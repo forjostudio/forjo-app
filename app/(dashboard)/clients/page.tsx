@@ -1,0 +1,36 @@
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { ClientsClient } from './clients-client'
+
+export default async function ClientsPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('owner_id', user.id)
+    .single()
+
+  if (!business) redirect('/onboarding')
+
+  const [{ data: clients }, { data: appointments }] = await Promise.all([
+    supabase.from('clients')
+      .select('*')
+      .eq('business_id', business.id)
+      .order('created_at', { ascending: false }),
+    supabase.from('appointments')
+      .select('*, services(name, price)')
+      .eq('business_id', business.id)
+      .order('date', { ascending: false }),
+  ])
+
+  return (
+    <ClientsClient
+      initialClients={clients || []}
+      appointments={appointments || []}
+      businessId={business.id}
+    />
+  )
+}
