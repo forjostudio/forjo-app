@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { BookingClient } from './booking-client'
+import type { PublicBusiness } from '@/lib/types'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -10,9 +11,10 @@ export default async function PublicBookingPage({ params }: Props) {
   const { slug } = await params
   const supabase = await createClient()
 
+  // Exclude secrets from public query
   const { data: business } = await supabase
     .from('businesses')
-    .select('*')
+    .select('id, owner_id, slug, name, type, logo_url, primary_color, phone, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, created_at')
     .eq('slug', slug)
     .single()
 
@@ -26,7 +28,7 @@ export default async function PublicBookingPage({ params }: Props) {
 
   return (
     <BookingClient
-      business={business}
+      business={business as unknown as PublicBusiness}
       services={services || []}
       professionals={professionals || []}
       hours={hours || []}

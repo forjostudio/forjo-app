@@ -9,8 +9,22 @@ export interface Business {
   phone: string | null
   address: string | null
   instagram: string | null
+  // MercadoPago & deposits
+  mp_access_token: string | null
+  require_deposit: boolean
+  deposit_amount: number
+  deposit_expiry_hours: number
+  // Notifications
+  notification_email: string | null
+  resend_api_key: string | null
+  // Anti-spam
+  recaptcha_site_key: string | null
+  recaptcha_secret_key: string | null
   created_at: string
 }
+
+// Public subset — never include secret keys
+export type PublicBusiness = Omit<Business, 'mp_access_token' | 'notification_email' | 'resend_api_key' | 'recaptcha_secret_key'>
 
 export interface Professional {
   id: string
@@ -62,9 +76,13 @@ export interface Appointment {
   client_email: string | null
   date: string
   time: string
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
+  status: 'pending' | 'pending_payment' | 'confirmed' | 'cancelled' | 'completed'
   payment_status: 'unpaid' | 'paid'
   notes: string | null
+  deposit_paid: boolean
+  deposit_amount: number
+  mp_payment_id: string | null
+  expires_at: string | null
   created_at: string
   professionals?: Professional
   services?: Service

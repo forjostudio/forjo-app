@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { format, addMinutes, parseISO, isBefore, startOfDay } from 'date-fns'
+import { useState, useEffect } from 'react'
+import { format, isBefore, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, Service, Professional, BusinessHour } from '@/lib/types'
+import type { PublicBusiness, Service, Professional, BusinessHour } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,7 +14,7 @@ import { Check, Clock, DollarSign, ChevronRight, ChevronLeft } from 'lucide-reac
 import { cn } from '@/lib/utils'
 
 interface Props {
-  business: Business
+  business: PublicBusiness
   services: Service[]
   professionals: Professional[]
   hours: BusinessHour[]
@@ -48,6 +48,19 @@ export function BookingClient({ business, services, professionals, hours }: Prop
   const [done, setDone] = useState(false)
 
   const openDays = hours.filter(h => h.is_open).map(h => h.day_of_week)
+  const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
+  const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+
+  useEffect(() => {
+    if (!requireDeposit && siteKey) {
+      const existing = document.querySelector(`script[data-recaptcha="${siteKey}"]`)
+      if (existing) return
+      const script = document.createElement('script')
+      script.src = `https://www.google.com/recaptcha/api.js?render=${siteKey}`
+      script.setAttribute('data-recaptcha', siteKey)
+      document.head.appendChild(script)
+    }
+  }, [requireDeposit, siteKey])
 
   function isDateDisabled(date: Date) {
     if (isBefore(date, startOfDay(new Date()))) return true
@@ -101,6 +114,34 @@ export function BookingClient({ business, services, professionals, hours }: Prop
 
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
     const proId = selectedPro && selectedPro !== 'none' ? (selectedPro as Professional).id : null
+    const initialStatus = requireDeposit ? 'pending_payment' : 'confirmed'
+
+    // reCAPTCHA check for no-deposit bookings
+    if (!requireDeposit && siteKey) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const gr = (window as any).grecaptcha
+        if (gr) {
+          const token: string = await new Promise((resolve, reject) =>
+            gr.ready(() => gr.execute(siteKey, { action: 'book' }).then(resolve).catch(reject))
+          )
+          const res = await fetch('/api/recaptcha/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, businessSlug: business.slug }),
+          })
+          const data = await res.json()
+          if (!data.ok) {
+            setSubmitting(false)
+            toast.error('No pudimos verificar tu reserva. Intentá de nuevo.')
+            return
+          }
+        }
+      } catch (e) {
+        console.error('reCAPTCHA error:', e)
+        // Don't block user if reCAPTCHA fails
+      }
+    }
 
     const { data: client } = await supabase
       .from('clients')
@@ -113,24 +154,53 @@ export function BookingClient({ business, services, professionals, hours }: Prop
       .select()
       .single()
 
-    const { error } = await supabase.from('appointments').insert({
-      business_id: business.id,
-      client_id: client?.id || null,
-      client_name: clientName,
-      client_phone: clientPhone || null,
-      client_email: clientEmail || null,
-      service_id: selectedService.id,
-      professional_id: proId,
-      date: dateStr,
-      time: selectedTime,
-      status: 'pending',
-    })
+    const { data: appt, error } = await supabase
+      .from('appointments')
+      .insert({
+        business_id: business.id,
+        client_id: client?.id || null,
+        client_name: clientName,
+        client_phone: clientPhone || null,
+        client_email: clientEmail || null,
+        service_id: selectedService.id,
+        professional_id: proId,
+        date: dateStr,
+        time: selectedTime,
+        status: initialStatus,
+      })
+      .select()
+      .single()
 
-    setSubmitting(false)
-    if (error) {
+    if (error || !appt) {
+      setSubmitting(false)
       toast.error('Error al confirmar. Intentá de nuevo.')
       return
     }
+
+    if (requireDeposit) {
+      const res = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointmentId: appt.id, businessSlug: business.slug }),
+      })
+      const data = await res.json()
+      if (data.ok && data.url) {
+        window.location.href = data.url
+      } else {
+        setSubmitting(false)
+        toast.error(data.error || 'Error al iniciar el pago')
+      }
+      return
+    }
+
+    // No deposit — fire-and-forget notifications
+    fetch('/api/notify/booking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appointmentId: appt.id }),
+    }).catch(console.error)
+
+    setSubmitting(false)
     setDone(true)
   }
 
@@ -335,6 +405,11 @@ export function BookingClient({ business, services, professionals, hours }: Prop
               <p className="text-gray-400">
                 {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} a las <strong className="text-white">{selectedTime}</strong>
               </p>
+              {requireDeposit && (
+                <p className="text-gray-400">
+                  Seña requerida: <strong className="text-white">${Number(business.deposit_amount).toLocaleString('es-AR')}</strong>
+                </p>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -375,8 +450,16 @@ export function BookingClient({ business, services, professionals, hours }: Prop
               disabled={!clientName || !clientPhone || submitting}
               onClick={handleConfirm}
             >
-              {submitting ? 'Confirmando...' : 'Confirmar turno'}
+              {submitting
+                ? (requireDeposit ? 'Iniciando pago...' : 'Confirmando...')
+                : (requireDeposit ? `Pagar seña $${Number(business.deposit_amount).toLocaleString('es-AR')}` : 'Confirmar turno')}
             </Button>
+
+            {requireDeposit && (
+              <p className="text-xs text-center text-gray-500">
+                Serás redirigido a MercadoPago para abonar la seña.
+              </p>
+            )}
           </div>
         )}
 

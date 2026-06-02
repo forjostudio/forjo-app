@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff } from 'lucide-react'
+import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
 const BUSINESS_TYPES = ['Barbería', 'Estética', 'Centro médico', 'Psicología', 'Odontología', 'Kinesiología', 'Otro']
@@ -99,6 +100,70 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     toast.success('Profesional eliminado')
   }
 
+  // Tab 5 - Payments & notifications
+  const [mpToken, setMpToken] = useState(business.mp_access_token || '')
+  const [showMpToken, setShowMpToken] = useState(false)
+  const [savingMp, setSavingMp] = useState(false)
+
+  const [depositForm, setDepositForm] = useState({
+    require_deposit: business.require_deposit || false,
+    deposit_amount: business.deposit_amount || 0,
+    deposit_expiry_hours: business.deposit_expiry_hours || 1,
+  })
+  const [savingDeposit, setSavingDeposit] = useState(false)
+
+  const [notifForm, setNotifForm] = useState({
+    notification_email: business.notification_email || '',
+    resend_api_key: business.resend_api_key || '',
+  })
+  const [showResendKey, setShowResendKey] = useState(false)
+  const [savingNotif, setSavingNotif] = useState(false)
+
+  const [recaptchaForm, setRecaptchaForm] = useState({
+    recaptcha_site_key: business.recaptcha_site_key || '',
+    recaptcha_secret_key: business.recaptcha_secret_key || '',
+  })
+  const [showRecaptchaSecret, setShowRecaptchaSecret] = useState(false)
+  const [savingRecaptcha, setSavingRecaptcha] = useState(false)
+
+  async function saveMpToken() {
+    setSavingMp(true)
+    const { error } = await supabase.from('businesses').update({ mp_access_token: mpToken || null }).eq('id', business.id)
+    setSavingMp(false)
+    if (error) toast.error('Error al guardar')
+    else toast.success('Token guardado')
+  }
+
+  async function saveDeposit() {
+    setSavingDeposit(true)
+    const { error } = await supabase.from('businesses').update(depositForm).eq('id', business.id)
+    setSavingDeposit(false)
+    if (error) toast.error('Error al guardar')
+    else toast.success('Configuración de seña guardada')
+  }
+
+  async function saveNotif() {
+    setSavingNotif(true)
+    const { error } = await supabase.from('businesses').update({
+      notification_email: notifForm.notification_email || null,
+      resend_api_key: notifForm.resend_api_key || null,
+    }).eq('id', business.id)
+    setSavingNotif(false)
+    if (error) toast.error('Error al guardar')
+    else toast.success('Notificaciones guardadas')
+  }
+
+  async function saveRecaptcha() {
+    setSavingRecaptcha(true)
+    const { error } = await supabase.from('businesses').update({
+      recaptcha_site_key: recaptchaForm.recaptcha_site_key || null,
+      recaptcha_secret_key: recaptchaForm.recaptcha_secret_key || null,
+    }).eq('id', business.id)
+    setSavingRecaptcha(false)
+    if (error) toast.error('Error al guardar')
+    else toast.success('Configuración anti-spam guardada')
+  }
+
   // Tab 4 - Hours
   const [hours, setHours] = useState<BusinessHour[]>(initialHours)
 
@@ -127,11 +192,12 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       <h1 className="text-2xl font-bold">Configuración</h1>
 
       <Tabs defaultValue="business">
-        <TabsList className="grid grid-cols-4 w-full sm:w-auto">
+        <TabsList className="grid grid-cols-5 w-full sm:w-auto">
           <TabsTrigger value="business">Negocio</TabsTrigger>
           <TabsTrigger value="services">Servicios</TabsTrigger>
           <TabsTrigger value="professionals">Equipo</TabsTrigger>
           <TabsTrigger value="hours">Horarios</TabsTrigger>
+          <TabsTrigger value="payments">Pagos</TabsTrigger>
         </TabsList>
 
         {/* Business */}
@@ -295,6 +361,171 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <Button onClick={saveHours}>Guardar horarios</Button>
             </div>
           </Card>
+        </TabsContent>
+
+        {/* Payments & notifications */}
+        <TabsContent value="payments" className="mt-4 space-y-4">
+
+          {/* MercadoPago */}
+          <Card className="p-6 space-y-4">
+            <div>
+              <p className="font-semibold text-sm">MercadoPago</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Encontralo en mercadopago.com.ar → Tu negocio → Credenciales
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label>Access Token</Label>
+              <div className="relative">
+                <Input
+                  type={showMpToken ? 'text' : 'password'}
+                  value={mpToken}
+                  onChange={e => setMpToken(e.target.value)}
+                  placeholder="APP_USR-..."
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowMpToken(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showMpToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <Button onClick={saveMpToken} disabled={savingMp}>
+              {savingMp ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </Card>
+
+          {/* Seña */}
+          <Card className="p-6 space-y-4">
+            <p className="font-semibold text-sm">Seña</p>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="require_deposit"
+                checked={depositForm.require_deposit}
+                onChange={e => setDepositForm(f => ({ ...f, require_deposit: e.target.checked }))}
+                className="w-4 h-4 accent-primary cursor-pointer"
+              />
+              <Label htmlFor="require_deposit" className="cursor-pointer">
+                Requerir seña para confirmar el turno
+              </Label>
+            </div>
+            {depositForm.require_deposit && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" /> Monto (ARS)
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={100}
+                    value={depositForm.deposit_amount}
+                    onChange={e => setDepositForm(f => ({ ...f, deposit_amount: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Horas para pagar
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={depositForm.deposit_expiry_hours}
+                    onChange={e => setDepositForm(f => ({ ...f, deposit_expiry_hours: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+              </div>
+            )}
+            <Button onClick={saveDeposit} disabled={savingDeposit}>
+              {savingDeposit ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </Card>
+
+          {/* Notificaciones */}
+          <Card className="p-6 space-y-4">
+            <div>
+              <p className="font-semibold text-sm">Notificaciones por email</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Creá tu cuenta gratis en resend.com
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label>Email para recibir notificaciones</Label>
+              <Input
+                type="email"
+                value={notifForm.notification_email}
+                onChange={e => setNotifForm(f => ({ ...f, notification_email: e.target.value }))}
+                placeholder="vos@tudominio.com"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>API Key de Resend</Label>
+              <div className="relative">
+                <Input
+                  type={showResendKey ? 'text' : 'password'}
+                  value={notifForm.resend_api_key}
+                  onChange={e => setNotifForm(f => ({ ...f, resend_api_key: e.target.value }))}
+                  placeholder="re_..."
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResendKey(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showResendKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <Button onClick={saveNotif} disabled={savingNotif}>
+              {savingNotif ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </Card>
+
+          {/* Anti-spam */}
+          <Card className="p-6 space-y-4">
+            <div>
+              <p className="font-semibold text-sm">Verificación anti-spam</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Creá tu cuenta en google.com/recaptcha → v3 → dominio: forjo.studio
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label>reCAPTCHA Site Key</Label>
+              <Input
+                value={recaptchaForm.recaptcha_site_key}
+                onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_site_key: e.target.value }))}
+                placeholder="6Le..."
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>reCAPTCHA Secret Key</Label>
+              <div className="relative">
+                <Input
+                  type={showRecaptchaSecret ? 'text' : 'password'}
+                  value={recaptchaForm.recaptcha_secret_key}
+                  onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_secret_key: e.target.value }))}
+                  placeholder="6Le..."
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowRecaptchaSecret(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showRecaptchaSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <Button onClick={saveRecaptcha} disabled={savingRecaptcha}>
+              {savingRecaptcha ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </Card>
+
         </TabsContent>
       </Tabs>
     </div>
