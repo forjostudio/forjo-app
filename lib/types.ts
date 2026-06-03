@@ -20,6 +20,36 @@ export interface Business {
   // Anti-spam
   recaptcha_site_key: string | null
   recaptcha_secret_key: string | null
+  // Scheduling
+  default_slot_duration?: number | null
+  // Plans
+  plan?: string | null
+  plan_status?: string | null
+  trial_ends_at?: string | null
+  // Subscription (MercadoPago)
+  mp_subscription_id?: string | null
+  mp_plan_id_active?: string | null
+  subscription_ends_at?: string | null
+  created_at: string
+}
+
+export interface Location {
+  id: string
+  business_id: string
+  name: string
+  address: string | null
+  phone: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface TimeBlock {
+  id: string
+  business_id: string
+  day_of_week: number
+  start_time: string
+  end_time: string
+  label: string | null
   created_at: string
 }
 
@@ -62,6 +92,8 @@ export interface Client {
   phone: string | null
   email: string | null
   notes: string | null
+  status?: string | null
+  client_number?: number | null
   created_at: string
 }
 
@@ -87,4 +119,34 @@ export interface Appointment {
   professionals?: Professional
   services?: Service
   clients?: Client
+}
+
+export interface ManualSale {
+  id: string
+  business_id: string
+  description: string
+  quantity: number
+  amount: number
+  sale_date: string
+  type: string
+  client_id?: string | null
+  created_at: string
+}
+
+export interface Expense {
+  id: string
+  business_id: string
+  category: string
+  amount: number
+  expense_date: string
+  notes: string | null
+  created_at: string
+}
+
+export interface SavedProduct {
+  id: string
+  business_id: string
+  name: string
+  type: string
+  created_at: string
 }

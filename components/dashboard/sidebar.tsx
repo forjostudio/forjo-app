@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business } from '@/lib/types'
+import { getPlanLimits } from '@/lib/plans'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
@@ -44,15 +45,24 @@ export function Sidebar({ business }: { business: Business }) {
     <div className="flex flex-col h-full">
       <div className="p-5 border-b border-border">
         <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-            style={{ backgroundColor: business.primary_color }}
-          >
-            {business.name.charAt(0).toUpperCase()}
-          </div>
+          {business.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={business.logo_url} alt={business.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+          ) : (
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+              style={{ backgroundColor: business.primary_color }}
+            >
+              {business.name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div className="min-w-0">
             <p className="font-semibold text-sm truncate">{business.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{business.type}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {business.plan_status === 'active'
+                ? `Plan ${getPlanLimits(business.plan || 'basic').name}`
+                : (business.type || '')}
+            </p>
           </div>
         </div>
       </div>
