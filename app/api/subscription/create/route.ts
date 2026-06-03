@@ -25,23 +25,25 @@ export async function POST(request: NextRequest) {
   if (!business) return Response.json({ error: 'Negocio no encontrado' }, { status: 404 })
 
   const planConfig = getSubscriptionPlan(plan)
-  if (!planConfig.mp_plan_id) {
-    return Response.json({ error: 'El plan no está configurado en MercadoPago' }, { status: 500 })
-  }
 
-  // With an associated plan, MP inherits the recurring config from the plan.
-  // Sending auto_recurring/card_token_id here makes MP treat it as a custom
-  // subscription and reject with "card_token_id is required". Omitting both
-  // returns an init_point for the hosted checkout where the user adds the card.
+  // Subscription WITHOUT an associated plan: with preapproval_plan_id MP forces
+  // the on-site card flow (requires card_token_id). Sending the amount inline in
+  // auto_recurring — and no preapproval_plan_id / card_token_id / status —
+  // returns an init_point for the hosted checkout where MP collects the card and
+  // confirms the subscription.
   const preapproval = await mpFetch('/preapproval', {
     method: 'POST',
     body: JSON.stringify({
-      preapproval_plan_id: planConfig.mp_plan_id,
       reason: `Forjo Gestión — Plan ${planConfig.name}`,
       external_reference: business.id,
       payer_email: user.email,
       back_url: `${FORJO_APP_URL}/dashboard?subscription=success`,
-      status: 'pending',
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: 'months',
+        transaction_amount: planConfig.price_ars,
+        currency_id: 'ARS',
+      },
     }),
   })
 
@@ -54,7 +56,6 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient()
   await admin.from('businesses').update({
     mp_subscription_id: preapproval.id,
-    mp_plan_id_active: planConfig.mp_plan_id,
     plan,
     plan_status: 'pending_payment',
   }).eq('id', business.id)
