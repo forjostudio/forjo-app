@@ -5,6 +5,7 @@ import { es } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Users, DollarSign, TrendingUp } from 'lucide-react'
+import { sanitizeWidgetIds } from '@/lib/dashboard-widgets'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -68,17 +69,22 @@ export default async function DashboardPage() {
     return sum + ((a.services as { price?: number } | null)?.price || 0)
   }, 0)
 
+  // Selección de widgets del negocio (null = mostrar todos). Catálogo en lib/dashboard-widgets.
+  const widgetSel = sanitizeWidgetIds(business.dashboard_widgets)
+  const showWidget = (id: string) => !widgetSel || widgetSel.includes(id)
+
   const stats = [
-    { label: 'Turnos hoy', value: todayCount || 0, icon: Calendar, color: 'text-blue-400' },
-    { label: 'Esta semana', value: weekCount || 0, icon: TrendingUp, color: 'text-green-400' },
+    { id: 'today_appointments', label: 'Turnos hoy', value: todayCount || 0, icon: Calendar, color: 'text-blue-400' },
+    { id: 'week_appointments', label: 'Esta semana', value: weekCount || 0, icon: TrendingUp, color: 'text-green-400' },
     {
+      id: 'month_revenue',
       label: 'Ingresos del mes',
       value: `$${monthRevenue.toLocaleString('es-AR')}`,
       icon: DollarSign,
       color: 'text-primary'
     },
-    { label: 'Total clientes', value: clientCount || 0, icon: Users, color: 'text-purple-400' },
-  ]
+    { id: 'total_clients', label: 'Total clientes', value: clientCount || 0, icon: Users, color: 'text-purple-400' },
+  ].filter(s => showWidget(s.id))
 
   return (
     <div className="space-y-6">
@@ -89,23 +95,26 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map(stat => {
-          const Icon = stat.icon
-          return (
-            <Card key={stat.label}>
-              <CardContent className="pt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <Icon className={`w-5 h-5 ${stat.color}`} />
-                </div>
-                <p className="text-2xl font-bold">{stat.value}</p>
-                <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      {stats.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map(stat => {
+            const Icon = stat.icon
+            return (
+              <Card key={stat.label}>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Icon className={`w-5 h-5 ${stat.color}`} />
+                  </div>
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
+      {showWidget('today_schedule') && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Turnos de hoy</CardTitle>
@@ -139,6 +148,7 @@ export default async function DashboardPage() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

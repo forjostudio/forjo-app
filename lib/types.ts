@@ -5,6 +5,8 @@ export interface Business {
   name: string
   type: string | null
   vertical?: string | null
+  // Subconjunto de widgets del dashboard a mostrar (null = todos). Ver lib/dashboard-widgets.
+  dashboard_widgets?: string[] | null
   logo_url: string | null
   primary_color: string
   phone: string | null

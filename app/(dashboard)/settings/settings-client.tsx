@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, Service, Professional, TimeBlock, Location } from '@/lib/types'
@@ -13,10 +13,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Sparkles } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS } from '@/lib/verticals'
+import { DASHBOARD_WIDGETS, DASHBOARD_WIDGET_IDS, sanitizeWidgetIds } from '@/lib/dashboard-widgets'
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
@@ -85,6 +86,80 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     toast.success('Negocio actualizado')
     // El menú y la terminología del dashboard dependen del vertical → recargar.
     if (verticalChanged) setTimeout(() => window.location.reload(), 600)
+  }
+
+  // ── IA: sugerencia de rubro (debounce + cache por nombre) ───────────────────
+  // Se dispara al "confirmar" el nombre: 800ms sin tipear. Cachea por nombre para
+  // no repreguntar lo mismo. Sin ANTHROPIC_API_KEY el endpoint responde
+  // { available:false } y simplemente no se muestra sugerencia (degradado).
+  const [aiSuggestion, setAiSuggestion] = useState<{ type: string; verticalLabel: string } | null>(null)
+  const lastQueriedName = useRef(business.name)
+
+  useEffect(() => {
+    const name = bizForm.name.trim()
+    if (!name || name === lastQueriedName.current) return
+    const t = setTimeout(async () => {
+      lastQueriedName.current = name
+      try {
+        const res = await fetch('/api/ai/suggest-vertical', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        })
+        const data = await res.json()
+        setAiSuggestion(data?.available && data.type ? { type: data.type, verticalLabel: data.verticalLabel } : null)
+      } catch { setAiSuggestion(null) }
+    }, 800)
+    return () => clearTimeout(t)
+  }, [bizForm.name])
+
+  function applySuggestion() {
+    if (!aiSuggestion) return
+    setBizForm(f => ({ ...f, type: aiSuggestion.type }))
+    setAiSuggestion(null)
+    toast.success(`Rubro aplicado: ${aiSuggestion.verticalLabel}`)
+  }
+
+  // ── IA: recomendación de widgets del dashboard ──────────────────────────────
+  // La IA elige de un catálogo FIJO. El usuario revisa y confirma con "Guardar panel"
+  // (nunca se auto-aplica). Persistimos null si están todos = default mostrar todo.
+  const currentVertical = getVerticalKeyByType(bizForm.type)
+  const [widgetSelection, setWidgetSelection] = useState<string[]>(
+    sanitizeWidgetIds(business.dashboard_widgets) ?? DASHBOARD_WIDGET_IDS
+  )
+  const [recommendingWidgets, setRecommendingWidgets] = useState(false)
+  const [savingWidgets, setSavingWidgets] = useState(false)
+
+  async function recommendWidgets() {
+    setRecommendingWidgets(true)
+    try {
+      const res = await fetch('/api/ai/recommend-widgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vertical: currentVertical }),
+      })
+      const data = await res.json()
+      if (data?.available && Array.isArray(data.widgets) && data.widgets.length > 0) {
+        setWidgetSelection(data.widgets)
+        toast.success('Widgets recomendados — revisá y guardá')
+      } else {
+        toast.error('La IA no está disponible')
+      }
+    } catch { toast.error('No se pudo recomendar') }
+    setRecommendingWidgets(false)
+  }
+
+  function toggleWidget(id: string) {
+    setWidgetSelection(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  async function saveWidgets() {
+    setSavingWidgets(true)
+    const value = widgetSelection.length === DASHBOARD_WIDGET_IDS.length ? null : widgetSelection
+    const { error } = await supabase.from('businesses').update({ dashboard_widgets: value }).eq('id', business.id)
+    setSavingWidgets(false)
+    if (error) { toast.error('Error al guardar'); return }
+    toast.success('Panel actualizado')
   }
 
   // ── Logo upload ───────────────────────────────────────────────────────────
@@ -464,6 +539,17 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                     {' · '}cambiarlo ajusta el menú y los campos del panel.
                   </p>
                 )}
+                {aiSuggestion && aiSuggestion.type !== bizForm.type && (
+                  <div className="flex items-center gap-2 mt-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    <span className="flex-1 min-w-0">
+                      Sugerencia: <span className="font-medium text-foreground">{aiSuggestion.type}</span>
+                      <span className="text-muted-foreground"> ({aiSuggestion.verticalLabel})</span>
+                    </span>
+                    <button type="button" onClick={applySuggestion} className="font-medium text-primary hover:underline flex-shrink-0">Aplicar</button>
+                    <button type="button" onClick={() => setAiSuggestion(null)} className="text-muted-foreground hover:text-foreground flex-shrink-0" aria-label="Descartar sugerencia"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <Label>Teléfono</Label>
@@ -490,6 +576,32 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <p className="text-sm mt-1">{process.env.NEXT_PUBLIC_APP_URL}/{business.slug}</p>
             </div>
             <Button onClick={saveBusiness} disabled={savingBiz}>{savingBiz ? 'Guardando...' : 'Guardar cambios'}</Button>
+
+            {/* ── Panel del dashboard (widgets + recomendación IA) ── */}
+            <div className="border-t border-border pt-5 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-semibold text-sm">Panel del dashboard</p>
+                  <p className="text-xs text-muted-foreground">Elegí qué widgets ver en tu panel principal.</p>
+                </div>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={recommendWidgets} disabled={recommendingWidgets}>
+                  <Sparkles className="w-3.5 h-3.5" /> {recommendingWidgets ? 'Pensando...' : 'Recomendar con IA'}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {DASHBOARD_WIDGETS.map(w => (
+                  <label key={w.id} className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={widgetSelection.includes(w.id)} onChange={() => toggleWidget(w.id)}
+                      className="w-4 h-4 accent-primary cursor-pointer mt-0.5" />
+                    <span>
+                      <span className="text-sm">{w.label}</span>
+                      <span className="block text-xs text-muted-foreground">{w.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <Button size="sm" onClick={saveWidgets} disabled={savingWidgets}>{savingWidgets ? 'Guardando...' : 'Guardar panel'}</Button>
+            </div>
           </Card>
 
           {/* Subscription */}

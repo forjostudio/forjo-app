@@ -128,3 +128,8 @@ export const TYPE_GROUPS = (Object.keys(VERTICALS) as VerticalKey[]).map((key) =
   label: VERTICALS[key].label,
   types: VERTICALS[key].types,
 }))
+
+// Lista cerrada de todos los subtipos válidos (todos los verticales). La usa la
+// sugerencia de rubro por IA: el modelo elige uno de acá, no inventa.
+export const ALL_BUSINESS_TYPES = (Object.keys(VERTICALS) as VerticalKey[])
+  .flatMap((key) => VERTICALS[key].types)

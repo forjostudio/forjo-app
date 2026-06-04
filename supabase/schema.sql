@@ -261,3 +261,10 @@ CREATE POLICY "fixed_expenses tenant delete" ON fixed_expenses
   FOR DELETE USING (
     business_id IN (SELECT id FROM businesses WHERE owner_id = (SELECT auth.uid()))
   );
+
+-- ============================================================
+-- MIGRATION: Widgets del dashboard (recomendados por IA) — run in Supabase SQL editor
+-- ============================================================
+-- Subconjunto de widgets que el negocio elige mostrar en el dashboard. NULL = todos.
+-- Vive en businesses (ya con RLS owner-only), así que no requiere policy nueva.
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS dashboard_widgets JSONB;
