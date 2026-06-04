@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +19,20 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [emailError, setEmailError] = useState('')
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  // Prefill with the logged-in user's email when the modal opens. Stays editable —
+  // some clients pay with a MercadoPago account under a different email. Only fills
+  // when the field is empty so we never overwrite what the user is typing.
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      const accountEmail = data.user?.email
+      if (active && accountEmail) setEmail((prev) => prev || accountEmail)
+    })
+    return () => { active = false }
+  }, [open])
 
   function handleClose(v: boolean) {
     if (!v) {

@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { mpFetch, isMPTestMode } from '@/lib/mercadopago'
 import { getSubscriptionPlan, FORJO_APP_URL } from '@/lib/subscription-plans'
 import type { NextRequest } from 'next/server'
@@ -19,10 +18,18 @@ export async function POST(request: NextRequest) {
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name')
+    .select('id, name, plan_status, mp_subscription_id')
     .eq('owner_id', user.id)
     .single()
   if (!business) return Response.json({ error: 'Negocio no encontrado' }, { status: 404 })
+
+  // Idempotent retry guard: if the business is already active with a live
+  // subscription, do NOT create another preapproval. Any other state (trial,
+  // pending, cancelled, expired) falls through and generates a fresh preapproval,
+  // so a rejected first attempt retries automatically — no manual SQL reset.
+  if (business.plan_status === 'active' && business.mp_subscription_id) {
+    return Response.json({ ok: false, error: 'Ya tenés una suscripción activa.' })
+  }
 
   const planConfig = getSubscriptionPlan(plan)
 
@@ -69,13 +76,9 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Error al crear la suscripción en MercadoPago' }, { status: 500 })
   }
 
-  // Persist with admin client (bypasses RLS, reliable server write)
-  const admin = createAdminClient()
-  await admin.from('businesses').update({
-    mp_subscription_id: preapproval.id,
-    plan,
-    plan_status: 'pending_payment',
-  }).eq('id', business.id)
-
+  // Deliberately DO NOT persist plan_status / mp_subscription_id here. The business
+  // stays in 'trial' until the webhook confirms the preapproval is `authorized`.
+  // Writing state before payment confirmation left businesses in a dirty state that
+  // blocked retries when the first card was rejected.
   return Response.json({ ok: true, init_point: preapproval.init_point })
 }
