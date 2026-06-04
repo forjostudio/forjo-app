@@ -282,11 +282,13 @@ export function FinancesClient({ businessId }: Props) {
   const ranking = [...rankingMap.values()].sort((a, b) => b.total - a.total).slice(0, 6)
   const rankingMax = ranking.length ? ranking[0].total : 0
 
-  // Desglose de egresos por gasto fijo (monto mensual de cada gasto activo).
-  const fixedBreakdown = activeFixed
-    .map(f => ({ id: f.id, name: f.name, monthly: monthlyEquivalent(Number(f.amount), f.frequency) }))
+  // Todos los gastos fijos (activos y pausados) con su monto mensual normalizado,
+  // ordenados de mayor a menor. La card de gestión usa SIEMPRE este orden, así que
+  // se reordena solo al agregar / editar / pausar (es un derivado del estado).
+  const fixedSorted = [...fixedExpenses]
+    .map(f => ({ ...f, monthly: monthlyEquivalent(Number(f.amount), f.frequency) }))
     .sort((a, b) => b.monthly - a.monthly)
-  const fixedBreakdownMax = fixedBreakdown.length ? fixedBreakdown[0].monthly : 0
+  const fixedSortedMax = fixedSorted.length ? fixedSorted[0].monthly : 0
 
   // Cashflow diario del período seleccionado.
   const dailyCashflow = buildDailyCashflow()
@@ -649,8 +651,8 @@ export function FinancesClient({ businessId }: Props) {
         </Card>
       )}
 
-      {/* Ranking de servicios + desglose de egresos fijos */}
-      {!loading && (ranking.length > 0 || fixedBreakdown.length > 0) && (
+      {/* Ranking de servicios + gestión de gastos fijos */}
+      {!loading && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {ranking.length > 0 && (
             <Card>
@@ -670,25 +672,61 @@ export function FinancesClient({ businessId }: Props) {
               </CardContent>
             </Card>
           )}
+
+          {/* Gastos fijos — única tarjeta de gestión (alta, edición, pausar, eliminar) */}
           <Card>
-            <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Receipt className="w-4 h-4 text-muted-foreground" /> Egresos por gasto fijo</CardTitle></CardHeader>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm flex items-center gap-2"><Receipt className="w-4 h-4 text-muted-foreground" /> Gastos fijos</CardTitle>
+              <Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => openNewFixed()}><Plus className="w-3.5 h-3.5" /> Nuevo gasto fijo</Button>
+            </CardHeader>
             <CardContent className="space-y-3">
-              {fixedBreakdown.length === 0 ? (
-                <div className="text-center py-6 space-y-2">
-                  <p className="text-sm text-muted-foreground">Sin gastos fijos activos.</p>
-                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openNewFixed()}><Plus className="w-3.5 h-3.5" /> Agregar gasto fijo</Button>
-                </div>
-              ) : fixedBreakdown.map(f => (
-                <div key={f.id} className="space-y-1">
-                  <div className="flex items-baseline justify-between gap-2 text-sm">
-                    <span className="truncate font-medium">{f.name}</span>
-                    <span className="flex-shrink-0 tabular-nums text-red-400">{fmtARS(f.monthly)}<span className="text-xs text-muted-foreground">/mes</span></span>
+              {/* Carga rápida: abre el modal con el nombre prellenado (nada se precarga solo) */}
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs text-muted-foreground self-center">Rápido:</span>
+                {FIXED_PRESETS.map(p => (
+                  <Button key={p} size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => openNewFixed(p)}>
+                    <Plus className="w-3 h-3" /> {p}
+                  </Button>
+                ))}
+              </div>
+
+              {fixedSorted.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">Sin gastos fijos cargados.</p>
+              ) : (
+                <>
+                  {fixedMonthly > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Total mensual: <span className="font-semibold text-red-400">{fmtARS(fixedMonthly)}</span>
+                    </p>
+                  )}
+                  <div className="space-y-2.5">
+                    {fixedSorted.map(f => (
+                      <div key={f.id} className={`space-y-1 ${!f.active ? 'opacity-50' : ''}`}>
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{f.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {FIXED_FREQ_LABEL[f.frequency] || f.frequency}
+                              {f.due_day && <> · vence el {f.due_day}</>}
+                              {!f.active && <> · pausado</>}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <span className="tabular-nums text-red-400 font-semibold mr-1">{fmtARS(f.monthly)}<span className="text-xs text-muted-foreground">/mes</span></span>
+                            <Button size="icon" variant="ghost" className={`h-7 w-7 ${f.active ? 'text-green-400' : 'text-muted-foreground'}`}
+                              title={f.active ? 'Pausar' : 'Activar'} onClick={() => toggleFixed(f)}><Power className="w-3.5 h-3.5" /></Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => openEditFixed(f)}><Pencil className="w-3.5 h-3.5" /></Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-red-400" onClick={() => setConfirmDeleteFixed(f.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </div>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full bg-red-400/70 rounded-full" style={{ width: `${fixedSortedMax > 0 ? (f.monthly / fixedSortedMax) * 100 : 0}%` }} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                    <div className="h-full bg-red-400/70 rounded-full" style={{ width: `${fixedBreakdownMax > 0 ? (f.monthly / fixedBreakdownMax) * 100 : 0}%` }} />
-                  </div>
-                </div>
-              ))}
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -700,7 +738,6 @@ export function FinancesClient({ businessId }: Props) {
           <TabsTrigger value="appointments">Turnos ({appointments.length})</TabsTrigger>
           <TabsTrigger value="sales">Ventas ({sales.length})</TabsTrigger>
           <TabsTrigger value="expenses">Egresos ({expenses.length})</TabsTrigger>
-          <TabsTrigger value="fixed">Gastos fijos ({fixedExpenses.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appointments" className="space-y-2 mt-4">
@@ -774,52 +811,6 @@ export function FinancesClient({ businessId }: Props) {
           ))}
         </TabsContent>
 
-        {/* ── Gastos fijos ── */}
-        <TabsContent value="fixed" className="space-y-3 mt-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-sm text-muted-foreground">
-              Egresos recurrentes que impactan en el saldo del mes.
-              {fixedMonthly > 0 && <> Total mensual: <span className="font-semibold text-red-400">{fmtARS(fixedMonthly)}</span>.</>}
-            </p>
-            <Button size="sm" className="gap-2" onClick={() => openNewFixed()}><Plus className="w-4 h-4" /> Nuevo gasto fijo</Button>
-          </div>
-
-          {/* Opciones rápidas */}
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs text-muted-foreground self-center">Rápido:</span>
-            {FIXED_PRESETS.map(p => (
-              <Button key={p} size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => openNewFixed(p)}>
-                <Plus className="w-3 h-3" /> {p}
-              </Button>
-            ))}
-          </div>
-
-          {fixedExpenses.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8 text-sm">Sin gastos fijos cargados</p>
-          ) : fixedExpenses.map(f => {
-            const monthly = monthlyEquivalent(Number(f.amount), f.frequency)
-            return (
-              <div key={f.id} className={`flex items-center gap-3 p-3 rounded-lg bg-card border border-border text-sm ${!f.active ? 'opacity-50' : ''}`}>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{f.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {FIXED_FREQ_LABEL[f.frequency] || f.frequency}
-                    {f.frequency !== 'monthly' && <> · {fmtARS(monthly)}/mes</>}
-                    {f.due_day && <> · vence el {f.due_day}</>}
-                    {!f.active && <> · pausado</>}
-                  </p>
-                </div>
-                <span className="font-semibold text-red-400 flex-shrink-0">{fmtARS(Number(f.amount))}</span>
-                <div className="flex gap-1 flex-shrink-0">
-                  <Button size="icon" variant="ghost" className={`h-7 w-7 ${f.active ? 'text-green-400' : 'text-muted-foreground'}`}
-                    title={f.active ? 'Pausar' : 'Activar'} onClick={() => toggleFixed(f)}><Power className="w-3.5 h-3.5" /></Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => openEditFixed(f)}><Pencil className="w-3.5 h-3.5" /></Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-red-400" onClick={() => setConfirmDeleteFixed(f.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                </div>
-              </div>
-            )
-          })}
-        </TabsContent>
       </Tabs>
 
       {/* ── Sale modal ──────────────────────────────────────────────────────────── */}
@@ -1019,7 +1010,8 @@ export function FinancesClient({ businessId }: Props) {
               <div className="space-y-1">
                 <Label className="text-xs">Frecuencia</Label>
                 <Select value={fixedForm.frequency} onValueChange={v => setFixedForm(f => ({ ...f, frequency: v ?? 'monthly' }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  {/* Base UI Select.Value muestra el value crudo por defecto; mapeamos a su label en español. */}
+                  <SelectTrigger><SelectValue>{(value: string) => FIXED_FREQ_LABEL[value] ?? value}</SelectValue></SelectTrigger>
                   <SelectContent>{FIXED_FREQUENCIES.map(fr => <SelectItem key={fr.value} value={fr.value}>{fr.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
