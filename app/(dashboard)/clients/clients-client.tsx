@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import Link from 'next/link'
 import { format, parseISO, differenceInDays, differenceInMonths, isSameMonth, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -16,9 +15,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { cn } from '@/lib/utils'
 import {
   Search, Phone, Mail, Trash2, GitMerge, MessageCircle,
-  Edit2, X, ChevronLeft, Lightbulb, TrendingUp, FileText,
+  Edit2, X, ChevronLeft, ChevronDown, Lightbulb, TrendingUp, FileText,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
+import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-panel'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 type StatusKey = 'new' | 'active' | 'frequent' | 'paused'
@@ -133,6 +133,8 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [mergeModal, setMergeModal] = useState(false)
+  // Historia Clínica colapsable (solo salud): arranca colapsada y se cierra al cambiar de paciente.
+  const [historyExpanded, setHistoryExpanded] = useState(false)
 
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const letterRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -240,6 +242,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
     if (!selected) return
     setNotes(selected.notes || '')
     setEditMode(false)
+    setHistoryExpanded(false)
     setEditForm({
       name: selected.name,
       phone: selected.phone || '',
@@ -556,13 +559,6 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                       <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => setEditMode(true)}>
                         <Edit2 className="w-3.5 h-3.5" /> Editar
                       </Button>
-                      {isSalud && (
-                        <Link href="/clinical-history">
-                          <Button size="sm" variant="outline" className="gap-1.5 h-8">
-                            <FileText className="w-3.5 h-3.5" /> Historia clínica
-                          </Button>
-                        </Link>
-                      )}
                       <Button size="sm" variant="outline" className="gap-1.5 h-8 text-red-400 hover:text-red-300 border-red-500/30"
                         onClick={() => setConfirmDelete(true)}>
                         <Trash2 className="w-3.5 h-3.5" /> Eliminar
@@ -716,6 +712,34 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                   <p className="text-[10px] text-muted-foreground">Guarda automáticamente</p>
                 </div>
               </div>
+
+              {/* ── Historia Clínica (colapsable, solo salud) ── */}
+              {isSalud && (
+                <div className="space-y-3 border-t border-border pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryExpanded(v => !v)}
+                    aria-expanded={historyExpanded}
+                    className="flex items-center justify-between w-full text-left rounded-lg px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="text-sm font-bold tracking-wide flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" /> Historia Clínica
+                    </span>
+                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform duration-200', historyExpanded && 'rotate-180')} />
+                  </button>
+                  {historyExpanded && (
+                    <ClinicalHistoryPanel
+                      clientId={selected.id}
+                      businessId={businessId}
+                      primaryColor={primaryColor}
+                      initialInsuranceName={selected.insurance_name}
+                      initialInsuranceNumber={selected.insurance_number}
+                      onInsuranceSaved={(name, number) =>
+                        setClients(prev => prev.map(c => c.id === selected.id ? { ...c, insurance_name: name, insurance_number: number } : c))}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )
         })()}

@@ -41,7 +41,9 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       service: 'Prestación',
       services: 'Prestaciones',
     },
-    menu: ['dashboard', 'appointments', 'patients', 'clinical_history', 'finances', 'settings'],
+    // La Historia Clínica vive dentro de la ficha del paciente (sección colapsable),
+    // ya no como item de menú propio.
+    menu: ['dashboard', 'appointments', 'patients', 'finances', 'settings'],
     features: {
       clinical_history: true,
       insurance: true, // obra social

@@ -12,7 +12,6 @@ import {
   LayoutDashboard,
   Calendar,
   Users,
-  FileText,
   BarChart3,
   Settings,
   ExternalLink,
@@ -35,7 +34,6 @@ function buildNav(business: Business): { href: string; label: string; icon: Luci
     appointments: { href: '/appointments', label: t.appointments, icon: Calendar },
     clients: { href: '/clients', label: t.clients, icon: Users },
     patients: { href: '/clients', label: t.clients, icon: Users },
-    clinical_history: { href: '/clinical-history', label: 'Historia Clínica', icon: FileText },
     finances: { href: '/finances', label: 'Finanzas', icon: BarChart3 },
     settings: { href: '/settings', label: 'Configuración', icon: Settings },
   }
