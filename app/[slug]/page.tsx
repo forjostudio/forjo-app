@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createPublicServerClient } from '@/lib/supabase/public'
 import { notFound } from 'next/navigation'
 import { BookingClient } from './booking-client'
 import type { PublicBusiness } from '@/lib/types'
@@ -9,21 +9,20 @@ interface Props {
 
 export default async function PublicBookingPage({ params }: Props) {
   const { slug } = await params
-  const supabase = await createClient()
+  const supabase = createPublicServerClient()
 
-  // Exclude secrets from public query
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, owner_id, slug, name, type, logo_url, primary_color, phone, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, created_at')
+    .select('id, owner_id, slug, name, type, logo_url, primary_color, phone, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, created_at')
     .eq('slug', slug)
     .single()
 
   if (!business) notFound()
 
-  const [{ data: services }, { data: professionals }, { data: hours }] = await Promise.all([
+  const [{ data: services }, { data: professionals }, { data: timeBlocks }] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id).eq('active', true),
     supabase.from('professionals').select('*').eq('business_id', business.id).eq('active', true),
-    supabase.from('business_hours').select('*').eq('business_id', business.id),
+    supabase.from('time_blocks').select('*').eq('business_id', business.id),
   ])
 
   return (
@@ -31,24 +30,7 @@ export default async function PublicBookingPage({ params }: Props) {
       business={business as unknown as PublicBusiness}
       services={services || []}
       professionals={professionals || []}
-      hours={hours || []}
+      timeBlocks={timeBlocks || []}
     />
   )
-}
-
-export async function generateMetadata({ params }: Props) {
-  const { slug } = await params
-  const supabase = await createClient()
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('name, type')
-    .eq('slug', slug)
-    .single()
-
-  if (!business) return { title: 'Negocio no encontrado' }
-
-  return {
-    title: `${business.name} — Reservar turno`,
-    description: `Reservá tu turno en ${business.name}`,
-  }
 }

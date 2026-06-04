@@ -1,33 +1,69 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, Service, Professional, BusinessHour } from '@/lib/types'
+import { Business, Service, Professional, TimeBlock, Location } from '@/lib/types'
+import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
+import { PlanModal } from '@/components/dashboard/plan-modal'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff } from 'lucide-react'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-
-const BUSINESS_TYPES = ['Barbería', 'Estética', 'Centro médico', 'Psicología', 'Odontología', 'Kinesiología', 'Otro']
+import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS } from '@/lib/verticals'
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
+const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
 
+// ── Time block state types ──────────────────────────────────────────────────
+type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; error?: string }
+type DayConfig = { enabled: boolean; blocks: LocalBlock[] }
+
+function defaultBlock(day: number): LocalBlock {
+  if (day >= 1 && day <= 5) return { start_time: '09:00', end_time: '18:00', label: '' }
+  if (day === 6) return { start_time: '09:00', end_time: '13:00', label: '' }
+  return { start_time: '09:00', end_time: '18:00', label: '' }
+}
+
+// ── Props ───────────────────────────────────────────────────────────────────
 interface Props {
   business: Business
   initialServices: Service[]
   initialProfessionals: Professional[]
-  initialHours: BusinessHour[]
+  initialTimeBlocks: TimeBlock[]
+  initialLocations: Location[]
 }
 
-export function SettingsClient({ business, initialServices, initialProfessionals, initialHours }: Props) {
+export function SettingsClient({ business, initialServices, initialProfessionals, initialTimeBlocks, initialLocations }: Props) {
   const supabase = createClient()
 
-  // Tab 1 - Business info
+  // ── Plan limits ───────────────────────────────────────────────────────────
+  const planConfig = getPlanLimits(business.plan || 'basic')
+  const [planModalOpen, setPlanModalOpen] = useState(false)
+  const [confirmCancelSub, setConfirmCancelSub] = useState(false)
+  const [cancellingSub, setCancellingSub] = useState(false)
+
+  async function cancelSubscription() {
+    setCancellingSub(true)
+    const res = await fetch('/api/subscription/cancel', { method: 'POST' })
+    const data = await res.json()
+    setCancellingSub(false)
+    setConfirmCancelSub(false)
+    if (data.ok) {
+      toast.success('Suscripción cancelada')
+      setTimeout(() => window.location.reload(), 800)
+    } else {
+      toast.error(data.error || 'Error al cancelar')
+    }
+  }
+
+  // ── Tab 1 — Business ──────────────────────────────────────────────────────
   const [bizForm, setBizForm] = useState({
     name: business.name,
     type: business.type || '',
@@ -40,67 +76,240 @@ export function SettingsClient({ business, initialServices, initialProfessionals
 
   async function saveBusiness() {
     setSavingBiz(true)
-    const { error } = await supabase
-      .from('businesses')
-      .update(bizForm)
-      .eq('id', business.id)
+    // Cambiar el tipo recalcula el vertical del negocio.
+    const vertical = getVerticalKeyByType(bizForm.type)
+    const verticalChanged = vertical !== (business.vertical ?? 'general')
+    const { error } = await supabase.from('businesses').update({ ...bizForm, vertical }).eq('id', business.id)
     setSavingBiz(false)
-    if (error) toast.error('Error al guardar')
-    else toast.success('Negocio actualizado')
+    if (error) { toast.error('Error al guardar'); return }
+    toast.success('Negocio actualizado')
+    // El menú y la terminología del dashboard dependen del vertical → recargar.
+    if (verticalChanged) setTimeout(() => window.location.reload(), 600)
   }
 
-  // Tab 2 - Services
+  // ── Logo upload ───────────────────────────────────────────────────────────
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [currentLogo, setCurrentLogo] = useState<string | null>(business.logo_url)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { toast.error('El archivo no puede superar 2MB'); return }
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) { toast.error('Formato no soportado. Usá JPG, PNG o WebP'); return }
+    setLogoFile(file)
+    setLogoPreview(URL.createObjectURL(file))
+  }
+
+  async function uploadLogo() {
+    if (!logoFile) return
+    setUploadingLogo(true)
+    const ext = logoFile.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const path = `${business.id}/logo.${ext}`
+    const { error: uploadError } = await supabase.storage.from('logos').upload(path, logoFile, { upsert: true })
+    if (uploadError) { toast.error('Error al subir el logo: ' + uploadError.message); setUploadingLogo(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path)
+    const urlWithCache = `${publicUrl}?t=${Date.now()}`
+    const { error: updateError } = await supabase.from('businesses').update({ logo_url: urlWithCache }).eq('id', business.id)
+    if (updateError) { toast.error('Error al guardar'); setUploadingLogo(false); return }
+    setCurrentLogo(urlWithCache)
+    setLogoPreview(null)
+    setLogoFile(null)
+    setUploadingLogo(false)
+    toast.success('Logo actualizado')
+  }
+
+  async function deleteLogo() {
+    const { error } = await supabase.from('businesses').update({ logo_url: null }).eq('id', business.id)
+    if (error) { toast.error('Error'); return }
+    setCurrentLogo(null)
+    setLogoPreview(null)
+    setLogoFile(null)
+    toast.success('Logo eliminado')
+  }
+
+  // ── Tab 2 — Services ──────────────────────────────────────────────────────
   const [services, setServices] = useState<Service[]>(initialServices)
   const [newService, setNewService] = useState({ name: '', duration_minutes: 30, price: 0 })
 
   async function addService() {
     if (!newService.name) return
-    const { data, error } = await supabase
-      .from('services')
-      .insert({ ...newService, business_id: business.id })
-      .select()
-      .single()
+    const { data, error } = await supabase.from('services').insert({ ...newService, business_id: business.id }).select().single()
     if (error) { toast.error('Error'); return }
     setServices(prev => [...prev, data as Service])
     setNewService({ name: '', duration_minutes: 30, price: 0 })
     toast.success('Servicio agregado')
   }
-
   async function deleteService(id: string) {
     await supabase.from('services').delete().eq('id', id)
     setServices(prev => prev.filter(s => s.id !== id))
     toast.success('Servicio eliminado')
   }
-
   async function toggleService(id: string, active: boolean) {
     await supabase.from('services').update({ active }).eq('id', id)
     setServices(prev => prev.map(s => s.id === id ? { ...s, active } : s))
   }
 
-  // Tab 3 - Professionals
+  // ── Tab 3 — Professionals ─────────────────────────────────────────────────
   const [professionals, setProfessionals] = useState<Professional[]>(initialProfessionals)
   const [newProName, setNewProName] = useState('')
+  const canAddPro = professionals.filter(p => p.active).length < planConfig.max_professionals
 
   async function addProfessional() {
     if (!newProName) return
-    const { data, error } = await supabase
-      .from('professionals')
-      .insert({ name: newProName, business_id: business.id })
-      .select()
-      .single()
+    const { data, error } = await supabase.from('professionals').insert({ name: newProName, business_id: business.id }).select().single()
     if (error) { toast.error('Error'); return }
     setProfessionals(prev => [...prev, data as Professional])
     setNewProName('')
     toast.success('Profesional agregado')
   }
-
   async function deleteProfessional(id: string) {
     await supabase.from('professionals').delete().eq('id', id)
     setProfessionals(prev => prev.filter(p => p.id !== id))
     toast.success('Profesional eliminado')
   }
 
-  // Tab 5 - Payments & notifications
+  // ── Tab 4 — Locations ─────────────────────────────────────────────────────
+  const [locations, setLocations] = useState<Location[]>(initialLocations)
+  const [newLocation, setNewLocation] = useState({ name: '', address: '', phone: '' })
+  const [savingLocation, setSavingLocation] = useState(false)
+
+  const activeLocations = locations.filter(l => l.is_active !== false)
+  const canAddLocation = activeLocations.length < planConfig.max_locations
+
+  async function addLocation() {
+    if (!newLocation.name.trim()) return
+    if (!canAddLocation) { toast.error('Límite del plan alcanzado'); return }
+    setSavingLocation(true)
+    const { data, error } = await supabase.from('locations').insert({
+      business_id: business.id,
+      name: newLocation.name.trim(),
+      address: newLocation.address.trim() || null,
+      phone: newLocation.phone.trim() || null,
+    }).select().single()
+    setSavingLocation(false)
+    if (error) { toast.error('Error al agregar'); return }
+    setLocations(prev => [...prev, data as Location])
+    setNewLocation({ name: '', address: '', phone: '' })
+    toast.success('Sucursal agregada')
+  }
+
+  async function deleteLocation(id: string) {
+    await supabase.from('locations').delete().eq('id', id)
+    setLocations(prev => prev.filter(l => l.id !== id))
+    toast.success('Sucursal eliminada')
+  }
+
+  // ── Tab 5 — Hours (time blocks) ───────────────────────────────────────────
+  const [slotDuration, setSlotDuration] = useState(business.default_slot_duration ?? 60)
+  const [dayStates, setDayStates] = useState<DayConfig[]>(() =>
+    Array.from({ length: 7 }, (_, day) => {
+      const blocks = initialTimeBlocks.filter(b => b.day_of_week === day)
+      return {
+        enabled: blocks.length > 0,
+        blocks: blocks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, label: b.label || '' })),
+      }
+    })
+  )
+  const [savingHours, setSavingHours] = useState(false)
+
+  function toggleDay(day: number) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const current = next[day]
+      if (current.enabled) {
+        next[day] = { ...current, enabled: false }
+      } else {
+        next[day] = {
+          enabled: true,
+          blocks: current.blocks.length > 0 ? current.blocks : [defaultBlock(day)],
+        }
+      }
+      return next
+    })
+  }
+
+  function addBlock(day: number) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const lastBlock = next[day].blocks[next[day].blocks.length - 1]
+      const newStart = lastBlock?.end_time || '09:00'
+      const [h, m] = newStart.split(':').map(Number)
+      const newEnd = `${String(Math.min(h + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      next[day] = { ...next[day], blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '' }] }
+      return next
+    })
+  }
+
+  function removeBlock(day: number, idx: number) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const blocks = next[day].blocks.filter((_, i) => i !== idx)
+      next[day] = { ...next[day], blocks, enabled: blocks.length > 0 }
+      return next
+    })
+  }
+
+  function updateBlock(day: number, idx: number, field: keyof LocalBlock, value: string) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const blocks = [...next[day].blocks]
+      blocks[idx] = { ...blocks[idx], [field]: value, error: undefined }
+      next[day] = { ...next[day], blocks }
+      return next
+    })
+  }
+
+  function validateBlocks(): boolean {
+    let valid = true
+    const next = dayStates.map(ds => {
+      if (!ds.enabled) return ds
+      const blocks = ds.blocks.map(b => {
+        if (b.end_time <= b.start_time) return { ...b, error: 'La hora fin debe ser mayor a la hora inicio' }
+        return { ...b, error: undefined }
+      })
+      // Check overlaps (sort by start, check consecutive)
+      const sorted = [...blocks].sort((a, b) => a.start_time.localeCompare(b.start_time))
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i].end_time > sorted[i + 1].start_time) {
+          // Mark overlapping
+          return { ...ds, blocks: blocks.map(b => ({ ...b, error: b.error || 'Los bloques se superponen' })) }
+        }
+      }
+      if (blocks.some(b => b.error)) valid = false
+      return { ...ds, blocks }
+    })
+    setDayStates(next)
+    return valid
+  }
+
+  async function saveHours() {
+    if (!validateBlocks()) { toast.error('Corregí los errores antes de guardar'); return }
+    setSavingHours(true)
+    // Delete all existing blocks for this business
+    await supabase.from('time_blocks').delete().eq('business_id', business.id)
+    // Collect blocks to insert
+    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null }[] = []
+    dayStates.forEach((ds, day) => {
+      if (!ds.enabled) return
+      ds.blocks.forEach(b => {
+        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null })
+      })
+    })
+    if (toInsert.length > 0) {
+      const { error } = await supabase.from('time_blocks').insert(toInsert)
+      if (error) { toast.error('Error al guardar horarios'); setSavingHours(false); return }
+    }
+    // Save slot duration
+    await supabase.from('businesses').update({ default_slot_duration: slotDuration }).eq('id', business.id)
+    setSavingHours(false)
+    toast.success('Horarios guardados')
+  }
+
+  // ── Tab 5 — Payments ──────────────────────────────────────────────────────
   const [mpToken, setMpToken] = useState(business.mp_access_token || '')
   const [showMpToken, setShowMpToken] = useState(false)
   const [savingMp, setSavingMp] = useState(false)
@@ -133,7 +342,6 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     if (error) toast.error('Error al guardar')
     else toast.success('Token guardado')
   }
-
   async function saveDeposit() {
     setSavingDeposit(true)
     const { error } = await supabase.from('businesses').update(depositForm).eq('id', business.id)
@@ -141,68 +349,97 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     if (error) toast.error('Error al guardar')
     else toast.success('Configuración de seña guardada')
   }
-
   async function saveNotif() {
     setSavingNotif(true)
-    const { error } = await supabase.from('businesses').update({
-      notification_email: notifForm.notification_email || null,
-      resend_api_key: notifForm.resend_api_key || null,
-    }).eq('id', business.id)
+    const { error } = await supabase.from('businesses').update({ notification_email: notifForm.notification_email || null, resend_api_key: notifForm.resend_api_key || null }).eq('id', business.id)
     setSavingNotif(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Notificaciones guardadas')
   }
-
   async function saveRecaptcha() {
     setSavingRecaptcha(true)
-    const { error } = await supabase.from('businesses').update({
-      recaptcha_site_key: recaptchaForm.recaptcha_site_key || null,
-      recaptcha_secret_key: recaptchaForm.recaptcha_secret_key || null,
-    }).eq('id', business.id)
+    const { error } = await supabase.from('businesses').update({ recaptcha_site_key: recaptchaForm.recaptcha_site_key || null, recaptcha_secret_key: recaptchaForm.recaptcha_secret_key || null }).eq('id', business.id)
     setSavingRecaptcha(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Configuración anti-spam guardada')
   }
 
-  // Tab 4 - Hours
-  const [hours, setHours] = useState<BusinessHour[]>(initialHours)
-
-  async function saveHours() {
-    const { error } = await supabase
-      .from('business_hours')
-      .upsert(hours.map(h => ({ ...h, business_id: business.id })))
-    if (error) toast.error('Error al guardar')
-    else toast.success('Horarios actualizados')
-  }
-
-  function toggleDay(i: number) {
-    const updated = [...hours]
-    updated[i] = { ...updated[i], is_open: !updated[i].is_open }
-    setHours(updated)
-  }
-
-  function updateHour(i: number, field: 'open_time' | 'close_time', value: string) {
-    const updated = [...hours]
-    updated[i] = { ...updated[i], [field]: value }
-    setHours(updated)
-  }
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Configuración</h1>
 
       <Tabs defaultValue="business">
-        <TabsList className="grid grid-cols-5 w-full sm:w-auto">
+        <TabsList className="grid grid-cols-6 w-full sm:w-auto">
           <TabsTrigger value="business">Negocio</TabsTrigger>
           <TabsTrigger value="services">Servicios</TabsTrigger>
           <TabsTrigger value="professionals">Equipo</TabsTrigger>
+          <TabsTrigger value="locations">Sucursales</TabsTrigger>
           <TabsTrigger value="hours">Horarios</TabsTrigger>
           <TabsTrigger value="payments">Pagos</TabsTrigger>
         </TabsList>
 
-        {/* Business */}
+        {/* ── Business ── */}
         <TabsContent value="business" className="mt-4">
-          <Card className="p-6 space-y-4">
+          <Card className="p-6 space-y-5">
+            {/* Logo */}
+            <div className="space-y-3">
+              <Label>Logo del negocio</Label>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0">
+                  {(logoPreview || currentLogo) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={logoPreview || currentLogo!}
+                      alt="Logo"
+                      className="w-20 h-20 rounded-full object-cover border border-border"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center">
+                      {bizForm.name ? (
+                        <span className="text-2xl font-bold text-primary">{bizForm.name.charAt(0).toUpperCase()}</span>
+                      ) : (
+                        <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp"
+                    className="hidden"
+                    onChange={handleLogoSelect}
+                  />
+                  {logoPreview ? (
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={uploadLogo} disabled={uploadingLogo}>
+                        {uploadingLogo ? 'Subiendo...' : 'Guardar logo'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => { setLogoPreview(null); setLogoFile(null) }}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 flex-wrap">
+                      <Button size="sm" variant="outline" onClick={() => logoInputRef.current?.click()}>
+                        {currentLogo ? 'Cambiar logo' : 'Subir logo'}
+                      </Button>
+                      {currentLogo && (
+                        <Button size="sm" variant="outline" className="text-red-400 border-red-500/30" onClick={deleteLogo}>
+                          Eliminar
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">JPG, PNG o WebP · Máximo 2MB</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>Nombre del negocio</Label>
@@ -213,9 +450,20 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                 <Select value={bizForm.type} onValueChange={v => setBizForm(f => ({ ...f, type: v ?? '' }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {BUSINESS_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    {TYPE_GROUPS.map(group => (
+                      <SelectGroup key={group.key}>
+                        <SelectLabel>{group.label}</SelectLabel>
+                        {group.types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectGroup>
+                    ))}
                   </SelectContent>
                 </Select>
+                {bizForm.type && (
+                  <p className="text-xs text-muted-foreground pt-0.5">
+                    Rubro: <span className="text-foreground">{VERTICALS[getVerticalKeyByType(bizForm.type)].label}</span>
+                    {' · '}cambiarlo ajusta el menú y los campos del panel.
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label>Teléfono</Label>
@@ -232,38 +480,53 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <div className="space-y-1">
                 <Label>Color principal</Label>
                 <div className="flex items-center gap-3">
-                  <input
-                    type="color"
-                    value={bizForm.primary_color}
-                    onChange={e => setBizForm(f => ({ ...f, primary_color: e.target.value }))}
-                    className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent"
-                  />
+                  <input type="color" value={bizForm.primary_color} onChange={e => setBizForm(f => ({ ...f, primary_color: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent" />
                   <span className="text-sm text-muted-foreground">{bizForm.primary_color}</span>
                 </div>
               </div>
             </div>
             <div className="pt-2">
               <Label className="text-muted-foreground text-xs">URL de tu página</Label>
-              <p className="text-sm mt-1">
-                {process.env.NEXT_PUBLIC_APP_URL}/{business.slug}
-              </p>
+              <p className="text-sm mt-1">{process.env.NEXT_PUBLIC_APP_URL}/{business.slug}</p>
             </div>
-            <Button onClick={saveBusiness} disabled={savingBiz}>
-              {savingBiz ? 'Guardando...' : 'Guardar cambios'}
-            </Button>
+            <Button onClick={saveBusiness} disabled={savingBiz}>{savingBiz ? 'Guardando...' : 'Guardar cambios'}</Button>
           </Card>
+
+          {/* Subscription */}
+          {(business.plan_status === 'active' || business.plan_status === 'cancelled') && (
+            <Card className="p-6 space-y-4 mt-4">
+              <p className="font-semibold text-sm">Tu suscripción</p>
+              <div className="text-sm space-y-1">
+                <p>Plan actual: <span className="font-medium">{planConfig.name}</span></p>
+                {business.subscription_ends_at && (
+                  <p className="text-muted-foreground">
+                    {business.plan_status === 'cancelled' ? 'Tu plan sigue activo hasta' : 'Próximo cobro'}:{' '}
+                    {new Date(business.subscription_ends_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                )}
+                {business.plan_status === 'cancelled' && (
+                  <p className="text-amber-400 text-xs">Suscripción cancelada — no se renovará automáticamente</p>
+                )}
+              </div>
+              {business.plan_status === 'active' && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setPlanModalOpen(true)}>Cambiar plan</Button>
+                  <Button variant="outline" size="sm" className="text-red-400 border-red-500/30"
+                    onClick={() => setConfirmCancelSub(true)}>Cancelar suscripción</Button>
+                </div>
+              )}
+            </Card>
+          )}
         </TabsContent>
 
-        {/* Services */}
+        {/* ── Services ── */}
         <TabsContent value="services" className="mt-4">
           <Card className="p-6 space-y-4">
             <div className="space-y-2">
               {services.map(s => (
                 <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
                   <div className="flex-1 min-w-0">
-                    <p className={cn('text-sm font-medium', !s.active && 'line-through text-muted-foreground')}>
-                      {s.name}
-                    </p>
+                    <p className={cn('text-sm font-medium', !s.active && 'line-through text-muted-foreground')}>{s.name}</p>
                     <p className="text-xs text-muted-foreground">{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</p>
                   </div>
                   <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
@@ -275,7 +538,6 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                 </div>
               ))}
             </div>
-
             <div className="border-t border-border pt-4 space-y-3">
               <p className="text-sm font-medium">Agregar servicio</p>
               <div className="grid grid-cols-12 gap-2 items-end">
@@ -299,9 +561,15 @@ export function SettingsClient({ business, initialServices, initialProfessionals
           </Card>
         </TabsContent>
 
-        {/* Professionals */}
+        {/* ── Professionals ── */}
         <TabsContent value="professionals" className="mt-4">
           <Card className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Profesionales del equipo</p>
+              <span className="text-xs bg-secondary px-2 py-1 rounded-full text-muted-foreground">
+                {planConfig.name} · {professionals.filter(p => p.active).length}/{planConfig.max_professionals}
+              </span>
+            </div>
             <div className="space-y-2">
               {professionals.map(p => (
                 <div key={p.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
@@ -315,219 +583,283 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                 </div>
               ))}
             </div>
-            <div className="border-t border-border pt-4 flex gap-2">
-              <Input value={newProName} onChange={e => setNewProName(e.target.value)} placeholder="Nombre del profesional" className="flex-1" />
-              <Button onClick={addProfessional} className="gap-1"><Plus className="w-4 h-4" /> Agregar</Button>
-            </div>
-          </Card>
-        </TabsContent>
-
-        {/* Hours */}
-        <TabsContent value="hours" className="mt-4">
-          <Card className="p-6 space-y-2">
-            {hours.sort((a, b) => a.day_of_week - b.day_of_week).map((h, i) => (
-              <div key={h.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
-                <button
-                  onClick={() => toggleDay(i)}
-                  className={cn(
-                    'w-24 text-xs font-medium py-1.5 px-3 rounded transition-colors',
-                    h.is_open ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-                  )}
-                >
-                  {DAYS[h.day_of_week]}
-                </button>
-                {h.is_open ? (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="time"
-                      value={h.open_time || '09:00'}
-                      onChange={e => updateHour(i, 'open_time', e.target.value)}
-                      className="w-28 text-sm"
-                    />
-                    <span className="text-muted-foreground">—</span>
-                    <Input
-                      type="time"
-                      value={h.close_time || '18:00'}
-                      onChange={e => updateHour(i, 'close_time', e.target.value)}
-                      className="w-28 text-sm"
-                    />
-                  </div>
-                ) : (
-                  <span className="text-muted-foreground text-sm">Cerrado</span>
-                )}
+            {!canAddPro ? (
+              <div className="border-t border-border pt-4 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Límite del plan alcanzado · Upgrade para agregar más</span>
+                <a href={UPGRADE_URL} target="_blank" rel="noopener noreferrer" className="text-primary text-xs hover:underline">Ver planes →</a>
               </div>
-            ))}
-            <div className="pt-4">
-              <Button onClick={saveHours}>Guardar horarios</Button>
+            ) : (
+              <div className="border-t border-border pt-4 flex gap-2">
+                <Input value={newProName} onChange={e => setNewProName(e.target.value)} placeholder="Nombre del profesional" className="flex-1" />
+                <Button onClick={addProfessional} className="gap-1"><Plus className="w-4 h-4" /> Agregar</Button>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* ── Locations ── */}
+        <TabsContent value="locations" className="mt-4">
+          <Card className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Sucursales</p>
+              <span className="text-xs bg-secondary px-2 py-1 rounded-full text-muted-foreground">
+                {planConfig.name} · {activeLocations.length}/{planConfig.max_locations}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {locations.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">Sin sucursales registradas</p>
+              )}
+              {locations.map(loc => (
+                <div key={loc.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{loc.name}</p>
+                    {(loc.address || loc.phone) && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {[loc.address, loc.phone].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0" onClick={() => deleteLocation(loc.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {!canAddLocation ? (
+              <div className="border-t border-border pt-4 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Límite del plan alcanzado · Upgrade para agregar más</span>
+                <a href={UPGRADE_URL} target="_blank" rel="noopener noreferrer" className="text-primary text-xs hover:underline">Ver planes →</a>
+              </div>
+            ) : (
+              <div className="border-t border-border pt-4 space-y-3">
+                <p className="text-sm font-medium">Agregar sucursal</p>
+                <div className="space-y-2">
+                  <Input value={newLocation.name} onChange={e => setNewLocation(f => ({ ...f, name: e.target.value }))} placeholder="Nombre de la sucursal *" />
+                  <Input value={newLocation.address} onChange={e => setNewLocation(f => ({ ...f, address: e.target.value }))} placeholder="Dirección (opcional)" />
+                  <Input value={newLocation.phone} onChange={e => setNewLocation(f => ({ ...f, phone: e.target.value }))} placeholder="Teléfono (opcional)" />
+                </div>
+                <Button onClick={addLocation} disabled={savingLocation} className="gap-1">
+                  <Plus className="w-4 h-4" /> {savingLocation ? 'Guardando...' : 'Agregar sucursal'}
+                </Button>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* ── Hours ── */}
+        <TabsContent value="hours" className="mt-4">
+          <Card className="p-6 space-y-5">
+            {/* Slot duration */}
+            <div className="flex items-center gap-4 pb-4 border-b border-border">
+              <div className="space-y-1 flex-1">
+                <Label>Duración del turno por defecto</Label>
+                <p className="text-xs text-muted-foreground">Se usa para calcular los slots disponibles. Puede sobreescribirse por servicio.</p>
+              </div>
+              <Select value={String(slotDuration)} onValueChange={v => setSlotDuration(Number(v))}>
+                <SelectTrigger className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SLOT_DURATIONS.map(d => (
+                    <SelectItem key={d} value={String(d)}>{d} minutos</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Days */}
+            <div className="space-y-4">
+              {DAY_DISPLAY_ORDER.map(day => {
+                const config = dayStates[day]
+                return (
+                  <div key={day} className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => toggleDay(day)}
+                        className={cn(
+                          'w-28 text-xs font-semibold py-1.5 px-3 rounded transition-colors flex-shrink-0',
+                          config.enabled ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                        )}
+                      >
+                        {DAYS[day]}
+                      </button>
+                      {!config.enabled && <span className="text-sm text-muted-foreground">Cerrado</span>}
+                    </div>
+
+                    {config.enabled && (
+                      <div className="pl-4 space-y-2">
+                        {config.blocks.map((block, idx) => (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Input
+                                type="time"
+                                value={block.start_time}
+                                onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
+                                className="w-28 text-sm"
+                              />
+                              <span className="text-muted-foreground text-sm">→</span>
+                              <Input
+                                type="time"
+                                value={block.end_time}
+                                onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
+                                className="w-28 text-sm"
+                              />
+                              <Input
+                                value={block.label}
+                                onChange={e => updateBlock(day, idx, 'label', e.target.value)}
+                                placeholder="Mañana, Tarde... (opcional)"
+                                className="w-44 text-sm"
+                              />
+                              <button
+                                onClick={() => removeBlock(day, idx)}
+                                className="text-muted-foreground hover:text-red-400 transition-colors"
+                                title="Eliminar bloque"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            {block.error && (
+                              <p className="text-xs text-red-400 pl-0.5">{block.error}</p>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => addBlock(day)}
+                          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors font-medium mt-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Agregar bloque
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-border">
+              <Button onClick={saveHours} disabled={savingHours}>
+                {savingHours ? 'Guardando...' : 'Guardar horarios'}
+              </Button>
             </div>
           </Card>
         </TabsContent>
 
-        {/* Payments & notifications */}
+        {/* ── Payments ── */}
         <TabsContent value="payments" className="mt-4 space-y-4">
-
           {/* MercadoPago */}
           <Card className="p-6 space-y-4">
             <div>
               <p className="font-semibold text-sm">MercadoPago</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Encontralo en mercadopago.com.ar → Tu negocio → Credenciales
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Encontralo en mercadopago.com.ar → Tu negocio → Credenciales</p>
             </div>
             <div className="space-y-1">
               <Label>Access Token</Label>
               <div className="relative">
-                <Input
-                  type={showMpToken ? 'text' : 'password'}
-                  value={mpToken}
-                  onChange={e => setMpToken(e.target.value)}
-                  placeholder="APP_USR-..."
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowMpToken(v => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
+                <Input type={showMpToken ? 'text' : 'password'} value={mpToken} onChange={e => setMpToken(e.target.value)} placeholder="APP_USR-..." className="pr-10" />
+                <button type="button" onClick={() => setShowMpToken(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                   {showMpToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            <Button onClick={saveMpToken} disabled={savingMp}>
-              {savingMp ? 'Guardando...' : 'Guardar'}
-            </Button>
+            <Button onClick={saveMpToken} disabled={savingMp}>{savingMp ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
 
           {/* Seña */}
           <Card className="p-6 space-y-4">
             <p className="font-semibold text-sm">Seña</p>
             <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="require_deposit"
-                checked={depositForm.require_deposit}
-                onChange={e => setDepositForm(f => ({ ...f, require_deposit: e.target.checked }))}
-                className="w-4 h-4 accent-primary cursor-pointer"
-              />
-              <Label htmlFor="require_deposit" className="cursor-pointer">
-                Requerir seña para confirmar el turno
-              </Label>
+              <input type="checkbox" id="require_deposit" checked={depositForm.require_deposit}
+                onChange={e => setDepositForm(f => ({ ...f, require_deposit: e.target.checked }))} className="w-4 h-4 accent-primary cursor-pointer" />
+              <Label htmlFor="require_deposit" className="cursor-pointer">Requerir seña para confirmar el turno</Label>
             </div>
             {depositForm.require_deposit && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <DollarSign className="w-3 h-3" /> Monto (ARS)
-                  </Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={100}
-                    value={depositForm.deposit_amount}
-                    onChange={e => setDepositForm(f => ({ ...f, deposit_amount: parseFloat(e.target.value) || 0 }))}
-                  />
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Monto (ARS)</Label>
+                  <Input type="text" inputMode="numeric"
+                    value={depositForm.deposit_amount === 0 ? '' : String(depositForm.deposit_amount)}
+                    onChange={e => { const raw = e.target.value.replace(/\D/g, ''); setDepositForm(f => ({ ...f, deposit_amount: raw === '' ? 0 : Number(raw) })) }}
+                    placeholder="0" />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Horas para pagar
-                  </Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={depositForm.deposit_expiry_hours}
-                    onChange={e => setDepositForm(f => ({ ...f, deposit_expiry_hours: parseInt(e.target.value) || 1 }))}
-                  />
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Horas para pagar</Label>
+                  <Input type="number" min={1} value={depositForm.deposit_expiry_hours}
+                    onChange={e => setDepositForm(f => ({ ...f, deposit_expiry_hours: parseInt(e.target.value) || 1 }))} />
                 </div>
               </div>
             )}
-            <Button onClick={saveDeposit} disabled={savingDeposit}>
-              {savingDeposit ? 'Guardando...' : 'Guardar'}
-            </Button>
+            <Button onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
 
           {/* Notificaciones */}
           <Card className="p-6 space-y-4">
             <div>
               <p className="font-semibold text-sm">Notificaciones por email</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Creá tu cuenta gratis en resend.com
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Creá tu cuenta gratis en resend.com</p>
             </div>
             <div className="space-y-1">
               <Label>Email para recibir notificaciones</Label>
-              <Input
-                type="email"
-                value={notifForm.notification_email}
-                onChange={e => setNotifForm(f => ({ ...f, notification_email: e.target.value }))}
-                placeholder="vos@tudominio.com"
-              />
+              <Input type="email" value={notifForm.notification_email} onChange={e => setNotifForm(f => ({ ...f, notification_email: e.target.value }))} placeholder="vos@tudominio.com" />
             </div>
             <div className="space-y-1">
               <Label>API Key de Resend</Label>
               <div className="relative">
-                <Input
-                  type={showResendKey ? 'text' : 'password'}
-                  value={notifForm.resend_api_key}
-                  onChange={e => setNotifForm(f => ({ ...f, resend_api_key: e.target.value }))}
-                  placeholder="re_..."
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowResendKey(v => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
+                <Input type={showResendKey ? 'text' : 'password'} value={notifForm.resend_api_key} onChange={e => setNotifForm(f => ({ ...f, resend_api_key: e.target.value }))} placeholder="re_..." className="pr-10" />
+                <button type="button" onClick={() => setShowResendKey(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                   {showResendKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            <Button onClick={saveNotif} disabled={savingNotif}>
-              {savingNotif ? 'Guardando...' : 'Guardar'}
-            </Button>
+            <Button onClick={saveNotif} disabled={savingNotif}>{savingNotif ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
 
           {/* Anti-spam */}
           <Card className="p-6 space-y-4">
             <div>
               <p className="font-semibold text-sm">Verificación anti-spam</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Creá tu cuenta en google.com/recaptcha → v3 → dominio: forjo.studio
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Creá tu cuenta en google.com/recaptcha → v3 → dominio: forjo.studio</p>
             </div>
             <div className="space-y-1">
               <Label>reCAPTCHA Site Key</Label>
-              <Input
-                value={recaptchaForm.recaptcha_site_key}
-                onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_site_key: e.target.value }))}
-                placeholder="6Le..."
-              />
+              <Input value={recaptchaForm.recaptcha_site_key} onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_site_key: e.target.value }))} placeholder="6Le..." />
             </div>
             <div className="space-y-1">
               <Label>reCAPTCHA Secret Key</Label>
               <div className="relative">
-                <Input
-                  type={showRecaptchaSecret ? 'text' : 'password'}
-                  value={recaptchaForm.recaptcha_secret_key}
-                  onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_secret_key: e.target.value }))}
-                  placeholder="6Le..."
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowRecaptchaSecret(v => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
+                <Input type={showRecaptchaSecret ? 'text' : 'password'} value={recaptchaForm.recaptcha_secret_key} onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_secret_key: e.target.value }))} placeholder="6Le..." className="pr-10" />
+                <button type="button" onClick={() => setShowRecaptchaSecret(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                   {showRecaptchaSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            <Button onClick={saveRecaptcha} disabled={savingRecaptcha}>
-              {savingRecaptcha ? 'Guardando...' : 'Guardar'}
-            </Button>
+            <Button onClick={saveRecaptcha} disabled={savingRecaptcha}>{savingRecaptcha ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
-
         </TabsContent>
       </Tabs>
+
+      {/* Plan change modal */}
+      <PlanModal open={planModalOpen} onOpenChange={setPlanModalOpen} />
+
+      {/* Cancel subscription confirmation */}
+      <Dialog open={confirmCancelSub} onOpenChange={setConfirmCancelSub}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>¿Cancelar suscripción?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tu plan seguirá activo hasta{' '}
+            {business.subscription_ends_at
+              ? new Date(business.subscription_ends_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })
+              : 'el fin del período'}
+            . No se renovará automáticamente.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConfirmCancelSub(false)}>Volver</Button>
+            <Button variant="destructive" onClick={cancelSubscription} disabled={cancellingSub}>
+              {cancellingSub ? 'Cancelando...' : 'Cancelar suscripción'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

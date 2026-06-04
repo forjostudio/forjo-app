@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mpFetch } from '@/lib/mercadopago'
+import { mpFetch, isMPTestMode } from '@/lib/mercadopago'
 import { getSubscriptionPlan, FORJO_APP_URL } from '@/lib/subscription-plans'
 import type { NextRequest } from 'next/server'
 
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return Response.json({ error: 'No autenticado' }, { status: 401 })
 
-  let body: { plan?: string }
+  let body: { plan?: string; payer_email?: string }
   try { body = await request.json() } catch { return Response.json({ error: 'JSON inválido' }, { status: 400 }) }
 
   const plan = body.plan
@@ -26,6 +26,23 @@ export async function POST(request: NextRequest) {
 
   const planConfig = getSubscriptionPlan(plan)
 
+  // payer_email is mandatory at MP. It must match the buyer's own MercadoPago
+  // account, NOT the Forjo account email — a mismatch breaks the checkout. So we
+  // use the email the client enters in the modal. In test mode we force the MP
+  // test buyer so payer and collector are both test accounts.
+  let payerEmail: string | undefined
+  if (isMPTestMode()) {
+    payerEmail = process.env.MP_TEST_PAYER_EMAIL
+    if (!payerEmail) {
+      return Response.json({ error: 'Falta configurar MP_TEST_PAYER_EMAIL para el modo prueba' }, { status: 500 })
+    }
+  } else {
+    payerEmail = body.payer_email?.trim()
+    if (!payerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
+      return Response.json({ error: 'Ingresá el email de tu cuenta de MercadoPago' }, { status: 400 })
+    }
+  }
+
   // Subscription WITHOUT an associated plan: with preapproval_plan_id MP forces
   // the on-site card flow (requires card_token_id). Sending the amount inline in
   // auto_recurring — and no preapproval_plan_id / card_token_id / status —
@@ -36,7 +53,7 @@ export async function POST(request: NextRequest) {
     body: JSON.stringify({
       reason: `Forjo Gestión — Plan ${planConfig.name}`,
       external_reference: business.id,
-      payer_email: user.email,
+      payer_email: payerEmail,
       back_url: `${FORJO_APP_URL}/dashboard?subscription=success`,
       auto_recurring: {
         frequency: 1,

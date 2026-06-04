@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { PlanBanner } from '@/components/dashboard/plan-banner'
 import { TestModeBanner } from '@/components/dashboard/test-mode-banner'
+import { VerticalProvider } from '@/lib/use-terminology'
+import { resolveVertical } from '@/lib/verticals'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -24,18 +26,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? Math.max(0, Math.ceil((new Date(business.trial_ends_at).getTime() - Date.now()) / 86_400_000))
     : 30
 
+  const vertical = resolveVertical(business)
+
   return (
-    <div className="min-h-screen">
-      <Sidebar business={business} />
-      <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">
-        <TestModeBanner />
-        <Suspense fallback={null}>
-          <PlanBanner planStatus={planStatus} daysLeft={daysLeft} />
-        </Suspense>
-        <div className="p-4 sm:p-6 lg:p-8">
-          {children}
-        </div>
-      </main>
-    </div>
+    <VerticalProvider vertical={vertical}>
+      <div className="min-h-screen">
+        <Sidebar business={business} />
+        <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">
+          <TestModeBanner />
+          <Suspense fallback={null}>
+            <PlanBanner planStatus={planStatus} daysLeft={daysLeft} />
+          </Suspense>
+          <div className="p-4 sm:p-6 lg:p-8">
+            {children}
+          </div>
+        </main>
+      </div>
+    </VerticalProvider>
   )
 }

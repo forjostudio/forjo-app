@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
@@ -32,6 +32,14 @@ export default function RegisterPage() {
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
+
+  // Capture intended plan from landing CTAs (?plan=basic|studio|pro)
+  useEffect(() => {
+    const plan = new URLSearchParams(window.location.search).get('plan')
+    if (plan && ['basic', 'studio', 'pro'].includes(plan)) {
+      localStorage.setItem('forjo_intended_plan', plan)
+    }
+  }, [])
 
   async function onSubmit(data: FormData) {
     setLoading(true)

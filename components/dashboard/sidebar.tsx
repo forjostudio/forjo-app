@@ -6,30 +6,44 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business } from '@/lib/types'
 import { getPlanLimits } from '@/lib/plans'
+import { resolveVertical } from '@/lib/verticals'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   Calendar,
   Users,
+  FileText,
   BarChart3,
   Settings,
   ExternalLink,
   LogOut,
   Menu,
-  X
+  X,
+  LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
-const NAV = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/appointments', label: 'Turnos', icon: Calendar },
-  { href: '/clients', label: 'Clientes', icon: Users },
-  { href: '/finances', label: 'Finanzas', icon: BarChart3 },
-  { href: '/settings', label: 'Configuración', icon: Settings },
-]
+// Maps each menu key (from the vertical config) to its route + icon. Labels for
+// client/patient items come from the vertical terminology so they read correctly
+// per rubro ("Pacientes" en salud, "Clientes" en belleza/general).
+function buildNav(business: Business): { href: string; label: string; icon: LucideIcon }[] {
+  const v = resolveVertical(business)
+  const t = v.terminology
+  const ITEMS: Record<string, { href: string; label: string; icon: LucideIcon }> = {
+    dashboard: { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    appointments: { href: '/appointments', label: t.appointments, icon: Calendar },
+    clients: { href: '/clients', label: t.clients, icon: Users },
+    patients: { href: '/clients', label: t.clients, icon: Users },
+    clinical_history: { href: '/clinical-history', label: 'Historia Clínica', icon: FileText },
+    finances: { href: '/finances', label: 'Finanzas', icon: BarChart3 },
+    settings: { href: '/settings', label: 'Configuración', icon: Settings },
+  }
+  return v.menu.map(key => ITEMS[key]).filter(Boolean)
+}
 
 export function Sidebar({ business }: { business: Business }) {
+  const NAV = buildNav(business)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()

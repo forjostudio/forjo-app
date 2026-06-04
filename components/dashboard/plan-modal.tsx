@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { SUBSCRIPTION_PLANS } from '@/lib/subscription-plans'
 import { getPlanLimits } from '@/lib/plans'
 import { cn } from '@/lib/utils'
@@ -11,14 +13,35 @@ import { Check } from 'lucide-react'
 
 export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
 
-  async function selectPlan(plan: string) {
-    setLoadingPlan(plan)
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  function handleClose(v: boolean) {
+    if (!v) {
+      setSelectedPlan(null)
+      setEmail('')
+      setEmailError('')
+      setLoadingPlan(null)
+    }
+    onOpenChange(v)
+  }
+
+  async function startCheckout() {
+    if (!selectedPlan) return
+    const value = email.trim()
+    if (!EMAIL_RE.test(value)) {
+      setEmailError('Ingresá un email válido')
+      return
+    }
+    setLoadingPlan(selectedPlan)
     try {
       const res = await fetch('/api/subscription/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan: selectedPlan, payer_email: value }),
       })
       const data = await res.json()
       if (data.ok && data.init_point) {
@@ -34,9 +57,14 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl">
-        <DialogHeader><DialogTitle>Elegí tu plan</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{selectedPlan ? 'Confirmá tu pago' : 'Elegí tu plan'}</DialogTitle>
+        </DialogHeader>
+
+        {!selectedPlan && (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
           {Object.entries(SUBSCRIPTION_PLANS).map(([key, plan]) => {
             const limits = getPlanLimits(key)
@@ -67,10 +95,9 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
                 <Button
                   className="w-full"
                   variant={isRec ? 'default' : 'outline'}
-                  disabled={loadingPlan !== null}
-                  onClick={() => selectPlan(key)}
+                  onClick={() => setSelectedPlan(key)}
                 >
-                  {loadingPlan === key ? 'Redirigiendo...' : 'Elegir'}
+                  Elegir
                 </Button>
               </div>
             )
@@ -79,6 +106,60 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
         <p className="text-xs text-muted-foreground text-center mt-2">
           Pagás de forma segura con MercadoPago · Podés cancelar cuando quieras
         </p>
+        </>
+        )}
+
+        {selectedPlan && (
+          <div className="mt-2 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Plan{' '}
+              <span className="font-semibold text-foreground">
+                {SUBSCRIPTION_PLANS[selectedPlan as keyof typeof SUBSCRIPTION_PLANS].name}
+              </span>{' '}
+              · ${SUBSCRIPTION_PLANS[selectedPlan as keyof typeof SUBSCRIPTION_PLANS].price_ars.toLocaleString('es-AR')}/mes
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="mp-email">Email de tu cuenta de MercadoPago</Label>
+              <Input
+                id="mp-email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="tucuenta@email.com"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError('') }}
+                onBlur={() => { if (email && !EMAIL_RE.test(email.trim())) setEmailError('Ingresá un email válido') }}
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? 'mp-email-error' : 'mp-email-help'}
+                disabled={loadingPlan !== null}
+              />
+              {emailError ? (
+                <p id="mp-email-error" className="text-xs text-red-500">{emailError}</p>
+              ) : (
+                <p id="mp-email-help" className="text-xs text-muted-foreground">
+                  Usá el email con el que iniciás sesión en MercadoPago. Debe coincidir con la cuenta con la que vas a pagar.
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => { setSelectedPlan(null); setEmailError('') }}
+                disabled={loadingPlan !== null}
+              >
+                Volver
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={startCheckout}
+                disabled={loadingPlan !== null || !email.trim()}
+              >
+                {loadingPlan ? 'Redirigiendo...' : 'Continuar al pago'}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -37,9 +37,17 @@ export async function POST(request: NextRequest) {
 
     const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
     const amount = Number(business.deposit_amount)
+    if (!amount || amount <= 0) {
+      return Response.json({ ok: false, error: 'El monto de la seña no es válido' }, { status: 400 })
+    }
     const expiryHours = Number(business.deposit_expiry_hours) || 1
     const serviceName = (appt.services as { name?: string } | null)?.name || 'Servicio'
     const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000)
+    const descriptor = business.name
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, '')
+      .substring(0, 22) || 'FORJO'
 
     const mpRes = await fetch(`${MP_API}/checkout/preferences`, {
       method: 'POST',
@@ -66,15 +74,9 @@ export async function POST(request: NextRequest) {
         auto_return: 'approved',
         notification_url: `${BASE_URL}/api/payment/webhook/${businessSlug}`,
         external_reference: String(appointmentId),
-        statement_descriptor: business.name.toUpperCase().substring(0, 22),
+        statement_descriptor: descriptor,
         expires: true,
         expiration_date_to: expiresAt.toISOString(),
-        payment_methods: {
-          excluded_payment_types: [
-            { id: 'credit_card' },
-            { id: 'prepaid_card' },
-          ],
-        },
       }),
     })
 

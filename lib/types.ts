@@ -4,6 +4,7 @@ export interface Business {
   slug: string
   name: string
   type: string | null
+  vertical?: string | null
   logo_url: string | null
   primary_color: string
   phone: string | null
@@ -94,7 +95,30 @@ export interface Client {
   notes: string | null
   status?: string | null
   client_number?: number | null
+  // Salud (obra social)
+  insurance_name?: string | null
+  insurance_number?: string | null
+  // Belleza (ficha de preferencias)
+  preferences?: string | null
   created_at: string
+}
+
+export interface ClinicalNote {
+  id: string
+  business_id: string
+  client_id: string
+  note: string
+  note_date: string
+  created_at: string
+}
+
+export interface ClientAttachment {
+  id: string
+  business_id: string
+  client_id: string
+  file_url: string
+  file_name: string | null
+  uploaded_at: string
 }
 
 export interface Appointment {

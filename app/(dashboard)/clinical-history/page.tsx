@@ -1,8 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { ClientsClient } from './clients-client'
+import { resolveVertical } from '@/lib/verticals'
+import { ClinicalHistoryClient } from './clinical-history-client'
 
-export default async function ClientsPage() {
+export default async function ClinicalHistoryPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -15,21 +16,18 @@ export default async function ClientsPage() {
 
   if (!business) redirect('/onboarding')
 
-  const [{ data: clients }, { data: appointments }] = await Promise.all([
-    supabase.from('clients')
-      .select('*')
-      .eq('business_id', business.id)
-      .order('created_at', { ascending: true }),
-    supabase.from('appointments')
-      .select('*, services(name, price)')
-      .eq('business_id', business.id)
-      .order('date', { ascending: false }),
-  ])
+  // La historia clínica solo existe para el rubro salud.
+  if (resolveVertical(business).key !== 'salud') redirect('/dashboard')
+
+  const { data: clients } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('business_id', business.id)
+    .order('name', { ascending: true })
 
   return (
-    <ClientsClient
+    <ClinicalHistoryClient
       initialClients={clients || []}
-      appointments={appointments || []}
       businessId={business.id}
       primaryColor={business.primary_color || '#d94a2b'}
     />

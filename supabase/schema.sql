@@ -142,3 +142,80 @@ CREATE POLICY "public insert appointments" ON appointments
   FOR INSERT WITH CHECK (true);
 CREATE POLICY "public insert clients" ON clients
   FOR INSERT WITH CHECK (true);
+
+-- ============================================================
+-- MIGRATION: Verticals (rubros) — run in Supabase SQL editor
+-- ============================================================
+-- Rubro del negocio. Los negocios existentes sin valor usan 'general'.
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vertical TEXT DEFAULT 'general';
+
+-- Campos extra para pacientes (salud)
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS insurance_name TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS insurance_number TEXT;
+
+-- Preferencias (belleza)
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS preferences TEXT;
+
+-- Historia clínica / notas con fecha
+CREATE TABLE IF NOT EXISTS clinical_notes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  note TEXT NOT NULL,
+  note_date DATE DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Archivos adjuntos por cliente
+CREATE TABLE IF NOT EXISTS client_attachments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  file_url TEXT NOT NULL,
+  file_name TEXT,
+  uploaded_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE client_attachments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "business access" ON clinical_notes FOR ALL
+  USING (business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid()));
+CREATE POLICY "business access" ON client_attachments FOR ALL
+  USING (business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid()));
+
+-- Migrar negocios existentes: derivar vertical desde su `type` actual.
+-- (Ajustar los nombres de type a los reales de tu base si difieren.)
+UPDATE businesses SET vertical = 'salud'
+  WHERE vertical IS DISTINCT FROM 'salud'
+    AND type IN ('Médico','Psicólogo','Kinesiólogo','Odontólogo','Nutricionista',
+                 'Centro médico','Psicología','Odontología','Kinesiología');
+UPDATE businesses SET vertical = 'belleza'
+  WHERE vertical IS DISTINCT FROM 'belleza'
+    AND type IN ('Peluquería','Barbería','Centro de estética','Manicura','Spa','Estética');
+UPDATE businesses SET vertical = 'general'
+  WHERE vertical IS NULL;
+
+-- ============================================================
+-- STORAGE: bucket privado "attachments" para adjuntos de clientes
+-- Path de los archivos: [business_id]/[client_id]/[filename]
+-- ============================================================
+INSERT INTO storage.buckets (id, name, public)
+  VALUES ('attachments', 'attachments', false)
+  ON CONFLICT (id) DO NOTHING;
+
+-- Solo el dueño del negocio puede subir/ver/borrar archivos de sus clientes.
+-- La primera carpeta del path es el business_id, que debe pertenecer al usuario.
+CREATE POLICY "business attachments" ON storage.objects
+  FOR ALL USING (
+    bucket_id = 'attachments'
+    AND (storage.foldername(name))[1] IN (
+      SELECT id::text FROM businesses WHERE owner_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    bucket_id = 'attachments'
+    AND (storage.foldername(name))[1] IN (
+      SELECT id::text FROM businesses WHERE owner_id = auth.uid()
+    )
+  );

@@ -7,13 +7,12 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Check, Plus, Trash2, Clock, DollarSign } from 'lucide-react'
+import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const BUSINESS_TYPES = ['Barbería', 'Estética', 'Centro médico', 'Psicología', 'Odontología', 'Kinesiología', 'Otro']
+import { TYPE_GROUPS, getVerticalKeyByType } from '@/lib/verticals'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -158,6 +157,7 @@ export default function OnboardingPage() {
           name,
           slug,
           type,
+          vertical: getVerticalKeyByType(type),
           phone: phone || null,
           address: address || null,
           instagram: instagram || null,
@@ -261,13 +261,32 @@ export default function OnboardingPage() {
                       <SelectValue placeholder="Seleccioná un tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                      {BUSINESS_TYPES.map(t => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      {TYPE_GROUPS.map(group => (
+                        <SelectGroup key={group.key}>
+                          <SelectLabel>{group.label}</SelectLabel>
+                          {group.types.map(t => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectGroup>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+
+              {/* Vertical hint — explica qué incluye el panel según el rubro */}
+              {type && getVerticalKeyByType(type) === 'salud' && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+                  <Stethoscope className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">Tu panel incluirá <strong className="text-foreground">historia clínica</strong> y <strong className="text-foreground">obra social</strong>.</span>
+                </div>
+              )}
+              {type && getVerticalKeyByType(type) === 'belleza' && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+                  <Sparkles className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">Tu panel incluirá <strong className="text-foreground">fichas de preferencias</strong> de clientes.</span>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>URL de tu página *</Label>

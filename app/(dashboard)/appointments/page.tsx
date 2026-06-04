@@ -15,11 +15,11 @@ export default async function AppointmentsPage() {
 
   if (!business) redirect('/onboarding')
 
-  const [{ data: appointments }, { data: professionals }, { data: services }] = await Promise.all([
+  const [{ data: appointments }, { data: professionals }, { data: services }, { data: timeBlocks }] = await Promise.all([
     supabase.from('appointments')
       .select('*, professionals(name), services(name, price, duration_minutes)')
       .eq('business_id', business.id)
-      .order('date', { ascending: false })
+      .order('date', { ascending: true })
       .order('time', { ascending: true }),
     supabase.from('professionals')
       .select('*')
@@ -29,6 +29,9 @@ export default async function AppointmentsPage() {
       .select('*')
       .eq('business_id', business.id)
       .eq('active', true),
+    supabase.from('time_blocks')
+      .select('*')
+      .eq('business_id', business.id),
   ])
 
   return (
@@ -36,6 +39,7 @@ export default async function AppointmentsPage() {
       initialAppointments={appointments || []}
       professionals={professionals || []}
       services={services || []}
+      timeBlocks={timeBlocks || []}
       businessId={business.id}
     />
   )

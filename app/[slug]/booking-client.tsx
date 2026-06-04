@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { format, isBefore, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { createClient } from '@/lib/supabase/client'
-import type { PublicBusiness, Service, Professional, BusinessHour } from '@/lib/types'
+import { createPublicBrowserClient } from '@/lib/supabase/public'
+import type { PublicBusiness, Service, Professional, TimeBlock } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,7 +17,7 @@ interface Props {
   business: PublicBusiness
   services: Service[]
   professionals: Professional[]
-  hours: BusinessHour[]
+  timeBlocks: TimeBlock[]
 }
 
 function timeToMinutes(t: string) {
@@ -31,8 +31,8 @@ function minutesToTime(m: number) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
-export function BookingClient({ business, services, professionals, hours }: Props) {
-  const supabase = createClient()
+export function BookingClient({ business, services, professionals, timeBlocks }: Props) {
+  const supabase = createPublicBrowserClient()
 
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
@@ -47,7 +47,7 @@ export function BookingClient({ business, services, professionals, hours }: Prop
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
-  const openDays = hours.filter(h => h.is_open).map(h => h.day_of_week)
+  const openDays = [...new Set(timeBlocks.map(b => b.day_of_week))]
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 
@@ -73,8 +73,8 @@ export function BookingClient({ business, services, professionals, hours }: Prop
     setSelectedTime('')
     setLoadingSlots(true)
 
-    const dayHour = hours.find(h => h.day_of_week === date.getDay())
-    if (!dayHour?.is_open || !dayHour.open_time || !dayHour.close_time) {
+    const dayBlocks = timeBlocks.filter(b => b.day_of_week === date.getDay())
+    if (dayBlocks.length === 0) {
       setAvailableSlots([])
       setLoadingSlots(false)
       return
@@ -87,21 +87,28 @@ export function BookingClient({ business, services, professionals, hours }: Prop
       .eq('business_id', business.id)
       .eq('date', dateStr)
       .neq('status', 'cancelled')
+      .neq('status', 'pending_payment')
 
-    const openMin = timeToMinutes(dayHour.open_time)
-    const closeMin = timeToMinutes(dayHour.close_time)
     const duration = selectedService.duration_minutes
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const isToday = dateStr === todayStr
+    const nowMinutes = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : -1
 
     const slots: string[] = []
-    for (let t = openMin; t + duration <= closeMin; t += duration) {
-      const slotEnd = t + duration
-      const conflict = (existingAppts || []).some(a => {
-        const aStart = timeToMinutes(a.time)
-        const aDuration = (a.services as { duration_minutes?: number } | null)?.duration_minutes || 30
-        const aEnd = aStart + aDuration
-        return t < aEnd && slotEnd > aStart
-      })
-      if (!conflict) slots.push(minutesToTime(t))
+    for (const block of dayBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+      const openMin = timeToMinutes(block.start_time)
+      const closeMin = timeToMinutes(block.end_time)
+      for (let t = openMin; t + duration <= closeMin; t += duration) {
+        if (nowMinutes >= 0 && t <= nowMinutes) continue
+        const slotEnd = t + duration
+        const conflict = (existingAppts || []).some(a => {
+          const aStart = timeToMinutes(a.time)
+          const aDuration = (a.services as { duration_minutes?: number } | null)?.duration_minutes || 30
+          const aEnd = aStart + aDuration
+          return t < aEnd && slotEnd > aStart
+        })
+        if (!conflict) slots.push(minutesToTime(t))
+      }
     }
 
     setAvailableSlots(slots)
@@ -241,12 +248,21 @@ export function BookingClient({ business, services, professionals, hours }: Prop
       <div className="max-w-lg mx-auto py-6">
         {/* Header */}
         <div className="text-center mb-8">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto mb-3"
-            style={{ backgroundColor: 'var(--primary-color)' }}
-          >
-            {business.name.charAt(0).toUpperCase()}
-          </div>
+          {business.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={business.logo_url}
+              alt={business.name}
+              className="w-16 h-16 rounded-2xl object-cover mx-auto mb-3 border border-white/10"
+            />
+          ) : (
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto mb-3"
+              style={{ backgroundColor: 'var(--primary-color)' }}
+            >
+              {business.name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <h1 className="text-xl font-bold">{business.name}</h1>
           {business.type && <p className="text-sm text-gray-400 mt-0.5">{business.type}</p>}
         </div>
@@ -433,7 +449,7 @@ export function BookingClient({ business, services, professionals, hours }: Prop
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-gray-300">Email <span className="text-gray-500">(opcional)</span></Label>
+                <Label className="text-gray-300">Email *</Label>
                 <Input
                   type="email"
                   value={clientEmail}
@@ -447,7 +463,7 @@ export function BookingClient({ business, services, professionals, hours }: Prop
             <Button
               className="w-full mt-2 text-white"
               style={{ backgroundColor: 'var(--primary-color)' }}
-              disabled={!clientName || !clientPhone || submitting}
+              disabled={!clientName || !clientPhone || !clientEmail || submitting}
               onClick={handleConfirm}
             >
               {submitting
