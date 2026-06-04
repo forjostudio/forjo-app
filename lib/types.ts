@@ -174,3 +174,14 @@ export interface SavedProduct {
   type: string
   created_at: string
 }
+
+export interface FixedExpense {
+  id: string
+  business_id: string
+  name: string
+  amount: number
+  frequency: string
+  due_day: number | null
+  active: boolean
+  created_at: string
+}

@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, differenceInCalendarDays, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Appointment, ManualSale, Expense, SavedProduct, Client } from '@/lib/types'
+import { Appointment, ManualSale, Expense, SavedProduct, Client, FixedExpense } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,14 +16,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DollarSign, TrendingUp, TrendingDown, Minus, Plus, Pencil, Trash2,
-  ChevronDown, Search, UserPlus, User, X,
+  ChevronDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
 } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 type Period = 'this_month' | 'last_month' | 'custom'
 type ClientMode = 'none' | 'search' | 'new'
 const EXPENSE_CATEGORIES = ['Insumos', 'Alquiler', 'Servicios', 'Personal', 'Marketing', 'Impuestos', 'Otro']
-function fmtARS(n: number) { return '$' + Number(n).toLocaleString('es-AR') }
+function fmtARS(n: number) { return '$' + Math.round(Number(n)).toLocaleString('es-AR') }
+
+// ── Gastos fijos: frecuencias y su equivalente mensual ────────────────────────
+// Todo gasto fijo se normaliza a un monto mensual para impactar el dashboard.
+const FIXED_FREQUENCIES: { value: string; label: string; toMonthly: number }[] = [
+  { value: 'monthly', label: 'Mensual', toMonthly: 1 },
+  { value: 'biweekly', label: 'Quincenal', toMonthly: 2 },
+  { value: 'weekly', label: 'Semanal', toMonthly: 52 / 12 },
+  { value: 'bimonthly', label: 'Bimestral', toMonthly: 1 / 2 },
+  { value: 'quarterly', label: 'Trimestral', toMonthly: 1 / 3 },
+  { value: 'yearly', label: 'Anual', toMonthly: 1 / 12 },
+]
+const FIXED_FREQ_LABEL: Record<string, string> = Object.fromEntries(FIXED_FREQUENCIES.map(f => [f.value, f.label]))
+const FIXED_PRESETS = ['Alquiler', 'Luz', 'Gas', 'Internet', 'Celular']
+function monthlyEquivalent(amount: number, frequency: string): number {
+  const f = FIXED_FREQUENCIES.find(x => x.value === frequency)
+  return amount * (f ? f.toMonthly : 1)
+}
 
 // ── ProductCombobox ──────────────────────────────────────────────────────────
 // Muestra el listado solo al escribir (≥1 char) o al clickear la flecha.
@@ -102,7 +119,15 @@ export function FinancesClient({ businessId }: Props) {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [savedProducts, setSavedProducts] = useState<SavedProduct[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>([])
   const [chartData, setChartData] = useState<{ name: string; ingresos: number; egresos: number }[]>([])
+
+  // Fixed expense modal
+  const [fixedModal, setFixedModal] = useState(false)
+  const [editFixed, setEditFixed] = useState<FixedExpense | null>(null)
+  const [fixedForm, setFixedForm] = useState({ name: '', amount: '', frequency: 'monthly', due_day: '' })
+  const [savingFixed, setSavingFixed] = useState(false)
+  const [confirmDeleteFixed, setConfirmDeleteFixed] = useState<string | null>(null)
 
   // Derived product lists filtered by type
   const incomeProducts = savedProducts.filter(p => p.type !== 'expense')
@@ -156,7 +181,9 @@ export function FinancesClient({ businessId }: Props) {
     if (!from || !to) return
     setLoading(true)
 
-    const [apptRes, salesRes, expRes, prodRes, clientRes] = await Promise.all([
+    // Fixed expenses are config (not date-bound): fetch them unfiltered by date,
+    // still scoped to the tenant by business_id.
+    const [apptRes, salesRes, expRes, prodRes, clientRes, fixedRes] = await Promise.all([
       supabase.from('appointments').select('*, services(name, price)')
         .eq('business_id', businessId).neq('status', 'cancelled').gte('date', from).lte('date', to).order('date', { ascending: false }),
       supabase.from('manual_sales').select('*')
@@ -165,6 +192,7 @@ export function FinancesClient({ businessId }: Props) {
         .eq('business_id', businessId).gte('expense_date', from).lte('expense_date', to).order('expense_date', { ascending: false }),
       supabase.from('saved_products').select('*').eq('business_id', businessId).order('name'),
       supabase.from('clients').select('*').eq('business_id', businessId).order('name'),
+      supabase.from('fixed_expenses').select('*').eq('business_id', businessId).order('amount', { ascending: false }),
     ])
 
     setAppointments(apptRes.data || [])
@@ -172,6 +200,12 @@ export function FinancesClient({ businessId }: Props) {
     setExpenses(expRes.data || [])
     setSavedProducts(prodRes.data || [])
     setClients(clientRes.data || [])
+    setFixedExpenses(fixedRes.data || [])
+
+    // Active fixed expenses contribute a recurring monthly amount to every month.
+    const fixedMonthlyLocal = (fixedRes.data || [])
+      .filter(f => f.active)
+      .reduce((sum, f) => sum + monthlyEquivalent(Number(f.amount), f.frequency), 0)
 
     // Chart: last 6 months
     const now = new Date()
@@ -188,7 +222,7 @@ export function FinancesClient({ businessId }: Props) {
           name: format(d, 'MMM', { locale: es }),
           ingresos: (a.data || []).reduce((sum, x) => sum + ((x.services as { price?: number } | null)?.price || 0), 0)
             + (s.data || []).reduce((sum, x) => sum + Number(x.amount) * Number(x.quantity), 0),
-          egresos: (e.data || []).reduce((sum, x) => sum + Number(x.amount), 0),
+          egresos: (e.data || []).reduce((sum, x) => sum + Number(x.amount), 0) + fixedMonthlyLocal,
         }))
       })
     )
@@ -199,12 +233,63 @@ export function FinancesClient({ businessId }: Props) {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Stats
+  // ── Stats ───────────────────────────────────────────────────────────────────
+  const { from: rangeFrom, to: rangeTo } = getDateRange()
   const apptRevenue = appointments.reduce((s, a) => s + ((a.services as { price?: number } | null)?.price || 0), 0)
   const salesRevenue = sales.reduce((s, x) => s + Number(x.amount) * Number(x.quantity), 0)
   const totalIncome = apptRevenue + salesRevenue
-  const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0)
+
+  // Variable (one-off) expenses come from the expenses table.
+  const variableExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0)
+
+  // Active fixed expenses normalized to a monthly amount → recurring egresos.
+  // Month views apply a factor of 1; a custom range is prorated by its length
+  // in months (≈30.44 days/month).
+  const activeFixed = fixedExpenses.filter(f => f.active)
+  const fixedMonthly = activeFixed.reduce((s, f) => s + monthlyEquivalent(Number(f.amount), f.frequency), 0)
+  const monthsInPeriod = period === 'custom' && rangeFrom && rangeTo
+    ? Math.max((differenceInCalendarDays(parseISO(rangeTo), parseISO(rangeFrom)) + 1) / 30.44, 0)
+    : 1
+  const recurringExpenses = fixedMonthly * monthsInPeriod
+
+  const totalExpenses = variableExpenses + recurringExpenses
   const balance = totalIncome - totalExpenses
+
+  // Ticket promedio: ingreso medio por transacción (turnos + ventas).
+  const incomeTxCount = appointments.length + sales.length
+  const avgTicket = incomeTxCount > 0 ? totalIncome / incomeTxCount : 0
+
+  // Margen: porción del ingreso que queda como saldo.
+  const margin = totalIncome > 0 ? (balance / totalIncome) * 100 : 0
+
+  // Ranking de servicios y productos por ingreso (turnos por servicio + ventas por descripción).
+  const rankingMap = new Map<string, { label: string; total: number; count: number }>()
+  for (const a of appointments) {
+    const svc = a.services as { name?: string; price?: number } | null
+    const label = svc?.name || 'Sin servicio'
+    const cur = rankingMap.get(label) || { label, total: 0, count: 0 }
+    cur.total += svc?.price || 0
+    cur.count += 1
+    rankingMap.set(label, cur)
+  }
+  for (const s of sales) {
+    const label = s.description || 'Venta'
+    const cur = rankingMap.get(label) || { label, total: 0, count: 0 }
+    cur.total += Number(s.amount) * Number(s.quantity)
+    cur.count += Number(s.quantity)
+    rankingMap.set(label, cur)
+  }
+  const ranking = [...rankingMap.values()].sort((a, b) => b.total - a.total).slice(0, 6)
+  const rankingMax = ranking.length ? ranking[0].total : 0
+
+  // Desglose de egresos por gasto fijo (monto mensual de cada gasto activo).
+  const fixedBreakdown = activeFixed
+    .map(f => ({ id: f.id, name: f.name, monthly: monthlyEquivalent(Number(f.amount), f.frequency) }))
+    .sort((a, b) => b.monthly - a.monthly)
+  const fixedBreakdownMax = fixedBreakdown.length ? fixedBreakdown[0].monthly : 0
+
+  // Cashflow diario del período seleccionado.
+  const dailyCashflow = buildDailyCashflow()
 
   // ── Shared helpers ────────────────────────────────────────────────────────────
   function isNewProduct(name: string, type: 'income' | 'expense') {
@@ -369,6 +454,91 @@ export function FinancesClient({ businessId }: Props) {
     toast.success('Marcado como pagado')
   }
 
+  // ── Daily cashflow ──────────────────────────────────────────────────────────
+  // Ingresos y egresos por día del período. Los gastos fijos caen en su día de
+  // vencimiento (solo en vistas de mes; en rangos largos el detalle diario no aporta).
+  function buildDailyCashflow() {
+    if (!rangeFrom || !rangeTo) return [] as { date: string; label: string; ingresos: number; egresos: number; neto: number }[]
+    const start = parseISO(rangeFrom)
+    const end = parseISO(rangeTo)
+    if (end < start) return []
+    const days = eachDayOfInterval({ start, end })
+    if (days.length > 92) return [] // rango muy largo: el cashflow diario no aporta
+
+    const inc = new Map<string, number>()
+    const eg = new Map<string, number>()
+    for (const a of appointments) inc.set(a.date, (inc.get(a.date) || 0) + ((a.services as { price?: number } | null)?.price || 0))
+    for (const s of sales) inc.set(s.sale_date, (inc.get(s.sale_date) || 0) + Number(s.amount) * Number(s.quantity))
+    for (const e of expenses) eg.set(e.expense_date, (eg.get(e.expense_date) || 0) + Number(e.amount))
+    if (period !== 'custom') {
+      for (const f of activeFixed) {
+        const day = f.due_day && f.due_day >= 1 && f.due_day <= 31 ? f.due_day : 1
+        const target = days.find(d => d.getDate() === day) || days[days.length - 1]
+        const k = format(target, 'yyyy-MM-dd')
+        eg.set(k, (eg.get(k) || 0) + monthlyEquivalent(Number(f.amount), f.frequency))
+      }
+    }
+    return days.map(d => {
+      const k = format(d, 'yyyy-MM-dd')
+      const ingresos = inc.get(k) || 0
+      const egresos = eg.get(k) || 0
+      return { date: k, label: format(d, 'd'), ingresos, egresos, neto: ingresos - egresos }
+    })
+  }
+
+  // ── Fixed expenses CRUD ───────────────────────────────────────────────────────
+  function openNewFixed(presetName = '') {
+    setEditFixed(null)
+    setFixedForm({ name: presetName, amount: '', frequency: 'monthly', due_day: '' })
+    setFixedModal(true)
+  }
+  function openEditFixed(f: FixedExpense) {
+    setEditFixed(f)
+    setFixedForm({ name: f.name, amount: String(f.amount), frequency: f.frequency, due_day: f.due_day ? String(f.due_day) : '' })
+    setFixedModal(true)
+  }
+  async function saveFixed() {
+    if (!fixedForm.name.trim()) { toast.error('Ingresá un nombre'); return }
+    if (!fixedForm.amount) { toast.error('Ingresá un monto'); return }
+    setSavingFixed(true)
+    const dueDay = fixedForm.due_day ? Math.min(Math.max(parseInt(fixedForm.due_day), 1), 31) : null
+    const payload = {
+      business_id: businessId,
+      name: fixedForm.name.trim(),
+      amount: parseFloat(fixedForm.amount),
+      frequency: fixedForm.frequency,
+      due_day: dueDay,
+    }
+    if (editFixed) {
+      const { error } = await supabase.from('fixed_expenses').update(payload).eq('id', editFixed.id)
+      setSavingFixed(false)
+      if (error) { toast.error('Error al guardar'); return }
+      setFixedExpenses(prev => prev.map(f => f.id === editFixed.id ? { ...f, ...payload } : f))
+      setFixedModal(false)
+      toast.success('Gasto fijo actualizado')
+    } else {
+      const { data, error } = await supabase.from('fixed_expenses').insert({ ...payload, active: true }).select().single()
+      setSavingFixed(false)
+      if (error) { toast.error('Error al guardar'); return }
+      setFixedExpenses(prev => [...prev, data])
+      setFixedModal(false)
+      toast.success('Gasto fijo agregado')
+    }
+  }
+  async function toggleFixed(f: FixedExpense) {
+    const next = !f.active
+    const { error } = await supabase.from('fixed_expenses').update({ active: next }).eq('id', f.id)
+    if (error) { toast.error('Error'); return }
+    setFixedExpenses(prev => prev.map(x => x.id === f.id ? { ...x, active: next } : x))
+  }
+  async function deleteFixed(id: string) {
+    const { error } = await supabase.from('fixed_expenses').delete().eq('id', id)
+    if (error) { toast.error('Error al eliminar'); return }
+    setFixedExpenses(prev => prev.filter(f => f.id !== id))
+    setConfirmDeleteFixed(null)
+    toast.success('Gasto fijo eliminado')
+  }
+
   return (
     <div className="space-y-6">
       {/* Header + period selector */}
@@ -390,13 +560,13 @@ export function FinancesClient({ businessId }: Props) {
         </div>
       )}
 
-      {/* Stats */}
+      {/* KPIs */}
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => <Card key={i}><CardContent className="pt-5 h-24 animate-pulse bg-secondary/30 rounded-lg" /></Card>)}
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => <Card key={i}><CardContent className="pt-5 h-24 animate-pulse bg-secondary/30 rounded-lg" /></Card>)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <Card><CardContent className="pt-5">
             <div className="flex items-center gap-2 mb-1"><TrendingUp className="w-4 h-4 text-green-400" /><span className="text-xs text-muted-foreground">Ingresos</span></div>
             <p className="text-xl font-bold text-green-400">{fmtARS(totalIncome)}</p>
@@ -405,10 +575,19 @@ export function FinancesClient({ businessId }: Props) {
           <Card><CardContent className="pt-5">
             <div className="flex items-center gap-2 mb-1"><TrendingDown className="w-4 h-4 text-red-400" /><span className="text-xs text-muted-foreground">Egresos</span></div>
             <p className="text-xl font-bold text-red-400">{fmtARS(totalExpenses)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Variables {fmtARS(variableExpenses)} · Fijos {fmtARS(recurringExpenses)}</p>
           </CardContent></Card>
           <Card><CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1"><Minus className={`w-4 h-4 ${balance >= 0 ? 'text-blue-400' : 'text-red-400'}`} /><span className="text-xs text-muted-foreground">Balance</span></div>
+            <div className="flex items-center gap-2 mb-1"><Minus className={`w-4 h-4 ${balance >= 0 ? 'text-blue-400' : 'text-red-400'}`} /><span className="text-xs text-muted-foreground">Saldo del mes</span></div>
             <p className={`text-xl font-bold ${balance >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{fmtARS(balance)}</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5">
+            <div className="flex items-center gap-2 mb-1"><Percent className={`w-4 h-4 ${margin >= 0 ? 'text-blue-400' : 'text-red-400'}`} /><span className="text-xs text-muted-foreground">Margen</span></div>
+            <p className={`text-xl font-bold ${margin >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{margin.toFixed(1)}%</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5">
+            <div className="flex items-center gap-2 mb-1"><Receipt className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Ticket promedio</span></div>
+            <p className="text-xl font-bold">{fmtARS(avgTicket)}</p>
           </CardContent></Card>
           <Card><CardContent className="pt-5">
             <div className="flex items-center gap-2 mb-1"><DollarSign className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Turnos</span></div>
@@ -437,12 +616,91 @@ export function FinancesClient({ businessId }: Props) {
         </Card>
       )}
 
+      {/* Cashflow diario */}
+      {!loading && dailyCashflow.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-muted-foreground" /> Cashflow diario</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={dailyCashflow}>
+                <defs>
+                  <linearGradient id="cfIn" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="cfOut" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="label" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} interval="preserveStartEnd" minTickGap={16} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} width={48} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6 }}
+                  labelFormatter={l => `Día ${l}`}
+                  formatter={(v, name) => [fmtARS(Number(v)), name === 'ingresos' ? 'Ingresos' : 'Egresos']} />
+                <Area type="monotone" dataKey="ingresos" stroke="hsl(var(--primary))" fill="url(#cfIn)" strokeWidth={2} />
+                <Area type="monotone" dataKey="egresos" stroke="hsl(var(--destructive))" fill="url(#cfOut)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Ranking de servicios + desglose de egresos fijos */}
+      {!loading && (ranking.length > 0 || fixedBreakdown.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {ranking.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Award className="w-4 h-4 text-muted-foreground" /> Ranking de servicios</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {ranking.map(r => (
+                  <div key={r.label} className="space-y-1">
+                    <div className="flex items-baseline justify-between gap-2 text-sm">
+                      <span className="truncate font-medium">{r.label}</span>
+                      <span className="flex-shrink-0 tabular-nums">{fmtARS(r.total)} <span className="text-xs text-muted-foreground">· {r.count}</span></span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div className="h-full bg-primary rounded-full" style={{ width: `${rankingMax > 0 ? (r.total / rankingMax) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+          <Card>
+            <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Receipt className="w-4 h-4 text-muted-foreground" /> Egresos por gasto fijo</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {fixedBreakdown.length === 0 ? (
+                <div className="text-center py-6 space-y-2">
+                  <p className="text-sm text-muted-foreground">Sin gastos fijos activos.</p>
+                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openNewFixed()}><Plus className="w-3.5 h-3.5" /> Agregar gasto fijo</Button>
+                </div>
+              ) : fixedBreakdown.map(f => (
+                <div key={f.id} className="space-y-1">
+                  <div className="flex items-baseline justify-between gap-2 text-sm">
+                    <span className="truncate font-medium">{f.name}</span>
+                    <span className="flex-shrink-0 tabular-nums text-red-400">{fmtARS(f.monthly)}<span className="text-xs text-muted-foreground">/mes</span></span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                    <div className="h-full bg-red-400/70 rounded-full" style={{ width: `${fixedBreakdownMax > 0 ? (f.monthly / fixedBreakdownMax) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Tabs */}
       <Tabs defaultValue="appointments">
         <TabsList>
           <TabsTrigger value="appointments">Turnos ({appointments.length})</TabsTrigger>
           <TabsTrigger value="sales">Ventas ({sales.length})</TabsTrigger>
           <TabsTrigger value="expenses">Egresos ({expenses.length})</TabsTrigger>
+          <TabsTrigger value="fixed">Gastos fijos ({fixedExpenses.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appointments" className="space-y-2 mt-4">
@@ -514,6 +772,53 @@ export function FinancesClient({ businessId }: Props) {
               </div>
             </div>
           ))}
+        </TabsContent>
+
+        {/* ── Gastos fijos ── */}
+        <TabsContent value="fixed" className="space-y-3 mt-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-muted-foreground">
+              Egresos recurrentes que impactan en el saldo del mes.
+              {fixedMonthly > 0 && <> Total mensual: <span className="font-semibold text-red-400">{fmtARS(fixedMonthly)}</span>.</>}
+            </p>
+            <Button size="sm" className="gap-2" onClick={() => openNewFixed()}><Plus className="w-4 h-4" /> Nuevo gasto fijo</Button>
+          </div>
+
+          {/* Opciones rápidas */}
+          <div className="flex flex-wrap gap-2">
+            <span className="text-xs text-muted-foreground self-center">Rápido:</span>
+            {FIXED_PRESETS.map(p => (
+              <Button key={p} size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => openNewFixed(p)}>
+                <Plus className="w-3 h-3" /> {p}
+              </Button>
+            ))}
+          </div>
+
+          {fixedExpenses.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8 text-sm">Sin gastos fijos cargados</p>
+          ) : fixedExpenses.map(f => {
+            const monthly = monthlyEquivalent(Number(f.amount), f.frequency)
+            return (
+              <div key={f.id} className={`flex items-center gap-3 p-3 rounded-lg bg-card border border-border text-sm ${!f.active ? 'opacity-50' : ''}`}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{f.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {FIXED_FREQ_LABEL[f.frequency] || f.frequency}
+                    {f.frequency !== 'monthly' && <> · {fmtARS(monthly)}/mes</>}
+                    {f.due_day && <> · vence el {f.due_day}</>}
+                    {!f.active && <> · pausado</>}
+                  </p>
+                </div>
+                <span className="font-semibold text-red-400 flex-shrink-0">{fmtARS(Number(f.amount))}</span>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button size="icon" variant="ghost" className={`h-7 w-7 ${f.active ? 'text-green-400' : 'text-muted-foreground'}`}
+                    title={f.active ? 'Pausar' : 'Activar'} onClick={() => toggleFixed(f)}><Power className="w-3.5 h-3.5" /></Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => openEditFixed(f)}><Pencil className="w-3.5 h-3.5" /></Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-red-400" onClick={() => setConfirmDeleteFixed(f.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                </div>
+              </div>
+            )
+          })}
         </TabsContent>
       </Tabs>
 
@@ -692,6 +997,58 @@ export function FinancesClient({ businessId }: Props) {
               <Button variant="outline" onClick={() => setExpenseModal(false)}>Cancelar</Button>
               <Button onClick={saveExpense} disabled={savingExpense}>{savingExpense ? 'Guardando...' : 'Guardar'}</Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Fixed expense modal ──────────────────────────────────────────────────── */}
+      <Dialog open={fixedModal} onOpenChange={setFixedModal}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>{editFixed ? 'Editar gasto fijo' : 'Nuevo gasto fijo'}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Nombre *</Label>
+              <Input value={fixedForm.name} onChange={e => setFixedForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: Alquiler" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Monto *</Label>
+                <Input type="text" inputMode="numeric" value={fixedForm.amount}
+                  onChange={e => setFixedForm(f => ({ ...f, amount: e.target.value.replace(/[^\d.]/g, '') }))} placeholder="0" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Frecuencia</Label>
+                <Select value={fixedForm.frequency} onValueChange={v => setFixedForm(f => ({ ...f, frequency: v ?? 'monthly' }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{FIXED_FREQUENCIES.map(fr => <SelectItem key={fr.value} value={fr.value}>{fr.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Día de vencimiento <span className="text-muted-foreground">(opcional)</span></Label>
+              <Input type="text" inputMode="numeric" value={fixedForm.due_day}
+                onChange={e => setFixedForm(f => ({ ...f, due_day: e.target.value.replace(/\D/g, '').slice(0, 2) }))} placeholder="Ej: 10" />
+            </div>
+            {fixedForm.amount && fixedForm.frequency !== 'monthly' && (
+              <p className="text-xs text-muted-foreground">
+                Equivale a <span className="font-medium text-foreground">{fmtARS(monthlyEquivalent(parseFloat(fixedForm.amount) || 0, fixedForm.frequency))}</span> por mes.
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setFixedModal(false)}>Cancelar</Button>
+              <Button onClick={saveFixed} disabled={savingFixed}>{savingFixed ? 'Guardando...' : 'Guardar'}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!confirmDeleteFixed} onOpenChange={open => !open && setConfirmDeleteFixed(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>¿Eliminar gasto fijo?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Dejará de impactar en el saldo del mes. Si solo querés pausarlo temporalmente, usá el botón de activar/pausar.</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConfirmDeleteFixed(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => confirmDeleteFixed && deleteFixed(confirmDeleteFixed)}>Eliminar</Button>
           </div>
         </DialogContent>
       </Dialog>
