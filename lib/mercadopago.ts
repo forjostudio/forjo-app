@@ -16,6 +16,15 @@ export function getMPAccessToken(): string {
   return process.env.MP_FORJO_ACCESS_TOKEN || ''
 }
 
+// Secret used to validate the x-signature header MercadoPago sends on webhooks.
+// Per MP_MODE so test and production notifications validate against their own secret.
+export function getMPWebhookSecret(): string {
+  if (MP_MODE === 'test') {
+    return process.env.MP_WEBHOOK_SECRET_TEST || ''
+  }
+  return process.env.MP_WEBHOOK_SECRET || ''
+}
+
 export function getMPPlanId(plan: 'basic' | 'studio' | 'pro'): string | null {
   if (MP_MODE === 'test') {
     return {

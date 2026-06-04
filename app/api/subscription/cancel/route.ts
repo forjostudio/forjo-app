@@ -15,11 +15,19 @@ export async function POST() {
   if (!business) return Response.json({ error: 'Negocio no encontrado' }, { status: 404 })
   if (!business.mp_subscription_id) return Response.json({ error: 'Sin suscripción activa' }, { status: 400 })
 
-  // Cancel in MercadoPago
-  await mpFetch(`/preapproval/${business.mp_subscription_id}`, {
+  // Cancel in MercadoPago (mpFetch uses the platform token per MP_MODE).
+  const result = await mpFetch(`/preapproval/${business.mp_subscription_id}`, {
     method: 'PUT',
     body: JSON.stringify({ status: 'cancelled' }),
   })
+
+  // Do NOT write state optimistically: only drop plan_status once MP confirms the
+  // preapproval is actually cancelled. A failed PUT returns an error object (HTTP
+  // status code as a number / message), never status: 'cancelled'.
+  if (result?.status !== 'cancelled') {
+    console.error('MP cancel error:', JSON.stringify(result))
+    return Response.json({ error: 'No se pudo cancelar en MercadoPago. Intentá de nuevo.' }, { status: 502 })
+  }
 
   // Keep plan active until subscription_ends_at; just mark cancelled
   const admin = createAdminClient()
