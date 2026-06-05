@@ -1,12 +1,16 @@
-// From de la cuenta Resend de Forjo: forjo.studio está verificado ahí.
-const GLOBAL_FROM = 'Forjo Gestión <notificaciones@forjo.studio>'
-
 // Decide con qué key y qué "from" mandar, según la config del negocio:
 // - Key propia del negocio → hay que mandar desde SU dominio verificado (resend_from).
 //   Sin resend_from, mandar con @forjo.studio daría 403 (dominio no verificado en su
 //   cuenta) → NO enviamos y tiramos un error claro en vez de fallar silencioso.
 // - Sin key propia → key global de Forjo + from @forjo.studio (dominio verificado).
-function resolveSender(resendApiKey?: string | null, resendFrom?: string | null): { key: string; from: string } {
+// Sanitiza el nombre para el display name del header From (sin saltos de línea ni
+// caracteres que rompan/inyecten el header). Fallback "Forjo Gestión".
+function fromDisplayName(name?: string | null): string {
+  const safe = (name || '').replace(/[\r\n"<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 64)
+  return safe || 'Forjo Gestión'
+}
+
+function resolveSender(businessName?: string | null, resendApiKey?: string | null, resendFrom?: string | null): { key: string; from: string } {
   const ownKey = resendApiKey?.trim()
   if (ownKey) {
     const ownFrom = resendFrom?.trim()
@@ -19,7 +23,8 @@ function resolveSender(resendApiKey?: string | null, resendFrom?: string | null)
   if (!globalKey) {
     throw new Error('sin RESEND_API_KEY global y el negocio no tiene key propia: no hay con qué enviar')
   }
-  return { key: globalKey, from: GLOBAL_FROM }
+  // Key global de Forjo: display name = nombre del negocio, dirección verificada de Forjo.
+  return { key: globalKey, from: `"${fromDisplayName(businessName)}" <notificaciones@forjo.studio>` }
 }
 
 function fmtDate(date: string): string {
@@ -59,6 +64,10 @@ export async function sendConfirmationEmail({
   time,
   businessName,
   businessSlug,
+  primaryColor,
+  logoUrl,
+  whatsapp,
+  cancelToken,
   resendApiKey,
   resendFrom,
 }: {
@@ -71,14 +80,32 @@ export async function sendConfirmationEmail({
   time: string
   businessName: string
   businessSlug: string
+  primaryColor?: string | null
+  logoUrl?: string | null
+  whatsapp?: string | null
+  cancelToken?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
 }) {
-  // Resuelve key + from (tira error claro si el negocio usa key propia sin remitente).
-  const { key, from } = resolveSender(resendApiKey, resendFrom)
+  // Resuelve key + from (display name = nombre del negocio; tira error claro si usa key
+  // propia sin remitente).
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
   const saldo = price - deposit
+
+  // Branding parametrizado: el acento toma el color del negocio (a futuro, la paleta del
+  // theme) sin reescribir el template. Fallback al rojo Forjo.
+  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
+  const cancelUrl = cancelToken ? `${baseUrl}/cancelar/${cancelToken}` : ''
+  const waDigits = whatsapp ? whatsapp.replace(/\D/g, '') : ''
+  const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
+  // Header: logo del negocio si tiene uno; si no, el nombre en texto (fallback actual).
+  const headerInner = logoUrl
+    ? `<img src="${logoUrl}" alt="${businessName}" height="48" style="max-height:48px;border-radius:8px;display:inline-block;"/>`
+    : `<div style="font-size:22px;font-weight:800;letter-spacing:2px;color:#ffffff;">${businessName.toUpperCase()}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:4px;letter-spacing:1px;text-transform:uppercase;">Gestión de turnos</div>`
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -88,9 +115,8 @@ export async function sendConfirmationEmail({
   <tr><td align="center">
     <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
-      <tr><td style="background:#1a1714;padding:32px 40px;border-radius:12px 12px 0 0;text-align:center;">
-        <div style="font-size:22px;font-weight:800;letter-spacing:2px;color:#f3ead8;">${businessName.toUpperCase()}</div>
-        <div style="font-size:12px;color:rgba(243,234,216,.4);margin-top:4px;letter-spacing:1px;text-transform:uppercase;">Gestión de turnos</div>
+      <tr><td style="background:${accent};padding:32px 40px;border-radius:12px 12px 0 0;text-align:center;">
+        ${headerInner}
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
@@ -99,7 +125,7 @@ export async function sendConfirmationEmail({
           Hola <strong>${clientName}</strong>, aquí está el resumen de tu reserva en <strong>${businessName}</strong>.
         </p>
 
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid #1a1714;border-radius:0 8px 8px 0;margin-bottom:24px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
           <tr><td style="padding:20px 22px 6px;">
             <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:14px;">Detalle del turno</div>
           </td></tr>
@@ -119,7 +145,7 @@ export async function sendConfirmationEmail({
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:10px 0 0;">Total</td>
-                <td style="font-size:20px;font-weight:900;color:#1a1714;padding:10px 0 0;text-align:right;">${fmtPrice(price)}</td>
+                <td style="font-size:20px;font-weight:900;color:${accent};padding:10px 0 0;text-align:right;">${fmtPrice(price)}</td>
               </tr>
               ${deposit > 0 ? `
               <tr>
@@ -135,13 +161,15 @@ export async function sendConfirmationEmail({
           </td></tr>
         </table>
 
-        <p style="font-size:13px;color:#999;line-height:1.7;margin:0;">
-          Si necesitás cancelar o modificar tu turno, comunicate directamente con el negocio.
-        </p>
+        <p style="font-size:13px;color:#777;line-height:1.7;margin:0 0 16px;">¿Necesitás cancelar o reprogramar tu turno?</p>
+        ${cancelUrl ? `<table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
+          <a href="${cancelUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Cancelar turno</a>
+        </td></tr></table>` : ''}
+        ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
       </td></tr>
 
-      <tr><td style="background:#1a1714;padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:#666;">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+      <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
       </td></tr>
 
     </table>
@@ -170,6 +198,7 @@ export async function sendAdminNotification({
   deposit,
   date,
   time,
+  businessName,
   resendApiKey,
   resendFrom,
   pending = false,
@@ -183,11 +212,12 @@ export async function sendAdminNotification({
   deposit: number
   date: string
   time: string
+  businessName?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
   pending?: boolean
 }) {
-  const { key, from } = resolveSender(resendApiKey, resendFrom)
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
   const statusLabel = pending ? '⏳ Pendiente de pago' : '✅ Pago confirmado'

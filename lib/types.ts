@@ -153,6 +153,8 @@ export interface Appointment {
   // Estado del email de confirmación (para detectar fallos; sin reintentos).
   email_sent?: boolean
   email_error?: string | null
+  // Token impredecible para el link público de cancelación (nunca cancelar por id).
+  cancel_token?: string
   created_at: string
   professionals?: Professional
   services?: Service

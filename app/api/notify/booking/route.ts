@@ -44,6 +44,10 @@ export async function POST(request: Request) {
           time: appt.time,
           businessName: String(business.name || ''),
           businessSlug: String(business.slug || ''),
+          primaryColor: business.primary_color as string | null,
+          logoUrl: business.logo_url as string | null,
+          whatsapp: business.phone as string | null,
+          cancelToken: appt.cancel_token as string | null,
           resendApiKey: resendKey,
           resendFrom,
         })
@@ -73,6 +77,7 @@ export async function POST(request: Request) {
           deposit: 0,
           date: appt.date,
           time: appt.time,
+          businessName: String(business.name || ''),
           resendApiKey: resendKey,
           resendFrom,
         })

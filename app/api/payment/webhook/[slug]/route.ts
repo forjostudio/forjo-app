@@ -109,6 +109,10 @@ async function processWebhook(slug: string, paymentId: string) {
           time: appt.time,
           businessName: business.name,
           businessSlug: slug,
+          primaryColor: business.primary_color,
+          logoUrl: business.logo_url,
+          whatsapp: business.phone,
+          cancelToken: appt.cancel_token,
           resendApiKey: business.resend_api_key,
           resendFrom: business.resend_from,
         })
@@ -135,6 +139,7 @@ async function processWebhook(slug: string, paymentId: string) {
           deposit: depositAmt,
           date: appt.date,
           time: appt.time,
+          businessName: business.name,
           resendApiKey: business.resend_api_key,
           resendFrom: business.resend_from,
           pending: false,
