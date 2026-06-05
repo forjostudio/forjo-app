@@ -1,40 +1,72 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 
+const SCORE_THRESHOLD = 0.5 // reCAPTCHA v3
+
 export async function POST(request: Request) {
+  // Cuerpo inválido → no podemos verificar nada. Fail-closed.
+  let token: unknown
+  let businessSlug: unknown
   try {
-    const { token, businessSlug } = await request.json()
-    if (!token) return Response.json({ ok: false, score: 0 })
+    const body = await request.json()
+    token = body?.token
+    businessSlug = body?.businessSlug
+  } catch {
+    console.error('[recaptcha] body inválido')
+    return Response.json({ ok: false, reason: 'bad_request' }, { status: 400 })
+  }
 
-    let secretKey = process.env.RECAPTCHA_SECRET_KEY || ''
+  const slug = typeof businessSlug === 'string' ? businessSlug : ''
 
-    if (businessSlug) {
-      const supabase = createAdminClient()
-      const { data: business } = await supabase
-        .from('businesses')
-        .select('recaptcha_secret_key')
-        .eq('slug', businessSlug)
-        .single()
-      if (business?.recaptcha_secret_key) {
-        secretKey = business.recaptcha_secret_key
-      }
-    }
+  // ── ¿reCAPTCHA está configurado para ESTE negocio? ──────────────────────────
+  // Secret propio del negocio (override por tenant) o el global de env. El lookup
+  // va por slug → mantiene el aislamiento por tenant. createAdminClient (service
+  // role) es server-only.
+  let secretKey = process.env.RECAPTCHA_SECRET_KEY || ''
+  if (slug) {
+    const supabase = createAdminClient()
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('recaptcha_secret_key')
+      .eq('slug', slug)
+      .single()
+    if (business?.recaptcha_secret_key) secretKey = business.recaptcha_secret_key
+  }
 
-    if (!secretKey) {
-      // No reCAPTCHA configured — allow through
-      return Response.json({ ok: true, score: 1 })
-    }
+  // No configurado → no hay verificación que hacer: se permite, pero queda rastro.
+  if (!secretKey) {
+    console.warn(`[recaptcha] reserva creada SIN reCAPTCHA (negocio sin secret): slug=${slug || 'desconocido'}`)
+    return Response.json({ ok: true, configured: false })
+  }
 
+  // ── Configurado → verificación OBLIGATORIA y fail-closed ───────────────────
+  if (typeof token !== 'string' || !token) {
+    console.warn(`[recaptcha] rechazada: token ausente. slug=${slug}`)
+    return Response.json({ ok: false, configured: true, reason: 'missing_token' }, { status: 400 })
+  }
+
+  let data: { success?: boolean; score?: number; 'error-codes'?: string[] }
+  try {
     const res = await fetch('https://www.google.com/recaptcha/api/siteverify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${secretKey}&response=${token}`,
+      body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(token)}`,
     })
-    const data = await res.json()
-
-    const score = data.score ?? 0
-    return Response.json({ ok: data.success === true && score >= 0.5, score })
+    data = await res.json()
   } catch (e) {
-    console.error('reCAPTCHA verify error:', e)
-    return Response.json({ ok: false, score: 0 }, { status: 500 })
+    // Excepción llamando a Google → NO asumir éxito. Fail-closed.
+    console.error(`[recaptcha] error llamando a siteverify. slug=${slug}:`, e)
+    return Response.json({ ok: false, configured: true, reason: 'verify_unreachable' }, { status: 502 })
   }
+
+  const score = typeof data.score === 'number' ? data.score : 0
+  const passed = data.success === true && score >= SCORE_THRESHOLD
+  if (!passed) {
+    console.warn(
+      `[recaptcha] rechazada: success=${data.success} score=${score} ` +
+      `errors=${JSON.stringify(data['error-codes'] ?? [])} slug=${slug}`
+    )
+    return Response.json({ ok: false, configured: true, score, reason: 'low_score_or_failed' })
+  }
+
+  return Response.json({ ok: true, configured: true, score })
 }

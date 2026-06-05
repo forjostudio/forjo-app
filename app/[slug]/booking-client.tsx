@@ -123,30 +123,44 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     const proId = selectedPro && selectedPro !== 'none' ? (selectedPro as Professional).id : null
     const initialStatus = requireDeposit ? 'pending_payment' : 'confirmed'
 
-    // reCAPTCHA check for no-deposit bookings
-    if (!requireDeposit && siteKey) {
+    // reCAPTCHA (solo reservas sin seña). El SERVER es la autoridad: sabe si ESTE
+    // negocio tiene reCAPTCHA configurado. Fail-closed: siempre verificamos contra
+    // /api/recaptcha/verify y solo seguimos si responde ok. Si el negocio lo exige y
+    // no se puede verificar (token ausente, score bajo, error), NO se crea la reserva.
+    if (!requireDeposit) {
+      let token = ''
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const gr = (window as any).grecaptcha
-        if (gr) {
-          const token: string = await new Promise((resolve, reject) =>
+        if (siteKey && gr) {
+          token = await new Promise<string>((resolve, reject) =>
             gr.ready(() => gr.execute(siteKey, { action: 'book' }).then(resolve).catch(reject))
           )
-          const res = await fetch('/api/recaptcha/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, businessSlug: business.slug }),
-          })
-          const data = await res.json()
-          if (!data.ok) {
-            setSubmitting(false)
-            toast.error('No pudimos verificar tu reserva. Intentá de nuevo.')
-            return
-          }
         }
       } catch (e) {
-        console.error('reCAPTCHA error:', e)
-        // Don't block user if reCAPTCHA fails
+        // No pudimos generar el token; el server decide según la config del negocio.
+        console.error('reCAPTCHA execute error:', e)
+      }
+
+      let verifyOk = false
+      try {
+        const res = await fetch('/api/recaptcha/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, businessSlug: business.slug }),
+        })
+        const data = await res.json()
+        verifyOk = data.ok === true
+      } catch (e) {
+        // No pudimos verificar → fail-closed (no asumimos que pasó).
+        console.error('reCAPTCHA verify request error:', e)
+        verifyOk = false
+      }
+
+      if (!verifyOk) {
+        setSubmitting(false)
+        toast.error('No pudimos verificar que no seas un bot. Recargá la página e intentá de nuevo.')
+        return
       }
     }
 
