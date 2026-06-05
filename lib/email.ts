@@ -1,4 +1,26 @@
-const FROM = 'Forjo Gestión <notificaciones@forjo.studio>'
+// From de la cuenta Resend de Forjo: forjo.studio está verificado ahí.
+const GLOBAL_FROM = 'Forjo Gestión <notificaciones@forjo.studio>'
+
+// Decide con qué key y qué "from" mandar, según la config del negocio:
+// - Key propia del negocio → hay que mandar desde SU dominio verificado (resend_from).
+//   Sin resend_from, mandar con @forjo.studio daría 403 (dominio no verificado en su
+//   cuenta) → NO enviamos y tiramos un error claro en vez de fallar silencioso.
+// - Sin key propia → key global de Forjo + from @forjo.studio (dominio verificado).
+function resolveSender(resendApiKey?: string | null, resendFrom?: string | null): { key: string; from: string } {
+  const ownKey = resendApiKey?.trim()
+  if (ownKey) {
+    const ownFrom = resendFrom?.trim()
+    if (!ownFrom) {
+      throw new Error('negocio con key Resend propia sin email remitente (resend_from) configurado: no se envía con @forjo.studio para evitar 403 por dominio no verificado')
+    }
+    return { key: ownKey, from: ownFrom }
+  }
+  const globalKey = process.env.RESEND_API_KEY
+  if (!globalKey) {
+    throw new Error('sin RESEND_API_KEY global y el negocio no tiene key propia: no hay con qué enviar')
+  }
+  return { key: globalKey, from: GLOBAL_FROM }
+}
 
 function fmtDate(date: string): string {
   const [y, m, d] = date.split('-').map(Number)
@@ -12,12 +34,9 @@ function fmtPrice(n: number) {
   return '$' + Number(n).toLocaleString('es-AR')
 }
 
-async function resendSend(resendApiKey: string | null | undefined, payload: Record<string, unknown>) {
-  const key = resendApiKey || process.env.RESEND_API_KEY
-  if (!key) {
-    console.log('No Resend API key configured, skipping email')
-    return
-  }
+// POST crudo a Resend. Tira error con el detalle si Resend responde !ok (para que el
+// caller logee el motivo real y persista el fallo). No traga nada.
+async function resendSend(key: string, payload: Record<string, unknown>) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -41,6 +60,7 @@ export async function sendConfirmationEmail({
   businessName,
   businessSlug,
   resendApiKey,
+  resendFrom,
 }: {
   to: string
   clientName: string
@@ -52,7 +72,10 @@ export async function sendConfirmationEmail({
   businessName: string
   businessSlug: string
   resendApiKey?: string | null
+  resendFrom?: string | null
 }) {
+  // Resuelve key + from (tira error claro si el negocio usa key propia sin remitente).
+  const { key, from } = resolveSender(resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
   const saldo = price - deposit
@@ -127,8 +150,8 @@ export async function sendConfirmationEmail({
 </body>
 </html>`
 
-  await resendSend(resendApiKey, {
-    from: FROM,
+  await resendSend(key, {
+    from,
     to: [to],
     subject: `✅ Turno confirmado — ${businessName} · ${fecha} ${hora} hs`,
     html,
@@ -148,6 +171,7 @@ export async function sendAdminNotification({
   date,
   time,
   resendApiKey,
+  resendFrom,
   pending = false,
 }: {
   to: string
@@ -160,8 +184,10 @@ export async function sendAdminNotification({
   date: string
   time: string
   resendApiKey?: string | null
+  resendFrom?: string | null
   pending?: boolean
 }) {
+  const { key, from } = resolveSender(resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
   const statusLabel = pending ? '⏳ Pendiente de pago' : '✅ Pago confirmado'
@@ -231,8 +257,8 @@ export async function sendAdminNotification({
 </body>
 </html>`
 
-  await resendSend(resendApiKey, {
-    from: FROM,
+  await resendSend(key, {
+    from,
     to: [to],
     subject,
     html,

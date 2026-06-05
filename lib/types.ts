@@ -22,6 +22,8 @@ export interface Business {
   // Notifications
   notification_email: string | null
   resend_api_key: string | null
+  // Email remitente para negocios con key Resend propia (dominio verificado en SU cuenta).
+  resend_from?: string | null
   // Anti-spam
   recaptcha_site_key: string | null
   recaptcha_secret_key: string | null
@@ -148,6 +150,9 @@ export interface Appointment {
   deposit_amount: number
   mp_payment_id: string | null
   expires_at: string | null
+  // Estado del email de confirmación (para detectar fallos; sin reintentos).
+  email_sent?: boolean
+  email_error?: string | null
   created_at: string
   professionals?: Professional
   services?: Service

@@ -484,6 +484,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const [notifForm, setNotifForm] = useState({
     notification_email: business.notification_email || '',
     resend_api_key: business.resend_api_key || '',
+    resend_from: business.resend_from || '',
   })
   const [showResendKey, setShowResendKey] = useState(false)
   const [savingNotif, setSavingNotif] = useState(false)
@@ -511,7 +512,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   }
   async function saveNotif() {
     setSavingNotif(true)
-    const { error } = await supabase.from('businesses').update({ notification_email: notifForm.notification_email || null, resend_api_key: notifForm.resend_api_key || null }).eq('id', business.id)
+    const { error } = await supabase.from('businesses').update({ notification_email: notifForm.notification_email || null, resend_api_key: notifForm.resend_api_key || null, resend_from: notifForm.resend_from || null }).eq('id', business.id)
     setSavingNotif(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Notificaciones guardadas')
@@ -1071,6 +1072,11 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                   {showResendKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Email remitente <span className="text-muted-foreground text-xs">(solo si usás tu propia API Key)</span></Label>
+              <Input type="email" value={notifForm.resend_from} onChange={e => setNotifForm(f => ({ ...f, resend_from: e.target.value }))} placeholder="turnos@tudominio.com" />
+              <p className="text-xs text-muted-foreground">Debe ser de un dominio verificado en tu cuenta de Resend. Si dejás la API Key vacía, los emails salen desde Forjo y este campo se ignora.</p>
             </div>
             <Button onClick={saveNotif} disabled={savingNotif}>{savingNotif ? 'Guardando...' : 'Guardar'}</Button>
           </Card>

@@ -93,35 +93,55 @@ async function processWebhook(slug: string, paymentId: string) {
     const servicePrice = Number((appt.services as { name?: string; price?: number } | null)?.price || 0)
     const depositAmt = Number(appt.deposit_amount || 0)
 
+    // Estamos dentro de after() → el 200 a MP ya se envió. Acá AWAIT: sin await el fetch
+    // a Resend se corta cuando la función se congela. Si falla, se logea y se persiste flag.
     if (appt.client_email) {
-      sendConfirmationEmail({
-        to: appt.client_email,
-        clientName: appt.client_name,
-        service: serviceName,
-        price: servicePrice,
-        deposit: depositAmt,
-        date: appt.date,
-        time: appt.time,
-        businessName: business.name,
-        businessSlug: slug,
-        resendApiKey: business.resend_api_key,
-      }).catch(e => console.error('Email cliente error:', e))
+      let emailSent = false
+      let emailError: string | null = null
+      try {
+        await sendConfirmationEmail({
+          to: appt.client_email,
+          clientName: appt.client_name,
+          service: serviceName,
+          price: servicePrice,
+          deposit: depositAmt,
+          date: appt.date,
+          time: appt.time,
+          businessName: business.name,
+          businessSlug: slug,
+          resendApiKey: business.resend_api_key,
+          resendFrom: business.resend_from,
+        })
+        emailSent = true
+      } catch (e) {
+        emailError = e instanceof Error ? e.message : String(e)
+        console.error(`[email] confirmación cliente FALLÓ (turno ${appointmentId}):`, emailError)
+      }
+      await supabase
+        .from('appointments')
+        .update({ email_sent: emailSent, email_error: emailError })
+        .eq('id', appointmentId)
     }
 
     if (business.notification_email) {
-      sendAdminNotification({
-        to: business.notification_email,
-        clientName: appt.client_name,
-        clientPhone: appt.client_phone,
-        clientEmail: appt.client_email,
-        service: serviceName,
-        price: servicePrice,
-        deposit: depositAmt,
-        date: appt.date,
-        time: appt.time,
-        resendApiKey: business.resend_api_key,
-        pending: false,
-      }).catch(e => console.error('Admin notification error:', e))
+      try {
+        await sendAdminNotification({
+          to: business.notification_email,
+          clientName: appt.client_name,
+          clientPhone: appt.client_phone,
+          clientEmail: appt.client_email,
+          service: serviceName,
+          price: servicePrice,
+          deposit: depositAmt,
+          date: appt.date,
+          time: appt.time,
+          resendApiKey: business.resend_api_key,
+          resendFrom: business.resend_from,
+          pending: false,
+        })
+      } catch (e) {
+        console.error(`[email] notif admin FALLÓ (turno ${appointmentId}):`, e instanceof Error ? e.message : e)
+      }
     }
   } else if (['rejected', 'cancelled', 'refunded', 'charged_back'].includes(payment.status)) {
     await supabase
