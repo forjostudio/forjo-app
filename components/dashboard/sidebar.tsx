@@ -112,7 +112,7 @@ export function Sidebar({ business }: { business: Business }) {
         </a>
       </nav>
 
-      <div className="p-3 border-t border-border">
+      <div className="p-3 border-t border-border space-y-1">
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full"
@@ -120,6 +120,16 @@ export function Sidebar({ business }: { business: Business }) {
           <LogOut className="w-4 h-4" />
           Cerrar sesión
         </button>
+        {/* Marca F constructivista — el primer trazo usa currentColor para adaptarse a claro/oscuro */}
+        <div className="flex items-center gap-2 px-3 pt-1 text-xs text-muted-foreground">
+          <svg viewBox="0 0 64 80" className="w-3 h-[0.95rem]" aria-hidden="true">
+            <rect x="6" y="6" width="14" height="68" fill="currentColor" />
+            <rect x="20" y="6" width="38" height="14" fill="#d94a2b" />
+            <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
+            <circle cx="56" cy="13" r="6" fill="#f4c543" />
+          </svg>
+          <span>hecho con <span className="font-semibold text-foreground">Forjo</span></span>
+        </div>
       </div>
     </div>
   )

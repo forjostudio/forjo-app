@@ -268,3 +268,9 @@ CREATE POLICY "fixed_expenses tenant delete" ON fixed_expenses
 -- Subconjunto de widgets que el negocio elige mostrar en el dashboard. NULL = todos.
 -- Vive en businesses (ya con RLS owner-only), así que no requiere policy nueva.
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS dashboard_widgets JSONB;
+
+-- ============================================================
+-- MIGRATION: Paleta de color por negocio (rebrand Forjo) — run in Supabase SQL editor
+-- ============================================================
+-- Tiñe el panel y la página pública vía data-palette. Valores: red|blue|yellow|green|ink.
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS palette TEXT NOT NULL DEFAULT 'red';

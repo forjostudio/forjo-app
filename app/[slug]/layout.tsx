@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { PaletteScript } from '@/components/palette-script'
 import type { CSSProperties } from 'react'
 import type { Metadata } from 'next'
 
@@ -8,7 +9,7 @@ const getSlugBusiness = cache(async (slug: string) => {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('businesses')
-    .select('name, primary_color, logo_url')
+    .select('name, primary_color, logo_url, palette')
     .eq('slug', slug)
     .single()
   return data
@@ -59,5 +60,10 @@ export default async function SlugLayout({ children, params }: LayoutProps) {
     '--primary-color-border': hexToRgba(color, 0.4),
   } as CSSProperties
 
-  return <div style={style}>{children}</div>
+  return (
+    <div style={style}>
+      <PaletteScript palette={business?.palette} />
+      {children}
+    </div>
+  )
 }

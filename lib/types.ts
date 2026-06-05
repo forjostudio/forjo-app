@@ -7,6 +7,8 @@ export interface Business {
   vertical?: string | null
   // Subconjunto de widgets del dashboard a mostrar (null = todos). Ver lib/dashboard-widgets.
   dashboard_widgets?: string[] | null
+  // Paleta de marca: red | blue | yellow | green | ink. Tiñe panel y página pública.
+  palette?: string | null
   logo_url: string | null
   primary_color: string
   phone: string | null

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, Service, Professional, TimeBlock, Location } from '@/lib/types'
@@ -13,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Sparkles } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Sparkles, Check, Sun, Moon } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS } from '@/lib/verticals'
@@ -21,6 +22,15 @@ import { DASHBOARD_WIDGETS, DASHBOARD_WIDGET_IDS, sanitizeWidgetIds } from '@/li
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
+
+// Paletas de marca (swatch = primary en claro). El detalle de tokens vive en globals.css.
+const PALETTES: { key: string; label: string; swatch: string }[] = [
+  { key: 'red', label: 'Rojo', swatch: '#d94a2b' },
+  { key: 'blue', label: 'Azul', swatch: '#2a5fa5' },
+  { key: 'yellow', label: 'Amarillo', swatch: '#c8901a' },
+  { key: 'green', label: 'Verde', swatch: '#2f8a5b' },
+  { key: 'ink', label: 'Tinta', swatch: '#1a1714' },
+]
 
 // ── Time block state types ──────────────────────────────────────────────────
 type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; error?: string }
@@ -43,6 +53,21 @@ interface Props {
 
 export function SettingsClient({ business, initialServices, initialProfessionals, initialTimeBlocks, initialLocations }: Props) {
   const supabase = createClient()
+
+  // ── Apariencia: paleta + tema (next-themes) ─────────────────────────────────
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const [palette, setPalette] = useState(business.palette ?? 'red')
+
+  async function selectPalette(key: string) {
+    setPalette(key)
+    // Feedback inmediato en el <html>; la persistencia confirma después.
+    document.documentElement.dataset.palette = key
+    const { error } = await supabase.from('businesses').update({ palette: key }).eq('id', business.id)
+    if (error) { toast.error('Error al guardar la paleta'); return }
+    toast.success('Paleta actualizada')
+  }
 
   // ── Plan limits ───────────────────────────────────────────────────────────
   const planConfig = getPlanLimits(business.plan || 'basic')
@@ -444,8 +469,9 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Configuración</h1>
 
-      <Tabs defaultValue="business">
-        <TabsList className="grid grid-cols-6 w-full sm:w-auto">
+      <Tabs defaultValue="appearance">
+        <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 w-full lg:w-auto h-auto">
+          <TabsTrigger value="appearance">Apariencia</TabsTrigger>
           <TabsTrigger value="business">Negocio</TabsTrigger>
           <TabsTrigger value="services">Servicios</TabsTrigger>
           <TabsTrigger value="professionals">Equipo</TabsTrigger>
@@ -453,6 +479,74 @@ export function SettingsClient({ business, initialServices, initialProfessionals
           <TabsTrigger value="hours">Horarios</TabsTrigger>
           <TabsTrigger value="payments">Pagos</TabsTrigger>
         </TabsList>
+
+        {/* ── Apariencia ── */}
+        <TabsContent value="appearance" className="mt-4">
+          <Card className="p-6 space-y-6">
+            {/* Paleta de color */}
+            <div className="space-y-3">
+              <div>
+                <p className="font-semibold text-sm">Paleta de color</p>
+                <p className="text-xs text-muted-foreground">Tiñe tu panel y tu página pública de reservas.</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {PALETTES.map(p => {
+                  const active = palette === p.key
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => selectPalette(p.key)}
+                      aria-pressed={active}
+                      className={cn(
+                        'relative flex flex-col items-center gap-2 rounded-lg border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        active ? 'border-primary bg-primary/5' : 'border-border hover:bg-secondary/50'
+                      )}
+                    >
+                      {active && <Check className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-primary" />}
+                      <span className="w-full h-10 rounded-md border border-border/50" style={{ backgroundColor: p.swatch }} />
+                      <span className="text-xs font-medium">{p.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Tema claro / oscuro */}
+            <div className="space-y-3">
+              <div>
+                <p className="font-semibold text-sm">Tema</p>
+                <p className="text-xs text-muted-foreground">Se guarda en este dispositivo.</p>
+              </div>
+              <div className="inline-flex rounded-lg border border-border p-1 bg-secondary/30">
+                {([
+                  { key: 'light', label: 'Claro', icon: Sun },
+                  { key: 'dark', label: 'Oscuro', icon: Moon },
+                ] as const).map(opt => {
+                  const Icon = opt.icon
+                  // Hasta montar, next-themes no conoce el tema → evitamos marcar activo (hydration).
+                  const active = mounted && theme === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setTheme(opt.key)}
+                      aria-pressed={active}
+                      className={cn(
+                        'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+                        active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <Icon className="w-4 h-4" /> {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
 
         {/* ── Business ── */}
         <TabsContent value="business" className="mt-4">
@@ -562,13 +656,6 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <div className="space-y-1 sm:col-span-2">
                 <Label>Dirección</Label>
                 <Input value={bizForm.address} onChange={e => setBizForm(f => ({ ...f, address: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>Color principal</Label>
-                <div className="flex items-center gap-3">
-                  <input type="color" value={bizForm.primary_color} onChange={e => setBizForm(f => ({ ...f, primary_color: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent" />
-                  <span className="text-sm text-muted-foreground">{bizForm.primary_color}</span>
-                </div>
               </div>
             </div>
             <div className="pt-2">

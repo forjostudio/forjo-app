@@ -246,25 +246,31 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
   return (
     <div className="min-h-screen p-4" style={{ backgroundColor: '#1a1714', color: '#f3ead8' }}>
       <div className="max-w-lg mx-auto py-6">
-        {/* Header */}
-        <div className="text-center mb-8">
-          {business.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={business.logo_url}
-              alt={business.name}
-              className="w-16 h-16 rounded-2xl object-cover mx-auto mb-3 border border-white/10"
-            />
-          ) : (
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto mb-3"
-              style={{ backgroundColor: 'var(--primary-color)' }}
-            >
-              {business.name.charAt(0).toUpperCase()}
+        {/* Hero Bauhaus — banda bg-primary (sigue la paleta del negocio) con formas geométricas */}
+        <div className="relative overflow-hidden rounded-xl bg-primary text-primary-foreground mb-8 p-6">
+          <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+            <span className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
+            <span className="absolute right-8 bottom-0 w-0 h-0 border-l-[24px] border-l-transparent border-r-[24px] border-r-transparent border-b-[36px] border-b-white/10" />
+            <span className="absolute left-3 -bottom-5 w-16 h-16 rotate-12 bg-black/10" />
+          </div>
+          <div className="relative flex items-center gap-4">
+            {business.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={business.logo_url}
+                alt={business.name}
+                className="w-14 h-14 rounded-xl object-cover border border-white/20 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center bg-white/15 font-bold text-2xl flex-shrink-0">
+                {business.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold uppercase tracking-tight truncate font-[family-name:var(--font-heading)]">{business.name}</h1>
+              {business.type && <p className="text-sm text-primary-foreground/80 mt-0.5">{business.type}</p>}
             </div>
-          )}
-          <h1 className="text-xl font-bold">{business.name}</h1>
-          {business.type && <p className="text-sm text-gray-400 mt-0.5">{business.type}</p>}
+          </div>
         </div>
 
         {/* Step indicators */}

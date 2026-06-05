@@ -6,6 +6,7 @@ import { PlanBanner } from '@/components/dashboard/plan-banner'
 import { TestModeBanner } from '@/components/dashboard/test-mode-banner'
 import { VerticalProvider } from '@/lib/use-terminology'
 import { resolveVertical } from '@/lib/verticals'
+import { PaletteScript } from '@/components/palette-script'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -30,6 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <VerticalProvider vertical={vertical}>
+      <PaletteScript palette={business.palette} />
       <div className="min-h-screen">
         <Sidebar business={business} />
         <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">

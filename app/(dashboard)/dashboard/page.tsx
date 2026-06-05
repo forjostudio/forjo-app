@@ -99,14 +99,16 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map(stat => {
             const Icon = stat.icon
+            // Acento Bauhaus: "Ingresos del mes" como bloque sólido primary.
+            const isPrimary = stat.id === 'month_revenue'
             return (
-              <Card key={stat.label}>
+              <Card key={stat.label} className={isPrimary ? 'bg-primary text-primary-foreground border-transparent' : ''}>
                 <CardContent className="pt-4">
                   <div className="flex items-center justify-between mb-2">
-                    <Icon className={`w-5 h-5 ${stat.color}`} />
+                    <Icon className={`w-5 h-5 ${isPrimary ? 'text-primary-foreground' : stat.color}`} />
                   </div>
                   <p className="text-2xl font-bold">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                  <p className={`text-xs mt-1 ${isPrimary ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{stat.label}</p>
                 </CardContent>
               </Card>
             )
