@@ -1,0 +1,153 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================================================
+   FORJO — brand theme. Drop-in replacement for app/globals.css.
+   · Light = cream/ink (default).  Dark = ink, toggled by next-themes (.dark)
+   · Per-business palette: set  data-palette="red|blue|yellow|green|ink"
+     on <html> (persist on the `businesses.palette` column).
+   Fonts come from next/font in app/layout.tsx (see HANDOFF.md):
+     --font-sans    → Space Grotesk
+     --font-heading → Archivo
+   ========================================================================= */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* sharper, more constructivist radius scale */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.85);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+/* ---- NEUTRALS · LIGHT (cream / ink) ---- */
+:root {
+  --radius: 0.4rem;
+
+  --background: #f3ead8;
+  --foreground: #1a1714;
+  --card: #fbf3e3;
+  --card-foreground: #1a1714;
+  --popover: #fbf3e3;
+  --popover-foreground: #1a1714;
+  --secondary: #e9ddc4;
+  --secondary-foreground: #1a1714;
+  --muted: #ece0c8;
+  --muted-foreground: #6b6253;
+  --border: #d9ceb4;
+  --input: #d9ceb4;
+  --destructive: #b23a26;
+
+  --sidebar: #efe3cd;
+  --sidebar-foreground: #1a1714;
+  --sidebar-border: #ddd1b7;
+  --sidebar-accent: #e3d7be;
+  --sidebar-accent-foreground: #1a1714;
+  --sidebar-ring: var(--ring);
+
+  /* Bauhaus constants — used for charts & status accents (palette-independent) */
+  --chart-2: #2a5fa5;   /* blue   */
+  --chart-3: #f4c543;   /* yellow */
+  --chart-4: #2f8a5b;   /* green  */
+  --chart-5: #8a5fb0;   /* violet */
+
+  /* accent family — default Rojo Forjo (palette blocks below override) */
+  --primary: #d94a2b;
+  --primary-foreground: #fbf3e3;
+  --accent: #d94a2b;
+  --accent-foreground: #fbf3e3;
+  --ring: #d94a2b;
+  --sidebar-primary: #d94a2b;
+  --sidebar-primary-foreground: #fbf3e3;
+  --chart-1: #d94a2b;
+}
+
+/* ---- NEUTRALS · DARK (ink) ---- */
+.dark {
+  --background: #1a1714;
+  --foreground: #f3ead8;
+  --card: #252019;
+  --card-foreground: #f3ead8;
+  --popover: #252019;
+  --popover-foreground: #f3ead8;
+  --secondary: #2e2820;
+  --secondary-foreground: #f3ead8;
+  --muted: #2e2820;
+  --muted-foreground: #a99e8b;
+  --border: oklch(0.94 0.03 80 / 12%);
+  --input: oklch(0.94 0.03 80 / 14%);
+  --destructive: #e05c43;
+
+  --sidebar: #141110;
+  --sidebar-foreground: #f3ead8;
+  --sidebar-border: oklch(0.94 0.03 80 / 10%);
+  --sidebar-accent: #2a241d;
+  --sidebar-accent-foreground: #f3ead8;
+
+  --chart-2: #7aa6d6;
+  --chart-3: #e6b53f;
+  --chart-4: #54b07f;
+  --chart-5: #a784c9;
+}
+
+/* =========================================================================
+   PALETTES — only the accent family changes.
+   ========================================================================= */
+[data-palette="red"]       { --primary:#d94a2b; --accent:#d94a2b; --ring:#d94a2b; --sidebar-primary:#d94a2b; --primary-foreground:#fbf3e3; --accent-foreground:#fbf3e3; --sidebar-primary-foreground:#fbf3e3; --chart-1:#d94a2b; }
+.dark[data-palette="red"]  { --primary:#e85c3f; --accent:#e85c3f; --ring:#e85c3f; --sidebar-primary:#e85c3f; --chart-1:#e85c3f; }
+
+[data-palette="blue"]      { --primary:#2a5fa5; --accent:#2a5fa5; --ring:#2a5fa5; --sidebar-primary:#2a5fa5; --primary-foreground:#fbf3e3; --accent-foreground:#fbf3e3; --sidebar-primary-foreground:#fbf3e3; --chart-1:#2a5fa5; }
+.dark[data-palette="blue"] { --primary:#5f93d6; --accent:#5f93d6; --ring:#5f93d6; --sidebar-primary:#5f93d6; --primary-foreground:#10141c; --sidebar-primary-foreground:#10141c; --chart-1:#5f93d6; }
+
+[data-palette="yellow"]      { --primary:#c8901a; --accent:#c8901a; --ring:#c8901a; --sidebar-primary:#c8901a; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#e0a92e; }
+.dark[data-palette="yellow"] { --primary:#e6b53f; --accent:#e6b53f; --ring:#e6b53f; --sidebar-primary:#e6b53f; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#e6b53f; }
+
+[data-palette="green"]      { --primary:#2f8a5b; --accent:#2f8a5b; --ring:#2f8a5b; --sidebar-primary:#2f8a5b; --primary-foreground:#fbf3e3; --accent-foreground:#fbf3e3; --sidebar-primary-foreground:#fbf3e3; --chart-1:#2f8a5b; }
+.dark[data-palette="green"] { --primary:#54b07f; --accent:#54b07f; --ring:#54b07f; --sidebar-primary:#54b07f; --primary-foreground:#0f1712; --sidebar-primary-foreground:#0f1712; --chart-1:#54b07f; }
+
+[data-palette="ink"]      { --primary:#1a1714; --accent:#1a1714; --ring:#1a1714; --sidebar-primary:#1a1714; --primary-foreground:#f3ead8; --accent-foreground:#f3ead8; --sidebar-primary-foreground:#f3ead8; --chart-1:#1a1714; }
+.dark[data-palette="ink"] { --primary:#f3ead8; --accent:#f3ead8; --ring:#f3ead8; --sidebar-primary:#f3ead8; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#cabfa6; }
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
+  html { @apply font-sans; }
+  /* Bauhaus display: headings use Archivo, tight + heavy */
+  h1, h2, h3 { font-family: var(--font-heading); letter-spacing: -0.02em; }
+}
