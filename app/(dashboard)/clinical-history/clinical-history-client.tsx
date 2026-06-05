@@ -10,10 +10,9 @@ import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-pa
 interface Props {
   initialClients: Client[]
   businessId: string
-  primaryColor: string
 }
 
-export function ClinicalHistoryClient({ initialClients, businessId, primaryColor }: Props) {
+export function ClinicalHistoryClient({ initialClients, businessId }: Props) {
   const [clients, setClients] = useState(initialClients)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -62,10 +61,10 @@ export function ClinicalHistoryClient({ initialClients, businessId, primaryColor
                   isSelected ? 'border-l-primary bg-primary/10' : 'border-l-transparent hover:bg-secondary/40'
                 )}
               >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                  style={{ backgroundColor: isSelected ? primaryColor : 'hsl(var(--secondary))' }}
-                >
+                <div className={cn(
+                  'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
+                  isSelected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+                )}>
                   {client.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -100,7 +99,6 @@ export function ClinicalHistoryClient({ initialClients, businessId, primaryColor
             <ClinicalHistoryPanel
               clientId={selected.id}
               businessId={businessId}
-              primaryColor={primaryColor}
               initialInsuranceName={selected.insurance_name}
               initialInsuranceNumber={selected.insurance_number}
               onInsuranceSaved={(name, number) =>

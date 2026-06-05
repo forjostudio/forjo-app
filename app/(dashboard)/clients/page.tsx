@@ -31,7 +31,6 @@ export default async function ClientsPage() {
       initialClients={clients || []}
       appointments={appointments || []}
       businessId={business.id}
-      primaryColor={business.primary_color || '#d94a2b'}
     />
   )
 }

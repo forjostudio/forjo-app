@@ -20,7 +20,6 @@ import { Plus, Trash2, Paperclip, Upload, ShieldCheck, Download, X } from 'lucid
 interface Props {
   clientId: string
   businessId: string
-  primaryColor: string
   initialInsuranceName?: string | null
   initialInsuranceNumber?: string | null
   // Permite al contenedor sincronizar su propio estado del cliente al guardar.
@@ -30,7 +29,6 @@ interface Props {
 export function ClinicalHistoryPanel({
   clientId,
   businessId,
-  primaryColor,
   initialInsuranceName,
   initialInsuranceNumber,
   onInsuranceSaved,
@@ -201,7 +199,7 @@ export function ClinicalHistoryPanel({
           <div className="relative space-y-3 pl-4 border-l-2 border-border">
             {notes.map(n => (
               <div key={n.id} className="relative">
-                <span className="absolute -left-[21px] top-1.5 w-3 h-3 rounded-full border-2 border-background" style={{ backgroundColor: primaryColor }} />
+                <span className="absolute -left-[21px] top-1.5 w-3 h-3 rounded-full border-2 border-background bg-primary" />
                 <div className="bg-card border border-border rounded-lg p-3 group">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold">{format(parseISO(n.note_date), "d 'de' MMMM 'de' yyyy", { locale: es })}</span>

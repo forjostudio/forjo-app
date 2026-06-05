@@ -29,7 +29,6 @@ export default async function ClinicalHistoryPage() {
     <ClinicalHistoryClient
       initialClients={clients || []}
       businessId={business.id}
-      primaryColor={business.primary_color || '#d94a2b'}
     />
   )
 }

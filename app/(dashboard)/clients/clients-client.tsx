@@ -109,11 +109,10 @@ interface Props {
   initialClients: Client[]
   appointments: Appointment[]
   businessId: string
-  primaryColor: string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function ClientsClient({ initialClients, appointments: initialAppts, businessId, primaryColor }: Props) {
+export function ClientsClient({ initialClients, appointments: initialAppts, businessId }: Props) {
   const supabase = createClient()
   const vertical = useVertical()
   const term = vertical.terminology
@@ -387,10 +386,9 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                 className={cn(
                   'px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
                   filter === t.key
-                    ? 'text-white'
+                    ? 'bg-primary text-primary-foreground'
                     : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
                 )}
-                style={filter === t.key ? { backgroundColor: primaryColor } : {}}
               >
                 {t.label}
               </button>
@@ -452,10 +450,10 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                       )}
                     >
                       {/* Avatar */}
-                      <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                        style={{ backgroundColor: isSelected ? primaryColor : 'hsl(var(--secondary))' }}
-                      >
+                      <div className={cn(
+                        'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
+                        isSelected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+                      )}>
                         {client.name.slice(0, 2).toUpperCase()}
                       </div>
                       {/* Info */}
@@ -651,13 +649,13 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={visitChart}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
-                        <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} allowDecimals={false} />
+                        <XAxis dataKey="name" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                        <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} allowDecimals={false} />
                         <Tooltip
-                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 6 }}
+                          contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
                           formatter={(v) => [Number(v), 'Visitas']}
                         />
-                        <Bar dataKey="visitas" radius={[3, 3, 0, 0]} fill={primaryColor} />
+                        <Bar dataKey="visitas" radius={[3, 3, 0, 0]} fill="var(--primary)" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -731,7 +729,6 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                     <ClinicalHistoryPanel
                       clientId={selected.id}
                       businessId={businessId}
-                      primaryColor={primaryColor}
                       initialInsuranceName={selected.insurance_name}
                       initialInsuranceNumber={selected.insurance_number}
                       onInsuranceSaved={(name, number) =>
