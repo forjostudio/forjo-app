@@ -45,3 +45,5 @@ next-env.d.ts
 
 # Claude Code — config local de máquina (las skills del proyecto sí se versionan)
 .claude/settings.local.json
+
+.env*
