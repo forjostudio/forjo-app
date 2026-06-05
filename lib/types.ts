@@ -65,6 +65,11 @@ export interface Professional {
   id: string
   business_id: string
   name: string
+  last_name: string | null
+  specialty: string | null
+  license_number: string | null
+  phone: string | null
+  email: string | null
   photo_url: string | null
   active: boolean
   created_at: string

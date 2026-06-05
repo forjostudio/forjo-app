@@ -21,7 +21,8 @@ export default async function PublicBookingPage({ params }: Props) {
 
   const [{ data: services }, { data: professionals }, { data: timeBlocks }] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id).eq('active', true),
-    supabase.from('professionals').select('*').eq('business_id', business.id).eq('active', true),
+    // Vista pública acotada (id, name, specialty) — no expone contacto/matrícula del staff.
+    supabase.from('public_professionals').select('*').eq('business_id', business.id),
     supabase.from('time_blocks').select('*').eq('business_id', business.id),
   ])
 

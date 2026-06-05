@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Check, Sun, Moon } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Check, Sun, Moon, Pencil } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS } from '@/lib/verticals'
@@ -31,6 +31,73 @@ const PALETTES: { key: string; label: string; swatch: string }[] = [
   { key: 'green', label: 'Verde', swatch: '#2f8a5b' },
   { key: 'ink', label: 'Tinta', swatch: '#1a1714' },
 ]
+
+// ── Profesionales: form ampliado + labels por rubro ─────────────────────────
+type ProForm = { name: string; last_name: string; specialty: string; license_number: string; phone: string; email: string }
+const EMPTY_PRO: ProForm = { name: '', last_name: '', specialty: '', license_number: '', phone: '', email: '' }
+
+// Etiquetas de Especialidad/Matrícula adaptadas al rubro (sin sobrecomplicar).
+const PRO_LABELS: Record<string, { specialty: string; specialtyPh: string; license: string; licensePh: string }> = {
+  salud:   { specialty: 'Especialidad',       specialtyPh: 'Cardiología, Pediatría…',  license: 'Matrícula profesional',      licensePh: 'MN 12345' },
+  belleza: { specialty: 'Especialidad',       specialtyPh: 'Colorista, barbero…',      license: 'Matrícula',                  licensePh: 'Opcional' },
+  general: { specialty: 'Especialidad / rol', specialtyPh: 'Rol o especialidad',        license: 'Matrícula / N° de registro', licensePh: 'Opcional' },
+}
+
+function proToPayload(f: ProForm) {
+  // Normaliza: trim y opcionales vacíos → null.
+  return {
+    name: f.name.trim(),
+    last_name: f.last_name.trim() || null,
+    specialty: f.specialty.trim() || null,
+    license_number: f.license_number.trim() || null,
+    phone: f.phone.trim() || null,
+    email: f.email.trim() || null,
+  }
+}
+
+// Campos del profesional, reutilizados en alta (inline) y edición (dialog).
+function ProFields({ value, onChange, labels, showExtra }: {
+  value: ProForm
+  onChange: (v: ProForm) => void
+  labels: { specialty: string; specialtyPh: string; license: string; licensePh: string }
+  showExtra: boolean
+}) {
+  const set = (k: keyof ProForm, v: string) => onChange({ ...value, [k]: v })
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label>Nombre *</Label>
+          <Input value={value.name} onChange={e => set('name', e.target.value)} placeholder="Nombre" />
+        </div>
+        <div className="space-y-1">
+          <Label>Apellido</Label>
+          <Input value={value.last_name} onChange={e => set('last_name', e.target.value)} placeholder="Apellido" />
+        </div>
+        <div className="space-y-1">
+          <Label>{labels.specialty}</Label>
+          <Input value={value.specialty} onChange={e => set('specialty', e.target.value)} placeholder={labels.specialtyPh} />
+        </div>
+        <div className="space-y-1">
+          <Label>{labels.license} <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+          <Input value={value.license_number} onChange={e => set('license_number', e.target.value)} placeholder={labels.licensePh} />
+        </div>
+      </div>
+      {showExtra && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label>Teléfono <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+            <Input value={value.phone} onChange={e => set('phone', e.target.value)} placeholder="+54 9 …" />
+          </div>
+          <div className="space-y-1">
+            <Label>Email <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+            <Input type="email" value={value.email} onChange={e => set('email', e.target.value)} placeholder="profesional@email.com" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Time block state types ──────────────────────────────────────────────────
 type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; error?: string }
@@ -202,19 +269,65 @@ export function SettingsClient({ business, initialServices, initialProfessionals
 
   // ── Tab 3 — Professionals ─────────────────────────────────────────────────
   const [professionals, setProfessionals] = useState<Professional[]>(initialProfessionals)
-  const [newProName, setNewProName] = useState('')
+  const [newPro, setNewPro] = useState<ProForm>(EMPTY_PRO)
+  const [proExtraOpen, setProExtraOpen] = useState(false)
+  const [savingPro, setSavingPro] = useState(false)
+  const [editingPro, setEditingPro] = useState<Professional | null>(null)
+  const [editPro, setEditPro] = useState<ProForm>(EMPTY_PRO)
+  const [savingEditPro, setSavingEditPro] = useState(false)
   const canAddPro = professionals.filter(p => p.active).length < planConfig.max_professionals
+  // Labels de Especialidad/Matrícula según el rubro del negocio.
+  const proLabels = PRO_LABELS[getVerticalKeyByType(business.type)] ?? PRO_LABELS.general
 
   async function addProfessional() {
-    if (!newProName) return
-    const { data, error } = await supabase.from('professionals').insert({ name: newProName, business_id: business.id }).select().single()
-    if (error) { toast.error('Error'); return }
+    if (!newPro.name.trim()) return
+    if (!canAddPro) { toast.error('Límite de profesionales del plan alcanzado'); return }
+    setSavingPro(true)
+    const { data, error } = await supabase
+      .from('professionals')
+      .insert({ ...proToPayload(newPro), business_id: business.id })
+      .select()
+      .single()
+    setSavingPro(false)
+    if (error) { toast.error('Error al agregar'); return }
     setProfessionals(prev => [...prev, data as Professional])
-    setNewProName('')
+    setNewPro(EMPTY_PRO)
+    setProExtraOpen(false)
     toast.success('Profesional agregado')
   }
+
+  function openEditPro(p: Professional) {
+    setEditingPro(p)
+    setEditPro({
+      name: p.name ?? '',
+      last_name: p.last_name ?? '',
+      specialty: p.specialty ?? '',
+      license_number: p.license_number ?? '',
+      phone: p.phone ?? '',
+      email: p.email ?? '',
+    })
+  }
+
+  async function saveEditPro() {
+    if (!editingPro || !editPro.name.trim()) return
+    setSavingEditPro(true)
+    const payload = proToPayload(editPro)
+    // Defensa en profundidad: filtro explícito por business_id además de la RLS.
+    const { error } = await supabase
+      .from('professionals')
+      .update(payload)
+      .eq('id', editingPro.id)
+      .eq('business_id', business.id)
+    setSavingEditPro(false)
+    if (error) { toast.error('Error al guardar'); return }
+    setProfessionals(prev => prev.map(p => p.id === editingPro.id ? { ...p, ...payload } as Professional : p))
+    setEditingPro(null)
+    toast.success('Profesional actualizado')
+  }
+
   async function deleteProfessional(id: string) {
-    await supabase.from('professionals').delete().eq('id', id)
+    // Defensa en profundidad: filtro explícito por business_id además de la RLS.
+    await supabase.from('professionals').delete().eq('id', id).eq('business_id', business.id)
     setProfessionals(prev => prev.filter(p => p.id !== id))
     toast.success('Profesional eliminado')
   }
@@ -701,17 +814,27 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </span>
             </div>
             <div className="space-y-2">
-              {professionals.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-semibold flex-shrink-0">
-                    {p.name.charAt(0).toUpperCase()}
+              {professionals.map(p => {
+                const fullName = [p.name, p.last_name].filter(Boolean).join(' ')
+                const sub = [p.specialty, p.license_number].filter(Boolean).join(' · ')
+                return (
+                  <div key={p.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-semibold flex-shrink-0">
+                      {p.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{fullName}</p>
+                      {sub && <p className="text-xs text-muted-foreground truncate">{sub}</p>}
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEditPro(p)} aria-label={`Editar ${fullName}`}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => deleteProfessional(p.id)} aria-label={`Eliminar ${fullName}`}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <span className="flex-1 text-sm">{p.name}</span>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => deleteProfessional(p.id)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+                )
+              })}
             </div>
             {!canAddPro ? (
               <div className="border-t border-border pt-4 flex items-center justify-between text-sm">
@@ -719,9 +842,17 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                 <a href={UPGRADE_URL} target="_blank" rel="noopener noreferrer" className="text-primary text-xs hover:underline">Ver planes →</a>
               </div>
             ) : (
-              <div className="border-t border-border pt-4 flex gap-2">
-                <Input value={newProName} onChange={e => setNewProName(e.target.value)} placeholder="Nombre del profesional" className="flex-1" />
-                <Button onClick={addProfessional} className="gap-1"><Plus className="w-4 h-4" /> Agregar</Button>
+              <div className="border-t border-border pt-4 space-y-3">
+                <p className="text-sm font-medium">Agregar profesional</p>
+                <ProFields value={newPro} onChange={setNewPro} labels={proLabels} showExtra={proExtraOpen} />
+                {!proExtraOpen && (
+                  <button type="button" onClick={() => setProExtraOpen(true)} className="text-xs text-primary hover:underline">
+                    + Datos de contacto (opcional)
+                  </button>
+                )}
+                <Button onClick={addProfessional} disabled={savingPro || !newPro.name.trim()} className="gap-1">
+                  <Plus className="w-4 h-4" /> {savingPro ? 'Agregando...' : 'Agregar'}
+                </Button>
               </div>
             )}
           </Card>
@@ -986,6 +1117,20 @@ export function SettingsClient({ business, initialServices, initialProfessionals
             <Button variant="outline" onClick={() => setConfirmCancelSub(false)}>Volver</Button>
             <Button variant="destructive" onClick={cancelSubscription} disabled={cancellingSub}>
               {cancellingSub ? 'Cancelando...' : 'Cancelar suscripción'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Editar profesional */}
+      <Dialog open={!!editingPro} onOpenChange={open => { if (!open) setEditingPro(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Editar profesional</DialogTitle></DialogHeader>
+          <ProFields value={editPro} onChange={setEditPro} labels={proLabels} showExtra />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setEditingPro(null)}>Cancelar</Button>
+            <Button onClick={saveEditPro} disabled={savingEditPro || !editPro.name.trim()}>
+              {savingEditPro ? 'Guardando...' : 'Guardar'}
             </Button>
           </div>
         </DialogContent>

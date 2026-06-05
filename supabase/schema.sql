@@ -90,6 +90,27 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS deposit_paid BOOLEAN DEFAULT F
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS deposit_amount DECIMAL(10,2) DEFAULT 0;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS mp_payment_id TEXT;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+-- Profesionales: datos ampliados (apellido, especialidad, matrícula, contacto).
+-- La tabla ya tiene business_id + RLS (policy "business member access" FOR ALL, abajo);
+-- RLS es por fila, así que estas columnas quedan protegidas para el dueño como el resto.
+ALTER TABLE professionals ADD COLUMN IF NOT EXISTS last_name TEXT;
+ALTER TABLE professionals ADD COLUMN IF NOT EXISTS specialty TEXT;
+ALTER TABLE professionals ADD COLUMN IF NOT EXISTS license_number TEXT;
+ALTER TABLE professionals ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE professionals ADD COLUMN IF NOT EXISTS email TEXT;
+
+-- La página pública SOLO necesita id, nombre y especialidad para el paso "elegí profesional".
+-- La policy "public read professionals" (USING true) exponía la fila ENTERA al rol anon,
+-- incluyendo ahora teléfono/email/matrícula del staff. La acotamos a una vista y quitamos
+-- la lectura directa de la tabla por anon (la vista corre como su dueño y solo expone
+-- columnas no sensibles).
+CREATE OR REPLACE VIEW public_professionals AS
+  SELECT id, business_id, name, specialty, active
+  FROM professionals
+  WHERE active = true;
+GRANT SELECT ON public_professionals TO anon, authenticated;
+DROP POLICY IF EXISTS "public read professionals" ON professionals;
 -- ============================================================
 
 -- RLS
@@ -132,8 +153,8 @@ CREATE POLICY "business member access" ON appointments
 -- Acceso público para página de reservas
 CREATE POLICY "public read businesses" ON businesses
   FOR SELECT USING (true);
-CREATE POLICY "public read professionals" ON professionals
-  FOR SELECT USING (true);
+-- Profesionales: la lectura pública es vía la vista acotada public_professionals
+-- (ver bloque de migración arriba), no la tabla entera, para no exponer contacto del staff.
 CREATE POLICY "public read services" ON services
   FOR SELECT USING (true);
 CREATE POLICY "public read hours" ON business_hours
