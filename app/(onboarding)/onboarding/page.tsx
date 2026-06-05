@@ -16,6 +16,16 @@ import { TYPE_GROUPS, getVerticalKeyByType } from '@/lib/verticals'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
+// Paletas curadas de marca (mismas que Configuración → Apariencia). El swatch es el
+// primary en claro; se persiste en businesses.palette y tiñe panel + página pública.
+const PALETTES: { key: string; label: string; swatch: string }[] = [
+  { key: 'red', label: 'Rojo', swatch: '#d94a2b' },
+  { key: 'blue', label: 'Azul', swatch: '#2a5fa5' },
+  { key: 'yellow', label: 'Amarillo', swatch: '#c8901a' },
+  { key: 'green', label: 'Verde', swatch: '#2f8a5b' },
+  { key: 'ink', label: 'Tinta', swatch: '#1a1714' },
+]
+
 const DEFAULT_HOURS = [
   { day_of_week: 0, is_open: false, open_time: '09:00', close_time: '18:00' },
   { day_of_week: 1, is_open: true, open_time: '09:00', close_time: '18:00' },
@@ -58,7 +68,13 @@ export default function OnboardingPage() {
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [instagram, setInstagram] = useState('')
-  const [primaryColor, setPrimaryColor] = useState('#d94a2b')
+  const [palette, setPalette] = useState('red')
+
+  function selectPalette(key: string) {
+    setPalette(key)
+    // Feedback inmediato: tiñe el onboarding al instante (igual que Apariencia).
+    document.documentElement.dataset.palette = key
+  }
 
   // Step 2 - Services
   const [services, setServices] = useState<Service[]>([{ name: '', duration_minutes: 30, price: 0 }])
@@ -161,7 +177,9 @@ export default function OnboardingPage() {
           phone: phone || null,
           address: address || null,
           instagram: instagram || null,
-          primary_color: primaryColor,
+          palette,
+          // back-compat: la columna primary_color sigue existiendo; la derivamos del swatch.
+          primary_color: PALETTES.find(p => p.key === palette)?.swatch ?? '#d94a2b',
         })
         .select()
         .single()
@@ -208,8 +226,16 @@ export default function OnboardingPage() {
     <div className="min-h-screen p-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary mb-2">Forjo</h1>
-          <p className="text-muted-foreground">Configurá tu negocio en 4 pasos</p>
+          <div className="flex items-center justify-center gap-2">
+            <svg width="26" height="33" viewBox="0 0 64 80" aria-hidden="true">
+              <rect x="6" y="6" width="14" height="68" fill="currentColor" className="text-foreground" />
+              <rect x="20" y="6" width="38" height="14" fill="#d94a2b" />
+              <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
+              <circle cx="56" cy="13" r="6" fill="#f4c543" />
+            </svg>
+            <span className="font-[family-name:var(--font-heading)] font-black text-3xl text-primary">Forjo</span>
+          </div>
+          <p className="text-muted-foreground mt-2">Configurá tu negocio en 4 pasos</p>
         </div>
 
         {/* Stepper */}
@@ -327,19 +353,29 @@ export default function OnboardingPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Color principal</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="color"
-                    value={primaryColor}
-                    onChange={e => setPrimaryColor(e.target.value)}
-                    className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent"
-                  />
-                  <span className="text-sm text-muted-foreground">{primaryColor}</span>
-                  <Button variant="ghost" size="sm" onClick={() => setPrimaryColor('#d94a2b')}>
-                    Resetear
-                  </Button>
+                <Label>Paleta de marca</Label>
+                <div className="flex flex-wrap gap-2">
+                  {PALETTES.map(p => {
+                    const active = palette === p.key
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        onClick={() => selectPalette(p.key)}
+                        aria-pressed={active}
+                        title={p.label}
+                        className={cn(
+                          'h-9 w-16 rounded-sm border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          active ? 'border-foreground' : 'border-transparent hover:border-muted-foreground/50'
+                        )}
+                        style={{ backgroundColor: p.swatch }}
+                      >
+                        <span className="sr-only">{p.label}</span>
+                      </button>
+                    )
+                  })}
                 </div>
+                <p className="text-xs text-muted-foreground">Tiñe tu panel y tu página pública de reservas. Podés cambiarla luego en Configuración.</p>
               </div>
             </div>
           )}

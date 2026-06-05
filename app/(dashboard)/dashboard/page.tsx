@@ -14,11 +14,13 @@ const STATUS_LABELS: Record<string, string> = {
   completed: 'Completado',
 }
 
+// Badges de estado con la paleta Bauhaus (constantes, no cambian por paleta de negocio):
+// pending=amarillo · confirmed=azul · completed=verde · cancelled=rojo.
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-500/20 text-yellow-400',
-  confirmed: 'bg-blue-500/20 text-blue-400',
-  cancelled: 'bg-red-500/20 text-red-400',
-  completed: 'bg-green-500/20 text-green-400',
+  pending: 'bg-[#f4c543] text-[#1a1714] border-transparent',
+  confirmed: 'bg-[#2a5fa5] text-white border-transparent',
+  cancelled: 'bg-[#d94a2b] text-white border-transparent',
+  completed: 'bg-[#2f8a5b] text-white border-transparent',
 }
 
 export default async function DashboardPage() {
@@ -74,8 +76,8 @@ export default async function DashboardPage() {
   const showWidget = (id: string) => !widgetSel || widgetSel.includes(id)
 
   const stats = [
-    { id: 'today_appointments', label: 'Turnos hoy', value: todayCount || 0, icon: Calendar, color: 'text-blue-400' },
-    { id: 'week_appointments', label: 'Esta semana', value: weekCount || 0, icon: TrendingUp, color: 'text-green-400' },
+    { id: 'today_appointments', label: 'Turnos hoy', value: todayCount || 0, icon: Calendar, color: 'text-[#2a5fa5]' },
+    { id: 'week_appointments', label: 'Esta semana', value: weekCount || 0, icon: TrendingUp, color: 'text-[#2f8a5b]' },
     {
       id: 'month_revenue',
       label: 'Ingresos del mes',
@@ -83,13 +85,22 @@ export default async function DashboardPage() {
       icon: DollarSign,
       color: 'text-primary'
     },
-    { id: 'total_clients', label: 'Total clientes', value: clientCount || 0, icon: Users, color: 'text-purple-400' },
+    { id: 'total_clients', label: 'Total clientes', value: clientCount || 0, icon: Users, color: 'text-[#8a5fb0]' },
   ].filter(s => showWidget(s.id))
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Bienvenido, {business.name}</h1>
+        {/* Eyebrow Bauhaus: triple primitiva (cuadrado rojo · cuadrado amarillo · círculo azul) */}
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <span className="flex items-center gap-1" aria-hidden="true">
+            <i className="block w-2 h-2 bg-[#d94a2b]" />
+            <i className="block w-2 h-2 bg-[#f4c543]" />
+            <i className="block w-2 h-2 rounded-full bg-[#2a5fa5]" />
+          </span>
+          Panel
+        </div>
+        <h1 className="text-2xl font-bold mt-2">Bienvenido, {business.name}</h1>
         <p className="text-muted-foreground mt-1">
           {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
         </p>
@@ -103,12 +114,13 @@ export default async function DashboardPage() {
             const isPrimary = stat.id === 'month_revenue'
             return (
               <Card key={stat.label} className={isPrimary ? 'bg-primary text-primary-foreground border-transparent' : ''}>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <Icon className={`w-5 h-5 ${isPrimary ? 'text-primary-foreground' : stat.color}`} />
+                <CardContent className="pt-5">
+                  {/* Ícono en recuadro (acento constructivista) */}
+                  <div className={`w-9 h-9 rounded-md flex items-center justify-center mb-3 ${isPrimary ? 'bg-white/15' : 'bg-secondary'}`}>
+                    <Icon className={`w-[18px] h-[18px] ${isPrimary ? 'text-primary-foreground' : stat.color}`} />
                   </div>
-                  <p className="text-2xl font-bold">{stat.value}</p>
-                  <p className={`text-xs mt-1 ${isPrimary ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{stat.label}</p>
+                  <p className="text-3xl font-[family-name:var(--font-heading)] font-extrabold tracking-tight leading-none">{stat.value}</p>
+                  <p className={`text-xs mt-1.5 ${isPrimary ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{stat.label}</p>
                 </CardContent>
               </Card>
             )

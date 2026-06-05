@@ -61,10 +61,7 @@ export function Sidebar({ business }: { business: Business }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={business.logo_url} alt={business.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
           ) : (
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-              style={{ backgroundColor: business.primary_color }}
-            >
+            <div className="w-9 h-9 rounded-md flex items-center justify-center bg-primary text-primary-foreground font-[family-name:var(--font-heading)] font-black text-base flex-shrink-0">
               {business.name.charAt(0).toUpperCase()}
             </div>
           )}

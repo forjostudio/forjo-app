@@ -9,16 +9,16 @@ export default async function PagoFallido({ params }: Props) {
   const { slug } = await params
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#1a1714' }}>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground">
       <div className="text-center max-w-sm">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-red-500/20">
-          <XCircle className="w-8 h-8 text-red-400" />
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-destructive/15">
+          <XCircle className="w-8 h-8 text-destructive" />
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">El pago no se completó</h1>
-        <p className="text-gray-400 mb-6">Por favor intentá de nuevo o elegí otro método.</p>
+        <h1 className="text-2xl font-bold mb-2 font-[family-name:var(--font-heading)]">El pago no se completó</h1>
+        <p className="text-muted-foreground mb-6">Por favor intentá de nuevo o elegí otro método.</p>
         <Link
           href={`/${slug}`}
-          className="text-sm text-gray-400 hover:text-white transition-colors underline"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
         >
           Volver e intentar de nuevo
         </Link>

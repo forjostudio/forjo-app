@@ -213,29 +213,26 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
 
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#1a1714' }}>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground">
         <div className="text-center max-w-sm">
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ backgroundColor: 'var(--primary-color)' }}
-          >
-            <Check className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-primary text-primary-foreground">
+            <Check className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">¡Turno confirmado!</h1>
-          <p className="text-gray-400 mb-6">
-            Tu turno en <strong className="text-white">{business.name}</strong> fue registrado.
+          <h1 className="text-2xl font-bold mb-2 font-[family-name:var(--font-heading)]">¡Turno confirmado!</h1>
+          <p className="text-muted-foreground mb-6">
+            Tu turno en <strong className="text-foreground">{business.name}</strong> fue registrado.
           </p>
-          <div className="rounded-xl p-4 text-left space-y-2 mb-6" style={{ backgroundColor: '#252220' }}>
-            <p className="text-sm text-gray-400">Servicio: <span className="text-white">{selectedService?.name}</span></p>
-            <p className="text-sm text-gray-400">
-              Fecha: <span className="text-white">{selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</span>
+          <div className="rounded-xl p-4 text-left space-y-2 mb-6 bg-card border border-border">
+            <p className="text-sm text-muted-foreground">Servicio: <span className="text-foreground">{selectedService?.name}</span></p>
+            <p className="text-sm text-muted-foreground">
+              Fecha: <span className="text-foreground">{selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</span>
             </p>
-            <p className="text-sm text-gray-400">Hora: <span className="text-white">{selectedTime}</span></p>
+            <p className="text-sm text-muted-foreground">Hora: <span className="text-foreground">{selectedTime}</span></p>
             {selectedPro && selectedPro !== 'none' && (
-              <p className="text-sm text-gray-400">Profesional: <span className="text-white">{(selectedPro as Professional).name}</span></p>
+              <p className="text-sm text-muted-foreground">Profesional: <span className="text-foreground">{(selectedPro as Professional).name}</span></p>
             )}
           </div>
-          <p className="text-xs text-gray-500">Te contactaremos para confirmar tu reserva.</p>
+          <p className="text-xs text-muted-foreground">Te contactaremos para confirmar tu reserva.</p>
         </div>
       </div>
     )
@@ -244,49 +241,47 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
   const stepsLabels = ['Servicio', 'Profesional', 'Fecha y hora', 'Tus datos']
 
   return (
-    <div className="min-h-screen p-4" style={{ backgroundColor: '#1a1714', color: '#f3ead8' }}>
-      <div className="max-w-lg mx-auto py-6">
-        {/* Hero Bauhaus — banda bg-primary (sigue la paleta del negocio) con formas geométricas */}
-        <div className="relative overflow-hidden rounded-xl bg-primary text-primary-foreground mb-8 p-6">
-          <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-            <span className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
-            <span className="absolute right-8 bottom-0 w-0 h-0 border-l-[24px] border-l-transparent border-r-[24px] border-r-transparent border-b-[36px] border-b-white/10" />
-            <span className="absolute left-3 -bottom-5 w-16 h-16 rotate-12 bg-black/10" />
-          </div>
-          <div className="relative flex items-center gap-4">
-            {business.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={business.logo_url}
-                alt={business.name}
-                className="w-14 h-14 rounded-xl object-cover border border-white/20 flex-shrink-0"
-              />
-            ) : (
-              <div className="w-14 h-14 rounded-xl flex items-center justify-center bg-white/15 font-bold text-2xl flex-shrink-0">
-                {business.name.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold uppercase tracking-tight truncate font-[family-name:var(--font-heading)]">{business.name}</h1>
-              {business.type && <p className="text-sm text-primary-foreground/80 mt-0.5">{business.type}</p>}
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Hero Bauhaus full-bleed — banda bg-primary (sigue la paleta del negocio) con formas geométricas */}
+      <div className="relative overflow-hidden bg-primary text-primary-foreground">
+        <svg className="absolute inset-0 w-full h-full opacity-90 pointer-events-none" viewBox="0 0 760 200" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
+          <circle cx="690" cy="40" r="70" fill="rgba(255,255,255,.10)" />
+          <rect x="600" y="120" width="90" height="90" fill="rgba(0,0,0,.10)" />
+          <path d="M720 140 L760 140 L760 200 Z" fill="rgba(255,255,255,.08)" />
+        </svg>
+        <div className="max-w-lg mx-auto px-6 py-10 relative flex items-center gap-4">
+          {business.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={business.logo_url}
+              alt={business.name}
+              className="w-14 h-14 rounded-xl object-cover border border-white/20 flex-shrink-0"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-xl flex items-center justify-center bg-white/15 font-[family-name:var(--font-heading)] font-black text-2xl flex-shrink-0">
+              {business.name.charAt(0).toUpperCase()}
             </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-[clamp(28px,7vw,40px)] font-black uppercase tracking-tight leading-none truncate font-[family-name:var(--font-heading)]">{business.name}</h1>
+            {business.type && <p className="text-sm text-primary-foreground/80 mt-1.5">{business.type}</p>}
           </div>
         </div>
+      </div>
 
+      <div className="max-w-lg mx-auto px-6 py-8">
         {/* Step indicators */}
         <div className="flex items-center justify-center gap-2 mb-8">
           {stepsLabels.map((label, i) => (
             <div key={i} className="flex items-center gap-2">
               <div className={cn(
                 'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
-                step > i + 1 ? 'text-white' : step === i + 1 ? 'text-white' : 'bg-white/10 text-gray-500'
-              )}
-                style={step >= i + 1 ? { backgroundColor: 'var(--primary-color)' } : {}}
-              >
+                step >= i + 1 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+              )}>
                 {step > i + 1 ? <Check className="w-3 h-3" /> : i + 1}
               </div>
               {i < stepsLabels.length - 1 && (
-                <div className={cn('h-px w-6 sm:w-10 transition-colors', step > i + 1 ? 'bg-white/30' : 'bg-white/10')} />
+                <div className={cn('h-px w-6 sm:w-10 transition-colors', step > i + 1 ? 'bg-primary/40' : 'bg-border')} />
               )}
             </div>
           ))}
@@ -295,32 +290,31 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
         {/* Step 1 - Service */}
         {step === 1 && (
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold mb-4">¿Qué servicio necesitás?</h2>
+            <h2 className="text-lg font-semibold mb-4 font-[family-name:var(--font-heading)]">¿Qué servicio necesitás?</h2>
             {services.map(service => (
               <button
                 key={service.id}
                 onClick={() => { setSelectedService(service); setStep(2) }}
                 className={cn(
-                  'w-full flex items-center justify-between p-4 rounded-xl border transition-colors text-left',
+                  'w-full flex items-center justify-between p-4 rounded-md border transition-colors text-left',
                   selectedService?.id === service.id
-                    ? 'border-current'
-                    : 'border-white/10 hover:border-white/20 bg-white/5'
+                    ? 'border-primary bg-primary/[0.08]'
+                    : 'border-border bg-card hover:border-primary'
                 )}
-                style={selectedService?.id === service.id ? { borderColor: 'var(--primary-color-border)', backgroundColor: 'var(--primary-color-subtle)' } : {}}
               >
                 <div>
                   <p className="font-medium text-sm">{service.name}</p>
-                  {service.description && <p className="text-xs text-gray-400 mt-0.5">{service.description}</p>}
+                  {service.description && <p className="text-xs text-muted-foreground mt-0.5">{service.description}</p>}
                   <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Clock className="w-3 h-3" /> {service.duration_minutes} min
                     </span>
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <DollarSign className="w-3 h-3" /> ${Number(service.price).toLocaleString('es-AR')}
                     </span>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               </button>
             ))}
           </div>
@@ -329,29 +323,26 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
         {/* Step 2 - Professional */}
         {step === 2 && (
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold mb-4">¿Con quién querés atenderte?</h2>
+            <h2 className="text-lg font-semibold mb-4 font-[family-name:var(--font-heading)]">¿Con quién querés atenderte?</h2>
             <button
               onClick={() => { setSelectedPro('none'); setStep(3) }}
-              className="w-full flex items-center gap-3 p-4 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 text-left"
+              className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
             >
-              <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-gray-400 text-sm flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
                 ?
               </div>
               <div>
                 <p className="font-medium text-sm">Sin preferencia</p>
-                <p className="text-xs text-gray-400">Se asignará automáticamente</p>
+                <p className="text-xs text-muted-foreground">Se asignará automáticamente</p>
               </div>
             </button>
             {professionals.map(pro => (
               <button
                 key={pro.id}
                 onClick={() => { setSelectedPro(pro); setStep(3) }}
-                className="w-full flex items-center gap-3 p-4 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 text-left"
+                className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
               >
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0"
-                  style={{ backgroundColor: 'var(--primary-color)' }}
-                >
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary text-primary-foreground font-semibold text-sm flex-shrink-0">
                   {pro.name.charAt(0).toUpperCase()}
                 </div>
                 <p className="font-medium text-sm">{pro.name}</p>
@@ -363,7 +354,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
         {/* Step 3 - Date & time */}
         {step === 3 && (
           <div>
-            <h2 className="text-lg font-semibold mb-4">¿Cuándo querés venir?</h2>
+            <h2 className="text-lg font-semibold mb-4 font-[family-name:var(--font-heading)]">¿Cuándo querés venir?</h2>
             <div className="flex justify-center mb-4">
               <Calendar
                 mode="single"
@@ -371,19 +362,19 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
                 onSelect={handleDateSelect}
                 disabled={isDateDisabled}
                 locale={es}
-                className="rounded-xl border border-white/10 bg-white/5 p-3"
+                className="rounded-md border border-border bg-card p-3"
               />
             </div>
 
             {selectedDate && (
               <div className="mt-4 space-y-3">
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   Horarios disponibles — {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
                 </p>
                 {loadingSlots ? (
-                  <p className="text-center text-gray-400 text-sm py-4">Cargando horarios...</p>
+                  <p className="text-center text-muted-foreground text-sm py-4">Cargando horarios...</p>
                 ) : availableSlots.length === 0 ? (
-                  <p className="text-center text-gray-400 text-sm py-4">No hay horarios disponibles para este día</p>
+                  <p className="text-center text-muted-foreground text-sm py-4">No hay horarios disponibles para este día</p>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {availableSlots.map(slot => (
@@ -391,12 +382,11 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
                         key={slot}
                         onClick={() => setSelectedTime(slot)}
                         className={cn(
-                          'py-2 px-3 rounded-lg text-sm font-medium transition-colors border',
+                          'py-2 px-3 rounded-md text-sm font-medium transition-colors border',
                           selectedTime === slot
-                            ? 'text-white border-transparent'
-                            : 'border-white/10 hover:border-white/20 bg-white/5'
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'border-border bg-card hover:border-primary'
                         )}
-                        style={selectedTime === slot ? { backgroundColor: 'var(--primary-color)', borderColor: 'var(--primary-color)' } : {}}
                       >
                         {slot}
                       </button>
@@ -407,8 +397,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
             )}
 
             <Button
-              className="w-full mt-6 text-white"
-              style={{ backgroundColor: 'var(--primary-color)' }}
+              className="w-full mt-6"
               disabled={!selectedDate || !selectedTime}
               onClick={() => setStep(4)}
             >
@@ -420,55 +409,51 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
         {/* Step 4 - Client data */}
         {step === 4 && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold mb-2">Tus datos</h2>
+            <h2 className="text-lg font-semibold mb-2 font-[family-name:var(--font-heading)]">Tus datos</h2>
 
-            <div className="rounded-xl p-4 space-y-1 text-sm mb-4" style={{ backgroundColor: '#252220' }}>
-              <p className="text-gray-400">Servicio: <span className="text-white">{selectedService?.name}</span></p>
-              <p className="text-gray-400">
-                {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} a las <strong className="text-white">{selectedTime}</strong>
+            <div className="rounded-md p-4 space-y-1 text-sm mb-4 bg-card border border-border border-l-4 border-l-primary">
+              <p className="text-muted-foreground">Servicio: <span className="text-foreground">{selectedService?.name}</span></p>
+              <p className="text-muted-foreground">
+                {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} a las <strong className="text-foreground">{selectedTime}</strong>
               </p>
               {requireDeposit && (
-                <p className="text-gray-400">
-                  Seña requerida: <strong className="text-white">${Number(business.deposit_amount).toLocaleString('es-AR')}</strong>
+                <p className="text-muted-foreground">
+                  Seña requerida: <strong className="text-foreground">${Number(business.deposit_amount).toLocaleString('es-AR')}</strong>
                 </p>
               )}
             </div>
 
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-gray-300">Nombre *</Label>
+                <Label>Nombre *</Label>
                 <Input
                   value={clientName}
                   onChange={e => setClientName(e.target.value)}
                   placeholder="Tu nombre completo"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-gray-300">Teléfono *</Label>
+                <Label>Teléfono *</Label>
                 <Input
                   type="tel"
                   value={clientPhone}
                   onChange={e => setClientPhone(e.target.value)}
                   placeholder="+54 9 11 1234-5678"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-gray-300">Email *</Label>
+                <Label>Email *</Label>
                 <Input
                   type="email"
                   value={clientEmail}
                   onChange={e => setClientEmail(e.target.value)}
                   placeholder="tu@email.com"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                 />
               </div>
             </div>
 
             <Button
-              className="w-full mt-2 text-white"
-              style={{ backgroundColor: 'var(--primary-color)' }}
+              className="w-full mt-2"
               disabled={!clientName || !clientPhone || !clientEmail || submitting}
               onClick={handleConfirm}
             >
@@ -478,7 +463,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
             </Button>
 
             {requireDeposit && (
-              <p className="text-xs text-center text-gray-500">
+              <p className="text-xs text-center text-muted-foreground">
                 Serás redirigido a MercadoPago para abonar la seña.
               </p>
             )}
@@ -489,7 +474,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
         {step > 1 && (
           <button
             onClick={() => setStep(s => s - 1)}
-            className="flex items-center gap-1 text-sm text-gray-400 hover:text-white mt-6 transition-colors"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mt-6 transition-colors"
           >
             <ChevronLeft className="w-4 h-4" /> Volver
           </button>
