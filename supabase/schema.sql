@@ -1,5 +1,17 @@
+-- ============================================================
+-- Forjo Gestión — SCHEMA BASE (estado inicial de referencia)
+-- ============================================================
+-- Este archivo describe el ESTADO BASE del esquema: las tablas núcleo y su RLS inicial.
+-- Los cambios incrementales (features posteriores) NO van acá: viven en
+-- supabase/migrations/ como archivos numerados (001_, 002_, …) y se corren EN ORDEN
+-- sobre esta base. Ver supabase/migrations/README.md para el orden exacto.
+--
+-- Idempotente: usa CREATE TABLE IF NOT EXISTS y DROP POLICY IF EXISTS antes de CREATE,
+-- así correrlo dos veces no rompe. Nada destructivo (sin DROP TABLE / DROP COLUMN / DELETE).
+-- ============================================================
+
 -- Negocios (cada tenant)
-CREATE TABLE businesses (
+CREATE TABLE IF NOT EXISTS businesses (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   slug TEXT UNIQUE NOT NULL,
@@ -14,7 +26,7 @@ CREATE TABLE businesses (
 );
 
 -- Profesionales del negocio
-CREATE TABLE professionals (
+CREATE TABLE IF NOT EXISTS professionals (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -24,7 +36,7 @@ CREATE TABLE professionals (
 );
 
 -- Servicios del negocio
-CREATE TABLE services (
+CREATE TABLE IF NOT EXISTS services (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -36,7 +48,7 @@ CREATE TABLE services (
 );
 
 -- Horarios por día
-CREATE TABLE business_hours (
+CREATE TABLE IF NOT EXISTS business_hours (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   day_of_week INTEGER NOT NULL,
@@ -46,7 +58,7 @@ CREATE TABLE business_hours (
 );
 
 -- Clientes
-CREATE TABLE clients (
+CREATE TABLE IF NOT EXISTS clients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -57,7 +69,7 @@ CREATE TABLE clients (
 );
 
 -- Turnos
-CREATE TABLE appointments (
+CREATE TABLE IF NOT EXISTS appointments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   professional_id UUID REFERENCES professionals(id),
@@ -75,45 +87,8 @@ CREATE TABLE appointments (
 );
 
 -- ============================================================
--- MIGRATION: Run these ALTER TABLE statements in Supabase SQL editor
+-- RLS — habilitar en todas las tablas de tenant
 -- ============================================================
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS mp_access_token TEXT;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS require_deposit BOOLEAN DEFAULT FALSE;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS deposit_amount DECIMAL(10,2) DEFAULT 0;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS deposit_expiry_hours INTEGER DEFAULT 1;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notification_email TEXT;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS resend_api_key TEXT;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS recaptcha_site_key TEXT;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS recaptcha_secret_key TEXT;
-
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS deposit_paid BOOLEAN DEFAULT FALSE;
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS deposit_amount DECIMAL(10,2) DEFAULT 0;
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS mp_payment_id TEXT;
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-
--- Profesionales: datos ampliados (apellido, especialidad, matrícula, contacto).
--- La tabla ya tiene business_id + RLS (policy "business member access" FOR ALL, abajo);
--- RLS es por fila, así que estas columnas quedan protegidas para el dueño como el resto.
-ALTER TABLE professionals ADD COLUMN IF NOT EXISTS last_name TEXT;
-ALTER TABLE professionals ADD COLUMN IF NOT EXISTS specialty TEXT;
-ALTER TABLE professionals ADD COLUMN IF NOT EXISTS license_number TEXT;
-ALTER TABLE professionals ADD COLUMN IF NOT EXISTS phone TEXT;
-ALTER TABLE professionals ADD COLUMN IF NOT EXISTS email TEXT;
-
--- La página pública SOLO necesita id, nombre y especialidad para el paso "elegí profesional".
--- La policy "public read professionals" (USING true) exponía la fila ENTERA al rol anon,
--- incluyendo ahora teléfono/email/matrícula del staff. La acotamos a una vista y quitamos
--- la lectura directa de la tabla por anon (la vista corre como su dueño y solo expone
--- columnas no sensibles).
-CREATE OR REPLACE VIEW public_professionals AS
-  SELECT id, business_id, name, specialty, active
-  FROM professionals
-  WHERE active = true;
-GRANT SELECT ON public_professionals TO anon, authenticated;
-DROP POLICY IF EXISTS "public read professionals" ON professionals;
--- ============================================================
-
--- RLS
 ALTER TABLE businesses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE professionals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
@@ -121,177 +96,60 @@ ALTER TABLE business_hours ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 
--- Políticas RLS - owner
+-- Políticas RLS — owner (el dueño accede solo a sus negocios y sus filas).
+-- DROP antes de CREATE para que correr el archivo dos veces no rompa.
+DROP POLICY IF EXISTS "owner access" ON businesses;
 CREATE POLICY "owner access" ON businesses
   FOR ALL USING (owner_id = auth.uid());
 
+DROP POLICY IF EXISTS "business member access" ON professionals;
 CREATE POLICY "business member access" ON professionals
   FOR ALL USING (business_id IN (
     SELECT id FROM businesses WHERE owner_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "business member access" ON services;
 CREATE POLICY "business member access" ON services
   FOR ALL USING (business_id IN (
     SELECT id FROM businesses WHERE owner_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "business member access" ON business_hours;
 CREATE POLICY "business member access" ON business_hours
   FOR ALL USING (business_id IN (
     SELECT id FROM businesses WHERE owner_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "business member access" ON clients;
 CREATE POLICY "business member access" ON clients
   FOR ALL USING (business_id IN (
     SELECT id FROM businesses WHERE owner_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "business member access" ON appointments;
 CREATE POLICY "business member access" ON appointments
   FOR ALL USING (business_id IN (
     SELECT id FROM businesses WHERE owner_id = auth.uid()
   ));
 
--- Acceso público para página de reservas
+-- Acceso público (rol anon) para la página de reservas /[slug].
+-- NOTA: la lectura pública de `professionals` se ACOTA luego a una vista en la
+-- migración 007 (no expone contacto/matrícula del staff). Acá queda el estado base.
+DROP POLICY IF EXISTS "public read businesses" ON businesses;
 CREATE POLICY "public read businesses" ON businesses
   FOR SELECT USING (true);
--- Profesionales: la lectura pública es vía la vista acotada public_professionals
--- (ver bloque de migración arriba), no la tabla entera, para no exponer contacto del staff.
+DROP POLICY IF EXISTS "public read professionals" ON professionals;
+CREATE POLICY "public read professionals" ON professionals
+  FOR SELECT USING (true);
+DROP POLICY IF EXISTS "public read services" ON services;
 CREATE POLICY "public read services" ON services
   FOR SELECT USING (true);
+DROP POLICY IF EXISTS "public read hours" ON business_hours;
 CREATE POLICY "public read hours" ON business_hours
   FOR SELECT USING (true);
+DROP POLICY IF EXISTS "public insert appointments" ON appointments;
 CREATE POLICY "public insert appointments" ON appointments
   FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "public insert clients" ON clients;
 CREATE POLICY "public insert clients" ON clients
   FOR INSERT WITH CHECK (true);
-
--- ============================================================
--- MIGRATION: Verticals (rubros) — run in Supabase SQL editor
--- ============================================================
--- Rubro del negocio. Los negocios existentes sin valor usan 'general'.
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vertical TEXT DEFAULT 'general';
-
--- Campos extra para pacientes (salud)
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS insurance_name TEXT;
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS insurance_number TEXT;
-
--- Preferencias (belleza)
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS preferences TEXT;
-
--- Historia clínica / notas con fecha
-CREATE TABLE IF NOT EXISTS clinical_notes (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-  note TEXT NOT NULL,
-  note_date DATE DEFAULT CURRENT_DATE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Archivos adjuntos por cliente
-CREATE TABLE IF NOT EXISTS client_attachments (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-  file_url TEXT NOT NULL,
-  file_name TEXT,
-  uploaded_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE client_attachments ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "business access" ON clinical_notes FOR ALL
-  USING (business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid()));
-CREATE POLICY "business access" ON client_attachments FOR ALL
-  USING (business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid()));
-
--- Migrar negocios existentes: derivar vertical desde su `type` actual.
--- (Ajustar los nombres de type a los reales de tu base si difieren.)
-UPDATE businesses SET vertical = 'salud'
-  WHERE vertical IS DISTINCT FROM 'salud'
-    AND type IN ('Médico','Psicólogo','Kinesiólogo','Odontólogo','Nutricionista',
-                 'Centro médico','Psicología','Odontología','Kinesiología');
-UPDATE businesses SET vertical = 'belleza'
-  WHERE vertical IS DISTINCT FROM 'belleza'
-    AND type IN ('Peluquería','Barbería','Centro de estética','Manicura','Spa','Estética');
-UPDATE businesses SET vertical = 'general'
-  WHERE vertical IS NULL;
-
--- ============================================================
--- STORAGE: bucket privado "attachments" para adjuntos de clientes
--- Path de los archivos: [business_id]/[client_id]/[filename]
--- ============================================================
-INSERT INTO storage.buckets (id, name, public)
-  VALUES ('attachments', 'attachments', false)
-  ON CONFLICT (id) DO NOTHING;
-
--- Solo el dueño del negocio puede subir/ver/borrar archivos de sus clientes.
--- La primera carpeta del path es el business_id, que debe pertenecer al usuario.
-CREATE POLICY "business attachments" ON storage.objects
-  FOR ALL USING (
-    bucket_id = 'attachments'
-    AND (storage.foldername(name))[1] IN (
-      SELECT id::text FROM businesses WHERE owner_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    bucket_id = 'attachments'
-    AND (storage.foldername(name))[1] IN (
-      SELECT id::text FROM businesses WHERE owner_id = auth.uid()
-    )
-  );
-
--- ============================================================
--- MIGRATION: Gastos fijos (egresos recurrentes) — run in Supabase SQL editor
--- ============================================================
-CREATE TABLE IF NOT EXISTS fixed_expenses (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-  frequency TEXT NOT NULL DEFAULT 'monthly',
-  due_day INTEGER,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  CONSTRAINT fixed_expenses_due_day_chk CHECK (due_day IS NULL OR (due_day BETWEEN 1 AND 31))
-);
-
-CREATE INDEX IF NOT EXISTS fixed_expenses_business_idx ON fixed_expenses(business_id);
-
--- RLS: tabla con datos de tenant → habilitar y definir policy por operación.
-ALTER TABLE fixed_expenses ENABLE ROW LEVEL SECURITY;
-
--- El vínculo tenant es businesses.owner_id = auth.uid(). auth.uid() va envuelto en
--- un subselect para que Postgres lo evalúe una sola vez por query.
-CREATE POLICY "fixed_expenses tenant select" ON fixed_expenses
-  FOR SELECT USING (
-    business_id IN (SELECT id FROM businesses WHERE owner_id = (SELECT auth.uid()))
-  );
-CREATE POLICY "fixed_expenses tenant insert" ON fixed_expenses
-  FOR INSERT WITH CHECK (
-    business_id IN (SELECT id FROM businesses WHERE owner_id = (SELECT auth.uid()))
-  );
--- update: USING = qué filas puede tocar; WITH CHECK = que no las reasigne a otro tenant.
-CREATE POLICY "fixed_expenses tenant update" ON fixed_expenses
-  FOR UPDATE USING (
-    business_id IN (SELECT id FROM businesses WHERE owner_id = (SELECT auth.uid()))
-  ) WITH CHECK (
-    business_id IN (SELECT id FROM businesses WHERE owner_id = (SELECT auth.uid()))
-  );
-CREATE POLICY "fixed_expenses tenant delete" ON fixed_expenses
-  FOR DELETE USING (
-    business_id IN (SELECT id FROM businesses WHERE owner_id = (SELECT auth.uid()))
-  );
-
--- ============================================================
--- MIGRATION: Widgets del dashboard (recomendados por IA) — run in Supabase SQL editor
--- ============================================================
--- Subconjunto de widgets que el negocio elige mostrar en el dashboard. NULL = todos.
--- Vive en businesses (ya con RLS owner-only), así que no requiere policy nueva.
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS dashboard_widgets JSONB;
-
--- ============================================================
--- MIGRATION: Paleta de color por negocio (rebrand Forjo) — run in Supabase SQL editor
--- ============================================================
--- Tiñe el panel y la página pública vía data-palette. Valores: red|blue|yellow|green|ink.
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS palette TEXT NOT NULL DEFAULT 'red';
