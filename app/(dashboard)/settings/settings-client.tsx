@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Sparkles, Check, Sun, Moon } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Check, Sun, Moon } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS } from '@/lib/verticals'
@@ -113,66 +113,13 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     if (verticalChanged) setTimeout(() => window.location.reload(), 600)
   }
 
-  // ── IA: sugerencia de rubro (debounce + cache por nombre) ───────────────────
-  // Se dispara al "confirmar" el nombre: 800ms sin tipear. Cachea por nombre para
-  // no repreguntar lo mismo. Sin ANTHROPIC_API_KEY el endpoint responde
-  // { available:false } y simplemente no se muestra sugerencia (degradado).
-  const [aiSuggestion, setAiSuggestion] = useState<{ type: string; verticalLabel: string } | null>(null)
-  const lastQueriedName = useRef(business.name)
-
-  useEffect(() => {
-    const name = bizForm.name.trim()
-    if (!name || name === lastQueriedName.current) return
-    const t = setTimeout(async () => {
-      lastQueriedName.current = name
-      try {
-        const res = await fetch('/api/ai/suggest-vertical', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }),
-        })
-        const data = await res.json()
-        setAiSuggestion(data?.available && data.type ? { type: data.type, verticalLabel: data.verticalLabel } : null)
-      } catch { setAiSuggestion(null) }
-    }, 800)
-    return () => clearTimeout(t)
-  }, [bizForm.name])
-
-  function applySuggestion() {
-    if (!aiSuggestion) return
-    setBizForm(f => ({ ...f, type: aiSuggestion.type }))
-    setAiSuggestion(null)
-    toast.success(`Rubro aplicado: ${aiSuggestion.verticalLabel}`)
-  }
-
-  // ── IA: recomendación de widgets del dashboard ──────────────────────────────
-  // La IA elige de un catálogo FIJO. El usuario revisa y confirma con "Guardar panel"
-  // (nunca se auto-aplica). Persistimos null si están todos = default mostrar todo.
-  const currentVertical = getVerticalKeyByType(bizForm.type)
+  // ── Widgets del dashboard (selección manual) ────────────────────────────────
+  // El usuario elige del catálogo FIJO y confirma con "Guardar panel".
+  // Persistimos null si están todos = default mostrar todo.
   const [widgetSelection, setWidgetSelection] = useState<string[]>(
     sanitizeWidgetIds(business.dashboard_widgets) ?? DASHBOARD_WIDGET_IDS
   )
-  const [recommendingWidgets, setRecommendingWidgets] = useState(false)
   const [savingWidgets, setSavingWidgets] = useState(false)
-
-  async function recommendWidgets() {
-    setRecommendingWidgets(true)
-    try {
-      const res = await fetch('/api/ai/recommend-widgets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vertical: currentVertical }),
-      })
-      const data = await res.json()
-      if (data?.available && Array.isArray(data.widgets) && data.widgets.length > 0) {
-        setWidgetSelection(data.widgets)
-        toast.success('Widgets recomendados — revisá y guardá')
-      } else {
-        toast.error('La IA no está disponible')
-      }
-    } catch { toast.error('No se pudo recomendar') }
-    setRecommendingWidgets(false)
-  }
 
   function toggleWidget(id: string) {
     setWidgetSelection(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -633,17 +580,6 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                     {' · '}cambiarlo ajusta el menú y los campos del panel.
                   </p>
                 )}
-                {aiSuggestion && aiSuggestion.type !== bizForm.type && (
-                  <div className="flex items-center gap-2 mt-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs">
-                    <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                    <span className="flex-1 min-w-0">
-                      Sugerencia: <span className="font-medium text-foreground">{aiSuggestion.type}</span>
-                      <span className="text-muted-foreground"> ({aiSuggestion.verticalLabel})</span>
-                    </span>
-                    <button type="button" onClick={applySuggestion} className="font-medium text-primary hover:underline flex-shrink-0">Aplicar</button>
-                    <button type="button" onClick={() => setAiSuggestion(null)} className="text-muted-foreground hover:text-foreground flex-shrink-0" aria-label="Descartar sugerencia"><X className="w-3.5 h-3.5" /></button>
-                  </div>
-                )}
               </div>
               <div className="space-y-1">
                 <Label>Teléfono</Label>
@@ -666,14 +602,9 @@ export function SettingsClient({ business, initialServices, initialProfessionals
 
             {/* ── Panel del dashboard (widgets + recomendación IA) ── */}
             <div className="border-t border-border pt-5 space-y-3">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <p className="font-semibold text-sm">Panel del dashboard</p>
-                  <p className="text-xs text-muted-foreground">Elegí qué widgets ver en tu panel principal.</p>
-                </div>
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={recommendWidgets} disabled={recommendingWidgets}>
-                  <Sparkles className="w-3.5 h-3.5" /> {recommendingWidgets ? 'Pensando...' : 'Recomendar con IA'}
-                </Button>
+              <div>
+                <p className="font-semibold text-sm">Panel del dashboard</p>
+                <p className="text-xs text-muted-foreground">Elegí qué widgets ver en tu panel principal.</p>
               </div>
               <div className="space-y-2">
                 {DASHBOARD_WIDGETS.map(w => (
