@@ -111,7 +111,7 @@ async function processWebhook(slug: string, paymentId: string) {
           businessSlug: slug,
           primaryColor: business.primary_color,
           logoUrl: business.logo_url,
-          whatsapp: business.phone,
+          whatsapp: business.whatsapp,
           cancelToken: appt.cancel_token,
           resendApiKey: business.resend_api_key,
           resendFrom: business.resend_from,

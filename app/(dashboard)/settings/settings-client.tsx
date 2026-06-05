@@ -19,6 +19,7 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS } from '@/lib/verticals'
 import { DASHBOARD_WIDGETS, DASHBOARD_WIDGET_IDS, sanitizeWidgetIds } from '@/lib/dashboard-widgets'
+import { normalizeArWhatsApp } from '@/lib/whatsapp'
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
@@ -160,7 +161,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const [bizForm, setBizForm] = useState({
     name: business.name,
     type: business.type || '',
-    phone: business.phone || '',
+    whatsapp: business.whatsapp || '',
     address: business.address || '',
     instagram: business.instagram || '',
     primary_color: business.primary_color,
@@ -168,11 +169,20 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const [savingBiz, setSavingBiz] = useState(false)
 
   async function saveBusiness() {
+    // WhatsApp: vacío permitido (null); si hay algo, normalizar a formato wa.me y validar.
+    let whatsapp: string | null = null
+    if (bizForm.whatsapp.trim()) {
+      whatsapp = normalizeArWhatsApp(bizForm.whatsapp)
+      if (!whatsapp) {
+        toast.error('WhatsApp inválido. Usá código de país y área, ej. +54 9 11 1234-5678')
+        return
+      }
+    }
     setSavingBiz(true)
     // Cambiar el tipo recalcula el vertical del negocio.
     const vertical = getVerticalKeyByType(bizForm.type)
     const verticalChanged = vertical !== (business.vertical ?? 'general')
-    const { error } = await supabase.from('businesses').update({ ...bizForm, vertical }).eq('id', business.id)
+    const { error } = await supabase.from('businesses').update({ ...bizForm, whatsapp, vertical }).eq('id', business.id)
     setSavingBiz(false)
     if (error) { toast.error('Error al guardar'); return }
     toast.success('Negocio actualizado')
@@ -696,8 +706,9 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                 )}
               </div>
               <div className="space-y-1">
-                <Label>Teléfono</Label>
-                <Input value={bizForm.phone} onChange={e => setBizForm(f => ({ ...f, phone: e.target.value }))} />
+                <Label>WhatsApp</Label>
+                <Input value={bizForm.whatsapp} onChange={e => setBizForm(f => ({ ...f, whatsapp: e.target.value }))} placeholder="+54 9 11 1234-5678" />
+                <p className="text-xs text-muted-foreground">Con código de país, ej. +54 9 11 1234-5678. Se usa para el botón de WhatsApp en los emails.</p>
               </div>
               <div className="space-y-1">
                 <Label>Instagram</Label>

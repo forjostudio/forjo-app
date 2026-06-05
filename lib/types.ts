@@ -11,7 +11,8 @@ export interface Business {
   palette?: string | null
   logo_url: string | null
   primary_color: string
-  phone: string | null
+  // Contacto del negocio: WhatsApp normalizado a formato wa.me (ver lib/whatsapp).
+  whatsapp: string | null
   address: string | null
   instagram: string | null
   // MercadoPago & deposits

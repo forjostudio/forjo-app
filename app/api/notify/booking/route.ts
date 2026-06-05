@@ -46,7 +46,7 @@ export async function POST(request: Request) {
           businessSlug: String(business.slug || ''),
           primaryColor: business.primary_color as string | null,
           logoUrl: business.logo_url as string | null,
-          whatsapp: business.phone as string | null,
+          whatsapp: business.whatsapp as string | null,
           cancelToken: appt.cancel_token as string | null,
           resendApiKey: resendKey,
           resendFrom,

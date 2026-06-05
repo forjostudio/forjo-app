@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TYPE_GROUPS, getVerticalKeyByType } from '@/lib/verticals'
+import { normalizeArWhatsApp } from '@/lib/whatsapp'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -65,7 +66,7 @@ export default function OnboardingPage() {
   const [slug, setSlug] = useState('')
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
   const [slugChecking, setSlugChecking] = useState(false)
-  const [phone, setPhone] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
   const [address, setAddress] = useState('')
   const [instagram, setInstagram] = useState('')
   const [palette, setPalette] = useState('red')
@@ -166,6 +167,16 @@ export default function OnboardingPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autenticado')
 
+      // WhatsApp opcional: si lo cargaron, normalizar a formato wa.me y validar.
+      let whatsappNorm: string | null = null
+      if (whatsapp.trim()) {
+        whatsappNorm = normalizeArWhatsApp(whatsapp)
+        if (!whatsappNorm) {
+          toast.error('WhatsApp inválido. Usá código de país y área, ej. +54 9 11 1234-5678')
+          return
+        }
+      }
+
       const { data: business, error: bizError } = await supabase
         .from('businesses')
         .insert({
@@ -174,7 +185,7 @@ export default function OnboardingPage() {
           slug,
           type,
           vertical: getVerticalKeyByType(type),
-          phone: phone || null,
+          whatsapp: whatsappNorm,
           address: address || null,
           instagram: instagram || null,
           palette,
@@ -338,8 +349,8 @@ export default function OnboardingPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Teléfono <span className="text-muted-foreground">(opcional)</span></Label>
-                  <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+54 9 11 1234-5678" />
+                  <Label>WhatsApp <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="+54 9 11 1234-5678" />
                 </div>
                 <div className="space-y-2">
                   <Label>Instagram <span className="text-muted-foreground">(opcional)</span></Label>

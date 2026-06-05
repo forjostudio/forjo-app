@@ -19,6 +19,7 @@ Sobre una base de datos **vacía**:
    pública acotada `public_professionals` (reemplaza la lectura pública de la tabla)
 8. `008_email_delivery.sql` — flag `email_sent`/`email_error` en turnos + `resend_from` por negocio
 9. `009_cancel_token.sql` — `cancel_token` por turno (link de cancelación del email)
+10. `010_rename_phone_to_whatsapp.sql` — renombra `businesses.phone` → `whatsapp` (coordinar con el deploy)
 
 Sobre una base de datos que **ya tiene el esquema actual** aplicado: correr 001–007 es
 seguro (son no-ops idempotentes). En la práctica el único pendiente real es **007**, que

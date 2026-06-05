@@ -1,3 +1,5 @@
+import { normalizeArWhatsApp } from '@/lib/whatsapp'
+
 // Decide con qué key y qué "from" mandar, según la config del negocio:
 // - Key propia del negocio → hay que mandar desde SU dominio verificado (resend_from).
 //   Sin resend_from, mandar con @forjo.studio daría 403 (dominio no verificado en su
@@ -99,7 +101,9 @@ export async function sendConfirmationEmail({
   const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const cancelUrl = cancelToken ? `${baseUrl}/cancelar/${cancelToken}` : ''
-  const waDigits = whatsapp ? whatsapp.replace(/\D/g, '') : ''
+  // Normaliza por las dudas (idempotente): cubre valores viejos sin normalizar. Si no es
+  // un número usable, se omite el link.
+  const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
   // Header: logo del negocio si tiene uno; si no, el nombre en texto (fallback actual).
   const headerInner = logoUrl
