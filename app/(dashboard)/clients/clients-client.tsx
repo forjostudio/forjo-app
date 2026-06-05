@@ -648,7 +648,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                   <div className="bg-card border border-border rounded-lg p-3">
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={visitChart}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                         <XAxis dataKey="name" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
                         <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} allowDecimals={false} />
                         <Tooltip

@@ -605,7 +605,7 @@ export function FinancesClient({ businessId }: Props) {
           <CardContent>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="name" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
                 <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
@@ -637,7 +637,7 @@ export function FinancesClient({ businessId }: Props) {
                     <stop offset="100%" stopColor="var(--destructive)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="label" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} interval="preserveStartEnd" minTickGap={16} />
                 <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} width={48} />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
