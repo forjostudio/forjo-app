@@ -147,6 +147,15 @@ export function AppointmentsClient({ initialAppointments, professionals, service
     if (error) { toast.error('Error al actualizar'); return }
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: status as Appointment['status'] } : a))
     toast.success('Estado actualizado')
+    // Cancelación desde el panel = avisar al cliente por email (server-side y awaiteado
+    // dentro del endpoint). Best-effort: no bloquea la UI ni se traga el error en consola.
+    if (status === 'cancelled') {
+      fetch('/api/notify/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointmentId: id }),
+      }).catch(e => console.error('[notify/cancel] no se pudo disparar:', e))
+    }
   }
 
   async function handleDelete() {

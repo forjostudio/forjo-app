@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendClientCancelEmail } from '@/lib/email'
 import type { NextRequest } from 'next/server'
 
 // Cancelación pública por TOKEN (no por id). El token impredecible resuelve el turno y su
@@ -13,7 +14,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('id, date, status')
+    .select('id, date, time, status, client_name, client_email, services(name), businesses(name, slug, primary_color, logo_url, resend_api_key, resend_from)')
     .eq('cancel_token', token)
     .single()
 
@@ -42,5 +43,31 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   }
 
   console.log(`[cancel] turno ${appt.id} cancelado vía token`)
+
+  // Email "cancelado por el cliente": AWAIT (en serverless, sin await el fetch a Resend se
+  // corta al hacer return). El branding/remitente sale del propio negocio del turno
+  // (aislamiento por tenant: no se confía en ningún input del cliente). Best-effort: si
+  // falla, se logea el motivo real y NO se rompe la cancelación, que ya está confirmada.
+  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; resend_api_key?: string | null; resend_from?: string | null } | null
+  if (appt.client_email && business) {
+    try {
+      await sendClientCancelEmail({
+        to: appt.client_email,
+        clientName: appt.client_name,
+        service: (appt.services as { name?: string } | null)?.name || '',
+        date: appt.date,
+        time: appt.time,
+        businessName: business.name || '',
+        businessSlug: business.slug || '',
+        primaryColor: business.primary_color,
+        logoUrl: business.logo_url,
+        resendApiKey: business.resend_api_key,
+        resendFrom: business.resend_from,
+      })
+    } catch (e) {
+      console.error(`[cancel] email cliente FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)
+    }
+  }
+
   return Response.json({ ok: true })
 }
