@@ -33,13 +33,20 @@ export async function POST(request: Request) {
     const supabase = createAdminClient()
 
     // Traemos el turno por id, SIN filtrar por status (el endpoint no depende de que ya esté
-    // cancelado). El branding/remitente y la info de seña salen del propio negocio del turno.
-    const { data: appt } = await supabase
+    // cancelado). Embebemos businesses(*) — como notify/booking — para no depender de listar
+    // columnas exactas (una columna inexistente en el select hacía fallar la query y devolver
+    // un 404 engañoso). maybeSingle() distingue "no hay fila" (null sin error) de un error de
+    // query real (que ahora se logea y devuelve 500, no un 404 mentiroso).
+    const { data: appt, error: apptErr } = await supabase
       .from('appointments')
-      .select('id, business_id, status, date, time, client_name, client_email, deposit_paid, deposit_amount, services(name), businesses(name, slug, primary_color, logo_url, whatsapp, resend_api_key, resend_from)')
+      .select('*, services(name), businesses(*)')
       .eq('id', appointmentId)
-      .single()
+      .maybeSingle()
 
+    if (apptErr) {
+      console.error(`[notify/cancel] error leyendo turno ${appointmentId}:`, apptErr.message)
+      return Response.json({ ok: false, error: 'query_failed', detail: apptErr.message }, { status: 500 })
+    }
     if (!appt) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
     // Defensa en profundidad: además de la sesión, el turno debe pertenecer al negocio del

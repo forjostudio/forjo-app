@@ -21,9 +21,16 @@ Sobre una base de datos **vacía**:
 9. `009_cancel_token.sql` — `cancel_token` por turno (link de cancelación del email)
 10. `010_rename_phone_to_whatsapp.sql` — renombra `businesses.phone` → `whatsapp` (coordinar con el deploy)
 
-Sobre una base de datos que **ya tiene el esquema actual** aplicado: correr 001–007 es
-seguro (son no-ops idempotentes). En la práctica el único pendiente real es **007**, que
-aplica los campos de profesionales y la vista acotada.
+Sobre una base de datos que **ya tiene parte del esquema** aplicado: correr cualquiera de
+001–010 es seguro (son no-ops idempotentes si ya están). Los pendientes que suelen faltar
+en una base que arrancó de `schema.sql` y se fue actualizando a mano son **007–010**:
+
+- **007** — campos de profesionales + vista acotada `public_professionals`.
+- **008** — `resend_from` por negocio + `email_sent`/`email_error` en turnos (flujo de emails).
+- **009** — `cancel_token` por turno (link de cancelación del email/cliente).
+- **010** — renombra `businesses.phone` → `whatsapp`. ⚠ Acoplada al deploy: el código nuevo
+  lee `whatsapp` (booking público, onboarding, settings, emails). Sin esta migración esas
+  queries fallan contra una columna `phone`. Correr en cuanto se deploya el código.
 
 ## Reglas
 
