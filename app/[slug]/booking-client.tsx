@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { format, isBefore, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { createPublicBrowserClient } from '@/lib/supabase/public'
 import type { PublicBusiness, Service, Professional, TimeBlock } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,8 +31,6 @@ function minutesToTime(m: number) {
 }
 
 export function BookingClient({ business, services, professionals, timeBlocks }: Props) {
-  const supabase = createPublicBrowserClient()
-
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedPro, setSelectedPro] = useState<Professional | null | 'none'>('none')
@@ -81,26 +78,27 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     }
 
     const dateStr = format(date, 'yyyy-MM-dd')
-    const { data: existingAppts } = await supabase
-      .from('appointments')
-      .select('time, status, expires_at, services(duration_minutes)')
-      .eq('business_id', business.id)
-      .eq('date', dateStr)
-      .neq('status', 'cancelled')
+    const proId = selectedPro && selectedPro !== 'none' ? (selectedPro as Professional).id : null
 
-    // Qué turnos OCUPAN el slot: confirmed/completed/pending siempre; pending_payment solo
-    // si la seña NO expiró todavía (expires_at futuro, o aún sin setear durante el alta).
-    // Si la seña venció, el slot se libera (el cron cancel-expired además lo pasa a
-    // cancelled). Antes pending_payment se excluía siempre → se podía reservar un slot que
-    // otro estaba pagando.
-    const nowMs = Date.now()
-    const occupied = (existingAppts || []).filter(a => {
-      if (a.status === 'pending_payment') {
-        return a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
+    // Disponibilidad server-side: el anon ya NO puede leer appointments (RLS), así que la
+    // sirve /api/booking/availability (service role) devolviendo solo los slots OCUPADOS
+    // (time/status/expires_at, sin datos del cliente) para este negocio+fecha+profesional.
+    const busyTimes = new Set<string>()
+    try {
+      const params = new URLSearchParams({ slug: business.slug, date: dateStr })
+      if (proId) params.set('professionalId', proId)
+      const res = await fetch(`/api/booking/availability?${params.toString()}`)
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.ok) {
+        for (const b of (data.busy as { time: string }[])) busyTimes.add(b.time.slice(0, 5))
       }
-      return true
-    })
+    } catch (e) {
+      console.error('availability error:', e)
+    }
 
+    // Marca de slot ocupado por inicio exacto (consistente con el índice 011, que protege el
+    // mismo time de inicio por profesional). El solapamiento por distinta duración sigue
+    // siendo la limitación conocida de la etapa 1.
     const duration = selectedService.duration_minutes
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     const isToday = dateStr === todayStr
@@ -112,14 +110,9 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
       const closeMin = timeToMinutes(block.end_time)
       for (let t = openMin; t + duration <= closeMin; t += duration) {
         if (nowMinutes >= 0 && t <= nowMinutes) continue
-        const slotEnd = t + duration
-        const conflict = occupied.some(a => {
-          const aStart = timeToMinutes(a.time)
-          const aDuration = (a.services as { duration_minutes?: number } | null)?.duration_minutes || 30
-          const aEnd = aStart + aDuration
-          return t < aEnd && slotEnd > aStart
-        })
-        if (!conflict) slots.push(minutesToTime(t))
+        const slotTime = minutesToTime(t)
+        if (busyTimes.has(slotTime)) continue
+        slots.push(slotTime)
       }
     }
 
@@ -133,86 +126,62 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
 
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
     const proId = selectedPro && selectedPro !== 'none' ? (selectedPro as Professional).id : null
-    const initialStatus = requireDeposit ? 'pending_payment' : 'confirmed'
 
-    // reCAPTCHA (solo reservas sin seña). El SERVER es la autoridad: sabe si ESTE
-    // negocio tiene reCAPTCHA configurado. Fail-closed: siempre verificamos contra
-    // /api/recaptcha/verify y solo seguimos si responde ok. Si el negocio lo exige y
-    // no se puede verificar (token ausente, score bajo, error), NO se crea la reserva.
+    // reCAPTCHA token (solo reservas sin seña). Lo generamos acá; la VERIFICACIÓN la hace
+    // el server dentro de /api/booking/create (fail-closed, no bypasseable). Si no se puede
+    // generar, el server decide según la config del negocio.
+    let recaptchaToken = ''
     if (!requireDeposit) {
-      let token = ''
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const gr = (window as any).grecaptcha
         if (siteKey && gr) {
-          token = await new Promise<string>((resolve, reject) =>
+          recaptchaToken = await new Promise<string>((resolve, reject) =>
             gr.ready(() => gr.execute(siteKey, { action: 'book' }).then(resolve).catch(reject))
           )
         }
       } catch (e) {
-        // No pudimos generar el token; el server decide según la config del negocio.
         console.error('reCAPTCHA execute error:', e)
-      }
-
-      let verifyOk = false
-      try {
-        const res = await fetch('/api/recaptcha/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, businessSlug: business.slug }),
-        })
-        const data = await res.json()
-        verifyOk = data.ok === true
-      } catch (e) {
-        // No pudimos verificar → fail-closed (no asumimos que pasó).
-        console.error('reCAPTCHA verify request error:', e)
-        verifyOk = false
-      }
-
-      if (!verifyOk) {
-        setSubmitting(false)
-        toast.error('No pudimos verificar que no seas un bot. Recargá la página e intentá de nuevo.')
-        return
       }
     }
 
-    const { data: client } = await supabase
-      .from('clients')
-      .insert({
-        business_id: business.id,
-        name: clientName,
-        phone: clientPhone || null,
-        email: clientEmail || null,
+    // Creación server-side. El cliente ya NO inserta con anon key: el endpoint valida
+    // reCAPTCHA, que service/professional sean del negocio, re-chequea disponibilidad e
+    // inserta capturando la constraint anti doble-booking.
+    let appointmentId = ''
+    try {
+      const res = await fetch('/api/booking/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug: business.slug,
+          serviceId: selectedService.id,
+          professionalId: proId,
+          date: dateStr,
+          time: selectedTime,
+          clientName,
+          clientPhone: clientPhone || null,
+          clientEmail: clientEmail || null,
+          recaptchaToken,
+        }),
       })
-      .select()
-      .single()
-
-    const { data: appt, error } = await supabase
-      .from('appointments')
-      .insert({
-        business_id: business.id,
-        client_id: client?.id || null,
-        client_name: clientName,
-        client_phone: clientPhone || null,
-        client_email: clientEmail || null,
-        service_id: selectedService.id,
-        professional_id: proId,
-        date: dateStr,
-        time: selectedTime,
-        status: initialStatus,
-      })
-      .select()
-      .single()
-
-    if (error || !appt) {
-      setSubmitting(false)
-      // 23505 = unique_violation del índice anti doble-booking: el slot se ocupó entre que
-      // se calcularon los horarios y este insert. No se crea el turno; pedimos elegir otro.
-      if (error?.code === '23505') {
-        toast.error('Ese horario se acaba de ocupar, elegí otro.')
-      } else {
-        toast.error('Error al confirmar. Intentá de nuevo.')
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.ok) {
+        setSubmitting(false)
+        if (data?.error === 'slot_taken') {
+          toast.error('Ese horario se acaba de ocupar, elegí otro.')
+        } else if (data?.error === 'recaptcha_failed') {
+          toast.error('No pudimos verificar que no seas un bot. Recargá la página e intentá de nuevo.')
+        } else {
+          toast.error('Error al confirmar. Intentá de nuevo.')
+        }
+        return
       }
+      appointmentId = data.appointmentId
+    } catch (e) {
+      setSubmitting(false)
+      console.error('booking create error:', e)
+      toast.error('No pudimos conectar. Revisá tu conexión e intentá de nuevo.')
       return
     }
 
@@ -220,7 +189,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
       const res = await fetch('/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appointmentId: appt.id, businessSlug: business.slug }),
+        body: JSON.stringify({ appointmentId, businessSlug: business.slug }),
       })
       const data = await res.json()
       if (data.ok && data.url) {
@@ -236,7 +205,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     fetch('/api/notify/booking', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appointmentId: appt.id }),
+      body: JSON.stringify({ appointmentId }),
     }).catch(console.error)
 
     setSubmitting(false)
