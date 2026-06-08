@@ -83,11 +83,23 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     const dateStr = format(date, 'yyyy-MM-dd')
     const { data: existingAppts } = await supabase
       .from('appointments')
-      .select('time, services(duration_minutes)')
+      .select('time, status, expires_at, services(duration_minutes)')
       .eq('business_id', business.id)
       .eq('date', dateStr)
       .neq('status', 'cancelled')
-      .neq('status', 'pending_payment')
+
+    // Qué turnos OCUPAN el slot: confirmed/completed/pending siempre; pending_payment solo
+    // si la seña NO expiró todavía (expires_at futuro, o aún sin setear durante el alta).
+    // Si la seña venció, el slot se libera (el cron cancel-expired además lo pasa a
+    // cancelled). Antes pending_payment se excluía siempre → se podía reservar un slot que
+    // otro estaba pagando.
+    const nowMs = Date.now()
+    const occupied = (existingAppts || []).filter(a => {
+      if (a.status === 'pending_payment') {
+        return a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
+      }
+      return true
+    })
 
     const duration = selectedService.duration_minutes
     const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -101,7 +113,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
       for (let t = openMin; t + duration <= closeMin; t += duration) {
         if (nowMinutes >= 0 && t <= nowMinutes) continue
         const slotEnd = t + duration
-        const conflict = (existingAppts || []).some(a => {
+        const conflict = occupied.some(a => {
           const aStart = timeToMinutes(a.time)
           const aDuration = (a.services as { duration_minutes?: number } | null)?.duration_minutes || 30
           const aEnd = aStart + aDuration
@@ -194,7 +206,13 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
 
     if (error || !appt) {
       setSubmitting(false)
-      toast.error('Error al confirmar. Intentá de nuevo.')
+      // 23505 = unique_violation del índice anti doble-booking: el slot se ocupó entre que
+      // se calcularon los horarios y este insert. No se crea el turno; pedimos elegir otro.
+      if (error?.code === '23505') {
+        toast.error('Ese horario se acaba de ocupar, elegí otro.')
+      } else {
+        toast.error('Error al confirmar. Intentá de nuevo.')
+      }
       return
     }
 

@@ -244,7 +244,13 @@ export function AppointmentsClient({ initialAppointments, professionals, service
       .single()
 
     setSaving(false)
-    if (error) { toast.error('Error al crear turno'); return }
+    if (error) {
+      // 23505 = unique_violation del índice anti doble-booking: ya hay un turno activo en
+      // ese profesional/fecha/hora. No se crea el turno.
+      if (error.code === '23505') toast.error('Ese horario ya está ocupado para ese profesional. Elegí otro.')
+      else toast.error('Error al crear turno')
+      return
+    }
     setAppointments(prev => [...prev, appt as Appointment])
     setDialogOpen(false)
     setForm({ client_name: '', client_phone: '', client_email: '', service_id: '', professional_id: '', date: '', time: '', notes: '' })
