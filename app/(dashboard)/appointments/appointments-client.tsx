@@ -151,22 +151,20 @@ export function AppointmentsClient({ initialAppointments, professionals, service
     toast.success('Estado actualizado')
   }
 
-  // Cancelación desde el panel: solo se ejecuta al confirmar en el diálogo. Cancela el
-  // turno (RLS aísla por tenant) y avisa al cliente por email vía /api/notify/cancel.
+  // Cancelación desde el panel: solo se ejecuta al confirmar en el diálogo. El endpoint es
+  // la autoridad: cancela el turno (auth + ownership + tenant) Y manda el email server-side,
+  // en orden, sin carrera de tiempos. Acá NO cancelamos por separado (eso causaba la carrera
+  // que dejaba el mail sin salir). credentials same-origin para que viajen las cookies de
+  // sesión; se chequea res.ok porque fetch no rechaza ante 401/403/500.
   async function handleCancel() {
     if (!confirmCancelId) return
     const id = confirmCancelId
     setCancelling(true)
-    const { error } = await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', id)
-    if (error) { setCancelling(false); toast.error('Error al cancelar'); return }
-    setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'cancelled' as Appointment['status'] } : a))
 
-    // El email lo manda el endpoint server-side (awaiteado adentro). Acá: credentials
-    // same-origin para que viajen las cookies de sesión que valida el endpoint, y SE
-    // CHEQUEA res.ok — fetch NO rechaza ante 401/403/500, así que un .catch suelto se
-    // tragaba el fallo (turno cancelado pero sin mail ni aviso). Ahora se logea y se avisa.
+    let cancelled = false
     let emailSent = false
-    let reached = false
+    let reason: string | null = null
+    let emailError: string | null = null
     try {
       const res = await fetch('/api/notify/cancel', {
         method: 'POST',
@@ -174,12 +172,14 @@ export function AppointmentsClient({ initialAppointments, professionals, service
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appointmentId: id }),
       })
-      reached = res.ok
+      const data = await res.json().catch(() => null)
       if (res.ok) {
-        const data = await res.json().catch(() => null)
+        cancelled = !!data?.cancelled
         emailSent = !!data?.email_sent
+        reason = data?.reason ?? null
+        emailError = data?.email_error ?? null
       } else {
-        console.error(`[notify/cancel] el endpoint respondió HTTP ${res.status}`)
+        console.error(`[notify/cancel] el endpoint respondió HTTP ${res.status}`, data)
       }
     } catch (e) {
       console.error('[notify/cancel] no se pudo disparar:', e)
@@ -187,9 +187,20 @@ export function AppointmentsClient({ initialAppointments, professionals, service
 
     setCancelling(false)
     setConfirmCancelId(null)
-    if (!reached) toast.warning('Turno cancelado, pero no pudimos avisar al cliente por email')
-    else if (emailSent) toast.success('Turno cancelado — le avisamos al cliente por email')
-    else toast.success('Turno cancelado')
+
+    if (!cancelled) {
+      toast.error('No se pudo cancelar el turno. Probá de nuevo.')
+      return
+    }
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'cancelled' as Appointment['status'] } : a))
+    if (emailSent) {
+      toast.success('Turno cancelado — le avisamos al cliente por email')
+    } else if (reason === 'no_client_email') {
+      toast.success('Turno cancelado (el cliente no tiene email cargado)')
+    } else {
+      if (emailError) console.error('[notify/cancel] Resend:', emailError)
+      toast.warning('Turno cancelado, pero no pudimos enviar el email al cliente')
+    }
   }
 
   async function handleDelete() {
