@@ -18,12 +18,13 @@ interface Props {
   date: string
   time: string
   businessName: string
+  businessSlug: string
   logoUrl: string | null
   accent: string
   initialState: 'active' | 'cancelled' | 'past'
 }
 
-export function CancelClient({ token, clientName, service, date, time, businessName, logoUrl, accent, initialState }: Props) {
+export function CancelClient({ token, clientName, service, date, time, businessName, businessSlug, logoUrl, accent, initialState }: Props) {
   const [view, setView] = useState<'active' | 'cancelled' | 'past' | 'done'>(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -101,10 +102,32 @@ export function CancelClient({ token, clientName, service, date, time, businessN
           )}
 
           {view === 'done' && (
-            <p className="text-sm text-muted-foreground">Listo, tu turno fue cancelado. Si querés, podés reservar otro horario cuando quieras.</p>
+            <>
+              <p className="text-sm text-muted-foreground mb-4">Listo, tu turno fue cancelado. Si querés, podés reservar otro horario cuando quieras.</p>
+              {businessSlug && (
+                <a
+                  href={`/${businessSlug}`}
+                  className="block w-full rounded-md py-2.5 text-center text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: accent }}
+                >
+                  Reservar otro turno
+                </a>
+              )}
+            </>
           )}
           {view === 'cancelled' && (
-            <p className="text-sm text-muted-foreground">No hay nada que hacer: este turno ya figuraba cancelado.</p>
+            <>
+              <p className="text-sm text-muted-foreground mb-4">No hay nada que hacer: este turno ya figuraba cancelado.</p>
+              {businessSlug && (
+                <a
+                  href={`/${businessSlug}`}
+                  className="block w-full rounded-md py-2.5 text-center text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: accent }}
+                >
+                  Reservar otro turno
+                </a>
+              )}
+            </>
           )}
           {view === 'past' && (
             <p className="text-sm text-muted-foreground">La fecha de este turno ya pasó, así que no se puede cancelar.</p>

@@ -11,7 +11,7 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('date, time, status, client_name, services(name), businesses(name, primary_color, logo_url)')
+    .select('date, time, status, client_name, services(name), businesses(name, slug, primary_color, logo_url)')
     .eq('cancel_token', token)
     .single()
 
@@ -27,7 +27,7 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
     )
   }
 
-  const business = appt.businesses as { name?: string; primary_color?: string | null; logo_url?: string | null } | null
+  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null } | null
   const serviceName = (appt.services as { name?: string } | null)?.name ?? ''
   const todayStr = new Date().toISOString().slice(0, 10)
   const initialState: 'active' | 'cancelled' | 'past' =
@@ -41,6 +41,7 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
       date={appt.date}
       time={appt.time}
       businessName={business?.name ?? ''}
+      businessSlug={business?.slug ?? ''}
       logoUrl={business?.logo_url ?? null}
       accent={(business?.primary_color && business.primary_color.trim()) || '#d94a2b'}
       initialState={initialState}

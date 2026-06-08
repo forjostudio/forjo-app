@@ -57,6 +57,8 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
   // New appointment form
   const [form, setForm] = useState({
@@ -147,15 +149,47 @@ export function AppointmentsClient({ initialAppointments, professionals, service
     if (error) { toast.error('Error al actualizar'); return }
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: status as Appointment['status'] } : a))
     toast.success('Estado actualizado')
-    // Cancelación desde el panel = avisar al cliente por email (server-side y awaiteado
-    // dentro del endpoint). Best-effort: no bloquea la UI ni se traga el error en consola.
-    if (status === 'cancelled') {
-      fetch('/api/notify/cancel', {
+  }
+
+  // Cancelación desde el panel: solo se ejecuta al confirmar en el diálogo. Cancela el
+  // turno (RLS aísla por tenant) y avisa al cliente por email vía /api/notify/cancel.
+  async function handleCancel() {
+    if (!confirmCancelId) return
+    const id = confirmCancelId
+    setCancelling(true)
+    const { error } = await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', id)
+    if (error) { setCancelling(false); toast.error('Error al cancelar'); return }
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'cancelled' as Appointment['status'] } : a))
+
+    // El email lo manda el endpoint server-side (awaiteado adentro). Acá: credentials
+    // same-origin para que viajen las cookies de sesión que valida el endpoint, y SE
+    // CHEQUEA res.ok — fetch NO rechaza ante 401/403/500, así que un .catch suelto se
+    // tragaba el fallo (turno cancelado pero sin mail ni aviso). Ahora se logea y se avisa.
+    let emailSent = false
+    let reached = false
+    try {
+      const res = await fetch('/api/notify/cancel', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appointmentId: id }),
-      }).catch(e => console.error('[notify/cancel] no se pudo disparar:', e))
+      })
+      reached = res.ok
+      if (res.ok) {
+        const data = await res.json().catch(() => null)
+        emailSent = !!data?.email_sent
+      } else {
+        console.error(`[notify/cancel] el endpoint respondió HTTP ${res.status}`)
+      }
+    } catch (e) {
+      console.error('[notify/cancel] no se pudo disparar:', e)
     }
+
+    setCancelling(false)
+    setConfirmCancelId(null)
+    if (!reached) toast.warning('Turno cancelado, pero no pudimos avisar al cliente por email')
+    else if (emailSent) toast.success('Turno cancelado — le avisamos al cliente por email')
+    else toast.success('Turno cancelado')
   }
 
   async function handleDelete() {
@@ -319,7 +353,7 @@ export function AppointmentsClient({ initialAppointments, professionals, service
                     </Button>
                   )}
                   {isActive && (
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-300" title="Cancelar" onClick={() => updateStatus(appt.id, 'cancelled')}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-300" title="Cancelar" onClick={() => setConfirmCancelId(appt.id)}>
                       <X className="w-4 h-4" />
                     </Button>
                   )}
@@ -334,6 +368,22 @@ export function AppointmentsClient({ initialAppointments, professionals, service
           })
         )}
       </div>
+
+      {/* Confirm cancel dialog */}
+      <Dialog open={!!confirmCancelId} onOpenChange={open => { if (!open && !cancelling) setConfirmCancelId(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>¿Cancelar este turno?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">El cliente será notificado por email. El horario queda disponible para otras personas.</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConfirmCancelId(null)} disabled={cancelling}>Volver</Button>
+            <Button variant="destructive" onClick={handleCancel} disabled={cancelling}>
+              {cancelling ? 'Cancelando...' : 'Sí, cancelar turno'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirm delete dialog */}
       <Dialog open={!!confirmDeleteId} onOpenChange={open => !open && setConfirmDeleteId(null)}>
