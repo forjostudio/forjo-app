@@ -64,7 +64,7 @@ BEGIN
       COALESCE(professional_id, '00000000-0000-0000-0000-000000000000'::uuid) WITH =,
       tsrange(
         (date + time),
-        (date + time) + (COALESCE(duration_minutes, 30) || ' minutes')::interval
+        (date + time) + make_interval(mins => COALESCE(duration_minutes, 30))
       ) WITH &&
     ) WHERE (status IN ('confirmed', 'pending_payment'));
   END IF;
