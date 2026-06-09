@@ -1,7 +1,7 @@
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyRecaptcha } from '@/lib/recaptcha'
-import { sendPendingPaymentEmail } from '@/lib/email'
+import { sendPendingPaymentEmail, sendExpiredHoldEmail } from '@/lib/email'
 
 // Mismo sentinela que el índice 011 / el endpoint de disponibilidad.
 const SENTINEL = '00000000-0000-0000-0000-000000000000'
@@ -120,11 +120,39 @@ export async function POST(request: Request) {
     .filter(a => a.status === 'pending_payment' && a.expires_at != null && new Date(a.expires_at as string).getTime() <= nowMs)
     .map(a => a.id)
   if (expiredHoldIds.length > 0) {
-    await supabase
+    const { data: cancelledHolds } = await supabase
       .from('appointments')
       .update({ status: 'cancelled' })
       .in('id', expiredHoldIds)
       .eq('business_id', business.id)
+      .select('id, client_name, client_email, date, time, services(name)')
+    // Avisar a los clientes de los holds vencidos que recién liberamos (no los agarra el cron
+    // porque ya quedan cancelados). after() para no demorar la reserva en curso.
+    const holds = cancelledHolds || []
+    if (holds.length > 0) {
+      after(async () => {
+        for (const h of holds) {
+          if (!h.client_email) continue
+          try {
+            await sendExpiredHoldEmail({
+              to: h.client_email,
+              clientName: h.client_name,
+              service: (h.services as { name?: string } | null)?.name || '',
+              date: h.date,
+              time: h.time,
+              businessName: String(business.name || ''),
+              businessSlug: String(business.slug || ''),
+              primaryColor: business.primary_color as string | null,
+              logoUrl: business.logo_url as string | null,
+              resendApiKey: business.resend_api_key as string | null,
+              resendFrom: business.resend_from as string | null,
+            })
+          } catch (e) {
+            console.error(`[booking/create] email hold vencido FALLÓ (turno ${h.id}):`, e instanceof Error ? e.message : e)
+          }
+        }
+      })
+    }
   }
 
   const initialStatus = requireDeposit ? 'pending_payment' : 'confirmed'

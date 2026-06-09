@@ -643,3 +643,105 @@ export async function sendPendingPaymentEmail({
   })
   console.log(`📧 Seña pendiente enviada a ${to}`)
 }
+
+// Email al cliente cuando el SISTEMA cancela su reserva por no haberse pagado la seña dentro
+// del plazo (lo dispara el cron cancel-expired). Avisa que se liberó el horario y ofrece
+// reservar de nuevo. Distinto del "cancelado por el cliente": acá nadie canceló a mano.
+export async function sendExpiredHoldEmail({
+  to,
+  clientName,
+  service,
+  date,
+  time,
+  businessName,
+  businessSlug,
+  primaryColor,
+  logoUrl,
+  resendApiKey,
+  resendFrom,
+}: {
+  to: string
+  clientName: string
+  service: string
+  date: string
+  time: string
+  businessName: string
+  businessSlug: string
+  primaryColor?: string | null
+  logoUrl?: string | null
+  resendApiKey?: string | null
+  resendFrom?: string | null
+}) {
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
+  const fecha = fmtDate(date)
+  const hora = time.slice(0, 5)
+  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
+  const bookingUrl = `${baseUrl}/${businessSlug}`
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+      <tr><td style="background:${accent};padding:32px 40px;border-radius:12px 12px 0 0;text-align:center;">
+        ${headerInner}
+      </td></tr>
+
+      <tr><td style="background:#ffffff;padding:40px 40px 32px;">
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu reserva se canceló</p>
+        <p style="font-size:15px;color:#555;margin:0 0 28px;line-height:1.6;">
+          Hola <strong>${clientName}</strong>, tu reserva en <strong>${businessName}</strong> se canceló automáticamente porque no se completó el pago de la seña dentro del plazo. El horario quedó liberado.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
+          <tr><td style="padding:20px 22px 6px;">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:14px;">Reserva cancelada</div>
+          </td></tr>
+          <tr><td style="padding:0 22px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${fecha}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;">Hora</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;text-align:right;">${hora} hs</td>
+              </tr>
+            </table>
+          </td></tr>
+        </table>
+
+        <p style="font-size:14px;color:#444;line-height:1.7;margin:0 0 18px;">¿Lo querés intentar de nuevo? Reservá otro turno y completá la seña a tiempo.</p>
+        <table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
+          <a href="${bookingUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Reservar otro turno</a>
+        </td></tr></table>
+      </td></tr>
+
+      <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+
+  await resendSend(key, {
+    from,
+    to: [to],
+    subject: `Reserva cancelada (sin seña) — ${businessName} · ${fecha} ${hora} hs`,
+    html,
+    text: `Hola ${clientName}, tu reserva en ${businessName} se canceló porque no se completó el pago de la seña a tiempo. El horario quedó liberado.\n\nServicio: ${service}\nFecha: ${fecha}\nHora: ${hora} hs\n\n¿Reintentar? Reservá otro turno: ${bookingUrl}`,
+  })
+  console.log(`📧 Cancelación por seña vencida enviada a ${to}`)
+}
