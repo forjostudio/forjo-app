@@ -16,8 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import {
-  DollarSign, TrendingUp, TrendingDown, Minus, Plus, Pencil, Trash2,
+  TrendingUp, TrendingDown, Plus, Pencil, Trash2,
   ChevronDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
+  Calendar, ShoppingBag,
 } from 'lucide-react'
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -255,10 +256,6 @@ export function FinancesClient({ businessId }: Props) {
 
   const totalExpenses = variableExpenses + recurringExpenses
   const balance = totalIncome - totalExpenses
-
-  // Ticket promedio: ingreso medio por transacción (turnos + ventas).
-  const incomeTxCount = appointments.length + sales.length
-  const avgTicket = incomeTxCount > 0 ? totalIncome / incomeTxCount : 0
 
   // Margen: porción del ingreso que queda como saldo.
   const margin = totalIncome > 0 ? (balance / totalIncome) * 100 : 0
@@ -547,7 +544,7 @@ export function FinancesClient({ businessId }: Props) {
       {/* Header + period selector */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
-          <PageEyebrow label="Caja" />
+          <PageEyebrow label="Reportes" />
           <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Finanzas</h1>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -566,40 +563,73 @@ export function FinancesClient({ businessId }: Props) {
         </div>
       )}
 
-      {/* KPIs */}
+      {/* Hero KPIs */}
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => <Card key={i}><CardContent className="pt-5 h-24 animate-pulse bg-secondary/30 rounded-lg" /></Card>)}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => <Card key={i}><CardContent className="pt-5 h-24 animate-pulse bg-secondary/30 rounded-lg" /></Card>)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          <Card><CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1"><TrendingUp className="w-4 h-4 text-green-400" /><span className="text-xs text-muted-foreground">Ingresos</span></div>
-            <p className="text-xl font-bold text-green-400">{fmtARS(totalIncome)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Turnos {fmtARS(apptRevenue)} · Ventas {fmtARS(salesRevenue)}</p>
-          </CardContent></Card>
-          <Card><CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1"><TrendingDown className="w-4 h-4 text-red-400" /><span className="text-xs text-muted-foreground">Egresos</span></div>
-            <p className="text-xl font-bold text-red-400">{fmtARS(totalExpenses)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Variables {fmtARS(variableExpenses)} · Fijos {fmtARS(recurringExpenses)}</p>
-          </CardContent></Card>
-          <Card><CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1"><Minus className={`w-4 h-4 ${balance >= 0 ? 'text-blue-400' : 'text-red-400'}`} /><span className="text-xs text-muted-foreground">Saldo del mes</span></div>
-            <p className={`text-xl font-bold ${balance >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{fmtARS(balance)}</p>
-          </CardContent></Card>
-          <Card><CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1"><Percent className={`w-4 h-4 ${margin >= 0 ? 'text-blue-400' : 'text-red-400'}`} /><span className="text-xs text-muted-foreground">Margen</span></div>
-            <p className={`text-xl font-bold ${margin >= 0 ? 'text-blue-400' : 'text-red-400'}`}>{margin.toFixed(1)}%</p>
-          </CardContent></Card>
-          <Card><CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1"><Receipt className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Ticket promedio</span></div>
-            <p className="text-xl font-bold">{fmtARS(avgTicket)}</p>
-          </CardContent></Card>
-          <Card><CardContent className="pt-5">
-            <div className="flex items-center gap-2 mb-1"><DollarSign className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Turnos</span></div>
-            <p className="text-xl font-bold">{appointments.length}</p>
-          </CardContent></Card>
-        </div>
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Saldo del mes — destacado */}
+            <Card className="col-span-2 lg:col-span-1 lg:row-span-2 border-[#2a5fa5]/30 bg-[#2a5fa5]/[0.04]">
+              <CardContent className="pt-5 h-full flex flex-col justify-center">
+                <div className="flex items-center gap-2 mb-1.5"><Activity className="w-4 h-4 text-[#2a5fa5]" /><span className="text-xs text-muted-foreground">Saldo del mes</span></div>
+                <p className={`text-3xl lg:text-[2.5rem] leading-none font-bold font-[family-name:var(--font-heading)] ${balance >= 0 ? 'text-[#2a5fa5]' : 'text-destructive'}`}>{fmtARS(balance)}</p>
+                <p className="text-xs text-muted-foreground mt-3">{margin.toFixed(1)}% de margen sobre los ingresos del mes</p>
+              </CardContent>
+            </Card>
+            {/* Ingresos */}
+            <Card><CardContent className="pt-5">
+              <div className="flex items-center gap-2 mb-1"><TrendingUp className="w-4 h-4 text-[#3fa46a]" /><span className="text-xs text-muted-foreground">Ingresos</span></div>
+              <p className="text-xl font-bold text-[#3fa46a]">{fmtARS(totalIncome)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Servicios {fmtARS(apptRevenue)} · Ventas {fmtARS(salesRevenue)}</p>
+            </CardContent></Card>
+            {/* Egresos */}
+            <Card><CardContent className="pt-5">
+              <div className="flex items-center gap-2 mb-1"><TrendingDown className="w-4 h-4 text-destructive" /><span className="text-xs text-muted-foreground">Egresos</span></div>
+              <p className="text-xl font-bold text-destructive">{fmtARS(totalExpenses)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Variables {fmtARS(variableExpenses)} · Fijos {fmtARS(recurringExpenses)}</p>
+            </CardContent></Card>
+            {/* Margen */}
+            <Card><CardContent className="pt-5">
+              <div className="flex items-center gap-2 mb-1"><Percent className={`w-4 h-4 ${margin >= 0 ? 'text-[#2a5fa5]' : 'text-destructive'}`} /><span className="text-xs text-muted-foreground">Margen</span></div>
+              <p className={`text-xl font-bold ${margin >= 0 ? 'text-[#2a5fa5]' : 'text-destructive'}`}>{margin.toFixed(1)}%</p>
+              <p className="text-xs text-muted-foreground mt-0.5">sobre ingresos del mes</p>
+            </CardContent></Card>
+            {/* Cantidad de turnos */}
+            <Card><CardContent className="pt-5">
+              <div className="flex items-center gap-2 mb-1"><Calendar className="w-4 h-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Cantidad de turnos</span></div>
+              <p className="text-xl font-bold">{appointments.length}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">en el período</p>
+            </CardContent></Card>
+          </div>
+
+          {/* RESUMEN DEL MES — ingresos por servicios, ventas y gastos */}
+          <div>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground mb-2.5">RESUMEN DEL MES</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Card className="relative overflow-hidden"><CardContent className="pt-5 pb-6">
+                <div className="flex items-center gap-2 mb-1"><Calendar className="w-4 h-4 text-[#3fa46a]" /><span className="text-xs text-muted-foreground">Servicios</span></div>
+                <p className="text-2xl font-bold text-[#3fa46a]">{fmtARS(apptRevenue)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{appointments.length} {appointments.length === 1 ? 'turno confirmado' : 'turnos confirmados'}</p>
+                <div className="absolute left-0 right-0 bottom-0 h-1 bg-[#3fa46a]" />
+              </CardContent></Card>
+              <Card className="relative overflow-hidden"><CardContent className="pt-5 pb-6">
+                <div className="flex items-center gap-2 mb-1"><ShoppingBag className="w-4 h-4 text-[#2a5fa5]" /><span className="text-xs text-muted-foreground">Ventas</span></div>
+                <p className="text-2xl font-bold text-[#2a5fa5]">{fmtARS(salesRevenue)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{sales.length} {sales.length === 1 ? 'venta registrada' : 'ventas registradas'}</p>
+                <div className="absolute left-0 right-0 bottom-0 h-1 bg-[#2a5fa5]" />
+              </CardContent></Card>
+              <Card className="relative overflow-hidden"><CardContent className="pt-5 pb-6">
+                <div className="flex items-center gap-2 mb-1"><Receipt className="w-4 h-4 text-destructive" /><span className="text-xs text-muted-foreground">Gastos</span></div>
+                <p className="text-2xl font-bold text-destructive">{fmtARS(totalExpenses)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{new Set(expenses.map(e => e.category || 'Otro')).size} categorías</p>
+                <div className="absolute left-0 right-0 bottom-0 h-1 bg-destructive" />
+              </CardContent></Card>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Bar chart */}

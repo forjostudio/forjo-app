@@ -500,14 +500,10 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                           : 'border-l-transparent hover:bg-secondary/40'
                       )}
                     >
-                      {/* Avatar — iniciales atenuadas si el cliente está en pausa (inactivo) */}
+                      {/* Avatar — iniciales en el color de la paleta (el estado lo indica el punto de la derecha) */}
                       <div className={cn(
                         'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                        isSelected
-                          ? 'bg-primary text-primary-foreground'
-                          : cs?.status === 'paused'
-                            ? 'bg-secondary text-muted-foreground'
-                            : 'bg-secondary text-secondary-foreground'
+                        isSelected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-primary'
                       )}>
                         {client.name.slice(0, 2).toUpperCase()}
                       </div>
