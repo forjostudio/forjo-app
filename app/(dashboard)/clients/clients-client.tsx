@@ -12,10 +12,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import {
   Search, Phone, Mail, Trash2, GitMerge, MessageCircle,
-  Edit2, X, ChevronLeft, ChevronDown, Lightbulb, TrendingUp, FileText,
+  Edit2, X, ChevronLeft, ChevronDown, Lightbulb, TrendingUp, FileText, Shield,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
 import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-panel'
@@ -108,11 +109,12 @@ function getSuggestion(visits: number, daysSinceLast: number) {
 interface Props {
   initialClients: Client[]
   appointments: Appointment[]
+  professionals: { id: string; name: string }[]
   businessId: string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function ClientsClient({ initialClients, appointments: initialAppts, businessId }: Props) {
+export function ClientsClient({ initialClients, appointments: initialAppts, professionals, businessId }: Props) {
   const supabase = createClient()
   const vertical = useVertical()
   const term = vertical.terminology
@@ -125,6 +127,8 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterKey>('all')
+  const [filterPro, setFilterPro] = useState('all')
+  const [filterInsurance, setFilterInsurance] = useState('all')
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', insurance_name: '', insurance_number: '', preferences: '' })
   const [notes, setNotes] = useState('')
@@ -186,6 +190,23 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
     return groups
   }, [clients])
 
+  // ── Filtros rápidos: profesional (vía turnos del cliente) y obra social ────
+  // Set de profesionales que atendieron a cada cliente (de sus turnos).
+  const clientProMap = useMemo(() => {
+    const map: Record<string, Set<string>> = {}
+    appts.forEach(a => {
+      if (!a.client_id || !a.professional_id) return
+      ;(map[a.client_id] = map[a.client_id] || new Set()).add(a.professional_id)
+    })
+    return map
+  }, [appts])
+  // Obras sociales distintas presentes en los clientes (para el dropdown).
+  const insuranceOptions = useMemo(() => {
+    const set = new Set<string>()
+    clients.forEach(c => { if (c.insurance_name?.trim()) set.add(c.insurance_name.trim()) })
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'))
+  }, [clients])
+
   // ── Filtered + grouped by letter ─────────────────────────────────────────
   const filteredClients = useMemo(() => {
     const q = search.toLowerCase()
@@ -193,10 +214,12 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
       .filter(c => {
         const m = !q || c.name.toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q)
         const f = filter === 'all' || clientStats[c.id]?.status === filter
-        return m && f
+        const fp = filterPro === 'all' || (clientProMap[c.id]?.has(filterPro) ?? false)
+        const fi = filterInsurance === 'all' || c.insurance_name?.trim() === filterInsurance
+        return m && f && fp && fi
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-  }, [clients, search, filter, clientStats])
+  }, [clients, search, filter, filterPro, filterInsurance, clientStats, clientProMap])
 
   const groupedByLetter = useMemo(() => {
     const groups: Record<string, Client[]> = {}
@@ -395,6 +418,34 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
             ))}
           </div>
 
+          {/* Filtros rápidos: profesional (siempre que haya) + obra social (solo salud) */}
+          {(professionals.length > 0 || (isSalud && insuranceOptions.length > 0)) && (
+            <div className="flex flex-wrap gap-2">
+              {professionals.length > 0 && (
+                <Select value={filterPro} onValueChange={v => setFilterPro(v ?? 'all')}>
+                  <SelectTrigger className="h-8 text-xs flex-1 min-w-[120px]">
+                    <SelectValue>{filterPro === 'all' ? 'Profesional' : (professionals.find(p => p.id === filterPro)?.name ?? 'Profesional')}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los profesionales</SelectItem>
+                    {professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              {isSalud && insuranceOptions.length > 0 && (
+                <Select value={filterInsurance} onValueChange={v => setFilterInsurance(v ?? 'all')}>
+                  <SelectTrigger className="h-8 text-xs flex-1 min-w-[120px]">
+                    <SelectValue>{filterInsurance === 'all' ? 'Obra social' : filterInsurance}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las obras sociales</SelectItem>
+                    {insuranceOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -545,6 +596,9 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                       {selected.phone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{selected.phone}</span>}
                       <span>alta hace {fmtSince(selected.created_at)}</span>
                       {selected.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{selected.email}</span>}
+                      {isSalud && selected.insurance_name && (
+                        <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" />{selected.insurance_name}{selected.insurance_number ? ` · ${selected.insurance_number}` : ''}</span>
+                      )}
                     </div>
                     <div className="flex gap-2 pt-1 flex-wrap">
                       {waPhone && (

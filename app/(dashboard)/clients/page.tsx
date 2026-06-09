@@ -15,7 +15,7 @@ export default async function ClientsPage() {
 
   if (!business) redirect('/onboarding')
 
-  const [{ data: clients }, { data: appointments }] = await Promise.all([
+  const [{ data: clients }, { data: appointments }, { data: professionals }] = await Promise.all([
     supabase.from('clients')
       .select('*')
       .eq('business_id', business.id)
@@ -24,12 +24,18 @@ export default async function ClientsPage() {
       .select('*, services(name, price)')
       .eq('business_id', business.id)
       .order('date', { ascending: false }),
+    supabase.from('professionals')
+      .select('id, name')
+      .eq('business_id', business.id)
+      .eq('active', true)
+      .order('name', { ascending: true }),
   ])
 
   return (
     <ClientsClient
       initialClients={clients || []}
       appointments={appointments || []}
+      professionals={professionals || []}
       businessId={business.id}
     />
   )
