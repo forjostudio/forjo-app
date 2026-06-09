@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Check, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -44,7 +45,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
   const [clientEmail, setClientEmail] = useState('')
   const [clientNotes, setClientNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
+  const router = useRouter()
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -156,6 +157,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     // reCAPTCHA, que service/professional sean del negocio, re-chequea disponibilidad e
     // inserta capturando la constraint anti doble-booking.
     let appointmentId = ''
+    let cancelToken = ''
     try {
       const res = await fetch('/api/booking/create', {
         method: 'POST',
@@ -186,6 +188,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
         return
       }
       appointmentId = data.appointmentId
+      cancelToken = data.cancelToken || ''
     } catch (e) {
       setSubmitting(false)
       console.error('booking create error:', e)
@@ -216,35 +219,15 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
       body: JSON.stringify({ appointmentId }),
     }).catch(console.error)
 
-    setSubmitting(false)
-    setDone(true)
-  }
-
-  if (done) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground">
-        <div className="text-center max-w-sm">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-primary text-primary-foreground">
-            <Check className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-bold mb-2 font-[family-name:var(--font-heading)]">¡Turno confirmado!</h1>
-          <p className="text-muted-foreground mb-6">
-            Tu turno en <strong className="text-foreground">{business.name}</strong> fue registrado.
-          </p>
-          <div className="rounded-xl p-4 text-left space-y-2 mb-6 bg-card border border-border">
-            <p className="text-sm text-muted-foreground">Servicio: <span className="text-foreground">{selectedService?.name}</span></p>
-            <p className="text-sm text-muted-foreground">
-              Fecha: <span className="text-foreground">{selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</span>
-            </p>
-            <p className="text-sm text-muted-foreground">Hora: <span className="text-foreground">{selectedTime}</span></p>
-            {selectedPro && selectedPro !== 'none' && (
-              <p className="text-sm text-muted-foreground">Profesional: <span className="text-foreground">{(selectedPro as Professional).name}</span></p>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">Te contactaremos para confirmar tu reserva.</p>
-        </div>
-      </div>
-    )
+    // Aterrizamos en la página de confirmación dedicada (theme-aware: código, calendario,
+    // cómo llegar, WhatsApp). Dejamos submitting en true: la navegación cambia la página.
+    if (cancelToken) {
+      router.push(`/${business.slug}/turno/${cancelToken}`)
+    } else {
+      // Fallback raro (sin token): no podemos linkear la confirmación → avisamos y reseteamos.
+      setSubmitting(false)
+      toast.success('¡Turno confirmado!')
+    }
   }
 
   const stepsLabels = ['Servicio', 'Profesional', 'Fecha y hora', 'Tus datos']

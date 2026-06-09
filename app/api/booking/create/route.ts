@@ -230,5 +230,5 @@ export async function POST(request: Request) {
     })
   }
 
-  return Response.json({ ok: true, appointmentId: appt.id, requiresPayment: requireDeposit })
+  return Response.json({ ok: true, appointmentId: appt.id, cancelToken: appt.cancel_token, requiresPayment: requireDeposit })
 }
