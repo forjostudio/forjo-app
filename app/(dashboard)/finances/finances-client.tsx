@@ -570,7 +570,7 @@ export function FinancesClient({ businessId }: Props) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-[1.55fr_1fr_1fr] gap-3">
             {/* Saldo del mes — destacado */}
             <Card className="col-span-2 lg:col-span-1 lg:row-span-2 border-[#2a5fa5]/30 bg-[#2a5fa5]/[0.04]">
               <CardContent className="pt-5 h-full flex flex-col justify-center">
