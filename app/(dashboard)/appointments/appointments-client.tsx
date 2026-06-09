@@ -237,6 +237,7 @@ export function AppointmentsClient({ initialAppointments, professionals, service
         professional_id: form.professional_id && form.professional_id !== 'none' ? form.professional_id : null,
         date: form.date,
         time: form.time,
+        duration_minutes: services.find(s => s.id === form.service_id)?.duration_minutes ?? null,
         notes: form.notes || null,
         status: 'confirmed',
       })
@@ -245,9 +246,9 @@ export function AppointmentsClient({ initialAppointments, professionals, service
 
     setSaving(false)
     if (error) {
-      // 23505 = unique_violation del índice anti doble-booking: ya hay un turno activo en
-      // ese profesional/fecha/hora. No se crea el turno.
-      if (error.code === '23505') toast.error('Ese horario ya está ocupado para ese profesional. Elegí otro.')
+      // 23505 = índice 011 (mismo inicio); 23P01 = exclusion constraint 013 (solapamiento).
+      // En ambos casos el horario choca con un turno activo de ese profesional.
+      if (error.code === '23505' || error.code === '23P01') toast.error('Ese horario se solapa con otro turno de ese profesional. Elegí otro.')
       else toast.error('Error al crear turno')
       return
     }

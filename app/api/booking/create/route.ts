@@ -6,6 +6,11 @@ import { sendPendingPaymentEmail } from '@/lib/email'
 // Mismo sentinela que el índice 011 / el endpoint de disponibilidad.
 const SENTINEL = '00000000-0000-0000-0000-000000000000'
 
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
 // Creación de un turno PÚBLICO server-side. Reemplaza el insert directo con anon key.
 // Cierra de una: reCAPTCHA fail-closed (no bypasseable desde el cliente), validación de que
 // service/professional sean del negocio (anti-tampering de tenant), re-check de disponibilidad
@@ -57,7 +62,7 @@ export async function POST(request: Request) {
   // sale la duración real (no se confía en nada del cliente).
   const { data: service } = await supabase
     .from('services')
-    .select('id, name, active')
+    .select('id, name, active, duration_minutes')
     .eq('id', serviceId)
     .eq('business_id', business.id)
     .single()
@@ -78,19 +83,25 @@ export async function POST(request: Request) {
     proId = pro.id
   }
 
-  // Re-check de disponibilidad (exact-start, consistente con el índice 011). Bucket de
-  // profesional por coalesce(sentinel).
+  // Re-check de disponibilidad por SOLAPAMIENTO (rango [inicio, fin), consistente con la
+  // exclusion constraint 013), no solo inicio exacto. Bucket por coalesce(sentinel).
   const bucket = proId ?? SENTINEL
   const nowMs = Date.now()
+  const reqStart = timeToMinutes(time)
+  const reqEnd = reqStart + Number(service.duration_minutes || 30)
   const { data: clashes } = await supabase
     .from('appointments')
-    .select('id, status, expires_at, professional_id')
+    .select('id, status, expires_at, professional_id, time, duration_minutes')
     .eq('business_id', business.id)
     .eq('date', date)
-    .eq('time', time)
     .in('status', ['confirmed', 'pending_payment'])
 
-  const sameBucket = (clashes || []).filter(a => (a.professional_id ?? SENTINEL) === bucket)
+  const overlaps = (a: { time: string; duration_minutes: number | null }) => {
+    const aStart = timeToMinutes(a.time)
+    const aEnd = aStart + Number(a.duration_minutes || 30)
+    return reqStart < aEnd && reqEnd > aStart
+  }
+  const sameBucket = (clashes || []).filter(a => (a.professional_id ?? SENTINEL) === bucket && overlaps(a))
 
   // ¿Ocupado de verdad? confirmed, o pending_payment cuya seña NO venció (o aún sin setear).
   const taken = sameBucket.some(a =>
@@ -100,10 +111,10 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'slot_taken' }, { status: 409 })
   }
 
-  // Liberar "holds" vencidos (pending_payment con seña expirada): la disponibilidad ya los
-  // muestra libres, pero el índice 011 los sigue contando hasta que el cron los cancele.
-  // Sin esto el slot se ve libre pero el insert choca con 23505. Los cancelamos acá mismo
-  // (consistente con cancel-expired), filtrando por business_id (tenant).
+  // Liberar "holds" vencidos que se solapan (pending_payment con seña expirada): la
+  // disponibilidad ya los muestra libres, pero las constraints los siguen contando hasta que
+  // el cron los cancele. Sin esto el slot se ve libre pero el insert choca. Los cancelamos
+  // acá mismo (consistente con cancel-expired), filtrando por business_id (tenant).
   const expiredHoldIds = sameBucket
     .filter(a => a.status === 'pending_payment' && a.expires_at != null && new Date(a.expires_at as string).getTime() <= nowMs)
     .map(a => a.id)
@@ -144,6 +155,7 @@ export async function POST(request: Request) {
       professional_id: proId,
       date,
       time,
+      duration_minutes: Number(service.duration_minutes || 30),
       status: initialStatus,
       expires_at: expiresAt,
     })
@@ -151,7 +163,8 @@ export async function POST(request: Request) {
     .single()
 
   if (insertErr || !appt) {
-    if (insertErr?.code === '23505') {
+    // 23505 = índice 011 (mismo inicio); 23P01 = exclusion constraint 013 (solapamiento).
+    if (insertErr?.code === '23505' || insertErr?.code === '23P01') {
       return Response.json({ ok: false, error: 'slot_taken' }, { status: 409 })
     }
     console.error('[booking/create] insert error:', insertErr?.message)

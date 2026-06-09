@@ -83,22 +83,19 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     // Disponibilidad server-side: el anon ya NO puede leer appointments (RLS), así que la
     // sirve /api/booking/availability (service role) devolviendo solo los slots OCUPADOS
     // (time/status/expires_at, sin datos del cliente) para este negocio+fecha+profesional.
-    const busyTimes = new Set<string>()
+    let busy: { time: string; duration_minutes?: number | null }[] = []
     try {
       const params = new URLSearchParams({ slug: business.slug, date: dateStr })
       if (proId) params.set('professionalId', proId)
       const res = await fetch(`/api/booking/availability?${params.toString()}`, { cache: 'no-store' })
       const data = await res.json().catch(() => null)
-      if (res.ok && data?.ok) {
-        for (const b of (data.busy as { time: string }[])) busyTimes.add(b.time.slice(0, 5))
-      }
+      if (res.ok && data?.ok) busy = data.busy || []
     } catch (e) {
       console.error('availability error:', e)
     }
 
-    // Marca de slot ocupado por inicio exacto (consistente con el índice 011, que protege el
-    // mismo time de inicio por profesional). El solapamiento por distinta duración sigue
-    // siendo la limitación conocida de la etapa 1.
+    // Un slot [inicio, fin) está ocupado si se SOLAPA con algún turno ocupado (consistente con
+    // la exclusion constraint 013, que protege el rango por profesional).
     const duration = selectedService.duration_minutes
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     const isToday = dateStr === todayStr
@@ -110,9 +107,13 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
       const closeMin = timeToMinutes(block.end_time)
       for (let t = openMin; t + duration <= closeMin; t += duration) {
         if (nowMinutes >= 0 && t <= nowMinutes) continue
-        const slotTime = minutesToTime(t)
-        if (busyTimes.has(slotTime)) continue
-        slots.push(slotTime)
+        const slotEnd = t + duration
+        const conflict = busy.some(b => {
+          const bStart = timeToMinutes(b.time)
+          const bEnd = bStart + (Number(b.duration_minutes) || 30)
+          return t < bEnd && slotEnd > bStart
+        })
+        if (!conflict) slots.push(minutesToTime(t))
       }
     }
 

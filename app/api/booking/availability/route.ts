@@ -12,7 +12,8 @@ const SENTINEL = '00000000-0000-0000-0000-000000000000'
 
 // Disponibilidad pública de un negocio para una fecha (y profesional). El anon NO puede leer
 // appointments (RLS), así que la disponibilidad la sirve este endpoint con service role,
-// devolviendo SOLO time/status/expires_at — NUNCA datos del cliente (nombre/teléfono/email).
+// devolviendo solo time/status/expires_at/duration_minutes (la duración hace falta para el
+// cálculo de solapamiento; NO es dato del cliente) — NUNCA nombre/teléfono/email del cliente.
 // Lookup por slug → aislamiento por tenant.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
   // Turnos que ocupan slots: confirmed + pending_payment (consistente con el índice 011).
   const { data: appts, error } = await supabase
     .from('appointments')
-    .select('time, status, expires_at, professional_id')
+    .select('time, status, expires_at, professional_id, duration_minutes')
     .eq('business_id', business.id)
     .eq('date', date)
     .in('status', ['confirmed', 'pending_payment'])
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
   const busy = (appts || [])
     .filter(a => (a.professional_id ?? SENTINEL) === bucket)
     .filter(a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
-    .map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at }))
+    .map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at, duration_minutes: a.duration_minutes }))
 
   return Response.json({ ok: true, busy }, { headers: { 'Cache-Control': 'no-store' } })
 }
