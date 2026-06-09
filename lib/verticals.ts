@@ -11,6 +11,9 @@ export interface VerticalTerminology {
   appointments: string
   service: string
   services: string
+  // Lugar de atención. Varía por rubro: salud=Consultorio, belleza=Local, general=Sucursal.
+  location: string
+  locations: string
 }
 
 export interface VerticalFeatures {
@@ -40,6 +43,8 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       appointments: 'Turnos',
       service: 'Prestación',
       services: 'Prestaciones',
+      location: 'Consultorio',
+      locations: 'Consultorios',
     },
     // La Historia Clínica vive dentro de la ficha del paciente (sección colapsable),
     // ya no como item de menú propio.
@@ -60,6 +65,8 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       appointments: 'Turnos',
       service: 'Servicio',
       services: 'Servicios',
+      location: 'Local',
+      locations: 'Locales',
     },
     menu: ['dashboard', 'appointments', 'clients', 'finances', 'settings'],
     features: {
@@ -77,6 +84,8 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       appointments: 'Turnos',
       service: 'Servicio',
       services: 'Servicios',
+      location: 'Sucursal',
+      locations: 'Sucursales',
     },
     menu: ['dashboard', 'appointments', 'clients', 'finances', 'settings'],
     features: {},

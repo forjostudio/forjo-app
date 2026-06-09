@@ -18,6 +18,8 @@ export interface ConfirmationViewProps {
   // Consultorio del turno (capa 2a). Si está, manda sobre la dirección del negocio.
   locationName?: string | null
   locationAddress?: string | null
+  // Etiqueta del lugar según el rubro (Consultorio/Local/Sucursal).
+  locationLabel?: string
   clientName: string
   clientPhone?: string | null
   clientEmail?: string | null
@@ -44,7 +46,7 @@ function waLink(whatsapp: string, text: string): string {
 }
 
 export function ConfirmationView({
-  businessName, businessType, logoUrl, address, mapsUrl, whatsapp, locationName, locationAddress,
+  businessName, businessType, logoUrl, address, mapsUrl, whatsapp, locationName, locationAddress, locationLabel,
   clientName, clientPhone, clientEmail,
   serviceName, durationMinutes, price, professionalName,
   date, time, code, depositPaid,
@@ -154,7 +156,7 @@ export function ConfirmationView({
             <Row icon={<User />} label="Profesional">{professionalName}</Row>
           )}
           {(placeName || placeAddress) && (
-            <Row icon={<MapPin />} label={placeName ? 'Consultorio' : 'Dirección'}>
+            <Row icon={<MapPin />} label={placeName ? (locationLabel || 'Consultorio') : 'Dirección'}>
               {placeName && <div>{placeName}</div>}
               {placeAddress && <div className={placeName ? 'text-muted-foreground text-[13px] font-medium' : undefined}>{placeAddress}</div>}
               {mapHref && (

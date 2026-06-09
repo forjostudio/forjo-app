@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ConfirmationView } from '@/components/booking/confirmation-view'
 import { bookingCode } from '@/lib/booking-code'
+import { resolveVertical } from '@/lib/verticals'
 
 export const metadata = { title: 'Turno confirmado' }
 
@@ -13,7 +14,7 @@ export default async function TurnoConfirmacion({ params }: { params: Promise<{ 
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('date, time, client_name, client_phone, client_email, cancel_token, deposit_paid, duration_minutes, professionals(name), services(name, price, duration_minutes), locations(name, address), businesses(name, type, slug, logo_url, address, maps_url, whatsapp)')
+    .select('date, time, client_name, client_phone, client_email, cancel_token, deposit_paid, duration_minutes, professionals(name), services(name, price, duration_minutes), locations(name, address), businesses(name, type, vertical, slug, logo_url, address, maps_url, whatsapp)')
     .eq('cancel_token', token)
     .single()
 
@@ -28,10 +29,11 @@ export default async function TurnoConfirmacion({ params }: { params: Promise<{ 
     )
   }
 
-  const business = appt.businesses as { name?: string; type?: string | null; slug?: string; logo_url?: string | null; address?: string | null; maps_url?: string | null; whatsapp?: string | null } | null
+  const business = appt.businesses as { name?: string; type?: string | null; vertical?: string | null; slug?: string; logo_url?: string | null; address?: string | null; maps_url?: string | null; whatsapp?: string | null } | null
   const service = appt.services as { name?: string; price?: number | null; duration_minutes?: number | null } | null
   const professional = appt.professionals as { name?: string } | null
   const location = appt.locations as { name?: string; address?: string | null } | null
+  const locationLabel = resolveVertical({ vertical: business?.vertical ?? null, type: business?.type ?? null }).terminology.location
 
   return (
     <ConfirmationView
@@ -44,6 +46,7 @@ export default async function TurnoConfirmacion({ params }: { params: Promise<{ 
       whatsapp={business?.whatsapp ?? null}
       locationName={location?.name ?? null}
       locationAddress={location?.address ?? null}
+      locationLabel={locationLabel}
       clientName={appt.client_name}
       clientPhone={appt.client_phone}
       clientEmail={appt.client_email}

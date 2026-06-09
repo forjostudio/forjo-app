@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Clock, ChevronLeft, ChevronRight } from 'lucide-react'
+import { resolveVertical } from '@/lib/verticals'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -51,6 +52,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const [clientNotes, setClientNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
+  const locWord = resolveVertical(business).terminology.location
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -485,7 +487,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} a las <strong className="text-foreground">{selectedTime}</strong>
               </p>
               {selectedLocationId && (
-                <p className="text-muted-foreground">Consultorio: <span className="text-foreground">{locations.find(l => l.id === selectedLocationId)?.name}</span></p>
+                <p className="text-muted-foreground">{locWord}: <span className="text-foreground">{locations.find(l => l.id === selectedLocationId)?.name}</span></p>
               )}
               {requireDeposit && (
                 <p className="text-muted-foreground">

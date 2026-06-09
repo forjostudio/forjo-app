@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Check, Sun, Moon, Pencil, MapPin, Copy } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS, type VerticalKey } from '@/lib/verticals'
+import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS, resolveVertical, type VerticalKey } from '@/lib/verticals'
 
 // Valor centinela para la opción "Otro" (tipo libre) en el selector de rubro.
 const OTRO_TYPE = '__otro__'
@@ -125,6 +125,10 @@ interface Props {
 
 export function SettingsClient({ business, initialServices, initialProfessionals, initialTimeBlocks, initialLocations, initialExceptions }: Props) {
   const supabase = createClient()
+
+  // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
+  const term = resolveVertical(business).terminology
+  const locWord = term.location.toLowerCase()
 
   // ── Apariencia: paleta + tema (next-themes) ─────────────────────────────────
   const { theme, setTheme } = useTheme()
@@ -564,13 +568,13 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     if (error) { toast.error('Error al agregar'); return }
     setLocations(prev => [...prev, data as Location])
     setNewLocation({ name: '', address: '', phone: '' })
-    toast.success('Consultorio agregado')
+    toast.success('Guardado')
   }
 
   async function deleteLocation(id: string) {
     await supabase.from('locations').delete().eq('id', id)
     setLocations(prev => prev.filter(l => l.id !== id))
-    toast.success('Consultorio eliminado')
+    toast.success('Eliminado')
   }
 
   // ── Tab 5 — Hours (time blocks) ───────────────────────────────────────────
@@ -786,7 +790,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
           <TabsTrigger value="business">Negocio</TabsTrigger>
           <TabsTrigger value="services">Servicios</TabsTrigger>
           <TabsTrigger value="professionals">Equipo</TabsTrigger>
-          <TabsTrigger value="locations">Consultorios</TabsTrigger>
+          <TabsTrigger value="locations">{term.locations}</TabsTrigger>
           <TabsTrigger value="hours">Horarios</TabsTrigger>
           <TabsTrigger value="payments">Pagos</TabsTrigger>
         </TabsList>
@@ -1141,10 +1145,10 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                   {activeLocations.length > 0 && (
                     <Select value={s.location_id || '__none__'} onValueChange={v => updateServiceLocation(s.id, v === '__none__' ? null : (v ?? null))}>
                       <SelectTrigger className="h-8 w-[150px] text-xs">
-                        <SelectValue>{s.location_id ? (activeLocations.find(l => l.id === s.location_id)?.name ?? 'Consultorio') : 'Todos'}</SelectValue>
+                        <SelectValue>{s.location_id ? (activeLocations.find(l => l.id === s.location_id)?.name ?? term.location) : 'Cualquiera'}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">Todos los consultorios</SelectItem>
+                        <SelectItem value="__none__">Cualquier {locWord}</SelectItem>
                         {activeLocations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -1179,13 +1183,13 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
               {activeLocations.length > 0 && (
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> Consultorio</Label>
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> {term.location}</Label>
                   <Select value={newService.location_id || '__none__'} onValueChange={v => setNewService(f => ({ ...f, location_id: v === '__none__' ? '' : (v ?? '') }))}>
                     <SelectTrigger className="w-full">
-                      <SelectValue>{newService.location_id ? (activeLocations.find(l => l.id === newService.location_id)?.name ?? 'Consultorio') : 'Todos los consultorios'}</SelectValue>
+                      <SelectValue>{newService.location_id ? (activeLocations.find(l => l.id === newService.location_id)?.name ?? term.location) : `Cualquier ${locWord}`}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Todos los consultorios</SelectItem>
+                      <SelectItem value="__none__">Cualquier {locWord}</SelectItem>
                       {activeLocations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -1275,14 +1279,14 @@ export function SettingsClient({ business, initialServices, initialProfessionals
         <TabsContent value="locations" className="mt-4">
           <Card className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Consultorios</p>
+              <p className="text-sm font-medium">{term.locations}</p>
               <span className="text-xs bg-secondary px-2 py-1 rounded-full text-muted-foreground">
                 {planConfig.name} · {activeLocations.length}/{planConfig.max_locations}
               </span>
             </div>
             <div className="space-y-2">
               {locations.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">Sin consultorios registrados</p>
+                <p className="text-sm text-muted-foreground text-center py-4">Todavía no agregaste {term.locations.toLowerCase()}</p>
               )}
               {locations.map(loc => (
                 <div key={loc.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50">
@@ -1307,14 +1311,14 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
             ) : (
               <div className="border-t border-border pt-4 space-y-3">
-                <p className="text-sm font-medium">Agregar consultorio</p>
+                <p className="text-sm font-medium">Agregar {locWord}</p>
                 <div className="space-y-2">
-                  <Input value={newLocation.name} onChange={e => setNewLocation(f => ({ ...f, name: e.target.value }))} placeholder="Nombre del consultorio *" />
+                  <Input value={newLocation.name} onChange={e => setNewLocation(f => ({ ...f, name: e.target.value }))} placeholder="Nombre *" />
                   <Input value={newLocation.address} onChange={e => setNewLocation(f => ({ ...f, address: e.target.value }))} placeholder="Dirección (opcional)" />
                   <Input value={newLocation.phone} onChange={e => setNewLocation(f => ({ ...f, phone: e.target.value }))} placeholder="Teléfono (opcional)" />
                 </div>
                 <Button onClick={addLocation} disabled={savingLocation} className="gap-1">
-                  <Plus className="w-4 h-4" /> {savingLocation ? 'Guardando...' : 'Agregar consultorio'}
+                  <Plus className="w-4 h-4" /> {savingLocation ? 'Guardando...' : `Agregar ${locWord}`}
                 </Button>
               </div>
             )}
@@ -1388,10 +1392,10 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                               {activeLocations.length > 0 && (
                                 <Select value={block.location_id || '__none__'} onValueChange={v => updateBlock(day, idx, 'location_id', v === '__none__' ? '' : (v ?? ''))}>
                                   <SelectTrigger className="w-40 text-sm">
-                                    <SelectValue>{block.location_id ? (activeLocations.find(l => l.id === block.location_id)?.name ?? 'Consultorio') : 'Sin consultorio'}</SelectValue>
+                                    <SelectValue>{block.location_id ? (activeLocations.find(l => l.id === block.location_id)?.name ?? term.location) : `Sin ${locWord}`}</SelectValue>
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="__none__">Sin consultorio</SelectItem>
+                                    <SelectItem value="__none__">Sin {locWord}</SelectItem>
                                     {activeLocations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                                   </SelectContent>
                                 </Select>

@@ -3,6 +3,7 @@ import { Check } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ConfirmationView } from '@/components/booking/confirmation-view'
 import { bookingCode } from '@/lib/booking-code'
+import { resolveVertical } from '@/lib/verticals'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -21,15 +22,16 @@ export default async function PagoExitoso({ params, searchParams }: Props) {
     const supabase = createAdminClient()
     const { data: appt } = await supabase
       .from('appointments')
-      .select('date, time, client_name, client_phone, client_email, cancel_token, duration_minutes, professionals(name), services(name, price, duration_minutes), locations(name, address), businesses(name, type, slug, logo_url, address, maps_url, whatsapp)')
+      .select('date, time, client_name, client_phone, client_email, cancel_token, duration_minutes, professionals(name), services(name, price, duration_minutes), locations(name, address), businesses(name, type, vertical, slug, logo_url, address, maps_url, whatsapp)')
       .eq('id', ref)
       .single()
 
     if (appt?.cancel_token) {
-      const business = appt.businesses as { name?: string; type?: string | null; slug?: string; logo_url?: string | null; address?: string | null; maps_url?: string | null; whatsapp?: string | null } | null
+      const business = appt.businesses as { name?: string; type?: string | null; vertical?: string | null; slug?: string; logo_url?: string | null; address?: string | null; maps_url?: string | null; whatsapp?: string | null } | null
       const service = appt.services as { name?: string; price?: number | null; duration_minutes?: number | null } | null
       const professional = appt.professionals as { name?: string } | null
       const location = appt.locations as { name?: string; address?: string | null } | null
+      const locationLabel = resolveVertical({ vertical: business?.vertical ?? null, type: business?.type ?? null }).terminology.location
       return (
         <ConfirmationView
           businessName={business?.name ?? ''}
@@ -41,6 +43,7 @@ export default async function PagoExitoso({ params, searchParams }: Props) {
           whatsapp={business?.whatsapp ?? null}
           locationName={location?.name ?? null}
           locationAddress={location?.address ?? null}
+          locationLabel={locationLabel}
           clientName={appt.client_name}
           clientPhone={appt.client_phone}
           clientEmail={appt.client_email}
