@@ -69,7 +69,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
   },
   general: {
     label: 'General',
-    types: ['Otro'],
+    types: ['Estudio de tatuajes', 'Entrenador personal', 'Clases particulares', 'Lavadero de autos', 'Cancha de fútbol', 'Veterinaria', 'Taller mecánico', 'Estudio de fotografía', 'Otro'],
     terminology: {
       client: 'Cliente',
       clients: 'Clientes',

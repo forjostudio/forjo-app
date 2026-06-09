@@ -19,7 +19,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, X, ImageIcon, Check, Sun, Moon, Pencil } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS } from '@/lib/verticals'
+import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS, type VerticalKey } from '@/lib/verticals'
+
+// Valor centinela para la opción "Otro" (tipo libre) en el selector de rubro.
+const OTRO_TYPE = '__otro__'
+// Tipos predefinidos de un grupo (sin el "Otro", que se sintetiza como campo libre).
+const predefinedTypes = (key: VerticalKey) => VERTICALS[key].types.filter(t => t !== 'Otro')
 import { DASHBOARD_WIDGETS, DASHBOARD_WIDGET_IDS, sanitizeWidgetIds } from '@/lib/dashboard-widgets'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -192,6 +197,30 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   })
   const [savingBiz, setSavingBiz] = useState(false)
 
+  // Rubro: el GRUPO (vertical) maneja el panel; el TIPO es solo el label del header.
+  // "Otro" = tipo libre dentro del grupo. Inicializamos desde lo guardado.
+  const initTypeGroup: VerticalKey = (business.vertical && business.vertical in VERTICALS
+    ? business.vertical
+    : getVerticalKeyByType(business.type)) as VerticalKey
+  const [typeGroup, setTypeGroup] = useState<VerticalKey>(initTypeGroup)
+  const [typeIsOtro, setTypeIsOtro] = useState(() => !!business.type && !predefinedTypes(initTypeGroup).includes(business.type))
+  const typeSelectValue = `${typeGroup}:::${typeIsOtro ? OTRO_TYPE : bizForm.type}`
+
+  function onTypeChange(v: string | null) {
+    if (!v) return
+    const [g, t] = v.split(':::')
+    const key = g as VerticalKey
+    setTypeGroup(key)
+    if (t === OTRO_TYPE) {
+      setTypeIsOtro(true)
+      // Si venía de un predefinido, limpiamos para que escriba; si ya era libre, lo dejamos.
+      setBizForm(f => ({ ...f, type: predefinedTypes(key).includes(f.type) ? '' : f.type }))
+    } else {
+      setTypeIsOtro(false)
+      setBizForm(f => ({ ...f, type: t }))
+    }
+  }
+
   async function saveBusiness() {
     // WhatsApp: vacío permitido (null); si hay algo, normalizar a formato wa.me y validar.
     let whatsapp: string | null = null
@@ -203,10 +232,11 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       }
     }
     setSavingBiz(true)
-    // Cambiar el tipo recalcula el vertical del negocio.
-    const vertical = getVerticalKeyByType(bizForm.type)
+    // El vertical lo define el GRUPO elegido (no se deriva del type, que puede ser libre).
+    const vertical = typeGroup
     const verticalChanged = vertical !== (business.vertical ?? 'general')
-    const { error } = await supabase.from('businesses').update({ ...bizForm, whatsapp, vertical }).eq('id', business.id)
+    const type = typeIsOtro ? bizForm.type.trim() : bizForm.type
+    const { error } = await supabase.from('businesses').update({ ...bizForm, type, whatsapp, vertical }).eq('id', business.id)
     setSavingBiz(false)
     if (error) { toast.error('Error al guardar'); return }
     toast.success('Negocio actualizado')
@@ -364,7 +394,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
 
   const canAddPro = professionals.filter(p => p.active).length < planConfig.max_professionals
   // Labels de Especialidad/Matrícula según el rubro del negocio.
-  const proLabels = PRO_LABELS[getVerticalKeyByType(business.type)] ?? PRO_LABELS.general
+  const proLabels = PRO_LABELS[initTypeGroup] ?? PRO_LABELS.general
 
   async function addProfessional() {
     if (!newPro.name.trim()) return
@@ -890,23 +920,32 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
               <div className="space-y-1">
                 <Label>Tipo</Label>
-                <Select value={bizForm.type} onValueChange={v => setBizForm(f => ({ ...f, type: v ?? '' }))}>
+                <Select value={typeSelectValue} onValueChange={onTypeChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TYPE_GROUPS.map(group => (
                       <SelectGroup key={group.key}>
                         <SelectLabel>{group.label}</SelectLabel>
-                        {group.types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        {predefinedTypes(group.key).map(t => (
+                          <SelectItem key={`${group.key}:::${t}`} value={`${group.key}:::${t}`}>{t}</SelectItem>
+                        ))}
+                        <SelectItem value={`${group.key}:::${OTRO_TYPE}`}>Otro…</SelectItem>
                       </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>
-                {bizForm.type && (
-                  <p className="text-xs text-muted-foreground pt-0.5">
-                    Rubro: <span className="text-foreground">{VERTICALS[getVerticalKeyByType(bizForm.type)].label}</span>
-                    {' · '}cambiarlo ajusta el menú y los campos del panel.
-                  </p>
+                {typeIsOtro && (
+                  <Input
+                    className="mt-2"
+                    placeholder="Especificá tu tipo de negocio (ej: Veterinaria, Lavadero…)"
+                    value={bizForm.type}
+                    onChange={e => setBizForm(f => ({ ...f, type: e.target.value }))}
+                  />
                 )}
+                <p className="text-xs text-muted-foreground pt-0.5">
+                  Rubro: <span className="text-foreground">{VERTICALS[typeGroup].label}</span>
+                  {' · '}define el menú y los campos del panel. El tipo es solo el texto del encabezado.
+                </p>
               </div>
               <div className="space-y-1">
                 <Label>WhatsApp</Label>
