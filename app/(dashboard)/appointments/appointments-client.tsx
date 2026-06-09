@@ -12,7 +12,9 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Check, X, CheckCircle2, Phone, Mail, Trash2, Eye, EyeOff, History } from 'lucide-react'
+import { Plus, Check, X, CheckCircle2, Phone, Mail, Trash2, RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 
 function timeToMinutes(t: string) {
   const [h, m] = t.split(':').map(Number)
@@ -37,6 +39,49 @@ const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
 }
 
+// Pill de estado y botones de acción de fila — componentes a nivel módulo (no se definen en
+// el render) para reusarlos en la tabla (desktop) y en las tarjetas (mobile).
+function StatusBadge({ appt }: { appt: Appointment }) {
+  return (
+    <Badge className={`text-xs ${STATUS_COLORS[appt.status] ?? ''}`} variant="outline">
+      {STATUS_LABELS[appt.status] ?? appt.status}
+    </Badge>
+  )
+}
+
+function RowActions({ appt, onStatus, onCancel, onDelete }: {
+  appt: Appointment
+  onStatus: (id: string, status: string) => void
+  onCancel: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const isActive = !['cancelled', 'completed'].includes(appt.status)
+  return (
+    <div className="flex gap-1 justify-end">
+      {appt.status === 'pending' && (
+        <Button size="icon" variant="ghost" className="h-8 w-8 text-green-400 hover:text-green-300" title="Confirmar" onClick={() => onStatus(appt.id, 'confirmed')}>
+          <Check className="w-4 h-4" />
+        </Button>
+      )}
+      {appt.status === 'confirmed' && (
+        <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-400 hover:text-blue-300" title="Marcar completado" onClick={() => onStatus(appt.id, 'completed')}>
+          <CheckCircle2 className="w-4 h-4" />
+        </Button>
+      )}
+      {isActive && (
+        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-300" title="Cancelar" onClick={() => onCancel(appt.id)}>
+          <X className="w-4 h-4" />
+        </Button>
+      )}
+      {(appt.status === 'cancelled' || appt.status === 'pending_payment') && (
+        <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-400" title="Eliminar registro" onClick={() => onDelete(appt.id)}>
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      )}
+    </div>
+  )
+}
+
 interface Props {
   initialAppointments: Appointment[]
   professionals: Professional[]
@@ -51,8 +96,8 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   const [filterDate, setFilterDate] = useState('')
   const [filterPro, setFilterPro] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
-  const [showCancelled, setShowCancelled] = useState(false)
-  const [showPast, setShowPast] = useState(false)
+  const [tab, setTab] = useState<'proximos' | 'pasados' | 'todos'>('proximos')
+  const [refreshing, setRefreshing] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -132,15 +177,15 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   }, [form.date, form.service_id, form.professional_id, calculateModalSlots])
 
   const filtered = appointments.filter(a => {
-    if (!showCancelled && a.status === 'cancelled') return false
-    if (!showPast && a.date < today) return false
+    if (tab === 'proximos' && (a.date < today || a.status === 'cancelled')) return false
+    if (tab === 'pasados' && a.date >= today) return false
     if (filterDate && a.date !== filterDate) return false
     if (filterPro !== 'all' && a.professional_id !== filterPro) return false
     if (filterStatus !== 'all' && a.status !== filterStatus) return false
     return true
   }).sort((a, b) => {
     const dateComp = a.date < b.date ? -1 : a.date > b.date ? 1 : 0
-    if (dateComp !== 0) return showPast ? -dateComp : dateComp
+    if (dateComp !== 0) return tab === 'pasados' ? -dateComp : dateComp
     return a.time < b.time ? -1 : 1
   })
 
@@ -149,6 +194,18 @@ export function AppointmentsClient({ initialAppointments, professionals, service
     if (error) { toast.error('Error al actualizar'); return }
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: status as Appointment['status'] } : a))
     toast.success('Estado actualizado')
+  }
+
+  async function refresh() {
+    setRefreshing(true)
+    const { data } = await supabase
+      .from('appointments')
+      .select('*, professionals(name), services(name, price, duration_minutes)')
+      .eq('business_id', businessId)
+      .order('date', { ascending: true })
+      .order('time', { ascending: true })
+    if (data) setAppointments(data as Appointment[])
+    setRefreshing(false)
   }
 
   // Cancelación desde el panel: solo se ejecuta al confirmar en el diálogo. El endpoint es
@@ -258,16 +315,47 @@ export function AppointmentsClient({ initialAppointments, professionals, service
     toast.success('Turno creado')
   }
 
+  const TABS: { k: typeof tab; label: string }[] = [
+    { k: 'proximos', label: 'Próximos' },
+    { k: 'pasados', label: 'Pasados' },
+    { k: 'todos', label: 'Todos' },
+  ]
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Turnos</h1>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <PageEyebrow label="Agenda" />
+          <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Turnos</h1>
+        </div>
         <Button onClick={() => setDialogOpen(true)} className="gap-2 sm:w-auto w-full">
           <Plus className="w-4 h-4" /> Nuevo turno
         </Button>
       </div>
 
-      {/* Filters */}
+      {/* Tabs + actualizar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="inline-flex rounded-lg border border-border bg-card p-1">
+          {TABS.map(({ k, label }) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={cn(
+                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                tab === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1" />
+        <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing} className="gap-1.5">
+          <RefreshCw className={cn('w-3.5 h-3.5', refreshing && 'animate-spin')} /> Actualizar
+        </Button>
+      </div>
+
+      {/* Filtros secundarios */}
       <div className="flex flex-wrap gap-2">
         <div className="relative">
           <Input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="w-44 text-sm" />
@@ -295,14 +383,6 @@ export function AppointmentsClient({ initialAppointments, professionals, service
             {Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Button variant={showPast ? 'secondary' : 'ghost'} size="sm" onClick={() => setShowPast(v => !v)} className="gap-1.5">
-          <History className="w-3.5 h-3.5" />
-          {showPast ? 'Próximos' : 'Ver todos'}
-        </Button>
-        <Button variant={showCancelled ? 'secondary' : 'ghost'} size="sm" onClick={() => setShowCancelled(v => !v)} className="gap-1.5">
-          {showCancelled ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          Cancelados
-        </Button>
         {(filterDate || filterPro !== 'all' || filterStatus !== 'all') && (
           <Button variant="ghost" size="sm" onClick={() => { setFilterDate(''); setFilterPro('all'); setFilterStatus('all') }}>
             Limpiar
@@ -310,82 +390,111 @@ export function AppointmentsClient({ initialAppointments, professionals, service
         )}
       </div>
 
-      {/* List */}
-      <div className="space-y-2">
-        {filtered.length === 0 ? (
-          <p className="text-muted-foreground text-center py-12">
-            {!showPast ? 'No hay turnos próximos — usá "Ver todos" para ver el historial' : 'No hay turnos con esos filtros'}
-          </p>
-        ) : (
-          filtered.map(appt => {
-            const service = appt.services as { name?: string; price?: number } | null
-            const professional = appt.professionals as { name?: string } | null
-            const phone = appt.client_phone
-            const waPhone = phone ? '549' + phone.replace(/\D/g, '').replace(/^(549|54)/, '') : null
-            const isActive = !['cancelled', 'completed'].includes(appt.status)
+      {/* Lista: tabla en desktop, tarjetas en mobile */}
+      {filtered.length === 0 ? (
+        <p className="text-muted-foreground text-center py-12">
+          {tab === 'proximos' ? 'No hay turnos próximos.' : 'No hay turnos con esos filtros.'}
+        </p>
+      ) : (
+        <>
+          {/* Desktop: tabla */}
+          <div className="hidden md:block rounded-xl border border-border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-secondary/40 text-left">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Hora</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cliente</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Servicio</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Profesional</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Precio</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Estado</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(appt => {
+                  const service = appt.services as { name?: string; price?: number } | null
+                  const professional = appt.professionals as { name?: string } | null
+                  const phone = appt.client_phone
+                  const waPhone = phone ? '549' + phone.replace(/\D/g, '').replace(/^(549|54)/, '') : null
+                  return (
+                    <tr key={appt.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap align-top">
+                        <div className="text-xs text-muted-foreground capitalize">{format(parseISO(appt.date), 'EEE d MMM', { locale: es })}</div>
+                        <div className="font-mono font-semibold">{appt.time.slice(0, 5)}</div>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                            {appt.client_name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{appt.client_name}</div>
+                            {waPhone ? (
+                              <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer" className="text-xs text-green-500 hover:text-green-400 flex items-center gap-1 transition-colors">
+                                <Phone className="w-3 h-3" />{phone}
+                              </a>
+                            ) : appt.client_email ? (
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 truncate"><Mail className="w-3 h-3 flex-shrink-0" />{appt.client_email}</div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top">{service?.name || '—'}</td>
+                      <td className="px-4 py-3 align-top text-muted-foreground">{professional?.name || '—'}</td>
+                      <td className="px-4 py-3 align-top text-right font-medium whitespace-nowrap">{service?.price != null ? `$${Number(service.price).toLocaleString('es-AR')}` : '—'}</td>
+                      <td className="px-4 py-3 align-top"><StatusBadge appt={appt} /></td>
+                      <td className="px-4 py-3 align-top"><RowActions appt={appt} onStatus={updateStatus} onCancel={setConfirmCancelId} onDelete={setConfirmDeleteId} /></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
 
-            return (
-              <div key={appt.id} className="flex items-start gap-3 p-4 rounded-lg bg-card border border-border">
-                <div className="w-14 flex-shrink-0 pt-0.5">
-                  <p className="text-xs text-muted-foreground">{format(parseISO(appt.date), 'd MMM', { locale: es })}</p>
-                  <p className="text-sm font-mono font-semibold">{appt.time.slice(0, 5)}</p>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{appt.client_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {service?.name}
-                    {professional?.name && ` · ${professional.name}`}
-                    {service?.price != null && ` · $${Number(service.price).toLocaleString('es-AR')}`}
-                  </p>
-                  {(phone || appt.client_email) && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
-                      {waPhone && (
-                        <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer"
-                          className="text-xs text-green-400 hover:text-green-300 flex items-center gap-1 transition-colors">
-                          <Phone className="w-3 h-3" />{phone}
-                        </a>
-                      )}
-                      {appt.client_email && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Mail className="w-3 h-3" />{appt.client_email}
-                        </span>
-                      )}
+          {/* Mobile: tarjetas */}
+          <div className="md:hidden space-y-2">
+            {filtered.map(appt => {
+              const service = appt.services as { name?: string; price?: number } | null
+              const professional = appt.professionals as { name?: string } | null
+              const phone = appt.client_phone
+              const waPhone = phone ? '549' + phone.replace(/\D/g, '').replace(/^(549|54)/, '') : null
+              return (
+                <div key={appt.id} className="flex items-start gap-3 p-4 rounded-lg bg-card border border-border">
+                  <div className="w-14 flex-shrink-0 pt-0.5">
+                    <p className="text-xs text-muted-foreground capitalize">{format(parseISO(appt.date), 'd MMM', { locale: es })}</p>
+                    <p className="text-sm font-mono font-semibold">{appt.time.slice(0, 5)}</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-sm truncate">{appt.client_name}</p>
+                      <StatusBadge appt={appt} />
                     </div>
-                  )}
+                    <p className="text-xs text-muted-foreground">
+                      {service?.name}
+                      {professional?.name && ` · ${professional.name}`}
+                      {service?.price != null && ` · $${Number(service.price).toLocaleString('es-AR')}`}
+                    </p>
+                    {(phone || appt.client_email) && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+                        {waPhone && (
+                          <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer" className="text-xs text-green-500 hover:text-green-400 flex items-center gap-1 transition-colors">
+                            <Phone className="w-3 h-3" />{phone}
+                          </a>
+                        )}
+                        {appt.client_email && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="w-3 h-3" />{appt.client_email}</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-2"><RowActions appt={appt} onStatus={updateStatus} onCancel={setConfirmCancelId} onDelete={setConfirmDeleteId} /></div>
+                  </div>
                 </div>
-
-                <Badge className={`text-xs hidden sm:inline-flex flex-shrink-0 ${STATUS_COLORS[appt.status] ?? ''}`} variant="outline">
-                  {STATUS_LABELS[appt.status] ?? appt.status}
-                </Badge>
-
-                <div className="flex gap-1 flex-shrink-0">
-                  {appt.status === 'pending' && (
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-green-400 hover:text-green-300" title="Confirmar" onClick={() => updateStatus(appt.id, 'confirmed')}>
-                      <Check className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {appt.status === 'confirmed' && (
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-400 hover:text-blue-300" title="Marcar completado" onClick={() => updateStatus(appt.id, 'completed')}>
-                      <CheckCircle2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {isActive && (
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-300" title="Cancelar" onClick={() => setConfirmCancelId(appt.id)}>
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {(appt.status === 'cancelled' || appt.status === 'pending_payment') && (
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-400" title="Eliminar registro" onClick={() => setConfirmDeleteId(appt.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )
-          })
-        )}
-      </div>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       {/* Confirm cancel dialog */}
       <Dialog open={!!confirmCancelId} onOpenChange={open => { if (!open && !cancelling) setConfirmCancelId(null) }}>

@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import {
   DollarSign, TrendingUp, TrendingDown, Minus, Plus, Pencil, Trash2,
   ChevronDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
@@ -544,8 +545,11 @@ export function FinancesClient({ businessId }: Props) {
   return (
     <div className="space-y-6">
       {/* Header + period selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Finanzas</h1>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <PageEyebrow label="Caja" />
+          <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Finanzas</h1>
+        </div>
         <div className="flex gap-2 flex-wrap">
           {(['this_month', 'last_month', 'custom'] as Period[]).map(p => (
             <Button key={p} size="sm" variant={period === p ? 'default' : 'outline'} onClick={() => setPeriod(p)}>

@@ -125,7 +125,17 @@ export function Sidebar({ business }: { business: Business }) {
             <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
             <circle cx="56" cy="13" r="6" fill="#f4c543" />
           </svg>
-          <span>hecho con <span className="font-semibold text-foreground">Forjo</span></span>
+          <span>
+            hecho con{' '}
+            <a
+              href="https://www.forjo.studio"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+            >
+              <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> studio
+            </a>
+          </span>
         </div>
       </div>
     </div>
