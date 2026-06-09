@@ -677,7 +677,7 @@ export function FinancesClient({ businessId }: Props) {
                 <>
                   {fixedMonthly > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      Total mensual: <span className="font-semibold text-red-400">{fmtARS(fixedMonthly)}</span>
+                      Total mensual: <span className="font-semibold text-destructive">{fmtARS(fixedMonthly)}</span>
                     </p>
                   )}
                   <div className="space-y-2.5">
@@ -693,7 +693,7 @@ export function FinancesClient({ businessId }: Props) {
                             </p>
                           </div>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <span className="tabular-nums text-red-400 font-semibold mr-1">{fmtARS(f.monthly)}<span className="text-xs text-muted-foreground">/mes</span></span>
+                            <span className="tabular-nums text-destructive font-semibold mr-1">{fmtARS(f.monthly)}<span className="text-xs text-muted-foreground">/mes</span></span>
                             <Button size="icon" variant="ghost" className={`h-7 w-7 ${f.active ? 'text-green-400' : 'text-muted-foreground'}`}
                               title={f.active ? 'Pausar' : 'Activar'} onClick={() => toggleFixed(f)}><Power className="w-3.5 h-3.5" /></Button>
                             <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => openEditFixed(f)}><Pencil className="w-3.5 h-3.5" /></Button>
@@ -701,7 +701,7 @@ export function FinancesClient({ businessId }: Props) {
                           </div>
                         </div>
                         <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                          <div className="h-full bg-red-400/70 rounded-full" style={{ width: `${fixedSortedMax > 0 ? (f.monthly / fixedSortedMax) * 100 : 0}%` }} />
+                          <div className="h-full bg-destructive/70 rounded-full" style={{ width: `${fixedSortedMax > 0 ? (f.monthly / fixedSortedMax) * 100 : 0}%` }} />
                         </div>
                       </div>
                     ))}

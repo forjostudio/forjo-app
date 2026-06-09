@@ -9,6 +9,7 @@ import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,12 +26,12 @@ const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
 
 // Paletas de marca (swatch = primary en claro). El detalle de tokens vive en globals.css.
-const PALETTES: { key: string; label: string; swatch: string }[] = [
-  { key: 'red', label: 'Rojo', swatch: '#d94a2b' },
-  { key: 'blue', label: 'Azul', swatch: '#2a5fa5' },
-  { key: 'yellow', label: 'Amarillo', swatch: '#c8901a' },
-  { key: 'green', label: 'Verde', swatch: '#2f8a5b' },
-  { key: 'ink', label: 'Tinta', swatch: '#1a1714' },
+const PALETTES: { key: string; label: string; sub: string; swatches: [string, string, string] }[] = [
+  { key: 'red', label: 'Rojo Forjo', sub: 'Principal', swatches: ['#d94a2b', '#1a1714', '#f4c543'] },
+  { key: 'blue', label: 'Azul', sub: 'Constructivista', swatches: ['#2a5fa5', '#1a1714', '#f4c543'] },
+  { key: 'yellow', label: 'Ocre', sub: 'Cálido', swatches: ['#c8901a', '#1a1714', '#d94a2b'] },
+  { key: 'green', label: 'Verde', sub: 'Bosque', swatches: ['#2f8a5b', '#1a1714', '#f4c543'] },
+  { key: 'ink', label: 'Tinta', sub: 'Monocromo', swatches: ['#1a1714', '#6b6256', '#e8dcc4'] },
 ]
 
 // ── Profesionales: form ampliado + labels por rubro ─────────────────────────
@@ -557,7 +558,10 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Configuración</h1>
+      <div>
+        <PageEyebrow label="Ajustes" />
+        <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Configuración</h1>
+      </div>
 
       <Tabs defaultValue="appearance">
         <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 w-full lg:w-auto h-auto">
@@ -589,13 +593,24 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                       onClick={() => selectPalette(p.key)}
                       aria-pressed={active}
                       className={cn(
-                        'relative flex flex-col items-center gap-2 rounded-lg border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        active ? 'border-primary bg-primary/5' : 'border-border hover:bg-secondary/50'
+                        'flex flex-col gap-2.5 rounded-lg border-2 p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        active ? 'border-foreground' : 'border-border hover:bg-secondary/50'
                       )}
                     >
-                      {active && <Check className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-primary" />}
-                      <span className="w-full h-10 rounded-md border border-border/50" style={{ backgroundColor: p.swatch }} />
-                      <span className="text-xs font-medium">{p.label}</span>
+                      <span className="flex h-10 w-full overflow-hidden rounded-md border border-border/50">
+                        {p.swatches.map((c, i) => <span key={i} className="flex-1" style={{ backgroundColor: c }} />)}
+                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold truncate">{p.label}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{p.sub}</p>
+                        </div>
+                        {active && (
+                          <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-foreground text-background">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
                     </button>
                   )
                 })}
