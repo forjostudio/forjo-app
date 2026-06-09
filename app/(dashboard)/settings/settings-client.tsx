@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, Service, Professional, TimeBlock, Location } from '@/lib/types'
+import { Business, Service, Professional, TimeBlock, Location, ScheduleException } from '@/lib/types'
+import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isBefore, startOfDay } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -118,9 +120,10 @@ interface Props {
   initialProfessionals: Professional[]
   initialTimeBlocks: TimeBlock[]
   initialLocations: Location[]
+  initialExceptions: ScheduleException[]
 }
 
-export function SettingsClient({ business, initialServices, initialProfessionals, initialTimeBlocks, initialLocations }: Props) {
+export function SettingsClient({ business, initialServices, initialProfessionals, initialTimeBlocks, initialLocations, initialExceptions }: Props) {
   const supabase = createClient()
 
   // ── Apariencia: paleta + tema (next-themes) ─────────────────────────────────
@@ -459,6 +462,51 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     await supabase.from('professionals').delete().eq('id', id).eq('business_id', business.id)
     setProfessionals(prev => prev.filter(p => p.id !== id))
     toast.success('Profesional eliminado')
+  }
+
+  // ── Horarios — excepciones por fecha (capa 1) ───────────────────────────────
+  const [exceptions, setExceptions] = useState<ScheduleException[]>(initialExceptions)
+  const [excMonth, setExcMonth] = useState(() => startOfMonth(new Date()))
+  const [excEditDate, setExcEditDate] = useState<string | null>(null)
+  const [excSpecial, setExcSpecial] = useState({ start: '09:00', end: '18:00' })
+  const thisMonthStart = startOfMonth(new Date())
+
+  const excByDate = useMemo(() => {
+    const m = new Map<string, ScheduleException>()
+    for (const e of exceptions) m.set(e.date, e)
+    return m
+  }, [exceptions])
+  const excCalendarDays = useMemo(() => {
+    const start = startOfWeek(startOfMonth(excMonth), { weekStartsOn: 1 })
+    const end = endOfWeek(endOfMonth(excMonth), { weekStartsOn: 1 })
+    return eachDayOfInterval({ start, end })
+  }, [excMonth])
+
+  function openExcDay(date: Date) {
+    const ds = format(date, 'yyyy-MM-dd')
+    const ex = excByDate.get(ds)
+    if (ex && !ex.closed && ex.start_time && ex.end_time) {
+      setExcSpecial({ start: ex.start_time.slice(0, 5), end: ex.end_time.slice(0, 5) })
+    }
+    setExcEditDate(ds)
+  }
+  async function upsertException(date: string, closed: boolean, start: string | null, end: string | null) {
+    const { data, error } = await supabase
+      .from('schedule_exceptions')
+      .upsert({ business_id: business.id, date, closed, start_time: start, end_time: end }, { onConflict: 'business_id,date' })
+      .select()
+      .single()
+    if (error) { toast.error('Error al guardar el día'); return }
+    setExceptions(prev => [...prev.filter(e => e.date !== date), data as ScheduleException].sort((a, b) => a.date.localeCompare(b.date)))
+    setExcEditDate(null)
+    toast.success('Día actualizado')
+  }
+  async function clearException(date: string) {
+    const { error } = await supabase.from('schedule_exceptions').delete().eq('business_id', business.id).eq('date', date)
+    if (error) { toast.error('Error'); return }
+    setExceptions(prev => prev.filter(e => e.date !== date))
+    setExcEditDate(null)
+    toast.success('Día normalizado')
   }
 
   // ── Tab 4 — Locations ─────────────────────────────────────────────────────
@@ -1293,6 +1341,75 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </Button>
             </div>
           </Card>
+
+          {/* Excepciones por fecha — anular/cambiar un día puntual sobre la grilla semanal */}
+          <Card className="p-6 space-y-4 mt-4">
+            <div>
+              <p className="font-semibold text-sm">Días especiales</p>
+              <p className="text-xs text-muted-foreground">Anulá o cambiá el horario de un día puntual, por encima de la grilla semanal. Tocá un día del calendario.</p>
+            </div>
+            <div className="max-w-sm">
+              <div className="flex items-center justify-between mb-3">
+                <button type="button" onClick={() => setExcMonth(m => addMonths(m, -1))} disabled={isSameMonth(excMonth, thisMonthStart)} className="w-8 h-8 rounded-md flex items-center justify-center text-lg text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors" aria-label="Mes anterior">‹</button>
+                <span className="text-sm font-semibold capitalize">{format(excMonth, 'MMMM yyyy', { locale: es })}</span>
+                <button type="button" onClick={() => setExcMonth(m => addMonths(m, 1))} className="w-8 h-8 rounded-md flex items-center justify-center text-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" aria-label="Mes siguiente">›</button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-muted-foreground font-semibold mb-1">
+                {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map((d, i) => <div key={i}>{d}</div>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {excCalendarDays.map(d => {
+                  const ds = format(d, 'yyyy-MM-dd')
+                  const inMonth = isSameMonth(d, excMonth)
+                  const isPast = isBefore(d, startOfDay(new Date()))
+                  const ex = excByDate.get(ds)
+                  const disabled = !inMonth || isPast
+                  return (
+                    <button
+                      key={ds}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => openExcDay(d)}
+                      className={cn(
+                        'aspect-square rounded-md text-xs font-medium flex items-center justify-center border transition-colors',
+                        disabled ? 'border-transparent text-muted-foreground/30 cursor-default'
+                          : ex?.closed ? 'border-destructive/40 bg-destructive/15 text-destructive'
+                            : ex ? 'border-primary/40 bg-primary/10 text-primary'
+                              : 'border-border bg-card hover:border-primary'
+                      )}
+                    >
+                      {d.getDate()}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-destructive/15 border border-destructive/40" /> Cerrado</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary/10 border border-primary/40" /> Horario especial</span>
+              </div>
+            </div>
+          </Card>
+
+          <Dialog open={!!excEditDate} onOpenChange={open => { if (!open) setExcEditDate(null) }}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="capitalize">{excEditDate ? format(parseISO(excEditDate), "EEEE d 'de' MMMM", { locale: es }) : ''}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <Button variant="outline" className="w-full justify-start" onClick={() => excEditDate && clearException(excEditDate)}>Día normal (según la grilla semanal)</Button>
+                <Button variant="outline" className="w-full justify-start" onClick={() => excEditDate && upsertException(excEditDate, true, null, null)}>Cerrado todo el día</Button>
+                <div className="rounded-md border border-border p-3 space-y-2">
+                  <p className="text-xs font-medium">Horario especial ese día</p>
+                  <div className="flex items-center gap-2">
+                    <Input type="time" value={excSpecial.start} onChange={e => setExcSpecial(s => ({ ...s, start: e.target.value }))} className="w-28 text-sm" />
+                    <span className="text-muted-foreground text-sm">→</span>
+                    <Input type="time" value={excSpecial.end} onChange={e => setExcSpecial(s => ({ ...s, end: e.target.value }))} className="w-28 text-sm" />
+                  </div>
+                  <Button size="sm" onClick={() => excEditDate && upsertException(excEditDate, false, excSpecial.start, excSpecial.end)}>Aplicar horario especial</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* ── Payments ── */}

@@ -58,6 +58,19 @@ export interface Location {
   created_at: string
 }
 
+// Excepción de horario por fecha (Capa 1). Anula o cambia un día puntual por encima
+// de la grilla semanal (time_blocks). closed=true → cerrado; closed=false → horario
+// especial (start_time/end_time).
+export interface ScheduleException {
+  id: string
+  business_id: string
+  date: string
+  closed: boolean
+  start_time: string | null
+  end_time: string | null
+  created_at: string
+}
+
 export interface TimeBlock {
   id: string
   business_id: string

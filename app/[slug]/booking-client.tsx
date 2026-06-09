@@ -18,6 +18,8 @@ interface Props {
   services: Service[]
   professionals: Professional[]
   timeBlocks: TimeBlock[]
+  // Excepciones por fecha (capa 1): anular o cambiar el horario de un día puntual.
+  exceptions: { date: string; closed: boolean; start_time: string | null; end_time: string | null }[]
 }
 
 function timeToMinutes(t: string) {
@@ -31,7 +33,7 @@ function minutesToTime(m: number) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
-export function BookingClient({ business, services, professionals, timeBlocks }: Props) {
+export function BookingClient({ business, services, professionals, timeBlocks, exceptions }: Props) {
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedPro, setSelectedPro] = useState<Professional | null | 'none'>('none')
@@ -63,6 +65,17 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
 
   // Días de la semana abiertos (de los time_blocks) para deshabilitar el resto en el calendario.
   const openDaysSet = useMemo(() => new Set(timeBlocks.map(b => b.day_of_week)), [timeBlocks])
+  // Excepciones indexadas por fecha (yyyy-MM-dd) para resolver cada día del calendario.
+  const exceptionByDate = useMemo(() => {
+    const m = new Map<string, { closed: boolean; start_time: string | null; end_time: string | null }>()
+    for (const e of exceptions) m.set(e.date, e)
+    return m
+  }, [exceptions])
+  // ¿El día está abierto? Una excepción manda sobre la grilla semanal.
+  const isDayOpen = (d: Date) => {
+    const ex = exceptionByDate.get(format(d, 'yyyy-MM-dd'))
+    return ex ? !ex.closed : openDaysSet.has(d.getDay())
+  }
   // Grilla del mes mostrado, en semanas de lunes a domingo.
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(calMonth), { weekStartsOn: 1 })
@@ -77,14 +90,18 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     setSelectedTime('')
     setLoadingSlots(true)
 
-    const dayBlocks = timeBlocks.filter(b => b.day_of_week === date.getDay())
+    const dateStr = format(date, 'yyyy-MM-dd')
+    const ex = exceptionByDate.get(dateStr)
+    // Excepción del día: cerrado → sin slots; horario especial → ese rango; si no, la grilla semanal.
+    const dayBlocks: { start_time: string; end_time: string }[] = ex
+      ? ((!ex.closed && ex.start_time && ex.end_time) ? [{ start_time: ex.start_time, end_time: ex.end_time }] : [])
+      : timeBlocks.filter(b => b.day_of_week === date.getDay())
     if (dayBlocks.length === 0) {
       setAvailableSlots([])
       setLoadingSlots(false)
       return
     }
 
-    const dateStr = format(date, 'yyyy-MM-dd')
     const proId = selectedPro && selectedPro !== 'none' ? (selectedPro as Professional).id : null
 
     // Disponibilidad server-side: el anon ya NO puede leer appointments (RLS), así que la
@@ -374,7 +391,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
                 {calendarDays.map(d => {
                   const inMonth = isSameMonth(d, calMonth)
                   const isPast = isBefore(d, startOfDay(new Date()))
-                  const isOpen = openDaysSet.has(d.getDay())
+                  const isOpen = isDayOpen(d)
                   const disabled = !inMonth || isPast || !isOpen
                   const sel = selectedDate != null && isSameDay(d, selectedDate)
                   return (

@@ -19,11 +19,14 @@ export default async function PublicBookingPage({ params }: Props) {
 
   if (!business) notFound()
 
-  const [{ data: services }, { data: professionals }, { data: timeBlocks }] = await Promise.all([
+  // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id).eq('active', true),
     // Vista pública acotada (id, name, specialty) — no expone contacto/matrícula del staff.
     supabase.from('public_professionals').select('*').eq('business_id', business.id),
     supabase.from('time_blocks').select('*').eq('business_id', business.id),
+    supabase.from('schedule_exceptions').select('date, closed, start_time, end_time').eq('business_id', business.id).gte('date', todayStr),
   ])
 
   return (
@@ -32,6 +35,7 @@ export default async function PublicBookingPage({ params }: Props) {
       services={services || []}
       professionals={professionals || []}
       timeBlocks={timeBlocks || []}
+      exceptions={exceptions || []}
     />
   )
 }
