@@ -155,11 +155,21 @@ async function processWebhook(slug: string, paymentId: string) {
       }
     }
   } else if (['rejected', 'cancelled', 'refunded', 'charged_back'].includes(payment.status)) {
-    await supabase
+    // Solo cancelamos turnos que TODAVÍA no pasaron (pending_payment o confirmed). Si el
+    // turno ya está 'completed', NO lo pisamos: el servicio se prestó. Un contracargo tardío
+    // (charged_back semanas después) no debe convertir un turno realizado en cancelado y
+    // ensuciar el historial/stats. El filtro por estado lo hace en el WHERE.
+    const { data: cancelledRows } = await supabase
       .from('appointments')
       .update({ status: 'cancelled' })
       .eq('id', appointmentId)
+      .in('status', ['pending_payment', 'confirmed'])
+      .select('id')
 
-    console.log(`❌ Pago ${payment.status} — turno ${appointmentId} cancelado`)
+    if (cancelledRows && cancelledRows.length > 0) {
+      console.log(`❌ Pago ${payment.status} — turno ${appointmentId} cancelado`)
+    } else {
+      console.log(`Pago ${payment.status} — turno ${appointmentId} ya pasó/no estaba activo, no se toca (estado: ${appt.status})`)
+    }
   }
 }
