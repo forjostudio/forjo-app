@@ -921,7 +921,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <div className="space-y-1">
                 <Label>Tipo</Label>
                 <Select value={typeSelectValue} onValueChange={onTypeChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue>{typeIsOtro ? 'Otro' : bizForm.type}</SelectValue></SelectTrigger>
                   <SelectContent>
                     {TYPE_GROUPS.map(group => (
                       <SelectGroup key={group.key}>
