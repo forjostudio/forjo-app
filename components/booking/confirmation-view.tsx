@@ -15,6 +15,9 @@ export interface ConfirmationViewProps {
   address?: string | null
   mapsUrl?: string | null
   whatsapp?: string | null
+  // Consultorio del turno (capa 2a). Si está, manda sobre la dirección del negocio.
+  locationName?: string | null
+  locationAddress?: string | null
   clientName: string
   clientPhone?: string | null
   clientEmail?: string | null
@@ -41,7 +44,7 @@ function waLink(whatsapp: string, text: string): string {
 }
 
 export function ConfirmationView({
-  businessName, businessType, logoUrl, address, mapsUrl, whatsapp,
+  businessName, businessType, logoUrl, address, mapsUrl, whatsapp, locationName, locationAddress,
   clientName, clientPhone, clientEmail,
   serviceName, durationMinutes, price, professionalName,
   date, time, code, depositPaid,
@@ -53,10 +56,15 @@ export function ConfirmationView({
   const firstName = clientName.trim().split(/\s+/)[0]
   const dur = durationMinutes && durationMinutes > 0 ? durationMinutes : null
 
-  // Preferimos el link de Maps cargado por el dueño (lleva al lugar exacto). Si no hay,
-  // caemos a una búsqueda por "negocio + dirección" (geolocaliza mejor que solo la calle).
-  const mapHref = (mapsUrl && mapsUrl.trim())
-    || (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${businessName} ${address}`)}` : null)
+  // Dónde: si el turno tiene consultorio, manda sobre la dirección del negocio.
+  const placeName = (locationName && locationName.trim()) || null
+  const placeAddress = (locationAddress && locationAddress.trim()) || (address && address.trim()) || null
+  // Mapa: si el consultorio tiene dirección propia, buscamos eso; si no, el link del dueño
+  // o una búsqueda por "negocio + dirección".
+  const mapHref = (locationAddress && locationAddress.trim())
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${businessName} ${placeName ?? ''} ${locationAddress}`)}`
+    : ((mapsUrl && mapsUrl.trim())
+      || (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${businessName} ${address}`)}` : null))
   const waHref = whatsapp
     ? waLink(whatsapp, `Hola ${businessName}, tengo un turno: ${serviceName} el ${fechaCorta} a las ${hora} hs (código ${code}).`)
     : null
@@ -145,9 +153,10 @@ export function ConfirmationView({
           {professionalName && (
             <Row icon={<User />} label="Profesional">{professionalName}</Row>
           )}
-          {address && (
-            <Row icon={<MapPin />} label="Dirección">
-              <div>{address}</div>
+          {(placeName || placeAddress) && (
+            <Row icon={<MapPin />} label={placeName ? 'Consultorio' : 'Dirección'}>
+              {placeName && <div>{placeName}</div>}
+              {placeAddress && <div className={placeName ? 'text-muted-foreground text-[13px] font-medium' : undefined}>{placeAddress}</div>}
               {mapHref && (
                 <a href={mapHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary font-semibold text-[13px] mt-1.5">
                   Ver en el mapa <ArrowRight className="w-3 h-3" />

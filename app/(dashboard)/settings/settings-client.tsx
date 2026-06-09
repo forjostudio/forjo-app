@@ -104,13 +104,13 @@ function ProFields({ value, onChange, labels, showExtra }: {
 }
 
 // ── Time block state types ──────────────────────────────────────────────────
-type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; error?: string }
+type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; location_id: string; error?: string }
 type DayConfig = { enabled: boolean; blocks: LocalBlock[] }
 
 function defaultBlock(day: number): LocalBlock {
-  if (day >= 1 && day <= 5) return { start_time: '09:00', end_time: '18:00', label: '' }
-  if (day === 6) return { start_time: '09:00', end_time: '13:00', label: '' }
-  return { start_time: '09:00', end_time: '18:00', label: '' }
+  if (day >= 1 && day <= 5) return { start_time: '09:00', end_time: '18:00', label: '', location_id: '' }
+  if (day === 6) return { start_time: '09:00', end_time: '13:00', label: '', location_id: '' }
+  return { start_time: '09:00', end_time: '18:00', label: '', location_id: '' }
 }
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -547,7 +547,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       const blocks = initialTimeBlocks.filter(b => b.day_of_week === day)
       return {
         enabled: blocks.length > 0,
-        blocks: blocks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, label: b.label || '' })),
+        blocks: blocks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, label: b.label || '', location_id: b.location_id || '' })),
       }
     })
   )
@@ -576,7 +576,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       const newStart = lastBlock?.end_time || '09:00'
       const [h, m] = newStart.split(':').map(Number)
       const newEnd = `${String(Math.min(h + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      next[day] = { ...next[day], blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '' }] }
+      next[day] = { ...next[day], blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '', location_id: lastBlock?.location_id || '' }] }
       return next
     })
   }
@@ -629,11 +629,11 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     // Delete all existing blocks for this business
     await supabase.from('time_blocks').delete().eq('business_id', business.id)
     // Collect blocks to insert
-    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null }[] = []
+    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null; location_id: string | null }[] = []
     dayStates.forEach((ds, day) => {
       if (!ds.enabled) return
       ds.blocks.forEach(b => {
-        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null })
+        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null, location_id: b.location_id || null })
       })
     })
     if (toInsert.length > 0) {
@@ -1307,8 +1307,19 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                                 value={block.label}
                                 onChange={e => updateBlock(day, idx, 'label', e.target.value)}
                                 placeholder="Mañana, Tarde... (opcional)"
-                                className="w-44 text-sm"
+                                className="w-40 text-sm"
                               />
+                              {activeLocations.length > 0 && (
+                                <Select value={block.location_id || '__none__'} onValueChange={v => updateBlock(day, idx, 'location_id', v === '__none__' ? '' : (v ?? ''))}>
+                                  <SelectTrigger className="w-40 text-sm">
+                                    <SelectValue>{block.location_id ? (activeLocations.find(l => l.id === block.location_id)?.name ?? 'Consultorio') : 'Sin consultorio'}</SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Sin consultorio</SelectItem>
+                                    {activeLocations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              )}
                               <button
                                 onClick={() => removeBlock(day, idx)}
                                 className="text-muted-foreground hover:text-red-400 transition-colors"

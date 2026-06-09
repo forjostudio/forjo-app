@@ -21,7 +21,7 @@ export default async function PagoExitoso({ params, searchParams }: Props) {
     const supabase = createAdminClient()
     const { data: appt } = await supabase
       .from('appointments')
-      .select('date, time, client_name, client_phone, client_email, cancel_token, duration_minutes, professionals(name), services(name, price, duration_minutes), businesses(name, type, slug, logo_url, address, maps_url, whatsapp)')
+      .select('date, time, client_name, client_phone, client_email, cancel_token, duration_minutes, professionals(name), services(name, price, duration_minutes), locations(name, address), businesses(name, type, slug, logo_url, address, maps_url, whatsapp)')
       .eq('id', ref)
       .single()
 
@@ -29,6 +29,7 @@ export default async function PagoExitoso({ params, searchParams }: Props) {
       const business = appt.businesses as { name?: string; type?: string | null; slug?: string; logo_url?: string | null; address?: string | null; maps_url?: string | null; whatsapp?: string | null } | null
       const service = appt.services as { name?: string; price?: number | null; duration_minutes?: number | null } | null
       const professional = appt.professionals as { name?: string } | null
+      const location = appt.locations as { name?: string; address?: string | null } | null
       return (
         <ConfirmationView
           businessName={business?.name ?? ''}
@@ -38,6 +39,8 @@ export default async function PagoExitoso({ params, searchParams }: Props) {
           address={business?.address ?? null}
           mapsUrl={business?.maps_url ?? null}
           whatsapp={business?.whatsapp ?? null}
+          locationName={location?.name ?? null}
+          locationAddress={location?.address ?? null}
           clientName={appt.client_name}
           clientPhone={appt.client_phone}
           clientEmail={appt.client_email}

@@ -78,6 +78,8 @@ export interface TimeBlock {
   start_time: string
   end_time: string
   label: string | null
+  // Consultorio/sucursal del bloque (Capa 2a). null = sede única / sin consultorio.
+  location_id: string | null
   created_at: string
 }
 
@@ -158,6 +160,8 @@ export interface Appointment {
   business_id: string
   professional_id: string | null
   service_id: string | null
+  // Consultorio/sucursal donde quedó el turno (Capa 2a). null = sede única.
+  location_id?: string | null
   client_id: string | null
   client_name: string
   client_phone: string | null

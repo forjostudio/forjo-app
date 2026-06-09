@@ -27,6 +27,7 @@ export async function POST(request: Request) {
   const slug = typeof body.slug === 'string' ? body.slug : ''
   const serviceId = typeof body.serviceId === 'string' ? body.serviceId : ''
   const professionalId = typeof body.professionalId === 'string' ? body.professionalId : null
+  const locationId = typeof body.locationId === 'string' ? body.locationId : null
   const date = typeof body.date === 'string' ? body.date : ''
   const time = typeof body.time === 'string' ? body.time : ''
   const clientName = typeof body.clientName === 'string' ? body.clientName.trim() : ''
@@ -172,6 +173,18 @@ export async function POST(request: Request) {
 
   // Insert del turno. El índice 011 es el respaldo ATÓMICO: si dos requests pasan el re-check
   // en la misma carrera, Postgres rechaza el segundo con 23505 y lo traducimos a slot_taken.
+  // Consultorio: solo aceptamos un location_id que sea de ESTE negocio (aislamiento por tenant).
+  let validLocationId: string | null = null
+  if (locationId) {
+    const { data: loc } = await supabase
+      .from('locations')
+      .select('id')
+      .eq('id', locationId)
+      .eq('business_id', business.id)
+      .maybeSingle()
+    validLocationId = loc ? locationId : null
+  }
+
   const { data: appt, error: insertErr } = await supabase
     .from('appointments')
     .insert({
@@ -182,6 +195,7 @@ export async function POST(request: Request) {
       client_email: clientEmail,
       service_id: service.id,
       professional_id: proId,
+      location_id: validLocationId,
       date,
       time,
       duration_minutes: Number(service.duration_minutes || 30),

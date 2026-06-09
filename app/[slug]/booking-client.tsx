@@ -20,6 +20,8 @@ interface Props {
   timeBlocks: TimeBlock[]
   // Excepciones por fecha (capa 1): anular o cambiar el horario de un día puntual.
   exceptions: { date: string; closed: boolean; start_time: string | null; end_time: string | null }[]
+  // Consultorios/sucursales activos (capa 2a). Los slots se etiquetan con su consultorio.
+  locations: { id: string; name: string; address: string | null }[]
 }
 
 function timeToMinutes(t: string) {
@@ -33,14 +35,15 @@ function minutesToTime(m: number) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
-export function BookingClient({ business, services, professionals, timeBlocks, exceptions }: Props) {
+export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations }: Props) {
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedPro, setSelectedPro] = useState<Professional | null | 'none'>('none')
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedTime, setSelectedTime] = useState('')
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null)
   const [calMonth, setCalMonth] = useState<Date>(() => startOfMonth(new Date()))
-  const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const [availableSlots, setAvailableSlots] = useState<{ time: string; locationId: string | null }[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
@@ -88,14 +91,16 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     if (!date || !selectedService) return
     setSelectedDate(date)
     setSelectedTime('')
+    setSelectedLocationId(null)
     setLoadingSlots(true)
 
     const dateStr = format(date, 'yyyy-MM-dd')
     const ex = exceptionByDate.get(dateStr)
     // Excepción del día: cerrado → sin slots; horario especial → ese rango; si no, la grilla semanal.
-    const dayBlocks: { start_time: string; end_time: string }[] = ex
-      ? ((!ex.closed && ex.start_time && ex.end_time) ? [{ start_time: ex.start_time, end_time: ex.end_time }] : [])
-      : timeBlocks.filter(b => b.day_of_week === date.getDay())
+    // Cada bloque lleva su consultorio (location_id) para etiquetar los slots.
+    const dayBlocks: { start_time: string; end_time: string; location_id: string | null }[] = ex
+      ? ((!ex.closed && ex.start_time && ex.end_time) ? [{ start_time: ex.start_time, end_time: ex.end_time, location_id: null }] : [])
+      : timeBlocks.filter(b => b.day_of_week === date.getDay()).map(b => ({ start_time: b.start_time, end_time: b.end_time, location_id: b.location_id }))
     if (dayBlocks.length === 0) {
       setAvailableSlots([])
       setLoadingSlots(false)
@@ -125,8 +130,9 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     const isToday = dateStr === todayStr
     const nowMinutes = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : -1
 
-    const slots: string[] = []
-    for (const block of dayBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+    const slots: { time: string; locationId: string | null }[] = []
+    const seen = new Set<string>()
+    for (const block of [...dayBlocks].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
       const openMin = timeToMinutes(block.start_time)
       const closeMin = timeToMinutes(block.end_time)
       for (let t = openMin; t + duration <= closeMin; t += duration) {
@@ -137,9 +143,15 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           const bEnd = bStart + (Number(b.duration_minutes) || 30)
           return t < bEnd && slotEnd > bStart
         })
-        if (!conflict) slots.push(minutesToTime(t))
+        if (conflict) continue
+        const time = minutesToTime(t)
+        const key = `${time}|${block.location_id ?? ''}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        slots.push({ time, locationId: block.location_id })
       }
     }
+    slots.sort((a, b) => a.time.localeCompare(b.time))
 
     setAvailableSlots(slots)
     setLoadingSlots(false)
@@ -185,6 +197,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           professionalId: proId,
           date: dateStr,
           time: selectedTime,
+          locationId: selectedLocationId,
           clientName,
           clientPhone: clientPhone || null,
           clientEmail: clientEmail || null,
@@ -426,20 +439,23 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   <p className="text-center text-muted-foreground text-sm py-4">No hay horarios disponibles para este día</p>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {availableSlots.map(slot => (
-                      <button
-                        key={slot}
-                        onClick={() => setSelectedTime(slot)}
-                        className={cn(
-                          'py-2 px-3 rounded-lg text-sm font-medium transition-colors border',
-                          selectedTime === slot
-                            ? 'bg-primary text-primary-foreground border-primary'
-                            : 'border-border bg-card hover:border-primary'
-                        )}
-                      >
-                        {slot}
-                      </button>
-                    ))}
+                    {availableSlots.map(slot => {
+                      const sel = selectedTime === slot.time && selectedLocationId === slot.locationId
+                      const locName = slot.locationId ? (locations.find(l => l.id === slot.locationId)?.name ?? null) : null
+                      return (
+                        <button
+                          key={`${slot.time}|${slot.locationId ?? ''}`}
+                          onClick={() => { setSelectedTime(slot.time); setSelectedLocationId(slot.locationId) }}
+                          className={cn(
+                            'py-2 px-3 rounded-lg text-sm font-medium transition-colors border flex flex-col items-center leading-tight',
+                            sel ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card hover:border-primary'
+                          )}
+                        >
+                          <span>{slot.time}</span>
+                          {locName && <span className={cn('text-[10px] font-normal truncate max-w-full', sel ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{locName}</span>}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -465,6 +481,9 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
               <p className="text-muted-foreground">
                 {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} a las <strong className="text-foreground">{selectedTime}</strong>
               </p>
+              {selectedLocationId && (
+                <p className="text-muted-foreground">Consultorio: <span className="text-foreground">{locations.find(l => l.id === selectedLocationId)?.name}</span></p>
+              )}
               {requireDeposit && (
                 <p className="text-muted-foreground">
                   Seña requerida: <strong className="text-foreground">${Number(business.deposit_amount).toLocaleString('es-AR')}</strong>
