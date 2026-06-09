@@ -1,6 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { NextRequest } from 'next/server'
 
+// Disponibilidad SIEMPRE fresca: nunca cachear (ni framework ni CDN ni browser). Un turno
+// recién tomado tiene que verse ocupado en la próxima consulta.
+export const dynamic = 'force-dynamic'
+
 // Sentinela para el "sin profesional": debe coincidir con el COALESCE del índice 011 para
 // que la disponibilidad y la constraint hablen el mismo idioma (cada profesional —y el "sin
 // preferencia"— tiene su propia agenda).
@@ -51,5 +55,5 @@ export async function GET(request: NextRequest) {
     .filter(a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
     .map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at }))
 
-  return Response.json({ ok: true, busy })
+  return Response.json({ ok: true, busy }, { headers: { 'Cache-Control': 'no-store' } })
 }

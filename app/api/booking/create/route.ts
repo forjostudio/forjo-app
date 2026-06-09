@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   // Negocio por slug (tenant).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, require_deposit, deposit_amount')
+    .select('id, require_deposit, deposit_amount, deposit_expiry_hours')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
@@ -77,25 +77,50 @@ export async function POST(request: Request) {
   }
 
   // Re-check de disponibilidad (exact-start, consistente con el índice 011). Bucket de
-  // profesional por coalesce(sentinel). pending_payment vencido NO ocupa.
+  // profesional por coalesce(sentinel).
   const bucket = proId ?? SENTINEL
   const nowMs = Date.now()
   const { data: clashes } = await supabase
     .from('appointments')
-    .select('status, expires_at, professional_id')
+    .select('id, status, expires_at, professional_id')
     .eq('business_id', business.id)
     .eq('date', date)
     .eq('time', time)
     .in('status', ['confirmed', 'pending_payment'])
 
-  const taken = (clashes || [])
-    .filter(a => (a.professional_id ?? SENTINEL) === bucket)
-    .some(a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
+  const sameBucket = (clashes || []).filter(a => (a.professional_id ?? SENTINEL) === bucket)
+
+  // ¿Ocupado de verdad? confirmed, o pending_payment cuya seña NO venció (o aún sin setear).
+  const taken = sameBucket.some(a =>
+    a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
+  )
   if (taken) {
     return Response.json({ ok: false, error: 'slot_taken' }, { status: 409 })
   }
 
+  // Liberar "holds" vencidos (pending_payment con seña expirada): la disponibilidad ya los
+  // muestra libres, pero el índice 011 los sigue contando hasta que el cron los cancele.
+  // Sin esto el slot se ve libre pero el insert choca con 23505. Los cancelamos acá mismo
+  // (consistente con cancel-expired), filtrando por business_id (tenant).
+  const expiredHoldIds = sameBucket
+    .filter(a => a.status === 'pending_payment' && a.expires_at != null && new Date(a.expires_at as string).getTime() <= nowMs)
+    .map(a => a.id)
+  if (expiredHoldIds.length > 0) {
+    await supabase
+      .from('appointments')
+      .update({ status: 'cancelled' })
+      .in('id', expiredHoldIds)
+      .eq('business_id', business.id)
+  }
+
   const initialStatus = requireDeposit ? 'pending_payment' : 'confirmed'
+  // pending_payment SIEMPRE con expires_at: si la reserva se abandona antes de iniciar el
+  // pago, el cron la libera. payment/create lo reescribe con su propia ventana. Sin esto, un
+  // hold sin expires_at quedaría ocupando el slot para siempre (el cron solo cancela vencidos).
+  const expiryHours = Number(business.deposit_expiry_hours) || 1
+  const expiresAt = requireDeposit
+    ? new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString()
+    : null
 
   const { data: client } = await supabase
     .from('clients')
@@ -118,6 +143,7 @@ export async function POST(request: Request) {
       date,
       time,
       status: initialStatus,
+      expires_at: expiresAt,
     })
     .select('id')
     .single()

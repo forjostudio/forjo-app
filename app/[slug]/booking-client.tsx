@@ -87,7 +87,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     try {
       const params = new URLSearchParams({ slug: business.slug, date: dateStr })
       if (proId) params.set('professionalId', proId)
-      const res = await fetch(`/api/booking/availability?${params.toString()}`)
+      const res = await fetch(`/api/booking/availability?${params.toString()}`, { cache: 'no-store' })
       const data = await res.json().catch(() => null)
       if (res.ok && data?.ok) {
         for (const b of (data.busy as { time: string }[])) busyTimes.add(b.time.slice(0, 5))
