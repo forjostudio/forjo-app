@@ -521,9 +521,10 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     toast.success('Día normalizado')
   }
 
-  // Selección múltiple de días (vacaciones): cerrar o normalizar varios de una.
+  // Selección múltiple de días (vacaciones): cerrar, dar horario especial o normalizar varios de una.
   const [excMulti, setExcMulti] = useState(false)
   const [excSel, setExcSel] = useState<Set<string>>(new Set())
+  const [excBulk, setExcBulk] = useState({ start: '09:00', end: '18:00' })
   async function bulkCloseDays(dates: string[]) {
     if (dates.length === 0) return
     const rows = dates.map(date => ({ business_id: business.id, date, closed: true, start_time: null, end_time: null }))
@@ -536,6 +537,20 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     })
     setExcSel(new Set()); setExcMulti(false)
     toast.success(`${dates.length} día${dates.length > 1 ? 's' : ''} cerrado${dates.length > 1 ? 's' : ''}`)
+  }
+  async function bulkSpecialDays(dates: string[], start: string, end: string) {
+    if (dates.length === 0) return
+    if (end <= start) { toast.error('La hora fin debe ser mayor a la inicio'); return }
+    const rows = dates.map(date => ({ business_id: business.id, date, closed: false, start_time: start, end_time: end }))
+    const { data, error } = await supabase.from('schedule_exceptions').upsert(rows, { onConflict: 'business_id,date' }).select()
+    if (error) { toast.error('Error al guardar'); return }
+    setExceptions(prev => {
+      const m = new Map(prev.map(e => [e.date, e]))
+      for (const e of (data as ScheduleException[])) m.set(e.date, e)
+      return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date))
+    })
+    setExcSel(new Set()); setExcMulti(false)
+    toast.success(`Horario especial en ${dates.length} día${dates.length > 1 ? 's' : ''}`)
   }
   async function bulkClearDays(dates: string[]) {
     if (dates.length === 0) return
@@ -1453,10 +1468,19 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </Button>
             </div>
             {excMulti && excSel.size > 0 && (
-              <div className="flex items-center gap-2 flex-wrap rounded-md bg-secondary/50 p-2">
-                <span className="text-xs text-muted-foreground">{excSel.size} día{excSel.size > 1 ? 's' : ''} seleccionado{excSel.size > 1 ? 's' : ''}</span>
-                <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => bulkCloseDays([...excSel])}>Cerrar</Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
+              <div className="rounded-md bg-secondary/50 p-3 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground flex-1 min-w-full sm:min-w-0">{excSel.size} día{excSel.size > 1 ? 's' : ''} seleccionado{excSel.size > 1 ? 's' : ''}</span>
+                  <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap border-t border-border pt-3">
+                  <span className="text-xs font-medium">Horario especial</span>
+                  <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-28 text-sm h-8" />
+                  <span className="text-muted-foreground text-sm">→</span>
+                  <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-28 text-sm h-8" />
+                  <Button size="sm" className="h-8 text-xs" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar a todos</Button>
+                </div>
               </div>
             )}
             <div className="max-w-sm">
