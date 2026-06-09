@@ -115,6 +115,7 @@ export function FinancesClient({ businessId }: Props) {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [loading, setLoading] = useState(true)
+  const [txTab, setTxTab] = useState('appointments')
 
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [sales, setSales] = useState<ManualSale[]>([])
@@ -767,12 +768,16 @@ export function FinancesClient({ businessId }: Props) {
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="appointments">
-        <TabsList>
-          <TabsTrigger value="appointments">Turnos ({appointments.length})</TabsTrigger>
-          <TabsTrigger value="sales">Ventas ({sales.length})</TabsTrigger>
-          <TabsTrigger value="expenses">Egresos ({expenses.length})</TabsTrigger>
-        </TabsList>
+      <Tabs value={txTab} onValueChange={setTxTab}>
+        <div className="flex items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="appointments">Turnos ({appointments.length})</TabsTrigger>
+            <TabsTrigger value="sales">Ventas ({sales.length})</TabsTrigger>
+            <TabsTrigger value="expenses">Egresos ({expenses.length})</TabsTrigger>
+          </TabsList>
+          {txTab === 'sales' && <Button size="sm" className="gap-2 flex-shrink-0" onClick={openNewSale}><Plus className="w-4 h-4" /> Nueva venta</Button>}
+          {txTab === 'expenses' && <Button size="sm" className="gap-2 flex-shrink-0" onClick={openNewExpense}><Plus className="w-4 h-4" /> Nuevo egreso</Button>}
+        </div>
 
         <TabsContent value="appointments" className="space-y-2 mt-4">
           {appointments.length === 0 ? (
@@ -796,9 +801,6 @@ export function FinancesClient({ businessId }: Props) {
         </TabsContent>
 
         <TabsContent value="sales" className="space-y-3 mt-4">
-          <div className="flex justify-end">
-            <Button size="sm" className="gap-2" onClick={openNewSale}><Plus className="w-4 h-4" /> Nueva venta</Button>
-          </div>
           {sales.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-sm">Sin ventas en este período</p>
           ) : sales.map(sale => {
@@ -824,9 +826,6 @@ export function FinancesClient({ businessId }: Props) {
         </TabsContent>
 
         <TabsContent value="expenses" className="space-y-3 mt-4">
-          <div className="flex justify-end">
-            <Button size="sm" className="gap-2" onClick={openNewExpense}><Plus className="w-4 h-4" /> Nuevo egreso</Button>
-          </div>
           {expenses.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-sm">Sin egresos en este período</p>
           ) : expenses.map(exp => (

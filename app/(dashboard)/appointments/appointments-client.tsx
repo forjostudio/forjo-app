@@ -322,7 +322,7 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-4xl">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <PageEyebrow label="Agenda" />

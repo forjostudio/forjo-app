@@ -309,6 +309,37 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const [editingPro, setEditingPro] = useState<Professional | null>(null)
   const [editPro, setEditPro] = useState<ProForm>(EMPTY_PRO)
   const [savingEditPro, setSavingEditPro] = useState(false)
+  const [uploadingProPhoto, setUploadingProPhoto] = useState(false)
+
+  // Foto del profesional (se muestra en la página pública). Mismo bucket que el logo,
+  // bajo la carpeta del negocio: logos/{businessId}/pro-{proId}.{ext}.
+  async function uploadProPhoto(file: File) {
+    if (!editingPro) return
+    if (file.size > 2 * 1024 * 1024) { toast.error('El archivo no puede superar 2MB'); return }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { toast.error('Formato no soportado. Usá JPG, PNG o WebP'); return }
+    setUploadingProPhoto(true)
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const path = `${business.id}/pro-${editingPro.id}.${ext}`
+    const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true })
+    if (error) { toast.error('Error al subir la foto: ' + error.message); setUploadingProPhoto(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path)
+    const url = `${publicUrl}?t=${Date.now()}`
+    const { error: upErr } = await supabase.from('professionals').update({ photo_url: url }).eq('id', editingPro.id)
+    if (upErr) { toast.error('Error al guardar la foto'); setUploadingProPhoto(false); return }
+    setProfessionals(prev => prev.map(p => p.id === editingPro.id ? { ...p, photo_url: url } : p))
+    setEditingPro(prev => prev ? { ...prev, photo_url: url } : prev)
+    setUploadingProPhoto(false)
+    toast.success('Foto actualizada')
+  }
+  async function removeProPhoto() {
+    if (!editingPro) return
+    const { error } = await supabase.from('professionals').update({ photo_url: null }).eq('id', editingPro.id)
+    if (error) { toast.error('Error al quitar la foto'); return }
+    setProfessionals(prev => prev.map(p => p.id === editingPro.id ? { ...p, photo_url: null } : p))
+    setEditingPro(prev => prev ? { ...prev, photo_url: null } : prev)
+    toast.success('Foto eliminada')
+  }
+
   const canAddPro = professionals.filter(p => p.active).length < planConfig.max_professionals
   // Labels de Especialidad/Matrícula según el rubro del negocio.
   const proLabels = PRO_LABELS[getVerticalKeyByType(business.type)] ?? PRO_LABELS.general
@@ -971,9 +1002,14 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                 const sub = [p.specialty, p.license_number].filter(Boolean).join(' · ')
                 return (
                   <div key={p.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-semibold flex-shrink-0">
-                      {p.name.charAt(0).toUpperCase()}
-                    </div>
+                    {p.photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.photo_url} alt={p.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-semibold flex-shrink-0">
+                        {p.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">{fullName}</p>
                       {sub && <p className="text-xs text-muted-foreground truncate">{sub}</p>}
@@ -1294,6 +1330,39 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       <Dialog open={!!editingPro} onOpenChange={open => { if (!open) setEditingPro(null) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Editar profesional</DialogTitle></DialogHeader>
+          {/* Foto del profesional — se muestra en la página pública de reservas */}
+          <div className="flex items-center gap-4">
+            {editingPro?.photo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={editingPro.photo_url} alt={editingPro.name} className="w-16 h-16 rounded-full object-cover border border-border flex-shrink-0" />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xl font-semibold flex-shrink-0">
+                {(editPro.name.charAt(0) || '?').toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-xs font-medium">Foto del profesional</p>
+              <p className="text-[11px] text-muted-foreground">Se muestra en tu página pública. JPG, PNG o WebP · máx 2MB.</p>
+              <div className="flex items-center gap-2 pt-2">
+                <label className={cn(
+                  'inline-flex items-center h-7 px-2.5 rounded-md border border-border text-xs font-medium cursor-pointer hover:border-primary hover:text-primary transition-colors',
+                  uploadingProPhoto && 'opacity-60 pointer-events-none'
+                )}>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    disabled={uploadingProPhoto}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadProPhoto(f); e.target.value = '' }}
+                  />
+                  {uploadingProPhoto ? 'Subiendo...' : (editingPro?.photo_url ? 'Cambiar' : 'Subir foto')}
+                </label>
+                {editingPro?.photo_url && (
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={removeProPhoto}>Quitar</Button>
+                )}
+              </div>
+            </div>
+          </div>
           <ProFields value={editPro} onChange={setEditPro} labels={proLabels} showExtra />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setEditingPro(null)}>Cancelar</Button>
