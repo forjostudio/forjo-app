@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { format, startOfDay, addDays } from 'date-fns'
+import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import type { PublicBusiness, Service, Professional, TimeBlock } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Check, Clock, ChevronLeft } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Check, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -35,11 +36,13 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
   const [selectedPro, setSelectedPro] = useState<Professional | null | 'none'>('none')
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedTime, setSelectedTime] = useState('')
+  const [calMonth, setCalMonth] = useState<Date>(() => startOfMonth(new Date()))
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [clientEmail, setClientEmail] = useState('')
+  const [clientNotes, setClientNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -57,17 +60,15 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     }
   }, [requireDeposit, siteKey])
 
-  // Próximos días abiertos (según los time_blocks) como pills, en vez de un calendario.
-  const upcomingDays = useMemo(() => {
-    const open = [...new Set(timeBlocks.map(b => b.day_of_week))]
-    const days: Date[] = []
-    const start = startOfDay(new Date())
-    for (let i = 0; days.length < 14 && i < 90; i++) {
-      const d = addDays(start, i)
-      if (open.includes(d.getDay())) days.push(d)
-    }
-    return days
-  }, [timeBlocks])
+  // Días de la semana abiertos (de los time_blocks) para deshabilitar el resto en el calendario.
+  const openDaysSet = useMemo(() => new Set(timeBlocks.map(b => b.day_of_week)), [timeBlocks])
+  // Grilla del mes mostrado, en semanas de lunes a domingo.
+  const calendarDays = useMemo(() => {
+    const start = startOfWeek(startOfMonth(calMonth), { weekStartsOn: 1 })
+    const end = endOfWeek(endOfMonth(calMonth), { weekStartsOn: 1 })
+    return eachDayOfInterval({ start, end })
+  }, [calMonth])
+  const thisMonth = startOfMonth(new Date())
 
   async function handleDateSelect(date: Date | undefined) {
     if (!date || !selectedService) return
@@ -168,6 +169,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
           clientName,
           clientPhone: clientPhone || null,
           clientEmail: clientEmail || null,
+          notes: clientNotes || null,
           recaptchaToken,
         }),
       })
@@ -352,30 +354,62 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
           <div>
             <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí día y horario</h2>
 
-            {/* Día — pills de los próximos días abiertos */}
+            {/* Día — calendario mensual con cuadrados y navegación de mes */}
             <p className="text-sm font-semibold mb-2 font-[family-name:var(--font-heading)]">Día</p>
-            {upcomingDays.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-3">No hay días disponibles por ahora.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {upcomingDays.map(d => {
-                  const sel = selectedDate != null && format(d, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  type="button"
+                  onClick={() => setCalMonth(m => addMonths(m, -1))}
+                  disabled={isSameMonth(calMonth, thisMonth)}
+                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  aria-label="Mes anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-sm font-semibold capitalize font-[family-name:var(--font-heading)]">{format(calMonth, 'MMMM yyyy', { locale: es })}</span>
+                <button
+                  type="button"
+                  onClick={() => setCalMonth(m => addMonths(m, 1))}
+                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  aria-label="Mes siguiente"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 mb-1">
+                {['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'].map(w => (
+                  <div key={w} className="text-center text-[10px] font-semibold uppercase text-muted-foreground">{w}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {calendarDays.map(d => {
+                  const inMonth = isSameMonth(d, calMonth)
+                  const isPast = isBefore(d, startOfDay(new Date()))
+                  const isOpen = openDaysSet.has(d.getDay())
+                  const disabled = !inMonth || isPast || !isOpen
+                  const sel = selectedDate != null && isSameDay(d, selectedDate)
                   return (
                     <button
-                      key={format(d, 'yyyy-MM-dd')}
+                      key={d.toISOString()}
+                      type="button"
+                      disabled={disabled}
                       onClick={() => handleDateSelect(d)}
                       className={cn(
-                        'flex flex-col items-center justify-center min-w-[58px] px-3 py-2 rounded-lg border transition-colors',
-                        sel ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card hover:border-primary'
+                        'aspect-square rounded-md text-sm font-medium flex items-center justify-center border transition-colors',
+                        sel
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : disabled
+                            ? 'border-transparent text-muted-foreground/30 cursor-default'
+                            : 'border-border bg-card hover:border-primary'
                       )}
                     >
-                      <span className="text-[10px] font-semibold uppercase tracking-wide">{format(d, 'EEE', { locale: es })}</span>
-                      <span className="text-base font-bold leading-none mt-0.5">{format(d, 'd')}</span>
+                      {format(d, 'd')}
                     </button>
                   )
                 })}
               </div>
-            )}
+            </div>
 
             {/* Horario */}
             {selectedDate && (
@@ -458,6 +492,16 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
                   value={clientEmail}
                   onChange={e => setClientEmail(e.target.value)}
                   placeholder="tu@email.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Notas para el negocio <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+                <Textarea
+                  value={clientNotes}
+                  onChange={e => setClientNotes(e.target.value)}
+                  placeholder="¿Algo que quieras avisar? (alergias, preferencias, etc.)"
+                  rows={3}
+                  className="resize-none"
                 />
               </div>
             </div>

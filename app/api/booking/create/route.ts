@@ -32,6 +32,7 @@ export async function POST(request: Request) {
   const clientName = typeof body.clientName === 'string' ? body.clientName.trim() : ''
   const clientPhone = typeof body.clientPhone === 'string' && body.clientPhone.trim() ? body.clientPhone.trim() : null
   const clientEmail = typeof body.clientEmail === 'string' && body.clientEmail.trim() ? body.clientEmail.trim() : null
+  const notes = typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim().slice(0, 1000) : null
   const recaptchaToken = typeof body.recaptchaToken === 'string' ? body.recaptchaToken : ''
 
   if (!slug || !serviceId || !date || !time || !clientName) {
@@ -156,6 +157,7 @@ export async function POST(request: Request) {
       date,
       time,
       duration_minutes: Number(service.duration_minutes || 30),
+      notes,
       status: initialStatus,
       expires_at: expiresAt,
     })

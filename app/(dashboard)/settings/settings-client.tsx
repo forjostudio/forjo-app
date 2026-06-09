@@ -564,7 +564,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       </div>
 
       <Tabs defaultValue="appearance">
-        <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 w-full lg:w-auto h-auto">
+        <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
           <TabsTrigger value="appearance">Apariencia</TabsTrigger>
           <TabsTrigger value="business">Negocio</TabsTrigger>
           <TabsTrigger value="services">Servicios</TabsTrigger>
