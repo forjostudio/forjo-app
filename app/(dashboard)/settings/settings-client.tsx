@@ -1088,7 +1088,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
           <Card className="p-6 space-y-3">
             <div>
               <p className="font-semibold text-sm">Reservas con seña vencida</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Cancela las reservas cuya seña no se pagó a tiempo y libera esos horarios. Se hace solo cada hora; podés forzarlo acá.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Cancela las reservas cuya seña no se pagó a tiempo y libera esos horarios. Se hace solo una vez por día; podés forzarlo acá.</p>
             </div>
             <Button variant="outline" onClick={cleanupExpired} disabled={cleaningUp}>
               {cleaningUp ? 'Limpiando...' : 'Liberar horarios vencidos'}
