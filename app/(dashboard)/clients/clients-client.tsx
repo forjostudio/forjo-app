@@ -426,7 +426,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                   <SelectTrigger className="h-8 text-xs flex-1 min-w-[120px]">
                     <SelectValue>{filterPro === 'all' ? 'Profesional' : (professionals.find(p => p.id === filterPro)?.name ?? 'Profesional')}</SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="min-w-[230px]">
                     <SelectItem value="all">Todos los profesionales</SelectItem>
                     {professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                   </SelectContent>
@@ -437,7 +437,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                   <SelectTrigger className="h-8 text-xs flex-1 min-w-[120px]">
                     <SelectValue>{filterInsurance === 'all' ? 'Obra social' : filterInsurance}</SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="min-w-[230px]">
                     <SelectItem value="all">Todas las obras sociales</SelectItem>
                     {insuranceOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                   </SelectContent>

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Plus, Trash2, Paperclip, Upload, ShieldCheck, Download, X } from 'lucide-react'
 
 // Panel de Historia Clínica de UN paciente: obra social, evolución (notas),
@@ -37,6 +38,7 @@ export function ClinicalHistoryPanel({
 
   const [notes, setNotes] = useState<ClinicalNote[]>([])
   const [attachments, setAttachments] = useState<ClientAttachment[]>([])
+  const [confirmDeleteAtt, setConfirmDeleteAtt] = useState<ClientAttachment | null>(null)
   const [loadingData, setLoadingData] = useState(true)
 
   const [noteText, setNoteText] = useState('')
@@ -140,6 +142,7 @@ export function ClinicalHistoryPanel({
     const { error } = await supabase.from('client_attachments').delete().eq('id', att.id)
     if (error) { toast.error('Error al eliminar'); return }
     setAttachments(prev => prev.filter(a => a.id !== att.id))
+    setConfirmDeleteAtt(null)
     toast.success('Archivo eliminado')
   }
 
@@ -238,7 +241,7 @@ export function ClinicalHistoryPanel({
                 <button onClick={() => viewAttachment(att)} className="text-muted-foreground hover:text-foreground transition-colors" title="Ver / descargar">
                   <Download className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => deleteAttachment(att)} className="text-muted-foreground hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" title="Eliminar">
+                <button onClick={() => setConfirmDeleteAtt(att)} className="text-muted-foreground hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" title="Eliminar">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -246,6 +249,19 @@ export function ClinicalHistoryPanel({
           </div>
         )}
       </div>
+
+      <Dialog open={!!confirmDeleteAtt} onOpenChange={open => { if (!open) setConfirmDeleteAtt(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>¿Eliminar archivo?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Se va a eliminar <strong className="text-foreground">{confirmDeleteAtt?.file_name || 'este archivo'}</strong> de forma permanente. Esta acción no se puede deshacer.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConfirmDeleteAtt(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => { if (confirmDeleteAtt) deleteAttachment(confirmDeleteAtt) }}>Eliminar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -310,22 +310,44 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const [editPro, setEditPro] = useState<ProForm>(EMPTY_PRO)
   const [savingEditPro, setSavingEditPro] = useState(false)
   const [uploadingProPhoto, setUploadingProPhoto] = useState(false)
+  const [newProPhoto, setNewProPhoto] = useState<File | null>(null)
+  const [newProPhotoPreview, setNewProPhotoPreview] = useState<string | null>(null)
 
   // Foto del profesional (se muestra en la página pública). Mismo bucket que el logo,
   // bajo la carpeta del negocio: logos/{businessId}/pro-{proId}.{ext}.
-  async function uploadProPhoto(file: File) {
-    if (!editingPro) return
-    if (file.size > 2 * 1024 * 1024) { toast.error('El archivo no puede superar 2MB'); return }
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { toast.error('Formato no soportado. Usá JPG, PNG o WebP'); return }
-    setUploadingProPhoto(true)
+  function validatePhoto(file: File): boolean {
+    if (file.size > 2 * 1024 * 1024) { toast.error('El archivo no puede superar 2MB'); return false }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { toast.error('Formato no soportado. Usá JPG, PNG o WebP'); return false }
+    return true
+  }
+  async function uploadPhotoFile(proId: string, file: File): Promise<string | null> {
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const path = `${business.id}/pro-${editingPro.id}.${ext}`
+    const path = `${business.id}/pro-${proId}.${ext}`
     const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true })
-    if (error) { toast.error('Error al subir la foto: ' + error.message); setUploadingProPhoto(false); return }
+    if (error) { toast.error('Error al subir la foto: ' + error.message); return null }
     const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path)
-    const url = `${publicUrl}?t=${Date.now()}`
-    const { error: upErr } = await supabase.from('professionals').update({ photo_url: url }).eq('id', editingPro.id)
-    if (upErr) { toast.error('Error al guardar la foto'); setUploadingProPhoto(false); return }
+    return `${publicUrl}?t=${Date.now()}`
+  }
+
+  // Alta: se elige antes de que exista el profesional; se sube en addProfessional.
+  function selectNewProPhoto(file: File) {
+    if (!validatePhoto(file)) return
+    setNewProPhoto(file)
+    setNewProPhotoPreview(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file) })
+  }
+  function clearNewProPhoto() {
+    setNewProPhotoPreview(prev => { if (prev) URL.revokeObjectURL(prev); return null })
+    setNewProPhoto(null)
+  }
+
+  // Edición: sube y persiste de inmediato.
+  async function uploadProPhoto(file: File) {
+    if (!editingPro || !validatePhoto(file)) return
+    setUploadingProPhoto(true)
+    const url = await uploadPhotoFile(editingPro.id, file)
+    if (!url) { setUploadingProPhoto(false); return }
+    const { error } = await supabase.from('professionals').update({ photo_url: url }).eq('id', editingPro.id)
+    if (error) { toast.error('Error al guardar la foto'); setUploadingProPhoto(false); return }
     setProfessionals(prev => prev.map(p => p.id === editingPro.id ? { ...p, photo_url: url } : p))
     setEditingPro(prev => prev ? { ...prev, photo_url: url } : prev)
     setUploadingProPhoto(false)
@@ -353,10 +375,20 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       .insert({ ...proToPayload(newPro), business_id: business.id })
       .select()
       .single()
+    if (error) { setSavingPro(false); toast.error('Error al agregar'); return }
+    let created = data as Professional
+    // Si eligió foto en el alta, la subimos ahora que existe el id.
+    if (newProPhoto) {
+      const url = await uploadPhotoFile(created.id, newProPhoto)
+      if (url) {
+        await supabase.from('professionals').update({ photo_url: url }).eq('id', created.id)
+        created = { ...created, photo_url: url }
+      }
+    }
     setSavingPro(false)
-    if (error) { toast.error('Error al agregar'); return }
-    setProfessionals(prev => [...prev, data as Professional])
+    setProfessionals(prev => [...prev, created])
     setNewPro(EMPTY_PRO)
+    clearNewProPhoto()
     setProExtraOpen(false)
     toast.success('Profesional agregado')
   }
@@ -1032,6 +1064,23 @@ export function SettingsClient({ business, initialServices, initialProfessionals
             ) : (
               <div className="border-t border-border pt-4 space-y-3">
                 <p className="text-sm font-medium">Agregar profesional</p>
+                <div className="flex items-center gap-3">
+                  {newProPhotoPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={newProPhotoPreview} alt="" className="w-12 h-12 rounded-full object-cover border border-border flex-shrink-0" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center text-primary flex-shrink-0">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <label className="inline-flex items-center h-7 px-2.5 rounded-md border border-border text-xs font-medium cursor-pointer hover:border-primary hover:text-primary transition-colors">
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) selectNewProPhoto(f); e.target.value = '' }} />
+                    {newProPhoto ? 'Cambiar foto' : 'Foto (opcional)'}
+                  </label>
+                  {newProPhoto && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={clearNewProPhoto}>Quitar</Button>
+                  )}
+                </div>
                 <ProFields value={newPro} onChange={setNewPro} labels={proLabels} showExtra={proExtraOpen} />
                 {!proExtraOpen && (
                   <button type="button" onClick={() => setProExtraOpen(true)} className="text-xs text-primary hover:underline">
