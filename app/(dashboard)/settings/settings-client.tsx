@@ -490,6 +490,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     deposit_expiry_hours: business.deposit_expiry_hours || 1,
   })
   const [savingDeposit, setSavingDeposit] = useState(false)
+  const [cleaningUp, setCleaningUp] = useState(false)
 
   const [notifForm, setNotifForm] = useState({
     notification_email: business.notification_email || '',
@@ -519,6 +520,24 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     setSavingDeposit(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Configuración de seña guardada')
+  }
+  async function cleanupExpired() {
+    setCleaningUp(true)
+    try {
+      const res = await fetch('/api/appointments/cleanup-expired', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.ok) {
+        toast.success(data.cancelled > 0
+          ? `Se liberaron ${data.cancelled} reserva(s) con seña vencida`
+          : 'No había reservas vencidas para liberar')
+      } else {
+        toast.error('No se pudo limpiar. Probá de nuevo.')
+      }
+    } catch {
+      toast.error('No se pudo conectar. Probá de nuevo.')
+    } finally {
+      setCleaningUp(false)
+    }
   }
   async function saveNotif() {
     setSavingNotif(true)
@@ -1063,6 +1082,17 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
             )}
             <Button onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
+          </Card>
+
+          {/* Limpieza de reservas con seña vencida */}
+          <Card className="p-6 space-y-3">
+            <div>
+              <p className="font-semibold text-sm">Reservas con seña vencida</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Cancela las reservas cuya seña no se pagó a tiempo y libera esos horarios. Se hace solo cada hora; podés forzarlo acá.</p>
+            </div>
+            <Button variant="outline" onClick={cleanupExpired} disabled={cleaningUp}>
+              {cleaningUp ? 'Limpiando...' : 'Liberar horarios vencidos'}
+            </Button>
           </Card>
 
           {/* Notificaciones */}
