@@ -7,8 +7,12 @@ export interface Business {
   vertical?: string | null
   // Subconjunto de widgets del dashboard a mostrar (null = todos). Ver lib/dashboard-widgets.
   dashboard_widgets?: string[] | null
-  // Paleta de marca: red | blue | yellow | green | ink. Tiñe panel y página pública.
+  // Estilo visual de marca. Tiñen panel y página pública (data-theme/palette/font).
+  // theme: forjo|modern|spa|cyber · font: auto|geometrica|bauhaus|elegante|tech|suave
+  // palette: depende del theme (ver lib/theme-config). Default Forjo: red.
   palette?: string | null
+  theme?: string | null
+  font?: string | null
   logo_url: string | null
   primary_color: string
   // Contacto del negocio: WhatsApp normalizado a formato wa.me (ver lib/whatsapp).

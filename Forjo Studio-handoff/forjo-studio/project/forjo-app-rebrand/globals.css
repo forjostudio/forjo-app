@@ -60,11 +60,6 @@
 :root {
   --radius: 0.4rem;
 
-  /* Tipografía Forjo (default). next/font setea --font-grotesk/--font-archivo en <html>.
-     Los themes alternativos (app/themes.css) sobreescriben --font-sans/--font-heading. */
-  --font-sans: var(--font-grotesk), system-ui, sans-serif;
-  --font-heading: var(--font-archivo), system-ui, sans-serif;
-
   --background: #f3ead8;
   --foreground: #1a1714;
   --card: #fbf3e3;

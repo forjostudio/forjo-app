@@ -1,13 +1,26 @@
-// Setea data-palette en <html> antes de pintar, para que las variantes de paleta
-// (incluidas las de modo oscuro, que usan .dark[data-palette=x] en el MISMO elemento)
-// apliquen sin flash. next-themes maneja la clase .dark sobre el mismo <html>.
-export function PaletteScript({ palette }: { palette?: string | null }) {
-  const value = palette || 'red'
-  return (
-    <script
-      dangerouslySetInnerHTML={{
-        __html: `document.documentElement.dataset.palette=${JSON.stringify(value)}`,
-      }}
-    />
-  )
+// Setea el estilo visual del negocio en <html> antes de pintar (sin flash):
+//   data-palette  → siempre (default 'red')
+//   data-theme    → solo si NO es 'forjo' (forjo = sin atributo, como el preview)
+//   data-font     → solo si NO es 'auto'  (auto  = fuente nativa del theme)
+// Las variantes de modo oscuro usan .dark[data-theme=x][data-palette=x] en el MISMO
+// <html>; next-themes maneja la clase .dark sobre ese elemento.
+export function PaletteScript({
+  palette,
+  theme,
+  font,
+}: {
+  palette?: string | null
+  theme?: string | null
+  font?: string | null
+}) {
+  const pal = palette || 'red'
+  const th = theme && theme !== 'forjo' ? theme : ''
+  const ft = font && font !== 'auto' ? font : ''
+  const js =
+    `(()=>{const d=document.documentElement.dataset;` +
+    `d.palette=${JSON.stringify(pal)};` +
+    (th ? `d.theme=${JSON.stringify(th)};` : `delete d.theme;`) +
+    (ft ? `d.font=${JSON.stringify(ft)};` : `delete d.font;`) +
+    `})()`
+  return <script dangerouslySetInnerHTML={{ __html: js }} />
 }

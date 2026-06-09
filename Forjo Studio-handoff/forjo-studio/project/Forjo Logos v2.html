@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>Forjo Studio — refinamiento finalistas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; font-family: 'Space Grotesk', sans-serif; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="finalists.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+(() => {
+const DC = window.DesignCanvas;
+const Section = window.DCSection;
+const Artboard = window.DCArtboard;
+
+const W = 560, H = 320;
+const HEAD_W = 720, HEAD_H = 320;
+
+function App() {
+  return (
+    <DC
+      title="Forjo Studio — refinamiento de finalistas"
+      subtitle="01 · 09 · 12 · 14 — cada uno con: hero light/dark, variantes de color, marca aislada, y mockup en contexto"
+    >
+      <Section id="f01" title="01 · Classic — wordmark + clay dot">
+        <Artboard id="f01-hero" label="Hero · light" width={W} height={H}><F01_Hero/></Artboard>
+        <Artboard id="f01-dark" label="Hero · dark" width={W} height={H}><F01_Dark/></Artboard>
+        <Artboard id="f01-color" label="Variantes de dot" width={W} height={H}><F01_ColorAlts/></Artboard>
+        <Artboard id="f01-mark" label="Mark · 'f.' avatar" width={W} height={H}><F01_Mark/></Artboard>
+        <Artboard id="f01-header" label="Contexto · header del sitio" width={HEAD_W} height={HEAD_H}><F01_Header/></Artboard>
+        <Artboard id="f01-tab" label="Contexto · favicon en tab" width={W} height={H}><F01_Tab/></Artboard>
+      </Section>
+
+      <Section id="f09" title="09 · Bauhaus — formas primarias">
+        <Artboard id="f09-hero" label="Hero · full color" width={W} height={H}><F09_Hero/></Artboard>
+        <Artboard id="f09-dark" label="Hero · dark" width={W} height={H}><F09_Dark/></Artboard>
+        <Artboard id="f09-palettes" label="4 paletas" width={W} height={H}><F09_Palettes/></Artboard>
+        <Artboard id="f09-mark" label="Mark aislada · favicon" width={W} height={H}><F09_Mark/></Artboard>
+        <Artboard id="f09-header" label="Contexto · header del sitio" width={HEAD_W} height={HEAD_H}><F09_Header/></Artboard>
+        <Artboard id="f09-card" label="Contexto · tarjeta personal" width={W} height={H}><F09_Card/></Artboard>
+      </Section>
+
+      <Section id="f12" title="12 · Modular — F pixelada">
+        <Artboard id="f12-hero" label="Hero · light" width={W} height={H}><F12_Hero/></Artboard>
+        <Artboard id="f12-dark" label="Hero · dark" width={W} height={H}><F12_Dark/></Artboard>
+        <Artboard id="f12-color" label="Acentos · 4 variantes" width={W} height={H}><F12_ColorAlts/></Artboard>
+        <Artboard id="f12-mark" label="Mark · escalas favicon" width={W} height={H}><F12_Mark/></Artboard>
+        <Artboard id="f12-header" label="Contexto · header del sitio" width={HEAD_W} height={HEAD_H}><F12_Header/></Artboard>
+        <Artboard id="f12-tab" label="Contexto · avatar redes" width={W} height={H}><F12_Tab/></Artboard>
+      </Section>
+
+      <Section id="f14" title="14 · F Block — bloque + chispa">
+        <Artboard id="f14-hero" label="Hero · light" width={W} height={H}><F14_Hero/></Artboard>
+        <Artboard id="f14-dark" label="Hero · dark · inverso" width={W} height={H}><F14_Dark/></Artboard>
+        <Artboard id="f14-color" label="4 chispas" width={W} height={H}><F14_ColorAlts/></Artboard>
+        <Artboard id="f14-mark" label="Mark · 3 escalas" width={W} height={H}><F14_Mark/></Artboard>
+        <Artboard id="f14-header" label="Contexto · header del sitio" width={HEAD_W} height={HEAD_H}><F14_Header/></Artboard>
+        <Artboard id="f14-social" label="Contexto · avatar redes" width={W} height={H}><F14_Social/></Artboard>
+      </Section>
+    </DC>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+})();
+</script>
+</body>
+</html>

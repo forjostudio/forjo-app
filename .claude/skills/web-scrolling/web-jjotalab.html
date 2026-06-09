@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jotalab — Cejas & Pestañas | Zárate Centro</title>
+  <meta name="description" content="Estudio de cejas y pestañas en Zárate Centro. Tratamientos personalizados con productos cruelty free aprobados por ANMAT. Reservá tu turno online.">
+  <meta property="og:title" content="Jotalab — Cejas & Pestañas | Zárate">
+  <meta property="og:description" content="Laminado, lifting y perfilado de cejas y pestañas en Zárate. Tratamientos 100% personalizados.">
+  <meta property="og:image" content="assets/WhatsApp Image 2026-05-12 at 14.51.16.jpeg">
+  <meta property="og:url" content="https://jjotalab.com">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ─── DESIGN SYSTEM ─── */
+    :root {
+      --cream:        #FDFAF6;
+      --white:        #FFFFFF;
+      --near-black:   #1C1814;
+      --text:         #2D2420;
+      --text-muted:   #8A7570;
+      --accent:       #B8846E;
+      --accent-light: #D4A896;
+      --accent-dark:  #8F5E4A;
+      --surface:      #F5EDE5;
+      --border:       #E8DDD7;
+
+      --font-title: 'Cormorant Garamond', Georgia, serif;
+      --font-body:  'DM Sans', system-ui, sans-serif;
+
+      --space-xs:  8px;
+      --space-sm:  16px;
+      --space-md:  24px;
+      --space-lg:  48px;
+      --space-xl:  80px;
+      --space-2xl: 120px;
+
+      --radius-sm:   4px;
+      --radius-md:   12px;
+      --radius-lg:   24px;
+      --radius-full: 999px;
+
+      --shadow-sm: 0 2px 8px rgba(28,24,20,.06);
+      --shadow-md: 0 8px 32px rgba(28,24,20,.10);
+      --shadow-lg: 0 24px 64px rgba(28,24,20,.14);
+
+      --ease-out: cubic-bezier(.16,1,.3,1);
+      --max-width: 1200px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: var(--font-body);
+      background: var(--cream);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+    img  { max-width: 100%; height: auto; display: block; }
+    a    { color: inherit; text-decoration: none; }
+    button { cursor: pointer; border: none; background: none; font-family: inherit; }
+
+    ::-webkit-scrollbar       { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--accent-light); border-radius: 3px; }
+
+    /* ─── NAV ─── */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 22px var(--space-md);
+      transition: background .4s ease, box-shadow .4s ease, padding .4s ease;
+    }
+    .nav.scrolled {
+      background: rgba(253,250,246,.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 1px 0 var(--border);
+      padding: 14px var(--space-md);
+    }
+    .nav__inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav__logo {
+      font-family: var(--font-title);
+      font-size: 1.6rem; font-weight: 500;
+      letter-spacing: .05em; color: var(--near-black);
+    }
+    .nav__logo span { color: var(--accent); }
+    .nav__links { display: flex; gap: var(--space-lg); list-style: none; }
+    .nav__links a {
+      font-size: .8rem; font-weight: 400;
+      letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text-muted);
+      transition: color .25s;
+    }
+    .nav__links a:hover { color: var(--accent); }
+    .nav__cta {
+      background: var(--near-black);
+      color: var(--cream) !important;
+      padding: 10px 24px;
+      border-radius: var(--radius-full);
+      font-size: .75rem !important;
+      font-weight: 500 !important;
+      letter-spacing: .1em !important;
+      text-transform: uppercase !important;
+      transition: background .25s, transform .25s !important;
+    }
+    .nav__cta:hover { background: var(--accent) !important; transform: translateY(-1px); }
+
+    .nav__toggle {
+      display: none; flex-direction: column; gap: 5px;
+      width: 24px; cursor: pointer; padding: 4px 0;
+    }
+    .nav__toggle span {
+      display: block; height: 1.5px;
+      background: var(--near-black); border-radius: 1px;
+      transition: .3s;
+    }
+
+    /* Mobile overlay */
+    .nav__mobile {
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: var(--space-lg);
+      position: fixed; inset: 0; z-index: 99;
+      background: var(--cream);
+      padding: var(--space-md);
+    }
+    .nav__mobile.open { display: flex; }
+    .nav__mobile a {
+      font-family: var(--font-title);
+      font-size: 2.5rem; font-weight: 300;
+      color: var(--near-black);
+      transition: color .25s;
+    }
+    .nav__mobile a:hover { color: var(--accent); }
+    .nav__close {
+      position: absolute; top: 20px; right: var(--space-md);
+      font-size: 1.4rem; color: var(--text-muted); cursor: pointer;
+    }
+
+    /* ─── HERO ─── */
+    .hero {
+      min-height: 100vh;
+      display: grid; grid-template-columns: 1fr 1fr;
+      position: relative; overflow: hidden;
+    }
+    .hero__content {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 120px var(--space-xl) 80px;
+      position: relative; z-index: 2;
+    }
+    .hero__eyebrow {
+      font-size: .72rem; font-weight: 500;
+      letter-spacing: .22em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: var(--space-md);
+      opacity: 0; transform: translateY(20px);
+      animation: fadeUp .8s var(--ease-out) .2s forwards;
+    }
+    .hero__title {
+      font-family: var(--font-title);
+      font-size: clamp(3rem, 5vw, 5.5rem);
+      font-weight: 300; line-height: 1.05;
+      color: var(--near-black); margin-bottom: var(--space-md);
+      opacity: 0; transform: translateY(30px);
+      animation: fadeUp .9s var(--ease-out) .4s forwards;
+    }
+    .hero__title em { font-style: italic; color: var(--accent); }
+
+    .hero__subtitle {
+      font-size: 1rem; color: var(--text-muted);
+      line-height: 1.75; max-width: 420px;
+      margin-bottom: var(--space-lg);
+      opacity: 0; transform: translateY(20px);
+      animation: fadeUp .8s var(--ease-out) .6s forwards;
+    }
+    .hero__actions {
+      display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;
+      opacity: 0; transform: translateY(20px);
+      animation: fadeUp .8s var(--ease-out) .8s forwards;
+    }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--accent); color: var(--white);
+      padding: 14px 32px; border-radius: var(--radius-full);
+      font-size: .875rem; font-weight: 500; letter-spacing: .04em;
+      transition: background .25s, transform .25s, box-shadow .25s;
+    }
+    .btn-primary:hover {
+      background: var(--accent-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(184,132,110,.35);
+    }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      color: var(--text); font-size: .875rem;
+      border-bottom: 1px solid var(--border); padding-bottom: 2px;
+      transition: color .25s, border-color .25s;
+    }
+    .btn-secondary:hover { color: var(--accent); border-color: var(--accent); }
+
+    .hero__badges {
+      display: flex; gap: var(--space-xs); flex-wrap: wrap;
+      margin-top: var(--space-lg);
+      opacity: 0;
+      animation: fadeUp .8s var(--ease-out) 1s forwards;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: var(--radius-full);
+      font-size: .72rem; color: var(--text-muted);
+    }
+
+    .hero__image-wrap { position: relative; overflow: hidden; }
+    .hero__image-wrap img {
+      width: 100%; height: 100%;
+      object-fit: cover; object-position: center top;
+      transition: transform 8s var(--ease-out);
+    }
+    .hero__image-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to right, var(--cream) 0%, transparent 28%);
+      z-index: 1;
+    }
+
+    .hero__scroll-hint {
+      position: absolute; bottom: 40px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      font-size: .68rem; letter-spacing: .16em; text-transform: uppercase;
+      color: var(--text-muted); z-index: 3;
+      opacity: 0;
+      animation: fadeUp .8s var(--ease-out) 1.4s forwards;
+    }
+    .scroll-line {
+      width: 1px; height: 40px;
+      background: linear-gradient(to bottom, var(--accent), transparent);
+      animation: scrollPulse 2s ease-in-out infinite;
+    }
+
+    /* ─── SECTION BASE ─── */
+    .section { padding: var(--space-2xl) var(--space-md); }
+    .section__inner { max-width: var(--max-width); margin: 0 auto; }
+    .section__label {
+      font-size: .68rem; font-weight: 500;
+      letter-spacing: .26em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: var(--space-sm);
+    }
+    .section__title {
+      font-family: var(--font-title);
+      font-size: clamp(2rem, 3.5vw, 3.5rem);
+      font-weight: 300; line-height: 1.12;
+      color: var(--near-black);
+    }
+    .section__title em { font-style: italic; color: var(--accent); }
+    .section__divider { width: 40px; height: 1px; background: var(--accent); margin: var(--space-md) 0; }
+
+    /* ─── ABOUT ─── */
+    .about { background: var(--white); }
+    .about__grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: var(--space-xl); align-items: center;
+    }
+    .about__image-wrap {
+      position: relative;
+      border-radius: var(--radius-lg); overflow: hidden;
+      aspect-ratio: 4/5;
+    }
+    .about__image-wrap img {
+      width: 100%; height: 100%;
+      object-fit: cover; object-position: center top;
+      transition: transform .6s var(--ease-out);
+    }
+    .about__image-wrap:hover img { transform: scale(1.04); }
+    .about__image-badge {
+      position: absolute; bottom: 24px; left: 24px;
+      background: rgba(253,250,246,.95);
+      backdrop-filter: blur(8px);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      box-shadow: var(--shadow-md);
+    }
+    .about__image-badge p  { font-size: .72rem; color: var(--text-muted); }
+    .about__image-badge strong { font-family: var(--font-title); font-size: 1.15rem; font-weight: 500; color: var(--near-black); }
+
+    .about__body p {
+      color: var(--text-muted); line-height: 1.85;
+      margin-bottom: var(--space-md);
+    }
+    .about__body p strong { color: var(--text); }
+
+    .about__features {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: var(--space-md); margin-top: var(--space-lg);
+    }
+    .feature { display: flex; flex-direction: column; gap: 5px; }
+    .feature__icon {
+      width: 36px; height: 36px;
+      background: var(--surface); border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; margin-bottom: 4px;
+    }
+    .feature__title { font-size: .875rem; font-weight: 500; color: var(--near-black); }
+    .feature__desc  { font-size: .78rem; color: var(--text-muted); line-height: 1.55; }
+
+    /* ─── PARALLAX QUOTE ─── */
+    .parallax-section {
+      position: relative; height: 60vh;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .parallax-bg {
+      position: absolute; inset: -20%;
+      background-image: url('assets/WhatsApp Image 2026-05-12 at 14.51.117.jpeg');
+      background-size: cover; background-position: center;
+      filter: brightness(.3);
+      will-change: transform;
+    }
+    .parallax-content {
+      position: relative; z-index: 2;
+      text-align: center; padding: 0 var(--space-md);
+      max-width: 800px;
+    }
+    .parallax-quote {
+      font-family: var(--font-title);
+      font-size: clamp(1.8rem, 4vw, 3.5rem);
+      font-weight: 300; font-style: italic;
+      color: var(--white); line-height: 1.3;
+    }
+    .parallax-author {
+      margin-top: var(--space-md);
+      font-size: .75rem; letter-spacing: .2em;
+      text-transform: uppercase; color: var(--accent-light);
+    }
+
+    /* ─── SERVICIOS ─── */
+    .services__grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: var(--space-md); margin-top: var(--space-xl);
+    }
+    .service-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg) var(--space-md);
+      display: flex; flex-direction: column; gap: var(--space-sm);
+      position: relative; overflow: hidden;
+      transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out), border-color .3s;
+    }
+    .service-card::after {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(to right, var(--accent), var(--accent-light));
+      transform: scaleX(0); transform-origin: left;
+      transition: transform .4s var(--ease-out);
+    }
+    .service-card:hover::after { transform: scaleX(1); }
+    .service-card:hover {
+      transform: translateY(-7px);
+      box-shadow: var(--shadow-lg);
+      border-color: transparent;
+    }
+    .service-card--featured {
+      background: var(--near-black);
+      border-color: var(--near-black);
+    }
+    .service-card--featured .service-card__name,
+    .service-card--featured .service-card__price { color: var(--cream); }
+    .service-card--featured .service-card__desc { color: rgba(253,250,246,.55); }
+    .service-card--featured .service-badge { background: var(--accent); color: var(--white); }
+    .service-card--featured .service-card__cta { color: var(--accent-light); }
+    .service-card--featured::after { background: linear-gradient(to right, var(--accent-light), var(--accent)); }
+
+    .service-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--surface); color: var(--accent);
+      font-size: .62rem; font-weight: 500;
+      letter-spacing: .15em; text-transform: uppercase;
+      padding: 4px 10px; border-radius: var(--radius-full);
+      width: fit-content;
+    }
+    .service-card__icon  { font-size: 1.4rem; }
+    .service-card__name  {
+      font-family: var(--font-title);
+      font-size: 1.2rem; font-weight: 500;
+      color: var(--near-black); line-height: 1.2;
+    }
+    .service-card__desc  { font-size: .78rem; color: var(--text-muted); line-height: 1.65; flex: 1; }
+    .service-card__price {
+      font-family: var(--font-title);
+      font-size: 1.9rem; font-weight: 500;
+      color: var(--near-black); margin-top: var(--space-xs);
+    }
+    .service-card__price span { font-size: .85rem; font-weight: 400; color: var(--text-muted); }
+    .service-card__cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: .78rem; font-weight: 500;
+      color: var(--accent); margin-top: var(--space-xs);
+      transition: gap .25s;
+    }
+    .service-card:hover .service-card__cta { gap: 10px; }
+
+    /* ─── GALERÍA ─── */
+    .gallery { background: var(--surface); }
+    .gallery__grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto;
+      gap: 12px; margin-top: var(--space-xl);
+    }
+    .gallery__item {
+      position: relative; overflow: hidden;
+      border-radius: var(--radius-md); cursor: pointer;
+    }
+    .gallery__item:first-child { grid-column: span 2; grid-row: span 2; }
+    .gallery__item img {
+      width: 100%; height: 100%;
+      object-fit: cover; min-height: 200px;
+      transition: transform .6s var(--ease-out);
+    }
+    .gallery__item:first-child img { min-height: 480px; }
+    .gallery__item:hover img { transform: scale(1.07); }
+    .gallery__overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(28,24,20,.55) 0%, transparent 55%);
+      opacity: 0; transition: opacity .3s;
+      display: flex; align-items: flex-end; padding: var(--space-md);
+    }
+    .gallery__item:hover .gallery__overlay { opacity: 1; }
+    .gallery__overlay span {
+      color: var(--white); font-size: .72rem;
+      letter-spacing: .12em; text-transform: uppercase;
+    }
+
+    /* ─── TESTIMONIOS ─── */
+    .testimonials__header {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      gap: var(--space-md); margin-bottom: var(--space-xl);
+    }
+    .testimonials__note {
+      font-size: .75rem; color: var(--text-muted);
+      border-left: 2px solid var(--accent-light);
+      padding-left: var(--space-sm);
+      max-width: 300px; line-height: 1.55;
+    }
+    .testimonials__grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-md);
+    }
+    .testimonial-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: var(--space-lg);
+      display: flex; flex-direction: column; gap: var(--space-md);
+      transition: transform .3s var(--ease-out), box-shadow .3s;
+    }
+    .testimonial-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+    .testimonial-card__stars { color: var(--accent); font-size: .95rem; letter-spacing: 2px; }
+    .testimonial-card__text {
+      font-family: var(--font-title);
+      font-size: 1.05rem; font-weight: 400; font-style: italic;
+      color: var(--text); line-height: 1.65; flex: 1;
+    }
+    .testimonial-card__author { display: flex; align-items: center; gap: 10px; }
+    .testimonial-card__avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--surface); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 500; flex-shrink: 0;
+    }
+    .testimonial-card__name    { font-size: .875rem; font-weight: 500; color: var(--near-black); }
+    .testimonial-card__service { font-size: .72rem; color: var(--text-muted); }
+
+    /* ─── CTA BANNER ─── */
+    .cta-banner {
+      background: var(--near-black);
+      padding: var(--space-2xl) var(--space-md);
+      text-align: center;
+    }
+    .cta-banner__inner { max-width: 700px; margin: 0 auto; }
+    .cta-banner__eyebrow {
+      font-size: .72rem; letter-spacing: .22em; text-transform: uppercase;
+      color: var(--accent-light); margin-bottom: var(--space-md);
+    }
+    .cta-banner__title {
+      font-family: var(--font-title);
+      font-size: clamp(2.2rem, 4.5vw, 4.2rem);
+      font-weight: 300; color: var(--white);
+      line-height: 1.12; margin-bottom: var(--space-md);
+    }
+    .cta-banner__title em { font-style: italic; color: var(--accent-light); }
+    .cta-banner__sub {
+      font-size: .875rem; color: rgba(253,250,246,.45);
+      margin-bottom: var(--space-lg);
+    }
+    .btn-light {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--cream); color: var(--near-black);
+      padding: 16px 40px; border-radius: var(--radius-full);
+      font-size: .875rem; font-weight: 500; letter-spacing: .05em;
+      transition: background .25s, color .25s, transform .25s;
+    }
+    .btn-light:hover {
+      background: var(--accent-light); color: var(--white);
+      transform: translateY(-2px);
+    }
+
+    /* ─── CONTACTO ─── */
+    .contact { background: var(--white); }
+    .contact__grid {
+      display: grid; grid-template-columns: 1fr 1.5fr;
+      gap: var(--space-xl); align-items: start;
+    }
+    .contact__info  { display: flex; flex-direction: column; gap: var(--space-lg); }
+    .contact__item  { display: flex; flex-direction: column; gap: 5px; }
+    .contact__label {
+      font-size: .68rem; font-weight: 500;
+      letter-spacing: .22em; text-transform: uppercase;
+      color: var(--accent);
+    }
+    .contact__value { font-size: 1rem; color: var(--text); transition: color .25s; }
+    .contact__value:hover { color: var(--accent); }
+
+    .social-links { display: flex; gap: var(--space-sm); }
+    .social-link {
+      width: 40px; height: 40px;
+      border: 1px solid var(--border); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .25s, border-color .25s, transform .25s;
+    }
+    .social-link:hover {
+      background: var(--accent); border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .social-link svg { width: 16px; height: 16px; stroke: var(--text-muted); fill: none; stroke-width: 1.5; transition: stroke .25s; }
+    .social-link:hover svg { stroke: white; }
+
+    .contact__form  { display: flex; flex-direction: column; gap: var(--space-md); }
+    .form-group     { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: .78rem; font-weight: 500; color: var(--text); }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      background: var(--cream); border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      font-family: var(--font-body); font-size: .875rem; color: var(--text);
+      outline: none; resize: none;
+      transition: border-color .25s, box-shadow .25s;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(184,132,110,.12);
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); }
+    .btn-submit {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      background: var(--accent); color: var(--white);
+      padding: 14px 32px; border-radius: var(--radius-full);
+      font-family: var(--font-body); font-size: .875rem; font-weight: 500;
+      transition: background .25s, transform .25s;
+      align-self: flex-start;
+    }
+    .btn-submit:hover { background: var(--accent-dark); transform: translateY(-2px); }
+
+    /* ─── FOOTER ─── */
+    .footer {
+      background: var(--near-black);
+      padding: var(--space-lg) var(--space-md);
+    }
+    .footer__inner {
+      max-width: var(--max-width); margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: var(--space-md);
+    }
+    .footer__logo {
+      font-family: var(--font-title);
+      font-size: 1.25rem; font-weight: 400;
+      color: var(--cream); letter-spacing: .05em;
+    }
+    .footer__logo span { color: var(--accent); }
+    .footer__copy  { font-size: .72rem; color: rgba(253,250,246,.3); }
+    .footer__links { display: flex; gap: var(--space-md); }
+    .footer__links a { font-size: .72rem; color: rgba(253,250,246,.45); transition: color .25s; }
+    .footer__links a:hover { color: var(--accent-light); }
+
+    /* ─── SCROLL ANIMATIONS ─── */
+    .reveal {
+      opacity: 0; transform: translateY(32px);
+      transition: opacity .75s var(--ease-out), transform .75s var(--ease-out);
+    }
+    .reveal.visible        { opacity: 1; transform: translateY(0); }
+    .reveal-left {
+      opacity: 0; transform: translateX(-44px);
+      transition: opacity .85s var(--ease-out), transform .85s var(--ease-out);
+    }
+    .reveal-left.visible   { opacity: 1; transform: translateX(0); }
+    .reveal-right {
+      opacity: 0; transform: translateX(44px);
+      transition: opacity .85s var(--ease-out), transform .85s var(--ease-out);
+    }
+    .reveal-right.visible  { opacity: 1; transform: translateX(0); }
+
+    .stagger > * {
+      opacity: 0; transform: translateY(26px);
+      transition: opacity .6s var(--ease-out), transform .6s var(--ease-out);
+    }
+    .stagger.visible > * { opacity: 1; transform: translateY(0); }
+    .stagger.visible > *:nth-child(1) { transition-delay: 0s; }
+    .stagger.visible > *:nth-child(2) { transition-delay: .08s; }
+    .stagger.visible > *:nth-child(3) { transition-delay: .16s; }
+    .stagger.visible > *:nth-child(4) { transition-delay: .24s; }
+    .stagger.visible > *:nth-child(5) { transition-delay: .32s; }
+    .stagger.visible > *:nth-child(6) { transition-delay: .40s; }
+
+    /* ─── KEYFRAMES ─── */
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scrollPulse {
+      0%   { transform: scaleY(0) translateY(0); transform-origin: top; opacity: 1; }
+      50%  { transform: scaleY(1) translateY(0); transform-origin: top; opacity: 1; }
+      100% { transform: scaleY(1) translateY(100%); opacity: 0; }
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 1024px) {
+      .hero { grid-template-columns: 1fr; }
+      .hero__image-wrap { display: none; }
+      .hero__content { padding: 120px var(--space-md) 80px; }
+      .about__grid { grid-template-columns: 1fr; }
+      .about__image-wrap { aspect-ratio: 16/9; }
+      .contact__grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      :root { --space-2xl: 80px; --space-xl: 48px; }
+      .nav__links  { display: none; }
+      .nav__toggle { display: flex; }
+      .about__features   { grid-template-columns: 1fr 1fr; }
+      .services__grid    { grid-template-columns: 1fr 1fr; }
+      .gallery__grid     { grid-template-columns: 1fr 1fr; }
+      .gallery__item:first-child { grid-column: span 2; grid-row: span 1; }
+      .gallery__item:first-child img { min-height: 280px; }
+      .testimonials__grid  { grid-template-columns: 1fr; }
+      .testimonials__header { flex-direction: column; align-items: flex-start; }
+      .form-row { grid-template-columns: 1fr; }
+      .footer__inner { flex-direction: column; text-align: center; }
+    }
+    @media (max-width: 480px) {
+      .services__grid { grid-template-columns: 1fr; }
+      .gallery__grid  { grid-template-columns: 1fr; }
+      .gallery__item:first-child { grid-column: span 1; }
+      .about__features { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .reveal, .reveal-left, .reveal-right, .stagger > * {
+        transition: none; opacity: 1; transform: none;
+      }
+      .scroll-line { animation: none; }
+      .hero__eyebrow, .hero__title, .hero__subtitle,
+      .hero__actions, .hero__badges, .hero__scroll-hint {
+        animation: none; opacity: 1; transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ NAV ═══ -->
+  <nav class="nav" id="nav" aria-label="Navegación principal">
+    <div class="nav__inner">
+      <a href="#" class="nav__logo">Jota<span>lab</span></a>
+      <ul class="nav__links">
+        <li><a href="#sobre">Sobre mí</a></li>
+        <li><a href="#servicios">Servicios</a></li>
+        <li><a href="#galeria">Galería</a></li>
+        <li><a href="#contacto">Contacto</a></li>
+        <li><a href="https://jjotalab.com" class="nav__cta" target="_blank" rel="noopener">Reservar turno</a></li>
+      </ul>
+      <div class="nav__toggle" id="navToggle" role="button" aria-label="Abrir menú" tabindex="0">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Mobile nav -->
+  <div class="nav__mobile" id="mobileNav" role="dialog" aria-modal="true">
+    <span class="nav__close" id="navClose" role="button" tabindex="0">✕</span>
+    <a href="#sobre"     onclick="closeMob()">Sobre mí</a>
+    <a href="#servicios" onclick="closeMob()">Servicios</a>
+    <a href="#galeria"   onclick="closeMob()">Galería</a>
+    <a href="#contacto"  onclick="closeMob()">Contacto</a>
+    <a href="https://jjotalab.com" class="btn-primary" target="_blank" rel="noopener">
+      Reservar turno →
+    </a>
+  </div>
+
+
+  <!-- ═══ HERO ═══ -->
+  <section class="hero">
+    <div class="hero__content">
+      <p class="hero__eyebrow">Cejas &amp; Pestañas · Zárate Centro</p>
+      <h1 class="hero__title">
+        Tu mejor<br><em>versión</em><br>empieza aquí
+      </h1>
+      <p class="hero__subtitle">
+        Tratamientos personalizados con productos cruelty free y aprobados por ANMAT.
+        Porque los detalles que enmarca tu mirada lo cambian todo.
+      </p>
+      <div class="hero__actions">
+        <a href="https://jjotalab.com" class="btn-primary" target="_blank" rel="noopener">
+          Reservar turno
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="#servicios" class="btn-secondary">Ver servicios</a>
+      </div>
+      <div class="hero__badges">
+        <span class="badge">✓ Cruelty free</span>
+        <span class="badge">✓ Aval ANMAT</span>
+        <span class="badge">✓ 100% personalizado</span>
+      </div>
+      <div class="hero__scroll-hint" aria-hidden="true">
+        <span>Scroll</span>
+        <div class="scroll-line"></div>
+      </div>
+    </div>
+    <div class="hero__image-wrap" aria-hidden="true">
+      <img
+        src="assets/WhatsApp Image 2026-05-12 at 14.51.16.jpeg"
+        alt=""
+        width="800" height="1000"
+        loading="eager"
+        id="heroImg"
+      >
+      <div class="hero__image-overlay"></div>
+    </div>
+  </section>
+
+
+  <!-- ═══ SOBRE JOAQUINA ═══ -->
+  <section class="section about" id="sobre">
+    <div class="section__inner">
+      <div class="about__grid">
+
+        <div class="reveal-left">
+          <div class="about__image-wrap">
+            <img
+              src="assets/WhatsApp Image 2026-05-12 at 14.51.161.jpeg"
+              alt="Trabajo de cejas realizado en Jotalab"
+              width="600" height="750" loading="lazy"
+            >
+            <div class="about__image-badge">
+              <p>Especialista en</p>
+              <strong>Cejas &amp; Pestañas</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="about__body reveal-right">
+          <p class="section__label">Sobre mí</p>
+          <h2 class="section__title">Hola, soy<br><em>Joaquina</em></h2>
+          <div class="section__divider"></div>
+          <p>
+            En Jotalab cada tratamiento es una experiencia única. Trabajo con productos nacionales de la línea
+            <strong>Melania Professional</strong>, cruelty free y aprobados por ANMAT, porque tu seguridad y el resultado natural son mi prioridad.
+          </p>
+          <p>
+            Cada sesión se adapta a tu tipo de cejas y pestañas, buscando siempre el resultado más favorecedor para vos.
+            Porque no hay una sola forma de ser bella.
+          </p>
+          <div class="about__features stagger">
+            <div class="feature">
+              <div class="feature__icon">🌿</div>
+              <div class="feature__title">Cruelty free</div>
+              <div class="feature__desc">Productos nacionales libres de crueldad animal</div>
+            </div>
+            <div class="feature">
+              <div class="feature__icon">✅</div>
+              <div class="feature__title">Aval ANMAT</div>
+              <div class="feature__desc">Todos los productos aprobados por ANMAT</div>
+            </div>
+            <div class="feature">
+              <div class="feature__icon">✨</div>
+              <div class="feature__title">Personalizado</div>
+              <div class="feature__desc">Adaptado a tu fisionomía y preferencias</div>
+            </div>
+            <div class="feature">
+              <div class="feature__icon">📍</div>
+              <div class="feature__title">Zárate Centro</div>
+              <div class="feature__desc">Ameghino y Justa Lima, fácil acceso</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══ PARALLAX QUOTE ═══ -->
+  <div class="parallax-section" aria-hidden="true">
+    <div class="parallax-bg" id="parallaxBg"></div>
+    <div class="parallax-content reveal">
+      <p class="parallax-quote">"Buscando el resultado más natural<br>y favorecedor para cada persona"</p>
+      <p class="parallax-author">— Joaquina · Jotalab, Zárate</p>
+    </div>
+  </div>
+
+
+  <!-- ═══ SERVICIOS ═══ -->
+  <section class="section" id="servicios">
+    <div class="section__inner">
+      <div class="reveal">
+        <p class="section__label">Lo que hago</p>
+        <h2 class="section__title">Servicios &amp;<br><em>Precios</em></h2>
+      </div>
+      <div class="services__grid stagger">
+
+        <div class="service-card">
+          <div class="service-card__icon">👁️</div>
+          <span class="service-badge">Pestañas</span>
+          <div class="service-card__name">Lifting nutritivo de pestañas</div>
+          <div class="service-card__desc">Rizo natural y duradero con nutrición profunda. Tus pestañas, completamente potenciadas.</div>
+          <div class="service-card__price">$18.000 <span>ARS</span></div>
+          <a href="https://jjotalab.com" class="service-card__cta" target="_blank" rel="noopener">Reservar →</a>
+        </div>
+
+        <div class="service-card">
+          <div class="service-card__icon">✦</div>
+          <span class="service-badge">Cejas</span>
+          <div class="service-card__name">Laminado de cejas</div>
+          <div class="service-card__desc">Cejas ordenadas, definidas y con cuerpo. El efecto peinado que dura semanas.</div>
+          <div class="service-card__price">$18.000 <span>ARS</span></div>
+          <a href="https://jjotalab.com" class="service-card__cta" target="_blank" rel="noopener">Reservar →</a>
+        </div>
+
+        <div class="service-card">
+          <div class="service-card__icon">🪄</div>
+          <span class="service-badge">Cejas</span>
+          <div class="service-card__name">Perfilado de cejas</div>
+          <div class="service-card__desc">Forma perfecta que enmarca y realza tu mirada. Diseño a medida de tu rostro.</div>
+          <div class="service-card__price">$14.000 <span>ARS</span></div>
+          <a href="https://jjotalab.com" class="service-card__cta" target="_blank" rel="noopener">Reservar →</a>
+        </div>
+
+        <div class="service-card">
+          <div class="service-card__icon">✦</div>
+          <span class="service-badge">Combo</span>
+          <div class="service-card__name">Laminado + perfilado</div>
+          <div class="service-card__desc">Lo mejor de los dos mundos: definición y cuerpo en una sola sesión.</div>
+          <div class="service-card__price">$22.000 <span>ARS</span></div>
+          <a href="https://jjotalab.com" class="service-card__cta" target="_blank" rel="noopener">Reservar →</a>
+        </div>
+
+        <div class="service-card service-card--featured">
+          <div class="service-card__icon">🏆</div>
+          <span class="service-badge">Best seller</span>
+          <div class="service-card__name">Full service</div>
+          <div class="service-card__desc">Perfilado + laminado de cejas + lifting nutritivo de pestañas. La experiencia completa para una mirada transformada.</div>
+          <div class="service-card__price">$28.000 <span>ARS</span></div>
+          <a href="https://jjotalab.com" class="service-card__cta" target="_blank" rel="noopener">Reservar →</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══ GALERÍA ═══ -->
+  <section class="section gallery" id="galeria">
+    <div class="section__inner">
+      <div class="reveal">
+        <p class="section__label">Trabajos reales</p>
+        <h2 class="section__title">Galería de<br><em>resultados</em></h2>
+      </div>
+      <div class="gallery__grid stagger">
+        <div class="gallery__item">
+          <img src="assets/WhatsApp Image 2026-05-12 at 14.51.1116.jpeg" alt="Resultado de cejas - Jotalab" width="800" height="600" loading="lazy">
+          <div class="gallery__overlay"><span>Resultado real</span></div>
+        </div>
+        <div class="gallery__item">
+          <img src="assets/WhatsApp Image 2026-05-12 at 14.51.1777.jpeg" alt="Laminado de cejas - Jotalab" width="400" height="300" loading="lazy">
+          <div class="gallery__overlay"><span>Laminado de cejas</span></div>
+        </div>
+        <div class="gallery__item">
+          <img src="assets/WhatsApp Image 2026-05-12 at 14.51.17.jpeg" alt="Lifting de pestañas - Jotalab" width="400" height="300" loading="lazy">
+          <div class="gallery__overlay"><span>Lifting de pestañas</span></div>
+        </div>
+        <div class="gallery__item">
+          <img src="assets/WhatsApp Image 2026-05-12 at 14.51.117.jpeg" alt="Perfilado de cejas - Jotalab" width="400" height="300" loading="lazy">
+          <div class="gallery__overlay"><span>Perfilado de cejas</span></div>
+        </div>
+        <div class="gallery__item">
+          <img src="assets/WhatsApp Image 2026-05-12 at 14.51.16.jpeg" alt="Full service - Jotalab" width="400" height="300" loading="lazy">
+          <div class="gallery__overlay"><span>Full service</span></div>
+        </div>
+        <div class="gallery__item">
+          <img src="assets/WhatsApp Image 2026-05-12 at 14.51.161.jpeg" alt="Cejas y pestañas - Jotalab" width="400" height="300" loading="lazy">
+          <div class="gallery__overlay"><span>Cejas &amp; Pestañas</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══ TESTIMONIOS ═══ -->
+  <section class="section" id="testimonios">
+    <div class="section__inner">
+      <div class="testimonials__header reveal">
+        <div>
+          <p class="section__label">Lo que dicen</p>
+          <h2 class="section__title">Clientas que<br><em>vuelven</em></h2>
+        </div>
+        <p class="testimonials__note">
+          ⚠️ Testimonios de ejemplo — reemplazalos por las reseñas reales de tus clientes.
+        </p>
+      </div>
+      <div class="testimonials__grid stagger">
+
+        <div class="testimonial-card">
+          <div class="testimonial-card__stars">★★★★★</div>
+          <p class="testimonial-card__text">"Me cambió la cara. Llevaba años con las cejas sin definición y ahora las tengo perfectas. El trato de Joaquina es re personalizado, se nota que sabe lo que hace."</p>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">AM</div>
+            <div>
+              <div class="testimonial-card__name">Ana M.</div>
+              <div class="testimonial-card__service">Laminado + perfilado</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card">
+          <div class="testimonial-card__stars">★★★★★</div>
+          <p class="testimonial-card__text">"El lifting nutritivo es una locura, duró muchísimo y las pestañas quedaron súper naturales. Ya reservé el turno para el mes que viene."</p>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">VG</div>
+            <div>
+              <div class="testimonial-card__name">Valentina G.</div>
+              <div class="testimonial-card__service">Lifting nutritivo</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card">
+          <div class="testimonial-card__stars">★★★★★</div>
+          <p class="testimonial-card__text">"Hice el full service y fue un antes y un después. Me fui sin nada de maquillaje y me sentí hermosa. Lo recomiendo a todas."</p>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">LC</div>
+            <div>
+              <div class="testimonial-card__name">Laura C.</div>
+              <div class="testimonial-card__service">Full service</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══ CTA BANNER ═══ -->
+  <div class="cta-banner">
+    <div class="cta-banner__inner reveal">
+      <p class="cta-banner__eyebrow">¿Lista para el cambio?</p>
+      <h2 class="cta-banner__title">Reservá tu turno<br>y empezá a <em>brillar</em></h2>
+      <p class="cta-banner__sub">Zárate Centro · Seña de $5.000 vía MercadoPago</p>
+      <a href="https://jjotalab.com" class="btn-light" target="_blank" rel="noopener">
+        Reservar turno →
+      </a>
+    </div>
+  </div>
+
+
+  <!-- ═══ CONTACTO ═══ -->
+  <section class="section contact" id="contacto">
+    <div class="section__inner">
+      <div class="reveal" style="margin-bottom: var(--space-xl);">
+        <p class="section__label">Contacto</p>
+        <h2 class="section__title">Hablemos,<br><em>coordinamos</em></h2>
+      </div>
+      <div class="contact__grid">
+
+        <div class="contact__info reveal-left">
+          <div class="contact__item">
+            <span class="contact__label">Ubicación</span>
+            <span class="contact__value">Ameghino y Justa Lima<br>Zárate Centro, Buenos Aires</span>
+          </div>
+          <div class="contact__item">
+            <span class="contact__label">WhatsApp</span>
+            <a href="https://wa.me/5493487624237" class="contact__value">+54 9 3487 624237</a>
+          </div>
+          <div class="contact__item">
+            <span class="contact__label">Turnos online</span>
+            <a href="https://jjotalab.com" class="contact__value" target="_blank" rel="noopener">jjotalab.com → Reservar turno</a>
+          </div>
+          <div class="contact__item">
+            <span class="contact__label">Redes</span>
+            <div class="social-links">
+              <a href="https://instagram.com/jjotalab" class="social-link" target="_blank" rel="noopener" aria-label="Instagram de Jotalab">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                  <circle cx="12" cy="12" r="4"/>
+                  <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+                </svg>
+              </a>
+              <a href="https://wa.me/5493487624237" class="social-link" target="_blank" rel="noopener" aria-label="WhatsApp de Jotalab">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="contact__form reveal-right">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="nombre">Nombre</label>
+              <input type="text" id="nombre" name="nombre" placeholder="Tu nombre" autocomplete="given-name">
+            </div>
+            <div class="form-group">
+              <label for="tel">WhatsApp</label>
+              <input type="tel" id="tel" name="tel" placeholder="+54 9 ..." autocomplete="tel">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="servicio">Servicio de interés</label>
+            <select id="servicio" name="servicio">
+              <option value="">Seleccioná un servicio</option>
+              <option>Lifting nutritivo de pestañas — $18.000</option>
+              <option>Laminado de cejas — $18.000</option>
+              <option>Perfilado de cejas — $14.000</option>
+              <option>Laminado + perfilado de cejas — $22.000</option>
+              <option>Full service — $28.000</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="mensaje">Mensaje (opcional)</label>
+            <textarea id="mensaje" name="mensaje" rows="4" placeholder="¿Tenés alguna consulta o preferencia de horario?"></textarea>
+          </div>
+          <button type="button" class="btn-submit" onclick="sendWA()">
+            Enviar por WhatsApp
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <span class="footer__logo">Jota<span>lab</span></span>
+      <p class="footer__copy">© 2026 Jotalab · Zárate, Buenos Aires</p>
+      <nav class="footer__links" aria-label="Links del footer">
+        <a href="#servicios">Servicios</a>
+        <a href="https://jjotalab.com" target="_blank" rel="noopener">Reservas</a>
+        <a href="https://instagram.com/jjotalab" target="_blank" rel="noopener">Instagram</a>
+      </nav>
+    </div>
+  </footer>
+
+
+  <script>
+    // ── NAV SCROLL ──
+    const nav = document.getElementById('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 60);
+    }, { passive: true });
+
+    // ── MOBILE NAV ──
+    const mob = document.getElementById('mobileNav');
+    document.getElementById('navToggle').addEventListener('click', () => {
+      mob.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+    document.getElementById('navClose').addEventListener('click', closeMob);
+    function closeMob() {
+      mob.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    // ── INTERSECTION OBSERVER ──
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .stagger').forEach(el => obs.observe(el));
+
+    // ── PARALLAX ──
+    const parallaxBg = document.getElementById('parallaxBg');
+    let ptick = false;
+    function runParallax() {
+      if (!parallaxBg) return;
+      const r = parallaxBg.parentElement.getBoundingClientRect();
+      const progress = -r.top / (r.height + window.innerHeight);
+      parallaxBg.style.transform = `translateY(${progress * 80}px)`;
+      ptick = false;
+    }
+    window.addEventListener('scroll', () => {
+      if (!ptick) { requestAnimationFrame(runParallax); ptick = true; }
+    }, { passive: true });
+    runParallax();
+
+    // ── HERO IMAGE SUBTLE ZOOM ──
+    const heroImg = document.getElementById('heroImg');
+    if (heroImg) setTimeout(() => { heroImg.style.transform = 'scale(1.05)'; }, 200);
+
+    // ── WHATSAPP FORM ──
+    function sendWA() {
+      const nombre   = document.getElementById('nombre').value.trim();
+      const servicio = document.getElementById('servicio').value;
+      const mensaje  = document.getElementById('mensaje').value.trim();
+      if (!nombre || !servicio) {
+        alert('Por favor completá tu nombre y el servicio que te interesa.');
+        return;
+      }
+      let txt = `Hola Joaquina! Soy ${nombre}.`;
+      txt += `\nMe interesa: ${servicio}.`;
+      if (mensaje) txt += `\n${mensaje}`;
+      txt += `\n¿Tenés disponibilidad?`;
+      window.open(`https://wa.me/5493487624237?text=${encodeURIComponent(txt)}`, '_blank', 'noopener,noreferrer');
+    }
+  </script>
+
+</body>
+</html>

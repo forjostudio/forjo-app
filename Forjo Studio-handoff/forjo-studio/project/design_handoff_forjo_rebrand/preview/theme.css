@@ -1,0 +1,204 @@
+/* =========================================================================
+   FORJO APP — brand theme (shadcn-compatible tokens)
+   Drop-in replacement for app/globals.css :root / .dark blocks.
+   Palettes are switched with  data-palette="red|blue|yellow|green|ink"
+   on <html>, light/dark with the .dark class (next-themes).
+   ========================================================================= */
+
+/* ---- Fonts ---- */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* type */
+  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --font-heading: 'Archivo', system-ui, sans-serif;
+
+  /* radius — sharper than default for a constructivist edge */
+  --radius: 0.4rem;
+  --r-sm: 0.25rem;
+  --r-md: 0.4rem;
+  --r-lg: 0.55rem;
+
+  /* ---- NEUTRALS · LIGHT (Forjo cream/ink) ---- */
+  --background: #f3ead8;
+  --foreground: #1a1714;
+  --card: #fbf3e3;
+  --card-foreground: #1a1714;
+  --popover: #fbf3e3;
+  --popover-foreground: #1a1714;
+  --secondary: #e9ddc4;
+  --secondary-foreground: #1a1714;
+  --muted: #ece0c8;
+  --muted-foreground: #6b6253;
+  --border: #d9ceb4;
+  --input: #d9ceb4;
+  --destructive: #b23a26;
+  --destructive-foreground: #fbf3e3;
+
+  --sidebar: #efe3cd;
+  --sidebar-foreground: #1a1714;
+  --sidebar-border: #ddd1b7;
+  --sidebar-accent: #e3d7be;
+  --sidebar-accent-foreground: #1a1714;
+
+  /* Bauhaus constants (used for accents / charts, do not change per palette) */
+  --bau-red: #d94a2b;
+  --bau-blue: #2a5fa5;
+  --bau-yellow: #f4c543;
+  --bau-green: #2f8a5b;
+  --bau-ink: #1a1714;
+
+  /* ---- ACCENT (overridden per palette) — defaults = Rojo Forjo ---- */
+  --primary: #d94a2b;
+  --primary-foreground: #fbf3e3;
+  --accent: #d94a2b;
+  --accent-foreground: #fbf3e3;
+  --ring: #d94a2b;
+  --sidebar-primary: #d94a2b;
+  --sidebar-primary-foreground: #fbf3e3;
+
+  --chart-1: var(--bau-red);
+  --chart-2: var(--bau-blue);
+  --chart-3: var(--bau-yellow);
+  --chart-4: var(--bau-green);
+  --chart-5: #8a5fb0;
+
+  color-scheme: light;
+}
+
+/* ---- NEUTRALS · DARK (ink) ---- */
+.dark {
+  --background: #1a1714;
+  --foreground: #f3ead8;
+  --card: #252019;
+  --card-foreground: #f3ead8;
+  --popover: #252019;
+  --popover-foreground: #f3ead8;
+  --secondary: #2e2820;
+  --secondary-foreground: #f3ead8;
+  --muted: #2e2820;
+  --muted-foreground: #a99e8b;
+  --border: #36302600;
+  --border: #38322820;
+  --border: rgba(243,234,216,0.12);
+  --input: rgba(243,234,216,0.14);
+  --destructive: #e05c43;
+  --destructive-foreground: #1a1714;
+
+  --sidebar: #141110;
+  --sidebar-foreground: #f3ead8;
+  --sidebar-border: rgba(243,234,216,0.10);
+  --sidebar-accent: #2a241d;
+  --sidebar-accent-foreground: #f3ead8;
+
+  color-scheme: dark;
+}
+
+/* =========================================================================
+   PALETTES — only accent-family tokens change.
+   ========================================================================= */
+/* RED (default) */
+[data-palette="red"]      { --primary:#d94a2b; --accent:#d94a2b; --ring:#d94a2b; --sidebar-primary:#d94a2b; --primary-foreground:#fbf3e3; --accent-foreground:#fbf3e3; --sidebar-primary-foreground:#fbf3e3; --chart-1:#d94a2b; }
+.dark[data-palette="red"] { --primary:#e85c3f; --accent:#e85c3f; --ring:#e85c3f; --sidebar-primary:#e85c3f; --chart-1:#e85c3f; }
+
+/* BLUE — constructivist */
+[data-palette="blue"]      { --primary:#2a5fa5; --accent:#2a5fa5; --ring:#2a5fa5; --sidebar-primary:#2a5fa5; --primary-foreground:#fbf3e3; --accent-foreground:#fbf3e3; --sidebar-primary-foreground:#fbf3e3; --chart-1:#2a5fa5; }
+.dark[data-palette="blue"] { --primary:#5f93d6; --accent:#5f93d6; --ring:#5f93d6; --sidebar-primary:#5f93d6; --primary-foreground:#10141c; --sidebar-primary-foreground:#10141c; --chart-1:#5f93d6; }
+
+/* YELLOW / OCRE — needs ink foreground */
+[data-palette="yellow"]      { --primary:#c8901a; --accent:#c8901a; --ring:#c8901a; --sidebar-primary:#c8901a; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#e0a92e; }
+.dark[data-palette="yellow"] { --primary:#e6b53f; --accent:#e6b53f; --ring:#e6b53f; --sidebar-primary:#e6b53f; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#e6b53f; }
+
+/* GREEN — forest */
+[data-palette="green"]      { --primary:#2f8a5b; --accent:#2f8a5b; --ring:#2f8a5b; --sidebar-primary:#2f8a5b; --primary-foreground:#fbf3e3; --accent-foreground:#fbf3e3; --sidebar-primary-foreground:#fbf3e3; --chart-1:#2f8a5b; }
+.dark[data-palette="green"] { --primary:#54b07f; --accent:#54b07f; --ring:#54b07f; --sidebar-primary:#54b07f; --primary-foreground:#0f1712; --sidebar-primary-foreground:#0f1712; --chart-1:#54b07f; }
+
+/* INK — monochrome Bauhaus */
+[data-palette="ink"]      { --primary:#1a1714; --accent:#1a1714; --ring:#1a1714; --sidebar-primary:#1a1714; --primary-foreground:#f3ead8; --accent-foreground:#f3ead8; --sidebar-primary-foreground:#f3ead8; --chart-1:#1a1714; }
+.dark[data-palette="ink"] { --primary:#f3ead8; --accent:#f3ead8; --ring:#f3ead8; --sidebar-primary:#f3ead8; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#cabfa6; }
+
+/* =========================================================================
+   BASE + COMPONENTS (preview-only — the real app gets these from shadcn)
+   ========================================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-family: var(--font-sans); }
+body { background: var(--background); color: var(--foreground); -webkit-font-smoothing: antialiased; }
+
+h1,h2,h3,h4,.font-heading { font-family: var(--font-heading); }
+
+/* helpers */
+.flex{display:flex}.col{flex-direction:column}.items-center{align-items:center}.items-start{align-items:flex-start}
+.justify-between{justify-content:space-between}.justify-center{justify-content:center}.wrap{flex-wrap:wrap}
+.gap-1{gap:4px}.gap-2{gap:8px}.gap-3{gap:12px}.gap-4{gap:16px}.gap-5{gap:20px}.gap-6{gap:24px}
+.flex-1{flex:1}.min0{min-width:0}.grow{flex-grow:1}.shrink0{flex-shrink:0}
+.grid{display:grid}.hidden{display:none}.relative{position:relative}
+.text-xs{font-size:11px}.text-sm{font-size:13px}.text-base{font-size:15px}.text-lg{font-size:18px}
+.muted{color:var(--muted-foreground)}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mono{font-variant-numeric:tabular-nums}
+
+/* card */
+.fcard{background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:var(--r-lg);}
+.fcard-pad{padding:24px}
+
+/* section heading with bauhaus tri-square bullet */
+.page-title{font-family:var(--font-heading);font-weight:800;font-size:26px;letter-spacing:-0.02em;line-height:1.05;}
+.eyebrow{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted-foreground);font-weight:600;}
+.tri{display:inline-flex;gap:3px}
+.tri i{width:7px;height:7px;display:block}
+.tri i:nth-child(1){background:var(--bau-red)}
+.tri i:nth-child(2){background:var(--bau-yellow)}
+.tri i:nth-child(3){background:var(--bau-blue);border-radius:50%}
+
+/* buttons */
+.fbtn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-sans);font-weight:600;font-size:13px;
+  padding:9px 16px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;transition:.15s;white-space:nowrap;line-height:1;}
+.fbtn-primary{background:var(--primary);color:var(--primary-foreground);}
+.fbtn-primary:hover{filter:brightness(1.06)}
+.fbtn-outline{background:transparent;border-color:var(--border);color:var(--foreground);}
+.fbtn-outline:hover{border-color:var(--primary);color:var(--primary)}
+.fbtn-ghost{background:transparent;color:var(--muted-foreground);}
+.fbtn-ghost:hover{background:var(--secondary);color:var(--foreground)}
+.fbtn-sm{padding:6px 12px;font-size:12px}
+.fbtn-icon{padding:0;width:34px;height:34px}
+
+/* badges */
+.fbadge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em;}
+.fbadge-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.b-pending{background:color-mix(in oklab,var(--bau-yellow) 22%,transparent);color:#9a6f12}
+.dark .b-pending{color:#e6b53f}
+.b-confirmed{background:color-mix(in oklab,var(--bau-blue) 18%,transparent);color:#2a5fa5}
+.dark .b-confirmed{color:#7aa6d6}
+.b-completed{background:color-mix(in oklab,var(--bau-green) 18%,transparent);color:#2f8a5b}
+.dark .b-completed{color:#54b07f}
+.b-cancelled{background:color-mix(in oklab,var(--bau-red) 16%,transparent);color:#b23a26}
+.dark .b-cancelled{color:#e85c3f}
+
+/* inputs */
+.finput,.fselect{width:100%;background:var(--background);border:1px solid var(--input);border-radius:var(--r-md);
+  color:var(--foreground);font-family:var(--font-sans);font-size:14px;padding:10px 12px;outline:none;transition:.15s;}
+.dark .finput,.dark .fselect{background:rgba(0,0,0,.18)}
+.finput:focus,.fselect:focus{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 22%,transparent)}
+.flabel{font-size:12px;font-weight:600;color:var(--foreground);display:block;margin-bottom:6px}
+
+/* table */
+.ftable{width:100%;border-collapse:collapse}
+.ftable th{background:var(--secondary);text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);
+  font-weight:700;padding:11px 16px;border-bottom:1px solid var(--border);white-space:nowrap}
+.ftable td{padding:13px 16px;font-size:13px;border-bottom:1px solid var(--border)}
+.ftable tr:last-child td{border-bottom:none}
+.ftable tbody tr:hover td{background:color-mix(in oklab,var(--foreground) 3%,transparent)}
+
+/* segmented tabs */
+.ftabs{display:inline-flex;background:var(--secondary);border-radius:var(--r-md);padding:3px;gap:2px}
+.ftab{padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted-foreground);border-radius:var(--r-sm);cursor:pointer;border:none;background:transparent;font-family:var(--font-sans);transition:.12s}
+.ftab.active{background:var(--card);color:var(--foreground);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+
+/* avatar */
+.favatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;
+  background:color-mix(in oklab,var(--primary) 18%,transparent);color:var(--primary)}
+
+/* toggle switch */
+.ftoggle{width:40px;height:23px;border-radius:999px;background:var(--muted);border:1px solid var(--border);position:relative;cursor:pointer;transition:.15s;flex-shrink:0}
+.ftoggle::after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:var(--card);transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.ftoggle.on{background:var(--primary)}
+.ftoggle.on::after{left:19px;background:#fff}

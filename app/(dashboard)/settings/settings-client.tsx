@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from 'next-themes'
+import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, Service, Professional, TimeBlock, Location } from '@/lib/types'
@@ -26,13 +27,7 @@ const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
 
 // Paletas de marca (swatch = primary en claro). El detalle de tokens vive en globals.css.
-const PALETTES: { key: string; label: string; sub: string; swatches: [string, string, string] }[] = [
-  { key: 'red', label: 'Rojo Forjo', sub: 'Principal', swatches: ['#d94a2b', '#1a1714', '#f4c543'] },
-  { key: 'blue', label: 'Azul', sub: 'Constructivista', swatches: ['#2a5fa5', '#1a1714', '#f4c543'] },
-  { key: 'yellow', label: 'Ocre', sub: 'Cálido', swatches: ['#c8901a', '#1a1714', '#d94a2b'] },
-  { key: 'green', label: 'Verde', sub: 'Bosque', swatches: ['#2f8a5b', '#1a1714', '#f4c543'] },
-  { key: 'ink', label: 'Tinta', sub: 'Monocromo', swatches: ['#1a1714', '#6b6256', '#e8dcc4'] },
-]
+// Paletas + themes + tipografías viven en lib/theme-config (fuente única).
 
 // ── Profesionales: form ampliado + labels por rubro ─────────────────────────
 type ProForm = { name: string; last_name: string; specialty: string; license_number: string; phone: string; email: string }
@@ -127,7 +122,27 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
-  const [palette, setPalette] = useState(business.palette ?? 'red')
+  // Estilo visual: theme (forjo|modern|spa|cyber), paleta (depende del theme) y font.
+  const [vtheme, setVtheme] = useState(() => normalizeTheme(business.theme))
+  const [palette, setPalette] = useState(() => normalizePalette(normalizeTheme(business.theme), business.palette))
+  const [font, setFont] = useState(() => normalizeFont(business.font))
+  const themePalettes = THEME_PALETTES[vtheme] || THEME_PALETTES.forjo
+
+  // Setea/borra los data-* del <html> según los defaults del preview (forjo/auto = sin atributo).
+  function applyTheme(t: string) { const d = document.documentElement.dataset; if (t === 'forjo') delete d.theme; else d.theme = t }
+  function applyFont(f: string) { const d = document.documentElement.dataset; if (f === 'auto') delete d.font; else d.font = f }
+
+  async function selectTheme(t: string) {
+    if (t === vtheme) return
+    // Cambiar de theme resetea la paleta al default de ese theme (sus ids son distintos).
+    const newPal = THEME_DEFAULT_PAL[t] || 'red'
+    setVtheme(t); setPalette(newPal)
+    applyTheme(t)
+    document.documentElement.dataset.palette = newPal
+    const { error } = await supabase.from('businesses').update({ theme: t, palette: newPal }).eq('id', business.id)
+    if (error) { toast.error('Error al guardar el estilo'); return }
+    toast.success('Estilo actualizado')
+  }
 
   async function selectPalette(key: string) {
     setPalette(key)
@@ -136,6 +151,14 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     const { error } = await supabase.from('businesses').update({ palette: key }).eq('id', business.id)
     if (error) { toast.error('Error al guardar la paleta'); return }
     toast.success('Paleta actualizada')
+  }
+
+  async function selectFont(f: string) {
+    setFont(f)
+    applyFont(f)
+    const { error } = await supabase.from('businesses').update({ font: f }).eq('id', business.id)
+    if (error) { toast.error('Error al guardar la tipografía'); return }
+    toast.success('Tipografía actualizada')
   }
 
   // ── Plan limits ───────────────────────────────────────────────────────────
@@ -577,40 +600,123 @@ export function SettingsClient({ business, initialServices, initialProfessionals
         {/* ── Apariencia ── */}
         <TabsContent value="appearance" className="mt-4">
           <Card className="p-6 space-y-6">
-            {/* Paleta de color */}
+            {/* Estilo visual (theme) */}
+            <div className="space-y-3">
+              <div>
+                <p className="font-semibold text-sm">Estilo visual</p>
+                <p className="text-xs text-muted-foreground">Cambiá la personalidad completa del panel y tu página: tipografías, colores y detalles.</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {THEMES.map(t => {
+                  const active = vtheme === t.id
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => selectTheme(t.id)}
+                      aria-pressed={active}
+                      className={cn(
+                        'overflow-hidden rounded-lg border-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        active ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-muted-foreground'
+                      )}
+                    >
+                      <span className="relative flex h-[68px] items-end gap-1.5 p-3" style={{ background: t.bg }}>
+                        <span className="absolute left-3 top-2.5 text-sm font-extrabold" style={{ color: t.fg }}>Aa</span>
+                        {t.chips.map((c, i) => (
+                          <span key={i} className="h-6 flex-1 rounded" style={{ background: c, opacity: 1 - i * 0.18, boxShadow: t.glow ? `0 0 10px ${c}` : undefined }} />
+                        ))}
+                      </span>
+                      <span className="flex items-center gap-2 p-2.5">
+                        <span className="min-w-0">
+                          <span className="block text-xs font-semibold truncate">{t.name}</span>
+                          <span className="block text-[10px] text-muted-foreground truncate">{t.meta}</span>
+                        </span>
+                        {active && (
+                          <span className="ml-auto flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Paleta de color (depende del theme activo) */}
             <div className="space-y-3">
               <div>
                 <p className="font-semibold text-sm">Paleta de color</p>
-                <p className="text-xs text-muted-foreground">Tiñe tu panel y tu página pública de reservas.</p>
+                <p className="text-xs text-muted-foreground">Define el color principal de tu panel y tu página pública de reservas.</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {PALETTES.map(p => {
-                  const active = palette === p.key
+                {themePalettes.map(p => {
+                  const active = palette === p.id
                   return (
                     <button
-                      key={p.key}
+                      key={p.id}
                       type="button"
-                      onClick={() => selectPalette(p.key)}
+                      onClick={() => selectPalette(p.id)}
                       aria-pressed={active}
                       className={cn(
                         'flex flex-col gap-2.5 rounded-lg border-2 p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        active ? 'border-foreground' : 'border-border hover:bg-secondary/50'
+                        active ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-muted-foreground'
                       )}
                     >
                       <span className="flex h-10 w-full overflow-hidden rounded-md border border-border/50">
-                        {p.swatches.map((c, i) => <span key={i} className="flex-1" style={{ backgroundColor: c }} />)}
+                        {p.swatches.map((c, i) => <span key={i} className="flex-1" style={{ backgroundColor: c, boxShadow: p.glow ? `inset 0 0 8px ${c}` : undefined }} />)}
                       </span>
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold truncate">{p.label}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{p.sub}</p>
+                          <p className="text-xs font-semibold truncate">{p.name}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{p.meta}</p>
                         </div>
                         {active && (
-                          <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-foreground text-background">
+                          <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground">
                             <Check className="w-3 h-3" />
                           </span>
                         )}
                       </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Tipografía */}
+            <div className="space-y-3">
+              <div>
+                <p className="font-semibold text-sm">Tipografía</p>
+                <p className="text-xs text-muted-foreground">Elegí el carácter de las letras. «Automática» usa la fuente nativa de cada estilo.</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {FONTS.map(f => {
+                  const active = font === f.id
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => selectFont(f.id)}
+                      aria-pressed={active}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        active ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-muted-foreground'
+                      )}
+                    >
+                      <span className="flex-shrink-0 w-10 h-10 rounded-md bg-secondary flex items-center justify-center text-xl font-bold leading-none" style={{ fontFamily: f.css }}>Aa</span>
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold truncate">{f.name}</span>
+                        <span className="block text-[10px] text-muted-foreground truncate">{f.meta}</span>
+                      </span>
+                      {active && (
+                        <span className="ml-auto flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground">
+                          <Check className="w-3 h-3" />
+                        </span>
+                      )}
                     </button>
                   )
                 })}

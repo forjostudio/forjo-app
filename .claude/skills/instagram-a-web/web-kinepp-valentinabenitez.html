@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valentina Benítez — Kinesióloga Suelo Pélvico</title>
+  <meta name="description" content="Valentina Benítez, kinesióloga especializada en suelo pélvico. Atención profesional para hombres, mujeres y todas las etapas de la vida.">
+  <meta property="og:title" content="Valentina Benítez — Kinesióloga Suelo Pélvico">
+  <meta property="og:description" content="Kinesióloga especializada en suelo pélvico. Cuidado profesional para todos.">
+  <meta property="og:image" content="assets/instagram/profile.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* =====================
+       DESIGN TOKENS
+    ===================== */
+    :root {
+      --bg:              #FDFAF7;
+      --bg-card:         #FFFFFF;
+      --bg-section:      #F7EEE7;
+      --bg-muted:        #F0E6DC;
+      --primary:         #C4837A;
+      --primary-light:   #E8B4B0;
+      --primary-dark:    #9E5A54;
+      --accent:          #B5746B;
+      --text:            #2D2625;
+      --text-secondary:  #6B5553;
+      --text-muted:      #9E8480;
+      --border:          #EAD8D4;
+      --shadow-sm:       0 2px 8px rgba(180, 100, 90, 0.08);
+      --shadow-md:       0 8px 30px rgba(180, 100, 90, 0.12);
+      --shadow-lg:       0 20px 60px rgba(180, 100, 90, 0.16);
+      --radius-sm:       8px;
+      --radius-md:       16px;
+      --radius-lg:       24px;
+      --radius-xl:       32px;
+      --font-display:    'Playfair Display', Georgia, serif;
+      --font-body:       'DM Sans', system-ui, sans-serif;
+    }
+
+    /* =====================
+       RESET & BASE
+    ===================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    img { display: block; max-width: 100%; }
+    a { text-decoration: none; color: inherit; }
+    button { cursor: pointer; border: none; background: none; font-family: inherit; }
+
+    /* Scrollbar personalizada */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-muted); }
+    ::-webkit-scrollbar-thumb { background: var(--primary-light); border-radius: 3px; }
+
+    /* =====================
+       NAVIGATION
+    ===================== */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.3s, backdrop-filter 0.3s, box-shadow 0.3s;
+    }
+    .nav.scrolled {
+      background: rgba(253, 250, 247, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 1px 0 var(--border);
+    }
+    .nav__logo {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+    .nav__logo span { color: var(--primary); }
+    .nav__links {
+      display: flex;
+      gap: 32px;
+      list-style: none;
+    }
+    .nav__links a {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: color 0.2s;
+    }
+    .nav__links a:hover { color: var(--primary); }
+    .nav__cta {
+      background: var(--primary);
+      color: #fff;
+      padding: 10px 22px;
+      border-radius: 50px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .nav__cta:hover { background: var(--primary-dark); transform: translateY(-1px); }
+
+    /* =====================
+       HERO
+    ===================== */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 100px 24px 60px;
+      background: linear-gradient(160deg, var(--bg) 0%, var(--bg-section) 60%, var(--bg-muted) 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      right: -200px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(196, 131, 122, 0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: -100px;
+      left: -100px;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(181, 116, 107, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero__inner {
+      max-width: 1200px;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    /* Instagram Profile Card */
+    .ig-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      padding: 32px;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .ig-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary-light), var(--primary), var(--accent));
+    }
+    .ig-card__header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ig-card__brand {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .ig-card__dots {
+      margin-left: auto;
+      display: flex;
+      gap: 4px;
+    }
+    .ig-card__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+
+    /* Profile pic with animated ring */
+    .ig-profile-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+    .ig-avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .ig-avatar-ring {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      padding: 3px;
+      background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+      animation: ring-rotate 4s linear infinite;
+    }
+    @keyframes ring-rotate {
+      0%   { background: linear-gradient(0deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+      25%  { background: linear-gradient(90deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+      50%  { background: linear-gradient(180deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+      75%  { background: linear-gradient(270deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+      100% { background: linear-gradient(360deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+    }
+    .ig-avatar-ring__inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 3px solid #fff;
+      overflow: hidden;
+    }
+    .ig-avatar-ring__inner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .ig-profile-info { flex: 1; }
+    .ig-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+    .ig-name {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text);
+    }
+    .ig-verified {
+      width: 18px;
+      height: 18px;
+      background: linear-gradient(135deg, #1877f2, #0d5fd6);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 2px 4px rgba(24, 119, 242, 0.3);
+    }
+    .ig-verified svg { width: 10px; height: 10px; }
+    .ig-handle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .ig-handle a { color: var(--primary); font-weight: 500; }
+    .ig-category {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      background: var(--bg-muted);
+      padding: 2px 10px;
+      border-radius: 50px;
+      display: inline-block;
+      margin-top: 4px;
+    }
+
+    .ig-stats {
+      display: flex;
+      gap: 24px;
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .ig-stat { text-align: center; flex: 1; }
+    .ig-stat__num {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .ig-stat__label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .ig-bio {
+      font-size: 0.875rem;
+      color: var(--text);
+      line-height: 1.55;
+      margin-bottom: 16px;
+    }
+    .ig-bio strong { font-weight: 600; }
+
+    .ig-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .ig-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .ig-btn--primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .ig-btn--primary:hover { background: var(--primary-dark); }
+    .ig-btn--secondary {
+      background: var(--bg-muted);
+      color: var(--text);
+    }
+    .ig-btn--secondary:hover { background: var(--border); }
+    .ig-btn--outline {
+      border: 1.5px solid var(--border);
+      color: var(--text);
+    }
+    .ig-btn--outline:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* Mini grid */
+    .ig-mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 3px;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .ig-mini-grid__item {
+      aspect-ratio: 1;
+      overflow: hidden;
+    }
+    .ig-mini-grid__item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.3s;
+    }
+    .ig-mini-grid__item:hover img { transform: scale(1.05); }
+
+    /* Hero copy */
+    .hero__copy { }
+    .hero__eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+    .hero__eyebrow::before {
+      content: '';
+      width: 28px;
+      height: 2px;
+      background: var(--primary);
+      border-radius: 1px;
+    }
+    .hero__title {
+      font-family: var(--font-display);
+      font-size: clamp(2.2rem, 4vw, 3.2rem);
+      font-weight: 700;
+      line-height: 1.15;
+      color: var(--text);
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+    .hero__title em {
+      font-style: italic;
+      color: var(--primary);
+    }
+    .hero__desc {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 32px;
+      max-width: 440px;
+    }
+    .hero__community {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 24px;
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-sm);
+    }
+    .hero__community-num {
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+    }
+    .hero__community-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .hero__community-label strong { display: block; font-weight: 600; color: var(--text); }
+    .hero__ctas {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary);
+      color: #fff;
+      padding: 14px 28px;
+      border-radius: 50px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px rgba(196, 131, 122, 0.3);
+    }
+    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(196, 131, 122, 0.4); }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: var(--text);
+      padding: 14px 28px;
+      border-radius: 50px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      border: 1.5px solid var(--border);
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* =====================
+       SECTIONS
+    ===================== */
+    section { position: relative; }
+    .section-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .section-eyebrow {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+    .section-title em { font-style: italic; color: var(--primary); }
+    .section-subtitle {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      margin-top: 12px;
+      max-width: 500px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* =====================
+       SOBRE MÍ
+    ===================== */
+    .about {
+      padding: 96px 0;
+      background: var(--bg-card);
+    }
+    .about__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .about__photos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .about__photo {
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .about__photo:first-child {
+      grid-row: span 2;
+    }
+    .about__photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.4s;
+    }
+    .about__photo:hover img { transform: scale(1.03); }
+    .about__photo--tall { height: 420px; }
+    .about__photo--short { height: 200px; }
+    .about__eyebrow {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 12px;
+    }
+    .about__title {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 2.5vw, 2.2rem);
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.25;
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+    .about__title em { font-style: italic; color: var(--primary); }
+    .about__text {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      line-height: 1.75;
+      margin-bottom: 16px;
+    }
+    .about__tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 28px;
+    }
+    .tag {
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 6px 16px;
+      border-radius: 50px;
+      background: var(--bg-section);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+    .tag:hover { background: var(--primary-light); color: var(--primary-dark); border-color: var(--primary-light); }
+    .tag--accent {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    /* =====================
+       GALERÍA
+    ===================== */
+    .gallery {
+      padding: 96px 0;
+      background: var(--bg-section);
+    }
+    .gallery__grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .gallery__item {
+      aspect-ratio: 1;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+    }
+    .gallery__item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.4s;
+    }
+    .gallery__item:hover img { transform: scale(1.08); }
+    .gallery__item::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(196,131,122,0.5) 0%, transparent 50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .gallery__item:hover::after { opacity: 1; }
+    .gallery__item--wide {
+      grid-column: span 2;
+      aspect-ratio: 2/1;
+    }
+    .gallery__cta {
+      text-align: center;
+      margin-top: 40px;
+    }
+
+    /* =====================
+       MÉTRICAS
+    ===================== */
+    .metrics {
+      padding: 80px 0;
+      background: var(--text);
+      overflow: hidden;
+    }
+    .metrics__grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: rgba(255,255,255,0.08);
+    }
+    .metric {
+      text-align: center;
+      padding: 48px 32px;
+      background: var(--text);
+      position: relative;
+    }
+    .metric__num {
+      font-family: var(--font-display);
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 700;
+      color: var(--primary-light);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .metric__label {
+      font-size: 0.875rem;
+      color: rgba(255,255,255,0.6);
+      font-weight: 400;
+      line-height: 1.4;
+    }
+    .metric__label strong {
+      display: block;
+      font-size: 1rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+      margin-bottom: 4px;
+    }
+
+    /* =====================
+       CONTACTO
+    ===================== */
+    .contact {
+      padding: 96px 0 0;
+      background: var(--bg-card);
+    }
+    .contact__inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+      padding-bottom: 80px;
+    }
+    .contact__title {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 3vw, 2.8rem);
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+    .contact__title em { font-style: italic; color: var(--primary); }
+    .contact__desc {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 32px;
+    }
+    .contact__links {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .contact__link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid var(--border);
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: all 0.2s;
+    }
+    .contact__link:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: rgba(196, 131, 122, 0.04);
+      transform: translateX(4px);
+    }
+    .contact__link-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .contact__link-icon--ig {
+      background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+    }
+    .contact__ig-cta {
+      background: var(--bg-section);
+      border-radius: var(--radius-xl);
+      padding: 40px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .contact__ig-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      overflow: hidden;
+      margin: 0 auto 16px;
+      border: 3px solid var(--primary-light);
+      padding: 2px;
+    }
+    .contact__ig-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+    .contact__ig-name {
+      font-family: var(--font-display);
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .contact__ig-handle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+    .contact__ig-stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 24px;
+    }
+    .contact__ig-stat { text-align: center; }
+    .contact__ig-stat strong {
+      display: block;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    .contact__ig-stat span {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* =====================
+       FOOTER
+    ===================== */
+    .footer {
+      background: var(--text);
+      color: rgba(255,255,255,0.7);
+      padding: 32px 0;
+      text-align: center;
+      font-size: 0.85rem;
+    }
+    .footer strong { color: rgba(255,255,255,0.9); }
+    .footer a { color: var(--primary-light); }
+
+    /* =====================
+       ANIMATIONS
+    ===================== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-left {
+      opacity: 0;
+      transform: translateX(-32px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal-left.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .reveal-right {
+      opacity: 0;
+      transform: translateX(32px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal-right.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .stagger-1 { transition-delay: 0.1s; }
+    .stagger-2 { transition-delay: 0.2s; }
+    .stagger-3 { transition-delay: 0.3s; }
+    .stagger-4 { transition-delay: 0.4s; }
+    .stagger-5 { transition-delay: 0.5s; }
+    .stagger-6 { transition-delay: 0.6s; }
+
+    /* =====================
+       FOTO DE CARA HERO
+    ===================== */
+    .hero__face {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .hero__face-photo {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      overflow: hidden;
+      flex-shrink: 0;
+      border: 3px solid var(--bg-card);
+      box-shadow: 0 4px 16px rgba(196, 131, 122, 0.25);
+      position: relative;
+    }
+    .hero__face-photo::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary-light), var(--primary));
+      z-index: -1;
+    }
+    .hero__face-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .hero__face-text { line-height: 1.35; }
+    .hero__face-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+    .hero__face-role {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* =====================
+       RESPONSIVE
+    ===================== */
+    @media (max-width: 1024px) {
+      .hero__inner { grid-template-columns: 1fr; gap: 48px; }
+      .hero__inner > .ig-card { order: -1; max-width: 400px; margin: 0 auto; }
+      .about__grid { grid-template-columns: 1fr; gap: 40px; }
+      .about__photos { max-width: 480px; }
+      .contact__inner { grid-template-columns: 1fr; gap: 40px; }
+      .gallery__grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .nav { padding: 14px 20px; }
+      .nav__links { display: none; }
+      .hero { padding: 80px 20px 48px; }
+      .hero__title { font-size: 2rem; }
+      .gallery__grid { grid-template-columns: repeat(2, 1fr); }
+      .gallery__item--wide { grid-column: span 2; }
+      .metrics__grid { grid-template-columns: 1fr; }
+      .metric { padding: 36px 24px; }
+    }
+    @media (max-width: 480px) {
+      .ig-profile-row { flex-direction: column; align-items: center; text-align: center; }
+      .ig-name-row { justify-content: center; }
+      .ig-handle { text-align: center; }
+      .ig-category { margin: 0 auto; }
+      .ig-stats { gap: 12px; }
+      .hero__community { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- =====================
+       NAVIGATION
+  ===================== -->
+  <nav class="nav" id="main-nav">
+    <div class="nav__logo">Valentina <span>Benítez</span></div>
+    <ul class="nav__links">
+      <li><a href="#sobre-mi">Sobre mí</a></li>
+      <li><a href="#galeria">Contenido</a></li>
+      <li><a href="#contacto">Contacto</a></li>
+    </ul>
+    <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank" class="nav__cta">
+      Seguir en Instagram
+    </a>
+  </nav>
+
+  <!-- =====================
+       HERO
+  ===================== -->
+  <section class="hero" id="inicio">
+    <div class="hero__inner">
+
+      <!-- Tarjeta Instagram -->
+      <div class="ig-card reveal-left">
+        <div class="ig-card__header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="2" width="20" height="20" rx="5" stroke="url(#ig-grad)" stroke-width="2"/>
+            <circle cx="12" cy="12" r="4" stroke="url(#ig-grad)" stroke-width="2"/>
+            <circle cx="17.5" cy="6.5" r="1" fill="url(#ig-grad)"/>
+            <defs>
+              <linearGradient id="ig-grad" x1="2" y1="22" x2="22" y2="2">
+                <stop offset="0%" stop-color="#f09433"/>
+                <stop offset="50%" stop-color="#dc2743"/>
+                <stop offset="100%" stop-color="#bc1888"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span class="ig-card__brand">Instagram</span>
+          <div class="ig-card__dots">
+            <div class="ig-card__dot"></div>
+            <div class="ig-card__dot"></div>
+            <div class="ig-card__dot"></div>
+          </div>
+        </div>
+
+        <div class="ig-profile-row">
+          <div class="ig-avatar-wrap">
+            <div class="ig-avatar-ring">
+              <div class="ig-avatar-ring__inner">
+                <img src="assets/instagram/profile.jpg" alt="Valentina Benítez - kinesióloga suelo pélvico">
+              </div>
+            </div>
+          </div>
+          <div class="ig-profile-info">
+            <div class="ig-name-row">
+              <span class="ig-name">Valentina Benítez</span>
+              <div class="ig-verified" title="Verificado">
+                <svg viewBox="0 0 10 10" fill="white"><path d="M4 7L2 5l.7-.7L4 5.6 7.3 2.3 8 3z"/></svg>
+              </div>
+            </div>
+            <p class="ig-handle"><a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank">@kinepp.valentinabenitez</a></p>
+            <span class="ig-category">Kinesiología · Suelo Pélvico</span>
+          </div>
+        </div>
+
+        <div class="ig-stats">
+          <div class="ig-stat">
+            <div class="ig-stat__num">8</div>
+            <div class="ig-stat__label">Posts</div>
+          </div>
+          <div class="ig-stat">
+            <div class="ig-stat__num">349</div>
+            <div class="ig-stat__label">Seguidores</div>
+          </div>
+          <div class="ig-stat">
+            <div class="ig-stat__num">108</div>
+            <div class="ig-stat__label">Siguiendo</div>
+          </div>
+        </div>
+
+        <p class="ig-bio">
+          <strong>Kinesióloga especializada en suelo pélvico</strong> 🌸<br>
+          Acompaño a personas en el cuidado de su salud pélvica con enfoque profesional y cercano.
+        </p>
+
+        <div class="ig-actions">
+          <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank" class="ig-btn ig-btn--primary">Contactar</a>
+          <a href="#sobre-mi" class="ig-btn ig-btn--secondary">Servicios</a>
+          <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank" class="ig-btn ig-btn--outline">Seguir</a>
+        </div>
+
+        <div class="ig-mini-grid">
+          <div class="ig-mini-grid__item"><img src="assets/instagram/post-2.jpg" alt="Post de Instagram"></div>
+          <div class="ig-mini-grid__item"><img src="assets/instagram/post-3.jpg" alt="Post de Instagram"></div>
+          <div class="ig-mini-grid__item"><img src="assets/instagram/post-4.jpg" alt="Post de Instagram"></div>
+          <div class="ig-mini-grid__item"><img src="assets/instagram/post-5.jpg" alt="Post de Instagram"></div>
+          <div class="ig-mini-grid__item"><img src="assets/instagram/post-6.jpg" alt="Post de Instagram"></div>
+          <div class="ig-mini-grid__item"><img src="assets/instagram/post-7.jpg" alt="Post de Instagram"></div>
+        </div>
+      </div>
+
+      <!-- Copy hero -->
+      <div class="hero__copy">
+        <div class="hero__face reveal">
+          <div class="hero__face-photo">
+            <img src="assets/instagram/profile-hires.jpg" alt="Valentina Benítez — kinesióloga suelo pélvico">
+          </div>
+          <div class="hero__face-text">
+            <div class="hero__face-name">Valentina Benítez</div>
+            <div class="hero__face-role">Kinesióloga · Suelo Pélvico</div>
+          </div>
+        </div>
+        <div class="hero__eyebrow reveal stagger-1">Kinesióloga · Suelo Pélvico</div>
+        <h1 class="hero__title reveal stagger-2">
+          Tu bienestar<br>
+          <em>pélvico</em><br>
+          en buenas manos
+        </h1>
+        <p class="hero__desc reveal stagger-3">
+          Especializada en kinesiología del suelo pélvico. Acompaño a personas en cada etapa de su vida: embarazo, postparto, recuperación y bienestar cotidiano.
+        </p>
+        <div class="hero__community reveal stagger-4">
+          <div>
+            <div class="hero__community-num">349</div>
+          </div>
+          <div class="hero__community-label">
+            <strong>Comunidad Instagram</strong>
+            Personas que confían en el cuidado profesional de su suelo pélvico
+          </div>
+        </div>
+        <div class="hero__ctas reveal stagger-5">
+          <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank" class="btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg>
+            Ver en Instagram
+          </a>
+          <a href="#sobre-mi" class="btn-secondary">
+            Conocer más
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =====================
+       SOBRE MÍ
+  ===================== -->
+  <section class="about" id="sobre-mi">
+    <div class="container">
+      <div class="about__grid">
+
+        <div class="about__photos reveal-left">
+          <div class="about__photo about__photo--tall">
+            <img src="assets/instagram/post-6.jpg" alt="Valentina Benítez kinesióloga">
+          </div>
+          <div class="about__photo about__photo--short">
+            <img src="assets/instagram/post-3.jpg" alt="Kinesiología suelo pélvico">
+          </div>
+          <div class="about__photo about__photo--short">
+            <img src="assets/instagram/post-4.jpg" alt="Kinesiología suelo pélvico">
+          </div>
+        </div>
+
+        <div class="reveal-right">
+          <p class="about__eyebrow">Sobre mí</p>
+          <h2 class="about__title">
+            Kinesióloga especializada en<br><em>suelo pélvico</em>
+          </h2>
+          <p class="about__text">
+            Soy Valentina Benítez, kinesióloga especializada en suelo pélvico. Mi trabajo está enfocado en acompañar a personas en el cuidado de su salud pélvica con un abordaje profesional, empático y personalizado.
+          </p>
+          <p class="about__text">
+            El suelo pélvico es una parte fundamental del cuerpo — tanto en hombres como en mujeres — que muchas veces no recibe la atención que merece. Mi misión es cambiar eso: que cada persona conozca su cuerpo, lo cuide y viva sin molestias.
+          </p>
+          <p class="about__text">
+            Trabajo en todas las etapas de la vida: embarazo, postparto, incontinencia, disfunciones pélvicas y recuperación. Porque el bienestar no tiene género ni una sola etapa.
+          </p>
+          <div class="about__tags">
+            <span class="tag tag--accent">Suelo pélvico</span>
+            <span class="tag">Embarazo</span>
+            <span class="tag">Postparto</span>
+            <span class="tag">Hombres y mujeres</span>
+            <span class="tag">Kinesiología</span>
+            <span class="tag">Incontinencia</span>
+            <span class="tag">Disfunción pélvica</span>
+            <span class="tag">Recuperación</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================
+       GALERÍA
+  ===================== -->
+  <section class="gallery" id="galeria">
+    <div class="container">
+      <div class="section-header reveal">
+        <span class="section-eyebrow">Contenido</span>
+        <h2 class="section-title">Mis <em>últimas publicaciones</em></h2>
+        <p class="section-subtitle">Educación, bienestar y kinesiología del suelo pélvico en mi Instagram.</p>
+      </div>
+      <div class="gallery__grid">
+        <div class="gallery__item gallery__item--wide reveal stagger-1">
+          <img src="assets/instagram/post-6.jpg" alt="Post de Instagram">
+        </div>
+        <div class="gallery__item reveal stagger-2">
+          <img src="assets/instagram/post-7.jpg" alt="Post de Instagram">
+        </div>
+        <div class="gallery__item reveal stagger-3">
+          <img src="assets/instagram/post-8.jpg" alt="Post de Instagram">
+        </div>
+        <div class="gallery__item reveal stagger-1">
+          <img src="assets/instagram/post-2.jpg" alt="Post de Instagram">
+        </div>
+        <div class="gallery__item reveal stagger-2">
+          <img src="assets/instagram/post-3.jpg" alt="Post de Instagram">
+        </div>
+        <div class="gallery__item reveal stagger-3">
+          <img src="assets/instagram/post-4.jpg" alt="Post de Instagram">
+        </div>
+        <div class="gallery__item reveal stagger-4">
+          <img src="assets/instagram/post-5.jpg" alt="Post de Instagram">
+        </div>
+        <div class="gallery__item reveal stagger-5">
+          <img src="assets/instagram/post-9.jpg" alt="Post de Instagram">
+        </div>
+      </div>
+      <div class="gallery__cta reveal">
+        <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank" class="btn-primary">
+          Ver todo en Instagram
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================
+       MÉTRICAS
+  ===================== -->
+  <section class="metrics">
+    <div class="container">
+      <div class="metrics__grid">
+        <div class="metric reveal stagger-1">
+          <div class="metric__num" data-target="349">0</div>
+          <div class="metric__label">
+            <strong>Seguidoras en Instagram</strong>
+            Comunidad que crece cada día
+          </div>
+        </div>
+        <div class="metric reveal stagger-2">
+          <div class="metric__num" data-target="8">0</div>
+          <div class="metric__label">
+            <strong>Publicaciones</strong>
+            Contenido educativo sobre suelo pélvico
+          </div>
+        </div>
+        <div class="metric reveal stagger-3">
+          <div class="metric__num">100%</div>
+          <div class="metric__label">
+            <strong>Enfoque en la mujer</strong>
+            Cuidado personalizado y profesional
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================
+       CONTACTO
+  ===================== -->
+  <section class="contact" id="contacto">
+    <div class="container">
+      <div class="contact__inner">
+
+        <div class="reveal-left">
+          <h2 class="contact__title">
+            ¿Empezamos<br>tu <em>cuidado</em>?
+          </h2>
+          <p class="contact__desc">
+            Si tienes preguntas sobre el suelo pélvico o quieres agendar una consulta, escríbeme por Instagram. Respondo todos los mensajes.
+          </p>
+          <div class="contact__links">
+            <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank" class="contact__link">
+              <div class="contact__link-icon contact__link-icon--ig">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><rect x="2" y="2" width="20" height="20" rx="5" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="white" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1" fill="white"/></svg>
+              </div>
+              @kinepp.valentinabenitez — Instagram
+            </a>
+          </div>
+        </div>
+
+        <div class="contact__ig-cta reveal-right">
+          <div class="contact__ig-avatar">
+            <img src="assets/instagram/profile.jpg" alt="Valentina Benítez">
+          </div>
+          <div class="contact__ig-name">Valentina Benítez</div>
+          <div class="contact__ig-handle">@kinepp.valentinabenitez</div>
+          <div class="contact__ig-stats">
+            <div class="contact__ig-stat">
+              <strong>8</strong>
+              <span>posts</span>
+            </div>
+            <div class="contact__ig-stat">
+              <strong>349</strong>
+              <span>seguidores</span>
+            </div>
+            <div class="contact__ig-stat">
+              <strong>108</strong>
+              <span>siguiendo</span>
+            </div>
+          </div>
+          <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank" class="btn-primary" style="width:100%;justify-content:center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg>
+            Seguir y contactar
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================
+       FOOTER
+  ===================== -->
+  <footer class="footer">
+    <p>© 2026 <strong>Valentina Benítez</strong> — Kinesióloga Suelo Pélvico ·
+      <a href="https://www.instagram.com/kinepp.valentinabenitez/" target="_blank">@kinepp.valentinabenitez</a>
+    </p>
+  </footer>
+
+  <!-- =====================
+       JS
+  ===================== -->
+  <script>
+    // Nav scroll effect
+    const nav = document.getElementById('main-nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 40);
+    }, { passive: true });
+
+    // Intersection Observer — reveal animations
+    const revealEls = document.querySelectorAll('.reveal, .reveal-left, .reveal-right');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    revealEls.forEach(el => observer.observe(el));
+
+    // Counter animation
+    function animateCounter(el, target, duration = 1500) {
+      let start = 0;
+      const step = target / (duration / 16);
+      const timer = setInterval(() => {
+        start += step;
+        if (start >= target) {
+          el.textContent = target.toLocaleString('es');
+          clearInterval(timer);
+        } else {
+          el.textContent = Math.floor(start).toLocaleString('es');
+        }
+      }, 16);
+    }
+
+    const counters = document.querySelectorAll('[data-target]');
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const target = parseInt(entry.target.dataset.target);
+          animateCounter(entry.target, target);
+          counterObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.5 });
+    counters.forEach(c => counterObserver.observe(c));
+
+    // Parallax on hero decoration
+    window.addEventListener('scroll', () => {
+      const scrollY = window.scrollY;
+      const hero = document.querySelector('.hero');
+      if (hero) {
+        const before = hero.querySelector(':not(*)');
+      }
+      document.querySelectorAll('.hero::before, .hero::after').forEach(el => {});
+    }, { passive: true });
+  </script>
+
+</body>
+</html>

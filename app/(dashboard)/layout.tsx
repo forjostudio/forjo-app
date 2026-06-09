@@ -31,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <VerticalProvider vertical={vertical}>
-      <PaletteScript palette={business.palette} />
+      <PaletteScript palette={business.palette} theme={business.theme} font={business.font} />
       <div className="min-h-screen">
         <Sidebar business={business} />
         <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">

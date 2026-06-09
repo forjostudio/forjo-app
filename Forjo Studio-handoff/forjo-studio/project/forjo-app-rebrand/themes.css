@@ -1,0 +1,285 @@
+/* =========================================================================
+   FORJO APP — VISUAL THEMES
+   Full look-and-feel variants layered on top of theme.css via
+   data-theme="modern|spa|cyber" on <html>. (No attribute = "forjo".)
+   Each theme overrides the entire token set — neutrals, accents, fonts,
+   radius — and adds a few scoped component flourishes (shadows, gradients,
+   neon glows). Light/dark still toggled with the .dark class.
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@400;500;600;700&family=Mulish:wght@300;400;500;600;700;800&family=Orbitron:wght@500;600;700;800;900&family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+/* ============================================================ *
+ * 1 · MODERN  — clean SaaS admin (Gentelella / Material BAT)   *
+ * ============================================================ */
+[data-theme="modern"]{
+  --font-sans:'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-heading:'Plus Jakarta Sans', system-ui, sans-serif;
+  --radius:0.75rem; --r-sm:0.5rem; --r-md:0.7rem; --r-lg:0.9rem;
+
+  --tint:#5b6ef5; /* accent that subtly tints the neutrals — set per palette */
+  --background:color-mix(in oklab,#eef1f7 95%,var(--tint));
+  --foreground:#1d2433;
+  --card:color-mix(in oklab,#ffffff 96%,var(--tint));
+  --card-foreground:#1d2433;
+  --popover:color-mix(in oklab,#ffffff 96%,var(--tint));
+  --popover-foreground:#1d2433;
+  --secondary:color-mix(in oklab,#eaeef6 92%,var(--tint));
+  --secondary-foreground:#1d2433;
+  --muted:color-mix(in oklab,#eef1f7 93%,var(--tint));
+  --muted-foreground:#69748c;
+  --border:color-mix(in oklab,#e2e8f2 89%,var(--tint));
+  --input:color-mix(in oklab,#dbe2ee 89%,var(--tint));
+  --destructive:#e5484d;
+  --destructive-foreground:#ffffff;
+
+  /* dark navy sidebar even in light mode — signature admin look */
+  --sidebar:color-mix(in oklab,#1b2334 90%,var(--tint));
+  --sidebar-foreground:#c6cfde;
+  --sidebar-border:rgba(255,255,255,.07);
+  --sidebar-accent:color-mix(in oklab,#28324a 85%,var(--tint));
+  --sidebar-accent-foreground:#ffffff;
+
+  --bau-red:#f0654a; --bau-blue:#5b6ef5; --bau-yellow:#f4b740; --bau-green:#1fbf91; --bau-ink:#1d2433;
+
+  --primary:#5b6ef5; --primary-foreground:#ffffff;
+  --accent:#5b6ef5; --accent-foreground:#ffffff; --ring:#5b6ef5;
+  --sidebar-primary:#5b6ef5; --sidebar-primary-foreground:#ffffff;
+  --chart-1:#5b6ef5; --chart-2:#1fbf91; --chart-3:#f4b740; --chart-4:#f0654a; --chart-5:#9b6ef5;
+  color-scheme:light;
+}
+.dark[data-theme="modern"]{
+  --background:color-mix(in oklab,#0f1623 91%,var(--tint));
+  --foreground:#e7ecf5;
+  --card:color-mix(in oklab,#18202f 91%,var(--tint));
+  --card-foreground:#e7ecf5;
+  --popover:color-mix(in oklab,#18202f 91%,var(--tint));
+  --popover-foreground:#e7ecf5;
+  --secondary:color-mix(in oklab,#1e2738 89%,var(--tint));
+  --secondary-foreground:#e7ecf5;
+  --muted:color-mix(in oklab,#1e2738 89%,var(--tint));
+  --muted-foreground:#8b96ac;
+  --border:rgba(255,255,255,.08);
+  --input:rgba(255,255,255,.12);
+  --sidebar:color-mix(in oklab,#0b101a 90%,var(--tint));
+  --sidebar-foreground:#c6cfde;
+  --sidebar-border:rgba(255,255,255,.06);
+  --sidebar-accent:color-mix(in oklab,#1a2233 87%,var(--tint));
+  --primary:#6d82f7; --accent:#6d82f7; --ring:#6d82f7; --sidebar-primary:#6d82f7;
+  color-scheme:dark;
+}
+/* modern flourishes — soft elevation + crisp colored stat accents */
+[data-theme="modern"] .fcard{box-shadow:0 1px 2px rgba(16,24,40,.04),0 4px 14px rgba(16,24,40,.05)}
+.dark[data-theme="modern"] .fcard{box-shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28)}
+[data-theme="modern"] .stat{position:relative;overflow:hidden}
+[data-theme="modern"] .stat::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;border-radius:3px}
+[data-theme="modern"] .stat:nth-child(1)::after{background:var(--bau-blue)}
+[data-theme="modern"] .stat:nth-child(2)::after{background:var(--bau-green)}
+[data-theme="modern"] .stat:nth-child(3)::after{background:var(--bau-yellow)}
+[data-theme="modern"] .stat:nth-child(4)::after{background:var(--bau-red)}
+[data-theme="modern"] .page-title,[data-theme="modern"] .side-name{letter-spacing:-.02em}
+[data-theme="modern"] .fbtn-primary{box-shadow:0 4px 12px color-mix(in oklab,var(--primary) 35%,transparent)}
+[data-theme="modern"] .navlink.active{box-shadow:0 4px 12px color-mix(in oklab,var(--primary) 30%,transparent)}
+
+/* ============================================================ *
+ * 2 · SPA  — calm wellness, soft gradients, relaxed type        *
+ * ============================================================ */
+[data-theme="spa"]{
+  --font-sans:'Mulish', system-ui, sans-serif;
+  --font-heading:'Cormorant Garamond', Georgia, serif;
+  --radius:1.1rem; --r-sm:0.7rem; --r-md:1rem; --r-lg:1.4rem;
+
+  --tint:#7e9b82; /* = primary; tints neutrals + gradient per palette */
+  --background:color-mix(in oklab,#efe9e2 91%,var(--tint));
+  --foreground:#4c443d;
+  --card:color-mix(in oklab,#fbf7f2 95%,var(--tint));
+  --card-foreground:#4c443d;
+  --popover:color-mix(in oklab,#fbf7f2 95%,var(--tint));
+  --popover-foreground:#4c443d;
+  --secondary:color-mix(in oklab,#e8ded3 89%,var(--tint));
+  --secondary-foreground:#4c443d;
+  --muted:color-mix(in oklab,#ece4da 90%,var(--tint));
+  --muted-foreground:#90847a;
+  --border:color-mix(in oklab,#e2d6c8 87%,var(--tint));
+  --input:color-mix(in oklab,#e2d6c8 87%,var(--tint));
+  --destructive:#c0876b;
+  --destructive-foreground:#fbf7f2;
+
+  --sidebar:color-mix(in oklab,#e9e0d5 89%,var(--tint));
+  --sidebar-foreground:#4c443d;
+  --sidebar-border:color-mix(in oklab,#ddd0c0 88%,var(--tint));
+  --sidebar-accent:color-mix(in oklab,#ddd0c0 84%,var(--tint));
+  --sidebar-accent-foreground:#4c443d;
+
+  --bau-red:#c0876b; --bau-blue:#7e93a6; --bau-yellow:#cdb083; --bau-green:#7e9b82; --bau-ink:#4c443d;
+
+  --primary:#7e9b82; --primary-foreground:#ffffff;
+  --accent:#b79aa0; --accent-foreground:#ffffff; --ring:#7e9b82;
+  --sidebar-primary:#7e9b82; --sidebar-primary-foreground:#ffffff;
+  --chart-1:#7e9b82; --chart-2:#b79aa0; --chart-3:#cdb083; --chart-4:#7e93a6; --chart-5:#a78bb0;
+  color-scheme:light;
+}
+.dark[data-theme="spa"]{
+  --background:color-mix(in oklab,#221f25 88%,var(--tint));
+  --foreground:#ece3da;
+  --card:color-mix(in oklab,#2b272f 89%,var(--tint));
+  --card-foreground:#ece3da;
+  --popover:color-mix(in oklab,#2b272f 89%,var(--tint));
+  --popover-foreground:#ece3da;
+  --secondary:color-mix(in oklab,#322d36 87%,var(--tint));
+  --secondary-foreground:#ece3da;
+  --muted:color-mix(in oklab,#322d36 87%,var(--tint));
+  --muted-foreground:#a99fa6;
+  --border:rgba(236,227,218,.12);
+  --input:rgba(236,227,218,.14);
+  --sidebar:color-mix(in oklab,#1b181f 88%,var(--tint));
+  --sidebar-foreground:#ece3da;
+  --sidebar-border:rgba(236,227,218,.10);
+  --sidebar-accent:color-mix(in oklab,#2a262f 86%,var(--tint));
+  --primary:#9bba9e; --primary-foreground:#1b1c1a;
+  --accent:#c9aeb4; --ring:#9bba9e; --sidebar-primary:#9bba9e; --sidebar-primary-foreground:#1b1c1a;
+  color-scheme:dark;
+}
+/* spa flourishes — flowing gradient canvas + airy serif headings */
+[data-theme="spa"] body{
+  background:linear-gradient(135deg,
+    color-mix(in oklab,#efe9e2 85%,var(--tint)) 0%,
+    color-mix(in oklab,#e7e2dd 88%,var(--tint)) 32%,
+    color-mix(in oklab,#e7e4df 88%,var(--accent)) 66%,
+    color-mix(in oklab,#ece0e2 82%,var(--accent)) 100%);
+  background-attachment:fixed;
+}
+.dark[data-theme="spa"] body{
+  background:linear-gradient(135deg,
+    color-mix(in oklab,#201d24 84%,var(--tint)) 0%,
+    color-mix(in oklab,#222028 86%,var(--accent)) 50%,
+    color-mix(in oklab,#1f2522 84%,var(--tint)) 100%);
+  background-attachment:fixed;
+}
+[data-theme="spa"] .fcard{box-shadow:0 10px 30px -16px rgba(80,64,52,.30)}
+.dark[data-theme="spa"] .fcard{box-shadow:0 14px 34px -18px rgba(0,0,0,.5)}
+[data-theme="spa"] .page-title{font-weight:500;letter-spacing:.01em;font-size:34px}
+[data-theme="spa"] h1,[data-theme="spa"] h2,[data-theme="spa"] h3{font-weight:500;letter-spacing:.01em}
+[data-theme="spa"] .eyebrow{letter-spacing:.28em;font-weight:500}
+[data-theme="spa"] .fin-saldo-v,[data-theme="spa"] .kv{font-weight:600}
+[data-theme="spa"] .fbtn-primary{background:linear-gradient(120deg,var(--primary),var(--accent));border:none}
+[data-theme="spa"] .fbtn-primary:hover{filter:brightness(1.04)}
+[data-theme="spa"] .side-logo{background:linear-gradient(135deg,var(--primary),var(--accent))}
+[data-theme="spa"] .navlink.active{background:linear-gradient(120deg,var(--primary),var(--accent))}
+
+/* ============================================================ *
+ * 3 · CYBER  — neon cyberpunk, glow + grid, techno type         *
+ * ============================================================ */
+[data-theme="cyber"]{
+  --font-sans:'Chakra Petch', system-ui, sans-serif;
+  --font-heading:'Orbitron', system-ui, sans-serif;
+  --radius:0.15rem; --r-sm:0.1rem; --r-md:0.15rem; --r-lg:0.2rem;
+
+  --tint:#00e5ff; /* = primary; tints the near-black neutrals + glows per palette */
+  --background:color-mix(in oklab,#080611 93%,var(--tint));
+  --foreground:#dff6ff;
+  --card:color-mix(in oklab,#0e0b1c 92%,var(--tint));
+  --card-foreground:#dff6ff;
+  --popover:color-mix(in oklab,#0e0b1c 92%,var(--tint));
+  --popover-foreground:#dff6ff;
+  --secondary:color-mix(in oklab,#16122a 90%,var(--tint));
+  --secondary-foreground:#dff6ff;
+  --muted:color-mix(in oklab,#16122a 90%,var(--tint));
+  --muted-foreground:#7d8bb5;
+  --border:color-mix(in srgb,var(--tint) 22%,transparent);
+  --input:color-mix(in srgb,var(--tint) 16%,transparent);
+  --destructive:#ff2e7e;
+  --destructive-foreground:#0a0410;
+
+  --sidebar:color-mix(in oklab,#0a0714 92%,var(--tint));
+  --sidebar-foreground:#bfe9f5;
+  --sidebar-border:color-mix(in srgb,var(--tint) 16%,transparent);
+  --sidebar-accent:color-mix(in srgb,var(--tint) 11%,transparent);
+  --sidebar-accent-foreground:#e6fbff;
+
+  --bau-red:#ff2e7e; --bau-blue:#00e5ff; --bau-yellow:#f5e663; --bau-green:#3dff9e; --bau-ink:#dff6ff;
+
+  --primary:#00e5ff; --primary-foreground:#04121a;
+  --accent:#ff2e7e; --accent-foreground:#0a0410; --ring:#00e5ff;
+  --sidebar-primary:#00e5ff; --sidebar-primary-foreground:#04121a;
+  --chart-1:#00e5ff; --chart-2:#ff2e7e; --chart-3:#f5e663; --chart-4:#3dff9e; --chart-5:#b06cff;
+  color-scheme:dark;
+}
+.dark[data-theme="cyber"]{
+  --background:color-mix(in oklab,#040309 94%,var(--tint));
+  --card:color-mix(in oklab,#0b0818 93%,var(--tint));
+  --sidebar:color-mix(in oklab,#070512 93%,var(--tint));
+}
+/* cyber flourishes — grid canvas, neon glow, sharp uppercase tech type */
+[data-theme="cyber"] body{
+  background:
+    radial-gradient(1100px 520px at 78% -8%, color-mix(in srgb,var(--accent) 17%,transparent), transparent 60%),
+    radial-gradient(1000px 600px at 8% 108%, color-mix(in srgb,var(--primary) 17%,transparent), transparent 60%),
+    var(--background);
+  background-attachment:fixed;
+}
+[data-theme="cyber"] .app{
+  background-image:linear-gradient(color-mix(in srgb,var(--primary) 6%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--primary) 6%,transparent) 1px,transparent 1px);
+  background-size:42px 42px;
+}
+[data-theme="cyber"] .fcard{box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 7%,transparent),0 0 26px -10px color-mix(in srgb,var(--primary) 35%,transparent)}
+[data-theme="cyber"] .stat,[data-theme="cyber"] .fcard:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent)}
+[data-theme="cyber"] .page-title{text-transform:uppercase;letter-spacing:.04em;text-shadow:0 0 18px color-mix(in oklab,var(--primary) 55%,transparent)}
+[data-theme="cyber"] .side-name{letter-spacing:.06em}
+[data-theme="cyber"] .eyebrow{letter-spacing:.32em;color:var(--primary)}
+[data-theme="cyber"] .fin-saldo-v{text-shadow:0 0 24px color-mix(in oklab,var(--primary) 60%,transparent)}
+[data-theme="cyber"] .fbtn-primary{box-shadow:0 0 18px color-mix(in oklab,var(--primary) 55%,transparent);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+[data-theme="cyber"] .fbtn-outline{border-color:rgba(0,229,255,.35)}
+[data-theme="cyber"] .navlink.active{box-shadow:inset 0 0 0 1px rgba(0,229,255,.6),0 0 18px -2px color-mix(in oklab,var(--primary) 55%,transparent)}
+[data-theme="cyber"] .side-logo{box-shadow:0 0 18px color-mix(in oklab,var(--primary) 60%,transparent)}
+[data-theme="cyber"] .fbadge{text-transform:uppercase;letter-spacing:.05em}
+
+/* =========================================================================
+   ACCENT PALETTE VARIANTS  — per theme, switched with data-palette
+   Each theme ships its own accent family. (Forjo palettes live in theme.css.)
+   ========================================================================= */
+
+/* ---- MODERN ---- */
+[data-theme="modern"][data-palette="indigo"] { --tint:#5b6ef5; --primary:#5b6ef5; --accent:#5b6ef5; --ring:#5b6ef5; --sidebar-primary:#5b6ef5; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#5b6ef5; }
+.dark[data-theme="modern"][data-palette="indigo"] { --primary:#6d82f7; --accent:#6d82f7; --ring:#6d82f7; --sidebar-primary:#6d82f7; --chart-1:#6d82f7; }
+[data-theme="modern"][data-palette="emerald"] { --tint:#10b981; --primary:#10b981; --accent:#10b981; --ring:#10b981; --sidebar-primary:#10b981; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#10b981; }
+.dark[data-theme="modern"][data-palette="emerald"] { --primary:#1fcf95; --accent:#1fcf95; --ring:#1fcf95; --sidebar-primary:#1fcf95; --chart-1:#1fcf95; }
+[data-theme="modern"][data-palette="violet"] { --tint:#8b5cf6; --primary:#8b5cf6; --accent:#8b5cf6; --ring:#8b5cf6; --sidebar-primary:#8b5cf6; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#8b5cf6; }
+.dark[data-theme="modern"][data-palette="violet"] { --primary:#a07cf8; --accent:#a07cf8; --ring:#a07cf8; --sidebar-primary:#a07cf8; --chart-1:#a07cf8; }
+[data-theme="modern"][data-palette="rose"] { --tint:#f43f5e; --primary:#f43f5e; --accent:#f43f5e; --ring:#f43f5e; --sidebar-primary:#f43f5e; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#f43f5e; }
+.dark[data-theme="modern"][data-palette="rose"] { --primary:#fb6178; --accent:#fb6178; --ring:#fb6178; --sidebar-primary:#fb6178; --chart-1:#fb6178; }
+[data-theme="modern"][data-palette="amber"] { --tint:#f59e0b; --primary:#f59e0b; --accent:#f59e0b; --ring:#f59e0b; --sidebar-primary:#f59e0b; --primary-foreground:#1d2433; --accent-foreground:#1d2433; --sidebar-primary-foreground:#1d2433; --chart-1:#f59e0b; }
+.dark[data-theme="modern"][data-palette="amber"] { --primary:#fbb734; --accent:#fbb734; --ring:#fbb734; --sidebar-primary:#fbb734; --primary-foreground:#1d2433; --sidebar-primary-foreground:#1d2433; --chart-1:#fbb734; }
+
+/* ---- SPA ---- (primary + a complementary --accent feeding the gradients) */
+[data-theme="spa"][data-palette="sage"]     { --tint:#7e9b82; --primary:#7e9b82; --accent:#b79aa0; --ring:#7e9b82; --sidebar-primary:#7e9b82; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#7e9b82; }
+.dark[data-theme="spa"][data-palette="sage"]{ --primary:#9bba9e; --accent:#c9aeb4; --ring:#9bba9e; --sidebar-primary:#9bba9e; --primary-foreground:#1b1c1a; --sidebar-primary-foreground:#1b1c1a; --chart-1:#9bba9e; }
+[data-theme="spa"][data-palette="mauve"]     { --tint:#b08a92; --primary:#b08a92; --accent:#cdb083; --ring:#b08a92; --sidebar-primary:#b08a92; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#b08a92; }
+.dark[data-theme="spa"][data-palette="mauve"]{ --primary:#caa5ad; --accent:#dcc096; --ring:#caa5ad; --sidebar-primary:#caa5ad; --primary-foreground:#211a1c; --sidebar-primary-foreground:#211a1c; --chart-1:#caa5ad; }
+[data-theme="spa"][data-palette="clay"]      { --tint:#bb8b6b; --primary:#bb8b6b; --accent:#9bb0a0; --ring:#bb8b6b; --sidebar-primary:#bb8b6b; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#bb8b6b; }
+.dark[data-theme="spa"][data-palette="clay"] { --primary:#d2a585; --accent:#b1c6b6; --ring:#d2a585; --sidebar-primary:#d2a585; --primary-foreground:#211b16; --sidebar-primary-foreground:#211b16; --chart-1:#d2a585; }
+[data-theme="spa"][data-palette="ocean"]     { --tint:#7e93a6; --primary:#7e93a6; --accent:#a9b8a0; --ring:#7e93a6; --sidebar-primary:#7e93a6; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#7e93a6; }
+.dark[data-theme="spa"][data-palette="ocean"]{ --primary:#9cb0c2; --accent:#c2d0b9; --ring:#9cb0c2; --sidebar-primary:#9cb0c2; --primary-foreground:#161b20; --sidebar-primary-foreground:#161b20; --chart-1:#9cb0c2; }
+[data-theme="spa"][data-palette="lavender"]     { --tint:#9d8fb0; --primary:#9d8fb0; --accent:#c6b59a; --ring:#9d8fb0; --sidebar-primary:#9d8fb0; --primary-foreground:#fff; --accent-foreground:#fff; --sidebar-primary-foreground:#fff; --chart-1:#9d8fb0; }
+.dark[data-theme="spa"][data-palette="lavender"]{ --primary:#b8a9ca; --accent:#d6c6ab; --ring:#b8a9ca; --sidebar-primary:#b8a9ca; --primary-foreground:#1c1a20; --sidebar-primary-foreground:#1c1a20; --chart-1:#b8a9ca; }
+
+/* ---- CYBER ---- (glows read --primary automatically) */
+[data-theme="cyber"][data-palette="cyan"]    { --tint:#00e5ff; --primary:#00e5ff; --accent:#ff2e7e; --ring:#00e5ff; --sidebar-primary:#00e5ff; --primary-foreground:#04121a; --accent-foreground:#0a0410; --sidebar-primary-foreground:#04121a; --chart-1:#00e5ff; }
+[data-theme="cyber"][data-palette="magenta"] { --tint:#ff2e7e; --primary:#ff2e7e; --accent:#00e5ff; --ring:#ff2e7e; --sidebar-primary:#ff2e7e; --primary-foreground:#150210; --accent-foreground:#04121a; --sidebar-primary-foreground:#150210; --chart-1:#ff2e7e; }
+[data-theme="cyber"][data-palette="lime"]    { --tint:#3dff9e; --primary:#3dff9e; --accent:#b06cff; --ring:#3dff9e; --sidebar-primary:#3dff9e; --primary-foreground:#021510; --accent-foreground:#0a0410; --sidebar-primary-foreground:#021510; --chart-1:#3dff9e; }
+[data-theme="cyber"][data-palette="purple"]  { --tint:#b06cff; --primary:#b06cff; --accent:#00e5ff; --ring:#b06cff; --sidebar-primary:#b06cff; --primary-foreground:#0c0418; --accent-foreground:#04121a; --sidebar-primary-foreground:#0c0418; --chart-1:#b06cff; }
+[data-theme="cyber"][data-palette="amber"]   { --tint:#ffd23d; --primary:#ffd23d; --accent:#ff2e7e; --ring:#ffd23d; --sidebar-primary:#ffd23d; --primary-foreground:#151002; --accent-foreground:#0a0410; --sidebar-primary-foreground:#151002; --chart-1:#ffd23d; }
+
+/* =========================================================================
+   TYPOGRAPHY PAIRINGS  — switched with data-font (overrides theme defaults).
+   No attribute = each theme keeps its own native pairing.
+   ========================================================================= */
+[data-font="geometrica"] { --font-sans:'Plus Jakarta Sans', system-ui, sans-serif; --font-heading:'Plus Jakarta Sans', system-ui, sans-serif; }
+[data-font="bauhaus"]    { --font-sans:'Space Grotesk', system-ui, sans-serif; --font-heading:'Archivo', system-ui, sans-serif; }
+[data-font="elegante"]   { --font-sans:'Mulish', system-ui, sans-serif; --font-heading:'Cormorant Garamond', Georgia, serif; }
+[data-font="tech"]       { --font-sans:'Chakra Petch', system-ui, sans-serif; --font-heading:'Orbitron', system-ui, sans-serif; }
+[data-font="suave"]      { --font-sans:'Manrope', system-ui, sans-serif; --font-heading:'Sora', system-ui, sans-serif; }
+/* serif headings want a touch more weight + air than their display defaults */
+[data-font="elegante"] .page-title,[data-font="elegante"] h1,[data-font="elegante"] h2,[data-font="elegante"] h3{font-weight:600;letter-spacing:.01em}
+[data-font="tech"] .page-title{text-transform:uppercase;letter-spacing:.03em}
+

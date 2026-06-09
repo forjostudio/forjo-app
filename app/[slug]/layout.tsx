@@ -8,7 +8,9 @@ const getSlugBusiness = cache(async (slug: string) => {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('businesses')
-    .select('name, logo_url, palette')
+    // select('*') (no lista explícita) → resiliente si theme/font aún no existen en DB
+    // (deploy antes de la migración 014): quedan undefined → default Forjo, sin 42703.
+    .select('*')
     .eq('slug', slug)
     .single()
   return data
@@ -47,7 +49,7 @@ export default async function SlugLayout({ children, params }: LayoutProps) {
   // La página pública sigue la paleta del negocio vía data-palette en <html>.
   return (
     <>
-      <PaletteScript palette={business?.palette} />
+      <PaletteScript palette={business?.palette} theme={business?.theme} font={business?.font} />
       {children}
     </>
   )

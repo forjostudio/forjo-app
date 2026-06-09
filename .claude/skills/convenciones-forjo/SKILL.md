@@ -17,7 +17,13 @@ Forjo Studio (forjo.studio) es la marca/empresa; Forjo Gestión es el producto S
 
 ## Stack
 
-- **Next.js 14** (App Router) + **Supabase** (Postgres + Auth) + **Vercel** (deploy).
+- **Next.js 16** (App Router) + **Supabase** (Postgres + Auth) + **Vercel** (deploy).
+  Es Next 16, NO 14: hay breaking changes respecto a versiones viejas (APIs, convenciones,
+  estructura). Ver `node_modules/next/dist/docs/` antes de asumir comportamiento.
+- **Middleware = `proxy.ts` en la raíz** (en Next 16 el middleware se llama `proxy`, no
+  `middleware`). Corre `updateSession` (de `lib/supabase/middleware.ts`) sobre las rutas
+  conocidas, incluidas **todas las `/api/*`** — o sea cualquier route handler bajo `/api`
+  pasa por el refresh de sesión de Supabase antes de ejecutarse. Corre en **Edge Runtime**.
 - Emails transaccionales: **Resend**.
 - Anti-spam en formularios públicos: **reCAPTCHA**.
 - Pagos/suscripciones: **MercadoPago** (ver skill `mercadopago-suscripciones`).
