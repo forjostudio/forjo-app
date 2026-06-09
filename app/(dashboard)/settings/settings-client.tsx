@@ -192,6 +192,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     type: business.type || '',
     whatsapp: business.whatsapp || '',
     address: business.address || '',
+    maps_url: business.maps_url || '',
     instagram: business.instagram || '',
     primary_color: business.primary_color,
   })
@@ -236,7 +237,8 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     const vertical = typeGroup
     const verticalChanged = vertical !== (business.vertical ?? 'general')
     const type = typeIsOtro ? bizForm.type.trim() : bizForm.type
-    const { error } = await supabase.from('businesses').update({ ...bizForm, type, whatsapp, vertical }).eq('id', business.id)
+    const maps_url = bizForm.maps_url.trim() || null
+    const { error } = await supabase.from('businesses').update({ ...bizForm, type, whatsapp, vertical, maps_url }).eq('id', business.id)
     setSavingBiz(false)
     if (error) { toast.error('Error al guardar'); return }
     toast.success('Negocio actualizado')
@@ -959,6 +961,17 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <div className="space-y-1 sm:col-span-2">
                 <Label>Dirección</Label>
                 <Input value={bizForm.address} onChange={e => setBizForm(f => ({ ...f, address: e.target.value }))} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Link de Google Maps <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                <Input
+                  value={bizForm.maps_url}
+                  onChange={e => setBizForm(f => ({ ...f, maps_url: e.target.value }))}
+                  placeholder="https://maps.app.goo.gl/…"
+                />
+                <p className="text-xs text-muted-foreground pt-0.5">
+                  Si lo pegás, los botones “Ver en el mapa” y “Cómo llegar” de la confirmación llevan exactamente a tu local. En Google Maps: buscá tu local → Compartir → Copiar vínculo.
+                </p>
               </div>
             </div>
             <div className="pt-2">

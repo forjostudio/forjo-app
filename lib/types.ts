@@ -18,6 +18,9 @@ export interface Business {
   // Contacto del negocio: WhatsApp normalizado a formato wa.me (ver lib/whatsapp).
   whatsapp: string | null
   address: string | null
+  // Link de Google Maps del local (opcional). Si está, los botones de mapa de la
+  // confirmación lo usan en vez de una búsqueda por texto de la dirección.
+  maps_url?: string | null
   instagram: string | null
   // MercadoPago & deposits
   mp_access_token: string | null

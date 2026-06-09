@@ -21,12 +21,12 @@ export default async function PagoExitoso({ params, searchParams }: Props) {
     const supabase = createAdminClient()
     const { data: appt } = await supabase
       .from('appointments')
-      .select('date, time, client_name, client_phone, client_email, cancel_token, duration_minutes, professionals(name), services(name, price, duration_minutes), businesses(name, type, slug, logo_url, address, whatsapp)')
+      .select('date, time, client_name, client_phone, client_email, cancel_token, duration_minutes, professionals(name), services(name, price, duration_minutes), businesses(name, type, slug, logo_url, address, maps_url, whatsapp)')
       .eq('id', ref)
       .single()
 
     if (appt?.cancel_token) {
-      const business = appt.businesses as { name?: string; type?: string | null; slug?: string; logo_url?: string | null; address?: string | null; whatsapp?: string | null } | null
+      const business = appt.businesses as { name?: string; type?: string | null; slug?: string; logo_url?: string | null; address?: string | null; maps_url?: string | null; whatsapp?: string | null } | null
       const service = appt.services as { name?: string; price?: number | null; duration_minutes?: number | null } | null
       const professional = appt.professionals as { name?: string } | null
       return (
@@ -36,6 +36,7 @@ export default async function PagoExitoso({ params, searchParams }: Props) {
           businessSlug={business?.slug ?? ''}
           logoUrl={business?.logo_url ?? null}
           address={business?.address ?? null}
+          mapsUrl={business?.maps_url ?? null}
           whatsapp={business?.whatsapp ?? null}
           clientName={appt.client_name}
           clientPhone={appt.client_phone}

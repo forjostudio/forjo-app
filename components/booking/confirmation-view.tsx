@@ -13,6 +13,7 @@ export interface ConfirmationViewProps {
   businessSlug: string
   logoUrl?: string | null
   address?: string | null
+  mapsUrl?: string | null
   whatsapp?: string | null
   clientName: string
   clientPhone?: string | null
@@ -40,7 +41,7 @@ function waLink(whatsapp: string, text: string): string {
 }
 
 export function ConfirmationView({
-  businessName, businessType, logoUrl, address, whatsapp,
+  businessName, businessType, logoUrl, address, mapsUrl, whatsapp,
   clientName, clientPhone, clientEmail,
   serviceName, durationMinutes, price, professionalName,
   date, time, code, depositPaid,
@@ -52,8 +53,10 @@ export function ConfirmationView({
   const firstName = clientName.trim().split(/\s+/)[0]
   const dur = durationMinutes && durationMinutes > 0 ? durationMinutes : null
 
-  // Incluimos el nombre del negocio en la búsqueda → geolocaliza mejor que solo la calle.
-  const mapHref = address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${businessName} ${address}`)}` : null
+  // Preferimos el link de Maps cargado por el dueño (lleva al lugar exacto). Si no hay,
+  // caemos a una búsqueda por "negocio + dirección" (geolocaliza mejor que solo la calle).
+  const mapHref = (mapsUrl && mapsUrl.trim())
+    || (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${businessName} ${address}`)}` : null)
   const waHref = whatsapp
     ? waLink(whatsapp, `Hola ${businessName}, tengo un turno: ${serviceName} el ${fechaCorta} a las ${hora} hs (código ${code}).`)
     : null
