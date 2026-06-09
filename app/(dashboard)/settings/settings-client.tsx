@@ -557,7 +557,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <PageEyebrow label="Ajustes" />
         <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Configuración</h1>
@@ -757,7 +757,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <Label className="text-muted-foreground text-xs">URL de tu página</Label>
               <p className="text-sm mt-1">{process.env.NEXT_PUBLIC_APP_URL}/{business.slug}</p>
             </div>
-            <Button onClick={saveBusiness} disabled={savingBiz}>{savingBiz ? 'Guardando...' : 'Guardar cambios'}</Button>
+            <Button className="self-start" onClick={saveBusiness} disabled={savingBiz}>{savingBiz ? 'Guardando...' : 'Guardar cambios'}</Button>
 
             {/* ── Panel del dashboard (widgets + recomendación IA) ── */}
             <div className="border-t border-border pt-5 space-y-3">
