@@ -74,9 +74,9 @@ function getSuggestion(visits: number, daysSinceLast: number) {
     label: 'CLIENTE PAUSADO',
     text: 'Hace más de 2 meses que no viene, ideal para recontactar',
     status: 'paused' as StatusKey,
-    color: 'text-gray-300',
-    border: 'border-gray-500/30',
-    bg: 'bg-gray-500/10',
+    color: 'text-foreground',
+    border: 'border-border',
+    bg: 'bg-secondary',
   }
   if (visits <= 1) return {
     label: 'CLIENTE RECIENTE',
@@ -449,10 +449,14 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                           : 'border-l-transparent hover:bg-secondary/40'
                       )}
                     >
-                      {/* Avatar */}
+                      {/* Avatar — iniciales atenuadas si el cliente está en pausa (inactivo) */}
                       <div className={cn(
                         'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                        isSelected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+                        isSelected
+                          ? 'bg-primary text-primary-foreground'
+                          : cs?.status === 'paused'
+                            ? 'bg-secondary text-muted-foreground'
+                            : 'bg-secondary text-secondary-foreground'
                       )}>
                         {client.name.slice(0, 2).toUpperCase()}
                       </div>
@@ -528,10 +532,6 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                         <Input value={editForm.insurance_number} onChange={e => setEditForm(f => ({ ...f, insurance_number: e.target.value }))}
                           placeholder="N° de afiliado" className="h-8 text-sm" />
                       </div>
-                    )}
-                    {isBelleza && (
-                      <Textarea value={editForm.preferences} onChange={e => setEditForm(f => ({ ...f, preferences: e.target.value }))}
-                        placeholder="Color de cabello, alergias, productos preferidos..." rows={3} className="text-sm resize-none" />
                     )}
                     <div className="flex gap-2">
                       <Button size="sm" onClick={saveClient} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
@@ -662,53 +662,17 @@ export function ClientsClient({ initialClients, appointments: initialAppts, busi
                 </div>
               </div>
 
-              {/* ── Preferencias (belleza) ── */}
-              {isBelleza && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold tracking-widest text-muted-foreground">PREFERENCIAS</h3>
-                  <div className="bg-card border border-border rounded-lg p-4 text-sm">
-                    {selected.preferences
-                      ? <p className="whitespace-pre-wrap text-foreground/90">{selected.preferences}</p>
-                      : <p className="text-muted-foreground">Sin preferencias registradas. Usá «Editar» para agregar color de cabello, alergias o productos preferidos.</p>}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Technical sheet + Notes ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold tracking-widest text-muted-foreground">FICHA TÉCNICA</h3>
-                  <div className="bg-card border border-border rounded-lg p-4 space-y-2 text-sm">
-                    {[
-                      { label: 'Email', value: selected.email || '—' },
-                      { label: 'Teléfono', value: selected.phone || '—' },
-                      ...(isSalud ? [
-                        { label: 'Obra social', value: selected.insurance_name || '—' },
-                        { label: 'N° afiliado', value: selected.insurance_number || '—' },
-                      ] : []),
-                      { label: 'Alta', value: format(parseISO(selected.created_at), "d 'de' MMMM 'de' yyyy", { locale: es }) },
-                      { label: 'Primera visita', value: confirmedAppts.length > 0 ? format(parseISO([...confirmedAppts].sort((a, b) => a.date < b.date ? -1 : 1)[0].date), "d 'de' MMMM 'de' yyyy", { locale: es }) : '—' },
-                      { label: 'Ficha N°', value: fichaNum(num) },
-                    ].map(row => (
-                      <div key={row.label} className="flex items-start gap-3">
-                        <span className="text-muted-foreground w-24 flex-shrink-0 text-xs pt-0.5">{row.label}</span>
-                        <span className="flex-1 text-xs">{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold tracking-widest text-muted-foreground">NOTAS</h3>
-                  <Textarea
-                    value={notes}
-                    onChange={e => handleNotesChange(e.target.value)}
-                    placeholder="Preferencias, alergias, observaciones..."
-                    rows={6}
-                    className="bg-card resize-none text-sm"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Guarda automáticamente</p>
-                </div>
+              {/* ── Notas (única sección libre; reemplaza Ficha técnica + Preferencias) ── */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold tracking-widest text-muted-foreground">NOTAS</h3>
+                <Textarea
+                  value={notes}
+                  onChange={e => handleNotesChange(e.target.value)}
+                  placeholder="Preferencias, alergias, observaciones..."
+                  rows={6}
+                  className="bg-card resize-none text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground">Guarda automáticamente</p>
               </div>
 
               {/* ── Historia Clínica (colapsable, solo salud) ── */}
