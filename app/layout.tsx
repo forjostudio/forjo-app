@@ -17,7 +17,7 @@ const heading = Archivo({
 });
 
 export const metadata: Metadata = {
-  title: "Forjo App — Turnos para tu negocio",
+  title: "Forjo Studio — Turnos para tu negocio",
   description: "Gestioná tus turnos, clientes y finanzas desde un solo lugar.",
 };
 

@@ -1117,7 +1117,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
             <div className="space-y-1">
               <Label>Email remitente <span className="text-muted-foreground text-xs">(solo si usás tu propia API Key)</span></Label>
               <Input type="email" value={notifForm.resend_from} onChange={e => setNotifForm(f => ({ ...f, resend_from: e.target.value }))} placeholder="turnos@tudominio.com" />
-              <p className="text-xs text-muted-foreground">Debe ser de un dominio verificado en tu cuenta de Resend. Si dejás la API Key vacía, los emails salen desde Forjo y este campo se ignora.</p>
+              <p className="text-xs text-muted-foreground">Debe ser de un dominio verificado en tu cuenta de Resend. Si dejás la API Key vacía, los emails salen desde Forjo Studio y este campo se ignora.</p>
             </div>
             <Button onClick={saveNotif} disabled={savingNotif}>{savingNotif ? 'Guardando...' : 'Guardar'}</Button>
           </Card>

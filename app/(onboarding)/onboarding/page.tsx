@@ -244,7 +244,7 @@ export default function OnboardingPage() {
               <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
               <circle cx="56" cy="13" r="6" fill="#f4c543" />
             </svg>
-            <span className="font-[family-name:var(--font-heading)] font-black text-3xl text-primary">Forjo</span>
+            <span className="font-[family-name:var(--font-heading)] font-black text-3xl text-primary">Forjo <span className="font-medium opacity-85">Studio</span></span>
           </div>
           <p className="text-muted-foreground mt-2">Configurá tu negocio en 4 pasos</p>
         </div>

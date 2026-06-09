@@ -133,7 +133,7 @@ export function Sidebar({ business }: { business: Business }) {
               rel="noopener noreferrer"
               className="hover:text-primary transition-colors"
             >
-              <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> studio
+              <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> Studio
             </a>
           </span>
         </div>

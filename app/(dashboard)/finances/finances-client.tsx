@@ -632,59 +632,6 @@ export function FinancesClient({ businessId }: Props) {
         </>
       )}
 
-      {/* Bar chart */}
-      {chartData.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Últimos 6 meses</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="name" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
-                <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
-                  formatter={(v, name) => [fmtARS(Number(v)), name === 'ingresos' ? 'Ingresos' : 'Egresos']} />
-                <Bar dataKey="ingresos" fill="var(--primary)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="egresos" fill="var(--destructive)" radius={[3, 3, 0, 0]} opacity={0.7} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Cashflow diario */}
-      {!loading && dailyCashflow.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-muted-foreground" /> Cashflow diario</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={dailyCashflow}>
-                <defs>
-                  <linearGradient id="cfIn" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="cfOut" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--destructive)" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="var(--destructive)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="label" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} interval="preserveStartEnd" minTickGap={16} />
-                <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} width={48} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
-                  labelFormatter={l => `Día ${l}`}
-                  formatter={(v, name) => [fmtARS(Number(v)), name === 'ingresos' ? 'Ingresos' : 'Egresos']} />
-                <Area type="monotone" dataKey="ingresos" stroke="var(--primary)" fill="url(#cfIn)" strokeWidth={2} />
-                <Area type="monotone" dataKey="egresos" stroke="var(--destructive)" fill="url(#cfOut)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Ranking de servicios + gestión de gastos fijos */}
       {!loading && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -764,6 +711,59 @@ export function FinancesClient({ businessId }: Props) {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Bar chart */}
+      {chartData.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Últimos 6 meses</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="name" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
+                  formatter={(v, name) => [fmtARS(Number(v)), name === 'ingresos' ? 'Ingresos' : 'Egresos']} />
+                <Bar dataKey="ingresos" fill="var(--primary)" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="egresos" fill="var(--destructive)" radius={[3, 3, 0, 0]} opacity={0.7} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cashflow diario */}
+      {!loading && dailyCashflow.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-muted-foreground" /> Cashflow diario</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={dailyCashflow}>
+                <defs>
+                  <linearGradient id="cfIn" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="cfOut" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--destructive)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="var(--destructive)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} interval="preserveStartEnd" minTickGap={16} />
+                <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} width={48} />
+                <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
+                  labelFormatter={l => `Día ${l}`}
+                  formatter={(v, name) => [fmtARS(Number(v)), name === 'ingresos' ? 'Ingresos' : 'Egresos']} />
+                <Area type="monotone" dataKey="ingresos" stroke="var(--primary)" fill="url(#cfIn)" strokeWidth={2} />
+                <Area type="monotone" dataKey="egresos" stroke="var(--destructive)" fill="url(#cfOut)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs */}

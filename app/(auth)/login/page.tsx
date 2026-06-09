@@ -60,19 +60,19 @@ export default function LoginPage() {
             <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="rgba(255,255,255,.65)" />
             <circle cx="56" cy="13" r="6" fill="rgba(255,255,255,.85)" />
           </svg>
-          <span className="font-[family-name:var(--font-heading)] font-black text-2xl">Forjo</span>
+          <span className="font-[family-name:var(--font-heading)] font-black text-2xl">Forjo <span className="font-medium opacity-85">Studio</span></span>
         </div>
         <h2 className="relative font-[family-name:var(--font-heading)] font-black uppercase leading-none tracking-tight text-[clamp(30px,4vw,46px)]">
           Tus turnos,<br />clientes y<br />finanzas en<br />un solo lugar.
         </h2>
-        <p className="relative text-sm opacity-80">© Forjo · Gestión de turnos para tu negocio</p>
+        <p className="relative text-sm opacity-80">© Forjo Studio · Gestión de turnos para tu negocio</p>
       </div>
 
       {/* Columna derecha — formulario */}
       <div className="w-full md:w-[440px] flex items-center justify-center p-8 sm:p-10">
         <div className="w-full max-w-[340px]">
           <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold">Iniciá sesión</h1>
-          <p className="text-muted-foreground text-sm mt-1.5 mb-6">Entrá a tu panel de Forjo</p>
+          <p className="text-muted-foreground text-sm mt-1.5 mb-6">Entrá a tu panel de Forjo Studio</p>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
