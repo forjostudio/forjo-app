@@ -69,10 +69,10 @@
   --primary:#6d82f7; --accent:#6d82f7; --ring:#6d82f7; --sidebar-primary:#6d82f7;
   color-scheme:dark;
 }
-/* modern flourishes — elevación suave + acentos de stat */
-[data-theme="modern"] .fcard{box-shadow:0 1px 2px rgba(16,24,40,.04),0 4px 14px rgba(16,24,40,.05)}
-.dark[data-theme="modern"] .fcard{box-shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28)}
-[data-theme="modern"] .fbtn-primary{box-shadow:0 4px 12px color-mix(in oklab,var(--primary) 35%,transparent)}
+/* modern flourishes — elevación suave en las tarjetas + botón con sombra de color */
+[data-theme="modern"] [data-slot="card"]{box-shadow:0 1px 2px rgba(16,24,40,.04),0 4px 14px rgba(16,24,40,.05)}
+.dark[data-theme="modern"] [data-slot="card"]{box-shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28)}
+[data-theme="modern"] [data-slot="button"].bg-primary{box-shadow:0 4px 12px color-mix(in oklab,var(--primary) 35%,transparent)}
 
 /* ============================================================ *
  * 2 · SPA  — calm wellness, soft gradients, relaxed type        *
@@ -133,9 +133,9 @@
   --accent:#c9aeb4; --ring:#9bba9e; --sidebar-primary:#9bba9e; --sidebar-primary-foreground:#1b1c1a;
   color-scheme:dark;
 }
-/* spa flourishes — degradé de fondo + headings serif aireados */
-[data-theme="spa"] .fcard{box-shadow:0 10px 30px -16px rgba(80,64,52,.30)}
-.dark[data-theme="spa"] .fcard{box-shadow:0 14px 34px -18px rgba(0,0,0,.5)}
+/* spa flourishes — sombra suave y difusa en las tarjetas + headings serif aireados */
+[data-theme="spa"] [data-slot="card"]{box-shadow:0 10px 30px -16px rgba(80,64,52,.30)}
+.dark[data-theme="spa"] [data-slot="card"]{box-shadow:0 14px 34px -18px rgba(0,0,0,.5)}
 [data-theme="spa"] h1,[data-theme="spa"] h2,[data-theme="spa"] h3{font-weight:500;letter-spacing:.01em}
 
 /* ============================================================ *
@@ -181,10 +181,10 @@
   --card:color-mix(in oklab,#0b0818 93%,var(--tint));
   --sidebar:color-mix(in oklab,#070512 93%,var(--tint));
 }
-/* cyber flourishes — glow neón + tipografía técnica en mayúsculas */
-[data-theme="cyber"] .fcard{box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 7%,transparent),0 0 26px -10px color-mix(in srgb,var(--primary) 35%,transparent)}
+/* cyber flourishes — glow neón en tarjetas + botón, tipografía técnica en mayúsculas */
+[data-theme="cyber"] [data-slot="card"]{box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 7%,transparent),0 0 26px -10px color-mix(in srgb,var(--primary) 35%,transparent)}
 [data-theme="cyber"] h1,[data-theme="cyber"] h2,[data-theme="cyber"] h3{text-transform:uppercase;letter-spacing:.03em}
-[data-theme="cyber"] .fbtn-primary{box-shadow:0 0 18px color-mix(in oklab,var(--primary) 55%,transparent);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+[data-theme="cyber"] [data-slot="button"].bg-primary{box-shadow:0 0 18px color-mix(in oklab,var(--primary) 55%,transparent)}
 
 /* =========================================================================
    PALETAS DE ACENTO  — por theme, vía data-palette
