@@ -1,5 +1,7 @@
+import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyRecaptcha } from '@/lib/recaptcha'
+import { sendPendingPaymentEmail } from '@/lib/email'
 
 // Mismo sentinela que el índice 011 / el endpoint de disponibilidad.
 const SENTINEL = '00000000-0000-0000-0000-000000000000'
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
   // Negocio por slug (tenant).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, require_deposit, deposit_amount, deposit_expiry_hours')
+    .select('id, name, slug, require_deposit, deposit_amount, deposit_expiry_hours, primary_color, logo_url, resend_api_key, resend_from')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
   // sale la duración real (no se confía en nada del cliente).
   const { data: service } = await supabase
     .from('services')
-    .select('id, active')
+    .select('id, name, active')
     .eq('id', serviceId)
     .eq('business_id', business.id)
     .single()
@@ -145,7 +147,7 @@ export async function POST(request: Request) {
       status: initialStatus,
       expires_at: expiresAt,
     })
-    .select('id')
+    .select('id, cancel_token')
     .single()
 
   if (insertErr || !appt) {
@@ -154,6 +156,35 @@ export async function POST(request: Request) {
     }
     console.error('[booking/create] insert error:', insertErr?.message)
     return Response.json({ ok: false, error: 'insert_failed' }, { status: 500 })
+  }
+
+  // Turno con seña: mail "falta pagar la seña" con link para completar el pago y para
+  // cancelar (ambos por cancel_token). Se manda al crear el pending_payment → cubre tanto el
+  // pago rechazado como el abandono en MercadoPago. after() para no demorar la respuesta
+  // (el cliente necesita el appointmentId ya para redirigir al checkout). Errores logeados.
+  if (requireDeposit && clientEmail && appt.cancel_token) {
+    const token = appt.cancel_token as string
+    after(async () => {
+      try {
+        await sendPendingPaymentEmail({
+          to: clientEmail,
+          clientName,
+          service: service.name || '',
+          date,
+          time,
+          businessName: String(business.name || ''),
+          primaryColor: business.primary_color as string | null,
+          logoUrl: business.logo_url as string | null,
+          depositAmount: Number(business.deposit_amount || 0),
+          expiryHours,
+          token,
+          resendApiKey: business.resend_api_key as string | null,
+          resendFrom: business.resend_from as string | null,
+        })
+      } catch (e) {
+        console.error(`[booking/create] email seña pendiente FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)
+      }
+    })
   }
 
   return Response.json({ ok: true, appointmentId: appt.id, requiresPayment: requireDeposit })

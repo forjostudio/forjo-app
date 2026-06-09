@@ -530,3 +530,116 @@ export async function sendClientCancelEmail({
   })
   console.log(`📧 Cancelación (cliente) enviada a ${to}`)
 }
+
+// Email al cliente cuando reservó un turno con seña y queda PENDIENTE de pago. Ofrece
+// completar el pago (link de retry por token) y cancelar (link por token). Avisa que si no
+// se paga, el turno se cancela solo en ~expiryHours. Se dispara al crear el pending_payment.
+export async function sendPendingPaymentEmail({
+  to,
+  clientName,
+  service,
+  date,
+  time,
+  businessName,
+  primaryColor,
+  logoUrl,
+  depositAmount,
+  expiryHours,
+  token,
+  resendApiKey,
+  resendFrom,
+}: {
+  to: string
+  clientName: string
+  service: string
+  date: string
+  time: string
+  businessName: string
+  primaryColor?: string | null
+  logoUrl?: string | null
+  depositAmount: number
+  expiryHours: number
+  token: string
+  resendApiKey?: string | null
+  resendFrom?: string | null
+}) {
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
+  const fecha = fmtDate(date)
+  const hora = time.slice(0, 5)
+  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
+  const payUrl = `${baseUrl}/api/payment/retry/${token}`
+  const cancelUrl = `${baseUrl}/cancelar/${token}`
+  const horas = expiryHours === 1 ? '1 hora' : `${expiryHours} horas`
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+      <tr><td style="background:${accent};padding:32px 40px;border-radius:12px 12px 0 0;text-align:center;">
+        ${headerInner}
+      </td></tr>
+
+      <tr><td style="background:#ffffff;padding:40px 40px 32px;">
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Falta pagar la seña</p>
+        <p style="font-size:15px;color:#555;margin:0 0 28px;line-height:1.6;">
+          Hola <strong>${clientName}</strong>, tu turno en <strong>${businessName}</strong> quedó reservado pero <strong>todavía no está confirmado</strong>: falta abonar la seña.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
+          <tr><td style="padding:20px 22px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${fecha}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Hora</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${hora} hs</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:10px 0 0;">Seña a pagar</td>
+                <td style="font-size:20px;font-weight:900;color:${accent};padding:10px 0 0;text-align:right;">${fmtPrice(depositAmount)}</td>
+              </tr>
+            </table>
+          </td></tr>
+        </table>
+
+        <table cellpadding="0" cellspacing="0" style="margin:0 0 14px;"><tr><td style="border-radius:8px;background:${accent};">
+          <a href="${payUrl}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Completar pago</a>
+        </td></tr></table>
+
+        <p style="font-size:13px;color:#777;line-height:1.7;margin:0 0 16px;">
+          Si no completás el pago, el turno se cancela automáticamente en aproximadamente <strong>${horas}</strong> y el horario queda libre para otra persona.
+        </p>
+        <p style="margin:0;font-size:13px;"><a href="${cancelUrl}" style="color:#999;text-decoration:underline;">Prefiero cancelar este turno</a></p>
+      </td></tr>
+
+      <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión</div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+
+  await resendSend(key, {
+    from,
+    to: [to],
+    subject: `Falta pagar la seña — ${businessName} · ${fecha} ${hora} hs`,
+    html,
+    text: `Hola ${clientName}, tu turno en ${businessName} quedó reservado pero falta abonar la seña (${fmtPrice(depositAmount)}).\n\nServicio: ${service}\nFecha: ${fecha}\nHora: ${hora} hs\n\nCompletá el pago: ${payUrl}\n\nSi no pagás, el turno se cancela en ~${horas}.\nCancelar: ${cancelUrl}`,
+  })
+  console.log(`📧 Seña pendiente enviada a ${to}`)
+}
