@@ -1,15 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { format, isBefore, startOfDay } from 'date-fns'
+import { useState, useEffect, useMemo } from 'react'
+import { format, startOfDay, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import type { PublicBusiness, Service, Professional, TimeBlock } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Calendar } from '@/components/ui/calendar'
-import { Check, Clock, DollarSign, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Check, Clock, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -44,7 +43,6 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
-  const openDays = [...new Set(timeBlocks.map(b => b.day_of_week))]
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 
@@ -59,10 +57,17 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
     }
   }, [requireDeposit, siteKey])
 
-  function isDateDisabled(date: Date) {
-    if (isBefore(date, startOfDay(new Date()))) return true
-    return !openDays.includes(date.getDay())
-  }
+  // Próximos días abiertos (según los time_blocks) como pills, en vez de un calendario.
+  const upcomingDays = useMemo(() => {
+    const open = [...new Set(timeBlocks.map(b => b.day_of_week))]
+    const days: Date[] = []
+    const start = startOfDay(new Date())
+    for (let i = 0; days.length < 14 && i < 90; i++) {
+      const d = addDays(start, i)
+      if (open.includes(d.getDay())) days.push(d)
+    }
+    return days
+  }, [timeBlocks])
 
   async function handleDateSelect(date: Date | undefined) {
     if (!date || !selectedService) return
@@ -272,53 +277,42 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
       </div>
 
       <div className="max-w-lg mx-auto px-6 py-8">
-        {/* Step indicators */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {stepsLabels.map((label, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className={cn(
-                'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
-                step >= i + 1 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-              )}>
-                {step > i + 1 ? <Check className="w-3 h-3" /> : i + 1}
-              </div>
-              {i < stepsLabels.length - 1 && (
-                <div className={cn('h-px w-6 sm:w-10 transition-colors', step > i + 1 ? 'bg-primary/40' : 'bg-border')} />
-              )}
-            </div>
-          ))}
+        {/* Progreso */}
+        <div className="mb-7">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Paso {step} de 4</span>
+            <span className="text-xs text-muted-foreground">{stepsLabels[step - 1]}</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${(step / 4) * 100}%` }} />
+          </div>
         </div>
 
         {/* Step 1 - Service */}
         {step === 1 && (
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold mb-4 font-[family-name:var(--font-heading)]">¿Qué servicio necesitás?</h2>
-            {services.map(service => (
-              <button
-                key={service.id}
-                onClick={() => { setSelectedService(service); setStep(2) }}
-                className={cn(
-                  'w-full flex items-center justify-between p-4 rounded-md border transition-colors text-left',
-                  selectedService?.id === service.id
-                    ? 'border-primary bg-primary/[0.08]'
-                    : 'border-border bg-card hover:border-primary'
-                )}
-              >
-                <div>
-                  <p className="font-medium text-sm">{service.name}</p>
-                  {service.description && <p className="text-xs text-muted-foreground mt-0.5">{service.description}</p>}
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> {service.duration_minutes} min
-                    </span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" /> ${Number(service.price).toLocaleString('es-AR')}
-                    </span>
+          <div>
+            <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí tu servicio</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {services.map(service => (
+                <button
+                  key={service.id}
+                  onClick={() => { setSelectedService(service); setStep(2) }}
+                  className={cn(
+                    'rounded-lg border p-4 text-left transition-colors',
+                    selectedService?.id === service.id
+                      ? 'border-primary bg-primary/[0.06]'
+                      : 'border-border bg-card hover:border-primary'
+                  )}
+                >
+                  <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
+                  {service.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{service.description}</p>}
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
+                    <Clock className="w-3.5 h-3.5" /> {service.duration_minutes} min
                   </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              </button>
-            ))}
+                  <p className="text-xl font-bold mt-2 font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -356,23 +350,37 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
         {/* Step 3 - Date & time */}
         {step === 3 && (
           <div>
-            <h2 className="text-lg font-semibold mb-4 font-[family-name:var(--font-heading)]">¿Cuándo querés venir?</h2>
-            <div className="flex justify-center mb-4">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={handleDateSelect}
-                disabled={isDateDisabled}
-                locale={es}
-                className="rounded-md border border-border bg-card p-3"
-              />
-            </div>
+            <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí día y horario</h2>
 
+            {/* Día — pills de los próximos días abiertos */}
+            <p className="text-sm font-semibold mb-2 font-[family-name:var(--font-heading)]">Día</p>
+            {upcomingDays.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-3">No hay días disponibles por ahora.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {upcomingDays.map(d => {
+                  const sel = selectedDate != null && format(d, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+                  return (
+                    <button
+                      key={format(d, 'yyyy-MM-dd')}
+                      onClick={() => handleDateSelect(d)}
+                      className={cn(
+                        'flex flex-col items-center justify-center min-w-[58px] px-3 py-2 rounded-lg border transition-colors',
+                        sel ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card hover:border-primary'
+                      )}
+                    >
+                      <span className="text-[10px] font-semibold uppercase tracking-wide">{format(d, 'EEE', { locale: es })}</span>
+                      <span className="text-base font-bold leading-none mt-0.5">{format(d, 'd')}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Horario */}
             {selectedDate && (
-              <div className="mt-4 space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Horarios disponibles — {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
-                </p>
+              <div className="mt-6">
+                <p className="text-sm font-semibold mb-2 font-[family-name:var(--font-heading)]">Horario</p>
                 {loadingSlots ? (
                   <p className="text-center text-muted-foreground text-sm py-4">Cargando horarios...</p>
                 ) : availableSlots.length === 0 ? (
@@ -384,7 +392,7 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
                         key={slot}
                         onClick={() => setSelectedTime(slot)}
                         className={cn(
-                          'py-2 px-3 rounded-md text-sm font-medium transition-colors border',
+                          'py-2 px-3 rounded-lg text-sm font-medium transition-colors border',
                           selectedTime === slot
                             ? 'bg-primary text-primary-foreground border-primary'
                             : 'border-border bg-card hover:border-primary'
@@ -481,6 +489,22 @@ export function BookingClient({ business, services, professionals, timeBlocks }:
             <ChevronLeft className="w-4 h-4" /> Volver
           </button>
         )}
+
+        {/* Footer — hecho con Forjo Studio */}
+        <div className="flex items-center justify-center gap-2 mt-10 text-xs text-muted-foreground">
+          <svg viewBox="0 0 64 80" className="w-3 h-[0.95rem]" aria-hidden="true">
+            <rect x="6" y="6" width="14" height="68" fill="currentColor" />
+            <rect x="20" y="6" width="38" height="14" fill="#d94a2b" />
+            <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
+            <circle cx="56" cy="13" r="6" fill="#f4c543" />
+          </svg>
+          <span>
+            hecho con{' '}
+            <a href="https://www.forjo.studio" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+              <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> Studio
+            </a>
+          </span>
+        </div>
       </div>
     </div>
   )
