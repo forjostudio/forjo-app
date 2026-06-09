@@ -96,11 +96,14 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
 
     const dateStr = format(date, 'yyyy-MM-dd')
     const ex = exceptionByDate.get(dateStr)
+    // Consultorio del servicio (opcional): se usa como consultorio del slot cuando el bloque
+    // de horario no tiene uno propio (Capa 2a). El bloque manda si está asignado.
+    const svcLoc = selectedService.location_id ?? null
     // Excepción del día: cerrado → sin slots; horario especial → ese rango; si no, la grilla semanal.
     // Cada bloque lleva su consultorio (location_id) para etiquetar los slots.
     const dayBlocks: { start_time: string; end_time: string; location_id: string | null }[] = ex
-      ? ((!ex.closed && ex.start_time && ex.end_time) ? [{ start_time: ex.start_time, end_time: ex.end_time, location_id: null }] : [])
-      : timeBlocks.filter(b => b.day_of_week === date.getDay()).map(b => ({ start_time: b.start_time, end_time: b.end_time, location_id: b.location_id }))
+      ? ((!ex.closed && ex.start_time && ex.end_time) ? [{ start_time: ex.start_time, end_time: ex.end_time, location_id: svcLoc }] : [])
+      : timeBlocks.filter(b => b.day_of_week === date.getDay()).map(b => ({ start_time: b.start_time, end_time: b.end_time, location_id: b.location_id ?? svcLoc }))
     if (dayBlocks.length === 0) {
       setAvailableSlots([])
       setLoadingSlots(false)

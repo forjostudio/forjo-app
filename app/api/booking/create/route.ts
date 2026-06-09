@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   // sale la duración real (no se confía en nada del cliente).
   const { data: service } = await supabase
     .from('services')
-    .select('id, name, active, duration_minutes')
+    .select('id, name, active, duration_minutes, location_id')
     .eq('id', serviceId)
     .eq('business_id', business.id)
     .single()
@@ -183,6 +183,11 @@ export async function POST(request: Request) {
       .eq('business_id', business.id)
       .maybeSingle()
     validLocationId = loc ? locationId : null
+  }
+  // Fallback al consultorio del servicio (ya validado como del negocio por el select de arriba):
+  // si el cliente no mandó consultorio o no era válido, manda el del servicio.
+  if (!validLocationId && service.location_id) {
+    validLocationId = service.location_id as string
   }
 
   const { data: appt, error: insertErr } = await supabase

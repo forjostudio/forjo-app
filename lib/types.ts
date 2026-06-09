@@ -108,6 +108,8 @@ export interface Service {
   price: number
   description: string | null
   active: boolean
+  // Consultorio donde se presta (opcional). null = cualquiera / sede única.
+  location_id?: string | null
   created_at: string
 }
 
