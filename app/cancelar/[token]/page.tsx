@@ -30,8 +30,13 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
   const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null } | null
   const serviceName = (appt.services as { name?: string } | null)?.name ?? ''
   const todayStr = new Date().toISOString().slice(0, 10)
-  const initialState: 'active' | 'cancelled' | 'past' =
-    appt.status === 'cancelled' ? 'cancelled' : appt.date < todayStr ? 'past' : 'active'
+  // Turno guardado en hora local AR (UTC-3). Dentro de las 24 h previas → ya no se cancela.
+  const apptMs = new Date(`${appt.date}T${String(appt.time).slice(0, 5)}:00-03:00`).getTime()
+  const initialState: 'active' | 'cancelled' | 'past' | 'too_late' =
+    appt.status === 'cancelled' ? 'cancelled'
+    : appt.date < todayStr ? 'past'
+    : apptMs - new Date().getTime() < 24 * 60 * 60 * 1000 ? 'too_late'
+    : 'active'
 
   return (
     <CancelClient

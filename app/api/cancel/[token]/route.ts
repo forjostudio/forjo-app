@@ -30,6 +30,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
     return Response.json({ ok: false, reason: 'past' })
   }
 
+  // Política: solo se puede cancelar/reprogramar hasta 24 h antes del turno. Enforcement
+  // server-side (no bypasseable). El turno se guarda en hora local AR (UTC-3, sin DST).
+  const apptMs = new Date(`${appt.date}T${String(appt.time).slice(0, 5)}:00-03:00`).getTime()
+  if (apptMs - Date.now() < 24 * 60 * 60 * 1000) {
+    return Response.json({ ok: false, reason: 'too_late' })
+  }
+
   // Cancelar = status 'cancelled' → libera el horario (la disponibilidad excluye cancelled).
   const { error } = await supabase
     .from('appointments')

@@ -21,11 +21,11 @@ interface Props {
   businessSlug: string
   logoUrl: string | null
   accent: string
-  initialState: 'active' | 'cancelled' | 'past'
+  initialState: 'active' | 'cancelled' | 'past' | 'too_late'
 }
 
 export function CancelClient({ token, clientName, service, date, time, businessName, businessSlug, logoUrl, accent, initialState }: Props) {
-  const [view, setView] = useState<'active' | 'cancelled' | 'past' | 'done'>(initialState)
+  const [view, setView] = useState<'active' | 'cancelled' | 'past' | 'too_late' | 'done'>(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,6 +41,8 @@ export function CancelClient({ token, clientName, service, date, time, businessN
         setView('cancelled')
       } else if (data.reason === 'past') {
         setView('past')
+      } else if (data.reason === 'too_late') {
+        setView('too_late')
       } else if (data.reason === 'not_found') {
         setError('Este enlace de cancelación no es válido.')
       } else {
@@ -57,6 +59,7 @@ export function CancelClient({ token, clientName, service, date, time, businessN
     view === 'done' ? 'Turno cancelado'
     : view === 'cancelled' ? 'Este turno ya está cancelado'
     : view === 'past' ? 'Este turno ya pasó'
+    : view === 'too_late' ? 'Ya no se puede cancelar'
     : '¿Cancelar tu turno?'
 
   return (
@@ -88,7 +91,7 @@ export function CancelClient({ token, clientName, service, date, time, businessN
 
           {view === 'active' && (
             <>
-              <p className="text-sm text-muted-foreground mb-4">Esta acción no se puede deshacer. El horario quedará disponible para otras personas.</p>
+              <p className="text-sm text-muted-foreground mb-4">Podés cancelar hasta <strong className="text-foreground">24 h antes</strong> del turno. Esta acción no se puede deshacer y el horario quedará disponible para otras personas. Si dejaste una seña, <strong className="text-foreground">no se reintegra</strong>.</p>
               {error && <p className="text-destructive text-sm mb-3">{error}</p>}
               <button
                 onClick={confirmCancel}
@@ -131,6 +134,11 @@ export function CancelClient({ token, clientName, service, date, time, businessN
           )}
           {view === 'past' && (
             <p className="text-sm text-muted-foreground">La fecha de este turno ya pasó, así que no se puede cancelar.</p>
+          )}
+          {view === 'too_late' && (
+            <p className="text-sm text-muted-foreground">
+              Solo se puede cancelar o reprogramar hasta <strong className="text-foreground">24 h antes</strong> del turno, y ese plazo ya pasó. Si necesitás avisar algo, escribile directamente al negocio. Si dejaste una seña, <strong className="text-foreground">no se reintegra</strong>.
+            </p>
           )}
         </div>
       </div>

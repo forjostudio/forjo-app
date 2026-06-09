@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
-  Check, Copy, Calendar, CalendarPlus, Scissors, User, MapPin, Users,
+  Check, Calendar, CalendarPlus, Scissors, User, MapPin, Users,
   ShieldCheck, ArrowRight, Navigation, MessageCircle,
 } from 'lucide-react'
 
@@ -46,8 +45,6 @@ export function ConfirmationView({
   serviceName, durationMinutes, price, professionalName,
   date, time, code, depositPaid,
 }: ConfirmationViewProps) {
-  const [copied, setCopied] = useState(false)
-
   const dt = parseISO(`${date}T${time.slice(0, 5)}:00`)
   const fechaLarga = format(dt, "EEEE d 'de' MMMM", { locale: es })
   const fechaCorta = format(dt, "EEE d 'de' MMM", { locale: es })
@@ -55,16 +52,11 @@ export function ConfirmationView({
   const firstName = clientName.trim().split(/\s+/)[0]
   const dur = durationMinutes && durationMinutes > 0 ? durationMinutes : null
 
-  const mapHref = address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : null
+  // Incluimos el nombre del negocio en la búsqueda → geolocaliza mejor que solo la calle.
+  const mapHref = address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${businessName} ${address}`)}` : null
   const waHref = whatsapp
     ? waLink(whatsapp, `Hola ${businessName}, tengo un turno: ${serviceName} el ${fechaCorta} a las ${hora} hs (código ${code}).`)
     : null
-
-  function copyCode() {
-    navigator.clipboard?.writeText(code).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1400)
-  }
 
   // Genera y descarga un .ics con el turno (hora local "flotante", sin TZ → la abre el cliente).
   function addToCalendar() {
@@ -103,18 +95,18 @@ export function ConfirmationView({
           <circle cx="700" cy="30" r="60" fill="rgba(255,255,255,.10)" />
           <rect x="610" y="96" width="74" height="74" fill="rgba(0,0,0,.10)" />
         </svg>
-        <div className="max-w-xl mx-auto px-6 py-7 relative flex items-center gap-3.5">
+        <div className="max-w-xl mx-auto px-6 py-9 relative flex flex-col items-center text-center gap-4">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={businessName} className="w-12 h-12 rounded-xl object-cover border border-white/20 flex-shrink-0" />
+            <img src={logoUrl} alt={businessName} className="w-16 h-16 rounded-2xl object-cover border border-white/20" />
           ) : (
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/15 font-[family-name:var(--font-heading)] font-black text-xl flex-shrink-0">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-white/15 font-[family-name:var(--font-heading)] font-black text-2xl">
               {businessName.charAt(0).toUpperCase()}
             </div>
           )}
-          <div className="min-w-0">
-            <p className="text-[clamp(20px,5vw,26px)] font-black uppercase tracking-tight leading-none truncate font-[family-name:var(--font-heading)]">{businessName}</p>
-            {businessType && <p className="text-xs text-primary-foreground/80 mt-1.5 truncate">{businessType}</p>}
+          <div>
+            <p className="text-[clamp(28px,7vw,40px)] font-black uppercase tracking-tight leading-none font-[family-name:var(--font-heading)]">{businessName}</p>
+            {businessType && <p className="text-sm text-primary-foreground/80 mt-2">{businessType}</p>}
           </div>
         </div>
       </div>
@@ -130,24 +122,8 @@ export function ConfirmationView({
           Te esperamos el <strong className="text-foreground">{fechaLarga}</strong> a las <strong className="text-foreground">{hora} hs</strong>.
         </p>
 
-        {/* Chip de código + copiar */}
-        <div className="flex justify-center my-5">
-          <div className="inline-flex items-center gap-2.5 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 pl-3.5 pr-2 py-1.5">
-            <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">Código</span>
-            <span className="text-sm font-bold tracking-wider font-[family-name:var(--font-heading)]">{code}</span>
-            <button
-              type="button"
-              onClick={copyCode}
-              aria-label="Copiar código"
-              className="w-6 h-6 rounded-full flex items-center justify-center bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
-            >
-              {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-            </button>
-          </div>
-        </div>
-
         {/* Tarjeta de detalle */}
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="rounded-xl border border-border bg-card overflow-hidden mt-6">
           <Row icon={<Calendar />} label="Cuándo">
             <span className="capitalize">{fechaLarga}</span>
             <br />
@@ -168,9 +144,9 @@ export function ConfirmationView({
           )}
           {address && (
             <Row icon={<MapPin />} label="Dirección">
-              {address}
+              <div>{address}</div>
               {mapHref && (
-                <a href={mapHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary font-semibold text-[13px] mt-1">
+                <a href={mapHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary font-semibold text-[13px] mt-1.5">
                   Ver en el mapa <ArrowRight className="w-3 h-3" />
                 </a>
               )}
@@ -187,7 +163,7 @@ export function ConfirmationView({
           </Row>
           <Row icon={<ShieldCheck />} label="Cancelación">
             <span className="text-muted-foreground font-medium">
-              Podés cancelar o reprogramar sin cargo hasta <strong className="text-foreground font-bold">24h antes</strong>.
+              Podés cancelar o reprogramar hasta <strong className="text-foreground font-bold">24 h antes</strong> del turno. Pasado ese plazo no se puede cancelar online.{depositPaid ? <> La seña <strong className="text-foreground font-bold">no se reintegra</strong>.</> : null}
             </span>
           </Row>
         </div>
