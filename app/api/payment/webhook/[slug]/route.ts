@@ -72,8 +72,14 @@ async function processWebhook(slug: string, paymentId: string) {
   }
 
   if (payment.status === 'approved') {
-    if (appt.status === 'confirmed') {
-      console.log(`Turno #${appointmentId} ya confirmado, ignorando webhook`)
+    // Idempotencia: solo procesamos el pago cuando el turno está ESPERÁNDOLO
+    // (pending_payment). Si ya está confirmed/completed/cancelled, el pago ya se procesó o
+    // el turno terminó/se canceló. MP puede re-disparar el webhook con 'approved' tiempo
+    // después (ej. liberación de la seña a los ~15 días): NO hay que re-confirmar ni
+    // reenviar el mail de un turno ya procesado o ya pasado. (Antes solo se filtraba
+    // 'confirmed' → un turno 'completed' que ya pasó disparaba un mail duplicado.)
+    if (appt.status !== 'pending_payment') {
+      console.log(`Turno #${appointmentId} en estado '${appt.status}' (no pending_payment): webhook 'approved' ignorado`)
       return
     }
 
