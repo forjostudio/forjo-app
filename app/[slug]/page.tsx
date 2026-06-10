@@ -13,7 +13,7 @@ export default async function PublicBookingPage({ params }: Props) {
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, owner_id, slug, name, type, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, created_at')
+    .select('id, owner_id, slug, name, type, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at')
     .eq('slug', slug)
     .single()
 

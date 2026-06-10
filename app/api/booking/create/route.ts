@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   // Negocio por slug (tenant).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, require_deposit, deposit_amount, deposit_expiry_hours, primary_color, logo_url, resend_api_key, resend_from')
+    .select('id, name, slug, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, resend_api_key, resend_from')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
@@ -89,6 +89,7 @@ export async function POST(request: Request) {
   // exclusion constraint 013), no solo inicio exacto. Bucket por coalesce(sentinel).
   const bucket = proId ?? SENTINEL
   const nowMs = Date.now()
+  const buffer = Number(business.buffer_minutes) || 0
   const reqStart = timeToMinutes(time)
   const reqEnd = reqStart + Number(service.duration_minutes || 30)
   const { data: clashes } = await supabase
@@ -98,10 +99,11 @@ export async function POST(request: Request) {
     .eq('date', date)
     .in('status', ['confirmed', 'pending_payment'])
 
+  // Buffer (descanso entre turnos): ensancha cada turno ocupado para exigir un hueco mínimo.
   const overlaps = (a: { time: string; duration_minutes: number | null }) => {
     const aStart = timeToMinutes(a.time)
     const aEnd = aStart + Number(a.duration_minutes || 30)
-    return reqStart < aEnd && reqEnd > aStart
+    return reqStart < aEnd + buffer && reqEnd > aStart - buffer
   }
   const sameBucket = (clashes || []).filter(a => (a.professional_id ?? SENTINEL) === bucket && overlaps(a))
 

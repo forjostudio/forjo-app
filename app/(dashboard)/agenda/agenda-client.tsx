@@ -43,6 +43,7 @@ function statusChip(status: string): string {
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
+const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30]
 
 // ── Time block state types ──────────────────────────────────────────────────
 type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; location_id: string; error?: string }
@@ -73,6 +74,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
 
   // ── Grilla semanal (time_blocks) ────────────────────────────────────────────
   const [slotDuration, setSlotDuration] = useState(business.default_slot_duration ?? 60)
+  const [bufferMinutes, setBufferMinutes] = useState(business.buffer_minutes ?? 0)
   const [dayStates, setDayStates] = useState<DayConfig[]>(() =>
     Array.from({ length: 7 }, (_, day) => {
       const blocks = initialTimeBlocks.filter(b => b.day_of_week === day)
@@ -188,8 +190,8 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       const { error } = await supabase.from('time_blocks').insert(toInsert)
       if (error) { toast.error('Error al guardar horarios'); setSavingHours(false); return }
     }
-    // Save slot duration
-    await supabase.from('businesses').update({ default_slot_duration: slotDuration }).eq('id', business.id)
+    // Save slot duration + buffer entre turnos
+    await supabase.from('businesses').update({ default_slot_duration: slotDuration, buffer_minutes: bufferMinutes }).eq('id', business.id)
     setSavingHours(false)
     toast.success('Horarios guardados')
   }
@@ -369,6 +371,24 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <SelectContent>
               {SLOT_DURATIONS.map(d => (
                 <SelectItem key={d} value={String(d)}>{d} minutos</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Buffer entre turnos */}
+        <div className="flex items-center gap-4 pb-4 border-b border-border">
+          <div className="space-y-1 flex-1">
+            <Label>Descanso entre turnos</Label>
+            <p className="text-xs text-muted-foreground">Tiempo libre que se deja entre un turno y el siguiente.</p>
+          </div>
+          <Select value={String(bufferMinutes)} onValueChange={v => setBufferMinutes(Number(v))}>
+            <SelectTrigger className="w-36">
+              <SelectValue>{bufferMinutes === 0 ? 'Sin descanso' : `${bufferMinutes} minutos`}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {BUFFER_OPTIONS.map(d => (
+                <SelectItem key={d} value={String(d)}>{d === 0 ? 'Sin descanso' : `${d} minutos`}</SelectItem>
               ))}
             </SelectContent>
           </Select>

@@ -37,6 +37,8 @@ export interface Business {
   recaptcha_secret_key: string | null
   // Scheduling
   default_slot_duration?: number | null
+  // Descanso entre turnos (minutos). Gap mínimo entre turnos consecutivos. 0 = sin buffer.
+  buffer_minutes?: number | null
   // Plans
   plan?: string | null
   plan_status?: string | null

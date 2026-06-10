@@ -129,8 +129,10 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     }
 
     // Un slot [inicio, fin) está ocupado si se SOLAPA con algún turno ocupado (consistente con
-    // la exclusion constraint 013, que protege el rango por profesional).
+    // la exclusion constraint 013, que protege el rango por profesional). El buffer (descanso
+    // entre turnos) ensancha cada turno ocupado para dejar un hueco mínimo entre consecutivos.
     const duration = selectedService.duration_minutes
+    const buffer = Number(business.buffer_minutes) || 0
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     const isToday = dateStr === todayStr
     const nowMinutes = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : -1
@@ -146,7 +148,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         const conflict = busy.some(b => {
           const bStart = timeToMinutes(b.time)
           const bEnd = bStart + (Number(b.duration_minutes) || 30)
-          return t < bEnd && slotEnd > bStart
+          return t < bEnd + buffer && slotEnd > bStart - buffer
         })
         if (conflict) continue
         const time = minutesToTime(t)
