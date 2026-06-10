@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { refreshMpToken } from '@/lib/mercadopago'
 
 const MP_API = 'https://api.mercadopago.com'
 
@@ -10,11 +11,50 @@ interface ApptForDeposit {
 }
 
 interface BusinessForDeposit {
+  id: string
   name: string
   slug: string
   mp_access_token: string | null
+  mp_refresh_token?: string | null
+  mp_token_expires_at?: string | null
   deposit_amount: number | null
   deposit_expiry_hours: number | null
+}
+
+interface MpTokenBusiness {
+  id: string
+  mp_access_token: string | null
+  mp_refresh_token?: string | null
+  mp_token_expires_at?: string | null
+}
+
+// Devuelve un access_token válido del negocio (MercadoPago Connect), refrescándolo si vence en
+// menos de 24 h. Persiste el nuevo token + el refresh rotado + la expiración. Para tokens
+// cargados a mano (sin refresh_token) devuelve el actual tal cual. Si el refresh falla, también
+// cae al token actual (best-effort, no rompe el cobro).
+export async function getValidMpAccessToken(business: MpTokenBusiness): Promise<string | null> {
+  const current = business.mp_access_token
+  if (!business.mp_refresh_token) return current
+  const expMs = business.mp_token_expires_at ? new Date(business.mp_token_expires_at).getTime() : 0
+  if (expMs && expMs > Date.now() + 24 * 60 * 60 * 1000) return current
+
+  const refreshed = await refreshMpToken(business.mp_refresh_token)
+  if (!refreshed?.access_token) {
+    console.error(`[mp] refresh falló (negocio ${business.id}); uso el token actual`)
+    return current
+  }
+  const newExpiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null
+  const supabase = createAdminClient()
+  await supabase
+    .from('businesses')
+    .update({
+      mp_access_token: refreshed.access_token,
+      mp_refresh_token: refreshed.refresh_token ?? business.mp_refresh_token,
+      mp_token_expires_at: newExpiresAt,
+    })
+    .eq('id', business.id)
+  console.log(`[mp] access_token refrescado (negocio ${business.id})`)
+  return refreshed.access_token
 }
 
 type PreferenceResult =
@@ -36,6 +76,11 @@ export async function createDepositPreference(
   if (!amount || amount <= 0) {
     return { ok: false, error: 'El monto de la seña no es válido', status: 400 }
   }
+  // Token válido (refresca si el de OAuth está por vencer; el manual pasa de largo).
+  const accessToken = await getValidMpAccessToken(business)
+  if (!accessToken) {
+    return { ok: false, error: 'El negocio no tiene MercadoPago configurado', status: 400 }
+  }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const expiryHours = Number(business.deposit_expiry_hours) || 1
@@ -50,7 +95,7 @@ export async function createDepositPreference(
   const mpRes = await fetch(`${MP_API}/checkout/preferences`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${business.mp_access_token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({

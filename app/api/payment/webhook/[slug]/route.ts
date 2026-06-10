@@ -2,6 +2,7 @@ import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendConfirmationEmail, sendAdminNotification } from '@/lib/email'
 import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar'
+import { getValidMpAccessToken } from '@/lib/payment'
 import type { NextRequest } from 'next/server'
 
 const MP_API = 'https://api.mercadopago.com'
@@ -50,8 +51,11 @@ async function processWebhook(slug: string, paymentId: string) {
     return
   }
 
+  // Token válido (refresca el de OAuth si está por vencer; el manual pasa de largo).
+  const mpToken = await getValidMpAccessToken(business)
+
   const mpRes = await fetch(`${MP_API}/v1/payments/${paymentId}`, {
-    headers: { Authorization: `Bearer ${business.mp_access_token}` },
+    headers: { Authorization: `Bearer ${mpToken}` },
   })
   const payment = await mpRes.json()
 

@@ -96,6 +96,26 @@ export async function exchangeMpCode(code: string): Promise<MpOAuthTokens | null
   return res.json()
 }
 
+// Refresca el access_token con el refresh_token. MP ROTA el refresh_token en cada uso, así que
+// el caller debe persistir el nuevo refresh_token que vuelve acá.
+export async function refreshMpToken(refreshToken: string): Promise<MpOAuthTokens | null> {
+  const res = await fetch(`${MP_API}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.MP_CLIENT_ID || '',
+      client_secret: process.env.MP_CLIENT_SECRET || '',
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }),
+  })
+  if (!res.ok) {
+    console.error('[mp/oauth] refresh falló:', res.status, await res.text().catch(() => ''))
+    return null
+  }
+  return res.json()
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function mpFetch(path: string, options: RequestInit = {}): Promise<any> {
   const res = await fetch(`${MP_API}${path}`, {
