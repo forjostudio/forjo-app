@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { mpConnectConfigured } from '@/lib/mercadopago'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
@@ -27,6 +28,7 @@ export default async function SettingsPage() {
       initialServices={services || []}
       initialProfessionals={professionals || []}
       initialLocations={locations || []}
+      mpConnectEnabled={mpConnectConfigured()}
     />
   )
 }

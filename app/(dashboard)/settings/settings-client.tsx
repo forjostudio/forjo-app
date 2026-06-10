@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
@@ -104,10 +105,21 @@ interface Props {
   initialServices: Service[]
   initialProfessionals: Professional[]
   initialLocations: Location[]
+  mpConnectEnabled: boolean
 }
 
-export function SettingsClient({ business, initialServices, initialProfessionals, initialLocations }: Props) {
+export function SettingsClient({ business, initialServices, initialProfessionals, initialLocations, mpConnectEnabled }: Props) {
   const supabase = createClient()
+  const router = useRouter()
+
+  // Aviso al volver del OAuth de MercadoPago (?mp=connected|error) y limpieza de la URL.
+  useEffect(() => {
+    const mp = new URLSearchParams(window.location.search).get('mp')
+    if (!mp) return
+    if (mp === 'connected') toast.success('MercadoPago conectado')
+    else if (mp === 'error') toast.error('No se pudo conectar con MercadoPago')
+    window.history.replaceState(null, '', '/settings')
+  }, [])
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
   const term = resolveVertical(business).terminology
@@ -494,6 +506,18 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const [mpToken, setMpToken] = useState(business.mp_access_token || '')
   const [showMpToken, setShowMpToken] = useState(false)
   const [savingMp, setSavingMp] = useState(false)
+  // Conexión por MercadoPago Connect (OAuth): mp_user_id presente = conectado por botón.
+  const mpConnected = !!business.mp_user_id
+  // Pegar el token a mano: avanzado. Abierto si ya hay token manual (sin user_id de OAuth).
+  const [mpManual, setMpManual] = useState(!!business.mp_access_token && !business.mp_user_id)
+  const [disconnectingMp, setDisconnectingMp] = useState(false)
+  async function disconnectMp() {
+    setDisconnectingMp(true)
+    const res = await fetch('/api/mercadopago/disconnect', { method: 'POST' })
+    setDisconnectingMp(false)
+    if (res.ok) { toast.success('MercadoPago desconectado'); router.refresh() }
+    else toast.error('No se pudo desconectar')
+  }
 
   const [depositForm, setDepositForm] = useState({
     require_deposit: business.require_deposit || false,
@@ -1133,18 +1157,44 @@ export function SettingsClient({ business, initialServices, initialProfessionals
           <Card className="p-6 space-y-4">
             <div>
               <p className="font-semibold text-sm">MercadoPago</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Encontralo en mercadopago.com.ar → Tu negocio → Credenciales</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Conectá tu cuenta para cobrar las señas de los turnos.</p>
             </div>
-            <div className="space-y-1">
-              <Label>Access Token</Label>
-              <div className="relative">
-                <Input type={showMpToken ? 'text' : 'password'} value={mpToken} onChange={e => setMpToken(e.target.value)} placeholder="APP_USR-..." className="pr-10" />
-                <button type="button" onClick={() => setShowMpToken(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showMpToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+
+            {mpConnectEnabled && (
+              mpConnected ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" /> Conectado {business.mp_user_id ? <span className="text-foreground">· cuenta #{business.mp_user_id}</span> : null}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={disconnectMp} disabled={disconnectingMp}>
+                    {disconnectingMp ? 'Desconectando...' : 'Desconectar'}
+                  </Button>
+                </div>
+              ) : (
+                <Button onClick={() => { window.location.href = '/api/mercadopago/connect' }}>Conectar con MercadoPago</Button>
+              )
+            )}
+
+            {/* Pegar el Access Token a mano (avanzado / fallback si no usás Connect) */}
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input type="checkbox" checked={mpManual} onChange={e => setMpManual(e.target.checked)} className="h-4 w-4 rounded border-border" />
+              Pegar el Access Token a mano <span className="text-muted-foreground text-xs">(avanzado)</span>
+            </label>
+            {mpManual && (
+              <div className="space-y-3 border-l-2 border-border pl-4">
+                <p className="text-xs text-muted-foreground">Lo encontrás en mercadopago.com.ar → Tu negocio → Credenciales.</p>
+                <div className="space-y-1">
+                  <Label>Access Token</Label>
+                  <div className="relative">
+                    <Input type={showMpToken ? 'text' : 'password'} value={mpToken} onChange={e => setMpToken(e.target.value)} placeholder="APP_USR-..." className="pr-10" />
+                    <button type="button" onClick={() => setShowMpToken(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showMpToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <Button onClick={saveMpToken} disabled={savingMp}>{savingMp ? 'Guardando...' : 'Guardar'}</Button>
               </div>
-            </div>
-            <Button onClick={saveMpToken} disabled={savingMp}>{savingMp ? 'Guardando...' : 'Guardar'}</Button>
+            )}
           </Card>
 
           {/* Seña */}

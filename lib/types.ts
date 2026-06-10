@@ -41,6 +41,11 @@ export interface Business {
   buffer_minutes?: number | null
   // Google Calendar: refresh_token del dueño (secreto, nunca al cliente). Si está, sincroniza.
   google_refresh_token?: string | null
+  // MercadoPago Connect (OAuth): refresh_token (secreto), user_id de la cuenta MP y expiración
+  // del access_token. El access_token vive en mp_access_token (compartido con el modo manual).
+  mp_refresh_token?: string | null
+  mp_user_id?: string | null
+  mp_token_expires_at?: string | null
   // Plans
   plan?: string | null
   plan_status?: string | null
@@ -88,7 +93,7 @@ export interface TimeBlock {
 }
 
 // Public subset — never include secret keys
-export type PublicBusiness = Omit<Business, 'mp_access_token' | 'notification_email' | 'resend_api_key' | 'recaptcha_secret_key' | 'google_refresh_token'>
+export type PublicBusiness = Omit<Business, 'mp_access_token' | 'mp_refresh_token' | 'notification_email' | 'resend_api_key' | 'recaptcha_secret_key' | 'google_refresh_token'>
 
 export interface Professional {
   id: string

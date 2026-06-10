@@ -40,6 +40,62 @@ export function getMPPlanId(plan: 'basic' | 'studio' | 'pro'): string | null {
   }[plan] || null
 }
 
+// ── MercadoPago Connect (OAuth) ──────────────────────────────────────────────
+// El negocio conecta su cuenta de MP con un botón; recibimos su access_token sin que copie
+// nada. Usa el client_id (APP_ID) + client_secret de la app de Forjo (env), no el del negocio.
+const MP_AUTH_BASE = 'https://auth.mercadopago.com.ar/authorization'
+
+export function mpConnectConfigured(): boolean {
+  return !!(process.env.MP_CLIENT_ID && process.env.MP_CLIENT_SECRET)
+}
+
+function appBaseUrl(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio').replace(/\/$/, '')
+}
+
+export function mpRedirectUri(): string {
+  return `${appBaseUrl()}/api/mercadopago/callback`
+}
+
+export function buildMpAuthUrl(state: string): string {
+  const p = new URLSearchParams({
+    client_id: process.env.MP_CLIENT_ID || '',
+    response_type: 'code',
+    platform_id: 'mp',
+    redirect_uri: mpRedirectUri(),
+    state,
+  })
+  return `${MP_AUTH_BASE}?${p.toString()}`
+}
+
+export interface MpOAuthTokens {
+  access_token?: string
+  refresh_token?: string
+  user_id?: number | string
+  expires_in?: number
+  public_key?: string
+}
+
+// Canjea el code del callback por las credenciales del negocio (access + refresh + user_id).
+export async function exchangeMpCode(code: string): Promise<MpOAuthTokens | null> {
+  const res = await fetch(`${MP_API}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.MP_CLIENT_ID || '',
+      client_secret: process.env.MP_CLIENT_SECRET || '',
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: mpRedirectUri(),
+    }),
+  })
+  if (!res.ok) {
+    console.error('[mp/oauth] exchangeCode falló:', res.status, await res.text().catch(() => ''))
+    return null
+  }
+  return res.json()
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function mpFetch(path: string, options: RequestInit = {}): Promise<any> {
   const res = await fetch(`${MP_API}${path}`, {
