@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { PaletteScript } from '@/components/palette-script'
 import { CancelClient } from './cancel-client'
 
 export const metadata = { title: 'Cancelar turno' }
@@ -11,7 +12,7 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('date, time, status, client_name, services(name), businesses(name, slug, primary_color, logo_url)')
+    .select('date, time, status, client_name, services(name), businesses(name, slug, primary_color, logo_url, theme, palette, font)')
     .eq('cancel_token', token)
     .single()
 
@@ -27,7 +28,7 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
     )
   }
 
-  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null } | null
+  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; theme?: string | null; palette?: string | null; font?: string | null } | null
   const serviceName = (appt.services as { name?: string } | null)?.name ?? ''
   const todayStr = new Date().toISOString().slice(0, 10)
   // Turno guardado en hora local AR (UTC-3). Dentro de las 24 h previas → ya no se cancela.
@@ -39,8 +40,10 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
     : 'active'
 
   return (
-    <CancelClient
-      token={token}
+    <>
+      <PaletteScript palette={business?.palette} theme={business?.theme} font={business?.font} />
+      <CancelClient
+        token={token}
       clientName={appt.client_name}
       service={serviceName}
       date={appt.date}
@@ -50,6 +53,7 @@ export default async function CancelarPage({ params }: { params: Promise<{ token
       logoUrl={business?.logo_url ?? null}
       accent={(business?.primary_color && business.primary_color.trim()) || '#d94a2b'}
       initialState={initialState}
-    />
+      />
+    </>
   )
 }
