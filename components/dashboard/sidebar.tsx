@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   Calendar,
+  CalendarClock,
   Users,
   BarChart3,
   Settings,
@@ -32,6 +33,7 @@ function buildNav(business: Business): { href: string; label: string; icon: Luci
   const ITEMS: Record<string, { href: string; label: string; icon: LucideIcon }> = {
     dashboard: { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     appointments: { href: '/appointments', label: t.appointments, icon: Calendar },
+    agenda: { href: '/agenda', label: 'Agenda', icon: CalendarClock },
     clients: { href: '/clients', label: t.clients, icon: Users },
     patients: { href: '/clients', label: t.clients, icon: Users },
     finances: { href: '/finances', label: 'Finanzas', icon: BarChart3 },
