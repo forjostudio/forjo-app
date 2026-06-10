@@ -510,6 +510,8 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   })
   const [showResendKey, setShowResendKey] = useState(false)
   const [savingNotif, setSavingNotif] = useState(false)
+  // Avanzado: dominio propio de email (Resend). Abierto si ya tenían key cargada.
+  const [ownDomain, setOwnDomain] = useState(!!business.resend_api_key)
 
   const [recaptchaForm, setRecaptchaForm] = useState({
     recaptcha_site_key: business.recaptcha_site_key || '',
@@ -517,6 +519,9 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   })
   const [showRecaptchaSecret, setShowRecaptchaSecret] = useState(false)
   const [savingRecaptcha, setSavingRecaptcha] = useState(false)
+  // Avanzado: cuenta propia de reCAPTCHA. Por defecto todos quedan protegidos con la
+  // clave global de Forjo; esto es un override. Abierto si ya tenían key cargada.
+  const [ownRecaptcha, setOwnRecaptcha] = useState(!!business.recaptcha_secret_key)
 
   async function saveMpToken() {
     setSavingMp(true)
@@ -552,14 +557,23 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   }
   async function saveNotif() {
     setSavingNotif(true)
-    const { error } = await supabase.from('businesses').update({ notification_email: notifForm.notification_email || null, resend_api_key: notifForm.resend_api_key || null, resend_from: notifForm.resend_from || null }).eq('id', business.id)
+    // Sin dominio propio → se limpian las claves de Resend (los emails vuelven a salir desde Forjo).
+    const { error } = await supabase.from('businesses').update({
+      notification_email: notifForm.notification_email || null,
+      resend_api_key: ownDomain ? (notifForm.resend_api_key || null) : null,
+      resend_from: ownDomain ? (notifForm.resend_from || null) : null,
+    }).eq('id', business.id)
     setSavingNotif(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Notificaciones guardadas')
   }
   async function saveRecaptcha() {
     setSavingRecaptcha(true)
-    const { error } = await supabase.from('businesses').update({ recaptcha_site_key: recaptchaForm.recaptcha_site_key || null, recaptcha_secret_key: recaptchaForm.recaptcha_secret_key || null }).eq('id', business.id)
+    // Sin cuenta propia → se limpian las claves (queda la protección global de Forjo).
+    const { error } = await supabase.from('businesses').update({
+      recaptcha_site_key: ownRecaptcha ? (recaptchaForm.recaptcha_site_key || null) : null,
+      recaptcha_secret_key: ownRecaptcha ? (recaptchaForm.recaptcha_secret_key || null) : null,
+    }).eq('id', business.id)
     setSavingRecaptcha(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Configuración anti-spam guardada')
@@ -1175,26 +1189,35 @@ export function SettingsClient({ business, initialServices, initialProfessionals
           <Card className="p-6 space-y-4">
             <div>
               <p className="font-semibold text-sm">Notificaciones por email</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Creá tu cuenta gratis en resend.com</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Dónde recibís los avisos de turnos nuevos y cancelaciones. Los emails salen desde Forjo Studio.</p>
             </div>
             <div className="space-y-1">
               <Label>Email para recibir notificaciones</Label>
               <Input type="email" value={notifForm.notification_email} onChange={e => setNotifForm(f => ({ ...f, notification_email: e.target.value }))} placeholder="vos@tudominio.com" />
             </div>
-            <div className="space-y-1">
-              <Label>API Key de Resend</Label>
-              <div className="relative">
-                <Input type={showResendKey ? 'text' : 'password'} value={notifForm.resend_api_key} onChange={e => setNotifForm(f => ({ ...f, resend_api_key: e.target.value }))} placeholder="re_..." className="pr-10" />
-                <button type="button" onClick={() => setShowResendKey(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showResendKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input type="checkbox" checked={ownDomain} onChange={e => setOwnDomain(e.target.checked)} className="h-4 w-4 rounded border-border" />
+              Enviar los emails desde mi propio dominio <span className="text-muted-foreground text-xs">(avanzado)</span>
+            </label>
+            {ownDomain && (
+              <div className="space-y-4 border-l-2 border-border pl-4">
+                <p className="text-xs text-muted-foreground">Creá tu cuenta gratis en resend.com, verificá tu dominio y pegá la API Key. Así los mails salen desde tu dominio en vez de Forjo Studio.</p>
+                <div className="space-y-1">
+                  <Label>API Key de Resend</Label>
+                  <div className="relative">
+                    <Input type={showResendKey ? 'text' : 'password'} value={notifForm.resend_api_key} onChange={e => setNotifForm(f => ({ ...f, resend_api_key: e.target.value }))} placeholder="re_..." className="pr-10" />
+                    <button type="button" onClick={() => setShowResendKey(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showResendKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>Email remitente</Label>
+                  <Input type="email" value={notifForm.resend_from} onChange={e => setNotifForm(f => ({ ...f, resend_from: e.target.value }))} placeholder="turnos@tudominio.com" />
+                  <p className="text-xs text-muted-foreground">Debe ser de un dominio verificado en tu cuenta de Resend.</p>
+                </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label>Email remitente <span className="text-muted-foreground text-xs">(solo si usás tu propia API Key)</span></Label>
-              <Input type="email" value={notifForm.resend_from} onChange={e => setNotifForm(f => ({ ...f, resend_from: e.target.value }))} placeholder="turnos@tudominio.com" />
-              <p className="text-xs text-muted-foreground">Debe ser de un dominio verificado en tu cuenta de Resend. Si dejás la API Key vacía, los emails salen desde Forjo Studio y este campo se ignora.</p>
-            </div>
+            )}
             <Button onClick={saveNotif} disabled={savingNotif}>{savingNotif ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
 
@@ -1202,21 +1225,30 @@ export function SettingsClient({ business, initialServices, initialProfessionals
           <Card className="p-6 space-y-4">
             <div>
               <p className="font-semibold text-sm">Verificación anti-spam</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Creá tu cuenta en google.com/recaptcha → v3 → dominio: forjo.studio</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Tus reservas ya están protegidas con reCAPTCHA por defecto. No tenés que configurar nada.</p>
             </div>
-            <div className="space-y-1">
-              <Label>reCAPTCHA Site Key</Label>
-              <Input value={recaptchaForm.recaptcha_site_key} onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_site_key: e.target.value }))} placeholder="6Le..." />
-            </div>
-            <div className="space-y-1">
-              <Label>reCAPTCHA Secret Key</Label>
-              <div className="relative">
-                <Input type={showRecaptchaSecret ? 'text' : 'password'} value={recaptchaForm.recaptcha_secret_key} onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_secret_key: e.target.value }))} placeholder="6Le..." className="pr-10" />
-                <button type="button" onClick={() => setShowRecaptchaSecret(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showRecaptchaSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input type="checkbox" checked={ownRecaptcha} onChange={e => setOwnRecaptcha(e.target.checked)} className="h-4 w-4 rounded border-border" />
+              Usar mi propia cuenta de reCAPTCHA <span className="text-muted-foreground text-xs">(avanzado)</span>
+            </label>
+            {ownRecaptcha && (
+              <div className="space-y-4 border-l-2 border-border pl-4">
+                <p className="text-xs text-muted-foreground">Creá tu cuenta en google.com/recaptcha → v3 → tu dominio.</p>
+                <div className="space-y-1">
+                  <Label>reCAPTCHA Site Key</Label>
+                  <Input value={recaptchaForm.recaptcha_site_key} onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_site_key: e.target.value }))} placeholder="6Le..." />
+                </div>
+                <div className="space-y-1">
+                  <Label>reCAPTCHA Secret Key</Label>
+                  <div className="relative">
+                    <Input type={showRecaptchaSecret ? 'text' : 'password'} value={recaptchaForm.recaptcha_secret_key} onChange={e => setRecaptchaForm(f => ({ ...f, recaptcha_secret_key: e.target.value }))} placeholder="6Le..." className="pr-10" />
+                    <button type="button" onClick={() => setShowRecaptchaSecret(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showRecaptchaSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
             <Button onClick={saveRecaptcha} disabled={savingRecaptcha}>{savingRecaptcha ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
         </TabsContent>
