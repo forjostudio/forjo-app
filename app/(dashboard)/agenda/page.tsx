@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { AgendaClient } from './agenda-client'
+import { startOfWeek, format } from 'date-fns'
+import { AgendaClient, type AgendaAppt } from './agenda-client'
 
 export default async function AgendaPage() {
   const supabase = await createClient()
@@ -15,10 +16,20 @@ export default async function AgendaPage() {
 
   if (!business) redirect('/onboarding')
 
-  const [{ data: timeBlocks }, { data: locations }, { data: exceptions }] = await Promise.all([
+  // Turnos desde el inicio de la semana actual en adelante para la vista semanal (sin cancelados).
+  const weekStartStr = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+
+  const [{ data: timeBlocks }, { data: locations }, { data: exceptions }, { data: appointments }] = await Promise.all([
     supabase.from('time_blocks').select('*').eq('business_id', business.id).order('day_of_week').order('start_time'),
     supabase.from('locations').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('schedule_exceptions').select('*').eq('business_id', business.id).order('date'),
+    supabase.from('appointments')
+      .select('id, date, time, status, client_name, duration_minutes, location_id, services(name), professionals(name)')
+      .eq('business_id', business.id)
+      .gte('date', weekStartStr)
+      .neq('status', 'cancelled')
+      .order('date', { ascending: true })
+      .order('time', { ascending: true }),
   ])
 
   return (
@@ -27,6 +38,7 @@ export default async function AgendaPage() {
       initialTimeBlocks={timeBlocks || []}
       initialLocations={locations || []}
       initialExceptions={exceptions || []}
+      initialAppointments={(appointments || []) as unknown as AgendaAppt[]}
     />
   )
 }

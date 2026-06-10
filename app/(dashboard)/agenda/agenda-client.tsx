@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, TimeBlock, Location, ScheduleException } from '@/lib/types'
-import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isBefore, startOfDay } from 'date-fns'
+import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, addDays, isSameMonth, isSameDay, isBefore, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card } from '@/components/ui/card'
@@ -12,10 +12,33 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, X, Copy } from 'lucide-react'
+import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
+
+// Turno para la vista semanal (subset con joins de nombre de servicio/profesional).
+export type AgendaAppt = {
+  id: string
+  date: string
+  time: string
+  status: string
+  client_name: string
+  duration_minutes: number | null
+  location_id: string | null
+  services: { name?: string } | null
+  professionals: { name?: string } | null
+}
+
+// El botón de Google Calendar queda oculto hasta tener Client ID/Secret y la verificación.
+const SHOW_GOOGLE_SYNC = false
+
+// Color del chip de turno según su estado, para la vista semanal.
+function statusChip(status: string): string {
+  if (status === 'confirmed') return 'bg-primary/10 text-foreground border-primary/30'
+  if (status === 'pending_payment') return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
+  return 'bg-secondary text-muted-foreground border-border'
+}
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Mon → Sun
@@ -36,9 +59,10 @@ interface Props {
   initialTimeBlocks: TimeBlock[]
   initialLocations: Location[]
   initialExceptions: ScheduleException[]
+  initialAppointments: AgendaAppt[]
 }
 
-export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions }: Props) {
+export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions, initialAppointments }: Props) {
   const supabase = createClient()
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
@@ -255,14 +279,80 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     toast.success('Días normalizados')
   }
 
+  // ── Vista semanal de turnos ─────────────────────────────────────────────────
+  const todayWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
+  const [weekStart, setWeekStart] = useState(todayWeekStart)
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
+  const openDays = useMemo(() => new Set(initialTimeBlocks.map(b => b.day_of_week)), [initialTimeBlocks])
+  const apptsByDate = useMemo(() => {
+    const m = new Map<string, AgendaAppt[]>()
+    for (const a of initialAppointments) {
+      const arr = m.get(a.date) || []
+      arr.push(a)
+      m.set(a.date, arr)
+    }
+    return m
+  }, [initialAppointments])
+  // Estado del día para el badge: cerrado / horario especial / abierto (según excepción o grilla).
+  function dayStatus(d: Date): 'closed' | 'special' | 'open' {
+    const ex = excByDate.get(format(d, 'yyyy-MM-dd'))
+    if (ex?.closed) return 'closed'
+    if (ex) return 'special'
+    return openDays.has(d.getDay()) ? 'open' : 'closed'
+  }
+  // Próximos días especiales (de hoy en adelante) para listarlos bajo el calendario.
+  const upcomingExc = useMemo(() => {
+    const t = format(new Date(), 'yyyy-MM-dd')
+    return exceptions.filter(e => e.date >= t).sort((a, b) => a.date.localeCompare(b.date))
+  }, [exceptions])
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <PageEyebrow label="Agenda" />
-        <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Horarios y disponibilidad</h1>
-        <p className="text-sm text-muted-foreground mt-1">Definí tu grilla semanal de atención y anulá o cambiá días puntuales.</p>
+        <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Agenda</h1>
+        <p className="text-sm text-muted-foreground mt-1">Tus turnos de la semana, la grilla de atención y los días especiales.</p>
       </div>
+
+      {/* Turnos de la semana */}
+      <Card className="p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-sm">Turnos de la semana</p>
+            <p className="text-xs text-muted-foreground capitalize">{format(weekStart, "d 'de' MMM", { locale: es })} – {format(addDays(weekStart, 6), "d 'de' MMM", { locale: es })}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-8 w-8" disabled={!isBefore(todayWeekStart, weekStart)} onClick={() => setWeekStart(w => addDays(w, -7))} aria-label="Semana anterior"><ChevronLeft className="w-4 h-4" /></Button>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setWeekStart(w => addDays(w, 7))} aria-label="Semana siguiente"><ChevronRight className="w-4 h-4" /></Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          {weekDays.map(d => {
+            const ds = format(d, 'yyyy-MM-dd')
+            const st = dayStatus(d)
+            const dayAppts = apptsByDate.get(ds) || []
+            const isToday = isSameDay(d, new Date())
+            return (
+              <div key={ds} className={cn('rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1', isToday ? 'border-primary' : 'border-border', st === 'closed' && 'bg-secondary/30')}>
+                <div className="flex items-center justify-between">
+                  <span className={cn('text-xs font-semibold capitalize', isToday && 'text-primary')}>{format(d, 'EEE d', { locale: es })}</span>
+                  {st === 'closed' && <CalendarOff className="w-3 h-3 text-muted-foreground" />}
+                  {st === 'special' && <CalendarClock className="w-3 h-3 text-primary" />}
+                </div>
+                {dayAppts.length === 0 ? (
+                  <span className="text-[10px] text-muted-foreground">{st === 'closed' ? 'Cerrado' : 'Sin turnos'}</span>
+                ) : dayAppts.map(a => (
+                  <div key={a.id} className={cn('rounded px-1.5 py-1 text-[11px] leading-tight border', statusChip(a.status))}>
+                    <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
+                    {a.services?.name && <span className="block truncate text-[10px] opacity-80">{a.services.name}</span>}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      </Card>
 
       {/* Grilla semanal */}
       <Card className="p-6 space-y-5">
@@ -451,6 +541,18 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary/10 border border-primary/40" /> Horario especial</span>
           </div>
         </div>
+        {upcomingExc.length > 0 && (
+          <div className="border-t border-border pt-3 space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Próximos días especiales</p>
+            {upcomingExc.map(e => (
+              <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="capitalize w-32 flex-shrink-0">{format(parseISO(e.date), "EEE d 'de' MMM", { locale: es })}</span>
+                <span className="text-xs text-muted-foreground flex-1">{e.closed ? 'Cerrado' : `Horario especial ${e.start_time?.slice(0, 5)}–${e.end_time?.slice(0, 5)}`}</span>
+                <button onClick={() => clearException(e.date)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0" title="Quitar"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Dialog open={!!excEditDate} onOpenChange={open => { if (!open) setExcEditDate(null) }}>
@@ -506,6 +608,18 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Google Calendar — oculto hasta tener credenciales + verificación de Google */}
+      {SHOW_GOOGLE_SYNC && (
+        <Card className="p-6 space-y-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-primary" />
+            <p className="font-semibold text-sm">Google Calendar</p>
+          </div>
+          <p className="text-xs text-muted-foreground">Conectá tu Google Calendar para que cada turno confirmado se agregue automáticamente a tu agenda.</p>
+          <Button variant="outline" size="sm">Conectar con Google Calendar</Button>
+        </Card>
+      )}
     </div>
   )
 }
