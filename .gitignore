@@ -49,4 +49,7 @@ next-env.d.ts
 # Material de diseño (handoff): referencia local, no código de la app
 Forjo Studio-handoff/
 
+# Credenciales OAuth de Google descargadas (el secreto va en .env.local, no al repo)
+client_secret_*.json
+
 .env*

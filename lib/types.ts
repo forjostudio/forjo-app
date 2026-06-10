@@ -39,6 +39,8 @@ export interface Business {
   default_slot_duration?: number | null
   // Descanso entre turnos (minutos). Gap mínimo entre turnos consecutivos. 0 = sin buffer.
   buffer_minutes?: number | null
+  // Google Calendar: refresh_token del dueño (secreto, nunca al cliente). Si está, sincroniza.
+  google_refresh_token?: string | null
   // Plans
   plan?: string | null
   plan_status?: string | null
@@ -86,7 +88,7 @@ export interface TimeBlock {
 }
 
 // Public subset — never include secret keys
-export type PublicBusiness = Omit<Business, 'mp_access_token' | 'notification_email' | 'resend_api_key' | 'recaptcha_secret_key'>
+export type PublicBusiness = Omit<Business, 'mp_access_token' | 'notification_email' | 'resend_api_key' | 'recaptcha_secret_key' | 'google_refresh_token'>
 
 export interface Professional {
   id: string
@@ -184,6 +186,8 @@ export interface Appointment {
   email_error?: string | null
   // Token impredecible para el link público de cancelación (nunca cancelar por id).
   cancel_token?: string
+  // ID del evento en Google Calendar del dueño (si sincroniza). Permite borrarlo al cancelar.
+  google_event_id?: string | null
   created_at: string
   professionals?: Professional
   services?: Service

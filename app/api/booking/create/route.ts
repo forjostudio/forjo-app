@@ -2,6 +2,7 @@ import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyRecaptcha } from '@/lib/recaptcha'
 import { sendPendingPaymentEmail, sendExpiredHoldEmail } from '@/lib/email'
+import { createCalendarEvent } from '@/lib/google-calendar'
 
 // Mismo sentinela que el índice 011 / el endpoint de disponibilidad.
 const SENTINEL = '00000000-0000-0000-0000-000000000000'
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   // Negocio por slug (tenant).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, resend_api_key, resend_from')
+    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, resend_api_key, resend_from, google_refresh_token')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
@@ -220,6 +221,30 @@ export async function POST(request: Request) {
     }
     console.error('[booking/create] insert error:', insertErr?.message)
     return Response.json({ ok: false, error: 'insert_failed' }, { status: 500 })
+  }
+
+  // Google Calendar: si el turno queda confirmado de una (sin seña) y el negocio sincroniza,
+  // creamos el evento en su calendario y guardamos el event id. after() para no demorar la
+  // respuesta; best-effort (si falla, el turno igual queda creado). El flujo con seña crea el
+  // evento recién en el webhook de pago aprobado.
+  if (initialStatus === 'confirmed' && business.google_refresh_token && appt.id) {
+    const refresh = business.google_refresh_token as string
+    const apptId = appt.id as string
+    after(async () => {
+      try {
+        const eventId = await createCalendarEvent(refresh, {
+          summary: `${service.name || 'Turno'} · ${clientName}`,
+          description: [`Cliente: ${clientName}`, clientPhone ? `Tel: ${clientPhone}` : '', clientEmail ? `Email: ${clientEmail}` : '', notes ? `Notas: ${notes}` : '', 'Reserva vía Forjo'].filter(Boolean).join('\n'),
+          location: (business.address as string | null) || undefined,
+          date,
+          time,
+          durationMinutes: Number(service.duration_minutes || 30),
+        })
+        if (eventId) await supabase.from('appointments').update({ google_event_id: eventId }).eq('id', apptId)
+      } catch (e) {
+        console.error(`[booking/create] gcal event FALLÓ (turno ${apptId}):`, e instanceof Error ? e.message : e)
+      }
+    })
   }
 
   // Turno con seña: mail "falta pagar la seña" con link para completar el pago y para

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, TimeBlock, Location, ScheduleException } from '@/lib/types'
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock } from 'lucide-react'
+import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -29,9 +30,6 @@ export type AgendaAppt = {
   services: { name?: string } | null
   professionals: { name?: string } | null
 }
-
-// El botón de Google Calendar queda oculto hasta tener Client ID/Secret y la verificación.
-const SHOW_GOOGLE_SYNC = false
 
 // Color del chip de turno según su estado, para la vista semanal.
 function statusChip(status: string): string {
@@ -61,10 +59,31 @@ interface Props {
   initialLocations: Location[]
   initialExceptions: ScheduleException[]
   initialAppointments: AgendaAppt[]
+  googleEnabled: boolean
+  googleConnected: boolean
 }
 
-export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions, initialAppointments }: Props) {
+export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions, initialAppointments, googleEnabled, googleConnected }: Props) {
   const supabase = createClient()
+  const router = useRouter()
+
+  // Aviso al volver del OAuth de Google (?google=connected|error) y limpieza de la URL.
+  useEffect(() => {
+    const g = new URLSearchParams(window.location.search).get('google')
+    if (!g) return
+    if (g === 'connected') toast.success('Google Calendar conectado')
+    else if (g === 'error') toast.error('No se pudo conectar con Google Calendar')
+    window.history.replaceState(null, '', '/agenda')
+  }, [])
+
+  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false)
+  async function disconnectGoogle() {
+    setDisconnectingGoogle(true)
+    const res = await fetch('/api/google/disconnect', { method: 'POST' })
+    setDisconnectingGoogle(false)
+    if (res.ok) { toast.success('Google Calendar desconectado'); router.refresh() }
+    else toast.error('No se pudo desconectar')
+  }
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
   const term = resolveVertical(business).terminology
@@ -629,15 +648,28 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
         </DialogContent>
       </Dialog>
 
-      {/* Google Calendar — oculto hasta tener credenciales + verificación de Google */}
-      {SHOW_GOOGLE_SYNC && (
+      {/* Google Calendar — visible solo si el entorno tiene credenciales OAuth configuradas */}
+      {googleEnabled && (
         <Card className="p-6 space-y-3">
           <div className="flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-primary" />
             <p className="font-semibold text-sm">Google Calendar</p>
           </div>
-          <p className="text-xs text-muted-foreground">Conectá tu Google Calendar para que cada turno confirmado se agregue automáticamente a tu agenda.</p>
-          <Button variant="outline" size="sm">Conectar con Google Calendar</Button>
+          {googleConnected ? (
+            <>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" /> Conectado. Los turnos nuevos se agregan automáticamente a tu calendario.
+              </p>
+              <Button variant="outline" size="sm" onClick={disconnectGoogle} disabled={disconnectingGoogle}>
+                {disconnectingGoogle ? 'Desconectando...' : 'Desconectar'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">Conectá tu Google Calendar para que cada turno confirmado se agregue automáticamente a tu agenda.</p>
+              <Button variant="outline" size="sm" onClick={() => { window.location.href = '/api/google/connect' }}>Conectar con Google Calendar</Button>
+            </>
+          )}
         </Card>
       )}
     </div>

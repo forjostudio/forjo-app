@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { startOfWeek, format } from 'date-fns'
+import { googleConfigured } from '@/lib/google-calendar'
 import { AgendaClient, type AgendaAppt } from './agenda-client'
 
 export default async function AgendaPage() {
@@ -39,6 +40,8 @@ export default async function AgendaPage() {
       initialLocations={locations || []}
       initialExceptions={exceptions || []}
       initialAppointments={(appointments || []) as unknown as AgendaAppt[]}
+      googleEnabled={googleConfigured()}
+      googleConnected={!!business.google_refresh_token}
     />
   )
 }

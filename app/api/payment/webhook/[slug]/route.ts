@@ -1,6 +1,7 @@
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendConfirmationEmail, sendAdminNotification } from '@/lib/email'
+import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar'
 import type { NextRequest } from 'next/server'
 
 const MP_API = 'https://api.mercadopago.com'
@@ -154,6 +155,23 @@ async function processWebhook(slug: string, paymentId: string) {
         console.error(`[email] notif admin FALLÓ (turno ${appointmentId}):`, e instanceof Error ? e.message : e)
       }
     }
+
+    // Google Calendar: turno confirmado por seña → crear el evento en el calendario del dueño.
+    if (business.google_refresh_token) {
+      try {
+        const eventId = await createCalendarEvent(business.google_refresh_token, {
+          summary: `${serviceName || 'Turno'} · ${appt.client_name}`,
+          description: [`Cliente: ${appt.client_name}`, appt.client_phone ? `Tel: ${appt.client_phone}` : '', appt.client_email ? `Email: ${appt.client_email}` : '', appt.notes ? `Notas: ${appt.notes}` : '', 'Reserva vía Forjo'].filter(Boolean).join('\n'),
+          location: business.address || undefined,
+          date: appt.date,
+          time: appt.time,
+          durationMinutes: Number(appt.duration_minutes || 30),
+        })
+        if (eventId) await supabase.from('appointments').update({ google_event_id: eventId }).eq('id', appointmentId)
+      } catch (e) {
+        console.error(`[gcal] evento FALLÓ (turno ${appointmentId}):`, e instanceof Error ? e.message : e)
+      }
+    }
   } else if (['rejected', 'cancelled', 'refunded', 'charged_back'].includes(payment.status)) {
     // Solo cancelamos turnos que TODAVÍA no pasaron (pending_payment o confirmed). Si el
     // turno ya está 'completed', NO lo pisamos: el servicio se prestó. Un contracargo tardío
@@ -168,6 +186,10 @@ async function processWebhook(slug: string, paymentId: string) {
 
     if (cancelledRows && cancelledRows.length > 0) {
       console.log(`❌ Pago ${payment.status} — turno ${appointmentId} cancelado`)
+      // Si ya había evento en Google Calendar (turno antes confirmado), lo borramos.
+      if (business.google_refresh_token && appt.google_event_id) {
+        try { await deleteCalendarEvent(business.google_refresh_token, appt.google_event_id) } catch (e) { console.error('[gcal] borrar evento:', e instanceof Error ? e.message : e) }
+      }
     } else {
       console.log(`Pago ${payment.status} — turno ${appointmentId} ya pasó/no estaba activo, no se toca (estado: ${appt.status})`)
     }

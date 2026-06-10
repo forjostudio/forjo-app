@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendClientCancelEmail } from '@/lib/email'
+import { deleteCalendarEvent } from '@/lib/google-calendar'
 import type { NextRequest } from 'next/server'
 
 // Cancelación pública por TOKEN (no por id). El token impredecible resuelve el turno y su
@@ -14,7 +15,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('id, date, time, status, client_name, client_email, services(name), businesses(name, slug, primary_color, logo_url, resend_api_key, resend_from)')
+    .select('id, date, time, status, client_name, client_email, google_event_id, services(name), businesses(name, slug, primary_color, logo_url, resend_api_key, resend_from, google_refresh_token)')
     .eq('cancel_token', token)
     .single()
 
@@ -55,7 +56,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   // corta al hacer return). El branding/remitente sale del propio negocio del turno
   // (aislamiento por tenant: no se confía en ningún input del cliente). Best-effort: si
   // falla, se logea el motivo real y NO se rompe la cancelación, que ya está confirmada.
-  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; resend_api_key?: string | null; resend_from?: string | null } | null
+  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; resend_api_key?: string | null; resend_from?: string | null; google_refresh_token?: string | null } | null
+
+  // Google Calendar: si el turno tenía evento, lo borramos del calendario del dueño.
+  if (business?.google_refresh_token && appt.google_event_id) {
+    try {
+      await deleteCalendarEvent(business.google_refresh_token, appt.google_event_id)
+    } catch (e) {
+      console.error(`[cancel] gcal borrar evento FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)
+    }
+  }
   if (appt.client_email && business) {
     try {
       await sendClientCancelEmail({
