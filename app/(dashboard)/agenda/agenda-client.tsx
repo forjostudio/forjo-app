@@ -329,7 +329,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-5xl">
       <div>
         <PageEyebrow label="Agenda" />
         <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Agenda</h1>
@@ -364,9 +364,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 {dayAppts.length === 0 ? (
                   <span className="text-[10px] text-muted-foreground">{st === 'closed' ? 'Cerrado' : 'Sin turnos'}</span>
                 ) : dayAppts.map(a => (
-                  <div key={a.id} className={cn('rounded px-1.5 py-1 text-[11px] leading-tight border', statusChip(a.status))}>
+                  <div key={a.id} className={cn('rounded px-1.5 py-1 text-[11px] leading-tight border break-words', statusChip(a.status))}>
                     <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
-                    {a.services?.name && <span className="block truncate text-[10px] opacity-80">{a.services.name}</span>}
+                    {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
                   </div>
                 ))}
               </div>
