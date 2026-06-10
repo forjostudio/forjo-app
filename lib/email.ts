@@ -218,6 +218,7 @@ export async function sendAdminNotification({
   resendApiKey,
   resendFrom,
   pending = false,
+  cancelled = false,
 }: {
   to: string
   clientName: string
@@ -232,14 +233,21 @@ export async function sendAdminNotification({
   resendApiKey?: string | null
   resendFrom?: string | null
   pending?: boolean
+  // true → aviso al dueño de que un turno se canceló (en vez de uno nuevo).
+  cancelled?: boolean
 }) {
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const statusLabel = pending ? '⏳ Pendiente de pago' : '✅ Pago confirmado'
-  const subject = pending
-    ? `⏳ Nueva reserva sin pagar — ${clientName} · ${fecha} ${hora} hs`
-    : `✅ Nuevo turno confirmado — ${clientName} · ${fecha} ${hora} hs`
+  const statusLabel = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Pendiente de pago' : '✅ Pago confirmado')
+  const eyebrow = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Reserva pendiente' : '✅ Reserva confirmada')
+  const badgeBg = cancelled ? '#fee2e2' : (pending ? '#fef3c7' : '#dcfce7')
+  const badgeColor = cancelled ? '#991b1b' : (pending ? '#92400e' : '#166534')
+  const subject = cancelled
+    ? `❌ Turno cancelado — ${clientName} · ${fecha} ${hora} hs`
+    : pending
+      ? `⏳ Nueva reserva sin pagar — ${clientName} · ${fecha} ${hora} hs`
+      : `✅ Nuevo turno confirmado — ${clientName} · ${fecha} ${hora} hs`
 
   const waPhone = clientPhone ? clientPhone.replace(/\D/g, '') : null
 
@@ -252,12 +260,12 @@ export async function sendAdminNotification({
     <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
 
       <tr><td style="background:#1a1714;padding:28px 36px;border-radius:12px 12px 0 0;">
-        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:4px;">${pending ? '⏳ Reserva pendiente' : '✅ Reserva confirmada'}</div>
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:4px;">${eyebrow}</div>
         <div style="font-size:26px;font-weight:800;letter-spacing:2px;color:#f3ead8;">Panel de gestión</div>
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:32px 36px;">
-        <div style="display:inline-block;background:${pending ? '#fef3c7' : '#dcfce7'};color:${pending ? '#92400e' : '#166534'};font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;margin-bottom:20px;">${statusLabel}</div>
+        <div style="display:inline-block;background:${badgeBg};color:${badgeColor};font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;margin-bottom:20px;">${statusLabel}</div>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid #1a1714;border-radius:0 8px 8px 0;margin-bottom:20px;">
           <tr><td style="padding:18px 20px;">
@@ -310,7 +318,7 @@ export async function sendAdminNotification({
     html,
     text: `${statusLabel}\n\nCliente: ${clientName}\nTeléfono: ${clientPhone || '—'}\nEmail: ${clientEmail || '—'}\n\nServicio: ${service}\nFecha: ${fecha}\nHora: ${hora} hs\nTotal: ${fmtPrice(price)}${deposit > 0 ? `\nSeña: ${fmtPrice(deposit)}` : ''}`,
   })
-  console.log(`🔔 Notificación admin enviada a ${to} (${pending ? 'pendiente' : 'confirmado'})`)
+  console.log(`🔔 Notificación admin enviada a ${to} (${cancelled ? 'cancelado' : pending ? 'pendiente' : 'confirmado'})`)
 }
 
 // Email al cliente cuando EL NEGOCIO cancela el turno desde el panel de administración.

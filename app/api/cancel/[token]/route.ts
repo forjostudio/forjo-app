@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendClientCancelEmail } from '@/lib/email'
+import { sendClientCancelEmail, sendAdminNotification } from '@/lib/email'
 import { deleteCalendarEvent } from '@/lib/google-calendar'
 import type { NextRequest } from 'next/server'
 
@@ -15,7 +15,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('id, date, time, status, client_name, client_email, google_event_id, services(name), businesses(name, slug, primary_color, logo_url, resend_api_key, resend_from, google_refresh_token)')
+    .select('id, date, time, status, client_name, client_phone, client_email, deposit_amount, google_event_id, services(name, price), businesses(name, slug, primary_color, logo_url, resend_api_key, resend_from, google_refresh_token, notification_email)')
     .eq('cancel_token', token)
     .single()
 
@@ -56,7 +56,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   // corta al hacer return). El branding/remitente sale del propio negocio del turno
   // (aislamiento por tenant: no se confía en ningún input del cliente). Best-effort: si
   // falla, se logea el motivo real y NO se rompe la cancelación, que ya está confirmada.
-  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; resend_api_key?: string | null; resend_from?: string | null; google_refresh_token?: string | null } | null
+  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; resend_api_key?: string | null; resend_from?: string | null; google_refresh_token?: string | null; notification_email?: string | null } | null
 
   // Google Calendar: si el turno tenía evento, lo borramos del calendario del dueño.
   if (business?.google_refresh_token && appt.google_event_id) {
@@ -83,6 +83,30 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
       })
     } catch (e) {
       console.error(`[cancel] email cliente FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)
+    }
+  }
+
+  // Aviso al DUEÑO: el cliente canceló su turno por el link público. Best-effort, solo si
+  // tiene configurado el email de notificaciones.
+  if (business?.notification_email) {
+    try {
+      await sendAdminNotification({
+        to: business.notification_email,
+        clientName: appt.client_name,
+        clientPhone: appt.client_phone,
+        clientEmail: appt.client_email,
+        service: (appt.services as { name?: string } | null)?.name || '',
+        price: Number((appt.services as { price?: number } | null)?.price || 0),
+        deposit: Number(appt.deposit_amount || 0),
+        date: appt.date,
+        time: appt.time,
+        businessName: business.name || '',
+        resendApiKey: business.resend_api_key,
+        resendFrom: business.resend_from,
+        cancelled: true,
+      })
+    } catch (e) {
+      console.error(`[cancel] aviso al dueño FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)
     }
   }
 
