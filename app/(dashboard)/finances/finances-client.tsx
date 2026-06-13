@@ -576,7 +576,7 @@ export function FinancesClient({ businessId }: Props) {
             <Card className="col-span-2 lg:col-span-1 lg:row-span-2 border-[#2a5fa5]/30 bg-[#2a5fa5]/[0.04]">
               <CardContent className="pt-5 h-full flex flex-col justify-center">
                 <div className="flex items-center gap-2 mb-1.5"><Activity className="w-4 h-4 text-[#2a5fa5]" /><span className="text-xs text-muted-foreground">Saldo del mes</span></div>
-                <p className={`text-3xl lg:text-[2.5rem] leading-none font-extrabold font-[family-name:var(--font-heading)] tracking-tight ${balance >= 0 ? 'text-[#2a5fa5]' : 'text-destructive'}`}>{fmtARS(balance)}</p>
+                <p className={`text-4xl lg:text-[4rem] leading-[0.95] font-extrabold font-[family-name:var(--font-heading)] tracking-[-0.03em] ${balance >= 0 ? 'text-[#2a5fa5]' : 'text-destructive'}`}>{fmtARS(balance)}</p>
                 <p className="text-xs text-muted-foreground mt-3">{margin.toFixed(1)}% de margen sobre los ingresos del mes</p>
               </CardContent>
             </Card>
