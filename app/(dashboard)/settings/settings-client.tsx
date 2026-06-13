@@ -851,28 +851,30 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
               <div className="space-y-1">
                 <Label>Tipo</Label>
-                <Select value={typeSelectValue} onValueChange={onTypeChange}>
-                  <SelectTrigger><SelectValue>{typeIsOtro ? 'Otro' : bizForm.type}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    {TYPE_GROUPS.map(group => (
-                      <SelectGroup key={group.key}>
-                        <SelectLabel>{group.label}</SelectLabel>
-                        {predefinedTypes(group.key).map(t => (
-                          <SelectItem key={`${group.key}:::${t}`} value={`${group.key}:::${t}`}>{t}</SelectItem>
-                        ))}
-                        <SelectItem value={`${group.key}:::${OTRO_TYPE}`}>Otro…</SelectItem>
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {typeIsOtro && (
-                  <Input
-                    className="mt-2"
-                    placeholder="Especificá tu tipo de negocio (ej: Veterinaria, Lavadero…)"
-                    value={bizForm.type}
-                    onChange={e => setBizForm(f => ({ ...f, type: e.target.value }))}
-                  />
-                )}
+                <div className="flex gap-2">
+                  <Select value={typeSelectValue} onValueChange={onTypeChange}>
+                    <SelectTrigger className={typeIsOtro ? 'w-28 flex-shrink-0' : 'w-full'}><SelectValue>{typeIsOtro ? 'Otro' : bizForm.type}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      {TYPE_GROUPS.map(group => (
+                        <SelectGroup key={group.key}>
+                          <SelectLabel>{group.label}</SelectLabel>
+                          {predefinedTypes(group.key).map(t => (
+                            <SelectItem key={`${group.key}:::${t}`} value={`${group.key}:::${t}`}>{t}</SelectItem>
+                          ))}
+                          <SelectItem value={`${group.key}:::${OTRO_TYPE}`}>Otro…</SelectItem>
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {typeIsOtro && (
+                    <Input
+                      className="flex-1 min-w-0"
+                      placeholder="Tu rubro (ej: Veterinaria, Lavadero…)"
+                      value={bizForm.type}
+                      onChange={e => setBizForm(f => ({ ...f, type: e.target.value }))}
+                    />
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground pt-0.5">
                   Rubro: <span className="text-foreground">{VERTICALS[typeGroup].label}</span>
                   {' · '}define el menú y los campos del panel. El tipo es solo el texto del encabezado.

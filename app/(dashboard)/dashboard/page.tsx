@@ -76,8 +76,8 @@ export default async function DashboardPage() {
   const showWidget = (id: string) => !widgetSel || widgetSel.includes(id)
 
   const stats = [
-    { id: 'today_appointments', label: 'Turnos hoy', value: todayCount || 0, icon: Calendar, color: 'text-[#2a5fa5]' },
-    { id: 'week_appointments', label: 'Esta semana', value: weekCount || 0, icon: TrendingUp, color: 'text-[#2f8a5b]' },
+    { id: 'today_appointments', label: 'Turnos de hoy', value: todayCount || 0, icon: Calendar, color: 'text-[#2a5fa5]' },
+    { id: 'week_appointments', label: 'Turnos de la semana', value: weekCount || 0, icon: TrendingUp, color: 'text-[#2f8a5b]' },
     {
       id: 'month_revenue',
       label: 'Ingresos del mes',
@@ -85,7 +85,7 @@ export default async function DashboardPage() {
       icon: DollarSign,
       color: 'text-primary'
     },
-    { id: 'total_clients', label: 'Total clientes', value: clientCount || 0, icon: Users, color: 'text-[#8a5fb0]' },
+    { id: 'total_clients', label: 'Total de clientes', value: clientCount || 0, icon: Users, color: 'text-[#8a5fb0]' },
   ].filter(s => showWidget(s.id))
 
   return (
@@ -131,7 +131,7 @@ export default async function DashboardPage() {
       {showWidget('today_schedule') && (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Turnos de hoy</CardTitle>
+          <CardTitle className="text-base">Agenda de hoy</CardTitle>
         </CardHeader>
         <CardContent>
           {!todayAppointments || todayAppointments.length === 0 ? (
