@@ -13,6 +13,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   { id: 'month_revenue', label: 'Ingresos del mes', description: 'Facturación acumulada del mes' },
   { id: 'total_clients', label: 'Total de clientes', description: 'Cantidad total de clientes / pacientes' },
   { id: 'today_schedule', label: 'Agenda de hoy', description: 'Lista detallada de los turnos del día' },
+  { id: 'upcoming_appointments', label: 'Próximos turnos', description: 'Turnos de los próximos 7 días, con navegación por semana' },
 ]
 
 export const DASHBOARD_WIDGET_IDS = DASHBOARD_WIDGETS.map(w => w.id)

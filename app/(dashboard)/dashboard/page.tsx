@@ -1,11 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Users, DollarSign, TrendingUp } from 'lucide-react'
 import { sanitizeWidgetIds } from '@/lib/dashboard-widgets'
+import { UpcomingAppointments, type UpcomingAppt } from '@/components/dashboard/upcoming-appointments'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -39,6 +40,9 @@ export default async function DashboardPage() {
   const today = format(new Date(), 'yyyy-MM-dd')
   const weekStart = format(new Date(Date.now() - 6 * 86400000), 'yyyy-MM-dd')
   const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd')
+  // Horizonte para "Próximos turnos": de mañana en adelante, hasta 8 semanas.
+  const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd')
+  const horizon = format(addDays(new Date(), 56), 'yyyy-MM-dd')
 
   const [
     { count: todayCount },
@@ -46,6 +50,7 @@ export default async function DashboardPage() {
     { data: monthData },
     { count: clientCount },
     { data: todayAppointments },
+    { data: upcoming },
   ] = await Promise.all([
     supabase.from('appointments').select('*', { count: 'exact', head: true })
       .eq('business_id', business.id).eq('date', today).neq('status', 'cancelled'),
@@ -65,6 +70,14 @@ export default async function DashboardPage() {
       .neq('status', 'cancelled')
       .order('time')
       .limit(8),
+    supabase.from('appointments')
+      .select('id, date, time, status, client_name, professionals(name), services(name)')
+      .eq('business_id', business.id)
+      .gte('date', tomorrow)
+      .lte('date', horizon)
+      .neq('status', 'cancelled')
+      .order('date')
+      .order('time'),
   ])
 
   const monthRevenue = (monthData || []).reduce((sum, a) => {
@@ -162,6 +175,10 @@ export default async function DashboardPage() {
           )}
         </CardContent>
       </Card>
+      )}
+
+      {showWidget('upcoming_appointments') && (
+        <UpcomingAppointments appointments={(upcoming || []) as unknown as UpcomingAppt[]} />
       )}
     </div>
   )
