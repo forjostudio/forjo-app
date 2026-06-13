@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, type MouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -233,8 +233,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // ── Excepciones por fecha (capa 1) ──────────────────────────────────────────
   const [exceptions, setExceptions] = useState<ScheduleException[]>(initialExceptions)
   const [excMonth, setExcMonth] = useState(() => startOfMonth(new Date()))
-  const [excEditDate, setExcEditDate] = useState<string | null>(null)
-  const [excSpecial, setExcSpecial] = useState({ start: '09:00', end: '18:00' })
   const thisMonthStart = startOfMonth(new Date())
 
   const excByDate = useMemo(() => {
@@ -248,37 +246,46 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     return eachDayOfInterval({ start, end })
   }, [excMonth])
 
-  function openExcDay(date: Date) {
-    const ds = format(date, 'yyyy-MM-dd')
-    const ex = excByDate.get(ds)
-    if (ex && !ex.closed && ex.start_time && ex.end_time) {
-      setExcSpecial({ start: ex.start_time.slice(0, 5), end: ex.end_time.slice(0, 5) })
-    }
-    setExcEditDate(ds)
-  }
-  async function upsertException(date: string, closed: boolean, start: string | null, end: string | null) {
-    const { data, error } = await supabase
-      .from('schedule_exceptions')
-      .upsert({ business_id: business.id, date, closed, start_time: start, end_time: end }, { onConflict: 'business_id,date' })
-      .select()
-      .single()
-    if (error) { toast.error('Error al guardar el día'); return }
-    setExceptions(prev => [...prev.filter(e => e.date !== date), data as ScheduleException].sort((a, b) => a.date.localeCompare(b.date)))
-    setExcEditDate(null)
-    toast.success('Día actualizado')
-  }
   async function clearException(date: string) {
     const { error } = await supabase.from('schedule_exceptions').delete().eq('business_id', business.id).eq('date', date)
     if (error) { toast.error('Error'); return }
     setExceptions(prev => prev.filter(e => e.date !== date))
-    setExcEditDate(null)
     toast.success('Día normalizado')
   }
 
-  // Selección múltiple de días (vacaciones): cerrar, dar horario especial o normalizar varios de una.
+  // Selección de días. excSel = días elegidos; el panel lateral opera sobre ellos (1 o varios).
   const [excMulti, setExcMulti] = useState(false)
   const [excSel, setExcSel] = useState<Set<string>>(new Set())
   const [excBulk, setExcBulk] = useState({ start: '09:00', end: '18:00' })
+  // Ancla para la selección por rango (Shift). Es el último día clickeado sin modificadores.
+  const [excAnchor, setExcAnchor] = useState<string | null>(null)
+  // Selección estilo Windows: click = un día · Shift = rango hacia el futuro · Ctrl/Cmd = sumar
+  // individuales. En modo "Seleccionar varios" el click simple ya suma (para touch sin teclado).
+  function handleDayClick(d: Date, ev: MouseEvent) {
+    const ds = format(d, 'yyyy-MM-dd')
+    if (ev.shiftKey && excAnchor && ds >= excAnchor) {
+      const today = startOfDay(new Date())
+      const range = eachDayOfInterval({ start: parseISO(excAnchor), end: parseISO(ds) })
+        .filter(x => !isBefore(x, today))
+        .map(x => format(x, 'yyyy-MM-dd'))
+      setExcSel(new Set(range))
+      return
+    }
+    if (ev.ctrlKey || ev.metaKey || excMulti) {
+      setExcSel(s => { const n = new Set(s); if (n.has(ds)) n.delete(ds); else n.add(ds); return n })
+    } else {
+      setExcSel(new Set([ds]))
+    }
+    setExcAnchor(ds)
+  }
+  // Resumen de la selección para el panel (1 día = fecha completa; varios = conteo + rango).
+  const selDates = [...excSel].sort()
+  const selectionLabel = selDates.length === 1
+    ? format(parseISO(selDates[0]), "EEEE d 'de' MMMM", { locale: es })
+    : selDates.length > 1
+      ? `${selDates.length} días · ${format(parseISO(selDates[0]), 'd MMM', { locale: es })} → ${format(parseISO(selDates[selDates.length - 1]), 'd MMM', { locale: es })}`
+      : ''
+  const selectionHasException = selDates.some(ds => excByDate.has(ds))
   async function bulkCloseDays(dates: string[]) {
     if (dates.length === 0) return
     const rows = dates.map(date => ({ business_id: business.id, date, closed: true, start_time: null, end_time: null }))
@@ -289,7 +296,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       for (const e of (data as ScheduleException[])) m.set(e.date, e)
       return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date))
     })
-    setExcSel(new Set()); setExcMulti(false)
+    setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
     toast.success(`${dates.length} día${dates.length > 1 ? 's' : ''} cerrado${dates.length > 1 ? 's' : ''}`)
   }
   async function bulkSpecialDays(dates: string[], start: string, end: string) {
@@ -303,7 +310,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       for (const e of (data as ScheduleException[])) m.set(e.date, e)
       return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date))
     })
-    setExcSel(new Set()); setExcMulti(false)
+    setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
     toast.success(`Horario especial en ${dates.length} día${dates.length > 1 ? 's' : ''}`)
   }
   async function bulkClearDays(dates: string[]) {
@@ -311,7 +318,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     const { error } = await supabase.from('schedule_exceptions').delete().eq('business_id', business.id).in('date', dates)
     if (error) { toast.error('Error'); return }
     setExceptions(prev => prev.filter(e => !dates.includes(e.date)))
-    setExcSel(new Set()); setExcMulti(false)
+    setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
     toast.success('Días normalizados')
   }
 
@@ -551,9 +558,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-semibold text-sm">Días especiales</p>
-            <p className="text-xs text-muted-foreground">{excMulti ? 'Tocá varios días y elegí qué hacer con todos.' : 'Anulá o cambiá el horario de un día puntual, por encima de la grilla semanal. Tocá un día del calendario.'}</p>
+            <p className="text-xs text-muted-foreground">{excMulti ? 'Tocá los días que quieras y elegí qué hacer en el panel.' : 'Tocá un día para anularlo o cambiarle el horario. Shift = rango · Ctrl = varios.'}</p>
           </div>
-          <Button variant={excMulti ? 'default' : 'outline'} size="sm" className="flex-shrink-0" onClick={() => { setExcMulti(v => !v); setExcSel(new Set()) }}>
+          <Button variant={excMulti ? 'default' : 'outline'} size="sm" className="flex-shrink-0" onClick={() => { setExcMulti(v => !v); setExcSel(new Set()); setExcAnchor(null) }}>
             {excMulti ? 'Listo' : 'Seleccionar varios'}
           </Button>
         </div>
@@ -579,18 +586,14 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     key={ds}
                     type="button"
                     disabled={disabled}
-                    onClick={() => {
-                      if (excMulti) {
-                        setExcSel(s => { const n = new Set(s); if (n.has(ds)) n.delete(ds); else n.add(ds); return n })
-                      } else openExcDay(d)
-                    }}
+                    onClick={e => handleDayClick(d, e)}
                     className={cn(
                       'aspect-square rounded-md text-xs font-medium flex items-center justify-center border transition-colors',
                       disabled ? 'border-transparent text-muted-foreground/30 cursor-default'
                         : ex?.closed ? 'border-destructive/40 bg-destructive/15 text-destructive'
                           : ex ? 'border-primary/40 bg-primary/10 text-primary'
                             : 'border-border bg-card hover:border-primary',
-                      excMulti && excSel.has(ds) && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
+                      excSel.has(ds) && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
                     )}
                   >
                     {d.getDate()}
@@ -604,25 +607,28 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             </div>
           </div>
 
-          {/* Panel de acción a la derecha del calendario (no empuja el calendario hacia abajo) */}
-          {excMulti && excSel.size > 0 && (
-            <div className="rounded-md bg-secondary/50 p-4 space-y-3 lg:w-64 lg:flex-shrink-0">
-              <p className="text-sm font-medium">{excSel.size} día{excSel.size > 1 ? 's' : ''} seleccionado{excSel.size > 1 ? 's' : ''}</p>
-              <div className="space-y-2">
-                <Button size="sm" variant="destructive" className="w-full" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
-                <Button size="sm" variant="outline" className="w-full" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
-              </div>
-              <div className="border-t border-border pt-3 space-y-2">
-                <p className="text-xs font-medium">Horario especial</p>
-                <div className="flex items-center gap-2">
-                  <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-full text-sm h-8" />
-                  <span className="text-muted-foreground text-sm">→</span>
-                  <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-full text-sm h-8" />
-                </div>
-                <Button size="sm" className="w-full" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar a todos</Button>
-              </div>
+          {/* Panel de acción a la derecha del calendario. Siempre visible; apagado sin selección. */}
+          <div className={cn('rounded-md bg-secondary/50 p-4 space-y-3 lg:w-64 lg:flex-shrink-0 transition-opacity', excSel.size === 0 && 'opacity-50 pointer-events-none')}>
+            <div>
+              <p className={cn('text-sm font-medium', selDates.length === 1 && 'capitalize')}>{excSel.size === 0 ? 'Ningún día seleccionado' : selectionLabel}</p>
+              {excSel.size === 0 && <p className="text-xs text-muted-foreground mt-0.5">Tocá un día del calendario.</p>}
             </div>
-          )}
+            <div className="space-y-2">
+              <Button size="sm" variant="destructive" className="w-full" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
+              {selectionHasException && (
+                <Button size="sm" variant="outline" className="w-full" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
+              )}
+            </div>
+            <div className="border-t border-border pt-3 space-y-2">
+              <p className="text-xs font-medium">Horario especial</p>
+              <div className="flex items-center gap-2">
+                <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-full text-sm h-8" />
+                <span className="text-muted-foreground text-sm">→</span>
+                <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-full text-sm h-8" />
+              </div>
+              <Button size="sm" className="w-full" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar horario especial</Button>
+            </div>
+          </div>
         </div>
         {upcomingExc.length > 0 && (
           <div className="border-t border-border pt-3 space-y-1.5">
@@ -637,27 +643,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </div>
         )}
       </Card>
-
-      <Dialog open={!!excEditDate} onOpenChange={open => { if (!open) setExcEditDate(null) }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="capitalize">{excEditDate ? format(parseISO(excEditDate), "EEEE d 'de' MMMM", { locale: es }) : ''}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Button variant="outline" className="w-full justify-start" onClick={() => excEditDate && clearException(excEditDate)}>Día normal (según la grilla semanal)</Button>
-            <Button variant="outline" className="w-full justify-start" onClick={() => excEditDate && upsertException(excEditDate, true, null, null)}>Cerrado todo el día</Button>
-            <div className="rounded-md border border-border p-3 space-y-2">
-              <p className="text-xs font-medium">Horario especial ese día</p>
-              <div className="flex items-center gap-2">
-                <Input type="time" value={excSpecial.start} onChange={e => setExcSpecial(s => ({ ...s, start: e.target.value }))} className="w-28 text-sm" />
-                <span className="text-muted-foreground text-sm">→</span>
-                <Input type="time" value={excSpecial.end} onChange={e => setExcSpecial(s => ({ ...s, end: e.target.value }))} className="w-28 text-sm" />
-              </div>
-              <Button size="sm" onClick={() => excEditDate && upsertException(excEditDate, false, excSpecial.start, excSpecial.end)}>Aplicar horario especial</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Copiar el horario de un día a otros (multi-día) */}
       <Dialog open={copyDay !== null} onOpenChange={open => { if (!open) setCopyDay(null) }}>
