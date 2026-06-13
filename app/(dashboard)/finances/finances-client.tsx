@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, differenceInCalendarDays, eachDayOfInterval } from 'date-fns'
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths, addDays, isSameMonth, differenceInCalendarDays, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -17,14 +17,28 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import {
   TrendingUp, TrendingDown, Plus, Pencil, Trash2,
-  ChevronDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
+  ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
   Calendar, ShoppingBag,
 } from 'lucide-react'
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
-type Period = 'this_month' | 'last_month' | 'custom'
 type ClientMode = 'none' | 'search' | 'new'
 const EXPENSE_CATEGORIES = ['Insumos', 'Alquiler', 'Servicios', 'Personal', 'Marketing', 'Impuestos', 'Otro']
+
+// Variación % vs período anterior. invert=true para gastos (bajar es bueno → verde).
+// Sin base previa (prev=0) no muestra nada para no inventar "∞%".
+function Delta({ cur, prev, invert = false }: { cur: number; prev: number; invert?: boolean }) {
+  if (!prev) return null
+  const pct = ((cur - prev) / Math.abs(prev)) * 100
+  const up = pct >= 0
+  const good = invert ? !up : up
+  const Arrow = up ? ArrowUp : ArrowDown
+  return (
+    <span className={`inline-flex items-center gap-0.5 font-semibold ${good ? 'text-[#3fa46a]' : 'text-destructive'}`}>
+      <Arrow className="w-3 h-3" />{Math.abs(pct).toFixed(0)}%
+    </span>
+  )
+}
 function fmtARS(n: number) { return '$' + Math.round(Number(n)).toLocaleString('es-AR') }
 
 // ── Gastos fijos: frecuencias y su equivalente mensual ────────────────────────
@@ -111,9 +125,13 @@ interface Props { businessId: string }
 export function FinancesClient({ businessId }: Props) {
   const supabase = createClient()
 
-  const [period, setPeriod] = useState<Period>('this_month')
+  // Período: mes anclado (navegable con flechas) o rango personalizado.
+  const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(new Date()))
+  const [customMode, setCustomMode] = useState(false)
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  // Totales del período ANTERIOR (para la comparación de las tarjetas).
+  const [prev, setPrev] = useState({ services: 0, sales: 0, income: 0, expenses: 0, balance: 0 })
   const [loading, setLoading] = useState(true)
   const [txTab, setTxTab] = useState('appointments')
 
@@ -173,10 +191,20 @@ export function FinancesClient({ businessId }: Props) {
     : []
 
   function getDateRange() {
-    const now = new Date()
-    if (period === 'this_month') return { from: format(startOfMonth(now), 'yyyy-MM-dd'), to: format(endOfMonth(now), 'yyyy-MM-dd') }
-    if (period === 'last_month') { const l = subMonths(now, 1); return { from: format(startOfMonth(l), 'yyyy-MM-dd'), to: format(endOfMonth(l), 'yyyy-MM-dd') } }
-    return { from: customFrom, to: customTo }
+    if (customMode) return { from: customFrom, to: customTo }
+    return { from: format(startOfMonth(monthAnchor), 'yyyy-MM-dd'), to: format(endOfMonth(monthAnchor), 'yyyy-MM-dd') }
+  }
+  // Período anterior para comparar: mes previo, o un rango de igual largo justo antes del custom.
+  function getPrevRange() {
+    if (customMode) {
+      if (!customFrom || !customTo) return { from: '', to: '' }
+      const len = differenceInCalendarDays(parseISO(customTo), parseISO(customFrom)) + 1
+      const pTo = addDays(parseISO(customFrom), -1)
+      const pFrom = addDays(pTo, -(len - 1))
+      return { from: format(pFrom, 'yyyy-MM-dd'), to: format(pTo, 'yyyy-MM-dd') }
+    }
+    const p = subMonths(monthAnchor, 1)
+    return { from: format(startOfMonth(p), 'yyyy-MM-dd'), to: format(endOfMonth(p), 'yyyy-MM-dd') }
   }
 
   const fetchData = useCallback(async () => {
@@ -210,6 +238,24 @@ export function FinancesClient({ businessId }: Props) {
       .filter(f => f.active)
       .reduce((sum, f) => sum + monthlyEquivalent(Number(f.amount), f.frequency), 0)
 
+    // Período anterior: mismos totales para comparar (servicios, ventas, egresos, saldo).
+    const { from: pf, to: pt } = getPrevRange()
+    if (pf && pt) {
+      const [pA, pS, pE] = await Promise.all([
+        supabase.from('appointments').select('services(price)').eq('business_id', businessId).neq('status', 'cancelled').gte('date', pf).lte('date', pt),
+        supabase.from('manual_sales').select('amount, quantity').eq('business_id', businessId).gte('sale_date', pf).lte('sale_date', pt),
+        supabase.from('expenses').select('amount').eq('business_id', businessId).gte('expense_date', pf).lte('expense_date', pt),
+      ])
+      const pServices = (pA.data || []).reduce((s, x) => s + ((x.services as { price?: number } | null)?.price || 0), 0)
+      const pSales = (pS.data || []).reduce((s, x) => s + Number(x.amount) * Number(x.quantity), 0)
+      const pVar = (pE.data || []).reduce((s, x) => s + Number(x.amount), 0)
+      const pMonths = customMode ? Math.max((differenceInCalendarDays(parseISO(pt), parseISO(pf)) + 1) / 30.44, 0) : 1
+      const pExpenses = pVar + fixedMonthlyLocal * pMonths
+      setPrev({ services: pServices, sales: pSales, income: pServices + pSales, expenses: pExpenses, balance: (pServices + pSales) - pExpenses })
+    } else {
+      setPrev({ services: 0, sales: 0, income: 0, expenses: 0, balance: 0 })
+    }
+
     // Chart: last 6 months
     const now = new Date()
     const chart = await Promise.all(
@@ -232,7 +278,7 @@ export function FinancesClient({ businessId }: Props) {
     setChartData(chart)
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, customFrom, customTo, businessId])
+  }, [monthAnchor, customMode, customFrom, customTo, businessId])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -250,7 +296,7 @@ export function FinancesClient({ businessId }: Props) {
   // in months (≈30.44 days/month).
   const activeFixed = fixedExpenses.filter(f => f.active)
   const fixedMonthly = activeFixed.reduce((s, f) => s + monthlyEquivalent(Number(f.amount), f.frequency), 0)
-  const monthsInPeriod = period === 'custom' && rangeFrom && rangeTo
+  const monthsInPeriod = customMode && rangeFrom && rangeTo
     ? Math.max((differenceInCalendarDays(parseISO(rangeTo), parseISO(rangeFrom)) + 1) / 30.44, 0)
     : 1
   const recurringExpenses = fixedMonthly * monthsInPeriod
@@ -471,7 +517,7 @@ export function FinancesClient({ businessId }: Props) {
     for (const a of appointments) inc.set(a.date, (inc.get(a.date) || 0) + ((a.services as { price?: number } | null)?.price || 0))
     for (const s of sales) inc.set(s.sale_date, (inc.get(s.sale_date) || 0) + Number(s.amount) * Number(s.quantity))
     for (const e of expenses) eg.set(e.expense_date, (eg.get(e.expense_date) || 0) + Number(e.amount))
-    if (period !== 'custom') {
+    if (!customMode) {
       for (const f of activeFixed) {
         const day = f.due_day && f.due_day >= 1 && f.due_day <= 31 ? f.due_day : 1
         const target = days.find(d => d.getDate() === day) || days[days.length - 1]
@@ -540,6 +586,12 @@ export function FinancesClient({ businessId }: Props) {
     toast.success('Gasto fijo eliminado')
   }
 
+  // Etiquetas del período actual / anterior para el selector y la comparación.
+  const atCurrentMonth = isSameMonth(monthAnchor, new Date())
+  const prevAnchor = subMonths(monthAnchor, 1)
+  const prevLabel = customMode ? 'período anterior' : format(prevAnchor, 'MMM yyyy', { locale: es })
+  const prevShort = customMode ? '' : format(prevAnchor, 'MMM', { locale: es })
+
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Header + period selector */}
@@ -548,16 +600,20 @@ export function FinancesClient({ businessId }: Props) {
           <PageEyebrow label="Reportes" />
           <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Finanzas</h1>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {(['this_month', 'last_month', 'custom'] as Period[]).map(p => (
-            <Button key={p} size="sm" variant={period === p ? 'default' : 'outline'} onClick={() => setPeriod(p)}>
-              {p === 'this_month' ? 'Este mes' : p === 'last_month' ? 'Mes anterior' : 'Personalizado'}
-            </Button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!customMode && (
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setMonthAnchor(m => subMonths(m, 1))} aria-label="Mes anterior"><ChevronLeft className="w-4 h-4" /></Button>
+              <span className="text-sm font-semibold capitalize w-32 text-center">{format(monthAnchor, 'MMMM yyyy', { locale: es })}</span>
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={atCurrentMonth} onClick={() => setMonthAnchor(m => addMonths(m, 1))} aria-label="Mes siguiente"><ChevronRight className="w-4 h-4" /></Button>
+            </div>
+          )}
+          {customMode && <span className="text-sm font-semibold">Rango personalizado</span>}
+          <Button size="sm" variant={customMode ? 'default' : 'outline'} onClick={() => setCustomMode(v => !v)}>{customMode ? 'Por mes' : 'Personalizado'}</Button>
         </div>
       </div>
 
-      {period === 'custom' && (
+      {customMode && (
         <div className="flex gap-2 items-end">
           <div className="space-y-1"><Label className="text-xs">Desde</Label><Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="w-40" /></div>
           <div className="space-y-1"><Label className="text-xs">Hasta</Label><Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="w-40" /></div>
@@ -577,7 +633,11 @@ export function FinancesClient({ businessId }: Props) {
               <CardContent className="pt-5 h-full flex flex-col justify-center">
                 <div className="flex items-center gap-2 mb-1.5"><Activity className="w-4 h-4 text-[#2a5fa5]" /><span className="text-xs text-muted-foreground">Saldo del mes</span></div>
                 <p className={`text-4xl lg:text-[4rem] leading-[0.95] font-extrabold font-[family-name:var(--font-heading)] tracking-[-0.03em] ${balance >= 0 ? 'text-[#2a5fa5]' : 'text-destructive'}`}>{fmtARS(balance)}</p>
-                <p className="text-xs text-muted-foreground mt-3">{margin.toFixed(1)}% de margen sobre los ingresos del mes</p>
+                {prev.balance !== 0 ? (
+                  <p className="text-xs text-muted-foreground mt-3"><Delta cur={balance} prev={prev.balance} /> vs {prevLabel} <span className="text-muted-foreground/60">· {fmtARS(prev.balance)}{prevShort ? ` en ${prevShort}` : ''}</span></p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-3">{margin.toFixed(1)}% de margen sobre los ingresos</p>
+                )}
               </CardContent>
             </Card>
             {/* Ingresos */}
@@ -614,18 +674,21 @@ export function FinancesClient({ businessId }: Props) {
                 <div className="flex items-center gap-2 mb-1"><Calendar className="w-4 h-4 text-[#3fa46a]" /><span className="text-xs text-muted-foreground">Servicios</span></div>
                 <p className="text-2xl font-extrabold font-[family-name:var(--font-heading)] tracking-tight text-[#3fa46a]">{fmtARS(apptRevenue)}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{appointments.length} {appointments.length === 1 ? 'turno confirmado' : 'turnos confirmados'}</p>
+                {prev.services > 0 && <p className="text-xs mt-1"><Delta cur={apptRevenue} prev={prev.services} /> <span className="text-muted-foreground">vs {prevLabel}</span></p>}
                 <div className="absolute left-0 right-0 bottom-0 h-1 bg-[#3fa46a]" />
               </CardContent></Card>
               <Card className="relative overflow-hidden"><CardContent className="pt-5 pb-6">
                 <div className="flex items-center gap-2 mb-1"><ShoppingBag className="w-4 h-4 text-[#2a5fa5]" /><span className="text-xs text-muted-foreground">Ventas</span></div>
                 <p className="text-2xl font-extrabold font-[family-name:var(--font-heading)] tracking-tight text-[#2a5fa5]">{fmtARS(salesRevenue)}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{sales.length} {sales.length === 1 ? 'venta registrada' : 'ventas registradas'}</p>
+                {prev.sales > 0 && <p className="text-xs mt-1"><Delta cur={salesRevenue} prev={prev.sales} /> <span className="text-muted-foreground">vs {prevLabel}</span></p>}
                 <div className="absolute left-0 right-0 bottom-0 h-1 bg-[#2a5fa5]" />
               </CardContent></Card>
               <Card className="relative overflow-hidden"><CardContent className="pt-5 pb-6">
                 <div className="flex items-center gap-2 mb-1"><Receipt className="w-4 h-4 text-destructive" /><span className="text-xs text-muted-foreground">Gastos</span></div>
                 <p className="text-2xl font-extrabold font-[family-name:var(--font-heading)] tracking-tight text-destructive">{fmtARS(totalExpenses)}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{new Set(expenses.map(e => e.category || 'Otro')).size} categorías</p>
+                {prev.expenses > 0 && <p className="text-xs mt-1"><Delta cur={totalExpenses} prev={prev.expenses} invert /> <span className="text-muted-foreground">vs {prevLabel}</span></p>}
                 <div className="absolute left-0 right-0 bottom-0 h-1 bg-destructive" />
               </CardContent></Card>
             </div>
