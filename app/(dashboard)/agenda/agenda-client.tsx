@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, Check } from 'lucide-react'
+import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, Check, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -345,10 +345,33 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 max-w-5xl">
-      <div>
-        <PageEyebrow label="Agenda" />
-        <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Agenda</h1>
-        <p className="text-sm text-muted-foreground mt-1">Tus turnos de la semana, la grilla de atención y los días especiales.</p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <PageEyebrow label="Agenda" />
+          <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Agenda</h1>
+          <p className="text-sm text-muted-foreground mt-1">Tus turnos de la semana, la grilla de atención y los días especiales.</p>
+        </div>
+
+        {/* Google Calendar — controles arriba a la derecha (solo si hay credenciales OAuth) */}
+        {googleEnabled && (
+          <div className="flex items-center gap-2 flex-shrink-0 sm:pt-1">
+            {googleConnected ? (
+              <>
+                <span className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground"><Check className="w-3.5 h-3.5 text-primary" /> Google Calendar</span>
+                <Button variant="outline" size="sm" onClick={syncGoogle} disabled={syncingGoogle}>
+                  <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', syncingGoogle && 'animate-spin')} />{syncingGoogle ? 'Sincronizando...' : 'Sincronizar'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={disconnectGoogle} disabled={disconnectingGoogle}>
+                  {disconnectingGoogle ? '...' : 'Desconectar'}
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => { window.location.href = '/api/google/connect' }}>
+                <CalendarClock className="w-3.5 h-3.5 mr-1.5" /> Conectar Google Calendar
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Turnos de la semana */}
@@ -662,37 +685,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Google Calendar — visible solo si el entorno tiene credenciales OAuth configuradas */}
-      {googleEnabled && (
-        <Card className="p-6 space-y-3">
-          <div className="flex items-center gap-2">
-            <CalendarClock className="w-4 h-4 text-primary" />
-            <p className="font-semibold text-sm">Google Calendar</p>
-          </div>
-          {googleConnected ? (
-            <>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" /> Conectado. Los turnos nuevos se agregan automáticamente a tu calendario.
-              </p>
-              <p className="text-xs text-muted-foreground">Si cancelás o borrás un turno desde Google Calendar, tocá el botón Sincronizar para reflejarlo en el panel.</p>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={syncGoogle} disabled={syncingGoogle}>
-                  {syncingGoogle ? 'Sincronizando...' : 'Sincronizar'}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={disconnectGoogle} disabled={disconnectingGoogle}>
-                  {disconnectingGoogle ? 'Desconectando...' : 'Desconectar'}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-xs text-muted-foreground">Conectá tu Google Calendar para que cada turno confirmado se agregue automáticamente a tu agenda.</p>
-              <Button variant="outline" size="sm" onClick={() => { window.location.href = '/api/google/connect' }}>Conectar con Google Calendar</Button>
-            </>
-          )}
-        </Card>
-      )}
     </div>
   )
 }
