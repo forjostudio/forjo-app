@@ -215,6 +215,7 @@ export async function sendAdminNotification({
   date,
   time,
   businessName,
+  logoUrl,
   resendApiKey,
   resendFrom,
   pending = false,
@@ -230,6 +231,7 @@ export async function sendAdminNotification({
   date: string
   time: string
   businessName?: string | null
+  logoUrl?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
   pending?: boolean
@@ -259,9 +261,9 @@ export async function sendAdminNotification({
   <tr><td align="center">
     <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
 
-      <tr><td style="background:#1a1714;padding:28px 36px;border-radius:12px 12px 0 0;">
-        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:4px;">${eyebrow}</div>
-        <div style="font-size:26px;font-weight:800;letter-spacing:2px;color:#f3ead8;">Panel de gestión</div>
+      <tr><td style="background:#1a1714;padding:28px 36px;border-radius:12px 12px 0 0;text-align:center;">
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:10px;">${eyebrow}</div>
+        ${renderEmailHeader(businessName || '', logoUrl)}
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:32px 36px;">

@@ -151,6 +151,7 @@ async function processWebhook(slug: string, paymentId: string) {
           date: appt.date,
           time: appt.time,
           businessName: business.name,
+          logoUrl: business.logo_url,
           resendApiKey: business.resend_api_key,
           resendFrom: business.resend_from,
           pending: false,

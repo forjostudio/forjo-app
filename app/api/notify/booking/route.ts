@@ -78,6 +78,7 @@ export async function POST(request: Request) {
           date: appt.date,
           time: appt.time,
           businessName: String(business.name || ''),
+          logoUrl: business.logo_url as string | null,
           resendApiKey: resendKey,
           resendFrom,
         })
