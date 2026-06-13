@@ -557,66 +557,72 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             {excMulti ? 'Listo' : 'Seleccionar varios'}
           </Button>
         </div>
-        {excMulti && excSel.size > 0 && (
-          <div className="rounded-md bg-secondary/50 p-3 space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground flex-1 min-w-full sm:min-w-0">{excSel.size} día{excSel.size > 1 ? 's' : ''} seleccionado{excSel.size > 1 ? 's' : ''}</span>
-              <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
+        <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
+          <div className="max-w-sm w-full">
+            <div className="flex items-center justify-between mb-3">
+              <button type="button" onClick={() => setExcMonth(m => addMonths(m, -1))} disabled={isSameMonth(excMonth, thisMonthStart)} className="w-8 h-8 rounded-md flex items-center justify-center text-lg text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors" aria-label="Mes anterior">‹</button>
+              <span className="text-sm font-semibold capitalize">{format(excMonth, 'MMMM yyyy', { locale: es })}</span>
+              <button type="button" onClick={() => setExcMonth(m => addMonths(m, 1))} className="w-8 h-8 rounded-md flex items-center justify-center text-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" aria-label="Mes siguiente">›</button>
             </div>
-            <div className="flex items-center gap-2 flex-wrap border-t border-border pt-3">
-              <span className="text-xs font-medium">Horario especial</span>
-              <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-28 text-sm h-8" />
-              <span className="text-muted-foreground text-sm">→</span>
-              <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-28 text-sm h-8" />
-              <Button size="sm" className="h-8 text-xs" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar a todos</Button>
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-muted-foreground font-semibold mb-1">
+              {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map((d, i) => <div key={i}>{d}</div>)}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {excCalendarDays.map(d => {
+                const ds = format(d, 'yyyy-MM-dd')
+                const inMonth = isSameMonth(d, excMonth)
+                const isPast = isBefore(d, startOfDay(new Date()))
+                const ex = excByDate.get(ds)
+                const disabled = !inMonth || isPast
+                return (
+                  <button
+                    key={ds}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      if (excMulti) {
+                        setExcSel(s => { const n = new Set(s); if (n.has(ds)) n.delete(ds); else n.add(ds); return n })
+                      } else openExcDay(d)
+                    }}
+                    className={cn(
+                      'aspect-square rounded-md text-xs font-medium flex items-center justify-center border transition-colors',
+                      disabled ? 'border-transparent text-muted-foreground/30 cursor-default'
+                        : ex?.closed ? 'border-destructive/40 bg-destructive/15 text-destructive'
+                          : ex ? 'border-primary/40 bg-primary/10 text-primary'
+                            : 'border-border bg-card hover:border-primary',
+                      excMulti && excSel.has(ds) && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
+                    )}
+                  >
+                    {d.getDate()}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-destructive/15 border border-destructive/40" /> Cerrado</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary/10 border border-primary/40" /> Horario especial</span>
             </div>
           </div>
-        )}
-        <div className="max-w-sm">
-          <div className="flex items-center justify-between mb-3">
-            <button type="button" onClick={() => setExcMonth(m => addMonths(m, -1))} disabled={isSameMonth(excMonth, thisMonthStart)} className="w-8 h-8 rounded-md flex items-center justify-center text-lg text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors" aria-label="Mes anterior">‹</button>
-            <span className="text-sm font-semibold capitalize">{format(excMonth, 'MMMM yyyy', { locale: es })}</span>
-            <button type="button" onClick={() => setExcMonth(m => addMonths(m, 1))} className="w-8 h-8 rounded-md flex items-center justify-center text-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" aria-label="Mes siguiente">›</button>
-          </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-muted-foreground font-semibold mb-1">
-            {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map((d, i) => <div key={i}>{d}</div>)}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {excCalendarDays.map(d => {
-              const ds = format(d, 'yyyy-MM-dd')
-              const inMonth = isSameMonth(d, excMonth)
-              const isPast = isBefore(d, startOfDay(new Date()))
-              const ex = excByDate.get(ds)
-              const disabled = !inMonth || isPast
-              return (
-                <button
-                  key={ds}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => {
-                    if (excMulti) {
-                      setExcSel(s => { const n = new Set(s); if (n.has(ds)) n.delete(ds); else n.add(ds); return n })
-                    } else openExcDay(d)
-                  }}
-                  className={cn(
-                    'aspect-square rounded-md text-xs font-medium flex items-center justify-center border transition-colors',
-                    disabled ? 'border-transparent text-muted-foreground/30 cursor-default'
-                      : ex?.closed ? 'border-destructive/40 bg-destructive/15 text-destructive'
-                        : ex ? 'border-primary/40 bg-primary/10 text-primary'
-                          : 'border-border bg-card hover:border-primary',
-                    excMulti && excSel.has(ds) && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
-                  )}
-                >
-                  {d.getDate()}
-                </button>
-              )
-            })}
-          </div>
-          <div className="flex items-center gap-4 mt-3 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-destructive/15 border border-destructive/40" /> Cerrado</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary/10 border border-primary/40" /> Horario especial</span>
-          </div>
+
+          {/* Panel de acción a la derecha del calendario (no empuja el calendario hacia abajo) */}
+          {excMulti && excSel.size > 0 && (
+            <div className="rounded-md bg-secondary/50 p-4 space-y-3 lg:w-64 lg:flex-shrink-0">
+              <p className="text-sm font-medium">{excSel.size} día{excSel.size > 1 ? 's' : ''} seleccionado{excSel.size > 1 ? 's' : ''}</p>
+              <div className="space-y-2">
+                <Button size="sm" variant="destructive" className="w-full" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
+                <Button size="sm" variant="outline" className="w-full" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
+              </div>
+              <div className="border-t border-border pt-3 space-y-2">
+                <p className="text-xs font-medium">Horario especial</p>
+                <div className="flex items-center gap-2">
+                  <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-full text-sm h-8" />
+                  <span className="text-muted-foreground text-sm">→</span>
+                  <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-full text-sm h-8" />
+                </div>
+                <Button size="sm" className="w-full" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar a todos</Button>
+              </div>
+            </div>
+          )}
         </div>
         {upcomingExc.length > 0 && (
           <div className="border-t border-border pt-3 space-y-1.5">
