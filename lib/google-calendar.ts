@@ -124,6 +124,30 @@ export async function createCalendarEvent(refreshToken: string, ev: CalEventInpu
   return j.id || null
 }
 
+// Estado en Google Calendar de varios eventos (un solo access_token para todos). Para la
+// sincronización inversa: si el dueño borró/canceló el evento en su calendario, lo reflejamos
+// en el panel. 'deleted' = 404/410, 'cancelled' = status del evento, 'active' = sigue, null =
+// no se pudo determinar (no tocar el turno).
+export async function getEventStatuses(
+  refreshToken: string,
+  eventIds: string[],
+): Promise<Record<string, 'active' | 'cancelled' | 'deleted' | null>> {
+  const out: Record<string, 'active' | 'cancelled' | 'deleted' | null> = {}
+  if (eventIds.length === 0) return out
+  const token = await getAccessToken(refreshToken)
+  if (!token) return out // sin token, todos quedan indeterminados → no se toca nada
+  for (const id of eventIds) {
+    const res = await fetch(`${CAL_API}/calendars/primary/events/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.status === 404 || res.status === 410) { out[id] = 'deleted'; continue }
+    if (!res.ok) { out[id] = null; continue }
+    const j = await res.json().catch(() => null)
+    out[id] = j?.status === 'cancelled' ? 'cancelled' : 'active'
+  }
+  return out
+}
+
 // Borra un evento del calendario primario. 404/410 (ya no existe) se trata como éxito.
 export async function deleteCalendarEvent(refreshToken: string, eventId: string): Promise<void> {
   const token = await getAccessToken(refreshToken)

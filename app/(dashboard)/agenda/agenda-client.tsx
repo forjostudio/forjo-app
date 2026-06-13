@@ -84,6 +84,21 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     if (res.ok) { toast.success('Google Calendar desconectado'); router.refresh() }
     else toast.error('No se pudo desconectar')
   }
+  const [syncingGoogle, setSyncingGoogle] = useState(false)
+  async function syncGoogle() {
+    setSyncingGoogle(true)
+    try {
+      const res = await fetch('/api/google/sync', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.ok) {
+        const n = data.cancelled ?? 0
+        toast.success(n > 0 ? `${n} turno${n > 1 ? 's' : ''} cancelado${n > 1 ? 's' : ''} desde tu calendario` : 'Todo al día, sin cambios')
+        if (n > 0) router.refresh()
+      } else toast.error('No se pudo sincronizar')
+    } finally {
+      setSyncingGoogle(false)
+    }
+  }
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
   const term = resolveVertical(business).terminology
@@ -660,9 +675,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" /> Conectado. Los turnos nuevos se agregan automáticamente a tu calendario.
               </p>
-              <Button variant="outline" size="sm" onClick={disconnectGoogle} disabled={disconnectingGoogle}>
-                {disconnectingGoogle ? 'Desconectando...' : 'Desconectar'}
-              </Button>
+              <p className="text-xs text-muted-foreground">Si cancelás o borrás un turno desde Google Calendar, tocá el botón Sincronizar para reflejarlo en el panel.</p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={syncGoogle} disabled={syncingGoogle}>
+                  {syncingGoogle ? 'Sincronizando...' : 'Sincronizar'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={disconnectGoogle} disabled={disconnectingGoogle}>
+                  {disconnectingGoogle ? 'Desconectando...' : 'Desconectar'}
+                </Button>
+              </div>
             </>
           ) : (
             <>
