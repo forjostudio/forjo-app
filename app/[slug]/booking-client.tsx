@@ -57,14 +57,15 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const router = useRouter()
   const locWord = resolveVertical(business).terminology.location
 
-  // Consultorios reservables: si el servicio fija uno, ese; si no, todos los activos.
-  // El paso de elegir consultorio aparece si hay 2+ y al menos uno tiene horarios propios.
+  // El paso de elegir consultorio aparece cuando hay 2+ consultorios con horarios propios.
+  // El picker muestra todos; los que no tienen horarios quedan deshabilitados. El consultorio
+  // del servicio (si lo tiene) sirve de fallback cuando no hay paso.
   const svcLocSel = selectedService?.location_id ?? null
   const locHasBlocks = (id: string) => timeBlocks.some(b => b.location_id === id)
-  const anyLocHasBlocks = locations.some(l => locHasBlocks(l.id))
-  const bookableLocs = svcLocSel ? locations.filter(l => l.id === svcLocSel) : locations
-  const needLocStep = bookableLocs.length > 1 && anyLocHasBlocks
-  const resolvedLoc = needLocStep ? bookingLoc : (bookableLocs.length === 1 ? bookableLocs[0].id : (svcLocSel ?? null))
+  const bookableLocs = locations
+  const locsWithHours = locations.filter(l => locHasBlocks(l.id))
+  const needLocStep = locsWithHours.length > 1
+  const resolvedLoc = needLocStep ? bookingLoc : (locsWithHours[0]?.id ?? svcLocSel ?? null)
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
