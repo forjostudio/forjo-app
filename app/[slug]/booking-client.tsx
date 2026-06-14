@@ -20,7 +20,8 @@ interface Props {
   professionals: Professional[]
   timeBlocks: TimeBlock[]
   // Excepciones por fecha (capa 1): anular o cambiar el horario de un día puntual.
-  exceptions: { date: string; closed: boolean; start_time: string | null; end_time: string | null }[]
+  // location_id null = global (todo el negocio); con valor = solo ese consultorio.
+  exceptions: { date: string; closed: boolean; start_time: string | null; end_time: string | null; location_id: string | null }[]
   // Consultorios/sucursales activos (capa 2a). Los slots se etiquetan con su consultorio.
   locations: { id: string; name: string; address: string | null }[]
 }
@@ -70,16 +71,32 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
 
   // Días de la semana abiertos (de los time_blocks) para deshabilitar el resto en el calendario.
   const openDaysSet = useMemo(() => new Set(timeBlocks.map(b => b.day_of_week)), [timeBlocks])
-  // Excepciones indexadas por fecha (yyyy-MM-dd) para resolver cada día del calendario.
-  const exceptionByDate = useMemo(() => {
-    const m = new Map<string, { closed: boolean; start_time: string | null; end_time: string | null }>()
-    for (const e of exceptions) m.set(e.date, e)
+  // Excepciones indexadas. Global (location_id null) = todo el negocio ese día. Por consultorio
+  // (location_id) = solo ese consultorio. La de consultorio manda sobre la global.
+  type Exc = { closed: boolean; start_time: string | null; end_time: string | null }
+  const globalExcByDate = useMemo(() => {
+    const m = new Map<string, Exc>()
+    for (const e of exceptions) if (!e.location_id) m.set(e.date, e)
     return m
   }, [exceptions])
-  // ¿El día está abierto? Una excepción manda sobre la grilla semanal.
+  const locExcByKey = useMemo(() => {
+    const m = new Map<string, Exc>()
+    for (const e of exceptions) if (e.location_id) m.set(`${e.date}|${e.location_id}`, e)
+    return m
+  }, [exceptions])
+  // Fechas con alguna excepción de horario especial por consultorio (para abrir días "cerrados").
+  const locSpecialDates = useMemo(() => {
+    const s = new Set<string>()
+    for (const e of exceptions) if (e.location_id && !e.closed && e.start_time && e.end_time) s.add(e.date)
+    return s
+  }, [exceptions])
+  // ¿El día está abierto? Permisivo: si la grilla abre ese día (o hay un especial por consultorio)
+  // y no hay un cierre GLOBAL, se muestra; el detalle por consultorio se resuelve al generar slots.
   const isDayOpen = (d: Date) => {
-    const ex = exceptionByDate.get(format(d, 'yyyy-MM-dd'))
-    return ex ? !ex.closed : openDaysSet.has(d.getDay())
+    const ds = format(d, 'yyyy-MM-dd')
+    const g = globalExcByDate.get(ds)
+    if (g) return !g.closed
+    return openDaysSet.has(d.getDay()) || locSpecialDates.has(ds)
   }
   // Grilla del mes mostrado, en semanas de lunes a domingo.
   const calendarDays = useMemo(() => {
@@ -97,15 +114,36 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     setLoadingSlots(true)
 
     const dateStr = format(date, 'yyyy-MM-dd')
-    const ex = exceptionByDate.get(dateStr)
     // Consultorio del servicio (opcional): se usa como consultorio del slot cuando el bloque
     // de horario no tiene uno propio (Capa 2a). El bloque manda si está asignado.
     const svcLoc = selectedService.location_id ?? null
-    // Excepción del día: cerrado → sin slots; horario especial → ese rango; si no, la grilla semanal.
-    // Cada bloque lleva su consultorio (location_id) para etiquetar los slots.
-    const dayBlocks: { start_time: string; end_time: string; location_id: string | null }[] = ex
-      ? ((!ex.closed && ex.start_time && ex.end_time) ? [{ start_time: ex.start_time, end_time: ex.end_time, location_id: svcLoc }] : [])
-      : timeBlocks.filter(b => b.day_of_week === date.getDay()).map(b => ({ start_time: b.start_time, end_time: b.end_time, location_id: b.location_id ?? svcLoc }))
+    const globalEx = globalExcByDate.get(dateStr)
+    const dayBlocks: { start_time: string; end_time: string; location_id: string | null }[] = []
+    if (globalEx?.closed) {
+      // Cierre global: sin slots ese día.
+    } else if (globalEx && !globalEx.closed && globalEx.start_time && globalEx.end_time) {
+      // Horario especial global: reemplaza el día por ese rango (un bloque).
+      dayBlocks.push({ start_time: globalEx.start_time, end_time: globalEx.end_time, location_id: svcLoc })
+    } else {
+      // Día normal: la grilla semanal, aplicando la excepción de cada consultorio si la hay.
+      for (const b of timeBlocks.filter(b => b.day_of_week === date.getDay())) {
+        const bLoc = b.location_id ?? svcLoc
+        const ex = bLoc ? locExcByKey.get(`${dateStr}|${bLoc}`) : undefined
+        if (ex?.closed) continue // ese consultorio cerrado ese día
+        if (ex && !ex.closed && ex.start_time && ex.end_time) {
+          dayBlocks.push({ start_time: ex.start_time, end_time: ex.end_time, location_id: bLoc })
+        } else {
+          dayBlocks.push({ start_time: b.start_time, end_time: b.end_time, location_id: bLoc })
+        }
+      }
+      // Horario especial por consultorio que ABRE un día sin bloque semanal para ese consultorio.
+      for (const e of exceptions) {
+        if (e.date !== dateStr || !e.location_id || e.closed || !e.start_time || !e.end_time) continue
+        if (!dayBlocks.some(db => db.location_id === e.location_id)) {
+          dayBlocks.push({ start_time: e.start_time, end_time: e.end_time, location_id: e.location_id })
+        }
+      }
+    }
     if (dayBlocks.length === 0) {
       setAvailableSlots([])
       setLoadingSlots(false)

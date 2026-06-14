@@ -26,7 +26,7 @@ export default async function PublicBookingPage({ params }: Props) {
     // Vista pública acotada (id, name, specialty) — no expone contacto/matrícula del staff.
     supabase.from('public_professionals').select('*').eq('business_id', business.id),
     supabase.from('time_blocks').select('*').eq('business_id', business.id),
-    supabase.from('schedule_exceptions').select('date, closed, start_time, end_time').eq('business_id', business.id).gte('date', todayStr),
+    supabase.from('schedule_exceptions').select('date, closed, start_time, end_time, location_id').eq('business_id', business.id).gte('date', todayStr),
     supabase.from('locations').select('id, name, address').eq('business_id', business.id).eq('is_active', true),
   ])
 

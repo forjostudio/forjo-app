@@ -252,9 +252,10 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   const [excMonth, setExcMonth] = useState(() => startOfMonth(new Date()))
   const thisMonthStart = startOfMonth(new Date())
 
+  // Excepciones agrupadas por fecha (puede haber varias por día: global + por consultorio).
   const excByDate = useMemo(() => {
-    const m = new Map<string, ScheduleException>()
-    for (const e of exceptions) m.set(e.date, e)
+    const m = new Map<string, ScheduleException[]>()
+    for (const e of exceptions) { const arr = m.get(e.date) || []; arr.push(e); m.set(e.date, arr) }
     return m
   }, [exceptions])
   const excCalendarDays = useMemo(() => {
@@ -263,17 +264,30 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     return eachDayOfInterval({ start, end })
   }, [excMonth])
 
-  async function clearException(date: string) {
-    const { error } = await supabase.from('schedule_exceptions').delete().eq('business_id', business.id).eq('date', date)
+  // Borrar una excepción puntual (de la lista de próximos), por id.
+  async function clearExceptionRow(ex: ScheduleException) {
+    const { error } = await supabase.from('schedule_exceptions').delete().eq('id', ex.id)
     if (error) { toast.error('Error'); return }
-    setExceptions(prev => prev.filter(e => e.date !== date))
-    toast.success('Día normalizado')
+    setExceptions(prev => prev.filter(e => e.id !== ex.id))
+    toast.success('Excepción quitada')
   }
 
   // Selección de días. excSel = días elegidos; el panel lateral opera sobre ellos (1 o varios).
   const [excMulti, setExcMulti] = useState(false)
   const [excSel, setExcSel] = useState<Set<string>>(new Set())
   const [excBulk, setExcBulk] = useState({ start: '09:00', end: '18:00' })
+  // "Aplicar a:" — a qué consultorios aplica la excepción. '__all__' = global (todo el negocio).
+  const [excTargets, setExcTargets] = useState<Set<string>>(new Set(['__all__']))
+  const excIsGlobal = excTargets.has('__all__') || activeLocations.length === 0
+  const excLocs: (string | null)[] = excIsGlobal ? [null] : [...excTargets]
+  const excMatchesTarget = (e: ScheduleException) => excIsGlobal ? !e.location_id : (!!e.location_id && excTargets.has(e.location_id))
+  // Merge de filas tras un upsert, deduplicando por (fecha|consultorio).
+  function mergeExceptions(prev: ScheduleException[], rows: ScheduleException[]) {
+    const key = (e: ScheduleException) => `${e.date}|${e.location_id ?? ''}`
+    const m = new Map(prev.map(e => [key(e), e]))
+    for (const e of rows) m.set(key(e), e)
+    return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date))
+  }
   // Ancla para la selección por rango (Shift). Es el último día clickeado sin modificadores.
   const [excAnchor, setExcAnchor] = useState<string | null>(null)
   // Selección estilo Windows: click = un día · Shift = rango hacia el futuro · Ctrl/Cmd = sumar
@@ -302,41 +316,35 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     : selDates.length > 1
       ? `${selDates.length} días · ${format(parseISO(selDates[0]), 'd MMM', { locale: es })} → ${format(parseISO(selDates[selDates.length - 1]), 'd MMM', { locale: es })}`
       : ''
-  const selectionHasException = selDates.some(ds => excByDate.has(ds))
+  const selectionHasException = selDates.some(ds => (excByDate.get(ds)?.length ?? 0) > 0)
   async function bulkCloseDays(dates: string[]) {
     if (dates.length === 0) return
-    const rows = dates.map(date => ({ business_id: business.id, date, closed: true, start_time: null, end_time: null }))
-    const { data, error } = await supabase.from('schedule_exceptions').upsert(rows, { onConflict: 'business_id,date' }).select()
+    const rows = dates.flatMap(date => excLocs.map(loc => ({ business_id: business.id, date, location_id: loc, closed: true, start_time: null, end_time: null })))
+    const { data, error } = await supabase.from('schedule_exceptions').upsert(rows, { onConflict: 'business_id,date,location_id' }).select()
     if (error) { toast.error('Error al guardar'); return }
-    setExceptions(prev => {
-      const m = new Map(prev.map(e => [e.date, e]))
-      for (const e of (data as ScheduleException[])) m.set(e.date, e)
-      return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date))
-    })
+    setExceptions(prev => mergeExceptions(prev, data as ScheduleException[]))
     setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
     toast.success(`${dates.length} día${dates.length > 1 ? 's' : ''} cerrado${dates.length > 1 ? 's' : ''}`)
   }
   async function bulkSpecialDays(dates: string[], start: string, end: string) {
     if (dates.length === 0) return
     if (end <= start) { toast.error('La hora fin debe ser mayor a la inicio'); return }
-    const rows = dates.map(date => ({ business_id: business.id, date, closed: false, start_time: start, end_time: end }))
-    const { data, error } = await supabase.from('schedule_exceptions').upsert(rows, { onConflict: 'business_id,date' }).select()
+    const rows = dates.flatMap(date => excLocs.map(loc => ({ business_id: business.id, date, location_id: loc, closed: false, start_time: start, end_time: end })))
+    const { data, error } = await supabase.from('schedule_exceptions').upsert(rows, { onConflict: 'business_id,date,location_id' }).select()
     if (error) { toast.error('Error al guardar'); return }
-    setExceptions(prev => {
-      const m = new Map(prev.map(e => [e.date, e]))
-      for (const e of (data as ScheduleException[])) m.set(e.date, e)
-      return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date))
-    })
+    setExceptions(prev => mergeExceptions(prev, data as ScheduleException[]))
     setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
     toast.success(`Horario especial en ${dates.length} día${dates.length > 1 ? 's' : ''}`)
   }
   async function bulkClearDays(dates: string[]) {
     if (dates.length === 0) return
-    const { error } = await supabase.from('schedule_exceptions').delete().eq('business_id', business.id).in('date', dates)
+    let q = supabase.from('schedule_exceptions').delete().eq('business_id', business.id).in('date', dates)
+    q = excIsGlobal ? q.is('location_id', null) : q.in('location_id', [...excTargets])
+    const { error } = await q
     if (error) { toast.error('Error'); return }
-    setExceptions(prev => prev.filter(e => !dates.includes(e.date)))
+    setExceptions(prev => prev.filter(e => !(dates.includes(e.date) && excMatchesTarget(e))))
     setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
-    toast.success('Días normalizados')
+    toast.success('Excepciones quitadas')
   }
 
   // ── Vista semanal de turnos ─────────────────────────────────────────────────
@@ -355,9 +363,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }, [initialAppointments])
   // Estado del día para el badge: cerrado / horario especial / abierto (según excepción o grilla).
   function dayStatus(d: Date): 'closed' | 'special' | 'open' {
-    const ex = excByDate.get(format(d, 'yyyy-MM-dd'))
-    if (ex?.closed) return 'closed'
-    if (ex) return 'special'
+    const list = excByDate.get(format(d, 'yyyy-MM-dd')) || []
+    if (list.some(e => e.closed && !e.location_id)) return 'closed' // cierre global
+    if (list.length > 0) return 'special' // excepciones parciales/especiales
     return openDays.has(d.getDay()) ? 'open' : 'closed'
   }
   // Próximos días especiales (de hoy en adelante) para listarlos bajo el calendario.
@@ -606,7 +614,8 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 const ds = format(d, 'yyyy-MM-dd')
                 const inMonth = isSameMonth(d, excMonth)
                 const isPast = isBefore(d, startOfDay(new Date()))
-                const ex = excByDate.get(ds)
+                const exList = excByDate.get(ds) || []
+                const exClosed = exList.some(e => e.closed)
                 const disabled = !inMonth || isPast
                 return (
                   <button
@@ -617,8 +626,8 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     className={cn(
                       'aspect-square rounded-md text-xs font-medium flex items-center justify-center border transition-colors',
                       disabled ? 'border-transparent text-muted-foreground/30 cursor-default'
-                        : ex?.closed ? 'border-destructive/40 bg-destructive/15 text-destructive'
-                          : ex ? 'border-primary/40 bg-primary/10 text-primary'
+                        : exClosed ? 'border-destructive/40 bg-destructive/15 text-destructive'
+                          : exList.length > 0 ? 'border-primary/40 bg-primary/10 text-primary'
                             : 'border-border bg-card hover:border-primary',
                       excSel.has(ds) && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
                     )}
@@ -640,6 +649,28 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
               <p className={cn('text-sm font-medium', selDates.length === 1 && 'capitalize')}>{excSel.size === 0 ? 'Ningún día seleccionado' : selectionLabel}</p>
               {excSel.size === 0 && <p className="text-xs text-muted-foreground mt-0.5">Tocá un día del calendario.</p>}
             </div>
+            {activeLocations.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium">Aplicar a</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => setExcTargets(new Set(['__all__']))} className={cn('text-[11px] font-semibold py-1 px-2.5 rounded transition-colors', excIsGlobal ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground')}>Todos</button>
+                  {activeLocations.map(l => (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => setExcTargets(prev => {
+                        const n = new Set(prev)
+                        n.delete('__all__')
+                        if (n.has(l.id)) n.delete(l.id); else n.add(l.id)
+                        if (n.size === 0) n.add('__all__')
+                        return n
+                      })}
+                      className={cn('text-[11px] font-semibold py-1 px-2.5 rounded transition-colors', !excIsGlobal && excTargets.has(l.id) ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground')}
+                    >{l.name}</button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Button size="sm" variant="destructive" className="w-full" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
               {selectionHasException && (
@@ -662,9 +693,12 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <p className="text-xs font-medium text-muted-foreground">Próximos días especiales</p>
             {upcomingExc.map(e => (
               <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="capitalize w-32 flex-shrink-0">{format(parseISO(e.date), "EEE d 'de' MMM", { locale: es })}</span>
-                <span className="text-xs text-muted-foreground flex-1">{e.closed ? 'Cerrado' : `Horario especial ${e.start_time?.slice(0, 5)}–${e.end_time?.slice(0, 5)}`}</span>
-                <button onClick={() => clearException(e.date)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0" title="Quitar"><X className="w-3.5 h-3.5" /></button>
+                <span className="capitalize w-28 flex-shrink-0">{format(parseISO(e.date), "EEE d 'de' MMM", { locale: es })}</span>
+                <span className="text-xs text-muted-foreground flex-1">
+                  {e.closed ? 'Cerrado' : `Horario especial ${e.start_time?.slice(0, 5)}–${e.end_time?.slice(0, 5)}`}
+                  {' · '}<span className="text-foreground/70">{e.location_id ? (activeLocations.find(l => l.id === e.location_id)?.name ?? term.location) : 'Todos'}</span>
+                </span>
+                <button onClick={() => clearExceptionRow(e)} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0" title="Quitar"><X className="w-3.5 h-3.5" /></button>
               </div>
             ))}
           </div>

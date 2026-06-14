@@ -77,6 +77,8 @@ export interface ScheduleException {
   closed: boolean
   start_time: string | null
   end_time: string | null
+  // Consultorio al que aplica. null = global (todo el negocio).
+  location_id?: string | null
   created_at: string
 }
 
