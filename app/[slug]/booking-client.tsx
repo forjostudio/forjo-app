@@ -57,12 +57,10 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const router = useRouter()
   const locWord = resolveVertical(business).terminology.location
 
-  // Consultorios reservables: si el servicio fija uno, ese; si no, los que tienen horarios.
+  // Consultorios reservables: si el servicio fija uno, ese; si no, todos los activos.
   // Si hay más de uno, se agrega un paso para elegirlo antes del calendario.
   const svcLocSel = selectedService?.location_id ?? null
-  const bookableLocs = svcLocSel
-    ? locations.filter(l => l.id === svcLocSel)
-    : locations.filter(l => timeBlocks.some(b => b.location_id === l.id))
+  const bookableLocs = svcLocSel ? locations.filter(l => l.id === svcLocSel) : locations
   const needLocStep = bookableLocs.length > 1
   const resolvedLoc = needLocStep ? bookingLoc : (bookableLocs[0]?.id ?? svcLocSel ?? null)
 
@@ -128,35 +126,42 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     // Consultorio del servicio (opcional): se usa como consultorio del slot cuando el bloque
     // de horario no tiene uno propio (Capa 2a). El bloque manda si está asignado.
     const svcLoc = selectedService.location_id ?? null
+    const loc = resolvedLoc // consultorio elegido para esta reserva (o null si no hay)
+    const weekly = timeBlocks.filter(b => b.day_of_week === date.getDay())
     const globalEx = globalExcByDate.get(dateStr)
     const dayBlocks: { start_time: string; end_time: string; location_id: string | null }[] = []
     if (globalEx?.closed) {
       // Cierre global: sin slots ese día.
     } else if (globalEx && !globalEx.closed && globalEx.start_time && globalEx.end_time) {
       // Horario especial global: reemplaza el día por ese rango (un bloque).
-      dayBlocks.push({ start_time: globalEx.start_time, end_time: globalEx.end_time, location_id: svcLoc })
+      dayBlocks.push({ start_time: globalEx.start_time, end_time: globalEx.end_time, location_id: loc ?? svcLoc })
+    } else if (loc) {
+      // Consultorio elegido: manda su excepción. Usa sus bloques propios o, si no tiene, los de
+      // "General" (sin consultorio) — así un negocio con horario único igual ofrece sus salas.
+      const locEx = locExcByKey.get(`${dateStr}|${loc}`)
+      if (!locEx?.closed) {
+        if (locEx && locEx.start_time && locEx.end_time) {
+          dayBlocks.push({ start_time: locEx.start_time, end_time: locEx.end_time, location_id: loc })
+        } else {
+          let base = weekly.filter(b => b.location_id === loc)
+          if (base.length === 0) base = weekly.filter(b => !b.location_id)
+          for (const b of base) dayBlocks.push({ start_time: b.start_time, end_time: b.end_time, location_id: loc })
+        }
+      }
     } else {
-      // Día normal: la grilla semanal, aplicando la excepción de cada consultorio si la hay.
-      for (const b of timeBlocks.filter(b => b.day_of_week === date.getDay())) {
+      // Negocio sin consultorios: la grilla tal cual, con excepción por bloque si la hay.
+      for (const b of weekly) {
         const bLoc = b.location_id ?? svcLoc
         const ex = bLoc ? locExcByKey.get(`${dateStr}|${bLoc}`) : undefined
-        if (ex?.closed) continue // ese consultorio cerrado ese día
+        if (ex?.closed) continue
         if (ex && !ex.closed && ex.start_time && ex.end_time) {
           dayBlocks.push({ start_time: ex.start_time, end_time: ex.end_time, location_id: bLoc })
         } else {
           dayBlocks.push({ start_time: b.start_time, end_time: b.end_time, location_id: bLoc })
         }
       }
-      // Horario especial por consultorio que ABRE un día sin bloque semanal para ese consultorio.
-      for (const e of exceptions) {
-        if (e.date !== dateStr || !e.location_id || e.closed || !e.start_time || !e.end_time) continue
-        if (!dayBlocks.some(db => db.location_id === e.location_id)) {
-          dayBlocks.push({ start_time: e.start_time, end_time: e.end_time, location_id: e.location_id })
-        }
-      }
     }
-    // Si el cliente eligió un consultorio en el paso previo, solo sus bloques.
-    const blocks = resolvedLoc ? dayBlocks.filter(b => b.location_id === resolvedLoc) : dayBlocks
+    const blocks = dayBlocks
     if (blocks.length === 0) {
       setAvailableSlots([])
       setLoadingSlots(false)
@@ -343,7 +348,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="text-[clamp(28px,7vw,40px)] font-black uppercase tracking-tight leading-none truncate font-[family-name:var(--font-heading)]">{business.name}</h1>
+            <h1 className="text-[clamp(22px,6vw,34px)] font-black uppercase tracking-tight leading-[1.05] break-words font-[family-name:var(--font-heading)]">{business.name}</h1>
             {business.type && <p className="text-sm text-primary-foreground/80 mt-1.5">{business.type}</p>}
           </div>
         </div>
