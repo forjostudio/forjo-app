@@ -23,7 +23,7 @@ interface Props {
   // location_id null = global (todo el negocio); con valor = solo ese consultorio.
   exceptions: { date: string; closed: boolean; start_time: string | null; end_time: string | null; location_id: string | null }[]
   // Consultorios/sucursales activos (capa 2a). Los slots se etiquetan con su consultorio.
-  locations: { id: string; name: string; address: string | null }[]
+  locations: { id: string; name: string; address: string | null; phone: string | null }[]
 }
 
 function timeToMinutes(t: string) {
@@ -457,6 +457,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   >
                     <p className="font-semibold">{l.name}</p>
                     {l.address && <p className="text-sm text-muted-foreground mt-0.5">{l.address}</p>}
+                    {l.phone && <p className="text-xs text-muted-foreground mt-0.5">{l.phone}</p>}
                     {!enabled && <p className="text-xs text-muted-foreground mt-1">Sin horarios disponibles</p>}
                   </button>
                 )
@@ -473,12 +474,19 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
             <div className="mb-4 rounded-md bg-card border border-border border-l-4 border-l-primary p-3 text-sm space-y-0.5">
               <p className="text-muted-foreground">Servicio: <span className="text-foreground">{selectedService?.name}</span></p>
               <p className="text-muted-foreground">Profesional: <span className="text-foreground">{selectedPro && selectedPro !== 'none' ? selectedPro.name : 'Sin preferencia'}</span></p>
-              {resolvedLoc && (
-                <p className="text-muted-foreground flex items-center gap-2">
-                  <span>{locWord}: <span className="text-foreground">{locations.find(l => l.id === resolvedLoc)?.name}</span></span>
-                  {needLocStep && <button type="button" onClick={() => { setBookingLoc(null); setSelectedDate(undefined); setSelectedTime('') }} className="text-xs text-primary hover:underline flex-shrink-0">Cambiar</button>}
-                </p>
-              )}
+              {resolvedLoc && (() => {
+                const loc = locations.find(l => l.id === resolvedLoc)
+                return (
+                  <div>
+                    <p className="text-muted-foreground flex items-center gap-2">
+                      <span>{locWord}: <span className="text-foreground">{loc?.name}</span></span>
+                      {needLocStep && <button type="button" onClick={() => { setBookingLoc(null); setSelectedDate(undefined); setSelectedTime('') }} className="text-xs text-primary hover:underline flex-shrink-0">Cambiar</button>}
+                    </p>
+                    {loc?.address && <p className="text-xs text-muted-foreground">{loc.address}</p>}
+                    {loc?.phone && <p className="text-xs text-muted-foreground">{loc.phone}</p>}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Día — calendario mensual con cuadrados y navegación de mes */}

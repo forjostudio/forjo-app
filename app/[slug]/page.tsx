@@ -32,7 +32,7 @@ export default async function PublicBookingPage({ params }: Props) {
     supabase.from('public_professionals').select('*').eq('business_id', business.id),
     supabase.from('time_blocks').select('*').eq('business_id', business.id),
     supabase.from('schedule_exceptions').select('date, closed, start_time, end_time, location_id').eq('business_id', business.id).gte('date', todayStr),
-    supabase.from('locations').select('id, name, address').eq('business_id', business.id).or('is_active.is.null,is_active.eq.true'),
+    supabase.from('locations').select('id, name, address, phone').eq('business_id', business.id).or('is_active.is.null,is_active.eq.true'),
   ])
 
   return (
