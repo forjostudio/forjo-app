@@ -48,7 +48,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
     },
     // La Historia Clínica vive dentro de la ficha del paciente (sección colapsable),
     // ya no como item de menú propio.
-    menu: ['dashboard', 'appointments', 'agenda', 'negocio', 'servicios', 'equipo', 'consultorios', 'patients', 'finances', 'settings'],
+    menu: ['dashboard', 'appointments', 'agenda', 'patients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'settings'],
     features: {
       clinical_history: true,
       insurance: true, // obra social
@@ -68,7 +68,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       location: 'Local',
       locations: 'Locales',
     },
-    menu: ['dashboard', 'appointments', 'agenda', 'negocio', 'servicios', 'equipo', 'consultorios', 'clients', 'finances', 'settings'],
+    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'settings'],
     features: {
       preferences: true, // color, alergias, productos
       service_photos: true, // antes/después
@@ -87,7 +87,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       location: 'Sucursal',
       locations: 'Sucursales',
     },
-    menu: ['dashboard', 'appointments', 'agenda', 'negocio', 'servicios', 'equipo', 'consultorios', 'clients', 'finances', 'settings'],
+    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'settings'],
     features: {},
   },
 }

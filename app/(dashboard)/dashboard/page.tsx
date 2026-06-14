@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { format, addDays } from 'date-fns'
@@ -89,16 +90,17 @@ export default async function DashboardPage() {
   const showWidget = (id: string) => !widgetSel || widgetSel.includes(id)
 
   const stats = [
-    { id: 'today_appointments', label: 'Turnos de hoy', value: todayCount || 0, icon: Calendar, color: 'text-[#2a5fa5]' },
-    { id: 'week_appointments', label: 'Turnos de la semana', value: weekCount || 0, icon: TrendingUp, color: 'text-[#2f8a5b]' },
+    { id: 'today_appointments', label: 'Turnos de hoy', value: todayCount || 0, icon: Calendar, color: 'text-[#2a5fa5]', href: '/appointments' },
+    { id: 'week_appointments', label: 'Turnos de la semana', value: weekCount || 0, icon: TrendingUp, color: 'text-[#2f8a5b]', href: '/agenda' },
     {
       id: 'month_revenue',
       label: 'Ingresos del mes',
       value: `$${monthRevenue.toLocaleString('es-AR')}`,
       icon: DollarSign,
-      color: 'text-primary'
+      color: 'text-primary',
+      href: '/finances',
     },
-    { id: 'total_clients', label: 'Total de clientes', value: clientCount || 0, icon: Users, color: 'text-[#8a5fb0]' },
+    { id: 'total_clients', label: 'Total de clientes', value: clientCount || 0, icon: Users, color: 'text-[#8a5fb0]', href: '/clients' },
   ].filter(s => showWidget(s.id))
 
   return (
@@ -126,16 +128,18 @@ export default async function DashboardPage() {
             // Acento Bauhaus: "Ingresos del mes" como bloque sólido primary.
             const isPrimary = stat.id === 'month_revenue'
             return (
-              <Card key={stat.label} className={isPrimary ? 'bg-primary text-primary-foreground border-transparent' : ''}>
-                <CardContent className="pt-5">
-                  {/* Ícono en recuadro (acento constructivista) */}
-                  <div className={`w-9 h-9 rounded-md flex items-center justify-center mb-3 ${isPrimary ? 'bg-white/15' : 'bg-secondary'}`}>
-                    <Icon className={`w-[18px] h-[18px] ${isPrimary ? 'text-primary-foreground' : stat.color}`} />
-                  </div>
-                  <p className="text-3xl font-[family-name:var(--font-heading)] font-extrabold tracking-tight leading-none">{stat.value}</p>
-                  <p className={`text-xs mt-1.5 ${isPrimary ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{stat.label}</p>
-                </CardContent>
-              </Card>
+              <Link key={stat.label} href={stat.href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+                <Card className={`transition-colors hover:border-primary ${isPrimary ? 'bg-primary text-primary-foreground border-transparent hover:border-transparent hover:opacity-95' : ''}`}>
+                  <CardContent className="pt-5">
+                    {/* Ícono en recuadro (acento constructivista) */}
+                    <div className={`w-9 h-9 rounded-md flex items-center justify-center mb-3 ${isPrimary ? 'bg-white/15' : 'bg-secondary'}`}>
+                      <Icon className={`w-[18px] h-[18px] ${isPrimary ? 'text-primary-foreground' : stat.color}`} />
+                    </div>
+                    <p className="text-3xl font-[family-name:var(--font-heading)] font-extrabold tracking-tight leading-none">{stat.value}</p>
+                    <p className={`text-xs mt-1.5 ${isPrimary ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{stat.label}</p>
+                  </CardContent>
+                </Card>
+              </Link>
             )
           })}
         </div>
@@ -143,8 +147,9 @@ export default async function DashboardPage() {
 
       {showWidget('today_schedule') && (
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">Agenda de hoy</CardTitle>
+          <Link href="/appointments" className="text-xs text-primary hover:underline flex-shrink-0">Ver todos →</Link>
         </CardHeader>
         <CardContent>
           {!todayAppointments || todayAppointments.length === 0 ? (
