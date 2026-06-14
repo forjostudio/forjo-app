@@ -128,6 +128,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     if (!mp) return
     if (mp === 'connected') toast.success('MercadoPago conectado')
     else if (mp === 'error') toast.error('No se pudo conectar con MercadoPago')
+    setConfigTab('integraciones')
     window.history.replaceState(null, '', '/settings')
   }, [])
 
@@ -655,7 +656,11 @@ export function SettingsClient({ business, initialServices, initialProfessionals
         {!isSection && (
           <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
             <TabsTrigger value="appearance">Apariencia</TabsTrigger>
-            <TabsTrigger value="payments">Pagos</TabsTrigger>
+            <TabsTrigger value="cobros">Cobros</TabsTrigger>
+            <TabsTrigger value="integraciones">Integraciones</TabsTrigger>
+            <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
+            <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
+            <TabsTrigger value="suscripcion">Suscripción</TabsTrigger>
           </TabsList>
         )}
 
@@ -1187,7 +1192,49 @@ export function SettingsClient({ business, initialServices, initialProfessionals
         </TabsContent>
 
         {/* ── Payments ── */}
-        <TabsContent value="payments" className="mt-4 space-y-4">
+        {/* ── Cobros (seña) ── */}
+        <TabsContent value="cobros" className="mt-4 space-y-4">
+          {/* Seña */}
+          <Card className="p-6 space-y-4">
+            <p className="font-semibold text-sm">Seña</p>
+            <div className="flex items-center gap-3">
+              <input type="checkbox" id="require_deposit" checked={depositForm.require_deposit}
+                onChange={e => setDepositForm(f => ({ ...f, require_deposit: e.target.checked }))} className="w-4 h-4 accent-primary cursor-pointer" />
+              <Label htmlFor="require_deposit" className="cursor-pointer">Requerir seña para confirmar el turno</Label>
+            </div>
+            {depositForm.require_deposit && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Monto (ARS)</Label>
+                  <Input type="text" inputMode="numeric"
+                    value={depositForm.deposit_amount === 0 ? '' : String(depositForm.deposit_amount)}
+                    onChange={e => { const raw = e.target.value.replace(/\D/g, ''); setDepositForm(f => ({ ...f, deposit_amount: raw === '' ? 0 : Number(raw) })) }}
+                    placeholder="0" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Horas para pagar</Label>
+                  <Input type="number" min={1} value={depositForm.deposit_expiry_hours}
+                    onChange={e => setDepositForm(f => ({ ...f, deposit_expiry_hours: parseInt(e.target.value) || 1 }))} />
+                </div>
+              </div>
+            )}
+            <Button onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
+          </Card>
+
+          {/* Limpieza de reservas con seña vencida */}
+          <Card className="p-6 space-y-3">
+            <div>
+              <p className="font-semibold text-sm">Reservas con seña vencida</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Cancela las reservas cuya seña no se pagó a tiempo y libera esos horarios. Se hace solo una vez por día; podés forzarlo acá.</p>
+            </div>
+            <Button variant="outline" onClick={cleanupExpired} disabled={cleaningUp}>
+              {cleaningUp ? 'Limpiando...' : 'Liberar horarios vencidos'}
+            </Button>
+          </Card>
+        </TabsContent>
+
+        {/* ── Integraciones (MercadoPago) ── */}
+        <TabsContent value="integraciones" className="mt-4 space-y-4">
           {/* MercadoPago */}
           <Card className="p-6 space-y-4">
             <div>
@@ -1231,45 +1278,10 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
             )}
           </Card>
+        </TabsContent>
 
-          {/* Seña */}
-          <Card className="p-6 space-y-4">
-            <p className="font-semibold text-sm">Seña</p>
-            <div className="flex items-center gap-3">
-              <input type="checkbox" id="require_deposit" checked={depositForm.require_deposit}
-                onChange={e => setDepositForm(f => ({ ...f, require_deposit: e.target.checked }))} className="w-4 h-4 accent-primary cursor-pointer" />
-              <Label htmlFor="require_deposit" className="cursor-pointer">Requerir seña para confirmar el turno</Label>
-            </div>
-            {depositForm.require_deposit && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Monto (ARS)</Label>
-                  <Input type="text" inputMode="numeric"
-                    value={depositForm.deposit_amount === 0 ? '' : String(depositForm.deposit_amount)}
-                    onChange={e => { const raw = e.target.value.replace(/\D/g, ''); setDepositForm(f => ({ ...f, deposit_amount: raw === '' ? 0 : Number(raw) })) }}
-                    placeholder="0" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Horas para pagar</Label>
-                  <Input type="number" min={1} value={depositForm.deposit_expiry_hours}
-                    onChange={e => setDepositForm(f => ({ ...f, deposit_expiry_hours: parseInt(e.target.value) || 1 }))} />
-                </div>
-              </div>
-            )}
-            <Button onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
-          </Card>
-
-          {/* Limpieza de reservas con seña vencida */}
-          <Card className="p-6 space-y-3">
-            <div>
-              <p className="font-semibold text-sm">Reservas con seña vencida</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Cancela las reservas cuya seña no se pagó a tiempo y libera esos horarios. Se hace solo una vez por día; podés forzarlo acá.</p>
-            </div>
-            <Button variant="outline" onClick={cleanupExpired} disabled={cleaningUp}>
-              {cleaningUp ? 'Limpiando...' : 'Liberar horarios vencidos'}
-            </Button>
-          </Card>
-
+        {/* ── Notificaciones ── */}
+        <TabsContent value="notificaciones" className="mt-4 space-y-4">
           {/* Notificaciones */}
           <Card className="p-6 space-y-4">
             <div>
@@ -1305,7 +1317,10 @@ export function SettingsClient({ business, initialServices, initialProfessionals
             )}
             <Button onClick={saveNotif} disabled={savingNotif}>{savingNotif ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
+        </TabsContent>
 
+        {/* ── Seguridad (anti-spam) ── */}
+        <TabsContent value="seguridad" className="mt-4 space-y-4">
           {/* Anti-spam */}
           <Card className="p-6 space-y-4">
             <div>
@@ -1336,9 +1351,11 @@ export function SettingsClient({ business, initialServices, initialProfessionals
             )}
             <Button onClick={saveRecaptcha} disabled={savingRecaptcha}>{savingRecaptcha ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
+        </TabsContent>
 
-          {/* Suscripción */}
-          {(business.plan_status === 'active' || business.plan_status === 'cancelled') && (
+        {/* ── Suscripción ── */}
+        <TabsContent value="suscripcion" className="mt-4 space-y-4">
+          {(business.plan_status === 'active' || business.plan_status === 'cancelled') ? (
             <Card className="p-6 space-y-4">
               <p className="font-semibold text-sm">Tu suscripción</p>
               <div className="text-sm space-y-1">
@@ -1360,6 +1377,12 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                     onClick={() => setConfirmCancelSub(true)}>Cancelar suscripción</Button>
                 </div>
               )}
+            </Card>
+          ) : (
+            <Card className="p-6 space-y-3">
+              <p className="font-semibold text-sm">Tu suscripción</p>
+              <p className="text-sm text-muted-foreground">Plan actual: <span className="font-medium text-foreground">{planConfig.name}</span></p>
+              <Button variant="outline" size="sm" onClick={() => setPlanModalOpen(true)}>Ver planes</Button>
             </Card>
           )}
         </TabsContent>
