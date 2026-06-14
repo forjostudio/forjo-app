@@ -57,15 +57,18 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const router = useRouter()
   const locWord = resolveVertical(business).terminology.location
 
-  // El paso de elegir consultorio aparece cuando hay 2+ consultorios con horarios propios.
-  // El picker muestra todos; los que no tienen horarios quedan deshabilitados. El consultorio
-  // del servicio (si lo tiene) sirve de fallback cuando no hay paso.
-  const svcLocSel = selectedService?.location_id ?? null
+  // Consultorios donde se ofrece el servicio (location_ids; vacío = todos). El picker muestra
+  // esos; los que no tienen horarios quedan deshabilitados. El paso aparece si quedan 2+ con
+  // horarios. Compatibilidad con el location_id único (legacy).
   const locHasBlocks = (id: string) => timeBlocks.some(b => b.location_id === id)
-  const bookableLocs = locations
-  const locsWithHours = locations.filter(l => locHasBlocks(l.id))
+  const svcAllowed = selectedService?.location_ids?.length
+    ? selectedService.location_ids
+    : (selectedService?.location_id ? [selectedService.location_id] : [])
+  const isAllowed = (id: string) => svcAllowed.length === 0 || svcAllowed.includes(id)
+  const bookableLocs = locations.filter(l => isAllowed(l.id))
+  const locsWithHours = bookableLocs.filter(l => locHasBlocks(l.id))
   const needLocStep = locsWithHours.length > 1
-  const resolvedLoc = needLocStep ? bookingLoc : (locsWithHours[0]?.id ?? svcLocSel ?? null)
+  const resolvedLoc = needLocStep ? bookingLoc : (locsWithHours[0]?.id ?? null)
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY

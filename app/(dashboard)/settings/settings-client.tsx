@@ -315,17 +315,17 @@ export function SettingsClient({ business, initialServices, initialProfessionals
 
   // ── Tab 2 — Services ──────────────────────────────────────────────────────
   const [services, setServices] = useState<Service[]>(initialServices)
-  const [newService, setNewService] = useState({ name: '', duration_minutes: 30, price: 0, location_id: '' })
+  const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[] }>({ name: '', duration_minutes: 30, price: 0, location_ids: [] })
 
   async function addService() {
     if (!newService.name) return
-    const { name, duration_minutes, price, location_id } = newService
+    const { name, duration_minutes, price, location_ids } = newService
     const { data, error } = await supabase.from('services')
-      .insert({ name, duration_minutes, price, location_id: location_id || null, business_id: business.id })
+      .insert({ name, duration_minutes, price, location_ids: location_ids.length ? location_ids : null, business_id: business.id })
       .select().single()
     if (error) { toast.error('Error'); return }
     setServices(prev => [...prev, data as Service])
-    setNewService({ name: '', duration_minutes: 30, price: 0, location_id: '' })
+    setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [] })
     toast.success('Servicio agregado')
   }
   async function deleteService(id: string) {
@@ -337,10 +337,15 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     await supabase.from('services').update({ active }).eq('id', id)
     setServices(prev => prev.map(s => s.id === id ? { ...s, active } : s))
   }
-  // Cambiar el consultorio de un servicio desde la lista (inline).
-  async function updateServiceLocation(id: string, locationId: string | null) {
-    await supabase.from('services').update({ location_id: locationId }).eq('id', id)
-    setServices(prev => prev.map(s => s.id === id ? { ...s, location_id: locationId } : s))
+  // Consultorios donde se ofrece un servicio (con compatibilidad legacy location_id).
+  const serviceLocSet = (s: Service) => s.location_ids?.length ? s.location_ids : (s.location_id ? [s.location_id] : [])
+  async function setServiceLocations(id: string, ids: string[]) {
+    await supabase.from('services').update({ location_ids: ids.length ? ids : null, location_id: null }).eq('id', id)
+    setServices(prev => prev.map(s => s.id === id ? { ...s, location_ids: ids, location_id: null } : s))
+  }
+  function toggleServiceLocation(s: Service, locId: string) {
+    const cur = serviceLocSet(s)
+    setServiceLocations(s.id, cur.includes(locId) ? cur.filter(x => x !== locId) : [...cur, locId])
   }
 
   // ── Tab 3 — Professionals ─────────────────────────────────────────────────
@@ -983,31 +988,35 @@ export function SettingsClient({ business, initialServices, initialProfessionals
         <TabsContent value="services" className="mt-4">
           <Card className="p-6 space-y-4">
             <div className="space-y-2">
-              {services.map(s => (
-                <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                  <div className="flex-1 min-w-0">
-                    <p className={cn('text-sm font-medium', !s.active && 'line-through text-muted-foreground')}>{s.name}</p>
-                    <p className="text-xs text-muted-foreground">{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</p>
+              {services.map(s => {
+                const set = serviceLocSet(s)
+                const all = set.length === 0
+                return (
+                  <div key={s.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className={cn('text-sm font-medium', !s.active && 'line-through text-muted-foreground')}>{s.name}</p>
+                        <p className="text-xs text-muted-foreground">{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</p>
+                      </div>
+                      <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
+                        {s.active ? 'Desactivar' : 'Activar'}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => deleteService(s.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {activeLocations.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-muted-foreground mr-0.5">Se ofrece en:</span>
+                        <button type="button" onClick={() => setServiceLocations(s.id, [])} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', all ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>Todos</button>
+                        {activeLocations.map(l => (
+                          <button key={l.id} type="button" onClick={() => toggleServiceLocation(s, l.id)} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', !all && set.includes(l.id) ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>{l.name}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {activeLocations.length > 0 && (
-                    <Select value={s.location_id || '__none__'} onValueChange={v => updateServiceLocation(s.id, v === '__none__' ? null : (v ?? null))}>
-                      <SelectTrigger className="h-8 w-[150px] text-xs">
-                        <SelectValue>{s.location_id ? (activeLocations.find(l => l.id === s.location_id)?.name ?? term.location) : 'Cualquiera'}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Cualquier {locWord}</SelectItem>
-                        {activeLocations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
-                    {s.active ? 'Desactivar' : 'Activar'}
-                  </Button>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => deleteService(s.id)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+                )
+              })}
             </div>
             <div className="border-t border-border pt-4 space-y-3">
               <p className="text-sm font-medium">Agregar servicio</p>
@@ -1029,17 +1038,17 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                 </div>
               </div>
               {activeLocations.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> {term.location}</Label>
-                  <Select value={newService.location_id || '__none__'} onValueChange={v => setNewService(f => ({ ...f, location_id: v === '__none__' ? '' : (v ?? '') }))}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue>{newService.location_id ? (activeLocations.find(l => l.id === newService.location_id)?.name ?? term.location) : `Cualquier ${locWord}`}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Cualquier {locWord}</SelectItem>
-                      {activeLocations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> Se ofrece en</Label>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button type="button" onClick={() => setNewService(f => ({ ...f, location_ids: [] }))} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', newService.location_ids.length === 0 ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>Todos</button>
+                    {activeLocations.map(l => {
+                      const on = newService.location_ids.includes(l.id)
+                      return (
+                        <button key={l.id} type="button" onClick={() => setNewService(f => ({ ...f, location_ids: on ? f.location_ids.filter(x => x !== l.id) : [...f.location_ids, l.id] }))} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', on ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>{l.name}</button>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
             </div>
