@@ -501,6 +501,24 @@ export function SettingsClient({ business, initialServices, initialProfessionals
     setLocations(prev => prev.filter(l => l.id !== id))
     toast.success('Eliminado')
   }
+  const [editLoc, setEditLoc] = useState<Location | null>(null)
+  const [editLocForm, setEditLocForm] = useState({ name: '', address: '', phone: '' })
+  const [savingEditLoc, setSavingEditLoc] = useState(false)
+  function openEditLocation(l: Location) {
+    setEditLoc(l)
+    setEditLocForm({ name: l.name, address: l.address || '', phone: l.phone || '' })
+  }
+  async function saveEditLocation() {
+    if (!editLoc || !editLocForm.name.trim()) return
+    setSavingEditLoc(true)
+    const payload = { name: editLocForm.name.trim(), address: editLocForm.address.trim() || null, phone: editLocForm.phone.trim() || null }
+    const { error } = await supabase.from('locations').update(payload).eq('id', editLoc.id)
+    setSavingEditLoc(false)
+    if (error) { toast.error('Error al guardar'); return }
+    setLocations(prev => prev.map(l => l.id === editLoc.id ? { ...l, ...payload } : l))
+    setEditLoc(null)
+    toast.success('Guardado')
+  }
 
   // ── Tab 5 — Payments ──────────────────────────────────────────────────────
   const [mpToken, setMpToken] = useState(business.mp_access_token || '')
@@ -1126,6 +1144,9 @@ export function SettingsClient({ business, initialServices, initialProfessionals
                       </p>
                     )}
                   </div>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8 flex-shrink-0" onClick={() => openEditLocation(loc)}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0" onClick={() => deleteLocation(loc.id)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -1151,6 +1172,20 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
             )}
           </Card>
+
+          <Dialog open={!!editLoc} onOpenChange={open => { if (!open) setEditLoc(null) }}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Editar {locWord}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Input value={editLocForm.name} onChange={e => setEditLocForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre *" />
+                <Input value={editLocForm.address} onChange={e => setEditLocForm(f => ({ ...f, address: e.target.value }))} placeholder="Dirección (opcional)" />
+                <Input value={editLocForm.phone} onChange={e => setEditLocForm(f => ({ ...f, phone: e.target.value }))} placeholder="Teléfono (opcional)" />
+              </div>
+              <Button onClick={saveEditLocation} disabled={savingEditLoc}>{savingEditLoc ? 'Guardando...' : 'Guardar'}</Button>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* ── Payments ── */}

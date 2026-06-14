@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, Check, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
@@ -102,15 +103,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
   const term = resolveVertical(business).terminology
-  const locWord = term.location.toLowerCase()
   // Los consultorios se administran en Configuración; acá solo se asignan a los bloques.
   const activeLocations = initialLocations.filter(l => l.is_active !== false)
 
   // ── Grilla semanal (time_blocks) ────────────────────────────────────────────
   const [slotDuration, setSlotDuration] = useState(business.default_slot_duration ?? 60)
   const [bufferMinutes, setBufferMinutes] = useState(business.buffer_minutes ?? 0)
-  // Consultorio activo en el editor de horarios ('' = General / sin consultorio).
-  const [activeLoc, setActiveLoc] = useState('')
+  // Consultorio activo en el editor de horarios. Con consultorios, arranca en el primero;
+  // sin consultorios, '' = grilla única (sin concepto de "General").
+  const [activeLoc, setActiveLoc] = useState(() => activeLocations[0]?.id ?? '')
   const selLoc = activeLocations.find(l => l.id === activeLoc) || null
   const selMeta = selLoc ? [selLoc.address, selLoc.phone].filter(Boolean).join(' · ') : ''
   const [dayStates, setDayStates] = useState<DayConfig[]>(() =>
@@ -234,6 +235,8 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     dayStates.forEach((ds, day) => {
       if (!ds.enabled) return
       ds.blocks.forEach(b => {
+        // Con consultorios cargados no existe "General": se descartan los bloques sin consultorio.
+        if (activeLocations.length > 0 && !b.location_id) return
         toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null, location_id: b.location_id || null })
       })
     })
@@ -483,22 +486,19 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </Select>
         </div>
 
-        {/* Selector de consultorio (tabs) + ficha — solo si hay consultorios cargados */}
+        {/* Selector de consultorio (tabs estilo Configuración) + ficha — solo si hay consultorios */}
         {activeLocations.length > 0 && (
           <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setActiveLoc('')} className={cn('text-xs font-semibold py-1.5 px-3 rounded-md transition-colors', activeLoc === '' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground')}>General</button>
-              {activeLocations.map(l => (
-                <button key={l.id} type="button" onClick={() => setActiveLoc(l.id)} className={cn('text-xs font-semibold py-1.5 px-3 rounded-md transition-colors', activeLoc === l.id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground')}>{l.name}</button>
-              ))}
-            </div>
-            {selLoc ? (
+            <Tabs value={activeLoc} onValueChange={setActiveLoc}>
+              <TabsList className="flex flex-wrap w-full sm:w-fit h-auto">
+                {activeLocations.map(l => <TabsTrigger key={l.id} value={l.id}>{l.name}</TabsTrigger>)}
+              </TabsList>
+            </Tabs>
+            {selLoc && (
               <div className="rounded-md bg-secondary/50 p-3">
                 <p className="text-sm font-medium">{selLoc.name}</p>
                 {selMeta && <p className="text-xs text-muted-foreground mt-0.5">{selMeta}</p>}
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Horarios sin {locWord} asignado. Elegí un {locWord} arriba para configurar su grilla.</p>
             )}
           </div>
         )}
