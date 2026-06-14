@@ -13,7 +13,7 @@ export default async function PublicBookingPage({ params }: Props) {
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, owner_id, slug, name, type, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at')
+    .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at')
     .eq('slug', slug)
     .single()
 
@@ -27,7 +27,7 @@ export default async function PublicBookingPage({ params }: Props) {
     supabase.from('public_professionals').select('*').eq('business_id', business.id),
     supabase.from('time_blocks').select('*').eq('business_id', business.id),
     supabase.from('schedule_exceptions').select('date, closed, start_time, end_time, location_id').eq('business_id', business.id).gte('date', todayStr),
-    supabase.from('locations').select('id, name, address').eq('business_id', business.id).eq('is_active', true),
+    supabase.from('locations').select('id, name, address').eq('business_id', business.id).or('is_active.is.null,is_active.eq.true'),
   ])
 
   return (

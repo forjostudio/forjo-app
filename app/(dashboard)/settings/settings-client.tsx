@@ -488,6 +488,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
       name: newLocation.name.trim(),
       address: newLocation.address.trim() || null,
       phone: newLocation.phone.trim() || null,
+      is_active: true,
     }).select().single()
     setSavingLocation(false)
     if (error) { toast.error('Error al agregar'); return }
