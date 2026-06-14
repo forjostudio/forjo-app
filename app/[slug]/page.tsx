@@ -3,6 +3,11 @@ import { notFound } from 'next/navigation'
 import { BookingClient } from './booking-client'
 import type { PublicBusiness } from '@/lib/types'
 
+// Datos siempre frescos: la página de reserva debe reflejar al instante los cambios del dueño
+// (horarios, consultorios, servicios, días especiales). Sin esto, Next cachea la ruta y sirve
+// datos viejos hasta el próximo deploy.
+export const dynamic = 'force-dynamic'
+
 interface Props {
   params: Promise<{ slug: string }>
 }
