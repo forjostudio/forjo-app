@@ -58,11 +58,13 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const locWord = resolveVertical(business).terminology.location
 
   // Consultorios reservables: si el servicio fija uno, ese; si no, todos los activos.
-  // Si hay más de uno, se agrega un paso para elegirlo antes del calendario.
+  // El paso de elegir consultorio aparece si hay 2+ y al menos uno tiene horarios propios.
   const svcLocSel = selectedService?.location_id ?? null
+  const locHasBlocks = (id: string) => timeBlocks.some(b => b.location_id === id)
+  const anyLocHasBlocks = locations.some(l => locHasBlocks(l.id))
   const bookableLocs = svcLocSel ? locations.filter(l => l.id === svcLocSel) : locations
-  const needLocStep = bookableLocs.length > 1
-  const resolvedLoc = needLocStep ? bookingLoc : (bookableLocs[0]?.id ?? svcLocSel ?? null)
+  const needLocStep = bookableLocs.length > 1 && anyLocHasBlocks
+  const resolvedLoc = needLocStep ? bookingLoc : (bookableLocs.length === 1 ? bookableLocs[0].id : (svcLocSel ?? null))
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -144,7 +146,8 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           dayBlocks.push({ start_time: locEx.start_time, end_time: locEx.end_time, location_id: loc })
         } else {
           let base = weekly.filter(b => b.location_id === loc)
-          if (base.length === 0) base = weekly.filter(b => !b.location_id)
+          // Fallback a "General" SOLO cuando no hubo elección de consultorio (un único consultorio).
+          if (base.length === 0 && !needLocStep) base = weekly.filter(b => !b.location_id)
           for (const b of base) dayBlocks.push({ start_time: b.start_time, end_time: b.end_time, location_id: loc })
         }
       }
@@ -435,16 +438,25 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           <div>
             <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí el {locWord.toLowerCase()}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {bookableLocs.map(l => (
-                <button
-                  key={l.id}
-                  onClick={() => { setBookingLoc(l.id); setSelectedDate(undefined); setSelectedTime('') }}
-                  className="rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary"
-                >
-                  <p className="font-semibold">{l.name}</p>
-                  {l.address && <p className="text-sm text-muted-foreground mt-0.5">{l.address}</p>}
-                </button>
-              ))}
+              {bookableLocs.map(l => {
+                const enabled = locHasBlocks(l.id)
+                return (
+                  <button
+                    key={l.id}
+                    type="button"
+                    disabled={!enabled}
+                    onClick={() => { setBookingLoc(l.id); setSelectedDate(undefined); setSelectedTime('') }}
+                    className={cn(
+                      'rounded-lg border p-4 text-left transition-colors',
+                      enabled ? 'border-border bg-card hover:border-primary' : 'border-border/50 bg-secondary/30 opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    <p className="font-semibold">{l.name}</p>
+                    {l.address && <p className="text-sm text-muted-foreground mt-0.5">{l.address}</p>}
+                    {!enabled && <p className="text-xs text-muted-foreground mt-1">Sin horarios disponibles</p>}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
