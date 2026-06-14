@@ -469,13 +469,17 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           <div>
             <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí día y horario</h2>
 
-            {/* Consultorio elegido — con opción de cambiarlo */}
-            {needLocStep && bookingLoc && (
-              <div className="flex items-center justify-between gap-2 mb-4 rounded-md bg-secondary/50 px-3 py-2">
-                <span className="text-sm">{locWord}: <span className="font-semibold">{bookableLocs.find(l => l.id === bookingLoc)?.name}</span></span>
-                <button type="button" onClick={() => { setBookingLoc(null); setSelectedDate(undefined); setSelectedTime('') }} className="text-xs text-primary hover:underline flex-shrink-0">Cambiar</button>
-              </div>
-            )}
+            {/* Resumen de lo ya elegido (servicio · profesional · consultorio) */}
+            <div className="mb-4 rounded-md bg-card border border-border border-l-4 border-l-primary p-3 text-sm space-y-0.5">
+              <p className="text-muted-foreground">Servicio: <span className="text-foreground">{selectedService?.name}</span></p>
+              <p className="text-muted-foreground">Profesional: <span className="text-foreground">{selectedPro && selectedPro !== 'none' ? selectedPro.name : 'Sin preferencia'}</span></p>
+              {resolvedLoc && (
+                <p className="text-muted-foreground flex items-center gap-2">
+                  <span>{locWord}: <span className="text-foreground">{locations.find(l => l.id === resolvedLoc)?.name}</span></span>
+                  {needLocStep && <button type="button" onClick={() => { setBookingLoc(null); setSelectedDate(undefined); setSelectedTime('') }} className="text-xs text-primary hover:underline flex-shrink-0">Cambiar</button>}
+                </p>
+              )}
+            </div>
 
             {/* Día — calendario mensual con cuadrados y navegación de mes */}
             <p className="text-sm font-semibold mb-2 font-[family-name:var(--font-heading)]">Día</p>
