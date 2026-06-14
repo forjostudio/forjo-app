@@ -24,8 +24,14 @@ export const PLANS = {
 
 export type PlanKey = keyof typeof PLANS
 
+// Modo test: con NEXT_PUBLIC_PLANS_UNLIMITED=true se levantan los topes (consultorios y
+// profesionales) para poder probar features multi-consultorio sin cambiar el pricing real.
 export function getPlanLimits(plan: string) {
-  return PLANS[(plan as PlanKey)] ?? PLANS.basic
+  const base = PLANS[(plan as PlanKey)] ?? PLANS.basic
+  if (process.env.NEXT_PUBLIC_PLANS_UNLIMITED === 'true') {
+    return { ...base, max_professionals: 99, max_locations: 99 }
+  }
+  return base
 }
 
 export const UPGRADE_URL = 'https://forjo.studio/#servicios'
