@@ -359,10 +359,6 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
       </div>
 
       <div className="max-w-lg mx-auto px-6 py-8">
-        {/* DEBUG temporal */}
-        <div className="mb-4 rounded bg-yellow-500/15 border border-yellow-500/40 p-2 text-[11px] font-mono break-words">
-          locations: {locations.length} [{locations.map(l => l.name).join(', ')}] · conHorarios: {locsWithHours.length} · needLocStep: {String(needLocStep)} · blockLocs: [{[...new Set(timeBlocks.map(b => b.location_id ?? 'null'))].join(', ')}]
-        </div>
         {/* Progreso */}
         <div className="mb-7">
           <div className="flex items-center justify-between mb-2">
