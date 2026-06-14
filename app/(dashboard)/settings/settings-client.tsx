@@ -100,17 +100,27 @@ function ProFields({ value, onChange, labels, showExtra }: {
 }
 
 // ── Props ───────────────────────────────────────────────────────────────────
+type SettingsView = 'config' | 'negocio' | 'servicios' | 'equipo' | 'consultorios'
+
 interface Props {
   business: Business
   initialServices: Service[]
   initialProfessionals: Professional[]
   initialLocations: Location[]
   mpConnectEnabled: boolean
+  // Qué mostrar: 'config' = pestañas de Configuración; el resto = una sección suelta (sidebar).
+  view?: SettingsView
 }
 
-export function SettingsClient({ business, initialServices, initialProfessionals, initialLocations, mpConnectEnabled }: Props) {
+export function SettingsClient({ business, initialServices, initialProfessionals, initialLocations, mpConnectEnabled, view = 'config' }: Props) {
   const supabase = createClient()
   const router = useRouter()
+
+  // Secciones que viven en el sidebar (una sola, sin pestañas). 'config' muestra las pestañas.
+  const SECTION_TAB: Record<string, string> = { negocio: 'business', servicios: 'services', equipo: 'professionals', consultorios: 'locations' }
+  const isSection = view !== 'config'
+  const [configTab, setConfigTab] = useState('appearance')
+  const tabValue = isSection ? SECTION_TAB[view] : configTab
 
   // Aviso al volver del OAuth de MercadoPago (?mp=connected|error) y limpieza de la URL.
   useEffect(() => {
@@ -631,19 +641,23 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <PageEyebrow label="Ajustes" />
-        <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Configuración</h1>
+        <PageEyebrow label={isSection ? 'Gestión' : 'Ajustes'} />
+        <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">
+          {view === 'negocio' ? 'Negocio'
+            : view === 'servicios' ? 'Servicios'
+            : view === 'equipo' ? 'Equipo'
+            : view === 'consultorios' ? term.locations
+            : 'Configuración'}
+        </h1>
       </div>
 
-      <Tabs defaultValue="appearance">
-        <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
-          <TabsTrigger value="appearance">Apariencia</TabsTrigger>
-          <TabsTrigger value="business">Negocio</TabsTrigger>
-          <TabsTrigger value="services">Servicios</TabsTrigger>
-          <TabsTrigger value="professionals">Equipo</TabsTrigger>
-          <TabsTrigger value="locations">{term.locations}</TabsTrigger>
-          <TabsTrigger value="payments">Pagos</TabsTrigger>
-        </TabsList>
+      <Tabs value={tabValue} onValueChange={isSection ? undefined : setConfigTab}>
+        {!isSection && (
+          <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
+            <TabsTrigger value="appearance">Apariencia</TabsTrigger>
+            <TabsTrigger value="payments">Pagos</TabsTrigger>
+          </TabsList>
+        )}
 
         {/* ── Apariencia ── */}
         <TabsContent value="appearance" className="mt-4">
@@ -805,6 +819,27 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               </div>
             </div>
           </Card>
+
+          {/* ── Panel del dashboard (widgets) ── */}
+          <Card className="p-6 space-y-3 mt-4">
+            <div>
+              <p className="font-semibold text-sm">Panel del dashboard</p>
+              <p className="text-xs text-muted-foreground">Elegí qué widgets ver en tu panel principal.</p>
+            </div>
+            <div className="space-y-2">
+              {DASHBOARD_WIDGETS.map(w => (
+                <label key={w.id} className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={widgetSelection.includes(w.id)} onChange={() => toggleWidget(w.id)}
+                    className="w-4 h-4 accent-primary cursor-pointer mt-0.5" />
+                  <span>
+                    <span className="text-sm">{w.label}</span>
+                    <span className="block text-xs text-muted-foreground">{w.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <Button size="sm" onClick={saveWidgets} disabled={savingWidgets}>{savingWidgets ? 'Guardando...' : 'Guardar panel'}</Button>
+          </Card>
         </TabsContent>
 
         {/* ── Business ── */}
@@ -934,54 +969,7 @@ export function SettingsClient({ business, initialServices, initialProfessionals
               <p className="text-sm mt-1">{process.env.NEXT_PUBLIC_APP_URL}/{business.slug}</p>
             </div>
             <Button className="self-start" onClick={saveBusiness} disabled={savingBiz}>{savingBiz ? 'Guardando...' : 'Guardar cambios'}</Button>
-
-            {/* ── Panel del dashboard (widgets + recomendación IA) ── */}
-            <div className="border-t border-border pt-5 space-y-3">
-              <div>
-                <p className="font-semibold text-sm">Panel del dashboard</p>
-                <p className="text-xs text-muted-foreground">Elegí qué widgets ver en tu panel principal.</p>
-              </div>
-              <div className="space-y-2">
-                {DASHBOARD_WIDGETS.map(w => (
-                  <label key={w.id} className="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" checked={widgetSelection.includes(w.id)} onChange={() => toggleWidget(w.id)}
-                      className="w-4 h-4 accent-primary cursor-pointer mt-0.5" />
-                    <span>
-                      <span className="text-sm">{w.label}</span>
-                      <span className="block text-xs text-muted-foreground">{w.description}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <Button size="sm" onClick={saveWidgets} disabled={savingWidgets}>{savingWidgets ? 'Guardando...' : 'Guardar panel'}</Button>
-            </div>
           </Card>
-
-          {/* Subscription */}
-          {(business.plan_status === 'active' || business.plan_status === 'cancelled') && (
-            <Card className="p-6 space-y-4 mt-4">
-              <p className="font-semibold text-sm">Tu suscripción</p>
-              <div className="text-sm space-y-1">
-                <p>Plan actual: <span className="font-medium">{planConfig.name}</span></p>
-                {business.subscription_ends_at && (
-                  <p className="text-muted-foreground">
-                    {business.plan_status === 'cancelled' ? 'Tu plan sigue activo hasta' : 'Próximo cobro'}:{' '}
-                    {new Date(business.subscription_ends_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                )}
-                {business.plan_status === 'cancelled' && (
-                  <p className="text-amber-400 text-xs">Suscripción cancelada — no se renovará automáticamente</p>
-                )}
-              </div>
-              {business.plan_status === 'active' && (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setPlanModalOpen(true)}>Cambiar plan</Button>
-                  <Button variant="outline" size="sm" className="text-red-400 border-red-500/30"
-                    onClick={() => setConfirmCancelSub(true)}>Cancelar suscripción</Button>
-                </div>
-              )}
-            </Card>
-          )}
         </TabsContent>
 
         {/* ── Services ── */}
@@ -1348,6 +1336,32 @@ export function SettingsClient({ business, initialServices, initialProfessionals
             )}
             <Button onClick={saveRecaptcha} disabled={savingRecaptcha}>{savingRecaptcha ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
+
+          {/* Suscripción */}
+          {(business.plan_status === 'active' || business.plan_status === 'cancelled') && (
+            <Card className="p-6 space-y-4">
+              <p className="font-semibold text-sm">Tu suscripción</p>
+              <div className="text-sm space-y-1">
+                <p>Plan actual: <span className="font-medium">{planConfig.name}</span></p>
+                {business.subscription_ends_at && (
+                  <p className="text-muted-foreground">
+                    {business.plan_status === 'cancelled' ? 'Tu plan sigue activo hasta' : 'Próximo cobro'}:{' '}
+                    {new Date(business.subscription_ends_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                )}
+                {business.plan_status === 'cancelled' && (
+                  <p className="text-amber-400 text-xs">Suscripción cancelada — no se renovará automáticamente</p>
+                )}
+              </div>
+              {business.plan_status === 'active' && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setPlanModalOpen(true)}>Cambiar plan</Button>
+                  <Button variant="outline" size="sm" className="text-red-400 border-red-500/30"
+                    onClick={() => setConfirmCancelSub(true)}>Cancelar suscripción</Button>
+                </div>
+              )}
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
