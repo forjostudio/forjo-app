@@ -44,6 +44,8 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedTime, setSelectedTime] = useState('')
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null)
+  // Consultorio elegido en el paso previo al calendario (cuando hay más de uno reservable).
+  const [bookingLoc, setBookingLoc] = useState<string | null>(null)
   const [calMonth, setCalMonth] = useState<Date>(() => startOfMonth(new Date()))
   const [availableSlots, setAvailableSlots] = useState<{ time: string; locationId: string | null }[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
@@ -54,6 +56,15 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
   const locWord = resolveVertical(business).terminology.location
+
+  // Consultorios reservables: si el servicio fija uno, ese; si no, los que tienen horarios.
+  // Si hay más de uno, se agrega un paso para elegirlo antes del calendario.
+  const svcLocSel = selectedService?.location_id ?? null
+  const bookableLocs = svcLocSel
+    ? locations.filter(l => l.id === svcLocSel)
+    : locations.filter(l => timeBlocks.some(b => b.location_id === l.id))
+  const needLocStep = bookableLocs.length > 1
+  const resolvedLoc = needLocStep ? bookingLoc : (bookableLocs[0]?.id ?? svcLocSel ?? null)
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -144,7 +155,9 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         }
       }
     }
-    if (dayBlocks.length === 0) {
+    // Si el cliente eligió un consultorio en el paso previo, solo sus bloques.
+    const blocks = resolvedLoc ? dayBlocks.filter(b => b.location_id === resolvedLoc) : dayBlocks
+    if (blocks.length === 0) {
       setAvailableSlots([])
       setLoadingSlots(false)
       return
@@ -177,7 +190,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
 
     const slots: { time: string; locationId: string | null }[] = []
     const seen = new Set<string>()
-    for (const block of [...dayBlocks].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+    for (const block of [...blocks].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
       const openMin = timeToMinutes(block.start_time)
       const closeMin = timeToMinutes(block.end_time)
       for (let t = openMin; t + duration <= closeMin; t += duration) {
@@ -356,7 +369,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
               {services.map(service => (
                 <button
                   key={service.id}
-                  onClick={() => { setSelectedService(service); setStep(2) }}
+                  onClick={() => { setSelectedService(service); setBookingLoc(null); setSelectedDate(undefined); setSelectedTime(''); setStep(2) }}
                   className={cn(
                     'rounded-lg border p-4 text-left transition-colors',
                     selectedService?.id === service.id
@@ -413,9 +426,35 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         )}
 
         {/* Step 3 - Date & time */}
-        {step === 3 && (
+        {step === 3 && needLocStep && !bookingLoc && (
+          <div>
+            <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí el {locWord.toLowerCase()}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {bookableLocs.map(l => (
+                <button
+                  key={l.id}
+                  onClick={() => { setBookingLoc(l.id); setSelectedDate(undefined); setSelectedTime('') }}
+                  className="rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary"
+                >
+                  <p className="font-semibold">{l.name}</p>
+                  {l.address && <p className="text-sm text-muted-foreground mt-0.5">{l.address}</p>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (!needLocStep || bookingLoc) && (
           <div>
             <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí día y horario</h2>
+
+            {/* Consultorio elegido — con opción de cambiarlo */}
+            {needLocStep && bookingLoc && (
+              <div className="flex items-center justify-between gap-2 mb-4 rounded-md bg-secondary/50 px-3 py-2">
+                <span className="text-sm">{locWord}: <span className="font-semibold">{bookableLocs.find(l => l.id === bookingLoc)?.name}</span></span>
+                <button type="button" onClick={() => { setBookingLoc(null); setSelectedDate(undefined); setSelectedTime('') }} className="text-xs text-primary hover:underline flex-shrink-0">Cambiar</button>
+              </div>
+            )}
 
             {/* Día — calendario mensual con cuadrados y navegación de mes */}
             <p className="text-sm font-semibold mb-2 font-[family-name:var(--font-heading)]">Día</p>
