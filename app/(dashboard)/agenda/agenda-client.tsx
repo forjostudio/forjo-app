@@ -109,6 +109,10 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // ── Grilla semanal (time_blocks) ────────────────────────────────────────────
   const [slotDuration, setSlotDuration] = useState(business.default_slot_duration ?? 60)
   const [bufferMinutes, setBufferMinutes] = useState(business.buffer_minutes ?? 0)
+  // Consultorio activo en el editor de horarios ('' = General / sin consultorio).
+  const [activeLoc, setActiveLoc] = useState('')
+  const selLoc = activeLocations.find(l => l.id === activeLoc) || null
+  const selMeta = selLoc ? [selLoc.address, selLoc.phone].filter(Boolean).join(' · ') : ''
   const [dayStates, setDayStates] = useState<DayConfig[]>(() =>
     Array.from({ length: 7 }, (_, day) => {
       const blocks = initialTimeBlocks.filter(b => b.day_of_week === day)
@@ -120,18 +124,18 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   )
   const [savingHours, setSavingHours] = useState(false)
 
+  // Abrir/cerrar un día PARA EL CONSULTORIO ACTIVO: cerrar = quitar sus bloques de ese día;
+  // abrir = agregar un bloque por defecto de ese consultorio. Los bloques de otros consultorios
+  // del mismo día no se tocan. enabled = hay algún bloque (de cualquier consultorio) ese día.
   function toggleDay(day: number) {
     setDayStates(prev => {
       const next = [...prev]
-      const current = next[day]
-      if (current.enabled) {
-        next[day] = { ...current, enabled: false }
-      } else {
-        next[day] = {
-          enabled: true,
-          blocks: current.blocks.length > 0 ? current.blocks : [defaultBlock(day)],
-        }
-      }
+      const dayBlocks = next[day].blocks
+      const hasLoc = dayBlocks.some(b => (b.location_id || '') === activeLoc)
+      const blocks = hasLoc
+        ? dayBlocks.filter(b => (b.location_id || '') !== activeLoc)
+        : [...dayBlocks, { ...defaultBlock(day), location_id: activeLoc }]
+      next[day] = { enabled: blocks.length > 0, blocks }
       return next
     })
   }
@@ -139,11 +143,12 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   function addBlock(day: number) {
     setDayStates(prev => {
       const next = [...prev]
-      const lastBlock = next[day].blocks[next[day].blocks.length - 1]
+      const locBlocks = next[day].blocks.filter(b => (b.location_id || '') === activeLoc)
+      const lastBlock = locBlocks[locBlocks.length - 1]
       const newStart = lastBlock?.end_time || '09:00'
       const [h, m] = newStart.split(':').map(Number)
       const newEnd = `${String(Math.min(h + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      next[day] = { ...next[day], blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '', location_id: lastBlock?.location_id || '' }] }
+      next[day] = { ...next[day], enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '', location_id: activeLoc }] }
       return next
     })
   }
@@ -175,15 +180,22 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
         if (b.end_time <= b.start_time) return { ...b, error: 'La hora fin debe ser mayor a la hora inicio' }
         return { ...b, error: undefined }
       })
-      // Check overlaps (sort by start, check consecutive)
-      const sorted = [...blocks].sort((a, b) => a.start_time.localeCompare(b.start_time))
-      for (let i = 0; i < sorted.length - 1; i++) {
-        if (sorted[i].end_time > sorted[i + 1].start_time) {
-          return { ...ds, blocks: blocks.map(b => ({ ...b, error: b.error || 'Los bloques se superponen' })) }
+      // Solapamiento POR consultorio: dos consultorios distintos pueden coincidir en horario;
+      // solo es error si se pisan bloques del MISMO consultorio.
+      const byLoc = new Map<string, typeof blocks>()
+      for (const b of blocks) { const k = b.location_id || ''; const arr = byLoc.get(k) || []; arr.push(b); byLoc.set(k, arr) }
+      const overlapLocs = new Set<string>()
+      for (const [k, arr] of byLoc) {
+        const sorted = [...arr].sort((a, b) => a.start_time.localeCompare(b.start_time))
+        for (let i = 0; i < sorted.length - 1; i++) {
+          if (sorted[i].end_time > sorted[i + 1].start_time) { overlapLocs.add(k); break }
         }
       }
-      if (blocks.some(b => b.error)) valid = false
-      return { ...ds, blocks }
+      const marked = overlapLocs.size > 0
+        ? blocks.map(b => overlapLocs.has(b.location_id || '') ? { ...b, error: b.error || 'Los bloques se superponen' } : b)
+        : blocks
+      if (marked.some(b => b.error)) valid = false
+      return { ...ds, blocks: marked }
     })
     setDayStates(next)
     return valid
@@ -195,11 +207,16 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   const [copyTargets, setCopyTargets] = useState<Set<number>>(new Set())
   function applyCopyDay() {
     if (copyDay === null || copyTargets.size === 0) { setCopyDay(null); return }
-    const src = dayStates[copyDay].blocks
+    // Copia SOLO los bloques del consultorio activo del día origen; en los destinos reemplaza
+    // los de ese consultorio y conserva los de los demás.
+    const src = dayStates[copyDay].blocks.filter(b => (b.location_id || '') === activeLoc)
     setDayStates(prev => {
       const next = [...prev]
       for (const d of copyTargets) {
-        next[d] = { enabled: true, blocks: src.map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label, location_id: b.location_id })) }
+        const others = next[d].blocks.filter(b => (b.location_id || '') !== activeLoc)
+        const copied = src.map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label, location_id: activeLoc }))
+        const blocks = [...others, ...copied]
+        next[d] = { enabled: blocks.length > 0, blocks }
       }
       return next
     })
@@ -458,10 +475,31 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </Select>
         </div>
 
-        {/* Days */}
+        {/* Selector de consultorio (tabs) + ficha — solo si hay consultorios cargados */}
+        {activeLocations.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setActiveLoc('')} className={cn('text-xs font-semibold py-1.5 px-3 rounded-md transition-colors', activeLoc === '' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground')}>General</button>
+              {activeLocations.map(l => (
+                <button key={l.id} type="button" onClick={() => setActiveLoc(l.id)} className={cn('text-xs font-semibold py-1.5 px-3 rounded-md transition-colors', activeLoc === l.id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground')}>{l.name}</button>
+              ))}
+            </div>
+            {selLoc ? (
+              <div className="rounded-md bg-secondary/50 p-3">
+                <p className="text-sm font-medium">{selLoc.name}</p>
+                {selMeta && <p className="text-xs text-muted-foreground mt-0.5">{selMeta}</p>}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Horarios sin {locWord} asignado. Elegí un {locWord} arriba para configurar su grilla.</p>
+            )}
+          </div>
+        )}
+
+        {/* Days — del consultorio activo */}
         <div className="space-y-4">
           {DAY_DISPLAY_ORDER.map(day => {
-            const config = dayStates[day]
+            const dayBlocks = dayStates[day].blocks.map((block, idx) => ({ block, idx })).filter(({ block }) => (block.location_id || '') === activeLoc)
+            const dayOpen = dayBlocks.length > 0
             return (
               <div key={day} className="space-y-2">
                 <div className="flex items-center gap-3">
@@ -469,17 +507,17 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     onClick={() => toggleDay(day)}
                     className={cn(
                       'w-28 text-xs font-semibold py-1.5 px-3 rounded transition-colors flex-shrink-0',
-                      config.enabled ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                      dayOpen ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
                     )}
                   >
                     {DAYS[day]}
                   </button>
-                  {!config.enabled && <span className="text-sm text-muted-foreground">Cerrado</span>}
+                  {!dayOpen && <span className="text-sm text-muted-foreground">Cerrado</span>}
                 </div>
 
-                {config.enabled && (
+                {dayOpen && (
                   <div className="pl-4 space-y-2">
-                    {config.blocks.map((block, idx) => (
+                    {dayBlocks.map(({ block, idx }) => (
                       <div key={idx} className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Input
@@ -501,17 +539,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             placeholder="Mañana, Tarde... (opcional)"
                             className="w-40 text-sm"
                           />
-                          {activeLocations.length > 0 && (
-                            <Select value={block.location_id || '__none__'} onValueChange={v => updateBlock(day, idx, 'location_id', v === '__none__' ? '' : (v ?? ''))}>
-                              <SelectTrigger className="w-40 text-sm">
-                                <SelectValue>{block.location_id ? (activeLocations.find(l => l.id === block.location_id)?.name ?? term.location) : `Sin ${locWord}`}</SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">Sin {locWord}</SelectItem>
-                                {activeLocations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          )}
                           <button
                             onClick={() => removeBlock(day, idx)}
                             className="text-muted-foreground hover:text-red-400 transition-colors"
