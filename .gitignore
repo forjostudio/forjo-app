@@ -46,6 +46,20 @@ next-env.d.ts
 # Claude Code — config local de máquina (las skills del proyecto sí se versionan)
 .claude/settings.local.json
 
+# GSD Core — tooling de terceros instalado vía `npx @opengsd/gsd-core` (no es código de la app)
+.claude/.gsd-profile
+.claude/agents/
+.claude/commands/
+.claude/gsd-core/
+.claude/hooks/
+.claude/scripts/
+.claude/gsd-file-manifest.json
+.claude/gsd-install-state.json
+.claude/gsd-migration-journal/
+.claude/package.json
+# Artefactos de planning que genera GSD al usar el workflow
+.planning/
+
 # Material de diseño (handoff): referencia local, no código de la app
 Forjo Studio-handoff/
 
