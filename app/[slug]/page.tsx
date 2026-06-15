@@ -16,8 +16,11 @@ export default async function PublicBookingPage({ params }: Props) {
   const { slug } = await params
   const supabase = createPublicServerClient()
 
+  // Vista pública acotada (migración 026): expone solo columnas no sensibles. NO leer la
+  // tabla `businesses` directo con anon key — filtraría secretos por tenant (mp_access_token,
+  // resend_api_key, recaptcha_secret_key, google_refresh_token, …).
   const { data: business } = await supabase
-    .from('businesses')
+    .from('public_businesses')
     .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at')
     .eq('slug', slug)
     .single()
