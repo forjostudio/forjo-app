@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import { sendConfirmationEmail, sendAdminNotification } from '@/lib/email'
 
 export async function POST(request: Request) {
@@ -10,9 +11,11 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient()
 
+    // businesses(*) → solo columnas NO secretas: los secretos Resend viven en business_secrets
+    // (D-02) y se traen aparte vía getBusinessSecrets, no por el join.
     const { data: appt } = await supabase
       .from('appointments')
-      .select('*, services(name, price), businesses(*)')
+      .select('*, services(name, price), businesses(id, name, slug, primary_color, logo_url, whatsapp, notification_email)')
       .eq('id', appointmentId)
       .eq('status', 'confirmed')
       .single()
@@ -25,8 +28,10 @@ export async function POST(request: Request) {
     const serviceName = (appt.services as { name?: string; price?: number } | null)?.name || ''
     const servicePrice = Number((appt.services as { name?: string; price?: number } | null)?.price || 0)
 
-    const resendKey = business.resend_api_key as string | null
-    const resendFrom = business.resend_from as string | null
+    // Secretos Resend por tenant desde business_secrets (fallback transitorio 027→028 en el helper).
+    const secrets = await getBusinessSecrets(appt.business_id as string)
+    const resendKey = secrets.resend_api_key
+    const resendFrom = secrets.resend_from
 
     // Email al cliente: AWAIT. En serverless, sin await el fetch a Resend se corta al
     // hacer return. Si falla, se logea el motivo real y se persiste el flag (no se traga).

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import { sendBusinessCancelEmail } from '@/lib/email'
 
 // Cancela un turno desde el panel y avisa al cliente por email ("cancelado por el negocio").
@@ -33,13 +34,13 @@ export async function POST(request: Request) {
     const supabase = createAdminClient()
 
     // Traemos el turno por id, SIN filtrar por status (el endpoint no depende de que ya esté
-    // cancelado). Embebemos businesses(*) — como notify/booking — para no depender de listar
-    // columnas exactas (una columna inexistente en el select hacía fallar la query y devolver
-    // un 404 engañoso). maybeSingle() distingue "no hay fila" (null sin error) de un error de
-    // query real (que ahora se logea y devuelve 500, no un 404 mentiroso).
+    // cancelado). businesses → solo columnas NO secretas: los secretos Resend viven en
+    // business_secrets (D-02) y se traen aparte vía getBusinessSecrets, no por el join.
+    // maybeSingle() distingue "no hay fila" (null sin error) de un error de query real (que se
+    // logea y devuelve 500, no un 404 mentiroso).
     const { data: appt, error: apptErr } = await supabase
       .from('appointments')
-      .select('*, services(name), businesses(*)')
+      .select('*, services(name), businesses(id, name, slug, primary_color, logo_url, whatsapp)')
       .eq('id', appointmentId)
       .maybeSingle()
 
@@ -79,6 +80,9 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, cancelled: true, email_sent: false, reason: 'no_client_email' })
     }
 
+    // Secretos Resend por tenant desde business_secrets (fallback transitorio 027→028 en el helper).
+    const secrets = await getBusinessSecrets(appt.business_id as string)
+
     // Envío del mail: el resultado real va en el body. Si Resend falla, queda
     // email_sent:false con el motivo (reason 'send_failed' + email_error) y se logea.
     let emailSent = false
@@ -97,8 +101,8 @@ export async function POST(request: Request) {
         whatsapp: business.whatsapp as string | null,
         depositPaid: appt.deposit_paid as boolean,
         depositAmount: Number(appt.deposit_amount || 0),
-        resendApiKey: business.resend_api_key as string | null,
-        resendFrom: business.resend_from as string | null,
+        resendApiKey: secrets.resend_api_key,
+        resendFrom: secrets.resend_from,
       })
       emailSent = true
     } catch (e) {
