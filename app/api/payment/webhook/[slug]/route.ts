@@ -124,6 +124,27 @@ async function processWebhook(slug: string, paymentId: string) {
       return
     }
 
+    // Chequeo de monto: un pago approved REAL pero por un monto distinto al esperado (ej. pagar $1
+    // una seña de $1500) NO debe confirmar el turno (D-01/D-02). Comparamos en centavos ENTEROS para
+    // evitar el bug de floats (1500.00 !== 1499.999...). El monto SIEMPRE sale de payment.transaction_amount
+    // traído de MP (§76), NUNCA de un monto del body del webhook (Anti-Pattern 4: el body es input no confiable).
+    // Fail-safe: transaction_amount null/undefined → Number(null||0)=0 (o NaN), y NaN !== expectedCents es
+    // true → cae en mismatch → no confirma de más, comportamiento seguro alineado con D-02.
+    const expectedCents = Math.round(Number(appt.deposit_amount || 0) * 100)
+    const paidCents = Math.round(Number(payment.transaction_amount || 0) * 100)
+    if (paidCents !== expectedCents) {
+      // Firma válida + pago approved + monto != esperado: NO confirmar. El turno queda pending_payment
+      // (NO se cancela). Marcamos payment_status='amount_mismatch' para distinguir "pagó mal" de "nunca
+      // pagó" (payment_status null). Cortamos con return ANTES del email y del evento de Google Calendar:
+      // sin side effects de confirmación cuando el monto no coincide.
+      await supabase
+        .from('appointments')
+        .update({ payment_status: 'amount_mismatch' })
+        .eq('id', appointmentId)
+      console.error('[payment/webhook] monto incorrecto', { paymentId, expected_cents: expectedCents, paid_cents: paidCents })
+      return
+    }
+
     await supabase
       .from('appointments')
       .update({
