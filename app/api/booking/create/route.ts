@@ -1,5 +1,6 @@
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import { verifyRecaptcha } from '@/lib/recaptcha'
 import { sendPendingPaymentEmail, sendExpiredHoldEmail } from '@/lib/email'
 import { createCalendarEvent } from '@/lib/google-calendar'
@@ -43,13 +44,18 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient()
 
-  // Negocio por slug (tenant).
+  // Negocio por slug (tenant). Solo columnas NO secretas: los secretos (resend_api_key,
+  // resend_from, google_refresh_token) viven en business_secrets (D-02) y se traen aparte.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, resend_api_key, resend_from, google_refresh_token')
+    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+
+  // Secretos email/calendar por tenant desde business_secrets (con fallback a businesses durante
+  // la transición 027→028, que lo da getBusinessSecrets). Se pasan a los helpers de email/gcal.
+  const secrets = await getBusinessSecrets(business.id)
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
 
@@ -148,8 +154,8 @@ export async function POST(request: Request) {
               businessSlug: String(business.slug || ''),
               primaryColor: business.primary_color as string | null,
               logoUrl: business.logo_url as string | null,
-              resendApiKey: business.resend_api_key as string | null,
-              resendFrom: business.resend_from as string | null,
+              resendApiKey: secrets.resend_api_key,
+              resendFrom: secrets.resend_from,
             })
           } catch (e) {
             console.error(`[booking/create] email hold vencido FALLÓ (turno ${h.id}):`, e instanceof Error ? e.message : e)
@@ -227,8 +233,8 @@ export async function POST(request: Request) {
   // creamos el evento en su calendario y guardamos el event id. after() para no demorar la
   // respuesta; best-effort (si falla, el turno igual queda creado). El flujo con seña crea el
   // evento recién en el webhook de pago aprobado.
-  if (initialStatus === 'confirmed' && business.google_refresh_token && appt.id) {
-    const refresh = business.google_refresh_token as string
+  if (initialStatus === 'confirmed' && secrets.google_refresh_token && appt.id) {
+    const refresh = secrets.google_refresh_token
     const apptId = appt.id as string
     after(async () => {
       try {
@@ -267,8 +273,8 @@ export async function POST(request: Request) {
           depositAmount: Number(business.deposit_amount || 0),
           expiryHours,
           token,
-          resendApiKey: business.resend_api_key as string | null,
-          resendFrom: business.resend_from as string | null,
+          resendApiKey: secrets.resend_api_key,
+          resendFrom: secrets.resend_from,
         })
       } catch (e) {
         console.error(`[booking/create] email seña pendiente FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)

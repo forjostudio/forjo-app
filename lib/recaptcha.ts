@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 
 const SCORE_THRESHOLD = 0.5 // reCAPTCHA v3
 
@@ -14,13 +15,20 @@ export type RecaptchaResult =
 export async function verifyRecaptcha({ token, slug }: { token: string; slug: string }): Promise<RecaptchaResult> {
   let secretKey = process.env.RECAPTCHA_SECRET_KEY || ''
   if (slug) {
+    // El secret de reCAPTCHA por tenant vive en business_secrets (D-01), NO en businesses.
+    // Acá resolvemos primero el business_id por slug (columna NO secreta de businesses) y luego
+    // leemos recaptcha_secret_key vía getBusinessSecrets (que durante la transición 027→028 hace
+    // fallback a businesses). El override por tenant pisa al global solo si existe el secret.
     const supabase = createAdminClient()
     const { data: business } = await supabase
       .from('businesses')
-      .select('recaptcha_secret_key')
+      .select('id')
       .eq('slug', slug)
       .single()
-    if (business?.recaptcha_secret_key) secretKey = business.recaptcha_secret_key
+    if (business?.id) {
+      const secrets = await getBusinessSecrets(business.id)
+      if (secrets.recaptcha_secret_key) secretKey = secrets.recaptcha_secret_key
+    }
   }
 
   // No configurado → no hay verificación que hacer: se permite, pero queda rastro.
