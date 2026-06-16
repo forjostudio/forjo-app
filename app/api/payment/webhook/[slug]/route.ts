@@ -4,6 +4,7 @@ import { sendConfirmationEmail, sendAdminNotification } from '@/lib/email'
 import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar'
 import { getValidMpAccessToken } from '@/lib/payment'
 import { getBusinessSecrets } from '@/lib/business-secrets'
+import { verifyMPSignature } from '@/lib/mercadopago'
 import type { NextRequest } from 'next/server'
 
 const MP_API = 'https://api.mercadopago.com'
@@ -12,6 +13,12 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  // data.id para el manifest de la firma sale del QUERY STRING primero (MP lo manda ahí en las
+  // notificaciones), con fallback al body. Llamar verifyMPSignature solo con body.data.id haría
+  // fallar TODA llamada real de MP → fail-closed → los deposits dejarían de confirmarse (Pitfall 1).
+  // searchParams es síncrono vía request.nextUrl; el slug (params) sigue siendo Promise y se await abajo.
+  const dataIdQuery = request.nextUrl.searchParams.get('data.id') ?? request.nextUrl.searchParams.get('id')
+
   let body: { type?: string; data?: { id?: string } }
   try {
     body = await request.json()
@@ -19,6 +26,16 @@ export async function POST(
     return new Response('OK', { status: 200 })
   }
 
+  // Verificar la firma PRIMERO, antes de confiar en el body o hacer cualquier trabajo (igual que el
+  // webhook de suscripción): un POST forjado con type:'payment'/status:'approved' recibe 401 y NUNCA
+  // dispara el after(). El verificador ya es fail-closed (secreto ausente → false → 401), por eso acá
+  // no hay lógica de "if secret" (no fail-open, D-04).
+  if (!verifyMPSignature(request, dataIdQuery ?? body.data?.id)) {
+    return new Response('Invalid signature', { status: 401 })
+  }
+
+  // Recién con la firma validada aplican los guards de negocio: type != payment o data.id ausente → 200
+  // (no es un evento que nos interese; preservamos el comportamiento previo, no es un rechazo de firma).
   if (body.type !== 'payment' || !body.data?.id) {
     return new Response('OK', { status: 200 })
   }
