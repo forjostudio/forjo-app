@@ -22,30 +22,26 @@ export interface Business {
   // confirmación lo usan en vez de una búsqueda por texto de la dirección.
   maps_url?: string | null
   instagram: string | null
+  // SECRETOS POR TENANT: los 7 secretos (mp_access_token, mp_refresh_token,
+  // mp_token_expires_at, resend_api_key, resend_from, recaptcha_secret_key,
+  // google_refresh_token) ya NO viven en Business. Ahora están en BusinessSecrets
+  // (lib/business-secrets.ts), keyed por business_id, en la tabla business_secrets con
+  // RLS solo-dueño. Leerlos SIEMPRE vía getBusinessSecrets(businessId) (server-only).
   // MercadoPago & deposits
-  mp_access_token: string | null
   require_deposit: boolean
   deposit_amount: number
   deposit_expiry_hours: number
   // Notifications
   notification_email: string | null
-  resend_api_key: string | null
-  // Email remitente para negocios con key Resend propia (dominio verificado en SU cuenta).
-  resend_from?: string | null
-  // Anti-spam
+  // Anti-spam: recaptcha_site_key NO es secreto (se renderiza en el browser) → se queda acá.
   recaptcha_site_key: string | null
-  recaptcha_secret_key: string | null
   // Scheduling
   default_slot_duration?: number | null
   // Descanso entre turnos (minutos). Gap mínimo entre turnos consecutivos. 0 = sin buffer.
   buffer_minutes?: number | null
-  // Google Calendar: refresh_token del dueño (secreto, nunca al cliente). Si está, sincroniza.
-  google_refresh_token?: string | null
-  // MercadoPago Connect (OAuth): refresh_token (secreto), user_id de la cuenta MP y expiración
-  // del access_token. El access_token vive en mp_access_token (compartido con el modo manual).
-  mp_refresh_token?: string | null
+  // MercadoPago Connect (OAuth): user_id de la cuenta MP. NO es secreto (es el id de cuenta);
+  // el dashboard lo usa como flag (¿conectó por OAuth?) → se queda en Business.
   mp_user_id?: string | null
-  mp_token_expires_at?: string | null
   // Plans
   plan?: string | null
   plan_status?: string | null
@@ -94,8 +90,14 @@ export interface TimeBlock {
   created_at: string
 }
 
-// Public subset — never include secret keys
-export type PublicBusiness = Omit<Business, 'mp_access_token' | 'mp_refresh_token' | 'notification_email' | 'resend_api_key' | 'recaptcha_secret_key' | 'google_refresh_token'>
+// Los secretos por tenant viven en BusinessSecrets (lib/business-secrets.ts), keyed por
+// business_id. Se re-exporta acá para que lib/types.ts sea el punto único de referencia de tipos.
+export type { BusinessSecrets } from './business-secrets'
+
+// Public subset — never include secret keys.
+// Los 7 campos secretos ya no existen en Business (viven en BusinessSecrets), así que el Omit
+// solo necesita excluir lo interno-pero-no-secreto que sigue siendo campo de Business.
+export type PublicBusiness = Omit<Business, 'notification_email'>
 
 export interface Professional {
   id: string
