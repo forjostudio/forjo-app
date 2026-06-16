@@ -1,56 +1,11 @@
-import crypto from 'crypto'
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mpFetch, getMPWebhookSecret } from '@/lib/mercadopago'
+import { mpFetch, verifyMPSignature } from '@/lib/mercadopago'
 import type { NextRequest } from 'next/server'
 
 // 35 days = monthly cycle + grace period
 function nextRenewal(): string {
   return new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString()
-}
-
-// Validates the x-signature header MercadoPago sends with every webhook. Without
-// this, anyone who discovers the URL could POST a forged event and flip a business
-// to 'active' without paying. Algorithm (per MP docs):
-//   manifest = "id:<data.id>;request-id:<x-request-id>;ts:<ts>;"  (omit absent parts)
-//   HMAC-SHA256(manifest, secret) must equal the v1 value inside x-signature.
-// Respects MP_MODE through getMPWebhookSecret(). Fails closed if the secret is unset.
-function verifyMPSignature(request: NextRequest, dataId: string | null | undefined): boolean {
-  const secret = getMPWebhookSecret()
-  if (!secret) {
-    console.error('MP_WEBHOOK_SECRET no configurado — webhook rechazado')
-    return false
-  }
-
-  const signature = request.headers.get('x-signature')
-  const requestId = request.headers.get('x-request-id')
-  if (!signature) return false
-
-  // x-signature: "ts=<unix>,v1=<hex hmac>"
-  let ts: string | undefined
-  let v1: string | undefined
-  for (const part of signature.split(',')) {
-    const idx = part.indexOf('=')
-    if (idx === -1) continue
-    const key = part.slice(0, idx).trim()
-    const val = part.slice(idx + 1).trim()
-    if (key === 'ts') ts = val
-    else if (key === 'v1') v1 = val
-  }
-  if (!ts || !v1) return false
-
-  // data.id is lowercased when alphanumeric (no-op for numeric ids).
-  const id = dataId ? String(dataId).toLowerCase() : undefined
-  let manifest = ''
-  if (id) manifest += `id:${id};`
-  if (requestId) manifest += `request-id:${requestId};`
-  manifest += `ts:${ts};`
-
-  const computed = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
-  const a = Buffer.from(computed, 'hex')
-  const b = Buffer.from(v1, 'hex')
-  if (a.length !== b.length) return false
-  return crypto.timingSafeEqual(a, b)
 }
 
 export async function POST(request: NextRequest) {
