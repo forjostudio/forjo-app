@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPlanLimits } from '@/lib/plans'
 import type { NextRequest } from 'next/server'
@@ -5,10 +6,25 @@ import type { NextRequest } from 'next/server'
 const VALID_PLANS = ['basic', 'studio', 'pro']
 const VALID_STATUSES = ['trial', 'active', 'expired', 'cancelled']
 
+// Compara el secreto admin en tiempo constante (hash-both-sides). Un `!==` directo
+// filtra por timing cuántos bytes coinciden, permitiendo adivinar el secreto byte a
+// byte; timingSafeEqual evita ese side-channel. Hasheamos ambos lados a SHA-256 (32
+// bytes fijos) ANTES de comparar: así un header de longitud distinta no dispara el
+// RangeError ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH (que devolvería 500) y tampoco se
+// filtra la longitud real del secreto. Nulo/vacío de cualquier lado → false sin
+// llamar a timingSafeEqual.
+function adminSecretMatches(provided: string | null | undefined, expected: string | undefined): boolean {
+  if (!provided || !expected) return false
+  const a = crypto.createHash('sha256').update(provided).digest()
+  const b = crypto.createHash('sha256').update(expected).digest()
+  return crypto.timingSafeEqual(a, b)
+}
+
 export async function POST(request: NextRequest) {
-  // Authenticate with admin secret — will be called by Stripe webhook
+  // set-plan lo invoca un actor externo con el header `x-admin-secret` (header-only;
+  // nunca por query string para no filtrarlo a logs/Referer). Comparación timing-safe.
   const secret = request.headers.get('x-admin-secret')
-  if (!secret || secret !== process.env.ADMIN_SECRET) {
+  if (!adminSecretMatches(secret, process.env.ADMIN_SECRET)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
