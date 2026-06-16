@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { startOfWeek, format } from 'date-fns'
 import { googleConfigured } from '@/lib/google-calendar'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import { AgendaClient, type AgendaAppt } from './agenda-client'
 
 export default async function AgendaPage() {
@@ -16,6 +17,10 @@ export default async function AgendaPage() {
     .single()
 
   if (!business) redirect('/onboarding')
+
+  // google_refresh_token ya no vive en businesses (migración 027). Leemos la PRESENCIA server-side
+  // vía getBusinessSecrets y pasamos solo un booleano al client (D-05: nunca el token crudo).
+  const secrets = await getBusinessSecrets(business.id)
 
   // Turnos desde el inicio de la semana actual en adelante para la vista semanal (sin cancelados).
   const weekStartStr = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
@@ -41,7 +46,7 @@ export default async function AgendaPage() {
       initialExceptions={exceptions || []}
       initialAppointments={(appointments || []) as unknown as AgendaAppt[]}
       googleEnabled={googleConfigured()}
-      googleConnected={!!business.google_refresh_token}
+      googleConnected={!!secrets.google_refresh_token}
     />
   )
 }

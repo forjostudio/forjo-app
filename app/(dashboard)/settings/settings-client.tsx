@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, Service, Professional, Location } from '@/lib/types'
+import { Business, BusinessSecrets, Service, Professional, Location } from '@/lib/types'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -104,6 +104,10 @@ type SettingsView = 'config' | 'negocio' | 'servicios' | 'equipo' | 'consultorio
 
 interface Props {
   business: Business
+  // Valores crudos de los secretos del dueño (leídos server-side vía getBusinessSecrets). Este
+  // es el form de edición del PROPIO dueño → D-05 permite mostrarle SU valor. Nunca se exponen
+  // a anon ni a otro componente que no sea este form.
+  secrets: BusinessSecrets
   initialServices: Service[]
   initialProfessionals: Professional[]
   initialLocations: Location[]
@@ -112,7 +116,7 @@ interface Props {
   view?: SettingsView
 }
 
-export function SettingsClient({ business, initialServices, initialProfessionals, initialLocations, mpConnectEnabled, view = 'config' }: Props) {
+export function SettingsClient({ business, secrets, initialServices, initialProfessionals, initialLocations, mpConnectEnabled, view = 'config' }: Props) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -538,13 +542,16 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   }
 
   // ── Tab 5 — Payments ──────────────────────────────────────────────────────
-  const [mpToken, setMpToken] = useState(business.mp_access_token || '')
+  // El valor crudo del token viene de secrets (business_secrets), no de business (D-05: el form
+  // de edición del dueño puede mostrar SU valor; el secreto ya no vive en Business).
+  const [mpToken, setMpToken] = useState(secrets.mp_access_token || '')
   const [showMpToken, setShowMpToken] = useState(false)
   const [savingMp, setSavingMp] = useState(false)
   // Conexión por MercadoPago Connect (OAuth): mp_user_id presente = conectado por botón.
+  // mp_user_id NO es secreto → sigue en businesses.
   const mpConnected = !!business.mp_user_id
   // Pegar el token a mano: avanzado. Abierto si ya hay token manual (sin user_id de OAuth).
-  const [mpManual, setMpManual] = useState(!!business.mp_access_token && !business.mp_user_id)
+  const [mpManual, setMpManual] = useState(!!secrets.mp_access_token && !business.mp_user_id)
   const [disconnectingMp, setDisconnectingMp] = useState(false)
   async function disconnectMp() {
     setDisconnectingMp(true)
@@ -563,28 +570,35 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   const [cleaningUp, setCleaningUp] = useState(false)
 
   const [notifForm, setNotifForm] = useState({
+    // notification_email NO es secreto → sigue en businesses. resend_* vienen de secrets (D-05).
     notification_email: business.notification_email || '',
-    resend_api_key: business.resend_api_key || '',
-    resend_from: business.resend_from || '',
+    resend_api_key: secrets.resend_api_key || '',
+    resend_from: secrets.resend_from || '',
   })
   const [showResendKey, setShowResendKey] = useState(false)
   const [savingNotif, setSavingNotif] = useState(false)
   // Avanzado: dominio propio de email (Resend). Abierto si ya tenían key cargada.
-  const [ownDomain, setOwnDomain] = useState(!!business.resend_api_key)
+  const [ownDomain, setOwnDomain] = useState(!!secrets.resend_api_key)
 
   const [recaptchaForm, setRecaptchaForm] = useState({
+    // recaptcha_site_key NO es secreto (se renderiza en el browser) → sigue en businesses.
+    // recaptcha_secret_key viene de secrets (business_secrets), valor solo al dueño (D-05).
     recaptcha_site_key: business.recaptcha_site_key || '',
-    recaptcha_secret_key: business.recaptcha_secret_key || '',
+    recaptcha_secret_key: secrets.recaptcha_secret_key || '',
   })
   const [showRecaptchaSecret, setShowRecaptchaSecret] = useState(false)
   const [savingRecaptcha, setSavingRecaptcha] = useState(false)
   // Avanzado: cuenta propia de reCAPTCHA. Por defecto todos quedan protegidos con la
   // clave global de Forjo; esto es un override. Abierto si ya tenían key cargada.
-  const [ownRecaptcha, setOwnRecaptcha] = useState(!!business.recaptcha_secret_key)
+  const [ownRecaptcha, setOwnRecaptcha] = useState(!!secrets.recaptcha_secret_key)
 
   async function saveMpToken() {
     setSavingMp(true)
-    const { error } = await supabase.from('businesses').update({ mp_access_token: mpToken || null }).eq('id', business.id)
+    // El secreto va a business_secrets (upsert por business_id). El session client lo autoriza
+    // la policy owner-only de business_secrets (Pitfall F).
+    const { error } = await supabase
+      .from('business_secrets')
+      .upsert({ business_id: business.id, mp_access_token: mpToken || null }, { onConflict: 'business_id' })
     setSavingMp(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Token guardado')
@@ -617,24 +631,33 @@ export function SettingsClient({ business, initialServices, initialProfessionals
   async function saveNotif() {
     setSavingNotif(true)
     // Sin dominio propio → se limpian las claves de Resend (los emails vuelven a salir desde Forjo).
-    const { error } = await supabase.from('businesses').update({
+    // notification_email NO es secreto → businesses. resend_* (secretos) → business_secrets (Pitfall F).
+    const { error: bizErr } = await supabase.from('businesses').update({
       notification_email: notifForm.notification_email || null,
+    }).eq('id', business.id)
+    const { error: secErr } = await supabase.from('business_secrets').upsert({
+      business_id: business.id,
       resend_api_key: ownDomain ? (notifForm.resend_api_key || null) : null,
       resend_from: ownDomain ? (notifForm.resend_from || null) : null,
-    }).eq('id', business.id)
+    }, { onConflict: 'business_id' })
     setSavingNotif(false)
-    if (error) toast.error('Error al guardar')
+    if (bizErr || secErr) toast.error('Error al guardar')
     else toast.success('Notificaciones guardadas')
   }
   async function saveRecaptcha() {
     setSavingRecaptcha(true)
     // Sin cuenta propia → se limpian las claves (queda la protección global de Forjo).
-    const { error } = await supabase.from('businesses').update({
+    // recaptcha_site_key es pública (se renderiza en el browser) → businesses.
+    // recaptcha_secret_key es secreto → business_secrets (upsert owner RLS, Pitfall F).
+    const { error: bizErr } = await supabase.from('businesses').update({
       recaptcha_site_key: ownRecaptcha ? (recaptchaForm.recaptcha_site_key || null) : null,
-      recaptcha_secret_key: ownRecaptcha ? (recaptchaForm.recaptcha_secret_key || null) : null,
     }).eq('id', business.id)
+    const { error: secErr } = await supabase.from('business_secrets').upsert({
+      business_id: business.id,
+      recaptcha_secret_key: ownRecaptcha ? (recaptchaForm.recaptcha_secret_key || null) : null,
+    }, { onConflict: 'business_id' })
     setSavingRecaptcha(false)
-    if (error) toast.error('Error al guardar')
+    if (bizErr || secErr) toast.error('Error al guardar')
     else toast.success('Configuración anti-spam guardada')
   }
 

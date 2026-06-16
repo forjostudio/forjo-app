@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
@@ -16,6 +17,11 @@ export default async function SettingsPage() {
 
   if (!business) redirect('/onboarding')
 
+  // Secretos server-side (service role, server-only). Los 7 secretos ya no viven en businesses
+  // (migración 027) → se leen vía getBusinessSecrets. Solo se pasan al form de edición del
+  // PROPIO dueño (D-05 permite mostrar el valor a su dueño; nunca a anon ni a otro componente).
+  const secrets = await getBusinessSecrets(business.id)
+
   const [{ data: services }, { data: professionals }, { data: locations }] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('professionals').select('*').eq('business_id', business.id).order('created_at'),
@@ -25,6 +31,7 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       business={business}
+      secrets={secrets}
       initialServices={services || []}
       initialProfessionals={professionals || []}
       initialLocations={locations || []}
