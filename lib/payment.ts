@@ -10,6 +10,9 @@ interface ApptForDeposit {
   services?: unknown
 }
 
+// Los secretos MP (access/refresh/expires) vienen ahora de business_secrets (vía getBusinessSecrets
+// en el caller, con fallback transitorio a businesses) — D-01/D-02. El caller resuelve los campos
+// no secretos de businesses (id, name, slug, deposit_*) y los mezcla con los mp_* de business_secrets.
 interface BusinessForDeposit {
   id: string
   name: string
@@ -29,9 +32,11 @@ interface MpTokenBusiness {
 }
 
 // Devuelve un access_token válido del negocio (MercadoPago Connect), refrescándolo si vence en
-// menos de 24 h. Persiste el nuevo token + el refresh rotado + la expiración. Para tokens
-// cargados a mano (sin refresh_token) devuelve el actual tal cual. Si el refresh falla, también
-// cae al token actual (best-effort, no rompe el cobro).
+// menos de 24 h. Persiste el nuevo token + el refresh rotado + la expiración en business_secrets
+// (NO en businesses): MP rota el refresh token en cada uso, así que este write es load-bearing —
+// si quedara apuntando a businesses, tras el drop de 028 la próxima rotación se perdería (T-01-07).
+// Para tokens cargados a mano (sin refresh_token) devuelve el actual tal cual. Si el refresh falla,
+// también cae al token actual (best-effort, no rompe el cobro).
 export async function getValidMpAccessToken(business: MpTokenBusiness): Promise<string | null> {
   const current = business.mp_access_token
   if (!business.mp_refresh_token) return current
@@ -45,14 +50,15 @@ export async function getValidMpAccessToken(business: MpTokenBusiness): Promise<
   }
   const newExpiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null
   const supabase = createAdminClient()
+  // Escritura de la rotación a business_secrets keyed por business_id (NO businesses).
   await supabase
-    .from('businesses')
+    .from('business_secrets')
     .update({
       mp_access_token: refreshed.access_token,
       mp_refresh_token: refreshed.refresh_token ?? business.mp_refresh_token,
       mp_token_expires_at: newExpiresAt,
     })
-    .eq('id', business.id)
+    .eq('business_id', business.id)
   console.log(`[mp] access_token refrescado (negocio ${business.id})`)
   return refreshed.access_token
 }
@@ -69,6 +75,9 @@ export async function createDepositPreference(
   appt: ApptForDeposit,
   business: BusinessForDeposit
 ): Promise<PreferenceResult> {
+  // business.mp_access_token (+ refresh/expires) llega resuelto desde business_secrets vía el
+  // caller (getBusinessSecrets, con fallback transitorio a businesses) — D-01. El armado de la
+  // preferencia MP queda intacto (esto NO es la fase de endurecimiento de firma — Fase 2).
   if (!business.mp_access_token) {
     return { ok: false, error: 'El negocio no tiene MercadoPago configurado', status: 400 }
   }
