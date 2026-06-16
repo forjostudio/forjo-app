@@ -54,7 +54,7 @@ async function processWebhook(slug: string, paymentId: string) {
     return
   }
 
-  // Secretos del tenant desde business_secrets (fallback transitorio a businesses pre-028).
+  // Secretos del tenant desde business_secrets (vía getBusinessSecrets, service-role).
   const secrets = await getBusinessSecrets(business.id)
 
   // El guard corta solo si el negocio realmente no tiene MP configurado, no por un cambio de

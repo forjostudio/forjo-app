@@ -53,8 +53,8 @@ export async function POST(request: Request) {
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
-  // Secretos email/calendar por tenant desde business_secrets (con fallback a businesses durante
-  // la transición 027→028, que lo da getBusinessSecrets). Se pasan a los helpers de email/gcal.
+  // Secretos email/calendar por tenant desde business_secrets (vía getBusinessSecrets,
+  // service-role). Se pasan a los helpers de email/gcal.
   const secrets = await getBusinessSecrets(business.id)
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0

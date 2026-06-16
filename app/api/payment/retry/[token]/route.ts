@@ -39,7 +39,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     return Response.redirect(`${baseUrl}/${slug}`, 302)
   }
 
-  // Secretos MP desde business_secrets (fallback transitorio a businesses pre-028) — D-01/D-02.
+  // Secretos MP desde business_secrets (vía getBusinessSecrets, service-role) — D-01/D-02.
   const secrets = await getBusinessSecrets(business.id)
 
   const result = await createDepositPreference(appt, {

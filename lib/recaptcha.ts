@@ -17,8 +17,8 @@ export async function verifyRecaptcha({ token, slug }: { token: string; slug: st
   if (slug) {
     // El secret de reCAPTCHA por tenant vive en business_secrets (D-01), NO en businesses.
     // Acá resolvemos primero el business_id por slug (columna NO secreta de businesses) y luego
-    // leemos recaptcha_secret_key vía getBusinessSecrets (que durante la transición 027→028 hace
-    // fallback a businesses). El override por tenant pisa al global solo si existe el secret.
+    // leemos recaptcha_secret_key vía getBusinessSecrets. El override por tenant pisa al global
+    // solo si existe el secret.
     const supabase = createAdminClient()
     const { data: business } = await supabase
       .from('businesses')

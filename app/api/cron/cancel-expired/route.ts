@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
   // Secretos Resend por negocio: el cron itera muchos turnos, así que resolvemos los secretos
   // UNA sola vez por business_id distinto (Map) en vez de una llamada por turno (Pitfall E).
-  // Fallback a businesses durante la transición 027→028 lo provee getBusinessSecrets.
+  // getBusinessSecrets los lee de business_secrets (service-role).
   const secretsByBusiness = new Map<string, BusinessSecrets>()
   async function secretsFor(businessId: string): Promise<BusinessSecrets> {
     const cached = secretsByBusiness.get(businessId)

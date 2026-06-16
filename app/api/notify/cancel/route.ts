@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, cancelled: true, email_sent: false, reason: 'no_client_email' })
     }
 
-    // Secretos Resend por tenant desde business_secrets (fallback transitorio 027→028 en el helper).
+    // Secretos Resend por tenant desde business_secrets (vía getBusinessSecrets, service-role).
     const secrets = await getBusinessSecrets(appt.business_id as string)
 
     // Envío del mail: el resultado real va en el body. Si Resend falla, queda

@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ ok: false, error: 'Negocio no encontrado' }, { status: 404 })
     }
 
-    // Secretos MP desde business_secrets (fallback transitorio a businesses pre-028) — D-01/D-02.
+    // Secretos MP desde business_secrets (vía getBusinessSecrets, service-role) — D-01/D-02.
     const secrets = await getBusinessSecrets(business.id)
 
     const { data: appt } = await supabase

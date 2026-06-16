@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const serviceName = (appt.services as { name?: string; price?: number } | null)?.name || ''
     const servicePrice = Number((appt.services as { name?: string; price?: number } | null)?.price || 0)
 
-    // Secretos Resend por tenant desde business_secrets (fallback transitorio 027→028 en el helper).
+    // Secretos Resend por tenant desde business_secrets (vía getBusinessSecrets, service-role).
     const secrets = await getBusinessSecrets(appt.business_id as string)
     const resendKey = secrets.resend_api_key
     const resendFrom = secrets.resend_from

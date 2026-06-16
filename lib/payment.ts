@@ -10,9 +10,9 @@ interface ApptForDeposit {
   services?: unknown
 }
 
-// Los secretos MP (access/refresh/expires) vienen ahora de business_secrets (vía getBusinessSecrets
-// en el caller, con fallback transitorio a businesses) — D-01/D-02. El caller resuelve los campos
-// no secretos de businesses (id, name, slug, deposit_*) y los mezcla con los mp_* de business_secrets.
+// Los secretos MP (access/refresh/expires) vienen de business_secrets (vía getBusinessSecrets
+// en el caller) — D-01/D-02. El caller resuelve los campos no secretos de businesses
+// (id, name, slug, deposit_*) y los mezcla con los mp_* de business_secrets.
 interface BusinessForDeposit {
   id: string
   name: string
@@ -76,8 +76,8 @@ export async function createDepositPreference(
   business: BusinessForDeposit
 ): Promise<PreferenceResult> {
   // business.mp_access_token (+ refresh/expires) llega resuelto desde business_secrets vía el
-  // caller (getBusinessSecrets, con fallback transitorio a businesses) — D-01. El armado de la
-  // preferencia MP queda intacto (esto NO es la fase de endurecimiento de firma — Fase 2).
+  // caller (getBusinessSecrets) — D-01. El armado de la preferencia MP queda intacto
+  // (esto NO es la fase de endurecimiento de firma — Fase 2).
   if (!business.mp_access_token) {
     return { ok: false, error: 'El negocio no tiene MercadoPago configurado', status: 400 }
   }

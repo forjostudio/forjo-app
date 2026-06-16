@@ -8,9 +8,9 @@ const getSlugBusiness = cache(async (slug: string) => {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('businesses')
-    // select('*') (no lista explícita) → resiliente si theme/font aún no existen en DB
-    // (deploy antes de la migración 014): quedan undefined → default Forjo, sin 42703.
-    .select('*')
+    // Solo los campos de branding/metadata que consumen generateMetadata y el layout.
+    // No se leen secretos acá (ya viven en business_secrets, migración 027/028).
+    .select('slug, name, logo_url, palette, theme, font')
     .eq('slug', slug)
     .single()
   return data
