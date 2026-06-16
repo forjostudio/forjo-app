@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createDepositPreference } from '@/lib/payment'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import type { NextRequest } from 'next/server'
 
 // Retry de pago de seña por TOKEN (link "Completar pago" del email de seña pendiente).
@@ -11,19 +12,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const supabase = createAdminClient()
 
+  // El join embebido trae SOLO columnas no secretas del negocio (en vez del viejo join-estrella
+  // que arrastraba mp_access_token): los secretos vienen aparte de business_secrets (Pitfall E).
   const { data: appt } = await supabase
     .from('appointments')
-    .select('*, services(name, price), businesses(*)')
+    .select('*, services(name, price), businesses(id, name, slug, deposit_amount, deposit_expiry_hours)')
     .eq('cancel_token', token)
     .single()
 
   const business = appt?.businesses as {
-    slug?: string; name?: string; mp_access_token?: string | null
+    id?: string; slug?: string; name?: string
     deposit_amount?: number | null; deposit_expiry_hours?: number | null
   } | null
 
   // Token inválido / sin negocio → al home.
-  if (!appt || !business) {
+  if (!appt || !business || !business.id) {
     return Response.redirect(`${baseUrl}/`, 302)
   }
 
@@ -36,7 +39,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     return Response.redirect(`${baseUrl}/${slug}`, 302)
   }
 
-  const result = await createDepositPreference(appt, business as Parameters<typeof createDepositPreference>[1])
+  // Secretos MP desde business_secrets (fallback transitorio a businesses pre-028) — D-01/D-02.
+  const secrets = await getBusinessSecrets(business.id)
+
+  const result = await createDepositPreference(appt, {
+    id: business.id,
+    name: business.name || '',
+    slug,
+    deposit_amount: business.deposit_amount ?? null,
+    deposit_expiry_hours: business.deposit_expiry_hours ?? null,
+    mp_access_token: secrets.mp_access_token,
+    mp_refresh_token: secrets.mp_refresh_token,
+    mp_token_expires_at: secrets.mp_token_expires_at,
+  })
   if (!result.ok) {
     return Response.redirect(`${baseUrl}/${slug}/pago/fallido`, 302)
   }
