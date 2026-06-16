@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getBusinessSecrets, type BusinessSecrets } from '@/lib/business-secrets'
 import { sendExpiredHoldEmail } from '@/lib/email'
 import type { NextRequest } from 'next/server'
 
@@ -11,9 +12,12 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
 
   // Primero traemos los que se van a cancelar CON sus datos, para poder avisar al cliente.
+  // Pitfall E: el nested join businesses(...) NO puede traer business_secrets → el join queda
+  // con columnas NO secretas (incluye id para keyear los secretos) y los secretos Resend se
+  // resuelven aparte con getBusinessSecrets, una sola vez por business_id distinto (abajo).
   const { data: expiring, error: fetchErr } = await supabase
     .from('appointments')
-    .select('id, date, time, client_name, client_email, services(name), businesses(name, slug, primary_color, logo_url, resend_api_key, resend_from)')
+    .select('id, date, time, client_name, client_email, services(name), businesses(id, name, slug, primary_color, logo_url)')
     .eq('status', 'pending_payment')
     .lt('expires_at', new Date().toISOString())
 
@@ -32,12 +36,25 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: error.message }, { status: 500 })
   }
 
+  // Secretos Resend por negocio: el cron itera muchos turnos, así que resolvemos los secretos
+  // UNA sola vez por business_id distinto (Map) en vez de una llamada por turno (Pitfall E).
+  // Fallback a businesses durante la transición 027→028 lo provee getBusinessSecrets.
+  const secretsByBusiness = new Map<string, BusinessSecrets>()
+  async function secretsFor(businessId: string): Promise<BusinessSecrets> {
+    const cached = secretsByBusiness.get(businessId)
+    if (cached) return cached
+    const fetched = await getBusinessSecrets(businessId)
+    secretsByBusiness.set(businessId, fetched)
+    return fetched
+  }
+
   // Aviso al cliente por cada turno cancelado (best-effort, awaiteado; branding del propio
   // negocio del turno → aislamiento por tenant). Un fallo de mail no aborta la cancelación.
   let emailed = 0
   for (const appt of expiring) {
     const business = appt.businesses as unknown as Record<string, string | null> | null
-    if (!appt.client_email || !business) continue
+    if (!appt.client_email || !business?.id) continue
+    const secrets = await secretsFor(business.id)
     try {
       await sendExpiredHoldEmail({
         to: appt.client_email,
@@ -49,8 +66,8 @@ export async function GET(request: NextRequest) {
         businessSlug: String(business.slug || ''),
         primaryColor: business.primary_color,
         logoUrl: business.logo_url,
-        resendApiKey: business.resend_api_key,
-        resendFrom: business.resend_from,
+        resendApiKey: secrets.resend_api_key,
+        resendFrom: secrets.resend_from,
       })
       emailed++
     } catch (e) {

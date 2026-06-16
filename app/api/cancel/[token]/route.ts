@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import { sendClientCancelEmail, sendAdminNotification } from '@/lib/email'
 import { deleteCalendarEvent } from '@/lib/google-calendar'
 import type { NextRequest } from 'next/server'
@@ -13,9 +14,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
 
   const supabase = createAdminClient()
 
+  // Pitfall E: el nested join businesses(...) NO puede traer business_secrets (no hay FK
+  // embebible desde appointments hacia esa tabla). El join queda con columnas NO secretas; los
+  // secretos (resend_*, google_refresh_token) se obtienen con un fetch separado a business_secrets.
   const { data: appt } = await supabase
     .from('appointments')
-    .select('id, date, time, status, client_name, client_phone, client_email, deposit_amount, google_event_id, services(name, price), businesses(name, slug, primary_color, logo_url, resend_api_key, resend_from, google_refresh_token, notification_email)')
+    .select('id, date, time, status, client_name, client_phone, client_email, deposit_amount, google_event_id, services(name, price), businesses(id, name, slug, primary_color, logo_url, notification_email)')
     .eq('cancel_token', token)
     .single()
 
@@ -56,12 +60,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   // corta al hacer return). El branding/remitente sale del propio negocio del turno
   // (aislamiento por tenant: no se confía en ningún input del cliente). Best-effort: si
   // falla, se logea el motivo real y NO se rompe la cancelación, que ya está confirmada.
-  const business = appt.businesses as { name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; resend_api_key?: string | null; resend_from?: string | null; google_refresh_token?: string | null; notification_email?: string | null } | null
+  const business = appt.businesses as { id?: string; name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; notification_email?: string | null } | null
+
+  // Secretos por tenant desde business_secrets (Pitfall E: no venían en el join). Fallback a
+  // businesses durante la transición 027→028 lo provee getBusinessSecrets.
+  const secrets = business?.id ? await getBusinessSecrets(business.id) : null
 
   // Google Calendar: si el turno tenía evento, lo borramos del calendario del dueño.
-  if (business?.google_refresh_token && appt.google_event_id) {
+  if (secrets?.google_refresh_token && appt.google_event_id) {
     try {
-      await deleteCalendarEvent(business.google_refresh_token, appt.google_event_id)
+      await deleteCalendarEvent(secrets.google_refresh_token, appt.google_event_id)
     } catch (e) {
       console.error(`[cancel] gcal borrar evento FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)
     }
@@ -78,8 +86,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
         businessSlug: business.slug || '',
         primaryColor: business.primary_color,
         logoUrl: business.logo_url,
-        resendApiKey: business.resend_api_key,
-        resendFrom: business.resend_from,
+        resendApiKey: secrets?.resend_api_key,
+        resendFrom: secrets?.resend_from,
       })
     } catch (e) {
       console.error(`[cancel] email cliente FALLÓ (turno ${appt.id}):`, e instanceof Error ? e.message : e)
@@ -102,8 +110,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
         time: appt.time,
         businessName: business.name || '',
         logoUrl: business.logo_url,
-        resendApiKey: business.resend_api_key,
-        resendFrom: business.resend_from,
+        resendApiKey: secrets?.resend_api_key,
+        resendFrom: secrets?.resend_from,
         cancelled: true,
       })
     } catch (e) {
