@@ -102,12 +102,26 @@ function ProFields({ value, onChange, labels, showExtra }: {
 // ── Props ───────────────────────────────────────────────────────────────────
 type SettingsView = 'config' | 'negocio' | 'servicios' | 'equipo' | 'consultorios'
 
+// Secretos vacíos: default para las vistas de sidebar (negocio/equipo/servicios/consultorios) que
+// reusan SettingsClient pero NO renderizan los forms de secretos (view !== 'config'). Solo la
+// página /settings (view='config') fetchea y pasa los valores reales (D-05).
+const EMPTY_SECRETS: BusinessSecrets = {
+  mp_access_token: null,
+  mp_refresh_token: null,
+  mp_token_expires_at: null,
+  resend_api_key: null,
+  resend_from: null,
+  recaptcha_secret_key: null,
+  google_refresh_token: null,
+}
+
 interface Props {
   business: Business
   // Valores crudos de los secretos del dueño (leídos server-side vía getBusinessSecrets). Este
   // es el form de edición del PROPIO dueño → D-05 permite mostrarle SU valor. Nunca se exponen
-  // a anon ni a otro componente que no sea este form.
-  secrets: BusinessSecrets
+  // a anon ni a otro componente que no sea este form. Opcional: las vistas de sidebar que no
+  // muestran los forms de secretos no lo pasan (default EMPTY_SECRETS).
+  secrets?: BusinessSecrets
   initialServices: Service[]
   initialProfessionals: Professional[]
   initialLocations: Location[]
@@ -116,7 +130,7 @@ interface Props {
   view?: SettingsView
 }
 
-export function SettingsClient({ business, secrets, initialServices, initialProfessionals, initialLocations, mpConnectEnabled, view = 'config' }: Props) {
+export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, mpConnectEnabled, view = 'config' }: Props) {
   const supabase = createClient()
   const router = useRouter()
 

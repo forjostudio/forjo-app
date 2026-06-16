@@ -30,7 +30,11 @@ export default async function PublicBookingPage({ params }: Props) {
   // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
   const todayStr = new Date().toISOString().slice(0, 10)
   const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }] = await Promise.all([
-    supabase.from('services').select('*').eq('business_id', business.id).eq('active', true),
+    // Vista pública acotada (migración 027): leer la vista, NO la tabla base `services` con anon
+    // key. La vista ya filtra WHERE active = true, así que el .eq('active', true) es redundante
+    // (consistente con cómo leemos public_professionals). Tras el DROP POLICY de 028, anon ya no
+    // podrá leer la tabla base y esta página seguirá funcionando.
+    supabase.from('public_services').select('*').eq('business_id', business.id),
     // Vista pública acotada (id, name, specialty) — no expone contacto/matrícula del staff.
     supabase.from('public_professionals').select('*').eq('business_id', business.id),
     supabase.from('time_blocks').select('*').eq('business_id', business.id),
