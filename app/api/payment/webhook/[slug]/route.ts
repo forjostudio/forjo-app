@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendConfirmationEmail, sendAdminNotification } from '@/lib/email'
 import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar'
 import { getValidMpAccessToken } from '@/lib/payment'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 import type { NextRequest } from 'next/server'
 
 const MP_API = 'https://api.mercadopago.com'
@@ -40,19 +41,37 @@ export async function POST(
 async function processWebhook(slug: string, paymentId: string) {
   const supabase = createAdminClient()
 
+  // Columnas NO secretas explícitas (en vez del viejo select-estrella): así un drop de columna se
+  // nota en vez de devolver undefined silencioso y dejar de confirmar turnos pagados (D-03 / T-01-05).
   const { data: business } = await supabase
     .from('businesses')
-    .select('*')
+    .select('id, name, slug, primary_color, logo_url, whatsapp, address, notification_email')
     .eq('slug', slug)
     .single()
 
-  if (!business?.mp_access_token) {
+  if (!business) {
+    console.log(`Webhook: negocio ${slug} no encontrado`)
+    return
+  }
+
+  // Secretos del tenant desde business_secrets (fallback transitorio a businesses pre-028).
+  const secrets = await getBusinessSecrets(business.id)
+
+  // El guard corta solo si el negocio realmente no tiene MP configurado, no por un cambio de
+  // esquema: lee secrets.mp_access_token, no un business.* de una lectura sin columnas (D-03).
+  if (!secrets.mp_access_token) {
     console.log(`Webhook: negocio ${slug} sin MP token`)
     return
   }
 
   // Token válido (refresca el de OAuth si está por vencer; el manual pasa de largo).
-  const mpToken = await getValidMpAccessToken(business)
+  // Construimos el shape MpTokenBusiness con el id del negocio + los mp_* de business_secrets.
+  const mpToken = await getValidMpAccessToken({
+    id: business.id,
+    mp_access_token: secrets.mp_access_token,
+    mp_refresh_token: secrets.mp_refresh_token,
+    mp_token_expires_at: secrets.mp_token_expires_at,
+  })
 
   const mpRes = await fetch(`${MP_API}/v1/payments/${paymentId}`, {
     headers: { Authorization: `Bearer ${mpToken}` },
@@ -124,8 +143,8 @@ async function processWebhook(slug: string, paymentId: string) {
           logoUrl: business.logo_url,
           whatsapp: business.whatsapp,
           cancelToken: appt.cancel_token,
-          resendApiKey: business.resend_api_key,
-          resendFrom: business.resend_from,
+          resendApiKey: secrets.resend_api_key,
+          resendFrom: secrets.resend_from,
         })
         emailSent = true
       } catch (e) {
@@ -152,8 +171,8 @@ async function processWebhook(slug: string, paymentId: string) {
           time: appt.time,
           businessName: business.name,
           logoUrl: business.logo_url,
-          resendApiKey: business.resend_api_key,
-          resendFrom: business.resend_from,
+          resendApiKey: secrets.resend_api_key,
+          resendFrom: secrets.resend_from,
           pending: false,
         })
       } catch (e) {
@@ -162,9 +181,9 @@ async function processWebhook(slug: string, paymentId: string) {
     }
 
     // Google Calendar: turno confirmado por seña → crear el evento en el calendario del dueño.
-    if (business.google_refresh_token) {
+    if (secrets.google_refresh_token) {
       try {
-        const eventId = await createCalendarEvent(business.google_refresh_token, {
+        const eventId = await createCalendarEvent(secrets.google_refresh_token, {
           summary: `${serviceName || 'Turno'} · ${appt.client_name}`,
           description: [`Cliente: ${appt.client_name}`, appt.client_phone ? `Tel: ${appt.client_phone}` : '', appt.client_email ? `Email: ${appt.client_email}` : '', appt.notes ? `Notas: ${appt.notes}` : '', 'Reserva vía Forjo'].filter(Boolean).join('\n'),
           location: business.address || undefined,
@@ -192,8 +211,8 @@ async function processWebhook(slug: string, paymentId: string) {
     if (cancelledRows && cancelledRows.length > 0) {
       console.log(`❌ Pago ${payment.status} — turno ${appointmentId} cancelado`)
       // Si ya había evento en Google Calendar (turno antes confirmado), lo borramos.
-      if (business.google_refresh_token && appt.google_event_id) {
-        try { await deleteCalendarEvent(business.google_refresh_token, appt.google_event_id) } catch (e) { console.error('[gcal] borrar evento:', e instanceof Error ? e.message : e) }
+      if (secrets.google_refresh_token && appt.google_event_id) {
+        try { await deleteCalendarEvent(secrets.google_refresh_token, appt.google_event_id) } catch (e) { console.error('[gcal] borrar evento:', e instanceof Error ? e.message : e) }
       }
     } else {
       console.log(`Pago ${payment.status} — turno ${appointmentId} ya pasó/no estaba activo, no se toca (estado: ${appt.status})`)
