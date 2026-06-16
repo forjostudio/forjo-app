@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getEventStatuses } from '@/lib/google-calendar'
 import { sendBusinessCancelEmail } from '@/lib/email'
+import { getBusinessSecrets } from '@/lib/business-secrets'
 
 // Sincronización inversa Google Calendar → panel: si el dueño borró o canceló el evento de un
 // turno en su calendario, cancelamos ese turno en el panel (y avisamos al cliente). Solo
@@ -12,12 +13,20 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ ok: false }, { status: 401 })
 
+  // El select de businesses ya NO trae secretos (resend_*/google_refresh_token viven en
+  // business_secrets, migración 027). Solo columnas no secretas para armar el email.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, primary_color, logo_url, whatsapp, resend_api_key, resend_from, google_refresh_token')
+    .select('id, name, slug, primary_color, logo_url, whatsapp')
     .eq('owner_id', user.id)
     .single()
-  if (!business?.google_refresh_token) {
+  if (!business) {
+    return NextResponse.json({ ok: false, error: 'not_connected' }, { status: 400 })
+  }
+
+  // Secretos server-side (service role) — google_refresh_token + resend_*; nunca viajan al cliente.
+  const secrets = await getBusinessSecrets(business.id)
+  if (!secrets.google_refresh_token) {
     return NextResponse.json({ ok: false, error: 'not_connected' }, { status: 400 })
   }
 
@@ -34,7 +43,7 @@ export async function POST() {
   const list = appts || []
   if (list.length === 0) return NextResponse.json({ ok: true, cancelled: 0 })
 
-  const statuses = await getEventStatuses(business.google_refresh_token, list.map(a => a.google_event_id as string))
+  const statuses = await getEventStatuses(secrets.google_refresh_token, list.map(a => a.google_event_id as string))
 
   let cancelled = 0
   for (const a of list) {
@@ -68,8 +77,8 @@ export async function POST() {
           whatsapp: business.whatsapp,
           depositPaid: a.deposit_paid as boolean,
           depositAmount: Number(a.deposit_amount || 0),
-          resendApiKey: business.resend_api_key,
-          resendFrom: business.resend_from,
+          resendApiKey: secrets.resend_api_key,
+          resendFrom: secrets.resend_from,
         })
       } catch (e) {
         console.error(`[google/sync] email cancelación FALLÓ (turno ${a.id}):`, e instanceof Error ? e.message : e)

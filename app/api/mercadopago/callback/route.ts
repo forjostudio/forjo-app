@@ -31,17 +31,37 @@ export async function GET(request: NextRequest) {
     ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     : null
 
-  const { error } = await supabase
+  // Resolver el business_id del dueño (necesario para keyear business_secrets por business_id).
+  const { data: biz } = await supabase
     .from('businesses')
-    .update({
+    .select('id')
+    .eq('owner_id', user.id)
+    .single()
+  if (!biz) return fail()
+
+  // mp_user_id NO es secreto (es el id de cuenta MP, el dashboard lo usa como flag de conexión)
+  // → se queda en businesses. Lo escribimos con el session client (autorizado por owner_id).
+  const { error: bizErr } = await supabase
+    .from('businesses')
+    .update({ mp_user_id: tokens.user_id != null ? String(tokens.user_id) : null })
+    .eq('owner_id', user.id)
+  if (bizErr) {
+    console.error('[mp/callback] guardar mp_user_id falló:', bizErr.message)
+    return fail()
+  }
+
+  // Los 3 secretos MP van a business_secrets (migración 027), keyed por business_id. El upsert
+  // del session client lo autoriza la policy owner-only de business_secrets (Pitfall F).
+  const { error: secErr } = await supabase
+    .from('business_secrets')
+    .upsert({
+      business_id: biz.id,
       mp_access_token: tokens.access_token,
       mp_refresh_token: tokens.refresh_token ?? null,
-      mp_user_id: tokens.user_id != null ? String(tokens.user_id) : null,
       mp_token_expires_at: expiresAt,
-    })
-    .eq('owner_id', user.id)
-  if (error) {
-    console.error('[mp/callback] guardar credenciales falló:', error.message)
+    }, { onConflict: 'business_id' })
+  if (secErr) {
+    console.error('[mp/callback] guardar secretos MP falló:', secErr.message)
     return fail()
   }
 

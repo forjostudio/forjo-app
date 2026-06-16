@@ -27,10 +27,19 @@ export async function GET(request: NextRequest) {
   // Sin refresh_token no podemos renovar el acceso (prompt=consent debería garantizarlo).
   if (!tokens?.refresh_token) return fail()
 
-  const { error } = await supabase
+  // Resolver el business_id del dueño para keyear business_secrets por business_id.
+  const { data: biz } = await supabase
     .from('businesses')
-    .update({ google_refresh_token: tokens.refresh_token })
+    .select('id')
     .eq('owner_id', user.id)
+    .single()
+  if (!biz) return fail()
+
+  // google_refresh_token es secreto → va a business_secrets (migración 027), keyed por
+  // business_id. El upsert del session client lo autoriza la policy owner-only (Pitfall F).
+  const { error } = await supabase
+    .from('business_secrets')
+    .upsert({ business_id: biz.id, google_refresh_token: tokens.refresh_token }, { onConflict: 'business_id' })
   if (error) {
     console.error('[google/callback] guardar token falló:', error.message)
     return fail()
