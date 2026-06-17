@@ -107,4 +107,44 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
     // Denegación = error de RLS, o 0 filas devueltas. Cualquiera de las dos es correcta.
     expect(error !== null || (data ?? []).length === 0).toBe(true)
   })
+
+  // ── D-10: la vista acotada public_businesses tras agregar landing_config (migración 030) ──────
+  // CFG-02: public_businesses ahora expone landing_config a anon por columna explícita, SIN
+  // re-abrir la fuga de secretos de v0.9. Estos 3 casos usan SOLO anon-key (anonA/anonB), nunca
+  // seeded.admin (Pitfall 12). Solo corren contra el DB real con la migración 030 ya aplicada.
+
+  it('D-10a — public_businesses expone landing_config a anon (anonA)', async () => {
+    // Selectabilidad (no valor): los fixtures dejan landing_config en null, pero la columna debe
+    // existir en la vista y poder leerse sin error. Si la vista no se extendió, PostgREST tira error.
+    const { data, error } = await anonA
+      .from('public_businesses')
+      .select('landing_config')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(error).toBeNull()
+    expect(data).toHaveProperty('landing_config')
+  })
+
+  it('D-10b — los secretos SIGUEN denegados tras agregar landing_config a la vista (anonA)', async () => {
+    // Anti-regresión (Pitfall 1 / T-06-04): mp_access_token NO está en la vista acotada → PostgREST
+    // debe errar. Prueba que extender la vista con landing_config NO re-abrió la fuga de v0.9.
+    const { error } = await anonA
+      .from('public_businesses')
+      .select('mp_access_token')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(error).not.toBeNull()
+  })
+
+  it('D-10c — cross-tenant: el anon del negocio B tampoco obtiene secretos del negocio A', async () => {
+    // El secreto está estructuralmente AUSENTE de la vista para TODO tenant, así que un read
+    // cross-tenant (dueño B leyendo la fila de bizA) tampoco alcanza mp_access_token → error.
+    // Usa anonB leyendo seeded.bizA; nunca seeded.admin. Cierra la 3ª pata de D-10.
+    const { error } = await anonB
+      .from('public_businesses')
+      .select('mp_access_token')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(error).not.toBeNull()
+  })
 })
