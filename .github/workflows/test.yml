@@ -1,0 +1,37 @@
+# CI: corre toda la suite de Vitest en cada push y PR (D-04).
+#
+# La suite cubre los dos pilares de TEST-01: webhooks de MercadoPago (mockeados, sin DB ni red →
+# corren SIEMPRE) y aislamiento multi-tenant RLS (necesita las creds del proyecto Supabase dev).
+#
+# ⚠ SKIP GRACEFUL (D-03): si los secrets de Supabase NO estan cargados en el repo (ej. un PR
+# desde un fork, donde GitHub no expone los secrets), los tests de aislamiento se SKIPEAN via
+# `describe.skipIf(!hasSupabaseCreds)` y solo corren los de webhook → el job pasa IGUAL. El
+# workflow NO se marca como fallido por falta de creds. Para que el aislamiento corra en CI, el
+# usuario debe cargar los 4 repo secrets (ver abajo) en Settings → Secrets and variables → Actions.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22: dentro de los engines de Vitest 4 (^20 || ^22 || >=24).
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test # = vitest run
+        env:
+          # Secrets del proyecto Supabase dev: si faltan, los tests de aislamiento se skipean (D-03).
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Secret del webhook MP: los webhook tests stubean su propio secret, pero se inyecta por
+          # consistencia con el entorno de produccion (MP_MODE production → lee MP_WEBHOOK_SECRET).
+          MP_WEBHOOK_SECRET: ${{ secrets.MP_WEBHOOK_SECRET }}
+          MP_MODE: production
