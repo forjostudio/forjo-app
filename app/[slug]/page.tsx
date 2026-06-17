@@ -2,6 +2,7 @@ import { createPublicServerClient } from '@/lib/supabase/public'
 import { notFound } from 'next/navigation'
 import { BookingClient } from './booking-client'
 import type { PublicBusiness } from '@/lib/types'
+import { parseLandingConfig } from '@/lib/landing/schema'
 
 // Datos siempre frescos: la página de reserva debe reflejar al instante los cambios del dueño
 // (horarios, consultorios, servicios, días especiales). Sin esto, Next cachea la ruta y sirve
@@ -21,11 +22,17 @@ export default async function PublicBookingPage({ params }: Props) {
   // resend_api_key, recaptcha_secret_key, google_refresh_token, …).
   const { data: business } = await supabase
     .from('public_businesses')
-    .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at')
+    .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, landing_config')
     .eq('slug', slug)
     .single()
 
   if (!business) notFound()
+
+  // D-01: ejercitamos el parser fail-safe en el path real del request (prueba viva de que
+  // ningún config inválido puede 500ear esta página). El valor se computa pero NO se renderiza
+  // en esta fase — el renderer lo consume en Phase 7.
+  const landing = parseLandingConfig((business as { landing_config?: unknown }).landing_config)
+  void landing
 
   // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
   const todayStr = new Date().toISOString().slice(0, 10)
