@@ -133,20 +133,21 @@ CREATE POLICY "business member access" ON appointments
   ));
 
 -- Acceso público (rol anon) para la página de reservas /[slug].
--- NOTA: la lectura pública de `professionals` se ACOTA luego a una vista en la
--- migración 007 (no expone contacto/matrícula del staff). Acá queda el estado base.
-DROP POLICY IF EXISTS "public read businesses" ON businesses;
-CREATE POLICY "public read businesses" ON businesses
-  FOR SELECT USING (true);
-DROP POLICY IF EXISTS "public read professionals" ON professionals;
-CREATE POLICY "public read professionals" ON professionals
-  FOR SELECT USING (true);
-DROP POLICY IF EXISTS "public read services" ON services;
-CREATE POLICY "public read services" ON services
-  FOR SELECT USING (true);
-DROP POLICY IF EXISTS "public read hours" ON business_hours;
-CREATE POLICY "public read hours" ON business_hours
-  FOR SELECT USING (true);
+--
+-- ⚠ SEGURIDAD (v0.9 hardening): la lectura pública NO se otorga con policies
+-- `USING (true)` sobre las tablas base — eso exponía TODAS las columnas (incluidos
+-- secretos por negocio) al rol anon. La lectura pública se otorga ÚNICAMENTE vía
+-- VISTAS ACOTADAS creadas en las migraciones, que exponen solo columnas no sensibles:
+--   - migración 007 → vista `public_professionals`  (DROP "public read professionals")
+--   - migración 026 → vista `public_businesses`     (DROP "public read businesses")
+--   - migración 028 → vistas `public_services` / `public_business_hours`
+--                     (DROP "public read services" / "public read hours")
+--   - migración 027 → tabla `business_secrets` (RLS solo-dueño) + se dropean las
+--                     7 columnas-secreto de `businesses`.
+-- Por eso acá NO se crean las policies abiertas de SELECT: bootstrappear una DB nueva
+-- desde este schema base + las migraciones en orden deja el estado seguro, sin recrear
+-- el agujero. Las migraciones citadas son idempotentes (CREATE OR REPLACE VIEW / DROP
+-- POLICY IF EXISTS). Solo se mantienen acá las policies de INSERT público (reservar).
 DROP POLICY IF EXISTS "public insert appointments" ON appointments;
 CREATE POLICY "public insert appointments" ON appointments
   FOR INSERT WITH CHECK (true);
