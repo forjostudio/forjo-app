@@ -48,10 +48,21 @@ export async function POST(request: Request) {
   // resend_from, google_refresh_token) viven en business_secrets (D-02) y se traen aparte.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url')
+    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, plan_status')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+
+  // Gate de plan (SEC-04): un negocio con suscripción vencida o cancelada NO puede seguir
+  // captando turnos por su link público. Se usa un BLOCKLIST explícito (no un allowlist): solo
+  // se rechazan los estados que sabemos que deben cerrar el booking. Cualquier negocio en periodo
+  // de prueba, sin estado seteado todavía, o con un valor legacy/desconocido SIGUE recibiendo
+  // reservas a propósito — un allowlist tipo "distinto de activo" barrería esos casos y mataría
+  // turnos legítimos de clientes que aún están por pagar. Rechazo temprano: corre antes de
+  // reCAPTCHA / servicio / slot. El negocio existe pero no está habilitado → 403 (no 404/409).
+  if (['expired', 'cancelled'].includes(business.plan_status)) {
+    return Response.json({ ok: false, error: 'plan_inactive' }, { status: 403 })
+  }
 
   // Secretos email/calendar por tenant desde business_secrets (vía getBusinessSecrets,
   // service-role). Se pasan a los helpers de email/gcal.
