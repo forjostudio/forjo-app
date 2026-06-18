@@ -83,6 +83,10 @@ export function FichaClient({ data }: { data: FichaData }) {
   const isTrial = data.plan_status === 'trial'
   const venceLabel = isTrial ? 'Trial vence' : 'Próximo cobro / vence'
   const venceDate = isTrial ? data.trial_ends_at : data.subscription_ends_at
+  // Gating de acciones por estado (UAT 02): un negocio suspendido solo admite Reactivar
+  // (cambiar plan / extender trial apagados). Extender trial no aplica a un plan activo (pago).
+  const canChangePlan = !isSuspended
+  const canExtendTrial = !isSuspended && data.plan_status !== 'active'
   const waHref = data.whatsapp ? `https://wa.me/${data.whatsapp.replace(/\D/g, '')}` : null
 
   return (
@@ -215,7 +219,7 @@ export function FichaClient({ data }: { data: FichaData }) {
                 Plan — actual: {PLAN_LABEL[data.plan]}
               </label>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Select value={selectedPlan} onValueChange={v => setSelectedPlan(v as PlanKey)}>
+                <Select value={selectedPlan} onValueChange={v => setSelectedPlan(v as PlanKey)} disabled={!canChangePlan}>
                   <SelectTrigger id="plan-target" className="flex-1">
                     <SelectValue>{PLAN_LABEL[selectedPlan]}</SelectValue>
                   </SelectTrigger>
@@ -225,15 +229,20 @@ export function FichaClient({ data }: { data: FichaData }) {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button type="button" className="flex-1" onClick={() => setChangePlanOpen(true)}>
+                <Button type="button" className="flex-1" disabled={!canChangePlan} onClick={() => setChangePlanOpen(true)}>
                   Cambiar plan
                 </Button>
               </div>
             </div>
 
-            <Button type="button" className="w-full" onClick={() => setExtendOpen(true)}>
+            <Button type="button" className="w-full" disabled={!canExtendTrial} onClick={() => setExtendOpen(true)}>
               Extender trial
             </Button>
+            {isSuspended && (
+              <p className="font-[family-name:var(--font-geist-mono)] text-[11px] text-muted-foreground">
+                Negocio suspendido: reactivalo para cambiar plan o extender trial.
+              </p>
+            )}
 
             <div className="space-y-1.5 pt-2">
               <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide" style={{ color: 'var(--crm-danger)' }}>
