@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPlanLimits } from '@/lib/plans'
+import { logAudit } from '@/lib/audit'
 import type { NextRequest } from 'next/server'
 
 const VALID_PLANS = ['basic', 'studio', 'pro']
@@ -56,6 +57,23 @@ export async function POST(request: NextRequest) {
 
   const { error } = await supabase.from('businesses').update(update).eq('id', businessId)
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  // CR-01 (code review Phase 2): este path corre como service-role (la migración 032 NO lo
+  // revierte) y antes no quedaba en auditoría. Toda mutación de plan/estado por este endpoint
+  // externo se registra ahora con actor NULL = "Sistema" (no hay sesión; gateado por
+  // x-admin-secret). Best-effort: logAudit no lanza si falla. suspended → risk 'alto' (igual que
+  // la acción auditada del CRM); resto → 'medio'.
+  if (plan || status) {
+    await logAudit({
+      actorId: null,
+      action: status === 'suspended' ? 'business.suspend' : 'plan.change',
+      targetType: 'business',
+      targetId: businessId,
+      businessId,
+      risk: status === 'suspended' ? 'alto' : 'medio',
+      metadata: { plan: plan ?? null, status: status ?? null, via: 'set-plan-route' },
+    })
+  }
 
   const limits = getPlanLimits(plan || 'basic')
   console.log(`[set-plan] ${business.name} → plan=${plan ?? '-'} status=${status ?? '-'} limits=${JSON.stringify(limits)}`)

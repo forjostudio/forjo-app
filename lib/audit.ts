@@ -6,7 +6,9 @@ export type Risk = 'alto' | 'medio' | 'bajo'
 
 // Entrada de logAudit: un único objeto (patrón del proyecto para >2 params).
 export interface AuditInput {
-  actorId: string
+  // Nullable: acciones del sistema / callers externos sin sesión (ej. set-plan gateado por
+  // x-admin-secret) registran actor_id NULL → "Sistema" en el visor de auditoría (migración 033).
+  actorId: string | null
   action: string
   targetType: string
   targetId?: string | null
