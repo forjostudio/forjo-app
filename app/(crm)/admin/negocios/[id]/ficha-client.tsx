@@ -19,6 +19,7 @@ import { ChevronLeft, MessageCircle, Mail } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatusBadge } from '@/components/crm/status-badge'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { ExtendTrialDialog } from '@/components/crm/extend-trial-dialog'
@@ -45,9 +46,10 @@ export type FichaData = {
 }
 
 const PLAN_LABEL: Record<PlanKey, string> = { basic: 'Básico', studio: 'Estudio', pro: 'Pro' }
-// Próximo plan en el ciclo de upgrade (changePlan simple: el operador rota al siguiente; el destino
-// se confirma en el ConfirmDialog). basic→studio→pro→basic.
-const NEXT_PLAN: Record<PlanKey, PlanKey> = { basic: 'studio', studio: 'pro', pro: 'basic' }
+const PLAN_KEYS: PlanKey[] = ['basic', 'studio', 'pro']
+// Default del selector de "Cambiar plan": el primer plan distinto del actual (el operador elige
+// el destino explícito; changePlan recibe ese plan, no un ciclo). UAT 02 Test 4.
+const DEFAULT_TARGET: Record<PlanKey, PlanKey> = { basic: 'studio', studio: 'basic', pro: 'studio' }
 
 const AR_TZ = 'America/Argentina/Buenos_Aires'
 const dateFmt = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: AR_TZ })
@@ -72,10 +74,10 @@ export function FichaClient({ data }: { data: FichaData }) {
   const [suspendOpen, setSuspendOpen] = React.useState(false)
   const [reactivateOpen, setReactivateOpen] = React.useState(false)
   const [extendOpen, setExtendOpen] = React.useState(false)
+  const [selectedPlan, setSelectedPlan] = React.useState<PlanKey>(DEFAULT_TARGET[data.plan])
 
   const isSuspended = data.plan_status === 'suspended'
   const billing = billingState(data.plan_status, data.subscription_ends_at)
-  const nextPlan = NEXT_PLAN[data.plan]
   const waHref = data.whatsapp ? `https://wa.me/${data.whatsapp.replace(/\D/g, '')}` : null
 
   return (
@@ -194,14 +196,33 @@ export function FichaClient({ data }: { data: FichaData }) {
           <section className="space-y-4 rounded-xl border border-border bg-card p-5">
             <h2 className="font-[family-name:var(--font-heading)] text-base font-bold tracking-[-0.02em]">Acciones</h2>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" className="flex-1" onClick={() => setChangePlanOpen(true)}>
-                Cambiar plan
-              </Button>
-              <Button type="button" className="flex-1" onClick={() => setExtendOpen(true)}>
-                Extender trial
-              </Button>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="plan-target"
+                className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground"
+              >
+                Plan — actual: {PLAN_LABEL[data.plan]}
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Select value={selectedPlan} onValueChange={v => setSelectedPlan(v as PlanKey)}>
+                  <SelectTrigger id="plan-target" className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLAN_KEYS.filter(p => p !== data.plan).map(p => (
+                      <SelectItem key={p} value={p}>{PLAN_LABEL[p]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" className="flex-1" onClick={() => setChangePlanOpen(true)}>
+                  Cambiar plan
+                </Button>
+              </div>
             </div>
+
+            <Button type="button" className="w-full" onClick={() => setExtendOpen(true)}>
+              Extender trial
+            </Button>
 
             <div className="space-y-1.5 pt-2">
               <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide" style={{ color: 'var(--crm-danger)' }}>
@@ -247,11 +268,11 @@ export function FichaClient({ data }: { data: FichaData }) {
         open={changePlanOpen}
         onOpenChange={setChangePlanOpen}
         title="Cambiar plan"
-        description={`Vas a cambiar el plan de este negocio a ${PLAN_LABEL[nextPlan]}. Queda registrado en auditoría.`}
+        description={`Vas a cambiar el plan de este negocio de ${PLAN_LABEL[data.plan]} a ${PLAN_LABEL[selectedPlan]}. Queda registrado en auditoría.`}
         risk="medio"
         confirmLabel="Cambiar plan"
         onConfirm={async () => {
-          await changePlan({ businessId: data.id, plan: nextPlan })
+          await changePlan({ businessId: data.id, plan: selectedPlan })
         }}
       />
 
