@@ -33,6 +33,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog'
+import { RiskBadge } from '@/components/crm/risk-badge'
 
 // ── Tipos / contrato de props (locked, UI-SPEC §"Props contract") ───────────────
 type Risk = 'alto' | 'medio' | 'bajo'
@@ -132,28 +133,9 @@ export function confirmButtonClass(destructive?: boolean): string {
     : ''
 }
 
-// ── Risk badge inline (NOTA de dependencia del plan: este plan wave 2 NO depende del plan 03
-//    que crea risk-badge.tsx; renderizamos la insignia inline con las mismas variantes). ──────
-const RISK_LABEL: Record<Risk, string> = { alto: 'Riesgo Alto', medio: 'Riesgo Medio', bajo: 'Riesgo Bajo' }
-
-function RiskBadge({ risk }: { risk: Risk }) {
-  return (
-    <span
-      data-slot="risk-badge"
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium',
-        risk === 'alto'
-          ? 'border-foreground/15 bg-secondary text-foreground'
-          : 'border-border bg-muted text-muted-foreground'
-      )}
-    >
-      {risk === 'alto' && (
-        <span aria-hidden className="size-1.5 rounded-full bg-[var(--crm-danger)]" />
-      )}
-      {RISK_LABEL[risk]}
-    </span>
-  )
-}
+// Nota: la insignia de riesgo usa el RiskBadge compartido (@/components/crm/risk-badge) — antes
+// había una copia inline (plan 01-04 wave 2 no dependía del plan 01-03 que lo crea); ya mergeado,
+// se reusa el componente único para que Medio se vea amarillo y no se dupliquen variantes.
 
 // ── Componente ───────────────────────────────────────────────────────────────────
 export function ConfirmDialog({

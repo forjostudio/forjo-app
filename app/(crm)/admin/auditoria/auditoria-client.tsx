@@ -73,6 +73,27 @@ function actionLabel(action: string): string {
   return ACTION_LABEL[action] ?? action
 }
 
+// Exporta las filas YA filtradas a un CSV descargable, 100% client-side (sin libs ni endpoint).
+// Mismas columnas visibles que la tabla; escape RFC-4180 (comillas dobladas) + BOM UTF-8 para Excel.
+function rowsToCsv(rows: AuditRow[]): string {
+  const headers = ['Cuándo', 'Quién', 'Acción', 'Negocio', 'Detalle', 'Motivo', 'Riesgo']
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const body = rows.map((r) =>
+    [
+      formatWhen(r.created_at),
+      r.actor_id ? 'Operador' : 'Sistema',
+      actionLabel(r.action),
+      r.business_id ?? '',
+      r.target_type + (r.target_id ? ` · ${r.target_id}` : ''),
+      r.reason ?? '',
+      r.risk,
+    ]
+      .map((c) => esc(String(c)))
+      .join(','),
+  )
+  return [headers.map(esc).join(','), ...body].join('\r\n')
+}
+
 // Actor: en Phase 1 no se resuelve el nombre del actor (no se hace join a auth.users en lectura).
 // Se distingue Operador (hay actor_id) vs Sistema (sin actor) por el icono + label.
 function ActorCell({ actorId }: { actorId: string | null }) {
@@ -131,6 +152,19 @@ export function AuditoriaClient({ rows, loadError }: { rows: AuditRow[]; loadErr
     setFilter('todos')
   }
 
+  function exportLog() {
+    // BOM (﻿) para que Excel respete UTF-8 (acentos del copy en español).
+    const blob = new Blob(['﻿' + rowsToCsv(filtered)], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `auditoria-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-4">
       {/* Controles: búsqueda + filter tabs + exportar */}
@@ -165,8 +199,14 @@ export function AuditoriaClient({ rows, loadError }: { rows: AuditRow[]; loadErr
             </TabsList>
           </Tabs>
 
-          {/* Exportar log — placeholder en Phase 1 */}
-          <Button variant="outline" size="sm" disabled className="gap-1.5">
+          {/* Exportar log — CSV client-side de las filas filtradas (deshabilitado si no hay filas). */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportLog}
+            disabled={filtered.length === 0}
+            className="gap-1.5"
+          >
             <Download className="size-3.5" />
             Exportar log
           </Button>

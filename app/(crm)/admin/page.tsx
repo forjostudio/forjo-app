@@ -9,7 +9,7 @@
  */
 export default function AdminPage() {
   return (
-    <div className="p-8 sm:p-12">
+    <div className="px-6 py-6 lg:px-8">
       <h1 className="text-base font-bold">Consola CRM</h1>
       <p className="mt-4 max-w-prose text-sm text-muted-foreground">
         Esta es la consola interna de operación. Las pantallas con datos

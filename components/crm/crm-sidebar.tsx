@@ -98,7 +98,7 @@ function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: stri
       >
         <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
         <span className="flex-1">{item.label}</span>
-        <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tracking-wider text-muted-foreground/60">
+        <span className="font-[family-name:var(--font-geist-mono)] text-xs tracking-wider text-muted-foreground/60">
           PRONTO
         </span>
       </span>
