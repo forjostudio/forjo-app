@@ -262,12 +262,26 @@ export function AppointmentsClient({ initialAppointments, professionals, service
 
   async function handleDelete() {
     if (!confirmDeleteId) return
+    const id = confirmDeleteId
     setDeleting(true)
-    const { error } = await supabase.from('appointments').delete().eq('id', confirmDeleteId)
+    // Borrado server-side: limpia el evento de Google Calendar (el token es server-only) antes
+    // de hard-deletear la fila. Un .delete() client-side dejaba el evento huérfano.
+    let ok = false
+    try {
+      const res = await fetch('/api/appointments/delete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointmentId: id }),
+      })
+      ok = res.ok && !!(await res.json().catch(() => null))?.ok
+    } catch (e) {
+      console.error('[appointments/delete] no se pudo disparar:', e)
+    }
     setDeleting(false)
     setConfirmDeleteId(null)
-    if (error) { toast.error('Error al eliminar'); return }
-    setAppointments(prev => prev.filter(a => a.id !== confirmDeleteId))
+    if (!ok) { toast.error('Error al eliminar'); return }
+    setAppointments(prev => prev.filter(a => a.id !== id))
     toast.success('Turno eliminado')
   }
 

@@ -1,6 +1,8 @@
+import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets } from '@/lib/business-secrets'
+import { deleteCalendarEvent } from '@/lib/google-calendar'
 import { sendBusinessCancelEmail } from '@/lib/email'
 
 // Cancela un turno desde el panel y avisa al cliente por email ("cancelado por el negocio").
@@ -67,6 +69,21 @@ export async function POST(request: Request) {
       if (cancelErr) {
         console.error(`[notify/cancel] no se pudo cancelar turno ${appointmentId}:`, cancelErr.message)
         return Response.json({ ok: false, error: 'cancel_failed' }, { status: 500 })
+      }
+
+      // Consistencia con el cancel público (cancel/[token]): al cancelar también borramos el
+      // evento de Google Calendar. Best-effort en after() (no demora la respuesta ni rompe la
+      // cancelación, que ya está confirmada). 404/410 dentro de deleteCalendarEvent = éxito.
+      if (appt.google_event_id) {
+        after(async () => {
+          const s = await getBusinessSecrets(appt.business_id as string)
+          if (!s.google_refresh_token) return
+          try {
+            await deleteCalendarEvent(s.google_refresh_token, appt.google_event_id as string)
+          } catch (e) {
+            console.error(`[notify/cancel] gcal borrar evento FALLÓ (turno ${appointmentId}):`, e instanceof Error ? e.message : e)
+          }
+        })
       }
     }
 

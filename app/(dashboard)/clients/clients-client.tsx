@@ -311,21 +311,47 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
 
   async function deleteClient() {
     if (!selectedId) return
+    const id = selectedId
     setDeleting(true)
-    await supabase.from('appointments').delete().eq('client_id', selectedId)
-    const { error } = await supabase.from('clients').delete().eq('id', selectedId)
+    // Server-side: borra los turnos del cliente (limpiando sus eventos de Google Calendar) y
+    // luego el cliente. El token de Google es server-only, así que el .delete() client-side
+    // dejaba los eventos huérfanos en el calendario del dueño.
+    let ok = false
+    try {
+      const res = await fetch('/api/appointments/delete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: id }),
+      })
+      ok = res.ok && !!(await res.json().catch(() => null))?.ok
+    } catch (e) {
+      console.error('[appointments/delete] no se pudo disparar:', e)
+    }
     setDeleting(false)
-    if (error) { toast.error('Error al eliminar'); return }
-    setClients(prev => prev.filter(c => c.id !== selectedId))
-    setAppts(prev => prev.filter(a => a.client_id !== selectedId))
+    if (!ok) { toast.error('Error al eliminar'); return }
+    setClients(prev => prev.filter(c => c.id !== id))
+    setAppts(prev => prev.filter(a => a.client_id !== id))
     setSelectedId(null)
     setConfirmDelete(false)
     toast.success('Cliente eliminado')
   }
 
   async function deleteAppt(id: string) {
-    const { error } = await supabase.from('appointments').delete().eq('id', id)
-    if (error) { toast.error('Error'); return }
+    // Server-side para limpiar el evento de Google Calendar antes del hard-delete.
+    let ok = false
+    try {
+      const res = await fetch('/api/appointments/delete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointmentId: id }),
+      })
+      ok = res.ok && !!(await res.json().catch(() => null))?.ok
+    } catch (e) {
+      console.error('[appointments/delete] no se pudo disparar:', e)
+    }
+    if (!ok) { toast.error('Error'); return }
     setAppts(prev => prev.filter(a => a.id !== id))
     toast.success('Visita eliminada')
   }
