@@ -10,6 +10,10 @@ const KNOWN_PREFIXES = [
   '/finances',
   '/settings',
   '/onboarding',
+  // CRM super-admin (Pitfall 3 / D3): sin este prefijo, /admin cae en el
+  // NextResponse.next() de abajo y NO pasa por updateSession → la cookie de
+  // sesion queda stale y getUser() en el layout puede devolver null intermitente.
+  '/admin',
   '/api',
   '/_next',
 ]

@@ -34,7 +34,12 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/clients') ||
     pathname.startsWith('/finances') ||
     pathname.startsWith('/settings') ||
-    pathname.startsWith('/onboarding')
+    pathname.startsWith('/onboarding') ||
+    // CRM super-admin (D3, defensa en profundidad): un request a /admin sin
+    // sesion se corta en el Edge antes de llegar al layout. Aca solo se
+    // garantiza que HAY sesion; el chequeo de rol is_admin vive en el layout
+    // del CRM (FND-01), no en el middleware.
+    pathname.startsWith('/admin')
 
   if (!user && isDashboardRoute) {
     const url = request.nextUrl.clone()
