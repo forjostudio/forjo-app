@@ -96,7 +96,14 @@ export function resolveTrialEndsAt(input: ResolveTrialInput, now: Date = new Dat
   if (input.exactDate) {
     // Tomar solo el día calendario (primeros 10 chars: YYYY-MM-DD) y fijar el fin del día AR.
     const day = input.exactDate.slice(0, 10)
-    return new Date(`${day}T23:59:59.999${AR_OFFSET}`).toISOString()
+    const resolved = new Date(`${day}T23:59:59.999${AR_OFFSET}`)
+    // WR-01 (code review Phase 2): "extender" un trial NUNCA puede mover la fecha al pasado.
+    // La UI deshabilita días pasados, pero el boundary real es server-side. Si la fecha resuelta
+    // (fin de ese día AR) ya pasó respecto de `now`, se rechaza.
+    if (resolved.getTime() <= now.getTime()) {
+      throw new Error('date_in_past')
+    }
+    return resolved.toISOString()
   }
   throw new Error('preset_or_date_required')
 }

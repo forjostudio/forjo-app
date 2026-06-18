@@ -132,4 +132,14 @@ describe('resolveTrialEndsAt', () => {
   it('ni preset ni exactDate → lanza preset_or_date_required', () => {
     expect(() => resolveTrialEndsAt({}, NOW)).toThrow('preset_or_date_required')
   })
+
+  it('exactDate en el pasado → lanza date_in_past (WR-01: extender no puede ir hacia atrás)', () => {
+    // 2026-06-17 termina (fin de día AR) antes de NOW (2026-06-18T12:00Z) → rechazado.
+    expect(() => resolveTrialEndsAt({ exactDate: '2026-06-17' }, NOW)).toThrow('date_in_past')
+  })
+
+  it('exactDate = hoy (fin del día AR aún futuro respecto de NOW) → válido', () => {
+    // 2026-06-18 fin de día AR = 2026-06-19T02:59:59.999Z > NOW → no se rechaza.
+    expect(resolveTrialEndsAt({ exactDate: '2026-06-18' }, NOW)).toBe('2026-06-19T02:59:59.999Z')
+  })
 })
