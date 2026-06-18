@@ -59,22 +59,27 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   // Al avanzar/retroceder de paso llevamos el inicio del paso al tope del viewport; al
   // elegir un día bajamos a la grilla de horarios. Respeta prefers-reduced-motion (sin smooth).
   const stepTopRef = useRef<HTMLDivElement>(null)
+  const calRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLDivElement>(null)
   const didMountRef = useRef(false)
-  const smoothScrollTo = (el: HTMLElement | null) => {
+  const smoothScrollTo = (el: HTMLElement | null, block: ScrollLogicalPosition = 'start') => {
     if (!el || typeof window === 'undefined') return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     // Doble rAF: esperamos a que el layout (slots recién pintados, imágenes) se asiente
     // antes de medir la posición, si no scrollIntoView calcula contra el layout viejo.
     requestAnimationFrame(() =>
-      requestAnimationFrame(() => el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }))
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block }))
     )
   }
-  // Cada cambio de paso (menos el montaje inicial) sube al inicio del paso.
+  // Cada cambio de paso (menos el montaje inicial) reposiciona el scroll. En el paso de día/hora,
+  // si el calendario ya está visible lo CENTRAMOS (calRef.current existe solo cuando se renderiza);
+  // en los demás pasos vamos al inicio del paso. bookingLoc en deps: al elegir consultorio aparece
+  // el calendario sin cambiar de paso, y ahí también queremos centrarlo.
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return }
-    smoothScrollTo(stepTopRef.current)
-  }, [step])
+    if (step === 3 && calRef.current) smoothScrollTo(calRef.current, 'center')
+    else smoothScrollTo(stepTopRef.current)
+  }, [step, bookingLoc])
   // Al elegir día y tener los horarios cargados, baja a la grilla de horarios.
   useEffect(() => {
     if (selectedDate && !loadingSlots) smoothScrollTo(timeRef.current)
@@ -516,7 +521,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
 
             {/* Día — calendario mensual con cuadrados y navegación de mes */}
             <p className="text-sm font-semibold mb-2 font-[family-name:var(--font-heading)]">Día</p>
-            <div className="rounded-lg border border-border bg-card p-3">
+            <div ref={calRef} className="rounded-lg border border-border bg-card p-3 scroll-mt-4">
               <div className="flex items-center justify-between mb-3">
                 <button
                   type="button"
