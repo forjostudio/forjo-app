@@ -83,6 +83,13 @@ export function FichaClient({ data }: { data: FichaData }) {
   const isTrial = data.plan_status === 'trial'
   const venceLabel = isTrial ? 'Trial vence' : 'Próximo cobro / vence'
   const venceDate = isTrial ? data.trial_ends_at : data.subscription_ends_at
+  // Display del vencimiento: fecha si existe; si es activo sin fin de período de MP, la suscripción
+  // recurrente no tiene fecha de fin → "Renovación automática"; en otros estados sin fecha, "—".
+  const venceDisplay = venceDate
+    ? dateFmt.format(new Date(venceDate))
+    : data.plan_status === 'active'
+      ? 'Renovación automática'
+      : '—'
   // Gating de acciones por estado (UAT 02): un negocio suspendido solo admite Reactivar
   // (cambiar plan / extender trial apagados). Extender trial no aplica a un plan activo (pago).
   const canChangePlan = !isSuspended
@@ -193,9 +200,7 @@ export function FichaClient({ data }: { data: FichaData }) {
             </Row>
 
             <Row label={venceLabel}>
-              <span className="text-sm text-foreground">
-                {venceDate ? dateFmt.format(new Date(venceDate)) : '—'}
-              </span>
+              <span className="text-sm text-foreground">{venceDisplay}</span>
             </Row>
 
             <Row label="ID suscripción">
