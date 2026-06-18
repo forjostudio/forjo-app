@@ -21,15 +21,31 @@ preguntás al usuario si la decisión es suya.
 
 ### 1. Leer contexto
 
-Antes de responder, leé estos archivos en paralelo:
+Antes de responder, leé en paralelo lo que aplique:
 
+**Estado del milestone (.planning):**
 - `.planning/PROJECT.md` — objetivo y decisiones LOCKED del milestone activo
 - `.planning/ROADMAP.md` — fases, dependencias, qué lleva "UI hint: yes"
 - `.planning/STATE.md` — fase actual y workstream activo
 - Si hay workstream activo (ver STATE.md): `.planning/workstreams/{ws}/STATE.md` y
   `.planning/workstreams/{ws}/phases/{fase}-CONTEXT.md` si existe
 
-Si algún archivo no existe, continuá sin él.
+**Contexto que NO vive en .planning (clave — muchas decisiones LOCKED están acá):**
+- **Skills del proyecto** según el dominio de la pregunta — NO decidas de memoria sobre estos:
+  - pagos / webhook / `plan_status` / suscripción / MercadoPago → `mercadopago-suscripciones`
+    (patrón validado en producción + errores a NO repetir)
+  - tabla nueva / RLS / policy / aislamiento / `business_id` → `supabase-multitenant-rls`
+  - naming / estructura / stack → `convenciones-forjo`
+- Los **archivos fuente** que la pregunta nombre (ej. si dice `lib/plans.ts`, leelo).
+- `MEMORY.md` (índice de memoria del proyecto) — decisiones cross-milestone, infra compartida
+  y estado de los otros workstreams.
+
+**Cross-workstream:** hay varios milestones en paralelo (crm, web-builder, standalone). Si la
+pregunta toca **infra compartida** (`base_url` por negocio, modelo de add-ons, contrato del agente
+de WhatsApp), esa decisión vive en los briefs/MEMORY, no en el `.planning` del workstream. Si tu
+decisión duplicaría o chocaría con otro milestone, NO decidas solo: marcalo.
+
+Si algún archivo o skill no existe, continuá sin él.
 
 ### 2. Clasificar la pregunta
 
@@ -51,6 +67,15 @@ Si algún archivo no existe, continuá sin él.
 - Decisiones de seguridad con impacto en producción (orden de migraciones destructivas, deploy strategy)
 - Cualquier cosa que cambie el ROADMAP o los requirements ya aprobados
 - Preguntas que no tienen respuesta obvia dado el contexto disponible
+- **Moneda** (ARS vs USD) y **pricing** de planes o add-ons — es decisión de negocio
+- Cualquier acción que **corte clientes reales en producción** (ej. si "suspender" deja sin
+  booking público / dashboard a un negocio activo, no es solo una marca interna del CRM)
+- **Tocar el webhook de pagos de MP** (persistir eventos, cambiar estados/flujos) → integridad
+  de pagos: consultá `mercadopago-suscripciones` y gateá si hay cualquier duda
+
+**PREGUNTA MIXTA (técnico + negocio):** muchas preguntas reales mezclan las dos cosas (ej. "mover
+precios a DB" [técnico] + "¿en qué moneda?" [negocio]). NO la trates como una sola: resolvé la(s)
+parte(s) técnica(s) y gateá SOLO la sub-decisión de negocio, en una misma respuesta.
 
 ### 3. Responder
 
@@ -67,6 +92,10 @@ Usá AskUserQuestion con:
   más una línea explicando POR QUÉ necesita tu input específicamente
 - options: Las mismas opciones que presentó el GSD, en el mismo orden
 
+**Si mixta:**
+Primero la(s) parte(s) técnica(s) con el formato DECISIÓN/RAZÓN, y abajo un AskUserQuestion SOLO
+por la sub-decisión de negocio. Dejale claro al usuario qué ya resolviste y qué le estás preguntando.
+
 ## Reglas invariantes
 
 - Nunca inventes información que no esté en los archivos de contexto
@@ -79,3 +108,8 @@ Usá AskUserQuestion con:
 - Para el aislamiento multi-tenant: nunca ceder en security → siempre la opción más
   restrictiva cuando hay duda
 - Las decisiones LOCKED en PROJECT.md no se re-litigian, se aplican
+- Antes de decidir sobre pagos, RLS o aislamiento, consultá la skill del dominio
+  (`mercadopago-suscripciones` / `supabase-multitenant-rls`) — no decidas de memoria
+- Si la pregunta toca infra compartida entre milestones, no la cierres sin chequear `MEMORY.md`
+- Los briefs (fuera del repo) y sus decisiones LOCKED son autoritativos para el milestone:
+  aplicalos, no los re-litigies
