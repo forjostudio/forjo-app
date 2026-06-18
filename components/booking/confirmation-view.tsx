@@ -108,23 +108,23 @@ export function ConfirmationView({
           <circle cx="700" cy="30" r="60" fill="rgba(255,255,255,.10)" />
           <rect x="610" y="96" width="74" height="74" fill="rgba(0,0,0,.10)" />
         </svg>
-        <div className="max-w-xl mx-auto px-6 py-9 relative flex flex-col items-center text-center gap-4">
+        <div className="max-w-xl mx-auto px-6 py-5 relative flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={businessName} className="w-16 h-16 rounded-2xl object-cover border border-white/20" />
+            <img src={logoUrl} alt={businessName} className="w-12 h-12 rounded-xl object-cover border border-white/20 flex-shrink-0" />
           ) : (
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-white/15 font-[family-name:var(--font-heading)] font-black text-2xl">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/15 font-[family-name:var(--font-heading)] font-black text-xl flex-shrink-0">
               {businessName.charAt(0).toUpperCase()}
             </div>
           )}
-          <div>
-            <p className="text-[clamp(28px,7vw,40px)] font-black uppercase tracking-tight leading-none font-[family-name:var(--font-heading)]">{businessName}</p>
-            {businessType && <p className="text-sm text-primary-foreground/80 mt-2">{businessType}</p>}
+          <div className="min-w-0">
+            <p className="text-[clamp(20px,5.5vw,28px)] font-black uppercase tracking-tight leading-none font-[family-name:var(--font-heading)] truncate">{businessName}</p>
+            {businessType && <p className="text-sm text-primary-foreground/80 mt-1">{businessType}</p>}
           </div>
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-6 pt-8 pb-14">
+      <div className="max-w-lg mx-auto px-6 pt-6 pb-14">
         {/* Check + saludo */}
         <div className="w-[62px] h-[62px] rounded-full flex items-center justify-center mx-auto bg-primary text-primary-foreground shadow-lg shadow-primary/40">
           <Check className="w-8 h-8" strokeWidth={3} />
