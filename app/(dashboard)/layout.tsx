@@ -23,6 +23,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!business) redirect('/onboarding')
 
   const planStatus = business.plan_status ?? 'trial'
+
+  // D-06: suspender = corte REAL, no marca. Un negocio suspendido NO entra al dashboard — se redirige
+  // a /suspendido (fuera del route group (dashboard), sin sidebar). Va antes del return del JSX para
+  // no renderizar parcialmente el dashboard. redirect() LANZA NEXT_REDIRECT: no envolver en try/catch.
+  if (planStatus === 'suspended') redirect('/suspendido')
+
   const daysLeft = business.trial_ends_at
     ? Math.max(0, Math.ceil((new Date(business.trial_ends_at).getTime() - Date.now()) / 86_400_000))
     : 30

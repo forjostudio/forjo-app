@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   // reservas a propósito — un allowlist tipo "distinto de activo" barrería esos casos y mataría
   // turnos legítimos de clientes que aún están por pagar. Rechazo temprano: corre antes de
   // reCAPTCHA / servicio / slot. El negocio existe pero no está habilitado → 403 (no 404/409).
-  if (['expired', 'cancelled'].includes(business.plan_status)) {
+  if (['expired', 'cancelled', 'suspended'].includes(business.plan_status)) {
     return Response.json({ ok: false, error: 'plan_inactive' }, { status: 403 })
   }
 
