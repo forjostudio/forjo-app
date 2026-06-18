@@ -9,11 +9,23 @@ export const SECTION_TYPES = ['hero', 'about', 'services', 'gallery', 'location'
 
 // z.object() en Zod v4 estripa por defecto las claves desconocidas (D-06): el config queda
 // válido y forward-compatible sin .strict()/.passthrough().
+// F8 (D8-06): `preset` se mantiene como z.string() — NO un enum cerrado de THEME ids. Un preset
+// desconocido NO debe invalidar todo el config; degrada a 'forjo' en la RESOLUCIÓN
+// (resolveLandingTheme → normalizeTheme), no acá. `overrides` queda como record forward-compatible
+// (mismo espíritu fail-safe que F7 usó con .catch por campo): la validación estricta de cada
+// override (palette/font acotados al set permitido, primary por allowlist de hex) vive en
+// lib/landing/theme.ts, NO en el envelope. Así un override roto no tira el config al DEFAULT.
 const themeSchema = z.object({
   preset: z.string(),
   // ⚠ Zod v4: z.record exige DOS args (key, value). Un solo arg rompe el build (Pitfall 5).
   overrides: z.record(z.string(), z.string()).optional(),
 })
+
+// Tipo derivado del themeSchema (D-07, mismo patrón que LandingConfig): lo consume
+// lib/landing/theme.ts para no duplicar el shape a mano. Forma: { preset: string;
+// overrides?: Record<string, string> }. Los overrides CONOCIDOS (palette/font/primary) se leen
+// por clave en resolveLandingTheme — el record forward-compatible no los cierra a propósito.
+export type LandingTheme = z.infer<typeof themeSchema>
 
 // `data` queda permisivo en esta fase (D-04): Phase 7 tipa el data de cada sección.
 // No cerramos internals ahora.
