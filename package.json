@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "setup:mp-plans": "tsx scripts/setup-mp-plans.ts",
+    "setup:admin": "tsx scripts/setup-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
