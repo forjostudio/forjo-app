@@ -185,3 +185,11 @@
   /* Bauhaus display: headings use Archivo, tight + heavy */
   h1, h2, h3 { font-family: var(--font-heading); letter-spacing: -0.02em; }
 }
+
+/* Scroll suave a anclas del landing (#reservar desde el CTA del Hero). CSS puro, sin JS
+   (D7-11): el <a href="#reservar"> funciona aunque el bundle no haya hidratado. Solo se
+   activa si el usuario NO pidió reduced-motion — fuera de este media query el scroll queda
+   en `auto` (instantáneo), respetando la preferencia de accesibilidad (Pitfall 6, WCAG). */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}

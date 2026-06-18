@@ -1,6 +1,7 @@
 import { createPublicServerClient } from '@/lib/supabase/public'
 import { notFound } from 'next/navigation'
 import { BookingClient } from './booking-client'
+import { LandingRenderer } from '@/components/landing/landing-renderer'
 import type { PublicBusiness } from '@/lib/types'
 import { parseLandingConfig } from '@/lib/landing/schema'
 
@@ -29,10 +30,9 @@ export default async function PublicBookingPage({ params }: Props) {
   if (!business) notFound()
 
   // D-01: ejercitamos el parser fail-safe en el path real del request (prueba viva de que
-  // ningún config inválido puede 500ear esta página). El valor se computa pero NO se renderiza
-  // en esta fase — el renderer lo consume en Phase 7.
+  // ningún config inválido puede 500ear esta página). landing === null = negocio legacy
+  // (passthrough byte-idéntico, LAND-06); config presente → lo compone el LandingRenderer.
   const landing = parseLandingConfig((business as { landing_config?: unknown }).landing_config)
-  void landing
 
   // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -49,8 +49,27 @@ export default async function PublicBookingPage({ params }: Props) {
     supabase.from('locations').select('id, name, address, phone').eq('business_id', business.id).or('is_active.is.null,is_active.eq.true'),
   ])
 
+  // Seam legacy-vs-renderer (Pitfall 4: NO se toca force-dynamic, fetch ni se agregan queries).
+  // landing === null → passthrough legacy byte-idéntico (LAND-06, probado en F6): un negocio que
+  // nunca optó por una landing ve EXACTAMENTE el BookingClient de siempre, cero regresión.
+  if (landing === null) {
+    return (
+      <BookingClient
+        business={business as unknown as PublicBusiness}
+        services={services || []}
+        professionals={professionals || []}
+        timeBlocks={timeBlocks || []}
+        exceptions={exceptions || []}
+        locations={locations || []}
+      />
+    )
+  }
+
+  // landing !== null → el LandingRenderer compone las secciones por order/enabled e inyecta
+  // booking (D7-05). Mismos props que el passthrough + el config; sin queries nuevas.
   return (
-    <BookingClient
+    <LandingRenderer
+      config={landing}
       business={business as unknown as PublicBusiness}
       services={services || []}
       professionals={professionals || []}
