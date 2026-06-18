@@ -149,6 +149,35 @@
 [data-palette="ink"]      { --primary:#1a1714; --accent:#1a1714; --ring:#1a1714; --sidebar-primary:#1a1714; --primary-foreground:#f3ead8; --accent-foreground:#f3ead8; --sidebar-primary-foreground:#f3ead8; --chart-1:#1a1714; }
 .dark[data-palette="ink"] { --primary:#f3ead8; --accent:#f3ead8; --ring:#f3ead8; --sidebar-primary:#f3ead8; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#cabfa6; }
 
+/* =========================================================================
+   CRM SHELL — accent divergente del super-admin (FND-04).
+   Acento AMARILLO primario (la app es rojo) + un SOLO rojo de marca para
+   peligro. Scopeado a .crm-shell para que NUNCA se filtre al dashboard ni al
+   booking; el subtree tambien lleva `dark`, asi que los neutrales dark aplican
+   via &:is(.dark *). NO toca :root, .dark, los [data-palette=...], app/layout.tsx
+   ni PaletteScript.
+   ========================================================================= */
+.crm-shell {
+  /* primary → amarillo (NO el rojo de la app). foreground = ink para contraste (~8.9:1). */
+  --primary: #e6b53f;
+  --primary-foreground: #1a1714;
+  --accent: #e6b53f;
+  --accent-foreground: #1a1714;
+  --ring: #e6b53f;
+  --sidebar-primary: #e6b53f;
+  --sidebar-primary-foreground: #1a1714;
+  --chart-1: #e6b53f;
+
+  /* Peligro CRM = un solo rojo de marca (NO el token --destructive, §12).
+     Expuesto como token para que las variantes de peligro lo referencien explicito. */
+  --crm-danger: #e85c3f;
+  --crm-danger-foreground: #fbf3e3;
+
+  /* info / success referencian las constantes Bauhaus (ya dark-aware) */
+  --crm-info: var(--chart-2);     /* azul  */
+  --crm-success: var(--chart-4);  /* verde */
+}
+
 @layer base {
   * { @apply border-border outline-ring/50; }
   body { @apply bg-background text-foreground; }
