@@ -14,7 +14,7 @@
 // `npx tsc --noEmit` + `npm run lint` + revisión visual en Phases 2-3 que consumen el dialog.
 
 import { describe, it, expect, vi } from 'vitest'
-import { computeConfirmState, buildSubmitGuard } from './confirm-dialog'
+import { computeConfirmState, buildSubmitGuard, confirmButtonClass } from './confirm-dialog'
 
 describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
   // Test 1 (simple, confirmWord undefined): botón habilitado de entrada.
@@ -105,11 +105,11 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
 
   // Test 6 (destructive): el helper de clase del botón confirmar referencia --crm-danger, no --destructive.
   it('destructive: la clase del botón confirmar usa --crm-danger (no --destructive)', () => {
-    const dangerCls = require('./confirm-dialog').confirmButtonClass(true)
+    const dangerCls = confirmButtonClass(true)
     expect(dangerCls).toMatch(/crm-danger/)
     expect(dangerCls).not.toMatch(/destructive/)
 
-    const normalCls = require('./confirm-dialog').confirmButtonClass(false)
+    const normalCls = confirmButtonClass(false)
     expect(normalCls).not.toMatch(/crm-danger/)
   })
 })
