@@ -133,6 +133,22 @@ describe('resolveTrialEndsAt', () => {
     expect(() => resolveTrialEndsAt({}, NOW)).toThrow('preset_or_date_required')
   })
 
+  it('preset extiende desde el fin de trial vigente si es futuro (UAT 02: 18/7 + 7d = 25/7, no hoy+7)', () => {
+    const currentEnd = '2026-07-18T02:59:59.999Z' // futuro respecto de NOW (2026-06-18)
+    const r = resolveTrialEndsAt({ preset: '7' }, NOW, currentEnd)
+    expect(new Date(r).getTime()).toBe(new Date(currentEnd).getTime() + 7 * 86_400_000)
+  })
+
+  it('preset extiende desde hoy si el fin vigente ya venció', () => {
+    const past = '2026-06-01T00:00:00.000Z' // anterior a NOW
+    const r = resolveTrialEndsAt({ preset: '7' }, NOW, past)
+    expect(new Date(r).getTime()).toBe(NOW.getTime() + 7 * 86_400_000)
+  })
+
+  it('preset sin fin vigente (null) → desde hoy (compat: now + N)', () => {
+    expect(new Date(resolveTrialEndsAt({ preset: '7' }, NOW, null)).getTime()).toBe(NOW.getTime() + 7 * 86_400_000)
+  })
+
   it('exactDate en el pasado → lanza date_in_past (WR-01: extender no puede ir hacia atrás)', () => {
     // 2026-06-17 termina (fin de día AR) antes de NOW (2026-06-18T12:00Z) → rechazado.
     expect(() => resolveTrialEndsAt({ exactDate: '2026-06-17' }, NOW)).toThrow('date_in_past')

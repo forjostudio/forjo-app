@@ -131,7 +131,17 @@ export async function extendTrial(input: unknown): Promise<void> {
   const data = extendTrialSchema.parse(input)
   const admin = createAdminClient()
 
-  const newEndsAt = resolveTrialEndsAt({ preset: data.preset, exactDate: data.exactDate })
+  // Leer el fin de trial vigente: el preset EXTIENDE desde esa fecha (si aún es futura), no desde hoy.
+  const { data: prev } = await admin
+    .from('businesses')
+    .select('trial_ends_at')
+    .eq('id', data.businessId)
+    .single()
+  const newEndsAt = resolveTrialEndsAt(
+    { preset: data.preset, exactDate: data.exactDate },
+    new Date(),
+    prev?.trial_ends_at ?? null,
+  )
 
   const { error } = await admin
     .from('businesses')

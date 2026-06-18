@@ -84,14 +84,23 @@ export type ResolveTrialInput = {
 
 /**
  * Resuelve la nueva `trial_ends_at` (ISO UTC) al extender un trial (D-07).
- * - preset 7/14/30 → now + N días.
- * - exactDate → fin del día AR (23:59:59.999 -03:00) de esa fecha, para no recortar un día por el
- *   offset UTC-3 (Pitfall 7).
+ * - preset 7/14/30 → EXTIENDE desde el fin de trial vigente si todavía es futuro; si ya venció (o no
+ *   hay fecha), desde hoy. Así "extender 7 días" sobre un trial que vence el 18/7 da 25/7, no hoy+7
+ *   (UAT 02: el preset es un EXTEND, no un reset desde hoy).
+ * - exactDate → fin del día AR (23:59:59.999 -03:00) de esa fecha (absoluto), para no recortar un día
+ *   por el offset UTC-3 (Pitfall 7).
  * - ni preset ni exactDate → lanza 'preset_or_date_required'.
  */
-export function resolveTrialEndsAt(input: ResolveTrialInput, now: Date = new Date()): string {
+export function resolveTrialEndsAt(
+  input: ResolveTrialInput,
+  now: Date = new Date(),
+  currentEndsAt?: string | null,
+): string {
   if (input.preset) {
-    return addDays(now, Number(input.preset)).toISOString()
+    const current = currentEndsAt ? new Date(currentEndsAt) : null
+    // Extender desde el fin vigente solo si sigue en el futuro; si ya venció, desde hoy.
+    const base = current && current.getTime() > now.getTime() ? current : now
+    return addDays(base, Number(input.preset)).toISOString()
   }
   if (input.exactDate) {
     // Tomar solo el día calendario (primeros 10 chars: YYYY-MM-DD) y fijar el fin del día AR.
