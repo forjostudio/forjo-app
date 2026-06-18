@@ -4,7 +4,7 @@ import { getPlanLimits } from '@/lib/plans'
 import type { NextRequest } from 'next/server'
 
 const VALID_PLANS = ['basic', 'studio', 'pro']
-const VALID_STATUSES = ['trial', 'active', 'expired', 'cancelled']
+const VALID_STATUSES = ['trial', 'active', 'expired', 'cancelled', 'suspended']
 
 // Compara el secreto admin en tiempo constante (hash-both-sides). Un `!==` directo
 // filtra por timing cuántos bytes coinciden, permitiendo adivinar el secreto byte a
