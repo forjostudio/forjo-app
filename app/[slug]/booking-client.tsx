@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -54,6 +54,27 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const [clientEmail, setClientEmail] = useState('')
   const [clientNotes, setClientNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // ── Auto-scroll de navegación (UX) ───────────────────────────────────────────────
+  // Al avanzar/retroceder de paso llevamos el inicio del paso al tope del viewport; al
+  // elegir un día bajamos a la grilla de horarios. Respeta prefers-reduced-motion (sin smooth).
+  const stepTopRef = useRef<HTMLDivElement>(null)
+  const timeRef = useRef<HTMLDivElement>(null)
+  const didMountRef = useRef(false)
+  const smoothScrollTo = (el: HTMLElement | null) => {
+    if (!el) return
+    const reduce = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+  }
+  // Cada cambio de paso (menos el montaje inicial) sube al inicio del paso.
+  useEffect(() => {
+    if (!didMountRef.current) { didMountRef.current = true; return }
+    smoothScrollTo(stepTopRef.current)
+  }, [step])
+  // Al elegir día y tener los horarios cargados, baja a la grilla de horarios.
+  useEffect(() => {
+    if (selectedDate && !loadingSlots) smoothScrollTo(timeRef.current)
+  }, [selectedDate, loadingSlots])
   const router = useRouter()
   const locWord = resolveVertical(business).terminology.location
 
@@ -361,7 +382,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-6 py-8">
+      <div ref={stepTopRef} className="max-w-lg mx-auto px-6 py-8 scroll-mt-4">
         {/* Progreso */}
         <div className="mb-7">
           <div className="flex items-center justify-between mb-2">
@@ -548,7 +569,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
 
             {/* Horario */}
             {selectedDate && (
-              <div className="mt-6">
+              <div ref={timeRef} className="mt-6 scroll-mt-4">
                 <p className="text-sm font-semibold mb-2 font-[family-name:var(--font-heading)]">Horario</p>
                 {loadingSlots ? (
                   <p className="text-center text-muted-foreground text-sm py-4">Cargando horarios...</p>
