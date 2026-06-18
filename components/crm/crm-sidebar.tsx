@@ -62,7 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'VENTAS',
     items: [
       { href: '#', label: 'Pipeline', icon: GitBranch, soon: true },
-      { href: '#', label: 'Negocios', icon: Store, soon: true },
+      { href: '/admin/negocios', label: 'Negocios', icon: Store },
     ],
   },
   {
@@ -75,7 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'CUENTA',
     items: [
-      { href: '#', label: 'Planes y precios', icon: CreditCard, soon: true },
+      { href: '/admin/planes', label: 'Planes y precios', icon: CreditCard },
       { href: '#', label: 'Ajustes', icon: Settings, soon: true },
     ],
   },
