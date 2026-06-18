@@ -62,9 +62,13 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const timeRef = useRef<HTMLDivElement>(null)
   const didMountRef = useRef(false)
   const smoothScrollTo = (el: HTMLElement | null) => {
-    if (!el) return
-    const reduce = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    if (!el || typeof window === 'undefined') return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    // Doble rAF: esperamos a que el layout (slots recién pintados, imágenes) se asiente
+    // antes de medir la posición, si no scrollIntoView calcula contra el layout viejo.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }))
+    )
   }
   // Cada cambio de paso (menos el montaje inicial) sube al inicio del paso.
   useEffect(() => {
