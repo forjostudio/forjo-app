@@ -78,6 +78,11 @@ export function FichaClient({ data }: { data: FichaData }) {
 
   const isSuspended = data.plan_status === 'suspended'
   const billing = billingState(data.plan_status, data.subscription_ends_at)
+  // Vencimiento mostrado en la card de Suscripción (UAT 02 Test 4): en trial mostramos cuándo
+  // vence el trial; con suscripción activa, la fecha de próximo cobro / fin de período.
+  const isTrial = data.plan_status === 'trial'
+  const venceLabel = isTrial ? 'Trial vence' : 'Próximo cobro / vence'
+  const venceDate = isTrial ? data.trial_ends_at : data.subscription_ends_at
   const waHref = data.whatsapp ? `https://wa.me/${data.whatsapp.replace(/\D/g, '')}` : null
 
   return (
@@ -183,6 +188,12 @@ export function FichaClient({ data }: { data: FichaData }) {
               </span>
             </Row>
 
+            <Row label={venceLabel}>
+              <span className="text-sm text-foreground">
+                {venceDate ? dateFmt.format(new Date(venceDate)) : '—'}
+              </span>
+            </Row>
+
             <Row label="ID suscripción">
               <span className="font-[family-name:var(--font-geist-mono)] text-xs text-muted-foreground">
                 {data.mp_subscription_id ?? '—'}
@@ -206,7 +217,7 @@ export function FichaClient({ data }: { data: FichaData }) {
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Select value={selectedPlan} onValueChange={v => setSelectedPlan(v as PlanKey)}>
                   <SelectTrigger id="plan-target" className="flex-1">
-                    <SelectValue />
+                    <SelectValue>{PLAN_LABEL[selectedPlan]}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {PLAN_KEYS.filter(p => p !== data.plan).map(p => (
