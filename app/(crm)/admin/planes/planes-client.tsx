@@ -33,7 +33,7 @@ export function PlanesClient({ cards }: { cards: PlanCardData[] }) {
       >
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
         <p>
-          Editar un precio impacta la facturación de planes futuros, no altera las suscripciones activas sin aviso.
+          Editar un precio aplica a cobros futuros (nuevas suscripciones); no altera las suscripciones activas.
           Cada cambio pide confirmación y queda en auditoría.
         </p>
       </div>
