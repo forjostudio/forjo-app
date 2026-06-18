@@ -67,3 +67,4 @@ Forjo Studio-handoff/
 client_secret_*.json
 
 .env*
+supabase/.temp/
