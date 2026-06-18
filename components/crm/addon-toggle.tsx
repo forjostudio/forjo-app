@@ -31,12 +31,16 @@ export interface AddonToggleProps {
 }
 
 export function AddonToggle({ businessId, addon, label, checked }: AddonToggleProps) {
-  // Estado optimista: arranca del valor que vino del server; se sincroniza si el prop cambia (revalidate).
+  // Estado optimista: arranca del valor que vino del server. Si el prop cambia (revalidate tras la
+  // action), se re-sincroniza DURANTE el render (patrón "adjusting state when a prop changes" de React,
+  // sin useEffect → sin cascading renders).
   const [on, setOn] = React.useState(checked)
+  const [prevChecked, setPrevChecked] = React.useState(checked)
   const [loading, setLoading] = React.useState(false)
-  React.useEffect(() => {
+  if (checked !== prevChecked) {
+    setPrevChecked(checked)
     setOn(checked)
-  }, [checked])
+  }
 
   async function handleChange(next: boolean) {
     if (loading) return // anti doble-submit mientras resuelve la action
