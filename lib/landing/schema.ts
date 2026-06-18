@@ -53,3 +53,65 @@ export function parseLandingConfig(raw: unknown): LandingConfig | null {
   const result = landingConfigSchema.safeParse(raw)
   return result.success ? result.data : DEFAULT_LANDING_CONFIG
 }
+
+// ── Tipos `data` por sección (Phase 7, D7-Discretion) ────────────────────────────
+// El envelope de arriba (sectionSchema.data = z.unknown().optional()) queda PERMISIVO a
+// propósito: cerrarlo con discriminatedUnion re-introduciría el riesgo de que un `data`
+// roto tire TODO el config al DEFAULT (whole-config fallback, D-05). En cambio, cada sección
+// parsea SU `data` con estos esquemas DENTRO del componente. Todos llevan `.catch({})`:
+// si el data está malformado → devuelve `{}` → la sección usa sus fallbacks (o se oculta),
+// NUNCA tira ni cierra el envelope F6. Defensa por-sección, no por-config.
+// booking NO lee data; Hours deriva solo de time_blocks → ninguno tiene esquema acá.
+
+export const heroData = z
+  .object({
+    headline: z.string().optional(),
+    subhead: z.string().optional(),
+    image: z.string().url().optional(),
+    cta_label: z.string().optional(),
+  })
+  .catch({})
+export type HeroData = z.infer<typeof heroData>
+
+export const aboutData = z
+  .object({
+    title: z.string().optional(),
+    body: z.string().optional(),
+    image: z.string().url().optional(),
+  })
+  .catch({})
+export type AboutData = z.infer<typeof aboutData>
+
+// La LISTA de servicios viene de la tabla `services` (D7-06): el data solo aporta título/subtítulo.
+export const servicesData = z
+  .object({
+    title: z.string().optional(),
+    subtitle: z.string().optional(),
+  })
+  .catch({})
+export type ServicesData = z.infer<typeof servicesData>
+
+export const galleryData = z
+  .object({
+    title: z.string().optional(),
+    images: z.array(z.string().url()).optional(),
+  })
+  .catch({})
+export type GalleryData = z.infer<typeof galleryData>
+
+// Las locations vienen de la tabla (D7-06); map_url/show_address vienen del config (Assumption A2).
+export const locationData = z
+  .object({
+    title: z.string().optional(),
+    map_url: z.string().url().optional(),
+    show_address: z.boolean().optional(),
+  })
+  .catch({})
+export type LocationData = z.infer<typeof locationData>
+
+export const ctaData = z
+  .object({
+    headline: z.string().optional(),
+  })
+  .catch({})
+export type CtaData = z.infer<typeof ctaData>
