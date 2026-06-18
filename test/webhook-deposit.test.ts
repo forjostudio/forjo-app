@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { makeWebhookRequest } from './helpers/next-request'
 import { craftSignature } from './helpers/mp-signature'
 
@@ -13,7 +13,10 @@ import { craftSignature } from './helpers/mp-signature'
 // se mockean a no-ops para que processWebhook no explote ni mande mails reales.
 
 // Spies del admin client, recreados en cada test (beforeEach) para aislar las aserciones.
-let updateSpy: ReturnType<typeof vi.fn>
+// Mock callable concreto: `ReturnType<typeof vi.fn>` resuelve a `Mock<Procedure | Constructable>`
+// en Vitest 4 y TS lo trata como posiblemente-constructable → `updateSpy(payload)` tiraba TS2348.
+// Tipar la firma de llamada lo deja callable y preserva `.mock`/`toHaveBeenCalledWith`.
+let updateSpy: Mock<(payload: Record<string, unknown>) => unknown>
 let fakeAdmin: { from: ReturnType<typeof vi.fn> }
 
 // `after()` de next/server LANZA "called outside a request scope" cuando se invoca fuera del
