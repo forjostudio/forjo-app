@@ -28,7 +28,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { resolveTrialEndsAt } from '@/lib/crm-metrics'
-import { extendTrial } from '@/app/(crm)/admin/_actions'
+import { extendTrial, grantTrial } from '@/app/(crm)/admin/_actions'
 
 type Preset = '7' | '14' | '30'
 
@@ -53,9 +53,15 @@ export interface ExtendTrialDialogProps {
   businessId: string
   /** trial_ends_at actual (ISO) o null — solo para contexto/preview de "actual". */
   currentTrialEndsAt: string | null
+  /**
+   * 'extend' (default): suma desde el fin de trial vigente (extiende) → llama extendTrial.
+   * 'grant': pone el negocio EN trial (status→trial) con un trial fresco desde hoy → llama grantTrial.
+   */
+  mode?: 'extend' | 'grant'
 }
 
-export function ExtendTrialDialog({ open, onOpenChange, businessId, currentTrialEndsAt }: ExtendTrialDialogProps) {
+export function ExtendTrialDialog({ open, onOpenChange, businessId, currentTrialEndsAt, mode = 'extend' }: ExtendTrialDialogProps) {
+  const isGrant = mode === 'grant'
   const [preset, setPreset] = React.useState<Preset | null>(null)
   const [exactDate, setExactDate] = React.useState<Date | undefined>(undefined)
   const [loading, setLoading] = React.useState(false)
@@ -89,7 +95,9 @@ export function ExtendTrialDialog({ open, onOpenChange, businessId, currentTrial
   // Preview de la nueva fecha — misma función que la action (coincide al persistir).
   const previewIso = React.useMemo(() => {
     try {
-      if (preset) return resolveTrialEndsAt({ preset })
+      // 'extend' previsualiza/persiste sumando desde el fin vigente; 'grant' arranca fresco (hoy).
+      const base = isGrant ? null : currentTrialEndsAt
+      if (preset) return resolveTrialEndsAt({ preset }, new Date(), base)
       if (exactDate) {
         const day = `${exactDate.getFullYear()}-${String(exactDate.getMonth() + 1).padStart(2, '0')}-${String(exactDate.getDate()).padStart(2, '0')}`
         return resolveTrialEndsAt({ exactDate: day })
@@ -98,18 +106,19 @@ export function ExtendTrialDialog({ open, onOpenChange, businessId, currentTrial
       return null
     }
     return null
-  }, [preset, exactDate])
+  }, [preset, exactDate, isGrant, currentTrialEndsAt])
 
   async function handleConfirm() {
     if (!hasChoice || loadingRef.current) return
     loadingRef.current = true
     setLoading(true)
     try {
+      const action = isGrant ? grantTrial : extendTrial
       if (preset) {
-        await extendTrial({ businessId, preset })
+        await action({ businessId, preset })
       } else if (exactDate) {
         const day = `${exactDate.getFullYear()}-${String(exactDate.getMonth() + 1).padStart(2, '0')}-${String(exactDate.getDate()).padStart(2, '0')}`
-        await extendTrial({ businessId, exactDate: `${day}T12:00:00.000Z` })
+        await action({ businessId, exactDate: `${day}T12:00:00.000Z` })
       }
       toast.success('Listo. La acción quedó registrada en auditoría.')
       loadingRef.current = false
@@ -129,8 +138,12 @@ export function ExtendTrialDialog({ open, onOpenChange, businessId, currentTrial
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent showCloseButton={!loading} className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Extender trial</DialogTitle>
-          <DialogDescription>Elegí cuántos días sumar o una fecha exacta de fin de trial.</DialogDescription>
+          <DialogTitle>{isGrant ? 'Poner en trial' : 'Extender trial'}</DialogTitle>
+          <DialogDescription>
+            {isGrant
+              ? 'Activá un trial para este negocio (pasa a estado trial). Elegí cuántos días dura o una fecha de fin.'
+              : 'Elegí cuántos días sumar o una fecha exacta de fin de trial.'}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Presets (toggle-group, active amarillo) */}
@@ -199,6 +212,8 @@ export function ExtendTrialDialog({ open, onOpenChange, businessId, currentTrial
                 <Loader2Icon className="animate-spin" />
                 Confirmando…
               </>
+            ) : isGrant ? (
+              'Poner en trial'
             ) : (
               'Extender trial'
             )}

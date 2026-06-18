@@ -66,6 +66,7 @@ const ACTION_LABEL: Record<string, string> = {
   'plan.price_edit': 'Editó precio',
   'user.impersonate': 'Impersonó negocio',
   'trial.extend': 'Extendió trial',
+  'trial.grant': 'Activó trial',
   'addon.toggle': 'Cambió add-on',
 }
 

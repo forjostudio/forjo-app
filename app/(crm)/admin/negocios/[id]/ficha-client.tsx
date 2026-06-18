@@ -74,6 +74,7 @@ export function FichaClient({ data }: { data: FichaData }) {
   const [suspendOpen, setSuspendOpen] = React.useState(false)
   const [reactivateOpen, setReactivateOpen] = React.useState(false)
   const [extendOpen, setExtendOpen] = React.useState(false)
+  const [grantOpen, setGrantOpen] = React.useState(false)
   const [selectedPlan, setSelectedPlan] = React.useState<PlanKey>(DEFAULT_TARGET[data.plan])
 
   const isSuspended = data.plan_status === 'suspended'
@@ -240,9 +241,15 @@ export function FichaClient({ data }: { data: FichaData }) {
               </div>
             </div>
 
-            <Button type="button" className="w-full" disabled={!canExtendTrial} onClick={() => setExtendOpen(true)}>
-              Extender trial
-            </Button>
+            {isTrial ? (
+              <Button type="button" className="w-full" disabled={!canExtendTrial} onClick={() => setExtendOpen(true)}>
+                Extender trial
+              </Button>
+            ) : (
+              <Button type="button" className="w-full" disabled={isSuspended} onClick={() => setGrantOpen(true)}>
+                Poner en trial
+              </Button>
+            )}
             {isSuspended && (
               <p className="font-[family-name:var(--font-geist-mono)] text-[11px] text-muted-foreground">
                 Negocio suspendido: reactivalo para cambiar plan o extender trial.
@@ -332,6 +339,14 @@ export function FichaClient({ data }: { data: FichaData }) {
         onOpenChange={setExtendOpen}
         businessId={data.id}
         currentTrialEndsAt={data.trial_ends_at}
+      />
+
+      <ExtendTrialDialog
+        open={grantOpen}
+        onOpenChange={setGrantOpen}
+        businessId={data.id}
+        currentTrialEndsAt={data.trial_ends_at}
+        mode="grant"
       />
     </div>
   )

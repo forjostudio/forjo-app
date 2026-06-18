@@ -163,6 +163,40 @@ export async function extendTrial(input: unknown): Promise<void> {
   revalidatePath('/admin')
 }
 
+// ── grantTrial ───────────────────────────────────────────────────────────────────────────────
+// "Poner en trial" (UAT 02, alcance nuevo): pone el negocio EN estado trial (regalar/activar un
+// trial desde cualquier estado no-trial). Setea plan_status='trial' + trial_ends_at fresco DESDE HOY
+// (currentEndsAt null → resolveTrialEndsAt suma desde now). Distinto de extendTrial, que NO toca
+// plan_status y extiende desde el fin vigente. Reusa extendTrialSchema (misma forma: preset|fecha).
+// Auditado como 'trial.grant' (código nuevo reconocido por el visor). Riesgo medio: otorga servicio.
+export async function grantTrial(input: unknown): Promise<void> {
+  const actor = await requireAdmin()
+  const data = extendTrialSchema.parse(input)
+  const admin = createAdminClient()
+
+  // Trial fresco desde hoy (no extiende un fin previo): currentEndsAt = null.
+  const newEndsAt = resolveTrialEndsAt({ preset: data.preset, exactDate: data.exactDate }, new Date(), null)
+
+  const { error } = await admin
+    .from('businesses')
+    .update({ plan_status: 'trial', trial_ends_at: newEndsAt })
+    .eq('id', data.businessId)
+  if (error) throw new Error('update_failed')
+
+  await logAudit({
+    actorId: actor.id,
+    action: 'trial.grant',
+    targetType: 'business',
+    targetId: data.businessId,
+    businessId: data.businessId,
+    risk: 'medio',
+    metadata: { newEndsAt, preset: data.preset ?? null, exactDate: data.exactDate ?? null },
+  })
+
+  revalidatePath(fichaPath(data.businessId))
+  revalidatePath('/admin')
+}
+
 // ── toggleAddon ────────────────────────────────────────────────────────────────────────────────
 // Setea businesses.has_web_custom / has_whatsapp (set fijo, D-08). El service-role bypassa el trigger
 // businesses_protect_admin_columns (Plan 01) que impide al dueño tocar estas columnas.
