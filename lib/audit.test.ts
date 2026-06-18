@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // @/lib/supabase/admin para (a) no tocar la DB real y (b) espiar la llamada a from().insert(),
 // para asertar el mapeo a snake_case y el manejo best-effort del error.
 
-let insertSpy: ReturnType<typeof vi.fn>
-let fromSpy: ReturnType<typeof vi.fn>
+let insertSpy: ReturnType<typeof vi.fn<(...args: unknown[]) => Promise<unknown>>>
+let fromSpy: ReturnType<typeof vi.fn<(...args: unknown[]) => { insert: (...a: unknown[]) => unknown }>>
 let insertResult: { error: { message: string } | null }
 
 vi.mock('@/lib/supabase/admin', () => ({
