@@ -43,8 +43,15 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // orderedSections: orden + filtro enabled + inyección de booking al final (D7-05).
   const sections = orderedSections(config.sections)
 
+  // .frj-site: scope de los tokens premium de F8.1-01 (--frj-*, fuente mono, container
+  // query). REGLA DURA D81-01: esta clase NO declara transform/overflow/filter/position
+  // fixed|sticky en globals.css — solo `container-type: inline-size` (que NO crea
+  // containing block para position:fixed). Por eso es seguro como ancestro de
+  // <section id="reservar">: NO rompe el position:fixed de vaul/sonner/react-day-picker.
+  // El overflow:hidden del campo decorativo del hero/cta vive en .frj-noisefield (su
+  // propio contenedor), NO acá. switch / orderedSections / props de BookingClient: VERBATIM.
   return (
-    <main>
+    <main className="frj-site">
       {sections.map((s, i) => {
         // switch (NO Record map): cada sección recibe props heterogéneas y el switch da
         // type-narrowing limpio sobre s.type. Las secciones del config traen `s.data`
