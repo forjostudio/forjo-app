@@ -1,12 +1,27 @@
 import Image from 'next/image'
 import { aboutData } from '@/lib/landing/schema'
 import { shouldHideAbout } from '@/lib/landing/derive'
+import { Kicker, GhostIndex } from '@/components/landing/_premium'
 
 // ── Sección About (RSC) ─────────────────────────────────────────────────────────────
 // Por qué RSC sin 'use client': contenido editorial puro, sin estado ni interactividad.
-// Layout editorial 2-col en desktop (imagen + texto), stack en mobile con la imagen primero
-// (o solo texto si no hay imagen). aboutData (07-01) lleva `.catch({})` → data malformado → {}.
-// Empty-state (D7-08): sin body NI imagen → la sección se oculta entera (return null).
+// aboutData (07-01) lleva `.catch({})` → data malformado → {}. Empty-state (D7-08):
+// sin body NI imagen → la sección se oculta entera (return null).
+//
+// Restyle F8.1 (D81-08, mock 04-screen.png): layout editorial 2-col (lead display + portrait
+// aspect 4/5 con tag overlay primary), número fantasma decorativo. SIN imagen degrada con
+// elegancia (solo la columna editorial; NUNCA bloque vacío). El <h2> es el lead display con
+// la última palabra realzada en <em> itálica primary (vocabulario del mock). Cero hex.
+
+// Realce editorial: parte el título en "todo menos la última palabra" + "última palabra".
+// La última palabra se pinta en <em> itálica primary (el "construir" del mock) — realce
+// determinista que no depende de contenido específico y mantiene la semántica del <h2>.
+function splitLead(title: string): { head: string; tail: string } {
+  const trimmed = title.trimEnd()
+  const idx = trimmed.lastIndexOf(' ')
+  if (idx === -1) return { head: '', tail: trimmed }
+  return { head: trimmed.slice(0, idx + 1), tail: trimmed.slice(idx + 1) }
+}
 
 export function About({ data }: { data: unknown }) {
   // Parse fail-safe: si el data está roto, devuelve {} y caemos en los fallbacks.
@@ -14,35 +29,54 @@ export function About({ data }: { data: unknown }) {
   // shouldHideAbout(data): oculta si no hay cuerpo ni imagen.
   if (shouldHideAbout(d)) return null
 
-  return (
-    <section className="px-4 py-12 md:px-6 md:py-16">
-      <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 md:grid-cols-2 md:items-center md:gap-12">
-        {/* Imagen (si existe): primero en mobile, columna izquierda en desktop. Aspect-ratio
-            explícito + next/image (width/height implícitos por aspect) para evitar CLS.
-            aspect-[3/2] en mobile, retrato editorial aspect-[4/5] en desktop (UI-SPEC §About). */}
-        {d.image && (
-          <div className="relative aspect-[3/2] overflow-hidden rounded-md md:aspect-[4/5]">
-            <Image
-              src={d.image}
-              alt=""
-              fill
-              sizes="(min-width: 768px) 50vw, 100vw"
-              className="object-cover"
-            />
-          </div>
-        )}
+  const title = d.title ?? 'Sobre nosotros'
+  const { head, tail } = splitLead(title)
 
-        {/* Texto: cuerpo capado a 65ch para respetar la medida de línea óptima (45–75ch). */}
+  return (
+    <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
+      {/* Número fantasma decorativo (01) — aria-hidden vive en GhostIndex. */}
+      <GhostIndex n={1} />
+
+      <div className="grid grid-cols-1 items-center gap-[clamp(28px,5cqw,56px)] md:grid-cols-[1.25fr_0.9fr] md:gap-[clamp(48px,7cqw,96px)]">
+        {/* Columna editorial: kicker + lead (h2 display con realce primary) + body muted. */}
         <div>
-          <h2 className="font-[family-name:var(--font-heading)] text-2xl font-bold leading-tight md:text-3xl">
-            {d.title ?? 'Sobre nosotros'}
+          <Kicker>Sobre nosotros</Kicker>
+
+          {/* ÚNICO heading de la sección: <h2> (sin saltos de nivel, WCAG AA). El realce
+              <em> es solo presentación; el texto completo del título queda legible. */}
+          <h2 className="frj-display mt-[0.7em] text-[clamp(22px,4.2cqw,46px)] font-bold leading-[1.12] [letter-spacing:-0.025em]">
+            {head}
+            {tail && (
+              <em className="italic font-semibold text-primary [letter-spacing:-0.03em]">
+                {tail}
+              </em>
+            )}
           </h2>
+
           {d.body && (
-            <p className="mt-4 max-w-[65ch] whitespace-pre-line text-base leading-relaxed text-muted-foreground md:text-lg">
+            <p className="mt-[1.1em] max-w-[46ch] whitespace-pre-line text-[clamp(14px,1.7cqw,18px)] leading-[1.6] text-muted-foreground">
               {d.body}
             </p>
           )}
         </div>
+
+        {/* Portrait aspect 4/5 con tag overlay primary (solo si hay imagen). En mobile
+            va segundo (stack natural). SIN imagen: la columna no se renderiza y el lead
+            ocupa todo el ancho — degrada con elegancia, nunca un bloque vacío. */}
+        {d.image && (
+          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[2px]">
+            <Image
+              src={d.image}
+              alt=""
+              fill
+              sizes="(min-width: 768px) 40vw, 100vw"
+              className="object-cover"
+            />
+            <span className="absolute bottom-0 left-0 bg-primary px-3 py-2 font-[family-name:var(--frj-font-mono)] text-[10px] uppercase tracking-[0.18em] text-[color:var(--frj-on-primary)]">
+              Conocé el espacio
+            </span>
+          </div>
+        )}
       </div>
     </section>
   )
