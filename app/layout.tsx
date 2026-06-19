@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {
   Archivo, Space_Grotesk,
   Plus_Jakarta_Sans, Cormorant_Garamond, Mulish, Orbitron, Chakra_Petch, Sora, Manrope,
+  JetBrains_Mono,
 } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -30,7 +31,12 @@ const chakra = Chakra_Petch({ variable: "--font-chakra", subsets: ["latin"], wei
 const sora = Sora({ variable: "--font-sora", subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], preload: false });
 const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], preload: false });
 
-const fontVars = [grotesk, archivo, jakarta, cormorant, mulish, orbitron, chakra, sora, manrope]
+// Fuente mono editorial del landing premium (F8.1): eyebrows/kickers, labels e indicador de scroll
+// (mono + letterspaced). Vía next/font → self-host, CERO dependencia npm nueva (D81-07).
+// preload:false → solo se descarga cuando el landing (.frj-site) la usa, igual que los themes alternativos.
+const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subsets: ["latin"], weight: ["400", "500", "600", "700"], preload: false });
+
+const fontVars = [grotesk, archivo, jakarta, cormorant, mulish, orbitron, chakra, sora, manrope, jetbrainsMono]
   .map(f => f.variable).join(" ");
 
 export const metadata: Metadata = {
