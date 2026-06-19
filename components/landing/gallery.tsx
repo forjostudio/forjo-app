@@ -1,15 +1,41 @@
 import Image from 'next/image'
 import { galleryData } from '@/lib/landing/schema'
 import { shouldHideGallery } from '@/lib/landing/derive'
+import { Kicker, GhostIndex } from '@/components/landing/_premium'
 
 // ── Sección Gallery (RSC) ───────────────────────────────────────────────────────────
 // Por qué RSC sin 'use client': grid de imágenes estático, sin estado ni interactividad.
-// Grid responsive NO masonry (D7-03): cada tile reserva su espacio con aspect-square +
-// width/height implícitos (next/image fill sobre contenedor con ratio) → CERO CLS.
-// Sin lightbox en el MVP (UI-SPEC FLAG): un lightbox sería un contrato de modal con
-// focus-trap/escape, diferido a F8. Tiles NO interactivos.
 // galleryData (07-01) lleva `.catch({})` → data malformado → {}.
 // Empty-state (D7-08): sin imágenes → la sección se oculta entera (return null).
+//
+// Restyle F8.1 (D81-08, mock 04-screen.png + `.frj-grid`): grid editorial FULL-BLEED (no el
+// grid uniforme plano de F7). Las celdas varían su aspect-ratio de forma DETERMINISTA por
+// índice (alta 3/4, ancha span-2 16/9, cuadrada 1/1, y en desktop una destacada span 2x2),
+// igual que el mock. CLS-safe: cada celda reserva su espacio con aspect-ratio + next/image
+// `fill` (no masonry, sin saltos de layout). Tiles NO interactivos (sin lightbox, igual que F7).
+// Cero hex: solo tokens / utilidades.
+
+// ── Patrón editorial determinista (espejo del mock) ──────────────────────────────────
+// Cada celda recibe su forma según la posición en un ciclo de 6, replicando la composición
+// asimétrica del mock. Determinista ⇒ SSR/CSR idénticos ⇒ cero CLS. Las clases controlan
+// span (grid-column/row) y aspect-ratio; el contenedor reserva el espacio antes de cargar.
+//   feat  → destacada: span 2 col × 2 row en desktop (1/1)
+//   wide  → ancha: span 2 col (16/9)
+//   tall  → alta: 3/4
+//   sq    → cuadrada: 1/1
+const SHAPES = [
+  // pos 0: destacada (en mobile cae a cuadrada simple vía el reset de span en <lg)
+  'sq lg:col-span-2 lg:row-span-2 lg:aspect-square',
+  'sq',
+  'col-span-2 aspect-video', // wide (16/9)
+  'aspect-[3/4]', // tall
+  'sq',
+  'col-span-2 aspect-video', // wide
+] as const
+
+function shapeFor(i: number): string {
+  return SHAPES[i % SHAPES.length]
+}
 
 export function Gallery({ data }: { data: unknown }) {
   // Parse fail-safe: si el data está roto, devuelve {} y no hay imágenes → se oculta.
@@ -21,31 +47,37 @@ export function Gallery({ data }: { data: unknown }) {
   const images = d.images ?? []
 
   return (
-    <section className="px-4 py-12 md:px-6 md:py-16">
-      <div className="mx-auto max-w-5xl">
-        <h2 className="font-[family-name:var(--font-heading)] text-2xl font-bold leading-tight md:text-3xl">
+    <section className="relative py-[clamp(56px,11cqw,150px)]">
+      {/* Número fantasma decorativo (04) — aria-hidden vive en GhostIndex. */}
+      <GhostIndex n={4} />
+
+      {/* Head con padding lateral (el grid es full-bleed; sólo el head respeta el gutter). */}
+      <div className="mb-[clamp(28px,5cqw,64px)] flex flex-col gap-[0.9em] px-[clamp(20px,5cqw,64px)]">
+        <Kicker>Galería</Kicker>
+        <h2 className="frj-display text-[clamp(30px,6.4cqw,80px)]">
           {d.title ?? 'Galería'}
         </h2>
-        {/* Grid responsive, NO masonry (CLS-safe): 2 col mobile, 3 tablet, 4 desktop. */}
-        <div className="mt-6 grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
-          {images.map((src, i) => (
-            // Contenedor con aspect-square reserva el espacio antes de cargar → sin CLS.
-            <div
-              key={`${src}-${i}`}
-              className="relative aspect-square overflow-hidden rounded-md bg-secondary"
-            >
-              <Image
-                src={src}
-                alt=""
-                fill
-                // Las primeras 4 tiles pueden estar above-the-fold → no lazy; el resto lazy.
-                loading={i < 4 ? undefined : 'lazy'}
-                sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
-                className="object-cover"
-              />
-            </div>
-          ))}
-        </div>
+      </div>
+
+      {/* Grid editorial full-bleed: 2 col mobile, 4 col desktop, gap fino (mock `.frj-grid`).
+          Cada celda lleva aspect-ratio reservado → CLS-safe sin masonry. */}
+      <div className="grid grid-cols-2 gap-[6px] px-[6px] lg:grid-cols-4">
+        {images.map((src, i) => (
+          <div
+            key={`${src}-${i}`}
+            className={`relative overflow-hidden bg-[color:var(--frj-surface-2)] ${shapeFor(i)}`}
+          >
+            <Image
+              src={src}
+              alt=""
+              fill
+              // Las primeras tiles pueden estar above-the-fold → no lazy; el resto lazy (CLS-safe).
+              loading={i < 2 ? undefined : 'lazy'}
+              sizes="(min-width: 1024px) 25vw, 50vw"
+              className="object-cover"
+            />
+          </div>
+        ))}
       </div>
     </section>
   )
