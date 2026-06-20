@@ -44,7 +44,11 @@ export function Cta({
 
       {/* Inner editorial: kicker mono opcional + display gigante + pills, centrado (max 24ch). */}
       <div className="relative z-10 mx-auto flex max-w-[24ch] flex-col items-center gap-[1.1em]">
-        <Kicker className="[&]:text-[color:var(--frj-on-primary)]/80">
+        {/* Eyebrow legible sobre el campo de color (mock): texto en --frj-on-primary pleno
+            (la base .frj-kicker lo pinta muted = oscuro sobre naranja → invisible) y el punto
+            de acento hereda ese color via currentColor (la base lo pinta --primary, que sobre
+            el bookend primary desaparece). Cero hex: solo tokens. */}
+        <Kicker className="[&]:text-[color:var(--frj-on-primary)] [&_.frj-kicker-dot]:bg-[currentColor]">
           Reservá tu turno
         </Kicker>
 
