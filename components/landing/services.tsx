@@ -14,7 +14,15 @@ import type { Service } from '@/lib/types'
 // booking). Headings: <h2> de sección (kicker + display) y <h3> por servicio, sin saltos.
 // Cero hex; tokens / --frj-*; mobile-first 375px.
 
-export function Services({ data, services }: { data: unknown; services: Service[] }) {
+export function Services({
+  data,
+  services,
+  index,
+}: {
+  data: unknown
+  services: Service[]
+  index?: number | string
+}) {
   const d = servicesData.parse(data ?? {})
   if (shouldHideServices(services)) return null
 
@@ -27,8 +35,8 @@ export function Services({ data, services }: { data: unknown; services: Service[
       // sube el encabezado para que se vea más sección. El pb conserva el ritmo inferior.
       className="relative scroll-mt-0 px-[clamp(20px,5cqw,64px)] pb-[clamp(56px,11cqw,150px)] pt-[clamp(40px,7cqw,96px)]"
     >
-      {/* Número fantasma decorativo (02) — aria-hidden vive en GhostIndex. */}
-      <GhostIndex n={2} />
+      {/* Número fantasma secuencial (lo deriva el renderer del orden real). aria-hidden vive en GhostIndex. */}
+      {index != null && <GhostIndex n={index} />}
 
       <div className="mb-[clamp(28px,5cqw,64px)] flex flex-col gap-[0.9em]">
         <Kicker>Servicios</Kicker>

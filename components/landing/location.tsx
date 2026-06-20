@@ -18,8 +18,20 @@ import type { Location as LocationType } from '@/lib/types'
 // --primary sobre --frj-surface + grid-lines hairline --frj-hair + pin de acento --primary),
 // con aspect-ratio reservado (CLS-safe) y aria-hidden en lo decorativo. Si hay map_url, el enlace
 // "Ver en el mapa" se superpone. Cero hex: solo tokens.
+//
+// Polish F8.1 (fidelidad mock): heading editorial "Cerca tuyo." (kicker "Dónde estamos") — no
+// repite la palabra entre kicker y heading. Cuando va combinada con Hours en 2-col (mock 04),
+// el renderer la rinde en variant="column": SOLO el bloque interno, SIN su propia <section> ni
+// número fantasma (eso lo aporta el wrapper combinado). Sola → variant="full" (como hoy).
 
-export function Location({
+// Predicado público para que el renderer decida combinar location+hours sin duplicar lógica.
+export function isLocationVisible(data: unknown, locations: LocationType[]): boolean {
+  return !shouldHideLocation(locationData.parse(data ?? {}), locations)
+}
+
+// Bloque interno (head + 2-col info/mapa). Sin <section> ni padding de sección: reutilizable
+// tanto en full-width como dentro del wrapper combinado.
+function LocationInner({
   data,
   locations,
 }: {
@@ -27,23 +39,18 @@ export function Location({
   locations: LocationType[]
 }) {
   const d = locationData.parse(data ?? {})
-  // shouldHideLocation(data, locations): oculta si no hay map_url NI address visible.
-  if (shouldHideLocation(d, locations)) return null
-
   // Dirección visible solo si el config lo habilita (show_address) y la sede tiene address.
   const showAddress = !!d.show_address
   const visibleLocations = showAddress ? locations.filter((l) => !!l.address) : []
   const multi = visibleLocations.length > 1
 
   return (
-    <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
-      {/* Número fantasma decorativo (05) — aria-hidden vive en GhostIndex. */}
-      <GhostIndex n={5} />
-
-      <div className="mb-[clamp(28px,5cqw,64px)] flex flex-col gap-[0.9em]">
+    <>
+      {/* Heading editorial "Cerca tuyo." con kicker "Dónde estamos" (mock): sin repetir palabra. */}
+      <div className="mb-[clamp(24px,4cqw,48px)] flex flex-col gap-[0.9em]">
         <Kicker>Dónde estamos</Kicker>
-        <h2 className="frj-display text-[clamp(30px,6.4cqw,80px)]">
-          {d.title ?? 'Dónde estamos'}
+        <h2 className="frj-display text-[clamp(26px,5cqw,60px)]">
+          {d.title ?? 'Cerca tuyo.'}
         </h2>
       </div>
 
@@ -94,6 +101,31 @@ export function Location({
           )}
         </div>
       </div>
+    </>
+  )
+}
+
+// Export del bloque interno para el wrapper combinado (renderer).
+export { LocationInner }
+
+export function Location({
+  data,
+  locations,
+  index,
+}: {
+  data: unknown
+  locations: LocationType[]
+  index?: number | string
+}) {
+  const d = locationData.parse(data ?? {})
+  // shouldHideLocation(data, locations): oculta si no hay map_url NI address visible.
+  if (shouldHideLocation(d, locations)) return null
+
+  // Full-width (sola): su propia <section> + número fantasma secuencial (del renderer).
+  return (
+    <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
+      {index != null && <GhostIndex n={index} />}
+      <LocationInner data={data} locations={locations} />
     </section>
   )
 }

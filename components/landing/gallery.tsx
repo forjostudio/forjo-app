@@ -37,7 +37,7 @@ function shapeFor(i: number): string {
   return SHAPES[i % SHAPES.length]
 }
 
-export function Gallery({ data }: { data: unknown }) {
+export function Gallery({ data, index }: { data: unknown; index?: number | string }) {
   // Parse fail-safe: si el data está roto, devuelve {} y no hay imágenes → se oculta.
   const d = galleryData.parse(data ?? {})
   // shouldHideGallery(data): oculta si no hay imágenes.
@@ -48,8 +48,8 @@ export function Gallery({ data }: { data: unknown }) {
 
   return (
     <section className="relative py-[clamp(56px,11cqw,150px)]">
-      {/* Número fantasma decorativo (04) — aria-hidden vive en GhostIndex. */}
-      <GhostIndex n={4} />
+      {/* Número fantasma secuencial (lo deriva el renderer del orden real). aria-hidden vive en GhostIndex. */}
+      {index != null && <GhostIndex n={index} />}
 
       {/* Head con padding lateral (el grid es full-bleed; sólo el head respeta el gutter). */}
       <div className="mb-[clamp(28px,5cqw,64px)] flex flex-col gap-[0.9em] px-[clamp(20px,5cqw,64px)]">

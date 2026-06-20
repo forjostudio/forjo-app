@@ -23,7 +23,7 @@ function splitLead(title: string): { head: string; tail: string } {
   return { head: trimmed.slice(0, idx + 1), tail: trimmed.slice(idx + 1) }
 }
 
-export function About({ data }: { data: unknown }) {
+export function About({ data, index }: { data: unknown; index?: number | string }) {
   // Parse fail-safe: si el data está roto, devuelve {} y caemos en los fallbacks.
   const d = aboutData.parse(data ?? {})
   // shouldHideAbout(data): oculta si no hay cuerpo ni imagen.
@@ -34,8 +34,8 @@ export function About({ data }: { data: unknown }) {
 
   return (
     <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
-      {/* Número fantasma decorativo (01) — aria-hidden vive en GhostIndex. */}
-      <GhostIndex n={1} />
+      {/* Número fantasma secuencial (lo deriva el renderer del orden real). aria-hidden vive en GhostIndex. */}
+      {index != null && <GhostIndex n={index} />}
 
       <div className="grid grid-cols-1 items-center gap-[clamp(28px,5cqw,56px)] md:grid-cols-[1.25fr_0.9fr] md:gap-[clamp(48px,7cqw,96px)]">
         {/* Columna editorial: kicker + lead (h2 display con realce primary) + body muted. */}
