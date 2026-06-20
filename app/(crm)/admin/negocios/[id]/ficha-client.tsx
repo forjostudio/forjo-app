@@ -24,7 +24,7 @@ import { StatusBadge } from '@/components/crm/status-badge'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { ExtendTrialDialog } from '@/components/crm/extend-trial-dialog'
 import { AddonToggle } from '@/components/crm/addon-toggle'
-import { changePlan, suspendBusiness, reactivateBusiness } from '@/app/(crm)/admin/_actions'
+import { changePlan, suspendBusiness, reactivateBusiness, startImpersonation } from '@/app/(crm)/admin/_actions'
 
 export type PlanKey = 'basic' | 'studio' | 'pro'
 
@@ -75,6 +75,7 @@ export function FichaClient({ data }: { data: FichaData }) {
   const [reactivateOpen, setReactivateOpen] = React.useState(false)
   const [extendOpen, setExtendOpen] = React.useState(false)
   const [grantOpen, setGrantOpen] = React.useState(false)
+  const [verOpen, setVerOpen] = React.useState(false)
   const [selectedPlan, setSelectedPlan] = React.useState<PlanKey>(DEFAULT_TARGET[data.plan])
 
   const isSuspended = data.plan_status === 'suspended'
@@ -256,6 +257,17 @@ export function FichaClient({ data }: { data: FichaData }) {
               </p>
             )}
 
+            {/* Ver como cliente — soporte read-only. NO se gatea por estado (D-11): el soporte se
+                necesita justo cuando hay un problema (ej. suspendido por error). */}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => setVerOpen(true)}
+            >
+              Ver como cliente
+            </Button>
+
             <div className="space-y-1.5 pt-2">
               <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide" style={{ color: 'var(--crm-danger)' }}>
                 Zona sensible
@@ -331,6 +343,25 @@ export function FichaClient({ data }: { data: FichaData }) {
         confirmLabel="Reactivar negocio"
         onConfirm={async () => {
           await reactivateBusiness({ businessId: data.id })
+        }}
+      />
+
+      {/* Ver como cliente (D-07/D-10/D-14): type-to-confirm "VER" + motivo obligatorio min 10
+          (minReasonLength alinea la UI con el min(10) server-side → feedback inline, no toast
+          genérico) + disclaimer legal. startImpersonation audita y redirige a /ver desde el server,
+          así que onConfirm no navega manualmente. */}
+      <ConfirmDialog
+        open={verOpen}
+        onOpenChange={setVerOpen}
+        title="Ver como cliente"
+        description="Acceso de soporte en modo solo lectura. Queda auditado con tu identidad y el motivo. Uso responsable de datos de terceros."
+        confirmWord="VER"
+        requireReason
+        minReasonLength={10}
+        risk="alto"
+        confirmLabel="Ver como cliente"
+        onConfirm={async (reason) => {
+          await startImpersonation({ businessId: data.id, reason: reason! })
         }}
       />
 

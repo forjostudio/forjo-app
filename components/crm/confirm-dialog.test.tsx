@@ -66,6 +66,33 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     expect(reasonOk.reasonHelper).toBeUndefined()
   })
 
+  // Test 4b (#3 minReasonLength aditivo): sin la prop el comportamiento no cambia (motivo 'a'
+  // habilita); con minReasonLength=10 un motivo de 3 chars NO habilita y de 10 sí, con helper inline.
+  it('minReasonLength: aditivo — sin prop "a" habilita; con 10 exige >=10 chars con helper', () => {
+    // sin la prop: comportamiento idéntico al actual (no vacío basta).
+    const sinProp = computeConfirmState({ confirmWord: 'VER', requireReason: true, typed: 'VER', reason: 'a', loading: false })
+    expect(sinProp.reasonOk).toBe(true)
+    expect(sinProp.canConfirm).toBe(true)
+    expect(sinProp.reasonHelper).toBeUndefined()
+
+    // con minReasonLength=10: 3 chars NO habilita y muestra el helper de largo mínimo.
+    const corto = computeConfirmState({ confirmWord: 'VER', requireReason: true, minReasonLength: 10, typed: 'VER', reason: 'abc', loading: false })
+    expect(corto.reasonOk).toBe(false)
+    expect(corto.canConfirm).toBe(false)
+    expect(corto.reasonHelper).toBe('El motivo debe tener al menos 10 caracteres')
+
+    // motivo vacío con minReasonLength=10 → sigue el helper de "obligatorio" (no el de largo).
+    const vacio = computeConfirmState({ confirmWord: 'VER', requireReason: true, minReasonLength: 10, typed: 'VER', reason: '   ', loading: false })
+    expect(vacio.reasonOk).toBe(false)
+    expect(vacio.reasonHelper).toBe('El motivo es obligatorio')
+
+    // 10 chars exactos → habilita y sin helper.
+    const ok = computeConfirmState({ confirmWord: 'VER', requireReason: true, minReasonLength: 10, typed: 'VER', reason: '1234567890', loading: false })
+    expect(ok.reasonOk).toBe(true)
+    expect(ok.canConfirm).toBe(true)
+    expect(ok.reasonHelper).toBeUndefined()
+  })
+
   // Test 5 (loading): durante loading no se puede confirmar (anti doble-submit) y el guard
   // sólo dispara onConfirm una vez.
   it('loading: canConfirm false durante loading; el submit guard previene doble disparo', async () => {

@@ -47,6 +47,13 @@ export interface ConfirmDialogProps {
   confirmWord?: string
   /** exige un motivo no vacío (textarea) además de la palabra. */
   requireReason?: boolean
+  /**
+   * Largo mínimo del motivo para habilitar confirmar (default 1 = el "no vacío" actual). Opcional y
+   * aditivo: las llamadas que no la pasan conservan el comportamiento previo. Alinea el gating del
+   * dialog con un mínimo server-side (impersonación: min 10) → feedback inline en vez del toast
+   * genérico de error. NO es la garantía: el mínimo real vive server-side (Pitfall 5).
+   */
+  minReasonLength?: number
   risk: Risk
   confirmLabel: string
   /** destructive ⇒ botón confirmar con fondo --crm-danger (no --destructive). */
@@ -59,6 +66,8 @@ export interface ConfirmDialogProps {
 export interface ConfirmStateInput {
   confirmWord?: string
   requireReason?: boolean
+  /** Largo mínimo del motivo (default 1 = "no vacío"). Aditivo, ver ConfirmDialogProps. */
+  minReasonLength?: number
   typed: string
   reason: string
   loading: boolean
@@ -81,19 +90,29 @@ export interface ConfirmState {
 export function computeConfirmState({
   confirmWord,
   requireReason,
+  minReasonLength,
   typed,
   reason,
   loading,
 }: ConfirmStateInput): ConfirmState {
   // Comparación EXACTA, case-sensitive (UI-SPEC §"Word input").
   const wordOk = !confirmWord || typed === confirmWord
-  const reasonOk = !requireReason || reason.trim().length > 0
+  // minReasonLength es aditivo: default 1 = el "no vacío" histórico (quien no pasa la prop no cambia).
+  const minLen = minReasonLength ?? 1
+  const reasonLen = reason.trim().length
+  const reasonOk = !requireReason || reasonLen >= minLen
   const canConfirm = wordOk && reasonOk && !loading
 
   // Mismatch sólo si hay palabra requerida y el usuario ya escribió algo distinto.
   const wordMismatch = !!confirmWord && typed.length > 0 && typed !== confirmWord
   const wordHelper = wordMismatch ? `Escribí "${confirmWord}" para confirmar` : undefined
-  const reasonHelper = requireReason && reason.trim().length === 0 ? 'El motivo es obligatorio' : undefined
+  // Motivo vacío → "obligatorio"; no vacío pero por debajo del mínimo → helper de largo mínimo.
+  const reasonHelper =
+    requireReason && reasonLen === 0
+      ? 'El motivo es obligatorio'
+      : requireReason && reasonLen < minLen
+        ? `El motivo debe tener al menos ${minLen} caracteres`
+        : undefined
 
   return { wordOk, reasonOk, wordMismatch, canConfirm, wordHelper, reasonHelper }
 }
@@ -145,6 +164,7 @@ export function ConfirmDialog({
   description,
   confirmWord,
   requireReason,
+  minReasonLength,
   risk,
   confirmLabel,
   destructive,
@@ -159,7 +179,7 @@ export function ConfirmDialog({
   const wordHelpId = React.useId()
   const reasonHelpId = React.useId()
 
-  const state = computeConfirmState({ confirmWord, requireReason, typed, reason, loading })
+  const state = computeConfirmState({ confirmWord, requireReason, minReasonLength, typed, reason, loading })
 
   // Reset al cerrar (vía onOpenChange) — pero bloquear el cierre durante loading.
   const handleOpenChange = React.useCallback(
