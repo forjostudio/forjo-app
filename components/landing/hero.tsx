@@ -67,8 +67,11 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
         <NoiseField className="-z-10" />
       )}
 
-      {/* Marca arriba a la izquierda (el "ESTUDIO TESTEADO" del mock) + CTA top-right. */}
-      <div className="relative z-10 flex items-center justify-between px-[clamp(20px,5cqw,64px)] pt-[clamp(20px,5cqw,48px)]">
+      {/* Topbar: marca izq + CTA der, ANCLADO arriba de todo (mock `.frj-nav`:
+          position:absolute; top:0). Antes era un flex sibling y el justify-end de la
+          <section> lo empujaba al medio/fondo; ahora vive fuera del flujo, pegado al top,
+          mientras el bloque editorial sigue anclado abajo. */}
+      <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-[clamp(20px,5cqw,64px)] pt-[clamp(18px,3cqw,34px)]">
         <span
           className={`font-[family-name:var(--font-heading)] text-lg font-extrabold tracking-tight ${
             hasImage ? 'text-white' : 'text-[color:var(--frj-on-primary)]'
