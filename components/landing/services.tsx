@@ -1,6 +1,6 @@
 import { servicesData } from '@/lib/landing/schema'
 import { shouldHideServices } from '@/lib/landing/derive'
-import { Kicker, GhostIndex } from '@/components/landing/_premium'
+import { Kicker, GhostIndex, PillButton } from '@/components/landing/_premium'
 import type { Service } from '@/lib/types'
 
 // ── Sección Services (RSC) ──────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ export function Services({ data, services }: { data: unknown; services: Service[
   if (shouldHideServices(services)) return null
 
   return (
-    <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
+    <section id="servicios" className="relative scroll-mt-4 px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
       {/* Número fantasma decorativo (02) — aria-hidden vive en GhostIndex. */}
       <GhostIndex n={2} />
 
@@ -68,6 +68,14 @@ export function Services({ data, services }: { data: unknown; services: Service[
           </li>
         ))}
       </ul>
+
+      {/* Cierre del flujo ver-servicios → reservar (pedido del usuario, fidelidad con el mock):
+          pill primario del template que ancla a la sección de booking. */}
+      <div className="mt-[clamp(28px,5cqw,56px)] flex">
+        <PillButton href="#reservar" variant="primary">
+          Reservar turno
+        </PillButton>
+      </div>
     </section>
   )
 }

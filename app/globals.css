@@ -340,6 +340,20 @@
 .frj-btn-on-photo .frj-btn-circ {
   background: color-mix(in oklab, var(--foreground) 16%, transparent);
 }
+/* ghost-photo: outline CLARO para fondos oscuros (hero secundario sobre primary/scrim) —
+   el ghost normal usa --foreground (oscuro) y se pierde en el hero. Hex-free via on-primary. */
+.frj-btn-ghost-photo {
+  background: transparent;
+  color: var(--frj-on-primary);
+  border-color: color-mix(in oklab, var(--frj-on-primary) 45%, transparent);
+}
+.frj-btn-ghost-photo:hover {
+  box-shadow: none;
+  border-color: var(--frj-on-primary);
+}
+.frj-btn-ghost-photo .frj-btn-circ {
+  background: color-mix(in oklab, var(--frj-on-primary) 20%, transparent);
+}
 /* respetar reduced-motion: sin animar transform */
 @media (prefers-reduced-motion: reduce) {
   .frj-btn { transition: none; }

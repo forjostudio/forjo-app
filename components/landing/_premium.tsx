@@ -112,7 +112,7 @@ export function PillButton({
 }: {
   href: string
   children: ReactNode
-  variant?: 'primary' | 'ghost' | 'on-photo'
+  variant?: 'primary' | 'ghost' | 'on-photo' | 'ghost-photo'
   external?: boolean
   className?: string
 }) {
@@ -121,7 +121,9 @@ export function PillButton({
       ? 'frj-btn-ghost'
       : variant === 'on-photo'
         ? 'frj-btn-on-photo'
-        : ''
+        : variant === 'ghost-photo'
+          ? 'frj-btn-ghost-photo'
+          : ''
   // Externos: target nueva pestaña + rel seguro (noopener evita window.opener hijack).
   const externalProps = external
     ? { target: '_blank', rel: 'noopener noreferrer' }

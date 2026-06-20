@@ -115,6 +115,11 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
           <PillButton href="#reservar" variant={hasImage ? 'on-photo' : 'primary'}>
             {ctaLabel}
           </PillButton>
+          {/* Secundario del mock: scrollea a la sección Servicios (#servicios). Outline claro
+              (ghost-photo) para contraste sobre el hero oscuro/foto. */}
+          <PillButton href="#servicios" variant="ghost-photo">
+            Ver servicios
+          </PillButton>
         </div>
       </div>
 
