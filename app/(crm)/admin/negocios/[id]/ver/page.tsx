@@ -3,6 +3,8 @@ import { requireAdmin } from '@/lib/admin-guard'
 import { logAudit } from '@/lib/audit'
 import { loadImpersonationData } from '@/lib/impersonation'
 import { PaletteScript } from '@/components/palette-script'
+import { ImpersonationBanner } from '@/components/crm/impersonation-banner'
+import { ImpersonationView } from './impersonation-view'
 
 /**
  * Sub-página de impersonación read-only (/admin/negocios/[id]/ver) — IMP-01/IMP-02/IMP-03.
@@ -60,9 +62,12 @@ export default async function VerPage({ params }: { params: Promise<{ id: string
     <>
       <PaletteScript palette={business.palette} theme={business.theme} font={business.font} />
       <div className="impersonation-view -mx-4 -my-6 min-h-screen bg-background text-foreground lg:-mx-6">
+        {/* Banner fijo "Estás viendo como X · solo lectura" + Salir (D-12). Es FEEDBACK, no la
+            garantía: la garantía read-only es server-side por ausencia de write paths. */}
+        <ImpersonationBanner businessName={business.name} planStatus={business.plan_status} />
         <div className="p-4 sm:p-6 lg:p-8">
-          <h1 className="text-2xl font-semibold">{business.name}</h1>
-          {/* Plan 03-02: ImpersonationBanner + renderers read-only por sección */}
+          {/* Renderers read-only por sección, alimentados por la data ya cargada server-side. */}
+          <ImpersonationView data={data} />
         </div>
       </div>
     </>
