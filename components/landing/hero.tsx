@@ -32,10 +32,11 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
   return (
     <section
       className="relative flex w-full flex-col justify-end overflow-hidden"
-      // hero full-bleed: ~85svh (con fallback vh para browsers sin svh). El overflow:hidden
+      // hero full-screen: 100svh (llena el viewport como el mock hero-fullscreen; svh evita el
+      // salto de la barra de URL en mobile y que asome la sección de abajo). El overflow:hidden
       // queda EN ESTA <section> (campo decorativo del hero), NO en el ancestro .frj-site del
       // booking — no afecta a <section id="reservar"> (D81-01).
-      style={{ minHeight: 'min(85svh, 900px)' }}
+      style={{ minHeight: '100svh' }}
     >
       {hasImage ? (
         <>
