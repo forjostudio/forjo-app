@@ -19,7 +19,14 @@ export function Services({ data, services }: { data: unknown; services: Service[
   if (shouldHideServices(services)) return null
 
   return (
-    <section id="servicios" className="relative scroll-mt-4 px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
+    <section
+      id="servicios"
+      // Anchor-land prolijo (pedido del usuario): al navegar a #servicios el número
+      // fantasma/encabezado deben quedar pegados al tope del viewport. scroll-mt-0 ancla
+      // el box-top de la section al borde superior y un pt menor (vs el py uniforme previo)
+      // sube el encabezado para que se vea más sección. El pb conserva el ritmo inferior.
+      className="relative scroll-mt-0 px-[clamp(20px,5cqw,64px)] pb-[clamp(56px,11cqw,150px)] pt-[clamp(40px,7cqw,96px)]"
+    >
       {/* Número fantasma decorativo (02) — aria-hidden vive en GhostIndex. */}
       <GhostIndex n={2} />
 
