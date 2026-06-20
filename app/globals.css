@@ -186,6 +186,37 @@
   h1, h2, h3 { font-family: var(--font-heading); letter-spacing: -0.02em; }
 }
 
+/* =========================================================================
+   IMPERSONATION VIEW (Phase 3 / D-12) — escape del shell dark del CRM.
+   El layout (crm) envuelve TODO en `.dark crm-shell`, pero la sub-página
+   /admin/negocios/[id]/ver debe verse con el TEMA DEL CLIENTE (ver lo que ve
+   el cliente, soporte visual), NO con el chrome dark del super-admin. Este
+   contenedor RE-DECLARA los neutrales LIGHT (los mismos valores de :root) para
+   neutralizar los neutrales dark heredados de `.dark`; el ACENTO sigue saliendo
+   del data-palette del negocio que PaletteScript ya setea en <html>. Scopeado a
+   .impersonation-view: NO toca :root, .dark, .crm-shell ni el dashboard real.
+   ========================================================================= */
+.impersonation-view {
+  --background: #f3ead8;
+  --foreground: #1a1714;
+  --card: #fbf3e3;
+  --card-foreground: #1a1714;
+  --popover: #fbf3e3;
+  --popover-foreground: #1a1714;
+  --secondary: #e9ddc4;
+  --secondary-foreground: #1a1714;
+  --muted: #ece0c8;
+  --muted-foreground: #6b6253;
+  --border: #d9ceb4;
+  --input: #d9ceb4;
+  --destructive: #b23a26;
+  --sidebar: #efe3cd;
+  --sidebar-foreground: #1a1714;
+  --sidebar-border: #ddd1b7;
+  --sidebar-accent: #e3d7be;
+  --sidebar-accent-foreground: #1a1714;
+}
+
 /* Scroll suave a anclas del landing (#reservar desde el CTA del Hero). CSS puro, sin JS
    (D7-11): el <a href="#reservar"> funciona aunque el bundle no haya hidratado. Solo se
    activa si el usuario NO pidió reduced-motion — fuera de este media query el scroll queda
