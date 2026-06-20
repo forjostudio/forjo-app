@@ -43,3 +43,37 @@ export async function getBusinessSecrets(businessId: string): Promise<BusinessSe
 
   return secrets ? { ...EMPTY, ...(secrets as Partial<BusinessSecrets>) } : EMPTY
 }
+
+// ── Presencia de integraciones (booleanos, sin valores) ──────────────────────────────────
+// Estado conectado/desconectado de cada integración del negocio, SIN exponer el valor crudo de
+// ningún token/secreto. La impersonación read-only (Phase 3) necesita mostrar "conectado/
+// desconectado" en la sección config (#4: antes esa sección no tenía fuente de datos) PERO nunca
+// el valor del secreto: getBusinessSecrets (arriba) sigue siendo la única que devuelve valores y
+// NO se llama bajo impersonación. Acotado por business_id; fila ausente → todo false.
+export interface BusinessIntegrationStatus {
+  mercadopago: boolean
+  email: boolean
+  recaptcha: boolean
+  google: boolean
+}
+
+export async function getBusinessIntegrationStatus(
+  businessId: string,
+): Promise<BusinessIntegrationStatus> {
+  const supabase = createAdminClient()
+
+  // Solo las columnas necesarias para derivar presencia. El valor crudo se descarta tras el
+  // mapeo a `!= null` — jamás se retorna el string del token/secreto.
+  const { data } = await supabase
+    .from('business_secrets')
+    .select('mp_access_token, resend_api_key, recaptcha_secret_key, google_refresh_token')
+    .eq('business_id', businessId)
+    .maybeSingle()
+
+  return {
+    mercadopago: data?.mp_access_token != null,
+    email: data?.resend_api_key != null,
+    recaptcha: data?.recaptcha_secret_key != null,
+    google: data?.google_refresh_token != null,
+  }
+}
