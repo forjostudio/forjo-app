@@ -249,6 +249,15 @@
   border-radius: 50%;
   flex: none;
 }
+/* Kicker sobre fondo de color pleno (CTA bookend): texto+punto en on-primary legible.
+   Va SIN @layer (igual que .frj-kicker) y después en el archivo → gana por orden a la base
+   y a las utilidades de Tailwind v4 (que viven en @layer utilities, sub-prioridad a lo no-layered). */
+.frj-kicker-on-primary {
+  color: var(--frj-on-primary);
+}
+.frj-kicker-on-primary .frj-kicker-dot {
+  background: currentColor;
+}
 
 /* GhostIndex — número fantasma decorativo en la esquina de una sección */
 .frj-bigindex {
