@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { requireAdmin } from '@/lib/admin-guard'
 import { logAudit } from '@/lib/audit'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -11,6 +12,7 @@ import {
   extendTrialSchema,
   toggleAddonSchema,
   updatePlanPriceSchema,
+  startImpersonationSchema,
 } from './_actions.schemas'
 
 // ── Server Actions del CRM super-admin (Phase 2) ──────────────────────────────────────────────
@@ -257,4 +259,34 @@ export async function updatePlanPrice(input: unknown): Promise<void> {
 
   revalidatePath('/admin/planes')
   revalidatePath('/admin')
+}
+
+// ── startImpersonation ─────────────────────────────────────────────────────────────────────────
+// ENTRADA a la impersonación read-only (Phase 3, IMP-02). A DIFERENCIA de las 6 actions de arriba,
+// esta NO muta `businesses`: solo AUDITA el acceso y NAVEGA a la sub-página. La garantía read-only
+// (D-02) se logra por AUSENCIA de write paths — esta es la única action del árbol de impersonación
+// y no hace admin.from(...).update/insert/delete ni revalidatePath. No declara createAdminClient.
+//
+// Orden obligatorio: (1) requireAdmin() PRIMERA línea (Pitfall 2: endpoint POST invocable directo,
+// el ConfirmDialog "VER" es solo refuerzo); (2) parse del input no confiable — D-07: motivo min 10
+// validado server-side; (3) logAudit con action='user.impersonate'/risk='alto'/reason (D-08, el
+// string EXACTO lo mapea auditoria-client.tsx); cada re-entrada genera fila nueva (D-09).
+//
+// El redirect() va FUERA de try/catch: lanza NEXT_REDIRECT (excepción de control). D-04: impersonar
+// = navegar a la sub-página, sin estado global / cookie de "modo impersonación".
+export async function startImpersonation(input: unknown): Promise<void> {
+  const actor = await requireAdmin()
+  const { businessId, reason } = startImpersonationSchema.parse(input)
+
+  await logAudit({
+    actorId: actor.id,
+    action: 'user.impersonate',
+    targetType: 'business',
+    targetId: businessId,
+    businessId,
+    risk: 'alto',
+    reason,
+  })
+
+  redirect(`/admin/negocios/${businessId}/ver`)
 }

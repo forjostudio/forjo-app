@@ -5,6 +5,7 @@ import {
   extendTrialSchema,
   toggleAddonSchema,
   updatePlanPriceSchema,
+  startImpersonationSchema,
   VALID_PLANS,
   VALID_STATUSES,
   ADDON_KEYS,
@@ -101,5 +102,27 @@ describe('updatePlanPriceSchema', () => {
   })
   it('rechaza planKey fuera del enum', () => {
     expect(updatePlanPriceSchema.safeParse({ planKey: 'enterprise', priceArs: 1000 }).success).toBe(false)
+  })
+})
+
+// ── startImpersonationSchema ────────────────────────────────────────────────────────────────
+// D-07: motivo obligatorio min 10 chars tras trim, validado server-side (Pitfall 5).
+describe('startImpersonationSchema', () => {
+  it('acepta businessId uuid + reason >= 10', () => {
+    expect(
+      startImpersonationSchema.safeParse({ businessId: UUID, reason: 'soporte: revisar config' }).success
+    ).toBe(true)
+  })
+  it('acepta reason de exactamente 10 chars no-blancos (borde)', () => {
+    expect(startImpersonationSchema.safeParse({ businessId: UUID, reason: 'abcdefghij' }).success).toBe(true)
+  })
+  it('rechaza businessId no-uuid', () => {
+    expect(startImpersonationSchema.safeParse({ businessId: 'abc', reason: 'motivo valido' }).success).toBe(false)
+  })
+  it('rechaza reason de menos de 10 chars', () => {
+    expect(startImpersonationSchema.safeParse({ businessId: UUID, reason: 'a' }).success).toBe(false)
+  })
+  it('rechaza reason que tras trim queda < 10 (espacios de borde no cuentan)', () => {
+    expect(startImpersonationSchema.safeParse({ businessId: UUID, reason: '   corto  ' }).success).toBe(false)
   })
 })

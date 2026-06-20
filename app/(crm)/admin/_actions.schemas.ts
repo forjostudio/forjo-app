@@ -58,9 +58,19 @@ export const updatePlanPriceSchema = z.object({
   priceArs: z.int().min(0),
 })
 
+// ── startImpersonation ───────────────────────────────────────────────────────────────────────
+// D-07: motivo OBLIGATORIO con mínimo de caracteres, validado SERVER-SIDE (Pitfall 5: el dialog
+// es refuerzo, no la garantía — un POST directo con motivo vacío o 'a' debe ser rechazado antes
+// de auditar). `.trim()` normaliza espacios de borde: un motivo de espacios no llega al mínimo.
+export const startImpersonationSchema = z.object({
+  businessId,
+  reason: z.string().trim().min(10),
+})
+
 // Tipos inferidos para tipar el input parseado en _actions.ts.
 export type ChangePlanInput = z.infer<typeof changePlanSchema>
 export type SetStatusInput = z.infer<typeof setStatusSchema>
 export type ExtendTrialInput = z.infer<typeof extendTrialSchema>
 export type ToggleAddonInput = z.infer<typeof toggleAddonSchema>
 export type UpdatePlanPriceInput = z.infer<typeof updatePlanPriceSchema>
+export type StartImpersonationInput = z.infer<typeof startImpersonationSchema>
