@@ -15,6 +15,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ChevronLeft, MessageCircle, Mail } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -70,6 +71,7 @@ function billingState(planStatus: string, subEndsAt: string | null): { label: st
 }
 
 export function FichaClient({ data }: { data: FichaData }) {
+  const router = useRouter()
   const [changePlanOpen, setChangePlanOpen] = React.useState(false)
   const [suspendOpen, setSuspendOpen] = React.useState(false)
   const [reactivateOpen, setReactivateOpen] = React.useState(false)
@@ -348,8 +350,11 @@ export function FichaClient({ data }: { data: FichaData }) {
 
       {/* Ver como cliente (D-07/D-10/D-14): type-to-confirm "VER" + motivo obligatorio min 10
           (minReasonLength alinea la UI con el min(10) server-side → feedback inline, no toast
-          genérico) + disclaimer legal. startImpersonation audita y redirige a /ver desde el server,
-          así que onConfirm no navega manualmente. */}
+          genérico) + disclaimer legal. startImpersonation SOLO audita y resuelve limpio (ya no
+          redirige desde el server: el NEXT_REDIRECT atravesaba el try/catch del dialog y disparaba
+          su toast de error espurio). La navegación a /ver la hace el cliente con router.push tras
+          resolver la action (D-04: navegar sigue siendo navegar, ahora client-side). El toast
+          genérico solo aparece ahora ante un fallo REAL (requireAdmin/zod). */}
       <ConfirmDialog
         open={verOpen}
         onOpenChange={setVerOpen}
@@ -362,6 +367,7 @@ export function FichaClient({ data }: { data: FichaData }) {
         confirmLabel="Ver como cliente"
         onConfirm={async (reason) => {
           await startImpersonation({ businessId: data.id, reason: reason! })
+          router.push(`/admin/negocios/${data.id}/ver`)
         }}
       />
 

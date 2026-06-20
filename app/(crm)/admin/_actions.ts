@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { requireAdmin } from '@/lib/admin-guard'
 import { logAudit } from '@/lib/audit'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -263,17 +262,20 @@ export async function updatePlanPrice(input: unknown): Promise<void> {
 
 // ── startImpersonation ─────────────────────────────────────────────────────────────────────────
 // ENTRADA a la impersonación read-only (Phase 3, IMP-02). A DIFERENCIA de las 6 actions de arriba,
-// esta NO muta `businesses`: solo AUDITA el acceso y NAVEGA a la sub-página. La garantía read-only
-// (D-02) se logra por AUSENCIA de write paths — esta es la única action del árbol de impersonación
-// y no hace admin.from(...).update/insert/delete ni revalidatePath. No declara createAdminClient.
+// esta NO muta `businesses`: solo AUDITA el acceso. La garantía read-only (D-02) se logra por
+// AUSENCIA de write paths — esta es la única action del árbol de impersonación y no hace
+// admin.from(...).update/insert/delete ni revalidatePath. No declara createAdminClient.
 //
 // Orden obligatorio: (1) requireAdmin() PRIMERA línea (Pitfall 2: endpoint POST invocable directo,
 // el ConfirmDialog "VER" es solo refuerzo); (2) parse del input no confiable — D-07: motivo min 10
 // validado server-side; (3) logAudit con action='user.impersonate'/risk='alto'/reason (D-08, el
 // string EXACTO lo mapea auditoria-client.tsx); cada re-entrada genera fila nueva (D-09).
 //
-// El redirect() va FUERA de try/catch: lanza NEXT_REDIRECT (excepción de control). D-04: impersonar
-// = navegar a la sub-página, sin estado global / cookie de "modo impersonación".
+// NO redirige desde el server: redirect() lanza NEXT_REDIRECT (excepción de control), que al
+// atravesar el try/catch del ConfirmDialog dispara su toast de error genérico aunque la navegación
+// igual ocurra. La action resuelve limpio (Promise<void>) y la NAVEGACIÓN la hace el cliente con
+// router.push (ficha-client.tsx). D-04 se preserva: impersonar = navegar a la sub-página, sin
+// estado global / cookie de "modo impersonación"; solo cambia que el navegar es client-side.
 export async function startImpersonation(input: unknown): Promise<void> {
   const actor = await requireAdmin()
   const { businessId, reason } = startImpersonationSchema.parse(input)
@@ -287,6 +289,4 @@ export async function startImpersonation(input: unknown): Promise<void> {
     risk: 'alto',
     reason,
   })
-
-  redirect(`/admin/negocios/${businessId}/ver`)
 }
