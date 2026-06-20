@@ -1,7 +1,7 @@
 import { heroData } from '@/lib/landing/schema'
 import { groupHoursByDay } from '@/lib/landing/derive'
 import type { VerticalKey } from '@/lib/verticals'
-import type { Business, Location, TimeBlock } from '@/lib/types'
+import type { Location, TimeBlock } from '@/lib/types'
 
 // ── Lógica pura de SEO/metadata de la landing (Phase 9) ──────────────────────────
 // Por qué este módulo: igual que derive.ts/theme.ts, casi todo el trabajo de SEO es
