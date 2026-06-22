@@ -108,6 +108,13 @@ export function PipelineClient({
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
 
+  // Deal "vivo" para el TagManagerDialog: NO el snapshot de tagDeal (congelado en el click), sino la fila
+  // re-sincronizada de `deals`. Tras quitar/asignar una tag, onChanged→router.refresh() re-sincroniza `deals`
+  // con tagIds frescos; si el diálogo leyera tagDeal, las "Asignadas" quedarían stale (la tag quitada seguiría
+  // figurando y no pasaría a "Asignar existente"). Fallback al snapshot por si el deal salió del board
+  // (won/lost) mientras el diálogo está abierto.
+  const activeTagDeal = tagDeal ? deals.find((d) => d.id === tagDeal.id) ?? tagDeal : null
+
   // Filtro de tags OR (D-09): espejar negocios-client (useMemo + matchedIds).
   const filtered = useMemo(() => {
     const matchedIds = new Set(filterByTags(deals.map((d) => ({ id: d.id, tagIds: d.tagIds })), selectedTagIds).map((r) => r.id))
@@ -397,10 +404,10 @@ export function PipelineClient({
         open={tagDeal !== null}
         onOpenChange={(o) => !o && setTagDeal(null)}
         entityType="lead"
-        entityId={tagDeal?.leadId ?? ''}
+        entityId={activeTagDeal?.leadId ?? ''}
         assignedTags={
-          tagDeal
-            ? tagDeal.tagIds.map((id) => tagById.get(id)).filter((t): t is PipelineTag => Boolean(t))
+          activeTagDeal
+            ? activeTagDeal.tagIds.map((id) => tagById.get(id)).filter((t): t is PipelineTag => Boolean(t))
             : []
         }
         catalogTags={catalogTags}
