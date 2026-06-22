@@ -41,8 +41,10 @@ type EntityTagSelect = { tag_id: string; entity_type: string; entity_id: string 
 export default async function PipelinePage() {
   const admin = createAdminClient()
 
-  // Deals open + catálogo de tags + asignaciones, en paralelo (volumen bajo, un operador).
-  const [dealsRes, tagsRes, entityTagsRes] = await Promise.all([
+  // Deals open + catálogo de tags + asignaciones + agregado won, en paralelo (volumen bajo, un operador).
+  // wonRes es una query AGREGADA (solo value_ars de los deals 'won'): SOLO el total $ cruza al cliente,
+  // las filas/columnas won NO entran al tablero (DECIDIDO POR EL USUARIO; T-04-10: Information Disclosure).
+  const [dealsRes, tagsRes, entityTagsRes, wonRes] = await Promise.all([
     admin
       .from('deals')
       .select('id, lead_id, title, value_ars, stage, status, business_id, expected_close_date')
@@ -50,12 +52,18 @@ export default async function PipelinePage() {
       .order('created_at', { ascending: false }),
     admin.from('tags').select('id, label, color').order('label', { ascending: true }),
     admin.from('entity_tags').select('tag_id, entity_type, entity_id'),
+    admin.from('deals').select('value_ars').eq('status', 'won'),
   ])
 
   const loadError = Boolean(dealsRes.error || tagsRes.error || entityTagsRes.error)
   if (dealsRes.error) console.error('[crm/pipeline] deals read error:', dealsRes.error.message)
   if (tagsRes.error) console.error('[crm/pipeline] tags read error:', tagsRes.error.message)
   if (entityTagsRes.error) console.error('[crm/pipeline] entity_tags read error:', entityTagsRes.error.message)
+  if (wonRes.error) console.error('[crm/pipeline] won read error:', wonRes.error.message)
+
+  // $ ganados real, calculado server-side (gap test 5). Suma value_ars de los deals 'won'.
+  const wonRows = (wonRes.data ?? []) as { value_ars: number | null }[]
+  const wonTotal = wonRows.reduce((acc, r) => acc + (r.value_ars ?? 0), 0)
 
   const dealRows: DealSelect[] = (dealsRes.data ?? []) as DealSelect[]
   const tagRows: TagSelect[] = (tagsRes.data ?? []) as TagSelect[]
@@ -86,7 +94,9 @@ export default async function PipelinePage() {
     return {
       id: d.id,
       leadId: d.lead_id,
-      contactName: lead?.name ?? d.title ?? 'Sin nombre',
+      // DECIDIDO POR EL USUARIO (gap 4b): el deal.title (nombre con que se creó el deal) tiene
+      // prioridad sobre el lead.name viejo.
+      contactName: d.title ?? lead?.name ?? 'Sin nombre',
       contactEmail: lead?.email ?? null,
       valueArs: d.value_ars,
       stage: d.stage,
@@ -99,5 +109,5 @@ export default async function PipelinePage() {
 
   const tags: PipelineTag[] = tagRows.map((t) => ({ id: t.id, label: t.label, color: t.color }))
 
-  return <PipelineClient deals={deals} tags={tags} loadError={loadError} />
+  return <PipelineClient deals={deals} tags={tags} wonTotal={wonTotal} loadError={loadError} />
 }
