@@ -107,7 +107,12 @@ export default async function PipelinePage() {
     }
   })
 
+  // El mismo catálogo de tags sirve para DOS usos en el cliente: la fila de chips del filtro OR (`tags`)
+  // y el diálogo de asignación por tarjeta (`catalogTags`). Solo id/label/color cruzan (T-04-13, no
+  // sensible); las tagIds por tarjeta ya viajan en deal.tagIds.
   const tags: PipelineTag[] = tagRows.map((t) => ({ id: t.id, label: t.label, color: t.color }))
 
-  return <PipelineClient deals={deals} tags={tags} wonTotal={wonTotal} loadError={loadError} />
+  return (
+    <PipelineClient deals={deals} tags={tags} catalogTags={tags} wonTotal={wonTotal} loadError={loadError} />
+  )
 }

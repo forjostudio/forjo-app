@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { TagChip } from '@/components/crm/tag-chip'
+import { TagManagerDialog } from '@/components/crm/tag-manager-dialog'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { STAGES, stageTotals, pipelineSummary, type StageKey } from '@/lib/crm-pipeline'
 import { filterByTags } from '@/lib/crm-tags'
@@ -64,11 +65,13 @@ function initials(name: string): string {
 export function PipelineClient({
   deals: initialDeals,
   tags,
+  catalogTags,
   wonTotal,
   loadError,
 }: {
   deals: PipelineDeal[]
   tags: PipelineTag[]
+  catalogTags: PipelineTag[]
   wonTotal: number
   loadError: boolean
 }) {
@@ -98,6 +101,10 @@ export function PipelineClient({
 
   // "Marcar perdido": deal seleccionado para el ConfirmDialog (con motivo obligatorio).
   const [lostDeal, setLostDeal] = useState<PipelineDeal | null>(null)
+
+  // "+ Tag" por tarjeta (gap test 7): la tarjeta cuyo TagManagerDialog está abierto. Las tags del
+  // pipeline cuelgan del lead (entityType='lead', entityId=leadId), coherente con tagIdsFor('lead', …).
+  const [tagDeal, setTagDeal] = useState<PipelineDeal | null>(null)
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
 
@@ -285,6 +292,7 @@ export function PipelineClient({
                       }}
                       onMarkLost={() => setLostDeal(deal)}
                       onMarkWon={() => handleMarkWon(deal)}
+                      onManageTags={() => setTagDeal(deal)}
                     />
                   ))}
                   {stageDeals.length === 0 && (
@@ -382,6 +390,23 @@ export function PipelineClient({
         </DialogContent>
       </Dialog>
 
+      {/* Tags por tarjeta (gap test 7): UN diálogo a nivel board controlado por tagDeal. Las tags del
+          pipeline cuelgan del lead; tras asignar/crear, router.refresh() recarga el RSC → el re-sync de
+          deals (prevInitialDeals) actualiza deal.tagIds → la tarjeta muestra el chip y el filtro OR la matchea. */}
+      <TagManagerDialog
+        open={tagDeal !== null}
+        onOpenChange={(o) => !o && setTagDeal(null)}
+        entityType="lead"
+        entityId={tagDeal?.leadId ?? ''}
+        assignedTags={
+          tagDeal
+            ? tagDeal.tagIds.map((id) => tagById.get(id)).filter((t): t is PipelineTag => Boolean(t))
+            : []
+        }
+        catalogTags={catalogTags}
+        onChanged={() => router.refresh()}
+      />
+
       {/* Marcar perdido (motivo obligatorio) */}
       <ConfirmDialog
         open={lostDeal !== null}
@@ -413,6 +438,7 @@ function DealCard({
   onDragEnd,
   onMarkLost,
   onMarkWon,
+  onManageTags,
 }: {
   deal: PipelineDeal
   tagById: Map<string, PipelineTag>
@@ -421,6 +447,7 @@ function DealCard({
   onDragEnd: () => void
   onMarkLost: () => void
   onMarkWon: () => void
+  onManageTags: () => void
 }) {
   const cardTags = deal.tagIds.map((id) => tagById.get(id)).filter((t): t is PipelineTag => Boolean(t))
   return (
@@ -466,6 +493,17 @@ function DealCard({
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-sm tabular-nums text-foreground">{arsFormatter.format(deal.valueArs)}</span>
         <div className="flex items-center gap-1">
+          {/* + Tag: abre el TagManagerDialog a nivel board (entityType='lead', entityId=leadId). Botón
+              nativo: el click NO arranca el drag del article (solo arrastrar desde el grip lo hace). */}
+          <button
+            type="button"
+            onClick={onManageTags}
+            aria-label={`Gestionar tags de ${deal.contactName}`}
+            className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <Plus aria-hidden="true" className="size-3" />
+            Tag
+          </button>
           <button
             type="button"
             onClick={onMarkWon}
