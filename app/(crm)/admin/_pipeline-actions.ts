@@ -9,6 +9,7 @@ import {
   createDealSchema,
   moveStageSchema,
   markLostSchema,
+  markWonSchema,
   convertLeadSchema,
   linkLeadOnSignupSchema,
 } from './_crm-actions.schemas'
@@ -74,12 +75,17 @@ export async function createDeal(input: unknown): Promise<void> {
   const admin = createAdminClient()
 
   // Resolver el lead: si hay email, intentar reusar uno existente (case-insensitive ya normalizado).
+  // DECIDIDO POR EL USUARIO (gap 4b): no reusar leads convertidos — solo se reusa un lead ACTIVO
+  // (business_id null); si no hay, se crea uno nuevo con el nombre del formulario. El reuse se acota
+  // con .is('business_id', null), así un email de un lead ya convertido no permite re-vincular ni
+  // renombrar un lead ajeno (el lookup no lo encuentra → cae a la rama de crear uno nuevo).
   let leadId: string | null = null
   if (data.leadEmail) {
     const { data: existing } = await admin
       .from('leads')
       .select('id')
       .eq('email', data.leadEmail)
+      .is('business_id', null)
       .limit(1)
       .maybeSingle()
     leadId = (existing as { id?: string } | null)?.id ?? null
@@ -132,6 +138,32 @@ export async function markLost(input: unknown): Promise<void> {
     targetId: data.dealId,
     risk: 'medio',
     metadata: { reason: data.reason },
+  })
+
+  revalidatePath(PIPELINE_PATH)
+}
+
+// ── markWon ───────────────────────────────────────────────────────────────────────────────────
+// Marca un deal como ganado (status='won'). Espejo de markLost pero risk 'bajo' (ganar NO es
+// destructivo) y SIN tocar stage (D-04: stage y status son ortogonales — markWon solo toca status,
+// no acopla stage↔status). Audita 'deal.won' para alimentar el visor / timeline.
+export async function markWon(input: unknown): Promise<void> {
+  const actor = await requireAdmin()
+  const data = markWonSchema.parse(input)
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('deals')
+    .update({ status: 'won', updated_at: new Date().toISOString() })
+    .eq('id', data.dealId)
+  if (error) throw new Error('update_failed')
+
+  await logAudit({
+    actorId: actor.id,
+    action: 'deal.won',
+    targetType: 'deal',
+    targetId: data.dealId,
+    risk: 'bajo',
   })
 
   revalidatePath(PIPELINE_PATH)

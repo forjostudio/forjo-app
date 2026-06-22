@@ -144,9 +144,12 @@ describe('createDeal', () => {
   // convertido no matchea → null → se cae a la rama de crear un lead nuevo con data.leadName.
   it('email de un lead YA CONVERTIDO → NO lo reusa, crea un lead nuevo con data.leadName', async () => {
     tableHandlers['leads'] = (ctx) => {
-      // Sin filtro por business_id null = lookup viejo (RED) → encuentra el convertido y lo reusa (BUG).
-      // Con .is('business_id', null) = reuse acotado (GREEN) → el convertido no matchea → null → insert.
-      if (!('business_id' in ctx.is)) return { data: { id: UUID, business_id: 'biz-1' }, error: null }
+      // El reuse-by-email acotado filtra por .is('business_id', null): el lookup (con el filtro)
+      // representa "buscar lead ACTIVO con ese email". El único lead con este email está convertido
+      // (business_id no-null), así que el lookup acotado NO lo encuentra → null → se cae a crear uno
+      // nuevo. RED (lookup sin .is) encontraría el convertido y lo reusaría (BUG). El insert posterior
+      // del lead nuevo NO aplica .is → entra por la rama sin filtro y devuelve el id creado.
+      if ('business_id' in ctx.is) return { data: null, error: null } // lookup acotado: no hay activo
       return { data: { id: UUID2 }, error: null } // insert().select().single() del lead nuevo
     }
     tableHandlers['deals'] = () => ({ data: { id: UUID2 }, error: null })
