@@ -30,25 +30,35 @@ const PIPELINE_PATH = '/admin/pipeline'
 const NEGOCIOS_PATH = '/admin/negocios'
 
 // ── createTag ─────────────────────────────────────────────────────────────────────────────────
-// Crea una tag en el catálogo global. Riesgo bajo (no toca datos de un negocio, solo el catálogo).
-export async function createTag(input: unknown): Promise<void> {
+// Crea una tag en el catálogo global y DEVUELVE su id (gap test 13: el caller encadena assignTag con
+// ese id para auto-asignar la tag recién creada en un solo paso). Riesgo bajo (no toca datos de un
+// negocio, solo el catálogo). El 23505 del índice único tags_label_unique_idx (label duplicado) SÍ
+// debe fallar acá (a diferencia de assignTag que es idempotente): createTag NO crea duplicados.
+export async function createTag(input: unknown): Promise<string> {
   const actor = await requireAdmin()
   const data = createTagSchema.parse(input)
   const admin = createAdminClient()
 
-  const { error } = await admin.from('tags').insert({ label: data.label, color: data.color })
-  if (error) throw new Error('update_failed')
+  const { data: row, error } = await admin
+    .from('tags')
+    .insert({ label: data.label, color: data.color })
+    .select('id')
+    .single<{ id: string }>()
+  if (error || !row) throw new Error('update_failed')
 
   await logAudit({
     actorId: actor.id,
     action: 'tag.create',
     targetType: 'tag',
+    targetId: row.id,
     risk: 'bajo',
     metadata: { label: data.label, color: data.color },
   })
 
   revalidatePath(PIPELINE_PATH)
   revalidatePath(NEGOCIOS_PATH)
+
+  return row.id
 }
 
 // ── assignTag ─────────────────────────────────────────────────────────────────────────────────
