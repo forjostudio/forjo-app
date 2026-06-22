@@ -101,15 +101,18 @@ export async function createDeal(input: unknown): Promise<void> {
     leadId = (created as { id: string }).id
   }
 
-  const { error: dealErr } = await admin
+  const { data: createdDeal, error: dealErr } = await admin
     .from('deals')
     .insert({ lead_id: leadId, title: data.leadName, value_ars: data.valueArs, stage: data.stage, status: 'open' })
+    .select('id')
+    .single()
   if (dealErr) throw new Error('update_failed')
 
   await logAudit({
     actorId: actor.id,
     action: 'deal.create',
     targetType: 'deal',
+    targetId: (createdDeal as { id: string }).id, // WR-01: el deal creado se linkea en el visor/timeline
     risk: 'bajo',
     metadata: { leadName: data.leadName, valueArs: data.valueArs, stage: data.stage },
   })
@@ -216,10 +219,12 @@ export async function convertLead(input: unknown): Promise<void> {
 // negocio ya se creó; un lead sin vincular se re-vincula a mano, D-06). Mismo criterio que los efectos
 // no críticos del repo (emails / Google Calendar en after()).
 export async function linkLeadOnSignup(input: unknown): Promise<void> {
-  // Parse defensivo: solo businessId; ignora cualquier email/leadId que venga en el input.
-  const data = linkLeadOnSignupSchema.parse(input)
-
   try {
+    // Parse defensivo DENTRO del try: solo businessId; ignora cualquier email/leadId que venga en el
+    // input. Si el input llega malformado, el ZodError cae al catch best-effort y NUNCA rompe el
+    // onboarding (CR-01: antes el parse estaba fuera del try y la excepción escapaba al handleFinish).
+    const data = linkLeadOnSignupSchema.parse(input)
+
     // Email del owner re-derivado de la SESIÓN (no del input). createClient = cliente con cookies del dueño.
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
