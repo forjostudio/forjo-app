@@ -9,6 +9,7 @@
     "lint": "eslint",
     "setup:mp-plans": "tsx scripts/setup-mp-plans.ts",
     "setup:admin": "tsx scripts/setup-admin.ts",
+    "setup:landing": "tsx scripts/setup-landing.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
