@@ -61,7 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'VENTAS',
     items: [
-      { href: '#', label: 'Pipeline', icon: GitBranch, soon: true },
+      { href: '/admin/pipeline', label: 'Pipeline', icon: GitBranch },
       { href: '/admin/negocios', label: 'Negocios', icon: Store },
     ],
   },
