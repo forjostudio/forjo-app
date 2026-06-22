@@ -228,7 +228,7 @@ export function ConfirmDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent showCloseButton={!loading}>
         <DialogHeader>
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 pr-8">
             <DialogTitle>{title}</DialogTitle>
             <RiskBadge risk={risk} />
           </div>
