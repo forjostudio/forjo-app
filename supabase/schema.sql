@@ -13,14 +13,65 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
-CREATE SCHEMA IF NOT EXISTS "public";
-
-
-ALTER SCHEMA "public" OWNER TO "pg_database_owner";
-
-
 COMMENT ON SCHEMA "public" IS 'standard public schema';
 
+
+
+CREATE EXTENSION IF NOT EXISTS "btree_gist" WITH SCHEMA "public";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "pg_stat_statements" WITH SCHEMA "extensions";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
+
+
+
+
+
+
+CREATE OR REPLACE FUNCTION "public"."businesses_protect_admin_columns"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- auth.role() devuelve el role del JWT actual: 'service_role' para el admin client,
+  -- 'authenticated' para el dueño con sesión, 'anon' para el público. Solo el service-role
+  -- puede tocar las columnas administrativas; cualquier otro role las ve revertidas.
+  if coalesce(auth.role(), '') <> 'service_role' then
+    new.has_web_custom := old.has_web_custom;
+    new.has_whatsapp   := old.has_whatsapp;
+    new.plan           := old.plan;
+    new.plan_status    := old.plan_status;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."businesses_protect_admin_columns"() OWNER TO "postgres";
 
 SET default_tablespace = '';
 
@@ -56,6 +107,24 @@ CREATE TABLE IF NOT EXISTS "public"."appointments" (
 
 
 ALTER TABLE "public"."appointments" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."audit_log" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "actor_id" "uuid",
+    "action" "text" NOT NULL,
+    "target_type" "text" NOT NULL,
+    "target_id" "text",
+    "business_id" "uuid",
+    "risk" "text" DEFAULT 'medio'::"text" NOT NULL,
+    "reason" "text",
+    "metadata" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "audit_log_risk_check" CHECK (("risk" = ANY (ARRAY['alto'::"text", 'medio'::"text", 'bajo'::"text"])))
+);
+
+
+ALTER TABLE "public"."audit_log" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."business_hours" (
@@ -119,7 +188,10 @@ CREATE TABLE IF NOT EXISTS "public"."businesses" (
     "font" "text" DEFAULT 'auto'::"text" NOT NULL,
     "maps_url" "text",
     "buffer_minutes" integer DEFAULT 0 NOT NULL,
-    "mp_user_id" "text"
+    "mp_user_id" "text",
+    "landing_config" "jsonb",
+    "has_web_custom" boolean DEFAULT false NOT NULL,
+    "has_whatsapp" boolean DEFAULT false NOT NULL
 );
 
 
@@ -171,6 +243,111 @@ CREATE TABLE IF NOT EXISTS "public"."clinical_notes" (
 ALTER TABLE "public"."clinical_notes" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."notes" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "business_id" "uuid",
+    "lead_id" "uuid",
+    "body" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."notes" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tasks" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "business_id" "uuid",
+    "lead_id" "uuid",
+    "title" "text" NOT NULL,
+    "due_date" "date",
+    "done" boolean DEFAULT false NOT NULL,
+    "completed_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."tasks" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."crm_timeline" WITH ("security_invoker"='true') AS
+ SELECT 'cambio'::"text" AS "kind",
+        CASE
+            WHEN ("audit_log"."actor_id" IS NULL) THEN 'sistema'::"text"
+            ELSE 'operador'::"text"
+        END AS "actor_type",
+    "audit_log"."action" AS "title",
+    "audit_log"."reason" AS "body",
+    "audit_log"."created_at" AS "occurred_at",
+    "audit_log"."metadata",
+    "audit_log"."business_id"
+   FROM "public"."audit_log"
+  WHERE ("audit_log"."action" <> ALL (ARRAY['note.create'::"text", 'note.edit'::"text", 'note.delete'::"text", 'task.create'::"text", 'task.complete'::"text"]))
+UNION ALL
+ SELECT 'nota'::"text" AS "kind",
+    'operador'::"text" AS "actor_type",
+    'Nota'::"text" AS "title",
+    "notes"."body",
+    "notes"."created_at" AS "occurred_at",
+    '{}'::"jsonb" AS "metadata",
+    "notes"."business_id"
+   FROM "public"."notes"
+UNION ALL
+ SELECT 'tarea'::"text" AS "kind",
+    'operador'::"text" AS "actor_type",
+        CASE
+            WHEN "tasks"."done" THEN 'Tarea completada'::"text"
+            ELSE 'Tarea creada'::"text"
+        END AS "title",
+    "tasks"."title" AS "body",
+    COALESCE("tasks"."completed_at", "tasks"."created_at") AS "occurred_at",
+    '{}'::"jsonb" AS "metadata",
+    "tasks"."business_id"
+   FROM "public"."tasks";
+
+
+ALTER VIEW "public"."crm_timeline" OWNER TO "postgres";
+
+
+COMMENT ON VIEW "public"."crm_timeline" IS 'Timeline unificado (audit_log + notes + tasks) con security_invoker=true: hereda la RLS admin-only de las tablas base. NUNCA quitar el flag (correría security-definer y bypassaría el gate admin). La rama audit_log excluye los codes note.*/task.* para no duplicar notas/tareas que ya entran por sus propias ramas (035).';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."deals" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "lead_id" "uuid" NOT NULL,
+    "title" "text",
+    "value_ars" integer DEFAULT 0 NOT NULL,
+    "probability" integer,
+    "expected_close_date" "date",
+    "stage" "text" DEFAULT 'lead'::"text" NOT NULL,
+    "status" "text" DEFAULT 'open'::"text" NOT NULL,
+    "lost_reason" "text",
+    "business_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "deals_stage_check" CHECK (("stage" = ANY (ARRAY['lead'::"text", 'calificado'::"text", 'trial'::"text", 'propuesta'::"text", 'pago'::"text"]))),
+    CONSTRAINT "deals_status_check" CHECK (("status" = ANY (ARRAY['open'::"text", 'won'::"text", 'lost'::"text"])))
+);
+
+
+ALTER TABLE "public"."deals" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."entity_tags" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tag_id" "uuid" NOT NULL,
+    "entity_type" "text" NOT NULL,
+    "entity_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "entity_tags_entity_type_check" CHECK (("entity_type" = ANY (ARRAY['lead'::"text", 'business'::"text"])))
+);
+
+
+ALTER TABLE "public"."entity_tags" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."expenses" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "business_id" "uuid",
@@ -201,6 +378,20 @@ CREATE TABLE IF NOT EXISTS "public"."fixed_expenses" (
 ALTER TABLE "public"."fixed_expenses" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."leads" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "email" "text",
+    "whatsapp" "text",
+    "business_id" "uuid",
+    "source" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."leads" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."locations" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "business_id" "uuid",
@@ -229,6 +420,19 @@ CREATE TABLE IF NOT EXISTS "public"."manual_sales" (
 
 
 ALTER TABLE "public"."manual_sales" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."plan_prices" (
+    "plan_key" "text" NOT NULL,
+    "price_ars" integer NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_by" "uuid",
+    CONSTRAINT "plan_prices_plan_key_check" CHECK (("plan_key" = ANY (ARRAY['basic'::"text", 'studio'::"text", 'pro'::"text"]))),
+    CONSTRAINT "plan_prices_price_ars_check" CHECK (("price_ars" >= 0))
+);
+
+
+ALTER TABLE "public"."plan_prices" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."professionals" (
@@ -281,7 +485,8 @@ CREATE OR REPLACE VIEW "public"."public_businesses" AS
     "recaptcha_site_key",
     "default_slot_duration",
     "buffer_minutes",
-    "created_at"
+    "created_at",
+    "landing_config"
    FROM "public"."businesses";
 
 
@@ -364,6 +569,17 @@ CREATE TABLE IF NOT EXISTS "public"."schedule_exceptions" (
 ALTER TABLE "public"."schedule_exceptions" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."tags" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "label" "text" NOT NULL,
+    "color" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."tags" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."time_blocks" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "business_id" "uuid",
@@ -386,6 +602,11 @@ ALTER TABLE ONLY "public"."appointments"
 
 ALTER TABLE ONLY "public"."appointments"
     ADD CONSTRAINT "appointments_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."audit_log"
+    ADD CONSTRAINT "audit_log_pkey" PRIMARY KEY ("id");
 
 
 
@@ -424,6 +645,16 @@ ALTER TABLE ONLY "public"."clinical_notes"
 
 
 
+ALTER TABLE ONLY "public"."deals"
+    ADD CONSTRAINT "deals_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."entity_tags"
+    ADD CONSTRAINT "entity_tags_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."expenses"
     ADD CONSTRAINT "expenses_pkey" PRIMARY KEY ("id");
 
@@ -434,6 +665,11 @@ ALTER TABLE ONLY "public"."fixed_expenses"
 
 
 
+ALTER TABLE ONLY "public"."leads"
+    ADD CONSTRAINT "leads_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."locations"
     ADD CONSTRAINT "locations_pkey" PRIMARY KEY ("id");
 
@@ -441,6 +677,16 @@ ALTER TABLE ONLY "public"."locations"
 
 ALTER TABLE ONLY "public"."manual_sales"
     ADD CONSTRAINT "manual_sales_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."notes"
+    ADD CONSTRAINT "notes_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."plan_prices"
+    ADD CONSTRAINT "plan_prices_pkey" PRIMARY KEY ("plan_key");
 
 
 
@@ -464,6 +710,16 @@ ALTER TABLE ONLY "public"."services"
 
 
 
+ALTER TABLE ONLY "public"."tags"
+    ADD CONSTRAINT "tags_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tasks"
+    ADD CONSTRAINT "tasks_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."time_blocks"
     ADD CONSTRAINT "time_blocks_pkey" PRIMARY KEY ("id");
 
@@ -477,7 +733,55 @@ CREATE UNIQUE INDEX "appointments_no_double_booking" ON "public"."appointments" 
 
 
 
+CREATE INDEX "audit_log_action_idx" ON "public"."audit_log" USING "btree" ("action");
+
+
+
+CREATE INDEX "audit_log_business_id_idx" ON "public"."audit_log" USING "btree" ("business_id");
+
+
+
+CREATE INDEX "audit_log_created_at_idx" ON "public"."audit_log" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "deals_business_id_idx" ON "public"."deals" USING "btree" ("business_id");
+
+
+
+CREATE INDEX "deals_lead_id_idx" ON "public"."deals" USING "btree" ("lead_id");
+
+
+
+CREATE INDEX "deals_stage_idx" ON "public"."deals" USING "btree" ("stage");
+
+
+
+CREATE INDEX "deals_status_idx" ON "public"."deals" USING "btree" ("status");
+
+
+
+CREATE INDEX "entity_tags_entity_idx" ON "public"."entity_tags" USING "btree" ("entity_type", "entity_id");
+
+
+
+CREATE UNIQUE INDEX "entity_tags_unique_idx" ON "public"."entity_tags" USING "btree" ("tag_id", "entity_type", "entity_id");
+
+
+
 CREATE INDEX "fixed_expenses_business_idx" ON "public"."fixed_expenses" USING "btree" ("business_id");
+
+
+
+CREATE INDEX "leads_business_id_idx" ON "public"."leads" USING "btree" ("business_id");
+
+
+
+CREATE INDEX "leads_email_idx" ON "public"."leads" USING "btree" ("lower"("email"));
+
+
+
+CREATE INDEX "notes_business_id_idx" ON "public"."notes" USING "btree" ("business_id");
 
 
 
@@ -493,7 +797,19 @@ CREATE INDEX "services_location" ON "public"."services" USING "btree" ("location
 
 
 
+CREATE UNIQUE INDEX "tags_label_unique_idx" ON "public"."tags" USING "btree" ("lower"("label"));
+
+
+
+CREATE INDEX "tasks_business_id_idx" ON "public"."tasks" USING "btree" ("business_id");
+
+
+
 CREATE INDEX "time_blocks_location" ON "public"."time_blocks" USING "btree" ("location_id");
+
+
+
+CREATE OR REPLACE TRIGGER "businesses_protect_admin_columns" BEFORE UPDATE ON "public"."businesses" FOR EACH ROW EXECUTE FUNCTION "public"."businesses_protect_admin_columns"();
 
 
 
@@ -519,6 +835,16 @@ ALTER TABLE ONLY "public"."appointments"
 
 ALTER TABLE ONLY "public"."appointments"
     ADD CONSTRAINT "appointments_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id");
+
+
+
+ALTER TABLE ONLY "public"."audit_log"
+    ADD CONSTRAINT "audit_log_actor_id_fkey" FOREIGN KEY ("actor_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."audit_log"
+    ADD CONSTRAINT "audit_log_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE SET NULL;
 
 
 
@@ -562,6 +888,21 @@ ALTER TABLE ONLY "public"."clinical_notes"
 
 
 
+ALTER TABLE ONLY "public"."deals"
+    ADD CONSTRAINT "deals_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."deals"
+    ADD CONSTRAINT "deals_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."entity_tags"
+    ADD CONSTRAINT "entity_tags_tag_id_fkey" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."expenses"
     ADD CONSTRAINT "expenses_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
 
@@ -569,6 +910,11 @@ ALTER TABLE ONLY "public"."expenses"
 
 ALTER TABLE ONLY "public"."fixed_expenses"
     ADD CONSTRAINT "fixed_expenses_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."leads"
+    ADD CONSTRAINT "leads_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE SET NULL;
 
 
 
@@ -584,6 +930,21 @@ ALTER TABLE ONLY "public"."manual_sales"
 
 ALTER TABLE ONLY "public"."manual_sales"
     ADD CONSTRAINT "manual_sales_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."clients"("id");
+
+
+
+ALTER TABLE ONLY "public"."notes"
+    ADD CONSTRAINT "notes_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."notes"
+    ADD CONSTRAINT "notes_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."plan_prices"
+    ADD CONSTRAINT "plan_prices_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 
@@ -622,6 +983,16 @@ ALTER TABLE ONLY "public"."services"
 
 
 
+ALTER TABLE ONLY "public"."tasks"
+    ADD CONSTRAINT "tasks_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."tasks"
+    ADD CONSTRAINT "tasks_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."time_blocks"
     ADD CONSTRAINT "time_blocks_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
 
@@ -632,7 +1003,42 @@ ALTER TABLE ONLY "public"."time_blocks"
 
 
 
+CREATE POLICY "admin read audit_log" ON "public"."audit_log" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read deals" ON "public"."deals" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read entity_tags" ON "public"."entity_tags" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read leads" ON "public"."leads" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read notes" ON "public"."notes" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read plan_prices" ON "public"."plan_prices" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read tags" ON "public"."tags" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read tasks" ON "public"."tasks" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
 ALTER TABLE "public"."appointments" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."audit_log" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "business access" ON "public"."client_attachments" USING (("business_id" IN ( SELECT "businesses"."id"
@@ -725,6 +1131,12 @@ ALTER TABLE "public"."clients" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."clinical_notes" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."deals" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."entity_tags" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."expenses" ENABLE ROW LEVEL SECURITY;
 
 
@@ -757,10 +1169,16 @@ CREATE POLICY "fixed_expenses tenant update" ON "public"."fixed_expenses" FOR UP
 
 
 
+ALTER TABLE "public"."leads" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."locations" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."manual_sales" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."notes" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "owner access" ON "public"."businesses" USING (("owner_id" = "auth"."uid"()));
@@ -779,6 +1197,9 @@ CREATE POLICY "owner manage schedule_exceptions" ON "public"."schedule_exception
    FROM "public"."businesses" "b"
   WHERE (("b"."id" = "schedule_exceptions"."business_id") AND ("b"."owner_id" = "auth"."uid"())))));
 
+
+
+ALTER TABLE "public"."plan_prices" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."professionals" ENABLE ROW LEVEL SECURITY;
@@ -805,7 +1226,18 @@ ALTER TABLE "public"."schedule_exceptions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."services" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."tags" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."tasks" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."time_blocks" ENABLE ROW LEVEL SECURITY;
+
+
+
+
+ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
 
 
 GRANT USAGE ON SCHEMA "public" TO "postgres";
@@ -815,9 +1247,1499 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."gbtreekey16_in"("cstring") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey16_in"("cstring") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey16_in"("cstring") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey16_in"("cstring") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey16_out"("public"."gbtreekey16") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey16_out"("public"."gbtreekey16") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey16_out"("public"."gbtreekey16") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey16_out"("public"."gbtreekey16") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey2_in"("cstring") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey2_in"("cstring") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey2_in"("cstring") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey2_in"("cstring") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey2_out"("public"."gbtreekey2") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey2_out"("public"."gbtreekey2") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey2_out"("public"."gbtreekey2") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey2_out"("public"."gbtreekey2") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey32_in"("cstring") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey32_in"("cstring") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey32_in"("cstring") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey32_in"("cstring") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey32_out"("public"."gbtreekey32") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey32_out"("public"."gbtreekey32") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey32_out"("public"."gbtreekey32") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey32_out"("public"."gbtreekey32") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey4_in"("cstring") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey4_in"("cstring") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey4_in"("cstring") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey4_in"("cstring") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey4_out"("public"."gbtreekey4") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey4_out"("public"."gbtreekey4") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey4_out"("public"."gbtreekey4") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey4_out"("public"."gbtreekey4") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey8_in"("cstring") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey8_in"("cstring") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey8_in"("cstring") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey8_in"("cstring") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey8_out"("public"."gbtreekey8") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey8_out"("public"."gbtreekey8") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey8_out"("public"."gbtreekey8") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey8_out"("public"."gbtreekey8") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_in"("cstring") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_in"("cstring") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_in"("cstring") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_in"("cstring") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO "service_role";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+GRANT ALL ON FUNCTION "public"."businesses_protect_admin_columns"() TO "anon";
+GRANT ALL ON FUNCTION "public"."businesses_protect_admin_columns"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."businesses_protect_admin_columns"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."cash_dist"("money", "money") TO "postgres";
+GRANT ALL ON FUNCTION "public"."cash_dist"("money", "money") TO "anon";
+GRANT ALL ON FUNCTION "public"."cash_dist"("money", "money") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."cash_dist"("money", "money") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."date_dist"("date", "date") TO "postgres";
+GRANT ALL ON FUNCTION "public"."date_dist"("date", "date") TO "anon";
+GRANT ALL ON FUNCTION "public"."date_dist"("date", "date") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."date_dist"("date", "date") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."float4_dist"(real, real) TO "postgres";
+GRANT ALL ON FUNCTION "public"."float4_dist"(real, real) TO "anon";
+GRANT ALL ON FUNCTION "public"."float4_dist"(real, real) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."float4_dist"(real, real) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."float8_dist"(double precision, double precision) TO "postgres";
+GRANT ALL ON FUNCTION "public"."float8_dist"(double precision, double precision) TO "anon";
+GRANT ALL ON FUNCTION "public"."float8_dist"(double precision, double precision) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."float8_dist"(double precision, double precision) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bit_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bit_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bit_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bit_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bit_consistent"("internal", bit, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bit_consistent"("internal", bit, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bit_consistent"("internal", bit, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bit_consistent"("internal", bit, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bit_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bit_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bit_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bit_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bit_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bit_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bit_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bit_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bit_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bit_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bit_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bit_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bit_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bit_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bit_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bit_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bool_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bool_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bool_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bool_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bool_consistent"("internal", boolean, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bool_consistent"("internal", boolean, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bool_consistent"("internal", boolean, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bool_consistent"("internal", boolean, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bool_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bool_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bool_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bool_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bool_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bool_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bool_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bool_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bool_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bool_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bool_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bool_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bool_same"("public"."gbtreekey2", "public"."gbtreekey2", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bool_same"("public"."gbtreekey2", "public"."gbtreekey2", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bool_same"("public"."gbtreekey2", "public"."gbtreekey2", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bool_same"("public"."gbtreekey2", "public"."gbtreekey2", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bool_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bool_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bool_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bool_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_consistent"("internal", character, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_consistent"("internal", character, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_consistent"("internal", character, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bpchar_consistent"("internal", character, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bytea_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bytea_consistent"("internal", "bytea", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_consistent"("internal", "bytea", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_consistent"("internal", "bytea", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_consistent"("internal", "bytea", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bytea_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bytea_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bytea_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_bytea_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_bytea_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_consistent"("internal", "money", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_consistent"("internal", "money", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_consistent"("internal", "money", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_consistent"("internal", "money", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_distance"("internal", "money", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_distance"("internal", "money", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_distance"("internal", "money", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_distance"("internal", "money", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_cash_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_cash_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_cash_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_cash_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_consistent"("internal", "date", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_consistent"("internal", "date", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_consistent"("internal", "date", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_consistent"("internal", "date", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_distance"("internal", "date", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_distance"("internal", "date", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_distance"("internal", "date", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_distance"("internal", "date", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_date_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_date_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_date_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_date_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_decompress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_decompress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_decompress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_decompress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_enum_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_enum_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_enum_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_enum_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_enum_consistent"("internal", "anyenum", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_enum_consistent"("internal", "anyenum", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_enum_consistent"("internal", "anyenum", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_enum_consistent"("internal", "anyenum", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_enum_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_enum_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_enum_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_enum_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_enum_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_enum_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_enum_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_enum_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_enum_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_enum_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_enum_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_enum_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_enum_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_enum_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_enum_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_enum_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_enum_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_enum_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_enum_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_enum_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_consistent"("internal", real, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_consistent"("internal", real, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_consistent"("internal", real, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_consistent"("internal", real, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_distance"("internal", real, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_distance"("internal", real, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_distance"("internal", real, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_distance"("internal", real, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float4_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float4_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float4_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float4_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_consistent"("internal", double precision, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_consistent"("internal", double precision, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_consistent"("internal", double precision, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_consistent"("internal", double precision, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_distance"("internal", double precision, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_distance"("internal", double precision, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_distance"("internal", double precision, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_distance"("internal", double precision, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_float8_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_float8_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_float8_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_float8_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_inet_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_inet_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_inet_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_inet_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_inet_consistent"("internal", "inet", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_inet_consistent"("internal", "inet", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_inet_consistent"("internal", "inet", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_inet_consistent"("internal", "inet", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_inet_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_inet_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_inet_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_inet_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_inet_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_inet_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_inet_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_inet_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_inet_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_inet_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_inet_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_inet_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_inet_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_inet_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_inet_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_inet_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_consistent"("internal", smallint, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_consistent"("internal", smallint, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_consistent"("internal", smallint, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_consistent"("internal", smallint, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_distance"("internal", smallint, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_distance"("internal", smallint, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_distance"("internal", smallint, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_distance"("internal", smallint, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_same"("public"."gbtreekey4", "public"."gbtreekey4", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_same"("public"."gbtreekey4", "public"."gbtreekey4", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_same"("public"."gbtreekey4", "public"."gbtreekey4", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_same"("public"."gbtreekey4", "public"."gbtreekey4", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int2_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int2_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int2_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int2_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_consistent"("internal", integer, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_consistent"("internal", integer, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_consistent"("internal", integer, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_consistent"("internal", integer, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_distance"("internal", integer, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_distance"("internal", integer, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_distance"("internal", integer, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_distance"("internal", integer, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int4_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int4_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int4_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int4_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_consistent"("internal", bigint, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_consistent"("internal", bigint, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_consistent"("internal", bigint, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_consistent"("internal", bigint, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_distance"("internal", bigint, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_distance"("internal", bigint, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_distance"("internal", bigint, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_distance"("internal", bigint, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_int8_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_int8_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_int8_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_int8_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_consistent"("internal", interval, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_consistent"("internal", interval, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_consistent"("internal", interval, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_consistent"("internal", interval, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_decompress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_decompress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_decompress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_decompress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_distance"("internal", interval, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_distance"("internal", interval, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_distance"("internal", interval, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_distance"("internal", interval, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_intv_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_intv_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_intv_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_intv_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad8_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad8_consistent"("internal", "macaddr8", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_consistent"("internal", "macaddr8", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_consistent"("internal", "macaddr8", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_consistent"("internal", "macaddr8", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad8_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad8_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad8_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad8_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad8_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad_consistent"("internal", "macaddr", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad_consistent"("internal", "macaddr", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad_consistent"("internal", "macaddr", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad_consistent"("internal", "macaddr", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_macad_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_macad_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_macad_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_macad_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_numeric_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_numeric_consistent"("internal", numeric, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_consistent"("internal", numeric, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_consistent"("internal", numeric, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_consistent"("internal", numeric, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_numeric_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_numeric_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_numeric_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_numeric_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_numeric_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_consistent"("internal", "oid", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_consistent"("internal", "oid", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_consistent"("internal", "oid", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_consistent"("internal", "oid", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_distance"("internal", "oid", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_distance"("internal", "oid", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_distance"("internal", "oid", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_distance"("internal", "oid", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_same"("public"."gbtreekey8", "public"."gbtreekey8", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_oid_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_oid_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_oid_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_oid_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_text_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_text_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_text_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_text_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_text_consistent"("internal", "text", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_text_consistent"("internal", "text", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_text_consistent"("internal", "text", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_text_consistent"("internal", "text", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_text_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_text_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_text_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_text_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_text_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_text_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_text_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_text_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_text_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_text_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_text_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_text_same"("public"."gbtreekey_var", "public"."gbtreekey_var", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_text_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_text_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_text_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_text_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_consistent"("internal", time without time zone, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_consistent"("internal", time without time zone, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_consistent"("internal", time without time zone, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_consistent"("internal", time without time zone, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_distance"("internal", time without time zone, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_distance"("internal", time without time zone, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_distance"("internal", time without time zone, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_distance"("internal", time without time zone, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_time_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_time_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_time_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_time_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_timetz_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_timetz_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_timetz_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_timetz_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_timetz_consistent"("internal", time with time zone, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_timetz_consistent"("internal", time with time zone, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_timetz_consistent"("internal", time with time zone, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_timetz_consistent"("internal", time with time zone, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_consistent"("internal", timestamp without time zone, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_consistent"("internal", timestamp without time zone, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_consistent"("internal", timestamp without time zone, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_consistent"("internal", timestamp without time zone, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_distance"("internal", timestamp without time zone, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_distance"("internal", timestamp without time zone, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_distance"("internal", timestamp without time zone, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_distance"("internal", timestamp without time zone, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_same"("public"."gbtreekey16", "public"."gbtreekey16", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_ts_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_ts_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_ts_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_ts_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_tstz_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_tstz_consistent"("internal", timestamp with time zone, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_consistent"("internal", timestamp with time zone, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_consistent"("internal", timestamp with time zone, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_consistent"("internal", timestamp with time zone, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_tstz_distance"("internal", timestamp with time zone, smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_distance"("internal", timestamp with time zone, smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_distance"("internal", timestamp with time zone, smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_tstz_distance"("internal", timestamp with time zone, smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_uuid_compress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_compress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_compress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_compress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_uuid_consistent"("internal", "uuid", smallint, "oid", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_consistent"("internal", "uuid", smallint, "oid", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_consistent"("internal", "uuid", smallint, "oid", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_consistent"("internal", "uuid", smallint, "oid", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_uuid_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_uuid_penalty"("internal", "internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_penalty"("internal", "internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_penalty"("internal", "internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_penalty"("internal", "internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_uuid_picksplit"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_picksplit"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_picksplit"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_picksplit"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_uuid_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_same"("public"."gbtreekey32", "public"."gbtreekey32", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_uuid_union"("internal", "internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_union"("internal", "internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_union"("internal", "internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_uuid_union"("internal", "internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_var_decompress"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_var_decompress"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_var_decompress"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_var_decompress"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."gbt_var_fetch"("internal") TO "postgres";
+GRANT ALL ON FUNCTION "public"."gbt_var_fetch"("internal") TO "anon";
+GRANT ALL ON FUNCTION "public"."gbt_var_fetch"("internal") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gbt_var_fetch"("internal") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."int2_dist"(smallint, smallint) TO "postgres";
+GRANT ALL ON FUNCTION "public"."int2_dist"(smallint, smallint) TO "anon";
+GRANT ALL ON FUNCTION "public"."int2_dist"(smallint, smallint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."int2_dist"(smallint, smallint) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."int4_dist"(integer, integer) TO "postgres";
+GRANT ALL ON FUNCTION "public"."int4_dist"(integer, integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."int4_dist"(integer, integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."int4_dist"(integer, integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."int8_dist"(bigint, bigint) TO "postgres";
+GRANT ALL ON FUNCTION "public"."int8_dist"(bigint, bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."int8_dist"(bigint, bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."int8_dist"(bigint, bigint) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."interval_dist"(interval, interval) TO "postgres";
+GRANT ALL ON FUNCTION "public"."interval_dist"(interval, interval) TO "anon";
+GRANT ALL ON FUNCTION "public"."interval_dist"(interval, interval) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."interval_dist"(interval, interval) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."oid_dist"("oid", "oid") TO "postgres";
+GRANT ALL ON FUNCTION "public"."oid_dist"("oid", "oid") TO "anon";
+GRANT ALL ON FUNCTION "public"."oid_dist"("oid", "oid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."oid_dist"("oid", "oid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."time_dist"(time without time zone, time without time zone) TO "postgres";
+GRANT ALL ON FUNCTION "public"."time_dist"(time without time zone, time without time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."time_dist"(time without time zone, time without time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."time_dist"(time without time zone, time without time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ts_dist"(timestamp without time zone, timestamp without time zone) TO "postgres";
+GRANT ALL ON FUNCTION "public"."ts_dist"(timestamp without time zone, timestamp without time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."ts_dist"(timestamp without time zone, timestamp without time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ts_dist"(timestamp without time zone, timestamp without time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tstz_dist"(timestamp with time zone, timestamp with time zone) TO "postgres";
+GRANT ALL ON FUNCTION "public"."tstz_dist"(timestamp with time zone, timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."tstz_dist"(timestamp with time zone, timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tstz_dist"(timestamp with time zone, timestamp with time zone) TO "service_role";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 GRANT ALL ON TABLE "public"."appointments" TO "anon";
 GRANT ALL ON TABLE "public"."appointments" TO "authenticated";
 GRANT ALL ON TABLE "public"."appointments" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."audit_log" TO "anon";
+GRANT ALL ON TABLE "public"."audit_log" TO "authenticated";
+GRANT ALL ON TABLE "public"."audit_log" TO "service_role";
 
 
 
@@ -857,6 +2779,36 @@ GRANT ALL ON TABLE "public"."clinical_notes" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."notes" TO "anon";
+GRANT ALL ON TABLE "public"."notes" TO "authenticated";
+GRANT ALL ON TABLE "public"."notes" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tasks" TO "anon";
+GRANT ALL ON TABLE "public"."tasks" TO "authenticated";
+GRANT ALL ON TABLE "public"."tasks" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."crm_timeline" TO "anon";
+GRANT ALL ON TABLE "public"."crm_timeline" TO "authenticated";
+GRANT ALL ON TABLE "public"."crm_timeline" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."deals" TO "anon";
+GRANT ALL ON TABLE "public"."deals" TO "authenticated";
+GRANT ALL ON TABLE "public"."deals" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."entity_tags" TO "anon";
+GRANT ALL ON TABLE "public"."entity_tags" TO "authenticated";
+GRANT ALL ON TABLE "public"."entity_tags" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."expenses" TO "anon";
 GRANT ALL ON TABLE "public"."expenses" TO "authenticated";
 GRANT ALL ON TABLE "public"."expenses" TO "service_role";
@@ -869,6 +2821,12 @@ GRANT ALL ON TABLE "public"."fixed_expenses" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."leads" TO "anon";
+GRANT ALL ON TABLE "public"."leads" TO "authenticated";
+GRANT ALL ON TABLE "public"."leads" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."locations" TO "anon";
 GRANT ALL ON TABLE "public"."locations" TO "authenticated";
 GRANT ALL ON TABLE "public"."locations" TO "service_role";
@@ -878,6 +2836,12 @@ GRANT ALL ON TABLE "public"."locations" TO "service_role";
 GRANT ALL ON TABLE "public"."manual_sales" TO "anon";
 GRANT ALL ON TABLE "public"."manual_sales" TO "authenticated";
 GRANT ALL ON TABLE "public"."manual_sales" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."plan_prices" TO "anon";
+GRANT ALL ON TABLE "public"."plan_prices" TO "authenticated";
+GRANT ALL ON TABLE "public"."plan_prices" TO "service_role";
 
 
 
@@ -929,9 +2893,21 @@ GRANT ALL ON TABLE "public"."schedule_exceptions" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."tags" TO "anon";
+GRANT ALL ON TABLE "public"."tags" TO "authenticated";
+GRANT ALL ON TABLE "public"."tags" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."time_blocks" TO "anon";
 GRANT ALL ON TABLE "public"."time_blocks" TO "authenticated";
 GRANT ALL ON TABLE "public"."time_blocks" TO "service_role";
+
+
+
+
+
+
 
 
 
@@ -959,6 +2935,30 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
