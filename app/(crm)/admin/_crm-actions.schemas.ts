@@ -40,6 +40,12 @@ export const markLostSchema = z.object({
   reason: z.string().trim().min(1),
 })
 
+// markWon: marcar un deal como ganado (status='won'). Espejo de markLost pero SIN motivo y SIN tocar
+// stage (D-04: stage y status son ortogonales). Solo necesita el dealId.
+export const markWonSchema = z.object({
+  dealId: id,
+})
+
 // convertLead: conversión MANUAL desde el tablero (el operador asocia un lead a un negocio ya creado).
 export const convertLeadSchema = z.object({
   leadId: id,
@@ -108,6 +114,7 @@ export const completeTaskSchema = z.object({
 export type CreateDealInput = z.infer<typeof createDealSchema>
 export type MoveStageInput = z.infer<typeof moveStageSchema>
 export type MarkLostInput = z.infer<typeof markLostSchema>
+export type MarkWonInput = z.infer<typeof markWonSchema>
 export type ConvertLeadInput = z.infer<typeof convertLeadSchema>
 export type LinkLeadOnSignupInput = z.infer<typeof linkLeadOnSignupSchema>
 export type CreateTagInput = z.infer<typeof createTagSchema>

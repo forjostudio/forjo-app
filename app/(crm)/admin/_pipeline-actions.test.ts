@@ -12,8 +12,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ── Estado mockeable del admin client (service-role) ────────────────────────────────────────────
 type QueryResult = { data?: unknown; error?: { code?: string; message?: string } | null }
+// Contexto de filtros aplicados sobre la query (lo usa el reuse-by-email acotado: el handler de
+// 'leads' puede inspeccionar si la action filtró por `.is('business_id', null)` y responder distinto).
+type QueryCtx = { is: Record<string, unknown> }
+type TableHandler = (ctx: QueryCtx) => QueryResult
 
-let tableHandlers: Record<string, () => QueryResult>
+let tableHandlers: Record<string, TableHandler>
 let insertedRows: Array<{ table: string; values: unknown }>
 let updatedRows: Array<{ table: string; values: unknown }>
 let auditCalls: Array<Record<string, unknown>>
@@ -22,13 +26,21 @@ let sessionUser: { id: string; email: string | null } | null
 
 // Builder de query encadenable que termina resolviendo el handler de la tabla.
 function makeQuery(table: string) {
-  const result = () => tableHandlers[table]?.() ?? { data: null, error: null }
+  // Filtros .is() acumulados en esta cadena (uno por query): el handler los recibe para distinguir,
+  // p. ej., un reuse-by-email acotado a business_id null (lead activo) de un lookup sin filtro.
+  const ctx: QueryCtx = { is: {} }
+  const result = () => tableHandlers[table]?.(ctx) ?? { data: null, error: null }
   const chain: Record<string, unknown> = {}
   const passthrough = () => chain
   chain.select = passthrough
   chain.eq = passthrough
   chain.order = passthrough
   chain.limit = passthrough
+  // .is(col, val) registra el filtro IS (la implementación GREEN del reuse usa .is('business_id', null)).
+  chain.is = (col: string, val: unknown) => {
+    ctx.is[col] = val
+    return chain
+  }
   // single/maybeSingle resuelven la lectura previa.
   chain.single = () => Promise.resolve(result())
   chain.maybeSingle = () => Promise.resolve(result())
@@ -69,7 +81,7 @@ vi.mock('@/lib/audit', () => ({
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
-import { moveStage, createDeal, markLost, convertLead, linkLeadOnSignup } from './_pipeline-actions'
+import { moveStage, createDeal, markLost, markWon, convertLead, linkLeadOnSignup } from './_pipeline-actions'
 
 const UUID = '11111111-1111-4111-8111-111111111111'
 const UUID2 = '22222222-2222-4222-8222-222222222222'
@@ -122,6 +134,78 @@ describe('createDeal', () => {
 
     expect(insertedRows.some((i) => i.table === 'deals')).toBe(true)
     expect(auditCalls.some((a) => a.action === 'deal.create')).toBe(true)
+  })
+
+  // ── Gap test 4b (reuse-by-email acotado a leads activos) ──────────────────────────────────────
+  // DECIDIDO POR EL USUARIO: createDeal NO debe reusar un lead YA CONVERTIDO (business_id no-null).
+  // El reuse-by-email se acota server-side con .is('business_id', null). El mock distingue por el
+  // filtro aplicado (ctx.is): el handler de 'leads' "ve" la fila convertida SOLO cuando el lookup
+  // NO filtró por business_id null (RED: implementación vieja); cuando SÍ filtra (GREEN), el lead
+  // convertido no matchea → null → se cae a la rama de crear un lead nuevo con data.leadName.
+  it('email de un lead YA CONVERTIDO → NO lo reusa, crea un lead nuevo con data.leadName', async () => {
+    tableHandlers['leads'] = (ctx) => {
+      // Sin filtro por business_id null = lookup viejo (RED) → encuentra el convertido y lo reusa (BUG).
+      // Con .is('business_id', null) = reuse acotado (GREEN) → el convertido no matchea → null → insert.
+      if (!('business_id' in ctx.is)) return { data: { id: UUID, business_id: 'biz-1' }, error: null }
+      return { data: { id: UUID2 }, error: null } // insert().select().single() del lead nuevo
+    }
+    tableHandlers['deals'] = () => ({ data: { id: UUID2 }, error: null })
+    await createDeal({ leadName: 'Franco Vellani', leadEmail: 'franco@example.com', valueArs: 0, stage: 'lead' })
+
+    const leadInsert = insertedRows.find((i) => i.table === 'leads')
+    expect(leadInsert).toBeTruthy() // se creó un lead nuevo (no se reusó el convertido)
+    expect((leadInsert!.values as Record<string, unknown>).name).toBe('Franco Vellani')
+  })
+
+  it('email de un lead ACTIVO (business_id null) → lo reusa, no inserta lead nuevo', async () => {
+    // El reuse acotado SÍ encuentra el lead activo (matchea business_id null) → no inserta lead.
+    tableHandlers['leads'] = (ctx) => {
+      if ('business_id' in ctx.is) return { data: { id: UUID, business_id: null }, error: null }
+      return { data: { id: UUID, business_id: null }, error: null }
+    }
+    tableHandlers['deals'] = () => ({ data: { id: UUID2 }, error: null })
+    await createDeal({ leadName: 'Lead Activo', leadEmail: 'activo@example.com', valueArs: 0, stage: 'lead' })
+
+    expect(insertedRows.some((i) => i.table === 'leads')).toBe(false) // NO se creó lead nuevo
+    expect(insertedRows.some((i) => i.table === 'deals')).toBe(true) // solo el deal
+  })
+})
+
+describe('markWon', () => {
+  it('setea status won y audita deal.won risk bajo con actorId del admin', async () => {
+    tableHandlers['deals'] = () => ({ data: null, error: null })
+    await markWon({ dealId: UUID })
+
+    const upd = updatedRows.find((u) => u.table === 'deals')
+    expect(upd).toBeTruthy()
+    expect((upd!.values as Record<string, unknown>).status).toBe('won')
+    const audit = auditCalls.find((a) => a.action === 'deal.won')
+    expect(audit).toBeTruthy()
+    expect(audit!.risk).toBe('bajo') // ganar NO es destructivo (a diferencia de mark_lost = medio)
+    expect(audit!.actorId).toBe('admin-1')
+    expect(audit!.targetId).toBe(UUID)
+  })
+
+  it('NO toca stage (D-04: stage y status son ortogonales)', async () => {
+    tableHandlers['deals'] = () => ({ data: null, error: null })
+    await markWon({ dealId: UUID })
+
+    const upd = updatedRows.find((u) => u.table === 'deals')
+    expect((upd!.values as Record<string, unknown>).stage).toBeUndefined()
+  })
+
+  it('requireAdmin lanza → no muta ni audita', async () => {
+    requireAdminImpl = async () => {
+      throw new Error('forbidden')
+    }
+    await expect(markWon({ dealId: UUID })).rejects.toThrow('forbidden')
+    expect(updatedRows.length).toBe(0)
+    expect(auditCalls.length).toBe(0)
+  })
+
+  it('input inválido (dealId no-uuid) → rechaza antes de mutar', async () => {
+    await expect(markWon({ dealId: 'no-es-uuid' })).rejects.toBeTruthy()
+    expect(updatedRows.length).toBe(0)
   })
 })
 

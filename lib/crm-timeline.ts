@@ -79,6 +79,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'deal.create': 'Creó negociación',
   'deal.stage_change': 'Movió de etapa',
   'deal.mark_lost': 'Marcó perdido',
+  'deal.won': 'Marcó ganado',
   'lead.convert': 'Convirtió lead',
   'tag.create': 'Creó tag',
   'tag.assign': 'Asignó tag',
