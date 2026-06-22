@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getPlanPrices } from '@/lib/plan-prices'
 import type { TimelineRow } from '@/lib/crm-timeline'
-import { FichaClient, type FichaData, type FichaTag, type FichaNote } from './ficha-client'
+import { FichaClient, type FichaData, type FichaTag, type FichaNote, type FichaTask } from './ficha-client'
 
 /**
  * Ficha de negocio de la Consola CRM (/admin/negocios/[id]) — ADM-02..06.
@@ -124,6 +124,24 @@ export default async function FichaPage({ params }: { params: Promise<{ id: stri
     console.error('[crm/ficha] notes read error:', e instanceof Error ? e.message : e)
   }
 
+  // ── Tareas con id (lista completable) ────────────────────────────────────────────────────────
+  // Espejo de la lectura de notas: la VIEW crm_timeline no expone el id de cada tarea → para poder
+  // marcarla como completada (completeTask) leemos las tareas con su id por separado (service-role,
+  // tasks es admin-only; el gate is_admin ya lo dio el layout). Solo id/title/done/completed_at/
+  // created_at cruzan al cliente — no son datos sensibles (T-04-13).
+  let fichaTasks: FichaTask[] = []
+  try {
+    const { data: tasksData } = await admin
+      .from('tasks')
+      .select('id, title, done, completed_at, created_at')
+      .eq('business_id', id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    fichaTasks = (tasksData ?? []) as FichaTask[]
+  } catch (e) {
+    console.error('[crm/ficha] tasks read error:', e instanceof Error ? e.message : e)
+  }
+
   const prices = await getPlanPrices()
   const plan = (data.plan ?? 'basic') as FichaData['plan']
 
@@ -151,6 +169,7 @@ export default async function FichaPage({ params }: { params: Promise<{ id: stri
       tags={fichaTags}
       catalogTags={catalogTags}
       notes={fichaNotes}
+      tasks={fichaTasks}
     />
   )
 }
