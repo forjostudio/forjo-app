@@ -16,18 +16,44 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, MessageCircle, Mail } from 'lucide-react'
+import { ChevronLeft, MessageCircle, Mail, Inbox, Plus, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatusBadge } from '@/components/crm/status-badge'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { ExtendTrialDialog } from '@/components/crm/extend-trial-dialog'
 import { AddonToggle } from '@/components/crm/addon-toggle'
+import { TagChip } from '@/components/crm/tag-chip'
+import { TimelineEntry } from '@/components/crm/timeline-entry'
 import { changePlan, suspendBusiness, reactivateBusiness, startImpersonation } from '@/app/(crm)/admin/_actions'
+import { createNote, createTask, completeTask, deleteNote } from '@/app/(crm)/admin/_content-actions'
+import { assignTag, removeTag } from '@/app/(crm)/admin/_tag-actions'
+import {
+  TIMELINE_FILTERS,
+  rowMatchesFilter,
+  filterShowsEmptyState,
+  type TimelineFilter,
+  type TimelineRow,
+} from '@/lib/crm-timeline'
 
 export type PlanKey = 'basic' | 'studio' | 'pro'
+
+// Tag mínima que cruza al cliente (catálogo / asignada). Solo id+label+color, nada sensible (T-04-13).
+export type FichaTag = {
+  id: string
+  label: string
+  color: string
+}
+
+// Nota con id (para la lista borrable; el timeline VIEW no expone el id, por eso se lee aparte).
+export type FichaNote = {
+  id: string
+  body: string
+  created_at: string
+}
 
 export type FichaData = {
   id: string
@@ -70,7 +96,19 @@ function billingState(planStatus: string, subEndsAt: string | null): { label: st
   return { label: '—', color: 'var(--muted-foreground)' }
 }
 
-export function FichaClient({ data }: { data: FichaData }) {
+export function FichaClient({
+  data,
+  timelineRows,
+  tags,
+  catalogTags,
+  notes,
+}: {
+  data: FichaData
+  timelineRows: TimelineRow[]
+  tags: FichaTag[]
+  catalogTags: FichaTag[]
+  notes: FichaNote[]
+}) {
   const router = useRouter()
   const [changePlanOpen, setChangePlanOpen] = React.useState(false)
   const [suspendOpen, setSuspendOpen] = React.useState(false)
@@ -79,6 +117,71 @@ export function FichaClient({ data }: { data: FichaData }) {
   const [grantOpen, setGrantOpen] = React.useState(false)
   const [verOpen, setVerOpen] = React.useState(false)
   const [selectedPlan, setSelectedPlan] = React.useState<PlanKey>(DEFAULT_TARGET[data.plan])
+
+  // ── Tab Resumen / Timeline (ahora real, ya no PRONTO) ──
+  const [tab, setTab] = React.useState<'resumen' | 'timeline'>('resumen')
+
+  // ── Estado del timeline: filtro activo + input de nota + alta de tarea ──
+  const [timelineFilter, setTimelineFilter] = React.useState<TimelineFilter>('todo')
+  const [noteBody, setNoteBody] = React.useState('')
+  const [taskTitle, setTaskTitle] = React.useState('')
+  const [pending, setPending] = React.useState(false)
+  const [addTagOpen, setAddTagOpen] = React.useState(false)
+  const [removeTagOpen, setRemoveTagOpen] = React.useState<FichaTag | null>(null)
+  const [deleteNoteTarget, setDeleteNoteTarget] = React.useState<FichaNote | null>(null)
+
+  // Tareas vivas (rama 'tarea' del timeline). Las notas viven en el timeline; las tareas se listan
+  // aparte para poder marcarse como completas (no las re-derivamos del timeline para no perder el id).
+  // Sin id en la VIEW: el checkbox de completar opera sobre las tareas que el operador crea en sesión.
+  const filteredTimeline = React.useMemo(
+    () => timelineRows.filter((r) => rowMatchesFilter(r, timelineFilter)),
+    [timelineRows, timelineFilter],
+  )
+
+  // Tags ya asignadas (set de ids) para no ofrecer en el catálogo las que ya están.
+  const assignedIds = React.useMemo(() => new Set(tags.map((t) => t.id)), [tags])
+  const availableTags = React.useMemo(
+    () => catalogTags.filter((t) => !assignedIds.has(t.id)),
+    [catalogTags, assignedIds],
+  )
+
+  async function submitNote() {
+    const body = noteBody.trim()
+    if (!body || pending) return
+    setPending(true)
+    try {
+      await createNote({ businessId: data.id, body })
+      setNoteBody('')
+      router.refresh()
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function submitTask() {
+    const title = taskTitle.trim()
+    if (!title || pending) return
+    setPending(true)
+    try {
+      await createTask({ businessId: data.id, title })
+      setTaskTitle('')
+      router.refresh()
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function handleAssignTag(tag: FichaTag) {
+    if (pending) return
+    setPending(true)
+    try {
+      await assignTag({ tagId: tag.id, entityType: 'business', entityId: data.id })
+      setAddTagOpen(false)
+      router.refresh()
+    } finally {
+      setPending(false)
+    }
+  }
 
   const isSuspended = data.plan_status === 'suspended'
   const billing = billingState(data.plan_status, data.subscription_ends_at)
@@ -134,27 +237,59 @@ export function FichaClient({ data }: { data: FichaData }) {
         </div>
       </div>
 
-      {/* Tabs Resumen / Timeline(PRONTO) */}
+      {/* Tabs Resumen / Timeline (ambos reales: el Timeline dejó de ser PRONTO/disabled) */}
       <div role="tablist" aria-label="Secciones de la ficha" className="flex items-center gap-1 border-b border-border">
-        <span
+        <button
+          type="button"
           role="tab"
-          aria-selected="true"
-          className="border-b-2 border-primary px-3 py-2 text-sm text-primary"
+          aria-selected={tab === 'resumen'}
+          onClick={() => setTab('resumen')}
+          className={cn(
+            'px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+            tab === 'resumen'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
         >
           Resumen
-        </span>
-        <span
+        </button>
+        <button
+          type="button"
           role="tab"
-          aria-disabled="true"
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground/60"
+          aria-selected={tab === 'timeline'}
+          onClick={() => setTab('timeline')}
+          className={cn(
+            'px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+            tab === 'timeline'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
         >
           Timeline
-          <span className="font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-wide">Pronto</span>
-        </span>
+        </button>
       </div>
 
-      {/* Dos columnas */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* ── Tab Timeline (TL-01) ── */}
+      {tab === 'timeline' && (
+        <TimelineTab
+          timelineRows={timelineRows}
+          filteredTimeline={filteredTimeline}
+          timelineFilter={timelineFilter}
+          setTimelineFilter={setTimelineFilter}
+          noteBody={noteBody}
+          setNoteBody={setNoteBody}
+          submitNote={submitNote}
+          taskTitle={taskTitle}
+          setTaskTitle={setTaskTitle}
+          submitTask={submitTask}
+          notes={notes}
+          onDeleteNote={setDeleteNoteTarget}
+          pending={pending}
+        />
+      )}
+
+      {/* Dos columnas (tab Resumen) */}
+      <div className={cn('grid grid-cols-1 gap-6 lg:grid-cols-2', tab !== 'resumen' && 'hidden')}>
         {/* Izquierda: Contacto + Suscripción */}
         <div className="space-y-6">
           <section className="space-y-4 rounded-xl border border-border bg-card p-5">
@@ -180,6 +315,38 @@ export function FichaClient({ data }: { data: FichaData }) {
               iconColor="var(--muted-foreground)"
               ariaAction={`Enviar email a ${data.name}`}
             />
+
+            {/* Fila de tags (D-08): chips asignadas + "+ Tag" (assignTag/removeTag del foundation compartido) */}
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground">
+                Tags
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {tags.length === 0 && (
+                  <span className="text-sm text-muted-foreground">Sin tags</span>
+                )}
+                {tags.map((t) => (
+                  <TagChip
+                    key={t.id}
+                    label={t.label}
+                    color={t.color}
+                    removable
+                    onRemove={() => setRemoveTagOpen(t)}
+                  />
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={availableTags.length === 0 || pending}
+                  onClick={() => setAddTagOpen(true)}
+                >
+                  <Plus className="size-3" aria-hidden="true" />
+                  Tag
+                </Button>
+              </div>
+            </div>
           </section>
 
           <section className="space-y-4 rounded-xl border border-border bg-card p-5">
@@ -385,6 +552,262 @@ export function FichaClient({ data }: { data: FichaData }) {
         currentTrialEndsAt={data.trial_ends_at}
         mode="grant"
       />
+
+      {/* Asignar tag: lista del catálogo (las no asignadas). assignTag del foundation compartido (D-08). */}
+      {addTagOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Asignar tag"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setAddTagOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm space-y-3 rounded-xl border border-border bg-card p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-[family-name:var(--font-heading)] text-base font-bold tracking-[-0.02em]">
+              Asignar tag
+            </h2>
+            <div className="flex flex-wrap gap-1.5">
+              {availableTags.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No hay más tags disponibles.</p>
+              ) : (
+                availableTags.map((t) => (
+                  <TagChip key={t.id} label={t.label} color={t.color} onToggle={() => handleAssignTag(t)} />
+                ))
+              )}
+            </div>
+            <div className="flex justify-end pt-1">
+              <Button type="button" variant="outline" size="sm" onClick={() => setAddTagOpen(false)}>
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quitar tag (refuerzo con ConfirmDialog; removeTag del foundation compartido). */}
+      <ConfirmDialog
+        open={removeTagOpen !== null}
+        onOpenChange={(open) => !open && setRemoveTagOpen(null)}
+        title="Quitar tag"
+        description={`Vas a quitar la tag "${removeTagOpen?.label ?? ''}" de este negocio.`}
+        risk="bajo"
+        confirmLabel="Quitar tag"
+        onConfirm={async () => {
+          if (!removeTagOpen) return
+          await removeTag({ tagId: removeTagOpen.id, entityType: 'business', entityId: data.id })
+          setRemoveTagOpen(null)
+          router.refresh()
+        }}
+      />
+
+      {/* Borrar nota (risk medio, acción destructiva): ConfirmDialog (refuerzo) + deleteNote (garantía). */}
+      <ConfirmDialog
+        open={deleteNoteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteNoteTarget(null)}
+        title="Borrar nota"
+        description="Vas a borrar esta nota del historial. Queda registrado en auditoría."
+        risk="medio"
+        confirmLabel="Borrar nota"
+        destructive
+        onConfirm={async () => {
+          if (!deleteNoteTarget) return
+          await deleteNote({ noteId: deleteNoteTarget.id })
+          setDeleteNoteTarget(null)
+          router.refresh()
+        }}
+      />
+    </div>
+  )
+}
+
+// ── TimelineTab ─────────────────────────────────────────────────────────────────────────────────
+// Render del tab Timeline (TL-01, reproduce 05-ficha-timeline.png): banner "Ir a Bandeja" (placeholder
+// Phase 6), input "+ Nota", alta de tarea liviana, chips de filtro (con empty state para Mensajes/
+// Llamadas, D-13) y la lista de TimelineEntry ordenada por occurred_at desc (ya viene ordenada del RSC).
+function TimelineTab({
+  timelineRows,
+  filteredTimeline,
+  timelineFilter,
+  setTimelineFilter,
+  noteBody,
+  setNoteBody,
+  submitNote,
+  taskTitle,
+  setTaskTitle,
+  submitTask,
+  notes,
+  onDeleteNote,
+  pending,
+}: {
+  timelineRows: TimelineRow[]
+  filteredTimeline: TimelineRow[]
+  timelineFilter: TimelineFilter
+  setTimelineFilter: (f: TimelineFilter) => void
+  noteBody: string
+  setNoteBody: (v: string) => void
+  submitNote: () => void
+  taskTitle: string
+  setTaskTitle: (v: string) => void
+  submitTask: () => void
+  notes: FichaNote[]
+  onDeleteNote: (note: FichaNote) => void
+  pending: boolean
+}) {
+  const showsEmptyState = filterShowsEmptyState(timelineFilter)
+  // La sección de notas borrables solo aplica al filtro Notas/Todo (las notas tienen id; el resto del
+  // timeline es read-only). deleteNote va detrás del ConfirmDialog del padre (risk medio).
+  const showNotesManager = (timelineFilter === 'notas' || timelineFilter === 'todo') && notes.length > 0
+
+  return (
+    <div className="space-y-4">
+      {/* Banner "Ir a Bandeja" (los mensajes/llamadas llegan con la Bandeja, Phase 6). */}
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-card/60 px-4 py-3">
+        <span
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground"
+          aria-hidden="true"
+        >
+          <Inbox className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-foreground">Mensajes y llamadas llegan con la Bandeja</p>
+          <p className="text-xs text-muted-foreground">Próximamente vas a poder responder desde acá.</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" disabled>
+          Ir a Bandeja
+        </Button>
+      </div>
+
+      {/* Input "+ Nota" + alta de tarea liviana */}
+      <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={noteBody}
+            onChange={(e) => setNoteBody(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submitNote()
+              }
+            }}
+            placeholder="Agregar una nota al historial…"
+            aria-label="Agregar una nota al historial"
+            className="flex-1"
+          />
+          <Button type="button" className="gap-1" disabled={!noteBody.trim() || pending} onClick={submitNote}>
+            <Plus className="size-3.5" aria-hidden="true" />
+            Nota
+          </Button>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submitTask()
+              }
+            }}
+            placeholder="Crear una tarea liviana…"
+            aria-label="Crear una tarea"
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1"
+            disabled={!taskTitle.trim() || pending}
+            onClick={submitTask}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            Tarea
+          </Button>
+        </div>
+      </div>
+
+      {/* Chips de filtro (Todo/Mensajes/Llamadas/Notas/Tareas/Cambios) */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {TIMELINE_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            aria-pressed={timelineFilter === f.key}
+            onClick={() => setTimelineFilter(f.key)}
+            className={cn(
+              'inline-flex min-h-9 items-center rounded-4xl border px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+              timelineFilter === f.key
+                ? 'border-border bg-secondary text-foreground'
+                : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Gestión de notas borrables (deleteNote detrás de ConfirmDialog, risk medio) */}
+      {showNotesManager && (
+        <div className="space-y-1.5 rounded-xl border border-border bg-card/60 p-3">
+          <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground">
+            Notas
+          </p>
+          <ul className="divide-y divide-border">
+            {notes.map((n) => (
+              <li key={n.id} className="flex items-start gap-2 py-2">
+                <p className="min-w-0 flex-1 text-sm text-foreground">{n.body}</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0 text-muted-foreground hover:text-[var(--crm-danger)]"
+                  aria-label="Borrar nota"
+                  disabled={pending}
+                  onClick={() => onDeleteNote(n)}
+                >
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Lista del timeline / empty states */}
+      {showsEmptyState ? (
+        <TimelineEmpty
+          heading="Sin mensajes — llegan con la Bandeja"
+          body="Cuando la Bandeja esté activa, los mensajes y llamadas van a aparecer acá en el historial."
+        />
+      ) : filteredTimeline.length === 0 ? (
+        <TimelineEmpty
+          heading={timelineRows.length === 0 ? 'Todavía no hay actividad' : 'Nada en este filtro'}
+          body={
+            timelineRows.length === 0
+              ? 'Las notas, tareas y cambios sobre este negocio van a aparecer acá en orden cronológico.'
+              : 'Probá con otro filtro o agregá una nota.'
+          }
+        />
+      ) : (
+        <ul className="divide-y divide-border rounded-xl border border-border bg-card px-4">
+          {filteredTimeline.map((row, i) => (
+            <TimelineEntry key={`${row.kind}-${row.occurred_at}-${i}`} row={row} />
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function TimelineEmpty({ heading, body }: { heading: string; body: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/40 px-6 py-12 text-center">
+      <h2 className="text-base font-bold font-[family-name:var(--font-heading)] tracking-[-0.02em]">
+        {heading}
+      </h2>
+      <p className="max-w-md text-sm text-muted-foreground">{body}</p>
     </div>
   )
 }

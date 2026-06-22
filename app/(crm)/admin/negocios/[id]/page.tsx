@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { getPlanPrices } from '@/lib/plan-prices'
-import { FichaClient, type FichaData } from './ficha-client'
+import type { TimelineRow } from '@/lib/crm-timeline'
+import { FichaClient, type FichaData, type FichaTag, type FichaNote } from './ficha-client'
 
 /**
  * Ficha de negocio de la Consola CRM (/admin/negocios/[id]) — ADM-02..06.
@@ -62,6 +64,66 @@ export default async function FichaPage({ params }: { params: Promise<{ id: stri
     console.error('[crm/ficha] getUserById error:', e instanceof Error ? e.message : e)
   }
 
+  // ── Timeline unificado (TL-01) ──────────────────────────────────────────────────────────────
+  // Se lee con el SESSION client (createClient → anon key + cookies del operador), NO con service-role,
+  // PORQUE crm_timeline es una VIEW security_invoker=true: corre con los privilegios del CALLER y así
+  // HEREDA la RLS admin-read de las tablas base (audit_log/notes/tasks). Leerla con service-role
+  // bypassaría ese gate (threat T-04-10). El filtro .eq('business_id', id) acota al negocio de la URL
+  // y evita fuga cross-entidad (T-04-10). SELECT explícito del shape de la VIEW; .order desc; .limit 100.
+  const supabase = await createClient()
+  const { data: timelineData, error: timelineError } = await supabase
+    .from('crm_timeline')
+    .select('kind, actor_type, title, body, occurred_at, metadata, business_id')
+    .eq('business_id', id)
+    .order('occurred_at', { ascending: false })
+    .limit(100)
+
+  if (timelineError) {
+    console.error('[crm/ficha] timeline read error:', timelineError.message)
+  }
+  const timelineRows: TimelineRow[] = (timelineData ?? []) as TimelineRow[]
+
+  // ── Tags asignadas a este negocio (fila de tags del Resumen) ──────────────────────────────────
+  // Lectura con service-role (entity_tags + tags son admin-only por RLS; el gate is_admin ya lo dio
+  // el layout). Solo cruzan al cliente label/color/id de las tags — no son datos sensibles (T-04-13).
+  let fichaTags: FichaTag[] = []
+  let catalogTags: FichaTag[] = []
+  try {
+    const { data: assigned } = await admin
+      .from('entity_tags')
+      .select('tag_id, tags(id, label, color)')
+      .eq('entity_type', 'business')
+      .eq('entity_id', id)
+    fichaTags = (assigned ?? [])
+      .map((r) => {
+        const t = (r as { tags: FichaTag | FichaTag[] | null }).tags
+        return Array.isArray(t) ? t[0] : t
+      })
+      .filter((t): t is FichaTag => Boolean(t))
+
+    const { data: catalog } = await admin.from('tags').select('id, label, color').order('label')
+    catalogTags = (catalog ?? []) as FichaTag[]
+  } catch (e) {
+    console.error('[crm/ficha] tags read error:', e instanceof Error ? e.message : e)
+  }
+
+  // ── Notas con id (lista borrable) ────────────────────────────────────────────────────────────
+  // El timeline (VIEW) no expone el id de cada nota → para poder borrar una nota concreta detrás del
+  // ConfirmDialog (deleteNote, risk medio) leemos las notas con su id por separado (service-role,
+  // notes es admin-only; el gate is_admin ya lo dio el layout). Solo body/created_at/id al cliente.
+  let fichaNotes: FichaNote[] = []
+  try {
+    const { data: notesData } = await admin
+      .from('notes')
+      .select('id, body, created_at')
+      .eq('business_id', id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    fichaNotes = (notesData ?? []) as FichaNote[]
+  } catch (e) {
+    console.error('[crm/ficha] notes read error:', e instanceof Error ? e.message : e)
+  }
+
   const prices = await getPlanPrices()
   const plan = (data.plan ?? 'basic') as FichaData['plan']
 
@@ -82,5 +144,13 @@ export default async function FichaPage({ params }: { params: Promise<{ id: stri
     planPriceArs: prices[plan],
   }
 
-  return <FichaClient data={ficha} />
+  return (
+    <FichaClient
+      data={ficha}
+      timelineRows={timelineRows}
+      tags={fichaTags}
+      catalogTags={catalogTags}
+      notes={fichaNotes}
+    />
+  )
 }

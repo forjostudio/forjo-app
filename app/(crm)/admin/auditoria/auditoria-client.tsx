@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { RiskBadge, type RiskLevel } from '@/components/crm/risk-badge'
+import { actionLabel } from '@/lib/crm-timeline'
 
 // Fila de audit_log tal cual viene de Supabase (snake_case, sin renombrar — convención del proyecto).
 export type AuditRow = {
@@ -57,23 +58,9 @@ function formatWhen(iso: string): string {
   return `${date} · ${time}`
 }
 
-// Label legible de la acción. El `action` es un código snake/dot ('business.suspend');
-// si no está mapeado, se muestra el código crudo (no se inventa copy).
-const ACTION_LABEL: Record<string, string> = {
-  'business.suspend': 'Suspendió negocio',
-  'business.reactivate': 'Reactivó negocio',
-  'plan.change': 'Cambió plan',
-  'plan.price_edit': 'Editó precio',
-  'user.impersonate': 'Impersonó negocio',
-  'user.impersonate.view': 'Vio ficha (impersonación)',
-  'trial.extend': 'Extendió trial',
-  'trial.grant': 'Activó trial',
-  'addon.toggle': 'Cambió add-on',
-}
-
-function actionLabel(action: string): string {
-  return ACTION_LABEL[action] ?? action
-}
+// Label legible de la acción: el mapa central vive en lib/crm-timeline (ACTION_LABEL + actionLabel),
+// compartido con el timeline de la ficha (Plan 03) para que audit y timeline lean consistente y los
+// action codes de Phase 4 (deal.*, tag.*, note.*, task.*) no se dupliquen en dos lugares. Importado arriba.
 
 // Exporta las filas YA filtradas a un CSV descargable, 100% client-side (sin libs ni endpoint).
 // Mismas columnas visibles que la tabla; escape RFC-4180 (comillas dobladas) + BOM UTF-8 para Excel.
