@@ -101,8 +101,8 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
                   <span className="text-sm font-normal text-muted-foreground">/mes</span>
                 </p>
                 <ul className="text-xs text-muted-foreground space-y-1.5 mt-3 mb-4 flex-1">
-                  <li className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" /> {limits.max_professionals} profesional{limits.max_professionals > 1 ? 'es' : ''}</li>
-                  <li className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" /> {limits.max_locations} local{limits.max_locations > 1 ? 'es' : ''}</li>
+                  <li className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" /> {limits.max_agendas} agenda{limits.max_agendas > 1 ? 's' : ''}</li>
+                  <li className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" /> Sucursales ilimitadas</li>
                   {limits.features.map(f => (
                     <li key={f} className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" /> {f}</li>
                   ))}

@@ -438,7 +438,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     toast.success('Foto eliminada')
   }
 
-  const canAddPro = professionals.filter(p => p.active).length < planConfig.max_professionals
+  const canAddPro = professionals.filter(p => p.active).length < planConfig.max_agendas
   // Labels de Especialidad/Matrícula según el rubro del negocio.
   const proLabels = PRO_LABELS[initTypeGroup] ?? PRO_LABELS.general
 
@@ -511,7 +511,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [savingLocation, setSavingLocation] = useState(false)
 
   const activeLocations = locations.filter(l => l.is_active !== false)
-  const canAddLocation = activeLocations.length < planConfig.max_locations
+  const canAddLocation = true // sucursales sin tope de plan
 
   async function addLocation() {
     if (!newLocation.name.trim()) return
@@ -1091,7 +1091,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">Profesionales del equipo</p>
               <span className="text-xs bg-secondary px-2 py-1 rounded-full text-muted-foreground">
-                {planConfig.name} · {professionals.filter(p => p.active).length}/{planConfig.max_professionals}
+                {planConfig.name} · {professionals.filter(p => p.active).length}/{planConfig.max_agendas}
               </span>
             </div>
             <div className="space-y-2">
@@ -1167,7 +1167,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">{term.locations}</p>
               <span className="text-xs bg-secondary px-2 py-1 rounded-full text-muted-foreground">
-                {planConfig.name} · {activeLocations.length}/{planConfig.max_locations}
+                {planConfig.name} · {activeLocations.length}
               </span>
             </div>
             <div className="space-y-2">
