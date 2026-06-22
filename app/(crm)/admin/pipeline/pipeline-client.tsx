@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Plus, GripVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,7 @@ import { TagChip } from '@/components/crm/tag-chip'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { STAGES, stageTotals, pipelineSummary, type StageKey } from '@/lib/crm-pipeline'
 import { filterByTags } from '@/lib/crm-tags'
-import { createDeal, moveStage, markLost } from '@/app/(crm)/admin/_pipeline-actions'
+import { createDeal, moveStage, markLost, markWon } from '@/app/(crm)/admin/_pipeline-actions'
 
 /**
  * Tablero de pipeline (client) — PIPE-01/02/04. Reproduce el mock 02-pipeline.png:
@@ -63,14 +64,27 @@ function initials(name: string): string {
 export function PipelineClient({
   deals: initialDeals,
   tags,
+  wonTotal,
   loadError,
 }: {
   deals: PipelineDeal[]
   tags: PipelineTag[]
+  wonTotal: number
   loadError: boolean
 }) {
+  const router = useRouter()
+
   // Estado local de los deals: el DnD lo muta OPTIMISTAMENTE y lo revierte si la action falla.
+  // Re-sincroniza con el RSC cuando llegan datos frescos (gap test 4a): tras router.refresh() el prop
+  // initialDeals cambia de identidad → se re-sincroniza DURANTE el render (patrón "adjusting state when
+  // a prop changes" de React, sin useEffect → sin cascading renders; calca AddonToggle / decisión 02-04).
+  // Seguro porque el server es la fuente de verdad; el optimismo del DnD/markWon revierte/aplica local.
   const [deals, setDeals] = useState<PipelineDeal[]>(initialDeals)
+  const [prevInitialDeals, setPrevInitialDeals] = useState(initialDeals)
+  if (initialDeals !== prevInitialDeals) {
+    setPrevInitialDeals(initialDeals)
+    setDeals(initialDeals)
+  }
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<StageKey | null>(null)
@@ -93,6 +107,8 @@ export function PipelineClient({
     return deals.filter((d) => matchedIds.has(d.id))
   }, [deals, selectedTagIds])
 
+  // summary solo se usa para openTotal: el cliente tiene los deals open. El wonTotal viene como prop
+  // server-side (gap test 5) porque el cliente NO recibe las filas won.
   const summary = useMemo(
     () => pipelineSummary(deals.map((d) => ({ stage: d.stage as StageKey, value_ars: d.valueArs, status: d.status as 'open' | 'won' | 'lost' }))),
     [deals],
@@ -144,11 +160,29 @@ export function PipelineClient({
       toast.success('Deal creado.')
       setNewDealOpen(false)
       setForm({ leadName: '', leadEmail: '', valueArs: '0', stage: 'lead' })
-      // revalidatePath del server refresca los datos en el próximo render del RSC.
+      // Gap test 4a: revalidar el RSC para que el deal recién creado aparezca al instante. El
+      // useEffect([initialDeals]) re-sincroniza el estado local cuando llegan los datos frescos.
+      router.refresh()
     } catch {
       toast.error('No se pudo crear el deal. Revisá los datos e intentá de nuevo.')
     } finally {
       setCreating(false)
+    }
+  }
+
+  // ── Marcar ganado ───────────────────────────────────────────────────────────────────────────────
+  // Acción DIRECTA (sin ConfirmDialog: ganar no es destructivo). Espejo de markLost pero optimista
+  // sin motivo: saca la tarjeta del board (status != open) y, si la action falla, re-inserta + toast.
+  // markWon solo cambia status server-side (D-04: no acopla stage↔status).
+  async function handleMarkWon(deal: PipelineDeal) {
+    setDeals((prev) => prev.filter((d) => d.id !== deal.id))
+    try {
+      await markWon({ dealId: deal.id })
+    } catch {
+      // Revertir (Pitfall 6: no mentir) + toast + revalidar para reconciliar con el server.
+      setDeals((prev) => [...prev, deal])
+      toast.error('No se pudo marcar como ganado. Probá de nuevo.')
+      router.refresh()
     }
   }
 
@@ -171,7 +205,7 @@ export function PipelineClient({
           <span className="text-foreground tabular-nums">{arsFormatter.format(summary.openTotal)}</span> abiertos
           {' · '}
           <span style={{ color: 'var(--crm-success)' }} className="tabular-nums">
-            {arsFormatter.format(summary.wonTotal)}
+            {arsFormatter.format(wonTotal)}
           </span>{' '}
           ganados
           <span className="hidden sm:inline"> · arrastrá las tarjetas para cambiar de etapa</span>
@@ -250,6 +284,7 @@ export function PipelineClient({
                         setDragOverStage(null)
                       }}
                       onMarkLost={() => setLostDeal(deal)}
+                      onMarkWon={() => handleMarkWon(deal)}
                     />
                   ))}
                   {stageDeals.length === 0 && (
@@ -377,6 +412,7 @@ function DealCard({
   onDragStart,
   onDragEnd,
   onMarkLost,
+  onMarkWon,
 }: {
   deal: PipelineDeal
   tagById: Map<string, PipelineTag>
@@ -384,6 +420,7 @@ function DealCard({
   onDragStart: () => void
   onDragEnd: () => void
   onMarkLost: () => void
+  onMarkWon: () => void
 }) {
   const cardTags = deal.tagIds.map((id) => tagById.get(id)).filter((t): t is PipelineTag => Boolean(t))
   return (
@@ -426,15 +463,24 @@ function DealCard({
         )}
       </div>
 
-      <div className="mt-2 flex items-center justify-between">
+      <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-sm tabular-nums text-foreground">{arsFormatter.format(deal.valueArs)}</span>
-        <button
-          type="button"
-          onClick={onMarkLost}
-          className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          Marcar perdido
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onMarkWon}
+            className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-[color:var(--crm-success)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            Marcar ganado
+          </button>
+          <button
+            type="button"
+            onClick={onMarkLost}
+            className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            Marcar perdido
+          </button>
+        </div>
       </div>
     </article>
   )
