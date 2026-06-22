@@ -16,7 +16,6 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
 import { ChevronLeft, MessageCircle, Mail, Inbox, Plus, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -31,7 +30,8 @@ import { TagChip } from '@/components/crm/tag-chip'
 import { TimelineEntry } from '@/components/crm/timeline-entry'
 import { changePlan, suspendBusiness, reactivateBusiness, startImpersonation } from '@/app/(crm)/admin/_actions'
 import { createNote, createTask, completeTask, deleteNote } from '@/app/(crm)/admin/_content-actions'
-import { createTag, assignTag, removeTag } from '@/app/(crm)/admin/_tag-actions'
+import { removeTag } from '@/app/(crm)/admin/_tag-actions'
+import { TagManagerDialog } from '@/components/crm/tag-manager-dialog'
 import {
   TIMELINE_FILTERS,
   rowMatchesFilter,
@@ -141,9 +141,6 @@ export function FichaClient({
   const [addTagOpen, setAddTagOpen] = React.useState(false)
   const [removeTagOpen, setRemoveTagOpen] = React.useState<FichaTag | null>(null)
   const [deleteNoteTarget, setDeleteNoteTarget] = React.useState<FichaNote | null>(null)
-  // Inputs del sub-bloque "Crear tag" (desbloqueo del deadlock de catálogo vacío, gap test 13).
-  const [newTagLabel, setNewTagLabel] = React.useState('')
-  const [newTagColor, setNewTagColor] = React.useState('#6366f1')
 
   // Tareas vivas (rama 'tarea' del timeline). Las notas viven en el timeline; las tareas se listan
   // aparte para poder marcarse como completas (no las re-derivamos del timeline para no perder el id).
@@ -151,13 +148,6 @@ export function FichaClient({
   const filteredTimeline = React.useMemo(
     () => timelineRows.filter((r) => rowMatchesFilter(r, timelineFilter)),
     [timelineRows, timelineFilter],
-  )
-
-  // Tags ya asignadas (set de ids) para no ofrecer en el catálogo las que ya están.
-  const assignedIds = React.useMemo(() => new Set(tags.map((t) => t.id)), [tags])
-  const availableTags = React.useMemo(
-    () => catalogTags.filter((t) => !assignedIds.has(t.id)),
-    [catalogTags, assignedIds],
   )
 
   async function submitNote() {
@@ -181,39 +171,6 @@ export function FichaClient({
       await createTask({ businessId: data.id, title })
       setTaskTitle('')
       router.refresh()
-    } finally {
-      setPending(false)
-    }
-  }
-
-  async function handleAssignTag(tag: FichaTag) {
-    if (pending) return
-    setPending(true)
-    try {
-      await assignTag({ tagId: tag.id, entityType: 'business', entityId: data.id })
-      setAddTagOpen(false)
-      router.refresh()
-    } finally {
-      setPending(false)
-    }
-  }
-
-  // Crea una tag nueva en el catálogo global (desbloquea el deadlock de catálogo vacío). El diálogo
-  // queda abierto: tras router.refresh el RSC recarga catalogTags y la nueva tag aparece como chip
-  // asignable. createTag revalida requireAdmin()+createTagSchema server-side (la UI solo invoca).
-  async function handleCreateTag() {
-    const label = newTagLabel.trim()
-    const color = newTagColor.trim()
-    if (!label || !color || pending) return
-    setPending(true)
-    try {
-      await createTag({ label, color })
-      setNewTagLabel('')
-      router.refresh()
-    } catch (e) {
-      // El índice único tags_label_unique_idx (23505) → createTag lanza 'update_failed'.
-      console.error('[crm/ficha] createTag error:', e instanceof Error ? e.message : e)
-      toast.error('No se pudo crear la tag (¿ya existe?).')
     } finally {
       setPending(false)
     }
@@ -604,89 +561,18 @@ export function FichaClient({
         mode="grant"
       />
 
-      {/* Tags: asignar del catálogo (assignTag) + crear nuevas (createTag). El sub-bloque "Crear nueva"
-          desbloquea el deadlock de catálogo vacío (gap test 13): en instalación nueva no hay tags que
-          asignar, así que la única forma de llenar el catálogo es crear desde acá. Ambas actions del
-          foundation compartido (D-08). */}
-      {addTagOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Tags"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setAddTagOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-card p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="font-[family-name:var(--font-heading)] text-base font-bold tracking-[-0.02em]">
-              Tags
-            </h2>
-
-            {/* Asignar existente */}
-            <div className="space-y-2">
-              <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground">
-                Asignar existente
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {availableTags.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay tags disponibles. Creá una abajo.</p>
-                ) : (
-                  availableTags.map((t) => (
-                    <TagChip key={t.id} label={t.label} color={t.color} onToggle={() => handleAssignTag(t)} />
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Crear nueva */}
-            <div className="space-y-2 border-t border-border pt-4">
-              <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground">
-                Crear nueva
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={newTagColor}
-                  onChange={(e) => setNewTagColor(e.target.value)}
-                  aria-label="Color de la tag"
-                  className="size-9 shrink-0 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
-                />
-                <Input
-                  value={newTagLabel}
-                  onChange={(e) => setNewTagLabel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleCreateTag()
-                    }
-                  }}
-                  placeholder="Nombre de la tag…"
-                  aria-label="Nombre de la tag"
-                  className="flex-1"
-                />
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                className="w-full gap-1"
-                disabled={!newTagLabel.trim() || pending}
-                onClick={handleCreateTag}
-              >
-                <Plus className="size-3.5" aria-hidden="true" />
-                Crear tag
-              </Button>
-            </div>
-
-            <div className="flex justify-end">
-              <Button type="button" variant="outline" size="sm" onClick={() => setAddTagOpen(false)}>
-                Cerrar
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tags: diálogo compartido (asignar existente + crear+auto-asignar en un paso, gap test 13). El
+          flujo de QUITAR tag NO vive acá: queda en los chips de la fila del Resumen con su ConfirmDialog
+          (refuerzo, ya verificado). createTag/assignTag revalidan requireAdmin()+zod server-side. */}
+      <TagManagerDialog
+        open={addTagOpen}
+        onOpenChange={setAddTagOpen}
+        entityType="business"
+        entityId={data.id}
+        assignedTags={tags}
+        catalogTags={catalogTags}
+        onChanged={() => router.refresh()}
+      />
 
       {/* Quitar tag (refuerzo con ConfirmDialog; removeTag del foundation compartido). */}
       <ConfirmDialog

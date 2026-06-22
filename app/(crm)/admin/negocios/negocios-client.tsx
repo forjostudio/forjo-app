@@ -186,6 +186,11 @@ export function NegociosClient({
     setSelectedTagIds([])
   }
 
+  // Hay filtro activo si la búsqueda, el tab (≠ default 'todos') o algún tag están aplicados. Habilita
+  // el control "Limpiar filtros" fuera del empty-state (gap test 14): debe estar disponible también
+  // cuando hay resultados visibles, no solo cuando el filtro deja la tabla vacía.
+  const hasActiveFilters = query.trim() !== '' || tab !== 'todos' || selectedTagIds.length > 0
+
   function exportCsv() {
     const blob = new Blob(['﻿' + rowsToCsv(filtered, prices)], {
       type: 'text/csv;charset=utf-8;',
@@ -271,6 +276,16 @@ export function NegociosClient({
               onToggle={() => toggleTag(t.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Control "Limpiar filtros" SIEMPRE visible cuando hay filtro activo (gap test 14), independiente
+          del empty-state: con resultados visibles también ofrece volver al estado por defecto. */}
+      {hasActiveFilters && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={clearFilters}>
+            Limpiar filtros
+          </Button>
         </div>
       )}
 
