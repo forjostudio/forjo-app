@@ -7,13 +7,18 @@
 // (entityType='lead', entityId=leadId) lo reusen sin duplicar UI.
 //
 // Comportamiento:
+//   - "Asignadas": chips TagChip removable (X) → removeTag(tagId, entityType, entityId) + onChanged().
+//     Aplica para AMBOS entityType ('lead' y 'business'): removeTag es de riesgo bajo (solo borra una fila
+//     de entity_tags, auditado server-side, no toca datos del negocio) → afordance directo sin ConfirmDialog
+//     (gap test 7: el pipeline, entityType='lead', no tenía NINGÚN surface para quitar una tag mal puesta).
 //   - "Asignar existente": chips TagChip toggle → assignTag(tagId, entityType, entityId) + onChanged().
 //   - "Crear nueva": Input + color picker → createTag (que AHORA devuelve el id) y EN EL MISMO PASO
 //     assignTag con ese id (gap test 13: la tag queda asignada sin tener que tocar "asignar existente").
 //
-// El client NUNCA autoriza: createTag/assignTag revalidan requireAdmin()+zod server-side (T-04-15/16);
-// este diálogo es solo el afordance. NO incluye removeTag: quitar una tag queda en cada surface con su
-// propio refuerzo (la ficha usa un ConfirmDialog ya verificado; no se mueve acá).
+// El client NUNCA autoriza: createTag/assignTag/removeTag revalidan requireAdmin()+zod server-side
+// (T-04-15/16); este diálogo es solo el afordance. La fila de chips removable + ConfirmDialog "Quitar tag"
+// de la ficha (entity_type='business', test 13 verificado) sigue INTACTA como surface adicional/refuerzo y
+// NO se movió acá: la sección "Asignadas" es una superficie distinta, no la reemplaza ni la duplica.
 
 import * as React from 'react'
 import { toast } from 'sonner'
@@ -22,7 +27,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TagChip } from '@/components/crm/tag-chip'
-import { createTag, assignTag } from '@/app/(crm)/admin/_tag-actions'
+import { createTag, assignTag, removeTag } from '@/app/(crm)/admin/_tag-actions'
 
 type Tag = { id: string; label: string; color: string }
 
@@ -68,6 +73,23 @@ export function TagManagerDialog({
     }
   }
 
+  // Quita una tag ya asignada a esta entidad (gap test 7). Mismo patrón pending/try-catch/toast que
+  // handleAssignExisting. removeTag es genérico (lead|business) y de riesgo bajo: afordance directo sin
+  // ConfirmDialog. Tras onChanged→refresh, el chip desaparece de la tarjeta y deja de matchear el filtro OR.
+  async function handleRemove(tag: Tag) {
+    if (pending) return
+    setPending(true)
+    try {
+      await removeTag({ tagId: tag.id, entityType, entityId })
+      onChanged?.()
+    } catch (e) {
+      console.error('[crm/tags] removeTag error:', e instanceof Error ? e.message : e)
+      toast.error('No se pudo quitar la tag. Probá de nuevo.')
+    } finally {
+      setPending(false)
+    }
+  }
+
   // Crea la tag (createTag devuelve el id) y EN EL MISMO PASO la asigna a esta entidad (gap test 13):
   // así la tag recién creada queda asignada sin tener que volver a tocarla en "asignar existente".
   async function handleCreateTag() {
@@ -107,8 +129,24 @@ export function TagManagerDialog({
           Tags
         </h2>
 
-        {/* Asignar existente */}
+        {/* Asignadas: tags ya puestas en la entidad, con X para quitarlas (gap test 7) */}
         <div className="space-y-2">
+          <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground">
+            Asignadas
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {assignedTags.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin tags asignadas.</p>
+            ) : (
+              assignedTags.map((t) => (
+                <TagChip key={t.id} label={t.label} color={t.color} removable onRemove={() => handleRemove(t)} />
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Asignar existente */}
+        <div className="space-y-2 border-t border-border pt-4">
           <p className="font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground">
             Asignar existente
           </p>
