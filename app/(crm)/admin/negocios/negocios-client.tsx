@@ -16,8 +16,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/crm/status-badge'
+import { TagChip } from '@/components/crm/tag-chip'
 import { filterBusinesses, type DirectoryRow, type DirectoryTab } from '@/lib/crm-directory'
+import { filterByTags } from '@/lib/crm-tags'
 import type { PlanPrices, PlanKey } from '@/lib/plan-prices'
+
+// Tag del catálogo que cruza al cliente para los chips del filtro (solo id+label+color, no sensible).
+export type DirectoryTag = {
+  id: string
+  label: string
+  color: string
+}
 
 /**
  * Directorio de negocios (client) — ADM-01. Calca la mecánica del visor de auditoría
@@ -42,6 +51,7 @@ export type NegocioRow = {
   has_web_custom: boolean
   has_whatsapp: boolean
   created_at: string
+  tagIds: string[]
 }
 
 // Display name de los 3 planes reales (basic/studio/pro → Básico/Estudio/Pro).
@@ -136,21 +146,34 @@ function rowsToCsv(rows: NegocioRow[], prices: PlanPrices): string {
 export function NegociosClient({
   rows,
   prices,
+  catalogTags,
   loadError,
 }: {
   rows: NegocioRow[]
   prices: PlanPrices
+  catalogTags: DirectoryTag[]
   loadError: boolean
 }) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState<DirectoryTab>('todos')
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
 
+  // Filtro combinado: tab+query (filterBusinesses, AND entre dimensiones) Y el filtro de tags
+  // (filterByTags, OR dentro de las tags seleccionadas, D-09). Un negocio pasa si matchea tab+query
+  // Y (sin tags seleccionadas O tiene alguna de las seleccionadas).
   const filtered = useMemo(() => {
     const directoryRows = rows.map(toDirectoryRow)
     const matchedIds = new Set(filterBusinesses(directoryRows, { query, tab }).map((r) => r.id))
-    return rows.filter((r) => matchedIds.has(r.id))
-  }, [rows, query, tab])
+    const byTabQuery = rows.filter((r) => matchedIds.has(r.id))
+    return filterByTags(byTabQuery, selectedTagIds)
+  }, [rows, query, tab, selectedTagIds])
+
+  function toggleTag(tagId: string) {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
+    )
+  }
 
   const counts = useMemo(
     () => Object.fromEntries(TABS.map((t) => [t.value, tabCount(rows, t.value)])) as Record<DirectoryTab, number>,
@@ -160,6 +183,7 @@ export function NegociosClient({
   function clearFilters() {
     setQuery('')
     setTab('todos')
+    setSelectedTagIds([])
   }
 
   function exportCsv() {
@@ -231,6 +255,24 @@ export function NegociosClient({
           </Button>
         </div>
       </div>
+
+      {/* Fila de chips de tag (mismos compartidos que el pipeline) — filtro OR (D-09) */}
+      {catalogTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-wide text-muted-foreground">
+            Tags
+          </span>
+          {catalogTags.map((t) => (
+            <TagChip
+              key={t.id}
+              label={t.label}
+              color={t.color}
+              selected={selectedTagIds.includes(t.id)}
+              onToggle={() => toggleTag(t.id)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Tabla / estados */}
       {loadError ? (

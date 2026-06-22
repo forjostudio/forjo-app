@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPlanPrices } from '@/lib/plan-prices'
-import { NegociosClient, type NegocioRow } from './negocios-client'
+import { NegociosClient, type NegocioRow, type DirectoryTag } from './negocios-client'
 
 /**
  * Directorio de negocios de la Consola CRM (/admin/negocios) — ADM-01.
@@ -54,6 +54,30 @@ export default async function NegociosPage() {
   const businesses: BusinessSelect[] = (data ?? []) as BusinessSelect[]
   const prices = await getPlanPrices()
 
+  // ── Tags del directorio (filtro por tag, PIPE-04) ──────────────────────────────────────────────
+  // Catálogo de tags + asignaciones (entity_type='business') con service-role (tags/entity_tags son
+  // admin-only por RLS; el gate is_admin lo dio el layout). Se mapean los tagIds por negocio para el
+  // filtro OR del cliente. tagIds NO son datos sensibles (T-04-13): solo ids de etiquetas del catálogo.
+  const tagsByBusiness = new Map<string, string[]>()
+  let catalogTags: DirectoryTag[] = []
+  try {
+    const { data: catalog } = await admin.from('tags').select('id, label, color').order('label')
+    catalogTags = (catalog ?? []) as DirectoryTag[]
+
+    const { data: assignments } = await admin
+      .from('entity_tags')
+      .select('tag_id, entity_id')
+      .eq('entity_type', 'business')
+    for (const a of assignments ?? []) {
+      const row = a as { tag_id: string; entity_id: string }
+      const list = tagsByBusiness.get(row.entity_id) ?? []
+      list.push(row.tag_id)
+      tagsByBusiness.set(row.entity_id, list)
+    }
+  } catch (e) {
+    console.error('[crm/negocios] tags read error:', e instanceof Error ? e.message : e)
+  }
+
   // Email del dueño acotado: solo el string de email, fallback a notification_email (nunca el user completo).
   const rows: NegocioRow[] = await Promise.all(
     businesses.map(async (b): Promise<NegocioRow> => {
@@ -76,9 +100,10 @@ export default async function NegociosPage() {
         has_web_custom: Boolean(b.has_web_custom),
         has_whatsapp: Boolean(b.has_whatsapp),
         created_at: b.created_at,
+        tagIds: tagsByBusiness.get(b.id) ?? [],
       }
     })
   )
 
-  return <NegociosClient rows={rows} prices={prices} loadError={Boolean(error)} />
+  return <NegociosClient rows={rows} prices={prices} catalogTags={catalogTags} loadError={Boolean(error)} />
 }
