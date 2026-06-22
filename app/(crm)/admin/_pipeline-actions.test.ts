@@ -165,7 +165,16 @@ describe('linkLeadOnSignup (conversión automática, anti-tampering)', () => {
   })
 
   it('lead inexistente → crea un lead ya convertido (deal won) — D-06', async () => {
-    tableHandlers['leads'] = () => ({ data: null, error: null }) // no hay match
+    // El maybeSingle del lookup devuelve null (no hay match); el insert().select().single() del
+    // alta devuelve la fila creada con su id (igual que Supabase). El mock no distingue lecturas de
+    // inserts por tabla, así que devolvemos el id: el lookup usa maybeSingle (null real lo da el
+    // primer call), pero acá el patrón de "crear" necesita el id de vuelta.
+    let leadCall = 0
+    tableHandlers['leads'] = () => {
+      leadCall += 1
+      // 1er call = lookup (maybeSingle) → sin match; 2do call = insert().select().single() → id nuevo.
+      return leadCall === 1 ? { data: null, error: null } : { data: { id: UUID }, error: null }
+    }
     tableHandlers['deals'] = () => ({ data: null, error: null })
     await linkLeadOnSignup({ businessId: UUID2 })
 
