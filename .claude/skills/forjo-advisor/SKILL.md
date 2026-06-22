@@ -113,3 +113,10 @@ por la sub-decisión de negocio. Dejale claro al usuario qué ya resolviste y qu
 - Si la pregunta toca infra compartida entre milestones, no la cierres sin chequear `MEMORY.md`
 - Los briefs (fuera del repo) y sus decisiones LOCKED son autoritativos para el milestone:
   aplicalos, no los re-litigies
+- **Pensá el sistema como futuro producto de venta.** Lo que hoy es interno (ej. el CRM) puede
+  volverse un producto vendible. Cuando una decisión sea **costosa de revertir** —esquema/modelo de
+  datos, contratos de API, formatos persistidos—, preferí la opción **más extensible** si el costo
+  extra es bajo: es un seguro barato contra una migración dolorosa. PERO **no gold-platees**: no
+  agregues features ni UI que hoy no se usan. Heurística: **sofisticá el modelo de datos** (caro de
+  migrar), **mantené simple la UI y el alcance** (barato de evolucionar). Si la sofisticación tiene
+  costo real y el futuro es incierto, marcá el trade-off y gateá al usuario en vez de decidir solo.
