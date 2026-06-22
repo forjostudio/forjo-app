@@ -14,6 +14,7 @@ import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles } from 'l
 import { cn } from '@/lib/utils'
 import { TYPE_GROUPS, getVerticalKeyByType } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
+import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -208,6 +209,18 @@ export default function OnboardingPage() {
       await supabase.from('business_hours').insert(
         hours.map(h => ({ ...h, business_id: business.id }))
       )
+
+      // Conversión automática lead→negocio (CRM, PIPE-03 / D-05). Este es el punto de integración
+      // REAL de la conversión: register solo hace auth.signUp; el negocio recién existe ACÁ. La sesión
+      // del dueño NO puede escribir leads/deals (tablas admin-only por RLS, migración 034) → la action
+      // corre service-role server-side y re-deriva el email del owner de la sesión (anti-tampering, por
+      // eso NO le pasamos email ni leadId). Best-effort: si falla, el negocio ya se creó; loguear y
+      // seguir, NUNCA bloquear el redirect al dashboard (T-04-09).
+      try {
+        await linkLeadOnSignup({ businessId: business.id })
+      } catch (linkErr) {
+        console.error('[onboarding/link-lead]', linkErr instanceof Error ? linkErr.message : linkErr)
+      }
 
       toast.success('¡Negocio creado con éxito!')
       router.push('/dashboard')
