@@ -258,6 +258,14 @@
 .frj-kicker-on-primary .frj-kicker-dot {
   background: currentColor;
 }
+/* kicker sobre FOTO: blanco translúcido (el hero ya usa blanco para el texto sobre foto).
+   Va sin @layer → le gana al color base muted de .frj-kicker (trap de Tailwind v4). */
+.frj-kicker-on-photo {
+  color: rgb(255 255 255 / 0.9);
+}
+.frj-kicker-on-photo .frj-kicker-dot {
+  background: currentColor;
+}
 
 /* GhostIndex — número fantasma decorativo en la esquina de una sección */
 .frj-bigindex {
@@ -352,14 +360,9 @@
 /* ghost-photo: outline CLARO para fondos oscuros (hero secundario sobre primary/scrim) —
    el ghost normal usa --foreground (oscuro) y se pierde en el hero. Hex-free via on-primary. */
 .frj-btn-ghost-photo {
-  /* tinte muy sutil + frosting: sobre una FOTO el blur/tint levantan el texto claro y el borde
-     para que el botón no se pierda (pedido del usuario); sobre el campo de color plano (hero sin
-     foto) el blur es invisible y el tinte apenas se nota. Borde más sólido (62%). */
-  background: color-mix(in oklab, black 16%, transparent);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
+  background: transparent;
   color: var(--frj-on-primary);
-  border-color: color-mix(in oklab, var(--frj-on-primary) 62%, transparent);
+  border-color: color-mix(in oklab, var(--frj-on-primary) 50%, transparent);
 }
 .frj-btn-ghost-photo:hover {
   box-shadow: none;
@@ -367,6 +370,20 @@
 }
 .frj-btn-ghost-photo .frj-btn-circ {
   background: color-mix(in oklab, var(--frj-on-primary) 20%, transparent);
+}
+/* photo-outline: variante FUERTE del ghost para fondos FOTO (no campo de color plano). Sobre una
+   imagen el outline claro se pierde; este suma un velo oscuro + frosting (backdrop blur) + borde
+   sólido para que el botón secundario se lea sin competir con el primario. Va SIN @layer y después
+   en el archivo → gana por orden a .frj-btn-ghost-photo (Tailwind v4: lo no-layered > @layer utilities). */
+.frj-btn-photo-outline {
+  background: color-mix(in oklab, black 42%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--frj-on-primary);
+  border-color: color-mix(in oklab, var(--frj-on-primary) 80%, transparent);
+}
+.frj-btn-photo-outline .frj-btn-circ {
+  background: color-mix(in oklab, var(--frj-on-primary) 28%, transparent);
 }
 /* respetar reduced-motion: sin animar transform */
 @media (prefers-reduced-motion: reduce) {

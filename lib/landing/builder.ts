@@ -29,7 +29,7 @@ import type { LandingConfig, LandingTheme } from '@/lib/landing/schema'
 // Materia prima YA normalizada por la skill (NO el shape crudo de instagram-data.json).
 export interface BuilderInput {
   business: { name: string; whatsapp?: string | null } // para fallbacks/decisiones
-  hero?: { headline?: string; subhead?: string; image?: string; cta_label?: string }
+  hero?: { headline?: string; kicker?: string; subhead?: string; image?: string; cta_label?: string }
   about?: { title?: string; body?: string; image?: string }
   // services SOLO aporta título/subtítulo: la LISTA viene de la tabla `services` (D10-04).
   services?: { title?: string; subtitle?: string }
@@ -110,6 +110,7 @@ export function buildLandingConfig(input: BuilderInput, theme: LandingTheme): La
   // hero — SIEMPRE presente. Claves del esquema: headline, subhead, image, cta_label.
   const heroData = pick({
     headline: str(input.hero?.headline),
+    kicker: str(input.hero?.kicker),
     subhead: str(input.hero?.subhead),
     image: isHttpUrl(input.hero?.image) ? input.hero!.image : undefined,
     cta_label: str(input.hero?.cta_label),

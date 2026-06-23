@@ -99,7 +99,10 @@ garantía de que lo escrito siempre pasa el gate Zod. Campos EXACTOS por secció
 clave la estripa Zod):
 
 - `business`: `{ name, whatsapp? }` (para fallbacks/decisiones).
-- `hero`: `{ headline?, subhead?, image?, cta_label? }` — SIEMPRE va.
+- `hero`: `{ headline?, kicker?, subhead?, image?, cta_label? }` — SIEMPRE va. El `headline` es la
+  propuesta de valor SIN la ciudad (ej. "Masajes deportivos y descontracturantes", NO "...en Capilla
+  del Señor"). La **ciudad/zona va en `kicker`** (eyebrow editorial del hero, ej. "Capilla del Señor"):
+  no la metas en el headline.
 - `about`: `{ title?, body?, image? }`.
 - `services`: `{ title?, subtitle? }` — **SOLO título/subtítulo, NUNCA una lista** (D10-04).
 - `gallery`: `{ title?, images? }`.

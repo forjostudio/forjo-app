@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import { heroData } from '@/lib/landing/schema'
-import { PillButton, NoiseField } from '@/components/landing/_premium'
+import { Kicker, PillButton, NoiseField } from '@/components/landing/_premium'
 import type { PublicBusiness } from '@/lib/types'
 
 // ── Sección Hero (RSC) ────────────────────────────────────────────────────────────
@@ -91,9 +91,19 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
           hasImage ? 'text-white' : 'text-[color:var(--frj-on-primary)]'
         }`}
       >
+        {/* Kicker editorial = ciudad/zona del negocio (config-driven, d.kicker). Reemplaza al
+            rubro genérico que se quitó. Color sin caer en el trap de capas de Tailwind v4: clase
+            sin-@layer (.frj-kicker-on-photo sobre foto / .frj-kicker-on-primary sobre color). */}
+        {d.kicker && (
+          <Kicker
+            className={`mb-[0.7em] ${hasImage ? 'frj-kicker-on-photo' : 'frj-kicker-on-primary'}`}
+          >
+            {d.kicker}
+          </Kicker>
+        )}
+
         {/* ÚNICO <h1> de la página (D7-02/D7-09): nunca se oculta, fallback a business.name.
-            Sin kicker arriba (se quitó el eyebrow de rubro: muy genérico). Display más chico
-            que antes (clamp menor) para acercar la escala al nombre del negocio del topbar. */}
+            Display más chico que antes (clamp menor) para acercar la escala al nombre del topbar. */}
         <h1 className="frj-display mb-[0.5em] text-[clamp(34px,9.5cqw,108px)]">
           {headline}
         </h1>
@@ -108,9 +118,14 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
           <PillButton href="#reservar" variant={hasImage ? 'on-photo' : 'primary'}>
             {ctaLabel}
           </PillButton>
-          {/* Secundario del mock: scrollea a la sección Servicios (#servicios). Outline claro
-              (ghost-photo) para contraste sobre el hero oscuro/foto. */}
-          <PillButton href="#servicios" variant="ghost-photo">
+          {/* Secundario del mock: scrollea a #servicios. Sobre FOTO el outline claro se perdía
+              (pedido del usuario), así que ahí suma .frj-btn-photo-outline (velo oscuro + frosting
+              + borde sólido). Sobre el campo de color plano queda el ghost-photo liviano. */}
+          <PillButton
+            href="#servicios"
+            variant="ghost-photo"
+            className={hasImage ? 'frj-btn-photo-outline' : undefined}
+          >
             Ver servicios
           </PillButton>
         </div>

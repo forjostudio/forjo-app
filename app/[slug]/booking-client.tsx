@@ -419,12 +419,21 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                       : 'border-border bg-card hover:border-primary'
                   )}
                 >
-                  <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
-                  {service.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{service.description}</p>}
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
-                    <Clock className="w-3.5 h-3.5" /> {service.duration_minutes} min
+                  {/* Tarjeta 2×2 (mock): izq = título (fila 1) + descripción (fila 2); der =
+                      precio + duración alineados a la derecha en la fila 2. Ocupa una línea menos
+                      que el stack vertical anterior. La descripción se edita en el panel admin. */}
+                  <div className="grid grid-cols-[1fr_auto] gap-x-3">
+                    <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
+                    <div className="col-start-2 row-start-2 self-end text-right">
+                      <p className="text-lg font-bold leading-tight font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
+                      <p className="mt-0.5 flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" /> {service.duration_minutes} min
+                      </p>
+                    </div>
+                    {service.description && (
+                      <p className="col-start-1 row-start-2 mt-1 self-end text-xs text-muted-foreground line-clamp-2">{service.description}</p>
+                    )}
                   </div>
-                  <p className="text-xl font-bold mt-2 font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
                 </button>
               ))}
             </div>
@@ -716,7 +725,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           <span>
             hecho con{' '}
             <a href="https://www.forjo.studio" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> Studio
+              <span className="font-semibold text-foreground font-[family-name:var(--font-archivo)]">Forjo</span> Studio
             </a>
           </span>
         </div>
