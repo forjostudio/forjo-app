@@ -726,8 +726,8 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           </svg>
           <span>
             hecho con{' '}
-            <a href="https://www.forjo.studio" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              <span className="font-semibold text-foreground font-[family-name:var(--font-archivo)]">Forjo</span> Studio
+            <a href="https://www.forjo.studio" target="_blank" rel="noopener noreferrer" className="font-[family-name:var(--font-archivo)] hover:text-foreground transition-colors">
+              <span className="font-semibold text-foreground">Forjo</span> Studio
             </a>
           </span>
         </div>
