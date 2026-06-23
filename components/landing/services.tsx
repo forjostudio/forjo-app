@@ -55,7 +55,7 @@ export function Services({
         {services.map((service, i) => (
           <li
             key={service.id}
-            className="grid grid-cols-[auto_1fr_auto] items-baseline gap-[clamp(14px,3cqw,40px)] border-b border-border py-[clamp(20px,3.4cqw,40px)] transition-transform duration-200 hover:translate-x-[clamp(6px,1.5cqw,18px)] motion-reduce:transition-none motion-reduce:hover:translate-x-0"
+            className="grid grid-cols-[auto_1fr_auto] items-center gap-[clamp(14px,3cqw,40px)] border-b border-border py-[clamp(20px,3.4cqw,40px)] transition-transform duration-200 hover:translate-x-[clamp(6px,1.5cqw,18px)] motion-reduce:transition-none motion-reduce:hover:translate-x-0"
           >
             {/* Número mono primary (01/02/03…), padded a 2 dígitos. Decorativo. */}
             <span
@@ -65,21 +65,28 @@ export function Services({
               {String(i + 1).padStart(2, '0')}
             </span>
 
-            {/* Nombre display + small muted (duración · descripción). */}
-            <div>
+            {/* Nombre display + descripción opcional. items-center en el <li> deja, SIN descripción,
+                el título centrado contra el precio (no queda una fila vacía arriba). */}
+            <div className="min-w-0">
               <h3 className="frj-display text-[clamp(22px,3.8cqw,44px)] font-bold leading-none [letter-spacing:-0.03em]">
                 {service.name}
               </h3>
-              <small className="mt-[0.55em] block max-w-[48ch] text-[clamp(13px,1.5cqw,16px)] font-normal leading-normal tracking-normal text-muted-foreground">
-                {service.duration_minutes} min
-                {service.description ? ` · ${service.description}` : ''}
-              </small>
+              {service.description && (
+                <small className="mt-[0.5em] block max-w-[48ch] text-[clamp(13px,1.5cqw,16px)] font-normal leading-snug tracking-normal text-muted-foreground line-clamp-2">
+                  {service.description}
+                </small>
+              )}
             </div>
 
-            {/* Precio mono a la derecha (toLocaleString es-AR como hoy). */}
-            <span className="whitespace-nowrap font-[family-name:var(--frj-font-mono)] text-[clamp(13px,1.6cqw,18px)] text-foreground">
-              ${Number(service.price).toLocaleString('es-AR')}
-            </span>
+            {/* Precio + duración a la derecha (2×2). Duración un punto más chica que el precio. */}
+            <div className="text-right">
+              <span className="block whitespace-nowrap font-[family-name:var(--frj-font-mono)] text-[clamp(13px,1.6cqw,18px)] text-foreground">
+                ${Number(service.price).toLocaleString('es-AR')}
+              </span>
+              <span className="mt-[0.3em] block whitespace-nowrap font-[family-name:var(--frj-font-mono)] text-[clamp(11px,1.2cqw,13px)] text-muted-foreground">
+                {service.duration_minutes} min
+              </span>
+            </div>
           </li>
         ))}
       </ul>

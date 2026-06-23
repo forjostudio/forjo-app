@@ -379,11 +379,13 @@
   background: color-mix(in oklab, black 42%, transparent);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
-  color: var(--frj-on-primary);
-  border-color: color-mix(in oklab, var(--frj-on-primary) 80%, transparent);
+  /* BLANCO fijo (no --frj-on-primary): en paletas claras (ocre) on-primary es OSCURO y el texto
+     se perdía sobre el velo oscuro/foto. El texto sobre foto siempre va claro, como el h1/sub. */
+  color: rgb(255 255 255 / 0.95);
+  border-color: rgb(255 255 255 / 0.8);
 }
 .frj-btn-photo-outline .frj-btn-circ {
-  background: color-mix(in oklab, var(--frj-on-primary) 28%, transparent);
+  background: rgb(255 255 255 / 0.22);
 }
 /* respetar reduced-motion: sin animar transform */
 @media (prefers-reduced-motion: reduce) {
