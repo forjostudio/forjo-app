@@ -1,7 +1,41 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets, type BusinessSecrets } from '@/lib/business-secrets'
 import { sendExpiredHoldEmail } from '@/lib/email'
+import { getPlanPrices } from '@/lib/plan-prices'
+import { computeSnapshotRows, type BizRow } from '@/lib/crm-reports'
 import type { NextRequest } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// Snapshot mensual de MRR (RPT-01, D-01): piggyback en el cron diario (Vercel Hobby = 1/día, NO se
+// agrega un cron nuevo). Best-effort en su PROPIO try/catch (mismo criterio que el loop de emails): un
+// fallo del snapshot NO aborta cancel-expired. Idempotente por la PK (month, plan): el upsert re-escribe
+// el mes en curso cada día (lo mantiene fresco) y los meses pasados quedan congelados porque su month-key
+// no se recalcula (A2 RESEARCH). Reusa el mismo admin client (service-role) — no hay sesión admin en el cron.
+async function writeMonthlySnapshot(supabase: SupabaseClient): Promise<number> {
+  try {
+    const [{ data: bizRows, error: bizErr }, prices] = await Promise.all([
+      supabase.from('businesses').select('id, name, plan, plan_status'),
+      getPlanPrices(),
+    ])
+    if (bizErr) {
+      console.error('[cron/mrr-snapshot] businesses read error:', bizErr.message)
+      return 0
+    }
+    const rows = computeSnapshotRows((bizRows ?? []) as BizRow[], prices)
+    if (rows.length === 0) return 0
+    const { error: snapErr } = await supabase
+      .from('mrr_snapshots')
+      .upsert(rows, { onConflict: 'month,plan' }) // dedupe = idempotencia (PK month,plan)
+    if (snapErr) {
+      console.error('[cron/mrr-snapshot] upsert error:', snapErr.message)
+      return 0
+    }
+    return rows.length
+  } catch (e) {
+    console.error('[cron/mrr-snapshot] FALLÓ:', e instanceof Error ? e.message : e)
+    return 0
+  }
+}
 
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization')
@@ -26,7 +60,9 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: fetchErr.message }, { status: 500 })
   }
   if (!expiring || expiring.length === 0) {
-    return Response.json({ cancelled: 0 })
+    // Sin holds vencidos hoy, pero el snapshot mensual igual debe correr (es diario/idempotente, D-01).
+    const snapshotRows = await writeMonthlySnapshot(supabase)
+    return Response.json({ cancelled: 0, snapshotRows })
   }
 
   const ids = expiring.map(a => a.id)
@@ -75,5 +111,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return Response.json({ cancelled: ids.length, emailed })
+  // Snapshot mensual de MRR (best-effort, idempotente) tras la lógica de cancel-expired (D-01).
+  const snapshotRows = await writeMonthlySnapshot(supabase)
+
+  return Response.json({ cancelled: ids.length, emailed, snapshotRows })
 }
