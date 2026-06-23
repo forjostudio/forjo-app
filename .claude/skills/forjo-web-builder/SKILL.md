@@ -141,12 +141,15 @@ ajustás según el feedback y volvés a mostrar el checkpoint.
 
 ### 7. ESCRIBIR (solo tras aprobar)
 
-Escribí el `BuilderInput` + `brand` a un archivo JSON temporal (PowerShell pelea con el quoting de
-JSON inline; por eso el script recibe `--config <path>`). El JSON tiene la forma
-`{ "input": <BuilderInput>, "brand": <BrandHints> }`. Luego corré:
+Escribí el `BuilderInput` + `brand` a un archivo JSON **persistente por slug** en
+`landing-payloads/<slug>.json` (carpeta gitignored, creala si no existe; PowerShell pelea con el
+quoting de JSON inline, por eso el script recibe `--config <path>`). El JSON tiene la forma
+`{ "input": <BuilderInput>, "brand": <BrandHints> }`. **NO lo borres al terminar** — queda guardado
+para editar y re-correr la próxima sin rehacer todo (ej. ajustar el headline o el kicker y volver a
+escribir). Si ya existe `landing-payloads/<slug>.json`, partí de ese y editá lo que cambie. Luego corré:
 
 ```powershell
-npm run setup:landing -- --slug <slug> --config <ruta-al-payload.json>
+npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json
 ```
 
 El script, en orden: resuelve `business_id` del slug → re-hostea cada imagen local a
