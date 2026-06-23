@@ -277,7 +277,18 @@ async function runWrite(
   }
 
   // 3) Armar el tema (recommendTheme) y el config (buildLandingConfig) con la lógica pura de 10-01.
-  const theme = recommendTheme(payload.brand ?? {})
+  //    Por DEFAULT el landing hereda el theme/palette/font que el negocio YA configuró en Apariencia
+  //    (la misma identidad de su web de reservas): partimos de la fila `businesses` y el payload solo
+  //    PISA si el operador pasó un override explícito. Así la landing matchea el booking salvo que se
+  //    pida lo contrario; recommendTheme solo adivina por vertical cuando el negocio no configuró nada.
+  const brand: BrandHints = {
+    vertical: payload.brand?.vertical ?? biz.vertical,
+    theme: payload.brand?.theme ?? biz.theme,
+    palette: payload.brand?.palette ?? biz.palette,
+    font: payload.brand?.font ?? biz.font,
+    primary_color: payload.brand?.primary_color ?? biz.primary_color,
+  }
+  const theme = recommendTheme(brand)
   const landingConfig = buildLandingConfig(input, theme)
 
   // 4) GATE (SKILL-04 / T-10-06): validar con parseLandingConfig ANTES de escribir. Si devuelve null

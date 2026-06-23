@@ -83,13 +83,14 @@ Si el operador da un `@handle`, intentá sacar copy + fotos como **materia prima
 - Las URLs del CDN de IG (`profilePicUrl`, `postImages`) **caducan** y NO sirven en runtime
   (Pitfall 1). Se usan SOLO para descargar la imagen localmente. **Nunca** van al config.
 
-### 4. COPY: pasarlo por el humanizador
+### 4. COPY: pasarlo por el humanizador (OBLIGATORIO)
 
-Tomá el copy scrapeado o el que dio el operador y pasálo por la skill **`humanizador`** para que
-no suene a IA (directo, sin relleno, sin tono inflado). El humanizador no inventa datos ni cambia
-cifras: solo limpia el texto. Aplicá las reglas UI/UX del CLAUDE global como criterio (jerarquía,
-microcopy de botones tipo "Reservá tu turno", no "Click aquí"), **sin inventar** servicios/
-precios/testimonios.
+**Paso obligatorio, NO opcional.** TODO el copy (scrapeado o dado por el operador) pasa por la skill
+**`humanizador`** ANTES del checkpoint — nunca escribas copy crudo "a mano" sin humanizar, aunque lo
+hayas redactado vos a partir de datos reales. El humanizador lo deja directo, sin relleno ni tono
+inflado; no inventa datos ni cambia cifras, solo limpia el texto. Aplicá las reglas UI/UX del CLAUDE
+global como criterio (jerarquía, microcopy de botones tipo "Reservá tu turno", no "Click aquí"),
+**sin inventar** servicios/precios/testimonios. En el checkpoint (paso 6) mostrás el copy YA humanizado.
 
 ### 5. ARMAR el config (BuilderInput)
 
@@ -111,9 +112,14 @@ clave la estripa Zod):
 Las imágenes (`hero.image`, `about.image`, `gallery.images[]`) van como **RUTAS LOCALES** del
 disco (las que dejó el scrape o el operador). El script las re-hostea — no pongas URLs de IG.
 
-Para el **tema**, armá los `brand` hints (`{ vertical, primary_color, theme?, palette?, font? }`)
-y dejá que `recommendTheme` elija preset + overrides. El `primary_color` solo se aplica si pasa
-`isSafeColor` (allowlist de hex) — esa validación la resuelve el builder, no la fuerces vos.
+Para el **tema**, lo normal es **NO pasar nada**: por default el landing hereda el `theme/palette/font`
+que el negocio ya configuró en su **Apariencia** (la misma identidad de su web de reservas). El script
+parte de la fila `businesses` y solo usa los `brand` hints que le pases como **override explícito**. Es
+decir: dejá `brand` vacío (o solo con `vertical`) para que la web matchee el booking; pasá
+`{ theme?, palette?, font?, primary_color? }` **únicamente si el operador quiere que la landing se vea
+distinta** a su página de reservas. El `primary_color` solo se aplica si pasa `isSafeColor` (allowlist
+de hex) — esa validación la resuelve el builder, no la fuerces vos. `recommendTheme` solo adivina por
+vertical cuando el negocio no configuró nada en Apariencia.
 
 ### 6. CHECKPOINT DE APROBACIÓN (D10-03 / SKILL-04 — BLOQUEANTE)
 
