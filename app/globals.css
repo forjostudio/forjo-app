@@ -352,9 +352,14 @@
 /* ghost-photo: outline CLARO para fondos oscuros (hero secundario sobre primary/scrim) —
    el ghost normal usa --foreground (oscuro) y se pierde en el hero. Hex-free via on-primary. */
 .frj-btn-ghost-photo {
-  background: transparent;
+  /* tinte muy sutil + frosting: sobre una FOTO el blur/tint levantan el texto claro y el borde
+     para que el botón no se pierda (pedido del usuario); sobre el campo de color plano (hero sin
+     foto) el blur es invisible y el tinte apenas se nota. Borde más sólido (62%). */
+  background: color-mix(in oklab, black 16%, transparent);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   color: var(--frj-on-primary);
-  border-color: color-mix(in oklab, var(--frj-on-primary) 45%, transparent);
+  border-color: color-mix(in oklab, var(--frj-on-primary) 62%, transparent);
 }
 .frj-btn-ghost-photo:hover {
   box-shadow: none;

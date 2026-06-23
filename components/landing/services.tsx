@@ -29,11 +29,11 @@ export function Services({
   return (
     <section
       id="servicios"
-      // Anchor-land prolijo (pedido del usuario): al navegar a #servicios el número
-      // fantasma/encabezado deben quedar pegados al tope del viewport. scroll-mt-0 ancla
-      // el box-top de la section al borde superior y un pt menor (vs el py uniforme previo)
-      // sube el encabezado para que se vea más sección. El pb conserva el ritmo inferior.
-      className="relative scroll-mt-0 px-[clamp(20px,5cqw,64px)] pb-[clamp(56px,11cqw,150px)] pt-[clamp(40px,7cqw,96px)]"
+      // Anchor-land prolijo (pedido del usuario): al navegar a #servicios el encabezado y los
+      // primeros ítems deben quedar pegados al tope del viewport. scroll-mt-0 ancla el box-top
+      // de la section al borde superior; el pt es CHICO (no el py uniforme) para no dejar aire
+      // muerto arriba y que se vea más sección de entrada. El pb conserva el ritmo inferior.
+      className="relative scroll-mt-0 px-[clamp(20px,5cqw,64px)] pb-[clamp(56px,11cqw,150px)] pt-[clamp(20px,3cqw,44px)]"
     >
       {/* Número fantasma secuencial (lo deriva el renderer del orden real). aria-hidden vive en GhostIndex. */}
       {index != null && <GhostIndex n={index} />}

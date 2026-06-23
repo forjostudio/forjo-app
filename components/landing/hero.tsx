@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import { heroData } from '@/lib/landing/schema'
-import { Kicker, PillButton, NoiseField } from '@/components/landing/_premium'
+import { PillButton, NoiseField } from '@/components/landing/_premium'
 import type { PublicBusiness } from '@/lib/types'
 
 // ── Sección Hero (RSC) ────────────────────────────────────────────────────────────
@@ -24,10 +24,6 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
   const headline = d.headline ?? business.name
   const ctaLabel = d.cta_label ?? 'Reservar turno'
   const hasImage = Boolean(d.image)
-
-  // Eyebrow editorial (kicker mono): el rubro/tipo del negocio como vocabulario del mock
-  // ("PSICOLOGÍA CLÍNICA · ..."). Cae a un eyebrow neutro si el negocio no declara rubro.
-  const eyebrow = business.vertical ?? business.type ?? 'Reservá tu turno online'
 
   return (
     <section
@@ -73,7 +69,7 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
           mientras el bloque editorial sigue anclado abajo. */}
       <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-[clamp(20px,5cqw,64px)] pt-[clamp(18px,3cqw,34px)]">
         <span
-          className={`font-[family-name:var(--font-heading)] text-lg font-extrabold tracking-tight ${
+          className={`font-[family-name:var(--font-heading)] text-xl font-extrabold tracking-tight ${
             hasImage ? 'text-white' : 'text-[color:var(--frj-on-primary)]'
           }`}
         >
@@ -95,16 +91,10 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
           hasImage ? 'text-white' : 'text-[color:var(--frj-on-primary)]'
         }`}
       >
-        <Kicker
-          className={
-            hasImage ? '[&]:text-white/85' : '[&]:text-[color:var(--frj-on-primary)]/80'
-          }
-        >
-          {eyebrow}
-        </Kicker>
-
-        {/* ÚNICO <h1> de la página (D7-02/D7-09): nunca se oculta, fallback a business.name. */}
-        <h1 className="frj-display mt-[0.32em] mb-[0.5em] text-[clamp(38px,13cqw,150px)]">
+        {/* ÚNICO <h1> de la página (D7-02/D7-09): nunca se oculta, fallback a business.name.
+            Sin kicker arriba (se quitó el eyebrow de rubro: muy genérico). Display más chico
+            que antes (clamp menor) para acercar la escala al nombre del negocio del topbar. */}
+        <h1 className="frj-display mb-[0.5em] text-[clamp(34px,9.5cqw,108px)]">
           {headline}
         </h1>
 
