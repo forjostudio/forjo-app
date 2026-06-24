@@ -68,7 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'INSIGHTS',
     items: [
-      { href: '#', label: 'Reportes', icon: BarChart3, soon: true },
+      { href: '/admin/reportes', label: 'Reportes', icon: BarChart3 },
       { href: '/admin/auditoria', label: 'Auditoría', icon: ScrollText },
     ],
   },
