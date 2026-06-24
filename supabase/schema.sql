@@ -243,6 +243,25 @@ CREATE TABLE IF NOT EXISTS "public"."clinical_notes" (
 ALTER TABLE "public"."clinical_notes" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."conversations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "business_id" "uuid" NOT NULL,
+    "channel" "text" DEFAULT 'whatsapp'::"text" NOT NULL,
+    "contact_phone" "text" NOT NULL,
+    "contact_name" "text",
+    "lead_id" "uuid",
+    "handled_by" "text" DEFAULT 'ai'::"text" NOT NULL,
+    "unread_count" integer DEFAULT 0 NOT NULL,
+    "last_message_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "conversations_channel_check" CHECK (("channel" = 'whatsapp'::"text")),
+    CONSTRAINT "conversations_handled_by_check" CHECK (("handled_by" = ANY (ARRAY['unassigned'::"text", 'ai'::"text", 'human'::"text"])))
+);
+
+
+ALTER TABLE "public"."conversations" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."notes" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "business_id" "uuid",
@@ -420,6 +439,24 @@ CREATE TABLE IF NOT EXISTS "public"."manual_sales" (
 
 
 ALTER TABLE "public"."manual_sales" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."messages" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "conversation_id" "uuid" NOT NULL,
+    "business_id" "uuid" NOT NULL,
+    "external_id" "text" NOT NULL,
+    "direction" "text" NOT NULL,
+    "sender" "text" DEFAULT 'contact'::"text" NOT NULL,
+    "body" "text" NOT NULL,
+    "sent_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "messages_direction_check" CHECK (("direction" = ANY (ARRAY['inbound'::"text", 'outbound'::"text"]))),
+    CONSTRAINT "messages_sender_check" CHECK (("sender" = ANY (ARRAY['contact'::"text", 'ai'::"text", 'human'::"text"])))
+);
+
+
+ALTER TABLE "public"."messages" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."mrr_snapshots" (
@@ -658,6 +695,11 @@ ALTER TABLE ONLY "public"."clinical_notes"
 
 
 
+ALTER TABLE ONLY "public"."conversations"
+    ADD CONSTRAINT "conversations_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."deals"
     ADD CONSTRAINT "deals_pkey" PRIMARY KEY ("id");
 
@@ -690,6 +732,11 @@ ALTER TABLE ONLY "public"."locations"
 
 ALTER TABLE ONLY "public"."manual_sales"
     ADD CONSTRAINT "manual_sales_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."messages"
+    ADD CONSTRAINT "messages_pkey" PRIMARY KEY ("id");
 
 
 
@@ -763,6 +810,18 @@ CREATE INDEX "audit_log_created_at_idx" ON "public"."audit_log" USING "btree" ("
 
 
 
+CREATE INDEX "conversations_business_idx" ON "public"."conversations" USING "btree" ("business_id");
+
+
+
+CREATE INDEX "conversations_last_msg_idx" ON "public"."conversations" USING "btree" ("last_message_at" DESC);
+
+
+
+CREATE UNIQUE INDEX "conversations_tenant_contact_idx" ON "public"."conversations" USING "btree" ("business_id", "channel", "contact_phone");
+
+
+
 CREATE INDEX "deals_business_id_idx" ON "public"."deals" USING "btree" ("business_id");
 
 
@@ -796,6 +855,14 @@ CREATE INDEX "leads_business_id_idx" ON "public"."leads" USING "btree" ("busines
 
 
 CREATE INDEX "leads_email_idx" ON "public"."leads" USING "btree" ("lower"("email"));
+
+
+
+CREATE INDEX "messages_conversation_idx" ON "public"."messages" USING "btree" ("conversation_id", "sent_at");
+
+
+
+CREATE UNIQUE INDEX "messages_external_id_idx" ON "public"."messages" USING "btree" ("business_id", "external_id");
 
 
 
@@ -906,6 +973,16 @@ ALTER TABLE ONLY "public"."clinical_notes"
 
 
 
+ALTER TABLE ONLY "public"."conversations"
+    ADD CONSTRAINT "conversations_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."conversations"
+    ADD CONSTRAINT "conversations_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE SET NULL;
+
+
+
 ALTER TABLE ONLY "public"."deals"
     ADD CONSTRAINT "deals_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE SET NULL;
 
@@ -948,6 +1025,16 @@ ALTER TABLE ONLY "public"."manual_sales"
 
 ALTER TABLE ONLY "public"."manual_sales"
     ADD CONSTRAINT "manual_sales_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."clients"("id");
+
+
+
+ALTER TABLE ONLY "public"."messages"
+    ADD CONSTRAINT "messages_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."messages"
+    ADD CONSTRAINT "messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE CASCADE;
 
 
 
@@ -1025,6 +1112,10 @@ CREATE POLICY "admin read audit_log" ON "public"."audit_log" FOR SELECT USING ((
 
 
 
+CREATE POLICY "admin read conversations" ON "public"."conversations" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
 CREATE POLICY "admin read deals" ON "public"."deals" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
 
 
@@ -1034,6 +1125,10 @@ CREATE POLICY "admin read entity_tags" ON "public"."entity_tags" FOR SELECT USIN
 
 
 CREATE POLICY "admin read leads" ON "public"."leads" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+CREATE POLICY "admin read messages" ON "public"."messages" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
 
 
 
@@ -1153,6 +1248,9 @@ ALTER TABLE "public"."clients" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."clinical_notes" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."conversations" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."deals" ENABLE ROW LEVEL SECURITY;
 
 
@@ -1200,6 +1298,9 @@ ALTER TABLE "public"."locations" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."manual_sales" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."messages" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."mrr_snapshots" ENABLE ROW LEVEL SECURITY;
 
 
@@ -1221,6 +1322,18 @@ CREATE POLICY "owner manage schedule_exceptions" ON "public"."schedule_exception
   WHERE (("b"."id" = "schedule_exceptions"."business_id") AND ("b"."owner_id" = "auth"."uid"()))))) WITH CHECK ((EXISTS ( SELECT 1
    FROM "public"."businesses" "b"
   WHERE (("b"."id" = "schedule_exceptions"."business_id") AND ("b"."owner_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "owner read conversations" ON "public"."conversations" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "owner read messages" ON "public"."messages" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
 
 
 
@@ -2804,6 +2917,12 @@ GRANT ALL ON TABLE "public"."clinical_notes" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."conversations" TO "anon";
+GRANT ALL ON TABLE "public"."conversations" TO "authenticated";
+GRANT ALL ON TABLE "public"."conversations" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."notes" TO "anon";
 GRANT ALL ON TABLE "public"."notes" TO "authenticated";
 GRANT ALL ON TABLE "public"."notes" TO "service_role";
@@ -2861,6 +2980,12 @@ GRANT ALL ON TABLE "public"."locations" TO "service_role";
 GRANT ALL ON TABLE "public"."manual_sales" TO "anon";
 GRANT ALL ON TABLE "public"."manual_sales" TO "authenticated";
 GRANT ALL ON TABLE "public"."manual_sales" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."messages" TO "anon";
+GRANT ALL ON TABLE "public"."messages" TO "authenticated";
+GRANT ALL ON TABLE "public"."messages" TO "service_role";
 
 
 
