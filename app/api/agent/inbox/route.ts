@@ -92,7 +92,10 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, error: 'insert_failed' }, { status: 500 })
   }
 
-  // 8. Upsert message idempotente por external_id (reintento del bot → ignoreDuplicates, no duplica).
+  // 8. Upsert message idempotente por (business_id, external_id) — reintento del bot →
+  //    ignoreDuplicates, no duplica. El external_id es único POR NEGOCIO (cada negocio lo sirve un bot
+  //    distinto con su propio SQLite), así que la unicidad DEBE estar scopeada al tenant (migración
+  //    039, CR-01): un external_id global colisionaría entre negocios y descartaría mensajes reales.
   //    business_id denormalizado (copiado del business validado) para que la RLS sea byte-idéntica a
   //    conversations (Pitfall 2).
   const { error: msgErr } = await supabase.from('messages').upsert(
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
       body: msg.body,
       sent_at: sentAt,
     },
-    { onConflict: 'external_id', ignoreDuplicates: true },
+    { onConflict: 'business_id,external_id', ignoreDuplicates: true },
   )
   if (msgErr) {
     console.error('[agent/inbox] message upsert error:', msgErr.message)
