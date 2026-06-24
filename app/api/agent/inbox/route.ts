@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { inboundSchema, matchEntity } from '@/lib/conversations'
+import { agentAuthOk } from '@/lib/agent-auth'
 import type { NextRequest } from 'next/server'
 
 // ── Ingest del bot de WhatsApp (Phase 6, Plan 01, D-05) ───────────────────────────────────────────
@@ -15,19 +16,12 @@ import type { NextRequest } from 'next/server'
 // reintento/idempotencia.
 export const dynamic = 'force-dynamic'
 
-// Auth FAIL-CLOSED: lee FORJO_AGENT_TOKEN; si no está seteado → false → 401 (igual que
-// verifyMPSignature del webhook de pago, SIN rama `if (secret)` que abriría el endpoint en dev).
-// El token es server-only (NO NEXT_PUBLIC_), igual que la service-role key.
-function authOk(request: NextRequest): boolean {
-  const expected = process.env.FORJO_AGENT_TOKEN
-  if (!expected) return false // sin secreto configurado → rechazo (fail-closed)
-  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
-  return Boolean(got) && got === expected
-}
+// Auth FAIL-CLOSED sobre FORJO_AGENT_TOKEN con comparación constant-time, compartida con el state
+// endpoint en lib/agent-auth.ts (antes duplicada verbatim, IN-03 / WR-02).
 
 export async function POST(request: NextRequest) {
   // 1. Auth PRIMERO, antes de tocar el body (un POST forjado recibe 401 sin escribir nada).
-  if (!authOk(request)) return new Response('Unauthorized', { status: 401 })
+  if (!agentAuthOk(request)) return new Response('Unauthorized', { status: 401 })
 
   // 2. Parseo defensivo del body.
   let raw: unknown
