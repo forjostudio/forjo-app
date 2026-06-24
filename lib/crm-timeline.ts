@@ -90,6 +90,9 @@ export const ACTION_LABEL: Record<string, string> = {
   'note.delete': 'Borró nota',
   'task.create': 'Creó tarea',
   'task.complete': 'Completó tarea',
+  // Phase 6 (bandeja / takeover)
+  'conversation.takeover': 'Tomó conversación',
+  'conversation.release': 'Liberó conversación',
 }
 
 /**
