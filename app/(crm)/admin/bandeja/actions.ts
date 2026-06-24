@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/admin-guard'
 import { logAudit } from '@/lib/audit'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isValidHandledByTransition, type HandledBy } from '@/lib/conversations'
 import {
   takeConversationSchema,
   releaseConversationSchema,
@@ -33,6 +34,21 @@ export async function takeConversation(input: unknown): Promise<void> {
   const data = takeConversationSchema.parse(input)
   const admin = createAdminClient()
 
+  // El update con service-role bypassa RLS y NO falla sobre un id inexistente (escribiría 0 filas
+  // "con éxito"). Por eso primero LEEMOS el estado actual: confirma que la conversación existe
+  // (si no → update_failed) y permite validar la transición con isValidHandledByTransition para no
+  // auditar un no-op (tomar algo ya en 'human' generaría un audit redundante y un toast espurio) (WR-05).
+  const { data: convo, error: readErr } = await admin
+    .from('conversations')
+    .select('handled_by')
+    .eq('id', data.conversationId)
+    .maybeSingle()
+  if (readErr) throw new Error('update_failed')
+  if (!convo) throw new Error('update_failed') // id inexistente → no se audita un takeover fantasma
+
+  // No-op: ya estaba en 'human'. No se escribe ni se audita (evita log redundante + toast espurio).
+  if (!isValidHandledByTransition(convo.handled_by as HandledBy, 'human')) return
+
   const { error } = await admin
     .from('conversations')
     .update({ handled_by: 'human' })
@@ -57,6 +73,18 @@ export async function releaseConversation(input: unknown): Promise<void> {
   const actor = await requireAdmin()
   const data = releaseConversationSchema.parse(input)
   const admin = createAdminClient()
+
+  // Simétrico de takeConversation (WR-05): leer-validar-escribir. Confirma existencia y evita auditar
+  // un no-op (liberar algo ya en 'ai').
+  const { data: convo, error: readErr } = await admin
+    .from('conversations')
+    .select('handled_by')
+    .eq('id', data.conversationId)
+    .maybeSingle()
+  if (readErr) throw new Error('update_failed')
+  if (!convo) throw new Error('update_failed')
+
+  if (!isValidHandledByTransition(convo.handled_by as HandledBy, 'ai')) return
 
   const { error } = await admin
     .from('conversations')
