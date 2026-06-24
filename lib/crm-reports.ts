@@ -36,6 +36,12 @@ export type RankingRow = { id: string; name: string; plan: string; mrr: number; 
 // Zona AR fija (UTC-3 sin DST). Para la month-key usamos el offset literal -03:00 (Pitfall 5).
 const AR_OFFSET = '-03:00'
 
+// Planes que admite el CHECK de mrr_snapshots (migración 036:33) y que siembra el seed. Mantener en
+// sync con ese CHECK. computeSnapshotRows filtra por este set para que un negocio en un plan legacy/no
+// estándar NO haga fallar el upsert COMPLETO del mes (CHECK 23514) — un solo plan desconocido tiraría
+// abajo todo el snapshot del mes, no solo su fila (Supabase manda el batch como un statement). WR-05.
+const SNAPSHOT_PLANS = new Set(['basic', 'studio', 'pro'])
+
 // ── Helpers ──────────────────────────────────────────────────────────────────────────────────
 // MRR de un negocio: precio de su plan si está activo, 0 si no (o si no hay fila de precio).
 function bizMrr(row: BizRow, prices: Prices): number {
@@ -174,12 +180,16 @@ export function ranking(
 export function computeSnapshotRows(rows: BizRow[], prices: Prices, now: Date = new Date()): SnapshotRow[] {
   const month = arMonthKey(now)
   const byPlan = mrrByPlan(rows, prices)
-  return Object.entries(byPlan).map(([plan, { mrr, count }]) => ({
-    month,
-    plan,
-    mrr,
-    active_count: count,
-  }))
+  return Object.entries(byPlan)
+    // Solo planes que admite el CHECK de la tabla (WR-05): un plan legacy/desconocido haría fallar
+    // el upsert entero del mes, no solo su fila. Se descarta silenciosamente acá en vez de en la DB.
+    .filter(([plan]) => SNAPSHOT_PLANS.has(plan))
+    .map(([plan, { mrr, count }]) => ({
+      month,
+      plan,
+      mrr,
+      active_count: count,
+    }))
 }
 
 // Exportado solo para legibilidad de tests/callers que necesiten la month-key sin recalcularla.

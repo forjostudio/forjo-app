@@ -247,4 +247,15 @@ describe('computeSnapshotRows', () => {
     const rows: BizRow[] = [biz({ id: '1', plan: 'basic', plan_status: 'cancelled' })]
     expect(computeSnapshotRows(rows, PRICES, NOW)).toEqual([])
   })
+
+  it('descarta planes fuera del CHECK (legacy/desconocido) para no romper el upsert del mes (WR-05)', () => {
+    const rows: BizRow[] = [
+      biz({ id: '1', plan: 'basic', plan_status: 'active' }),
+      biz({ id: '2', plan: 'legacy', plan_status: 'active' }), // plan fuera del CHECK → se descarta
+      biz({ id: '3', plan: 'grandfathered', plan_status: 'active' }),
+    ]
+    const snap = computeSnapshotRows(rows, PRICES, NOW)
+    expect(snap.map((s) => s.plan).sort()).toEqual(['basic'])
+    expect(snap.every((s) => ['basic', 'studio', 'pro'].includes(s.plan))).toBe(true)
+  })
 })
