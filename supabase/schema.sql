@@ -422,6 +422,19 @@ CREATE TABLE IF NOT EXISTS "public"."manual_sales" (
 ALTER TABLE "public"."manual_sales" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."mrr_snapshots" (
+    "month" "date" NOT NULL,
+    "plan" "text" NOT NULL,
+    "mrr" bigint DEFAULT 0 NOT NULL,
+    "active_count" integer DEFAULT 0 NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "mrr_snapshots_plan_check" CHECK (("plan" = ANY (ARRAY['basic'::"text", 'studio'::"text", 'pro'::"text"])))
+);
+
+
+ALTER TABLE "public"."mrr_snapshots" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."plan_prices" (
     "plan_key" "text" NOT NULL,
     "price_ars" integer NOT NULL,
@@ -677,6 +690,11 @@ ALTER TABLE ONLY "public"."locations"
 
 ALTER TABLE ONLY "public"."manual_sales"
     ADD CONSTRAINT "manual_sales_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."mrr_snapshots"
+    ADD CONSTRAINT "mrr_snapshots_pkey" PRIMARY KEY ("month", "plan");
 
 
 
@@ -1019,6 +1037,10 @@ CREATE POLICY "admin read leads" ON "public"."leads" FOR SELECT USING ((( SELECT
 
 
 
+CREATE POLICY "admin read mrr_snapshots" ON "public"."mrr_snapshots" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
 CREATE POLICY "admin read notes" ON "public"."notes" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
 
 
@@ -1176,6 +1198,9 @@ ALTER TABLE "public"."locations" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."manual_sales" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."mrr_snapshots" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."notes" ENABLE ROW LEVEL SECURITY;
@@ -2836,6 +2861,12 @@ GRANT ALL ON TABLE "public"."locations" TO "service_role";
 GRANT ALL ON TABLE "public"."manual_sales" TO "anon";
 GRANT ALL ON TABLE "public"."manual_sales" TO "authenticated";
 GRANT ALL ON TABLE "public"."manual_sales" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."mrr_snapshots" TO "anon";
+GRANT ALL ON TABLE "public"."mrr_snapshots" TO "authenticated";
+GRANT ALL ON TABLE "public"."mrr_snapshots" TO "service_role";
 
 
 
