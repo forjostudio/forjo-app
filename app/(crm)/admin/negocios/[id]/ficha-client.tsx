@@ -28,7 +28,7 @@ import { ExtendTrialDialog } from '@/components/crm/extend-trial-dialog'
 import { AddonToggle } from '@/components/crm/addon-toggle'
 import { TagChip } from '@/components/crm/tag-chip'
 import { TimelineEntry } from '@/components/crm/timeline-entry'
-import { changePlan, suspendBusiness, reactivateBusiness, startImpersonation } from '@/app/(crm)/admin/_actions'
+import { changePlan, suspendBusiness, reactivateBusiness, activateBusiness, startImpersonation } from '@/app/(crm)/admin/_actions'
 import { createNote, createTask, completeTask, deleteNote } from '@/app/(crm)/admin/_content-actions'
 import { removeTag } from '@/app/(crm)/admin/_tag-actions'
 import { TagManagerDialog } from '@/components/crm/tag-manager-dialog'
@@ -125,6 +125,7 @@ export function FichaClient({
   const [changePlanOpen, setChangePlanOpen] = React.useState(false)
   const [suspendOpen, setSuspendOpen] = React.useState(false)
   const [reactivateOpen, setReactivateOpen] = React.useState(false)
+  const [activateOpen, setActivateOpen] = React.useState(false)
   const [extendOpen, setExtendOpen] = React.useState(false)
   const [grantOpen, setGrantOpen] = React.useState(false)
   const [verOpen, setVerOpen] = React.useState(false)
@@ -420,9 +421,17 @@ export function FichaClient({
             </div>
 
             {isTrial ? (
-              <Button type="button" className="w-full" disabled={!canExtendTrial} onClick={() => setExtendOpen(true)}>
-                Extender trial
-              </Button>
+              <>
+                {/* Convertir el trial en cliente pago (gap UAT): activación MANUAL (no toca MP) — pone
+                    plan_status='active' + trial_ends_at=null, que apaga el cartel de Trial del dashboard.
+                    Es la acción primaria del trial; "Extender trial" queda como secundaria. */}
+                <Button type="button" className="w-full" onClick={() => setActivateOpen(true)}>
+                  Activar como pago
+                </Button>
+                <Button type="button" variant="outline" className="w-full" disabled={!canExtendTrial} onClick={() => setExtendOpen(true)}>
+                  Extender trial
+                </Button>
+              </>
             ) : (
               <Button type="button" className="w-full" disabled={isSuspended} onClick={() => setGrantOpen(true)}>
                 Poner en trial
@@ -520,6 +529,21 @@ export function FichaClient({
         confirmLabel="Reactivar negocio"
         onConfirm={async () => {
           await reactivateBusiness({ businessId: data.id })
+        }}
+      />
+
+      {/* Activar como pago (gap UAT): convierte un trial en activo/pago. Audita business.activate.
+          activateBusiness solo audita + muta plan_status/trial_ends_at y resuelve void (no redirige);
+          el revalidatePath del server refresca la ficha y apaga el cartel de Trial del dashboard. */}
+      <ConfirmDialog
+        open={activateOpen}
+        onOpenChange={setActivateOpen}
+        title="Activar como pago"
+        description="El negocio deja el trial y queda como activo/pago. No genera cobro automático (la facturación es manual). Queda registrado en auditoría."
+        risk="medio"
+        confirmLabel="Activar como pago"
+        onConfirm={async () => {
+          await activateBusiness({ businessId: data.id })
         }}
       />
 

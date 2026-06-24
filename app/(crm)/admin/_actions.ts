@@ -123,6 +123,36 @@ export async function reactivateBusiness(input: unknown): Promise<void> {
   revalidatePath('/admin')
 }
 
+// ── activateBusiness ───────────────────────────────────────────────────────────────────────────
+// Convierte un negocio en TRIAL a activo/pago: plan_status='active' + trial_ends_at=null. Mismo update
+// que reactivateBusiness, pero es un evento DISTINTO (un trial nunca estuvo suspendido) → action code
+// propio 'business.activate' para que la auditoría lo distinga de un "reactivar" (un-suspend).
+// NO toca MercadoPago: es una activación MANUAL (coherente con el cobro manual, D-A5); el flag de estado
+// vive en businesses y el webhook de MP lo gestiona aparte si más adelante hay suscripción real.
+export async function activateBusiness(input: unknown): Promise<void> {
+  const actor = await requireAdmin()
+  const data = setStatusSchema.pick({ businessId: true }).parse(input)
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('businesses')
+    .update({ plan_status: 'active', trial_ends_at: null })
+    .eq('id', data.businessId)
+  if (error) throw new Error('update_failed')
+
+  await logAudit({
+    actorId: actor.id,
+    action: 'business.activate',
+    targetType: 'business',
+    targetId: data.businessId,
+    businessId: data.businessId,
+    risk: 'medio',
+  })
+
+  revalidatePath(fichaPath(data.businessId))
+  revalidatePath('/admin')
+}
+
 // ── extendTrial ────────────────────────────────────────────────────────────────────────────────
 // D-07: presets 7/14/30 días o fecha exacta. Resuelve la nueva fecha con resolveTrialEndsAt (Plan 01)
 // y actualiza ÚNICAMENTE trial_ends_at. NO muta plan_status: extender un trial nunca reactiva ni

@@ -68,6 +68,7 @@ export const ACTION_LABEL: Record<string, string> = {
   // Phase 2/3 (auditoría existente)
   'business.suspend': 'Suspendió negocio',
   'business.reactivate': 'Reactivó negocio',
+  'business.activate': 'Activó negocio (pago)',
   'plan.change': 'Cambió plan',
   'plan.price_edit': 'Editó precio',
   'user.impersonate': 'Impersonó negocio',
