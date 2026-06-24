@@ -55,7 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'OPERACIÓN',
     items: [
       { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '#', label: 'Bandeja', icon: Inbox, soon: true },
+      { href: '/admin/bandeja', label: 'Bandeja', icon: Inbox },
     ],
   },
   {
