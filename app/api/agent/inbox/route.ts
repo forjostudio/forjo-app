@@ -72,19 +72,33 @@ export async function POST(request: NextRequest) {
 
   // 7. Upsert conversation por (business_id, channel, contact_phone) → idempotente, sin race (NO
   //    check-then-insert). last_message_at se refresca con cada mensaje.
+  //
+  //    OJO (WR-01): el upsert corre en CADA mensaje y, en conflicto, NO debe pisar contact_name/lead_id
+  //    con valores nulos/stale. Un mensaje saliente del bot (o uno entrante sin name) llega sin
+  //    contact.name y, si lo escribiéramos, borraríamos un nombre ya conocido; el lead_id recomputado
+  //    puede quedar null y DESLIGAR la conversación del pipeline. Por eso solo incluimos contact_name y
+  //    lead_id en el set del upsert cuando vienen NO nulos (coalesce app-side): si son null, se omiten
+  //    de la fila y el upsert preserva el valor existente (en el insert inicial la columna queda en su
+  //    default null, que es lo correcto).
+  const conversationRow: {
+    business_id: string
+    channel: 'whatsapp'
+    contact_phone: string
+    last_message_at: string
+    contact_name?: string
+    lead_id?: string
+  } = {
+    business_id: business.id,
+    channel: 'whatsapp',
+    contact_phone: normalizedPhone,
+    last_message_at: sentAt,
+  }
+  if (msg.contact.name) conversationRow.contact_name = msg.contact.name
+  if (leadId) conversationRow.lead_id = leadId
+
   const { data: convo, error: convoErr } = await supabase
     .from('conversations')
-    .upsert(
-      {
-        business_id: business.id,
-        channel: 'whatsapp',
-        contact_phone: normalizedPhone,
-        contact_name: msg.contact.name ?? null,
-        lead_id: leadId,
-        last_message_at: sentAt,
-      },
-      { onConflict: 'business_id,channel,contact_phone' },
-    )
+    .upsert(conversationRow, { onConflict: 'business_id,channel,contact_phone' })
     .select('id')
     .single()
   if (convoErr || !convo) {
