@@ -70,16 +70,40 @@ describe('inboundSchema', () => {
     expect(r.success).toBe(true)
   })
 
-  it('acepta un payload mínimo (sin name/email/sent_at) y aplica el default de sender', () => {
+  it('acepta un payload mínimo entrante (sin name/email/sent_at) y aplica el default de sender', () => {
     const r = inboundSchema.safeParse({
       slug: 'mi-negocio',
       external_id: 'msg-1',
       contact: { phone: '+5491112345678' },
-      direction: 'outbound',
-      body: 'Respuesta del bot',
+      direction: 'inbound',
+      body: 'Hola',
     })
     expect(r.success).toBe(true)
     if (r.success) expect(r.data.sender).toBe('contact')
+  })
+
+  it('acepta un saliente con sender ai', () => {
+    const r = inboundSchema.safeParse({
+      slug: 'mi-negocio',
+      external_id: 'msg-2',
+      contact: { phone: '+5491112345678' },
+      direction: 'outbound',
+      body: 'Respuesta del bot',
+      sender: 'ai',
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('rechaza una combinación incoherente direction/sender (inbound + ai)', () => {
+    expect(
+      inboundSchema.safeParse({ ...valid, direction: 'inbound', sender: 'ai' }).success,
+    ).toBe(false)
+  })
+
+  it('rechaza una combinación incoherente direction/sender (outbound + contact)', () => {
+    expect(
+      inboundSchema.safeParse({ ...valid, direction: 'outbound', sender: 'contact' }).success,
+    ).toBe(false)
   })
 
   it('rechaza payload sin slug', () => {

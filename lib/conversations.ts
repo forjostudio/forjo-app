@@ -31,19 +31,33 @@ export function isValidHandledByTransition(from: HandledBy, to: HandledBy): bool
 // El bot es input NO confiable (CLAUDE.md): el payload se valida con zod ANTES de tocar la DB. El
 // `slug` resuelve el tenant server-side (anti-tampering: el business_id NUNCA sale del body). El
 // `external_id` es el id del mensaje en el SQLite del bot → garantiza idempotencia en reintentos.
-export const inboundSchema = z.object({
-  slug: z.string().min(1),
-  external_id: z.string().min(1), // id del mensaje en el bot → idempotencia (D-05)
-  contact: z.object({
-    phone: z.string().min(1),
-    name: z.string().nullish(),
-    email: z.string().nullish(),
-  }),
-  direction: z.enum(['inbound', 'outbound']), // entrante (cliente) / saliente (bot/IA)
-  body: z.string(),
-  sender: z.enum(['contact', 'ai', 'human']).default('contact'),
-  sent_at: z.string().datetime().nullish(),
-})
+export const inboundSchema = z
+  .object({
+    slug: z.string().min(1),
+    external_id: z.string().min(1), // id del mensaje en el bot → idempotencia (D-05)
+    contact: z.object({
+      phone: z.string().min(1),
+      name: z.string().nullish(),
+      email: z.string().nullish(),
+    }),
+    direction: z.enum(['inbound', 'outbound']), // entrante (cliente) / saliente (bot/IA)
+    body: z.string(),
+    sender: z.enum(['contact', 'ai', 'human']).default('contact'),
+    sent_at: z.string().datetime().nullish(),
+  })
+  // Coherencia direction↔sender (WR-03): el bot es input NO confiable, así que el schema impone el
+  // invariante en vez de confiar en que el bot lo respete. La bandeja renderiza lado de la burbuja y
+  // label ("Vos / Agente IA") a partir de estos dos campos: una combinación incoherente produciría una
+  // burbuja mal ubicada/etiquetada. Regla: entrante ⇒ lo escribe el contacto; saliente ⇒ lo escribe la
+  // IA o un humano (nunca el contacto).
+  .superRefine((data, ctx) => {
+    if (data.direction === 'inbound' && data.sender !== 'contact') {
+      ctx.addIssue({ code: 'custom', path: ['sender'], message: 'inbound requiere sender contact' })
+    }
+    if (data.direction === 'outbound' && data.sender === 'contact') {
+      ctx.addIssue({ code: 'custom', path: ['sender'], message: 'outbound requiere sender ai|human' })
+    }
+  })
 
 export type InboundMessage = z.infer<typeof inboundSchema>
 
