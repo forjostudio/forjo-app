@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
+import { agentAuthOk } from '@/lib/agent-auth'
 import type { NextRequest } from 'next/server'
 
 // ── Estado de atención para el polling del bot (Phase 6, Plan 01, D-03) ───────────────────────────
@@ -9,16 +10,11 @@ import type { NextRequest } from 'next/server'
 // slug, force-dynamic, searchParams síncrono.
 export const dynamic = 'force-dynamic'
 
-// Auth FAIL-CLOSED idéntico al del ingest: secreto ausente → 401 (sin fail-open).
-function authOk(request: NextRequest): boolean {
-  const expected = process.env.FORJO_AGENT_TOKEN
-  if (!expected) return false
-  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
-  return Boolean(got) && got === expected
-}
+// Auth FAIL-CLOSED compartido con el ingest (lib/agent-auth.ts): secreto ausente → 401, comparación
+// constant-time (WR-02 / IN-03).
 
 export async function GET(request: NextRequest) {
-  if (!authOk(request)) return new Response('Unauthorized', { status: 401 })
+  if (!agentAuthOk(request)) return new Response('Unauthorized', { status: 401 })
 
   const slug = request.nextUrl.searchParams.get('slug') || ''
   const phone = request.nextUrl.searchParams.get('phone') || ''
@@ -37,10 +33,15 @@ export async function GET(request: NextRequest) {
   // Teléfono normalizado para matchear el contact_phone (se guarda normalizado en el ingest).
   const normalizedPhone = normalizeArWhatsApp(phone) ?? phone
 
+  // El índice único es (business_id, channel, contact_phone): incluimos channel para que el lookup
+  // matchee la tupla completa y .maybeSingle() siga siendo total cuando se agregue un 2do canal (mail
+  // diferido). Sin channel, dos filas podrían compartir (business_id, contact_phone) y maybeSingle()
+  // lanzaría, rompiendo la pausa del bot (fail-open) (WR-04).
   const { data: convo } = await supabase
     .from('conversations')
     .select('handled_by')
     .eq('business_id', business.id)
+    .eq('channel', 'whatsapp')
     .eq('contact_phone', normalizedPhone)
     .maybeSingle()
 
