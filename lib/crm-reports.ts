@@ -92,18 +92,25 @@ export function arpa(mrr: number, activos: number): number {
  * La función recibe los deals YA filtrados a la ventana de 90 días (lo hace la query del caller).
  */
 export function funnel(deals: { stage: StageKey; status: DealStatus }[]): FunnelStep[] {
-  // order alcanzado por cada deal: won llega al último (pago); el resto, al order de su stage.
-  const stageOrder = (s: StageKey) => STAGES.find((st) => st.key === s)?.order ?? 0
-  const maxOrder = STAGES.length - 1
+  // WR-02: NO asumir que la posición en el array STAGES == su `.order`. Trabajamos sobre una copia
+  // ORDENADA por el campo `.order`, y derivamos el escalón máximo del máximo `.order` real. Así, si
+  // alguien reordena STAGES o asigna orders no contiguos, el embudo no se corrompe silenciosamente.
+  const ordered = [...STAGES].sort((a, b) => a.order - b.order)
+  // slot de cada `order` dentro del array ordenado (order → índice de bucket).
+  const slotByOrder = new Map<number, number>(ordered.map((s, i) => [s.order, i]))
+  const stageOrder = (s: StageKey) => STAGES.find((st) => st.key === s)?.order ?? ordered[0].order
+  const maxOrder = ordered[ordered.length - 1].order
 
-  const counts = STAGES.map(() => 0)
+  const counts = ordered.map(() => 0)
   for (const deal of deals) {
-    const reached = deal.status === 'won' ? maxOrder : stageOrder(deal.stage)
-    // Suma 1 en cada etapa 0..reached (etapa alcanzada). 'lost' usa su stage (su última etapa).
-    for (let i = 0; i <= reached; i++) counts[i] += 1
+    // order alcanzado: won llega al último (pago); el resto, al order de su stage. 'lost' usa su stage.
+    const reachedOrder = deal.status === 'won' ? maxOrder : stageOrder(deal.stage)
+    const reachedSlot = slotByOrder.get(reachedOrder) ?? 0
+    // Suma 1 en cada slot 0..reachedSlot (etapa alcanzada, recorriendo el orden real).
+    for (let i = 0; i <= reachedSlot; i++) counts[i] += 1
   }
 
-  return STAGES.map((stage, i) => {
+  return ordered.map((stage, i) => {
     let pct: number | null = null
     if (i > 0) {
       const prev = counts[i - 1]

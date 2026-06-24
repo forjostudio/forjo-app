@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mrrByPlan, arpa, funnel, churn, ranking, computeSnapshotRows } from '@/lib/crm-reports'
 import type { BizRow } from '@/lib/crm-reports'
+import { STAGES } from '@/lib/crm-pipeline'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────────────────
 // `now` fijo para determinismo (Pitfall 5: zona AR). 2026-06-18T12:00:00Z = mediodía UTC.
@@ -111,6 +112,23 @@ describe('funnel', () => {
   it('respeta el orden de STAGES (lead → … → pago)', () => {
     const steps = funnel([])
     expect(steps.map((s) => s.key)).toEqual(['lead', 'calificado', 'trial', 'propuesta', 'pago'])
+  })
+
+  it('cuenta por .order de la etapa, no por la posición en el array STAGES (WR-02)', () => {
+    // El resultado se ordena por el campo .order: validamos que sale estrictamente creciente en .order
+    // independientemente de cómo esté declarado el array. Si funnel indexara por posición de array, esta
+    // invariante se rompería al reordenar STAGES; al indexar por .order, se mantiene.
+    const orderByKey = Object.fromEntries(STAGES.map((s) => [s.key, s.order]))
+    const steps = funnel([])
+    const orders = steps.map((s) => orderByKey[s.key])
+    const sorted = [...orders].sort((a, b) => a - b)
+    expect(orders).toEqual(sorted)
+
+    // Un deal en la etapa con MAYOR .order (no necesariamente el último del array) cuenta en TODAS las
+    // etapas de order ≤ al suyo. Tomamos la etapa de mayor order vía el campo, no vía índice.
+    const topStage = [...STAGES].sort((a, b) => b.order - a.order)[0]
+    const reachedTop = funnel([{ stage: topStage.key, status: 'open' }])
+    expect(reachedTop.every((s) => s.count === 1)).toBe(true)
   })
 })
 
