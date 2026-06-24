@@ -8,9 +8,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Snapshot mensual de MRR (RPT-01, D-01): piggyback en el cron diario (Vercel Hobby = 1/día, NO se
 // agrega un cron nuevo). Best-effort en su PROPIO try/catch (mismo criterio que el loop de emails): un
-// fallo del snapshot NO aborta cancel-expired. Idempotente por la PK (month, plan): el upsert re-escribe
-// el mes en curso cada día (lo mantiene fresco) y los meses pasados quedan congelados porque su month-key
-// no se recalcula (A2 RESEARCH). Reusa el mismo admin client (service-role) — no hay sesión admin en el cron.
+// fallo del snapshot NO aborta cancel-expired. Idempotente por la PK (month, plan).
+// CONTRATO de congelado (WR-03): SOLO el mes EN CURSO se refresca — cada corrida del cron re-upsertea su
+// fila con el MRR calculado a precios de HOY (getPlanPrices), así que si plan_prices cambia a mitad de
+// mes, la barra del mes actual se recomputa con los precios nuevos en la próxima corrida. Los meses
+// PASADOS quedan congelados de hecho porque su month-key ya no se vuelve a producir (no se re-upsertean),
+// no porque el precio quede grabado. Reusa el mismo admin client (service-role) — no hay sesión admin en el cron.
 async function writeMonthlySnapshot(supabase: SupabaseClient): Promise<number> {
   try {
     const [{ data: bizRows, error: bizErr }, prices] = await Promise.all([
