@@ -127,8 +127,13 @@ export function churn(events: { action: string }[], prevActiveCount: number | nu
     if (e.action === 'business.suspend') suspend += 1
     else if (e.action === 'business.reactivate') reactivate += 1
   }
+  // bajas = count NETO (puede ser negativo si las reactivaciones superan las suspensiones del mes).
   const bajas = suspend - reactivate
   if (prevActiveCount === null || prevActiveCount <= 0) return { bajas, pct: null }
+  // Churn es una TASA DE PÉRDIDA: nunca negativa. Si el neto es ≤ 0 (más reactivaciones que bajas, o
+  // ninguna baja), el % de churn es 0 — no un porcentaje negativo, que sería un indicador sin sentido
+  // en una tarjeta de "churn". El count `bajas` se conserva crudo (puede mostrarse negativo aparte).
+  if (bajas <= 0) return { bajas, pct: 0 }
   return { bajas, pct: bajas / prevActiveCount }
 }
 

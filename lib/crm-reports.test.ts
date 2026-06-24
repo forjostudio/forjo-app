@@ -145,6 +145,19 @@ describe('churn', () => {
     expect(r.bajas).toBe(0)
     expect(r.pct).toBe(0)
   })
+
+  it('reactivaciones > suspensiones → pct NUNCA negativo (clamp a 0), bajas crudo (WR-01)', () => {
+    const events = [
+      { action: 'business.suspend' },
+      { action: 'business.reactivate' },
+      { action: 'business.reactivate' },
+      { action: 'business.reactivate' },
+    ]
+    const r = churn(events, 100)
+    expect(r.bajas).toBe(-2) // count neto crudo se conserva
+    expect(r.pct).toBe(0) // churn es tasa de pérdida: nunca negativa
+    expect(r.pct).not.toBeLessThan(0)
+  })
 })
 
 // ── ranking ────────────────────────────────────────────────────────────────────────────────
