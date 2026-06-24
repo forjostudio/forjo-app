@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { PaletteScript } from '@/components/palette-script'
 import { resolveLandingTheme } from '@/lib/landing/theme'
 import type { LandingTheme } from '@/lib/landing/schema'
+import { buildMetadataParts } from '@/lib/landing/seo'
 import type { Metadata } from 'next'
 
 // Deduplicates the DB call between generateMetadata and the component
@@ -27,22 +28,62 @@ interface LayoutProps {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
-  const business = await getSlugBusiness(slug)
-  if (!business) return {}
 
-  // Strip cache-busting param — browsers reject favicon URLs with query strings
-  const logo = business.logo_url?.split('?')[0] ?? null
+  // Fail-safe total (SEO-05 / D9-06): TODO el cuerpo va en try/catch. Si algo tira
+  // (config corrupto, `new URL(base)` inválido, etc.) devolvemos un default válido y
+  // NUNCA un 500 — la metadata jamás debe romper el render de la landing.
+  try {
+    const business = await getSlugBusiness(slug)
+    // Sin negocio: devolvemos {} (page.tsx maneja el notFound real). No inventamos metadata.
+    if (!business) return {}
 
-  return {
-    title: `${business.name} — Reservar turno`,
-    description: `Reservá tu turno en ${business.name}`,
-    ...(logo && {
-      icons: {
-        icon: [{ url: logo, type: 'image/png' }],
-        shortcut: [logo],
-        apple: [{ url: logo }],
+    // buildMetadataParts (09-01) deriva { title, description } por-negocio desde el
+    // landing_config ya traído por el `getSlugBusiness` cacheado — NO se agrega fetch.
+    // El helper es total (parseo fail-safe del hero) y siempre devuelve strings válidos.
+    const { title, description } = buildMetadataParts({
+      business,
+      landingConfig: business.landing_config,
+    })
+
+    // metadataBase (D9-03 / Pitfall 3): habilita que los campos URL relativos (og:url, y
+    // la og:image que 09-03 inyecta por convención de archivo) se absoluticen solos. Mismo
+    // patrón de base que lib/email.ts / lib/mercadopago.ts. `new URL(base)` puede tirar →
+    // por eso vive dentro del try/catch fail-safe.
+    const base = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
+
+    // Strip cache-busting param — browsers reject favicon URLs with query strings
+    const logo = business.logo_url?.split('?')[0] ?? null
+
+    return {
+      metadataBase: new URL(base),
+      title,
+      description,
+      // og:url RELATIVO a propósito: metadataBase lo absolutiza. NO listamos `images`
+      // a mano — la convención de archivo opengraph-image.tsx de 09-03 auto-inyecta el
+      // meta og:image 1200x630 (listarla acá la duplicaría / pisaría).
+      openGraph: {
+        title,
+        description,
+        url: `/${slug}`,
+        type: 'website',
       },
-    }),
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+      },
+      // Conservamos el favicon/icons existente (logo del negocio sin cache-buster).
+      ...(logo && {
+        icons: {
+          icon: [{ url: logo, type: 'image/png' }],
+          shortcut: [logo],
+          apple: [{ url: logo }],
+        },
+      }),
+    }
+  } catch {
+    // Default válido ante cualquier falla: título genérico, jamás throw (SEO-05 / D9-06).
+    return { title: 'Reservar turno' }
   }
 }
 

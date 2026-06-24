@@ -78,6 +78,9 @@ export function parseLandingConfig(raw: unknown): LandingConfig | null {
 export const heroData = z
   .object({
     headline: z.string().optional(),
+    // kicker: eyebrow editorial del hero (ej. la ciudad/zona del negocio). Reemplaza al rubro
+    // genérico; la skill lo puebla con la ciudad y la saca del headline.
+    kicker: z.string().optional(),
     subhead: z.string().optional(),
     image: z.string().url().optional(),
     cta_label: z.string().optional(),

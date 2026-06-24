@@ -224,3 +224,246 @@
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
 }
+
+/* =========================================================================
+   LANDING PREMIUM (F8.1) — capa full-bleed editorial SCOPEADA a .frj-site.
+   El LandingRenderer aplica .frj-site al contenedor raíz del sitio público.
+
+   REGLA DURA (D81-09 / D8-03): esta capa NO toca :root, .dark, los
+   [data-palette=...] globales, .crm-shell ni nada fuera de .frj-site. El
+   dashboard y el CRM deben verse IDÉNTICOS post-cambio.
+
+   Los tokens premium se DERIVAN de los tokens del motor F8 (--primary /
+   --background / --foreground / --card / --secondary / --primary-foreground),
+   que ya cambian por paleta × modo × override inline de PaletteScript. Vía
+   color-mix(in oklab, ...) las 5 paletas (red/blue/yellow/green/ink) × claro/
+   oscuro × override funcionan solas, SIN declarar valores por paleta a mano
+   (D81-06). CERO hex hardcodeado por paleta.
+   ========================================================================= */
+.frj-site {
+  /* --- tokens premium derivados (palette/mode-agnósticos) --- */
+  /* sombra profunda del primary para gradientes hero/cta */
+  --frj-primary-deep: color-mix(in oklab, var(--primary) 78%, black);
+  /* texto legible sobre campos de color primary */
+  --frj-on-primary: var(--primary-foreground);
+  /* superficies editoriales */
+  --frj-surface: var(--card);
+  --frj-surface-2: var(--secondary);
+  /* líneas finas / grid del mapa */
+  --frj-hair: color-mix(in oklab, var(--foreground) 8%, transparent);
+  /* textura fractalNoise (SVG data-uri exacto del mock — textura, no color de marca) */
+  --frj-noise: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxNjAnIGhlaWdodD0nMTYwJz48ZmlsdGVyIGlkPSduJz48ZmVUdXJidWxlbmNlIHR5cGU9J2ZyYWN0YWxOb2lzZScgYmFzZUZyZXF1ZW5jeT0nMC45JyBudW1PY3RhdmVzPScyJyBzdGl0Y2hUaWxlcz0nc3RpdGNoJy8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9JzE2MCcgaGVpZ2h0PScxNjAnIGZpbHRlcj0ndXJsKCNuKScgb3BhY2l0eT0nMC41Jy8+PC9zdmc+");
+  /* mapea la fuente mono del layout (Task 1) al nombre que usan las primitivas */
+  --frj-font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  /* tipografía fluida vía container queries (cqw) — el restyle de secciones se apoya acá */
+  container-type: inline-size;
+}
+
+/* ── Primitivas editoriales (clases que consume components/landing/_premium.tsx) ── */
+
+/* Kicker — eyebrow mono + uppercase + letterspaced con punto de acento */
+.frj-kicker {
+  font-family: var(--frj-font-mono);
+  font-size: clamp(10px, 1.15cqw, 13px);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+}
+.frj-kicker .frj-kicker-dot {
+  width: 0.5em;
+  height: 0.5em;
+  background: var(--primary);
+  border-radius: 50%;
+  flex: none;
+}
+/* Kicker sobre fondo de color pleno (CTA bookend): texto+punto en on-primary legible.
+   Va SIN @layer (igual que .frj-kicker) y después en el archivo → gana por orden a la base
+   y a las utilidades de Tailwind v4 (que viven en @layer utilities, sub-prioridad a lo no-layered). */
+.frj-kicker-on-primary {
+  color: var(--frj-on-primary);
+}
+.frj-kicker-on-primary .frj-kicker-dot {
+  background: currentColor;
+}
+/* kicker sobre FOTO: blanco translúcido (el hero ya usa blanco para el texto sobre foto).
+   Va sin @layer → le gana al color base muted de .frj-kicker (trap de Tailwind v4). */
+.frj-kicker-on-photo {
+  color: rgb(255 255 255 / 0.9);
+}
+.frj-kicker-on-photo .frj-kicker-dot {
+  background: currentColor;
+}
+
+/* GhostIndex — número fantasma decorativo en la esquina de una sección */
+.frj-bigindex {
+  position: absolute;
+  top: clamp(20px, 4cqw, 52px);
+  right: clamp(16px, 4cqw, 56px);
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-size: clamp(60px, 16cqw, 230px);
+  line-height: 1;
+  color: var(--foreground);
+  opacity: 0.05;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* SectionShell — scaffold editorial de sección */
+.frj-sec {
+  position: relative;
+  padding: clamp(56px, 11cqw, 150px) clamp(20px, 5cqw, 64px);
+}
+.frj-sec-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+  margin-bottom: clamp(28px, 5cqw, 64px);
+}
+.frj-display {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  text-wrap: balance;
+}
+.frj-sec-head .frj-display {
+  font-size: clamp(30px, 6.4cqw, 80px);
+}
+
+/* PillButton — CTA pill con flecha en círculo */
+.frj-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(14px, 1.5cqw, 17px);
+  min-height: 2.75rem; /* 44px touch target (WCAG AA) */
+  padding: 0.85em 1.4em;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  background: var(--primary);
+  color: var(--frj-on-primary);
+}
+.frj-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px -8px color-mix(in oklab, var(--primary) 70%, transparent);
+}
+.frj-btn .frj-btn-circ {
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--frj-on-primary) 22%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.frj-btn-ghost {
+  background: transparent;
+  color: var(--foreground);
+  border-color: var(--border);
+}
+.frj-btn-ghost:hover {
+  box-shadow: none;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.frj-btn-ghost .frj-btn-circ {
+  background: color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+/* on-photo: claro fijo sobre imágenes oscuras (contraste garantizado sobre foto/scrim) */
+.frj-btn-on-photo {
+  background: var(--frj-surface);
+  color: var(--foreground);
+}
+.frj-btn-on-photo .frj-btn-circ {
+  background: color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+/* ghost-photo: outline CLARO para fondos oscuros (hero secundario sobre primary/scrim) —
+   el ghost normal usa --foreground (oscuro) y se pierde en el hero. Hex-free via on-primary. */
+.frj-btn-ghost-photo {
+  background: transparent;
+  color: var(--frj-on-primary);
+  border-color: color-mix(in oklab, var(--frj-on-primary) 50%, transparent);
+}
+.frj-btn-ghost-photo:hover {
+  box-shadow: none;
+  border-color: var(--frj-on-primary);
+}
+.frj-btn-ghost-photo .frj-btn-circ {
+  background: color-mix(in oklab, var(--frj-on-primary) 20%, transparent);
+}
+/* photo-outline: variante FUERTE del ghost para fondos FOTO (no campo de color plano). Sobre una
+   imagen el outline claro se pierde; este suma un velo oscuro + frosting (backdrop blur) + borde
+   sólido para que el botón secundario se lea sin competir con el primario. Va SIN @layer y después
+   en el archivo → gana por orden a .frj-btn-ghost-photo (Tailwind v4: lo no-layered > @layer utilities). */
+.frj-btn-photo-outline {
+  background: color-mix(in oklab, black 42%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  /* BLANCO fijo (no --frj-on-primary): en paletas claras (ocre) on-primary es OSCURO y el texto
+     se perdía sobre el velo oscuro/foto. El texto sobre foto siempre va claro, como el h1/sub. */
+  color: rgb(255 255 255 / 0.95);
+  border-color: rgb(255 255 255 / 0.8);
+}
+.frj-btn-photo-outline .frj-btn-circ {
+  background: rgb(255 255 255 / 0.22);
+}
+/* respetar reduced-motion: sin animar transform */
+@media (prefers-reduced-motion: reduce) {
+  .frj-btn { transition: none; }
+  .frj-btn:hover { transform: none; }
+}
+
+/* NoiseField — campo de color radial + anillos constructivistas + grano */
+.frj-noisefield {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--frj-on-primary);
+}
+.frj-noisefield-field {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 90% at 78% 8%,
+    color-mix(in oklab, var(--primary) 78%, white 6%) 0%,
+    var(--primary) 30%,
+    var(--frj-primary-deep) 100%
+  );
+}
+.frj-noisefield-rings {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  mix-blend-mode: soft-light;
+}
+.frj-noisefield-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, var(--frj-on-primary) 50%, transparent);
+}
+.frj-noisefield-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: var(--frj-noise);
+}
+/* tono "hair" (sutil, para superficies neutras tipo grid de mapa) */
+.frj-noisefield-hair .frj-noisefield-field {
+  background: color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+.frj-noisefield-hair .frj-noisefield-ring {
+  border-color: var(--frj-hair);
+}

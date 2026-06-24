@@ -57,6 +57,10 @@ next-env.d.ts
 .claude/gsd-install-state.json
 .claude/gsd-migration-journal/
 .claude/package.json
+# Payloads de la skill forjo-web-builder (BuilderInput+brand por slug, con rutas locales/contenido).
+# Persistentes para editar/re-correr, pero NO se versionan (datos por cliente + paths locales).
+landing-payloads/
+
 # Artefactos de planning que genera GSD al usar el workflow
 .planning/
 
