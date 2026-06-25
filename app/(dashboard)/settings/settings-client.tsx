@@ -387,6 +387,33 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setServiceLocations(s.id, cur.includes(locId) ? cur.filter(x => x !== locId) : [...cur, locId])
   }
 
+  // Edición de servicio (reusa el form de alta: nombre, duración, precio, consultorios).
+  const [editSvc, setEditSvc] = useState<Service | null>(null)
+  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[] }>({ name: '', duration_minutes: 30, price: 0, location_ids: [] })
+  const [savingEditSvc, setSavingEditSvc] = useState(false)
+  function openEditService(s: Service) {
+    setEditSvc(s)
+    setEditSvcForm({ name: s.name, duration_minutes: s.duration_minutes, price: Number(s.price), location_ids: serviceLocSet(s) })
+  }
+  async function saveEditService() {
+    if (!editSvc || !editSvcForm.name.trim()) return
+    setSavingEditSvc(true)
+    // Normaliza igual que addService/setServiceLocations: array vacío → null = "todos"; limpia el legacy location_id.
+    const payload = {
+      name: editSvcForm.name.trim(),
+      duration_minutes: editSvcForm.duration_minutes,
+      price: editSvcForm.price,
+      location_ids: editSvcForm.location_ids.length ? editSvcForm.location_ids : null,
+      location_id: null,
+    }
+    const { error } = await supabase.from('services').update(payload).eq('id', editSvc.id).eq('business_id', business.id)
+    setSavingEditSvc(false)
+    if (error) { toast.error('Error al guardar'); return }
+    setServices(prev => prev.map(s => s.id === editSvc.id ? { ...s, ...payload } : s))
+    setEditSvc(null)
+    toast.success('Servicio actualizado')
+  }
+
   // ── Tab 3 — Professionals ─────────────────────────────────────────────────
   const [professionals, setProfessionals] = useState<Professional[]>(initialProfessionals)
   const [newPro, setNewPro] = useState<ProForm>(EMPTY_PRO)
@@ -553,6 +580,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     }
     setLocations(prev => prev.filter(l => l.id !== id))
     toast.success('Eliminado')
+  }
+  // Soft-disable de locales (la columna en locations es is_active, NO active). El booking público
+  // ya filtra is_active (app/[slug]/page.tsx) → un local desactivado deja de ofrecerse sin más.
+  async function toggleLocation(id: string, is_active: boolean) {
+    const { error } = await supabase.from('locations').update({ is_active }).eq('id', id).eq('business_id', business.id)
+    if (error) { toast.error('Error al actualizar'); return }
+    setLocations(prev => prev.map(l => l.id === id ? { ...l, is_active } : l))
+    toast.success(is_active ? 'Activado' : 'Desactivado')
   }
   const [editLoc, setEditLoc] = useState<Location | null>(null)
   const [editLocForm, setEditLocForm] = useState({ name: '', address: '', phone: '' })
@@ -1049,6 +1084,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                       <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
                         {s.active ? 'Desactivar' : 'Activar'}
                       </Button>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => setDelService(s)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -1101,6 +1139,47 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               )}
             </div>
           </Card>
+
+          {/* Editar servicio (reusa el form de alta: nombre, min, precio, consultorios).
+              Los chips espejan el alta; usa el cliente browser directo (sin server actions). */}
+          <Dialog open={!!editSvc} onOpenChange={open => { if (!open) setEditSvc(null) }}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Editar servicio</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Nombre</Label>
+                  <Input value={editSvcForm.name} onChange={e => setEditSvcForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Min.</Label>
+                    <Input type="number" value={editSvcForm.duration_minutes} onChange={e => setEditSvcForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) || 0 }))} min={5} step={5} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
+                    <Input type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} min={0} step={100} />
+                  </div>
+                </div>
+                {activeLocations.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> Se ofrece en</Label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button type="button" onClick={() => setEditSvcForm(f => ({ ...f, location_ids: [] }))} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', editSvcForm.location_ids.length === 0 ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>Todos</button>
+                      {activeLocations.map(l => {
+                        const on = editSvcForm.location_ids.includes(l.id)
+                        return (
+                          <button key={l.id} type="button" onClick={() => setEditSvcForm(f => ({ ...f, location_ids: on ? f.location_ids.filter(x => x !== l.id) : [...f.location_ids, l.id] }))} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', on ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>{l.name}</button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <Button onClick={saveEditService} disabled={savingEditSvc || !editSvcForm.name.trim()}>{savingEditSvc ? 'Guardando...' : 'Guardar'}</Button>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* ── Professionals ── */}
@@ -1195,13 +1274,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               {locations.map(loc => (
                 <div key={loc.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{loc.name}</p>
+                    <p className={cn('text-sm font-medium', loc.is_active === false && 'line-through text-muted-foreground')}>{loc.name}</p>
                     {(loc.address || loc.phone) && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {[loc.address, loc.phone].filter(Boolean).join(' · ')}
                       </p>
                     )}
                   </div>
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground flex-shrink-0" onClick={() => toggleLocation(loc.id, loc.is_active === false)}>
+                    {loc.is_active === false ? 'Activar' : 'Desactivar'}
+                  </Button>
                   <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8 flex-shrink-0" onClick={() => openEditLocation(loc)}>
                     <Pencil className="w-4 h-4" />
                   </Button>
