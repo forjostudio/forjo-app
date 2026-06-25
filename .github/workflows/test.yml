@@ -25,6 +25,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx tsc --noEmit # typecheck (strict) — falla rápido ante errores de tipos
       - run: npm test # = vitest run
         env:
           # Secrets del proyecto Supabase dev: si faltan, los tests de aislamiento se skipean (D-03).
