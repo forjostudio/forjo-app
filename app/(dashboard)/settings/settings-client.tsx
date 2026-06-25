@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Business, BusinessSecrets, Service, Professional, Location } from '@/lib/types'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
+import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -345,6 +346,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // ── Tab 2 — Services ──────────────────────────────────────────────────────
   const [services, setServices] = useState<Service[]>(initialServices)
   const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[] }>({ name: '', duration_minutes: 30, price: 0, location_ids: [] })
+  const [delService, setDelService] = useState<Service | null>(null)
 
   async function addService() {
     if (!newService.name) return
@@ -358,7 +360,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     toast.success('Servicio agregado')
   }
   async function deleteService(id: string) {
-    await supabase.from('services').delete().eq('id', id)
+    // NO optimista: capturamos el error real. Defensa en profundidad con business_id (igual que
+    // deleteProfessional). Si hay turnos asociados, el FK (23503) bloquea el borrado → sugerimos
+    // desactivar en vez de tocar el estado (el item sigue en la lista porque no filtramos).
+    const { error } = await supabase.from('services').delete().eq('id', id).eq('business_id', business.id)
+    if (error) {
+      if (error.code === '23503') toast.error('No se puede eliminar: el servicio tiene turnos asociados. Desactivalo en vez de borrarlo.')
+      else toast.error('No se pudo eliminar el servicio')
+      return
+    }
     setServices(prev => prev.filter(s => s.id !== id))
     toast.success('Servicio eliminado')
   }
@@ -531,8 +541,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     toast.success('Guardado')
   }
 
+  const [delLoc, setDelLoc] = useState<Location | null>(null)
   async function deleteLocation(id: string) {
-    await supabase.from('locations').delete().eq('id', id)
+    // Mismo patrón que deleteService: NO optimista, error real + business_id. FK (23503) =
+    // tiene turnos → bloqueamos y sugerimos desactivar (soft-disable vía is_active).
+    const { error } = await supabase.from('locations').delete().eq('id', id).eq('business_id', business.id)
+    if (error) {
+      if (error.code === '23503') toast.error(`No se puede eliminar: el ${locWord} tiene turnos asociados. Desactivalo en vez de borrarlo.`)
+      else toast.error('No se pudo eliminar')
+      return
+    }
     setLocations(prev => prev.filter(l => l.id !== id))
     toast.success('Eliminado')
   }
@@ -1031,7 +1049,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                       <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
                         {s.active ? 'Desactivar' : 'Activar'}
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => deleteService(s.id)}>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => setDelService(s)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -1187,7 +1205,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8 flex-shrink-0" onClick={() => openEditLocation(loc)}>
                     <Pencil className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0" onClick={() => deleteLocation(loc.id)}>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0" onClick={() => setDelLoc(loc)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -1494,6 +1512,31 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmación de borrado (servicio / consultorio). El ConfirmDialog usa el cliente browser
+          de Supabase directo (NO server actions, NO redirect) → sin toast espurio de NEXT_REDIRECT.
+          Ante FK (turnos asociados) deleteService/deleteLocation muestran su toast y NO filtran el
+          item: el dialog se cierra pero la fila sigue en la lista. */}
+      <ConfirmDialog
+        open={!!delService}
+        onOpenChange={(o) => { if (!o) setDelService(null) }}
+        title="¿Eliminar servicio?"
+        description={delService ? `Vas a eliminar "${delService.name}". Esta acción no se puede deshacer.` : undefined}
+        risk="alto"
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={async () => { if (delService) { await deleteService(delService.id); setDelService(null) } }}
+      />
+      <ConfirmDialog
+        open={!!delLoc}
+        onOpenChange={(o) => { if (!o) setDelLoc(null) }}
+        title={`¿Eliminar ${locWord}?`}
+        description={delLoc ? `Vas a eliminar "${delLoc.name}". Esta acción no se puede deshacer.` : undefined}
+        risk="alto"
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={async () => { if (delLoc) { await deleteLocation(delLoc.id); setDelLoc(null) } }}
+      />
     </div>
   )
 }
