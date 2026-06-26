@@ -1,28 +1,20 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { format, parseISO, addDays } from 'date-fns'
+import { useState } from 'react'
+import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Appointment, Professional, Service, TimeBlock } from '@/lib/types'
+import { Appointment, Professional, Service, TimeBlock, Client, Location } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Check, X, CheckCircle2, Phone, Mail, Trash2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
-
-function timeToMinutes(t: string) {
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
-}
-function minutesToTime(m: number) {
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-}
+import { NuevoTurnoForm } from '@/components/dashboard/nuevo-turno-form'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -87,10 +79,12 @@ interface Props {
   professionals: Professional[]
   services: Service[]
   timeBlocks: TimeBlock[]
+  clients: Client[]
+  locations: Location[]
   businessId: string
 }
 
-export function AppointmentsClient({ initialAppointments, professionals, services, timeBlocks, businessId }: Props) {
+export function AppointmentsClient({ initialAppointments, professionals, services, clients, locations, businessId }: Props) {
   const supabase = createClient()
   const [appointments, setAppointments] = useState(initialAppointments)
   const [filterDate, setFilterDate] = useState('')
@@ -99,82 +93,12 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   const [tab, setTab] = useState<'proximos' | 'pasados' | 'todos'>('proximos')
   const [refreshing, setRefreshing] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
 
-  // New appointment form
-  const [form, setForm] = useState({
-    client_name: '',
-    client_phone: '',
-    client_email: '',
-    service_id: '',
-    professional_id: '',
-    date: '',
-    time: '',
-    notes: '',
-  })
-  const [modalSlots, setModalSlots] = useState<string[]>([])
-  const [loadingSlots, setLoadingSlots] = useState(false)
-
   const today = format(new Date(), 'yyyy-MM-dd')
-
-  // Calculate available slots for new appointment modal
-  const calculateModalSlots = useCallback(async () => {
-    if (!form.date || !form.service_id) { setModalSlots([]); return }
-    const service = services.find(s => s.id === form.service_id)
-    if (!service) return
-
-    const dateObj = new Date(form.date + 'T12:00:00')
-    const dayBlocks = timeBlocks.filter(b => b.day_of_week === dateObj.getDay())
-    if (dayBlocks.length === 0) {
-      setModalSlots([])
-      return
-    }
-
-    setLoadingSlots(true)
-    const { data: existing } = await supabase
-      .from('appointments')
-      .select('time, professional_id, services(duration_minutes)')
-      .eq('business_id', businessId)
-      .eq('date', form.date)
-      .neq('status', 'cancelled')
-      .neq('status', 'pending_payment')
-
-    const proId = form.professional_id && form.professional_id !== 'none' ? form.professional_id : null
-    const relevant = proId
-      ? (existing || []).filter(a => !a.professional_id || a.professional_id === proId)
-      : (existing || [])
-
-    const duration = service.duration_minutes
-    const isToday = form.date === today
-    const nowMin = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : -1
-
-    const slots: string[] = []
-    for (const block of dayBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time))) {
-      const openMin = timeToMinutes(block.start_time)
-      const closeMin = timeToMinutes(block.end_time)
-      for (let t = openMin; t + duration <= closeMin; t += duration) {
-        if (nowMin >= 0 && t <= nowMin) continue
-        const slotEnd = t + duration
-        const conflict = relevant.some(a => {
-          const aStart = timeToMinutes(a.time)
-          const aDur = (a.services as { duration_minutes?: number } | null)?.duration_minutes || 30
-          return t < aStart + aDur && slotEnd > aStart
-        })
-        if (!conflict) slots.push(minutesToTime(t))
-      }
-    }
-    setModalSlots(slots)
-    setLoadingSlots(false)
-  }, [form.date, form.service_id, form.professional_id, services, timeBlocks, businessId, today, supabase])
-
-  useEffect(() => {
-    if (form.date && form.service_id) calculateModalSlots()
-    else setModalSlots([])
-  }, [form.date, form.service_id, form.professional_id, calculateModalSlots])
 
   const filtered = appointments.filter(a => {
     if (tab === 'proximos' && (a.date < today || a.status === 'cancelled')) return false
@@ -283,50 +207,6 @@ export function AppointmentsClient({ initialAppointments, professionals, service
     if (!ok) { toast.error('Error al eliminar'); return }
     setAppointments(prev => prev.filter(a => a.id !== id))
     toast.success('Turno eliminado')
-  }
-
-  async function handleCreate() {
-    if (!form.client_name || !form.service_id || !form.date || !form.time) {
-      toast.error('Completá los campos obligatorios')
-      return
-    }
-    setSaving(true)
-    const { data: client } = await supabase
-      .from('clients')
-      .insert({ business_id: businessId, name: form.client_name, phone: form.client_phone || null, email: form.client_email || null })
-      .select().single()
-
-    const { data: appt, error } = await supabase
-      .from('appointments')
-      .insert({
-        business_id: businessId,
-        client_id: client?.id || null,
-        client_name: form.client_name,
-        client_phone: form.client_phone || null,
-        client_email: form.client_email || null,
-        service_id: form.service_id,
-        professional_id: form.professional_id && form.professional_id !== 'none' ? form.professional_id : null,
-        date: form.date,
-        time: form.time,
-        duration_minutes: services.find(s => s.id === form.service_id)?.duration_minutes ?? null,
-        notes: form.notes || null,
-        status: 'confirmed',
-      })
-      .select('*, professionals(name), services(name, price, duration_minutes)')
-      .single()
-
-    setSaving(false)
-    if (error) {
-      // 23505 = índice 011 (mismo inicio); 23P01 = exclusion constraint 013 (solapamiento).
-      // En ambos casos el horario choca con un turno activo de ese profesional.
-      if (error.code === '23505' || error.code === '23P01') toast.error('Ese horario se solapa con otro turno de ese profesional. Elegí otro.')
-      else toast.error('Error al crear turno')
-      return
-    }
-    setAppointments(prev => [...prev, appt as Appointment])
-    setDialogOpen(false)
-    setForm({ client_name: '', client_phone: '', client_email: '', service_id: '', professional_id: '', date: '', time: '', notes: '' })
-    toast.success('Turno creado')
   }
 
   const TABS: { k: typeof tab; label: string }[] = [
@@ -542,102 +422,15 @@ export function AppointmentsClient({ initialAppointments, professionals, service
         </DialogContent>
       </Dialog>
 
-      {/* New appointment dialog */}
-      <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) setModalSlots([]) }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuevo turno</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1 col-span-2">
-                <Label>Nombre *</Label>
-                <Input value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>Teléfono</Label>
-                <Input value={form.client_phone} onChange={e => setForm(f => ({ ...f, client_phone: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>Email</Label>
-                <Input type="email" value={form.client_email} onChange={e => setForm(f => ({ ...f, client_email: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label>Servicio *</Label>
-              <Select value={form.service_id} onValueChange={v => setForm(f => ({ ...f, service_id: v ?? '', time: '' }))}>
-                <SelectTrigger>
-                  <SelectValue>
-                    {(() => {
-                      const s = services.find(s => s.id === form.service_id)
-                      return s ? `${s.name} — ${s.duration_minutes}min` : <span className="text-muted-foreground">Elegí un servicio</span>
-                    })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {services.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.name} — {s.duration_minutes}min — ${Number(s.price).toLocaleString('es-AR')}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Profesional</Label>
-              <Select value={form.professional_id} onValueChange={v => setForm(f => ({ ...f, professional_id: v ?? '', time: '' }))}>
-                <SelectTrigger>
-                  <SelectValue>
-                    {form.professional_id && form.professional_id !== 'none'
-                      ? (professionals.find(p => p.id === form.professional_id)?.name ?? 'Sin preferencia')
-                      : <span className="text-muted-foreground">Sin preferencia</span>}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin preferencia</SelectItem>
-                  {professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Fecha *</Label>
-                <Input
-                  type="date"
-                  min={today}
-                  value={form.date}
-                  onChange={e => setForm(f => ({ ...f, date: e.target.value, time: '' }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Horario *</Label>
-                {form.date && form.service_id ? (
-                  loadingSlots ? (
-                    <div className="h-9 flex items-center px-3 text-sm text-muted-foreground border rounded-md">Calculando...</div>
-                  ) : modalSlots.length === 0 ? (
-                    <div className="h-9 flex items-center px-3 text-sm text-muted-foreground border rounded-md">Sin horarios</div>
-                  ) : (
-                    <Select value={form.time} onValueChange={v => setForm(f => ({ ...f, time: v ?? '' }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Elegí horario" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {modalSlots.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )
-                ) : (
-                  <div className="h-9 flex items-center px-3 text-sm text-muted-foreground border rounded-md border-dashed">
-                    Elegí servicio y fecha
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handleCreate} disabled={saving}>{saving ? 'Guardando...' : 'Crear turno'}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Nuevo turno — form compartido (modal desktop / drawer mobile), alta vía el endpoint autenticado */}
+      <NuevoTurnoForm
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        clients={clients}
+        services={services}
+        professionals={professionals}
+        locations={locations}
+      />
     </div>
   )
 }

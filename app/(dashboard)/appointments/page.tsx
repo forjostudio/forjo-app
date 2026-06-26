@@ -15,7 +15,7 @@ export default async function AppointmentsPage() {
 
   if (!business) redirect('/onboarding')
 
-  const [{ data: appointments }, { data: professionals }, { data: services }, { data: timeBlocks }] = await Promise.all([
+  const [{ data: appointments }, { data: professionals }, { data: services }, { data: timeBlocks }, { data: clients }, { data: locations }] = await Promise.all([
     supabase.from('appointments')
       .select('*, professionals(name), services(name, price, duration_minutes)')
       .eq('business_id', business.id)
@@ -32,6 +32,15 @@ export default async function AppointmentsPage() {
     supabase.from('time_blocks')
       .select('*')
       .eq('business_id', business.id),
+    // Clientes para el combobox del form compartido (filtrados por business_id en el server — T-01-14).
+    supabase.from('clients')
+      .select('*')
+      .eq('business_id', business.id)
+      .order('name', { ascending: true }),
+    supabase.from('locations')
+      .select('*')
+      .eq('business_id', business.id)
+      .order('created_at', { ascending: true }),
   ])
 
   return (
@@ -40,6 +49,8 @@ export default async function AppointmentsPage() {
       professionals={professionals || []}
       services={services || []}
       timeBlocks={timeBlocks || []}
+      clients={clients || []}
+      locations={locations || []}
       businessId={business.id}
     />
   )
