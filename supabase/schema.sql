@@ -13,6 +13,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
+CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
+
+
+
+
+
+
 COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
@@ -1155,6 +1162,12 @@ CREATE POLICY "admin read tasks" ON "public"."tasks" FOR SELECT USING ((( SELECT
 ALTER TABLE "public"."appointments" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "appointments tenant insert" ON "public"."appointments" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
 ALTER TABLE "public"."audit_log" ENABLE ROW LEVEL SECURITY;
 
 
@@ -1243,6 +1256,12 @@ ALTER TABLE "public"."client_attachments" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."clients" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "clients tenant insert" ON "public"."clients" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
 
 
 ALTER TABLE "public"."clinical_notes" ENABLE ROW LEVEL SECURITY;
@@ -1378,6 +1397,9 @@ ALTER TABLE "public"."time_blocks" ENABLE ROW LEVEL SECURITY;
 ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
 
 
+
+
+
 GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
@@ -1466,6 +1488,12 @@ GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO 
 GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO "anon";
 GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO "service_role";
+
+
+
+
+
+
 
 
 
