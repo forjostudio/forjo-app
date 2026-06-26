@@ -20,6 +20,10 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 export interface SeededTenant {
   admin: SupabaseClient
   userId: string
+  // Credenciales del dueño: las necesita el alta MANUAL (Plan 02) para firmar un cliente anon+RLS
+  // como el dueño y asertar el dedupe con la sesión real (no con el service-role del seed).
+  email: string
+  password: string
   businessId: string
   bufferMinutes: number
   serviceId: string
@@ -80,7 +84,7 @@ export async function seedOneTenant(opts?: { bufferMinutes?: number; serviceDura
   if (insPro.error || !insPro.data) throw new Error(`seed: insert professional falló: ${insPro.error?.message}`)
   const professionalId = insPro.data.id
 
-  return { admin, userId, businessId, bufferMinutes, serviceId, serviceDurationMinutes, professionalId, locationId }
+  return { admin, userId, email, password, businessId, bufferMinutes, serviceId, serviceDurationMinutes, professionalId, locationId }
 }
 
 // teardownOneTenant: borra TODO lo creado, incluso si un test falló (try/finally como
