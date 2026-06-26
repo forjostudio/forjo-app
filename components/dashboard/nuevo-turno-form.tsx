@@ -7,7 +7,7 @@
 // mostramos un combobox de clientes (filtro en memoria, command.tsx NO existe) con crear-nuevo inline,
 // y traducimos los errores del endpoint a los toasts del UI-SPEC. Sin control de seña (D-01).
 
-import { useState, useEffect, useMemo, useId } from 'react'
+import { useState, useMemo, useId, useSyncExternalStore, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import type { Client, Service, Professional, Location } from '@/lib/types'
@@ -22,18 +22,19 @@ import { cn } from '@/lib/utils'
 
 // ── Hook responsive mínimo (sin dependencias) ───────────────────────────────────────────────
 // Dialog y Drawer son portales con estado propio; renderizar uno u otro pide un breakpoint en JS,
-// no clases CSS. SSR-safe: arranca en `false` (no matchea) y se resuelve en el primer effect del
-// cliente, así no hay mismatch de hidratación.
+// no clases CSS. useSyncExternalStore se suscribe a matchMedia (store externo) sin setState-in-effect.
+// SSR-safe: el getServerSnapshot devuelve `false` (no matchea) → sin mismatch de hidratación.
 function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false)
-  useEffect(() => {
-    const mql = window.matchMedia(query)
-    setMatches(mql.matches)
-    const onChange = (e: MediaQueryListEvent) => setMatches(e.matches)
-    mql.addEventListener('change', onChange)
-    return () => mql.removeEventListener('change', onChange)
-  }, [query])
-  return matches
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mql = window.matchMedia(query)
+      mql.addEventListener('change', onChange)
+      return () => mql.removeEventListener('change', onChange)
+    },
+    [query],
+  )
+  const getSnapshot = useCallback(() => window.matchMedia(query).matches, [query])
+  return useSyncExternalStore(subscribe, getSnapshot, () => false)
 }
 
 // ── Mapeo de error del endpoint → copy del UI-SPEC (español) ─────────────────────────────────
@@ -72,18 +73,64 @@ interface Props {
   onCreated?: () => void
 }
 
+// Shell responsive: Dialog en desktop (≥768px) / Drawer vaul en mobile (<768px). El cuerpo
+// con estado (TurnoFormBody) se REMONTA cada vez que se abre (key={open}) para resetearse —
+// así el prefill se aplica como estado inicial y evitamos resetear con un effect (idiomático).
 export function NuevoTurnoForm({ open, onOpenChange, clients, services, professionals, locations, prefill, onCreated }: Props) {
-  const router = useRouter()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+
+  const body = (
+    <TurnoFormBody
+      key={open ? 'open' : 'closed'}
+      onOpenChange={onOpenChange}
+      clients={clients}
+      services={services}
+      professionals={professionals}
+      locations={locations}
+      prefill={prefill}
+      onCreated={onCreated}
+    />
+  )
+
+  // Desktop ≥768px → Dialog · mobile <768px → Drawer (vaul). D-09.
+  if (isDesktop) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo turno</DialogTitle>
+          </DialogHeader>
+          {body}
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Nuevo turno</DrawerTitle>
+        </DrawerHeader>
+        <div className="overflow-y-auto px-4 pb-6">{body}</div>
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+type BodyProps = Omit<Props, 'open'>
+
+function TurnoFormBody({ onOpenChange, clients, services, professionals, locations, prefill, onCreated }: BodyProps) {
+  const router = useRouter()
 
   // Consultorios activos (igual criterio que el resto del dashboard).
   const activeLocations = useMemo(() => locations.filter((l) => l.is_active !== false), [locations])
 
-  // ── Estado del form ─────────────────────────────────────────────────────────────────────
+  // ── Estado del form ─ valores iniciales desde prefill (D-08). El remount via key resetea todo.
   const [serviceId, setServiceId] = useState('')
-  const [professionalId, setProfessionalId] = useState('none')
+  const [professionalId, setProfessionalId] = useState(prefill?.professionalId || 'none')
   const [locationId, setLocationId] = useState('')
-  const [date, setDate] = useState('')
+  const [date, setDate] = useState(prefill?.date || '')
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -96,23 +143,6 @@ export function NuevoTurnoForm({ open, onOpenChange, clients, services, professi
   const [newClientContact, setNewClientContact] = useState('')
 
   const searchListId = useId()
-
-  // Reset al abrir/cerrar — y aplicar prefill al abrir.
-  useEffect(() => {
-    if (open) {
-      setServiceId('')
-      setProfessionalId(prefill?.professionalId || 'none')
-      setLocationId('')
-      setDate(prefill?.date || '')
-      setTime('')
-      setNotes('')
-      setSelectedClient(null)
-      setClientSearch('')
-      setCreatingClient(false)
-      setNewClientName('')
-      setNewClientContact('')
-    }
-  }, [open, prefill?.date, prefill?.professionalId])
 
   // ── Combobox: filtro en memoria sobre clients (ya cargados por business_id) ────────────────
   const filteredClients = useMemo(() => {
@@ -217,8 +247,8 @@ export function NuevoTurnoForm({ open, onOpenChange, clients, services, professi
     else router.refresh()
   }
 
-  // ── Cuerpo del form (compartido entre Dialog y Drawer) ─────────────────────────────────────
-  const body = (
+  // ── Cuerpo del form (compartido entre Dialog y Drawer vía el shell de NuevoTurnoForm) ────────
+  return (
     <div className="space-y-3">
       {/* Cliente — combobox + crear inline */}
       <div className="space-y-1.5">
@@ -442,30 +472,5 @@ export function NuevoTurnoForm({ open, onOpenChange, clients, services, professi
         </Button>
       </div>
     </div>
-  )
-
-  // Desktop ≥768px → Dialog · mobile <768px → Drawer (vaul). D-09.
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuevo turno</DialogTitle>
-          </DialogHeader>
-          {body}
-        </DialogContent>
-      </Dialog>
-    )
-  }
-
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Nuevo turno</DrawerTitle>
-        </DrawerHeader>
-        <div className="overflow-y-auto px-4 pb-6">{body}</div>
-      </DrawerContent>
-    </Drawer>
   )
 }
