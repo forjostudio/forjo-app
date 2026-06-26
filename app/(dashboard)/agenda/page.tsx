@@ -25,7 +25,7 @@ export default async function AgendaPage() {
   // Turnos desde el inicio de la semana actual en adelante para la vista semanal (sin cancelados).
   const weekStartStr = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
 
-  const [{ data: timeBlocks }, { data: locations }, { data: exceptions }, { data: appointments }] = await Promise.all([
+  const [{ data: timeBlocks }, { data: locations }, { data: exceptions }, { data: appointments }, { data: services }, { data: professionals }, { data: clients }] = await Promise.all([
     supabase.from('time_blocks').select('*').eq('business_id', business.id).order('day_of_week').order('start_time'),
     supabase.from('locations').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('schedule_exceptions').select('*').eq('business_id', business.id).order('date'),
@@ -36,6 +36,10 @@ export default async function AgendaPage() {
       .neq('status', 'cancelled')
       .order('date', { ascending: true })
       .order('time', { ascending: true }),
+    // Datos para el form compartido "Nuevo turno" (D-08), filtrados por business_id en el server (T-01-14).
+    supabase.from('services').select('*').eq('business_id', business.id).eq('active', true),
+    supabase.from('professionals').select('*').eq('business_id', business.id).eq('active', true),
+    supabase.from('clients').select('*').eq('business_id', business.id).order('name', { ascending: true }),
   ])
 
   return (
@@ -45,6 +49,9 @@ export default async function AgendaPage() {
       initialLocations={locations || []}
       initialExceptions={exceptions || []}
       initialAppointments={(appointments || []) as unknown as AgendaAppt[]}
+      services={services || []}
+      professionals={professionals || []}
+      clients={clients || []}
       googleEnabled={googleConfigured()}
       googleConnected={!!secrets.google_refresh_token}
     />

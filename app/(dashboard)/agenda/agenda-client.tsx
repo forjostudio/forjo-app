@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, type MouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, TimeBlock, Location, ScheduleException } from '@/lib/types'
+import { Business, TimeBlock, Location, ScheduleException, Service, Professional, Client } from '@/lib/types'
 import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, addDays, isSameMonth, isSameDay, isBefore, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -18,6 +18,7 @@ import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, C
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
+import { NuevoTurnoForm } from '@/components/dashboard/nuevo-turno-form'
 
 // Turno para la vista semanal (subset con joins de nombre de servicio/profesional).
 export type AgendaAppt = {
@@ -60,13 +61,25 @@ interface Props {
   initialLocations: Location[]
   initialExceptions: ScheduleException[]
   initialAppointments: AgendaAppt[]
+  services: Service[]
+  professionals: Professional[]
+  clients: Client[]
   googleEnabled: boolean
   googleConnected: boolean
 }
 
-export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions, initialAppointments, googleEnabled, googleConnected }: Props) {
+export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions, initialAppointments, services, professionals, clients, googleEnabled, googleConnected }: Props) {
   const supabase = createClient()
   const router = useRouter()
+
+  // ── Alta manual de turno (D-08): botón "Nuevo turno" + click-en-día pre-llena la FECHA.
+  // El form compartido corre el pipeline server-side completo vía el endpoint autenticado.
+  const [nuevoTurnoOpen, setNuevoTurnoOpen] = useState(false)
+  const [prefillDate, setPrefillDate] = useState('')
+  function openNuevoTurno(date = '') {
+    setPrefillDate(date)
+    setNuevoTurnoOpen(true)
+  }
 
   // Aviso al volver del OAuth de Google (?google=connected|error) y limpieza de la URL.
   useEffect(() => {
@@ -387,10 +400,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           <p className="text-sm text-muted-foreground mt-1">Tus turnos de la semana, la grilla de atención y los días especiales.</p>
         </div>
 
-        {/* Google Calendar — controles arriba a la derecha (solo si hay credenciales OAuth) */}
-        {googleEnabled && (
-          <div className="flex items-center gap-2 flex-shrink-0 sm:pt-1">
-            {googleConnected ? (
+        {/* Acciones de la página: alta de turno + controles de Google Calendar */}
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0 sm:pt-1">
+          <Button onClick={() => openNuevoTurno()} className="gap-2">
+            <Plus className="w-4 h-4" /> Nuevo turno
+          </Button>
+          {googleEnabled && (
+            googleConnected ? (
               <>
                 <span className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground"><Check className="w-3.5 h-3.5 text-primary" /> Google Calendar</span>
                 <Button variant="outline" size="sm" onClick={syncGoogle} disabled={syncingGoogle}>
@@ -404,9 +420,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
               <Button variant="outline" size="sm" onClick={() => { window.location.href = '/api/google/connect' }}>
                 <CalendarClock className="w-3.5 h-3.5 mr-1.5" /> Conectar Google Calendar
               </Button>
-            )}
-          </div>
-        )}
+            )
+          )}
+        </div>
       </div>
 
       {/* Turnos de la semana */}
@@ -427,8 +443,19 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             const st = dayStatus(d)
             const dayAppts = apptsByDate.get(ds) || []
             const isToday = isSameDay(d, new Date())
+            // D-08 acotado: la celda de día es un <button> que pre-llena la FECHA del form (no la hora).
             return (
-              <div key={ds} className={cn('rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1', isToday ? 'border-primary' : 'border-border', st === 'closed' && 'bg-secondary/30')}>
+              <button
+                key={ds}
+                type="button"
+                onClick={() => openNuevoTurno(ds)}
+                aria-label={`Agregar turno el ${format(d, "EEEE d 'de' MMMM", { locale: es })}`}
+                className={cn(
+                  'text-left rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1 transition-colors hover:border-primary focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+                  isToday ? 'border-primary' : 'border-border',
+                  st === 'closed' && 'bg-secondary/30'
+                )}
+              >
                 <div className="flex items-center justify-between">
                   <span className={cn('text-xs font-semibold capitalize', isToday && 'text-primary')}>{format(d, 'EEE d', { locale: es })}</span>
                   {st === 'closed' && <CalendarOff className="w-3 h-3 text-muted-foreground" />}
@@ -442,7 +469,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
                   </div>
                 ))}
-              </div>
+              </button>
             )
           })}
         </div>
@@ -737,6 +764,18 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Nuevo turno — form compartido (modal desktop / drawer mobile), alta vía el endpoint autenticado.
+          prefill.date = día clickeado en el resumen semanal (D-08 acotado: solo la fecha, no la hora). */}
+      <NuevoTurnoForm
+        open={nuevoTurnoOpen}
+        onOpenChange={setNuevoTurnoOpen}
+        prefill={{ date: prefillDate }}
+        clients={clients}
+        services={services}
+        professionals={professionals}
+        locations={initialLocations}
+      />
     </div>
   )
 }
