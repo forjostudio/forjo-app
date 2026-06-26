@@ -206,6 +206,14 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
   }
 
   async function handleSubmit() {
+    // Hay un cliente nuevo en progreso sin confirmar (creatingClient): el genérico "Completá el
+    // cliente..." sería engañoso (el contacto ya está cargado, falta confirmarlo). Mensaje específico.
+    if (creatingClient) {
+      toast.error(dedupeMatch
+        ? 'Ese contacto ya existe. Usá el cliente existente o cambiá el contacto.'
+        : 'Confirmá o cancelá el cliente nuevo antes de agregar el turno.')
+      return
+    }
     if (!selectedClient || !serviceId || !date || !time) {
       toast.error('Completá el cliente, el servicio y el horario.')
       return
