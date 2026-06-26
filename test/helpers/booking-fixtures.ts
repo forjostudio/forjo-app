@@ -1,0 +1,97 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+
+// ── Fixtures de un solo tenant para los tests del core (booking-core) ─────────────────
+// Siembra UN negocio fixture completo (dueño auth + business + service activo + professional
+// activo + location) en el proyecto Supabase DEV, con todo lo que createAppointmentCore necesita
+// re-validar por business_id. Molde directo de test/helpers/supabase-fixtures.ts (seedTwoTenants).
+//
+// ⚠ SERVICE-ROLE SOLO ACÁ (mismo criterio que supabase-fixtures.ts): el cliente service-role
+// bypassa RLS y es la herramienta correcta para CREAR/BORRAR fixtures. Para el test del CORE lo
+// reusamos también como el `supabase` que recibe createAppointmentCore: el core es rol-agnóstico
+// y acá NO estamos asertando RLS (eso ya lo cubre isolation.test.ts) sino la lógica del core
+// (anti-tampering, overlap/buffer, traducción de constraint), así que aislar el test del core de
+// la cuestión RLS con el admin es lo correcto.
+//
+// persistSession: false → no escribe sesión a disco (corre en Node, sin browser).
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+export interface SeededTenant {
+  admin: SupabaseClient
+  userId: string
+  businessId: string
+  bufferMinutes: number
+  serviceId: string
+  serviceDurationMinutes: number
+  professionalId: string
+  locationId: string
+}
+
+// seedOneTenant: crea 1 usuario auth + 1 business (con buffer_minutes) + 1 service activo +
+// 1 professional activo + 1 location. Prefijo único por corrida (`__test_<uuid8>`): el proyecto
+// dev es COMPARTIDO; dos runs concurrentes (local + CI) no deben colisionar en el slug UNIQUE de
+// businesses ni en el email de auth.
+export async function seedOneTenant(opts?: { bufferMinutes?: number; serviceDurationMinutes?: number }): Promise<SeededTenant> {
+  const bufferMinutes = opts?.bufferMinutes ?? 0
+  const serviceDurationMinutes = opts?.serviceDurationMinutes ?? 30
+
+  const run = crypto.randomUUID().slice(0, 8)
+  const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
+
+  const email = `__test_${run}@forjo.test`
+  const password = `Test_${run}_pw!`
+
+  // email_confirm: true → usuario confirmado al instante (no hace falta para el core, pero
+  // mantiene el molde de supabase-fixtures.ts y deja el fixture listo si algún test quisiera firmar).
+  const u = await admin.auth.admin.createUser({ email, password, email_confirm: true })
+  if (u.error || !u.data.user) throw new Error(`seed: createUser falló: ${u.error?.message}`)
+  const userId = u.data.user.id
+
+  const insBiz = await admin
+    .from('businesses')
+    .insert({ owner_id: userId, slug: `__test_${run}`, name: `__test ${run}`, buffer_minutes: bufferMinutes })
+    .select('id')
+    .single()
+  if (insBiz.error || !insBiz.data) throw new Error(`seed: insert business falló: ${insBiz.error?.message}`)
+  const businessId = insBiz.data.id
+
+  const insLoc = await admin
+    .from('locations')
+    .insert({ business_id: businessId, name: `__test_loc_${run}` })
+    .select('id')
+    .single()
+  if (insLoc.error || !insLoc.data) throw new Error(`seed: insert location falló: ${insLoc.error?.message}`)
+  const locationId = insLoc.data.id
+
+  const insSvc = await admin
+    .from('services')
+    .insert({ business_id: businessId, name: `__test_svc_${run}`, duration_minutes: serviceDurationMinutes, price: 100, active: true })
+    .select('id')
+    .single()
+  if (insSvc.error || !insSvc.data) throw new Error(`seed: insert service falló: ${insSvc.error?.message}`)
+  const serviceId = insSvc.data.id
+
+  const insPro = await admin
+    .from('professionals')
+    .insert({ business_id: businessId, name: `__test_pro_${run}`, active: true })
+    .select('id')
+    .single()
+  if (insPro.error || !insPro.data) throw new Error(`seed: insert professional falló: ${insPro.error?.message}`)
+  const professionalId = insPro.data.id
+
+  return { admin, userId, businessId, bufferMinutes, serviceId, serviceDurationMinutes, professionalId, locationId }
+}
+
+// teardownOneTenant: borra TODO lo creado, incluso si un test falló (try/finally como
+// supabase-fixtures.ts). Borrar el business CASCADEA a sus hijos (service/professional/location/
+// appointments vía ON DELETE CASCADE en business_id). El usuario auth NO cae por ese CASCADE →
+// se borra explícito en el finally con auth.admin.deleteUser.
+export async function teardownOneTenant(seeded: SeededTenant): Promise<void> {
+  const { admin, businessId, userId } = seeded
+  try {
+    if (businessId) await admin.from('businesses').delete().eq('id', businessId)
+  } finally {
+    if (userId) await admin.auth.admin.deleteUser(userId)
+  }
+}
