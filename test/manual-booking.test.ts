@@ -62,6 +62,9 @@ async function resolveClientId(
 
 describe.skipIf(!hasSupabaseCreds)('alta manual de turno (dedupe D-04 + confirmed + 401)', () => {
   let t: SeededTenant
+  // other: segundo tenant — sus entidades (service/professional/location) sirven para ejercer el
+  // anti-tampering cross-tenant a través del handler autenticado del dueño A (ver test al final).
+  let other: SeededTenant
   // ownerAnon: cliente anon-key AUTENTICADO como el dueño → corre con RLS como en producción.
   let ownerAnon: SupabaseClient
   // Cliente preexistente con teléfono + email conocidos para ejercitar el dedupe.
@@ -71,6 +74,8 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de turno (dedupe D-04 + confirme
 
   beforeAll(async () => {
     t = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
+    // Segundo tenant para el anti-tampering cross-tenant (serviceId/professionalId/locationId de OTRO negocio).
+    other = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
 
     // Sembrar (service-role) un cliente preexistente del negocio con teléfono + email conocidos.
     const insClient = await t.admin
@@ -98,6 +103,7 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de turno (dedupe D-04 + confirme
 
   afterAll(async () => {
     if (t) await teardownOneTenant(t)
+    if (other) await teardownOneTenant(other)
   })
 
   // Cada test limpia los appointments + clientes nuevos que sembró (preserva el cliente existente).
@@ -225,5 +231,119 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de turno (dedupe D-04 + confirme
       expect(appt?.expires_at).toBeNull()
       expect(appt?.client_id).toBe(existingClientId)
     }
+  })
+
+  // ── Test slot_taken vía el HANDLER autenticado ───────────────────────────────────────────────
+  // Cobertura de integración pedida por el verifier (01-VERIFICATION.md, item de Verificación Humana
+  // #1): el core tiene Test B/D en booking-core.test.ts pero con service-role aislado. Acá ejercemos
+  // la MISMA cadena que corre el handler (resolveClientId → createAppointmentCore) con la sesión
+  // anon+RLS del dueño, end-to-end: con un turno confirmed ya ocupando el slot, un 2º intento del
+  // mismo profesional/horario debe devolver el código que el handler propaga → slot_taken (409), y
+  // NO insertar un segundo turno.
+  it('devuelve slot_taken cuando el slot ya está ocupado, vía el handler autenticado (no solo el core)', async () => {
+    const resolvedId = await resolveClientId(ownerAnon, t.businessId, {
+      clientId: existingClientId,
+      clientName: 'Cliente Existente',
+      clientPhone: EXISTING_PHONE,
+      clientEmail: EXISTING_EMAIL,
+    })
+
+    // 1er turno (el handler lo crearía sin problema): ocupa el slot 16:00 del profesional.
+    const first = await createAppointmentCore({
+      supabase: ownerAnon,
+      business: { id: t.businessId, buffer_minutes: t.bufferMinutes },
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      date: DATE,
+      time: '16:00',
+      clientId: resolvedId,
+      clientName: 'Cliente Existente',
+      clientPhone: EXISTING_PHONE,
+      clientEmail: EXISTING_EMAIL,
+      notes: null,
+      requireDeposit: false,
+    })
+    expect(first.ok).toBe(true)
+
+    // 2º intento sobre el MISMO slot/profesional → el core devuelve slot_taken (409), que el handler
+    // propaga tal cual como { ok:false, error:'slot_taken' } con status 409.
+    const second = await createAppointmentCore({
+      supabase: ownerAnon,
+      business: { id: t.businessId, buffer_minutes: t.bufferMinutes },
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      date: DATE,
+      time: '16:00',
+      clientId: resolvedId,
+      clientName: 'Cliente Existente',
+      clientPhone: EXISTING_PHONE,
+      clientEmail: EXISTING_EMAIL,
+      notes: null,
+      requireDeposit: false,
+    })
+    expect(second.ok).toBe(false)
+    if (!second.ok) {
+      expect(second.error).toBe('slot_taken')
+      expect(second.status).toBe(409)
+    }
+
+    // No se insertó un 2º turno: sigue habiendo exactamente 1 turno (el primero) en ese slot.
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('id')
+      .eq('business_id', t.businessId)
+      .eq('date', DATE)
+      .eq('time', '16:00')
+      .in('status', ['confirmed', 'pending_payment'])
+    expect((appts ?? []).length).toBe(1)
+  })
+
+  // ── Test anti-tampering cross-tenant vía el HANDLER autenticado (EL invariante core) ──────────
+  // Cobertura de integración pedida por el verifier (item de Verificación Humana #2): el dueño del
+  // negocio A está autenticado (ownerAnon), pero el body trae un serviceId que pertenece al negocio B
+  // (other). El core re-valida TODA entidad por business_id del dueño A → debe RECHAZAR con
+  // invalid_service (400), que el handler propaga, y NO insertar ningún turno con datos de otro tenant.
+  // Esto ejerce el aislamiento multi-tenant a través del handler autenticado completo (anon+RLS del
+  // dueño A), no solo del core en aislamiento (booking-core.test.ts Test A usa service-role).
+  it('rechaza serviceId de otro tenant (anti-tampering) en el handler autenticado', async () => {
+    const resolvedId = await resolveClientId(ownerAnon, t.businessId, {
+      clientId: existingClientId,
+      clientName: 'Cliente Existente',
+      clientPhone: EXISTING_PHONE,
+      clientEmail: EXISTING_EMAIL,
+    })
+
+    // serviceId del negocio B, con la sesión anon+RLS del dueño A. El core hace
+    // .eq('id', serviceId).eq('business_id', A) → no matchea → invalid_service.
+    const res = await createAppointmentCore({
+      supabase: ownerAnon,
+      business: { id: t.businessId, buffer_minutes: t.bufferMinutes },
+      serviceId: other.serviceId, // entidad de OTRO tenant
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      date: DATE,
+      time: '17:00',
+      clientId: resolvedId,
+      clientName: 'Cliente Existente',
+      clientPhone: EXISTING_PHONE,
+      clientEmail: EXISTING_EMAIL,
+      notes: null,
+      requireDeposit: false,
+    })
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.error).toBe('invalid_service')
+      expect(res.status).toBe(400)
+    }
+
+    // No se insertó NINGÚN turno con el serviceId cross-tenant en el negocio del dueño A.
+    const { data: tampered } = await t.admin
+      .from('appointments')
+      .select('id')
+      .eq('business_id', t.businessId)
+      .eq('service_id', other.serviceId)
+    expect((tampered ?? []).length).toBe(0)
   })
 })
