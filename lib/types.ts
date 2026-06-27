@@ -87,6 +87,9 @@ export interface TimeBlock {
   label: string | null
   // Consultorio/sucursal del bloque (Capa 2a). null = sede única / sin consultorio.
   location_id: string | null
+  // Cupo del bloque (migración 041). NOT NULL DEFAULT 1 en la DB → siempre presente. 1 = comportamiento
+  // individual de siempre (1 reserva por slot); > 1 = clase grupal con `capacity` lugares en el mismo slot.
+  capacity: number
   created_at: string
 }
 
@@ -199,6 +202,11 @@ export interface Appointment {
   cancel_token?: string
   // ID del evento en Google Calendar del dueño (si sincroniza). Permite borrarlo al cancelar.
   google_event_id?: string | null
+  // Cupos grupales (migración 041, lo escribe book_slot_atomic). Opcionales con `?` porque no todo
+  // `select` los trae. `seat` = posición 0..capacity-1 que vuelve único el índice 011 por slot (cupo 1
+  // siempre seat 0). `is_group` = desnormalización (capacity > 1) que condiciona el EXCLUDE 013.
+  seat?: number
+  is_group?: boolean
   created_at: string
   professionals?: Professional
   services?: Service
