@@ -124,6 +124,7 @@ describe('groupHoursByDay (LAND-04)', () => {
     end_time,
     label: null,
     location_id: null,
+    capacity: 1,
     created_at: '2026-01-01',
   })
 
@@ -213,6 +214,7 @@ describe('empty-state predicates (LAND-05)', () => {
           end_time: '13:00:00',
           label: null,
           location_id: null,
+          capacity: 1,
           created_at: '2026-01-01',
         },
       ]),

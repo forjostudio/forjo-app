@@ -146,6 +146,13 @@ describe.skipIf(!hasSupabaseCreds)('booking-core: createAppointmentCore', () => 
         }
         return wrapped
       },
+      // El alta vive ahora en el RPC book_slot_atomic (no en .insert()): el respaldo atómico real
+      // ocurre dentro de la DB. El re-check JS ve [] (cliente ciego), pero el RPC re-cuenta sobre el
+      // estado vivo y, para cupo 1, el ocupante sembrado fuerza el choque 23505/slot_full del backstop
+      // → slot_taken. .rpc() pasa al cliente real para ejercer ese camino atómico de la DB.
+      rpc(...args: Parameters<SupabaseClient['rpc']>) {
+        return t.admin.rpc(...args)
+      },
     } as unknown as SupabaseClient
 
     const res = await createAppointmentCore({

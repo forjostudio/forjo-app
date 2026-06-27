@@ -22,6 +22,7 @@ const tb = (day_of_week: number, start_time: string, end_time: string): TimeBloc
   end_time,
   label: null,
   location_id: null,
+  capacity: 1,
   created_at: '2026-01-01',
 })
 
