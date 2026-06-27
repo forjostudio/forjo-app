@@ -87,6 +87,41 @@ export async function seedOneTenant(opts?: { bufferMinutes?: number; serviceDura
   return { admin, userId, email, password, businessId, bufferMinutes, serviceId, serviceDurationMinutes, professionalId, locationId }
 }
 
+// seedTimeBlock: siembra UN time_block (plantilla semanal recurrente) con `capacity` configurable
+// usando el service-role del seed. El RPC book_slot_atomic y el endpoint availability resuelven la
+// capacity de un slot leyendo time_blocks por (business_id, day_of_week, ventana start_time/end_time):
+// sin un time_block sembrado, el RPC cae al default capacity=1. Por eso los tests de cupo (CONC-01,
+// CUPOS-03) DEBEN sembrar el bloque con la capacity que quieren probar.
+//
+// `day_of_week` default = 1 (lunes, convención Postgres EXTRACT(dow): 0=domingo..6=sábado) porque la
+// fecha de test fija de la suite es '2031-03-03', que es un LUNES. La ventana default '08:00'..'20:00'
+// envuelve los horarios de test (09:00, 10:00, etc.). Mantener firma de seedOneTenant intacta: este es
+// un helper aparte. El teardown por CASCADE de business ya borra los time_blocks (sin cambio).
+export async function seedTimeBlock(
+  seeded: SeededTenant,
+  opts?: { capacity?: number; dayOfWeek?: number; startTime?: string; endTime?: string }
+): Promise<string> {
+  const capacity = opts?.capacity ?? 1
+  const dayOfWeek = opts?.dayOfWeek ?? 1 // 2031-03-03 = lunes
+  const startTime = opts?.startTime ?? '08:00'
+  const endTime = opts?.endTime ?? '20:00'
+
+  const ins = await seeded.admin
+    .from('time_blocks')
+    .insert({
+      business_id: seeded.businessId,
+      day_of_week: dayOfWeek,
+      start_time: startTime,
+      end_time: endTime,
+      location_id: seeded.locationId,
+      capacity,
+    })
+    .select('id')
+    .single()
+  if (ins.error || !ins.data) throw new Error(`seed: insert time_block falló: ${ins.error?.message}`)
+  return ins.data.id
+}
+
 // teardownOneTenant: borra TODO lo creado, incluso si un test falló (try/finally como
 // supabase-fixtures.ts). Borrar el business CASCADEA a sus hijos (service/professional/location/
 // appointments vía ON DELETE CASCADE en business_id). El usuario auth NO cae por ese CASCADE →
