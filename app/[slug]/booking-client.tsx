@@ -211,12 +211,20 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     // sirve /api/booking/availability (service role) devolviendo solo los slots OCUPADOS
     // (time/status/expires_at, sin datos del cliente) para este negocio+fecha+profesional.
     let busy: { time: string; duration_minutes?: number | null }[] = []
+    // `full`: horarios donde el server ya decidió "lleno" (count >= capacity). La AUTORIDAD del
+    // conteo vive en el server (anon NO lee appointments); el client confía en `full` y NUNCA
+    // recomputa la ocupación ni conoce cuántos lugares quedan (D-06). Respuesta vieja sin `full`
+    // → se trata como [] (defensivo, no rompe).
+    let full: string[] = []
     try {
       const params = new URLSearchParams({ slug: business.slug, date: dateStr })
       if (proId) params.set('professionalId', proId)
       const res = await fetch(`/api/booking/availability?${params.toString()}`, { cache: 'no-store' })
       const data = await res.json().catch(() => null)
-      if (res.ok && data?.ok) busy = data.busy || []
+      if (res.ok && data?.ok) {
+        busy = data.busy || []
+        full = data.full || []
+      }
     } catch (e) {
       console.error('availability error:', e)
     }
@@ -245,6 +253,10 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         })
         if (conflict) continue
         const time = minutesToTime(t)
+        // Slot lleno según el server (cupo grupal: count >= capacity). El client confía en `full`
+        // y no recomputa contra capacity (no tiene ni debe tener el count). Para capacity=1 esto
+        // coincide con el `conflict` por solapamiento; ambos co-existen sin romperse.
+        if (full.includes(time)) continue
         const key = `${time}|${block.location_id ?? ''}`
         if (seen.has(key)) continue
         seen.add(key)
