@@ -93,15 +93,26 @@ BEGIN
     AND a.date = p_date AND a.time = p_time
     AND a.status IN ('confirmed', 'pending_payment');
 
-  -- 4. Si ya está lleno → slot_full (P0001). El core lo mapea a error de dominio slot_full (409).
-  IF v_occupied >= v_capacity THEN
-    RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
+  -- 4. Asignación de asiento + cero regresión cupo 1 (CONC-02).
+  --    CASO CUPO 1 (v_capacity = 1): NO se levanta slot_full por count. Se fuerza siempre seat=0,
+  --      de modo que la 2ª reserva del slot reuse el seat 0 del ocupante y choque con el índice único
+  --      011 → 23505, que el core traduce a slot_taken (EXACTAMENTE el comportamiento anti-doble-booking
+  --      de v0.9, byte-idéntico). Si se levantara slot_full acá, el cupo 1 devolvería slot_full y se
+  --      perdería la no-regresión que guardea CONC-02 / booking-core.test.ts Test D.
+  --    CASO CUPO N (v_capacity > 1): si ya está lleno → slot_full (P0001), que el core mapea a 409.
+  --      Si hay lugar, seat := v_occupied (primer asiento libre 0..capacity-1).
+  --    En AMBOS casos el índice único (..., seat) es el respaldo atómico: si dos requests cruzaran el
+  --    lock (no debería), el seat duplicado choca con 23505. is_group = (capacity > 1) desnormaliza si
+  --    el slot es grupal para condicionar el EXCLUDE 013.
+  IF v_capacity > 1 THEN
+    IF v_occupied >= v_capacity THEN
+      RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
+    END IF;
+    v_seat := v_occupied;
+  ELSE
+    -- Cupo 1: seat fijo en 0 → la 2ª reserva colisiona con el índice 011 (23505 → slot_taken).
+    v_seat := 0;
   END IF;
-
-  -- 5. Asigna el primer asiento libre (0..capacity-1) e inserta. is_group = (capacity > 1) desnormaliza
-  --    si el slot es grupal para condicionar el EXCLUDE 013. El índice único (..., seat) es el respaldo
-  --    atómico: si dos requests cruzaran el lock (no debería), el seat duplicado choca con 23505.
-  v_seat := v_occupied;
   RETURN QUERY
   INSERT INTO appointments (
     business_id, client_id, client_name, client_phone, client_email,
