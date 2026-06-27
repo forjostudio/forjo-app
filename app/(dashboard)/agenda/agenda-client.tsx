@@ -46,13 +46,15 @@ const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
 const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30]
 
 // ── Time block state types ──────────────────────────────────────────────────
-type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; location_id: string; error?: string }
+// `capacity` = lugares del bloque (CUPOS-01). 1 = bloque individual de siempre (cero cambio de
+// comportamiento); > 1 = clase grupal con N cupos en el mismo slot.
+type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; location_id: string; capacity: number; error?: string }
 type DayConfig = { enabled: boolean; blocks: LocalBlock[] }
 
 function defaultBlock(day: number): LocalBlock {
-  if (day >= 1 && day <= 5) return { start_time: '09:00', end_time: '18:00', label: '', location_id: '' }
-  if (day === 6) return { start_time: '09:00', end_time: '13:00', label: '', location_id: '' }
-  return { start_time: '09:00', end_time: '18:00', label: '', location_id: '' }
+  if (day >= 1 && day <= 5) return { start_time: '09:00', end_time: '18:00', label: '', location_id: '', capacity: 1 }
+  if (day === 6) return { start_time: '09:00', end_time: '13:00', label: '', location_id: '', capacity: 1 }
+  return { start_time: '09:00', end_time: '18:00', label: '', location_id: '', capacity: 1 }
 }
 
 interface Props {
@@ -132,7 +134,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       const blocks = initialTimeBlocks.filter(b => b.day_of_week === day)
       return {
         enabled: blocks.length > 0,
-        blocks: blocks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, label: b.label || '', location_id: b.location_id || '' })),
+        blocks: blocks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, label: b.label || '', location_id: b.location_id || '', capacity: b.capacity ?? 1 })),
       }
     })
   )
@@ -162,7 +164,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       const newStart = lastBlock?.end_time || '09:00'
       const [h, m] = newStart.split(':').map(Number)
       const newEnd = `${String(Math.min(h + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      next[day] = { ...next[day], enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '', location_id: activeLoc }] }
+      next[day] = { ...next[day], enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '', location_id: activeLoc, capacity: 1 }] }
       return next
     })
   }
@@ -176,7 +178,8 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     })
   }
 
-  function updateBlock(day: number, idx: number, field: keyof LocalBlock, value: string) {
+  // value: string para los Inputs de texto/hora/label; number para `capacity` (cupo).
+  function updateBlock(day: number, idx: number, field: keyof LocalBlock, value: string | number) {
     setDayStates(prev => {
       const next = [...prev]
       const blocks = [...next[day].blocks]
@@ -228,7 +231,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       const next = [...prev]
       for (const d of copyTargets) {
         const others = next[d].blocks.filter(b => (b.location_id || '') !== activeLoc)
-        const copied = src.map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label, location_id: activeLoc }))
+        const copied = src.map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label, location_id: activeLoc, capacity: b.capacity }))
         const blocks = [...others, ...copied]
         next[d] = { enabled: blocks.length > 0, blocks }
       }
@@ -244,13 +247,14 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     // Delete all existing blocks for this business
     await supabase.from('time_blocks').delete().eq('business_id', business.id)
     // Collect blocks to insert
-    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null; location_id: string | null }[] = []
+    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null; location_id: string | null; capacity: number }[] = []
     dayStates.forEach((ds, day) => {
       if (!ds.enabled) return
       ds.blocks.forEach(b => {
         // Con consultorios cargados no existe "General": se descartan los bloques sin consultorio.
         if (activeLocations.length > 0 && !b.location_id) return
-        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null, location_id: b.location_id || null })
+        // capacity viaja en el insert (delete-all + insert ya reinserta todos los bloques). Default 1 = individual.
+        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null, location_id: b.location_id || null, capacity: b.capacity || 1 })
       })
     })
     if (toInsert.length > 0) {
@@ -574,6 +578,21 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             placeholder="Mañana, Tarde... (opcional)"
                             className="w-40 text-sm"
                           />
+                          {/* Cupo (CUPOS-01): lugares del bloque. min 1 = individual (CHECK capacity >= 1 en la migración). */}
+                          <div className="flex items-center gap-1.5">
+                            <Label htmlFor={`cupo-${day}-${idx}`} className="text-xs text-muted-foreground">Cupo</Label>
+                            <Input
+                              id={`cupo-${day}-${idx}`}
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={block.capacity}
+                              onChange={e => updateBlock(day, idx, 'capacity', Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                              className="w-16 text-sm"
+                              title="Cupo (lugares por bloque)"
+                              aria-label="Cupo (lugares por bloque)"
+                            />
+                          </div>
                           <button
                             onClick={() => removeBlock(day, idx)}
                             className="text-muted-foreground hover:text-red-400 transition-colors"
