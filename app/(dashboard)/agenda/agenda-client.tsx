@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, type MouseEvent } from 'react'
+import { useState, useMemo, useEffect, useCallback, useSyncExternalStore, type MouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -8,13 +8,14 @@ import { Business, TimeBlock, Location, ScheduleException, Service, Professional
 import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, addDays, isSameMonth, isSameDay, isBefore, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, Check, RefreshCw } from 'lucide-react'
+import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, Check, RefreshCw, Users, Phone, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -27,6 +28,9 @@ export type AgendaAppt = {
   time: string
   status: string
   client_name: string
+  // Contacto para el roster del admin (D-04). Datos propios del negocio sobre sus clientes.
+  client_phone?: string | null
+  client_email?: string | null
   duration_minutes: number | null
   location_id: string | null
   services: { name?: string } | null
@@ -38,6 +42,38 @@ function statusChip(status: string): string {
   if (status === 'confirmed') return 'bg-primary/10 text-foreground border-primary/30'
   if (status === 'pending_payment') return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
   return 'bg-secondary text-muted-foreground border-border'
+}
+
+// Etiqueta del estado para el roster (mismo semantismo de color que statusChip).
+function statusLabel(status: string): string {
+  if (status === 'confirmed') return 'Confirmado'
+  if (status === 'pending_payment') return 'Seña pendiente'
+  return status
+}
+
+// Estados que OCUPAN un lugar del cupo (mismo WHERE de los constraints 011/013).
+const OCCUPYING_STATUSES = ['confirmed', 'pending_payment']
+
+// Minutos desde 'HH:MM[:SS]' para resolver la ventana del time_block que cubre un slot.
+function timeToMin(t: string): number {
+  const [h, m] = t.split(':')
+  return Number(h) * 60 + Number(m)
+}
+
+// Dialog (desktop ≥768px) / Drawer vaul (mobile) son portales con estado propio: el breakpoint
+// se decide en JS, no con clases CSS. useSyncExternalStore se suscribe a matchMedia (store externo)
+// sin setState-in-effect. SSR-safe: getServerSnapshot → false. Espeja NuevoTurnoForm (D-09/D-04).
+function useMediaQuery(query: string): boolean {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mql = window.matchMedia(query)
+      mql.addEventListener('change', onChange)
+      return () => mql.removeEventListener('change', onChange)
+    },
+    [query],
+  )
+  const getSnapshot = useCallback(() => window.matchMedia(query).matches, [query])
+  return useSyncExternalStore(subscribe, getSnapshot, () => false)
 }
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -381,6 +417,40 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     }
     return m
   }, [initialAppointments])
+
+  // ── Roster del admin (CUPOS-04, D-04) ────────────────────────────────────────
+  // Click en un slot grupal → overlay con contador "ocupados/cupo" + lista (nombre, contacto, estado).
+  // Solo se computa en memoria sobre initialAppointments (ya filtrados por business_id en el server,
+  // T-02-13): NUNCA toca datos de otro tenant.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+  const [rosterSlot, setRosterSlot] = useState<{ date: string; time: string } | null>(null)
+
+  // capacityFor(date, time): MAX capacity de los time_blocks cuyo día (getUTCDay, igual que la DB y
+  // availability) + ventana [start,end) cubren el slot. Sin bloque que lo cubra → 1 (individual).
+  const capacityFor = useCallback((date: string, time: string): number => {
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
+    const tMin = timeToMin(time)
+    let cap = 0
+    for (const b of initialTimeBlocks) {
+      if (b.day_of_week !== dow) continue
+      if (timeToMin(b.start_time) <= tMin && tMin < timeToMin(b.end_time)) {
+        cap = Math.max(cap, Number(b.capacity) || 1)
+      }
+    }
+    return cap || 1
+  }, [initialTimeBlocks])
+
+  // Roster del slot seleccionado: turnos del MISMO (date, time) que ocupan lugar (confirmed/pending),
+  // + el cupo del bloque que cubre el slot. Contador "N/capacity".
+  const roster = useMemo(() => {
+    if (!rosterSlot) return null
+    const { date, time } = rosterSlot
+    const slotKey = time.slice(0, 5)
+    const enrollees = initialAppointments
+      .filter(a => a.date === date && a.time.slice(0, 5) === slotKey && OCCUPYING_STATUSES.includes(a.status))
+      .sort((a, b) => a.client_name.localeCompare(b.client_name))
+    return { date, time: slotKey, enrollees, capacity: capacityFor(date, time) }
+  }, [rosterSlot, initialAppointments, capacityFor])
   // Estado del día para el badge: cerrado / horario especial / abierto (según excepción o grilla).
   function dayStatus(d: Date): 'closed' | 'special' | 'open' {
     const list = excByDate.get(format(d, 'yyyy-MM-dd')) || []
@@ -447,33 +517,56 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             const st = dayStatus(d)
             const dayAppts = apptsByDate.get(ds) || []
             const isToday = isSameDay(d, new Date())
-            // D-08 acotado: la celda de día es un <button> que pre-llena la FECHA del form (no la hora).
+            // D-08 acotado: el header de la celda pre-llena la FECHA del form (no la hora).
+            // Los chips de un slot GRUPAL (capacity > 1) abren el roster (D-04); los individuales
+            // se muestran como hoy (no interactivos). La celda es un <div> para que los chips-botón
+            // del roster no queden anidados en un <button> (HTML inválido / a11y rota).
             return (
-              <button
+              <div
                 key={ds}
-                type="button"
-                onClick={() => openNuevoTurno(ds)}
-                aria-label={`Agregar turno el ${format(d, "EEEE d 'de' MMMM", { locale: es })}`}
                 className={cn(
-                  'text-left rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1 transition-colors hover:border-primary focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+                  'rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1 transition-colors',
                   isToday ? 'border-primary' : 'border-border',
                   st === 'closed' && 'bg-secondary/30'
                 )}
               >
-                <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => openNuevoTurno(ds)}
+                  aria-label={`Agregar turno el ${format(d, "EEEE d 'de' MMMM", { locale: es })}`}
+                  className="text-left flex items-center justify-between rounded -m-1 p-1 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                >
                   <span className={cn('text-xs font-semibold capitalize', isToday && 'text-primary')}>{format(d, 'EEE d', { locale: es })}</span>
                   {st === 'closed' && <CalendarOff className="w-3 h-3 text-muted-foreground" />}
                   {st === 'special' && <CalendarClock className="w-3 h-3 text-primary" />}
-                </div>
+                </button>
                 {dayAppts.length === 0 ? (
                   <span className="text-[10px] text-muted-foreground">{st === 'closed' ? 'Cerrado' : 'Sin turnos'}</span>
-                ) : dayAppts.map(a => (
-                  <div key={a.id} className={cn('rounded px-1.5 py-1 text-[11px] leading-tight border break-words', statusChip(a.status))}>
-                    <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
-                    {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
-                  </div>
-                ))}
-              </button>
+                ) : dayAppts.map(a => {
+                  const isGroup = capacityFor(ds, a.time) > 1
+                  const chipClass = cn('rounded px-1.5 py-1 text-[11px] leading-tight border break-words', statusChip(a.status))
+                  const chipBody = (
+                    <>
+                      <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
+                      {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
+                    </>
+                  )
+                  // Slot grupal → chip clickeable que abre el roster del slot (mismo date/time).
+                  return isGroup ? (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setRosterSlot({ date: ds, time: a.time })}
+                      aria-label={`Ver inscriptos de las ${a.time.slice(0, 5)} del ${format(d, "EEEE d 'de' MMMM", { locale: es })}`}
+                      className={cn(chipClass, 'text-left w-full cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background')}
+                    >
+                      {chipBody}
+                    </button>
+                  ) : (
+                    <div key={a.id} className={chipClass}>{chipBody}</div>
+                  )
+                })}
+              </div>
             )
           })}
         </div>
@@ -750,6 +843,68 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </div>
         )}
       </Card>
+
+      {/* Roster del slot grupal (CUPOS-04, D-04): contador "ocupados/cupo" + inscriptos.
+          Dialog en desktop / Drawer vaul en mobile (mismo shell responsive que NuevoTurnoForm). */}
+      {roster && (() => {
+        const title = `${format(parseISO(roster.date), "EEE d 'de' MMM", { locale: es })} · ${roster.time}`
+        const counter = `${roster.enrollees.length}/${roster.capacity}`
+        const body = (
+          <div className="space-y-3">
+            {/* Contador de ocupación — dato exclusivo del admin (el público nunca lo ve, D-06). */}
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold tabular-nums">{counter}</span>
+              <span className="text-xs text-muted-foreground">{roster.enrollees.length === 1 ? 'inscripto' : 'inscriptos'}</span>
+            </div>
+            {roster.enrollees.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin inscriptos aún.</p>
+            ) : (
+              <ul className="space-y-2">
+                {roster.enrollees.map(a => (
+                  <li key={a.id} className="flex items-start justify-between gap-3 rounded-md border border-border p-2.5">
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-sm font-medium truncate">{a.client_name}</p>
+                      {a.client_phone && (
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3 flex-shrink-0" /><span className="truncate">{a.client_phone}</span></p>
+                      )}
+                      {a.client_email && (
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="w-3 h-3 flex-shrink-0" /><span className="truncate">{a.client_email}</span></p>
+                      )}
+                      {!a.client_phone && !a.client_email && (
+                        <p className="text-xs text-muted-foreground">Sin contacto</p>
+                      )}
+                    </div>
+                    <span className={cn('flex-shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium', statusChip(a.status))}>
+                      {statusLabel(a.status)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+        const close = () => setRosterSlot(null)
+        return isDesktop ? (
+          <Dialog open onOpenChange={open => { if (!open) close() }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 capitalize">{title}</DialogTitle>
+              </DialogHeader>
+              {body}
+            </DialogContent>
+          </Dialog>
+        ) : (
+          <Drawer open onOpenChange={open => { if (!open) close() }}>
+            <DrawerContent>
+              <DrawerHeader>
+                <DrawerTitle className="capitalize">{title}</DrawerTitle>
+              </DrawerHeader>
+              <div className="overflow-y-auto px-4 pb-6">{body}</div>
+            </DrawerContent>
+          </Drawer>
+        )
+      })()}
 
       {/* Copiar el horario de un día a otros (multi-día) */}
       <Dialog open={copyDay !== null} onOpenChange={open => { if (!open) setCopyDay(null) }}>
