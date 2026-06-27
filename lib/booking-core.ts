@@ -58,7 +58,7 @@ export type CreateAppointmentResult =
       // los ids para que el caller público dispare sus mails de hold-vencido en su propio after().
       cancelledHoldIds: string[]
     }
-  | { ok: false; error: 'invalid_service' | 'invalid_professional' | 'slot_taken' | 'insert_failed'; status: 400 | 409 | 500 }
+  | { ok: false; error: 'invalid_service' | 'invalid_professional' | 'slot_taken' | 'slot_full' | 'insert_failed'; status: 400 | 409 | 500 }
 
 export async function createAppointmentCore(input: CreateAppointmentInput): Promise<CreateAppointmentResult> {
   const {
@@ -117,6 +117,21 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     .eq('date', date)
     .in('status', ['confirmed', 'pending_payment'])
 
+  // Capacity del bloque que cubre este slot. MISMO join que book_slot_atomic (plantilla semanal:
+  // day_of_week + ventana start/end), MISMA convención de dow que EXTRACT(dow): 0=domingo..6=sábado
+  // (new Date('yyyy-MM-dd') parsea a medianoche UTC → getUTCDay() coincide con EXTRACT(dow) de la DB).
+  // Si no hay bloque que lo cubra → capacity 1 (comportamiento individual). El RPC es la AUTORIDAD
+  // atómica del cupo; este query es solo para decidir si el re-check JS (UX) debe rechazar temprano.
+  const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
+  const { data: capBlocks } = await supabase
+    .from('time_blocks')
+    .select('capacity')
+    .eq('business_id', business.id)
+    .eq('day_of_week', dow)
+    .lte('start_time', time)
+    .gt('end_time', time)
+  const slotCapacity = (capBlocks || []).reduce((max, b) => Math.max(max, Number(b.capacity) || 1), 1)
+
   // Buffer (descanso entre turnos): ensancha cada turno ocupado para exigir un hueco mínimo.
   const overlaps = (a: { time: string; duration_minutes: number | null }) => {
     const aStart = timeToMinutes(a.time)
@@ -129,7 +144,14 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
   const taken = sameBucket.some(a =>
     a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
   )
-  if (taken) {
+  // Re-check JS capacity-aware (Pitfall 5 / A5): el rechazo temprano `slot_taken` por SOLAPAMIENTO
+  // solo aplica a bloques cupo 1, donde es el anti-doble-booking de duración variable de v0.9 (un
+  // turno de 60' que pisa parcialmente a otro de 30' — el RPC NO lo cubre, solo cuenta el slot exacto).
+  // En bloques GRUPALES (capacity > 1) NO rechazamos acá: todos los inscriptos comparten el MISMO slot
+  // exacto (D-03, duración fija) y un solape "consigo mismos" no es conflicto — la autoridad del cupo
+  // es el RPC (advisory lock + count vs capacity → slot_full). Rechazar acá bloquearía falsamente al
+  // 2º+ inscripto de la clase. Para cupo 1, capacity-aware ⇒ comportamiento byte-idéntico a hoy.
+  if (taken && slotCapacity <= 1) {
     return { ok: false, error: 'slot_taken', status: 409 }
   }
 
@@ -178,43 +200,52 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     validLocationId = service.location_id as string
   }
 
-  // Insert del turno. El índice 011 es el respaldo ATÓMICO: si dos requests pasan el re-check
-  // en la misma carrera, Postgres rechaza el segundo con 23505 (o 23P01 por la exclusion 013)
-  // y lo traducimos a slot_taken. El re-check JS de arriba es solo UX; la garantía real es la DB.
-  const { data: appt, error: insertErr } = await supabase
-    .from('appointments')
-    .insert({
-      business_id: business.id,
-      client_id: clientId,
-      client_name: clientName,
-      client_phone: clientPhone,
-      client_email: clientEmail,
-      service_id: service.id,
-      professional_id: proId,
-      location_id: validLocationId,
-      date,
-      time,
-      duration_minutes: Number(service.duration_minutes || 30),
-      notes,
-      status: initialStatus,
-      expires_at: expiresAt,
+  // Alta del turno vía book_slot_atomic (migración 041). REEMPLAZA el INSERT autocommit directo:
+  // el .insert() del client JS es su propia transacción, y entre el re-check de arriba y el insert
+  // hay una ventana de carrera (TOCTOU) que dos requests concurrentes del mismo slot podían cruzar →
+  // sobrecupo. El RPC encapsula advisory-lock + count vs capacity + INSERT con seat en UNA transacción
+  // server-side: serializa SOLO las reservas que pelean este mismo slot+bucket y asigna el asiento
+  // atómicamente. La garantía real del cupo vive acá (DB), no en el re-check JS (que es solo UX).
+  // El anti-tampering de tenant (service/professional/location por business_id) ya corrió ARRIBA; el
+  // RPC recibe ids ya validados y re-impone el filtro por p_business_id internamente (SECURITY DEFINER).
+  const { data: appt, error: rpcErr } = await supabase
+    .rpc('book_slot_atomic', {
+      p_business_id: business.id,
+      p_professional_id: proId,
+      p_service_id: service.id,
+      p_location_id: validLocationId,
+      p_date: date,
+      p_time: time,
+      p_duration: Number(service.duration_minutes || 30),
+      p_client_id: clientId,
+      p_client_name: clientName,
+      p_client_phone: clientPhone,
+      p_client_email: clientEmail,
+      p_notes: notes,
+      p_status: initialStatus,
+      p_expires_at: expiresAt,
     })
-    .select('id, cancel_token')
     .single()
 
-  if (insertErr || !appt) {
-    // 23505 = índice 011 (mismo inicio); 23P01 = exclusion constraint 013 (solapamiento).
-    if (insertErr?.code === '23505' || insertErr?.code === '23P01') {
+  if (rpcErr || !appt) {
+    // (a) RAISE 'slot_full' (ERRCODE P0001 — cupo grupal lleno) llega en `message` → slot_full (409).
+    if (rpcErr?.message?.includes('slot_full')) {
+      return { ok: false, error: 'slot_full', status: 409 }
+    }
+    // (b) 23505 = índice único de seat (cupo 1: 2ª reserva del slot, doble-booking clásico);
+    //     23P01 = exclusion constraint 013 (solape de duración variable, cupo 1) → slot_taken (409).
+    if (rpcErr?.code === '23505' || rpcErr?.code === '23P01') {
       return { ok: false, error: 'slot_taken', status: 409 }
     }
-    console.error('[booking-core] insert error:', insertErr?.message)
+    console.error('[booking-core] rpc error:', rpcErr?.message)
     return { ok: false, error: 'insert_failed', status: 500 }
   }
+  const apptRow = appt as { id: string; cancel_token: string }
 
   return {
     ok: true,
-    appointmentId: appt.id as string,
-    cancelToken: appt.cancel_token as string,
+    appointmentId: apptRow.id,
+    cancelToken: apptRow.cancel_token,
     status: initialStatus,
     serviceName: (service.name as string) || '',
     durationMinutes: Number(service.duration_minutes || 30),
