@@ -59,6 +59,67 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 
+CREATE OR REPLACE FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) RETURNS TABLE("id" "uuid", "cancel_token" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_bucket uuid := COALESCE(p_professional_id, '00000000-0000-0000-0000-000000000000'::uuid);
+  v_capacity int;
+  v_occupied int;
+  v_seat smallint;
+BEGIN
+  -- 1. Lock por slot+bucket: serializa SOLO las reservas que pelean este mismo slot.
+  --    hashtextextended de la clave estable del slot → bigint para el advisory lock.
+  --    El COALESCE es byte-idéntico al del índice 011 y al count de abajo.
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    p_business_id::text || v_bucket::text || p_date::text || p_time::text, 0));
+
+  -- 2. Capacity del bloque que cubre este slot (plantilla semanal: day_of_week + ventana).
+  --    Si no hay bloque que lo cubra, default 1 (comportamiento individual). EXTRACT(dow) usa la
+  --    misma convención que time_blocks.day_of_week (0=domingo..6=sábado).
+  SELECT COALESCE(MAX(tb.capacity), 1) INTO v_capacity
+  FROM time_blocks tb
+  WHERE tb.business_id = p_business_id
+    AND tb.day_of_week = EXTRACT(dow FROM p_date)
+    AND p_time >= tb.start_time AND p_time < tb.end_time;
+
+  -- 3. Ocupantes actuales del slot exacto (mismo bucket, mismo date+time, estados que ocupan).
+  --    Los holds vencidos ya los liberó el core ANTES del RPC, así que el count está limpio.
+  SELECT count(*) INTO v_occupied
+  FROM appointments a
+  WHERE a.business_id = p_business_id
+    AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+    AND a.date = p_date AND a.time = p_time
+    AND a.status IN ('confirmed', 'pending_payment');
+
+  -- 4. Si ya está lleno → slot_full (P0001). El core lo mapea a error de dominio slot_full (409).
+  IF v_occupied >= v_capacity THEN
+    RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 5. Asigna el primer asiento libre (0..capacity-1) e inserta. is_group = (capacity > 1) desnormaliza
+  --    si el slot es grupal para condicionar el EXCLUDE 013. El índice único (..., seat) es el respaldo
+  --    atómico: si dos requests cruzaran el lock (no debería), el seat duplicado choca con 23505.
+  v_seat := v_occupied;
+  RETURN QUERY
+  INSERT INTO appointments (
+    business_id, client_id, client_name, client_phone, client_email,
+    service_id, professional_id, location_id, date, time, duration_minutes,
+    seat, is_group, notes, status, expires_at
+  ) VALUES (
+    p_business_id, p_client_id, p_client_name, p_client_phone, p_client_email,
+    p_service_id, p_professional_id, p_location_id, p_date, p_time, p_duration,
+    v_seat, (v_capacity > 1), p_notes, p_status, p_expires_at
+  )
+  RETURNING appointments.id, appointments.cancel_token;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."businesses_protect_admin_columns"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -109,7 +170,9 @@ CREATE TABLE IF NOT EXISTS "public"."appointments" (
     "mp_payment_id" "text",
     "expires_at" timestamp with time zone,
     "duration_minutes" integer,
-    "google_event_id" "text"
+    "google_event_id" "text",
+    "seat" smallint DEFAULT 0 NOT NULL,
+    "is_group" boolean DEFAULT false NOT NULL
 );
 
 
@@ -645,7 +708,9 @@ CREATE TABLE IF NOT EXISTS "public"."time_blocks" (
     "end_time" time without time zone NOT NULL,
     "label" "text",
     "created_at" timestamp with time zone DEFAULT "now"(),
-    "location_id" "uuid"
+    "location_id" "uuid",
+    "capacity" smallint DEFAULT 1 NOT NULL,
+    CONSTRAINT "time_blocks_capacity_positive" CHECK (("capacity" >= 1))
 );
 
 
@@ -653,7 +718,7 @@ ALTER TABLE "public"."time_blocks" OWNER TO "postgres";
 
 
 ALTER TABLE ONLY "public"."appointments"
-    ADD CONSTRAINT "appointments_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, COALESCE("professional_id", '00000000-0000-0000-0000-000000000000'::"uuid") WITH =, "tsrange"(("date" + "time"), (("date" + "time") + "make_interval"("mins" => COALESCE("duration_minutes", 30)))) WITH &&) WHERE (("status" = ANY (ARRAY['confirmed'::"text", 'pending_payment'::"text"])));
+    ADD CONSTRAINT "appointments_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, COALESCE("professional_id", '00000000-0000-0000-0000-000000000000'::"uuid") WITH =, "tsrange"(("date" + "time"), (("date" + "time") + "make_interval"("mins" => COALESCE("duration_minutes", 30)))) WITH &&) WHERE ((("status" = ANY (ARRAY['confirmed'::"text", 'pending_payment'::"text"])) AND (NOT "is_group")));
 
 
 
@@ -801,7 +866,7 @@ CREATE UNIQUE INDEX "appointments_cancel_token_idx" ON "public"."appointments" U
 
 
 
-CREATE UNIQUE INDEX "appointments_no_double_booking" ON "public"."appointments" USING "btree" ("business_id", COALESCE("professional_id", '00000000-0000-0000-0000-000000000000'::"uuid"), "date", "time") WHERE ("status" = ANY (ARRAY['confirmed'::"text", 'pending_payment'::"text"]));
+CREATE UNIQUE INDEX "appointments_no_double_booking" ON "public"."appointments" USING "btree" ("business_id", COALESCE("professional_id", '00000000-0000-0000-0000-000000000000'::"uuid"), "date", "time", "seat") WHERE ("status" = ANY (ARRAY['confirmed'::"text", 'pending_payment'::"text"]));
 
 
 
@@ -1392,6 +1457,20 @@ ALTER TABLE "public"."tasks" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."time_blocks" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "time_blocks tenant insert" ON "public"."time_blocks" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "time_blocks tenant update" ON "public"."time_blocks" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
 
 
 ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
@@ -1641,6 +1720,12 @@ GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO 
 
 
 
+
+
+
+GRANT ALL ON FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) TO "service_role";
 
 
 
