@@ -525,9 +525,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
               <div
                 key={ds}
                 className={cn(
-                  'rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1 transition-colors',
+                  // Hover sutil de la celda (mismo token que el header-boton y los chips): la celda
+                  // dejo de ser <button> (a11y de los chips-boton del roster) y recupera el feedback
+                  // de hover aca. transition-colors (≤300ms, solo color) · los hijos (header-boton,
+                  // chips) mantienen su propio hover/focus encima.
+                  'rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1 transition-colors hover:border-primary/60',
+                  st === 'closed' ? 'bg-secondary/30 hover:bg-secondary/50' : 'hover:bg-secondary/40',
                   isToday ? 'border-primary' : 'border-border',
-                  st === 'closed' && 'bg-secondary/30'
                 )}
               >
                 <button
