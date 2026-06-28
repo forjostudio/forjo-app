@@ -83,7 +83,16 @@ export async function GET(request: NextRequest) {
     .filter(a => (a.professional_id ?? SENTINEL) === bucket)
     .filter(a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
 
-  const busy = live.map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at, duration_minutes: a.duration_minutes }))
+  // `busy` SOLO refleja ocupación de slots INDIVIDUALES (capacity 1): ahí un turno que solapa
+  // (incluso de duración variable) bloquea el horario — es el anti-doble-booking de v0.9 que el
+  // client aplica como `conflict`. En slots GRUPALES (capacity > 1) la ocupación NO va a `busy`:
+  // varios turnos en el MISMO horario son ESPERADOS (D-03, duración fija) y NO son conflicto; la
+  // ÚNICA condición de bloqueo del grupo es `full` (count >= capacity). Sin este filtro, el
+  // `conflict` por solapamiento del client borraría un slot grupal con 1/N ocupado ANTES de que
+  // `full` aplique → el público no podría reservar el 2º+ lugar de una clase (bug de cupos).
+  const busy = live
+    .filter(a => capacityFor(a.time) <= 1)
+    .map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at, duration_minutes: a.duration_minutes }))
 
   // Ocupación por slot vs capacity → `full` (solo la lista de horarios llenos). MISMO bucket y
   // mismo descarte de holds vencidos que `busy`. D-06 (LOCKED): el público SOLO recibe libre/lleno;
