@@ -103,7 +103,11 @@ export async function GET(request: NextRequest) {
   for (const a of live) countByTime.set(a.time, (countByTime.get(a.time) ?? 0) + 1)
   const full = [...countByTime.entries()]
     .filter(([time, n]) => n >= capacityFor(time))
-    .map(([time]) => time)
+    // `a.time` viene de Postgres como 'HH:MM:SS'; el client arma los slots con minutesToTime → 'HH:MM'
+    // y compara con `full.includes(time)` (igualdad de string). Sin normalizar, '09:00' nunca matchea
+    // '09:00:00' y el slot LLENO seguiría ofreciéndose. `busy` no sufría esto porque se compara por
+    // minutos (timeToMinutes tolera los segundos); `full` es comparación literal, así que va en 'HH:MM'.
+    .map(([time]) => time.slice(0, 5))
 
   return Response.json({ ok: true, busy, full }, { headers: { 'Cache-Control': 'no-store' } })
 }
