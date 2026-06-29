@@ -2,17 +2,21 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, teardownOneTenant, seedTimeBlock, type SeededTenant } from './helpers/booking-fixtures'
+import { createAppointmentCore } from '@/lib/booking-core'
+import { GET as availabilityGET } from '@/app/api/booking/availability/route'
+import type { NextRequest } from 'next/server'
 
-// ── Tests de concurrencia: cupos grupales (Phase 2 — CONC-01, CONC-02, CUPOS-03) ──────────
+// ── Tests de concurrencia: cupos grupales (Phase 2 — CONC-01, CONC-02, CUPOS-03, CUPOS-02) ──
 //
-// ⚠ SCAFFOLD (Wave 0). Este archivo es el esqueleto que Plan 02-05 completa con los cuerpos reales
-// (moldes en 02-RESEARCH.md §CONC-01 / §CONC-02 / §CUPOS-03). Acá SOLO se deja la estructura del
-// suite + el seed del tenant/time_block para que los `it` existan y se puedan filtrar con `-t`.
-// Los cuerpos son placeholders que FALLAN a propósito (expect.fail) — NO deben pasar en falso, así
-// el gate de Plan 05 los ve rojos hasta que se implementen.
+// Criterio de éxito DURO de la fase. La garantía atómica anti-sobrecupo y la cero-regresión cupo 1
+// viven en la DB (book_slot_atomic, migración 041): estos tests son la única prueba de que funcionan
+// bajo concurrencia real. El advisory lock del RPC serializa en la DB independientemente del orden de
+// llegada → CONC-01 es DETERMINISTA (siempre 1 ok + 1 full), no flaky.
 //
 // describe.skipIf(!hasSupabaseCreds): sin las 3 creds de Supabase, se skipean (igual que booking-core).
-// Corren contra Supabase LOCAL (supabase db reset PG17) o el proyecto dev compartido.
+// Corren contra Supabase LOCAL (supabase db reset PG17, con 041 aplicada → book_slot_atomic existe).
+// Se usa el cliente service-role del helper como el `supabase` del core: el core es rol-agnóstico y
+// acá NO se asierta RLS sino la lógica del cupo (advisory lock + count vs capacity en la DB).
 //
 // Fecha futura fija (lunes) para alinear con el day_of_week del time_block sembrado (seedTimeBlock
 // default day_of_week=1) y no chocar con turnos pasados.
@@ -41,27 +45,183 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     }
   })
 
-  // CONC-01 — anti-sobrecupo bajo concurrencia: con capacity=2 y 1 lugar ocupado, dos altas EN
-  // PARALELO sobre el último lugar deben resolver exactamente 1 ok + 1 slot_full (el advisory lock
-  // del RPC serializa la carrera en la DB). Plan 05: sembrar seedTimeBlock({ capacity: 2 }), ocupar
-  // seat 0, luego Promise.all de dos createAppointmentCore y asertar oks=1 / fulls=1 + exactamente 2
-  // filas confirmadas en el slot (no 3).
+  // baseInput: el molde EXACTO de booking-core.test.ts. professionalId fijo (NO null) para que las
+  // distintas reservas del mismo slot caigan SIEMPRE en el mismo bucket — Pitfall 1: nunca mezclar
+  // professional_id null y la sentinela entre reservas del mismo slot (el advisory lock y el índice
+  // bucketizan por COALESCE(professional_id, sentinel); mezclar rompería la serialización).
+  function baseInput() {
+    return {
+      supabase,
+      business: { id: t.businessId, buffer_minutes: t.bufferMinutes },
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      date: DATE,
+      clientId: null,
+      clientName: 'Cliente Test',
+      clientPhone: null,
+      clientEmail: null,
+      notes: null,
+      requireDeposit: false,
+    }
+  }
+
+  // Cuenta independiente (con t.admin) de filas que OCUPAN un slot: confirmed + pending_payment.
+  // Es la verificación que NO confía en los resultados del core sino en el estado real de la DB.
+  async function occupantsAt(time: string): Promise<number> {
+    const { data } = await t.admin
+      .from('appointments')
+      .select('id')
+      .eq('business_id', t.businessId)
+      .eq('date', DATE)
+      .eq('time', time)
+      .in('status', ['confirmed', 'pending_payment'])
+    return (data || []).length
+  }
+
+  // CONC-01 — anti-sobrecupo bajo concurrencia. Con capacity=2 y 1 lugar ya ocupado, dos altas EN
+  // PARALELO sobre el último lugar deben resolver exactamente 1 ok + 1 slot_full. El advisory lock
+  // del RPC (book_slot_atomic) serializa la carrera DENTRO de la DB: aunque las dos llamadas lleguen
+  // a la vez, la 1ª toma el lock, cuenta (1 < 2) e inserta seat 1; la 2ª espera el lock, recuenta
+  // (2 >= 2) y RAISE 'slot_full'. Por eso es DETERMINISTA, no flaky. La verificación clave es el
+  // estado de la DB: exactamente 2 filas ocupando el slot (no 3) — la prueba real de que no hubo
+  // sobrecupo (T-02-16).
   it('CONC-01 — anti-sobrecupo: dos reservas concurrentes sobre el último lugar, solo una confirma', async () => {
-    void seedTimeBlock // referencia para evitar unused hasta Plan 05
-    expect.fail('pendiente: Plan 02-05 completa el cuerpo (molde 02-RESEARCH.md §CONC-01)')
+    await seedTimeBlock(t, { capacity: 2 })
+
+    // Ocupa el seat 0 (deja exactamente 1 lugar libre).
+    const seed = await createAppointmentCore({ ...baseInput(), time: '09:00' })
+    expect(seed.ok).toBe(true)
+
+    // Dos altas EN PARALELO peleando por el último lugar.
+    const [a, b] = await Promise.all([
+      createAppointmentCore({ ...baseInput(), time: '09:00' }),
+      createAppointmentCore({ ...baseInput(), time: '09:00' }),
+    ])
+
+    const oks = [a, b].filter(r => r.ok)
+    const fulls = [a, b].filter(r => !r.ok && r.error === 'slot_full')
+    expect(oks.length).toBe(1)
+    expect(fulls.length).toBe(1)
+
+    // Verificación independiente del estado de la DB: exactamente capacity (2) filas ocupando el
+    // slot — NO 3. Si el advisory lock fallara, habría 3 (sobrecupo) y este assert lo detectaría.
+    expect(await occupantsAt('09:00')).toBe(2)
   })
 
-  // CONC-02 — no-regresión cupo 1: con capacity=1 (default), la 2ª reserva del mismo slot debe dar
-  // slot_taken (NO slot_full) — el índice único de seat (seat 0 único) rechaza la 2ª igual que hoy.
-  // Plan 05: seedTimeBlock({ capacity: 1 }), 1ª ok, 2ª → error 'slot_taken'.
+  // CONC-02 — no-regresión cupo 1: con capacity=1, la 2ª reserva del mismo slot debe dar slot_taken
+  // (NO slot_full). Para cupo 1, el índice único de seat (seat 0 único por slot) rechaza la 2ª con
+  // 23505 → el core lo traduce a slot_taken, igual que el anti-doble-booking de v0.9. Es la guarda
+  // de cero-regresión: si esto diera slot_full, enmascararía una regresión del camino cupo 1 (T-02-17).
   it('CONC-02 — no-regresion: capacity=1 sigue rechazando la 2ª con slot_taken', async () => {
-    expect.fail('pendiente: Plan 02-05 completa el cuerpo (molde 02-RESEARCH.md §CONC-02)')
+    await seedTimeBlock(t, { capacity: 1 })
+
+    const first = await createAppointmentCore({ ...baseInput(), time: '10:00' })
+    expect(first.ok).toBe(true)
+
+    const second = await createAppointmentCore({ ...baseInput(), time: '10:00' })
+    expect(second.ok).toBe(false)
+    if (!second.ok) {
+      // Explícitamente slot_taken, NUNCA slot_full: cupo 1 es doble-booking clásico, no cupo lleno.
+      expect(second.error).toBe('slot_taken')
+      expect(second.status).toBe(409)
+    }
+    // Y la DB conserva exactamente 1 fila (la 2ª no entró).
+    expect(await occupantsAt('10:00')).toBe(1)
   })
 
-  // CUPOS-03 — admite hasta capacity y rechaza el excedente: con capacity=N, las primeras N altas
-  // confirman (seats 0..N-1) y la N+1 da slot_full. Plan 05: seedTimeBlock({ capacity: N }), loop de
-  // N altas ok + 1 alta extra → 'slot_full'.
+  // CUPOS-03 — admite hasta capacity y rechaza el excedente. Con capacity=N, las primeras N altas
+  // secuenciales confirman (seats 0..N-1) y la (N+1)ª da slot_full. Verificación DB: exactamente N
+  // filas ocupando el slot.
   it('CUPOS-03 — admite hasta capacity y rechaza el excedente con slot_full', async () => {
-    expect.fail('pendiente: Plan 02-05 completa el cuerpo (molde 02-RESEARCH.md §CUPOS-03)')
+    const N = 3
+    await seedTimeBlock(t, { capacity: N })
+
+    // N altas secuenciales: todas ok.
+    for (let i = 0; i < N; i++) {
+      const res = await createAppointmentCore({ ...baseInput(), time: '11:00' })
+      expect(res.ok).toBe(true)
+    }
+
+    // La (N+1)ª excede la capacity → slot_full.
+    const extra = await createAppointmentCore({ ...baseInput(), time: '11:00' })
+    expect(extra.ok).toBe(false)
+    if (!extra.ok) {
+      expect(extra.error).toBe('slot_full')
+      expect(extra.status).toBe(409)
+    }
+
+    // Exactamente N filas ocupando el slot (no N+1).
+    expect(await occupantsAt('11:00')).toBe(N)
+  })
+
+  // CUPOS-02 — availability no filtra lugares restantes (D-06). El público SOLO recibe disponible/
+  // lleno: la respuesta es `{ ok, busy, full }` y NUNCA contiene el conteo de ocupantes por slot, ni
+  // `remaining`, ni una entrada por inscripto que permita inferir cuántos lugares quedan (T-02-18).
+  //
+  // Además fija las dos regresiones del UAT:
+  //   (a) un slot GRUPAL LLENO aparece en `full` en formato 'HH:MM' (no 'HH:MM:SS') para que el
+  //       client lo matchee por igualdad de string.
+  //   (b) un slot GRUPAL PARCIAL (M < capacity) NO está en `busy` (la ocupación grupal no debe
+  //       removerse por el camino de solapamiento) NI en `full` (sigue reservable).
+  //   (c) para capacity=1, el slot ocupado SÍ está en busy y en full (coinciden).
+  it('CUPOS-02 — availability no filtra lugares restantes (busy/full sin conteo)', async () => {
+    // Bloque grupal capacity=3 en la ventana default; un slot individual lo modelamos con su propio
+    // bloque capacity=1 que se solapa en otra franja horaria (12:00..13:00) sin chocar con el grupal.
+    await seedTimeBlock(t, { capacity: 3, startTime: '08:00', endTime: '12:00' })
+    await seedTimeBlock(t, { capacity: 1, startTime: '12:00', endTime: '20:00' })
+
+    // Slot grupal PARCIAL: 2 de 3 lugares en '09:00' (M < capacity → reservable, no lleno).
+    for (let i = 0; i < 2; i++) {
+      const r = await createAppointmentCore({ ...baseInput(), time: '09:00' })
+      expect(r.ok).toBe(true)
+    }
+    // Slot grupal LLENO: 3 de 3 en '10:00'.
+    for (let i = 0; i < 3; i++) {
+      const r = await createAppointmentCore({ ...baseInput(), time: '10:00' })
+      expect(r.ok).toBe(true)
+    }
+    // Slot INDIVIDUAL ocupado: 1 de 1 en '12:30' (cupo 1 → busy y full coinciden).
+    const ind = await createAppointmentCore({ ...baseInput(), time: '12:30' })
+    expect(ind.ok).toBe(true)
+
+    // El slug del fixture no se expone en SeededTenant: lo leemos de la DB con t.admin (el endpoint
+    // resuelve el tenant por slug). NO modificamos el fixture (este plan solo toca concurrency.test.ts).
+    const { data: bizRow } = await t.admin.from('businesses').select('slug').eq('id', t.businessId).single()
+    const slug = bizRow?.slug as string
+
+    // Invocar el route handler real (lee request.url, resuelve tenant por slug, service-role).
+    const url = `https://test.local/api/booking/availability?slug=${slug}&date=${DATE}&professionalId=${t.professionalId}`
+    const res = await availabilityGET(new Request(url) as unknown as NextRequest)
+    const body = (await res.json()) as { ok: boolean; busy: unknown[]; full: unknown[] }
+
+    // Forma del contrato: SOLO ok/busy/full. Ninguna clave que revele ocupación restante.
+    expect(body.ok).toBe(true)
+    expect(Array.isArray(body.busy)).toBe(true)
+    expect(Array.isArray(body.full)).toBe(true)
+    expect(Object.keys(body).sort()).toEqual(['busy', 'full', 'ok'])
+
+    // No-leak: ninguna entrada de busy expone count/remaining/seat/capacity ni nada que cuente lugares.
+    const leakKeys = ['count', 'remaining', 'seat', 'capacity', 'occupied', 'available', 'spots', 'roster']
+    for (const entry of body.busy as Record<string, unknown>[]) {
+      for (const k of leakKeys) expect(entry).not.toHaveProperty(k)
+    }
+    // full es un array de strings 'HH:MM' (no objetos con conteo).
+    const full = body.full as string[]
+    for (const f of full) expect(typeof f).toBe('string')
+
+    // (a) el slot grupal LLENO '10:00' está en full como 'HH:MM' (no 'HH:MM:SS').
+    expect(full).toContain('10:00')
+    expect(full).not.toContain('10:00:00')
+
+    // (b) el slot grupal PARCIAL '09:00' (2/3) NO está en full (sigue reservable) NI en busy (la
+    //     ocupación grupal no se remueve por solapamiento — sino el público no podría reservar el 3º).
+    expect(full).not.toContain('09:00')
+    const busyTimes = (body.busy as { time: string }[]).map(b => b.time.slice(0, 5))
+    expect(busyTimes).not.toContain('09:00')
+
+    // (c) el slot INDIVIDUAL ocupado '12:30' está en busy Y en full (cupo 1 → coinciden).
+    expect(busyTimes).toContain('12:30')
+    expect(full).toContain('12:30')
   })
 })
