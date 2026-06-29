@@ -530,7 +530,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                   // de hover aca. transition-colors (≤300ms, solo color) · los hijos (header-boton,
                   // chips) mantienen su propio hover/focus encima.
                   'rounded-lg border p-2 min-h-[5rem] flex flex-col gap-1 transition-colors hover:border-primary/60',
-                  st === 'closed' ? 'bg-secondary/30 hover:bg-secondary/50' : 'hover:bg-secondary/40',
+                  st === 'closed' ? 'bg-secondary/30 hover:bg-secondary/80' : 'hover:bg-secondary/70',
                   isToday ? 'border-primary' : 'border-border',
                 )}
               >
@@ -538,7 +538,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                   type="button"
                   onClick={() => openNuevoTurno(ds)}
                   aria-label={`Agregar turno el ${format(d, "EEEE d 'de' MMMM", { locale: es })}`}
-                  className="text-left flex items-center justify-between rounded -m-1 p-1 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  className="text-left flex items-center justify-between rounded -m-1 p-1 transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                 >
                   <span className={cn('text-xs font-semibold capitalize', isToday && 'text-primary')}>{format(d, 'EEE d', { locale: es })}</span>
                   {st === 'closed' && <CalendarOff className="w-3 h-3 text-muted-foreground" />}
