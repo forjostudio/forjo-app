@@ -140,6 +140,39 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
   }
   const sameBucket = (clashes || []).filter(a => (a.professional_id ?? SENTINEL) === bucket && overlaps(a))
 
+  // ── Re-check de ESPACIO compartido (ESPACIO-02, solo UX) ─────────────────────────────
+  // Rechazo TEMPRANO si un espacio físico (cancha, sala) que esta agenda ocupa ya está tomado por
+  // una agenda hermana en un horario solapado. NO es la autoridad: la garantía atómica vive en el
+  // RPC del Plan 01 (book_slot_atomic — advisory lock por espacio + EXISTS anti-solape cross-bucket).
+  // Esto solo evita entrar al RPC para devolver un slot_taken más rápido y con mejor UX. Mismo estilo
+  // de query que el re-check de bucket (113-118), bucketización byte-idéntica con SENTINEL (Pitfall 1).
+  // Si la agenda no tiene espacios mapeados → skip total: ninguna query extra, camino cupos/individual
+  // byte-idéntico al de hoy. El bloqueo de espacio es independiente de la capacity (un espacio físico
+  // NO se comparte como un cupo — Pitfall 5): por eso este chequeo va aparte del `taken && slotCapacity`.
+  const { data: mySpaces } = await supabase
+    .from('agenda_spaces')
+    .select('space_id')
+    .eq('business_id', business.id)
+    .eq('professional_id', bucket)
+  if (mySpaces && mySpaces.length > 0) {
+    const { data: siblings } = await supabase
+      .from('agenda_spaces')
+      .select('professional_id')
+      .eq('business_id', business.id)
+      .in('space_id', mySpaces.map(s => s.space_id))
+      .neq('professional_id', bucket)
+    const siblingBuckets = new Set((siblings || []).map(s => s.professional_id as string))
+    // ¿Algún clash YA traído (mismo date, líneas 113-118) cae en una agenda hermana, solapa en
+    // tiempo y está "ocupado de verdad" (confirmed o hold no vencido)? → rechazo temprano.
+    const spaceClash = (clashes || []).some(a =>
+      siblingBuckets.has(a.professional_id ?? SENTINEL) &&
+      overlaps(a) &&
+      (a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
+    )
+    // Reusa slot_taken (NO se agrega space_taken): el público solo sabe "ocupado" (D-06).
+    if (spaceClash) return { ok: false, error: 'slot_taken', status: 409 }
+  }
+
   // ¿Ocupado de verdad? confirmed, o pending_payment cuya seña NO venció (o aún sin setear).
   const taken = sameBucket.some(a =>
     a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
