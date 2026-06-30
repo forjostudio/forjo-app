@@ -17,7 +17,7 @@ El faseo va de adentro hacia afuera: primero el **scaffold del vertical** (que e
 
 Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del vertical y de la cancha aterrizan antes de que el flujo público los consuma).
 
-- [ ] **Phase 1: Vertical Canchas** - El negocio setea su rubro a "canchas" y el dashboard adopta terminología y menú propios (sin "Profesionales/Equipo"), sin romper los otros verticales
+- [x] **Phase 1: Vertical Canchas** - El negocio setea su rubro a "canchas" y el dashboard adopta terminología y menú propios (sin "Profesionales/Equipo"), sin romper los otros verticales (completed 2026-06-30)
 - [ ] **Phase 2: Configuración de Canchas** - El dueño crea/edita/elimina canchas como entidad reservable (nombre + precio propio + duración fija propia) mapeada a espacios físicos del motor v0.12
 - [ ] **Phase 3: Booking público de alquiler** - El cliente elige cancha + horario disponible (sin elegir duración), al precio de la cancha, respetando la exclusión atómica por espacio
 
@@ -35,8 +35,10 @@ Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del v
   3. Los verticales existentes (salud/belleza/general) y los negocios ya creados resuelven exactamente igual que antes — cero regresión visible en su terminología y menú.
   4. La resolución de vertical es determinística y sin estado roto: un negocio sin el rubro canchas nunca ve UI de canchas, y uno de canchas nunca ve UI de profesionales.
 
-**Plans**: 1 plan
-- [ ] 01-01-PLAN.md — Vertical 'canchas' como VerticalKey de primera clase (terminología Reserva+Cancha, menú sin Equipo) + removal de TYPE_TERMINOLOGY_OVERRIDE + guard server-side anti-/equipo (D-05)
+**Plans**: 1/1 plans complete
+
+- [x] 01-01-PLAN.md — Vertical 'canchas' como VerticalKey de primera clase (terminología Reserva+Cancha, menú sin Equipo) + removal de TYPE_TERMINOLOGY_OVERRIDE + guard server-side anti-/equipo (D-05)
+
 **Phase-level decision (defer to discuss-phase)**: cómo se resuelve "canchas" como vertical/type — ¿es un `VerticalKey` nuevo (`canchas`) con su propio `VerticalConfig` (menú sin `equipo`, terminología propia), o se eleva el `TYPE_TERMINOLOGY_OVERRIDE` actual de "Cancha de fútbol" (hoy label-only dentro de `general`) a una config de menú/terminología completa? Hay ya un override label-only en `lib/verticals.ts`; decidir en discuss si se promueve a vertical de primera clase o se extiende el mecanismo de override para esconder items de menú. NO lockear acá.
 
 **Security/Integrity relevance**: Bajo. El cambio es de presentación (terminología/menú) y resolución de vertical, framework-agnóstico (sin React/iconos en `lib/verticals.ts`). No agrega datos de tenant nuevos. El riesgo real es de **regresión** (no romper la resolución de los otros verticales ni de los negocios existentes), no de aislamiento. Si la decisión de fase agrega una columna nueva al negocio (ej. marcar el rubro), debe respetar el aislamiento por `business_id` ya vigente en `businesses`.
@@ -53,7 +55,11 @@ Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del v
   3. La config de canchas reusa el motor de v0.12 (`spaces`/`agenda_spaces`) sin re-migrar el core: el mapeo cancha→espacios sigue acoplando la disponibilidad (reservar una cancha que comparte espacio bloquea a las hermanas).
   4. Una cancha de un negocio nunca aparece, se edita ni se mapea a espacios de otro negocio — el modelo de cancha y su mapeo a espacios están aislados por tenant.
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+- [ ] 02-01-PLAN.md — Migración aditiva 043 (`professionals.service_id`, puntero 1:1 D-06) + `lib/types.ts` + capa pura `lib/canchas.ts` (provisión/reconstrucción/soft-delete) + tests (wave 1)
+- [ ] 02-02-PLAN.md — Manager de canchas en `/servicios` (D-03): carga de professionals/spaces/agenda_spaces + form de cancha con precio/duración propios + mapeo de espacios (1:1 + compartir, D-04) + soft-delete, condicionado por vertical sin romper view="equipo" (wave 2)
+
 **Phase-level decision (defer to discuss-phase)**: **dónde viven el precio y la duración fija de la cancha.** Opciones a evaluar en discuss-phase (NO lockear acá): (a) reusar `services` (un servicio por cancha que aporta precio + duración, ya soportado por el motor anti-solape por duración) y el mapeo agenda↔servicio; (b) columnas nuevas (`price`, `duration_min`) sobre la fila de agenda/`professionals` que representa la cancha; (c) tabla/columna nueva dedicada a la cancha. Evaluar qué minimiza migración y reusa el camino de precio/seña existente. Toda opción que agregue columnas/tablas exige RLS habilitada + policies por operación con `WITH CHECK (business_id ∈ negocios del dueño)`.
 
 **Security/Integrity relevance**: Medio. Introduce/reusa datos de tenant (la cancha y su precio/duración + el mapeo a espacios). Toda tabla/columna nueva debe tener RLS habilitada y policies por operación que impidan crear/leer/mapear canchas o espacios de otro tenant (filtro `business_id`, `WITH CHECK` en INSERT/UPDATE). El mapeo cancha→espacios reusa `agenda_spaces` (ya RLS por tenant en v0.12) — no debilitarlo. El secure-phase gate verifica: aislamiento por tenant del modelo de cancha y de su mapeo a espacios; que un negocio no pueda acoplar disponibilidad cross-tenant; que no se exponga el precio/config interna a `anon` salvo lo que el booking público necesita (vía vista acotada, patrón `public_services`/`public_professionals`).
@@ -83,6 +89,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Vertical Canchas | 0/1 | Not started | - |
-| 2. Configuración de Canchas | 0/TBD | Not started | - |
+| 1. Vertical Canchas | 1/1 | Complete    | 2026-06-30 |
+| 2. Configuración de Canchas | 0/2 | Not started | - |
 | 3. Booking público de alquiler | 0/TBD | Not started | - |
