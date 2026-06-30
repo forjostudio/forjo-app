@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, teardownOneTenant, seedTimeBlock, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, type SeededTenant } from './helpers/booking-fixtures'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { GET as availabilityGET } from '@/app/api/booking/availability/route'
 import type { NextRequest } from 'next/server'
@@ -42,6 +42,10 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     if (t) {
       await t.admin.from('appointments').delete().eq('business_id', t.businessId)
       await t.admin.from('time_blocks').delete().eq('business_id', t.businessId)
+      // CONC-03 mapea agendas a espacios: limpiar para no contaminar otros tests del mismo business
+      // (agenda_spaces antes que spaces por la FK; appointment_spaces cae por CASCADE de appointments).
+      await t.admin.from('agenda_spaces').delete().eq('business_id', t.businessId)
+      await t.admin.from('spaces').delete().eq('business_id', t.businessId)
     }
   })
 
@@ -223,5 +227,50 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     // (c) el slot INDIVIDUAL ocupado '12:30' está en busy Y en full (cupo 1 → coinciden).
     expect(busyTimes).toContain('12:30')
     expect(full).toContain('12:30')
+  })
+
+  // CONC-03 — anti-conflicto-de-espacio bajo concurrencia (criterio de éxito DURO de Phase 3).
+  // Dos reservas EN PARALELO sobre agendas DISTINTAS (dos professional_id reales) que comparten un
+  // mismo espacio físico (cancha A), al MISMO horario solapado, no pueden ambas confirmar: exactamente
+  // 1 ok + 1 slot_taken.
+  //
+  // Por qué es DETERMINISTA (no flaky): el RPC book_slot_atomic (migración 042) toma un advisory lock
+  // por CADA space_id de la agenda reservada antes de chequear solapes. La 1ª llamada toma el lock de A,
+  // inserta y mapea appointment_spaces; la 2ª espera el MISMO lock de A (lo comparten porque ambas
+  // agendas están en agenda_spaces→A), recuenta y ve el solape por espacio en la agenda hermana →
+  // RAISE slot_taken. El lock por espacio serializa la carrera DENTRO de la DB, igual que el de cupo en
+  // CONC-01. La verificación dura no son los retornos del core sino el estado real de la DB: exactamente
+  // 1 fila ocupa el slot solapado a través de AMBAS agendas (no 2). Si la exclusión de espacio se
+  // rompiera (2 ok), este assert lo detecta (T-03-16).
+  it('CONC-03 — anti-conflicto-de-espacio: dos reservas concurrentes sobre agendas que comparten espacio, solo una confirma', async () => {
+    // Canchas = cupo 1: el conflicto es por SOLAPE DE ESPACIO, no por cupo lleno (D-03). El time_block
+    // capacity=1 cubre a ambas agendas (la ventana/día es del business, no por professional).
+    await seedTimeBlock(t, { capacity: 1 })
+
+    // Un espacio físico compartido (cancha A) y una 2ª agenda hermana (professional_id REAL distinto,
+    // nunca null/sentinela — Pitfall 1). Mapear AMBAS agendas al MISMO espacio A.
+    const spaceA = await seedSpace(t, { name: 'A' })
+    const agendaB = await seedProfessional(t, { name: '__test_agenda_B' })
+    await seedAgendaSpace(t, { professionalId: t.professionalId, spaceId: spaceA })
+    await seedAgendaSpace(t, { professionalId: agendaB, spaceId: spaceA })
+
+    // Dos altas EN PARALELO al MISMO horario '09:00' (misma duración → solapan en tiempo) sobre las dos
+    // agendas que comparten A. Overrideamos professionalId distinto en cada una (Pitfall 1).
+    const [a, b] = await Promise.all([
+      createAppointmentCore({ ...baseInput(), professionalId: t.professionalId, time: '09:00' }),
+      createAppointmentCore({ ...baseInput(), professionalId: agendaB, time: '09:00' }),
+    ])
+
+    const oks = [a, b].filter(r => r.ok)
+    const rejected = [a, b].filter(r => !r.ok && r.error === 'slot_taken')
+    expect(oks.length).toBe(1)
+    expect(rejected.length).toBe(1)
+    const taken = rejected[0]
+    if (!taken.ok) expect(taken.status).toBe(409)
+
+    // Verificación independiente del estado de la DB: exactamente 1 fila ocupa el slot solapado a través
+    // de AMBAS agendas hermanas (no 2). occupantsAt cuenta por business+date+time+status sin filtrar por
+    // agenda, así que captura las dos agendas que comparten el espacio. Si ambas hubieran entrado → 2.
+    expect(await occupantsAt('09:00')).toBe(1)
   })
 })
