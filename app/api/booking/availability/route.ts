@@ -83,6 +83,44 @@ export async function GET(request: NextRequest) {
     .filter(a => (a.professional_id ?? SENTINEL) === bucket)
     .filter(a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
 
+  // ── Bloqueo acoplado por ESPACIO compartido (ESPACIO-02, read-path) ──────────────────
+  // Si la agenda consultada comparte ≥1 espacio físico (cancha, sala) con otra agenda del MISMO
+  // negocio, un turno de esa agenda hermana que solapa en tiempo bloquea este slot: el espacio
+  // físico no se puede usar dos veces a la vez. El READ tiene que reflejarlo o el público vería
+  // el slot libre y recibiría un rechazo confuso al reservar (la autoridad atómica es el RPC del
+  // Plan 01; esto es el espejo de lectura). spaces/agenda_spaces NO tienen read anon (D-06): se
+  // resuelven con el service-role ya creado (`supabase`), filtrando por business_id (tenant).
+  //
+  // Bidireccional: cae solo de la simetría del set de espacios. Si consulto la F11 ({A,B,C}), su
+  // hermana B ({B}) entra; si consulto B, la F11 entra (ambas comparten B).
+  const { data: mySpaces } = await supabase
+    .from('agenda_spaces')
+    .select('space_id')
+    .eq('business_id', business.id)
+    .eq('professional_id', bucket)
+  let siblingBusy: { time: string; status: string; expires_at: string | null; duration_minutes: number | null }[] = []
+  if (mySpaces && mySpaces.length > 0) {
+    // Agendas hermanas: comparten ≥1 espacio con la consultada (excluye la propia agenda).
+    const { data: sib } = await supabase
+      .from('agenda_spaces')
+      .select('professional_id')
+      .eq('business_id', business.id)
+      .in('space_id', mySpaces.map(s => s.space_id))
+      .neq('professional_id', bucket)
+    const siblingBuckets = new Set((sib || []).map(s => s.professional_id as string))
+    // De los `appts` del negocio ya traídos (sin filtrar por bucket), tomar los que caen en una
+    // agenda hermana y siguen vivos (mismo descarte de holds vencidos que `live`). El bloqueo de
+    // espacio es un solape 1-a-la-vez (ocupás el espacio físico o no), INDEPENDIENTE de la capacity
+    // de la agenda hermana: por eso va a `busy`, NUNCA a `full` (Pitfall 5 — `full` queda reservado
+    // para count >= capacity del propio bucket, que es "cupo lleno", no "espacio ocupado").
+    siblingBusy = (appts || [])
+      .filter(a => siblingBuckets.has(a.professional_id ?? SENTINEL))
+      .filter(a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
+      .map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at, duration_minutes: a.duration_minutes }))
+  }
+  // Una agenda SIN espacios mapeados → siblingBusy = [] (skip total): disponibilidad byte-idéntica
+  // a la de antes (cupos/individual intactos).
+
   // `busy` SOLO refleja ocupación de slots INDIVIDUALES (capacity 1): ahí un turno que solapa
   // (incluso de duración variable) bloquea el horario — es el anti-doble-booking de v0.9 que el
   // client aplica como `conflict`. En slots GRUPALES (capacity > 1) la ocupación NO va a `busy`:
@@ -93,6 +131,12 @@ export async function GET(request: NextRequest) {
   const busy = live
     .filter(a => capacityFor(a.time) <= 1)
     .map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at, duration_minutes: a.duration_minutes }))
+    // Mergear el bloqueo por espacio compartido (solape 1-a-la-vez). Va en `busy` y NUNCA en `full`:
+    // el client lo trata como `conflict` (horario no disponible), igual que un slot individual ocupado.
+    // D-06 (LOCKED): la respuesta NO cambia de forma — sigue `{ ok, busy, full }` con las mismas claves.
+    // El público no puede inferir QUÉ agenda hermana bloqueó ni cuántos espacios hay (cada entrada de
+    // siblingBusy expone solo time/status/expires_at/duration_minutes, idéntico a una entrada normal).
+    .concat(siblingBusy)
 
   // Ocupación por slot vs capacity → `full` (solo la lista de horarios llenos). MISMO bucket y
   // mismo descarte de holds vencidos que `busy`. D-06 (LOCKED): el público SOLO recibe libre/lleno;
