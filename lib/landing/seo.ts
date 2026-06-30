@@ -96,7 +96,7 @@ export function buildMetadataParts({
   // description: subhead si hay; si no, template-por-vertical (que siempre incluye el name).
   // El vertical se resuelve barato: si el valor guardado no es una key conocida, cae a 'general'.
   const verticalKey: VerticalKey =
-    business.vertical === 'salud' || business.vertical === 'belleza' || business.vertical === 'general'
+    business.vertical === 'salud' || business.vertical === 'belleza' || business.vertical === 'general' || business.vertical === 'canchas'
       ? business.vertical
       : 'general'
   const rawDescription =
