@@ -242,3 +242,118 @@ ALTER FUNCTION "public"."book_slot_atomic"(uuid, uuid, uuid, uuid, date, time wi
 -- Re-emitir el GRANT (el CREATE OR REPLACE preserva grants, pero se re-emite por claridad/idempotencia,
 -- igual que 041): anon (caso anon-key), authenticated (alta manual anon+RLS), service_role (booking público).
 GRANT EXECUTE ON FUNCTION "public"."book_slot_atomic"(uuid, uuid, uuid, uuid, date, time without time zone, integer, uuid, text, text, text, text, text, timestamp with time zone) TO "anon", "authenticated", "service_role";
+
+-- ════════════════════════════════════════════════════════════════════════════════════════════
+-- BACKSTOP DECLARATIVO (Plan 03-04) — appointment_spaces: proyección turno×espacio + EXCLUDE gist
+-- ════════════════════════════════════════════════════════════════════════════════════════════
+-- Append marker: todo lo de ARRIBA es del Plan 01 (spaces + agenda_spaces + book_slot_atomic).
+-- Lo de ABAJO es la red de seguridad DECLARATIVA del Plan 04 (recortable, defensa en profundidad).
+--
+-- POR QUÉ ESTO Y NO UN EXCLUDE SOBRE appointments: un EXCLUDE constraint opera por tupla de UNA
+--   tabla y NO puede hacer join a la puente (agenda_spaces) en su predicado por fila. La reserva
+--   F11 es UNA fila de appointments mapeada a {A,B,C} vía la puente — un gist sobre appointments no
+--   puede expandir esa fila a 3 espacios. Esta proyección DESNORMALIZA el fan-out F11→{A,B,C}: la
+--   F11 produce 3 filas (una por A, B, C) y cada cruzada produce 1. El EXCLUDE entonces SÍ ve
+--   "espacio B ocupado por la F11 a las 20" vs "espacio B reservado por cruzada B a las 20" como dos
+--   filas con el mismo space_id y rangos solapados → choca (23P01).
+--
+-- RELACIÓN CON EL ADVISORY LOCK DEL PLAN 01: el advisory lock es app-logic dentro del RPC; un bug
+--   de lógica (ej. olvidar un espacio del set) no lo detecta nadie. El EXCLUDE de la proyección es
+--   declarativo: si dos reservas no se serializaran, el insert de proyección choca con 23P01 y aborta
+--   toda la transacción. Es defensa en profundidad ADICIONAL — NO reemplaza el lock (Pitfall 6).
+--
+-- BACKFILL: el backstop aplica a reservas creadas TRAS esta migración. No hay backfill de turnos
+--   previos (RESEARCH §Runtime State Inventory): la proyección arranca vacía y se puebla por trigger.
+
+-- ── 4. appointment_spaces: proyección turno×espacio (una fila por turno × espacio ocupado) ───
+-- Una fila por cada (appointment × espacio que ocupa). La F11 a las 20hs (que ocupa {A,B,C}) produce
+-- 3 filas; cada cruzada produce 1. PK (appointment_id, space_id): cada espacio aparece UNA sola vez
+-- por appointment → la F11 NO choca consigo misma (Pitfall 3). appointment_id ON DELETE CASCADE: si
+-- se borra el turno, se borran sus proyecciones; space_id ON DELETE CASCADE (espejo de spaces).
+CREATE TABLE "public"."appointment_spaces" (
+  "appointment_id" uuid NOT NULL REFERENCES "public"."appointments"("id") ON DELETE CASCADE,
+  "business_id"    uuid NOT NULL,
+  "space_id"       uuid NOT NULL REFERENCES "public"."spaces"("id") ON DELETE CASCADE,
+  "slot"           tsrange NOT NULL,
+  PRIMARY KEY ("appointment_id", "space_id")
+);
+ALTER TABLE "public"."appointment_spaces" ENABLE ROW LEVEL SECURITY;
+
+-- Tabla de tenant: la pueblan los triggers (corren con privilegios del owner del trigger / del RPC
+-- SECURITY DEFINER), no el cliente directamente. Policies de SOLO LECTURA por tenant (mismo molde
+-- que spaces: owner_id = auth.uid()) para que el dashboard pueda leerla si hiciera falta. SIN policy
+-- anon (D-06): la proyección es interna. NO se dan insert/update/delete por policy: solo los triggers
+-- escriben (vía privilegios del definer), así que el owner nunca la muta a mano desde el dashboard.
+CREATE POLICY "appointment_spaces tenant select" ON "public"."appointment_spaces" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+-- EXCLUDE gist: mismo business + mismo espacio + rangos de tiempo solapados ⇒ rechazo (23P01).
+-- El core ya mapea 23P01 → slot_taken 409 (booking-core.ts:276) — sin cambio de app. btree_gist ya
+-- está habilitado (lo usa el EXCLUDE 013 de la 041/baseline). Este es el ÚNICO backstop CROSS-bucket
+-- (el 013 es por bucket/agenda, no por espacio): dos AGENDAS distintas que comparten un espacio
+-- físico chocan acá aunque sus buckets sean distintos. La proyección ya filtra por status (solo
+-- confirmed/pending_payment entran vía el trigger), así que el EXCLUDE no necesita WHERE de status.
+ALTER TABLE ONLY "public"."appointment_spaces"
+  ADD CONSTRAINT "appointment_spaces_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, "space_id" WITH =, "slot" WITH &&);
+
+-- ── 5. Triggers de población/limpieza de appointment_spaces ──────────────────────────────────
+-- appointment_spaces_populate(): AFTER INSERT en appointments. Si el turno ocupa
+-- (confirmed/pending_payment), expande la agenda a sus espacios vía agenda_spaces e inserta UNA fila
+-- de proyección por espacio. Para una agenda SIN espacios mapeados, la subconsulta devuelve 0 filas
+-- → no inserta nada (cero overhead/regresión para cupos/individual). El slot se construye con el
+-- MISMO tsrange(date+time, date+time + make_interval(mins => COALESCE(duration_minutes,30))) que el
+-- EXISTS del Plan 01 y el EXCLUDE 013, garantizando semántica de solape consistente.
+--
+-- Corre dentro de la MISMA transacción del insert de appointments (el RPC book_slot_atomic): si el
+-- advisory lock del Plan 01 fallara y dos reservas de espacios solapados llegaran al insert, la 2ª
+-- proyección choca con appointment_spaces_no_overlap (23P01) y aborta TODA la transacción (incluido
+-- el insert del appointment). Ese es el backstop atómico vivo.
+CREATE OR REPLACE FUNCTION "public"."appointment_spaces_populate"() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.status IN ('confirmed', 'pending_payment') THEN
+    -- Una fila por espacio de la agenda (vía la puente). Keya por professional_id REAL (no por el
+    -- sentinela): la agenda sin profesional no tiene espacios (Pitfall 1 / A2). Cada espacio aparece
+    -- una sola vez (la PK de agenda_spaces lo garantiza) → la F11 no choca consigo misma (Pitfall 3).
+    INSERT INTO appointment_spaces (appointment_id, business_id, space_id, slot)
+    SELECT NEW.id, NEW.business_id, asp.space_id,
+           tsrange(NEW.date + NEW.time,
+                   NEW.date + NEW.time + make_interval(mins => COALESCE(NEW.duration_minutes, 30)))
+    FROM agenda_spaces asp
+    WHERE asp.business_id = NEW.business_id
+      AND asp.professional_id = NEW.professional_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+ALTER FUNCTION "public"."appointment_spaces_populate"() OWNER TO "postgres";
+
+CREATE TRIGGER "appointment_spaces_populate_trg"
+  AFTER INSERT ON "public"."appointments"
+  FOR EACH ROW EXECUTE FUNCTION "public"."appointment_spaces_populate"();
+
+-- appointment_spaces_cleanup(): AFTER UPDATE OF status en appointments. Si el turno DEJA de ocupar
+-- (NEW.status NOT IN confirmed/pending_payment — ej. cancelled/expirado) y OLD.status SÍ ocupaba,
+-- borra sus filas de proyección → el espacio se libera (Pitfall 4: espejo del WHERE de status del
+-- EXCLUDE 013). El core pasa los holds vencidos a cancelled ANTES del RPC, así que el trigger los
+-- limpia y la proyección no bloquea espacios por turnos muertos. El DELETE es idempotente (si no hay
+-- filas, no hace nada). No se repuebla en el camino inverso (pending→confirmed sigue ocupando, ya
+-- tiene su proyección del INSERT; el trigger solo dispara cuando status CAMBIA y deja de ocupar).
+CREATE OR REPLACE FUNCTION "public"."appointment_spaces_cleanup"() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF OLD.status IN ('confirmed', 'pending_payment')
+     AND NEW.status NOT IN ('confirmed', 'pending_payment') THEN
+    DELETE FROM appointment_spaces WHERE appointment_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+ALTER FUNCTION "public"."appointment_spaces_cleanup"() OWNER TO "postgres";
+
+CREATE TRIGGER "appointment_spaces_cleanup_trg"
+  AFTER UPDATE OF "status" ON "public"."appointments"
+  FOR EACH ROW EXECUTE FUNCTION "public"."appointment_spaces_cleanup"();
