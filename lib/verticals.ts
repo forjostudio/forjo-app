@@ -138,16 +138,6 @@ export interface ResolvedVertical extends VerticalConfig {
   key: VerticalKey
 }
 
-// Override de terminología por `type` (no por VerticalKey). "Cancha de fútbol" es un type DENTRO
-// del vertical `general`, así que el término del eje de la agenda se resuelve por type, no por key:
-// el rubro canchas ve "Cancha"/"Canchas" en vez de "Profesional"/"Equipo". Label-only (D-05): solo
-// pisa strings, no toca datos. Solo aplica al type exacto listado acá; el resto de general y los
-// demás verticales conservan 'Profesional'/'Equipo' byte-idéntico. Aplicado en getVertical tras el
-// spread del vertical → cae también por resolveVertical cuando se resuelve por type.
-const TYPE_TERMINOLOGY_OVERRIDE: Record<string, Partial<VerticalTerminology>> = {
-  'Cancha de fútbol': { resource: 'Cancha', resources: 'Canchas' },
-}
-
 export function getVerticalKeyByType(businessType?: string | null): VerticalKey {
   if (!businessType) return 'general'
   for (const key of Object.keys(VERTICALS) as VerticalKey[]) {
@@ -157,32 +147,27 @@ export function getVerticalKeyByType(businessType?: string | null): VerticalKey 
 }
 
 // Resolve the vertical of a business by its `type` (per the spec signature).
-// El término del eje de agenda ("Cancha" vs "Profesional") depende del `type`, NO solo del
-// VerticalKey: se mergea el override por type sobre la terminología del vertical tras el spread.
+// Cada vertical posee su terminología directamente (el eje de agenda "Cancha" lo dueña el
+// vertical 'canchas'), así que la terminología sale directa del VerticalConfig, sin pisado por type.
 export function getVertical(businessType: string): ResolvedVertical {
   const key = getVerticalKeyByType(businessType)
-  const override = TYPE_TERMINOLOGY_OVERRIDE[businessType]
   return {
     key,
     ...VERTICALS[key],
-    terminology: { ...VERTICALS[key].terminology, ...(override ?? {}) },
+    terminology: { ...VERTICALS[key].terminology },
   }
 }
 
 // Resolve from a full business: prefer the stored `vertical` column, fall back
 // to deriving it from `type` (backward compatibility for rows without vertical).
-// El override de terminología por type ("Cancha") se aplica en AMBAS ramas: el rubro canchas
-// resuelve por su `vertical` almacenado (general) pero su término del eje depende del `type`, así
-// que se mergea TYPE_TERMINOLOGY_OVERRIDE[type] también cuando se resuelve por el vertical stored.
 export function resolveVertical(business: { vertical?: string | null; type?: string | null }): ResolvedVertical {
   const stored = business.vertical
-  const override = TYPE_TERMINOLOGY_OVERRIDE[business.type ?? '']
   if (stored && stored in VERTICALS) {
     const key = stored as VerticalKey
     return {
       key,
       ...VERTICALS[key],
-      terminology: { ...VERTICALS[key].terminology, ...(override ?? {}) },
+      terminology: { ...VERTICALS[key].terminology },
     }
   }
   return getVertical(business.type ?? '')
