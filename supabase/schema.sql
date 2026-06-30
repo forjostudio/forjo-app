@@ -68,12 +68,55 @@ DECLARE
   v_capacity int;
   v_occupied int;
   v_seat smallint;
+  v_space_ids uuid[];   -- (042) espacios físicos que ocupa la agenda reservada (vía agenda_spaces)
+  v_sid uuid;           -- (042) iterador del FOREACH del lock por espacio
 BEGIN
   -- 1. Lock por slot+bucket: serializa SOLO las reservas que pelean este mismo slot.
   --    hashtextextended de la clave estable del slot → bigint para el advisory lock.
   --    El COALESCE es byte-idéntico al del índice 011 y al count de abajo.
   PERFORM pg_advisory_xact_lock(hashtextextended(
     p_business_id::text || v_bucket::text || p_date::text || p_time::text, 0));
+
+  -- 1b. (042) Exclusión acoplada por espacio físico — lock por conjunto de espacios + EXISTS.
+  --     Resolver el set de espacios de la agenda reservada vía la puente. NOTA: se keya por
+  --     p_professional_id CRUDO (no v_bucket): la puente referencia professionals.id real; las
+  --     agendas sin profesional/sentinela no tienen espacios (Pitfall 1 / A2). Si la agenda no tiene
+  --     espacios mapeados, v_space_ids queda NULL → sin lock de espacio, sin chequeo, cero overhead.
+  SELECT array_agg(asp.space_id ORDER BY asp.space_id) INTO v_space_ids   -- ORDEN ASCENDENTE (anti-deadlock)
+  FROM agenda_spaces asp
+  WHERE asp.business_id = p_business_id
+    AND asp.professional_id = p_professional_id;
+
+  IF v_space_ids IS NOT NULL THEN
+    -- Lock por CADA espacio en el orden ascendente del array_agg → ambas reservas que pelean un
+    -- espacio compartido lo toman en la misma posición global (sin cruce → sin deadlock 40P01).
+    FOREACH v_sid IN ARRAY v_space_ids LOOP
+      PERFORM pg_advisory_xact_lock(hashtextextended(p_business_id::text || v_sid::text, 0));
+    END LOOP;
+
+    -- Tras tomar los locks (el EXISTS es ahora autoritativo): ¿hay algún turno SOLAPADO en tiempo en
+    -- CUALQUIER agenda HERMANA (que comparta ≥1 espacio del set) excluyendo la propia agenda? El
+    -- join appointments → agenda_spaces (por COALESCE(professional_id, sentinel) del turno) expande
+    -- cada turno a sus espacios; other.space_id = ANY(v_space_ids) exige intersección; el && de
+    -- tsrange exige solape de tiempo (duración variable). El <> de self excluye la F11 contra sí misma.
+    IF EXISTS (
+      SELECT 1
+      FROM appointments a
+      JOIN agenda_spaces other ON other.business_id = p_business_id
+                              AND other.professional_id = COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid)
+      WHERE a.business_id = p_business_id
+        AND a.status IN ('confirmed', 'pending_payment')
+        AND a.date = p_date
+        AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid)
+            <> COALESCE(p_professional_id, '00000000-0000-0000-0000-000000000000'::uuid)   -- excluye self (Pitfall 3)
+        AND other.space_id = ANY (v_space_ids)                                              -- comparte ≥1 espacio
+        AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+            && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))  -- solape de tiempo
+    ) THEN
+      -- Reusar slot_taken (NO space_taken). El caller lo capta por `message` (P0001) en booking-core.
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
 
   -- 2. Capacity del bloque que cubre este slot (plantilla semanal: day_of_week + ventana).
   --    Si no hay bloque que lo cubra, default 1 (comportamiento individual). EXTRACT(dow) usa la
@@ -93,17 +136,7 @@ BEGIN
     AND a.date = p_date AND a.time = p_time
     AND a.status IN ('confirmed', 'pending_payment');
 
-  -- 4. Asignación de asiento + cero regresión cupo 1 (CONC-02).
-  --    CASO CUPO 1 (v_capacity = 1): NO se levanta slot_full por count. Se fuerza siempre seat=0,
-  --      de modo que la 2ª reserva del slot reuse el seat 0 del ocupante y choque con el índice único
-  --      011 → 23505, que el core traduce a slot_taken (EXACTAMENTE el comportamiento anti-doble-booking
-  --      de v0.9, byte-idéntico). Si se levantara slot_full acá, el cupo 1 devolvería slot_full y se
-  --      perdería la no-regresión que guardea CONC-02 / booking-core.test.ts Test D.
-  --    CASO CUPO N (v_capacity > 1): si ya está lleno → slot_full (P0001), que el core mapea a 409.
-  --      Si hay lugar, seat := v_occupied (primer asiento libre 0..capacity-1).
-  --    En AMBOS casos el índice único (..., seat) es el respaldo atómico: si dos requests cruzaran el
-  --    lock (no debería), el seat duplicado choca con 23505. is_group = (capacity > 1) desnormaliza si
-  --    el slot es grupal para condicionar el EXCLUDE 013.
+  -- 4. Asignación de asiento + cero regresión cupo 1 (CONC-02). Sin cambio respecto de 041.
   IF v_capacity > 1 THEN
     IF v_occupied >= v_capacity THEN
       RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
@@ -155,6 +188,16 @@ ALTER FUNCTION "public"."businesses_protect_admin_columns"() OWNER TO "postgres"
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."agenda_spaces" (
+    "business_id" "uuid" NOT NULL,
+    "professional_id" "uuid" NOT NULL,
+    "space_id" "uuid" NOT NULL
+);
+
+
+ALTER TABLE "public"."agenda_spaces" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."appointments" (
@@ -700,6 +743,17 @@ CREATE TABLE IF NOT EXISTS "public"."schedule_exceptions" (
 ALTER TABLE "public"."schedule_exceptions" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."spaces" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "business_id" "uuid" NOT NULL,
+    "name" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."spaces" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."tags" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "label" "text" NOT NULL,
@@ -726,6 +780,11 @@ CREATE TABLE IF NOT EXISTS "public"."time_blocks" (
 
 
 ALTER TABLE "public"."time_blocks" OWNER TO "postgres";
+
+
+ALTER TABLE ONLY "public"."agenda_spaces"
+    ADD CONSTRAINT "agenda_spaces_pkey" PRIMARY KEY ("professional_id", "space_id");
+
 
 
 ALTER TABLE ONLY "public"."appointments"
@@ -858,6 +917,11 @@ ALTER TABLE ONLY "public"."services"
 
 
 
+ALTER TABLE ONLY "public"."spaces"
+    ADD CONSTRAINT "spaces_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."tags"
     ADD CONSTRAINT "tags_pkey" PRIMARY KEY ("id");
 
@@ -978,6 +1042,21 @@ CREATE INDEX "time_blocks_location" ON "public"."time_blocks" USING "btree" ("lo
 
 
 CREATE OR REPLACE TRIGGER "businesses_protect_admin_columns" BEFORE UPDATE ON "public"."businesses" FOR EACH ROW EXECUTE FUNCTION "public"."businesses_protect_admin_columns"();
+
+
+
+ALTER TABLE ONLY "public"."agenda_spaces"
+    ADD CONSTRAINT "agenda_spaces_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."agenda_spaces"
+    ADD CONSTRAINT "agenda_spaces_professional_id_fkey" FOREIGN KEY ("professional_id") REFERENCES "public"."professionals"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."agenda_spaces"
+    ADD CONSTRAINT "agenda_spaces_space_id_fkey" FOREIGN KEY ("space_id") REFERENCES "public"."spaces"("id") ON DELETE CASCADE;
 
 
 
@@ -1171,6 +1250,11 @@ ALTER TABLE ONLY "public"."services"
 
 
 
+ALTER TABLE ONLY "public"."spaces"
+    ADD CONSTRAINT "spaces_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."tasks"
     ADD CONSTRAINT "tasks_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
 
@@ -1232,6 +1316,35 @@ CREATE POLICY "admin read tags" ON "public"."tags" FOR SELECT USING ((( SELECT (
 
 
 CREATE POLICY "admin read tasks" ON "public"."tasks" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+ALTER TABLE "public"."agenda_spaces" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "agenda_spaces tenant delete" ON "public"."agenda_spaces" FOR DELETE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "agenda_spaces tenant insert" ON "public"."agenda_spaces" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "agenda_spaces tenant select" ON "public"."agenda_spaces" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "agenda_spaces tenant update" ON "public"."agenda_spaces" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
 
 
 
@@ -1457,6 +1570,35 @@ ALTER TABLE "public"."schedule_exceptions" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."services" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."spaces" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "spaces tenant delete" ON "public"."spaces" FOR DELETE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "spaces tenant insert" ON "public"."spaces" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "spaces tenant select" ON "public"."spaces" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "spaces tenant update" ON "public"."spaces" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
 
 
 ALTER TABLE "public"."tags" ENABLE ROW LEVEL SECURITY;
@@ -2993,6 +3135,12 @@ GRANT ALL ON FUNCTION "public"."tstz_dist"(timestamp with time zone, timestamp w
 
 
 
+GRANT ALL ON TABLE "public"."agenda_spaces" TO "anon";
+GRANT ALL ON TABLE "public"."agenda_spaces" TO "authenticated";
+GRANT ALL ON TABLE "public"."agenda_spaces" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."appointments" TO "anon";
 GRANT ALL ON TABLE "public"."appointments" TO "authenticated";
 GRANT ALL ON TABLE "public"."appointments" TO "service_role";
@@ -3170,6 +3318,12 @@ GRANT ALL ON TABLE "public"."saved_products" TO "service_role";
 GRANT ALL ON TABLE "public"."schedule_exceptions" TO "anon";
 GRANT ALL ON TABLE "public"."schedule_exceptions" TO "authenticated";
 GRANT ALL ON TABLE "public"."schedule_exceptions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."spaces" TO "anon";
+GRANT ALL ON TABLE "public"."spaces" TO "authenticated";
+GRANT ALL ON TABLE "public"."spaces" TO "service_role";
 
 
 
