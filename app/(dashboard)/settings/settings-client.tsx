@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, BusinessSecrets, Service, Professional, Location } from '@/lib/types'
+import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace } from '@/lib/types'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
@@ -126,12 +126,17 @@ interface Props {
   initialServices: Service[]
   initialProfessionals: Professional[]
   initialLocations: Location[]
+  // Espacios físicos (canchas) + mapeo agenda→espacios (motor-reservas / espacio compartido).
+  // Cargados por tenant en page.tsx / equipo (.eq('business_id', business.id) + RLS). Opcionales:
+  // las vistas de sidebar que no muestran la tab de Equipo (servicios/negocio/consultorios) no los pasan.
+  initialSpaces?: Space[]
+  initialAgendaSpaces?: AgendaSpace[]
   mpConnectEnabled: boolean
   // Qué mostrar: 'config' = pestañas de Configuración; el resto = una sección suelta (sidebar).
   view?: SettingsView
 }
 
-export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, mpConnectEnabled, view = 'config' }: Props) {
+export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], mpConnectEnabled, view = 'config' }: Props) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -539,7 +544,81 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // Defensa en profundidad: filtro explícito por business_id además de la RLS.
     await supabase.from('professionals').delete().eq('id', id).eq('business_id', business.id)
     setProfessionals(prev => prev.filter(p => p.id !== id))
+    // Limpieza optimista del mapeo: al borrar la agenda, sus filas de agenda_spaces caen por FK
+    // CASCADE en la DB; reflejarlo en el estado para que el UI no muestre mapeos huérfanos.
+    setAgendaSpaces(prev => prev.filter(a => a.professional_id !== id))
     toast.success('Profesional eliminado')
+  }
+
+  // ── Espacios físicos + mapeo agenda→espacios (motor-reservas / espacio compartido) ─────────
+  // Reusa el patrón del CRUD de professionals (estado local + browser client RLS + UI optimista +
+  // toast). Toda escritura confía en RLS WITH CHECK por tenant (Plan 01); el business_id se pasa
+  // porque la columna es NOT NULL, pero la policy lo valida (no es superficie falsificable).
+  const [spaces, setSpaces] = useState<Space[]>(initialSpaces)
+  const [agendaSpaces, setAgendaSpaces] = useState<AgendaSpace[]>(initialAgendaSpaces)
+  const [newSpaceName, setNewSpaceName] = useState('')
+  const [savingSpace, setSavingSpace] = useState(false)
+  // Término del eje según el rubro: 'Cancha'/'Canchas' para canchas, 'Profesional'/'Equipo' resto.
+  const resourceWord = term.resource
+  const resourcesWord = term.resources
+
+  async function addSpace() {
+    const name = newSpaceName.trim()
+    if (!name) return
+    setSavingSpace(true)
+    const { data, error } = await supabase
+      .from('spaces')
+      .insert({ name, business_id: business.id })
+      .select()
+      .single()
+    setSavingSpace(false)
+    if (error) { toast.error('Error al agregar el espacio'); return }
+    setSpaces(prev => [...prev, data as Space])
+    setNewSpaceName('')
+    toast.success('Espacio agregado')
+  }
+
+  async function deleteSpace(id: string) {
+    // Defensa en profundidad: filtro explícito por business_id además de la RLS.
+    const { error } = await supabase.from('spaces').delete().eq('id', id).eq('business_id', business.id)
+    if (error) { toast.error('Error al eliminar el espacio'); return }
+    setSpaces(prev => prev.filter(s => s.id !== id))
+    // Sus filas de agenda_spaces caen por FK CASCADE en la DB; reflejarlo en el estado.
+    setAgendaSpaces(prev => prev.filter(a => a.space_id !== id))
+    toast.success('Espacio eliminado')
+  }
+
+  function isMapped(professionalId: string, spaceId: string) {
+    return agendaSpaces.some(a => a.professional_id === professionalId && a.space_id === spaceId)
+  }
+
+  // Marca/desmarca el mapeo de una agenda a un espacio. Optimista con rollback en error.
+  async function toggleAgendaSpace(professionalId: string, spaceId: string) {
+    const mapped = isMapped(professionalId, spaceId)
+    if (mapped) {
+      // Optimista: quitar primero.
+      setAgendaSpaces(prev => prev.filter(a => !(a.professional_id === professionalId && a.space_id === spaceId)))
+      const { error } = await supabase
+        .from('agenda_spaces')
+        .delete()
+        .eq('business_id', business.id)
+        .eq('professional_id', professionalId)
+        .eq('space_id', spaceId)
+      if (error) {
+        // Rollback: re-insertar la fila quitada.
+        setAgendaSpaces(prev => [...prev, { business_id: business.id, professional_id: professionalId, space_id: spaceId }])
+        toast.error('Error al actualizar el mapeo')
+      }
+    } else {
+      const row: AgendaSpace = { business_id: business.id, professional_id: professionalId, space_id: spaceId }
+      setAgendaSpaces(prev => [...prev, row])
+      const { error } = await supabase.from('agenda_spaces').insert(row)
+      if (error) {
+        // Rollback: quitar la fila agregada.
+        setAgendaSpaces(prev => prev.filter(a => !(a.professional_id === professionalId && a.space_id === spaceId)))
+        toast.error('Error al actualizar el mapeo')
+      }
+    }
   }
 
   // ── Tab 4 — Locations ─────────────────────────────────────────────────────
@@ -1253,6 +1332,99 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 <Button onClick={addProfessional} disabled={savingPro || !newPro.name.trim()} className="gap-1">
                   <Plus className="w-4 h-4" /> {savingPro ? 'Agregando...' : 'Agregar'}
                 </Button>
+              </div>
+            )}
+          </Card>
+
+          {/* ── Espacios físicos + mapeo agenda→espacios (motor-reservas / espacio compartido) ──
+               Vive dentro de la tab de Equipo (D-04, sin pantalla nueva). El alta de espacios y el
+               mapeo escriben spaces/agenda_spaces por el browser client con RLS. El término del eje
+               ('Cancha'/'Profesional') se nombra por rubro. */}
+          <Card className="p-6 space-y-4 mt-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Espacios físicos</p>
+              <p className="text-xs text-muted-foreground">
+                Definí los espacios que se comparten entre {resourcesWord.toLowerCase()}. Reservar un{' '}
+                {resourceWord.toLowerCase()} bloquea a todos los que comparten un espacio en el mismo horario.
+              </p>
+            </div>
+
+            {spaces.length > 0 && (
+              <div className="space-y-2">
+                {spaces.map(s => (
+                  <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                      <MapPin className="w-4 h-4" />
+                    </div>
+                    <p className="flex-1 min-w-0 text-sm truncate">{s.name}</p>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => deleteSpace(s.id)} aria-label={`Eliminar espacio ${s.name}`}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t border-border pt-4 space-y-3">
+              <p className="text-sm font-medium">Agregar espacio</p>
+              <div className="flex items-end gap-2">
+                <div className="flex-1 space-y-1">
+                  <Label htmlFor="new-space-name">Nombre del espacio</Label>
+                  <Input
+                    id="new-space-name"
+                    value={newSpaceName}
+                    onChange={e => setNewSpaceName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSpace() } }}
+                    placeholder="Cancha A, Sala 1…"
+                  />
+                </div>
+                <Button onClick={addSpace} disabled={savingSpace || !newSpaceName.trim()} className="gap-1">
+                  <Plus className="w-4 h-4" /> {savingSpace ? 'Agregando...' : 'Agregar'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Mapeo agenda→espacios: por cada agenda, qué espacios ocupa (checkbox por espacio). */}
+            {spaces.length > 0 && professionals.length > 0 && (
+              <div className="border-t border-border pt-4 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Espacios por {resourceWord.toLowerCase()}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Marcá qué espacios ocupa cada {resourceWord.toLowerCase()}. Ej: la cancha grande ocupa todas.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {professionals.map(p => {
+                    const fullName = [p.name, p.last_name].filter(Boolean).join(' ')
+                    return (
+                      <div key={p.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
+                        <p className="text-sm font-medium truncate">{fullName}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {spaces.map(s => {
+                            const checked = isMapped(p.id, s.id)
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => toggleAgendaSpace(p.id, s.id)}
+                                aria-pressed={checked}
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-medium transition-colors',
+                                  checked
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-border text-muted-foreground hover:border-primary hover:text-primary',
+                                )}
+                              >
+                                {checked && <Check className="w-3.5 h-3.5" />}
+                                {s.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </Card>
