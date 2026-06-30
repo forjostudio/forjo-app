@@ -22,10 +22,15 @@ export default async function SettingsPage() {
   // PROPIO dueño (D-05 permite mostrar el valor a su dueño; nunca a anon ni a otro componente).
   const secrets = await getBusinessSecrets(business.id)
 
-  const [{ data: services }, { data: professionals }, { data: locations }] = await Promise.all([
+  // spaces / agenda_spaces (motor-reservas / espacio compartido): se cargan por tenant con el
+  // cliente server (anon + RLS) — las policies por op del Plan 01 garantizan el aislamiento.
+  // agenda_spaces no tiene created_at (PK professional_id,space_id) → no se ordena.
+  const [{ data: services }, { data: professionals }, { data: locations }, { data: spaces }, { data: agendaSpaces }] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('professionals').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('locations').select('*').eq('business_id', business.id).order('created_at'),
+    supabase.from('spaces').select('*').eq('business_id', business.id).order('created_at'),
+    supabase.from('agenda_spaces').select('*').eq('business_id', business.id),
   ])
 
   return (
@@ -35,6 +40,8 @@ export default async function SettingsPage() {
       initialServices={services || []}
       initialProfessionals={professionals || []}
       initialLocations={locations || []}
+      initialSpaces={spaces || []}
+      initialAgendaSpaces={agendaSpaces || []}
       mpConnectEnabled={mpConnectConfigured()}
     />
   )
