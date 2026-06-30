@@ -59,6 +59,48 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 
+CREATE OR REPLACE FUNCTION "public"."appointment_spaces_cleanup"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+  IF OLD.status IN ('confirmed', 'pending_payment')
+     AND NEW.status NOT IN ('confirmed', 'pending_payment') THEN
+    DELETE FROM appointment_spaces WHERE appointment_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."appointment_spaces_cleanup"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."appointment_spaces_populate"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+  IF NEW.status IN ('confirmed', 'pending_payment') THEN
+    -- Una fila por espacio de la agenda (vía la puente). Keya por professional_id REAL (no por el
+    -- sentinela): la agenda sin profesional no tiene espacios (Pitfall 1 / A2). Cada espacio aparece
+    -- una sola vez (la PK de agenda_spaces lo garantiza) → la F11 no choca consigo misma (Pitfall 3).
+    INSERT INTO appointment_spaces (appointment_id, business_id, space_id, slot)
+    SELECT NEW.id, NEW.business_id, asp.space_id,
+           tsrange(NEW.date + NEW.time,
+                   NEW.date + NEW.time + make_interval(mins => COALESCE(NEW.duration_minutes, 30)))
+    FROM agenda_spaces asp
+    WHERE asp.business_id = NEW.business_id
+      AND asp.professional_id = NEW.professional_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."appointment_spaces_populate"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) RETURNS TABLE("id" "uuid", "cancel_token" "uuid")
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -198,6 +240,17 @@ CREATE TABLE IF NOT EXISTS "public"."agenda_spaces" (
 
 
 ALTER TABLE "public"."agenda_spaces" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."appointment_spaces" (
+    "appointment_id" "uuid" NOT NULL,
+    "business_id" "uuid" NOT NULL,
+    "space_id" "uuid" NOT NULL,
+    "slot" "tsrange" NOT NULL
+);
+
+
+ALTER TABLE "public"."appointment_spaces" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."appointments" (
@@ -787,6 +840,16 @@ ALTER TABLE ONLY "public"."agenda_spaces"
 
 
 
+ALTER TABLE ONLY "public"."appointment_spaces"
+    ADD CONSTRAINT "appointment_spaces_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, "space_id" WITH =, "slot" WITH &&);
+
+
+
+ALTER TABLE ONLY "public"."appointment_spaces"
+    ADD CONSTRAINT "appointment_spaces_pkey" PRIMARY KEY ("appointment_id", "space_id");
+
+
+
 ALTER TABLE ONLY "public"."appointments"
     ADD CONSTRAINT "appointments_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, COALESCE("professional_id", '00000000-0000-0000-0000-000000000000'::"uuid") WITH =, "tsrange"(("date" + "time"), (("date" + "time") + "make_interval"("mins" => COALESCE("duration_minutes", 30)))) WITH &&) WHERE ((("status" = ANY (ARRAY['confirmed'::"text", 'pending_payment'::"text"])) AND (NOT "is_group")));
 
@@ -1041,6 +1104,14 @@ CREATE INDEX "time_blocks_location" ON "public"."time_blocks" USING "btree" ("lo
 
 
 
+CREATE OR REPLACE TRIGGER "appointment_spaces_cleanup_trg" AFTER UPDATE OF "status" ON "public"."appointments" FOR EACH ROW EXECUTE FUNCTION "public"."appointment_spaces_cleanup"();
+
+
+
+CREATE OR REPLACE TRIGGER "appointment_spaces_populate_trg" AFTER INSERT ON "public"."appointments" FOR EACH ROW EXECUTE FUNCTION "public"."appointment_spaces_populate"();
+
+
+
 CREATE OR REPLACE TRIGGER "businesses_protect_admin_columns" BEFORE UPDATE ON "public"."businesses" FOR EACH ROW EXECUTE FUNCTION "public"."businesses_protect_admin_columns"();
 
 
@@ -1057,6 +1128,16 @@ ALTER TABLE ONLY "public"."agenda_spaces"
 
 ALTER TABLE ONLY "public"."agenda_spaces"
     ADD CONSTRAINT "agenda_spaces_space_id_fkey" FOREIGN KEY ("space_id") REFERENCES "public"."spaces"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."appointment_spaces"
+    ADD CONSTRAINT "appointment_spaces_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "public"."appointments"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."appointment_spaces"
+    ADD CONSTRAINT "appointment_spaces_space_id_fkey" FOREIGN KEY ("space_id") REFERENCES "public"."spaces"("id") ON DELETE CASCADE;
 
 
 
@@ -1343,6 +1424,15 @@ CREATE POLICY "agenda_spaces tenant select" ON "public"."agenda_spaces" FOR SELE
 CREATE POLICY "agenda_spaces tenant update" ON "public"."agenda_spaces" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
   WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+ALTER TABLE "public"."appointment_spaces" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "appointment_spaces tenant select" ON "public"."appointment_spaces" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
   WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
 
@@ -1873,6 +1963,18 @@ GRANT ALL ON FUNCTION "public"."gbtreekey_var_out"("public"."gbtreekey_var") TO 
 
 
 
+
+
+
+GRANT ALL ON FUNCTION "public"."appointment_spaces_cleanup"() TO "anon";
+GRANT ALL ON FUNCTION "public"."appointment_spaces_cleanup"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."appointment_spaces_cleanup"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."appointment_spaces_populate"() TO "anon";
+GRANT ALL ON FUNCTION "public"."appointment_spaces_populate"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."appointment_spaces_populate"() TO "service_role";
 
 
 
@@ -3138,6 +3240,12 @@ GRANT ALL ON FUNCTION "public"."tstz_dist"(timestamp with time zone, timestamp w
 GRANT ALL ON TABLE "public"."agenda_spaces" TO "anon";
 GRANT ALL ON TABLE "public"."agenda_spaces" TO "authenticated";
 GRANT ALL ON TABLE "public"."agenda_spaces" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."appointment_spaces" TO "anon";
+GRANT ALL ON TABLE "public"."appointment_spaces" TO "authenticated";
+GRANT ALL ON TABLE "public"."appointment_spaces" TO "service_role";
 
 
 
