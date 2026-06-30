@@ -122,6 +122,46 @@ export async function seedTimeBlock(
   return ins.data.id
 }
 
+// seedProfessional: siembra UN professional activo adicional sobre un tenant ya sembrado y devuelve
+// su id. Molde directo del insert de professional de seedOneTenant (líneas 79-85). Lo necesita CONC-03:
+// una 2ª agenda HERMANA (segundo professional_id REAL, nunca null/sentinela — Pitfall 1) que comparta
+// un espacio físico con la 1ª (t.professionalId). Helper aparte para NO tocar la firma de seedOneTenant
+// que usan CONC-01/02/CUPOS. El teardown por CASCADE de business ya borra el professional extra.
+export async function seedProfessional(seeded: SeededTenant, opts?: { name?: string }): Promise<string> {
+  const ins = await seeded.admin
+    .from('professionals')
+    .insert({ business_id: seeded.businessId, name: opts?.name ?? `__test_pro_extra_${crypto.randomUUID().slice(0, 8)}`, active: true })
+    .select('id')
+    .single()
+  if (ins.error || !ins.data) throw new Error(`seed: insert professional extra falló: ${ins.error?.message}`)
+  return ins.data.id
+}
+
+// seedSpace: siembra UN espacio físico (cancha A/B/C) en `spaces` por service-role y devuelve el
+// space_id. Molde de seedTimeBlock (service-role insert + throw en error). El RPC book_slot_atomic
+// (migración 042) lee los espacios que ocupa una agenda vía agenda_spaces y toma un advisory lock por
+// cada uno → la exclusión por espacio compartido. El teardown por CASCADE de business borra spaces.
+export async function seedSpace(seeded: SeededTenant, opts?: { name?: string }): Promise<string> {
+  const ins = await seeded.admin
+    .from('spaces')
+    .insert({ business_id: seeded.businessId, name: opts?.name ?? '__test_space' })
+    .select('id')
+    .single()
+  if (ins.error || !ins.data) throw new Error(`seed: insert space falló: ${ins.error?.message}`)
+  return ins.data.id
+}
+
+// seedAgendaSpace: mapea una agenda (professional) a un espacio en `agenda_spaces` (puente NOT NULL,
+// PK (professional_id, space_id)). Molde de seedTimeBlock. Mapear DOS agendas distintas al MISMO
+// space_id es lo que hace que sus reservas solapadas colisionen por espacio (CONC-03). Sin retorno
+// (la PK no es un id sintético). El teardown por CASCADE de business borra agenda_spaces.
+export async function seedAgendaSpace(seeded: SeededTenant, args: { professionalId: string; spaceId: string }): Promise<void> {
+  const ins = await seeded.admin
+    .from('agenda_spaces')
+    .insert({ business_id: seeded.businessId, professional_id: args.professionalId, space_id: args.spaceId })
+  if (ins.error) throw new Error(`seed: insert agenda_space falló: ${ins.error?.message}`)
+}
+
 // teardownOneTenant: borra TODO lo creado, incluso si un test falló (try/finally como
 // supabase-fixtures.ts). Borrar el business CASCADEA a sus hijos (service/professional/location/
 // appointments vía ON DELETE CASCADE en business_id). El usuario auth NO cae por ese CASCADE →
