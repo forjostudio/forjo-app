@@ -2,7 +2,7 @@
 // feature flags based on the business `type`. Keep this file framework-agnostic
 // (no React / icon imports) so it can be used on server and client.
 
-export type VerticalKey = 'salud' | 'belleza' | 'general'
+export type VerticalKey = 'salud' | 'belleza' | 'general' | 'canchas'
 
 export interface VerticalTerminology {
   client: string
@@ -14,9 +14,9 @@ export interface VerticalTerminology {
   // Lugar de atención. Varía por rubro: salud=Consultorio, belleza=Local, general=Sucursal.
   location: string
   locations: string
-  // Eje de la agenda (quién/qué se reserva). Por defecto 'Profesional'/'Equipo' en todos los
-  // verticales; el rubro "Cancha de fútbol" lo resuelve a 'Cancha'/'Canchas' vía override por type
-  // (ver TYPE_TERMINOLOGY_OVERRIDE). Label-only: NO afecta datos ni el VerticalKey resuelto.
+  // Eje de la agenda (quién/qué se reserva). Cada vertical define su eje directamente: salud/belleza/
+  // general usan 'Profesional'/'Equipo'; el vertical 'canchas' usa 'Cancha'/'Canchas' de forma nativa.
+  // Label-only: NO afecta datos ni el VerticalKey resuelto.
   resource: string
   resources: string
 }
@@ -85,7 +85,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
   },
   general: {
     label: 'General',
-    types: ['Estudio de tatuajes', 'Entrenador personal', 'Clases particulares', 'Lavadero de autos', 'Cancha de fútbol', 'Veterinaria', 'Taller mecánico', 'Estudio de fotografía', 'Otro'],
+    types: ['Estudio de tatuajes', 'Entrenador personal', 'Clases particulares', 'Lavadero de autos', 'Veterinaria', 'Taller mecánico', 'Estudio de fotografía', 'Otro'],
     terminology: {
       client: 'Cliente',
       clients: 'Clientes',
@@ -99,6 +99,27 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       resources: 'Equipo',
     },
     menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'settings'],
+    features: {},
+  },
+  canchas: {
+    label: 'Canchas',
+    types: ['Cancha de fútbol', 'Cancha de pádel', 'Cancha de tenis', 'Cancha de básquet', 'Otro'],
+    terminology: {
+      client: 'Cliente',
+      clients: 'Clientes',
+      // El turno de alquiler se llama "Reserva" (más natural para canchas, D-04).
+      appointment: 'Reserva',
+      appointments: 'Reservas',
+      // En canchas el bookable ES la cancha: service y resource apuntan al mismo eje (D-04).
+      service: 'Cancha',
+      services: 'Canchas',
+      location: 'Sede',
+      locations: 'Sedes',
+      resource: 'Cancha',
+      resources: 'Canchas',
+    },
+    // Sin 'equipo' ni 'patients' (D-02): el rubro no tiene staff, el bookable es la cancha.
+    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'consultorios', 'negocio', 'settings'],
     features: {},
   },
 }

@@ -25,6 +25,7 @@ const SCHEMA_TYPE_BY_VERTICAL: Record<VerticalKey, string> = {
   salud: 'MedicalClinic',
   belleza: 'BeautySalon',
   general: 'LocalBusiness',
+  canchas: 'SportsActivityLocation',
 }
 
 export function verticalToSchemaType(vertical: VerticalKey): string {
@@ -61,6 +62,7 @@ const DESCRIPTION_TEMPLATE_BY_VERTICAL: Record<VerticalKey, (name: string) => st
   salud: (name) => `Reservá tu turno online en ${name}.`,
   belleza: (name) => `Reservá tu turno online en ${name}.`,
   general: (name) => `Reservá tu turno online en ${name}.`,
+  canchas: (name) => `Reservá tu cancha online en ${name}.`,
 }
 
 // Localiza la sección hero del config y parsea SU data con heroData (.catch({}) →
