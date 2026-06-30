@@ -1342,10 +1342,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                ('Cancha'/'Profesional') se nombra por rubro. */}
           <Card className="p-6 space-y-4 mt-4">
             <div className="space-y-1">
-              <p className="text-sm font-medium">Espacios físicos</p>
+              <p className="text-sm font-medium">Espacios físicos compartidos</p>
               <p className="text-xs text-muted-foreground">
-                Definí los espacios que se comparten entre {resourcesWord.toLowerCase()}. Reservar un{' '}
-                {resourceWord.toLowerCase()} bloquea a todos los que comparten un espacio en el mismo horario.
+                Un espacio físico es un lugar real que se comparte entre varias {resourcesWord.toLowerCase()}
+                {' '}—una sala, un sector de cancha, un equipo—. Reservar en una bloquea a las demás que comparten
+                ese espacio en el mismo horario. Ejemplo: una cancha de fútbol 11 partida en 3 cruzadas → creás
+                3 espacios (A, B y C); la cancha grande ocupa los tres.
               </p>
             </div>
 
@@ -1375,7 +1377,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     value={newSpaceName}
                     onChange={e => setNewSpaceName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSpace() } }}
-                    placeholder="Cancha A, Sala 1…"
+                    placeholder="Sala 1, Sector A, Equipo de pilates…"
                   />
                 </div>
                 <Button onClick={addSpace} disabled={savingSpace || !newSpaceName.trim()} className="gap-1">
@@ -1384,15 +1386,23 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               </div>
             </div>
 
-            {/* Mapeo agenda→espacios: por cada agenda, qué espacios ocupa (checkbox por espacio). */}
-            {spaces.length > 0 && professionals.length > 0 && (
+            {/* Mapeo agenda→espacios: por cada agenda, qué espacios ocupa (checkbox por espacio).
+                Si todavía no hay agendas reales, mostramos una línea guía en vez de ocultar el bloque. */}
+            {spaces.length > 0 && (
               <div className="border-t border-border pt-4 space-y-3">
                 <div className="space-y-1">
-                  <p className="text-sm font-medium">Espacios por {resourceWord.toLowerCase()}</p>
+                  <p className="text-sm font-medium">Qué espacios ocupa cada {resourceWord.toLowerCase()}</p>
                   <p className="text-xs text-muted-foreground">
-                    Marcá qué espacios ocupa cada {resourceWord.toLowerCase()}. Ej: la cancha grande ocupa todas.
+                    Marcá los espacios que ocupa cada {resourceWord.toLowerCase()}; al reservarse bloquea a las
+                    demás que compartan alguno.
                   </p>
                 </div>
+                {professionals.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Primero agregá tus {resourcesWord.toLowerCase()} más arriba; después vas a poder marcar qué
+                    espacios ocupa cada una.
+                  </p>
+                ) : (
                 <div className="space-y-2">
                   {professionals.map(p => {
                     const fullName = [p.name, p.last_name].filter(Boolean).join(' ')
@@ -1425,6 +1435,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     )
                   })}
                 </div>
+                )}
               </div>
             )}
           </Card>
