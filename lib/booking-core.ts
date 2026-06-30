@@ -232,6 +232,12 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     if (rpcErr?.message?.includes('slot_full')) {
       return { ok: false, error: 'slot_full', status: 409 }
     }
+    // (a2) RAISE 'slot_taken' (ERRCODE P0001 — solape de espacio físico cross-bucket, migración 042)
+    //      llega en `message` (no por SQLSTATE de constraint) → slot_taken (409). Reusa el código
+    //      existente, no agrega space_taken (D-06: el público solo sabe "ocupado").
+    if (rpcErr?.message?.includes('slot_taken')) {
+      return { ok: false, error: 'slot_taken', status: 409 }
+    }
     // (b) 23505 = índice único de seat (cupo 1: 2ª reserva del slot, doble-booking clásico);
     //     23P01 = exclusion constraint 013 (solape de duración variable, cupo 1) → slot_taken (409).
     if (rpcErr?.code === '23505' || rpcErr?.code === '23P01') {

@@ -116,6 +116,24 @@ export interface Professional {
   created_at: string
 }
 
+// Espacio físico por negocio (migración 042). Cada cancha (A/B/C) = una fila. Datos de tenant
+// (RLS por op WITH CHECK por business_id, sin read anon — D-06). Campos snake_case espejo de la fila DB.
+export interface Space {
+  id: string
+  business_id: string
+  name: string
+  created_at: string
+}
+
+// Puente agenda↔espacio (migración 042). Mapea cada agenda (fila de Professional, per D-02) a los
+// espacios físicos que ocupa: F11→{A,B,C}; cruzada A→{A}. professional_id y space_id son NOT NULL FK
+// en la DB (la sentinela "sin profesional" no tiene espacios — Pitfall 1). PK (professional_id, space_id).
+export interface AgendaSpace {
+  business_id: string
+  professional_id: string
+  space_id: string
+}
+
 export interface Service {
   id: string
   business_id: string
