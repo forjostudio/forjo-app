@@ -18,7 +18,7 @@ El faseo va de adentro hacia afuera: primero el **scaffold del vertical** (que e
 Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del vertical y de la cancha aterrizan antes de que el flujo público los consuma).
 
 - [x] **Phase 1: Vertical Canchas** - El negocio setea su rubro a "canchas" y el dashboard adopta terminología y menú propios (sin "Profesionales/Equipo"), sin romper los otros verticales (completed 2026-06-30)
-- [ ] **Phase 2: Configuración de Canchas** - El dueño crea/edita/elimina canchas como entidad reservable (nombre + precio propio + duración fija propia) mapeada a espacios físicos del motor v0.12
+- [x] **Phase 2: Configuración de Canchas** - El dueño crea/edita/elimina canchas como entidad reservable (nombre + precio propio + duración fija propia) mapeada a espacios físicos del motor v0.12 (completed 2026-07-01)
 - [ ] **Phase 3: Booking público de alquiler** - El cliente elige cancha + horario disponible (sin elegir duración), al precio de la cancha, respetando la exclusión atómica por espacio
 
 ## Phase Details
@@ -55,10 +55,14 @@ Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del v
   3. La config de canchas reusa el motor de v0.12 (`spaces`/`agenda_spaces`) sin re-migrar el core: el mapeo cancha→espacios sigue acoplando la disponibilidad (reservar una cancha que comparte espacio bloquea a las hermanas).
   4. Una cancha de un negocio nunca aparece, se edita ni se mapea a espacios de otro negocio — el modelo de cancha y su mapeo a espacios están aislados por tenant.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
+**Wave 1**
 
-- [ ] 02-01-PLAN.md — Migración aditiva 043 (`professionals.service_id`, puntero 1:1 D-06) + `lib/types.ts` + capa pura `lib/canchas.ts` (provisión/reconstrucción/soft-delete) + tests (wave 1)
-- [ ] 02-02-PLAN.md — Manager de canchas en `/servicios` (D-03): carga de professionals/spaces/agenda_spaces + form de cancha con precio/duración propios + mapeo de espacios (1:1 + compartir, D-04) + soft-delete, condicionado por vertical sin romper view="equipo" (wave 2)
+- [x] 02-01-PLAN.md — Migración aditiva 043 (`professionals.service_id`, puntero 1:1 D-06) + `lib/types.ts` + capa pura `lib/canchas.ts` (provisión/reconstrucción/soft-delete) + tests (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 02-02-PLAN.md — Manager de canchas en `/servicios` (D-03): carga de professionals/spaces/agenda_spaces + form de cancha con precio/duración propios + mapeo de espacios (1:1 + compartir, D-04) + soft-delete, condicionado por vertical sin romper view="equipo" (wave 2)
 
 **Phase-level decision (defer to discuss-phase)**: **dónde viven el precio y la duración fija de la cancha.** Opciones a evaluar en discuss-phase (NO lockear acá): (a) reusar `services` (un servicio por cancha que aporta precio + duración, ya soportado por el motor anti-solape por duración) y el mapeo agenda↔servicio; (b) columnas nuevas (`price`, `duration_min`) sobre la fila de agenda/`professionals` que representa la cancha; (c) tabla/columna nueva dedicada a la cancha. Evaluar qué minimiza migración y reusa el camino de precio/seña existente. Toda opción que agregue columnas/tablas exige RLS habilitada + policies por operación con `WITH CHECK (business_id ∈ negocios del dueño)`.
 
@@ -76,8 +80,20 @@ Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del v
   3. Reservar una cancha respeta la exclusión por espacio: si comparte espacio con otra ocupada en un horario solapado, ese horario no aparece disponible / la reserva se rechaza (hereda la atomicidad de `book_slot_atomic`, sin sobre-reserva bajo concurrencia).
   4. Para más tiempo que la duración de la cancha, el cliente puede sacar dos turnos consecutivos sobre el mismo recurso (sin duración custom).
 
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Migración 044 `public_canchas` (vista acotada sin service_id, molde public_services) + scaffold de tests (ALQUILER-01/03/04 + anti-tampering + cross-tenant + espacio compartido) (wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — Rama canchas en `/api/booking/create` (D-03): deriva el service de professionals.service_id server-side, ignora el serviceId del cliente, re-valida por business_id (wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-03-PLAN.md — `canchas-booking-client.tsx` (3 pasos, D-02) + gateo por vertical en `page.tsx` (lee public_canchas) y `landing-renderer.tsx` (booking como prop, D-05) (wave 3)
+
 **Phase-level decision (defer to discuss-phase)**: cómo la vista pública lee el precio/duración/disponibilidad de la cancha depende de dónde quedó el modelo en Phase 2 (servicio vs columnas vs tabla) — qué vista acotada (`public_*`) expone la cancha a `anon` sin filtrar config interna. Resolver en discuss-phase de esta fase, una vez lockeado el modelo de Phase 2.
 
 **Security/Integrity relevance**: Alto (público + concurrencia). El flujo corre por el camino anónimo (service role en el route handler, tenant resuelto por slug) y DEBE: (a) heredar la atomicidad anti-conflicto de `book_slot_atomic` sin debilitarla — nunca un `count`/check de disponibilidad suelto sin el lock atómico; (b) re-validar la cancha/servicio/espacios por `business_id` (anti-tampering de tenant: nunca confiar en IDs del cliente — patrón ya vigente en `/api/booking/create`); (c) exponer a `anon` solo lo necesario vía vista acotada, sin filtrar precio/config interna ni la grilla de otro negocio; (d) respetar el gating de `plan_status` y reCAPTCHA del booking público existente. El secure-phase gate verifica: anti-tampering de cancha/espacio, atomicidad heredada (no sobre-reserva concurrente entre canchas que comparten espacio), y que la vista pública de canchas no exponga datos de otro tenant.
@@ -90,5 +106,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Vertical Canchas | 1/1 | Complete    | 2026-06-30 |
-| 2. Configuración de Canchas | 0/2 | Not started | - |
-| 3. Booking público de alquiler | 0/TBD | Not started | - |
+| 2. Configuración de Canchas | 2/2 | Complete    | 2026-07-01 |
+| 3. Booking público de alquiler | 0/3 | Not started | - |
