@@ -770,6 +770,20 @@ CREATE OR REPLACE VIEW "public"."public_services" AS
 ALTER VIEW "public"."public_services" OWNER TO "postgres";
 
 
+CREATE OR REPLACE VIEW "public"."public_canchas" AS
+ SELECT "p"."id",
+    "p"."business_id",
+    "p"."name",
+    "s"."price",
+    "s"."duration_minutes"
+   FROM ("public"."professionals" "p"
+     JOIN "public"."services" "s" ON (("s"."id" = "p"."service_id")))
+  WHERE (("p"."service_id" IS NOT NULL) AND ("p"."active" = true) AND ("s"."active" = true));
+
+
+ALTER VIEW "public"."public_canchas" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."saved_products" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "business_id" "uuid",
@@ -3424,6 +3438,12 @@ GRANT ALL ON TABLE "public"."services" TO "service_role";
 GRANT ALL ON TABLE "public"."public_services" TO "anon";
 GRANT ALL ON TABLE "public"."public_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_services" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."public_canchas" TO "anon";
+GRANT ALL ON TABLE "public"."public_canchas" TO "authenticated";
+GRANT ALL ON TABLE "public"."public_canchas" TO "service_role";
 
 
 
