@@ -239,17 +239,31 @@ describe('canchas: deleteCancha', () => {
     expect(log.some(o => o.op === 'delete')).toBe(false)
   })
 
-  it('hard-delete sin reservas: borra agenda_spaces, space dedicado, professional, service', async () => {
+  it('hard-delete sin reservas: borra agenda_spaces, professional, service y el space DEDICADO', async () => {
     const { client, log } = makeMockClient()
-    const res = await deleteCancha(client as never, BID, cancha, { hard: true })
+    const agendaSpaces: AgendaSpace[] = [{ business_id: BID, professional_id: 'p1', space_id: 'spA' }]
+    const res = await deleteCancha(client as never, BID, cancha, { hard: true, agendaSpaces })
     expect(res.ok).toBe(true)
     expect(opsOn(log, 'agenda_spaces', 'delete')).toHaveLength(1)
     expect(opsOn(log, 'professionals', 'delete')).toHaveLength(1)
     expect(opsOn(log, 'services', 'delete')).toHaveLength(1)
+    expect(opsOn(log, 'spaces', 'delete')).toHaveLength(1) // el dedicado → no queda huérfano
+    expect(opsOn(log, 'spaces', 'delete')[0].filters.id).toBe('spA')
     // Cada delete filtra por business_id.
-    for (const table of ['agenda_spaces', 'professionals', 'services']) {
+    for (const table of ['agenda_spaces', 'professionals', 'services', 'spaces']) {
       expect(opsOn(log, table, 'delete')[0].filters.business_id).toBe(BID)
     }
+  })
+
+  it('hard-delete NO borra un espacio COMPARTIDO (mapeado a otra agenda)', async () => {
+    const { client, log } = makeMockClient()
+    const agendaSpaces: AgendaSpace[] = [
+      { business_id: BID, professional_id: 'p1', space_id: 'spA' },
+      { business_id: BID, professional_id: 'p2', space_id: 'spA' }, // otra cancha comparte spA
+    ]
+    const res = await deleteCancha(client as never, BID, cancha, { hard: true, agendaSpaces })
+    expect(res.ok).toBe(true)
+    expect(opsOn(log, 'spaces', 'delete')).toHaveLength(0) // compartido → se conserva
   })
 
   it('hard-delete con turnos (FK 23503) devuelve error de dominio sugiriendo desactivar', async () => {

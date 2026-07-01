@@ -18,7 +18,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Business, Service, Professional, Space, AgendaSpace } from '@/lib/types'
-import { provisionCancha, canchasFromData, deleteCancha, editCancha as persistCanchaEdit, setCanchaActive, type Cancha } from '@/lib/canchas'
+import { provisionCancha, canchasFromData, deleteCancha, editCancha as persistCanchaEdit, setCanchaActive, dedicatedSpaceIds, type Cancha } from '@/lib/canchas'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -55,7 +55,8 @@ export function CanchasManager({
 
   // ── Alta de cancha ──────────────────────────────────────────────────────────
   const [newName, setNewName] = useState('')
-  const [newPrice, setNewPrice] = useState(0)
+  // Precio como string para permitir la celda VACÍA (no un 0 fijo que no se puede borrar). Se parsea al alta.
+  const [newPrice, setNewPrice] = useState('')
   const [newDuration, setNewDuration] = useState(60)
   // Control "compartir espacio" (D-04): por defecto vacío → provisionCancha crea un space dedicado 1:1.
   // Si el dueño marca espacios existentes, se pasan como sharedSpaceIds y NO se crea space nuevo (F11→{A,B,C}).
@@ -69,12 +70,13 @@ export function CanchasManager({
 
   async function addCancha() {
     const name = newName.trim()
+    const price = parseFloat(newPrice)
     if (!name) { toast.error('Poné un nombre para la cancha'); return }
-    if (!(newPrice > 0)) { toast.error('El precio debe ser mayor a 0'); return }
+    if (!(price > 0)) { toast.error('El precio debe ser mayor a 0'); return }
     if (!(newDuration > 0)) { toast.error('La duración debe ser mayor a 0'); return }
     setSaving(true)
     const res = await provisionCancha(supabase, business.id, {
-      name, price: newPrice, duration: newDuration,
+      name, price, duration: newDuration,
       sharedSpaceIds: sharedSpaceIds.length ? sharedSpaceIds : undefined,
     })
     setSaving(false)
@@ -91,35 +93,36 @@ export function CanchasManager({
       ...res.spaceIds.map(space_id => ({ business_id: business.id, professional_id: res.professional.id, space_id })),
     ])
     // Reset del form.
-    setNewName(''); setNewPrice(0); setNewDuration(60); setSharedSpaceIds([]); setShareOpen(false)
+    setNewName(''); setNewPrice(''); setNewDuration(60); setSharedSpaceIds([]); setShareOpen(false)
     toast.success('Cancha creada')
   }
 
   // ── Edición de cancha (edita el service: nombre/precio/duración, D-01/CANCHA-02) ──────────────
   const [editCancha, setEditCancha] = useState<Cancha | null>(null)
   const [editName, setEditName] = useState('')
-  const [editPrice, setEditPrice] = useState(0)
+  const [editPrice, setEditPrice] = useState('') // string → permite celda vacía; se parsea al guardar
   const [editDuration, setEditDuration] = useState(60)
   const [savingEdit, setSavingEdit] = useState(false)
 
   function openEdit(c: Cancha) {
     setEditCancha(c)
     setEditName(c.service.name)
-    setEditPrice(Number(c.service.price))
+    setEditPrice(String(c.service.price))
     setEditDuration(c.service.duration_minutes)
   }
 
   async function saveEdit() {
     if (!editCancha) return
     const name = editName.trim()
+    const price = parseFloat(editPrice)
     if (!name) { toast.error('El nombre no puede quedar vacío'); return }
-    if (!(editPrice > 0)) { toast.error('El precio debe ser mayor a 0'); return }
+    if (!(price > 0)) { toast.error('El precio debe ser mayor a 0'); return }
     if (!(editDuration > 0)) { toast.error('La duración debe ser mayor a 0'); return }
     setSavingEdit(true)
     // Propaga el nombre a TODAS las filas que lo muestran (service + professional + espacios DEDICADOS);
     // los espacios compartidos NO se renombran. Cada cancha edita SOLO su service → conserva su duración/precio.
     const target = editCancha
-    const res = await persistCanchaEdit(supabase, business.id, target, { name, price: editPrice, duration: editDuration }, agendaSpaces)
+    const res = await persistCanchaEdit(supabase, business.id, target, { name, price, duration: editDuration }, agendaSpaces)
     setSavingEdit(false)
     if (!res.ok) { toast.error('Error al guardar'); return }
     // Ids de los espacios DEDICADOS de esta cancha (mapeados solo a su agenda) → se renombran en el estado.
@@ -127,7 +130,7 @@ export function CanchasManager({
       const m = agendaSpaces.filter(a => a.space_id === id)
       return m.length === 1 && m[0].professional_id === target.professional.id
     })
-    setServices(prev => prev.map(s => s.id === target.service.id ? { ...s, name, price: editPrice, duration_minutes: editDuration } : s))
+    setServices(prev => prev.map(s => s.id === target.service.id ? { ...s, name, price, duration_minutes: editDuration } : s))
     setProfessionals(prev => prev.map(p => p.id === target.professional.id ? { ...p, name } : p))
     setSpaces(prev => prev.map(sp => dedicatedIds.includes(sp.id) ? { ...sp, name } : sp))
     setEditCancha(null)
@@ -169,7 +172,9 @@ export function CanchasManager({
   async function confirmDelete() {
     if (!delCancha) return
     const target = delCancha
-    const res = await deleteCancha(supabase, business.id, target, { hard: true })
+    // Los espacios DEDICADOS (los que se van a borrar) se calculan con el estado ACTUAL antes de mutarlo.
+    const removedSpaceIds = dedicatedSpaceIds(target, agendaSpaces)
+    const res = await deleteCancha(supabase, business.id, target, { hard: true, agendaSpaces })
     if (!res.ok) {
       // FK: la cancha tiene turnos asociados → no se puede borrar; guiar a desactivar.
       toast.error(res.error === 'has_appointments'
@@ -182,6 +187,8 @@ export function CanchasManager({
     setServices(prev => prev.filter(s => s.id !== target.service.id))
     setProfessionals(prev => prev.filter(p => p.id !== proId))
     setAgendaSpaces(prev => prev.filter(a => a.professional_id !== proId))
+    // Sacar del estado los espacios dedicados borrados → dejan de aparecer en "compartir espacio".
+    setSpaces(prev => prev.filter(sp => !removedSpaceIds.includes(sp.id)))
     setDelCancha(null)
     toast.success('Cancha eliminada')
   }
@@ -253,7 +260,7 @@ export function CanchasManager({
             </div>
             <div className="col-span-3 space-y-1">
               <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
-              <Input type="number" value={newPrice} onChange={e => setNewPrice(parseFloat(e.target.value) || 0)} min={0} step={100} />
+              <Input type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} min={0} step={100} placeholder="0" />
             </div>
             <div className="col-span-1">
               <Button size="icon" onClick={addCancha} disabled={saving} className="h-9 w-9" aria-label="Agregar cancha">
@@ -325,7 +332,7 @@ export function CanchasManager({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
-                <Input type="number" value={editPrice} onChange={e => setEditPrice(parseFloat(e.target.value) || 0)} min={0} step={100} />
+                <Input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} min={0} step={100} placeholder="0" />
               </div>
             </div>
           </div>

@@ -143,15 +143,29 @@ export function canchasFromData(
   return canchas
 }
 
+// ── dedicatedSpaceIds ─────────────────────────────────────────────────────────────────────────
+// Espacios DEDICADOS de una cancha: los mapeados EXCLUSIVAMENTE a su agenda (una sola fila en
+// agenda_spaces y para este professional). Los COMPARTIDOS (mapeados a >1 agenda, ej. F11→{A,B,C})
+// NO son dedicados. Se usa para renombrar (editCancha) y para borrar el espacio propio (deleteCancha)
+// sin tocar los compartidos por otras canchas.
+export function dedicatedSpaceIds(cancha: Cancha, agendaSpaces: AgendaSpace[]): string[] {
+  return cancha.spaceIds.filter(id => {
+    const mappings = agendaSpaces.filter(a => a.space_id === id)
+    return mappings.length === 1 && mappings[0].professional_id === cancha.professional.id
+  })
+}
+
 // ── deleteCancha ────────────────────────────────────────────────────────────────────────────
 // Soft-delete por defecto (active=false en service Y professional → la agenda sale del booking, D-05).
-// Hard-delete solo si { hard:true }: borra agenda_spaces → space dedicado → professional → service,
-// filtrando por business_id. Un FK 23503 (turnos asociados) → error de dominio 'has_appointments'.
+// Hard-delete solo si { hard:true }: borra agenda_spaces → professional → service → space(s) DEDICADO(s),
+// filtrando por business_id. Los espacios DEDICADOS se borran para que no queden huérfanos en el picker
+// de "compartir espacio"; los COMPARTIDOS se conservan (otras canchas los usan) — por eso se necesita
+// `agendaSpaces`. Un FK 23503 (turnos asociados) → error de dominio 'has_appointments'.
 export async function deleteCancha(
   client: Client,
   businessId: string,
   cancha: Cancha,
-  opts: { hard?: boolean } = {},
+  opts: { hard?: boolean; agendaSpaces?: AgendaSpace[] } = {},
 ): Promise<DeleteResult> {
   if (!opts.hard) {
     // Soft: desactivar service Y professional (para que la agenda salga del booking).
@@ -159,6 +173,9 @@ export async function deleteCancha(
     await client.from('professionals').update({ active: false }).eq('id', cancha.professional.id).eq('business_id', businessId)
     return { ok: true }
   }
+
+  // Calcular los espacios DEDICADOS ANTES de borrar el mapeo (después ya no se puede derivar).
+  const dedicated = dedicatedSpaceIds(cancha, opts.agendaSpaces ?? [])
 
   // Hard: borrar el mapeo primero, luego el resto en orden.
   await client.from('agenda_spaces').delete().eq('professional_id', cancha.professional.id).eq('business_id', businessId)
@@ -176,6 +193,14 @@ export async function deleteCancha(
   if (svcErr) {
     if ((svcErr as { code?: string }).code === '23503') return { ok: false, error: 'has_appointments' }
     return { ok: false, error: 'service_delete_failed' }
+  }
+
+  // Borrar los espacios DEDICADOS (ya sin agenda_spaces que los referencien) para que no queden
+  // huérfanos en el picker de "compartir espacio". Best-effort: si un space aún tiene referencias
+  // (FK, ej. appointment_spaces históricos) el error se ignora — la cancha ya se borró y un space
+  // huérfano es cosmético, no vale abortar.
+  for (const spaceId of dedicated) {
+    await client.from('spaces').delete().eq('id', spaceId).eq('business_id', businessId)
   }
 
   return { ok: true }
@@ -205,14 +230,10 @@ export async function editCancha(
   await client.from('professionals').update({ name })
     .eq('id', cancha.professional.id).eq('business_id', businessId)
 
-  // 3. space(s) DEDICADO(s): renombrar solo los mapeados exclusivamente a esta agenda.
-  for (const spaceId of cancha.spaceIds) {
-    const mappings = agendaSpaces.filter(a => a.space_id === spaceId)
-    const isDedicated = mappings.length === 1 && mappings[0].professional_id === cancha.professional.id
-    if (isDedicated) {
-      await client.from('spaces').update({ name })
-        .eq('id', spaceId).eq('business_id', businessId)
-    }
+  // 3. space(s) DEDICADO(s): renombrar solo los mapeados exclusivamente a esta agenda (no los compartidos).
+  for (const spaceId of dedicatedSpaceIds(cancha, agendaSpaces)) {
+    await client.from('spaces').update({ name })
+      .eq('id', spaceId).eq('business_id', businessId)
   }
   return { ok: true }
 }
