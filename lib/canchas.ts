@@ -180,3 +180,57 @@ export async function deleteCancha(
 
   return { ok: true }
 }
+
+// ── editCancha ──────────────────────────────────────────────────────────────────────────────
+// Edita una cancha propagando el nombre a TODAS las filas que lo muestran (fix del bug de rename):
+// service (name + price + duration), professional (name = la agenda) y el/los space(s) DEDICADO(s).
+// Un space es DEDICADO si en agendaSpaces está mapeado SOLO a esta agenda; los COMPARTIDOS (mapeados
+// a >1 agenda, ej. F11→{A,B,C}) NO se renombran — renombrar una cancha no debe pisar el nombre de un
+// espacio que otras canchas comparten. Todo filtra por business_id (aislamiento).
+export async function editCancha(
+  client: Client,
+  businessId: string,
+  cancha: Cancha,
+  patch: { name: string; price: number; duration: number },
+  agendaSpaces: AgendaSpace[],
+): Promise<DeleteResult> {
+  const name = patch.name
+  // 1. service: nombre + precio + duración fija propia (cada cancha edita SOLO su service → D-01).
+  const { error: svcErr } = await client.from('services')
+    .update({ name, price: patch.price, duration_minutes: patch.duration })
+    .eq('id', cancha.service.id).eq('business_id', businessId)
+  if (svcErr) return { ok: false, error: 'service_update_failed' }
+
+  // 2. professional (la agenda visible lleva el mismo nombre que la cancha).
+  await client.from('professionals').update({ name })
+    .eq('id', cancha.professional.id).eq('business_id', businessId)
+
+  // 3. space(s) DEDICADO(s): renombrar solo los mapeados exclusivamente a esta agenda.
+  for (const spaceId of cancha.spaceIds) {
+    const mappings = agendaSpaces.filter(a => a.space_id === spaceId)
+    const isDedicated = mappings.length === 1 && mappings[0].professional_id === cancha.professional.id
+    if (isDedicated) {
+      await client.from('spaces').update({ name })
+        .eq('id', spaceId).eq('business_id', businessId)
+    }
+  }
+  return { ok: true }
+}
+
+// ── setCanchaActive ─────────────────────────────────────────────────────────────────────────
+// Activa/desactiva una cancha (REVERSIBLE): active en service Y professional. Desactivar la saca del
+// booking (D-05); activar la reincorpora. NO destructivo — la tupla y las reservas se conservan.
+export async function setCanchaActive(
+  client: Client,
+  businessId: string,
+  cancha: Cancha,
+  active: boolean,
+): Promise<DeleteResult> {
+  const { error: e1 } = await client.from('services').update({ active })
+    .eq('id', cancha.service.id).eq('business_id', businessId)
+  if (e1) return { ok: false, error: 'service_update_failed' }
+  const { error: e2 } = await client.from('professionals').update({ active })
+    .eq('id', cancha.professional.id).eq('business_id', businessId)
+  if (e2) return { ok: false, error: 'professional_update_failed' }
+  return { ok: true }
+}

@@ -3,6 +3,8 @@ import {
   provisionCancha,
   deleteCancha,
   canchasFromData,
+  editCancha,
+  setCanchaActive,
 } from '@/lib/canchas'
 import type { Service, Professional, AgendaSpace } from '@/lib/types'
 
@@ -255,5 +257,85 @@ describe('canchas: deleteCancha', () => {
     const res = await deleteCancha(client as never, BID, cancha, { hard: true })
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.error).toBe('has_appointments')
+  })
+})
+
+describe('canchas: editCancha (fix rename — propaga el nombre a toda la tupla)', () => {
+  const svc: Service = {
+    id: 's1', business_id: BID, name: 'Cruzada', duration_minutes: 60, price: 100,
+    description: null, active: true, created_at: '',
+  }
+  const pro: Professional = {
+    id: 'p1', business_id: BID, name: 'Cruzada', last_name: null, specialty: null, license_number: null,
+    phone: null, email: null, photo_url: null, active: true, service_id: 's1', created_at: '',
+  }
+
+  it('renombra service (+precio+duración) + professional + espacio DEDICADO, con business_id', async () => {
+    const { client, log } = makeMockClient()
+    const cancha = { service: svc, professional: pro, spaceIds: ['spD'] }
+    const agendaSpaces: AgendaSpace[] = [{ business_id: BID, professional_id: 'p1', space_id: 'spD' }]
+    const res = await editCancha(client as never, BID, cancha, { name: 'Cancha B', price: 200, duration: 90 }, agendaSpaces)
+
+    expect(res.ok).toBe(true)
+    const svcUpd = opsOn(log, 'services', 'update')[0].payload as Record<string, unknown>
+    expect(svcUpd.name).toBe('Cancha B')
+    expect(svcUpd.price).toBe(200)
+    expect(svcUpd.duration_minutes).toBe(90)
+    const proUpd = opsOn(log, 'professionals', 'update')[0].payload as Record<string, unknown>
+    expect(proUpd.name).toBe('Cancha B')
+    const spUpd = opsOn(log, 'spaces', 'update')
+    expect(spUpd).toHaveLength(1) // el dedicado se renombra
+    expect((spUpd[0].payload as Record<string, unknown>).name).toBe('Cancha B')
+    // business_id en cada update (defensa en profundidad).
+    expect(opsOn(log, 'services', 'update')[0].filters.business_id).toBe(BID)
+    expect(opsOn(log, 'professionals', 'update')[0].filters.business_id).toBe(BID)
+  })
+
+  it('NO renombra un espacio COMPARTIDO (mapeado a >1 agenda), sí service + professional', async () => {
+    const { client, log } = makeMockClient()
+    const cancha = { service: svc, professional: pro, spaceIds: ['spShared'] }
+    const agendaSpaces: AgendaSpace[] = [
+      { business_id: BID, professional_id: 'p1', space_id: 'spShared' }, // esta cancha
+      { business_id: BID, professional_id: 'p2', space_id: 'spShared' }, // otra cancha → compartido
+    ]
+    const res = await editCancha(client as never, BID, cancha, { name: 'Cancha B', price: 200, duration: 90 }, agendaSpaces)
+
+    expect(res.ok).toBe(true)
+    expect(opsOn(log, 'spaces', 'update')).toHaveLength(0) // NO toca el compartido
+    expect(opsOn(log, 'services', 'update')).toHaveLength(1)
+    expect(opsOn(log, 'professionals', 'update')).toHaveLength(1)
+  })
+})
+
+describe('canchas: setCanchaActive (toggle reversible)', () => {
+  const svc: Service = {
+    id: 's1', business_id: BID, name: 'C', duration_minutes: 60, price: 100,
+    description: null, active: false, created_at: '',
+  }
+  const pro: Professional = {
+    id: 'p1', business_id: BID, name: 'C', last_name: null, specialty: null, license_number: null,
+    phone: null, email: null, photo_url: null, active: false, service_id: 's1', created_at: '',
+  }
+  const cancha = { service: svc, professional: pro, spaceIds: ['spD'] }
+
+  it('activa: active=true en service Y professional, con business_id, sin borrar nada', async () => {
+    const { client, log } = makeMockClient()
+    const res = await setCanchaActive(client as never, BID, cancha, true)
+
+    expect(res.ok).toBe(true)
+    expect((opsOn(log, 'services', 'update')[0].payload as Record<string, unknown>).active).toBe(true)
+    expect((opsOn(log, 'professionals', 'update')[0].payload as Record<string, unknown>).active).toBe(true)
+    expect(opsOn(log, 'services', 'update')[0].filters.business_id).toBe(BID)
+    expect(opsOn(log, 'professionals', 'update')[0].filters.business_id).toBe(BID)
+    expect(log.some(o => o.op === 'delete')).toBe(false)
+  })
+
+  it('desactiva: active=false en ambos', async () => {
+    const { client, log } = makeMockClient()
+    const res = await setCanchaActive(client as never, BID, { ...cancha, service: { ...svc, active: true } }, false)
+
+    expect(res.ok).toBe(true)
+    expect((opsOn(log, 'services', 'update')[0].payload as Record<string, unknown>).active).toBe(false)
+    expect((opsOn(log, 'professionals', 'update')[0].payload as Record<string, unknown>).active).toBe(false)
   })
 })

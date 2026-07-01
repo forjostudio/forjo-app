@@ -18,14 +18,14 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Business, Service, Professional, Space, AgendaSpace } from '@/lib/types'
-import { provisionCancha, canchasFromData, deleteCancha, type Cancha } from '@/lib/canchas'
+import { provisionCancha, canchasFromData, deleteCancha, editCancha as persistCanchaEdit, setCanchaActive, type Cancha } from '@/lib/canchas'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Trash2, Clock, DollarSign, Pencil, MapPin, Check } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Pencil, MapPin, Check, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -116,33 +116,84 @@ export function CanchasManager({
     if (!(editPrice > 0)) { toast.error('El precio debe ser mayor a 0'); return }
     if (!(editDuration > 0)) { toast.error('La duración debe ser mayor a 0'); return }
     setSavingEdit(true)
-    const payload = { name, price: editPrice, duration_minutes: editDuration }
-    // Defensa en profundidad: filtro por business_id además de la RLS. Cada cancha conserva SU duración
-    // (edita solo su propio service) → dos canchas nunca comparten duración/precio.
-    const { error } = await supabase.from('services').update(payload)
-      .eq('id', editCancha.service.id).eq('business_id', business.id)
+    // Propaga el nombre a TODAS las filas que lo muestran (service + professional + espacios DEDICADOS);
+    // los espacios compartidos NO se renombran. Cada cancha edita SOLO su service → conserva su duración/precio.
+    const target = editCancha
+    const res = await persistCanchaEdit(supabase, business.id, target, { name, price: editPrice, duration: editDuration }, agendaSpaces)
     setSavingEdit(false)
-    if (error) { toast.error('Error al guardar'); return }
-    setServices(prev => prev.map(s => s.id === editCancha.service.id ? { ...s, ...payload } : s))
+    if (!res.ok) { toast.error('Error al guardar'); return }
+    // Ids de los espacios DEDICADOS de esta cancha (mapeados solo a su agenda) → se renombran en el estado.
+    const dedicatedIds = target.spaceIds.filter(id => {
+      const m = agendaSpaces.filter(a => a.space_id === id)
+      return m.length === 1 && m[0].professional_id === target.professional.id
+    })
+    setServices(prev => prev.map(s => s.id === target.service.id ? { ...s, name, price: editPrice, duration_minutes: editDuration } : s))
+    setProfessionals(prev => prev.map(p => p.id === target.professional.id ? { ...p, name } : p))
+    setSpaces(prev => prev.map(sp => dedicatedIds.includes(sp.id) ? { ...sp, name } : sp))
     setEditCancha(null)
     toast.success('Cancha actualizada')
   }
 
-  // ── Borrado (soft-delete por defecto, D-05) detrás de ConfirmDialog ──────────────────────────
+  // ── Activar / desactivar (reversible, D-05) ──────────────────────────────────────────────────
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+
+  async function toggleActive(c: Cancha) {
+    const next = !c.service.active
+    setTogglingId(c.service.id)
+    const res = await setCanchaActive(supabase, business.id, c, next)
+    setTogglingId(null)
+    if (!res.ok) { toast.error('No se pudo actualizar la cancha'); return }
+    setServices(prev => prev.map(s => s.id === c.service.id ? { ...s, active: next } : s))
+    setProfessionals(prev => prev.map(p => p.id === c.professional.id ? { ...p, active: next } : p))
+    toast.success(next ? 'Cancha activada' : 'Cancha desactivada')
+  }
+
+  // ── Eliminar permanentemente (hard-delete, D-05) con gate por tipeo "ELIMINAR" ────────────────
   const [delCancha, setDelCancha] = useState<Cancha | null>(null)
+  const [delPending, setDelPending] = useState<number | null>(null) // reservas próximas; null = contando
+
+  async function openDelete(c: Cancha) {
+    setDelCancha(c)
+    setDelPending(null)
+    // Contar reservas PRÓXIMAS (pending/pending_payment/confirmed, fecha >= hoy AR) de la agenda de la cancha.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+    const { count } = await supabase.from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', business.id)
+      .eq('professional_id', c.professional.id)
+      .in('status', ['pending', 'pending_payment', 'confirmed'])
+      .gte('date', today)
+    setDelPending(count ?? 0)
+  }
 
   async function confirmDelete() {
     if (!delCancha) return
-    // Soft: active=false en service Y professional → la cancha sale del booking pero conserva reservas.
-    const res = await deleteCancha(supabase, business.id, delCancha)
-    if (!res.ok) { toast.error('No se pudo desactivar la cancha'); return }
-    const svcId = delCancha.service.id
-    const proId = delCancha.professional.id
-    setServices(prev => prev.map(s => s.id === svcId ? { ...s, active: false } : s))
-    setProfessionals(prev => prev.map(p => p.id === proId ? { ...p, active: false } : p))
+    const target = delCancha
+    const res = await deleteCancha(supabase, business.id, target, { hard: true })
+    if (!res.ok) {
+      // FK: la cancha tiene turnos asociados → no se puede borrar; guiar a desactivar.
+      toast.error(res.error === 'has_appointments'
+        ? 'No se puede eliminar: la cancha tiene turnos asociados. Desactivala en su lugar.'
+        : 'No se pudo eliminar la cancha')
+      setDelCancha(null)
+      return
+    }
+    const proId = target.professional.id
+    setServices(prev => prev.filter(s => s.id !== target.service.id))
+    setProfessionals(prev => prev.filter(p => p.id !== proId))
+    setAgendaSpaces(prev => prev.filter(a => a.professional_id !== proId))
     setDelCancha(null)
-    toast.success('Cancha desactivada')
+    toast.success('Cancha eliminada')
   }
+
+  // Descripción del dialog de eliminar: avisa de reservas próximas y exige tipear ELIMINAR.
+  const delDescription = delCancha
+    ? (delPending === null
+        ? `Vas a eliminar "${delCancha.service.name}" de forma permanente. Verificando reservas…`
+        : delPending > 0
+          ? `⚠ "${delCancha.service.name}" tiene ${delPending} reserva(s) próxima(s). Eliminarla es permanente y no se puede deshacer. Si querés conservar el historial, desactivala en su lugar. Para eliminar igual, escribí ELIMINAR.`
+          : `Vas a eliminar "${delCancha.service.name}" de forma permanente. No se puede deshacer. Escribí ELIMINAR para confirmar.`)
+    : undefined
 
   // Nombre del/los espacio(s) que ocupa cada cancha, para la línea de detalle de la lista.
   const spaceName = (id: string) => spaces.find(s => s.id === id)?.name ?? 'Espacio'
@@ -166,10 +217,13 @@ export function CanchasManager({
                     {c.service.duration_minutes}min · ${Number(c.service.price).toLocaleString('es-AR')}
                   </p>
                 </div>
+                <Button variant="ghost" size="icon" disabled={togglingId === c.service.id} className={cn('h-8 w-8', c.service.active ? 'text-muted-foreground hover:text-foreground' : 'text-primary hover:text-primary')} onClick={() => toggleActive(c)} aria-label={c.service.active ? `Desactivar ${c.service.name}` : `Activar ${c.service.name}`}>
+                  {c.service.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEdit(c)} aria-label={`Editar ${c.service.name}`}>
                   <Pencil className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => setDelCancha(c)} aria-label={`Eliminar ${c.service.name}`}>
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => openDelete(c)} aria-label={`Eliminar ${c.service.name}`}>
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
@@ -279,14 +333,16 @@ export function CanchasManager({
         </DialogContent>
       </Dialog>
 
-      {/* Confirmación de borrado (soft-delete: la cancha se desactiva y conserva sus reservas). */}
+      {/* Eliminación PERMANENTE (hard-delete): gate por tipeo "ELIMINAR" + aviso de reservas próximas.
+          Para solo sacarla del booking (reversible) está el toggle Activar/Desactivar de cada fila. */}
       <ConfirmDialog
         open={!!delCancha}
         onOpenChange={o => { if (!o) setDelCancha(null) }}
-        title="¿Desactivar cancha?"
-        description={delCancha ? `Vas a desactivar "${delCancha.service.name}". Deja de aparecer en las reservas nuevas, pero conserva las reservas ya hechas.` : undefined}
+        title="¿Eliminar cancha?"
+        description={delDescription}
+        confirmWord="ELIMINAR"
         risk="alto"
-        confirmLabel="Desactivar"
+        confirmLabel="Eliminar"
         destructive
         onConfirm={confirmDelete}
       />
