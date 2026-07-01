@@ -21,9 +21,7 @@ const riskBadgeVariants = cva(
   {
     variants: {
       risk: {
-        // alto → relleno rojo de marca (--crm-danger, el único rojo), texto crema. Consistente con
-        // `medio` (relleno amarillo): el nivel se lee por el relleno, sin dot.
-        alto: 'border-transparent bg-[var(--crm-danger)] text-[var(--crm-danger-foreground)]',
+        alto: 'border-border bg-secondary text-foreground',
         medio: 'border-transparent bg-primary text-primary-foreground',
         bajo: 'border-border bg-secondary text-muted-foreground',
       },
@@ -48,7 +46,15 @@ export function RiskBadge({
   VariantProps<typeof riskBadgeVariants>) {
   return (
     <span className={cn(riskBadgeVariants({ risk }), className)} {...props}>
-      {/* Dot indicador: neutro en bajo; alto y medio van rellenos (el color del pill ya marca el nivel). */}
+      {/* Dot indicador: rojo --crm-danger en alto, neutro en bajo, ninguno en medio (el
+          relleno amarillo ya marca el nivel). */}
+      {risk === 'alto' && (
+        <span
+          aria-hidden="true"
+          className="size-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: 'var(--crm-danger)' }}
+        />
+      )}
       {risk === 'bajo' && (
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />
       )}
