@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace } from '@/lib/types'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
+import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -159,6 +160,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
   const term = resolveVertical(business).terminology
   const locWord = term.location.toLowerCase()
+  // Vertical canchas: en /servicios (view='servicios') se renderiza el manager de canchas (D-03) en
+  // lugar del CRUD genérico de services. El resto de verticales conserva el CRUD de services intacto.
+  const isCanchas = resolveVertical(business).key === 'canchas'
 
   // ── Apariencia: paleta + tema (next-themes) ─────────────────────────────────
   const { theme, setTheme } = useTheme()
@@ -1148,6 +1152,24 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
         {/* ── Services ── */}
         <TabsContent value="services" className="mt-4">
+          {isCanchas ? (
+            /* Vertical canchas (D-03): manager de canchas en lugar del CRUD genérico de services.
+               Consume lib/canchas.ts (Plan 01) y comparte el estado de services/professionals/
+               spaces/agendaSpaces para reconstruir la lista por service_id. */
+            <CanchasManager
+              business={business}
+              supabase={supabase}
+              services={services}
+              setServices={setServices}
+              professionals={professionals}
+              setProfessionals={setProfessionals}
+              spaces={spaces}
+              setSpaces={setSpaces}
+              agendaSpaces={agendaSpaces}
+              setAgendaSpaces={setAgendaSpaces}
+            />
+          ) : (
+          <>
           <Card className="p-6 space-y-4">
             <div className="space-y-2">
               {services.map(s => {
@@ -1259,6 +1281,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               <Button onClick={saveEditService} disabled={savingEditSvc || !editSvcForm.name.trim()}>{savingEditSvc ? 'Guardando...' : 'Guardar'}</Button>
             </DialogContent>
           </Dialog>
+          </>
+          )}
         </TabsContent>
 
         {/* ── Professionals ── */}
