@@ -273,4 +273,40 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     // agenda, así que captura las dos agendas que comparten el espacio. Si ambas hubieran entrado → 2.
     expect(await occupantsAt('09:00')).toBe(1)
   })
+
+  // ALQUILER-02 — exclusión por espacio compartido SECUENCIAL (booking de canchas, Phase 3).
+  // Complementa a CONC-03 (que prueba la carrera concurrente): acá el escenario es SECUENCIAL —
+  // reservar una cancha y DESPUÉS intentar la cancha HERMANA que comparte el mismo espacio físico en
+  // un horario solapado → la 2ª recibe slot_taken. Es el caso de uso real del booking de alquiler:
+  // dos canchas cruzadas (ej. F11 y una de sus componentes A) comparten espacio, reservar una bloquea
+  // la otra. La garantía la da el motor v0.12 (book_slot_atomic: advisory lock por espacio + EXISTS
+  // cross-bucket), no un check suelto — reuso directo vía createAppointmentCore, cero código nuevo del
+  // motor. Verificación DURA: exactamente 1 fila ocupa el slot a través de AMBAS agendas.
+  it('ALQUILER-02 — exclusión por espacio (secuencial): reservar una cancha bloquea la hermana que comparte espacio', async () => {
+    await seedTimeBlock(t, { capacity: 1 }) // canchas = cupo 1; el conflicto es por espacio.
+
+    // Espacio físico compartido (cancha A) + una 2ª agenda-cancha hermana (professional_id REAL, nunca
+    // sentinela — Pitfall 1). Ambas agendas mapeadas al MISMO espacio A → comparten espacio.
+    const spaceA = await seedSpace(t, { name: 'A' })
+    const agendaB = await seedProfessional(t, { name: '__test_agenda_B_seq' })
+    await seedAgendaSpace(t, { professionalId: t.professionalId, spaceId: spaceA })
+    await seedAgendaSpace(t, { professionalId: agendaB, spaceId: spaceA })
+
+    // 1ª reserva: cancha A en '09:00' → ok.
+    const first = await createAppointmentCore({ ...baseInput(), professionalId: t.professionalId, time: '09:00' })
+    expect(first.ok).toBe(true)
+
+    // 2ª reserva: cancha HERMANA (agendaB) en el MISMO '09:00' (solapa en tiempo) → comparten espacio A
+    // → slot_taken. La exclusión la impone el RPC (EXISTS cross-bucket por espacio), no un check JS.
+    const second = await createAppointmentCore({ ...baseInput(), professionalId: agendaB, time: '09:00' })
+    expect(second.ok).toBe(false)
+    if (!second.ok) {
+      expect(second.error).toBe('slot_taken')
+      expect(second.status).toBe(409)
+    }
+
+    // Verificación DURA en la DB: exactamente 1 fila ocupa el slot a través de AMBAS agendas hermanas
+    // (no 2). Si la exclusión por espacio se rompiera, habría 2 y este assert lo detecta.
+    expect(await occupantsAt('09:00')).toBe(1)
+  })
 })
