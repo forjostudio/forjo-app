@@ -1,8 +1,9 @@
 import { createPublicServerClient } from '@/lib/supabase/public'
 import { notFound } from 'next/navigation'
 import { BookingClient } from './booking-client'
+import { CanchasBookingClient } from './canchas-booking-client'
 import { LandingRenderer } from '@/components/landing/landing-renderer'
-import type { PublicBusiness, Location } from '@/lib/types'
+import type { PublicBusiness, Location, PublicCancha } from '@/lib/types'
 import { parseLandingConfig } from '@/lib/landing/schema'
 import { resolveVertical } from '@/lib/verticals'
 import { buildJsonLd } from '@/lib/landing/seo'
@@ -56,7 +57,7 @@ export default async function PublicBookingPage({ params }: Props) {
 
   // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
   const todayStr = new Date().toISOString().slice(0, 10)
-  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }] = await Promise.all([
+  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }, { data: canchas }] = await Promise.all([
     // Vista pública acotada (migración 027): leer la vista, NO la tabla base `services` con anon
     // key. La vista ya filtra WHERE active = true, así que el .eq('active', true) es redundante
     // (consistente con cómo leemos public_professionals). Tras el DROP POLICY de 028, anon ya no
@@ -67,6 +68,10 @@ export default async function PublicBookingPage({ params }: Props) {
     supabase.from('time_blocks').select('*').eq('business_id', business.id),
     supabase.from('schedule_exceptions').select('date, closed, start_time, end_time, location_id').eq('business_id', business.id).gte('date', todayStr),
     supabase.from('locations').select('id, name, address, phone').eq('business_id', business.id).or('is_active.is.null,is_active.eq.true'),
+    // Vista pública acotada (migración 044): canchas del vertical canchas con { id, business_id,
+    // name, price, duration_minutes }, SIN service_id. Query aditiva y barata: para salud/belleza/
+    // general devuelve [] (no hay canchas) y no afecta su render. La usa el gateo por vertical abajo.
+    supabase.from('public_canchas').select('*').eq('business_id', business.id),
   ])
 
   // JSON-LD LocalBusiness (SEO-03 / D9-04): se construye SOLO con la data ya fetcheada
@@ -88,28 +93,47 @@ export default async function PublicBookingPage({ params }: Props) {
     url: `${base}/${slug}`,
   })
 
+  // Gateo por vertical (D-05): en canchas el flujo de reserva es CanchasBookingClient (3 pasos,
+  // sin profesional ni duración custom), leyendo public_canchas; el resto (salud/belleza/general)
+  // renderiza BookingClient byte-idéntico. `vertical` ya se resolvió arriba (:76) — se reusa.
+  const isCanchas = vertical.key === 'canchas'
+  // El slot de booking resuelto por vertical: se usa tanto en la rama legacy (directo) como
+  // dentro del LandingRenderer (como prop bookingSlot), para no acoplar el renderer al modelo canchas.
+  const bookingNode = isCanchas ? (
+    <CanchasBookingClient
+      business={business as unknown as PublicBusiness}
+      canchas={(canchas || []) as unknown as PublicCancha[]}
+      timeBlocks={timeBlocks || []}
+      exceptions={exceptions || []}
+      locations={locations || []}
+    />
+  ) : (
+    <BookingClient
+      business={business as unknown as PublicBusiness}
+      services={services || []}
+      professionals={professionals || []}
+      timeBlocks={timeBlocks || []}
+      exceptions={exceptions || []}
+      locations={locations || []}
+    />
+  )
+
   // Seam legacy-vs-renderer (Pitfall 4: NO se toca force-dynamic, fetch ni se agregan queries).
   // landing === null → passthrough legacy byte-idéntico (LAND-06, probado en F6): un negocio que
-  // nunca optó por una landing ve EXACTAMENTE el BookingClient de siempre, cero regresión.
-  // El <JsonLdScript> es aditivo (no altera los props de BookingClient/LandingRenderer, LAND-02).
+  // nunca optó por una landing ve EXACTAMENTE su booking de siempre (BookingClient o, en canchas,
+  // CanchasBookingClient). El <JsonLdScript> es aditivo (no altera los props, LAND-02).
   if (landing === null) {
     return (
       <>
         <JsonLdScript jsonLd={jsonLd} />
-        <BookingClient
-          business={business as unknown as PublicBusiness}
-          services={services || []}
-          professionals={professionals || []}
-          timeBlocks={timeBlocks || []}
-          exceptions={exceptions || []}
-          locations={locations || []}
-        />
+        {bookingNode}
       </>
     )
   }
 
   // landing !== null → el LandingRenderer compone las secciones por order/enabled e inyecta
-  // booking (D7-05). Mismos props que el passthrough + el config; sin queries nuevas.
+  // booking (D7-05). El booking ya resuelto por vertical va como prop `bookingSlot` (D-05): el
+  // renderer lo mete en su caja negra <section id="reservar"> sin conocer el modelo canchas.
   return (
     <>
       <JsonLdScript jsonLd={jsonLd} />
@@ -121,6 +145,7 @@ export default async function PublicBookingPage({ params }: Props) {
         timeBlocks={timeBlocks || []}
         exceptions={exceptions || []}
         locations={locations || []}
+        bookingSlot={bookingNode}
       />
     </>
   )

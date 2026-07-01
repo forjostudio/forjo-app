@@ -18,6 +18,7 @@
 //  2) location + hours se COMBINAN en UNA sección 2-col (mock `.frj-loc`) con UN solo número
 //     fantasma cuando AMBAS están visibles. Si sólo una está visible, va full-width como hoy.
 
+import type { ReactNode } from 'react'
 import { BookingClient } from '@/app/[slug]/booking-client'
 import {
   orderedSections,
@@ -52,13 +53,18 @@ interface Props {
   timeBlocks: TimeBlock[]
   exceptions: ExceptionLite[]
   locations: LocationLite[]
+  // Booking ya resuelto por vertical en page.tsx (D-05): si viene, reemplaza al BookingClient
+  // por defecto dentro de la caja negra <section id="reservar"> (p.ej. CanchasBookingClient para
+  // el vertical canchas). Así el renderer NO conoce el modelo canchas ni agrega queries: es un
+  // slot ReactNode opaco. Si es undefined, cae en el BookingClient de siempre (otros verticales).
+  bookingSlot?: ReactNode
 }
 
 // Tipos numerados (los que llevan número fantasma en el mock). hero/booking/cta NO numeran.
 // location+hours combinadas cuentan como UNA unidad numerada.
 type RenderableSection = ReturnType<typeof orderedSections>[number]
 
-export function LandingRenderer({ config, business, services, professionals, timeBlocks, exceptions, locations }: Props) {
+export function LandingRenderer({ config, business, services, professionals, timeBlocks, exceptions, locations, bookingSlot }: Props) {
   // orderedSections: orden + filtro enabled + inyección de booking al final (D7-05).
   const sections = orderedSections(config.sections)
 
@@ -175,21 +181,25 @@ export function LandingRenderer({ config, business, services, professionals, tim
           case 'cta':
             return <Cta key={i} data={s.data} business={business} />
           case 'booking':
-            // CAJA NEGRA (Pitfall 2 / Blocker Pitfall 4/8): BookingClient se envuelve SOLO en
+            // CAJA NEGRA (Pitfall 2 / Blocker Pitfall 4/8): el booking se envuelve SOLO en
             // <section id="reservar">. PROHIBIDO transform/overflow-hidden/position:fixed|sticky/
             // filter/perspective/altura-fija alrededor — cualquiera crea un containing block que
             // rompe el position:fixed de vaul (drawers), sonner (toasts) y react-day-picker
-            // (popover del calendario). Props pasados VERBATIM: contrato congelado (SC#2, LAND-02).
+            // (popover del calendario). D-05: si page.tsx pasó un `bookingSlot` ya resuelto por
+            // vertical (CanchasBookingClient), lo renderizamos dentro de la MISMA caja negra sin
+            // envoltorios nuevos; si no, el BookingClient de siempre (props VERBATIM, SC#2/LAND-02).
             return (
               <section id="reservar" key={i}>
-                <BookingClient
-                  business={business}
-                  services={services}
-                  professionals={professionals}
-                  timeBlocks={timeBlocks}
-                  exceptions={exceptions}
-                  locations={locations}
-                />
+                {bookingSlot ?? (
+                  <BookingClient
+                    business={business}
+                    services={services}
+                    professionals={professionals}
+                    timeBlocks={timeBlocks}
+                    exceptions={exceptions}
+                    locations={locations}
+                  />
+                )}
               </section>
             )
           default:
