@@ -138,6 +138,18 @@ export interface AgendaSpace {
   space_id: string
 }
 
+// Cancha pública (vista acotada `public_canchas`, migr. 044). Forma que ve el anon en el
+// booking público de canchas: `id` = professional_id de la agenda-cancha; `price`/`duration_minutes`
+// salen del service 1:1 de la cancha (D-03). NUNCA expone `service_id` (vive solo en JOIN+WHERE).
+// El client reserva con `professionalId = id` (sin serviceId): el server deriva el service (Plan 02).
+export interface PublicCancha {
+  id: string
+  business_id: string
+  name: string
+  price: number
+  duration_minutes: number
+}
+
 export interface Service {
   id: string
   business_id: string
