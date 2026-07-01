@@ -37,7 +37,11 @@ export async function POST(request: Request) {
   const notes = typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim().slice(0, 1000) : null
   const recaptchaToken = typeof body.recaptchaToken === 'string' ? body.recaptchaToken : ''
 
-  if (!slug || !serviceId || !date || !time || !clientName) {
+  // Guard de campos requeridos. AMPLIADO para el vertical canchas (D-03): el cliente de canchas
+  // manda `professionalId` (la cancha) y NO `serviceId` — el service se deriva server-side más abajo.
+  // Por eso se exige (serviceId || professionalId) en vez de serviceId a secas. El path legacy
+  // (salud/belleza/general, que manda serviceId) queda byte-idéntico: si viene serviceId, pasa igual.
+  if (!slug || !(serviceId || professionalId) || !date || !time || !clientName) {
     return Response.json({ ok: false, error: 'missing_fields' }, { status: 400 })
   }
 
@@ -85,13 +89,50 @@ export async function POST(request: Request) {
     .select('id')
     .single()
 
+  // ── Derivación del service para el vertical CANCHAS (D-03) — la ÚNICA lógica server nueva de la fase ──
+  // El cliente de canchas manda `professionalId` (la cancha, = el bucket reservable) pero NUNCA
+  // `serviceId` ni precio: precio + duración fija son propios de la cancha y salen del server. En el
+  // modelo del motor v0.12 una cancha ES una fila de `professionals` con `service_id` NO nulo (puntero
+  // 1:1 cancha↔service, migr. 043); los professionals de salud/belleza/general tienen `service_id` NULL.
+  //
+  // Por eso, cuando llega `professionalId`, leemos ese professional re-validado por business_id
+  // (anti-tampering de tenant) y miramos su `service_id`:
+  //   - service_id NO nulo → es una CANCHA: DERIVAMOS ese service y lo usamos SIEMPRE, ignorando por
+  //     completo cualquier `serviceId` que venga en el body (regla dura D-03 / Pitfall 2: nunca merge
+  //     cliente-provee-service; un serviceId forjado no puede reservar la cancha cara al precio/duración
+  //     de otra). El resolvedServiceId va al core, que lo re-valida OTRA VEZ por business_id (doble
+  //     barrera) y de él saca precio (ALQUILER-04) y duración fija (ALQUILER-01).
+  //   - professional inexistente para ESTE negocio (cross-tenant / id inventado) Y sin serviceId del
+  //     body → invalid_service (400): la cancha ajena no se puede reservar contra este slug.
+  //   - professional legítimo pero con service_id NULL → es un professional GENÉRICO (legacy): NO se
+  //     deriva nada, se mantiene el serviceId del body → el path salud/belleza/general queda byte-idéntico.
+  let resolvedServiceId = serviceId
+  if (professionalId && professionalId !== 'none') {
+    const { data: cancha } = await supabase
+      .from('professionals')
+      .select('service_id')
+      .eq('id', professionalId)
+      .eq('business_id', business.id) // anti-tampering: la cancha/agenda DEBE ser de este negocio (por slug)
+      .single()
+    if (cancha?.service_id) {
+      // Es una cancha: el service SIEMPRE se deriva del professional; el serviceId del body se ignora.
+      resolvedServiceId = cancha.service_id as string
+    } else if (!resolvedServiceId) {
+      // No es una cancha de este negocio (o no existe) y el cliente tampoco mandó un serviceId legacy
+      // válido → no hay service que reservar. Caso canchas cross-tenant / professionalId inventado.
+      return Response.json({ ok: false, error: 'invalid_service' }, { status: 400 })
+    }
+    // Si cancha.service_id es null pero HAY serviceId del body → professional genérico (legacy): se
+    // deja resolvedServiceId = serviceId sin tocar. El core re-valida ambos por business_id.
+  }
+
   // Núcleo compartido: anti-tampering (service/professional/location por business_id) + re-check de
   // solapamiento con buffer + liberación de holds vencidos + insert + traducción 23505/23P01 →
   // slot_taken. Devuelve los ids de holds liberados; los mails de hold vencido se mandan acá abajo.
   const result = await createAppointmentCore({
     supabase,
     business,
-    serviceId,
+    serviceId: resolvedServiceId,
     professionalId,
     locationId,
     date,
