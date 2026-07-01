@@ -674,7 +674,8 @@ CREATE TABLE IF NOT EXISTS "public"."professionals" (
     "specialty" "text",
     "license_number" "text",
     "phone" "text",
-    "email" "text"
+    "email" "text",
+    "service_id" "uuid"
 );
 
 
@@ -1008,6 +1009,10 @@ CREATE UNIQUE INDEX "appointments_no_double_booking" ON "public"."appointments" 
 
 
 
+CREATE INDEX "professionals_service_id_idx" ON "public"."professionals" USING "btree" ("service_id") WHERE ("service_id" IS NOT NULL);
+
+
+
 CREATE INDEX "audit_log_action_idx" ON "public"."audit_log" USING "btree" ("action");
 
 
@@ -1303,6 +1308,11 @@ ALTER TABLE ONLY "public"."professionals"
 
 ALTER TABLE ONLY "public"."professionals"
     ADD CONSTRAINT "professionals_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id");
+
+
+
+ALTER TABLE ONLY "public"."professionals"
+    ADD CONSTRAINT "professionals_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE SET NULL;
 
 
 

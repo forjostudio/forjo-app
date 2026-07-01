@@ -113,6 +113,10 @@ export interface Professional {
   email: string | null
   photo_url: string | null
   active: boolean
+  // Puntero 1:1 a su `service` de precio+duración en el vertical canchas (migración 043, D-06).
+  // La cancha ES esta fila de agenda; service_id apunta al service que le da precio+duración fija.
+  // NULL en salud/belleza/general (esos verticales no son canchas y no usan la columna).
+  service_id?: string | null
   created_at: string
 }
 
