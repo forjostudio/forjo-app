@@ -19,7 +19,7 @@ Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del v
 
 - [x] **Phase 1: Vertical Canchas** - El negocio setea su rubro a "canchas" y el dashboard adopta terminología y menú propios (sin "Profesionales/Equipo"), sin romper los otros verticales (completed 2026-06-30)
 - [x] **Phase 2: Configuración de Canchas** - El dueño crea/edita/elimina canchas como entidad reservable (nombre + precio propio + duración fija propia) mapeada a espacios físicos del motor v0.12 (completed 2026-07-01)
-- [ ] **Phase 3: Booking público de alquiler** - El cliente elige cancha + horario disponible (sin elegir duración), al precio de la cancha, respetando la exclusión atómica por espacio
+- [x] **Phase 3: Booking público de alquiler** - El cliente elige cancha + horario disponible (sin elegir duración), al precio de la cancha, respetando la exclusión atómica por espacio (completed 2026-07-02)
 
 ## Phase Details
 
@@ -80,19 +80,19 @@ Faseo: vertical-scaffold → cancha-config → booking-público (el modelo del v
   3. Reservar una cancha respeta la exclusión por espacio: si comparte espacio con otra ocupada en un horario solapado, ese horario no aparece disponible / la reserva se rechaza (hereda la atomicidad de `book_slot_atomic`, sin sobre-reserva bajo concurrencia).
   4. Para más tiempo que la duración de la cancha, el cliente puede sacar dos turnos consecutivos sobre el mismo recurso (sin duración custom).
 
-**Plans**: 3 plans
+**Plans**: 2/3 plans executed
 **UI hint**: yes
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Migración 044 `public_canchas` (vista acotada sin service_id, molde public_services) + scaffold de tests (ALQUILER-01/03/04 + anti-tampering + cross-tenant + espacio compartido) (wave 1)
+- [x] 03-01-PLAN.md — Migración 044 `public_canchas` (vista acotada sin service_id, molde public_services) + scaffold de tests (ALQUILER-01/03/04 + anti-tampering + cross-tenant + espacio compartido) (wave 1)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 03-02-PLAN.md — Rama canchas en `/api/booking/create` (D-03): deriva el service de professionals.service_id server-side, ignora el serviceId del cliente, re-valida por business_id (wave 2)
+- [x] 03-02-PLAN.md — Rama canchas en `/api/booking/create` (D-03): deriva el service de professionals.service_id server-side, ignora el serviceId del cliente, re-valida por business_id (wave 2)
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 03-03-PLAN.md — `canchas-booking-client.tsx` (3 pasos, D-02) + gateo por vertical en `page.tsx` (lee public_canchas) y `landing-renderer.tsx` (booking como prop, D-05) (wave 3)
+- [x] 03-03-PLAN.md — `canchas-booking-client.tsx` (3 pasos, D-02) + gateo por vertical en `page.tsx` (lee public_canchas) y `landing-renderer.tsx` (booking como prop, D-05) (wave 3)
 
 **Phase-level decision (defer to discuss-phase)**: cómo la vista pública lee el precio/duración/disponibilidad de la cancha depende de dónde quedó el modelo en Phase 2 (servicio vs columnas vs tabla) — qué vista acotada (`public_*`) expone la cancha a `anon` sin filtrar config interna. Resolver en discuss-phase de esta fase, una vez lockeado el modelo de Phase 2.
 
@@ -107,4 +107,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Vertical Canchas | 1/1 | Complete    | 2026-06-30 |
 | 2. Configuración de Canchas | 2/2 | Complete    | 2026-07-01 |
-| 3. Booking público de alquiler | 0/3 | Not started | - |
+| 3. Booking público de alquiler | 3/3 | Complete    | 2026-07-02 |
