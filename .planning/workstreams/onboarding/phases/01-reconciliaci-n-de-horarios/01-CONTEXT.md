@@ -58,10 +58,11 @@ book_slot_atomic sobre time_blocks). No se agregan capacidades nuevas de agenda.
   Días sin `time_blocks` = cerrado en el display.
 
 ### Cross-phase (nota para Phase 2)
-- **D-06:** El usuario quiere, además del horario partido (D-04), un **botón "Omitir / agregar más
+- **D-06 [informational]:** (NO es una decisión de implementación de Phase 1 — es un forward-reference
+  a Phase 2.) El usuario quiere, además del horario partido (D-04), un **botón "Omitir / agregar más
   tarde"** en el paso de horarios del onboarding. El botón "Omitir" formal es **ONB-01 (Phase 2)**;
-  en Phase 1 el paso de horarios queda con soporte de time_blocks + split. Si es barato incluir el
-  skip del paso de horarios acá, hacerlo; si no, es el primer candidato natural del rework de Phase 2.
+  en Phase 1 el paso de horarios queda con soporte de time_blocks + split. El skip del paso de
+  horarios es el primer candidato natural del rework de Phase 2 — se implementa allá, no acá.
 
 ### Claude's Discretion
 - UI exacta del paso de horarios con split (botones agregar/quitar bloque) — seguir el patrón del
