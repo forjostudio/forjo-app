@@ -37,10 +37,11 @@ book_slot_atomic sobre time_blocks). No se agregan capacidades nuevas de agenda.
 ### Eliminación de `business_hours`
 - **D-03:** Se **DROPEA la tabla `business_hours`** (fold de SCHED-DROP-01 a esta fase, ya que no hay
   data que preservar). Orden obligatorio: **primero migrar los 3 lectores** (D-05) a `time_blocks`,
-  **después** el DROP, para no romper nada. Migración numerada nueva (próximo número disponible;
-  verificar la secuencia — 045 ya existe en `gsd/motor-reservas` fuera de esta rama, coordinar el
-  número al planificar). Verificar con `grep` que ningún path lea `business_hours` antes del DROP.
-  Validar con `supabase db reset` local.
+  **después** el DROP, para no romper nada. **Migración 046** (`046_drop_business_hours.sql`): el
+  **045** es `045_landing_cms.sql` (CMS de la landing forjo.studio, YA en prod) — estaba en
+  `gsd/motor-reservas` y faltaba en main tras el merge canchas-solo; **restaurada en esta rama** para
+  que la secuencia matchee prod, así que 046 es el próximo libre. Verificar con `grep` que ningún path
+  lea `business_hours` antes del DROP. Validar con `supabase db reset` local.
 
 ### Onboarding pasa a escribir time_blocks (+ horario partido)
 - **D-04:** El paso de horarios del onboarding (`app/(onboarding)/onboarding/page.tsx:~209`) deja de
@@ -115,8 +116,8 @@ book_slot_atomic sobre time_blocks). No se agregan capacidades nuevas de agenda.
 
 ### Established Patterns
 - Migraciones numeradas en `supabase/migrations/*.sql`, aplicadas a mano + validadas con
-  `supabase db reset` local (⚠ coordinar el número: `045_landing_cms.sql` existe en `gsd/motor-reservas`,
-  fuera de esta rama `gsd/onboarding` — verificar la secuencia real en la rama al planificar).
+  `supabase db reset` local. RESUELTO: `045_landing_cms.sql` (prod) restaurada en esta rama; la nueva
+  del DROP es **046**.
 - Derivar "horario por día" agrupando por `day_of_week` (mismo criterio de dow que el motor).
 
 ### Integration Points
