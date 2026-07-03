@@ -680,22 +680,41 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Navigation */}
+          {/* Navigation — la detección de "último paso" y el avance/retroceso se guían por la POSICIÓN
+              dentro de visibleSteps (no por el literal 4), para saltar limpio el paso oculto en canchas
+              (Servicios n=2 → Horarios n=4). Cluster: Atrás — [ Omitir por ahora ] [ Siguiente ];
+              en el último paso solo la CTA Finalizar. */}
           <div className="flex justify-between mt-6 pt-4 border-t border-border">
             <Button
               variant="ghost"
-              onClick={() => setStep(s => s - 1)}
-              disabled={step === 1}
+              onClick={() => setStep(visibleSteps[currentIndex - 1].n)}
+              disabled={currentIndex === 0}
             >
               Atrás
             </Button>
-            {step < 4 ? (
-              <Button
-                onClick={() => setStep(s => s + 1)}
-                disabled={!canGoNext()}
-              >
-                Siguiente
-              </Button>
+            {!isLastStep ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {/* Omitir por ahora (D-01/D-04): visible SOLO en pasos opcionales intermedios
+                    (currentIndex > 0 = no en Negocio; !isLastStep = no en el último, ahí va Finalizar).
+                    variant="ghost" → menor énfasis, nunca accent (el accent queda para la única CTA
+                    forward). Avanza a la posición siguiente SIN correr canGoNext ni validar: skip
+                    granular por paso, no salto al final. No persiste nada (handleFinish ya filtra
+                    vacíos, D-05). Siempre habilitado en pasos opcionales. */}
+                {currentIndex > 0 && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setStep(visibleSteps[currentIndex + 1].n)}
+                  >
+                    Omitir por ahora
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setStep(visibleSteps[currentIndex + 1].n)}
+                  disabled={!canGoNext()}
+                >
+                  Siguiente
+                </Button>
+              </div>
             ) : (
               <Button onClick={handleFinish} disabled={loading}>
                 {loading ? 'Guardando...' : 'Finalizar y entrar al dashboard'}
