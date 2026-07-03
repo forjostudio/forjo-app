@@ -38,7 +38,12 @@ Faseo: reconciliación de horarios → rework UX del onboarding (los datos se un
   3. Los cuatro lectores actuales (panel de agenda, booking público, landing, agente) siguen funcionando sin regresión: ningún negocio existente pierde ni ve cambiados sus horarios tras la unificación.
   4. Editar los horarios desde el panel de agenda se refleja de forma consistente en todos los lectores (una sola fuente de verdad; no hay que cargarlos dos veces en dos lugares distintos).
 
-**Plans**: TBD
+**Plans**: 3 plans (2 waves — los lectores/escritores migran a `time_blocks` ANTES del DROP)
+
+Plans:
+- [ ] 01-01-PLAN.md — Onboarding escribe `time_blocks` (con horario partido) en vez de `business_hours` (SCHED-01) · wave 1
+- [ ] 01-02-PLAN.md — Agente de WhatsApp lee `time_blocks` (único lector vivo restante; la landing ya migró en web-builder) (SCHED-02) · wave 1
+- [ ] 01-03-PLAN.md — DROP `business_hours` (migr. 045) + regenerar schema.sql + quitar tipo `BusinessHour` (SCHED-02 / SCHED-DROP-01 folded) · wave 2, aplicación a prod MANUAL
 
 **Phase-level decision (defer to discuss-phase)**: **cuál es la tabla canónica de horarios.** Opciones a evaluar en discuss-phase (NO lockear acá): (a) migrar el onboarding a escribir `time_blocks` (lo que ya leen panel/booking) y migrar los lectores de `business_hours` (landing/agente) a `time_blocks` — `time_blocks` como única fuente; (b) mantener `business_hours` como fuente y hacer que panel/booking la lean; (c) una vista/sincronización que mantenga ambas coherentes de forma transitoria. Evaluar qué **minimiza migración** y **no rompe a los lectores actuales** (panel, booking, landing, agente). La deprecación/eliminación de la tabla perdedora queda diferida (SCHED-DROP-01, v2), así que la opción elegida puede mantener ambas tablas transitoriamente si eso reduce riesgo de regresión.
 
@@ -70,5 +75,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Reconciliación de horarios | 0/TBD | Not started | - |
+| 1. Reconciliación de horarios | 0/3 | Not started | - |
 | 2. Rework UX del onboarding | 0/TBD | Not started | - |
