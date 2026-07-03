@@ -304,19 +304,6 @@ CREATE TABLE IF NOT EXISTS "public"."audit_log" (
 ALTER TABLE "public"."audit_log" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."business_hours" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "business_id" "uuid",
-    "day_of_week" integer NOT NULL,
-    "open_time" time without time zone,
-    "close_time" time without time zone,
-    "is_open" boolean DEFAULT true
-);
-
-
-ALTER TABLE "public"."business_hours" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."business_secrets" (
     "business_id" "uuid" NOT NULL,
     "mp_access_token" "text",
@@ -682,19 +669,6 @@ CREATE TABLE IF NOT EXISTS "public"."professionals" (
 ALTER TABLE "public"."professionals" OWNER TO "postgres";
 
 
-CREATE OR REPLACE VIEW "public"."public_business_hours" AS
- SELECT "id",
-    "business_id",
-    "day_of_week",
-    "open_time",
-    "close_time",
-    "is_open"
-   FROM "public"."business_hours";
-
-
-ALTER VIEW "public"."public_business_hours" OWNER TO "postgres";
-
-
 CREATE OR REPLACE VIEW "public"."public_businesses" AS
  SELECT "id",
     "owner_id",
@@ -877,11 +851,6 @@ ALTER TABLE ONLY "public"."appointments"
 
 ALTER TABLE ONLY "public"."audit_log"
     ADD CONSTRAINT "audit_log_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."business_hours"
-    ADD CONSTRAINT "business_hours_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1192,11 +1161,6 @@ ALTER TABLE ONLY "public"."audit_log"
 
 ALTER TABLE ONLY "public"."audit_log"
     ADD CONSTRAINT "audit_log_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."business_hours"
-    ADD CONSTRAINT "business_hours_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
 
 
 
@@ -1522,12 +1486,6 @@ CREATE POLICY "business member access" ON "public"."appointments" USING (("busin
 
 
 
-CREATE POLICY "business member access" ON "public"."business_hours" USING (("business_id" IN ( SELECT "businesses"."id"
-   FROM "public"."businesses"
-  WHERE ("businesses"."owner_id" = "auth"."uid"()))));
-
-
-
 CREATE POLICY "business member access" ON "public"."clients" USING (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
   WHERE ("businesses"."owner_id" = "auth"."uid"()))));
@@ -1544,9 +1502,6 @@ CREATE POLICY "business member access" ON "public"."services" USING (("business_
    FROM "public"."businesses"
   WHERE ("businesses"."owner_id" = "auth"."uid"()))));
 
-
-
-ALTER TABLE "public"."business_hours" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."business_secrets" ENABLE ROW LEVEL SECURITY;
@@ -3285,12 +3240,6 @@ GRANT ALL ON TABLE "public"."audit_log" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."business_hours" TO "anon";
-GRANT ALL ON TABLE "public"."business_hours" TO "authenticated";
-GRANT ALL ON TABLE "public"."business_hours" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."business_secrets" TO "anon";
 GRANT ALL ON TABLE "public"."business_secrets" TO "authenticated";
 GRANT ALL ON TABLE "public"."business_secrets" TO "service_role";
@@ -3408,12 +3357,6 @@ GRANT ALL ON TABLE "public"."plan_prices" TO "service_role";
 GRANT ALL ON TABLE "public"."professionals" TO "anon";
 GRANT ALL ON TABLE "public"."professionals" TO "authenticated";
 GRANT ALL ON TABLE "public"."professionals" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."public_business_hours" TO "anon";
-GRANT ALL ON TABLE "public"."public_business_hours" TO "authenticated";
-GRANT ALL ON TABLE "public"."public_business_hours" TO "service_role";
 
 
 

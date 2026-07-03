@@ -165,15 +165,6 @@ export interface Service {
   created_at: string
 }
 
-export interface BusinessHour {
-  id: string
-  business_id: string
-  day_of_week: number
-  open_time: string | null
-  close_time: string | null
-  is_open: boolean
-}
-
 export interface Client {
   id: string
   business_id: string

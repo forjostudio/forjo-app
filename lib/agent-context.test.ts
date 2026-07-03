@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { mapBusinessHours, mapServices, DAYS } from '@/lib/agent-context'
+import { mapTimeBlocks, mapServices, DAYS } from '@/lib/agent-context'
 
-// ── mapBusinessHours ────────────────────────────────────────────────────────────────────────────
-// Agrupa filas de business_hours por day_of_week (0..6) en el shape del HANDOFF:
-// 7 entradas [{ day, ranges:[{open,close}] }], con open/close en HH:MM. is_open=false o times null
-// → la fila se ignora (ese día queda con ranges:[]).
-describe('mapBusinessHours', () => {
+// ── mapTimeBlocks ─────────────────────────────────────────────────────────────────────────────────
+// Agrupa filas de time_blocks por day_of_week (0..6) en el shape del HANDOFF:
+// 7 entradas [{ day, ranges:[{open,close}] }], con open/close en HH:MM. En time_blocks NO existe
+// is_open: cada bloque presente = tramo abierto; un día sin bloques queda con ranges:[] (cerrado).
+describe('mapTimeBlocks', () => {
   it('devuelve 7 entradas en orden domingo..sábado', () => {
-    const out = mapBusinessHours([])
+    const out = mapTimeBlocks([])
     expect(out).toHaveLength(7)
     expect(out.map((h) => h.day)).toEqual([...DAYS])
   })
 
-  it('agrupa por day_of_week y recorta a HH:MM', () => {
-    const out = mapBusinessHours([
-      { day_of_week: 1, open_time: '09:00:00', close_time: '13:00:00', is_open: true },
-      { day_of_week: 1, open_time: '17:00:00', close_time: '21:00:00', is_open: true },
+  it('agrupa por day_of_week y recorta a HH:MM (horario partido)', () => {
+    const out = mapTimeBlocks([
+      { day_of_week: 1, start_time: '09:00:00', end_time: '13:00:00' },
+      { day_of_week: 1, start_time: '17:00:00', end_time: '21:00:00' },
     ])
     const lunes = out[1]
     expect(lunes.day).toBe('lunes')
@@ -25,25 +25,18 @@ describe('mapBusinessHours', () => {
     ])
   })
 
-  it('ignora filas con is_open=false', () => {
-    const out = mapBusinessHours([
-      { day_of_week: 2, open_time: '09:00:00', close_time: '18:00:00', is_open: false },
+  it('un día sin bloques queda cerrado (ranges:[])', () => {
+    const out = mapTimeBlocks([
+      { day_of_week: 1, start_time: '09:00:00', end_time: '18:00:00' },
     ])
+    // martes (índice 2) no tiene bloques → cerrado
     expect(out[2].ranges).toEqual([])
   })
 
-  it('ignora filas con open_time o close_time null', () => {
-    const out = mapBusinessHours([
-      { day_of_week: 3, open_time: null, close_time: '18:00:00', is_open: true },
-      { day_of_week: 3, open_time: '09:00:00', close_time: null, is_open: true },
-    ])
-    expect(out[3].ranges).toEqual([])
-  })
-
   it('tolera input null/undefined → 7 días con ranges vacíos', () => {
-    expect(mapBusinessHours(null)).toHaveLength(7)
-    expect(mapBusinessHours(undefined)).toHaveLength(7)
-    expect(mapBusinessHours(null).every((h) => h.ranges.length === 0)).toBe(true)
+    expect(mapTimeBlocks(null)).toHaveLength(7)
+    expect(mapTimeBlocks(undefined)).toHaveLength(7)
+    expect(mapTimeBlocks(null).every((h) => h.ranges.length === 0)).toBe(true)
   })
 })
 

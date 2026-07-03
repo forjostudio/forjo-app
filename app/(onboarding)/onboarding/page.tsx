@@ -28,14 +28,32 @@ const PALETTES: { key: string; label: string; swatch: string }[] = [
   { key: 'ink', label: 'Tinta', swatch: '#1a1714' },
 ]
 
-const DEFAULT_HOURS = [
-  { day_of_week: 0, is_open: false, open_time: '09:00', close_time: '18:00' },
-  { day_of_week: 1, is_open: true, open_time: '09:00', close_time: '18:00' },
-  { day_of_week: 2, is_open: true, open_time: '09:00', close_time: '18:00' },
-  { day_of_week: 3, is_open: true, open_time: '09:00', close_time: '18:00' },
-  { day_of_week: 4, is_open: true, open_time: '09:00', close_time: '18:00' },
-  { day_of_week: 5, is_open: true, open_time: '09:00', close_time: '18:00' },
-  { day_of_week: 6, is_open: true, open_time: '09:00', close_time: '13:00' },
+// Estado del paso de horarios: un día → { enabled, blocks[] }, donde cada bloque es una ventana
+// simple { start_time, end_time }. Modelo N-bloques/día para soportar horario partido (D-04, ej.
+// Lun 9-12 y 15-19). En el insert cada bloque se mapea a una fila time_blocks con label=null,
+// location_id=null, capacity=1 fijos (el onboarding no maneja sedes ni cupos). error = validación
+// inline por bloque (fin > inicio), mismo criterio que el panel (agenda-client.tsx:validateBlocks).
+interface HourBlock {
+  start_time: string
+  end_time: string
+  error?: string
+}
+
+interface DayState {
+  enabled: boolean
+  blocks: HourBlock[]
+}
+
+// Default equivalente al DEFAULT_HOURS anterior, expresado como bloques: lun-vie 9-18, sáb 9-13,
+// dom cerrado. Índice del array = day_of_week (0=domingo … 6=sábado).
+const DEFAULT_DAY_STATES: DayState[] = [
+  { enabled: false, blocks: [] },                                    // 0 domingo — cerrado
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 1 lunes
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 2 martes
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 3 miércoles
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 4 jueves
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 5 viernes
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '13:00' }] }, // 6 sábado
 ]
 
 interface Service {
@@ -46,13 +64,6 @@ interface Service {
 
 interface Professional {
   name: string
-}
-
-interface HourConfig {
-  day_of_week: number
-  is_open: boolean
-  open_time: string
-  close_time: string
 }
 
 export default function OnboardingPage() {
@@ -84,8 +95,8 @@ export default function OnboardingPage() {
   // Step 3 - Professionals
   const [professionals, setProfessionals] = useState<Professional[]>([{ name: '' }])
 
-  // Step 4 - Hours
-  const [hours, setHours] = useState<HourConfig[]>(DEFAULT_HOURS)
+  // Step 4 - Hours (día → { enabled, blocks[] }, índice = day_of_week)
+  const [dayStates, setDayStates] = useState<DayState[]>(DEFAULT_DAY_STATES)
 
   const checkSlug = useCallback(async (value: string) => {
     if (!value || value.length < 3) return
@@ -149,20 +160,73 @@ export default function OnboardingPage() {
     setProfessionals(updated)
   }
 
-  // Hours
-  function toggleDay(i: number) {
-    const updated = [...hours]
-    updated[i].is_open = !updated[i].is_open
-    setHours(updated)
+  // Hours — patrón del panel (agenda-client.tsx) adaptado a un solo eje día (sin consultorio/location).
+  // Activar un día = arrancar con un bloque por defecto; desactivar = sin bloques (día cerrado).
+  function toggleDay(day: number) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const blocks: HourBlock[] = next[day].enabled ? [] : [{ start_time: '09:00', end_time: '18:00' }]
+      next[day] = { enabled: blocks.length > 0, blocks }
+      return next
+    })
   }
 
-  function updateHour(i: number, field: 'open_time' | 'close_time', value: string) {
-    const updated = [...hours]
-    updated[i][field] = value
-    setHours(updated)
+  // Agregar bloque = horario partido. Arranca donde terminó el último bloque (+3h), como el panel.
+  function addBlock(day: number) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const last = next[day].blocks[next[day].blocks.length - 1]
+      const newStart = last?.end_time || '09:00'
+      const [h, m] = newStart.split(':').map(Number)
+      const newEnd = `${String(Math.min(h + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      next[day] = { enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd }] }
+      return next
+    })
+  }
+
+  function removeBlock(day: number, idx: number) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const blocks = next[day].blocks.filter((_, i) => i !== idx)
+      next[day] = { enabled: blocks.length > 0, blocks }
+      return next
+    })
+  }
+
+  function updateBlock(day: number, idx: number, field: 'start_time' | 'end_time', value: string) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const blocks = [...next[day].blocks]
+      blocks[idx] = { ...blocks[idx], [field]: value, error: undefined }
+      next[day] = { ...next[day], blocks }
+      return next
+    })
+  }
+
+  // Validación inline por bloque: fin > inicio (mismo criterio que validateBlocks del panel).
+  // No valida solapamiento (el onboarding no maneja consultorios). Marca errores en el estado y
+  // devuelve false si hay alguno para bloquear el finalizar.
+  function validateHours(): boolean {
+    let valid = true
+    const next = dayStates.map(ds => {
+      if (!ds.enabled) return ds
+      const blocks = ds.blocks.map(b => {
+        if (b.end_time <= b.start_time) { valid = false; return { ...b, error: 'La hora fin debe ser mayor a la hora inicio' } }
+        return { ...b, error: undefined }
+      })
+      return { ...ds, blocks }
+    })
+    setDayStates(next)
+    return valid
   }
 
   async function handleFinish() {
+    // Bloquear el finalizar si algún bloque de horario es inválido (fin <= inicio). Marca el error
+    // inline en el estado y no avanza (no crea el negocio con horarios rotos).
+    if (!validateHours()) {
+      toast.error('Revisá los horarios: la hora de fin debe ser mayor a la de inicio.')
+      return
+    }
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -206,9 +270,27 @@ export default function OnboardingPage() {
         professionals.filter(p => p.name).map(p => ({ ...p, business_id: business.id }))
       )
 
-      await supabase.from('business_hours').insert(
-        hours.map(h => ({ ...h, business_id: business.id }))
+      // Horarios → time_blocks (fuente única canónica, D-01/D-04). Cada bloque de un día habilitado es
+      // una fila; días sin bloques = cerrado (no se inserta nada). label/location_id null y capacity=1
+      // fijos: el onboarding no maneja sedes ni cupos (patrón del panel, agenda-client.tsx:saveHours).
+      // business_id = SIEMPRE el del negocio recién creado por esta sesión (business.id), nunca del
+      // cliente (aislamiento por tenant + RLS de time_blocks por business_id ya vigente, T-01-01).
+      const timeBlocksToInsert = dayStates.flatMap((ds, day) =>
+        ds.enabled
+          ? ds.blocks.map(b => ({
+              business_id: business.id,
+              day_of_week: day,
+              start_time: b.start_time,
+              end_time: b.end_time,
+              label: null,
+              location_id: null,
+              capacity: 1,
+            }))
+          : []
       )
+      if (timeBlocksToInsert.length > 0) {
+        await supabase.from('time_blocks').insert(timeBlocksToInsert)
+      }
 
       // Conversión automática lead→negocio (CRM, PIPE-03 / D-05). Este es el punto de integración
       // REAL de la conversión: register solo hace auth.signUp; el negocio recién existe ACÁ. La sesión
@@ -504,36 +586,69 @@ export default function OnboardingPage() {
           {step === 4 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Horarios de atención</h2>
+              <p className="text-sm text-muted-foreground">Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
               <div className="space-y-2">
-                {hours.map((h, i) => (
-                  <div key={i} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
+                {dayStates.map((ds, day) => (
+                  <div key={day} className="flex items-start gap-3 py-2 border-b border-border last:border-0">
                     <button
-                      onClick={() => toggleDay(i)}
+                      type="button"
+                      onClick={() => toggleDay(day)}
+                      aria-pressed={ds.enabled}
                       className={cn(
-                        'w-20 text-xs font-medium py-1 px-2 rounded transition-colors',
-                        h.is_open ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                        'w-20 shrink-0 text-xs font-medium py-1 px-2 rounded transition-colors mt-1',
+                        ds.enabled ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
                       )}
                     >
-                      {DAYS[h.day_of_week]}
+                      {DAYS[day]}
                     </button>
-                    {h.is_open ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <Input
-                          type="time"
-                          value={h.open_time}
-                          onChange={e => updateHour(i, 'open_time', e.target.value)}
-                          className="w-28 text-sm"
-                        />
-                        <span className="text-muted-foreground text-sm">—</span>
-                        <Input
-                          type="time"
-                          value={h.close_time}
-                          onChange={e => updateHour(i, 'close_time', e.target.value)}
-                          className="w-28 text-sm"
-                        />
+                    {ds.enabled ? (
+                      <div className="flex-1 space-y-2">
+                        {ds.blocks.map((b, idx) => (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="time"
+                                value={b.start_time}
+                                onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
+                                className="w-28 text-sm"
+                                aria-invalid={!!b.error}
+                              />
+                              <span className="text-muted-foreground text-sm">—</span>
+                              <Input
+                                type="time"
+                                value={b.end_time}
+                                onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
+                                className="w-28 text-sm"
+                                aria-invalid={!!b.error}
+                              />
+                              {ds.blocks.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeBlock(day, idx)}
+                                  className="text-muted-foreground hover:text-destructive h-9 w-9"
+                                  aria-label="Quitar bloque"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                            {b.error && <p className="text-xs text-destructive">{b.error}</p>}
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => addBlock(day)}
+                          className="gap-1.5 text-xs text-muted-foreground h-8"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Agregar bloque
+                        </Button>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm">Cerrado</span>
+                      <span className="text-muted-foreground text-sm mt-1.5">Cerrado</span>
                     )}
                   </div>
                 ))}
