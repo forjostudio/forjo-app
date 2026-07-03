@@ -270,8 +270,27 @@ export default function OnboardingPage() {
         professionals.filter(p => p.name).map(p => ({ ...p, business_id: business.id }))
       )
 
-      // TODO(Task 2): insertar time_blocks desde dayStates.
-      void dayStates
+      // Horarios → time_blocks (fuente única canónica, D-01/D-04). Cada bloque de un día habilitado es
+      // una fila; días sin bloques = cerrado (no se inserta nada). label/location_id null y capacity=1
+      // fijos: el onboarding no maneja sedes ni cupos (patrón del panel, agenda-client.tsx:saveHours).
+      // business_id = SIEMPRE el del negocio recién creado por esta sesión (business.id), nunca del
+      // cliente (aislamiento por tenant + RLS de time_blocks por business_id ya vigente, T-01-01).
+      const timeBlocksToInsert = dayStates.flatMap((ds, day) =>
+        ds.enabled
+          ? ds.blocks.map(b => ({
+              business_id: business.id,
+              day_of_week: day,
+              start_time: b.start_time,
+              end_time: b.end_time,
+              label: null,
+              location_id: null,
+              capacity: 1,
+            }))
+          : []
+      )
+      if (timeBlocksToInsert.length > 0) {
+        await supabase.from('time_blocks').insert(timeBlocksToInsert)
+      }
 
       // Conversión automática lead→negocio (CRM, PIPE-03 / D-05). Este es el punto de integración
       // REAL de la conversión: register solo hace auth.signUp; el negocio recién existe ACÁ. La sesión
