@@ -60,6 +60,9 @@ interface Service {
   name: string
   duration_minutes: number
   price: number
+  // Error inline de precio (validación onBlur, D-08). Vive en el estado del item, mismo criterio que
+  // HourBlock.error / validateBlocks del panel. Solo estado de UI: NO se persiste en la fila de services.
+  priceError?: string
 }
 
 interface Professional {
@@ -79,6 +82,8 @@ export default function OnboardingPage() {
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
   const [slugChecking, setSlugChecking] = useState(false)
   const [whatsapp, setWhatsapp] = useState('')
+  // Error inline de WhatsApp (validación onBlur, D-08). WhatsApp es OPCIONAL: vacío = válido, sin error.
+  const [whatsappError, setWhatsappError] = useState<string | undefined>()
   const [address, setAddress] = useState('')
   const [instagram, setInstagram] = useState('')
   const [palette, setPalette] = useState('red')
@@ -141,8 +146,19 @@ export default function OnboardingPage() {
 
   function updateService(i: number, field: keyof Service, value: string | number) {
     const updated = [...services]
-    updated[i] = { ...updated[i], [field]: value }
+    // Limpiar el error de precio al escribir → feedback en vivo (se re-valida onBlur).
+    updated[i] = { ...updated[i], [field]: value, priceError: undefined }
     setServices(updated)
+  }
+
+  // Validación inline de precio onBlur (D-08/D-09): precio 0 y positivos son VÁLIDOS (servicio gratuito);
+  // solo el negativo da error. El error vive en el item, se limpia al corregir (updateService).
+  function validateServicePrice(i: number) {
+    setServices(prev => prev.map((s, idx) =>
+      idx === i
+        ? { ...s, priceError: s.price < 0 ? 'El precio no puede ser negativo' : undefined }
+        : s
+    ))
   }
 
   // Professionals
@@ -262,8 +278,16 @@ export default function OnboardingPage() {
 
       if (bizError) throw bizError
 
+      // priceError es solo estado de UI (validación inline): NO se envía al insert (columna inexistente
+      // en services). Se arma la fila con los campos de dominio explícitos. Precio 0 se persiste tal cual
+      // (servicio gratuito, D-09).
       await supabase.from('services').insert(
-        services.filter(s => s.name).map(s => ({ ...s, business_id: business.id }))
+        services.filter(s => s.name).map(s => ({
+          name: s.name,
+          duration_minutes: s.duration_minutes,
+          price: s.price,
+          business_id: business.id,
+        }))
       )
 
       await supabase.from('professionals').insert(
@@ -469,7 +493,20 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>WhatsApp <span className="text-muted-foreground">(opcional)</span></Label>
-                  <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="+54 9 11 1234-5678" />
+                  {/* Validación inline onBlur (D-08): si hay algo cargado y el formato es inválido, error
+                      inmediato; vacío o válido = sin error. Se limpia al escribir (feedback en vivo). */}
+                  <Input
+                    value={whatsapp}
+                    onChange={e => { setWhatsapp(e.target.value); setWhatsappError(undefined) }}
+                    onBlur={() => setWhatsappError(
+                      whatsapp.trim() && !normalizeArWhatsApp(whatsapp)
+                        ? 'WhatsApp inválido. Usá código de país y área, ej. +54 9 11 1234-5678'
+                        : undefined
+                    )}
+                    placeholder="+54 9 11 1234-5678"
+                    aria-invalid={!!whatsappError}
+                  />
+                  {whatsappError && <p className="text-xs text-destructive">{whatsappError}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Instagram <span className="text-muted-foreground">(opcional)</span></Label>
@@ -515,22 +552,30 @@ export default function OnboardingPage() {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Tus servicios</h2>
               <div className="space-y-3">
+                {/* Header de columnas fijo (D-07): los labels Nombre/Min./Precio viven UNA sola vez arriba
+                    de la grilla y quedan visibles siempre, sin importar qué fila tenga foco (antes solo se
+                    renderizaban en la 1ª fila con `i === 0`). Alineado a la misma grilla 12-col + spacer
+                    col-span-1 para la columna del trash. */}
+                <div className="grid grid-cols-12 gap-2">
+                  <Label className="col-span-5 text-xs text-muted-foreground">Nombre</Label>
+                  <Label className="col-span-3 text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Min.
+                  </Label>
+                  <Label className="col-span-3 text-xs text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" /> Precio
+                  </Label>
+                  <div className="col-span-1" />
+                </div>
                 {services.map((service, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-5 space-y-1">
-                      {i === 0 && <Label className="text-xs text-muted-foreground">Nombre</Label>}
+                  <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                    <div className="col-span-5">
                       <Input
                         value={service.name}
                         onChange={e => updateService(i, 'name', e.target.value)}
                         placeholder="Corte de cabello"
                       />
                     </div>
-                    <div className="col-span-3 space-y-1">
-                      {i === 0 && (
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> Min.
-                        </Label>
-                      )}
+                    <div className="col-span-3">
                       <Input
                         type="number"
                         value={service.duration_minutes}
@@ -539,21 +584,19 @@ export default function OnboardingPage() {
                         step={5}
                       />
                     </div>
-                    <div className="col-span-3 space-y-1">
-                      {i === 0 && (
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                          <DollarSign className="w-3 h-3" /> Precio
-                        </Label>
-                      )}
+                    <div className="col-span-3">
+                      {/* Precio valida onBlur (D-08/D-09): negativo = error inline; 0 y positivos válidos. */}
                       <Input
                         type="number"
                         value={service.price}
                         onChange={e => updateService(i, 'price', parseFloat(e.target.value))}
+                        onBlur={() => validateServicePrice(i)}
                         min={0}
                         step={100}
+                        aria-invalid={!!service.priceError}
                       />
                     </div>
-                    <div className="col-span-1 flex items-end justify-end">
+                    <div className="col-span-1 flex items-center justify-end">
                       {services.length > 1 && (
                         <Button
                           variant="ghost"
@@ -565,6 +608,9 @@ export default function OnboardingPage() {
                         </Button>
                       )}
                     </div>
+                    {service.priceError && (
+                      <p className="col-span-12 text-xs text-destructive">{service.priceError}</p>
+                    )}
                   </div>
                 ))}
               </div>
