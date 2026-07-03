@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mapBusinessHours, mapServices } from '@/lib/agent-context'
+import { mapTimeBlocks, mapServices } from '@/lib/agent-context'
 import type { NextRequest } from 'next/server'
 
 // ── Context read-only del agente (Phase 6, Plan 01, D-06) ─────────────────────────────────────────
@@ -32,8 +32,8 @@ export async function GET(request: NextRequest) {
       .eq('business_id', business.id)
       .eq('active', true),
     supabase
-      .from('business_hours')
-      .select('day_of_week, open_time, close_time, is_open')
+      .from('time_blocks')
+      .select('day_of_week, start_time, end_time')
       .eq('business_id', business.id),
   ])
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
         bookingUrl: `${appUrl}/${business.slug}/turno`, // OBLIGATORIO (HANDOFF)
       },
       services: mapServices(services),
-      hours: mapBusinessHours(hours),
+      hours: mapTimeBlocks(hours),
       notes: null, // no hay campo notes en businesses hoy → null (HANDOFF lo permite)
     },
     { headers: { 'Cache-Control': 'no-store' } },
