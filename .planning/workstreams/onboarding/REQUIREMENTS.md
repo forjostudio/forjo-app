@@ -13,8 +13,10 @@
 
 - El paso "Horarios de atención" del onboarding (`app/(onboarding)/onboarding/page.tsx:209`) escribe
   en **`business_hours`**.
+
 - El **panel de agenda** (`app/(dashboard)/agenda/*`) y el **booking público** (`app/[slug]/page.tsx`)
   leen **`time_blocks`** → los horarios del onboarding NO llegan ahí.
+
 - Pero `business_hours` **ya no está huérfana**: la leen la **landing** (`lib/landing/derive.ts`,
   `components/landing/hours.tsx`) y el **agente de WhatsApp** (`lib/agent-context.ts`,
   `app/api/agent/context/route.ts`). → Hay **dos fuentes de horarios divergentes**; la fuente
@@ -24,9 +26,10 @@
 
 ### Horarios — reconciliación (SCHED)
 
-- [ ] **SCHED-01**: Los horarios que el negocio carga en el onboarding se reflejan en el **panel de
+- [x] **SCHED-01**: Los horarios que el negocio carga en el onboarding se reflejan en el **panel de
   agenda** y en el **booking público** (los horarios del alta efectivamente se usan para reservar).
-- [ ] **SCHED-02**: La **landing pública** y el **agente de WhatsApp** muestran los mismos horarios
+
+- [x] **SCHED-02**: La **landing pública** y el **agente de WhatsApp** muestran los mismos horarios
   que el panel/booking — una sola fuente de verdad, sin divergencia entre `business_hours` y
   `time_blocks` (cero regresión en los lectores actuales).
 
@@ -34,6 +37,7 @@
 
 - [ ] **ONB-01**: El usuario puede **omitir** los pasos no obligatorios del onboarding y completarlos
   después desde el panel (botón "Omitir" en los pasos no cruciales).
+
 - [ ] **ONB-02**: El flujo de onboarding es claro y sin fricción — labels siempre visibles, feedback
   inmediato, orden lógico de los pasos (repaso general de UX).
 
@@ -44,6 +48,7 @@ Reconocidos pero diferidos — no entran en v0.14.
 - **SCHED-DROP-01**: Deprecar/eliminar la tabla perdedora (`business_hours` o `time_blocks`) una vez
   unificada la fuente y migrados todos los lectores — limpieza de esquema (candidata si la Phase 1
   decide mantener ambas tablas de forma transitoria).
+
 - **ONB-PROGRESS-01**: Indicador de "onboarding incompleto" en el panel que recuerde completar los
   pasos omitidos.
 
@@ -61,7 +66,7 @@ Reconocidos pero diferidos — no entran en v0.14.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHED-01 | Phase 1 | Pending |
-| SCHED-02 | Phase 1 | Pending |
+| SCHED-01 | Phase 1 | Complete |
+| SCHED-02 | Phase 1 | Complete |
 | ONB-01 | Phase 2 | Pending |
 | ONB-02 | Phase 2 | Pending |
