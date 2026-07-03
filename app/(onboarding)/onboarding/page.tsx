@@ -314,6 +314,9 @@ export default function OnboardingPage() {
     }
   }
 
+  // Array base de pasos con su `n` ESTABLE (n=1 Negocio … n=4 Horarios). `n` es el identificador
+  // canónico del paso: `step` y los bloques del render (`step === 1/2/3/4`) siempre keyean contra él,
+  // así el contenido de cada paso no se corre cuando ocultamos uno. El orden NO cambia (D-06).
   const steps = [
     { n: 1, label: 'Tu negocio' },
     { n: 2, label: 'Servicios' },
@@ -321,10 +324,27 @@ export default function OnboardingPage() {
     { n: 4, label: 'Horarios' },
   ]
 
+  // Stepper dinámico por vertical (D-03): en 'canchas' una cancha NO es un profesional humano, así que
+  // el paso Profesionales (n=3) desaparece del flujo → quedan 3 pasos (Negocio → Servicios → Horarios).
+  // En el resto de verticales `visibleSteps === steps` (4 pasos). La numeración VISIBLE del stepper
+  // deriva de la POSICIÓN en este array (idx+1), no del `n`, para leerse 1-2-3 / 1-2-3-4 sin huecos.
+  const visibleSteps = getVerticalKeyByType(type) === 'canchas'
+    ? steps.filter(s => s.n !== 3)
+    : steps
+
+  // Índice del paso actual dentro de `visibleSteps` (posición, no `n`). La navegación se mueve entre
+  // posiciones para saltar limpio el paso oculto en canchas (Servicios n=2 → Horarios n=4 sin pasar
+  // por el Profesionales inexistente). También define cuál es el "último paso" (Finalizar) y si mostrar
+  // Omitir. Fallback a 0 si `step` no está en la lista visible (cambio de rubro que oculta el actual).
+  const currentIndex = Math.max(0, visibleSteps.findIndex(s => s.n === step))
+  const isLastStep = currentIndex === visibleSteps.length - 1
+
   const canGoNext = () => {
+    // Gating relajado (D-02): solo el paso Negocio (siempre visibleSteps[0]) bloquea el avance;
+    // Servicios/Profesionales/Horarios son omitibles → nunca bloquean (esto también elimina el viejo
+    // requisito `price > 0`, cumpliendo D-09 a nivel de gating). Negocio es el primer paso en todo
+    // vertical, así que keyeamos contra su `n` (1), no contra una posición que pueda correrse.
     if (step === 1) return name && slug && slugAvailable && type
-    if (step === 2) return services.every(s => s.name && s.price > 0) && services.length > 0
-    if (step === 3) return professionals.every(p => p.name) && professionals.length > 0
     return true
   }
 
@@ -341,12 +361,16 @@ export default function OnboardingPage() {
             </svg>
             <span className="font-[family-name:var(--font-heading)] font-black text-3xl text-primary">Forjo <span className="font-medium opacity-85">Studio</span></span>
           </div>
-          <p className="text-muted-foreground mt-2">Configurá tu negocio en 4 pasos</p>
+          {/* Subtítulo count-aware: refleja el conteo real de pasos visibles (3 en canchas, 4 en el
+              resto), no un literal fijo. */}
+          <p className="text-muted-foreground mt-2">Configurá tu negocio en {visibleSteps.length} pasos</p>
         </div>
 
-        {/* Stepper */}
+        {/* Stepper — itera sobre visibleSteps (Profesionales oculto en canchas, D-03). El número visible
+            del nodo deriva de la POSICIÓN (idx+1) → 1-2-3 / 1-2-3-4 sin huecos; el estado
+            activo/completado compara contra `s.n` (el paso real), no contra la posición. */}
         <div className="flex items-center justify-center mb-8 gap-0">
-          {steps.map((s, idx) => (
+          {visibleSteps.map((s, idx) => (
             <div key={s.n} className="flex items-center">
               <div className="flex flex-col items-center">
                 <div className={cn(
@@ -355,14 +379,14 @@ export default function OnboardingPage() {
                   step === s.n ? 'bg-primary text-primary-foreground ring-4 ring-primary/20' :
                   'bg-secondary text-muted-foreground'
                 )}>
-                  {step > s.n ? <Check className="w-4 h-4" /> : s.n}
+                  {step > s.n ? <Check className="w-4 h-4" /> : idx + 1}
                 </div>
                 <span className={cn(
                   'text-xs mt-1 hidden sm:block',
                   step === s.n ? 'text-foreground font-medium' : 'text-muted-foreground'
                 )}>{s.label}</span>
               </div>
-              {idx < steps.length - 1 && (
+              {idx < visibleSteps.length - 1 && (
                 <div className={cn(
                   'h-px w-12 sm:w-20 mx-1 sm:mx-2 mb-4 transition-colors',
                   step > s.n ? 'bg-primary' : 'bg-border'
