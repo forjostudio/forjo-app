@@ -8,12 +8,12 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { TYPE_GROUPS, getVerticalKeyByType } from '@/lib/verticals'
+import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 
@@ -82,6 +82,8 @@ export default function OnboardingPage() {
 
   // Step 1 - Business
   const [name, setName] = useState('')
+  // vertical = rubro elegido (resuelve terminología/menú, D-07); type = texto libre de display (D-07).
+  const [vertical, setVertical] = useState<VerticalKey>('' as VerticalKey)
   const [type, setType] = useState('')
   const [slug, setSlug] = useState('')
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
@@ -290,7 +292,7 @@ export default function OnboardingPage() {
           name,
           slug,
           type,
-          vertical: getVerticalKeyByType(type),
+          vertical,
           whatsapp: whatsappNorm,
           address: address || null,
           instagram: instagram || null,
@@ -377,7 +379,7 @@ export default function OnboardingPage() {
   // el paso Profesionales (n=3) desaparece del flujo → quedan 3 pasos (Negocio → Servicios → Horarios).
   // En el resto de verticales `visibleSteps === steps` (4 pasos). La numeración VISIBLE del stepper
   // deriva de la POSICIÓN en este array (idx+1), no del `n`, para leerse 1-2-3 / 1-2-3-4 sin huecos.
-  const visibleSteps = getVerticalKeyByType(type) === 'canchas'
+  const visibleSteps = vertical === 'canchas'
     ? steps.filter(s => s.n !== 3)
     : steps
 
@@ -393,7 +395,7 @@ export default function OnboardingPage() {
     // Servicios/Profesionales/Horarios son omitibles → nunca bloquean (esto también elimina el viejo
     // requisito `price > 0`, cumpliendo D-09 a nivel de gating). Negocio es el primer paso en todo
     // vertical, así que keyeamos contra su `n` (1), no contra una posición que pueda correrse.
-    if (step === 1) return name && slug && slugAvailable && type
+    if (step === 1) return name && slug && slugAvailable && vertical
     return true
   }
 
@@ -464,33 +466,41 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Tipo de negocio *</Label>
-                  <Select value={type} onValueChange={v => setType(v ?? '')}>
+                  <Label>Rubro *</Label>
+                  <Select value={vertical} onValueChange={v => setVertical(v as VerticalKey)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Seleccioná un tipo" />
+                      <SelectValue placeholder="Elegí tu rubro" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TYPE_GROUPS.map(group => (
-                        <SelectGroup key={group.key}>
-                          <SelectLabel>{group.label}</SelectLabel>
-                          {group.types.map(t => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectGroup>
+                      {(Object.keys(VERTICALS) as VerticalKey[]).map(k => (
+                        <SelectItem key={k} value={k}>{VERTICALS[k].label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
+              {/* Campo libre SIEMPRE visible (D-04/D-05): ancho completo bajo la grilla. El placeholder
+                  sugiere según el rubro elegido; la leyenda avisa que es la categoría pública. Opcional
+                  (D-03) → no bloquea el avance (canGoNext exige el rubro, no este campo). */}
+              <div className="space-y-2">
+                <Label>¿A qué se dedica tu negocio?</Label>
+                <Input
+                  value={type}
+                  onChange={e => setType(e.target.value)}
+                  placeholder={RUBRO_PLACEHOLDERS[vertical] ?? ''}
+                />
+                <p className="text-xs text-muted-foreground">Así aparecerá en tu página de reservas</p>
+              </div>
+
               {/* Vertical hint — explica qué incluye el panel según el rubro */}
-              {type && getVerticalKeyByType(type) === 'salud' && (
+              {vertical === 'salud' && (
                 <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
                   <Stethoscope className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                   <span className="text-muted-foreground">Tu panel incluirá <strong className="text-foreground">historia clínica</strong> y <strong className="text-foreground">obra social</strong>.</span>
                 </div>
               )}
-              {type && getVerticalKeyByType(type) === 'belleza' && (
+              {vertical === 'belleza' && (
                 <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
                   <Sparkles className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                   <span className="text-muted-foreground">Tu panel incluirá <strong className="text-foreground">fichas de preferencias</strong> de clientes.</span>
