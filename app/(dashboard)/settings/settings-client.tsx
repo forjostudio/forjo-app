@@ -1068,7 +1068,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               <div className="space-y-1">
                 <Label>Rubro</Label>
                 <Select value={vertical} onValueChange={v => setVertical(v as VerticalKey)}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Elegí tu rubro" /></SelectTrigger>
+                  {/* Base UI Select.Value muestra el value crudo (la VerticalKey); mapeamos a su label. */}
+                  <SelectTrigger className="w-full"><SelectValue>{(v: string | null) => (v && v in VERTICALS ? VERTICALS[v as VerticalKey].label : 'Elegí tu rubro')}</SelectValue></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(VERTICALS) as VerticalKey[]).map(k => (
                       <SelectItem key={k} value={k}>{VERTICALS[k].label}</SelectItem>

@@ -469,7 +469,11 @@ export default function OnboardingPage() {
                   <Label>Rubro *</Label>
                   <Select value={vertical} onValueChange={v => setVertical(v as VerticalKey)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Elegí tu rubro" />
+                      {/* Base UI Select.Value muestra el value crudo por defecto (la VerticalKey);
+                          mapeamos a su label. Vacío → placeholder (muted vía data-placeholder). */}
+                      <SelectValue>
+                        {(v: string | null) => (v && v in VERTICALS ? VERTICALS[v as VerticalKey].label : 'Elegí tu rubro')}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {(Object.keys(VERTICALS) as VerticalKey[]).map(k => (
