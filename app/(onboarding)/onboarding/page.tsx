@@ -710,7 +710,7 @@ export default function OnboardingPage() {
           {/* Step 4 */}
           {step === 4 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Horarios de atención</h2>
+              <h2 className="text-xl font-semibold mb-4 text-center sm:text-left">Horarios de atención</h2>
               <p className="text-sm text-muted-foreground">Tocá cada día para abrirlo o cerrarlo. Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
               <div className="space-y-2">
                 {dayStates.map((ds, day) => (
