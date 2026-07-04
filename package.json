@@ -10,6 +10,7 @@
     "setup:mp-plans": "tsx scripts/setup-mp-plans.ts",
     "setup:admin": "tsx scripts/setup-admin.ts",
     "setup:landing": "tsx scripts/setup-landing.ts",
+    "db:clean-users": "powershell -ExecutionPolicy Bypass -File scripts/reset-test-users.ps1",
     "test": "vitest run",
     "test:watch": "vitest"
   },
