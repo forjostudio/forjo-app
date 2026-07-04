@@ -63,6 +63,10 @@ interface Service {
   // Error inline de precio (validación onBlur, D-08). Vive en el estado del item, mismo criterio que
   // HourBlock.error / validateBlocks del panel. Solo estado de UI: NO se persiste en la fila de services.
   priceError?: string
+  // Error inline de nombre (validación onBlur). Se marca solo si la fila tiene datos (precio/duración
+  // distintos del default) pero sin nombre → el nombre es obligatorio para que la fila sea un servicio
+  // real. NO bloquea Siguiente/Omitir (gating relajado, D-02). Solo estado de UI, no se persiste.
+  nameError?: string
 }
 
 interface Professional {
@@ -146,8 +150,16 @@ export default function OnboardingPage() {
 
   function updateService(i: number, field: keyof Service, value: string | number) {
     const updated = [...services]
-    // Limpiar el error de precio al escribir → feedback en vivo (se re-valida onBlur).
-    updated[i] = { ...updated[i], [field]: value, priceError: undefined }
+    // Limpiar el error del campo editado al escribir → feedback en vivo (se re-valida onBlur). El nombre
+    // limpia su error solo cuando pasa a ser no-vacío; los demás campos limpian nameError igual porque
+    // cambiar precio/duración puede resolver la condición "fila con datos sin nombre".
+    const clearName = field === 'name' ? (typeof value === 'string' && value.trim() !== '') : true
+    updated[i] = {
+      ...updated[i],
+      [field]: value,
+      priceError: undefined,
+      nameError: clearName ? undefined : updated[i].nameError,
+    }
     setServices(updated)
   }
 
@@ -159,6 +171,18 @@ export default function OnboardingPage() {
         ? { ...s, priceError: s.price < 0 ? 'El precio no puede ser negativo' : undefined }
         : s
     ))
+  }
+
+  // Validación inline de nombre onBlur: el nombre es obligatorio SOLO si la fila tiene datos (precio > 0
+  // o duración distinta del default 30). Una fila totalmente vacía se ignora (se filtra en handleFinish),
+  // así que no molesta con error. Mismo precedente que validateServicePrice; no bloquea el avance (D-02).
+  function validateServiceName(i: number) {
+    setServices(prev => prev.map((s, idx) => {
+      if (idx !== i) return s
+      const hasData = s.price > 0 || s.duration_minutes !== 30
+      const missing = s.name.trim() === '' && hasData
+      return { ...s, nameError: missing ? 'El nombre es obligatorio' : undefined }
+    }))
   }
 
   // Professionals
@@ -282,7 +306,7 @@ export default function OnboardingPage() {
       // en services). Se arma la fila con los campos de dominio explícitos. Precio 0 se persiste tal cual
       // (servicio gratuito, D-09).
       await supabase.from('services').insert(
-        services.filter(s => s.name).map(s => ({
+        services.filter(s => s.name.trim()).map(s => ({
           name: s.name,
           duration_minutes: s.duration_minutes,
           price: s.price,
