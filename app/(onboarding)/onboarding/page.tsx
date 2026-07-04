@@ -656,7 +656,7 @@ export default function OnboardingPage() {
           {step === 4 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Horarios de atención</h2>
-              <p className="text-sm text-muted-foreground">Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
+              <p className="text-sm text-muted-foreground">Tocá cada día para abrirlo o cerrarlo. Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
               <div className="space-y-2">
                 {dayStates.map((ds, day) => (
                   <div key={day} className="flex items-start gap-3 py-2 border-b border-border last:border-0">
@@ -750,6 +750,7 @@ export default function OnboardingPage() {
                   <Button
                     variant="ghost"
                     onClick={() => setStep(visibleSteps[currentIndex + 1].n)}
+                    className="text-muted-foreground"
                   >
                     Omitir por ahora
                   </Button>
