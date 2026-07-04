@@ -802,7 +802,7 @@ export default function OnboardingPage() {
                   <Button
                     variant="ghost"
                     onClick={() => setStep(visibleSteps[currentIndex + 1].n)}
-                    className="text-muted-foreground"
+                    className="text-muted-foreground/70"
                   >
                     Omitir por ahora
                   </Button>
