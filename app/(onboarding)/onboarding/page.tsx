@@ -723,7 +723,7 @@ export default function OnboardingPage() {
                       onClick={() => toggleDay(day)}
                       aria-pressed={ds.enabled}
                       className={cn(
-                        'w-full sm:w-20 shrink-0 text-center text-xs font-medium py-1 px-2 rounded transition-colors sm:mt-1',
+                        'w-3/5 mx-auto sm:w-20 sm:mx-0 shrink-0 text-center text-xs font-medium py-1 px-2 rounded transition-colors sm:mt-1',
                         ds.enabled ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
                       )}
                     >
@@ -733,14 +733,15 @@ export default function OnboardingPage() {
                       <div className="flex-1 min-w-0 space-y-2">
                         {ds.blocks.map((b, idx) => (
                           <div key={idx} className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              {/* Inputs de hora: flex-1 min-w-0 en mobile para repartir el ancho y no
-                                  desbordar a 375px (día w-20 + 2 inputs + "—" + trash); w-28 fijo en sm+. */}
+                            <div className="flex items-center justify-center sm:justify-start gap-2">
+                              {/* Inputs de hora: ancho fijo snug (w-24 = 96px) y texto centrado — entra
+                                  "09:00" + el ícono nativo del reloj sin truncar; centrados bajo el día en
+                                  mobile, alineados a la izquierda en sm+. */}
                               <Input
                                 type="time"
                                 value={b.start_time}
                                 onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                                className="flex-1 min-w-0 sm:w-28 sm:flex-none text-sm"
+                                className="w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               <span className="text-muted-foreground text-sm">—</span>
@@ -748,7 +749,7 @@ export default function OnboardingPage() {
                                 type="time"
                                 value={b.end_time}
                                 onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                                className="flex-1 min-w-0 sm:w-28 sm:flex-none text-sm"
+                                className="w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               {ds.blocks.length > 1 && (
@@ -772,13 +773,13 @@ export default function OnboardingPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => addBlock(day)}
-                          className="gap-1.5 text-xs text-muted-foreground h-8"
+                          className="gap-1.5 text-xs text-muted-foreground h-8 mx-auto sm:mx-0 flex"
                         >
                           <Plus className="w-3.5 h-3.5" /> Agregar bloque
                         </Button>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm mt-1.5">Cerrado</span>
+                      <span className="text-muted-foreground text-sm mt-1.5 text-center sm:text-left">Cerrado</span>
                     )}
                   </div>
                 ))}
