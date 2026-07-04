@@ -1,26 +1,25 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import * as React from 'react'
+import { toast } from 'sonner'
+
+import { Button } from '@/components/ui/button'
+import { ConfirmDialog, confirmButtonClass } from '@/components/crm/confirm-dialog'
 import { setMaintenance } from '@/app/(crm)/admin/_maintenance-actions'
 
 /** Toggle del modo mantenimiento global (kill switch). Prende/apaga la app para
- *  los negocios sin tocar Vercel ni redeploy — se aplica en el próximo request. */
+ *  los negocios sin tocar Vercel ni redeploy — se aplica en el próximo request.
+ *  Riesgo alto (baja toda la app) → confirma con ConfirmDialog en ambos casos. */
 export function MaintenanceToggle({ initial }: { initial: boolean }) {
-  const [on, setOn] = useState(initial)
-  const [pending, start] = useTransition()
-  const [err, setErr] = useState<string | null>(null)
+  const [on, setOn] = React.useState(initial)
+  const [open, setOpen] = React.useState(false)
+  const next = !on // el estado al que se va a cambiar
 
-  function toggle() {
-    setErr(null)
-    const next = !on
-    start(async () => {
-      try {
-        await setMaintenance(next)
-        setOn(next)
-      } catch {
-        setErr('No se pudo aplicar. Probá de nuevo.')
-      }
-    })
+  // onConfirm: si lanza, el ConfirmDialog queda abierto y muestra el toast de error.
+  async function onConfirm() {
+    await setMaintenance(next)
+    setOn(next)
+    toast.success(next ? 'App puesta en mantenimiento.' : 'App reactivada.')
   }
 
   return (
@@ -36,25 +35,35 @@ export function MaintenanceToggle({ initial }: { initial: boolean }) {
         </div>
         <span
           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-            on ? 'bg-red-500/15 text-red-500' : 'bg-emerald-500/15 text-emerald-600'
+            on
+              ? 'bg-[var(--crm-danger)]/15 text-[var(--crm-danger)]'
+              : 'bg-[var(--crm-success)]/15 text-[var(--crm-success)]'
           }`}
         >
           {on ? 'Fuera de línea' : 'Online'}
         </span>
       </div>
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={toggle}
-          disabled={pending}
-          className={`rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50 ${
-            on ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
-          }`}
-        >
-          {pending ? 'Aplicando…' : on ? 'Reactivar app' : 'Poner en mantenimiento'}
-        </button>
-        {err && <span className="text-sm text-red-500">{err}</span>}
+
+      <div className="mt-4">
+        <Button type="button" onClick={() => setOpen(true)} className={confirmButtonClass(next)}>
+          {on ? 'Reactivar app' : 'Poner en mantenimiento'}
+        </Button>
       </div>
+
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={next ? 'Poner la app en mantenimiento' : 'Reactivar la app'}
+        description={
+          next
+            ? 'Todos los negocios van a ver la página de mantenimiento y no van a poder entrar hasta que la reactives. Los webhooks (/api) y este panel siguen funcionando.'
+            : 'Los negocios van a volver a tener acceso normal a la app.'
+        }
+        risk={next ? 'alto' : 'medio'}
+        destructive={next}
+        confirmLabel={next ? 'Poner en mantenimiento' : 'Reactivar'}
+        onConfirm={onConfirm}
+      />
     </div>
   )
 }
