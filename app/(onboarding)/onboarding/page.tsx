@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -409,14 +410,9 @@ export default function OnboardingPage() {
     <div className="min-h-screen p-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-8">
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2">
-            <svg width="26" height="33" viewBox="0 0 64 80" aria-hidden="true">
-              <rect x="6" y="6" width="14" height="68" fill="currentColor" className="text-foreground" />
-              <rect x="20" y="6" width="38" height="14" fill="#d94a2b" />
-              <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
-              <circle cx="56" cy="13" r="6" fill="#f4c543" />
-            </svg>
-            <span className="font-[family-name:var(--font-heading)] font-black text-3xl text-primary">Forjo <span className="font-medium opacity-85">Studio</span></span>
+          <div className="flex items-center justify-center">
+            <Image src="/brand/forjo-gestion-lockup-tinta.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto dark:hidden" />
+            <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="hidden h-10 w-auto dark:block" />
           </div>
           {/* Subtítulo count-aware: refleja el conteo real de pasos visibles (3 en canchas, 4 en el
               resto), no un literal fijo. */}
