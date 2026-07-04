@@ -722,15 +722,17 @@ export default function OnboardingPage() {
                       {DAYS[day]}
                     </button>
                     {ds.enabled ? (
-                      <div className="flex-1 space-y-2">
+                      <div className="flex-1 min-w-0 space-y-2">
                         {ds.blocks.map((b, idx) => (
                           <div key={idx} className="space-y-1">
                             <div className="flex items-center gap-2">
+                              {/* Inputs de hora: flex-1 min-w-0 en mobile para repartir el ancho y no
+                                  desbordar a 375px (día w-20 + 2 inputs + "—" + trash); w-28 fijo en sm+. */}
                               <Input
                                 type="time"
                                 value={b.start_time}
                                 onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                                className="w-28 text-sm"
+                                className="flex-1 min-w-0 sm:w-28 sm:flex-none text-sm"
                                 aria-invalid={!!b.error}
                               />
                               <span className="text-muted-foreground text-sm">—</span>
@@ -738,7 +740,7 @@ export default function OnboardingPage() {
                                 type="time"
                                 value={b.end_time}
                                 onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                                className="w-28 text-sm"
+                                className="flex-1 min-w-0 sm:w-28 sm:flex-none text-sm"
                                 aria-invalid={!!b.error}
                               />
                               {ds.blocks.length > 1 && (
