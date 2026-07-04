@@ -40,7 +40,7 @@ export interface VerticalConfig {
 export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
   salud: {
     label: 'Salud',
-    types: ['Médico', 'Psicólogo', 'Kinesiólogo', 'Odontólogo', 'Nutricionista'],
+    types: [],
     terminology: {
       client: 'Paciente',
       clients: 'Pacientes',
@@ -63,8 +63,8 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
     },
   },
   belleza: {
-    label: 'Belleza y Estética',
-    types: ['Peluquería', 'Barbería', 'Centro de estética', 'Manicura', 'Spa'],
+    label: 'Belleza/Estética/Spa',
+    types: [],
     terminology: {
       client: 'Cliente',
       clients: 'Clientes',
@@ -85,7 +85,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
   },
   general: {
     label: 'General',
-    types: ['Estudio de tatuajes', 'Entrenador personal', 'Clases particulares', 'Lavadero de autos', 'Veterinaria', 'Taller mecánico', 'Estudio de fotografía', 'Otro'],
+    types: [],
     terminology: {
       client: 'Cliente',
       clients: 'Clientes',
@@ -103,7 +103,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
   },
   canchas: {
     label: 'Canchas',
-    types: ['Cancha de fútbol', 'Cancha de pádel', 'Cancha de tenis', 'Cancha de básquet', 'Otro'],
+    types: [],
     terminology: {
       client: 'Cliente',
       clients: 'Clientes',
@@ -180,7 +180,19 @@ export const TYPE_GROUPS = (Object.keys(VERTICALS) as VerticalKey[]).map((key) =
   types: VERTICALS[key].types,
 }))
 
-// Lista cerrada de todos los subtipos válidos (todos los verticales). La usa la
-// sugerencia de rubro por IA: el modelo elige uno de acá, no inventa.
-export const ALL_BUSINESS_TYPES = (Object.keys(VERTICALS) as VerticalKey[])
-  .flatMap((key) => VERTICALS[key].types)
+// Placeholder del campo libre "¿A qué se dedica tu negocio?" (texto de display),
+// sugerido según el rubro elegido (D-06). Patrón "Ej: …" como en Servicios.
+export const RUBRO_PLACEHOLDERS: Record<VerticalKey, string> = {
+  salud: 'Ej: Lic. en Psicología, Kinesiólogo',
+  belleza: 'Ej: Barbería, Masajista, Depilación',
+  general: 'Ej: Lavaautos, Tatuajes, Fotógrafo',
+  canchas: 'Ej: Canchas de fútbol',
+}
+
+// Label del rubro (vertical) de un negocio, para el fallback de categoría en la
+// página pública de reservas cuando `type` (texto libre) está vacío (D-03).
+// Reusa la precedencia vertical>>type de resolveVertical: devuelve el label correcto
+// incluso para filas viejas sin `vertical`.
+export function getVerticalLabel(business: { vertical?: string | null; type?: string | null }): string {
+  return resolveVertical(business).label
+}

@@ -18,16 +18,11 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { TYPE_GROUPS, getVerticalKeyByType, VERTICALS, resolveVertical, type VerticalKey } from '@/lib/verticals'
-
-// Valor centinela para la opción "Otro" (tipo libre) en el selector de rubro.
-const OTRO_TYPE = '__otro__'
-// Tipos predefinidos de un grupo (sin el "Otro", que se sintetiza como campo libre).
-const predefinedTypes = (key: VerticalKey) => VERTICALS[key].types.filter(t => t !== 'Otro')
+import { getVerticalKeyByType, VERTICALS, RUBRO_PLACEHOLDERS, resolveVertical, type VerticalKey } from '@/lib/verticals'
 import { DASHBOARD_WIDGETS, DASHBOARD_WIDGET_IDS, sanitizeWidgetIds } from '@/lib/dashboard-widgets'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 
@@ -239,29 +234,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   })
   const [savingBiz, setSavingBiz] = useState(false)
 
-  // Rubro: el GRUPO (vertical) maneja el panel; el TIPO es solo el label del header.
-  // "Otro" = tipo libre dentro del grupo. Inicializamos desde lo guardado.
-  const initTypeGroup: VerticalKey = (business.vertical && business.vertical in VERTICALS
-    ? business.vertical
-    : getVerticalKeyByType(business.type)) as VerticalKey
-  const [typeGroup, setTypeGroup] = useState<VerticalKey>(initTypeGroup)
-  const [typeIsOtro, setTypeIsOtro] = useState(() => !!business.type && !predefinedTypes(initTypeGroup).includes(business.type))
-  const typeSelectValue = `${typeGroup}:::${typeIsOtro ? OTRO_TYPE : bizForm.type}`
-
-  function onTypeChange(v: string | null) {
-    if (!v) return
-    const [g, t] = v.split(':::')
-    const key = g as VerticalKey
-    setTypeGroup(key)
-    if (t === OTRO_TYPE) {
-      setTypeIsOtro(true)
-      // Si venía de un predefinido, limpiamos para que escriba; si ya era libre, lo dejamos.
-      setBizForm(f => ({ ...f, type: predefinedTypes(key).includes(f.type) ? '' : f.type }))
-    } else {
-      setTypeIsOtro(false)
-      setBizForm(f => ({ ...f, type: t }))
-    }
-  }
+  // Rubro (vertical): resuelve terminología/menú del panel (D-07). Inicializa desde la columna
+  // vertical guardada; para filas viejas sin vertical, deriva del type con getVerticalKeyByType.
+  // El type es texto libre de display (bizForm.type), ya no un subtipo del selector.
+  const [vertical, setVertical] = useState<VerticalKey>(
+    (business.vertical && business.vertical in VERTICALS
+      ? business.vertical
+      : getVerticalKeyByType(business.type)) as VerticalKey
+  )
 
   async function saveBusiness() {
     // WhatsApp: vacío permitido (null); si hay algo, normalizar a formato wa.me y validar.
@@ -274,10 +254,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       }
     }
     setSavingBiz(true)
-    // El vertical lo define el GRUPO elegido (no se deriva del type, que puede ser libre).
-    const vertical = typeGroup
+    // El vertical lo define el rubro elegido (estado `vertical`); el type es texto libre.
     const verticalChanged = vertical !== (business.vertical ?? 'general')
-    const type = typeIsOtro ? bizForm.type.trim() : bizForm.type
+    const type = bizForm.type.trim()
     const maps_url = bizForm.maps_url.trim() || null
     const { error } = await supabase.from('businesses').update({ ...bizForm, type, whatsapp, vertical, maps_url }).eq('id', business.id)
     setSavingBiz(false)
@@ -486,7 +465,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   const canAddPro = professionals.filter(p => p.active).length < planConfig.max_agendas
   // Labels de Especialidad/Matrícula según el rubro del negocio.
-  const proLabels = PRO_LABELS[initTypeGroup] ?? PRO_LABELS.general
+  const proLabels = PRO_LABELS[vertical] ?? PRO_LABELS.general
 
   async function addProfessional() {
     if (!newPro.name.trim()) return
@@ -1087,35 +1066,27 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 <Input value={bizForm.name} onChange={e => setBizForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="space-y-1">
-                <Label>Tipo</Label>
-                <div className="flex gap-2">
-                  <Select value={typeSelectValue} onValueChange={onTypeChange}>
-                    <SelectTrigger className={typeIsOtro ? 'w-28 flex-shrink-0' : 'w-full'}><SelectValue>{typeIsOtro ? 'Otro' : bizForm.type}</SelectValue></SelectTrigger>
-                    <SelectContent>
-                      {TYPE_GROUPS.map(group => (
-                        <SelectGroup key={group.key}>
-                          <SelectLabel>{group.label}</SelectLabel>
-                          {predefinedTypes(group.key).map(t => (
-                            <SelectItem key={`${group.key}:::${t}`} value={`${group.key}:::${t}`}>{t}</SelectItem>
-                          ))}
-                          <SelectItem value={`${group.key}:::${OTRO_TYPE}`}>Otro…</SelectItem>
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {typeIsOtro && (
-                    <Input
-                      className="flex-1 min-w-0"
-                      placeholder="Tu rubro (ej: Veterinaria, Lavadero…)"
-                      value={bizForm.type}
-                      onChange={e => setBizForm(f => ({ ...f, type: e.target.value }))}
-                    />
-                  )}
-                </div>
+                <Label>Rubro</Label>
+                <Select value={vertical} onValueChange={v => setVertical(v as VerticalKey)}>
+                  {/* Base UI Select.Value muestra el value crudo (la VerticalKey); mapeamos a su label. */}
+                  <SelectTrigger className="w-full"><SelectValue>{(v: string | null) => (v && v in VERTICALS ? VERTICALS[v as VerticalKey].label : 'Elegí tu rubro')}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(VERTICALS) as VerticalKey[]).map(k => (
+                      <SelectItem key={k} value={k}>{VERTICALS[k].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground pt-0.5">
-                  Rubro: <span className="text-foreground">{VERTICALS[typeGroup].label}</span>
-                  {' · '}define el menú y los campos del panel. El tipo es solo el texto del encabezado.
+                  Rubro: <span className="text-foreground">{VERTICALS[vertical].label}</span>
+                  {' · '}define el menú y los campos del panel.
                 </p>
+                <Label className="pt-2">¿A qué se dedica tu negocio?</Label>
+                <Input
+                  value={bizForm.type}
+                  onChange={e => setBizForm(f => ({ ...f, type: e.target.value }))}
+                  placeholder={RUBRO_PLACEHOLDERS[vertical]}
+                />
+                <p className="text-xs text-muted-foreground">Así aparecerá en tu página de reservas</p>
               </div>
               <div className="space-y-1">
                 <Label>WhatsApp</Label>

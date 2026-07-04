@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Clock, ChevronLeft, ChevronRight } from 'lucide-react'
-import { resolveVertical } from '@/lib/verticals'
+import { resolveVertical, getVerticalLabel } from '@/lib/verticals'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -398,7 +398,9 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           )}
           <div className="min-w-0">
             <h1 className="text-[clamp(22px,6vw,34px)] font-black uppercase tracking-tight leading-[1.05] break-words font-[family-name:var(--font-heading)]">{business.name}</h1>
-            {business.type && <p className="text-sm text-primary-foreground/80 mt-1.5">{business.type}</p>}
+            {/* Categoría del negocio: el texto libre `type` si existe, o el label del rubro como
+                fallback (D-03) — nunca queda sin subtítulo. Interpolado en JSX → auto-escape de React. */}
+            {(business.type || getVerticalLabel(business)) && <p className="text-sm text-primary-foreground/80 mt-1.5">{business.type || getVerticalLabel(business)}</p>}
           </div>
         </div>
       </div>

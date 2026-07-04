@@ -1,18 +1,19 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { TYPE_GROUPS, getVerticalKeyByType } from '@/lib/verticals'
+import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 
@@ -60,6 +61,13 @@ interface Service {
   name: string
   duration_minutes: number
   price: number
+  // Error inline de precio (validación onBlur, D-08). Vive en el estado del item, mismo criterio que
+  // HourBlock.error / validateBlocks del panel. Solo estado de UI: NO se persiste en la fila de services.
+  priceError?: string
+  // Error inline de nombre (validación onBlur). Se marca solo si la fila tiene datos (precio/duración
+  // distintos del default) pero sin nombre → el nombre es obligatorio para que la fila sea un servicio
+  // real. NO bloquea Siguiente/Omitir (gating relajado, D-02). Solo estado de UI, no se persiste.
+  nameError?: string
 }
 
 interface Professional {
@@ -74,11 +82,15 @@ export default function OnboardingPage() {
 
   // Step 1 - Business
   const [name, setName] = useState('')
+  // vertical = rubro elegido (resuelve terminología/menú, D-07); type = texto libre de display (D-07).
+  const [vertical, setVertical] = useState<VerticalKey>('' as VerticalKey)
   const [type, setType] = useState('')
   const [slug, setSlug] = useState('')
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
   const [slugChecking, setSlugChecking] = useState(false)
   const [whatsapp, setWhatsapp] = useState('')
+  // Error inline de WhatsApp (validación onBlur, D-08). WhatsApp es OPCIONAL: vacío = válido, sin error.
+  const [whatsappError, setWhatsappError] = useState<string | undefined>()
   const [address, setAddress] = useState('')
   const [instagram, setInstagram] = useState('')
   const [palette, setPalette] = useState('red')
@@ -141,8 +153,39 @@ export default function OnboardingPage() {
 
   function updateService(i: number, field: keyof Service, value: string | number) {
     const updated = [...services]
-    updated[i] = { ...updated[i], [field]: value }
+    // Limpiar el error del campo editado al escribir → feedback en vivo (se re-valida onBlur). El nombre
+    // limpia su error solo cuando pasa a ser no-vacío; los demás campos limpian nameError igual porque
+    // cambiar precio/duración puede resolver la condición "fila con datos sin nombre".
+    const clearName = field === 'name' ? (typeof value === 'string' && value.trim() !== '') : true
+    updated[i] = {
+      ...updated[i],
+      [field]: value,
+      priceError: undefined,
+      nameError: clearName ? undefined : updated[i].nameError,
+    }
     setServices(updated)
+  }
+
+  // Validación inline de precio onBlur (D-08/D-09): precio 0 y positivos son VÁLIDOS (servicio gratuito);
+  // solo el negativo da error. El error vive en el item, se limpia al corregir (updateService).
+  function validateServicePrice(i: number) {
+    setServices(prev => prev.map((s, idx) =>
+      idx === i
+        ? { ...s, priceError: s.price < 0 ? 'El precio no puede ser negativo' : undefined }
+        : s
+    ))
+  }
+
+  // Validación inline de nombre onBlur: el nombre es obligatorio SOLO si la fila tiene datos (precio > 0
+  // o duración distinta del default 30). Una fila totalmente vacía se ignora (se filtra en handleFinish),
+  // así que no molesta con error. Mismo precedente que validateServicePrice; no bloquea el avance (D-02).
+  function validateServiceName(i: number) {
+    setServices(prev => prev.map((s, idx) => {
+      if (idx !== i) return s
+      const hasData = s.price > 0 || s.duration_minutes !== 30
+      const missing = s.name.trim() === '' && hasData
+      return { ...s, nameError: missing ? 'El nombre es obligatorio' : undefined }
+    }))
   }
 
   // Professionals
@@ -249,7 +292,7 @@ export default function OnboardingPage() {
           name,
           slug,
           type,
-          vertical: getVerticalKeyByType(type),
+          vertical,
           whatsapp: whatsappNorm,
           address: address || null,
           instagram: instagram || null,
@@ -262,8 +305,16 @@ export default function OnboardingPage() {
 
       if (bizError) throw bizError
 
+      // priceError es solo estado de UI (validación inline): NO se envía al insert (columna inexistente
+      // en services). Se arma la fila con los campos de dominio explícitos. Precio 0 se persiste tal cual
+      // (servicio gratuito, D-09).
       await supabase.from('services').insert(
-        services.filter(s => s.name).map(s => ({ ...s, business_id: business.id }))
+        services.filter(s => s.name.trim()).map(s => ({
+          name: s.name,
+          duration_minutes: s.duration_minutes,
+          price: s.price,
+          business_id: business.id,
+        }))
       )
 
       await supabase.from('professionals').insert(
@@ -314,6 +365,9 @@ export default function OnboardingPage() {
     }
   }
 
+  // Array base de pasos con su `n` ESTABLE (n=1 Negocio … n=4 Horarios). `n` es el identificador
+  // canónico del paso: `step` y los bloques del render (`step === 1/2/3/4`) siempre keyean contra él,
+  // así el contenido de cada paso no se corre cuando ocultamos uno. El orden NO cambia (D-06).
   const steps = [
     { n: 1, label: 'Tu negocio' },
     { n: 2, label: 'Servicios' },
@@ -321,32 +375,57 @@ export default function OnboardingPage() {
     { n: 4, label: 'Horarios' },
   ]
 
+  // Stepper dinámico por vertical (D-03): en 'canchas' una cancha NO es un profesional humano, así que
+  // el paso Profesionales (n=3) desaparece del flujo → quedan 3 pasos (Negocio → Servicios → Horarios).
+  // En el resto de verticales `visibleSteps === steps` (4 pasos). La numeración VISIBLE del stepper
+  // deriva de la POSICIÓN en este array (idx+1), no del `n`, para leerse 1-2-3 / 1-2-3-4 sin huecos.
+  const visibleSteps = vertical === 'canchas'
+    ? steps.filter(s => s.n !== 3)
+    : steps
+
+  // Índice del paso actual dentro de `visibleSteps` (posición, no `n`). La navegación se mueve entre
+  // posiciones para saltar limpio el paso oculto en canchas (Servicios n=2 → Horarios n=4 sin pasar
+  // por el Profesionales inexistente). También define cuál es el "último paso" (Finalizar) y si mostrar
+  // Omitir. Fallback a 0 si `step` no está en la lista visible (cambio de rubro que oculta el actual).
+  const currentIndex = Math.max(0, visibleSteps.findIndex(s => s.n === step))
+  const isLastStep = currentIndex === visibleSteps.length - 1
+
   const canGoNext = () => {
-    if (step === 1) return name && slug && slugAvailable && type
-    if (step === 2) return services.every(s => s.name && s.price > 0) && services.length > 0
-    if (step === 3) return professionals.every(p => p.name) && professionals.length > 0
+    // Gating relajado (D-02): solo el paso Negocio (siempre visibleSteps[0]) bloquea el avance;
+    // Servicios/Profesionales/Horarios son omitibles → nunca bloquean (esto también elimina el viejo
+    // requisito `price > 0`, cumpliendo D-09 a nivel de gating). Negocio es el primer paso en todo
+    // vertical, así que keyeamos contra su `n` (1), no contra una posición que pueda correrse.
+    if (step === 1) return name && slug && slugAvailable && vertical
     return true
   }
+
+  // Gate del "+ Agregar" para no apilar filas vacías: la última fila debe estar completa antes de sumar
+  // otra. Servicios → nombre no vacío y sin priceError (nombre = campo obligatorio de la fila, D-02).
+  // Profesionales → solo nombre. NO toca el gating de Siguiente/Omitir (D-02 sigue relajado); solo el
+  // affordance de agregar. El disabled usa el estilo built-in de shadcn.
+  const lastService = services[services.length - 1]
+  const canAddService = !!lastService?.name.trim() && !lastService?.priceError
+  const lastProfessional = professionals[professionals.length - 1]
+  const canAddProfessional = !!lastProfessional?.name.trim()
 
   return (
     <div className="min-h-screen p-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-8">
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2">
-            <svg width="26" height="33" viewBox="0 0 64 80" aria-hidden="true">
-              <rect x="6" y="6" width="14" height="68" fill="currentColor" className="text-foreground" />
-              <rect x="20" y="6" width="38" height="14" fill="#d94a2b" />
-              <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
-              <circle cx="56" cy="13" r="6" fill="#f4c543" />
-            </svg>
-            <span className="font-[family-name:var(--font-heading)] font-black text-3xl text-primary">Forjo <span className="font-medium opacity-85">Studio</span></span>
+          <div className="flex items-center justify-center">
+            <Image src="/brand/forjo-gestion-lockup-tinta.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto dark:hidden" />
+            <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="hidden h-10 w-auto dark:block" />
           </div>
-          <p className="text-muted-foreground mt-2">Configurá tu negocio en 4 pasos</p>
+          {/* Subtítulo count-aware: refleja el conteo real de pasos visibles (3 en canchas, 4 en el
+              resto), no un literal fijo. */}
+          <p className="text-muted-foreground mt-2">Configurá tu negocio en {visibleSteps.length} pasos</p>
         </div>
 
-        {/* Stepper */}
+        {/* Stepper — itera sobre visibleSteps (Profesionales oculto en canchas, D-03). El número visible
+            del nodo deriva de la POSICIÓN (idx+1) → 1-2-3 / 1-2-3-4 sin huecos; el estado
+            activo/completado compara contra `s.n` (el paso real), no contra la posición. */}
         <div className="flex items-center justify-center mb-8 gap-0">
-          {steps.map((s, idx) => (
+          {visibleSteps.map((s, idx) => (
             <div key={s.n} className="flex items-center">
               <div className="flex flex-col items-center">
                 <div className={cn(
@@ -355,14 +434,14 @@ export default function OnboardingPage() {
                   step === s.n ? 'bg-primary text-primary-foreground ring-4 ring-primary/20' :
                   'bg-secondary text-muted-foreground'
                 )}>
-                  {step > s.n ? <Check className="w-4 h-4" /> : s.n}
+                  {step > s.n ? <Check className="w-4 h-4" /> : idx + 1}
                 </div>
                 <span className={cn(
                   'text-xs mt-1 hidden sm:block',
                   step === s.n ? 'text-foreground font-medium' : 'text-muted-foreground'
                 )}>{s.label}</span>
               </div>
-              {idx < steps.length - 1 && (
+              {idx < visibleSteps.length - 1 && (
                 <div className={cn(
                   'h-px w-12 sm:w-20 mx-1 sm:mx-2 mb-4 transition-colors',
                   step > s.n ? 'bg-primary' : 'bg-border'
@@ -387,33 +466,45 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Tipo de negocio *</Label>
-                  <Select value={type} onValueChange={v => setType(v ?? '')}>
+                  <Label>Rubro *</Label>
+                  <Select value={vertical} onValueChange={v => setVertical(v as VerticalKey)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Seleccioná un tipo" />
+                      {/* Base UI Select.Value muestra el value crudo por defecto (la VerticalKey);
+                          mapeamos a su label. Vacío → placeholder (muted vía data-placeholder). */}
+                      <SelectValue>
+                        {(v: string | null) => (v && v in VERTICALS ? VERTICALS[v as VerticalKey].label : 'Elegí tu rubro')}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {TYPE_GROUPS.map(group => (
-                        <SelectGroup key={group.key}>
-                          <SelectLabel>{group.label}</SelectLabel>
-                          {group.types.map(t => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectGroup>
+                      {(Object.keys(VERTICALS) as VerticalKey[]).map(k => (
+                        <SelectItem key={k} value={k}>{VERTICALS[k].label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
+              {/* Campo libre SIEMPRE visible (D-04/D-05): ancho completo bajo la grilla. El placeholder
+                  sugiere según el rubro elegido; la leyenda avisa que es la categoría pública. Opcional
+                  (D-03) → no bloquea el avance (canGoNext exige el rubro, no este campo). */}
+              <div className="space-y-2">
+                <Label>¿A qué se dedica tu negocio?</Label>
+                <Input
+                  value={type}
+                  onChange={e => setType(e.target.value)}
+                  placeholder={RUBRO_PLACEHOLDERS[vertical] ?? ''}
+                />
+                <p className="text-xs text-muted-foreground">Así aparecerá en tu página de reservas</p>
+              </div>
+
               {/* Vertical hint — explica qué incluye el panel según el rubro */}
-              {type && getVerticalKeyByType(type) === 'salud' && (
+              {vertical === 'salud' && (
                 <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
                   <Stethoscope className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                   <span className="text-muted-foreground">Tu panel incluirá <strong className="text-foreground">historia clínica</strong> y <strong className="text-foreground">obra social</strong>.</span>
                 </div>
               )}
-              {type && getVerticalKeyByType(type) === 'belleza' && (
+              {vertical === 'belleza' && (
                 <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
                   <Sparkles className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                   <span className="text-muted-foreground">Tu panel incluirá <strong className="text-foreground">fichas de preferencias</strong> de clientes.</span>
@@ -445,7 +536,20 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>WhatsApp <span className="text-muted-foreground">(opcional)</span></Label>
-                  <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="+54 9 11 1234-5678" />
+                  {/* Validación inline onBlur (D-08): si hay algo cargado y el formato es inválido, error
+                      inmediato; vacío o válido = sin error. Se limpia al escribir (feedback en vivo). */}
+                  <Input
+                    value={whatsapp}
+                    onChange={e => { setWhatsapp(e.target.value); setWhatsappError(undefined) }}
+                    onBlur={() => setWhatsappError(
+                      whatsapp.trim() && !normalizeArWhatsApp(whatsapp)
+                        ? 'WhatsApp inválido. Usá código de país y área, ej. +54 9 11 1234-5678'
+                        : undefined
+                    )}
+                    placeholder="+54 9 11 1234-5678"
+                    aria-invalid={!!whatsappError}
+                  />
+                  {whatsappError && <p className="text-xs text-destructive">{whatsappError}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Instagram <span className="text-muted-foreground">(opcional)</span></Label>
@@ -491,60 +595,95 @@ export default function OnboardingPage() {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Tus servicios</h2>
               <div className="space-y-3">
+                {/* Header de columnas fijo (D-07): los labels Nombre/Min./Precio viven UNA sola vez arriba
+                    de la grilla y quedan visibles siempre, sin importar qué fila tenga foco. Sticky (top-0)
+                    para no perderse con listas largas; oculto en mobile (< sm) donde cada fila es una
+                    tarjeta con labels propios. bg-card = superficie del onboarding. */}
+                <div className="hidden sm:grid sticky top-0 z-10 bg-card grid-cols-12 gap-2 py-1">
+                  <Label className="col-span-5 text-xs text-muted-foreground">Nombre</Label>
+                  <Label className="col-span-3 text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Min.
+                  </Label>
+                  <Label className="col-span-3 text-xs text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" /> Precio
+                  </Label>
+                  <div className="col-span-1" />
+                </div>
+                {/* Un solo template responsive por fila (FIX 4/6): mobile (< sm) = tarjeta de dos líneas con
+                    labels propios (el header de columnas está oculto → labels siempre visibles, ONB-02);
+                    desktop (sm+) = fila en la grilla 12-col alineada al header sticky. */}
                 {services.map((service, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-5 space-y-1">
-                      {i === 0 && <Label className="text-xs text-muted-foreground">Nombre</Label>}
+                  <div
+                    key={i}
+                    className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:border-0 sm:p-0 sm:grid sm:grid-cols-12 sm:gap-2 sm:items-center"
+                  >
+                    {/* Línea 1 mobile / col Nombre desktop */}
+                    <div className="sm:col-span-5 space-y-1">
+                      <Label className="sm:hidden text-xs text-muted-foreground">Nombre</Label>
                       <Input
                         value={service.name}
                         onChange={e => updateService(i, 'name', e.target.value)}
-                        placeholder="Corte de cabello"
+                        onBlur={() => validateServiceName(i)}
+                        placeholder={i === 0 ? 'Ej: Corte de cabello' : ''}
+                        aria-invalid={!!service.nameError}
                       />
                     </div>
-                    <div className="col-span-3 space-y-1">
-                      {i === 0 && (
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    {/* Línea 2 mobile: Min. + Precio lado a lado + trash centrado; en desktop cada campo es
+                        su propia columna de la grilla. */}
+                    <div className="flex items-end gap-2 sm:contents">
+                      <div className="flex-1 min-w-0 sm:col-span-3 space-y-1">
+                        <Label className="sm:hidden text-xs text-muted-foreground flex items-center gap-1">
                           <Clock className="w-3 h-3" /> Min.
                         </Label>
-                      )}
-                      <Input
-                        type="number"
-                        value={service.duration_minutes}
-                        onChange={e => updateService(i, 'duration_minutes', parseInt(e.target.value))}
-                        min={5}
-                        step={5}
-                      />
-                    </div>
-                    <div className="col-span-3 space-y-1">
-                      {i === 0 && (
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Input
+                          type="number"
+                          value={service.duration_minutes}
+                          onChange={e => updateService(i, 'duration_minutes', parseInt(e.target.value))}
+                          onFocus={e => e.target.select()}
+                          min={5}
+                          step={5}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 sm:col-span-3 space-y-1">
+                        <Label className="sm:hidden text-xs text-muted-foreground flex items-center gap-1">
                           <DollarSign className="w-3 h-3" /> Precio
                         </Label>
-                      )}
-                      <Input
-                        type="number"
-                        value={service.price}
-                        onChange={e => updateService(i, 'price', parseFloat(e.target.value))}
-                        min={0}
-                        step={100}
-                      />
+                        {/* Precio valida onBlur (D-08/D-09): negativo = error inline; 0 y positivos válidos.
+                            onFocus select() → escribir reemplaza el 0 preseteado (antes escribía "05"). */}
+                        <Input
+                          type="number"
+                          value={service.price}
+                          onChange={e => updateService(i, 'price', parseFloat(e.target.value))}
+                          onFocus={e => e.target.select()}
+                          onBlur={() => validateServicePrice(i)}
+                          min={0}
+                          step={100}
+                          aria-invalid={!!service.priceError}
+                        />
+                      </div>
+                      <div className="sm:col-span-1 flex items-center justify-end">
+                        {services.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeService(i)}
+                            className="text-muted-foreground hover:text-destructive h-9 w-9"
+                            aria-label="Quitar servicio"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div className="col-span-1 flex items-end justify-end">
-                      {services.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeService(i)}
-                          className="text-muted-foreground hover:text-destructive h-9 w-9"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
+                    {(service.nameError || service.priceError) && (
+                      <p className="sm:col-span-12 text-xs text-destructive">
+                        {service.nameError || service.priceError}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
-              <Button variant="outline" onClick={addService} className="w-full gap-2">
+              <Button variant="outline" onClick={addService} disabled={!canAddService} className="w-full gap-2">
                 <Plus className="w-4 h-4" /> Agregar servicio
               </Button>
             </div>
@@ -576,7 +715,7 @@ export default function OnboardingPage() {
                   </div>
                 ))}
               </div>
-              <Button variant="outline" onClick={addProfessional} className="w-full gap-2">
+              <Button variant="outline" onClick={addProfessional} disabled={!canAddProfessional} className="w-full gap-2">
                 <Plus className="w-4 h-4" /> Agregar profesional
               </Button>
             </div>
@@ -585,32 +724,38 @@ export default function OnboardingPage() {
           {/* Step 4 */}
           {step === 4 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Horarios de atención</h2>
-              <p className="text-sm text-muted-foreground">Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
+              <h2 className="text-xl font-semibold mb-4 text-center sm:text-left">Horarios de atención</h2>
+              <p className="text-sm text-muted-foreground">Tocá cada día para abrirlo o cerrarlo. Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
               <div className="space-y-2">
                 {dayStates.map((ds, day) => (
-                  <div key={day} className="flex items-start gap-3 py-2 border-b border-border last:border-0">
+                  // Mobile (< sm): día como barra full-width centrada arriba y los bloques debajo (stack
+                  // vertical). Desktop (sm+): layout horizontal — día w-20 a la izquierda, bloques a la
+                  // derecha. items-stretch en mobile para que el botón ocupe todo el ancho.
+                  <div key={day} className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2 sm:gap-3 py-2 border-b border-border last:border-0">
                     <button
                       type="button"
                       onClick={() => toggleDay(day)}
                       aria-pressed={ds.enabled}
                       className={cn(
-                        'w-20 shrink-0 text-xs font-medium py-1 px-2 rounded transition-colors mt-1',
+                        'w-3/5 mx-auto sm:w-20 sm:mx-0 shrink-0 text-center text-xs font-medium py-1 px-2 rounded transition-colors sm:mt-1',
                         ds.enabled ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
                       )}
                     >
                       {DAYS[day]}
                     </button>
                     {ds.enabled ? (
-                      <div className="flex-1 space-y-2">
+                      <div className="flex-1 min-w-0 space-y-2">
                         {ds.blocks.map((b, idx) => (
                           <div key={idx} className="space-y-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center sm:justify-start gap-2">
+                              {/* Inputs de hora: ancho fijo snug (w-24 = 96px) y texto centrado — entra
+                                  "09:00" + el ícono nativo del reloj sin truncar; centrados bajo el día en
+                                  mobile, alineados a la izquierda en sm+. */}
                               <Input
                                 type="time"
                                 value={b.start_time}
                                 onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                                className="w-28 text-sm"
+                                className="w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               <span className="text-muted-foreground text-sm">—</span>
@@ -618,7 +763,7 @@ export default function OnboardingPage() {
                                 type="time"
                                 value={b.end_time}
                                 onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                                className="w-28 text-sm"
+                                className="w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               {ds.blocks.length > 1 && (
@@ -642,13 +787,13 @@ export default function OnboardingPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => addBlock(day)}
-                          className="gap-1.5 text-xs text-muted-foreground h-8"
+                          className="gap-1.5 text-xs text-muted-foreground h-8 mx-auto sm:mx-0 flex"
                         >
                           <Plus className="w-3.5 h-3.5" /> Agregar bloque
                         </Button>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm mt-1.5">Cerrado</span>
+                      <span className="text-muted-foreground text-sm mt-1.5 text-center sm:text-left">Cerrado</span>
                     )}
                   </div>
                 ))}
@@ -656,22 +801,42 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Navigation */}
+          {/* Navigation — la detección de "último paso" y el avance/retroceso se guían por la POSICIÓN
+              dentro de visibleSteps (no por el literal 4), para saltar limpio el paso oculto en canchas
+              (Servicios n=2 → Horarios n=4). Cluster: Atrás — [ Omitir por ahora ] [ Siguiente ];
+              en el último paso solo la CTA Finalizar. */}
           <div className="flex justify-between mt-6 pt-4 border-t border-border">
             <Button
               variant="ghost"
-              onClick={() => setStep(s => s - 1)}
-              disabled={step === 1}
+              onClick={() => setStep(visibleSteps[currentIndex - 1].n)}
+              disabled={currentIndex === 0}
             >
               Atrás
             </Button>
-            {step < 4 ? (
-              <Button
-                onClick={() => setStep(s => s + 1)}
-                disabled={!canGoNext()}
-              >
-                Siguiente
-              </Button>
+            {!isLastStep ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {/* Omitir por ahora (D-01/D-04): visible SOLO en pasos opcionales intermedios
+                    (currentIndex > 0 = no en Negocio; !isLastStep = no en el último, ahí va Finalizar).
+                    variant="ghost" → menor énfasis, nunca accent (el accent queda para la única CTA
+                    forward). Avanza a la posición siguiente SIN correr canGoNext ni validar: skip
+                    granular por paso, no salto al final. No persiste nada (handleFinish ya filtra
+                    vacíos, D-05). Siempre habilitado en pasos opcionales. */}
+                {currentIndex > 0 && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setStep(visibleSteps[currentIndex + 1].n)}
+                    className="text-muted-foreground/70"
+                  >
+                    Omitir por ahora
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setStep(visibleSteps[currentIndex + 1].n)}
+                  disabled={!canGoNext()}
+                >
+                  Siguiente
+                </Button>
+              </div>
             ) : (
               <Button onClick={handleFinish} disabled={loading}>
                 {loading ? 'Guardando...' : 'Finalizar y entrar al dashboard'}
