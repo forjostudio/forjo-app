@@ -3,6 +3,7 @@ import { getPlanPrices } from '@/lib/plan-prices'
 import { computeKpis, deriveAlerts, type BizRow } from '@/lib/crm-metrics'
 import { KpiCard } from '@/components/crm/kpi-card'
 import { AlertList, type AlertItem } from '@/components/crm/alert-list'
+import { MaintenanceToggle } from '@/components/crm/maintenance-toggle'
 
 /**
  * Dashboard de la Consola CRM (/admin) — ADM-07 / ALERT-01 / D-12.
@@ -50,6 +51,16 @@ export default async function AdminPage() {
   }
 
   const rows: BizRow[] = (data ?? []) as BizRow[]
+
+  // Estado del modo mantenimiento (fail-safe: si la tabla no existe aún en la nube,
+  // maybeSingle deja el flag en false y el toggle igual se muestra).
+  const { data: appSettings } = await admin
+    .from('app_settings')
+    .select('maintenance')
+    .eq('id', 'default')
+    .maybeSingle()
+  const maintenance = appSettings?.maintenance === true
+
   const prices = await getPlanPrices()
 
   const now = new Date()
@@ -90,6 +101,9 @@ export default async function AdminPage() {
 
       {/* Alertas clickeables → ficha del negocio (ALERT-01 / D-12). */}
       <AlertList alerts={alerts} />
+
+      {/* Modo mantenimiento (kill switch global) — baja la app sin tocar Vercel. */}
+      <MaintenanceToggle initial={maintenance} />
     </div>
   )
 }

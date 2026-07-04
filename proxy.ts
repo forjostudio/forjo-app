@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
+import { createPublicServerClient } from '@/lib/supabase/public'
 
 // Página de mantenimiento (autocontenida) para el kill switch.
 const SUSPENDED_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8">
@@ -14,6 +15,27 @@ p{color:var(--muted);line-height:1.6;font-size:15px}</style></head>
 <body><div class="card"><img class="logo" src="/forjo-lockup.png" alt="Forjo Gestión">
 <h1>Estamos en mantenimiento</h1>
 <p>Volvemos en un rato. Gracias por la paciencia.</p></div></body></html>`
+
+// Rutas que NUNCA se cortan por mantenimiento: /api (webhooks de MercadoPago +
+// crons) y /admin + /login para que el super-admin pueda entrar y apagar el switch.
+const MAINT_EXEMPT = ['/api', '/admin', '/login']
+
+// ¿App en mantenimiento? Override por env (break-glass) o flag en app_settings
+// (toggle del panel super-admin). Fail-open: si la lectura falla, NO corta la app.
+async function isMaintenance(): Promise<boolean> {
+  if (process.env.SITE_SUSPENDED === 'true') return true
+  try {
+    const sb = createPublicServerClient()
+    const { data } = await sb
+      .from('app_settings')
+      .select('maintenance')
+      .eq('id', 'default')
+      .maybeSingle()
+    return data?.maintenance === true
+  } catch {
+    return false
+  }
+}
 
 const KNOWN_PREFIXES = [
   '/login',
@@ -35,11 +57,12 @@ const KNOWN_PREFIXES = [
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Kill switch / modo mantenimiento: con SITE_SUSPENDED=true la app devuelve 503
-  // con la página de mantenimiento. Se deja pasar /api (webhooks de MercadoPago,
-  // crons) para NO perder eventos de pago. Apagado por default; se prende con la
-  // env en Vercel + redeploy.
-  if (process.env.SITE_SUSPENDED === 'true' && !pathname.startsWith('/api')) {
+  // Kill switch / modo mantenimiento: se controla desde el panel super-admin
+  // (flag en app_settings) o por env SITE_SUSPENDED (break-glass). Devuelve 503
+  // con la página de mantenimiento en todo lo público; deja pasar /api, /admin y
+  // /login (ver MAINT_EXEMPT) para no perder webhooks y poder apagarlo.
+  const maintExempt = MAINT_EXEMPT.some((p) => pathname === p || pathname.startsWith(p + '/'))
+  if (!maintExempt && (await isMaintenance())) {
     return new NextResponse(SUSPENDED_HTML, {
       status: 503,
       headers: { 'content-type': 'text/html; charset=utf-8', 'retry-after': '3600' },
