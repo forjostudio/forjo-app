@@ -23,7 +23,7 @@ Faseo: reconciliación de horarios → rework UX del onboarding (los datos se un
 
 - [x] **Phase 1: Reconciliación de horarios** - Unificar la fuente de horarios para que lo que se carga en el onboarding llegue al panel de agenda + booking público, y que landing + agente de WhatsApp muestren lo mismo (sin divergencia `business_hours` ↔ `time_blocks`) (completed 2026-07-03)
 - [x] **Phase 2: Rework UX del onboarding** - Botón "Omitir" en los pasos no obligatorios (completar después desde el panel) + repaso general del flujo (labels visibles, feedback inmediato, orden lógico) (completed 2026-07-04)
-- [ ] **Phase 3: Rework del selector de rubro** - Reducir a 4 rubros (Salud, Belleza/Estética/Spa, General, Canchas) + campo personalizable siempre visible con sugerencia por rubro y leyenda "Así aparecerá en tu página de reservas", aplicado en el onboarding y en la configuración del dashboard
+- [x] **Phase 3: Rework del selector de rubro** - Reducir a 4 rubros (Salud, Belleza/Estética/Spa, General, Canchas) + campo personalizable siempre visible con sugerencia por rubro y leyenda "Así aparecerá en tu página de reservas", aplicado en el onboarding y en la configuración del dashboard (completed 2026-07-04)
 
 ## Phase Details
 
@@ -92,10 +92,16 @@ Plans:
   3. El **mismo selector** (4 rubros + campo personalizable) está en la **configuración del negocio en el dashboard**, consistente con el onboarding.
   4. **Cero regresión**: negocios existentes siguen resolviendo su vertical/terminología correctamente (sin migración destructiva); el auto-ocultar Profesionales en canchas (D-03 de Phase 2) sigue funcionando con el nuevo modelo.
 
-**Plans**: TBD
+**Plans**: 3/3 plans complete
+
+- [x] 03-01-PLAN.md — Migración 047 (backfill vertical) + rework de lib/verticals.ts (label belleza, vaciar types, helpers RUBRO_PLACEHOLDERS/getVerticalLabel, borrar dead code) + test del CASE
+- [x] 03-02-PLAN.md — Selector de 4 rubros + campo libre siempre visible en onboarding y settings (re-key auto-hide canchas/canGoNext/hints al vertical elegido)
+- [x] 03-03-PLAN.md — Fallback de categoría (getVerticalLabel) en ambos booking clients (genérico + canchas)
+
 **UI hint**: yes
 
 **Phase-level decision (defer to discuss-phase)**:
+
 - **Mapeo de datos:** rubro elegido → columna `vertical`; texto libre → columna `type` (etiqueta visible). Confirmar que `resolveVertical` (ya prefiere `vertical`) y la lógica de canchas del onboarding (hoy keyea `getVerticalKeyByType(type)`) se pasan al **rubro elegido** sin romper negocios existentes (que tienen `type` granular).
 - **Sugerencia por IA:** hoy la clasificación elige de `ALL_BUSINESS_TYPES` (lista cerrada de subtipos). Con texto libre cambia de sentido: mantener / adaptar / quitar.
 - **¿El campo personalizable es obligatorio u opcional?** Qué se muestra en booking si queda vacío (fallback al label del rubro).
@@ -112,4 +118,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Reconciliación de horarios | 3/3 | Complete    | 2026-07-03 |
 | 2. Rework UX del onboarding | 1/1 | Complete   | 2026-07-04 |
-| 3. Rework del selector de rubro | 0/TBD | Not started | - |
+| 3. Rework del selector de rubro | 3/3 | Complete   | 2026-07-04 |

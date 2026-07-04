@@ -43,12 +43,12 @@
 
 ### Onboarding — selector de rubro (RUBRO)
 
-- [ ] **ONB-RUBRO-01**: El selector de rubro se reduce a **4 opciones** (Salud, Belleza/Estética/Spa,
+- [x] **ONB-RUBRO-01**: El selector de rubro se reduce a **4 opciones** (Salud, Belleza/Estética/Spa,
   General, Canchas) y muestra **siempre** un campo personalizable (texto libre) con una **sugerencia por
   rubro** (placeholder "Ej: …") y la leyenda **"Así aparecerá en tu página de reservas"** — en el
   onboarding (paso "Tu negocio"). Reemplaza la lista larga de subtipos y el campo de "Otro" (hoy roto).
 
-- [ ] **ONB-RUBRO-02**: El **mismo selector** (4 rubros + campo personalizable) está en la **configuración
+- [x] **ONB-RUBRO-02**: El **mismo selector** (4 rubros + campo personalizable) está en la **configuración
   del negocio en el dashboard**, y el texto libre se **muestra como categoría del negocio en la página
   pública de reservas**. El rubro elegido resuelve el vertical (terminología/menú/features) sin regresión
   para negocios existentes.
@@ -82,5 +82,5 @@ Reconocidos pero diferidos — no entran en v0.14.
 | SCHED-02 | Phase 1 | Complete |
 | ONB-01 | Phase 2 | Complete |
 | ONB-02 | Phase 2 | Complete |
-| ONB-RUBRO-01 | Phase 3 | Pending |
-| ONB-RUBRO-02 | Phase 3 | Pending |
+| ONB-RUBRO-01 | Phase 3 | Complete |
+| ONB-RUBRO-02 | Phase 3 | Complete |
