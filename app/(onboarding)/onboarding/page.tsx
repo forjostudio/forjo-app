@@ -577,10 +577,10 @@ export default function OnboardingPage() {
               <h2 className="text-xl font-semibold mb-4">Tus servicios</h2>
               <div className="space-y-3">
                 {/* Header de columnas fijo (D-07): los labels Nombre/Min./Precio viven UNA sola vez arriba
-                    de la grilla y quedan visibles siempre, sin importar qué fila tenga foco (antes solo se
-                    renderizaban en la 1ª fila con `i === 0`). Alineado a la misma grilla 12-col + spacer
-                    col-span-1 para la columna del trash. */}
-                <div className="grid grid-cols-12 gap-2">
+                    de la grilla y quedan visibles siempre, sin importar qué fila tenga foco. Sticky (top-0)
+                    para no perderse con listas largas; oculto en mobile (< sm) donde cada fila es una
+                    tarjeta con labels propios. bg-card = superficie del onboarding. */}
+                <div className="hidden sm:grid sticky top-0 z-10 bg-card grid-cols-12 gap-2 py-1">
                   <Label className="col-span-5 text-xs text-muted-foreground">Nombre</Label>
                   <Label className="col-span-3 text-xs text-muted-foreground flex items-center gap-1">
                     <Clock className="w-3 h-3" /> Min.
@@ -590,50 +590,76 @@ export default function OnboardingPage() {
                   </Label>
                   <div className="col-span-1" />
                 </div>
+                {/* Un solo template responsive por fila (FIX 4/6): mobile (< sm) = tarjeta de dos líneas con
+                    labels propios (el header de columnas está oculto → labels siempre visibles, ONB-02);
+                    desktop (sm+) = fila en la grilla 12-col alineada al header sticky. */}
                 {services.map((service, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-5">
+                  <div
+                    key={i}
+                    className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:border-0 sm:p-0 sm:grid sm:grid-cols-12 sm:gap-2 sm:items-center"
+                  >
+                    {/* Línea 1 mobile / col Nombre desktop */}
+                    <div className="sm:col-span-5 space-y-1">
+                      <Label className="sm:hidden text-xs text-muted-foreground">Nombre</Label>
                       <Input
                         value={service.name}
                         onChange={e => updateService(i, 'name', e.target.value)}
-                        placeholder="Corte de cabello"
+                        onBlur={() => validateServiceName(i)}
+                        placeholder={i === 0 ? 'Ej: Corte de cabello' : ''}
+                        aria-invalid={!!service.nameError}
                       />
                     </div>
-                    <div className="col-span-3">
-                      <Input
-                        type="number"
-                        value={service.duration_minutes}
-                        onChange={e => updateService(i, 'duration_minutes', parseInt(e.target.value))}
-                        min={5}
-                        step={5}
-                      />
+                    {/* Línea 2 mobile: Min. + Precio lado a lado + trash centrado; en desktop cada campo es
+                        su propia columna de la grilla. */}
+                    <div className="flex items-end gap-2 sm:contents">
+                      <div className="flex-1 min-w-0 sm:col-span-3 space-y-1">
+                        <Label className="sm:hidden text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Min.
+                        </Label>
+                        <Input
+                          type="number"
+                          value={service.duration_minutes}
+                          onChange={e => updateService(i, 'duration_minutes', parseInt(e.target.value))}
+                          onFocus={e => e.target.select()}
+                          min={5}
+                          step={5}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 sm:col-span-3 space-y-1">
+                        <Label className="sm:hidden text-xs text-muted-foreground flex items-center gap-1">
+                          <DollarSign className="w-3 h-3" /> Precio
+                        </Label>
+                        {/* Precio valida onBlur (D-08/D-09): negativo = error inline; 0 y positivos válidos.
+                            onFocus select() → escribir reemplaza el 0 preseteado (antes escribía "05"). */}
+                        <Input
+                          type="number"
+                          value={service.price}
+                          onChange={e => updateService(i, 'price', parseFloat(e.target.value))}
+                          onFocus={e => e.target.select()}
+                          onBlur={() => validateServicePrice(i)}
+                          min={0}
+                          step={100}
+                          aria-invalid={!!service.priceError}
+                        />
+                      </div>
+                      <div className="sm:col-span-1 flex items-center justify-end">
+                        {services.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeService(i)}
+                            className="text-muted-foreground hover:text-destructive h-9 w-9"
+                            aria-label="Quitar servicio"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div className="col-span-3">
-                      {/* Precio valida onBlur (D-08/D-09): negativo = error inline; 0 y positivos válidos. */}
-                      <Input
-                        type="number"
-                        value={service.price}
-                        onChange={e => updateService(i, 'price', parseFloat(e.target.value))}
-                        onBlur={() => validateServicePrice(i)}
-                        min={0}
-                        step={100}
-                        aria-invalid={!!service.priceError}
-                      />
-                    </div>
-                    <div className="col-span-1 flex items-center justify-end">
-                      {services.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeService(i)}
-                          className="text-muted-foreground hover:text-destructive h-9 w-9"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                    {service.priceError && (
-                      <p className="col-span-12 text-xs text-destructive">{service.priceError}</p>
+                    {(service.nameError || service.priceError) && (
+                      <p className="sm:col-span-12 text-xs text-destructive">
+                        {service.nameError || service.priceError}
+                      </p>
                     )}
                   </div>
                 ))}
