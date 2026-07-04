@@ -16,13 +16,14 @@ El faseo va datos → UX: primero se unifica de dónde salen los horarios (Phase
 
 **Phase Numbering:**
 
-- Integer phases (1, 2): Planned milestone work
+- Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (1.1, 1.2): Urgent insertions (marked with INSERTED)
 
 Faseo: reconciliación de horarios → rework UX del onboarding (los datos se unifican antes de pulir el flujo que los carga).
 
 - [x] **Phase 1: Reconciliación de horarios** - Unificar la fuente de horarios para que lo que se carga en el onboarding llegue al panel de agenda + booking público, y que landing + agente de WhatsApp muestren lo mismo (sin divergencia `business_hours` ↔ `time_blocks`) (completed 2026-07-03)
 - [x] **Phase 2: Rework UX del onboarding** - Botón "Omitir" en los pasos no obligatorios (completar después desde el panel) + repaso general del flujo (labels visibles, feedback inmediato, orden lógico) (completed 2026-07-04)
+- [ ] **Phase 3: Rework del selector de rubro** - Reducir a 4 rubros (Salud, Belleza/Estética/Spa, General, Canchas) + campo personalizable siempre visible con sugerencia por rubro y leyenda "Así aparecerá en tu página de reservas", aplicado en el onboarding y en la configuración del dashboard
 
 ## Phase Details
 
@@ -79,12 +80,36 @@ Plans:
 
 **Security/Integrity relevance**: Bajo (UX). Es rework de presentación/UX sobre pasos existentes del onboarding; no agrega datos de tenant nuevos ni toca el aislamiento. El onboarding escribe sobre el negocio del usuario autenticado (patrón ya vigente); "Omitir" no debilita ninguna validación server-side ni permite escribir sobre otro tenant. El único cuidado de integridad es no permitir omitir un paso que sea prerrequisito real de otro (que el flujo quede en un estado inconsistente); eso se acota al definir el set de pasos obligatorios vs. omitibles en discuss-phase.
 
+### Phase 3: Rework del selector de rubro
+
+**Goal**: Simplificar el selector de rubro a **4 opciones** (Salud, Belleza/Estética/Spa, General, Canchas — los 4 `VerticalKey` que ya existen) y sumar un **campo personalizable siempre visible** (texto libre) que muestra una **sugerencia por rubro** (placeholder tipo "Ej: …") y una **leyenda "Así aparecerá en tu página de reservas"**. El rubro elegido resuelve el vertical (terminología/menú/features); el texto libre es la etiqueta visible del negocio en la **página pública de reservas**. Aplica tanto al **onboarding** (paso "Tu negocio") como a la **configuración del negocio en el dashboard**. Cero regresión en la resolución de vertical de negocios existentes.
+**Depends on**: Phase 2
+**Requirements**: ONB-RUBRO-01, ONB-RUBRO-02
+**Success Criteria** (what must be TRUE):
+
+  1. El usuario ve 4 rubros (Salud, Belleza/Estética/Spa, General, Canchas), elige uno, y **siempre** aparece un campo para personalizar el rubro con una sugerencia acorde ("Ej: …") — sin depender de tocar "Otro" (que hoy además está roto: el campo no aparece).
+  2. El texto personalizado se guarda y **aparece en la página pública de reservas** como categoría del negocio ("así aparecerá…"); el rubro elegido define terminología/menú/features (vertical).
+  3. El **mismo selector** (4 rubros + campo personalizable) está en la **configuración del negocio en el dashboard**, consistente con el onboarding.
+  4. **Cero regresión**: negocios existentes siguen resolviendo su vertical/terminología correctamente (sin migración destructiva); el auto-ocultar Profesionales en canchas (D-03 de Phase 2) sigue funcionando con el nuevo modelo.
+
+**Plans**: TBD
+**UI hint**: yes
+
+**Phase-level decision (defer to discuss-phase)**:
+- **Mapeo de datos:** rubro elegido → columna `vertical`; texto libre → columna `type` (etiqueta visible). Confirmar que `resolveVertical` (ya prefiere `vertical`) y la lógica de canchas del onboarding (hoy keyea `getVerticalKeyByType(type)`) se pasan al **rubro elegido** sin romper negocios existentes (que tienen `type` granular).
+- **Sugerencia por IA:** hoy la clasificación elige de `ALL_BUSINESS_TYPES` (lista cerrada de subtipos). Con texto libre cambia de sentido: mantener / adaptar / quitar.
+- **¿El campo personalizable es obligatorio u opcional?** Qué se muestra en booking si queda vacío (fallback al label del rubro).
+- **Placeholders por rubro** (propuesta del usuario): Salud "Ej: Lic. en Psicología, Kinesiólogo" · Belleza/Estética/Spa "Ej: Barbería, Masajista, Depilación" · General "Ej: Lavaautos, Tatuajes, Fotógrafo" · Canchas "Ej: Canchas de fútbol".
+
+**Security/Integrity relevance**: Bajo-Medio (regresión, no aislamiento). Rubro/`type`/`vertical` ya viven bajo `business_id`; esta fase no agrega aislamiento nuevo. Pero toca el **modelo de resolución de vertical usado en toda la app** (terminología, menú, landing, agente) + la **página pública de reservas**. Riesgo dominante = **regresión** en negocios existentes (mismo cuidado que Phase 1): no cambiar el vertical resuelto de un negocio ya creado. Todo cambio de datos debe ser **aditivo/no destructivo**; el texto libre en `type` expuesto en booking es data pública ya acotada.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2
+Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Reconciliación de horarios | 3/3 | Complete    | 2026-07-03 |
 | 2. Rework UX del onboarding | 1/1 | Complete   | 2026-07-04 |
+| 3. Rework del selector de rubro | 0/TBD | Not started | - |
