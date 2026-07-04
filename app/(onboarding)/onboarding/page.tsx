@@ -718,13 +718,16 @@ export default function OnboardingPage() {
               <p className="text-sm text-muted-foreground">Tocá cada día para abrirlo o cerrarlo. Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
               <div className="space-y-2">
                 {dayStates.map((ds, day) => (
-                  <div key={day} className="flex items-start gap-3 py-2 border-b border-border last:border-0">
+                  // Mobile (< sm): día como barra full-width centrada arriba y los bloques debajo (stack
+                  // vertical). Desktop (sm+): layout horizontal — día w-20 a la izquierda, bloques a la
+                  // derecha. items-stretch en mobile para que el botón ocupe todo el ancho.
+                  <div key={day} className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2 sm:gap-3 py-2 border-b border-border last:border-0">
                     <button
                       type="button"
                       onClick={() => toggleDay(day)}
                       aria-pressed={ds.enabled}
                       className={cn(
-                        'w-20 shrink-0 text-xs font-medium py-1 px-2 rounded transition-colors mt-1',
+                        'w-full sm:w-20 shrink-0 text-center text-xs font-medium py-1 px-2 rounded transition-colors sm:mt-1',
                         ds.enabled ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
                       )}
                     >
