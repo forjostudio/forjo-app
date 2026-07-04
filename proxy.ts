@@ -8,10 +8,10 @@ const SUSPENDED_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-
 *{margin:0;box-sizing:border-box}body{background:var(--bg);color:var(--ink);
 font-family:system-ui,-apple-system,'Segoe UI',sans-serif;min-height:100vh;display:flex;
 align-items:center;justify-content:center;padding:24px;text-align:center}
-.card{max-width:440px}.dot{width:44px;height:44px;border-radius:50%;background:var(--accent);margin:0 auto 24px}
+.card{max-width:460px}.logo{width:220px;max-width:72%;height:auto;margin:0 auto 30px;display:block}
 h1{font-size:26px;letter-spacing:-.02em;margin-bottom:12px}
 p{color:var(--muted);line-height:1.6;font-size:15px}</style></head>
-<body><div class="card"><div class="dot"></div>
+<body><div class="card"><img class="logo" src="/forjo-lockup.png" alt="Forjo Gestión">
 <h1>Estamos en mantenimiento</h1>
 <p>Volvemos en un rato. Gracias por la paciencia.</p></div></body></html>`
 
