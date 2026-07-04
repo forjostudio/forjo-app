@@ -35,10 +35,10 @@
 
 ### Onboarding — UX (ONB)
 
-- [ ] **ONB-01**: El usuario puede **omitir** los pasos no obligatorios del onboarding y completarlos
+- [x] **ONB-01**: El usuario puede **omitir** los pasos no obligatorios del onboarding y completarlos
   después desde el panel (botón "Omitir" en los pasos no cruciales).
 
-- [ ] **ONB-02**: El flujo de onboarding es claro y sin fricción — labels siempre visibles, feedback
+- [x] **ONB-02**: El flujo de onboarding es claro y sin fricción — labels siempre visibles, feedback
   inmediato, orden lógico de los pasos (repaso general de UX).
 
 ## v2 / Future Requirements
@@ -68,5 +68,5 @@ Reconocidos pero diferidos — no entran en v0.14.
 |-------------|-------|--------|
 | SCHED-01 | Phase 1 | Complete |
 | SCHED-02 | Phase 1 | Complete |
-| ONB-01 | Phase 2 | Pending |
-| ONB-02 | Phase 2 | Pending |
+| ONB-01 | Phase 2 | Complete |
+| ONB-02 | Phase 2 | Complete |

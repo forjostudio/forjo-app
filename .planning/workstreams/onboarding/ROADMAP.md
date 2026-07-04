@@ -22,7 +22,7 @@ El faseo va datos → UX: primero se unifica de dónde salen los horarios (Phase
 Faseo: reconciliación de horarios → rework UX del onboarding (los datos se unifican antes de pulir el flujo que los carga).
 
 - [x] **Phase 1: Reconciliación de horarios** - Unificar la fuente de horarios para que lo que se carga en el onboarding llegue al panel de agenda + booking público, y que landing + agente de WhatsApp muestren lo mismo (sin divergencia `business_hours` ↔ `time_blocks`) (completed 2026-07-03)
-- [ ] **Phase 2: Rework UX del onboarding** - Botón "Omitir" en los pasos no obligatorios (completar después desde el panel) + repaso general del flujo (labels visibles, feedback inmediato, orden lógico)
+- [x] **Phase 2: Rework UX del onboarding** - Botón "Omitir" en los pasos no obligatorios (completar después desde el panel) + repaso general del flujo (labels visibles, feedback inmediato, orden lógico) (completed 2026-07-04)
 
 ## Phase Details
 
@@ -66,7 +66,13 @@ Plans:
   3. Los pasos obligatorios (los que no se pueden omitir) siguen exigiéndose: el flujo distingue claramente qué es opcional y qué no, y no deja avanzar sin lo crucial.
   4. El flujo se siente más claro y sin fricción: labels siempre visibles, feedback inmediato en las acciones (errores/confirmaciones), y orden lógico de los pasos — sin campos ni pasos nuevos.
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 02-01-PLAN.md — Rework UX del onboarding: "Omitir por ahora" en pasos opcionales + stepper dinámico (canchas) + header fijo de Servicios + validación inline onBlur + precio 0 (ONB-01, ONB-02) · wave 1
+
 **UI hint**: yes
 
 **Phase-level decision (defer to discuss-phase)**: **qué pasos son "no obligatorios" (omitibles) y cuáles no.** Definir en discuss-phase el set exacto de pasos que llevan botón "Omitir" vs. los obligatorios, y **cómo se representa un paso omitido** para que el panel sepa que quedó pendiente (marcar el paso como incompleto vs. simplemente dejar el dato vacío). El indicador de "onboarding incompleto" en el panel que recuerde completar los pasos omitidos queda diferido (ONB-PROGRESS-01, v2), así que en v0.14 alcanza con que el dato quede completable desde el panel, sin un recordatorio dedicado.
@@ -80,5 +86,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Reconciliación de horarios | 3/3 | Complete   | 2026-07-03 |
-| 2. Rework UX del onboarding | 0/TBD | Not started | - |
+| 1. Reconciliación de horarios | 3/3 | Complete    | 2026-07-03 |
+| 2. Rework UX del onboarding | 1/1 | Complete   | 2026-07-04 |
