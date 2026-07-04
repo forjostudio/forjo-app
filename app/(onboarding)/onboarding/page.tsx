@@ -396,6 +396,15 @@ export default function OnboardingPage() {
     return true
   }
 
+  // Gate del "+ Agregar" para no apilar filas vacías: la última fila debe estar completa antes de sumar
+  // otra. Servicios → nombre no vacío y sin priceError (nombre = campo obligatorio de la fila, D-02).
+  // Profesionales → solo nombre. NO toca el gating de Siguiente/Omitir (D-02 sigue relajado); solo el
+  // affordance de agregar. El disabled usa el estilo built-in de shadcn.
+  const lastService = services[services.length - 1]
+  const canAddService = !!lastService?.name.trim() && !lastService?.priceError
+  const lastProfessional = professionals[professionals.length - 1]
+  const canAddProfessional = !!lastProfessional?.name.trim()
+
   return (
     <div className="min-h-screen p-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-8">
@@ -664,7 +673,7 @@ export default function OnboardingPage() {
                   </div>
                 ))}
               </div>
-              <Button variant="outline" onClick={addService} className="w-full gap-2">
+              <Button variant="outline" onClick={addService} disabled={!canAddService} className="w-full gap-2">
                 <Plus className="w-4 h-4" /> Agregar servicio
               </Button>
             </div>
@@ -696,7 +705,7 @@ export default function OnboardingPage() {
                   </div>
                 ))}
               </div>
-              <Button variant="outline" onClick={addProfessional} className="w-full gap-2">
+              <Button variant="outline" onClick={addProfessional} disabled={!canAddProfessional} className="w-full gap-2">
                 <Plus className="w-4 h-4" /> Agregar profesional
               </Button>
             </div>
