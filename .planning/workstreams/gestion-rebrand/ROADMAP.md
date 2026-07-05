@@ -44,11 +44,11 @@ estática — la reorg deja el terreno listo para colgar las features de las fas
   4. El menú y la terminología por vertical (incluido `canchas`, que oculta Profesionales) se mantienen correctos tras la reorg — ningún grupo ni tab rompe el gating por rubro existente.
   5. El usuario abre una FAQ/ayuda estática (cómo usar Forjo Gestión) desde Configuración o el footer, sin relación con el agente.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Sidebar agrupado en 5 secciones data-driven (NAV-01, behavior-frozen)
-- [ ] 01-02-PLAN.md — Hub Negocio (4 tabs) + Configuración (3 tabs) + reubicación del OAuth de MercadoPago (NAV-02, D-06)
+- [x] 01-02-PLAN.md — Hub Negocio (4 tabs) + Configuración (3 tabs) + reubicación del OAuth de MercadoPago (NAV-02, D-06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -116,6 +116,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Reorg de IA + Ayuda | 1/3 | In Progress|  |
+| 1. Reorg de IA + Ayuda | 2/3 | In Progress|  |
 | 2. Alta manual + Exports CSV | 0/TBD | Not started | - |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |

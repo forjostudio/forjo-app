@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v0.15
 milestone_name: milestone
 current_phase: 01
-current_plan: 1
+current_plan: 3 / 3
 status: executing
-stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-07-05T14:55:50.854Z"
-last_activity: 2026-07-05 -- Phase 01 execution started
+stopped_at: Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
+last_updated: "2026-07-05T15:04:45.136Z"
+last_activity: 2026-07-05 -- Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -30,14 +30,14 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 **Status:** Executing Phase 01
 **Current Phase:** 01
-**Last Activity:** 2026-07-05 -- Completed 01-01-PLAN.md (sidebar agrupado, NAV-01)
-**Last Activity Description:** Sidebar del dashboard agrupado en 5 secciones data-driven; NAV-01 completo
+**Last Activity:** 2026-07-05 -- Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
+**Last Activity Description:** Cobros/Integraciones/Notificaciones migraron al hub Negocio (4 tabs); Configuración quedó en 3 tabs; OAuth MP aterriza en /negocio; NAV-02 completo
 
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** 2 / 3
-**Progreso:** [███░░░░░░░] 33%
+**Current Plan:** 3 / 3
+**Progreso:** [███████░░░] 67%
 
 ## Roadmap
 
@@ -58,6 +58,10 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 - **[01-01]** Sidebar agrupado data-driven `{ section, keys[] }` dentro de `sidebar.tsx`, filtrado contra `resolveVertical(business).menu`; `lib/verticals.ts` intacto. Estado activo `bg-primary` (NO el del CRM). El link "Ayuda" del footer lo agrega el Plan 01-03, NO el 01-01.
 - **[01-01]** Fix pre-existente aplicado en el mismo archivo: `SidebarContent` función → elemento JSX const (react-hooks/static-components) para pasar el gate `npx eslint`; patrón analog de `crm-sidebar.tsx`.
+- **[01-02]** Split Negocio/Configuración (NAV-02): la migración = **reasignar qué TabsList/TabsContent muestra cada `view`** en `settings-client.tsx`, NO mover el cuerpo de las tabs (behavior-frozen). `/negocio` = hub de 4 tabs con estado propio `negocioTab` (default `business`); `/settings` reducido a 3 tabs (Apariencia·Seguridad·Suscripción). El único `<Tabs>` con los 7 TabsContent como hijos hace el resto (shadcn muestra solo el que matchea `value`).
+- **[01-02]** OAuth de MercadoPago reruteado a `/negocio` (D-06): callback/connect redirigen a `/negocio?mp=...` y el `useEffect` del `?mp=` (gateado por `isNegocio`) setea la tab Integraciones + toast + `replaceState` a `/negocio`. NO se tocó la validación de state/CSRF ni el canje de code.
+- **[01-02]** `negocio/page.tsx` ahora pasa `secrets = getBusinessSecrets(business.id)` (service-role, scoped por `owner_id`) al hub para las tabs migradas — mismo patrón que `settings/page.tsx`.
+- **[01-02]** eslint del repo (regla estricta `react-hooks/set-state-in-effect`) ya fallaba en `settings-client.tsx` en HEAD (muchos errores pre-existentes: set-state-in-effect, "This value cannot be modified", impure-fn-during-render). Conteo de problemas baseline vs. post-cambio = 20 vs 20: no se introdujo ninguno nuevo. tsc verde.
 
 **TODOs:**
 
@@ -67,7 +71,7 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Session Continuity
 
-**Last session:** 2026-07-05
+**Last session:** 2026-07-05T15:04:45.128Z
 
-**Stopped At:** Completed 01-01-PLAN.md (sidebar agrupado, NAV-01)
-**Resume File:** .planning/workstreams/gestion-rebrand/phases/01-reorg-de-ia-ayuda/01-UI-SPEC.md
+**Stopped At:** Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
+**Resume File:** .planning/workstreams/gestion-rebrand/phases/01-reorg-de-ia-ayuda/01-03-PLAN.md

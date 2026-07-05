@@ -24,7 +24,7 @@
 - [x] **NAV-01**: El sidebar se agrupa en secciones (PANEL · AGENDA · GESTIÓN · REPORTES · AJUSTES) en
   vez de lista plana, sin cambiar el comportamiento de cada item (behavior-frozen).
 
-- [ ] **NAV-02**: "Negocio" pasa a ser un hub con tabs (Datos del negocio · Cobros · Integraciones ·
+- [x] **NAV-02**: "Negocio" pasa a ser un hub con tabs (Datos del negocio · Cobros · Integraciones ·
   Notificaciones/Mails) y "Configuración" queda para app/cuenta (Apariencia · Seguridad · Suscripción).
   Las rutas viejas redirigen a la nueva ubicación sin romper el flujo existente.
 
@@ -75,7 +75,7 @@ Reconocidos pero diferidos — no entran en v0.15 (dependen del add-on del agent
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | NAV-01 | Phase 1 | Complete |
-| NAV-02 | Phase 1 | Pending |
+| NAV-02 | Phase 1 | Complete |
 | HELP-01 | Phase 1 | Pending |
 | CLIENT-01 | Phase 2 | Pending |
 | DATA-01 | Phase 2 | Pending |
