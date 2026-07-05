@@ -6,7 +6,7 @@ import { buildMpAuthUrl, mpConnectConfigured } from '@/lib/mercadopago'
 // redirige a la autorización de MP.
 export async function GET() {
   const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio').replace(/\/$/, '')
-  if (!mpConnectConfigured()) return NextResponse.redirect(`${base}/settings?mp=error`)
+  if (!mpConnectConfigured()) return NextResponse.redirect(`${base}/negocio?mp=error`)
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

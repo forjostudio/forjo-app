@@ -4,7 +4,8 @@ import { exchangeMpCode } from '@/lib/mercadopago'
 
 // Callback del OAuth de MercadoPago: valida el state, canjea el code y guarda las credenciales
 // del negocio del dueño logueado. El access_token va a mp_access_token (lo usa el flujo de seña
-// tal cual el modo manual). Vuelve a /settings con ?mp=connected|error.
+// tal cual el modo manual). Vuelve a /negocio con ?mp=connected|error (Integraciones migró de
+// Configuración a Negocio, NAV-02/D-06).
 export async function GET(request: NextRequest) {
   const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio').replace(/\/$/, '')
   const url = new URL(request.url)
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
   const saved = request.cookies.get('mp_oauth_state')?.value
 
   const fail = () => {
-    const r = NextResponse.redirect(`${base}/settings?mp=error`)
+    const r = NextResponse.redirect(`${base}/negocio?mp=error`)
     r.cookies.delete('mp_oauth_state')
     return r
   }
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
     return fail()
   }
 
-  const r = NextResponse.redirect(`${base}/settings?mp=connected`)
+  const r = NextResponse.redirect(`${base}/negocio?mp=connected`)
   r.cookies.delete('mp_oauth_state')
   return r
 }
