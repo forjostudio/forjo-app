@@ -137,20 +137,33 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const router = useRouter()
 
   // Secciones que viven en el sidebar (una sola, sin pestañas). 'config' muestra las pestañas.
+  // 'negocio' ahora es un HUB con sus propias pestañas (NAV-02, D-04): dejó de ser una sección
+  // suelta de una sola tab. El resto (servicios/equipo/consultorios) siguen siendo secciones sueltas.
   const SECTION_TAB: Record<string, string> = { negocio: 'business', servicios: 'services', equipo: 'professionals', consultorios: 'locations' }
   const isSection = view !== 'config'
+  const isNegocio = view === 'negocio'
   const [configTab, setConfigTab] = useState('appearance')
-  const tabValue = isSection ? SECTION_TAB[view] : configTab
+  // Estado de tab propio del hub Negocio (Datos·Cobros·Integraciones·Notificaciones/Mails). Se
+  // separa de configTab porque son dos TabsList distintas en dos rutas distintas; default 'business'.
+  const [negocioTab, setNegocioTab] = useState('business')
+  // Qué value/handler recibe el <Tabs>: config y negocio tienen estado propio (TabsList visible);
+  // las secciones sueltas restantes mapean a su única tab fija y no cambian de tab (onValueChange undefined).
+  const tabValue = isNegocio ? negocioTab : isSection ? SECTION_TAB[view] : configTab
+  const onTabChange = isNegocio ? setNegocioTab : isSection ? undefined : setConfigTab
 
   // Aviso al volver del OAuth de MercadoPago (?mp=connected|error) y limpieza de la URL.
+  // D-06: Integraciones migró de /settings a /negocio, así que el retorno del OAuth se maneja acá,
+  // en el hub Negocio. El backend ahora redirige a /negocio?mp=... → gateamos por isNegocio para que
+  // el efecto solo corra al montar /negocio (nunca en /settings).
   useEffect(() => {
+    if (!isNegocio) return
     const mp = new URLSearchParams(window.location.search).get('mp')
     if (!mp) return
     if (mp === 'connected') toast.success('MercadoPago conectado')
     else if (mp === 'error') toast.error('No se pudo conectar con MercadoPago')
-    setConfigTab('integraciones')
-    window.history.replaceState(null, '', '/settings')
-  }, [])
+    setNegocioTab('integraciones')
+    window.history.replaceState(null, '', '/negocio')
+  }, [isNegocio])
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).
   const term = resolveVertical(business).terminology
@@ -804,13 +817,23 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         </h1>
       </div>
 
-      <Tabs value={tabValue} onValueChange={isSection ? undefined : setConfigTab}>
+      <Tabs value={tabValue} onValueChange={onTabChange}>
+        {/* TabsList del hub Negocio (NAV-02): Cobros·Integraciones·Notificaciones migraron acá desde
+            Configuración. El label de la 4ª es literal "Notificaciones/Mails" (brief §3) aunque el
+            value siga siendo 'notificaciones'. */}
+        {isNegocio && (
+          <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
+            <TabsTrigger value="business">Datos del negocio</TabsTrigger>
+            <TabsTrigger value="cobros">Cobros</TabsTrigger>
+            <TabsTrigger value="integraciones">Integraciones</TabsTrigger>
+            <TabsTrigger value="notificaciones">Notificaciones/Mails</TabsTrigger>
+          </TabsList>
+        )}
+        {/* TabsList de Configuración reducido a 3 (NAV-02): Cobros/Integraciones/Notificaciones se
+            movieron al hub Negocio de arriba. */}
         {!isSection && (
           <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
             <TabsTrigger value="appearance">Apariencia</TabsTrigger>
-            <TabsTrigger value="cobros">Cobros</TabsTrigger>
-            <TabsTrigger value="integraciones">Integraciones</TabsTrigger>
-            <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
             <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
             <TabsTrigger value="suscripcion">Suscripción</TabsTrigger>
           </TabsList>
