@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
@@ -1725,6 +1726,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Segundo acceso a la ayuda (HELP-01 / D-07): navegación interna del dashboard hacia la guía
+          estática. Se muestra solo en Configuración (no en los hubs Negocio/Servicios/etc.). */}
+      {!isSection && (
+        <Link
+          href="/ayuda"
+          className="inline-block text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded"
+        >
+          ¿Necesitás ayuda? Ver la guía
+        </Link>
+      )}
 
       {/* Plan change modal */}
       <PlanModal open={planModalOpen} onOpenChange={setPlanModalOpen} />

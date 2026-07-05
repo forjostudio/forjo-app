@@ -19,6 +19,7 @@ import {
   BarChart3,
   Settings,
   ExternalLink,
+  HelpCircle,
   LogOut,
   Menu,
   X,
@@ -160,6 +161,17 @@ export function Sidebar({ business }: { business: Business }) {
       </nav>
 
       <div className="p-3 border-t border-border space-y-1">
+        {/* Acceso a la ayuda estática desde el footer (HELP-01 / D-07): HELP-01 pide un acceso
+            desde el footer del sidebar además del de Configuración. Misma fila que los links de nav
+            y cierra el drawer en mobile igual que ellos. */}
+        <Link
+          href="/ayuda"
+          onClick={() => setMobileOpen(false)}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <HelpCircle className="w-4 h-4 flex-shrink-0" />
+          Ayuda
+        </Link>
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full"
