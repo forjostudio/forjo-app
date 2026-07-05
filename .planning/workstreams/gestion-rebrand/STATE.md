@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v0.15
 milestone_name: milestone
-current_phase: "None (próximo: Phase 1)"
-current_plan: N/A
-status: Roadmap creado (esperando planificación de fase)
+current_phase: 01
+current_plan: 1
+status: executing
 stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-07-05T14:45:34.885Z"
-last_activity: 2026-07-05 -- Phase 01 planning complete
+last_updated: "2026-07-05T14:55:50.854Z"
+last_activity: 2026-07-05 -- Phase 01 execution started
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -28,16 +28,16 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Current Position
 
-**Status:** Roadmap creado (esperando planificación de fase)
-**Current Phase:** None (próximo: Phase 1)
-**Last Activity:** 2026-07-05 -- Phase 01 planning complete
-**Last Activity Description:** Phase 01 planning complete — 3 plans ready
+**Status:** Executing Phase 01
+**Current Phase:** 01
+**Last Activity:** 2026-07-05 -- Completed 01-01-PLAN.md (sidebar agrupado, NAV-01)
+**Last Activity Description:** Sidebar del dashboard agrupado en 5 secciones data-driven; NAV-01 completo
 
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** N/A
-**Progreso:** [░░░░░░░░░░] 0%
+**Current Plan:** 2 / 3
+**Progreso:** [███░░░░░░░] 33%
 
 ## Roadmap
 
@@ -56,6 +56,9 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 - El badge de origen (Fase 2) y el import (Fase 3) comparten la columna de origen → introducirla en Fase 2, consumirla en Fase 3.
 - Vertical `canchas` existe (sin profesionales) — la reorg no puede romper el gating/terminología por vertical (`resolveVertical`/`VERTICALS`).
 
+- **[01-01]** Sidebar agrupado data-driven `{ section, keys[] }` dentro de `sidebar.tsx`, filtrado contra `resolveVertical(business).menu`; `lib/verticals.ts` intacto. Estado activo `bg-primary` (NO el del CRM). El link "Ayuda" del footer lo agrega el Plan 01-03, NO el 01-01.
+- **[01-01]** Fix pre-existente aplicado en el mismo archivo: `SidebarContent` función → elemento JSX const (react-hooks/static-components) para pasar el gate `npx eslint`; patrón analog de `crm-sidebar.tsx`.
+
 **TODOs:**
 
 - Fase 3: research a nivel plan-phase (parseo/validación/dedup/aislamiento del import CSV).
@@ -64,7 +67,7 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Session Continuity
 
-**Last session:** 2026-07-05T14:15:30.974Z
+**Last session:** 2026-07-05
 
-**Stopped At:** Phase 1 UI-SPEC approved
+**Stopped At:** Completed 01-01-PLAN.md (sidebar agrupado, NAV-01)
 **Resume File:** .planning/workstreams/gestion-rebrand/phases/01-reorg-de-ia-ayuda/01-UI-SPEC.md
