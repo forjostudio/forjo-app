@@ -1,6 +1,19 @@
 ---
-workstream: gestion-rebrand
-created: 2026-07-04
+gsd_state_version: 1.0
+milestone: v0.15
+milestone_name: milestone
+current_phase: "None (próximo: Phase 1)"
+current_plan: N/A
+status: Roadmap creado (esperando planificación de fase)
+stopped_at: Phase 1 UI-SPEC approved
+last_updated: "2026-07-05T14:45:34.885Z"
+last_activity: 2026-07-05 -- Phase 01 planning complete
+progress:
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -17,8 +30,8 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 **Status:** Roadmap creado (esperando planificación de fase)
 **Current Phase:** None (próximo: Phase 1)
-**Last Activity:** 2026-07-04
-**Last Activity Description:** ROADMAP.md creado — 3 fases, 7/7 requirements mapeados (coverage 100%)
+**Last Activity:** 2026-07-05 -- Phase 01 planning complete
+**Last Activity Description:** Phase 01 planning complete — 3 plans ready
 
 ## Progress
 
@@ -35,18 +48,23 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 ## Accumulated Context
 
 **Decisiones / notas:**
+
 - Behavior-frozen: la reorg mueve funcionalidad de lugar, no la cambia. Mock aprobado en
   `design_handoff_forjo_rebrand/` (incluye "Mapa de cambios de dónde a dónde" = checklist de migración).
+
 - Próxima migración libre = **049** (045=landing_cms, 047=backfill vertical, 048=app_settings ya tomadas; no renumerar las ajenas). La columna de origen del cliente (Fase 2) es candidata a 049.
 - El badge de origen (Fase 2) y el import (Fase 3) comparten la columna de origen → introducirla en Fase 2, consumirla en Fase 3.
 - Vertical `canchas` existe (sin profesionales) — la reorg no puede romper el gating/terminología por vertical (`resolveVertical`/`VERTICALS`).
 
 **TODOs:**
+
 - Fase 3: research a nivel plan-phase (parseo/validación/dedup/aislamiento del import CSV).
 
 **Blockers:** Ninguno.
 
 ## Session Continuity
 
-**Stopped At:** Roadmap creado; pendiente `/gsd:discuss-phase 1 --ws gestion-rebrand`
-**Resume File:** .planning/workstreams/gestion-rebrand/ROADMAP.md
+**Last session:** 2026-07-05T14:15:30.974Z
+
+**Stopped At:** Phase 1 UI-SPEC approved
+**Resume File:** .planning/workstreams/gestion-rebrand/phases/01-reorg-de-ia-ayuda/01-UI-SPEC.md
