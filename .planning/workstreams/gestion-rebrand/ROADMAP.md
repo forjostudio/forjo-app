@@ -41,7 +41,10 @@ estática — la reorg deja el terreno listo para colgar las features de las fas
   3. Entrar a cualquier ruta vieja (la ubicación previa de una sección movida) redirige a su nueva ubicación sin error 404 ni pérdida de estado del flujo.
   4. El menú y la terminología por vertical (incluido `canchas`, que oculta Profesionales) se mantienen correctos tras la reorg — ningún grupo ni tab rompe el gating por rubro existente.
   5. El usuario abre una FAQ/ayuda estática (cómo usar Forjo Gestión) desde Configuración o el footer, sin relación con el agente.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 01-01-PLAN.md — Sidebar agrupado en 5 secciones data-driven (NAV-01, behavior-frozen)
+- [ ] 01-02-PLAN.md — Hub Negocio (4 tabs) + Configuración (3 tabs) + reubicación del OAuth de MercadoPago (NAV-02, D-06)
+- [ ] 01-03-PLAN.md — FAQ estática /ayuda + dos accesos (footer del sidebar + Configuración) (HELP-01)
 **UI hint**: yes
 **Phase-level decision (defer to discuss-phase)**:
   - Alcance exacto del "Mapa de cambios de dónde a dónde" del mock aprobado (`design_handoff_forjo_rebrand/`): qué items van a qué grupo y qué sub-tabs de Negocio/Configuración migran desde dónde (checklist de migración 1:1).
@@ -95,6 +98,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Reorg de IA + Ayuda | 0/TBD | Not started | - |
+| 1. Reorg de IA + Ayuda | 0/3 | Not started | - |
 | 2. Alta manual + Exports CSV | 0/TBD | Not started | - |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |
