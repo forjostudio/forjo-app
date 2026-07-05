@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_plan: 3 / 3
 status: executing
-stopped_at: Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
-last_updated: "2026-07-05T15:04:45.136Z"
-last_activity: 2026-07-05 -- Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
+stopped_at: Completed 01-03-PLAN.md (FAQ/ayuda estática, HELP-01) — Phase 01 completa
+last_updated: "2026-07-05T00:00:00.000Z"
+last_activity: 2026-07-05 -- Completed 01-03-PLAN.md (FAQ/ayuda estática, HELP-01)
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 33
 ---
 
 # Project State
@@ -28,16 +28,16 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Current Position
 
-**Status:** Executing Phase 01
+**Status:** Executing Phase 01 (Phase 01 completa — 3/3 plans)
 **Current Phase:** 01
-**Last Activity:** 2026-07-05 -- Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
-**Last Activity Description:** Cobros/Integraciones/Notificaciones migraron al hub Negocio (4 tabs); Configuración quedó en 3 tabs; OAuth MP aterriza en /negocio; NAV-02 completo
+**Last Activity:** 2026-07-05 -- Completed 01-03-PLAN.md (FAQ/ayuda estática, HELP-01)
+**Last Activity Description:** Ruta /ayuda con FAQ estática (7 preguntas) en disclosures nativos <details>/<summary> zero-install; dos accesos (footer del sidebar + Configuración); HELP-01 completo. Phase 01 (NAV-01·NAV-02·HELP-01) completa.
 
 ## Progress
 
-**Phases Complete:** 0 / 3
+**Phases Complete:** 1 / 3
 **Current Plan:** 3 / 3
-**Progreso:** [███████░░░] 67%
+**Progreso:** [██████████] 100% (Phase 01)
 
 ## Roadmap
 
@@ -62,6 +62,7 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 - **[01-02]** OAuth de MercadoPago reruteado a `/negocio` (D-06): callback/connect redirigen a `/negocio?mp=...` y el `useEffect` del `?mp=` (gateado por `isNegocio`) setea la tab Integraciones + toast + `replaceState` a `/negocio`. NO se tocó la validación de state/CSRF ni el canje de code.
 - **[01-02]** `negocio/page.tsx` ahora pasa `secrets = getBusinessSecrets(business.id)` (service-role, scoped por `owner_id`) al hub para las tabs migradas — mismo patrón que `settings/page.tsx`.
 - **[01-02]** eslint del repo (regla estricta `react-hooks/set-state-in-effect`) ya fallaba en `settings-client.tsx` en HEAD (muchos errores pre-existentes: set-state-in-effect, "This value cannot be modified", impure-fn-during-render). Conteo de problemas baseline vs. post-cambio = 20 vs 20: no se introdujo ninguno nuevo. tsc verde.
+- **[01-03]** FAQ/ayuda estática (HELP-01): ruta `/ayuda` = server component sync con `const FAQ: { pregunta, respuesta }[]` (7 preguntas) versionado en git (D-08, sin Supabase/MDX). Disclosure nativo `<details>`/`<summary>` estilado con Tailwind (`group-open:rotate-180`, `[&::-webkit-details-marker]:hidden`) → **cero deps nuevas** (HARD GATE `git diff --stat package.json` vacío; NO shadcn Accordion). Dos accesos (D-07): footer del sidebar (`HelpCircle` + `<Link href=/ayuda>` que cierra el drawer mobile) y link "¿Necesitás ayuda? Ver la guía" en la view `config` de settings-client (gateado con `!isSection`). Behavior-frozen: ningún otro destino del sidebar cambió. Contenido de las 7 respuestas = draft de Claude, el usuario debe revisarlo (D-09). Los 10 errores eslint de `settings-client.tsx` son pre-existentes (mismo conteo en HEAD) → deferred, no tocados.
 
 **TODOs:**
 
@@ -71,7 +72,7 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Session Continuity
 
-**Last session:** 2026-07-05T15:04:45.128Z
+**Last session:** 2026-07-05
 
-**Stopped At:** Completed 01-02-PLAN.md (split Negocio/Configuración, NAV-02)
-**Resume File:** .planning/workstreams/gestion-rebrand/phases/01-reorg-de-ia-ayuda/01-03-PLAN.md
+**Stopped At:** Completed 01-03-PLAN.md (FAQ/ayuda estática, HELP-01) — Phase 01 completa (NAV-01·NAV-02·HELP-01)
+**Resume File:** None
