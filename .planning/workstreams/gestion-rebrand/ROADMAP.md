@@ -24,7 +24,7 @@ verificable por separado.
 ## Phases
 
 - [x] **Phase 1: Reorg de IA + Ayuda** - Sidebar agrupado + split Negocio-hub/Configuración con redirects, más la FAQ estática — todo behavior-frozen (completed 2026-07-05)
-- [ ] **Phase 2: Alta manual + Exports CSV** - Alta manual de cliente con badge de origen (columna nueva) + export de clientes y finanzas a CSV
+- [x] **Phase 2: Alta manual + Exports CSV** - Alta manual de cliente con badge de origen (columna nueva) + export de clientes y finanzas a CSV (completed 2026-07-06)
 - [ ] **Phase 3: Import de clientes CSV** - Upload → preview/validación → confirmar, deduplicando y respetando el aislamiento por tenant
 
 ## Phase Details
@@ -76,7 +76,7 @@ además introduce la columna de origen que la Fase 3 (import) va a consumir.
   3. El dueño exporta su lista de clientes a CSV y descarga un archivo con solo los clientes de su negocio (ningún dato de otro tenant).
   4. El dueño exporta sus finanzas (movimientos/cashflow) a CSV y descarga un archivo con solo los movimientos de su negocio.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 **UI hint**: yes
 
 **Wave 1**
@@ -89,7 +89,7 @@ además introduce la columna de origen que la Fase 3 (import) va a consumir.
 
 **Wave 3** *(blocked on Wave 2 — comparte clients-client.tsx)*
 
-- [ ] 02-03-PLAN.md — Exports CSV server-side: `api/export/clients` + `api/export/finances` (BOM + RFC4180) + botones en Clientes y Finanzas (DATA-01, DATA-02)
+- [x] 02-03-PLAN.md — Exports CSV server-side: `api/export/clients` + `api/export/finances` (BOM + RFC4180) + botones en Clientes y Finanzas (DATA-01, DATA-02)
 
 **Phase-level decision (resolved en discuss-phase → 02-CONTEXT.md)**:
 
@@ -130,5 +130,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
-| 2. Alta manual + Exports CSV | 2/3 | In Progress|  |
+| 2. Alta manual + Exports CSV | 3/3 | Complete   | 2026-07-06 |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |

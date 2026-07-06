@@ -30,9 +30,9 @@
 
 ### Datos — Export / Import CSV (DATA)
 
-- [ ] **DATA-01**: El dueño exporta su lista de **clientes** a CSV.
+- [x] **DATA-01**: El dueño exporta su lista de **clientes** a CSV.
 
-- [ ] **DATA-02**: El dueño exporta sus **finanzas** (movimientos/cashflow) a CSV.
+- [x] **DATA-02**: El dueño exporta sus **finanzas** (movimientos/cashflow) a CSV.
 
 - [ ] **DATA-03**: El dueño **importa clientes** desde un CSV con flujo upload → preview/validación →
   confirmar, deduplicando y respetando el aislamiento por tenant (RLS + `business_id`).
@@ -78,6 +78,6 @@ Reconocidos pero diferidos — no entran en v0.15 (dependen del add-on del agent
 | NAV-02 | Phase 1 | Complete |
 | HELP-01 | Phase 1 | Complete |
 | CLIENT-01 | Phase 2 | Complete |
-| DATA-01 | Phase 2 | Pending |
-| DATA-02 | Phase 2 | Pending |
+| DATA-01 | Phase 2 | Complete |
+| DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 3 | Pending |
