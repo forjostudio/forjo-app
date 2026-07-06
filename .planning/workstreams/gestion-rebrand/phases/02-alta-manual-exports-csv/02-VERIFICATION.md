@@ -1,8 +1,9 @@
 ---
 phase: 02-alta-manual-exports-csv
 verified: 2026-07-06T12:00:00Z
-status: human_needed
+status: passed
 score: 9/9
+uat_result: "5/5 pass, 0 issues (2 bugs UAT arreglados: header botones + validación teléfono; +1 fix polish: 'Exportando...' en Finanzas; +1 hardening: CSV formula injection T-02-13)"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

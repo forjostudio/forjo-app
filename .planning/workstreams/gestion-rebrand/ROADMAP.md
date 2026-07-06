@@ -130,5 +130,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
-| 2. Alta manual + Exports CSV | 3/3 | Complete   | 2026-07-06 |
+| 2. Alta manual + Exports CSV | 3/3 | Complete    | 2026-07-06 |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |
