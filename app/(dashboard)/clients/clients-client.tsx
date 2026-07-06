@@ -4,6 +4,9 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { format, parseISO, differenceInDays, differenceInMonths, isSameMonth, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { Client, Appointment } from '@/lib/types'
 import { useVertical } from '@/lib/use-terminology'
@@ -11,12 +14,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import {
   Search, Phone, Mail, Trash2, GitMerge, MessageCircle,
   Edit2, X, ChevronLeft, ChevronDown, Lightbulb, TrendingUp, FileText, Shield,
+  UserPlus,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
 import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-panel'
@@ -45,6 +50,34 @@ const FILTER_TABS: { key: FilterKey; label: string }[] = [
   { key: 'paused', label: 'Pausa' },
 ]
 const ALL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('')
+
+// Badge de origen del cliente (SC-2). Mapeo LOCKED del UI-SPEC §Color: reserva=outline (quieto,
+// el más común), manual=default/accent (la acción que introduce esta fase, único gasto de --primary
+// del badge), importado=secondary (Fase 3). Distinguibles por borde/fill/color, no solo por hue.
+const ORIGIN_BADGE: Record<Client['origin'], { label: string; variant: 'outline' | 'default' | 'secondary' }> = {
+  reserva: { label: 'Reserva', variant: 'outline' },
+  manual: { label: 'Manual', variant: 'default' },
+  importado: { label: 'Importado', variant: 'secondary' },
+}
+
+// Schema del alta manual (CLIENT-01). Copy del UI-SPEC §Copywriting. Regla D-02: nombre + al menos
+// un contacto (teléfono o email); email válido si viene lleno. La validación server-side es la
+// autoridad; esta es feedback inmediato en el form. Los insurance_* solo se muestran/mandan en salud.
+const newClientSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Ingresá un nombre.'),
+    phone: z.string().trim().optional(),
+    email: z.union([z.string().trim().email('El email no es válido.'), z.literal('')]).optional(),
+    notes: z.string().trim().optional(),
+    insurance_name: z.string().trim().optional(),
+    insurance_number: z.string().trim().optional(),
+  })
+  .refine((d) => !!d.phone?.trim() || !!d.email?.trim(), {
+    message: 'Ingresá al menos un teléfono o un email.',
+    path: ['phone'],
+  })
+
+type NewClientForm = z.infer<typeof newClientSchema>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fichaNum(n: number) { return `#${String(n).padStart(3, '0')}` }
@@ -138,6 +171,55 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   const [mergeModal, setMergeModal] = useState(false)
   // Historia Clínica colapsable (solo salud): arranca colapsada y se cierra al cambiar de paciente.
   const [historyExpanded, setHistoryExpanded] = useState(false)
+
+  // ── Alta manual de cliente (CLIENT-01) ─────────────────────────────────────
+  const [newClientOpen, setNewClientOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const {
+    register: registerNew,
+    handleSubmit: handleSubmitNew,
+    reset: resetNew,
+    formState: { errors: newErrors },
+  } = useForm<NewClientForm>({
+    resolver: zodResolver(newClientSchema),
+    mode: 'onBlur', // validación inline al salir del campo (UI-SPEC §A)
+  })
+
+  // Escribe SIEMPRE vía el endpoint server-side (aislamiento por tenant). En éxito, prepend al estado
+  // local para que el cliente aparezca al instante (SC-1) con su badge "Manual".
+  async function onCreateClient(data: NewClientForm) {
+    setCreating(true)
+    try {
+      const res = await fetch('/api/clients/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name?.trim(),
+          phone: data.phone?.trim() || null,
+          email: data.email?.trim() || null,
+          notes: data.notes?.trim() || null,
+          // Solo se mandan en salud; el server igual re-gatea por vertical (no confía en el cliente).
+          ...(isSalud
+            ? { insurance_name: data.insurance_name?.trim() || null, insurance_number: data.insurance_number?.trim() || null }
+            : {}),
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.ok || !body.client) {
+        toast.error('No se pudo crear el cliente. Intentá de nuevo.')
+        setCreating(false)
+        return
+      }
+      setClients(prev => [body.client as Client, ...prev])
+      toast.success(`${term.client} creado`)
+      resetNew()
+      setNewClientOpen(false)
+    } catch {
+      toast.error('No se pudo crear el cliente. Intentá de nuevo.')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const letterRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -415,15 +497,21 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       )}>
         {/* Header */}
         <div className="flex-shrink-0 p-4 border-b border-border space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h1 className="text-lg font-bold">
               {term.clients} <span className="text-muted-foreground font-normal text-sm">({clients.length})</span>
             </h1>
-            {duplicates.length > 0 && (
-              <button onClick={() => setMergeModal(true)} className="text-muted-foreground hover:text-foreground transition-colors" title="Fusionar duplicados">
-                <GitMerge className="w-4 h-4" />
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {duplicates.length > 0 && (
+                <button onClick={() => setMergeModal(true)} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Fusionar duplicados">
+                  <GitMerge className="w-4 h-4" />
+                </button>
+              )}
+              {/* CTA primario del panel (CLIENT-01). size default → h-9 (≥44px con el padding en mobile). */}
+              <Button onClick={() => setNewClientOpen(true)} className="gap-1.5">
+                <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
+              </Button>
+            </div>
           </div>
 
           {/* Filter tabs */}
@@ -536,7 +624,13 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{client.name}</p>
-                        <p className="text-xs text-muted-foreground">{fichaNum(num)} · {cs?.visits ?? 0} visitas</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">{fichaNum(num)} · {cs?.visits ?? 0} visitas</p>
+                          {/* Badge de origen (SC-2): estado no interactivo, coexiste con el status dot */}
+                          <Badge variant={ORIGIN_BADGE[client.origin].variant} className="flex-shrink-0">
+                            {ORIGIN_BADGE[client.origin].label}
+                          </Badge>
+                        </div>
                       </div>
                       {/* Status dot */}
                       <div className={cn('w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[cs?.status ?? 'new'])} title={STATUS_LABEL[cs?.status ?? 'new']} />
@@ -825,6 +919,53 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               )
             })}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Nuevo cliente (alta manual, CLIENT-01) ── */}
+      <Dialog open={newClientOpen} onOpenChange={(o) => { setNewClientOpen(o); if (!o) resetNew() }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Nuevo {term.client.toLowerCase()}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmitNew(onCreateClient)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="nc-name">Nombre</Label>
+              <Input id="nc-name" {...registerNew('name')} aria-invalid={!!newErrors.name} />
+              {newErrors.name && <p className="text-xs text-destructive">{newErrors.name.message}</p>}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="nc-phone">Teléfono</Label>
+                <Input id="nc-phone" {...registerNew('phone')} aria-invalid={!!newErrors.phone} />
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="nc-email">Email</Label>
+                <Input id="nc-email" type="email" {...registerNew('email')} aria-invalid={!!newErrors.email} />
+              </div>
+            </div>
+            {(newErrors.phone || newErrors.email) && (
+              <p className="text-xs text-destructive">{newErrors.phone?.message ?? newErrors.email?.message}</p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="nc-notes">Notas (opcional)</Label>
+              <Textarea id="nc-notes" {...registerNew('notes')} rows={3} />
+            </div>
+            {isSalud && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="nc-ins-name">Obra social</Label>
+                  <Input id="nc-ins-name" {...registerNew('insurance_name')} />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="nc-ins-num">N° de afiliado</Label>
+                  <Input id="nc-ins-num" {...registerNew('insurance_number')} />
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => { setNewClientOpen(false); resetNew() }}>Cancelar</Button>
+              <Button type="submit" disabled={creating}>{creating ? 'Guardando...' : 'Guardar'}</Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
