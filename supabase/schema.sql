@@ -387,7 +387,9 @@ CREATE TABLE IF NOT EXISTS "public"."clients" (
     "client_number" integer,
     "insurance_name" "text",
     "insurance_number" "text",
-    "preferences" "text"
+    "preferences" "text",
+    "origin" "text" DEFAULT 'reserva'::"text" NOT NULL,
+    CONSTRAINT "clients_origin_check" CHECK (("origin" = ANY (ARRAY['reserva'::"text", 'manual'::"text", 'importado'::"text"])))
 );
 
 
