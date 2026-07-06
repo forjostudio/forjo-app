@@ -75,6 +75,17 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de cliente (origin=manual + tena
     expect(validateClientBody({ name: 'Ana Gómez', phone: null, email: 'ana@test.com' })).toBeNull()
   })
 
+  // ── Validación: teléfono con formato no numérico → invalid_phone (bug UAT Fase 2) ─────────────
+  it('invalid_phone — un teléfono con letras es rechazado; formatos numéricos válidos pasan', () => {
+    expect(validateClientBody({ name: 'Juan', phone: 'asdadasad', email: null })).toBe('invalid_phone')
+    expect(validateClientBody({ name: 'Juan', phone: 'abc123', email: 'j@test.com' })).toBe('invalid_phone')
+    // Formatos de teléfono válidos (dígitos, espacios, + ( ) -) pasan.
+    expect(validateClientBody({ name: 'Juan', phone: '+54 11 1234-5678', email: null })).toBeNull()
+    expect(validateClientBody({ name: 'Juan', phone: '(011) 4567-8900', email: null })).toBeNull()
+    // Teléfono vacío con email válido → válido (phone es opcional).
+    expect(validateClientBody({ name: 'Juan', phone: '', email: 'j@test.com' })).toBeNull()
+  })
+
   // ── Insert: origin='manual' + business_id de la sesión ───────────────────────────────────────
   it('origin=manual — el cliente creado queda con origin=manual y business_id del negocio de la sesión', async () => {
     const payload = buildClientInsert(

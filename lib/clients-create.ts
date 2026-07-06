@@ -19,11 +19,20 @@ export interface ClientCreateInput {
   insurance_number: string | null
 }
 
-// Validación de dominio (D-02): nombre no vacío + al menos uno de teléfono/email.
-// Devuelve el código de error snake_case, o null si el body es válido.
+// Un teléfono es opcional, pero si viene solo puede tener dígitos, espacios y `+ ( ) -`
+// (no letras ni otros símbolos). Vacío/null = válido (el campo no es obligatorio).
+export function isValidPhone(phone: string | null | undefined): boolean {
+  const v = phone?.trim()
+  if (!v) return true
+  return /^[\d\s()+-]+$/.test(v)
+}
+
+// Validación de dominio (D-02): nombre no vacío + al menos uno de teléfono/email +
+// teléfono con formato numérico si viene. Devuelve el código de error snake_case, o null si es válido.
 export function validateClientBody(input: { name: string; phone: string | null; email: string | null }): string | null {
   if (!input.name) return 'missing_fields'
   if (!input.phone && !input.email) return 'missing_fields'
+  if (!isValidPhone(input.phone)) return 'invalid_phone'
   return null
 }
 

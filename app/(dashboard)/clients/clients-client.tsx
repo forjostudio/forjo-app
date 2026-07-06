@@ -9,6 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { Client, Appointment } from '@/lib/types'
+import { isValidPhone } from '@/lib/clients-create'
 import { useVertical } from '@/lib/use-terminology'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,7 +67,7 @@ const ORIGIN_BADGE: Record<Client['origin'], { label: string; variant: 'outline'
 const newClientSchema = z
   .object({
     name: z.string().trim().min(1, 'Ingresá un nombre.'),
-    phone: z.string().trim().optional(),
+    phone: z.string().trim().refine(isValidPhone, 'El teléfono solo puede tener números, espacios y + ( ) -.').optional(),
     email: z.union([z.string().trim().email('El email no es válido.'), z.literal('')]).optional(),
     notes: z.string().trim().optional(),
     insurance_name: z.string().trim().optional(),
@@ -183,6 +184,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   } = useForm<NewClientForm>({
     resolver: zodResolver(newClientSchema),
     mode: 'onBlur', // validación inline al salir del campo (UI-SPEC §A)
+    reValidateMode: 'onChange', // una vez que hay error, se limpia al corregir (no queda "pegado")
   })
 
   // Escribe SIEMPRE vía el endpoint server-side (aislamiento por tenant). En éxito, prepend al estado
@@ -497,33 +499,32 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       )}>
         {/* Header */}
         <div className="flex-shrink-0 p-4 border-b border-border space-y-3">
+          {/* Fila 1: título + (opcional) fusionar duplicados. */}
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-lg font-bold">
               {term.clients} <span className="text-muted-foreground font-normal text-sm">({clients.length})</span>
             </h1>
-            <div className="flex items-center gap-2">
-              {duplicates.length > 0 && (
-                <button onClick={() => setMergeModal(true)} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Fusionar duplicados">
-                  <GitMerge className="w-4 h-4" />
-                </button>
-              )}
-              {/* Export CSV (DATA-01) — acción SECUNDARIA (outline). <a download> = descarga directa
-                  del route handler autenticado, sin loading. El label se oculta en mobile (queda el
-                  icono) para no apretar la fila; desktop mantiene "Exportar CSV". */}
-              <a
-                href="/api/export/clients"
-                download
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-                title="Exportar CSV"
-              >
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">Exportar CSV</span>
-              </a>
-              {/* CTA primario del panel (CLIENT-01). size default → h-9 (≥44px con el padding en mobile). */}
-              <Button onClick={() => setNewClientOpen(true)} className="gap-1.5">
-                <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
-              </Button>
-            </div>
+            {duplicates.length > 0 && (
+              <button onClick={() => setMergeModal(true)} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Fusionar duplicados">
+                <GitMerge className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {/* Fila 2: acciones en grid de 2 columnas (w-full) — el panel es angosto (lg:w-80),
+              así los botones nunca compiten con el título ni se clipean por el overflow-hidden.
+              Export = secundario (outline), Nuevo cliente = CTA primario (CLIENT-01). */}
+          <div className="grid grid-cols-2 gap-2">
+            <a
+              href="/api/export/clients"
+              download
+              className={cn(buttonVariants({ variant: 'outline' }), 'w-full gap-1.5')}
+              title="Exportar CSV"
+            >
+              <Download className="w-4 h-4" /> Exportar CSV
+            </a>
+            <Button onClick={() => setNewClientOpen(true)} className="w-full gap-1.5">
+              <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
+            </Button>
           </div>
 
           {/* Filter tabs */}
