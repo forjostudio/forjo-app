@@ -174,6 +174,9 @@ export interface Client {
   notes: string | null
   status?: string | null
   client_number?: number | null
+  // Procedencia del cliente: 'reserva' (llegó por la reserva pública), 'manual' (alta a mano del
+  // dueño) o 'importado' (import CSV, Fase 3). Columna origin (migr. 049), NOT NULL DEFAULT 'reserva'.
+  origin: 'reserva' | 'manual' | 'importado'
   // Salud (obra social)
   insurance_name?: string | null
   insurance_number?: string | null
