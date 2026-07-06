@@ -4,8 +4,9 @@
 //
 // Invariantes de seguridad que viven acá (D-02 + skill supabase-multitenant-rls):
 //  - business_id SIEMPRE proviene del negocio resuelto por sesión (owner_id), NUNCA del body.
-//  - origin='manual' se fija server-side; el cliente no lo elige (el CHECK de migr. 049 además
-//    rechaza cualquier valor fuera de reserva|manual|importado).
+//  - origin se fija server-side; el cliente no lo elige (el CHECK de migr. 049 además
+//    rechaza cualquier valor fuera de reserva|manual|importado). buildClientInsert lo recibe
+//    como parámetro con default 'manual' (alta manual); el import lo pasa como 'importado'.
 //  - insurance_name / insurance_number SOLO se persisten si el vertical del negocio es salud.
 
 import { resolveVertical } from '@/lib/verticals'
@@ -37,11 +38,13 @@ export function validateClientBody(input: { name: string; phone: string | null; 
 }
 
 // Construye el objeto del insert en `clients`. business_id = el del negocio de la sesión (no del
-// body). origin='manual' fijo. insurance_* solo si el vertical resuelto es salud; en otros
-// verticales se ignora aunque venga en el body (T-02-08).
+// body). origin parametrizable con default 'manual' (alta manual intacta); el import CSV lo llama
+// con 'importado'. insurance_* solo si el vertical resuelto es salud; en otros verticales se
+// ignora aunque venga en el body (T-02-08).
 export function buildClientInsert(
   business: { id: string; type?: string | null; vertical?: string | null },
   input: ClientCreateInput,
+  origin: 'manual' | 'importado' = 'manual',
 ): Record<string, unknown> {
   const isSalud = resolveVertical(business).key === 'salud'
   return {
@@ -53,6 +56,6 @@ export function buildClientInsert(
     ...(isSalud
       ? { insurance_name: input.insurance_name, insurance_number: input.insurance_number }
       : {}),
-    origin: 'manual',
+    origin,
   }
 }
