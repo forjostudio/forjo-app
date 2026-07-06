@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v0.15
 milestone_name: milestone
 current_phase: 03
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-07-06T21:30:03.022Z"
-last_activity: 2026-07-06 -- Completed 03-01 (import CSV — lógica pura + papaparse)
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-07-06T22:00:00.000Z"
+last_activity: 2026-07-06 -- Completed 03-03 (UI dialog import CSV — 4 etapas)
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
-  percent: 67
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -28,16 +28,16 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Current Position
 
-**Status:** Executing Phase 03
-**Current Phase:** 03
-**Last Activity:** 2026-07-06 -- Completed 03-02 (route handlers preview/confirm del import CSV)
-**Last Activity Description:** 03-02 ejecutado: preview (parse+clasificar, no escribe) + confirm (re-parse + batch insert anon+RLS origin='importado'), tsc verde + vitest 20/20
+**Status:** Phase 03 completa (3/3 plans) — milestone v0.15 con las 3 fases ejecutadas
+**Current Phase:** 03 (completa)
+**Last Activity:** 2026-07-06 -- Completed 03-03 (UI dialog import CSV — 4 etapas)
+**Last Activity Description:** 03-03 ejecutado: botón "Importar CSV" (header 2-col) + Dialog de 4 etapas (upload→preview→confirmando→resumen) consumiendo preview/confirm; importados con badge "Importado"; tsc verde + eslint sin regresión. DATA-03 cerrado end-to-end.
 
 ## Progress
 
-**Phases Complete:** 2 / 3
-**Current Plan:** 3
-**Progreso:** [█████████░] 89%
+**Phases Complete:** 3 / 3
+**Current Plan:** 3 (completo)
+**Progreso:** [██████████] 100%
 
 ## Roadmap
 
@@ -72,15 +72,17 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 - **[03-02]** Route handlers preview/confirm del import (DATA-03). Dos endpoints autenticados que comparten el MISMO pipeline (auth `getUser`→401 · tenant por `owner_id`→404 · upload multipart Next 16 `request.formData()`→`File`→`file.text()` = PRIMER uso de formData en el repo · guards ANTES de parsear: `MAX_BYTES=2MB`→413, extensión `.csv`→400, header rígido→400 `invalid_header`, `>2000` filas→400 `too_many_rows` · `parseCsv`/`classifyRows` de `@/lib/clients-import` · query existentes filtrada por `business_id`), anon+RLS `@/lib/supabase/server` NUNCA service-role. **`preview`** solo cuenta → `{ok,preview:{total,importables,duplicadas,errores}}`, CERO `.insert/.update/.delete` (SC-1, grep verifica). **`confirm`** RE-PARSEA autoritativamente (D-03, no confía en la preview — T-03-07) + batch `.insert(payload).select('id')` con `buildClientInsert(business, fila, 'importado')` (origin forzado server-side, Pitfall 5) → `{ok,resumen:{importados,omitidos,fallidos}}`. Fallo parcial de batch → cuenta no-insertadas en `fallidos` (200 con resumen); solo fallo total inesperado (0 insertadas) → 500 `insert_failed`. Fix de tipado: `insertedCount = inserted?.length ?? 0` resuelto ANTES de ramificar sobre `insertErr` (Supabase narrowea `inserted`→`null` en la rama de error → TS2339). Verify aislado `vitest run test/clients-import.test.ts` 20/20 + tsc verde (suite full sigue con flakiness de infra de 03-01, no relacionada).
 
+- **[03-03]** UI del import CSV (DATA-03) — cierra DATA-03 end-to-end. `clients-client.tsx`: header reestructurado (fila 2-col Exportar+Importar ambos outline; "Nuevo cliente" a fila primaria full-width) + Dialog ancho `sm:max-w-2xl` de 4 etapas por `importStage` local ('upload'|'preview'|'confirming'|'resumen'). **Upload:** dropzone + `<input type=file accept=".csv,text/csv">` oculto, guard client-side `.csv`+≤2MB (feedback; el server re-valida), archivo elegido con nombre+tamaño + `X` (`aria-label="Quitar archivo"`), POST FormData a `/preview` SIN Content-Type (browser setea boundary). **Preview (SC-1):** contadores (Badge outline/destructive/secondary) + tabla de FILAS CON ERROR (el endpoint solo devuelve counts + `errores:[{row,error}]`, NO datos por fila de válidas/duplicadas → se tabula lo disponible: `Fila N` + mensaje) marcadas fill+border+icono+texto (desktop Table / mobile filas apiladas), empty state deshabilita Confirmar. **Confirming:** re-POST del MISMO File retenido en state a `/confirm`, anti-doble-submit (stage→disabled + return temprano) + cierre bloqueado (`onImportOpenChange` ignora close si stage==='confirming'). **Resumen (SC-4):** 3 tiles importados/omitidos/fallidos (fallidos `text-destructive` solo si >0), "Cerrar" (outline) re-fetchea la lista `order created_at ASC` → importados con badge "Importado" (ORIGIN_BADGE existente, sin re-mapear). `IMPORT_ROW_ERROR` traduce códigos: `missing_fields`→"Falta el nombre o un contacto…", `invalid_phone`→"El teléfono no es válido.". Reuso puro (Dialog/Button/Table/Badge), cero deps/componentes UI nuevos, `--primary` solo en "Confirmar import". Commits `c32fe35` (header) + `5776a57` (dialog). tsc verde; eslint sin regresión (baseline 2 = post 2, el `set-state-in-effect` sigue en deferred-items).
+
 **TODOs:**
 
-- Fase 3: ejecutar 03-03 (UI dialog import) — consume `POST /api/import/clients/{preview,confirm}`.
+- Milestone v0.15 con las 3 fases ejecutadas. Pendiente: human-check visual del flujo de import en `/clients` (exportar→reimportar→preview→confirmar→resumen con badge "Importado"), luego verify/secure/ship del milestone.
 
 **Blockers:** Ninguno.
 
 ## Session Continuity
 
-**Last session:** 2026-07-06T21:33:00.000Z
+**Last session:** 2026-07-06T22:00:00.000Z
 
-**Stopped At:** Completed 03-02-PLAN.md
-**Resume File:** .planning/workstreams/gestion-rebrand/phases/03-import-de-clientes-csv/03-03-PLAN.md
+**Stopped At:** Completed 03-03-PLAN.md
+**Resume File:** (Phase 3 completa — próximo: /gsd:verify-work o cierre del milestone)

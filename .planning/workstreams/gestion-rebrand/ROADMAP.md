@@ -25,7 +25,7 @@ verificable por separado.
 
 - [x] **Phase 1: Reorg de IA + Ayuda** - Sidebar agrupado + split Negocio-hub/Configuración con redirects, más la FAQ estática — todo behavior-frozen (completed 2026-07-05)
 - [x] **Phase 2: Alta manual + Exports CSV** - Alta manual de cliente con badge de origen (columna nueva) + export de clientes y finanzas a CSV (completed 2026-07-06)
-- [ ] **Phase 3: Import de clientes CSV** - Upload → preview/validación → confirmar, deduplicando y respetando el aislamiento por tenant
+- [x] **Phase 3: Import de clientes CSV** - Upload → preview/validación → confirmar, deduplicando y respetando el aislamiento por tenant
 
 ## Phase Details
 
@@ -112,7 +112,7 @@ con backend delicado del milestone, aislado en su propia fase.
   3. La importación deduplica contra los clientes ya existentes del negocio (por el criterio definido, ej. contacto), sin crear duplicados de clientes que ya estaban.
   4. Los clientes creados por import quedan con badge de origen "Importado" (consume la columna de origen de la Fase 2) y el dueño ve un resumen de cuántos se importaron / omitieron / fallaron.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 **UI hint**: yes
 
 **Wave 1**
@@ -125,7 +125,7 @@ con backend delicado del milestone, aislado en su propia fase.
 
 **Wave 3** *(blocked on Wave 2 — consume los endpoints)*
 
-- [ ] 03-03-PLAN.md — UI: botón "Importar CSV" + Dialog de 4 etapas (upload → preview → confirmar → resumen) en clients-client.tsx (DATA-03)
+- [x] 03-03-PLAN.md — UI: botón "Importar CSV" + Dialog de 4 etapas (upload → preview → confirmar → resumen) en clients-client.tsx (DATA-03)
 
 **Phase-level decision (defer to discuss-phase)**:
 
@@ -144,4 +144,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
 | 2. Alta manual + Exports CSV | 3/3 | Complete    | 2026-07-06 |
-| 3. Import de clientes CSV | 2/3 | In Progress|  |
+| 3. Import de clientes CSV | 3/3 | Complete    | 2026-07-06 |
