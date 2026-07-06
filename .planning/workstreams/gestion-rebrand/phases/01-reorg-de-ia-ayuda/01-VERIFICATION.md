@@ -1,8 +1,10 @@
 ---
 phase: 01-reorg-de-ia-ayuda
 verified: 2026-07-05T16:30:00Z
-status: human_needed
+status: passed
 score: 10/10 must-haves verificados
+uat_result: "3 pass, 1 blocked-on-deploy (OAuth MP), 0 issues — ver 01-UAT.md"
+acknowledged_gaps: 1
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -180,3 +182,7 @@ La fase logra su objetivo: el chasis de navegación está reorganizado (sidebar 
 
 _Verificado: 2026-07-05T16:30:00Z_
 _Verificador: Claude (gsd-verifier)_
+
+## Acknowledged Gaps
+
+- **Test 2 (UAT) — OAuth de MercadoPago aterriza en /negocio → Integraciones:** `blocked-on-deploy`, aceptado por el usuario (2026-07-05). NO es un defecto de código: el reruteo `/settings?mp=` → `/negocio?mp=` está verificado en código (callback L69, connect L9; 0 residual `/settings?mp=`; validación state/CSRF y canje `exchangeMpCode` intactos — auditoría de seguridad T-02-02 CLOSED). El flujo OAuth end-to-end solo se puede ejercitar en el dominio de `NEXT_PUBLIC_APP_URL` (producción), no desde localhost. **Acción pendiente:** smoke-check post-deploy de la rama — conectar MP y confirmar landing en `/negocio` → tab Integraciones + toast + URL limpia.
