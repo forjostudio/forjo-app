@@ -72,6 +72,15 @@ Si algún archivo o skill no existe, continuá sin él.
   booking público / dashboard a un negocio activo, no es solo una marca interna del CRM)
 - **Tocar el webhook de pagos de MP** (persistir eventos, cambiar estados/flujos) → integridad
   de pagos: consultá `mercadopago-suscripciones` y gateá si hay cualquier duda
+- **Tocar el núcleo de integridad de reservas** — constraints anti-doble-booking (011/013),
+  capacity/cupos, concurrencia anti-sobrecupo, exclusión por espacio compartido (canchas): tan
+  sensible como el webhook de MP. NO decidas de memoria; consultá los briefs de cupos / motor-reservas
+  y gateá ante cualquier riesgo de regresión (doble-booking, sobrecupo, turnos perdidos)
+- **Push o merge a `main`** = deploy a producción (Vercel publica `main`, toca clientes vivos). El
+  advisor NUNCA decide ni ejecuta solo un merge/push a main — es una acción de release, siempre del usuario
+- **Aplicar migraciones a staging o prod** (Supabase SQL editor) es acción externa → gatear. El flujo
+  es local (`supabase db reset` valida) → staging (ensayo) → prod (a mano); las nuevas son 040+ sobre
+  el baseline. Nunca "aplicar a prod" como decisión autónoma
 
 **PREGUNTA MIXTA (técnico + negocio):** muchas preguntas reales mezclan las dos cosas (ej. "mover
 precios a DB" [técnico] + "¿en qué moneda?" [negocio]). NO la trates como una sola: resolvé la(s)
@@ -110,6 +119,11 @@ por la sub-decisión de negocio. Dejale claro al usuario qué ya resolviste y qu
 - Las decisiones LOCKED en PROJECT.md no se re-litigian, se aplican
 - Antes de decidir sobre pagos, RLS o aislamiento, consultá la skill del dominio
   (`mercadopago-suscripciones` / `supabase-multitenant-rls`) — no decidas de memoria
+- Antes de decidir sobre el **núcleo de reservas** (constraints 011/013, capacity, concurrencia,
+  espacio compartido) consultá el brief de cupos / motor-reservas — es tan sensible como pagos/RLS
+- Los ejemplos concretos de este SKILL (fases o decisiones nombradas, ej. "moneda ARS", "CRM en
+  build") son ILUSTRATIVOS y pueden estar viejos: la verdad viva está en `MEMORY.md` y los briefs;
+  ante conflicto, prevalece `MEMORY.md`
 - Si la pregunta toca infra compartida entre milestones, no la cierres sin chequear `MEMORY.md`
 - Los briefs (fuera del repo) y sus decisiones LOCKED son autoritativos para el milestone:
   aplicalos, no los re-litigies
