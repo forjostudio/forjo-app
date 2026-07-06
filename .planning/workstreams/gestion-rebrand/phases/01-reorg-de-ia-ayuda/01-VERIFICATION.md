@@ -27,7 +27,7 @@ human_verification:
 **Objetivo de la fase:** Reorganizar el chasis de navegación de la app (sidebar agrupado + hub Negocio / Configuración) sin cambiar el comportamiento de ningún flujo existente (behavior-frozen), y sumar la ayuda estática — la reorg deja el terreno listo para colgar las features de las fases siguientes.
 
 **Verificado:** 2026-07-05T16:30:00Z
-**Estado:** human_needed
+**Estado:** passed (UAT: 3 pass, 1 blocked-on-deploy aceptado — ver ## Acknowledged Gaps)
 **Re-verificación:** No — verificación inicial
 
 ---

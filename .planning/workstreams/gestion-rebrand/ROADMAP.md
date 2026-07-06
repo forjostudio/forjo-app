@@ -23,7 +23,7 @@ verificable por separado.
 
 ## Phases
 
-- [ ] **Phase 1: Reorg de IA + Ayuda** - Sidebar agrupado + split Negocio-hub/Configuración con redirects, más la FAQ estática — todo behavior-frozen
+- [x] **Phase 1: Reorg de IA + Ayuda** - Sidebar agrupado + split Negocio-hub/Configuración con redirects, más la FAQ estática — todo behavior-frozen (completed 2026-07-05)
 - [ ] **Phase 2: Alta manual + Exports CSV** - Alta manual de cliente con badge de origen (columna nueva) + export de clientes y finanzas a CSV
 - [ ] **Phase 3: Import de clientes CSV** - Upload → preview/validación → confirmar, deduplicando y respetando el aislamiento por tenant
 
@@ -44,7 +44,7 @@ estática — la reorg deja el terreno listo para colgar las features de las fas
   4. El menú y la terminología por vertical (incluido `canchas`, que oculta Profesionales) se mantienen correctos tras la reorg — ningún grupo ni tab rompe el gating por rubro existente.
   5. El usuario abre una FAQ/ayuda estática (cómo usar Forjo Gestión) desde Configuración o el footer, sin relación con el agente.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Sidebar agrupado en 5 secciones data-driven (NAV-01, behavior-frozen)
@@ -52,7 +52,7 @@ estática — la reorg deja el terreno listo para colgar las features de las fas
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-03-PLAN.md — FAQ estática /ayuda + dos accesos (footer del sidebar + Configuración) (HELP-01)
+- [x] 01-03-PLAN.md — FAQ estática /ayuda + dos accesos (footer del sidebar + Configuración) (HELP-01)
 
 **UI hint**: yes
 **Phase-level decision (defer to discuss-phase)**:
@@ -116,6 +116,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Reorg de IA + Ayuda | 2/3 | In Progress|  |
+| 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
 | 2. Alta manual + Exports CSV | 0/TBD | Not started | - |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |

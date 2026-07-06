@@ -44,7 +44,7 @@
 
 ### Ayuda (HELP)
 
-- [ ] **HELP-01**: La app ofrece una **FAQ/ayuda estática** (cómo usar Forjo Gestión), accesible desde
+- [x] **HELP-01**: La app ofrece una **FAQ/ayuda estática** (cómo usar Forjo Gestión), accesible desde
   Configuración o el footer. Sin relación con el agente.
 
 ## v2 / Future Requirements
@@ -76,7 +76,7 @@ Reconocidos pero diferidos — no entran en v0.15 (dependen del add-on del agent
 |-------------|-------|--------|
 | NAV-01 | Phase 1 | Complete |
 | NAV-02 | Phase 1 | Complete |
-| HELP-01 | Phase 1 | Pending |
+| HELP-01 | Phase 1 | Complete |
 | CLIENT-01 | Phase 2 | Pending |
 | DATA-01 | Phase 2 | Pending |
 | DATA-02 | Phase 2 | Pending |
