@@ -36,6 +36,11 @@ Las 4 decisiones fueron resueltas por el advisor (todas técnicas; ninguna de ne
 - **Migración 049** = primera libre (045 landing_cms, 046 drop_business_hours, 047 backfill_vertical, 048 app_settings
   ya tomadas — NO renumerar las ajenas). `clients` **ya tiene RLS habilitada** (tabla existente) → la migración es
   solo `ALTER TABLE ... ADD COLUMN`, sin policies nuevas.
+- **Aplicación de la migración (GATEADA — acción externa, NO autónoma):** el flujo es **local (`supabase db reset`
+  valida en PG local) → staging (forjo-staging) → prod (a mano)**. El planner marca la tarea de aplicación como
+  `autonomous: false`; el ejecutor genera el SQL numerado + regenera `schema.sql`, pero **NO aplica la migración a
+  staging/prod solo** — eso lo hace el usuario. Igual criterio para el **deploy**: mergear/pushear a `main` = publicar
+  a producción (Vercel) → acción de release del usuario, nunca automática.
 
 ### D-02 — UX del alta manual (CLIENT-01)
 - **Alta dedicada en `/clients`** (botón "Nuevo cliente" → form o modal), NO el alta inline acoplada a crear turno
