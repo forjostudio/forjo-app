@@ -112,12 +112,12 @@ con backend delicado del milestone, aislado en su propia fase.
   3. La importación deduplica contra los clientes ya existentes del negocio (por el criterio definido, ej. contacto), sin crear duplicados de clientes que ya estaban.
   4. Los clientes creados por import quedan con badge de origen "Importado" (consume la columna de origen de la Fase 2) y el dueño ve un resumen de cuántos se importaron / omitieron / fallaron.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 **UI hint**: yes
 
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Setup papaparse (D-05) + lógica pura `lib/clients-import.ts` (parseo RFC4180, round-trip lossless, validación, dedup) + parametrizar `origin` en buildClientInsert + tests (DATA-03)
+- [x] 03-01-PLAN.md — Setup papaparse (D-05) + lógica pura `lib/clients-import.ts` (parseo RFC4180, round-trip lossless, validación, dedup) + parametrizar `origin` en buildClientInsert + tests (DATA-03)
 
 **Wave 2** *(blocked on Wave 1 — usa la lógica pura)*
 
@@ -144,4 +144,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
 | 2. Alta manual + Exports CSV | 3/3 | Complete    | 2026-07-06 |
-| 3. Import de clientes CSV | 0/3 | Not started | - |
+| 3. Import de clientes CSV | 1/3 | In Progress|  |

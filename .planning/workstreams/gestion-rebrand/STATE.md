@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.15
 milestone_name: milestone
-current_phase: 3
-current_plan: Not started
+current_phase: 03
+current_plan: 2
 status: executing
-stopped_at: Phase 3 research + UI-SPEC done
-last_updated: "2026-07-06T21:05:13.376Z"
-last_activity: 2026-07-06 -- Phase 03 planning complete
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-07-06T21:21:33.766Z"
+last_activity: 2026-07-06 -- Completed 03-01 (import CSV — lógica pura + papaparse)
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 67
+  total_plans: 9
+  completed_plans: 8
+  percent: 78
 ---
 
 # Project State
@@ -28,16 +28,16 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Current Position
 
-**Status:** Ready to execute
-**Current Phase:** 3
-**Last Activity:** 2026-07-06 -- Phase 03 planning complete
-**Last Activity Description:** Phase 03 planning complete — 3 plans ready
+**Status:** Executing Phase 03
+**Current Phase:** 03
+**Last Activity:** 2026-07-06 -- Completed 03-01 (import CSV — lógica pura + papaparse)
+**Last Activity Description:** 03-01 ejecutado: papaparse instalada, lib/clients-import.ts (lógica pura), origin parametrizado, 20 tests verdes
 
 ## Progress
 
 **Phases Complete:** 2 / 3
-**Current Plan:** Not started
-**Progreso:** [██████████] 100%
+**Current Plan:** 2
+**Progreso:** [████████░░] 78%
 
 ## Roadmap
 
@@ -68,15 +68,17 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 - **[01-03]** FAQ/ayuda estática (HELP-01): ruta `/ayuda` = server component sync con `const FAQ: { pregunta, respuesta }[]` (7 preguntas) versionado en git (D-08, sin Supabase/MDX). Disclosure nativo `<details>`/`<summary>` estilado con Tailwind (`group-open:rotate-180`, `[&::-webkit-details-marker]:hidden`) → **cero deps nuevas** (HARD GATE `git diff --stat package.json` vacío; NO shadcn Accordion). Dos accesos (D-07): footer del sidebar (`HelpCircle` + `<Link href=/ayuda>` que cierra el drawer mobile) y link "¿Necesitás ayuda? Ver la guía" en la view `config` de settings-client (gateado con `!isSection`). Behavior-frozen: ningún otro destino del sidebar cambió. Contenido de las 7 respuestas = draft de Claude, el usuario debe revisarlo (D-09). Los 10 errores eslint de `settings-client.tsx` son pre-existentes (mismo conteo en HEAD) → deferred, no tocados.
 
+- **[03-01]** Import CSV — lógica pura (DATA-03). `papaparse@5.5.4` = primera y única dep del milestone (pineada exacta sin caret; npm agrega `^` por default → corregido a mano + `npm install --package-lock-only`). `lib/clients-import.ts` (framework-agnostic, molde `lib/clients-create.ts`): `parseCsv` (papaparse header:true + skipEmptyLines:'greedy' + transformHeader trim/lowercase + BOM stripping + header rígido validado contra `nombre,telefono,email,origen,notas,obra_social,nro_obra_social`), `unescapeFormulaGuard` (quita UN `'` líder solo si el siguiente char ∈ `[=+-@\t\r]` = mismo conjunto que el `esc()` del export invertido → round-trip lossless `=X`→`=X`), `classifyRows` (des-escapa → `validateClientBody` reusado → dedup email-minúsc + tel solo-dígitos vs existentes E intra-CSV, mismo criterio que "Fusionar duplicados" L260-266 → `{importables, errores:[{row:idx+2, error}], duplicadas, total}`; notas truncadas 1000; NO inserta, eso es la Wave 2). `buildClientInsert` parametrizado con `origin: 'manual'|'importado' = 'manual'` (retro-compatible: `clients/create/route.ts` NO se toca). TDD: RED be58292 → GREEN 6d893ec, 20/20 verde en aislamiento + `manual-client` 8/8 sin regresión. FLAKY conocido: la suite full-parallel (`vitest run`, 31 archivos) tira timeouts 5s en tests Supabase-backed por contención → `deferred-items.md` (fix = subir testTimeout/limitar pool, fuera de scope).
+
 **TODOs:**
 
-- Fase 3: research a nivel plan-phase (parseo/validación/dedup/aislamiento del import CSV).
+- Fase 3: ejecutar 03-02 (route handlers preview/confirm) y 03-03 (UI dialog import).
 
 **Blockers:** Ninguno.
 
 ## Session Continuity
 
-**Last session:** 2026-07-06T20:48:36.118Z
+**Last session:** 2026-07-06T21:21:33.756Z
 
-**Stopped At:** Phase 3 research + UI-SPEC done
-**Resume File:** .planning/workstreams/gestion-rebrand/phases/03-import-de-clientes-csv/03-UI-SPEC.md
+**Stopped At:** Completed 03-01-PLAN.md
+**Resume File:** .planning/workstreams/gestion-rebrand/phases/03-import-de-clientes-csv/03-02-PLAN.md

@@ -34,7 +34,7 @@
 
 - [x] **DATA-02**: El dueño exporta sus **finanzas** (movimientos/cashflow) a CSV.
 
-- [ ] **DATA-03**: El dueño **importa clientes** desde un CSV con flujo upload → preview/validación →
+- [x] **DATA-03**: El dueño **importa clientes** desde un CSV con flujo upload → preview/validación →
   confirmar, deduplicando y respetando el aislamiento por tenant (RLS + `business_id`).
 
 ### Clientes (CLIENT)
@@ -80,4 +80,4 @@ Reconocidos pero diferidos — no entran en v0.15 (dependen del add-on del agent
 | CLIENT-01 | Phase 2 | Complete |
 | DATA-01 | Phase 2 | Complete |
 | DATA-02 | Phase 2 | Complete |
-| DATA-03 | Phase 3 | Pending |
+| DATA-03 | Phase 3 | Complete |
