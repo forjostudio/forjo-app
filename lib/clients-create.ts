@@ -28,12 +28,22 @@ export function isValidPhone(phone: string | null | undefined): boolean {
   return /^[\d\s()+-]+$/.test(v)
 }
 
+// Un email es opcional, pero si viene tiene que tener formato válido (local@dominio.tld). Vacío/null =
+// válido. Contraparte server-side del `z.string().email()` del form del alta — la usa también el import
+// CSV, que no tiene validación de cliente por fila (por eso un email sin @ se colaba). Bug UAT Fase 3.
+export function isValidEmail(email: string | null | undefined): boolean {
+  const v = email?.trim()
+  if (!v) return true
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+}
+
 // Validación de dominio (D-02): nombre no vacío + al menos uno de teléfono/email +
-// teléfono con formato numérico si viene. Devuelve el código de error snake_case, o null si es válido.
+// teléfono y email con formato válido si vienen. Devuelve el código de error snake_case, o null si es válido.
 export function validateClientBody(input: { name: string; phone: string | null; email: string | null }): string | null {
   if (!input.name) return 'missing_fields'
   if (!input.phone && !input.email) return 'missing_fields'
   if (!isValidPhone(input.phone)) return 'invalid_phone'
+  if (!isValidEmail(input.email)) return 'invalid_email'
   return null
 }
 

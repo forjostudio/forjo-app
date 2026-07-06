@@ -77,6 +77,7 @@ interface ImportResumen { importados: number; omitidos: number; fallidos: number
 const IMPORT_ROW_ERROR: Record<string, string> = {
   missing_fields: 'Falta el nombre o un contacto (teléfono o email).',
   invalid_phone: 'El teléfono no es válido.',
+  invalid_email: 'El email no es válido.',
 }
 function importRowErrorLabel(code: string): string {
   return IMPORT_ROW_ERROR[code] ?? 'Fila con datos inválidos.'

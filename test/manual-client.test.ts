@@ -86,6 +86,16 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de cliente (origin=manual + tena
     expect(validateClientBody({ name: 'Juan', phone: '', email: 'j@test.com' })).toBeNull()
   })
 
+  // ── Validación: email con formato inválido → invalid_email (bug UAT Fase 3 — sin @ se colaba) ──
+  it('invalid_email — un email sin @ (o mal formado) es rechazado; vacío o válido pasa', () => {
+    expect(validateClientBody({ name: 'Juan', phone: '1122334455', email: 'diesdsgorgmail.com' })).toBe('invalid_email')
+    expect(validateClientBody({ name: 'Juan', phone: '1122334455', email: 'sin-arroba' })).toBe('invalid_email')
+    expect(validateClientBody({ name: 'Juan', phone: '1122334455', email: 'a@b' })).toBe('invalid_email')
+    // Email válido o vacío (con otro contacto) pasa.
+    expect(validateClientBody({ name: 'Juan', phone: '1122334455', email: 'ok@gmail.com' })).toBeNull()
+    expect(validateClientBody({ name: 'Juan', phone: '1122334455', email: '' })).toBeNull()
+  })
+
   // ── Insert: origin='manual' + business_id de la sesión ───────────────────────────────────────
   it('origin=manual — el cliente creado queda con origin=manual y business_id del negocio de la sesión', async () => {
     const payload = buildClientInsert(
