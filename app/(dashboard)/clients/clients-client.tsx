@@ -1133,6 +1133,193 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── Importar CSV (DATA-03) — un Dialog ancho, 4 etapas (upload→preview→confirming→resumen) ── */}
+      <Dialog open={importOpen} onOpenChange={onImportOpenChange}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Importar {term.clients.toLowerCase()}</DialogTitle></DialogHeader>
+
+          {/* ETAPA 1 — Upload */}
+          {importStage === 'upload' && (
+            <div className="space-y-4">
+              {/* Dropzone (click-to-choose; el input file va oculto y lo dispara "Elegir archivo") */}
+              <div className="border-2 border-dashed border-border rounded-lg py-6 px-4 flex flex-col items-center gap-2 text-center">
+                <Upload className="w-8 h-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Elegí el archivo .csv exportado de Forjo.</p>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="sr-only"
+                  onChange={(e) => onImportFileSelect(e.target.files?.[0] ?? null)}
+                />
+                <Button variant="outline" onClick={() => importInputRef.current?.click()}>
+                  Elegir archivo
+                </Button>
+                <p className="text-xs text-muted-foreground">Usá el CSV que exportaste desde Forjo (mismo formato).</p>
+              </div>
+
+              {/* Archivo elegido: nombre + tamaño + X para quitarlo */}
+              {importFile && (
+                <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+                  <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span className="flex-1 truncate">{importFile.name}</span>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    {(importFile.size / 1024).toFixed(0)} KB
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearImportFile}
+                    aria-label="Quitar archivo"
+                    className="text-muted-foreground hover:text-foreground transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Error de archivo inline (extensión/tamaño/header) */}
+              {importFileError && (
+                <p className="text-sm text-destructive">{importFileError}</p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => onImportOpenChange(false)}>Cancelar</Button>
+                <Button onClick={onImportPreview} disabled={!importFile || importLoading}>
+                  {importLoading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</>) : 'Continuar'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ETAPA 2 — Preview (SC-1: nada se escribe) */}
+          {importStage === 'preview' && importPreview && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Revisá antes de importar. Todavía no se guardó nada.</p>
+
+              {/* Contadores */}
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">{importPreview.importables} válidas</Badge>
+                <Badge variant="destructive">{importPreview.errores.length} con error</Badge>
+                <Badge variant="secondary">{importPreview.duplicadas} duplicadas</Badge>
+              </div>
+
+              {importPreview.importables === 0 ? (
+                /* Empty state: sin filas importables → no se puede confirmar */
+                <div className="flex flex-col items-center gap-2 text-center rounded-lg border border-border py-6 px-4">
+                  <AlertCircle className="w-8 h-8 text-destructive" />
+                  <p className="text-sm font-bold">No hay filas para importar.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Revisá que el CSV tenga la primera fila de encabezados y al menos un {term.client.toLowerCase()} con nombre y un contacto (teléfono o email).
+                  </p>
+                </div>
+              ) : importPreview.errores.length > 0 ? (
+                <>
+                  {/* Tabla de filas con error (desktop) — el server solo devuelve las filas con error;
+                      las válidas/duplicadas se resumen en los contadores. Marca = fill+border+icono+texto. */}
+                  <div className="hidden sm:block max-h-[50vh] overflow-y-auto rounded-lg border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-20">Fila</TableHead>
+                          <TableHead>Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {importPreview.errores.map((e) => (
+                          <TableRow key={e.row} className="bg-destructive/10 border-l-2 border-destructive">
+                            <TableCell className="text-muted-foreground">Fila {e.row}</TableCell>
+                            <TableCell>
+                              <span className="flex items-center gap-1 text-xs text-destructive">
+                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                {importRowErrorLabel(e.error)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* Filas apiladas (mobile) — mismo tratamiento, sin tabla */}
+                  <div className="sm:hidden max-h-[50vh] overflow-y-auto divide-y divide-border rounded-lg border border-border">
+                    {importPreview.errores.map((e) => (
+                      <div key={e.row} className="bg-destructive/10 border-l-2 border-destructive px-3 py-2">
+                        <p className="text-xs text-muted-foreground">Fila {e.row}</p>
+                        <p className="flex items-center gap-1 text-xs text-destructive">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                          {importRowErrorLabel(e.error)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                /* Todo importable, sin errores: confirmación calma con las importables listas */
+                <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-3 text-sm">
+                  <CheckCircle2 className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <span>{importPreview.importables} {importPreview.importables === 1 ? 'fila lista' : 'filas listas'} para importar.</span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => { resetImport() }}>Cambiar archivo</Button>
+                <Button onClick={onImportConfirm} disabled={importPreview.importables === 0}>
+                  Confirmar import
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ETAPA 3 — Confirmando (write en vuelo; cierre bloqueado por onImportOpenChange) */}
+          {importStage === 'confirming' && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Revisá antes de importar. Todavía no se guardó nada.</p>
+              <div className="flex items-center justify-center py-6">
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Importando...
+                </span>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" disabled>Cambiar archivo</Button>
+                <Button disabled>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Importando...
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ETAPA 4 — Resumen (SC-4) */}
+          {importStage === 'resumen' && importResumen && (
+            <div className="space-y-4">
+              <p className="text-sm font-bold">Importación completada.</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-border p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">{importResumen.importados}</p>
+                  <p className="text-xs text-muted-foreground">Importados</p>
+                </div>
+                <div className="rounded-lg border border-border p-3 text-center">
+                  <p className="text-2xl font-bold text-muted-foreground">{importResumen.omitidos}</p>
+                  <p className="text-xs text-muted-foreground">Omitidos</p>
+                </div>
+                <div className="rounded-lg border border-border p-3 text-center">
+                  <p className={cn('text-2xl font-bold', importResumen.fallidos > 0 ? 'text-destructive' : 'text-muted-foreground')}>
+                    {importResumen.fallidos}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Fallidos</p>
+                </div>
+              </div>
+              {(importResumen.omitidos > 0 || importResumen.fallidos > 0) && (
+                <p className="text-xs text-muted-foreground">
+                  Las filas con error no se importaron; las duplicadas se omitieron.
+                </p>
+              )}
+              <div className="flex justify-end pt-2">
+                <Button variant="outline" onClick={onImportDone}>Cerrar</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
