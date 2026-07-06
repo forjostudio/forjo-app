@@ -1,0 +1,35 @@
+-- 049 — clients.origin: procedencia del cliente (Gestión rebrand / Phase 2 — CLIENT-01, SC-2).
+--
+-- Contexto (alta manual + exports + import de Fase 3):
+--   Hoy `clients` no distingue de dónde vino un cliente: los que llegaron por la reserva pública
+--   y los que el dueño cargue a mano se ven igual. La Fase 2 introduce el alta manual (el dueño
+--   crea un cliente que NO vino por reserva) y un badge de origen en la lista de Clientes. Para eso
+--   la tabla necesita una columna que registre la procedencia de cada fila.
+--
+-- Qué hace:
+--   1. ALTER TABLE clients ADD COLUMN origin text NOT NULL DEFAULT 'reserva', modelada como text + CHECK
+--      restringido a los tres orígenes posibles del cliente: el que llega por la reserva pública, el que
+--      el dueño da de alta a mano, y el que entra por import CSV (reservado para la Fase 3).
+--
+-- Racional D-01 (lockeado):
+--   - Modelo text + CHECK (igual que `appointments.status` y `plan_status`), NO enum Postgres: evita el
+--     dolor de `ALTER TYPE ... ADD VALUE` cuando aparezcan nuevos orígenes y es más extensible.
+--   - El `DEFAULT 'reserva'` hace el BACKFILL AUTOMÁTICO de las filas existentes (SC-2): todos los clientes
+--     que ya están en la tabla (llegaron por la reserva pública) quedan marcados 'reserva' sin un UPDATE
+--     separado. La columna es NOT NULL: siempre viaja un valor.
+--   - El valor 'importado' queda RESERVADO para la Fase 3 (import CSV, DATA-03): el CHECK ya lo admite, pero
+--     nadie lo escribe todavía. El alta manual (plan 02-02) escribe 'manual'.
+--
+-- Qué NO hace (invariantes del proyecto):
+--   - NO agrega policy RLS nueva ni habilita RLS: `clients` YA es RLS por business_id (tabla existente) →
+--     la columna hereda ese aislamiento. Agregar una policy sería un error: no cambia la superficie de acceso.
+--   - NO renumera ni edita ninguna migración ajena (045 landing_cms, 046 drop_business_hours,
+--     047 backfill_vertical, 048 app_settings ya tomadas). 049 = primera libre.
+--   - NO se aplica vía `supabase db push` remoto. La ÚNICA validación autónoma es `supabase db reset` local
+--     (PG17), que replaya el baseline numerado + 040..049 en orden. Staging (forjo-staging) y prod se aplican
+--     A MANO coordinado con el deploy + `NOTIFY pgrst, 'reload schema';` (PostgREST refresca su schema cache).
+--     Tras aplicar, regenerar `supabase/schema.sql` (patrón del repo, igual que 037/039/042/043).
+
+-- ── clients.origin: procedencia del cliente (reserva | manual | importado) ───────────────────
+ALTER TABLE "public"."clients"
+  ADD COLUMN IF NOT EXISTS "origin" text NOT NULL DEFAULT 'reserva' CHECK (origin IN ('reserva','manual','importado'));
