@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.15
 milestone_name: milestone
-current_phase: 03
 current_plan: Not started
-status: completed
+status: Awaiting next milestone
 stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-07-06T23:24:06.758Z"
-last_activity: 2026-07-06
+last_updated: "2026-07-06T23:41:52.175Z"
+last_activity: 2026-07-06 — Milestone v0.15 completed and archived
 progress:
   total_phases: 3
   completed_phases: 3
   total_plans: 9
   completed_plans: 9
   percent: 100
+current_phase: 03
 ---
 
 # Project State
@@ -28,10 +28,10 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 ## Current Position
 
-**Status:** Milestone complete
-**Current Phase:** 03
-**Last Activity:** 2026-07-06
-**Last Activity Description:** Phase 03 complete
+Phase: Milestone v0.15 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-06 — Milestone v0.15 completed and archived
 
 ## Progress
 
@@ -86,3 +86,7 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 **Stopped At:** Completed 03-03-PLAN.md
 **Resume File:** (Phase 3 completa — próximo: /gsd:verify-work o cierre del milestone)
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
