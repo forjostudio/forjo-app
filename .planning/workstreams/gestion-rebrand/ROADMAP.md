@@ -112,8 +112,21 @@ con backend delicado del milestone, aislado en su propia fase.
   3. La importación deduplica contra los clientes ya existentes del negocio (por el criterio definido, ej. contacto), sin crear duplicados de clientes que ya estaban.
   4. Los clientes creados por import quedan con badge de origen "Importado" (consume la columna de origen de la Fase 2) y el dueño ve un resumen de cuántos se importaron / omitieron / fallaron.
 
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
+
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Setup papaparse (D-05) + lógica pura `lib/clients-import.ts` (parseo RFC4180, round-trip lossless, validación, dedup) + parametrizar `origin` en buildClientInsert + tests (DATA-03)
+
+**Wave 2** *(blocked on Wave 1 — usa la lógica pura)*
+
+- [ ] 03-02-PLAN.md — Route handlers de import: `api/import/clients/preview` (no escribe, SC-1) + `api/import/clients/confirm` (batch insert anon+RLS, origin='importado', SC-2/SC-4) (DATA-03)
+
+**Wave 3** *(blocked on Wave 2 — consume los endpoints)*
+
+- [ ] 03-03-PLAN.md — UI: botón "Importar CSV" + Dialog de 4 etapas (upload → preview → confirmar → resumen) en clients-client.tsx (DATA-03)
+
 **Phase-level decision (defer to discuss-phase)**:
 
   - Formato/columnas esperadas del CSV de import: fijar el header canónico (idealmente = el del export de clientes de la Fase 2, para round-trip), qué columnas son obligatorias, y cómo se tolera un CSV exportado desde otra herramienta (mapeo de columnas vs. header rígido).
@@ -131,4 +144,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
 | 2. Alta manual + Exports CSV | 3/3 | Complete    | 2026-07-06 |
-| 3. Import de clientes CSV | 0/TBD | Not started | - |
+| 3. Import de clientes CSV | 0/3 | Not started | - |
