@@ -76,9 +76,22 @@ además introduce la columna de origen que la Fase 3 (import) va a consumir.
   3. El dueño exporta su lista de clientes a CSV y descarga un archivo con solo los clientes de su negocio (ningún dato de otro tenant).
   4. El dueño exporta sus finanzas (movimientos/cashflow) a CSV y descarga un archivo con solo los movimientos de su negocio.
 
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
-**Phase-level decision (defer to discuss-phase)**:
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Migración 049 (`clients.origin` text+CHECK) + regenerar schema.sql + `Client.origin` en types (aplicación GATEADA, autonomous:false) (CLIENT-01)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-02-PLAN.md — Alta manual: endpoint `api/clients/create` (anon+RLS, origin='manual') + Dialog "Nuevo cliente" + badge de origen por fila (CLIENT-01)
+
+**Wave 3** *(blocked on Wave 2 — comparte clients-client.tsx)*
+
+- [ ] 02-03-PLAN.md — Exports CSV server-side: `api/export/clients` + `api/export/finances` (BOM + RFC4180) + botones en Clientes y Finanzas (DATA-01, DATA-02)
+
+**Phase-level decision (resolved en discuss-phase → 02-CONTEXT.md)**:
 
   - Modelo del badge de origen: columna `origin`/`source` (text con CHECK `reserva|manual|importado`) en `clients` vs. enum Postgres — migración **049** (primera libre; 045/047/048 ya tomadas, no renumerar). Definir el default para filas existentes (backfill a `reserva`) y el valor que escribe el alta manual (`manual`); dejar el valor `importado` reservado para la Fase 3.
   - Columnas exactas del CSV de clientes (nombre, contacto, ¿origen?, ¿notas?, ¿campos de vertical salud como obra social?) y de finanzas (fecha, tipo, monto, concepto, ¿fuente turno/venta/egreso?) — alinear con lo que el import de la Fase 3 espera leer de vuelta (round-trip).
@@ -117,5 +130,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
-| 2. Alta manual + Exports CSV | 0/TBD | Not started | - |
+| 2. Alta manual + Exports CSV | 0/3 | Not started | - |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |
