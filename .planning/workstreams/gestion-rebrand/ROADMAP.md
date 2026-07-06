@@ -76,12 +76,12 @@ además introduce la columna de origen que la Fase 3 (import) va a consumir.
   3. El dueño exporta su lista de clientes a CSV y descarga un archivo con solo los clientes de su negocio (ningún dato de otro tenant).
   4. El dueño exporta sus finanzas (movimientos/cashflow) a CSV y descarga un archivo con solo los movimientos de su negocio.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 **UI hint**: yes
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Migración 049 (`clients.origin` text+CHECK) + regenerar schema.sql + `Client.origin` en types (aplicación GATEADA, autonomous:false) (CLIENT-01)
+- [x] 02-01-PLAN.md — Migración 049 (`clients.origin` text+CHECK) + regenerar schema.sql + `Client.origin` en types (aplicación GATEADA, autonomous:false) (CLIENT-01)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -130,5 +130,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
-| 2. Alta manual + Exports CSV | 0/3 | Not started | - |
+| 2. Alta manual + Exports CSV | 1/3 | In Progress|  |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |
