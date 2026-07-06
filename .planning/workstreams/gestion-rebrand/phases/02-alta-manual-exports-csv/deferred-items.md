@@ -13,3 +13,11 @@ Ambos son PRE-EXISTENTES (confirmado con `git stash`): no los introdujo esta fas
 
 No se corrigen en 02-02 (scope boundary: solo se arregla lo que introduce el task). Candidatos a
 un cleanup transversal del archivo.
+
+## Pre-existing lint baseline en finances-client.tsx (out of scope 02-03)
+
+Detectado al correr eslint sobre finances-client.tsx durante 02-03 (botón export). PRE-EXISTENTE
+(confirmado con `git stash` sobre el baseline HEAD): no lo introdujo el botón "Exportar CSV".
+
+- **`react-hooks/set-state-in-effect` (error)** — L283, `setState` sincrónico dentro de un effect.
+  Patrón viejo del archivo, no tocado por 02-03. Mismo criterio que clients: no se arregla acá.
