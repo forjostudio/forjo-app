@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.15
 milestone_name: milestone
 current_phase: 02
-current_plan: 1
+current_plan: 3
 status: executing
-stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-07-06T12:18:15.072Z"
-last_activity: 2026-07-06 -- Phase 02 execution started
+stopped_at: Completed 02-02-PLAN.md (alta manual + badge de origen)
+last_updated: "2026-07-06T12:37:10.168Z"
+last_activity: 2026-07-06 -- Completed 02-02 (alta manual de cliente)
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 33
 ---
 
@@ -30,14 +30,14 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 **Status:** Executing Phase 02
 **Current Phase:** 02
-**Last Activity:** 2026-07-06 -- Phase 02 execution started
-**Last Activity Description:** Phase 02 execution started
+**Last Activity:** 2026-07-06 -- Completed 02-02 (alta manual de cliente)
+**Last Activity Description:** 02-02 ejecutado: endpoint POST /api/clients/create (anon+RLS, origin='manual') + Dialog "Nuevo cliente" + badge de origen. Próximo: 02-03 (exports CSV)
 
 ## Progress
 
 **Phases Complete:** 1 / 3
-**Current Plan:** 1
-**Progreso:** [██████████] 100% (Phase 01)
+**Current Plan:** 3 (Phase 02 · 02-01 y 02-02 hechos)
+**Progreso:** [████████░░] 83%
 
 ## Roadmap
 
@@ -62,6 +62,8 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 - **[01-02]** OAuth de MercadoPago reruteado a `/negocio` (D-06): callback/connect redirigen a `/negocio?mp=...` y el `useEffect` del `?mp=` (gateado por `isNegocio`) setea la tab Integraciones + toast + `replaceState` a `/negocio`. NO se tocó la validación de state/CSRF ni el canje de code.
 - **[01-02]** `negocio/page.tsx` ahora pasa `secrets = getBusinessSecrets(business.id)` (service-role, scoped por `owner_id`) al hub para las tabs migradas — mismo patrón que `settings/page.tsx`.
 - **[01-02]** eslint del repo (regla estricta `react-hooks/set-state-in-effect`) ya fallaba en `settings-client.tsx` en HEAD (muchos errores pre-existentes: set-state-in-effect, "This value cannot be modified", impure-fn-during-render). Conteo de problemas baseline vs. post-cambio = 20 vs 20: no se introdujo ninguno nuevo. tsc verde.
+- **[02-02]** Alta manual de cliente (CLIENT-01): endpoint `POST /api/clients/create` = molde de `appointments/create` (anon+RLS `@/lib/supabase/server`, NUNCA service-role; tenant por `owner_id`). `origin='manual'` y `business_id` se fijan server-side en `buildClientInsert` (`lib/clients-create.ts`, lógica pura compartida con `test/manual-client.test.ts` → misma fuente de verdad testeable sin server). `insurance_*` gateado por `resolveVertical(business).key==='salud'`. Sin dedupe (el alta crea directo). UI: tercer Dialog "Nuevo cliente" espejando delete/merge + botón primary en el header + badge de origen por fila (`ORIGIN_BADGE`: reserva=outline·manual=default·importado=secondary), status dot intacto; escribe por fetch + prepend optimista (SC-1). TDD: RED 9c3e7bc → GREEN 9b41b42 (7/7). eslint del archivo: 2 problemas pre-existentes (set-state-in-effect L347 + TrendingUp unused), 0 nuevos → `deferred-items.md`.
+
 - **[01-03]** FAQ/ayuda estática (HELP-01): ruta `/ayuda` = server component sync con `const FAQ: { pregunta, respuesta }[]` (7 preguntas) versionado en git (D-08, sin Supabase/MDX). Disclosure nativo `<details>`/`<summary>` estilado con Tailwind (`group-open:rotate-180`, `[&::-webkit-details-marker]:hidden`) → **cero deps nuevas** (HARD GATE `git diff --stat package.json` vacío; NO shadcn Accordion). Dos accesos (D-07): footer del sidebar (`HelpCircle` + `<Link href=/ayuda>` que cierra el drawer mobile) y link "¿Necesitás ayuda? Ver la guía" en la view `config` de settings-client (gateado con `!isSection`). Behavior-frozen: ningún otro destino del sidebar cambió. Contenido de las 7 respuestas = draft de Claude, el usuario debe revisarlo (D-09). Los 10 errores eslint de `settings-client.tsx` son pre-existentes (mismo conteo en HEAD) → deferred, no tocados.
 
 **TODOs:**
@@ -74,5 +76,5 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 **Last session:** 2026-07-06T12:18:15.062Z
 
-**Stopped At:** Phase 2 UI-SPEC approved
-**Resume File:** .planning/workstreams/gestion-rebrand/phases/02-alta-manual-exports-csv/02-UI-SPEC.md
+**Stopped At:** Completed 02-02-PLAN.md (alta manual + badge de origen)
+**Resume File:** .planning/workstreams/gestion-rebrand/phases/02-alta-manual-exports-csv/02-03-PLAN.md

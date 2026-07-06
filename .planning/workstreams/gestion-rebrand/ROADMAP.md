@@ -76,7 +76,7 @@ además introduce la columna de origen que la Fase 3 (import) va a consumir.
   3. El dueño exporta su lista de clientes a CSV y descarga un archivo con solo los clientes de su negocio (ningún dato de otro tenant).
   4. El dueño exporta sus finanzas (movimientos/cashflow) a CSV y descarga un archivo con solo los movimientos de su negocio.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 **UI hint**: yes
 
 **Wave 1**
@@ -85,7 +85,7 @@ además introduce la columna de origen que la Fase 3 (import) va a consumir.
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 02-02-PLAN.md — Alta manual: endpoint `api/clients/create` (anon+RLS, origin='manual') + Dialog "Nuevo cliente" + badge de origen por fila (CLIENT-01)
+- [x] 02-02-PLAN.md — Alta manual: endpoint `api/clients/create` (anon+RLS, origin='manual') + Dialog "Nuevo cliente" + badge de origen por fila (CLIENT-01)
 
 **Wave 3** *(blocked on Wave 2 — comparte clients-client.tsx)*
 
@@ -130,5 +130,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
-| 2. Alta manual + Exports CSV | 1/3 | In Progress|  |
+| 2. Alta manual + Exports CSV | 2/3 | In Progress|  |
 | 3. Import de clientes CSV | 0/TBD | Not started | - |

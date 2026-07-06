@@ -39,7 +39,7 @@
 
 ### Clientes (CLIENT)
 
-- [ ] **CLIENT-01**: El dueño da de alta un cliente/paciente **manualmente** (que no vino por reserva),
+- [x] **CLIENT-01**: El dueño da de alta un cliente/paciente **manualmente** (que no vino por reserva),
   y cada cliente muestra un **badge de origen** (Reserva · Manual · Importado).
 
 ### Ayuda (HELP)
@@ -77,7 +77,7 @@ Reconocidos pero diferidos — no entran en v0.15 (dependen del add-on del agent
 | NAV-01 | Phase 1 | Complete |
 | NAV-02 | Phase 1 | Complete |
 | HELP-01 | Phase 1 | Complete |
-| CLIENT-01 | Phase 2 | Pending |
+| CLIENT-01 | Phase 2 | Complete |
 | DATA-01 | Phase 2 | Pending |
 | DATA-02 | Phase 2 | Pending |
 | DATA-03 | Phase 3 | Pending |
