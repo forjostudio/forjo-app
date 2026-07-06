@@ -133,6 +133,7 @@ export function FinancesClient({ businessId }: Props) {
   // Totales del período ANTERIOR (para la comparación de las tarjetas).
   const [prev, setPrev] = useState({ services: 0, sales: 0, income: 0, expenses: 0, balance: 0 })
   const [loading, setLoading] = useState(true)
+  const [exportingFin, setExportingFin] = useState(false)
   const [txTab, setTxTab] = useState('appointments')
 
   const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -610,10 +611,36 @@ export function FinancesClient({ businessId }: Props) {
           )}
           {customMode && <span className="text-sm font-semibold">Rango personalizado</span>}
           <Button size="sm" variant={customMode ? 'default' : 'outline'} onClick={() => setCustomMode(v => !v)}>{customMode ? 'Por mes' : 'Personalizado'}</Button>
-          {/* Export CSV (DATA-02) — acción SECUNDARIA (outline), matchea los controles hermanos.
-              Navega al route handler autenticado; Content-Disposition attachment dispara la descarga. */}
-          <Button size="sm" variant="outline" onClick={() => { window.location.href = '/api/export/finances' }}>
-            <Download className="w-4 h-4" /> Exportar CSV
+          {/* Export CSV (DATA-02) — acción SECUNDARIA (outline). Fetch+blob para mostrar estado de
+              carga "Exportando..." y manejar el error con toast (el CSV puede tardar en negocios grandes). */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={exportingFin}
+            onClick={async () => {
+              setExportingFin(true)
+              try {
+                const res = await fetch('/api/export/finances')
+                if (!res.ok) throw new Error('export_failed')
+                const blob = await res.blob()
+                const cd = res.headers.get('content-disposition') || ''
+                const filename = cd.match(/filename="?([^"]+)"?/)?.[1] || 'finanzas.csv'
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = filename
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                URL.revokeObjectURL(url)
+              } catch {
+                toast.error('No se pudo exportar. Intentá de nuevo.')
+              } finally {
+                setExportingFin(false)
+              }
+            }}
+          >
+            <Download className="w-4 h-4" /> {exportingFin ? 'Exportando...' : 'Exportar CSV'}
           </Button>
         </div>
       </div>
