@@ -1,8 +1,9 @@
 ---
 phase: 03-import-de-clientes-csv
 verified: 2026-07-06T18:50:00Z
-status: human_needed
+status: passed
 score: 9/9
+uat_result: "5/5 pass, 0 issues. 3 bugs UAT arreglados: colapso Excel a 1 columna (parseCsv recovery, ba27417), tabla de filas válidas (6126ff8), validación de email sin @ (isValidEmail, d710247). SC-1 cerrado con la tabla de válidas."
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
