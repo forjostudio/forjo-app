@@ -21,6 +21,7 @@ const MAX_BYTES = 2 * 1024 * 1024 // 2 MB (D-04)
 const MAX_ROWS = 2000 // T-03-06: expansión por filas → 400 too_many_rows antes de dedup/insert
 
 export async function POST(request: Request) {
+  try {
   // Cliente anon+RLS con las cookies de la sesión del dueño. NO admin.
   const supabase = await createClient()
 
@@ -95,6 +96,14 @@ export async function POST(request: Request) {
       importables: importables.length,
       duplicadas,
       errores,
+      filas: importables, // datos de las filas VÁLIDAS para la tabla de preview (SC-1). Solo display;
+      // el confirm RE-PARSEA (no confía en esto). Son datos del propio dueño (sin cruce de tenant).
     },
   })
+  } catch (e) {
+    // Cualquier throw inesperado (formData/parseo/query) se loguea y devuelve JSON 500 — NO un HTML de
+    // error — para que la UI muestre un código y no un genérico ciego (diagnóstico del path multipart).
+    console.error('[import/preview] error inesperado:', e instanceof Error ? e.message : e)
+    return Response.json({ ok: false, error: 'server_error' }, { status: 500 })
+  }
 }

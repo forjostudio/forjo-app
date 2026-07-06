@@ -68,7 +68,8 @@ const ORIGIN_BADGE: Record<Client['origin'], { label: string; variant: 'outline'
 // Contrato exacto: preview:{ total, importables, duplicadas, errores:[{row,error}] } / resumen:{…}.
 // `errores.error` es un código snake_case de validateClientBody — se traduce a copy con IMPORT_ROW_ERROR.
 interface ImportRowError { row: number; error: string }
-interface ImportPreview { total: number; importables: number; duplicadas: number; errores: ImportRowError[] }
+interface ImportPreviewRow { nombre: string; telefono: string | null; email: string | null }
+interface ImportPreview { total: number; importables: number; duplicadas: number; errores: ImportRowError[]; filas: ImportPreviewRow[] }
 interface ImportResumen { importados: number; omitidos: number; fallidos: number }
 
 // Copy en español por código de error de fila (UI-SPEC §Copywriting). missing_fields cubre nombre
@@ -318,7 +319,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
         } else if (body?.error === 'file_too_large' || body?.error === 'invalid_file_type') {
           setImportFileError('Subí un archivo .csv de hasta 2 MB.')
         } else {
-          toast.error('No se pudo procesar el archivo. Intentá de nuevo.')
+          toast.error(`No se pudo procesar el archivo${body?.error ? ` (${body.error})` : ''}. Intentá de nuevo.`)
         }
         setImportLoading(false)
         return
@@ -1213,52 +1214,62 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                     Revisá que el CSV tenga la primera fila de encabezados y al menos un {term.client.toLowerCase()} con nombre y un contacto (teléfono o email).
                   </p>
                 </div>
-              ) : importPreview.errores.length > 0 ? (
+              ) : (
                 <>
-                  {/* Tabla de filas con error (desktop) — el server solo devuelve las filas con error;
-                      las válidas/duplicadas se resumen en los contadores. Marca = fill+border+icono+texto. */}
-                  <div className="hidden sm:block max-h-[50vh] overflow-y-auto rounded-lg border border-border">
+                  {/* Línea de estado + tabla de las filas VÁLIDAS que se van a importar (SC-1). */}
+                  <p className="flex items-center gap-1 text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span>{importPreview.importables} {importPreview.importables === 1 ? 'fila lista' : 'filas listas'} para importar.</span>
+                  </p>
+                  {/* Desktop: tabla Nombre · Teléfono · Email de las filas válidas. */}
+                  <div className="hidden sm:block max-h-[42vh] overflow-y-auto rounded-lg border border-border">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-20">Fila</TableHead>
-                          <TableHead>Estado</TableHead>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead>Teléfono</TableHead>
+                          <TableHead>Email</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {importPreview.errores.map((e) => (
-                          <TableRow key={e.row} className="bg-destructive/10 border-l-2 border-destructive">
-                            <TableCell className="text-muted-foreground">Fila {e.row}</TableCell>
-                            <TableCell>
-                              <span className="flex items-center gap-1 text-xs text-destructive">
-                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                                {importRowErrorLabel(e.error)}
-                              </span>
-                            </TableCell>
+                        {importPreview.filas.map((f, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{f.nombre}</TableCell>
+                            <TableCell className="text-muted-foreground">{f.telefono || '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{f.email || '—'}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
-                  {/* Filas apiladas (mobile) — mismo tratamiento, sin tabla */}
-                  <div className="sm:hidden max-h-[50vh] overflow-y-auto divide-y divide-border rounded-lg border border-border">
-                    {importPreview.errores.map((e) => (
-                      <div key={e.row} className="bg-destructive/10 border-l-2 border-destructive px-3 py-2">
-                        <p className="text-xs text-muted-foreground">Fila {e.row}</p>
-                        <p className="flex items-center gap-1 text-xs text-destructive">
-                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                          {importRowErrorLabel(e.error)}
-                        </p>
+                  {/* Mobile: filas apiladas. */}
+                  <div className="sm:hidden max-h-[42vh] overflow-y-auto divide-y divide-border rounded-lg border border-border">
+                    {importPreview.filas.map((f, i) => (
+                      <div key={i} className="px-3 py-2">
+                        <p className="text-sm font-medium">{f.nombre}</p>
+                        <p className="text-xs text-muted-foreground">{[f.telefono, f.email].filter(Boolean).join(' · ') || '—'}</p>
                       </div>
                     ))}
                   </div>
+
+                  {/* Filas con error (no se importan) — listado aparte, marcado destructive. */}
+                  {importPreview.errores.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="flex items-center gap-1 text-xs font-medium text-destructive">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        {importPreview.errores.length} {importPreview.errores.length === 1 ? 'fila con error' : 'filas con error'} — no se importan
+                      </p>
+                      <div className="max-h-[24vh] overflow-y-auto divide-y divide-border rounded-lg border border-destructive/40">
+                        {importPreview.errores.map((e) => (
+                          <p key={e.row} className="flex items-center gap-1 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            Fila {e.row}: {importRowErrorLabel(e.error)}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
-              ) : (
-                /* Todo importable, sin errores: confirmación calma con las importables listas */
-                <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-3 text-sm">
-                  <CheckCircle2 className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                  <span>{importPreview.importables} {importPreview.importables === 1 ? 'fila lista' : 'filas listas'} para importar.</span>
-                </div>
               )}
 
               <div className="flex justify-end gap-2 pt-2">
