@@ -6,14 +6,14 @@ current_phase: 03
 current_plan: 2
 status: executing
 stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-07-06T21:21:33.766Z"
+last_updated: "2026-07-06T21:30:03.022Z"
 last_activity: 2026-07-06 -- Completed 03-01 (import CSV — lógica pura + papaparse)
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 9
   completed_plans: 8
-  percent: 78
+  percent: 67
 ---
 
 # Project State
@@ -30,14 +30,14 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 **Status:** Executing Phase 03
 **Current Phase:** 03
-**Last Activity:** 2026-07-06 -- Completed 03-01 (import CSV — lógica pura + papaparse)
-**Last Activity Description:** 03-01 ejecutado: papaparse instalada, lib/clients-import.ts (lógica pura), origin parametrizado, 20 tests verdes
+**Last Activity:** 2026-07-06 -- Completed 03-02 (route handlers preview/confirm del import CSV)
+**Last Activity Description:** 03-02 ejecutado: preview (parse+clasificar, no escribe) + confirm (re-parse + batch insert anon+RLS origin='importado'), tsc verde + vitest 20/20
 
 ## Progress
 
 **Phases Complete:** 2 / 3
-**Current Plan:** 2
-**Progreso:** [████████░░] 78%
+**Current Plan:** 3
+**Progreso:** [█████████░] 89%
 
 ## Roadmap
 
@@ -70,15 +70,17 @@ salvo DATA-03 (import CSV) donde el aislamiento vuelve a ser crítico.
 
 - **[03-01]** Import CSV — lógica pura (DATA-03). `papaparse@5.5.4` = primera y única dep del milestone (pineada exacta sin caret; npm agrega `^` por default → corregido a mano + `npm install --package-lock-only`). `lib/clients-import.ts` (framework-agnostic, molde `lib/clients-create.ts`): `parseCsv` (papaparse header:true + skipEmptyLines:'greedy' + transformHeader trim/lowercase + BOM stripping + header rígido validado contra `nombre,telefono,email,origen,notas,obra_social,nro_obra_social`), `unescapeFormulaGuard` (quita UN `'` líder solo si el siguiente char ∈ `[=+-@\t\r]` = mismo conjunto que el `esc()` del export invertido → round-trip lossless `=X`→`=X`), `classifyRows` (des-escapa → `validateClientBody` reusado → dedup email-minúsc + tel solo-dígitos vs existentes E intra-CSV, mismo criterio que "Fusionar duplicados" L260-266 → `{importables, errores:[{row:idx+2, error}], duplicadas, total}`; notas truncadas 1000; NO inserta, eso es la Wave 2). `buildClientInsert` parametrizado con `origin: 'manual'|'importado' = 'manual'` (retro-compatible: `clients/create/route.ts` NO se toca). TDD: RED be58292 → GREEN 6d893ec, 20/20 verde en aislamiento + `manual-client` 8/8 sin regresión. FLAKY conocido: la suite full-parallel (`vitest run`, 31 archivos) tira timeouts 5s en tests Supabase-backed por contención → `deferred-items.md` (fix = subir testTimeout/limitar pool, fuera de scope).
 
+- **[03-02]** Route handlers preview/confirm del import (DATA-03). Dos endpoints autenticados que comparten el MISMO pipeline (auth `getUser`→401 · tenant por `owner_id`→404 · upload multipart Next 16 `request.formData()`→`File`→`file.text()` = PRIMER uso de formData en el repo · guards ANTES de parsear: `MAX_BYTES=2MB`→413, extensión `.csv`→400, header rígido→400 `invalid_header`, `>2000` filas→400 `too_many_rows` · `parseCsv`/`classifyRows` de `@/lib/clients-import` · query existentes filtrada por `business_id`), anon+RLS `@/lib/supabase/server` NUNCA service-role. **`preview`** solo cuenta → `{ok,preview:{total,importables,duplicadas,errores}}`, CERO `.insert/.update/.delete` (SC-1, grep verifica). **`confirm`** RE-PARSEA autoritativamente (D-03, no confía en la preview — T-03-07) + batch `.insert(payload).select('id')` con `buildClientInsert(business, fila, 'importado')` (origin forzado server-side, Pitfall 5) → `{ok,resumen:{importados,omitidos,fallidos}}`. Fallo parcial de batch → cuenta no-insertadas en `fallidos` (200 con resumen); solo fallo total inesperado (0 insertadas) → 500 `insert_failed`. Fix de tipado: `insertedCount = inserted?.length ?? 0` resuelto ANTES de ramificar sobre `insertErr` (Supabase narrowea `inserted`→`null` en la rama de error → TS2339). Verify aislado `vitest run test/clients-import.test.ts` 20/20 + tsc verde (suite full sigue con flakiness de infra de 03-01, no relacionada).
+
 **TODOs:**
 
-- Fase 3: ejecutar 03-02 (route handlers preview/confirm) y 03-03 (UI dialog import).
+- Fase 3: ejecutar 03-03 (UI dialog import) — consume `POST /api/import/clients/{preview,confirm}`.
 
 **Blockers:** Ninguno.
 
 ## Session Continuity
 
-**Last session:** 2026-07-06T21:21:33.756Z
+**Last session:** 2026-07-06T21:33:00.000Z
 
-**Stopped At:** Completed 03-01-PLAN.md
-**Resume File:** .planning/workstreams/gestion-rebrand/phases/03-import-de-clientes-csv/03-02-PLAN.md
+**Stopped At:** Completed 03-02-PLAN.md
+**Resume File:** .planning/workstreams/gestion-rebrand/phases/03-import-de-clientes-csv/03-03-PLAN.md

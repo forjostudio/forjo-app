@@ -112,7 +112,7 @@ con backend delicado del milestone, aislado en su propia fase.
   3. La importación deduplica contra los clientes ya existentes del negocio (por el criterio definido, ej. contacto), sin crear duplicados de clientes que ya estaban.
   4. Los clientes creados por import quedan con badge de origen "Importado" (consume la columna de origen de la Fase 2) y el dueño ve un resumen de cuántos se importaron / omitieron / fallaron.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 **UI hint**: yes
 
 **Wave 1**
@@ -121,7 +121,7 @@ con backend delicado del milestone, aislado en su propia fase.
 
 **Wave 2** *(blocked on Wave 1 — usa la lógica pura)*
 
-- [ ] 03-02-PLAN.md — Route handlers de import: `api/import/clients/preview` (no escribe, SC-1) + `api/import/clients/confirm` (batch insert anon+RLS, origin='importado', SC-2/SC-4) (DATA-03)
+- [x] 03-02-PLAN.md — Route handlers de import: `api/import/clients/preview` (no escribe, SC-1) + `api/import/clients/confirm` (batch insert anon+RLS, origin='importado', SC-2/SC-4) (DATA-03)
 
 **Wave 3** *(blocked on Wave 2 — consume los endpoints)*
 
@@ -144,4 +144,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Reorg de IA + Ayuda | 3/3 | Complete    | 2026-07-05 |
 | 2. Alta manual + Exports CSV | 3/3 | Complete    | 2026-07-06 |
-| 3. Import de clientes CSV | 1/3 | In Progress|  |
+| 3. Import de clientes CSV | 2/3 | In Progress|  |
