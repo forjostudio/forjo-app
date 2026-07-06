@@ -15,9 +15,11 @@ import { createClient } from '@/lib/supabase/server'
 //   • BOM UTF-8 al inicio — emitido con la secuencia de escape TS (backslash-uFEFF), NUNCA el glifo
 //     invisible pegado — para que Excel-AR muestre bien los acentos.
 //   • Escaping RFC4180 (esc): cada campo entre comillas dobles, comilla interna duplicada;
-//     filas separadas por \r\n (CRLF). Cubre comas/comillas/saltos y CSV formula injection
-//     (los campos peligrosos quedan encerrados entre comillas, no los interpreta Excel como
-//     fórmula al abrirlos).
+//     filas separadas por \r\n (CRLF). Cubre comas/comillas/saltos.
+//   • CSV formula injection (OWASP): las comillas de RFC4180 NO alcanzan (Excel las quita al
+//     parsear y evalúa =... igual). Los campos que arrancan con = + - @ (o tab/CR) se prefijan
+//     con ' para neutralizar la fórmula. Importa porque el CSV incluye datos de origen no
+//     confiable (ej. nombre del cliente cargado en una reserva pública).
 //   • Header = CONTRATO DE ROUND-TRIP con la Fase 3 (import CSV): orden estable
 //     nombre,telefono,email,origen,notas,obra_social,nro_obra_social. NO cambiar el orden
 //     ni los nombres sin coordinar con la Fase 3.
@@ -50,8 +52,13 @@ export async function GET() {
     .eq('business_id', business.id)
     .order('name', { ascending: true })
 
-  // Escaping RFC4180: campo entre comillas dobles, comilla interna duplicada.
-  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+  // Escaping RFC4180 + defensa CSV formula injection (OWASP): si el campo arranca con = + - @
+  // (o tab/CR), prefijar con ' para que Excel/Sheets no lo evalúe como fórmula; luego RFC4180
+  // (comillas dobles, comilla interna duplicada). Ver cabecera (T-02-13, endurecido post-secure).
+  const esc = (v: string) => {
+    const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
+    return `"${safe.replace(/"/g, '""')}"`
+  }
 
   // Header = contrato de round-trip con la Fase 3 (orden estable).
   const headers = ['nombre', 'telefono', 'email', 'origen', 'notas', 'obra_social', 'nro_obra_social']

@@ -95,8 +95,13 @@ export async function GET() {
   // Orden por fecha descendente (coherente con la vista de finanzas).
   movimientos.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0))
 
-  // Escaping RFC4180: campo entre comillas dobles, comilla interna duplicada.
-  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+  // Escaping RFC4180 + defensa CSV formula injection (OWASP): si el campo arranca con = + - @
+  // (o tab/CR), prefijar con ' para que Excel/Sheets no lo evalúe como fórmula; luego RFC4180
+  // (comillas dobles, comilla interna duplicada). Los conceptos pueden venir de datos no confiables.
+  const esc = (v: string) => {
+    const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
+    return `"${safe.replace(/"/g, '""')}"`
+  }
 
   const headers = ['fecha', 'tipo', 'concepto', 'monto']
   const rows = movimientos.map((m) =>
