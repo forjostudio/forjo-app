@@ -74,11 +74,16 @@ export interface ParseResult {
 // valida contra CANONICAL_HEADER; si falta una columna obligatoria → validHeader=false y no se
 // devuelven filas (el handler responde invalid_header).
 export function parseCsv(text: string): ParseResult {
-  const clean = text.replace(/^﻿/, '')
+  // Strip del BOM del export (U+FEFF) + de una línea `sep=,`/`sep=;` que algunas herramientas
+  // (Excel) escriben adelante para fijar el delimitador. Ambos romperían el header rígido si no.
+  const clean = text.replace(/^﻿/, '').replace(/^sep=.\r?\n/i, '')
   const result = Papa.parse<RawRow>(clean, {
     header: true,
     skipEmptyLines: 'greedy',
-    transformHeader: (h) => h.trim().toLowerCase(),
+    // Tolerancia a round-trips por Excel (locale ES/AR): normalizar cada nombre de columna quitando
+    // comillas sueltas (Excel puede dejar `nombre"` o `"nombre` al re-guardar) + trim + lowercase.
+    // NO habilita mapeo flexible de columnas (eso es v2): el header rígido igual se valida abajo.
+    transformHeader: (h) => h.trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase(),
   })
 
   const fields = result.meta.fields ?? []

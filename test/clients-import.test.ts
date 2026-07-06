@@ -89,6 +89,22 @@ describe('parseCsv — parseo RFC4180 + BOM + header rígido', () => {
     expect(rows[0].nombre).toBe('Ana')
   })
 
+  it('tolera el CSV re-guardado por Excel (locale ES): comillas corridas en el header + sep= (UAT bug)', () => {
+    // Excel (delimitador ; local) al re-guardar deja el primer campo como `nombre"` en vez de `"nombre"`.
+    // transformHeader debe quitar la comilla suelta para que el header rígido siga validando.
+    const excel = 'nombre","telefono","email","origen","notas","obra_social","nro_obra_social"\r\n' +
+      'Franco Ezequiel,"03487675109","francovellani@gmail.com","manual","Alergico","Accord Salud","8548698"'
+    const { validHeader, rows } = parseCsv(excel)
+    expect(validHeader).toBe(true)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].nombre).toBe('Franco Ezequiel')
+    expect(rows[0].telefono).toBe('03487675109')
+    expect(rows[0].obra_social).toBe('Accord Salud')
+    // Una línea `sep=,` adelante (Excel) tampoco rompe el header.
+    const withSep = 'sep=,\r\n' + HEADER + '\r\n"Ana","111","","","","",""'
+    expect(parseCsv(withSep).validHeader).toBe(true)
+  })
+
   it('header equivocado → validHeader=false, no se procesan filas', () => {
     const csv = 'name,phone,mail\r\n"Ana","111","a@t.com"'
     const { validHeader } = parseCsv(csv)
