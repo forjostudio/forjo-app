@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { Client, Appointment } from '@/lib/types'
 import { useVertical } from '@/lib/use-terminology'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 import {
   Search, Phone, Mail, Trash2, GitMerge, MessageCircle,
   Edit2, X, ChevronLeft, ChevronDown, Lightbulb, TrendingUp, FileText, Shield,
-  UserPlus,
+  UserPlus, Download,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
 import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-panel'
@@ -507,6 +507,18 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                   <GitMerge className="w-4 h-4" />
                 </button>
               )}
+              {/* Export CSV (DATA-01) — acción SECUNDARIA (outline). <a download> = descarga directa
+                  del route handler autenticado, sin loading. El label se oculta en mobile (queda el
+                  icono) para no apretar la fila; desktop mantiene "Exportar CSV". */}
+              <a
+                href="/api/export/clients"
+                download
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+                title="Exportar CSV"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Exportar CSV</span>
+              </a>
               {/* CTA primario del panel (CLIENT-01). size default → h-9 (≥44px con el padding en mobile). */}
               <Button onClick={() => setNewClientOpen(true)} className="gap-1.5">
                 <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}

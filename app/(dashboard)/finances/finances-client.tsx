@@ -18,7 +18,7 @@ import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import {
   TrendingUp, TrendingDown, Plus, Pencil, Trash2,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
-  Calendar, ShoppingBag,
+  Calendar, ShoppingBag, Download,
 } from 'lucide-react'
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -610,6 +610,11 @@ export function FinancesClient({ businessId }: Props) {
           )}
           {customMode && <span className="text-sm font-semibold">Rango personalizado</span>}
           <Button size="sm" variant={customMode ? 'default' : 'outline'} onClick={() => setCustomMode(v => !v)}>{customMode ? 'Por mes' : 'Personalizado'}</Button>
+          {/* Export CSV (DATA-02) — acción SECUNDARIA (outline), matchea los controles hermanos.
+              Navega al route handler autenticado; Content-Disposition attachment dispara la descarga. */}
+          <Button size="sm" variant="outline" onClick={() => { window.location.href = '/api/export/finances' }}>
+            <Download className="w-4 h-4" /> Exportar CSV
+          </Button>
         </div>
       </div>
 
