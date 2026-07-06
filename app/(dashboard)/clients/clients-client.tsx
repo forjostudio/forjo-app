@@ -22,8 +22,11 @@ import { cn } from '@/lib/utils'
 import {
   Search, Phone, Mail, Trash2, GitMerge, MessageCircle,
   Edit2, X, ChevronLeft, ChevronDown, Lightbulb, TrendingUp, FileText, Shield,
-  UserPlus, Download,
+  UserPlus, Download, Upload, AlertCircle, CheckCircle2, Loader2,
 } from 'lucide-react'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
 import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-panel'
 
@@ -60,6 +63,25 @@ const ORIGIN_BADGE: Record<Client['origin'], { label: string; variant: 'outline'
   manual: { label: 'Manual', variant: 'default' },
   importado: { label: 'Importado', variant: 'secondary' },
 }
+
+// ── Import CSV (DATA-03) — shapes de respuesta de los route handlers (Plan 02) ─────────────────
+// Contrato exacto: preview:{ total, importables, duplicadas, errores:[{row,error}] } / resumen:{…}.
+// `errores.error` es un código snake_case de validateClientBody — se traduce a copy con IMPORT_ROW_ERROR.
+interface ImportRowError { row: number; error: string }
+interface ImportPreview { total: number; importables: number; duplicadas: number; errores: ImportRowError[] }
+interface ImportResumen { importados: number; omitidos: number; fallidos: number }
+
+// Copy en español por código de error de fila (UI-SPEC §Copywriting). missing_fields cubre nombre
+// faltante Y sin contacto (el server no discrimina cuál); invalid_phone = teléfono no válido.
+const IMPORT_ROW_ERROR: Record<string, string> = {
+  missing_fields: 'Falta el nombre o un contacto (teléfono o email).',
+  invalid_phone: 'El teléfono no es válido.',
+}
+function importRowErrorLabel(code: string): string {
+  return IMPORT_ROW_ERROR[code] ?? 'Fila con datos inválidos.'
+}
+
+const IMPORT_MAX_BYTES = 2 * 1024 * 1024 // 2 MB — mismo cap que el server (D-04); guard client-side = feedback
 
 // Schema del alta manual (CLIENT-01). Copy del UI-SPEC §Copywriting. Regla D-02: nombre + al menos
 // un contacto (teléfono o email); email válido si viene lleno. La validación server-side es la
@@ -173,6 +195,19 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   // Historia Clínica colapsable (solo salud): arranca colapsada y se cierra al cambiar de paciente.
   const [historyExpanded, setHistoryExpanded] = useState(false)
 
+  // ── Import CSV (DATA-03) ────────────────────────────────────────────────────
+  // Un solo Dialog ancho que avanza por 4 etapas (UI-SPEC Opción A). El File se retiene en state
+  // para re-postearlo a /confirm sin re-seleccionar (stateless re-upload — la preview no es
+  // autoritativa; el server re-parsea el archivo crudo).
+  const [importOpen, setImportOpen] = useState(false)
+  const [importStage, setImportStage] = useState<'upload' | 'preview' | 'confirming' | 'resumen'>('upload')
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importFileError, setImportFileError] = useState<string | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
+  const [importResumen, setImportResumen] = useState<ImportResumen | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
+
   // ── Alta manual de cliente (CLIENT-01) ─────────────────────────────────────
   const [newClientOpen, setNewClientOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -221,6 +256,117 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
     } finally {
       setCreating(false)
     }
+  }
+
+  // ── Import CSV handlers (DATA-03) ──────────────────────────────────────────
+  // Reset completo del flujo (molde del reset del alta): vuelve a etapa upload y limpia todo.
+  function resetImport() {
+    setImportStage('upload')
+    setImportFile(null)
+    setImportFileError(null)
+    setImportPreview(null)
+    setImportResumen(null)
+    setImportLoading(false)
+    if (importInputRef.current) importInputRef.current.value = ''
+  }
+
+  // El Dialog no se puede cerrar durante la escritura (confirming) — evita abandonar un import a medio
+  // escribir. Cerrar en cualquier otra etapa resetea el flujo.
+  function onImportOpenChange(open: boolean) {
+    if (!open && importStage === 'confirming') return
+    setImportOpen(open)
+    if (!open) resetImport()
+  }
+
+  // Selección de archivo: valida extensión .csv + tamaño ≤2MB client-side (feedback inmediato; el
+  // server re-valida — D-03/D-04). Si inválido, NO avanza y muestra el error inline.
+  function onImportFileSelect(file: File | null) {
+    setImportFileError(null)
+    if (!file) { setImportFile(null); return }
+    const okExt = file.name.toLowerCase().endsWith('.csv')
+    const okSize = file.size <= IMPORT_MAX_BYTES
+    if (!okExt || !okSize) {
+      setImportFile(null)
+      setImportFileError('Subí un archivo .csv de hasta 2 MB.')
+      if (importInputRef.current) importInputRef.current.value = ''
+      return
+    }
+    setImportFile(file)
+  }
+
+  function clearImportFile() {
+    setImportFile(null)
+    setImportFileError(null)
+    if (importInputRef.current) importInputRef.current.value = ''
+  }
+
+  // Etapa upload → preview: POST multipart del File a /preview (SIN Content-Type manual — el browser
+  // setea el boundary). En ok → guarda el preview y avanza. NADA se escribe (SC-1).
+  async function onImportPreview() {
+    if (!importFile) return
+    setImportLoading(true)
+    setImportFileError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', importFile)
+      const res = await fetch('/api/import/clients/preview', { method: 'POST', body: fd })
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.ok || !body.preview) {
+        // Header inválido → mensaje inline específico; el resto → toast genérico y quedarse en upload.
+        if (body?.error === 'invalid_header') {
+          setImportFileError('El CSV no tiene el formato esperado. Exportá tus clientes desde Forjo y usá ese archivo como base.')
+        } else if (body?.error === 'file_too_large' || body?.error === 'invalid_file_type') {
+          setImportFileError('Subí un archivo .csv de hasta 2 MB.')
+        } else {
+          toast.error('No se pudo procesar el archivo. Intentá de nuevo.')
+        }
+        setImportLoading(false)
+        return
+      }
+      setImportPreview(body.preview as ImportPreview)
+      setImportStage('preview')
+    } catch {
+      toast.error('No se pudo procesar el archivo. Intentá de nuevo.')
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
+  // Etapa preview → confirming → resumen: re-POST del MISMO File a /confirm (anti-doble-submit vía
+  // stage='confirming' + botón disabled). En ok → resumen. Error → vuelve a preview sin perder el File.
+  async function onImportConfirm() {
+    if (!importFile || importStage === 'confirming') return
+    setImportStage('confirming')
+    try {
+      const fd = new FormData()
+      fd.append('file', importFile)
+      const res = await fetch('/api/import/clients/confirm', { method: 'POST', body: fd })
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.ok || !body.resumen) {
+        toast.error('No se pudo completar la importación. Intentá de nuevo.')
+        setImportStage('preview')
+        return
+      }
+      setImportResumen(body.resumen as ImportResumen)
+      setImportStage('resumen')
+    } catch {
+      toast.error('No se pudo completar la importación. Intentá de nuevo.')
+      setImportStage('preview')
+    }
+  }
+
+  // Cierre del resumen: re-fetchea la lista de clientes (los importados aparecen con badge "Importado",
+  // ya mapeado en ORIGIN_BADGE) — preferimos re-fetch sobre state surgery dado el tamaño del batch.
+  async function onImportDone() {
+    setImportOpen(false)
+    resetImport()
+    // Mismo orden que el load inicial de page.tsx (created_at asc) para que el clientNumberMap no cambie.
+    const { data } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('created_at', { ascending: true })
+    if (data) setClients(data as Client[])
   }
 
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -510,9 +656,9 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               </button>
             )}
           </div>
-          {/* Fila 2: acciones en grid de 2 columnas (w-full) — el panel es angosto (lg:w-80),
-              así los botones nunca compiten con el título ni se clipean por el overflow-hidden.
-              Export = secundario (outline), Nuevo cliente = CTA primario (CLIENT-01). */}
+          {/* Fila 2 (secundaria, grid 2-col): las dos acciones de round-trip CSV emparejadas —
+              Exportar + Importar, ambas peso secundario (outline). El panel es angosto (lg:w-80),
+              así los botones no compiten con el título ni se clipean por el overflow-hidden. */}
           <div className="grid grid-cols-2 gap-2">
             <a
               href="/api/export/clients"
@@ -522,10 +668,16 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
             >
               <Download className="w-4 h-4" /> Exportar CSV
             </a>
-            <Button onClick={() => setNewClientOpen(true)} className="w-full gap-1.5">
-              <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
+            {/* Importar CSV: variant outline, icono Upload, SIN gap manual (el Button trae su gap). */}
+            <Button variant="outline" onClick={() => setImportOpen(true)} className="w-full">
+              <Upload className="w-4 h-4" /> Importar CSV
             </Button>
           </div>
+          {/* Fila 3 (primaria, full-width): el CTA primario "Nuevo cliente" en su propia fila para que
+              quede dominante y no se apriete en el grid 2-col junto a los dos secundarios (CLIENT-01). */}
+          <Button onClick={() => setNewClientOpen(true)} className="w-full gap-1.5">
+            <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
+          </Button>
 
           {/* Filter tabs */}
           <div className="flex gap-1 flex-wrap">
