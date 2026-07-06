@@ -73,20 +73,30 @@ export interface ParseResult {
 // para tolerar "Nombre "/"TELEFONO" sin habilitar mapeo flexible (eso es v2). El header rígido se
 // valida contra CANONICAL_HEADER; si falta una columna obligatoria → validHeader=false y no se
 // devuelven filas (el handler responde invalid_header).
-export function parseCsv(text: string): ParseResult {
-  // Strip del BOM del export (U+FEFF) + de una línea `sep=,`/`sep=;` que algunas herramientas
-  // (Excel) escriben adelante para fijar el delimitador. Ambos romperían el header rígido si no.
-  const clean = text.replace(/^﻿/, '').replace(/^sep=.\r?\n/i, '')
-  const result = Papa.parse<RawRow>(clean, {
-    header: true,
-    skipEmptyLines: 'greedy',
-    // Tolerancia a round-trips por Excel (locale ES/AR): normalizar cada nombre de columna quitando
-    // comillas sueltas (Excel puede dejar `nombre"` o `"nombre` al re-guardar) + trim + lowercase.
-    // NO habilita mapeo flexible de columnas (eso es v2): el header rígido igual se valida abajo.
-    transformHeader: (h) => h.trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase(),
-  })
+// Normaliza un nombre de columna: quita comillas sueltas (Excel puede dejar `nombre"`/`"nombre` al
+// re-guardar) + trim + lowercase. NO habilita mapeo flexible (v2): el header rígido igual se valida.
+const normHeader = (h: string) => h.trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase()
 
-  const fields = result.meta.fields ?? []
+export function parseCsv(text: string): ParseResult {
+  // Strip del BOM del export (U+FEFF) + de una línea `sep=,`/`sep=;` que Excel a veces escribe
+  // adelante para fijar el delimitador. Ambos romperían el header rígido si no.
+  const clean = text.replace(/^﻿/, '').replace(/^sep=.\r?\n/i, '')
+
+  let result = Papa.parse<RawRow>(clean, { header: true, skipEmptyLines: 'greedy', transformHeader: normHeader })
+  let fields = result.meta.fields ?? []
+
+  // Recuperación del "colapso a una columna" de Excel (locale ES/AR, delimitador ;): Excel abre el
+  // comma-CSV como UNA columna y al re-guardar envuelve cada fila entera en un campo RFC4180 con las
+  // comillas internas dobladas (`"a,""b"",""c"""`). papaparse lo des-quotea a `a,"b","c"` → queda UN
+  // solo campo cuyo nombre CONTIENE comas. Si detectamos eso, re-parseamos: cada celda colapsada YA es
+  // una línea CSV real (papaparse ya deshizo el doblado de comillas), así que re-unimos y re-parseamos.
+  if (fields.length === 1 && fields[0].includes(',')) {
+    const flat = Papa.parse<string[]>(clean, { header: false, skipEmptyLines: 'greedy' })
+    const lines = (flat.data as string[][]).map((r) => r[0] ?? '')
+    result = Papa.parse<RawRow>(lines.join('\r\n'), { header: true, skipEmptyLines: 'greedy', transformHeader: normHeader })
+    fields = result.meta.fields ?? []
+  }
+
   const validHeader = CANONICAL_HEADER.every((col) => fields.includes(col))
   if (!validHeader) return { validHeader: false, rows: [] }
 

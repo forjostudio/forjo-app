@@ -89,12 +89,15 @@ describe('parseCsv — parseo RFC4180 + BOM + header rígido', () => {
     expect(rows[0].nombre).toBe('Ana')
   })
 
-  it('tolera el CSV re-guardado por Excel (locale ES): comillas corridas en el header + sep= (UAT bug)', () => {
-    // Excel (delimitador ; local) al re-guardar deja el primer campo como `nombre"` en vez de `"nombre"`.
-    // transformHeader debe quitar la comilla suelta para que el header rígido siga validando.
-    const excel = 'nombre","telefono","email","origen","notas","obra_social","nro_obra_social"\r\n' +
-      'Franco Ezequiel,"03487675109","francovellani@gmail.com","manual","Alergico","Accord Salud","8548698"'
-    const { validHeader, rows } = parseCsv(excel)
+  it('tolera el CSV re-guardado por Excel (locale ES): colapso a una columna con comillas dobladas (UAT bug)', () => {
+    // BYTES EXACTOS de un CSV re-guardado por Excel (locale ES, delimitador ;): abre el comma-CSV como
+    // UNA columna y guarda cada fila entera como un campo RFC4180 con las comillas internas dobladas.
+    // parseCsv debe des-colapsarlo (re-parsear) y validar el header rígido igual.
+    const excelCollapsed = [
+      '"nombre,""telefono"",""email"",""origen"",""notas"",""obra_social"",""nro_obra_social"""',
+      '"Franco Ezequiel,""03487675109"",""francovellani@gmail.com"",""manual"",""Alergico"",""Accord Salud"",""8548698"""',
+    ].join('\r\n')
+    const { validHeader, rows } = parseCsv(excelCollapsed)
     expect(validHeader).toBe(true)
     expect(rows).toHaveLength(1)
     expect(rows[0].nombre).toBe('Franco Ezequiel')
@@ -103,6 +106,8 @@ describe('parseCsv — parseo RFC4180 + BOM + header rígido', () => {
     // Una línea `sep=,` adelante (Excel) tampoco rompe el header.
     const withSep = 'sep=,\r\n' + HEADER + '\r\n"Ana","111","","","","",""'
     expect(parseCsv(withSep).validHeader).toBe(true)
+    // Un header genuinamente inválido sigue siendo rechazado (la recuperación no lo fuerza a válido).
+    expect(parseCsv('name,phone,mail\r\n"a","1","x"').validHeader).toBe(false)
   })
 
   it('header equivocado → validHeader=false, no se procesan filas', () => {
