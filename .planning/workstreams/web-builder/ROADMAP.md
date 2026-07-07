@@ -87,8 +87,12 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
   5. El widget interactivo de reserva NO queda envuelto en `transform`/`overflow`/scroll-timeline ni se re-estiliza por dentro — disponibilidad, seña y el flujo de MercadoPago no regresionan (invariante caja negra verificado con vaul/sonner/react-day-picker).
 
 **Plans**: 2 plans
+**Wave 1**
 
 - [ ] 12-01-PLAN.md — Schema (`motion` + `rsvData`) + `normalizeMotion` + motor de motion CSS-first en `.frj-site` + `data-motion`/clases en el renderer y editoriales + hero a `preload` (MOTION-01..04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 12-02-PLAN.md — `RsvStrip` (header + strip horizontal, empty-state safe) montado como hermano del widget + checkpoint funcional de la caja negra (reserva con/sin seña) (RSV-01/02)
 
 **UI hint**: yes
