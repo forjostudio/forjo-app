@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSafeColor, resolveLandingTheme } from '@/lib/landing/theme'
+import { isSafeColor, resolveLandingTheme, normalizeMotion } from '@/lib/landing/theme'
 
 // ── Tests puros de resolución/validación de tema (Fase 8, THEME-01/02) ────────────
 // Espejan test/landing-derive.test.ts: describe/it/expect, import desde @/lib/...,
@@ -160,5 +160,40 @@ describe('resolveLandingTheme (mapeo + fallback legacy)', () => {
     expect(r.theme).toBe('cyber')
     expect(r.palette).toBe('lime')
     expect(r.font).toBe('tech') // del fallback, porque no hubo override.font
+  })
+})
+
+// ── normalizeMotion: resolución del nivel de motion (D-04, espejo de normalizeTheme) ─
+// El default 'subtle' es de AUTORÍA (lo setea la skill), NO de render. El resolver degrada
+// defensivamente: solo 'subtle'/'premium' pasan; ausente/inválido/'none'/no-string → 'none'
+// (estático). Espejo exacto de la filosofía de normalizeTheme (default en la resolución, no
+// en el parse) → un config existente sin motion renderiza byte-idéntico a hoy.
+describe('normalizeMotion (resolución de nivel, D-04)', () => {
+  it('"subtle" → "subtle"', () => {
+    expect(normalizeMotion('subtle')).toBe('subtle')
+  })
+
+  it('"premium" → "premium"', () => {
+    expect(normalizeMotion('premium')).toBe('premium')
+  })
+
+  it('"none" → "none"', () => {
+    expect(normalizeMotion('none')).toBe('none')
+  })
+
+  it('undefined → "none" (sin default de render, D-04)', () => {
+    expect(normalizeMotion(undefined)).toBe('none')
+  })
+
+  it('string inválido → "none"', () => {
+    expect(normalizeMotion('basura')).toBe('none')
+  })
+
+  it('no-string (número) → "none"', () => {
+    expect(normalizeMotion(42)).toBe('none')
+  })
+
+  it('null → "none"', () => {
+    expect(normalizeMotion(null)).toBe('none')
   })
 })

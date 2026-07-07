@@ -39,6 +39,14 @@ const sectionSchema = z.object({
 export const landingConfigSchema = z.object({
   theme: themeSchema,
   sections: z.array(sectionSchema),
+  // motion (F12, MOTION-01): nivel de movimiento premium data-driven del renderer.
+  // .optional() SIN .default() → el default 'subtle' es de AUTORÍA (lo setea la skill al
+  // escribir el config), NO de parse (D-04): un config existente sin `motion` renderiza
+  // estático, byte-idéntico a hoy. El .catch(undefined) es OBLIGATORIO (fail-safe): sin él un
+  // `motion` basura invalidaría el safeParse del envelope y tiraría TODO el config al
+  // DEFAULT_LANDING_CONFIG, perdiendo theme/sections reales. Con .catch, un motion roto
+  // degrada a undefined → normalizeMotion → 'none' (estático), preservando el resto.
+  motion: z.enum(['none', 'subtle', 'premium']).optional().catch(undefined),
 })
 
 // Derivamos el tipo del schema (D-07) — no se escribe una interface a mano.
@@ -113,6 +121,22 @@ export const galleryData = z
   })
   .catch({})
 export type GalleryData = z.infer<typeof galleryData>
+
+// Data de la galería de la RESERVA (F12, RSV — la CONSUME el Plan 02). Campo dedicado, NO
+// reusa `galleryData` (D-03b: fotos de confianza de la sucursal/ambiente ANTES de reservar).
+// Espejo VERBATIM del patrón de galleryData: z.object({...}).catch({}) — un data roto degrada
+// a {} → empty-state (RSV-01, la sección booking queda byte-idéntica a hoy). NO usar record
+// dinámico (Pitfall 4 / Zod v4 exige 2 args). `images` con z.string().url() (control V5 input
+// validation): evita renderizar URL no-http en el Plan 02 — una url inválida invalida el
+// objeto entero → {} (el .catch({}) lo captura).
+export const rsvData = z
+  .object({
+    header: z.string().optional(),
+    intro: z.string().optional(),
+    images: z.array(z.string().url()).optional(),
+  })
+  .catch({})
+export type RsvData = z.infer<typeof rsvData>
 
 // Las locations vienen de la tabla (D7-06); map_url/show_address vienen del config (Assumption A2).
 export const locationData = z

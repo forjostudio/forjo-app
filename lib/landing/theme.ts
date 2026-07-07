@@ -71,3 +71,15 @@ export function resolveLandingTheme(
 
   return { theme, palette, font, primary }
 }
+
+// ── normalizeMotion: resolución del nivel de motion (F12, MOTION-01/D-04) ──────────
+// POR QUÉ vive acá y no en el parse: espejo EXACTO de la filosofía de normalizeTheme — el
+// default de un config nuevo es de AUTORÍA, no de render. La skill (Phase 11) setea
+// `motion: 'subtle'` EXPLÍCITO al crear/reescribir una landing; `parseLandingConfig` NUNCA
+// inyecta un default de motion (D-04). Por eso el render NORMALIZA el valor leído acá y
+// degrada defensivamente: un config existente SIN `motion` (o con valor inválido/'none') →
+// 'none' → render estático byte-idéntico a hoy (cero regresión para landings ya publicadas).
+// Función PURA (regla del módulo: SIN React, SIN Supabase), named export.
+export function normalizeMotion(raw: unknown): 'none' | 'subtle' | 'premium' {
+  return raw === 'subtle' || raw === 'premium' ? raw : 'none'
+}
