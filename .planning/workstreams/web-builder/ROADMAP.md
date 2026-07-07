@@ -86,7 +86,10 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
   4. El landing muestra la galería de sucursal/servicio (header/intro/galería adyacente) configurable desde `landing_config` alrededor de la sección de reserva; sin contenido, la sección se comporta como hoy (empty-state, cero regresión).
   5. El widget interactivo de reserva NO queda envuelto en `transform`/`overflow`/scroll-timeline ni se re-estiliza por dentro — disponibilidad, seña y el flujo de MercadoPago no regresionan (invariante caja negra verificado con vaul/sonner/react-day-picker).
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+- [ ] 12-01-PLAN.md — Schema (`motion` + `rsvData`) + `normalizeMotion` + motor de motion CSS-first en `.frj-site` + `data-motion`/clases en el renderer y editoriales + hero a `preload` (MOTION-01..04)
+- [ ] 12-02-PLAN.md — `RsvStrip` (header + strip horizontal, empty-state safe) montado como hermano del widget + checkpoint funcional de la caja negra (reserva con/sin seña) (RSV-01/02)
 
 **UI hint**: yes
 
@@ -140,7 +143,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 9. SEO, OG & Performance | v0.10 | 3/3 | Complete | 2026-06-22 |
 | 10. Skill `forjo-web-builder` | v0.10 | 3/3 | Complete | 2026-06-23 |
 | 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete    | 2026-07-07 |
-| 12. Premium motion + fotos en la reserva | v0.16 | 0/TBD | Not started | - |
+| 12. Premium motion + fotos en la reserva | v0.16 | 0/2 | Not started | - |
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 0/TBD | Not started | - |
 | 14. CMS editor UI | v0.16 | 0/TBD | Not started | - |
 
