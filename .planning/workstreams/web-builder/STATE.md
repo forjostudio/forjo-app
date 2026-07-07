@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
 status: verifying
-stopped_at: Phase 12 context gathered
-last_updated: "2026-07-07T15:19:28.223Z"
+stopped_at: Phase 12 UI-SPEC approved
+last_updated: "2026-07-07T16:04:39.428Z"
 last_activity: 2026-07-07
 progress:
   total_phases: 4
@@ -114,9 +114,9 @@ Items reconocidos y diferidos a milestones posteriores (v2):
 
 ## Session Continuity
 
-Last session: 2026-07-07T15:19:28.180Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/workstreams/web-builder/phases/12-premium-motion-fotos-en-la-reserva-renderer-schema/12-CONTEXT.md
+Last session: 2026-07-07T16:04:39.381Z
+Stopped at: Phase 12 UI-SPEC approved
+Resume file: .planning/workstreams/web-builder/phases/12-premium-motion-fotos-en-la-reserva-renderer-schema/12-UI-SPEC.md
 
 ## Operator Next Steps
 
