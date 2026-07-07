@@ -48,7 +48,7 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
 **Milestone Goal:** ver arriba. Build order LOCKED: skill (11) → motion + reserva media / schema (12) → CMS foundation (13) → CMS editor UI (14). El schema (`motion` + galería de reserva) existe ANTES del CMS porque el editor expone esos campos.
 
 - [x] **Phase 11: Skill — modo edición + fuentes de contenido** - Retoque idempotente de landings existentes desde el payload guardado + fuentes de contenido en orden de confiabilidad (operador → web existente → IG best-effort) (completed 2026-07-07)
-- [ ] **Phase 12: Premium motion + fotos en la reserva (renderer + schema)** - Campo `landing_config.motion` fail-safe con scroll-reveal/parallax CSS-first alrededor de las secciones editoriales + galería alrededor del widget de reserva; booking caja negra intacto
+- [x] **Phase 12: Premium motion + fotos en la reserva (renderer + schema)** - Campo `landing_config.motion` fail-safe con scroll-reveal/parallax CSS-first alrededor de las secciones editoriales + galería alrededor del widget de reserva; booking caja negra intacto (completed 2026-07-07)
 - [ ] **Phase 13: CMS foundation — write path owner-only + flag** - Path autenticado owner-only (RLS por tenant + Zod) para escribir `landing_config` desde el panel, detrás de feature flag, sin service-role ni endpoint anónimo
 - [ ] **Phase 14: CMS editor UI** - Editor visual completo: copy/imágenes por sección (incl. galería RSV), reorden/on-off del set FIJO, tema/paleta/motion, y preview de los cambios
 
@@ -86,14 +86,14 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
   4. El landing muestra la galería de sucursal/servicio (header/intro/galería adyacente) configurable desde `landing_config` alrededor de la sección de reserva; sin contenido, la sección se comporta como hoy (empty-state, cero regresión).
   5. El widget interactivo de reserva NO queda envuelto en `transform`/`overflow`/scroll-timeline ni se re-estiliza por dentro — disponibilidad, seña y el flujo de MercadoPago no regresionan (invariante caja negra verificado con vaul/sonner/react-day-picker).
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 **Wave 1**
 
 - [x] 12-01-PLAN.md — Schema (`motion` + `rsvData`) + `normalizeMotion` + motor de motion CSS-first en `.frj-site` + `data-motion`/clases en el renderer y editoriales + hero a `preload` (MOTION-01..04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 12-02-PLAN.md — `RsvStrip` (header + strip horizontal, empty-state safe) montado como hermano del widget + checkpoint funcional de la caja negra (reserva con/sin seña) (RSV-01/02)
+- [x] 12-02-PLAN.md — `RsvStrip` (header + strip horizontal, empty-state safe) montado como hermano del widget + checkpoint funcional de la caja negra (reserva con/sin seña) (RSV-01/02)
 
 **UI hint**: yes
 
@@ -147,7 +147,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 9. SEO, OG & Performance | v0.10 | 3/3 | Complete | 2026-06-22 |
 | 10. Skill `forjo-web-builder` | v0.10 | 3/3 | Complete | 2026-06-23 |
 | 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete    | 2026-07-07 |
-| 12. Premium motion + fotos en la reserva | v0.16 | 1/2 | In Progress|  |
+| 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete   | 2026-07-07 |
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 0/TBD | Not started | - |
 | 14. CMS editor UI | v0.16 | 0/TBD | Not started | - |
 
