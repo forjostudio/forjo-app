@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
-status: executing
-stopped_at: Phase 11 planned (2 plans, verification passed)
-last_updated: "2026-07-07T13:07:25.138Z"
+status: verifying
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-07-07T13:13:41.258Z"
 last_activity: 2026-07-07 -- Phase 11 execution started
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 
 Phase: 11 (skill-modo-edici-n-fuentes-de-contenido) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-07 -- Phase 11 execution started
 
 ## Performance Metrics
@@ -54,6 +54,7 @@ Last activity: 2026-07-07 -- Phase 11 execution started
 
 *Updated after each plan completion*
 | Phase 11 P01 | 15m | 2 tasks | 2 files |
+| Phase 11 P02 | ~20m | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,8 @@ Decisiones LOCKED del milestone v0.16 (no re-litigar en discuss-phase) — de PR
 - [v0.16]: Set de secciones FIJO — EDIT-03 solo reordena/togglea, sin layout libre / drag-and-drop de secciones nuevas
 - [v0.10 carryover]: `landing_config` viaja por la vista `public_businesses` por columnas explícitas — sin re-abrir la fuga de secretos de v0.9
 - [v0.10 carryover]: `parseLandingConfig` total — `null → null` (passthrough legacy); `presente-pero-inválido → DEFAULT_LANDING_CONFIG`; `safeParse` exclusivo; `.strip()` de claves desconocidas
+- [Phase 11]: MODO EDICIÓN: retocar sin rehacer desde landing-payloads/<slug>.json (o --inspect), diff acotado a campo, re-escritura idempotente
+- [Phase 11]: FUENTES DE CONTENIDO: operador estructurado, web (WebFetch), IG (instaloader best-effort con fallthrough); instaloader reemplaza el Playwright de instagram-a-web
 
 ### Pending Todos
 
@@ -108,8 +111,8 @@ Items reconocidos y diferidos a milestones posteriores (v2):
 
 ## Session Continuity
 
-Last session: 2026-07-07T13:07:14.864Z
-Stopped at: Phase 11 planned (2 plans, plan-checker PASS)
+Last session: 2026-07-07T13:13:41.248Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: .planning/workstreams/web-builder/phases/11-skill-modo-edici-n-fuentes-de-contenido/11-01-PLAN.md
 
 ## Operator Next Steps

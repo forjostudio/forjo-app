@@ -47,7 +47,7 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
 
 **Milestone Goal:** ver arriba. Build order LOCKED: skill (11) → motion + reserva media / schema (12) → CMS foundation (13) → CMS editor UI (14). El schema (`motion` + galería de reserva) existe ANTES del CMS porque el editor expone esos campos.
 
-- [ ] **Phase 11: Skill — modo edición + fuentes de contenido** - Retoque idempotente de landings existentes desde el payload guardado + fuentes de contenido en orden de confiabilidad (operador → web existente → IG best-effort)
+- [x] **Phase 11: Skill — modo edición + fuentes de contenido** - Retoque idempotente de landings existentes desde el payload guardado + fuentes de contenido en orden de confiabilidad (operador → web existente → IG best-effort) (completed 2026-07-07)
 - [ ] **Phase 12: Premium motion + fotos en la reserva (renderer + schema)** - Campo `landing_config.motion` fail-safe con scroll-reveal/parallax CSS-first alrededor de las secciones editoriales + galería alrededor del widget de reserva; booking caja negra intacto
 - [ ] **Phase 13: CMS foundation — write path owner-only + flag** - Path autenticado owner-only (RLS por tenant + Zod) para escribir `landing_config` desde el panel, detrás de feature flag, sin service-role ni endpoint anónimo
 - [ ] **Phase 14: CMS editor UI** - Editor visual completo: copy/imágenes por sección (incl. galería RSV), reorden/on-off del set FIJO, tema/paleta/motion, y preview de los cambios
@@ -68,10 +68,10 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
 
 **Threat note**: Bajo riesgo. La skill NO abre superficie web nueva — sigue escribiendo por el script local service-role de v0.10 (SKILL-04), con el mismo checkpoint humano pre-escritura. El único cuidado: el diff acotado no debe filtrar secretos del payload (el payload no contiene secretos de tenant, solo copy/imágenes/tema).
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 - [x] 11-01-PLAN.md — Artefactos de código: extender `--inspect` (read-only, D-04) + copiar `scripts/instagram-cosechar.py` (D-03)
-- [ ] 11-02-PLAN.md — Skill: sección MODO EDICIÓN (SKILL-05) + paso FUENTES DE CONTENIDO con pipeline instaloader (SKILL-06)
+- [x] 11-02-PLAN.md — Skill: sección MODO EDICIÓN (SKILL-05) + paso FUENTES DE CONTENIDO con pipeline instaloader (SKILL-06)
 
 ### Phase 12: Premium motion + fotos en la reserva (renderer + schema)
 
@@ -139,7 +139,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 8.1 Re-diseño premium del template | v0.10 | 4/4 | Complete | 2026-06-20 |
 | 9. SEO, OG & Performance | v0.10 | 3/3 | Complete | 2026-06-22 |
 | 10. Skill `forjo-web-builder` | v0.10 | 3/3 | Complete | 2026-06-23 |
-| 11. Skill — modo edición + fuentes | v0.16 | 1/2 | In Progress|  |
+| 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete   | 2026-07-07 |
 | 12. Premium motion + fotos en la reserva | v0.16 | 0/TBD | Not started | - |
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 0/TBD | Not started | - |
 | 14. CMS editor UI | v0.16 | 0/TBD | Not started | - |
