@@ -109,27 +109,55 @@ corto que parte de lo último que se escribió y toca solo el campo pedido.
 
 ---
 
-### 3. SCRAPE de Instagram (OPCIONAL, best-effort — D10-02 / SKILL-02)
+### 3. FUENTES DE CONTENIDO (materia prima — elegí la que haya)
 
-Si el operador da un `@handle`, intentá sacar copy + fotos como **materia prima**. El motor vive
-**aislado** en `.claude/skills/instagram-a-web/` (Playwright en su propio `node_modules`).
+El objetivo es juntar **copy + fotos reales** del negocio. Probá las fuentes en **orden de
+confiabilidad**: si una falla o no hay data, caé a la siguiente sin bloquearte.
 
-- **NUNCA instales Playwright en el root del repo** (Pitfall 4 / T-10-11). El scrape corre
-  **DESDE el directorio de la skill `instagram-a-web`**, usando su engine. El script de ejemplo
-  está hardcodeado a un handle: generá/editá una copia parametrizada por el `@handle` del cliente
-  y corréla desde ese directorio.
-- Output esperado: `instagram-data.json` + imágenes en `assets/instagram/` (dentro de la skill).
-  Eso es **solo materia prima** de copy e imágenes — no se escribe crudo a ningún lado.
-- **Modos de falla esperados** (no prometemos scraping robusto): login-wall, rate-limit/anti-bot,
-  selectores que Instagram cambió. Si pasa cualquiera de estos → **FALLBACK MANUAL**, no te
-  bloquees:
+**(a) Entrada estructurada del operador (la más confiable — D-01).** Pedí en un formato fijo:
 
-  > "No pude acceder al perfil automáticamente (Instagram bloquea bastante). Pasame dos cosas:
-  > 1. **Copy**: la bio, a qué se dedica el negocio y la frase principal que querés en el hero.
-  > 2. **Fotos**: 6-12 fotos en una carpeta local (decime la ruta)."
+- **Hero**: propuesta de valor SIN la ciudad + la ciudad/zona (va al `kicker`) + (opcional) una
+  frase secundaria.
+- **About**: 2-4 líneas de quién es / qué hace el negocio.
+- **Fotos**: ruta a una **carpeta local** con 6-12 imágenes, marcando cuál es hero / about / galería.
+- **Servicios NO**: se derivan solos de la tabla (D10-04) — no los pidas ni los armes.
 
-- Las URLs del CDN de IG (`profilePicUrl`, `postImages`) **caducan** y NO sirven en runtime
-  (Pitfall 1). Se usan SOLO para descargar la imagen localmente. **Nunca** van al config.
+**(b) Web existente del negocio (D-02).** Si ya tiene web (Instagram link-in-bio, Linktree, sitio
+viejo), leéla con **WebFetch nativo** para sacar copy + descargar las imágenes localmente. Mismo
+trato que Instagram: **nunca hot-link** (las URLs caducan), el texto pasa por el `humanizador`, y
+**NO copies estructura ni HTML** — solo el contenido.
+
+**(c) Instagram (best-effort — D-03).** Cuando el negocio tiene IG activo, ahí están sus fotos
+reales y, en las captions, su voz y sus datos. Se cosecha con **instaloader** (CLI de Python) que
+**reusa la sesión de Firefox** (sin password) y se consolida con `scripts/instagram-cosechar.py`.
+
+- **Prerrequisitos** (tool LOCAL del operador, **NO** dependencias de la app — no van al
+  `package.json` ni al runtime web):
+  - `pip install instaloader browser_cookie3`.
+  - Estar **logueado en Instagram en Firefox** en esta PC. **Firefox** es el más confiable para
+    importar la sesión (Chrome/Edge fallan por el cifrado de cookies); las cookies tienen que estar
+    **en disco** → **incógnito NO sirve**.
+  - Usá una **cuenta IG dedicada** (no la personal): scrapear puede marcar la cuenta. El perfil a
+    cosechar debe ser **público** (uno privado exige que la cuenta logueada lo siga).
+
+  ```powershell
+  # 1. Bajar posts (fotos + metadata). Sin videos, solo imágenes. Reusa la sesión de Firefox:
+  python -m instaloader --load-cookies firefox --no-videos --no-video-thumbnails --dirname-pattern "<handle>" "<handle>"
+  # 2. Consolidar a datos usables:
+  python scripts/instagram-cosechar.py <dir>/<handle>
+  ```
+
+  El paso 2 (`scripts/instagram-cosechar.py`) deja en la carpeta: `captions.md` (las captions en
+  limpio — **voz real del negocio**, materia prima de copy), `resumen.json` (posts por fecha con
+  `likes`/`caption`/`images[]` + un bloque `top_fotos` con las mejores) y las imágenes en alta.
+
+- **Falla esperada** (login-wall / anti-bot / rate-limit) → **caé a la fuente (a) sin bloquearte**.
+  Los `403 Forbidden [retrying]` intermitentes son normales: instaloader reintenta solo y termina.
+
+**Cierre (vale para cualquier fuente — no regresión):** el copy pasa por el `humanizador` (paso 4)
+y **NADA se inventa** (regla fundamental) — se usa lo que el negocio ya dijo. Las imágenes van como
+**RUTAS LOCALES**; el script las **re-hostea** a `landing-assets/{businessId}/` (SKILL-03). Las URLs
+del CDN de IG/web **caducan** y NO sirven en runtime: se descargan localmente, **nunca** van al config.
 
 ### 4. COPY: pasarlo por el humanizador (OBLIGATORIO)
 
@@ -220,7 +248,7 @@ de lo armado (secciones, tema, cantidad de imágenes re-hosteadas). El script ya
 - **Secciones FIJAS** (D3): mismo set para todos; varían colores/tipografía/imágenes/orden y
   on-off. **Sin layout libre / drag-and-drop / bespoke** por cliente (eso es milestone futuro, D6).
 - **Solo componentes Forjo-native**: NUNCA inyectes HTML suelto de `instagram-a-web` ni de
-  `web-scrolling`. Esas skills son **referencia + scraping**, no output literal (D5). Todo es
+  `web-scrolling`. Esas skills son **referencia/inspiración**, no output literal (D5). Todo es
   config que consume el renderer nativo (React/Tailwind).
 - **NO tocar booking ni pagos**: la sección de reservas reusa `BookingClient` tal cual, **caja
   negra** (LAND-02). No la pongas en el config; el renderer la inyecta.
@@ -238,7 +266,9 @@ de lo armado (secciones, tema, cantidad de imágenes re-hosteadas). El script ya
 
 ## Reusos declarados
 
-- **`instagram-a-web`** → SOLO el motor de scraping de contenido (su HTML no se usa).
+- **Cosecha de Instagram** → el pipeline **instaloader** (documentado en el paso "3. FUENTES DE
+  CONTENIDO") + `scripts/instagram-cosechar.py`. Reusa la sesión de Firefox del operador; es la
+  fuente de IG de esta skill. (`instagram-a-web` ya NO es el motor de IG.)
 - **`web-scrolling`** → SOLO criterio/inspiración de diseño (su HTML no se usa).
 - **`humanizador`** → pasar el copy generado para que no suene a IA.
 - **Reglas UI/UX del CLAUDE global** → jerarquía, mobile-first, WCAG, microcopy.
