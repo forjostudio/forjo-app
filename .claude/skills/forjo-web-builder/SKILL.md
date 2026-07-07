@@ -61,6 +61,54 @@ ya está `poblado` o `null`. **No escribe nada** — re-correrlo da el mismo out
 - **`services` se deriva sola de la tabla** (D10-04): la skill NO arma una lista de servicios.
   De la sección services solo definís **título/subtítulo**; los items los pone el renderer.
 
+---
+
+### MODO EDICIÓN (retocar una landing existente)
+
+Si el operador quiere **RETOCAR** una web ya hecha (cambiar el headline, sumar fotos, cambiar la
+paleta) y **NO rehacerla**, no arranques de cero ni recorras todo el flujo: este es un sub-modo
+corto que parte de lo último que se escribió y toca solo el campo pedido.
+
+1. **Fuente de verdad: el payload guardado.** Buscá `landing-payloads/<slug>.json` (se persiste en
+   cada escritura, paso 7). Tiene la forma `{ "input": <BuilderInput>, "brand": <BrandHints> }`.
+   - **Si existe** → es el estado exacto de lo último que se escribió. Partí de ahí.
+   - **Si NO existe** (landing hecha antes de que se persistieran los payloads) → reconstruí el
+     estado actual con:
+
+     ```powershell
+     npm run setup:landing -- --inspect <slug>
+     ```
+
+     El `--inspect` extendido **vuelca el `landing_config` completo** (copy incluido), así que el
+     operador **no re-tipea todo**: solo confirma o retoca. Avisale que, al escribir, se va a
+     **re-generar el config completo** a partir del payload reconstruido. Si algún campo del config
+     volcado no alcanza para reconstruir lo que necesitás, pedíselo puntualmente al operador.
+
+2. **Aplicá SOLO el cambio pedido** sobre `input`/`brand` del payload (ej. `hero.headline`, sumar
+   `gallery.images`, cambiar `palette`). **No toques lo que no se pidió** — el resto queda idéntico.
+
+3. **Copy nuevo → `humanizador` (obligatorio).** Si el cambio suma o reescribe copy, ese texto pasa
+   por la skill `humanizador` antes del checkpoint, igual que en el flujo completo (paso 4). Nunca
+   escribas copy crudo sin humanizar, aunque sea un solo campo.
+
+4. **CHECKPOINT ACOTADO (D-05 — BLOQUEANTE).** Mostrá el diff **a nivel campo**: antes → después
+   **solo de los campos que cambiaron** (ej. `hero.headline: <valor viejo> → <valor nuevo>`),
+   computado comparando el payload viejo contra el nuevo. **NO muestres el config entero.** El diff
+   contiene solo copy/imágenes/tema — nunca credenciales ni columnas sensibles del tenant. Esperá
+   aprobación explícita, con el mismo ethos bloqueante del paso 6.
+
+5. **Re-escribí (idempotente, D-06).** Corré el mismo comando del paso 7 con el payload editado:
+
+   ```powershell
+   npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json
+   ```
+
+   Re-correr con el mismo payload da el mismo resultado: el script re-arma el `landing_config`
+   completo de forma determinista. "Aplicar solo el campo" = editar solo ese campo del payload,
+   **no** un patch parcial de la DB.
+
+---
+
 ### 3. SCRAPE de Instagram (OPCIONAL, best-effort — D10-02 / SKILL-02)
 
 Si el operador da un `@handle`, intentá sacar copy + fotos como **materia prima**. El motor vive
