@@ -47,7 +47,9 @@ export function Gallery({ data, index }: { data: unknown; index?: number | strin
   const images = d.images ?? []
 
   return (
-    <section className="relative py-[clamp(56px,11cqw,150px)]">
+    // frj-reveal: reveal de entrada editorial (subtle/premium), 100% CSS. Anti-trap: visible por
+    // defecto fuera de @supports+no-preference (globals.css).
+    <section className="frj-reveal relative py-[clamp(56px,11cqw,150px)]">
       {/* Número fantasma secuencial (lo deriva el renderer del orden real). aria-hidden vive en GhostIndex. */}
       {index != null && <GhostIndex n={index} />}
 
@@ -60,12 +62,17 @@ export function Gallery({ data, index }: { data: unknown; index?: number | strin
       </div>
 
       {/* Grid editorial full-bleed: 2 col mobile, 4 col desktop, gap fino (mock `.frj-grid`).
-          Cada celda lleva aspect-ratio reservado → CLS-safe sin masonry. */}
-      <div className="grid grid-cols-2 gap-[6px] px-[6px] lg:grid-cols-4">
+          Cada celda lleva aspect-ratio reservado → CLS-safe sin masonry.
+          frj-stagger: escalona el reveal de las tiles (80ms/item, tope 320ms) SOLO en premium
+          (el CSS aplica animation-delay a los hijos directos del .frj-stagger — globals.css). */}
+      <div className="frj-stagger grid grid-cols-2 gap-[6px] px-[6px] lg:grid-cols-4">
         {images.map((src, i) => (
           <div
             key={`${src}-${i}`}
-            className={`relative overflow-hidden bg-[color:var(--frj-surface-2)] ${shapeFor(i)}`}
+            // frj-reveal: entrada escalonada (el frj-stagger del grid le pone el animation-delay).
+            // frj-parallax: translateY ±24px SOLO premium. Ambos 100% CSS, anti-trap (visible por
+            // defecto). El overflow-hidden es de la tile, nunca ancestro del booking.
+            className={`frj-reveal frj-parallax relative overflow-hidden bg-[color:var(--frj-surface-2)] ${shapeFor(i)}`}
           >
             <Image
               src={src}

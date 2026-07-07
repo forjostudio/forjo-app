@@ -33,7 +33,9 @@ export function About({ data, index }: { data: unknown; index?: number | string 
   const { head, tail } = splitLead(title)
 
   return (
-    <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
+    // frj-reveal: reveal de entrada editorial (subtle/premium), 100% CSS. Anti-trap: visible por
+    // defecto fuera de @supports+no-preference (globals.css).
+    <section className="frj-reveal relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
       {/* Número fantasma secuencial (lo deriva el renderer del orden real). aria-hidden vive en GhostIndex. */}
       {index != null && <GhostIndex n={index} />}
 
@@ -64,7 +66,9 @@ export function About({ data, index }: { data: unknown; index?: number | string 
             va segundo (stack natural). SIN imagen: la columna no se renderiza y el lead
             ocupa todo el ancho — degrada con elegancia, nunca un bloque vacío. */}
         {d.image && (
-          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[2px]">
+          // frj-parallax: translateY ±24px SOLO premium (CSS). NO cambia sizes/loading del <Image>
+          // (no diferimos la carga). El overflow-hidden es de esta tile, no ancestro del booking.
+          <div className="frj-parallax relative aspect-[4/5] w-full overflow-hidden rounded-[2px]">
             <Image
               src={d.image}
               alt=""

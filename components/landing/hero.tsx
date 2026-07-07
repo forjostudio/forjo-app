@@ -27,7 +27,10 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
 
   return (
     <section
-      className="relative flex w-full flex-col justify-end overflow-hidden"
+      // frj-reveal: reveal de entrada (subtle/premium). El motion es 100% CSS (globals.css);
+      // fuera de @supports+no-preference el estado base es visible (anti-trap). El overflow-hidden
+      // vive en ESTA <section> (campo decorativo del hero), NUNCA en .frj-site (D81-01).
+      className="frj-reveal relative flex w-full flex-col justify-end overflow-hidden"
       // hero full-screen: 100svh (llena el viewport como el mock hero-fullscreen; svh evita el
       // salto de la barra de URL en mobile y que asome la sección de abajo). El overflow:hidden
       // queda EN ESTA <section> (campo decorativo del hero), NO en el ancestro .frj-site del
@@ -36,15 +39,23 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
     >
       {hasImage ? (
         <>
-          {/* Imagen full-bleed (next/image, remotePatterns ya configurado en 07-01). */}
-          <Image
-            src={d.image!}
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="absolute inset-0 -z-10 size-full object-cover"
-          />
+          {/* Capa de imagen con parallax (frj-parallax-hero, ±48px, SOLO premium vía CSS). El
+              translateY se aplica a ESTE wrapper, NO reemplaza el <img> ni difiere su carga
+              (MOTION-03 / SC#2): la imagen sigue siendo el LCP, arriba del fold, con preload.
+              Fuera del @supports+no-preference el wrapper queda estático (sin transform). */}
+          <div className="frj-parallax frj-parallax-hero absolute inset-0 -z-10">
+            {/* Imagen full-bleed (next/image, remotePatterns ya configurado en 07-01).
+                preload=true: Next 16 reemplaza el viejo prop de carga priorizada (deprecado)
+                por `preload`, que inserta el <link rel=preload> en el <head> — mismo efecto LCP. */}
+            <Image
+              src={d.image!}
+              alt=""
+              fill
+              preload
+              sizes="100vw"
+              className="size-full object-cover"
+            />
+          </div>
           {/* Scrim doble-gradiente (sutil arriba + denso abajo) que ancla el texto claro
               al fondo y garantiza >=4.5:1 sin depender del contenido de la imagen (D7-03).
               Negro de scrim = utilidad Tailwind (no hex hardcodeado). Decorativo. */}

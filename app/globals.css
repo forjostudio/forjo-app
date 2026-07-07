@@ -467,3 +467,100 @@
 .frj-noisefield-hair .frj-noisefield-ring {
   border-color: var(--frj-hair);
 }
+
+/* =========================================================================
+   MOTION PREMIUM (F12) — scroll-reveal + parallax CSS-first, data-driven.
+
+   POR QUÉ CSS puro (cero JS, cero 'use client'): animation-timeline: view()
+   corre en el compositor, no arrastra el árbol de secciones al bundle y no
+   introduce riesgo de "trap opacity:0" (Pitfall 1). El renderer emite
+   data-motion="none|subtle|premium" en <main class="frj-site"> y las clases
+   .frj-reveal / .frj-parallax SOLO en las secciones editoriales — NUNCA en
+   <section id="reservar"> (caja negra, MOTION-04 / Pitfall 3).
+
+   REGLA DURA D81-01 (intacta): estas reglas se aplican a elementos HIJOS de
+   .frj-site (vía los selectores .frj-site[data-motion=...] .frj-reveal), NO a
+   la clase .frj-site misma — que sigue declarando SOLO container-type. Ningún
+   selector de acá agrega transform/overflow/filter/position a .frj-site.
+
+   ANTI-TRAP (Pitfall 1, T-12-03): el estado base de .frj-reveal / .frj-parallax
+   es VISIBLE y sin transform (fallback estático para Firefox stable, no-JS y
+   reduced-motion). El opacity:0 inicial y el animation-timeline viven SOLO
+   dentro de @supports (animation-timeline: view()) + @media (no-preference).
+   Tres capas de degradación (no-support / reduced-motion / no-JS) caen todas a
+   contenido visible.
+
+   Solo se anima transform/opacity (MOTION-02). El parallax es translateY
+   únicamente — NUNCA el viejo truco de fondo fijo, que fuerza repaints y rompe
+   en mobile (MOTION-03).
+   ========================================================================= */
+
+/* Estado base: SIEMPRE visible. Es el piso anti-trap (sin opacity:0, sin transform). */
+.frj-site[data-motion='subtle'] .frj-reveal,
+.frj-site[data-motion='premium'] .frj-reveal {
+  /* visible por defecto — el reveal solo se activa dentro del @supports de abajo */
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* Reveal de entrada (subtle Y premium, todas las editoriales — D-02). 280ms ease-out
+       expresivo; `both` + rango que termina en 15% dejan el estado final fijo sin re-disparo
+       (one-shot sin JS: pasado el 15% el elemento queda en el `to`). */
+    .frj-site[data-motion='subtle'] .frj-reveal,
+    .frj-site[data-motion='premium'] .frj-reveal {
+      animation: frj-reveal-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 15%;
+    }
+
+    /* Parallax SOLO premium, SOLO donde hay foto (hero/about/gallery — D-01/D-02). translateY
+       ligado al recorrido visible del elemento. Amplitud base ±24px (about/gallery). */
+    .frj-site[data-motion='premium'] .frj-parallax {
+      animation: frj-parallax linear both;
+      animation-timeline: view();
+      animation-range: cover;
+    }
+    /* Tiles de gallery: reveal + parallax en el MISMO elemento. Sin esta regla combinada, las
+       reglas separadas de .frj-reveal y .frj-parallax se pisarían (el shorthand `animation` de
+       una sobrescribe a la otra por cascada). Acá corren ambas con comas: el reveal (entrada,
+       ligado a `view()` en el rango de entrada) + el parallax (translateY, ligado a `cover`).
+       Cada animación referencia su timeline por índice (animation-timeline en el mismo orden). */
+    .frj-site[data-motion='premium'] .frj-reveal.frj-parallax {
+      animation:
+        frj-reveal-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both,
+        frj-parallax linear both;
+      animation-timeline: view(), view();
+      animation-range: entry 0% entry 15%, cover;
+    }
+    /* Variante hero: amplitud mayor ±48px (movimiento más notorio en el bloque estrella). */
+    .frj-site[data-motion='premium'] .frj-parallax-hero {
+      animation: frj-parallax-hero linear both;
+      animation-timeline: view();
+      animation-range: cover;
+    }
+
+    /* Stagger premium en las tiles de gallery: delay incremental 80ms/item, tope 320ms
+       acumulado (ítems 5+ comparten el último delay). Escalona la entrada de la lista.
+       Las tiles combinan reveal+parallax → el delay va en pareja `<reveal>, 0s` para NO
+       demorar el parallax (que debe seguir ligado al scroll desde el arranque). */
+    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(1) { animation-delay: 0ms, 0s; }
+    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(2) { animation-delay: 80ms, 0s; }
+    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(3) { animation-delay: 160ms, 0s; }
+    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(4) { animation-delay: 240ms, 0s; }
+    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(n + 5) { animation-delay: 320ms, 0s; }
+  }
+}
+
+/* Keyframes del motion. Scope: dentro de la capa landing (no en :root). Solo transform/opacity. */
+@keyframes frj-reveal-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes frj-parallax {
+  from { transform: translateY(-24px); }
+  to   { transform: translateY(24px); }
+}
+@keyframes frj-parallax-hero {
+  from { transform: translateY(-48px); }
+  to   { transform: translateY(48px); }
+}

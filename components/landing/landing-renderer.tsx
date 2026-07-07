@@ -35,6 +35,7 @@ import { Hours, HoursInner, isHoursVisible } from '@/components/landing/hours'
 import { GhostIndex } from '@/components/landing/_premium'
 import { Cta } from '@/components/landing/cta'
 import { aboutData, galleryData } from '@/lib/landing/schema'
+import { normalizeMotion } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
 import type { PublicBusiness, Service, Professional, TimeBlock, Location as LocationType } from '@/lib/types'
 
@@ -67,6 +68,21 @@ type RenderableSection = ReturnType<typeof orderedSections>[number]
 export function LandingRenderer({ config, business, services, professionals, timeBlocks, exceptions, locations, bookingSlot }: Props) {
   // orderedSections: orden + filtro enabled + inyección de booking al final (D7-05).
   const sections = orderedSections(config.sections)
+
+  // Nivel de motion resuelto (F12, MOTION-01). normalizeMotion degrada defensivamente:
+  // ausente/inválido/'none' → 'none' (estático, byte-idéntico a hoy — D-04). El valor se
+  // emite como data-motion en <main class="frj-site"> (abajo). Las CLASES .frj-reveal /
+  // .frj-parallax se aplican SOLO a las editoriales; el case 'booking' NUNCA las recibe
+  // (caja negra, MOTION-04). El CSS de globals.css engancha con .frj-site[data-motion=...].
+  const motionLevel = normalizeMotion(config.motion)
+
+  // Wrapper de reveal para las secciones editoriales que renderizan su <section> internamente
+  // pero cuyo componente NO recibió la clase (services/location/hours/cta). RSC puro, sin
+  // marcarlo client: un simple <div class="frj-reveal"> hijo de .frj-site. NO envuelve NUNCA la
+  // sección booking (esa rama del switch no pasa por acá). El motion es 100% CSS.
+  const Reveal = ({ children }: { children: ReactNode }) => (
+    <div className="frj-reveal">{children}</div>
+  )
 
   // Lookup del `data` por tipo (para evaluar visibilidad de los empty-states sin re-iterar).
   const dataOf = (type: string): unknown => {
@@ -122,7 +138,8 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // grid 2-col (info/mapa | horarios), stack en mobile. CERO impacto sobre booking.
   function CombinedLocationHours({ index }: { index: number | undefined }) {
     return (
-      <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
+      // frj-reveal: editorial → reveal de entrada (subtle/premium). Sin parallax (no hay foto).
+      <section className="frj-reveal relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
         {index != null && <GhostIndex n={index} />}
         <div className="grid grid-cols-1 items-start gap-[clamp(40px,7cqw,80px)] md:grid-cols-2">
           <div>
@@ -148,7 +165,7 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // El overflow:hidden del campo decorativo del hero/cta vive en .frj-noisefield (su
   // propio contenedor), NO acá. switch / orderedSections / props de BookingClient: VERBATIM.
   return (
-    <main className="frj-site">
+    <main className="frj-site" data-motion={motionLevel}>
       {sections.map((s, i) => {
         const index = nextIndexFor(s)
         // switch (NO Record map): cada sección recibe props heterogéneas y el switch da
@@ -162,24 +179,43 @@ export function LandingRenderer({ config, business, services, professionals, tim
             return <About key={i} data={s.data} index={index} />
           case 'services':
             // Lista derivada de la tabla services (D7-06); el data solo aporta título.
-            return <Services key={i} data={s.data} services={services} index={index} />
+            // Reveal editorial vía wrapper (el componente rinde su propia <section>).
+            return (
+              <Reveal key={i}>
+                <Services data={s.data} services={services} index={index} />
+              </Reveal>
+            )
           case 'gallery':
+            // Gallery lleva frj-reveal/frj-parallax en su propio componente (tiene fotos).
             return <Gallery key={i} data={s.data} index={index} />
           case 'location':
             // Combinada con hours → la PRIMERA del par rinde el bloque 2-col; la segunda nada.
             if (combine) {
               return s.type === firstOfPair ? <CombinedLocationHours key={i} index={index} /> : null
             }
-            // Sola: full-width como hoy (respeta shouldHide). locations llega acotado.
-            return <Location key={i} data={s.data} locations={locations as unknown as LocationType[]} index={index} />
+            // Sola: full-width como hoy (respeta shouldHide). locations llega acotado. Reveal wrapper.
+            return (
+              <Reveal key={i}>
+                <Location data={s.data} locations={locations as unknown as LocationType[]} index={index} />
+              </Reveal>
+            )
           case 'hours':
             if (combine) {
               return s.type === firstOfPair ? <CombinedLocationHours key={i} index={index} /> : null
             }
-            // Sola: full-width. Hours deriva de time_blocks; locations solo para multi-sede.
-            return <Hours key={i} data={s.data} timeBlocks={timeBlocks} locations={locations as unknown as LocationType[]} index={index} />
+            // Sola: full-width. Hours deriva de time_blocks; locations solo para multi-sede. Reveal wrapper.
+            return (
+              <Reveal key={i}>
+                <Hours data={s.data} timeBlocks={timeBlocks} locations={locations as unknown as LocationType[]} index={index} />
+              </Reveal>
+            )
           case 'cta':
-            return <Cta key={i} data={s.data} business={business} />
+            // Editorial → reveal de entrada. Wrapper (Cta rinde su propia sección/bookend).
+            return (
+              <Reveal key={i}>
+                <Cta data={s.data} business={business} />
+              </Reveal>
+            )
           case 'booking':
             // CAJA NEGRA (Pitfall 2 / Blocker Pitfall 4/8): el booking se envuelve SOLO en
             // <section id="reservar">. PROHIBIDO transform/overflow-hidden/position:fixed|sticky/
