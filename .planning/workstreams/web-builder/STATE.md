@@ -4,13 +4,13 @@ milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
 status: executing
 stopped_at: Phase 12 UI-SPEC approved
-last_updated: "2026-07-07T19:21:10.372Z"
-last_activity: 2026-07-07 -- Phase 12 planning complete
+last_updated: "2026-07-07T19:47:10.132Z"
+last_activity: 2026-07-07 -- Phase 12 execution started
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 25
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-07)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados. (v0.16 suma edición self-serve del landing + motion premium SIN debilitar este invariante.)
-**Current focus:** Phase 11 — skill-modo-edici-n-fuentes-de-contenido
+**Current focus:** Phase 12 — Premium motion + fotos en la reserva (renderer + schema)
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
+Phase: 12 (Premium motion + fotos en la reserva (renderer + schema)) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-07 -- Phase 12 planning complete
+Last activity: 2026-07-07 -- Phase 12 execution started
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Last activity: 2026-07-07 -- Phase 12 planning complete
 *Updated after each plan completion*
 | Phase 11 P01 | 15m | 2 tasks | 2 files |
 | Phase 11 P02 | ~20m | 2 tasks | 1 files |
+| Phase 12 P01 | 9 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Decisiones LOCKED del milestone v0.16 (no re-litigar en discuss-phase) — de PR
 - [v0.10 carryover]: `parseLandingConfig` total — `null → null` (passthrough legacy); `presente-pero-inválido → DEFAULT_LANDING_CONFIG`; `safeParse` exclusivo; `.strip()` de claves desconocidas
 - [Phase 11]: MODO EDICIÓN: retocar sin rehacer desde landing-payloads/<slug>.json (o --inspect), diff acotado a campo, re-escritura idempotente
 - [Phase 11]: FUENTES DE CONTENIDO: operador estructurado, web (WebFetch), IG (instaloader best-effort con fallthrough); instaloader reemplaza el Playwright de instagram-a-web
+- [Phase ?]: F12-01: default subtle es de autoria (skill), no de render — parseLandingConfig sin default de motion (D-04)
+- [Phase ?]: F12-01: motion 100% CSS-first (animation-timeline: view()), cero use client nuevo, gated por @supports + prefers-reduced-motion
 
 ### Pending Todos
 
@@ -114,7 +117,7 @@ Items reconocidos y diferidos a milestones posteriores (v2):
 
 ## Session Continuity
 
-Last session: 2026-07-07T16:04:39.381Z
+Last session: 2026-07-07T19:46:54.907Z
 Stopped at: Phase 12 UI-SPEC approved
 Resume file: .planning/workstreams/web-builder/phases/12-premium-motion-fotos-en-la-reserva-renderer-schema/12-UI-SPEC.md
 
