@@ -147,8 +147,11 @@ async function runInspect(
     whatsapp: biz.whatsapp,
     servicios_activos: serviceNames.length,
     servicios: serviceNames,
-    // null vs poblado: si ya tiene landing_config, re-correr la escritura lo SOBRE-ESCRIBE (A4).
-    landing_config: biz.landing_config == null ? null : 'poblado',
+    // Volcado COMPLETO del landing_config actual (o null si no hay). Es el insumo con el que la skill
+    // reconstruye el BuilderInput/brand de una landing SIN payload guardado (previa a la persistencia
+    // de payloads) sin re-tipear todo el copy a mano (D-04, habilita SC2 de SKILL-05). Sigue read-only:
+    // solo se imprime. Si ya hay config, re-correr la escritura lo SOBRE-ESCRIBE (A4).
+    landing_config: biz.landing_config ?? null,
   }
   console.log('[setup-landing] inspect (read-only) —', slug)
   console.log(JSON.stringify(resumen, null, 2))
