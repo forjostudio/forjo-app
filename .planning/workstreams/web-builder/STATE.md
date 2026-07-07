@@ -4,8 +4,8 @@ milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
 status: verifying
 stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-07-07T13:13:41.258Z"
-last_activity: 2026-07-07 -- Phase 11 execution started
+last_updated: "2026-07-07T13:25:09.864Z"
+last_activity: 2026-07-07
 progress:
   total_phases: 4
   completed_phases: 1
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 
 ## Current Position
 
-Phase: 11 (skill-modo-edici-n-fuentes-de-contenido) — EXECUTING
-Plan: 2 of 2
+Phase: 12
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-07 -- Phase 11 execution started
+Last activity: 2026-07-07
 
 ## Performance Metrics
 
@@ -42,7 +42,7 @@ Last activity: 2026-07-07 -- Phase 11 execution started
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 11 | TBD | - | - |
+| 11 | 2 | - | - |
 | 12 | TBD | - | - |
 | 13 | TBD | - | - |
 | 14 | TBD | - | - |
