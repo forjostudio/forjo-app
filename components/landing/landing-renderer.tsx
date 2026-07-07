@@ -30,6 +30,7 @@ import { Hero } from '@/components/landing/hero'
 import { About } from '@/components/landing/about'
 import { Services } from '@/components/landing/services'
 import { Gallery } from '@/components/landing/gallery'
+import { RsvStrip } from '@/components/landing/rsv-strip'
 import { Location, LocationInner, isLocationVisible } from '@/components/landing/location'
 import { Hours, HoursInner, isHoursVisible } from '@/components/landing/hours'
 import { GhostIndex } from '@/components/landing/_premium'
@@ -226,6 +227,15 @@ export function LandingRenderer({ config, business, services, professionals, tim
             // envoltorios nuevos; si no, el BookingClient de siempre (props VERBATIM, SC#2/LAND-02).
             return (
               <section id="reservar" key={i}>
+                {/* Galería RSV (RSV-01): header + strip horizontal de fotos de confianza,
+                    HERMANO del widget y renderizado ANTES (D-03). Su data sale del campo
+                    DEDICADO del config (D-03b): `dataOf('booking')` devuelve el `data` colgado
+                    de la sección booking del config, que RsvStrip parsea fail-safe con
+                    rsvData.parse (sin fotos/roto → null → #reservar byte-idéntico a hoy). NO
+                    envuelve al widget: su overflow-x vive confinado en su propio div, y el
+                    booking NO recibe motion/overflow/transform (caja negra, RSV-02/MOTION-04).
+                    Las props de BookingClient quedan VERBATIM. */}
+                <RsvStrip data={dataOf('booking')} />
                 {bookingSlot ?? (
                   <BookingClient
                     business={business}
