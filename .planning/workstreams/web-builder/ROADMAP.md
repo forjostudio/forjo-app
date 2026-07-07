@@ -13,6 +13,7 @@ Detalle v0.9 archivado en [`milestones/v0.9-ROADMAP.md`](../../milestones/v0.9-R
 ## Phases
 
 **Phase Numbering:**
+
 - El workstream `web-builder` continúa la numeración: v0.10 cerró en Phase 10, este milestone arranca en **Phase 11**.
 - Integer phases (11, 12, …): trabajo planeado del milestone.
 - Decimal phases (12.1, …): inserciones urgentes (marcadas INSERTED).
@@ -67,8 +68,9 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
 
 **Threat note**: Bajo riesgo. La skill NO abre superficie web nueva — sigue escribiendo por el script local service-role de v0.10 (SKILL-04), con el mismo checkpoint humano pre-escritura. El único cuidado: el diff acotado no debe filtrar secretos del payload (el payload no contiene secretos de tenant, solo copy/imágenes/tema).
 
-**Plans**: 2 plans
-- [ ] 11-01-PLAN.md — Artefactos de código: extender `--inspect` (read-only, D-04) + copiar `scripts/instagram-cosechar.py` (D-03)
+**Plans**: 1/2 plans executed
+
+- [x] 11-01-PLAN.md — Artefactos de código: extender `--inspect` (read-only, D-04) + copiar `scripts/instagram-cosechar.py` (D-03)
 - [ ] 11-02-PLAN.md — Skill: sección MODO EDICIÓN (SKILL-05) + paso FUENTES DE CONTENIDO con pipeline instaloader (SKILL-06)
 
 ### Phase 12: Premium motion + fotos en la reserva (renderer + schema)
@@ -137,7 +139,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 8.1 Re-diseño premium del template | v0.10 | 4/4 | Complete | 2026-06-20 |
 | 9. SEO, OG & Performance | v0.10 | 3/3 | Complete | 2026-06-22 |
 | 10. Skill `forjo-web-builder` | v0.10 | 3/3 | Complete | 2026-06-23 |
-| 11. Skill — modo edición + fuentes | v0.16 | 0/2 | Not started | - |
+| 11. Skill — modo edición + fuentes | v0.16 | 1/2 | In Progress|  |
 | 12. Premium motion + fotos en la reserva | v0.16 | 0/TBD | Not started | - |
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 0/TBD | Not started | - |
 | 14. CMS editor UI | v0.16 | 0/TBD | Not started | - |
