@@ -4,8 +4,8 @@ milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
 status: verifying
 stopped_at: Phase 12 UI-SPEC approved
-last_updated: "2026-07-07T22:34:45.574Z"
-last_activity: 2026-07-07 -- Phase 12 execution started
+last_updated: "2026-07-08T00:33:41.260Z"
+last_activity: 2026-07-08
 progress:
   total_phases: 4
   completed_phases: 2
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 
 ## Current Position
 
-Phase: 12 (Premium motion + fotos en la reserva (renderer + schema)) — EXECUTING
-Plan: 2 of 2
+Phase: 13
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-07 -- Phase 12 execution started
+Last activity: 2026-07-08
 
 ## Performance Metrics
 
@@ -43,7 +43,7 @@ Last activity: 2026-07-07 -- Phase 12 execution started
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 11 | 2 | - | - |
-| 12 | TBD | - | - |
+| 12 | 2 | - | - |
 | 13 | TBD | - | - |
 | 14 | TBD | - | - |
 
@@ -113,6 +113,8 @@ Items reconocidos y diferidos a milestones posteriores (v2):
 | OPS | URLs por-negocio + dominio propio (OPS-02/03) | Deferred | v0.16 scope lock |
 | FU | Rediseño premium full-bleed del template (FU-2) | Deferred | milestone de estilo aparte |
 | FU | Alto del drawer de reservas en mobile (FU-1) | Deferred | polish de booking aparte |
+| FU | Tuning del "feel premium" del motion + encuadre de fotos strip/galería (más amplitud reveal/parallax, aspect de tiles) — el operador lo vio funcionando pero lo quiere más marcado | Deferred | Phase 12 UAT (2026-07-07) |
+| FU | Layout estilo Meitre (`sommabar.meitre.com`): foto full-bleed de fondo + tarjeta de reserva flotando arriba/centrada — referencia que le gusta al operador para el rediseño premium (junto con FU-2) | Deferred | Phase 12 UAT (2026-07-07) |
 | BESPOKE | Sitio standalone vía API (D6) | Deferred | milestone aparte |
 
 ## Session Continuity
