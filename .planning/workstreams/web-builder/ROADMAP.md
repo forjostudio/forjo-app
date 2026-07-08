@@ -150,7 +150,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 10. Skill `forjo-web-builder` | v0.10 | 3/3 | Complete | 2026-06-23 |
 | 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete    | 2026-07-07 |
 | 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete    | 2026-07-07 |
-| 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete   | 2026-07-08 |
+| 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete    | 2026-07-08 |
 | 14. CMS editor UI | v0.16 | 0/TBD | Not started | - |
 
 ---
