@@ -38,34 +38,45 @@ export async function saveLandingConfig(
   // 1. Flag primero — kill-switch global. Con el flag off el request NO escribe ni resuelve sesión.
   if (!CMS_ENABLED) return { ok: false, error: 'cms_disabled' }
 
-  // 2. Session client (anon + cookies, RLS activo). PROHIBIDO createAdminClient()/service-role acá.
-  const supabase = await createClient()
+  // Efectos de red (pasos 2-6) envueltos en try/catch: un error inesperado (red, Supabase caído)
+  // devuelve un error de dominio { ok:false, error:'server_error' } en vez de tirar un throw sin
+  // capturar fuera de la Server Action (WR-03). Los early-returns de dominio de abajo NO tiran.
+  try {
+    // 2. Session client (anon + cookies, RLS activo). PROHIBIDO createAdminClient()/service-role acá.
+    const supabase = await createClient()
 
-  // 3. Sesión del dueño.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { ok: false, error: 'unauthorized' }
+    // 3. Sesión del dueño.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return { ok: false, error: 'unauthorized' }
 
-  // 4. Negocio resuelto de la SESIÓN (owner_id = auth.uid()), nunca de un business_id del body.
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('owner_id', user.id)
-    .single()
-  if (!business) return { ok: false, error: 'no_business' }
+    // 4. Negocio resuelto de la SESIÓN (owner_id = auth.uid()), nunca de un business_id del body.
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('owner_id', user.id)
+      .single()
+    if (!business) return { ok: false, error: 'no_business' }
 
-  // 5. Validación estricta reject-on-invalid: un config inválido NO se escribe (no 500, no default).
-  const parsed = parseLandingConfigForWrite(input)
-  if (!parsed.ok) return { ok: false, error: parsed.error }
+    // 5. Validación estricta reject-on-invalid: un config inválido NO se escribe (no 500, no default).
+    const parsed = parseLandingConfigForWrite(input)
+    if (!parsed.ok) return { ok: false, error: parsed.error }
 
-  // 6. Overwrite total SOLO de landing_config, acotado a la fila del propio negocio. El payload es
-  //    exactamente { landing_config } (por construcción nunca toca otra columna).
-  const { error } = await supabase
-    .from('businesses')
-    .update({ landing_config: parsed.data })
-    .eq('id', business.id)
-  if (error) return { ok: false, error: 'update_failed' }
+    // 6. Overwrite total SOLO de landing_config, acotado a la fila del propio negocio. El payload es
+    //    exactamente { landing_config } (por construcción nunca toca otra columna). El `.select('id')`
+    //    verifica filas afectadas: si el negocio fue borrado entre el fetch y el update, el update es
+    //    un no-op silencioso que sin esta verificación devolvería { ok:true } sin escribir nada (WR-01).
+    const { data: updated, error } = await supabase
+      .from('businesses')
+      .update({ landing_config: parsed.data })
+      .eq('id', business.id)
+      .select('id')
+    if (error) return { ok: false, error: 'update_failed' }
+    if (!updated || updated.length === 0) return { ok: false, error: 'update_failed' }
 
-  return { ok: true }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'server_error' }
+  }
 }
