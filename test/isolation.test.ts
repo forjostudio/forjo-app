@@ -108,6 +108,53 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
     expect(error !== null || (data ?? []).length === 0).toBe(true)
   })
 
+  // ── SC2: aislamiento cross-tenant del write path del CMS (landing_config) — Phase 13 ──────────
+  // La garantía de SC2 es RLS (no la Server Action, que ni siquiera acepta un bizA del body). Se
+  // prueba con el UPDATE directo anon-key, idéntico al caso de appointments: apuntamos por `id` a la
+  // fila de A y dejamos que la policy `owner_id = auth.uid()` deniegue. anon-key SOLO en la aserción;
+  // seeded.admin únicamente para el check independiente del efecto (Pitfall 3, NO es la aserción RLS).
+
+  it('cross-WRITE landing_config: B no puede escribir el config de A (SC2)', async () => {
+    // anonB (sesión de B) apunta EXPLÍCITAMENTE a la fila de A (por id, NO por owner/business_id):
+    // dejamos que RLS deniegue. Un config válido cualquiera como payload.
+    const { data, error } = await anonB
+      .from('businesses')
+      .update({ landing_config: { theme: { preset: 'forjo' }, sections: [] } })
+      .eq('id', seeded.bizA)
+      .select('id')
+    // Denegación RLS: error, o 0 filas afectadas. Cualquiera de las dos es válida.
+    expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+    // Check INDEPENDIENTE del efecto con service-role (NO es la aserción de RLS): A nunca escribió su
+    // config (el fixture lo deja null) y el intento de B tampoco lo tocó → sigue null.
+    const { data: check } = await seeded.admin
+      .from('businesses')
+      .select('landing_config')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(check?.landing_config).toBeNull()
+  })
+
+  it('same-tenant WRITE landing_config: A SÍ escribe el suyo (happy path)', async () => {
+    // anonA escribe SU propio landing_config: la policy owner_id = auth.uid() lo permite. Va DESPUÉS
+    // del cross-write de B para que el "quedó null tras el intento de B" del it anterior sea limpio.
+    const cfg = { theme: { preset: 'forjo' }, sections: [] }
+    const { error } = await anonA
+      .from('businesses')
+      .update({ landing_config: cfg })
+      .eq('id', seeded.bizA)
+      .select('id')
+    expect(error).toBeNull()
+
+    // Check de efecto con service-role (no es la aserción RLS): el config quedó persistido en la fila de A.
+    const { data: check } = await seeded.admin
+      .from('businesses')
+      .select('landing_config')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(check?.landing_config).toMatchObject(cfg)
+  })
+
   // ── D-10: la vista acotada public_businesses tras agregar landing_config (migración 030) ──────
   // CFG-02: public_businesses ahora expone landing_config a anon por columna explícita, SIN
   // re-abrir la fuga de secretos de v0.9. Estos 3 casos usan SOLO anon-key (anonA/anonB), nunca
