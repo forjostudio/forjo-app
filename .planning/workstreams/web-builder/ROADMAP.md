@@ -110,7 +110,9 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
   2. La escritura pasa por RLS por tenant: un dueño NO puede escribir el `landing_config` de otro negocio (verificado por un test de aislamiento con dos sesiones anon autenticadas, al estilo TEST-01); nunca se usa service-role ni un endpoint de escritura anónimo en la superficie web.
   3. El CMS vive detrás de un feature flag y NO aparece en el nav del dashboard para clientes en este milestone; su exposición + el flujo publish/go-live quedan explícitamente fuera de alcance (EDIT-07 es el borde).
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+- [ ] 13-01-PLAN.md — Validador de escritura estricto (`parseLandingConfigForWrite`, reject-on-invalid) + Server Action owner-only `saveLandingConfig` (session client, flag `CMS_ENABLED` fail-closed, business_id de sesión) + extensión del test de aislamiento SC2 (cross-write denegado + same-tenant permitido). Sin migración, cero service-role. (EDIT-05, EDIT-07)
 
 **Threat note** (SECURITY-SENSITIVE — flag esta fase para secure-phase): (a) **Aislamiento de tenant**: el write path debe ser owner-only por RLS + `.eq('business_id', …)` de la sesión; nunca confiar en un `business_id` del body. (b) **Sin service-role en la web**: prohibido `createAdminClient()` en cualquier route/action que escriba config desde el panel — solo el cliente de sesión (anon + cookies, RLS activo). (c) **Validación Zod estricta**: `safeParse` + `.strip()` de claves desconocidas antes de escribir, para no re-abrir la fuga de secretos que v0.9 cerró ni inyectar campos no permitidos. (d) **Feature flag**: el flag apaga la ruta entera; verificar que un cliente sin el flag no llega ni al render del editor. El test de aislamiento anon-key de v0.9/v0.10 se extiende al write path.
 
@@ -148,7 +150,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 10. Skill `forjo-web-builder` | v0.10 | 3/3 | Complete | 2026-06-23 |
 | 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete    | 2026-07-07 |
 | 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete    | 2026-07-07 |
-| 13. CMS foundation — write path owner-only + flag | v0.16 | 0/TBD | Not started | - |
+| 13. CMS foundation — write path owner-only + flag | v0.16 | 0/1 | Planned | - |
 | 14. CMS editor UI | v0.16 | 0/TBD | Not started | - |
 
 ---
