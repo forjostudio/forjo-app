@@ -1,0 +1,438 @@
+'use client'
+
+import { useId, useState, type ReactNode } from 'react'
+import { ImageIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  heroData,
+  aboutData,
+  servicesData,
+  galleryData,
+  rsvData,
+  locationData,
+  ctaData,
+} from '@/lib/landing/schema'
+import type { LandingConfig } from '@/lib/landing/schema'
+import { groupHoursByDay, DIAS, HOURS_RENDER_ORDER } from '@/lib/landing/derive'
+import type { Service, TimeBlock, PublicBusiness } from '@/lib/types'
+
+// ── Forms de copy por sección (Phase 14, Plan 02 — EDIT-01, D-05) ───────────────────────
+// Un form por sección, dirigido por los schemas `data` por-sección de lib/landing/schema.ts.
+// Cada campo edita EXACTAMENTE una clave del `data` de esa sección; cada keystroke llama
+// onDataChange({ campo: valor }) → el shell aplica setSectionData (merge shallow) al borrador →
+// el preview reacciona. NADA se arma desde cero (L5): el reducer parte del config recibido.
+//
+// Por qué services/locations/hours son READ-ONLY acá: esas listas viven en sus propias tablas
+// (services / locations / time_blocks) y se editan en sus pantallas (Servicios, Negocio → …).
+// El config `data` solo aporta el copy que las envuelve (título/subtítulo, map_url/show_address).
+// Mostrarlas acá read-only + un hint evita duplicar la fuente de verdad (D7-06).
+//
+// Por qué rsvData vive bajo `booking`: la galería/copy de confianza de la reserva (RSV strip, F12)
+// se muestra ANTES del widget de reserva; el widget en sí es caja negra (no se edita acá).
+//
+// Las imágenes NO se instancian acá (cero lógica de upload — 14-03 la implementa). El shell/panel
+// inyecta el control real por `imageSlot`; sin él, se rinde un placeholder (la costura queda visible).
+
+// LocationLite: exactamente las columnas que la page fetchea y el renderer consume (mismo shape
+// que web-client.tsx / section-list.tsx). No se traen columnas sensibles.
+type LocationLite = { id: string; name: string; address: string | null; phone: string | null }
+
+type Section = LandingConfig['sections'][number]
+
+// Costura de imagen: el panel/shell pasa un render-prop que monta el control real (14-03). `field`
+// es la clave del data (ej. 'hero.image', 'gallery.images'); `kind` distingue única vs multi-grid.
+export type ImageSlotSpec = { field: string; kind: 'single' | 'multi'; label: string }
+export type ImageSlot = (spec: ImageSlotSpec) => ReactNode
+
+export interface SectionFormProps {
+  section: Section
+  onDataChange: (partial: Record<string, unknown>) => void
+  services: Service[]
+  locations: LocationLite[]
+  timeBlocks: TimeBlock[]
+  business: PublicBusiness
+  businessId: string
+  // Opcional (14-03): sin él, cada campo de imagen rinde un placeholder read-only.
+  imageSlot?: ImageSlot
+}
+
+// ── Sub-componentes de campo reutilizables (labels SIEMPRE visibles, nunca placeholder-only) ──
+
+function OptionalTag() {
+  return <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  optional,
+  multiline,
+  rows,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  optional?: boolean
+  multiline?: boolean
+  rows?: number
+}) {
+  const id = useId()
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>
+        {label} {optional && <OptionalTag />}
+      </Label>
+      {multiline ? (
+        <Textarea id={id} rows={rows ?? 3} value={value} onChange={(e) => onChange(e.target.value)} />
+      ) : (
+        <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} />
+      )}
+    </div>
+  )
+}
+
+// URL field con validación https onBlur (UX inmediata; la validación no-bypasseable corre
+// server-side al Guardar — T-14-06). Vacío = válido (el campo es opcional).
+function UrlField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  const id = useId()
+  const [error, setError] = useState<string | null>(null)
+
+  function validate(v: string) {
+    if (!v) {
+      setError(null)
+      return
+    }
+    try {
+      const u = new URL(v)
+      if (u.protocol !== 'https:') {
+        setError('El enlace debe empezar con https://')
+        return
+      }
+      setError(null)
+    } catch {
+      setError('Ingresá un enlace válido (https://…)')
+    }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>
+        {label} <OptionalTag />
+      </Label>
+      <Input
+        id={id}
+        type="url"
+        inputMode="url"
+        placeholder="https://…"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => validate(e.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-err` : undefined}
+      />
+      {error && (
+        <p id={`${id}-err`} className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// Toggle booleano (show_address). Botón segmentado Sí/No con aria-pressed (no hay Switch en
+// @/components/ui — mismo patrón segmentado que settings). Touch target ≥ 44px.
+function ToggleField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-medium">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-pressed={value}
+        onClick={() => onChange(!value)}
+        className={cn(
+          'inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          value
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        {value ? 'Sí' : 'No'}
+      </button>
+    </div>
+  )
+}
+
+// Panel read-only para listas derivadas (services/locations/hours): bg-muted/40 + hint explícito
+// a la pantalla donde SÍ se editan, para que el dueño entienda por qué no son editables acá.
+function ReadonlyPanel({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  hint: string
+  children?: ReactNode
+}) {
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/40 p-3">
+      <p className="text-xs font-semibold text-muted-foreground">{title}</p>
+      {children}
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  )
+}
+
+// Placeholder de imagen cuando el shell no inyecta `imageSlot` (14-03 aún no cableado). Deja la
+// costura visible sin acoplar este archivo al upload.
+function ImageSeamFallback({ label, kind }: { label: string; kind: 'single' | 'multi' }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
+        <ImageIcon className="size-4 shrink-0" aria-hidden="true" />
+        <span>
+          {kind === 'multi' ? 'Galería de imágenes' : 'Imagen'} — la carga se habilita próximamente
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function renderImage(imageSlot: ImageSlot | undefined, spec: ImageSlotSpec): ReactNode {
+  return imageSlot ? imageSlot(spec) : <ImageSeamFallback label={spec.label} kind={spec.kind} />
+}
+
+// ── Dispatcher: un form por section.type ────────────────────────────────────────────────
+export function SectionForm(props: SectionFormProps) {
+  const { section, onDataChange, services, locations, timeBlocks, imageSlot } = props
+
+  switch (section.type) {
+    case 'hero': {
+      const d = heroData.parse(section.data)
+      return (
+        <div className="space-y-4">
+          <TextField
+            label="Título principal"
+            value={d.headline ?? ''}
+            onChange={(v) => onDataChange({ headline: v })}
+          />
+          <TextField
+            label="Bajada (kicker)"
+            optional
+            value={d.kicker ?? ''}
+            onChange={(v) => onDataChange({ kicker: v })}
+          />
+          <TextField
+            label="Subtítulo"
+            optional
+            multiline
+            value={d.subhead ?? ''}
+            onChange={(v) => onDataChange({ subhead: v })}
+          />
+          <TextField
+            label="Texto del botón"
+            optional
+            value={d.cta_label ?? ''}
+            onChange={(v) => onDataChange({ cta_label: v })}
+          />
+          {renderImage(imageSlot, { field: 'hero.image', kind: 'single', label: 'Imagen de portada' })}
+        </div>
+      )
+    }
+
+    case 'about': {
+      const d = aboutData.parse(section.data)
+      return (
+        <div className="space-y-4">
+          <TextField
+            label="Título"
+            value={d.title ?? ''}
+            onChange={(v) => onDataChange({ title: v })}
+          />
+          <TextField
+            label="Texto"
+            multiline
+            rows={5}
+            value={d.body ?? ''}
+            onChange={(v) => onDataChange({ body: v })}
+          />
+          {renderImage(imageSlot, { field: 'about.image', kind: 'single', label: 'Imagen' })}
+        </div>
+      )
+    }
+
+    case 'services': {
+      const d = servicesData.parse(section.data)
+      return (
+        <div className="space-y-4">
+          <TextField
+            label="Título"
+            value={d.title ?? ''}
+            onChange={(v) => onDataChange({ title: v })}
+          />
+          <TextField
+            label="Subtítulo"
+            optional
+            value={d.subtitle ?? ''}
+            onChange={(v) => onDataChange({ subtitle: v })}
+          />
+          <ReadonlyPanel title="Servicios" hint="La lista se edita en Servicios.">
+            {services.length > 0 ? (
+              <ul className="space-y-1">
+                {services.map((s) => (
+                  <li key={s.id} className="text-sm text-foreground">
+                    {s.name}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Todavía no cargaste servicios.</p>
+            )}
+          </ReadonlyPanel>
+        </div>
+      )
+    }
+
+    case 'gallery': {
+      const d = galleryData.parse(section.data)
+      return (
+        <div className="space-y-4">
+          <TextField
+            label="Título"
+            optional
+            value={d.title ?? ''}
+            onChange={(v) => onDataChange({ title: v })}
+          />
+          {renderImage(imageSlot, { field: 'gallery.images', kind: 'multi', label: 'Imágenes' })}
+        </div>
+      )
+    }
+
+    case 'location': {
+      const d = locationData.parse(section.data)
+      return (
+        <div className="space-y-4">
+          <TextField
+            label="Título"
+            optional
+            value={d.title ?? ''}
+            onChange={(v) => onDataChange({ title: v })}
+          />
+          <UrlField
+            label="Enlace del mapa"
+            value={d.map_url ?? ''}
+            onChange={(v) => onDataChange({ map_url: v })}
+          />
+          <ToggleField
+            label="Mostrar la dirección"
+            value={d.show_address ?? false}
+            onChange={(v) => onDataChange({ show_address: v })}
+          />
+          <ReadonlyPanel title="Sucursales" hint="Las sucursales se editan en Negocio → Ubicaciones.">
+            {locations.length > 0 ? (
+              <ul className="space-y-1">
+                {locations.map((l) => (
+                  <li key={l.id} className="text-sm text-foreground">
+                    {l.name}
+                    {l.address ? <span className="text-muted-foreground"> — {l.address}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Todavía no cargaste sucursales.</p>
+            )}
+          </ReadonlyPanel>
+        </div>
+      )
+    }
+
+    case 'hours': {
+      // hours NO tiene copy: deriva 100% de time_blocks. Panel informativo read-only + preview
+      // del horario actual (mismo agrupado que el renderer, groupHoursByDay).
+      const byDay = groupHoursByDay(timeBlocks)
+      return (
+        <div className="space-y-4">
+          <ReadonlyPanel
+            title="Horarios"
+            hint="Los horarios se editan en Negocio → Horarios."
+          >
+            {timeBlocks.length > 0 ? (
+              <ul className="space-y-1">
+                {HOURS_RENDER_ORDER.filter((day) => byDay.has(day)).map((day) => (
+                  <li key={day} className="text-sm text-foreground">
+                    <span className="font-medium">{DIAS[day]}:</span>{' '}
+                    <span className="text-muted-foreground">{byDay.get(day)!.join(' · ')}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Todavía no cargaste horarios.</p>
+            )}
+          </ReadonlyPanel>
+        </div>
+      )
+    }
+
+    case 'cta': {
+      const d = ctaData.parse(section.data)
+      return (
+        <div className="space-y-4">
+          <TextField
+            label="Título del llamado a la acción"
+            value={d.headline ?? ''}
+            onChange={(v) => onDataChange({ headline: v })}
+          />
+        </div>
+      )
+    }
+
+    case 'booking': {
+      // El widget de reserva es caja negra (no se edita). Editable = solo el copy/galería de la
+      // RSV strip (rsvData), la franja de confianza que se muestra antes de reservar.
+      const d = rsvData.parse(section.data)
+      return (
+        <div className="space-y-4">
+          <TextField
+            label="Título de la reserva"
+            optional
+            value={d.header ?? ''}
+            onChange={(v) => onDataChange({ header: v })}
+          />
+          <TextField
+            label="Texto introductorio"
+            optional
+            multiline
+            value={d.intro ?? ''}
+            onChange={(v) => onDataChange({ intro: v })}
+          />
+          {renderImage(imageSlot, { field: 'rsvData.images', kind: 'multi', label: 'Galería de la reserva' })}
+        </div>
+      )
+    }
+
+    default:
+      return null
+  }
+}
