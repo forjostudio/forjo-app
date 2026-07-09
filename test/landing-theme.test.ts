@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isSafeColor, resolveLandingTheme, normalizeMotion } from '@/lib/landing/theme'
+import { normalizeTheme, THEME_DEFAULT_PAL } from '@/lib/theme-config'
 
 // ── Tests puros de resolución/validación de tema (Fase 8, THEME-01/02) ────────────
 // Espejan test/landing-derive.test.ts: describe/it/expect, import desde @/lib/...,
@@ -195,5 +196,34 @@ describe('normalizeMotion (resolución de nivel, D-04)', () => {
 
   it('null → "none"', () => {
     expect(normalizeMotion(null)).toBe('none')
+  })
+})
+
+// ── normalizeTheme como active-match del grid del editor (14-04, landmine L8) ──────
+// El grid de presets del editor (theme-controls.tsx) resalta el preset activo comparando
+// normalizeTheme(theme.preset) contra el id de cada card. La razón: el DEFAULT sembrado de
+// una landing es { preset: 'default' } (schema.ts) — un valor de AUTORÍA, NO un id de theme.
+// Sin normalizar, un config null-sembrado no resaltaría NINGÚN swatch (nada activo). Con
+// normalizeTheme, 'default'/ausente/desconocido degrada a 'forjo' → el editor resalta Forjo,
+// igual que lo que verá el visitante (resolveLandingTheme usa el mismo normalizeTheme).
+describe('normalizeTheme como active-match del editor (L8)', () => {
+  it("'default' (config null-sembrado) → 'forjo' (resalta Forjo, no nada)", () => {
+    expect(normalizeTheme('default')).toBe('forjo')
+  })
+
+  it('undefined → forjo (sin preset guardado)', () => {
+    expect(normalizeTheme(undefined)).toBe('forjo')
+  })
+
+  it('preset desconocido → forjo (defensivo)', () => {
+    expect(normalizeTheme('__hacker__')).toBe('forjo')
+  })
+
+  it('preset conocido se preserva (modern → modern)', () => {
+    expect(normalizeTheme('modern')).toBe('modern')
+  })
+
+  it("la paleta default del active-match de 'default' es la de forjo ('red')", () => {
+    expect(THEME_DEFAULT_PAL[normalizeTheme('default')]).toBe('red')
   })
 })
