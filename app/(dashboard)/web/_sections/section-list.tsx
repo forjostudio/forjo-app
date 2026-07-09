@@ -1,21 +1,48 @@
 'use client'
 
+import { useState } from 'react'
+import { ChevronUp, ChevronDown, Eye, EyeOff, GripVertical } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import type { LandingConfig } from '@/lib/landing/schema'
 import type { PublicBusiness, Service, TimeBlock } from '@/lib/types'
+import { SectionForm } from './section-forms'
 
-// ── STUB: SectionListPanel (Phase 14) — contrato de props FINAL ────────────────────────
-// Este stub declara la firma COMPLETA que 14-02 implementa SIN cambiarla ni tocar el shell.
-// El shell (web-client.tsx) ya le pasa los 4 datos read-only (services/locations/timeBlocks/
-// business) que las forms de sección necesitan para los paneles derivados (servicios/ubicación/
-// horarios son read-only acá — vienen de sus tablas). Todas las mutaciones del borrador viajan
-// por los callbacks onMove/onToggle/onSectionDataChange, que el shell cablea a lib/landing/
-// editor-draft.ts. Implementación real (8 filas fijas, reorder up/down, toggle enabled, forms de
-// copy por sección) → Plan 14-02.
+// ── SectionListPanel (Phase 14, Plan 02 — EDIT-03) ──────────────────────────────────────
+// Implementa el contrato FINAL que el stub de 14-01 ya declaraba (misma firma; el shell
+// web-client.tsx ya pasa los 4 datos read-only). Panel del set FIJO de 8 secciones:
+//   - Se listan SIEMPRE las 8 (SECTION_TYPES), en orden por `order`, sin filtrar enabled: acá
+//     se administran todas, incluidas las ocultas (a diferencia de orderedSections del render).
+//   - Reorden por FLECHAS subir/bajar (NO drag-and-drop, D-04: cero dependencia nueva). Cada
+//     flecha invoca onMove → moveSection (swap de `order` con la vecina; no-op en bordes). La
+//     primera fila no puede subir; la última no puede bajar (botón disabled).
+//   - Toggle enabled por sección (Eye/EyeOff, botón segmentado — no hay Switch en @/components/ui).
+//     `booking` queda LOCKED-ON (D-04b: lockear SOLO booking; hero sigue togglable) porque el
+//     render server-side (orderedSections) la re-inyecta siempre aunque esté off — apagarla acá
+//     confundiría sin efecto real.
+//   - Expand-to-edit: click en el label abre el form de copy de esa sección (acordeón inline;
+//     una abierta a la vez). Una sección enabled:false sigue expandible (se edita aunque esté oculta).
+//   - Reorden anunciado a AT via región aria-live="polite".
 
 // LocationLite: el shell pasa las locations con las columnas acotadas del renderer.
 type LocationLite = { id: string; name: string; address: string | null; phone: string | null }
 
 type SectionType = LandingConfig['sections'][number]['type']
+
+// Labels en español (14-UI-SPEC Copywriting). Set fijo — coincide 1:1 con SECTION_TYPES.
+const LABELS: Record<SectionType, string> = {
+  hero: 'Portada',
+  about: 'Nosotros',
+  services: 'Servicios',
+  gallery: 'Galería',
+  location: 'Ubicación',
+  hours: 'Horarios',
+  cta: 'Llamado a la acción',
+  booking: 'Reservas',
+}
+
+// Secciones con toggle bloqueado en "visible" (D-04b): SOLO booking (núcleo del producto).
+const LOCKED_ON: ReadonlySet<SectionType> = new Set<SectionType>(['booking'])
 
 export interface SectionListPanelProps {
   draft: LandingConfig
@@ -28,24 +55,146 @@ export interface SectionListPanelProps {
   business: PublicBusiness
 }
 
-export function SectionListPanel(props: SectionListPanelProps) {
-  // Stub mínimo real: lista las secciones en orden actual con su estado. La UI completa
-  // (reorder/toggle/forms) llega en 14-02; acá sólo garantizamos que el shell compila y monta algo.
-  const ordered = [...props.draft.sections].sort((a, b) => a.order - b.order)
+export function SectionListPanel({
+  draft,
+  onMove,
+  onToggle,
+  onSectionDataChange,
+  services,
+  locations,
+  timeBlocks,
+  business,
+}: SectionListPanelProps) {
+  // Sección expandida (una a la vez). null = todas colapsadas.
+  const [openType, setOpenType] = useState<SectionType | null>(null)
+  // Mensaje para el lector de pantalla tras un reorden (aria-live polite).
+  const [announce, setAnnounce] = useState('')
+
+  // Orden de administración: asc por `order`, SIN filtrar enabled (se listan las 8 siempre).
+  const ordered = [...draft.sections].sort((a, b) => a.order - b.order)
+
+  function handleMove(type: SectionType, dir: 'up' | 'down', idx: number) {
+    onMove(type, dir)
+    // Nueva posición 1-based: subir → idx (0-based idx-1 +1); bajar → idx+2 (0-based idx+1 +1).
+    const newPos = dir === 'up' ? idx : idx + 2
+    setAnnounce(`Sección movida a la posición ${newPos}`)
+  }
+
   return (
     <div className="space-y-2" aria-label="Secciones de la web">
-      <p className="text-sm font-semibold">Secciones</p>
-      <ul className="space-y-1">
-        {ordered.map((s) => (
-          <li
-            key={s.type}
-            className="flex items-center gap-2 rounded-md border bg-secondary p-3 text-sm"
-          >
-            <span className={s.enabled ? '' : 'text-muted-foreground'}>{s.type}</span>
-          </li>
-        ))}
+      <div>
+        <p className="text-sm font-semibold">Secciones</p>
+        <p className="text-xs text-muted-foreground">
+          Reordená con las flechas y mostrá u ocultá cada sección. Tocá el nombre para editar su
+          contenido.
+        </p>
+      </div>
+
+      <ul className="space-y-2">
+        {ordered.map((s, i) => {
+          const isFirst = i === 0
+          const isLast = i === ordered.length - 1
+          const locked = LOCKED_ON.has(s.type)
+          const open = openType === s.type
+
+          return (
+            <li key={s.type} className="rounded-md border bg-secondary">
+              <div className="flex items-center gap-1.5 p-2">
+                {/* Grip decorativo: señala "arrastrable-ish" pero el reorden es por flechas (NO DnD). */}
+                <GripVertical
+                  className="size-4 shrink-0 text-muted-foreground/40"
+                  aria-hidden="true"
+                />
+
+                {/* Label = disparador del acordeón. enabled:false → texto atenuado (sigue editable). */}
+                <button
+                  type="button"
+                  onClick={() => setOpenType(open ? null : s.type)}
+                  aria-expanded={open}
+                  className={cn(
+                    'flex-1 rounded px-1 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    s.enabled ? '' : 'text-muted-foreground',
+                  )}
+                >
+                  {LABELS[s.type]}
+                </button>
+
+                {/* Subir: disabled en la primera fila. */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="min-h-11 min-w-11"
+                  disabled={isFirst}
+                  aria-disabled={isFirst}
+                  aria-label="Subir sección"
+                  onClick={() => handleMove(s.type, 'up', i)}
+                >
+                  <ChevronUp className="size-4" />
+                </Button>
+
+                {/* Bajar: disabled en la última fila. */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="min-h-11 min-w-11"
+                  disabled={isLast}
+                  aria-disabled={isLast}
+                  aria-label="Bajar sección"
+                  onClick={() => handleMove(s.type, 'down', i)}
+                >
+                  <ChevronDown className="size-4" />
+                </Button>
+
+                {/* Toggle enabled (Eye/EyeOff). booking queda locked-on (disabled, pinned "on"). */}
+                <button
+                  type="button"
+                  aria-pressed={s.enabled}
+                  aria-label={s.enabled ? 'Visible' : 'Oculta'}
+                  disabled={locked}
+                  title={locked ? 'Esta sección siempre se muestra' : undefined}
+                  onClick={() => {
+                    if (!locked) onToggle(s.type)
+                  }}
+                  className={cn(
+                    'inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    s.enabled
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                    locked && 'cursor-not-allowed opacity-70',
+                  )}
+                >
+                  {s.enabled ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                </button>
+              </div>
+
+              {locked && (
+                <p className="px-3 pb-2 text-xs text-muted-foreground">
+                  Esta sección siempre se muestra
+                </p>
+              )}
+
+              {open && (
+                <div className="border-t p-3">
+                  <SectionForm
+                    section={s}
+                    onDataChange={(partial) => onSectionDataChange(s.type, partial)}
+                    services={services}
+                    locations={locations}
+                    timeBlocks={timeBlocks}
+                    business={business}
+                    businessId={business.id}
+                  />
+                </div>
+              )}
+            </li>
+          )
+        })}
       </ul>
-      <p className="text-xs text-muted-foreground">Reorden y edición por sección — próximamente.</p>
+
+      {/* Anuncio del reorden a AT — no visual, solo lector de pantalla. */}
+      <div aria-live="polite" className="sr-only">
+        {announce}
+      </div>
     </div>
   )
 }
