@@ -4,14 +4,14 @@ milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
 status: executing
 stopped_at: Completed 14-03-PLAN.md
-last_updated: "2026-07-09T20:10:00.000Z"
+last_updated: "2026-07-09T21:59:21.816Z"
 last_activity: 2026-07-09 -- Completed 14-03 (image controls / EDIT-02)
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
-  percent: 89
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -58,6 +58,7 @@ Last activity: 2026-07-09 -- Completed 14-03 (image controls / EDIT-02)
 | Phase 12 P01 | 9 | 2 tasks | 9 files |
 | Phase 14 P01 | 8 | 3 tasks | 7 files |
 | Phase 14 P02 | 22 | 2 tasks | 4 files |
+| Phase 14 P04 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -124,7 +125,7 @@ Items reconocidos y diferidos a milestones posteriores (v2):
 
 ## Session Continuity
 
-Last session: 2026-07-09T20:10:00.000Z
+Last session: 2026-07-09T21:59:21.801Z
 Stopped at: Completed 14-03-PLAN.md
 Resume file: None
 
