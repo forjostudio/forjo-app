@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
 status: executing
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-07-09T19:55:28.562Z"
-last_activity: 2026-07-09 -- Phase 14 execution started
+stopped_at: Completed 14-03-PLAN.md
+last_updated: "2026-07-09T20:10:00.000Z"
+last_activity: 2026-07-09 -- Completed 14-03 (image controls / EDIT-02)
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 9
-  completed_plans: 7
-  percent: 75
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 ## Current Position
 
 Phase: 14 (CMS editor UI) — EXECUTING
-Plan: 3 of 4
-Status: Ready to execute
-Last activity: 2026-07-09 -- Phase 14 execution started
+Plan: 4 of 4
+Status: Ready to execute (14-04 pending)
+Last activity: 2026-07-09 -- Completed 14-03 (image controls / EDIT-02)
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Decisiones LOCKED del milestone v0.16 (no re-litigar en discuss-phase) — de PR
 - [Phase ?]: F12-01: motion 100% CSS-first (animation-timeline: view()), cero use client nuevo, gated por @supports + prefers-reduced-motion
 - [Phase ?]: 14-01: editor CMS shell — preview WYSIWYG del LandingRenderer real dirigido por borrador; tema al wrapper del preview; save por saveLandingConfig overwrite-total; 3 sub-editores como stubs con props-contract final
 - [Phase 14]: normalizeSections (editor-draft.ts, no en el seed): el panel CMS materializa las 8 secciones fijas on-demand en los mutadores; faltantes ocultas salvo hero/booking
+- [Phase 14]: 14-03 EDIT-02: upload de imágenes browser→Storage con session client bajo `{business_id}/` (RLS owner-write, migr.030); barrera de aislamiento extraída a `lib/landing/editor-upload.ts` puro (buildUploadPath primer segmento=businessId + section sanitizada) testeado 13/13; controles single+grid sin service-role. UAT end-to-end pendiente (Storage local OFF)
 
 ### Pending Todos
 
@@ -123,8 +124,8 @@ Items reconocidos y diferidos a milestones posteriores (v2):
 
 ## Session Continuity
 
-Last session: 2026-07-09T19:55:28.552Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-07-09T20:10:00.000Z
+Stopped at: Completed 14-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

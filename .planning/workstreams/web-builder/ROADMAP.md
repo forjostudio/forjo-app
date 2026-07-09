@@ -129,7 +129,7 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
   4. El dueño elige preset de tema y ajusta paleta/color primario y `motion` dentro del set permitido, viendo el resultado aplicado.
   5. El dueño ve un preview de su landing con los cambios (WYSIWYG o preview lado a lado) antes de persistir por el path owner-only.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 **Wave 1**
 
 - [x] 14-01-PLAN.md — Shell del editor: page gateada por `CMS_ENABLED` + client con borrador, preview en vivo del renderer real y save bar (EDIT-06) [wave 1]
@@ -137,7 +137,7 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 14-02-PLAN.md — Panel de secciones (reorden/toggle del set FIJO) + forms de copy por sección (EDIT-03, EDIT-01) [wave 2]
-- [ ] 14-03-PLAN.md — Controles de imagen single + grid RSV, upload owner-only a `landing-assets/{business_id}/` (EDIT-02) [wave 2]
+- [x] 14-03-PLAN.md — Controles de imagen single + grid RSV, upload owner-only a `landing-assets/{business_id}/` (EDIT-02) [wave 2]
 - [ ] 14-04-PLAN.md — Controles de tema/paleta/primary/motion apuntados a `landing_config.theme` (EDIT-04) [wave 2]
 
 **UI hint**: yes
