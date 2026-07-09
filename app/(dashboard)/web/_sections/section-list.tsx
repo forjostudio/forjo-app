@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { LandingConfig } from '@/lib/landing/schema'
 import type { PublicBusiness, Service, TimeBlock } from '@/lib/types'
+import { normalizeSections } from '@/lib/landing/editor-draft'
 import { SectionForm } from './section-forms'
 
 // ── SectionListPanel (Phase 14, Plan 02 — EDIT-03) ──────────────────────────────────────
@@ -70,8 +71,11 @@ export function SectionListPanel({
   // Mensaje para el lector de pantalla tras un reorden (aria-live polite).
   const [announce, setAnnounce] = useState('')
 
-  // Orden de administración: asc por `order`, SIN filtrar enabled (se listan las 8 siempre).
-  const ordered = [...draft.sections].sort((a, b) => a.order - b.order)
+  // Orden de administración: SIEMPRE las 8 fijas (must-have truth #1). normalizeSections materializa
+  // las que el config real omite (booking, y about/gallery/… vacías) y las devuelve ya ordenadas por
+  // `order` contiguo — sin filtrar enabled (se administran también las ocultas). Los mutadores del
+  // shell normalizan igual, así que togglear/editar/reordenar una fila sintetizada la crea de verdad.
+  const ordered = normalizeSections(draft).sections
 
   function handleMove(type: SectionType, dir: 'up' | 'down', idx: number) {
     onMove(type, dir)

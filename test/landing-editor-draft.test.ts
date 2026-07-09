@@ -6,6 +6,7 @@ import {
   setTheme,
   setMotion,
   isDirty,
+  normalizeSections,
 } from '@/lib/landing/editor-draft'
 import { SECTION_TYPES } from '@/lib/landing/schema'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -204,5 +205,84 @@ describe('isDirty', () => {
     const saved = baseConfig()
     const current = moveSection(saved, 'about', 'up')
     expect(isDirty(current, saved)).toBe(true)
+  })
+})
+
+// Config parcial (como lo emite el builder / el DEFAULT): NO trae las 8 secciones. El panel del
+// editor debe ver siempre las 8, así que normalizeSections las materializa.
+function partialConfig(): LandingConfig {
+  return {
+    theme: { preset: 'forjo' },
+    sections: [
+      { type: 'hero', enabled: true, order: 0, data: { headline: 'Hola' } },
+      { type: 'services', enabled: true, order: 1 },
+    ],
+  }
+}
+
+describe('normalizeSections (garantiza las 8 secciones fijas)', () => {
+  it('materializa las secciones faltantes hasta completar las 8 fijas', () => {
+    const r = normalizeSections(partialConfig())
+    expect(r.sections).toHaveLength(8)
+    expect(new Set(r.sections.map((s) => s.type))).toEqual(new Set(SECTION_TYPES))
+  })
+
+  it('reasigna order contiguo 0..7 en orden canónico e inserta las faltantes en su lugar', () => {
+    const r = normalizeSections(partialConfig())
+    const byOrder = [...r.sections].sort((a, b) => a.order - b.order).map((s) => s.type)
+    expect(byOrder).toEqual([...SECTION_TYPES])
+    expect(r.sections.map((s) => s.order).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+  })
+
+  it('las faltantes arrancan ocultas salvo hero/booking (núcleo)', () => {
+    const r = normalizeSections(partialConfig())
+    const enabledByType = Object.fromEntries(r.sections.map((s) => [s.type, s.enabled]))
+    expect(enabledByType.booking).toBe(true) // núcleo, materializada visible
+    expect(enabledByType.about).toBe(false) // faltante vacía → oculta
+    expect(enabledByType.gallery).toBe(false)
+  })
+
+  it('preserva el data y el enabled de las secciones existentes', () => {
+    const r = normalizeSections(partialConfig())
+    const hero = r.sections.find((s) => s.type === 'hero')!
+    expect(hero.data).toEqual({ headline: 'Hola' })
+    expect(hero.enabled).toBe(true)
+  })
+
+  it('es idempotente sobre un config ya-completo (no cambia el caso de 8)', () => {
+    const cfg = baseConfig()
+    expect(normalizeSections(cfg)).toEqual(cfg)
+  })
+
+  it('no muta el config de entrada (pureza)', () => {
+    const cfg = partialConfig()
+    const snapshot = JSON.stringify(cfg)
+    normalizeSections(cfg)
+    expect(JSON.stringify(cfg)).toBe(snapshot)
+  })
+})
+
+describe('mutadores sobre config parcial (upsert vía normalize)', () => {
+  it('toggleSection sobre una sección ausente la crea y la prende', () => {
+    const r = toggleSection(partialConfig(), 'about')
+    const about = r.sections.find((s) => s.type === 'about')!
+    // about arranca oculta (false) al materializarse → toggle la deja visible.
+    expect(about.enabled).toBe(true)
+    expect(r.sections).toHaveLength(8)
+  })
+
+  it('setSectionData sobre una sección ausente la crea con su data', () => {
+    const r = setSectionData(partialConfig(), 'cta', { headline: 'Reservá ahora' })
+    const cta = r.sections.find((s) => s.type === 'cta')!
+    expect(cta.data).toEqual({ headline: 'Reservá ahora' })
+    expect(r.sections).toHaveLength(8)
+  })
+
+  it('moveSection sobre config parcial opera sobre las 8 materializadas', () => {
+    const r = moveSection(partialConfig(), 'booking', 'up')
+    expect(r.sections).toHaveLength(8)
+    // booking estaba última (order 7); tras subir queda en 6 y cta baja a 7.
+    expect(r.sections.find((s) => s.type === 'booking')!.order).toBe(6)
+    expect(r.sections.find((s) => s.type === 'cta')!.order).toBe(7)
   })
 })
