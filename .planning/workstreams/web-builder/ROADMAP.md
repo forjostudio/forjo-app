@@ -129,10 +129,10 @@ Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v
   4. El dueño elige preset de tema y ajusta paleta/color primario y `motion` dentro del set permitido, viendo el resultado aplicado.
   5. El dueño ve un preview de su landing con los cambios (WYSIWYG o preview lado a lado) antes de persistir por el path owner-only.
 
-**Plans**: 4 plans (3 waves)
+**Plans**: 1/4 plans executed
 **Wave 1**
 
-- [ ] 14-01-PLAN.md — Shell del editor: page gateada por `CMS_ENABLED` + client con borrador, preview en vivo del renderer real y save bar (EDIT-06) [wave 1]
+- [x] 14-01-PLAN.md — Shell del editor: page gateada por `CMS_ENABLED` + client con borrador, preview en vivo del renderer real y save bar (EDIT-06) [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -160,7 +160,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete    | 2026-07-07 |
 | 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete    | 2026-07-07 |
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete    | 2026-07-08 |
-| 14. CMS editor UI | v0.16 | 0/4 | Not started | - |
+| 14. CMS editor UI | v0.16 | 1/4 | In Progress|  |
 
 ---
 *Next: `/gsd:plan-phase 11 --ws web-builder`*

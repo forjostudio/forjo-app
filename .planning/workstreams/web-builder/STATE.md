@@ -4,14 +4,14 @@ milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
 status: executing
 stopped_at: Phase 14 UI-SPEC approved
-last_updated: "2026-07-08T23:44:28.727Z"
-last_activity: 2026-07-08 -- Phase 14 planning complete
+last_updated: "2026-07-09T14:51:35.028Z"
+last_activity: 2026-07-09 -- Phase 14 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
-  percent: 75
+  total_plans: 9
+  completed_plans: 6
+  percent: 67
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-07)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados. (v0.16 suma edición self-serve del landing + motion premium SIN debilitar este invariante.)
-**Current focus:** Phase 13 — CMS foundation — write path owner-only + flag
+**Current focus:** Phase 14 — CMS editor UI
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
+Phase: 14 (CMS editor UI) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-08 -- Phase 14 planning complete
+Last activity: 2026-07-09 -- Phase 14 execution started
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Last activity: 2026-07-08 -- Phase 14 planning complete
 | Phase 11 P01 | 15m | 2 tasks | 2 files |
 | Phase 11 P02 | ~20m | 2 tasks | 1 files |
 | Phase 12 P01 | 9 | 2 tasks | 9 files |
+| Phase 14 P01 | 8 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Decisiones LOCKED del milestone v0.16 (no re-litigar en discuss-phase) — de PR
 - [Phase 11]: FUENTES DE CONTENIDO: operador estructurado, web (WebFetch), IG (instaloader best-effort con fallthrough); instaloader reemplaza el Playwright de instagram-a-web
 - [Phase ?]: F12-01: default subtle es de autoria (skill), no de render — parseLandingConfig sin default de motion (D-04)
 - [Phase ?]: F12-01: motion 100% CSS-first (animation-timeline: view()), cero use client nuevo, gated por @supports + prefers-reduced-motion
+- [Phase ?]: 14-01: editor CMS shell — preview WYSIWYG del LandingRenderer real dirigido por borrador; tema al wrapper del preview; save por saveLandingConfig overwrite-total; 3 sub-editores como stubs con props-contract final
 
 ### Pending Todos
 
@@ -119,7 +121,7 @@ Items reconocidos y diferidos a milestones posteriores (v2):
 
 ## Session Continuity
 
-Last session: 2026-07-08T20:38:43.024Z
+Last session: 2026-07-09T14:51:28.538Z
 Stopped at: Phase 14 UI-SPEC approved
 Resume file: .planning/workstreams/web-builder/phases/14-cms-editor-ui/14-UI-SPEC.md
 

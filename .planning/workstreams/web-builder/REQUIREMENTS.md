@@ -28,7 +28,7 @@ Requirements del milestone v0.16. Cada uno mapea a una fase del roadmap. Actores
 - [ ] **EDIT-03**: El dueño reordena y prende/apaga las secciones habilitadas (`order`/`enabled`), dentro del set FIJO de secciones (sin layout libre).
 - [ ] **EDIT-04**: El dueño elige preset de tema y ajusta paleta/color primario y `motion` dentro del set permitido, viendo el resultado aplicado.
 - [x] **EDIT-05**: Los cambios del CMS se persisten por un path autenticado owner-only (RLS por tenant + validación Zod del `landing_config`); nunca vía service-role ni endpoint de escritura anónimo en la superficie web.
-- [ ] **EDIT-06**: El dueño ve un preview de su landing con los cambios antes de que impacten en la página pública (WYSIWYG o preview lado a lado).
+- [x] **EDIT-06**: El dueño ve un preview de su landing con los cambios antes de que impacten en la página pública (WYSIWYG o preview lado a lado).
 - [x] **EDIT-07**: El CMS se monta detrás de un feature flag y NO se expone a clientes en este milestone; su exposición en el nav + el flujo publish/go-live quedan explícitamente fuera de alcance.
 
 ### Fotos en la sección de reserva (RSV)
