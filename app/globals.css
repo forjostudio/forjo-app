@@ -469,98 +469,143 @@
 }
 
 /* =========================================================================
-   MOTION PREMIUM (F12) — scroll-reveal + parallax CSS-first, data-driven.
+   MOTION PREMIUM (F12 → polish OA7) — scroll-reveal + scale-in + lift,
+   IntersectionObserver-driven (JS nativo).
 
-   POR QUÉ CSS puro (cero JS, cero 'use client'): animation-timeline: view()
-   corre en el compositor, no arrastra el árbol de secciones al bundle y no
-   introduce riesgo de "trap opacity:0" (Pitfall 1). El renderer emite
-   data-motion="none|subtle|premium" en <main class="frj-site"> y las clases
-   .frj-reveal / .frj-parallax SOLO en las secciones editoriales — NUNCA en
-   <section id="reservar"> (caja negra, MOTION-04 / Pitfall 3).
+   POR QUÉ IntersectionObserver y NO animation-timeline: view(): el motor viejo
+   (view()) es baseline SOLO Chromium → el reveal/parallax era INVISIBLE en
+   Safari, Firefox e iOS (el contenido aparecía sin animar, ok, pero el efecto
+   nunca se veía fuera de Chrome). El controlador cliente (landing-motion.tsx)
+   observa los .frj-reveal y les agrega la clase .shown al entrar al viewport;
+   el CSS de acá engancha esos selectores. IO es API nativa del browser (cero
+   dependencias) y anima en TODOS los navegadores.
 
-   REGLA DURA D81-01 (intacta): estas reglas se aplican a elementos HIJOS de
-   .frj-site (vía los selectores .frj-site[data-motion=...] .frj-reveal), NO a
-   la clase .frj-site misma — que sigue declarando SOLO container-type. Ningún
-   selector de acá agrega transform/overflow/filter/position a .frj-site.
+   REGLA DURA D81-01 (intacta): estas reglas se aplican a DESCENDIENTES de
+   .frj-site (vía .frj-site[data-motion=...][data-motion-ready] .frj-reveal…),
+   NUNCA a la clase .frj-site misma — que sigue declarando SOLO container-type.
+   Ningún selector de acá agrega transform/overflow/filter/position a .frj-site.
+   `data-motion-ready` es un ATRIBUTO que setea el controlador (no un estilo que
+   cree containing block).
 
-   ANTI-TRAP (Pitfall 1, T-12-03): el estado base de .frj-reveal / .frj-parallax
-   es VISIBLE y sin transform (fallback estático para Firefox stable, no-JS y
-   reduced-motion). El opacity:0 inicial y el animation-timeline viven SOLO
-   dentro de @supports (animation-timeline: view()) + @media (no-preference).
-   Tres capas de degradación (no-support / reduced-motion / no-JS) caen todas a
-   contenido visible.
+   ANTI-TRAP (T-OA7-02): el estado base de .frj-reveal es VISIBLE (sin opacity:0).
+   El estado "pendiente" (opacity:0 + translateY 28px) SOLO existe cuando el
+   controlador agregó data-motion-ready a .frj-site — o sea, únicamente con JS
+   activo + motion subtle/premium + sin reduced-motion. Sin JS / motion=none /
+   reduced-motion → contenido visible estático (cero regresión). El controlador
+   además marca .shown SÍNCRONO a los .frj-reveal ya en viewport (hero above-the-
+   fold) para que aparezcan CRISP, sin parpadeo.
 
-   Solo se anima transform/opacity (MOTION-02). El parallax es translateY
-   únicamente — NUNCA el viejo truco de fondo fijo, que fuerza repaints y rompe
-   en mobile (MOTION-03).
+   CAJA NEGRA DEL BOOKING (D-E / T-OA7-01): estas clases (.frj-reveal/.frj-zoom/
+   .lift) van SOLO en secciones editoriales y en el <div> HERMANO del strip RSV.
+   NUNCA en <section id="reservar"> ni en ningún ANCESTRO del widget (transform/
+   overflow romperían el position:fixed de vaul/sonner/react-day-picker).
    ========================================================================= */
 
-/* Estado base: SIEMPRE visible. Es el piso anti-trap (sin opacity:0, sin transform). */
-.frj-site[data-motion='subtle'] .frj-reveal,
-.frj-site[data-motion='premium'] .frj-reveal {
-  /* visible por defecto — el reveal solo se activa dentro del @supports de abajo */
+/* Scrim del hero: bottom-heavy hacia el token --background (funde la foto abajo).
+   SOLO el background — el layout/z-index los pone Tailwind en la <section> del hero.
+   Polish estructural SIEMPRE-ON (D-D): no es animación, aplica en todos los niveles
+   de motion. Tokens, sin hex. */
+.frj-hero-scrim {
+  background: linear-gradient(
+    to top,
+    var(--background) 0%,
+    color-mix(in oklab, var(--background) 75%, transparent) 45%,
+    color-mix(in oklab, var(--background) 30%, transparent) 100%
+  );
 }
 
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    /* Reveal de entrada (subtle Y premium, todas las editoriales — D-02). 280ms ease-out
-       expresivo; `both` + rango que termina en 15% dejan el estado final fijo sin re-disparo
-       (one-shot sin JS: pasado el 15% el elemento queda en el `to`). */
-    .frj-site[data-motion='subtle'] .frj-reveal,
-    .frj-site[data-motion='premium'] .frj-reveal {
-      animation: frj-reveal-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 15%;
-    }
-
-    /* Parallax SOLO premium, SOLO donde hay foto (hero/about/gallery — D-01/D-02). translateY
-       ligado al recorrido visible del elemento. Amplitud base ±24px (about/gallery). */
-    .frj-site[data-motion='premium'] .frj-parallax {
-      animation: frj-parallax linear both;
-      animation-timeline: view();
-      animation-range: cover;
-    }
-    /* Tiles de gallery: reveal + parallax en el MISMO elemento. Sin esta regla combinada, las
-       reglas separadas de .frj-reveal y .frj-parallax se pisarían (el shorthand `animation` de
-       una sobrescribe a la otra por cascada). Acá corren ambas con comas: el reveal (entrada,
-       ligado a `view()` en el rango de entrada) + el parallax (translateY, ligado a `cover`).
-       Cada animación referencia su timeline por índice (animation-timeline en el mismo orden). */
-    .frj-site[data-motion='premium'] .frj-reveal.frj-parallax {
-      animation:
-        frj-reveal-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both,
-        frj-parallax linear both;
-      animation-timeline: view(), view();
-      animation-range: entry 0% entry 15%, cover;
-    }
-    /* Variante hero: amplitud mayor ±48px (movimiento más notorio en el bloque estrella). */
-    .frj-site[data-motion='premium'] .frj-parallax-hero {
-      animation: frj-parallax-hero linear both;
-      animation-timeline: view();
-      animation-range: cover;
-    }
-
-    /* Stagger premium en las tiles de gallery: delay incremental 80ms/item, tope 320ms
-       acumulado (ítems 5+ comparten el último delay). Escalona la entrada de la lista.
-       Las tiles combinan reveal+parallax → el delay va en pareja `<reveal>, 0s` para NO
-       demorar el parallax (que debe seguir ligado al scroll desde el arranque). */
-    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(1) { animation-delay: 0ms, 0s; }
-    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(2) { animation-delay: 80ms, 0s; }
-    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(3) { animation-delay: 160ms, 0s; }
-    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(4) { animation-delay: 240ms, 0s; }
-    .frj-site[data-motion='premium'] .frj-stagger > *:nth-child(n + 5) { animation-delay: 320ms, 0s; }
+/* Grilla de galería: filas parejas + backfill nativo de huecos. Polish estructural
+   SIEMPRE-ON (D-D): no depende del nivel de motion. grid-auto-flow:dense = "la función
+   que reordena" es nativa de CSS (rellena los huecos con la próxima foto que entra, sin
+   JS). .frj-site declara container-type:inline-size, así que cqw y @container funcionan. */
+.frj-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: clamp(140px, 24cqw, 240px);
+  grid-auto-flow: dense;
+  gap: 6px;
+}
+@container (min-width: 768px) {
+  .frj-gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
+/* .wide queda LISTO para cuando el editor lo setee (follow-up). Hoy la galería lo aplica
+   de forma DETERMINISTA por índice para replicar el ritmo del mockup. */
+.frj-gallery-grid > .wide {
+  grid-column: span 2;
+}
 
-/* Keyframes del motion. Scope: dentro de la capa landing (no en :root). Solo transform/opacity. */
-@keyframes frj-reveal-in {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* Transición del reveal — SOLO con JS activo (data-motion-ready presente). Valores exactos
+   del mockup: 0.92s cubic(.16,1,.3,1) para opacity y transform. */
+.frj-site[data-motion-ready] .frj-reveal {
+  transition:
+    opacity 0.92s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.92s cubic-bezier(0.16, 1, 0.3, 1);
 }
-@keyframes frj-parallax {
-  from { transform: translateY(-24px); }
-  to   { transform: translateY(24px); }
+
+/* Estado PENDIENTE (oculto) — gated a subtle/premium + ready + :not(.shown). El opacity:0
+   NUNCA existe sin data-motion-ready (anti-trap). El controlador marca .shown a los que ya
+   están en viewport de forma síncrona → no parpadean. */
+.frj-site[data-motion='subtle'][data-motion-ready] .frj-reveal:not(.shown),
+.frj-site[data-motion='premium'][data-motion-ready] .frj-reveal:not(.shown) {
+  opacity: 0;
+  transform: translateY(28px);
 }
-@keyframes frj-parallax-hero {
-  from { transform: translateY(-48px); }
-  to   { transform: translateY(48px); }
+
+/* Estado REVELADO. */
+.frj-site[data-motion-ready] .frj-reveal.shown {
+  opacity: 1;
+  transform: none;
+}
+
+/* Scale-in de fotos — SOLO premium + ready. La foto entra en 1.08 y va a 1 al revelarse
+   (1.5s cubic del mockup). El overflow:hidden es de la tile .frj-zoom, no de un ancestro
+   del booking. */
+.frj-site[data-motion='premium'][data-motion-ready] .frj-zoom {
+  overflow: hidden;
+}
+.frj-site[data-motion='premium'][data-motion-ready] .frj-zoom img {
+  transform: scale(1.08);
+  transition: transform 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Al revelar: cubre la foto ANIDADA dentro de una sección .frj-reveal Y la tile que ES a la
+   vez .frj-reveal.frj-zoom (galería/rsv). */
+.frj-site[data-motion='premium'][data-motion-ready] .frj-reveal.shown .frj-zoom img,
+.frj-site[data-motion='premium'][data-motion-ready] .frj-reveal.frj-zoom.shown img {
+  transform: none;
+}
+
+/* .lift hover — SOLO premium, CSS puro (no necesita JS, no gateado por ready). Va en fotos/
+   tarjetas (about/galería/RSV strip), NUNCA en botones (.frj-btn ya hace su translateY(-2px)
+   propio — sumar .lift duplicaría el hover, D-F). rgba en sombras = convención del archivo
+   (los tokens son para colores de marca, no para el alpha de sombras). */
+.frj-site[data-motion='premium'] .lift {
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    filter 0.22s ease;
+  filter: brightness(0.92);
+}
+.frj-site[data-motion='premium'] .lift:hover {
+  filter: brightness(1.08);
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.6);
+}
+
+/* Fail-safe reduced-motion (belt-and-suspenders; el controlador además NO agrega
+   data-motion-ready bajo reduced-motion). Contenido visible estático, sin ninguna animación. */
+@media (prefers-reduced-motion: reduce) {
+  .frj-site .frj-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none;
+  }
+  .frj-site .frj-zoom img {
+    transform: none !important;
+    transition: none;
+  }
+  .frj-site .lift:hover {
+    transform: none;
+  }
 }
