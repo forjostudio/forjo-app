@@ -1,7 +1,7 @@
 ---
 phase: 14-cms-editor-ui
 verified: 2026-07-10T12:57:43Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified (roadmap Success Criteria)
 behavior_unverified: 0
 overrides_applied: 0
@@ -10,6 +10,7 @@ human_verification:
   - test: "Subir una imagen (hero/about/gallery/RSV) en un entorno prod-like (Storage local está OFF) y confirmar que el objeto queda bajo landing-assets/{business_id}/, que 'Reemplazar' sube un objeto nuevo y actualiza la URL, y que 'Quitar' la saca del preview."
     expected: "El upload real contra Supabase Storage funciona end-to-end (la lógica está verificada por unit test + code review, pero el round-trip contra Storage no corrió en este entorno)."
     why_human: "El Storage local de Supabase está OFF en este proyecto (documentado en RESEARCH/SUMMARY 14-03); no hay infra para ejecutar el upload real en CI/verificación automatizada."
+    result: "PASS — UAT ejecutado por el usuario 2026-07-10 sobre un deploy preview de Vercel (rama gsd/gestion-rebrand, Storage real de prod, negocio de prueba Forjo Barbers). Editor cargó tras setear CMS_ENABLED en scope Preview; upload de imágenes funcionó end-to-end. El error de reCAPTCHA del widget de reserva es un artefacto del dominio *.vercel.app fuera de la allowlist de la site key (booking = caja negra), NO de la Fase 14. Pendiente aparte: polish de diseño (FU)."
 ---
 
 # Phase 14: CMS editor UI Verification Report
