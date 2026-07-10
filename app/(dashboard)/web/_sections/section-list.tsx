@@ -8,6 +8,7 @@ import type { LandingConfig } from '@/lib/landing/schema'
 import type { PublicBusiness, Service, TimeBlock } from '@/lib/types'
 import { normalizeSections } from '@/lib/landing/editor-draft'
 import { SectionForm } from './section-forms'
+import { SingleImageControl, ImageGridControl } from './image-controls'
 
 // ── SectionListPanel (Phase 14, Plan 02 — EDIT-03) ──────────────────────────────────────
 // Implementa el contrato FINAL que el stub de 14-01 ya declaraba (misma firma; el shell
@@ -54,6 +55,9 @@ export interface SectionListPanelProps {
   locations: LocationLite[]
   timeBlocks: TimeBlock[]
   business: PublicBusiness
+  // Señal de uploads-en-vuelo hacia el shell (gatea Guardar mientras hay subidas). Los controles de
+  // imagen (14-03) se montan acá vía imageSlot y reportan hacia arriba por este callback.
+  onUploadingChange: (delta: number) => void
 }
 
 export function SectionListPanel({
@@ -65,6 +69,7 @@ export function SectionListPanel({
   locations,
   timeBlocks,
   business,
+  onUploadingChange,
 }: SectionListPanelProps) {
   // Sección expandida (una a la vez). null = todas colapsadas.
   const [openType, setOpenType] = useState<SectionType | null>(null)
@@ -187,6 +192,28 @@ export function SectionListPanel({
                     timeBlocks={timeBlocks}
                     business={business}
                     businessId={business.id}
+                    imageSlot={(spec) => {
+                      // La clave del `data` es el segmento tras el punto: 'hero.image'→'image',
+                      // 'gallery.images'→'images', 'rsvData.images'→'images'. El businessId sale del
+                      // business de la SESIÓN (props del shell), jamás del cliente (aislamiento RLS).
+                      const key = spec.field.split('.')[1]
+                      const data = (s.data ?? {}) as Record<string, unknown>
+                      return spec.kind === 'single' ? (
+                        <SingleImageControl
+                          businessId={business.id}
+                          value={typeof data[key] === 'string' ? (data[key] as string) : undefined}
+                          onChange={(url) => onSectionDataChange(s.type, { [key]: url })}
+                          onUploadingChange={onUploadingChange}
+                        />
+                      ) : (
+                        <ImageGridControl
+                          businessId={business.id}
+                          values={Array.isArray(data[key]) ? (data[key] as string[]) : []}
+                          onChange={(urls) => onSectionDataChange(s.type, { [key]: urls })}
+                          onUploadingChange={onUploadingChange}
+                        />
+                      )
+                    }}
                   />
                 </div>
               )}

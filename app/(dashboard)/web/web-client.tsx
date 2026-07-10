@@ -267,6 +267,7 @@ export function WebEditorClient({
             locations={locations}
             timeBlocks={timeBlocks}
             business={business}
+            onUploadingChange={onUploadingChange}
           />
 
           <ThemeControls
