@@ -66,9 +66,10 @@ export function About({ data, index }: { data: unknown; index?: number | string 
             va segundo (stack natural). SIN imagen: la columna no se renderiza y el lead
             ocupa todo el ancho — degrada con elegancia, nunca un bloque vacío. */}
         {d.image && (
-          // frj-parallax: translateY ±24px SOLO premium (CSS). NO cambia sizes/loading del <Image>
-          // (no diferimos la carga). El overflow-hidden es de esta tile, no ancestro del booking.
-          <div className="frj-parallax relative aspect-[4/5] w-full overflow-hidden rounded-[2px]">
+          // frj-zoom: scale-in 1.08->1 SOLO premium; lift: hover brightness+translateY SOLO premium.
+          // NO cambia sizes/loading del <Image> (no diferimos la carga). El overflow-hidden es de
+          // esta tile (.frj-zoom lo refuerza en premium), no ancestro del booking.
+          <div className="frj-zoom lift relative aspect-[4/5] w-full overflow-hidden rounded-[2px]">
             <Image
               src={d.image}
               alt=""

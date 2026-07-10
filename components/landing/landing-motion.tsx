@@ -1,0 +1,84 @@
+'use client'
+
+import { useEffect } from 'react'
+
+// ── LandingMotion — controlador de scroll-reveal (IntersectionObserver) ──────────────
+// POR QUÉ IO y NO animation-timeline: view(): el motor viejo (view()) es baseline SOLO
+// Chromium → el reveal NO se veía en Safari, Firefox ni iOS. IntersectionObserver es API
+// nativa del browser (cero dependencias) y anima en TODOS los navegadores. Espejo del
+// <script> del mockup aprobado y del Reveal.tsx del CMS armar-web-forjo.
+//
+// POR QUÉ UN controlador global (montado UNA vez dentro de .frj-site) y no un wrapper client
+// por sección: las secciones siguen siendo RSC (cero árbol al bundle). Este componente no
+// renderiza DOM (retorna null): solo corre un efecto que busca los .frj-reveal ya presentes
+// en el markup del server y los observa.
+//
+// CAJA NEGRA DEL BOOKING (D-E / T-OA7-01): este controlador SOLO agrega .shown y un
+// transition-delay a nodos con clase .frj-reveal. Por markup, ningún .frj-reveal es ancestro
+// del widget de reserva (el único .frj-reveal dentro de #reservar es el <div> HERMANO del
+// strip RSV, que envuelve solo header+fotos, nunca el widget). Así no se crea containing block
+// que rompa el position:fixed de vaul/sonner/react-day-picker.
+
+export function LandingMotion({ level }: { level: 'none' | 'subtle' | 'premium' }) {
+  useEffect(() => {
+    // motion=none → estático, no tocamos nada (byte-idéntico a hoy).
+    if (level === 'none') return
+    // Fail-safe reduced-motion: no activamos el estado oculto ni observamos (belt-and-suspenders
+    // con el @media del CSS). El controlador NO agrega data-motion-ready → el opacity:0 nunca aplica.
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    )
+      return
+
+    const root = document.querySelector<HTMLElement>('.frj-site')
+    if (!root) return
+
+    // Recién ACÁ el CSS activa el estado pendiente (opacity:0). Antes de esto todo es visible
+    // → sin JS / sin este efecto no hay trap (anti-trap D-C).
+    root.setAttribute('data-motion-ready', '')
+
+    const els = Array.from(root.querySelectorAll<HTMLElement>('.frj-reveal'))
+
+    // ANTI-FLASH (D-C): los .frj-reveal que YA están en viewport (above-the-fold, incluido el
+    // hero) se marcan .shown de forma SÍNCRONA → aparecen crisp, sin animar ni parpadear. Solo
+    // los que entran por scroll animan.
+    for (const el of els) {
+      if (el.getBoundingClientRect().top < window.innerHeight) {
+        el.classList.add('shown')
+      }
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          const el = entry.target as HTMLElement
+          // Stagger de grilla: si el elemento es hijo de un .frj-stagger, calculamos su índice
+          // entre los hermanos que también son .frj-reveal y aplicamos 90ms/item (replica el
+          // mockup). El primero (índice 0) no lleva delay.
+          const parent = el.parentElement
+          if (parent && parent.classList.contains('frj-stagger')) {
+            const sibs = Array.from(parent.children).filter((c) =>
+              c.classList.contains('frj-reveal'),
+            )
+            const i = sibs.indexOf(el)
+            if (i > 0) el.style.transitionDelay = `${i * 90}ms`
+          }
+          el.classList.add('shown')
+          observer.unobserve(el) // one-shot: no re-disparar al salir/entrar
+        }
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -8% 0px' },
+    )
+
+    // Observamos SOLO los que todavía no están .shown (los above-the-fold ya se resolvieron).
+    for (const el of els) {
+      if (!el.classList.contains('shown')) observer.observe(el)
+    }
+
+    return () => observer.disconnect()
+  }, [level])
+
+  return null
+}

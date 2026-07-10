@@ -35,6 +35,7 @@ import { Location, LocationInner, isLocationVisible } from '@/components/landing
 import { Hours, HoursInner, isHoursVisible } from '@/components/landing/hours'
 import { GhostIndex } from '@/components/landing/_premium'
 import { Cta } from '@/components/landing/cta'
+import { LandingMotion } from '@/components/landing/landing-motion'
 import { aboutData, galleryData } from '@/lib/landing/schema'
 import { normalizeMotion } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -72,15 +73,17 @@ export function LandingRenderer({ config, business, services, professionals, tim
 
   // Nivel de motion resuelto (F12, MOTION-01). normalizeMotion degrada defensivamente:
   // ausente/inválido/'none' → 'none' (estático, byte-idéntico a hoy — D-04). El valor se
-  // emite como data-motion en <main class="frj-site"> (abajo). Las CLASES .frj-reveal /
-  // .frj-parallax se aplican SOLO a las editoriales; el case 'booking' NUNCA las recibe
-  // (caja negra, MOTION-04). El CSS de globals.css engancha con .frj-site[data-motion=...].
+  // emite como data-motion en <main class="frj-site"> (abajo) y se pasa como prop al
+  // controlador <LandingMotion/>. Las CLASES .frj-reveal / .frj-zoom / .lift se aplican SOLO a
+  // las editoriales; el case 'booking' NUNCA las recibe (caja negra, MOTION-04 / T-OA7-01).
   const motionLevel = normalizeMotion(config.motion)
 
   // Wrapper de reveal para las secciones editoriales que renderizan su <section> internamente
   // pero cuyo componente NO recibió la clase (services/location/hours/cta). RSC puro, sin
   // marcarlo client: un simple <div class="frj-reveal"> hijo de .frj-site. NO envuelve NUNCA la
-  // sección booking (esa rama del switch no pasa por acá). El motion es 100% CSS.
+  // sección booking (esa rama del switch no pasa por acá). El motion ahora lo dispara
+  // IntersectionObserver (el controlador <LandingMotion/>), NO animation-timeline:view() (que
+  // era baseline solo Chromium → invisible en Safari/Firefox/iOS). El controlador agrega .shown.
   const Reveal = ({ children }: { children: ReactNode }) => (
     <div className="frj-reveal">{children}</div>
   )
@@ -167,6 +170,11 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // propio contenedor), NO acá. switch / orderedSections / props de BookingClient: VERBATIM.
   return (
     <main className="frj-site" data-motion={motionLevel}>
+      {/* Controlador de motion (IntersectionObserver): observa los .frj-reveal del markup y les
+          agrega .shown al entrar al viewport. Es el ÚNICO client component del árbol; no renderiza
+          DOM (retorna null). Con level='none' no toca nada (estático). NUNCA observa el widget de
+          booking: solo nodos .frj-reveal, que por markup nunca son su ancestro (T-OA7-01). */}
+      <LandingMotion level={motionLevel} />
       {sections.map((s, i) => {
         const index = nextIndexFor(s)
         // switch (NO Record map): cada sección recibe props heterogéneas y el switch da
@@ -187,7 +195,7 @@ export function LandingRenderer({ config, business, services, professionals, tim
               </Reveal>
             )
           case 'gallery':
-            // Gallery lleva frj-reveal/frj-parallax en su propio componente (tiene fotos).
+            // Gallery lleva frj-reveal/frj-zoom/lift en sus propias tiles (tiene fotos).
             return <Gallery key={i} data={s.data} index={index} />
           case 'location':
             // Combinada con hours → la PRIMERA del par rinde el bloque 2-col; la segunda nada.

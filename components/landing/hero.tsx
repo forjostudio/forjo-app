@@ -39,11 +39,11 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
     >
       {hasImage ? (
         <>
-          {/* Capa de imagen con parallax (frj-parallax-hero, ±48px, SOLO premium vía CSS). El
-              translateY se aplica a ESTE wrapper, NO reemplaza el <img> ni difiere su carga
-              (MOTION-03 / SC#2): la imagen sigue siendo el LCP, arriba del fold, con preload.
-              Fuera del @supports+no-preference el wrapper queda estático (sin transform). */}
-          <div className="frj-parallax frj-parallax-hero absolute inset-0 -z-10">
+          {/* Capa de imagen con scale-in (frj-zoom: la foto entra en 1.08 y va a 1 al revelarse,
+              SOLO premium). El overflow-hidden lo aporta .frj-zoom en premium; el <img> sigue
+              siendo el LCP, arriba del fold, con preload (no se difiere la carga). Fuera de premium
+              el wrapper queda estático (sin transform). */}
+          <div className="frj-zoom absolute inset-0 -z-10">
             {/* Imagen full-bleed (next/image, remotePatterns ya configurado en 07-01).
                 preload=true: Next 16 reemplaza el viejo prop de carga priorizada (deprecado)
                 por `preload`, que inserta el <link rel=preload> en el <head> — mismo efecto LCP. */}
@@ -56,15 +56,16 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
               className="size-full object-cover"
             />
           </div>
-          {/* Scrim doble-gradiente (sutil arriba + denso abajo) que ancla el texto claro
-              al fondo y garantiza >=4.5:1 sin depender del contenido de la imagen (D7-03).
-              Negro de scrim = utilidad Tailwind (no hex hardcodeado). Decorativo. */}
+          {/* Scrim del hero. Arriba: gradiente negro sutil (contraste del topbar sobre foto clara,
+              utilidad Tailwind). Abajo: .frj-hero-scrim bottom-heavy que funde la foto hacia el
+              token --background (mockup aprobado) — reemplaza el viejo gradiente negro denso para
+              que el hero se integre con la sección de abajo. Ambos decorativos. */}
           <div
             className="absolute inset-0 -z-10 bg-gradient-to-b from-black/25 via-black/0 to-black/0"
             aria-hidden="true"
           />
           <div
-            className="absolute inset-0 -z-10 bg-gradient-to-t from-black/80 via-black/35 to-black/0"
+            className="frj-hero-scrim pointer-events-none absolute inset-0 -z-10"
             aria-hidden="true"
           />
         </>

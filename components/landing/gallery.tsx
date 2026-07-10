@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { cn } from '@/lib/utils'
 import { galleryData } from '@/lib/landing/schema'
 import { shouldHideGallery } from '@/lib/landing/derive'
 import { Kicker, GhostIndex } from '@/components/landing/_premium'
@@ -8,33 +9,18 @@ import { Kicker, GhostIndex } from '@/components/landing/_premium'
 // galleryData (07-01) lleva `.catch({})` → data malformado → {}.
 // Empty-state (D7-08): sin imágenes → la sección se oculta entera (return null).
 //
-// Restyle F8.1 (D81-08, mock 04-screen.png + `.frj-grid`): grid editorial FULL-BLEED (no el
-// grid uniforme plano de F7). Las celdas varían su aspect-ratio de forma DETERMINISTA por
-// índice (alta 3/4, ancha span-2 16/9, cuadrada 1/1, y en desktop una destacada span 2x2),
-// igual que el mock. CLS-safe: cada celda reserva su espacio con aspect-ratio + next/image
-// `fill` (no masonry, sin saltos de layout). Tiles NO interactivos (sin lightbox, igual que F7).
-// Cero hex: solo tokens / utilidades.
+// Restyle F8.1 → polish OA7 (mockup aprobado): grid editorial full-bleed de filas PAREJAS
+// (grid-auto-rows) con backfill nativo de huecos (grid-auto-flow:dense) y fotos a DOBLE ANCHO
+// (.wide). La altura de cada celda la fija .frj-gallery-grid (grid-auto-rows), no un aspect
+// por tile; la imagen `fill` + object-cover llena la celda. CLS-safe (la fila reserva su alto).
+// Tiles NO interactivos (sin lightbox, igual que F7). Cero hex: solo tokens / utilidades.
 
-// ── Patrón editorial determinista (espejo del mock) ──────────────────────────────────
-// Cada celda recibe su forma según la posición en un ciclo de 6, replicando la composición
-// asimétrica del mock. Determinista ⇒ SSR/CSR idénticos ⇒ cero CLS. Las clases controlan
-// span (grid-column/row) y aspect-ratio; el contenedor reserva el espacio antes de cargar.
-//   feat  → destacada: span 2 col × 2 row en desktop (1/1)
-//   wide  → ancha: span 2 col (16/9)
-//   tall  → alta: 3/4
-//   sq    → cuadrada: 1/1
-const SHAPES = [
-  // pos 0: destacada (en mobile cae a cuadrada simple vía el reset de span en <lg)
-  'sq lg:col-span-2 lg:row-span-2 lg:aspect-square',
-  'sq',
-  'col-span-2 aspect-video', // wide (16/9)
-  'aspect-[3/4]', // tall
-  'sq',
-  'col-span-2 aspect-video', // wide
-] as const
-
-function shapeFor(i: number): string {
-  return SHAPES[i % SHAPES.length]
+// ── Doble ancho determinista (placeholder hasta que el editor lo setee) ───────────────
+// isWide(i): replica el ritmo del mockup (una foto ancha cada 4, en la 3ª posición del ciclo).
+// Es DETERMINISTA ⇒ SSR/CSR idénticos ⇒ cero CLS. Follow-up: cuando el editor CMS permita
+// marcar "foto ancha", este placeholder se reemplaza por el flag del config.
+function isWide(i: number): boolean {
+  return i % 4 === 2
 }
 
 export function Gallery({ data, index }: { data: unknown; index?: number | string }) {
@@ -61,18 +47,22 @@ export function Gallery({ data, index }: { data: unknown; index?: number | strin
         </h2>
       </div>
 
-      {/* Grid editorial full-bleed: 2 col mobile, 4 col desktop, gap fino (mock `.frj-grid`).
-          Cada celda lleva aspect-ratio reservado → CLS-safe sin masonry.
-          frj-stagger: escalona el reveal de las tiles (80ms/item, tope 320ms) SOLO en premium
-          (el CSS aplica animation-delay a los hijos directos del .frj-stagger — globals.css). */}
-      <div className="frj-stagger grid grid-cols-2 gap-[6px] px-[6px] lg:grid-cols-4">
+      {/* Grid editorial full-bleed: .frj-gallery-grid aporta columns (2 mobile / 3 ≥768px),
+          grid-auto-rows, grid-auto-flow:dense y gap (globals.css). frj-stagger queda como SCOPE
+          del stagger del controlador JS (90ms/item por índice de hermano .frj-reveal). */}
+      <div className="frj-gallery-grid frj-stagger px-[6px]">
         {images.map((src, i) => (
           <div
             key={`${src}-${i}`}
-            // frj-reveal: entrada escalonada (el frj-stagger del grid le pone el animation-delay).
-            // frj-parallax: translateY ±24px SOLO premium. Ambos 100% CSS, anti-trap (visible por
-            // defecto). El overflow-hidden es de la tile, nunca ancestro del booking.
-            className={`frj-reveal frj-parallax relative overflow-hidden bg-[color:var(--frj-surface-2)] ${shapeFor(i)}`}
+            // frj-reveal: entrada escalonada (el controlador IO le pone el transition-delay por
+            // índice dentro del .frj-stagger). frj-zoom: scale-in 1.08->1 SOLO premium. lift: hover
+            // brightness+translateY SOLO premium. Sin clases de aspect: el alto lo fija
+            // grid-auto-rows y la imagen `fill` llena la celda. .wide (doble ancho) por índice
+            // determinista. El overflow-hidden es de la tile, nunca ancestro del booking.
+            className={cn(
+              'frj-reveal frj-zoom lift relative overflow-hidden bg-[color:var(--frj-surface-2)]',
+              isWide(i) && 'wide',
+            )}
           >
             <Image
               src={src}
@@ -80,7 +70,7 @@ export function Gallery({ data, index }: { data: unknown; index?: number | strin
               fill
               // Las primeras tiles pueden estar above-the-fold → no lazy; el resto lazy (CLS-safe).
               loading={i < 2 ? undefined : 'lazy'}
-              sizes="(min-width: 1024px) 25vw, 50vw"
+              sizes="(min-width: 768px) 33vw, 50vw"
               className="object-cover"
             />
           </div>

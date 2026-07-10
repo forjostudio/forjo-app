@@ -37,9 +37,13 @@ export function RsvStrip({ data }: { data: unknown }) {
   const hasHead = Boolean(d.header)
 
   return (
-    // Bloque RSV: HERMANO del widget (va ANTES). Sin motion (data-motion/frj-reveal/frj-parallax):
-    // pertenece a la caja negra del booking, que NUNCA se anima (MOTION-04). Sin overflow/transform acá.
-    <div className="pb-[clamp(24px,4cqw,40px)]">
+    // Bloque RSV: HERMANO del widget de reserva (lo renderiza el renderer ANTES, dentro de
+    // <section id="reservar">), envuelve SOLO header+fotos del strip y NUNCA al widget. Por eso
+    // aplicarle frj-reveal (translateY) es SEGURO: no crea un containing block para el widget, que
+    // es un HERMANO (no un descendiente). El opacity/transform del reveal vive en este <div>, no
+    // sube a la <section> ni a ningún ancestro del widget (T-OA7-01 / MOTION-04). Sin overflow/
+    // transform propio de este contenedor (el overflow-x del strip vive en su div interno).
+    <div className="frj-reveal pb-[clamp(24px,4cqw,40px)]">
       {/* Head editorial (mismo par que las demás secciones): Kicker opcional + <h2> + intro
           opcional. <h2> respeta la jerarquía (el <h1> es exclusivo del hero, D7-02). Solo se
           renderiza si el config trae header (sin fallback impuesto). Padding lateral fluido. */}
@@ -71,9 +75,10 @@ export function RsvStrip({ data }: { data: unknown }) {
             // Tile: alto fijo 128px mobile / 168px ≥768px, aspect-ratio 4/3 (ancho derivado →
             // ≈171px mobile / ≈224px desktop). El aspect-ratio + alto fijo RESERVAN el espacio
             // (CLS-safe, sin salto de layout). shrink-0 evita que el flex las comprima.
-            // El placeholder mientras carga = --frj-surface-2 (espejo de gallery). El
-            // overflow-hidden es de la TILE, nunca ancestro del booking.
-            className="relative h-[128px] shrink-0 overflow-hidden rounded-[8px] bg-[color:var(--frj-surface-2)] aspect-[4/3] md:h-[168px]"
+            // El placeholder mientras carga = --frj-surface-2 (espejo de gallery). frj-zoom
+            // (scale-in) + lift (hover) van sobre las FOTOS del strip, SOLO premium — nunca sobre
+            // el contenedor del widget (matiz 3 / T-OA7-01). El overflow-hidden es de la TILE.
+            className="frj-zoom lift relative h-[128px] shrink-0 overflow-hidden rounded-[8px] bg-[color:var(--frj-surface-2)] aspect-[4/3] md:h-[168px]"
           >
             <Image
               src={src}
