@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.16
 milestone_name: Web Builder — Ampliación + CMS
-status: executing
+status: Awaiting next milestone
 stopped_at: Completed 14-03-PLAN.md
-last_updated: "2026-07-09T21:59:21.816Z"
-last_activity: 2026-07-09 -- Completed 14-03 (image controls / EDIT-02)
+last_updated: "2026-07-10T18:52:44.423Z"
+last_activity: 2026-07-10 — Milestone v0.16 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 
 ## Current Position
 
-Phase: 14 (CMS editor UI) — EXECUTING
-Plan: 4 of 4
-Status: Ready to execute (14-04 pending)
-Last activity: 2026-07-09 -- Completed 14-03 (image controls / EDIT-02)
+Phase: Milestone v0.16 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-10 — Milestone v0.16 completed and archived
 
 ## Performance Metrics
 
@@ -131,4 +131,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Execute Phase 11 with `/gsd:execute-phase 11 --ws web-builder`
+- Start the next milestone with /gsd-new-milestone

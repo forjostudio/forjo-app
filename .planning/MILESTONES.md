@@ -1,5 +1,19 @@
 # Milestones
 
+## v0.16 Web Builder — Ampliación + CMS (Shipped: 2026-07-10)
+
+**Phases completed:** 4 phases, 9 plans, 11 tasks
+
+**Key accomplishments:**
+
+- **Phase 11 — Skill CMS ampliada:** modo edición idempotente (retoque desde `landing-payloads/<slug>.json` con checkpoint diff) + fuentes de contenido (operador estructurado → web existente → Instagram best-effort). SECURED 7/7.
+- **Phase 12 — Premium motion + fotos en la reserva:** motor de movimiento CSS-first (`animation-timeline: view()`, scroll-reveal + parallax, fail-safe a estático, `prefers-reduced-motion`) + galería de fotos de la sucursal alrededor del widget de reserva (booking = caja negra).
+- **Phase 13 — CMS foundation (write path):** Server Action owner-only `saveLandingConfig` con session client (RLS por tenant), validación Zod estricta reject-on-invalid, y kill-switch global `CMS_ENABLED` fail-closed — sin migración, sin service-role en la web, sin dependencia nueva. SECURED 7/7.
+- **Phase 14 — CMS editor UI:** editor visual completo (copy por sección, upload de imágenes a `landing-assets/{business_id}/`, reorden/on-off del set fijo de 8, tema/paleta/primary/motion, preview en vivo del `LandingRenderer` real) — detrás del flag `CMS_ENABLED`, sin exposición en nav ni publish/go-live (v2). Verificado 5/5 SCs, SECURED 16/16, UAT de upload OK en preview.
+- **Shipped a prod** (`gestion.forjo.studio`) con el CMS **invisible por flag** (exposición + publish/go-live = v2, PUB-01/02). Cero migraciones nuevas en el milestone.
+
+---
+
 ## v0.15 Gestión rebrand (Shipped: 2026-07-06)
 
 **Phases completed:** 3 phases, 9 plans, 11 tasks
