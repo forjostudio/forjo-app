@@ -1,7 +1,8 @@
 'use client'
 
-import { Check } from 'lucide-react'
+import { Check, Moon, Sun } from 'lucide-react'
 import type { LandingTheme } from '@/lib/landing/schema'
+import { normalizeMode, type LandingMode } from '@/lib/landing/theme'
 import {
   THEMES,
   THEME_PALETTES,
@@ -24,6 +25,11 @@ import { cn } from '@/lib/utils'
 // (web-client.tsx) cablea onChange/onMotionChange a los mutadores puros setTheme/setMotion del
 // borrador y recomputa resolveLandingTheme sobre el wrapper del preview → cambio en vivo.
 
+const MODE_OPTIONS = [
+  { key: 'light' as const, label: 'Claro', icon: Sun },
+  { key: 'dark' as const, label: 'Oscuro', icon: Moon },
+]
+
 const MOTION_OPTIONS = [
   { key: 'none', label: 'Sin movimiento' },
   { key: 'subtle', label: 'Sutil' },
@@ -35,7 +41,7 @@ export interface ThemeControlsProps {
   // Patch parcial del tema; el shell lo aplica con setTheme(draft, patch).
   // `primary` YA NO se expone (ver nota abajo), pero el patch lo sigue admitiendo porque setTheme
   // es genérico; el editor simplemente no lo emite nunca.
-  onChange: (patch: { preset?: string; palette?: string; font?: string }) => void
+  onChange: (patch: { preset?: string; palette?: string; font?: string; mode?: LandingMode }) => void
   motion: 'none' | 'subtle' | 'premium'
   onMotionChange: (level: 'none' | 'subtle' | 'premium') => void
 }
@@ -58,6 +64,8 @@ export function ThemeControls({ theme, onChange, motion, onMotionChange }: Theme
   const paletteList = THEME_PALETTES[activePreset] ?? THEME_PALETTES.forjo
   // Fuente activa: mismo normalize defensivo que el render (un id desconocido cae a 'auto').
   const activeFont = normalizeFont(theme.overrides?.font)
+  // Modo activo: mismo normalize que el render (ausente/basura → 'light').
+  const activeMode = normalizeMode(theme.overrides?.mode)
 
   // El ESTILO VISUAL es la decisión de primer orden: elegir uno RESETEA todo lo que haya debajo.
   //  - palette → la default del preset (la del preset anterior ni siquiera pertenece al set nuevo).
@@ -199,6 +207,39 @@ export function ThemeControls({ theme, onChange, motion, onMotionChange }: Theme
                     <Check className="w-3 h-3" />
                   </span>
                 )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Modo claro / oscuro DEL LANDING ─────────────────────────────────────
+          No es la preferencia del visitante: es cómo el dueño decide que se vea SU página. El
+          <main> del landing declara el modo, así que la página se ve igual entre para quien
+          entre. */}
+      <div className="space-y-2">
+        <div>
+          <p className="font-semibold text-sm">Modo</p>
+          <p className="text-xs text-muted-foreground">
+            Cómo se ve tu página para todos los visitantes.
+          </p>
+        </div>
+        <div role="group" aria-label="Modo" className="inline-flex rounded-lg border border-border p-1 bg-secondary/30">
+          {MODE_OPTIONS.map((opt) => {
+            const active = activeMode === opt.key
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => onChange({ mode: opt.key })}
+                aria-pressed={active}
+                className={cn(
+                  'inline-flex min-h-9 items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <opt.icon className="size-4" aria-hidden="true" />
+                {opt.label}
               </button>
             )
           })}

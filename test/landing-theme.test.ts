@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSafeColor, resolveLandingTheme, normalizeMotion } from '@/lib/landing/theme'
+import { isSafeColor, resolveLandingTheme, normalizeMotion, normalizeMode } from '@/lib/landing/theme'
 import { normalizeTheme, THEME_DEFAULT_PAL } from '@/lib/theme-config'
 
 // ── Tests puros de resolución/validación de tema (Fase 8, THEME-01/02) ────────────
@@ -60,12 +60,15 @@ describe('isSafeColor (allowlist hex estricto)', () => {
 describe('resolveLandingTheme (mapeo + fallback legacy)', () => {
   const fb = { theme: 'modern', palette: 'indigo', font: 'auto' }
 
+  // `mode` se sumó al tema resuelto (claro/oscuro del landing, de autoría). Sin config no hay
+  // override → 'light', que es el defaultTheme de la app: el legacy sigue viéndose igual.
   it('caso 1 · landingTheme=null → fallback puro normalizado, primary undefined', () => {
     expect(resolveLandingTheme(null, fb)).toEqual({
       theme: 'modern',
       palette: 'indigo',
       font: 'auto',
       primary: undefined,
+      mode: 'light',
     })
   })
 
@@ -75,6 +78,7 @@ describe('resolveLandingTheme (mapeo + fallback legacy)', () => {
       palette: 'indigo',
       font: 'auto',
       primary: undefined,
+      mode: 'light',
     })
   })
 
@@ -258,5 +262,35 @@ describe('resolveLandingTheme — la fuente del panel no pisa la del theme del l
   it('SIN landing (legacy) sigue tomando la fuente del negocio', () => {
     const r = resolveLandingTheme(null, { theme: 'forjo', palette: 'red', font: 'bauhaus' })
     expect(r.font).toBe('bauhaus')
+  })
+})
+
+// ── modo claro/oscuro DEL LANDING (no del visitante) ─────────────────────────────────
+// Antes el landing heredaba la clase .dark que next-themes le pone a <html> según lo que el
+// VISITANTE tenga guardado: la misma página se veía clara u oscura según quién entrara, y el
+// dueño no podía decidirlo. Ahora es parte del config y lo declara el <main> del landing.
+describe('normalizeMode', () => {
+  it('solo "dark" es dark; todo lo demás cae a light', () => {
+    expect(normalizeMode('dark')).toBe('dark')
+    expect(normalizeMode('light')).toBe('light')
+  })
+
+  // Default light = el defaultTheme de la app ⇒ un landing ya publicado sin la clave sigue
+  // viéndose como hoy para el visitante típico (cero regresión).
+  it('ausente o basura → light (fail-safe)', () => {
+    expect(normalizeMode(undefined)).toBe('light')
+    expect(normalizeMode(null)).toBe('light')
+    expect(normalizeMode('DARK')).toBe('light')
+    expect(normalizeMode(1)).toBe('light')
+  })
+})
+
+describe('resolveLandingTheme — mode', () => {
+  it('lee overrides.mode', () => {
+    expect(resolveLandingTheme({ preset: 'forjo', overrides: { mode: 'dark' } }, {}).mode).toBe('dark')
+  })
+
+  it('sin override → light', () => {
+    expect(resolveLandingTheme({ preset: 'forjo' }, {}).mode).toBe('light')
   })
 })

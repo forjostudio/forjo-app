@@ -18,7 +18,7 @@
 //  2) location + hours se COMBINAN en UNA sección 2-col (mock `.frj-loc`) con UN solo número
 //     fantasma cuando AMBAS están visibles. Si sólo una está visible, va full-width como hoy.
 
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { BookingClient } from '@/app/[slug]/booking-client'
 import {
   orderedSections,
@@ -38,7 +38,7 @@ import { Cta } from '@/components/landing/cta'
 import { LandingMotion } from '@/components/landing/landing-motion'
 import { PhotoLightbox } from '@/components/landing/photo-lightbox'
 import { aboutData, galleryData } from '@/lib/landing/schema'
-import { normalizeMotion } from '@/lib/landing/theme'
+import { normalizeMotion, resolveLandingTheme } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
 import type { PublicBusiness, Service, Professional, TimeBlock, Location as LocationType } from '@/lib/types'
 
@@ -94,6 +94,14 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // controlador <LandingMotion/>. Las CLASES .frj-reveal / .frj-zoom / .lift se aplican SOLO a
   // las editoriales; el case 'booking' NUNCA las recibe (caja negra, MOTION-04 / T-OA7-01).
   const motionLevel = normalizeMotion(config.motion)
+
+  // Tema resuelto del landing (preset/overrides del config, con fallback a los valores del negocio
+  // para un config recién sembrado). Se emite como data-* en el <main> de abajo.
+  const t = resolveLandingTheme(config.theme, {
+    theme: business.theme,
+    palette: business.palette,
+    font: business.font,
+  })
 
 
   // Lookup del `data` por tipo (para evaluar visibilidad de los empty-states sin re-iterar).
@@ -177,7 +185,28 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // El overflow:hidden del campo decorativo del hero/cta vive en .frj-noisefield (su
   // propio contenedor), NO acá. switch / orderedSections / props de BookingClient: VERBATIM.
   return (
-    <main className="frj-site" data-motion={motionLevel}>
+    <main
+      // EL LANDING DECLARA SU PROPIO CONTEXTO VISUAL, no lo hereda.
+      // Antes el <main> no traía theme/palette/font/modo y los tomaba del ancestro. Eso rompía en
+      // los DOS lados:
+      //   - en el preview del CMS heredaba el theme del PANEL (un landing forjo dentro de un panel
+      //     modern salía con la Jakarta del panel, y el fondo del panel), o sea que la vista previa
+      //     mentía;
+      //   - en la web pública heredaba la clase .dark que next-themes le pone a <html> según lo que
+      //     el VISITANTE tenga guardado → la misma página se veía clara u oscura según quién entrara.
+      // Declarando los tokens acá, el subárbol resuelve contra ESTE elemento y no contra <html>.
+      // `data-theme` va SIEMPRE, incluido 'forjo': omitirlo (como hace PaletteScript en <html>) acá
+      // significaría heredar el theme de arriba, no caer al default — de ahí el selector
+      // [data-theme='forjo'] que se agregó en globals.css.
+      // Ojo (limitación conocida): los overlays del booking que se portean a document.body
+      // (vaul/sonner) quedan FUERA de este árbol y siguen el tema de la app, no el del landing.
+      className={t.mode === 'dark' ? 'frj-site dark' : 'frj-site'}
+      data-motion={motionLevel}
+      data-theme={t.theme}
+      data-palette={t.palette}
+      data-font={t.font !== 'auto' ? t.font : undefined}
+      style={t.primary ? ({ ['--primary']: t.primary } as CSSProperties) : undefined}
+    >
       {/* Controlador de motion (IntersectionObserver): observa los .frj-reveal del markup y les
           agrega .shown al entrar al viewport. Es el ÚNICO client component del árbol; no renderiza
           DOM (retorna null). Con level='none' no toca nada (estático). NUNCA observa el widget de

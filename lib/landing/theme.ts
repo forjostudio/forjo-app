@@ -32,6 +32,21 @@ export interface ResolvedTheme {
   palette: string
   font: string
   primary?: string
+  // Modo claro/oscuro DEL LANDING (no del visitante). Ver normalizeMode.
+  mode: LandingMode
+}
+
+export type LandingMode = 'light' | 'dark'
+
+// ── normalizeMode: el modo del landing es AUTORÍA, no preferencia del visitante ────────
+// Hasta ahora el landing heredaba la clase .dark que next-themes pone en <html> según lo que el
+// VISITANTE tenga guardado — o sea que la misma página se veía clara u oscura según quién entrara,
+// y el dueño no podía decidirlo. Ahora el modo es parte del config (overrides.mode) y el <main>
+// del landing lo declara, así que la página se ve como el dueño la dejó.
+// Default 'light' (ausente/basura → light): es el defaultTheme de la app, así que un landing ya
+// publicado sin la clave sigue viéndose como hoy para el visitante típico.
+export function normalizeMode(raw: unknown): LandingMode {
+  return raw === 'dark' ? 'dark' : 'light'
 }
 
 // El fallback legacy: los valores per-negocio de businesses.theme/palette/font. Pueden venir
@@ -82,7 +97,11 @@ export function resolveLandingTheme(
   // Nunca propagamos un color sin validar (T-08-01).
   const primary = isSafeColor(overrides?.primary) ? overrides!.primary : undefined
 
-  return { theme, palette, font, primary }
+  // mode: solo del config. NO cae al negocio: businesses no tiene un modo claro/oscuro persistido
+  // (eso es preferencia del usuario del panel, no del negocio).
+  const mode = normalizeMode(overrides?.mode)
+
+  return { theme, palette, font, primary, mode }
 }
 
 // ── normalizeMotion: resolución del nivel de motion (F12, MOTION-01/D-04) ──────────

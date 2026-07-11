@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { LandingRenderer } from '@/components/landing/landing-renderer'
 import { parseLandingConfig, DEFAULT_LANDING_CONFIG } from '@/lib/landing/schema'
-import { resolveLandingTheme } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
 import type { PublicBusiness, Service, Professional, TimeBlock } from '@/lib/types'
 import {
@@ -135,7 +134,7 @@ export function WebEditorClient({
     [],
   )
   const onThemeChange = useCallback(
-    (patch: { preset?: string; palette?: string; font?: string }) =>
+    (patch: { preset?: string; palette?: string; font?: string; mode?: 'light' | 'dark' }) =>
       setDraft((d) => setTheme(d, patch)),
     [],
   )
@@ -175,20 +174,6 @@ export function WebEditorClient({
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [dirty])
 
-  // ── Preview: tema resuelto para el WRAPPER (L6) ─────────────────────────────────────────
-  // resolveLandingTheme mapea draft.theme (preset/overrides) al motor, con fallback a los
-  // businesses.theme/palette/font (el chrome de marca) para un config recién sembrado. Los
-  // atributos data-* + --primary van al wrapper .frj-site del preview, jamás al <html>.
-  const t = useMemo(
-    () =>
-      resolveLandingTheme(draft.theme, {
-        theme: business.theme,
-        palette: business.palette,
-        font: business.font,
-      }),
-    [draft.theme, business.theme, business.palette, business.font],
-  )
-
   const preview = (
     // Marco EXTERNO: el overflow/redondeo vive ACÁ, fuera de .frj-site (L7). Nunca poner
     // overflow/transform en un ancestro de #reservar dentro de .frj-site.
@@ -203,12 +188,13 @@ export function WebEditorClient({
         // adentro. Es seguro para el booking: isolation NO crea containing block para
         // position:fixed (eso lo hacen transform/filter/contain) y los overlays de vaul/sonner
         // portan a document.body, fuera de este árbol.
-        className="frj-site isolate"
-        // Tema al wrapper (L6): omitir 'forjo'/'auto' igual que PaletteScript; --primary sólo si es válido.
-        data-theme={t.theme !== 'forjo' ? t.theme : undefined}
-        data-palette={t.palette}
-        data-font={t.font !== 'auto' ? t.font : undefined}
-        style={t.primary ? ({ ['--primary']: t.primary } as React.CSSProperties) : undefined}
+        //
+        // El TEMA ya NO se aplica acá: lo declara el propio <main class="frj-site"> del
+        // LandingRenderer (theme/palette/font/modo). Ponerlo también acá era duplicar la fuente de
+        // verdad — y encima el wrapper omitía el atributo cuando el theme era 'forjo', con lo cual
+        // el preview HEREDABA el theme del panel (fuentes y colores del dashboard): la vista previa
+        // mentía. Ahora el preview muestra exactamente lo que verá el visitante.
+        className="isolate"
       >
         <LandingRenderer
           config={draft}

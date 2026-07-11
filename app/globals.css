@@ -57,7 +57,15 @@
 }
 
 /* ---- NEUTRALS · LIGHT (cream / ink) ---- */
-:root {
+/* [data-theme='forjo'] va junto a :root a propósito. El theme forjo es "la AUSENCIA de
+   data-theme" (PaletteScript borra el atributo), lo cual alcanza mientras el theme viva en
+   <html>: ahí no hay nada arriba de quién heredar. Pero el LANDING declara su theme en su propio
+   <main> (para no heredar el del panel en el preview, ni el del visitante en la web pública), y
+   ahí "no poner el atributo" significaría HEREDAR el theme del ancestro. Por eso forjo necesita
+   un selector REAL que reponga los tokens base. Sin esto, un landing forjo dentro del dashboard
+   con theme modern tomaba la Jakarta del panel en vez de la Archivo de Bauhaus. */
+:root,
+[data-theme='forjo'] {
   --radius: 0.4rem;
 
   /* Tipografía Forjo (default). next/font setea --font-grotesk/--font-archivo en <html>.

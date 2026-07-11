@@ -126,7 +126,13 @@ export function setSectionData(
 // otras claves de overrides (ej. `font`) quedan intactas.
 export function setTheme(
   config: LandingConfig,
-  patch: { preset?: string; palette?: string; font?: string | undefined; primary?: string | undefined },
+  patch: {
+    preset?: string
+    palette?: string
+    font?: string | undefined
+    mode?: 'light' | 'dark'
+    primary?: string | undefined
+  },
 ): LandingConfig {
   const overrides: Record<string, string> = { ...(config.theme.overrides ?? {}) }
 
@@ -134,6 +140,9 @@ export function setTheme(
     if (patch.palette === undefined) delete overrides.palette
     else overrides.palette = patch.palette
   }
+  // mode: claro/oscuro DEL LANDING (lo declara el <main> del renderer, no el <html> del visitante).
+  // No se borra nunca desde acá: el editor siempre manda un valor explícito.
+  if (patch.mode !== undefined) overrides.mode = patch.mode
   // font: mismo contrato que palette. El renderer YA lo resuelve (resolveLandingTheme →
   // overrides.font → data-font); antes de esto el editor simplemente no lo exponía.
   if ('font' in patch) {
