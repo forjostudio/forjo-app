@@ -534,6 +534,26 @@
   );
 }
 
+/* Sombra del bloque editorial del hero CUANDO HAY FOTO.
+   El problema que resuelve: el texto blanco apoyado sobre la foto se leía "pegado", plano,
+   como un sticker. Dos capas (la receta de los títulos sobre imagen):
+     1) una sombra CORTA y cerrada → despega la letra del fondo, le da borde sin dibujar borde;
+     2) una sombra LARGA y muy difusa → oscurece un halo amplio alrededor del texto, que aporta
+        profundidad Y, de paso, sostiene el contraste sobre las zonas claras de la foto.
+   Sutil a propósito: si la sombra se nota COMO sombra, está mal. Va solo sobre foto — sobre el
+   campo de color (NoiseField) el mismo negro ensucia y no hace falta. */
+.frj-hero-onphoto h1 {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.28),
+    0 10px 34px rgb(0 0 0 / 0.45);
+}
+.frj-hero-onphoto p,
+.frj-hero-onphoto .frj-kicker {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 4px 18px rgb(0 0 0 / 0.4);
+}
+
 /* Grilla de galería: filas parejas + backfill nativo de huecos. Polish estructural
    SIEMPRE-ON (D-D): no depende del nivel de motion. grid-auto-flow:dense = "la función
    que reordena" es nativa de CSS (rellena los huecos con la próxima foto que entra, sin

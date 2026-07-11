@@ -59,10 +59,14 @@ export function ThemeControls({ theme, onChange, motion, onMotionChange }: Theme
   // Fuente activa: mismo normalize defensivo que el render (un id desconocido cae a 'auto').
   const activeFont = normalizeFont(theme.overrides?.font)
 
-  // Seleccionar un preset resetea la paleta a la default del preset (mismo comportamiento que
-  // selectTheme en settings): la paleta del preset anterior no aplica al nuevo set.
+  // El ESTILO VISUAL es la decisión de primer orden: elegir uno RESETEA todo lo que haya debajo.
+  //  - palette → la default del preset (la del preset anterior ni siquiera pertenece al set nuevo).
+  //  - font → se BORRA el override (font: undefined) para que mande la tipografía de diseño del
+  //    theme. Antes no se limpiaba: si tenías una fuente elegida a mano, cambiabas de estilo y la
+  //    letra NO cambiaba — el override viejo seguía pisando al theme nuevo (bug reportado).
+  // El primary ya no existe como control y el editor lo limpia al cargar (stripPrimary).
   function selectPreset(id: string) {
-    onChange({ preset: id, palette: THEME_DEFAULT_PAL[id] ?? 'red' })
+    onChange({ preset: id, palette: THEME_DEFAULT_PAL[id] ?? 'red', font: undefined })
   }
 
   return (

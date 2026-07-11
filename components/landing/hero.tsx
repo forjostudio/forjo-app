@@ -126,10 +126,12 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
         </a>
       </div>
 
-      {/* Bloque editorial anclado al fondo (display gigante + sub + pill). */}
+      {/* Bloque editorial anclado al fondo (display gigante + sub + pill).
+          frj-hero-onphoto (solo con foto): sombra de texto en dos capas para que el título no se
+          lea "pegado" sobre la imagen. Ver globals.css. */}
       <div
         className={`relative z-10 flex w-full flex-col px-[clamp(20px,5cqw,64px)] pb-[clamp(28px,6cqw,72px)] pt-[clamp(40px,8cqw,96px)] ${
-          hasImage ? 'text-white' : 'text-[color:var(--frj-on-primary)]'
+          hasImage ? 'frj-hero-onphoto text-white' : 'text-[color:var(--frj-on-primary)]'
         }`}
       >
         {/* Kicker editorial = ciudad/zona del negocio (config-driven, d.kicker). Reemplaza al

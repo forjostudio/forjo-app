@@ -344,3 +344,18 @@ describe('stripPrimary', () => {
     expect(stripPrimary(cfg)).toBe(cfg)
   })
 })
+
+// El estilo visual es la decisión de PRIMER ORDEN: elegirlo resetea lo que haya debajo.
+// Bug reportado: con una fuente elegida a mano, cambiar de estilo NO cambiaba la letra — el
+// override viejo seguía pisando la tipografía de diseño del theme nuevo.
+describe('setTheme — elegir un preset resetea los overrides de abajo', () => {
+  it('borra el override de font y baja la palette del preset nuevo', () => {
+    const out = setTheme(
+      { theme: { preset: 'forjo', overrides: { font: 'tech', palette: 'red' } }, sections: [] },
+      { preset: 'spa', palette: 'sage', font: undefined },
+    )
+    expect(out.theme.preset).toBe('spa')
+    expect(out.theme.overrides?.palette).toBe('sage')
+    expect(out.theme.overrides).not.toHaveProperty('font') // sin override → manda la fuente del theme
+  })
+})
