@@ -39,7 +39,20 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
       // frj-reveal: reveal de entrada (subtle/premium). El motion es 100% CSS (globals.css);
       // fuera de @supports+no-preference el estado base es visible (anti-trap). El overflow-hidden
       // vive en ESTA <section> (campo decorativo del hero), NUNCA en .frj-site (D81-01).
-      className="frj-reveal relative flex w-full flex-col justify-end overflow-hidden"
+      //
+      // `isolate` + fondo negro (solo con foto) resuelven juntos el "velo blanco":
+      //  - isolate crea el CONTEXTO DE APILADO acá. Sin él, la capa de la foto (-z-10) escapa al
+      //    contexto raíz y termina detrás de cualquier fondo opaco de un ancestro (le pasaba al
+      //    preview del CMS: la foto no se veía). Con isolate, el -z-10 queda encerrado en el hero.
+      //  - el negro es lo que hay DEBAJO de la foto, así que al bajar `image_opacity` la foto se
+      //    funde a NEGRO y no al --background del tema (que en claro es blanco y la lavaba).
+      //    Ojo al orden de pintado: el fondo del elemento se pinta ANTES que sus descendientes de
+      //    z-index negativo — pero solo si el elemento es contexto de apilado. De ahí que `isolate`
+      //    sea requisito de esto, no un extra.
+      // Sin foto no se pinta negro: ahí manda el NoiseField (campo de color), que no debe taparse.
+      className={`frj-reveal relative isolate flex w-full flex-col justify-end overflow-hidden ${
+        hasImage ? 'bg-black' : ''
+      }`}
       // hero full-screen: 100svh (llena el viewport como el mock hero-fullscreen; svh evita el
       // salto de la barra de URL en mobile y que asome la sección de abajo). El overflow:hidden
       // queda EN ESTA <section> (campo decorativo del hero), NO en el ancestro .frj-site del

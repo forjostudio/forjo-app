@@ -153,14 +153,17 @@ describe('resolveLandingTheme (mapeo + fallback legacy)', () => {
     expect(r.font).toBe('auto')
   })
 
-  it('override de palette sin override de font → font cae al fallback', () => {
+  // ⚠ Este test afirmaba lo contrario ("font cae al fallback") y se CAMBIÓ a propósito: heredar
+  // la fuente del panel le pisaba al theme del landing su tipografía de diseño. La palette SÍ
+  // sigue cayendo al fallback (acotada al set del theme); la font no. Ver el describe de abajo.
+  it('override de palette sin override de font → la font NO cae al fallback (manda el theme)', () => {
     const r = resolveLandingTheme(
       { preset: 'cyber', overrides: { palette: 'lime' } },
       { theme: 'modern', palette: 'indigo', font: 'tech' },
     )
     expect(r.theme).toBe('cyber')
     expect(r.palette).toBe('lime')
-    expect(r.font).toBe('tech') // del fallback, porque no hubo override.font
+    expect(r.font).toBe('auto') // NO 'tech' del panel: sin override manda la fuente del theme
   })
 })
 
@@ -225,5 +228,35 @@ describe('normalizeTheme como active-match del editor (L8)', () => {
 
   it("la paleta default del active-match de 'default' es la de forjo ('red')", () => {
     expect(THEME_DEFAULT_PAL[normalizeTheme('default')]).toBe('red')
+  })
+})
+
+// ── La fuente del theme NO la pisa la del panel ───────────────────────────────────────
+// Bug real: `businesses.font` es la fuente del PANEL. El landing la heredaba como fallback y le
+// pisaba al theme su tipografía de diseño → elegías "Cyber" (Orbitron) y seguías viendo Archivo.
+// Peor: el editor mostraba "Automática · Según estilo" seleccionada mientras renderizaba otra cosa.
+describe('resolveLandingTheme — la fuente del panel no pisa la del theme del landing', () => {
+  it('con landing y SIN override de font → auto (manda la fuente que define el theme)', () => {
+    const r = resolveLandingTheme(
+      { preset: 'cyber' },
+      { theme: 'forjo', palette: 'red', font: 'bauhaus' }, // el negocio tiene Archivo en el panel
+    )
+    expect(r.theme).toBe('cyber')
+    expect(r.font).toBe('auto') // NO 'bauhaus' → PaletteScript no emite data-font → manda cyber
+  })
+
+  it('un override explícito de font sigue mandando', () => {
+    const r = resolveLandingTheme(
+      { preset: 'cyber', overrides: { font: 'elegante' } },
+      { theme: 'forjo', palette: 'red', font: 'bauhaus' },
+    )
+    expect(r.font).toBe('elegante')
+  })
+
+  // El fallback sigue vivo para el caso LEGACY (negocio SIN landing: renderiza la página de
+  // reservas de siempre, donde la fuente del panel es la correcta). Sacarlo sería una regresión.
+  it('SIN landing (legacy) sigue tomando la fuente del negocio', () => {
+    const r = resolveLandingTheme(null, { theme: 'forjo', palette: 'red', font: 'bauhaus' })
+    expect(r.font).toBe('bauhaus')
   })
 })

@@ -62,8 +62,21 @@ export function resolveLandingTheme(
   // Un override inexistente cae al default del theme (normalizePalette), no rompe.
   const palette = normalizePalette(theme, overrides?.palette ?? fallback.palette)
 
-  // font: override normalizado; sin override → la del fallback.
-  const font = normalizeFont(overrides?.font ?? fallback.font)
+  // font: override normalizado. SIN override, la fuente sale del THEME, no del negocio.
+  //
+  // POR QUÉ NO cae a fallback.font cuando hay landing (bug real): `businesses.font` es la fuente
+  // del PANEL. Heredarla acá le PISABA al theme del landing su tipografía de diseño — elegías
+  // "Cyber" (Orbitron) y seguías viendo la Archivo del panel. El editor encima mostraba
+  // "Automática · Según estilo" seleccionada, o sea que decía una cosa y renderizaba otra.
+  // Ahora, con landing: sin override → 'auto' → PaletteScript NO emite data-font → manda el
+  // --font-heading que define el theme en themes.css. Eso es lo que "Automática" promete.
+  //
+  // El fallback SIGUE vivo para el caso LEGACY (landingTheme ausente: negocio sin landing, que
+  // renderiza la página de reservas de siempre). Ahí la fuente del panel es la correcta y sacarla
+  // sería una regresión visible (D8-03).
+  const font = landingTheme
+    ? normalizeFont(overrides?.font)
+    : normalizeFont(fallback.font)
 
   // primary: SOLO si pasa la allowlist de hex (isSafeColor). En cualquier otro caso → undefined.
   // Nunca propagamos un color sin validar (T-08-01).
