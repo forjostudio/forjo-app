@@ -380,26 +380,26 @@ export function SectionForm(props: SectionFormProps) {
               min={70}
               max={160}
             />
-            {d.kicker && (
-              <NumberStepper
-                label="Tamaño de la bajada"
-                hint="(%)"
-                value={d.kicker_scale ?? 100}
-                onChange={(v) => onDataChange({ kicker_scale: v })}
-                min={70}
-                max={160}
-              />
-            )}
-            {d.subhead && (
-              <NumberStepper
-                label="Tamaño del subtítulo"
-                hint="(%)"
-                value={d.subhead_scale ?? 100}
-                onChange={(v) => onDataChange({ subhead_scale: v })}
-                min={70}
-                max={160}
-              />
-            )}
+            {/* Los tres tamaños se muestran SIEMPRE, aunque el texto esté vacío: gatearlos por
+                contenido escondía el control justo cuando el dueño estaba por escribir la bajada
+                (y quedaba la sensación de que faltaba la opción). Sin texto, el ajuste no hace
+                nada visible — pero está donde se lo espera. */}
+            <NumberStepper
+              label="Tamaño de la bajada"
+              hint="(%)"
+              value={d.kicker_scale ?? 100}
+              onChange={(v) => onDataChange({ kicker_scale: v })}
+              min={70}
+              max={160}
+            />
+            <NumberStepper
+              label="Tamaño del subtítulo"
+              hint="(%)"
+              value={d.subhead_scale ?? 100}
+              onChange={(v) => onDataChange({ subhead_scale: v })}
+              min={70}
+              max={160}
+            />
           </div>
         </div>
       )

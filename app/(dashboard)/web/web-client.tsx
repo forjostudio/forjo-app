@@ -194,7 +194,16 @@ export function WebEditorClient({
     // overflow/transform en un ancestro de #reservar dentro de .frj-site.
     <div className="overflow-hidden rounded-lg border bg-background">
       <div
-        className="frj-site"
+        // `isolate` (isolation: isolate) NO es cosmético: arregla que la FOTO DEL HERO no se viera
+        // en el preview. La capa de la imagen es `-z-10` y el <section> del hero es position:
+        // relative con z-index auto ⇒ NO crea contexto de apilado, así que la imagen sube hasta el
+        // contexto raíz y se pinta DETRÁS del `bg-background` opaco del marco de acá arriba. (En la
+        // web pública no pasa: el único fondo opaco es el del <body>, que se propaga al canvas y se
+        // pinta antes que todo.) `isolate` crea el contexto de apilado acá y encierra al -z-10
+        // adentro. Es seguro para el booking: isolation NO crea containing block para
+        // position:fixed (eso lo hacen transform/filter/contain) y los overlays de vaul/sonner
+        // portan a document.body, fuera de este árbol.
+        className="frj-site isolate"
         // Tema al wrapper (L6): omitir 'forjo'/'auto' igual que PaletteScript; --primary sólo si es válido.
         data-theme={t.theme !== 'forjo' ? t.theme : undefined}
         data-palette={t.palette}

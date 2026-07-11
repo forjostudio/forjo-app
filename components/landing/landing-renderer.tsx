@@ -68,6 +68,22 @@ interface Props {
 // location+hours combinadas cuentan como UNA unidad numerada.
 type RenderableSection = ReturnType<typeof orderedSections>[number]
 
+// Wrapper de reveal para las secciones editoriales que renderizan su <section> internamente pero
+// cuyo componente NO recibió la clase (services/location/hours/cta). RSC puro: un <div
+// class="frj-reveal"> hijo de .frj-site. NUNCA envuelve la sección booking (esa rama del switch no
+// pasa por acá). El controlador <LandingMotion/> le agrega .shown al entrar en viewport.
+//
+// ⚠ DEBE vivir en el SCOPE DEL MÓDULO, no adentro de LandingRenderer. Definido adentro, cada
+// render creaba un componente con IDENTIDAD NUEVA → React desmontaba y REMONTABA esos 4 subárboles
+// en cada render → los nodos nuevos nacían sin la clase `.shown` (que el controlador agrega
+// IMPERATIVAMENTE, fuera del conocimiento de React) y, como el IntersectionObserver es one-shot y
+// ya los había dejado de observar, quedaban en opacity:0 PARA SIEMPRE. En la web pública no se
+// notaba (el renderer es RSC y corre una sola vez), pero en el preview del CMS —que re-renderiza
+// con cada tecla— servicios/ubicación/horarios/CTA desaparecían apenas tocabas algo.
+const Reveal = ({ children }: { children: ReactNode }) => (
+  <div className="frj-reveal">{children}</div>
+)
+
 export function LandingRenderer({ config, business, services, professionals, timeBlocks, exceptions, locations, bookingSlot }: Props) {
   // orderedSections: orden + filtro enabled + inyección de booking al final (D7-05).
   const sections = orderedSections(config.sections)
@@ -79,15 +95,6 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // las editoriales; el case 'booking' NUNCA las recibe (caja negra, MOTION-04 / T-OA7-01).
   const motionLevel = normalizeMotion(config.motion)
 
-  // Wrapper de reveal para las secciones editoriales que renderizan su <section> internamente
-  // pero cuyo componente NO recibió la clase (services/location/hours/cta). RSC puro, sin
-  // marcarlo client: un simple <div class="frj-reveal"> hijo de .frj-site. NO envuelve NUNCA la
-  // sección booking (esa rama del switch no pasa por acá). El motion ahora lo dispara
-  // IntersectionObserver (el controlador <LandingMotion/>), NO animation-timeline:view() (que
-  // era baseline solo Chromium → invisible en Safari/Firefox/iOS). El controlador agrega .shown.
-  const Reveal = ({ children }: { children: ReactNode }) => (
-    <div className="frj-reveal">{children}</div>
-  )
 
   // Lookup del `data` por tipo (para evaluar visibilidad de los empty-states sin re-iterar).
   const dataOf = (type: string): unknown => {

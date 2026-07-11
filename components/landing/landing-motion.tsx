@@ -44,17 +44,6 @@ export function LandingMotion({ level }: { level: 'none' | 'subtle' | 'premium' 
     // → sin JS / sin este efecto no hay trap (anti-trap D-C).
     root.setAttribute('data-motion-ready', '')
 
-    const els = Array.from(root.querySelectorAll<HTMLElement>('.frj-reveal'))
-
-    // ANTI-FLASH (D-C): los .frj-reveal que YA están en viewport (above-the-fold, incluido el
-    // hero) se marcan .shown de forma SÍNCRONA → aparecen crisp, sin animar ni parpadear. Solo
-    // los que entran por scroll animan.
-    for (const el of els) {
-      if (el.getBoundingClientRect().top < window.innerHeight) {
-        el.classList.add('shown')
-      }
-    }
-
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -78,12 +67,36 @@ export function LandingMotion({ level }: { level: 'none' | 'subtle' | 'premium' 
       { threshold: 0.15, rootMargin: '0px 0px -8% 0px' },
     )
 
-    // Observamos SOLO los que todavía no están .shown (los above-the-fold ya se resolvieron).
-    for (const el of els) {
-      if (!el.classList.contains('shown')) observer.observe(el)
+    // scan(): resuelve TODOS los .frj-reveal que todavía no están resueltos.
+    //  - ANTI-FLASH (D-C): los que YA están en viewport se marcan .shown de forma SÍNCRONA →
+    //    aparecen crisp, sin animar ni parpadear. Solo los que entran por scroll animan.
+    //  - Al resto los pone bajo observación.
+    // Es idempotente: un elemento ya .shown se saltea, y observar dos veces el mismo nodo es no-op.
+    function scan() {
+      for (const el of root!.querySelectorAll<HTMLElement>('.frj-reveal')) {
+        if (el.classList.contains('shown')) continue
+        if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('shown')
+        else observer.observe(el)
+      }
     }
 
-    return () => observer.disconnect()
+    scan()
+
+    // POR QUÉ un MutationObserver: `.shown` es una clase IMPERATIVA, invisible para React. En el
+    // preview del CMS, React monta NODOS NUEVOS cada vez que el dueño prende/apaga o reordena una
+    // sección — y esos nodos nacen sin `.shown` y sin estar observados (el efecto no vuelve a
+    // correr: su dep es [level]). Sin este re-scan quedaban en opacity:0 PARA SIEMPRE: la sección
+    // que acabás de prender no aparecía nunca.
+    // Solo childList/subtree: NO attributes — observar atributos entraría en loop, porque agregar
+    // `.shown` es en sí mismo una mutación de atributo.
+    // En la web pública (RSC, un solo render) no se dispara nunca: costo cero.
+    const mutations = new MutationObserver(() => scan())
+    mutations.observe(root, { childList: true, subtree: true })
+
+    return () => {
+      mutations.disconnect()
+      observer.disconnect()
+    }
   }, [level])
 
   return null
