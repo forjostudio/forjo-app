@@ -37,6 +37,7 @@ import { GhostIndex } from '@/components/landing/_premium'
 import { Cta } from '@/components/landing/cta'
 import { LandingMotion } from '@/components/landing/landing-motion'
 import { PhotoLightbox } from '@/components/landing/photo-lightbox'
+import { WhatsappFloat } from '@/components/landing/whatsapp-float'
 import { aboutData, galleryData } from '@/lib/landing/schema'
 import { normalizeMotion, resolveLandingTheme } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -305,6 +306,12 @@ export function LandingRenderer({ config, business, services, professionals, tim
             return null
         }
       })}
+
+      {/* Botón flotante de WhatsApp. Va como ÚLTIMO hijo del landing por diseño: es un contenedor
+          sticky de altura 0, y solo desde el final del flujo queda pegado al borde inferior del
+          scrollport (ver whatsapp-float.tsx). No se configura: si el negocio declaró WhatsApp, el
+          botón existe. Fuera de #reservar → el widget de reserva sigue siendo caja negra. */}
+      <WhatsappFloat whatsapp={business.whatsapp} />
     </main>
   )
 }

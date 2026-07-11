@@ -262,6 +262,20 @@
    (D81-06). CERO hex hardcodeado por paleta.
    ========================================================================= */
 .frj-site {
+  /* El landing APLICA sus propios tokens, no solo los declara.
+     Sin estas 3 líneas el aislamiento del tema no funciona, y el motivo es sutil: el fondo y el
+     color base se pintan en `body` (`body { @apply bg-background text-foreground }`) y la fuente
+     base se computa en `html` (`html { @apply font-sans }`). Los descendientes heredan el valor
+     YA CALCULADO, no el token — así que redeclarar --background/--font-sans en el <main> del
+     landing no cambiaba nada. Eso explica el síntoma exacto: los TÍTULOS sí seguían al theme (la
+     regla `h1,h2,h3 { font-family: var(--font-heading) }` matchea el elemento y resuelve la
+     variable ahí), pero el CUERPO no, y el fondo del preview seguía siendo el del panel.
+     Aplicándolos acá, el landing pinta su propio fondo y fija su propia fuente, y todo lo de
+     adentro hereda de ÉL. Esto es también lo que le da función real al modo claro/oscuro del CMS. */
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+
   /* --- tokens premium derivados (palette/mode-agnósticos) --- */
   /* sombra profunda del primary para gradientes hero/cta */
   --frj-primary-deep: color-mix(in oklab, var(--primary) 78%, black);
@@ -552,8 +566,8 @@
    campo de color (NoiseField) el mismo negro ensucia y no hace falta. */
 .frj-hero-onphoto h1 {
   text-shadow:
-    0 1px 2px rgb(0 0 0 / 0.28),
-    0 10px 34px rgb(0 0 0 / 0.45);
+    0 2px 4px rgb(0 0 0 / 0.4),
+    0 14px 44px rgb(0 0 0 / 0.6);
 }
 .frj-hero-onphoto p,
 .frj-hero-onphoto .frj-kicker {
