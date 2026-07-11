@@ -60,7 +60,9 @@ export function Gallery({ data, index }: { data: unknown; index?: number | strin
             // grid-auto-rows y la imagen `fill` llena la celda. .wide (doble ancho) por índice
             // determinista. El overflow-hidden es de la tile, nunca ancestro del booking.
             className={cn(
-              'frj-reveal frj-zoom lift relative overflow-hidden bg-[color:var(--frj-surface-2)]',
+              // rounded-[12px] + hairline: valores del mockup aprobado (las tiles van redondeadas,
+              // no a canto vivo). El overflow-hidden recorta la foto al radio.
+              'frj-reveal frj-zoom lift relative overflow-hidden rounded-[12px] border border-[color:var(--frj-hair)] bg-[color:var(--frj-surface-2)]',
               isWide(i) && 'wide',
             )}
           >
