@@ -184,6 +184,19 @@
   html { @apply font-sans; }
   /* Bauhaus display: headings use Archivo, tight + heavy */
   h1, h2, h3 { font-family: var(--font-heading); letter-spacing: -0.02em; }
+
+  /* Cursor de mano en todo lo clickeable.
+     POR QUÉ hace falta una regla explícita: Tailwind v4 sacó `cursor: pointer` de su preflight
+     (los <button> ahora heredan `cursor: default`, como manda el UA stylesheet). Sin esto, el
+     puntero no cambia al pasar por botones y controles — la app entera se siente "muerta" y los
+     acordeones/toggles no se leen como clickeables. Excluimos los deshabilitados: ahí el cursor
+     de flecha (o el not-allowed que ya seteen las clases) es la señal correcta. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
 }
 
 /* =========================================================================

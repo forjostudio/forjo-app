@@ -23,6 +23,7 @@ import {
   toggleSection,
   setTheme,
   setMotion,
+  stripPrimary,
   isDirty,
 } from '@/lib/landing/editor-draft'
 import { saveLandingConfig } from './_landing-actions'
@@ -95,8 +96,12 @@ export function WebEditorClient({
   // Si el negocio nunca optó por una landing, initialConfig es null → empty-state + seed del DEFAULT.
   const isEmpty = initialConfig === null || initialConfig === undefined
   // Borrador inicial: el config parseado, o el DEFAULT sembrado (D-03 / §7).
+  // stripPrimary: se quitó el control "Color principal" del editor (pisaba el acento de cualquier
+  // paleta y dejaba los swatches decorativos). Normalizamos ACÁ, en el seed, porque `seeded`
+  // alimenta a la vez el borrador Y el baseline → el editor NO abre marcado como "cambios sin
+  // guardar", pero el primary ya no pisa nada y el próximo guardado lo persiste limpio.
   const seeded = useMemo<LandingConfig>(
-    () => parseLandingConfig(initialConfig) ?? DEFAULT_LANDING_CONFIG,
+    () => stripPrimary(parseLandingConfig(initialConfig) ?? DEFAULT_LANDING_CONFIG),
     [initialConfig],
   )
 
@@ -130,7 +135,7 @@ export function WebEditorClient({
     [],
   )
   const onThemeChange = useCallback(
-    (patch: { preset?: string; palette?: string; primary?: string | undefined }) =>
+    (patch: { preset?: string; palette?: string; font?: string }) =>
       setDraft((d) => setTheme(d, patch)),
     [],
   )

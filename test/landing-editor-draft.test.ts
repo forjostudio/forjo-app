@@ -7,6 +7,7 @@ import {
   setMotion,
   isDirty,
   normalizeSections,
+  stripPrimary,
 } from '@/lib/landing/editor-draft'
 import { SECTION_TYPES } from '@/lib/landing/schema'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -284,5 +285,62 @@ describe('mutadores sobre config parcial (upsert vía normalize)', () => {
     // booking estaba última (order 7); tras subir queda en 6 y cta baja a 7.
     expect(r.sections.find((s) => s.type === 'booking')!.order).toBe(6)
     expect(r.sections.find((s) => s.type === 'cta')!.order).toBe(7)
+  })
+})
+
+// ── setTheme: fuente (overrides.font) ────────────────────────────────────────────────
+// El renderer YA resolvía overrides.font → data-font (resolveLandingTheme); el editor no lo
+// exponía. setTheme lo trata igual que palette: setear escribe, undefined borra.
+describe('setTheme — fuente', () => {
+  const cfg = (overrides?: Record<string, string>): LandingConfig => ({
+    theme: { preset: 'forjo', ...(overrides ? { overrides } : {}) },
+    sections: [],
+  })
+
+  it('escribe overrides.font', () => {
+    expect(setTheme(cfg(), { font: 'elegante' }).theme.overrides?.font).toBe('elegante')
+  })
+
+  it('font: undefined BORRA el override (vuelve a la fuente del preset)', () => {
+    const out = setTheme(cfg({ font: 'tech' }), { font: undefined })
+    expect(out.theme.overrides).not.toHaveProperty('font')
+  })
+
+  it('no pisa los otros overrides al tocar la fuente', () => {
+    const out = setTheme(cfg({ palette: 'lima', primary: '#db2800' }), { font: 'suave' })
+    expect(out.theme.overrides).toMatchObject({ palette: 'lima', primary: '#db2800', font: 'suave' })
+  })
+})
+
+// ── stripPrimary: se quitó el control "Color principal" del editor ───────────────────
+// Un primary custom pisa el acento de CUALQUIER paleta. Sacar SOLO la UI dejaría a los negocios
+// que ya lo tienen guardado pisados PARA SIEMPRE y sin control que lo borre. El editor normaliza
+// el config al cargarlo.
+describe('stripPrimary', () => {
+  it('saca overrides.primary y deja el resto del theme intacto', () => {
+    const out = stripPrimary({
+      theme: { preset: 'cyber', overrides: { palette: 'lima', font: 'tech', primary: '#db2800' } },
+      sections: [],
+      motion: 'premium',
+    })
+    expect(out.theme.overrides).not.toHaveProperty('primary')
+    expect(out.theme.overrides).toMatchObject({ palette: 'lima', font: 'tech' })
+    expect(out.theme.preset).toBe('cyber')
+    // No pierde el resto del config: el write es overwrite-total (L5), perder motion acá sería
+    // perderlo en la DB al guardar.
+    expect(out.motion).toBe('premium')
+  })
+
+  // Identidad referencial cuando no hay nada que sacar: el seed alimenta draft Y baseline, y el
+  // editor NO debe abrir marcado como "cambios sin guardar".
+  it('sin primary devuelve el MISMO objeto (no ensucia el isDirty del editor)', () => {
+    const cfg: LandingConfig = { theme: { preset: 'forjo', overrides: { palette: 'lima' } }, sections: [] }
+    expect(stripPrimary(cfg)).toBe(cfg)
+    expect(isDirty(stripPrimary(cfg), cfg)).toBe(false)
+  })
+
+  it('tolera un theme sin overrides', () => {
+    const cfg: LandingConfig = { theme: { preset: 'forjo' }, sections: [] }
+    expect(stripPrimary(cfg)).toBe(cfg)
   })
 })

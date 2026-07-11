@@ -1,18 +1,16 @@
 'use client'
 
-import { useState } from 'react'
 import { Check } from 'lucide-react'
 import type { LandingTheme } from '@/lib/landing/schema'
 import {
   THEMES,
   THEME_PALETTES,
   THEME_DEFAULT_PAL,
+  FONTS,
   normalizeTheme,
   normalizePalette,
+  normalizeFont,
 } from '@/lib/theme-config'
-import { isSafeColor } from '@/lib/landing/theme'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 // ── ThemeControls (Phase 14, EDIT-04) ────────────────────────────────────────────────
@@ -34,11 +32,20 @@ const MOTION_OPTIONS = [
 
 export interface ThemeControlsProps {
   theme: LandingTheme
-  // Patch parcial del tema; el shell lo aplica con setTheme(draft, patch). primary undefined = quitar.
-  onChange: (patch: { preset?: string; palette?: string; primary?: string | undefined }) => void
+  // Patch parcial del tema; el shell lo aplica con setTheme(draft, patch).
+  // `primary` YA NO se expone (ver nota abajo), pero el patch lo sigue admitiendo porque setTheme
+  // es genérico; el editor simplemente no lo emite nunca.
+  onChange: (patch: { preset?: string; palette?: string; font?: string }) => void
   motion: 'none' | 'subtle' | 'premium'
   onMotionChange: (level: 'none' | 'subtle' | 'premium') => void
 }
+
+// ── Por qué NO hay control de "Color principal" ──────────────────────────────────────
+// Lo tuvo y se quitó: un primary custom pisa el acento de CUALQUIER paleta, así que convivía mal
+// con el selector de paletas (elegías una y no cambiaba nada visible → los swatches quedaban
+// decorativos). La paleta es ahora la única fuente del acento. El schema/resolver siguen
+// soportando overrides.primary (fail-safe, configs viejos), pero el editor lo LIMPIA al cargar
+// (stripPrimary en editor-draft) para que nadie quede pisado sin forma de revertirlo.
 
 export function ThemeControls({ theme, onChange, motion, onMotionChange }: ThemeControlsProps) {
   // Active-match del preset por normalizeTheme (L8): el DEFAULT sembrado es { preset: 'default' }
@@ -49,36 +56,8 @@ export function ThemeControls({ theme, onChange, motion, onMotionChange }: Theme
   // default del preset, igual que en el render — así el swatch resaltado coincide con lo que se ve.
   const activePalette = normalizePalette(activePreset, theme.overrides?.palette)
   const paletteList = THEME_PALETTES[activePreset] ?? THEME_PALETTES.forjo
-
-  const currentPrimary = theme.overrides?.primary
-  // Estado local del hex de texto: dejamos tipear libre (incluso estados intermedios inválidos) sin
-  // escribir al borrador hasta que valide. Se siembra del override actual.
-  const [hexInput, setHexInput] = useState(currentPrimary ?? '')
-  const [hexError, setHexError] = useState(false)
-
-  // El <input type="color"> nativo solo entiende #rrggbb; si el primary no es un hex de 6 dígitos
-  // (vacío, #fff corto, o inválido) mostramos un fallback visual sin escribirlo.
-  const colorValue = /^#[0-9a-fA-F]{6}$/.test(currentPrimary ?? '') ? currentPrimary! : '#d94a2b'
-
-  // POR QUÉ isSafeColor: overrides.primary cruza al preview como CSS var inline; validamos por
-  // ALLOWLIST de hex (anti CSS-injection, T-14-13/T-08-01). Un hex inválido NO se persiste (el
-  // render igual lo dropea, pero no ensuciamos el borrador). Vacío = quitar el primary custom.
-  function applyHex(raw: string) {
-    setHexInput(raw)
-    const v = raw.trim()
-    if (v === '') {
-      setHexError(false)
-      onChange({ primary: undefined })
-      return
-    }
-    if (isSafeColor(v)) {
-      setHexError(false)
-      onChange({ primary: v })
-    } else {
-      setHexError(true)
-      // No escribimos: el primary inválido no llega al borrador.
-    }
-  }
+  // Fuente activa: mismo normalize defensivo que el render (un id desconocido cae a 'auto').
+  const activeFont = normalizeFont(theme.overrides?.font)
 
   // Seleccionar un preset resetea la paleta a la default del preset (mismo comportamiento que
   // selectTheme en settings): la paleta del preset anterior no aplica al nuevo set.
@@ -175,33 +154,51 @@ export function ThemeControls({ theme, onChange, motion, onMotionChange }: Theme
         </div>
       </div>
 
-      {/* ── Color principal (override.primary, validado por allowlist) ──────────── */}
-      <div className="space-y-2">
-        <Label htmlFor="landing-primary">Color principal</Label>
-        <div className="flex items-center gap-2">
-          <input
-            id="landing-primary"
-            type="color"
-            value={colorValue}
-            onChange={(e) => applyHex(e.target.value)}
-            aria-label="Color principal"
-            className="h-11 w-14 flex-shrink-0 cursor-pointer rounded-md border border-border bg-background p-1"
-          />
-          <Input
-            value={hexInput}
-            onChange={(e) => applyHex(e.target.value)}
-            placeholder="#d94a2b"
-            spellCheck={false}
-            aria-invalid={hexError}
-            aria-describedby={hexError ? 'landing-primary-error' : undefined}
-            className="max-w-[160px] font-mono"
-          />
-        </div>
-        {hexError && (
-          <p id="landing-primary-error" className="text-xs text-destructive">
-            Ingresá un color válido (ej. #d94a2b)
+      {/* ── Tipografía (overrides.font) ─────────────────────────────────────────
+          El renderer YA resolvía overrides.font → data-font (resolveLandingTheme); lo único que
+          faltaba era exponerlo. Mismo set de 6 fuentes que usa el panel (lib/theme-config). */}
+      <div className="space-y-3">
+        <div>
+          <p className="font-semibold text-sm">Tipografía</p>
+          <p className="text-xs text-muted-foreground">
+            &quot;Automática&quot; usa la que trae el estilo visual elegido.
           </p>
-        )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {FONTS.map((f) => {
+            const active = activeFont === f.id
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onChange({ font: f.id })}
+                aria-pressed={active}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border-2 p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  active ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-muted-foreground',
+                )}
+              >
+                {/* La muestra "Aa" se rinde con la fuente real (css var del FontDef). */}
+                <span
+                  className="text-lg font-bold leading-none"
+                  style={{ fontFamily: f.css }}
+                  aria-hidden="true"
+                >
+                  Aa
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-semibold truncate">{f.name}</span>
+                  <span className="block text-[10px] text-muted-foreground truncate">{f.meta}</span>
+                </span>
+                {active && (
+                  <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground">
+                    <Check className="w-3 h-3" />
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* ── Nivel de movimiento (motion, segmented de 3) ───────────────────────── */}

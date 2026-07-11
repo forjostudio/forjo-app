@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 // ── Primitivas editoriales compartidas del landing premium (F8.1) ──────────────────
@@ -37,12 +37,16 @@ function ArrowRight() {
 export function Kicker({
   children,
   className,
+  style,
 }: {
   children: ReactNode
   className?: string
+  // style: lo usa el Hero para escalar el tamaño del kicker (hero.kicker_scale del CMS). El
+  // font-size base vive en .frj-kicker (globals.css); acá solo se lo multiplica.
+  style?: CSSProperties
 }) {
   return (
-    <span className={cn('frj-kicker', className)}>
+    <span className={cn('frj-kicker', className)} style={style}>
       {/* punto de acento decorativo (el color real lo pinta la clase via --primary) */}
       <span className="frj-kicker-dot" aria-hidden="true" />
       {children}

@@ -31,7 +31,13 @@ export function LandingMotion({ level }: { level: 'none' | 'subtle' | 'premium' 
     )
       return
 
-    const root = document.querySelector<HTMLElement>('.frj-site')
+    // ⚠ El selector DEBE pedir [data-motion], no solo .frj-site. En el EDITOR del CMS hay DOS
+    // .frj-site anidados: el wrapper del preview (web-client.tsx, que lleva data-theme/palette/font)
+    // y, adentro, el <main> del renderer — que es el único que lleva data-motion. Con el selector
+    // pelado agarrábamos el de AFUERA y le poníamos data-motion-ready ahí; como el CSS exige
+    // data-motion y data-motion-ready EN EL MISMO elemento, no matcheaba ninguna regla y el motion
+    // quedaba MUERTO en el preview (en la web pública hay un solo .frj-site, por eso ahí sí andaba).
+    const root = document.querySelector<HTMLElement>('.frj-site[data-motion]')
     if (!root) return
 
     // Recién ACÁ el CSS activa el estado pendiente (opacity:0). Antes de esto todo es visible

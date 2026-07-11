@@ -92,6 +92,25 @@ export const heroData = z
     subhead: z.string().optional(),
     image: z.string().url().optional(),
     cta_label: z.string().optional(),
+
+    // ── Ajustes de PRESENTACIÓN del hero (editables desde el CMS) ──────────────────────
+    // POR QUÉ .catch(undefined) EN CADA CAMPO y no alcanza el .catch({}) del objeto: ese catch
+    // es whole-object — un solo número basura tiraría TODO el heroData a {} y el dueño perdería
+    // headline/kicker/subhead/image de una. Con el catch por campo, un valor roto degrada SOLO
+    // ese ajuste a su default y el copy sobrevive.
+    // Ausente = el look de hoy (opacidad 100, escala 100) ⇒ cero regresión en configs existentes.
+
+    // Opacidad de la foto de portada, 0-100 (100 = foto a full). ACOTADO a propósito: el hero
+    // garantiza contraste AA del texto vía el scrim (D7-03); dejar el rango libre permitiría
+    // fondos ilegibles.
+    image_opacity: z.number().int().min(0).max(100).optional().catch(undefined),
+
+    // Tamaño de cada texto del hero en % (100 = el de hoy). Se aplica como MULTIPLICADOR sobre
+    // el clamp() responsive de cada uno — no como px fijos — para no romper el escalado por
+    // viewport. Acotado 70-160: fuera de ese rango el bloque editorial desborda o desaparece.
+    headline_scale: z.number().int().min(70).max(160).optional().catch(undefined),
+    kicker_scale: z.number().int().min(70).max(160).optional().catch(undefined),
+    subhead_scale: z.number().int().min(70).max(160).optional().catch(undefined),
   })
   .catch({})
 export type HeroData = z.infer<typeof heroData>

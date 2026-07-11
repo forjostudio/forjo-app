@@ -126,13 +126,19 @@ export function setSectionData(
 // otras claves de overrides (ej. `font`) quedan intactas.
 export function setTheme(
   config: LandingConfig,
-  patch: { preset?: string; palette?: string; primary?: string | undefined },
+  patch: { preset?: string; palette?: string; font?: string | undefined; primary?: string | undefined },
 ): LandingConfig {
   const overrides: Record<string, string> = { ...(config.theme.overrides ?? {}) }
 
   if ('palette' in patch) {
     if (patch.palette === undefined) delete overrides.palette
     else overrides.palette = patch.palette
+  }
+  // font: mismo contrato que palette. El renderer YA lo resuelve (resolveLandingTheme →
+  // overrides.font → data-font); antes de esto el editor simplemente no lo exponía.
+  if ('font' in patch) {
+    if (patch.font === undefined) delete overrides.font
+    else overrides.font = patch.font
   }
   if ('primary' in patch) {
     if (patch.primary === undefined) delete overrides.primary
@@ -144,6 +150,24 @@ export function setTheme(
     overrides,
   }
   return { ...config, theme }
+}
+
+// ── stripPrimary: saca overrides.primary del config ───────────────────────────────────
+// POR QUÉ existe: se quitó el control "Color principal" del editor. Un `primary` custom pisa el
+// acento de CUALQUIER paleta, y eso dejaba a los swatches de paleta decorativos (elegís una y no
+// pasa nada). Pero sacar SOLO la UI dejaría a los negocios que ya tienen un primary guardado
+// pisados para siempre y SIN forma de quitarlo (no queda control que lo borre). Por eso el editor
+// normaliza el config al cargarlo: el primary se va, la paleta vuelve a mandar, y el próximo
+// guardado lo persiste limpio.
+// Se aplica al BORRADOR y al BASELINE por igual → el editor NO abre marcado como "cambios sin
+// guardar" (isDirty compara ambos, y ambos entran ya normalizados).
+// El schema y el resolver siguen soportando `primary` a propósito: un config viejo con primary
+// renderiza igual que siempre en la web pública hasta que el dueño entre al editor y guarde.
+export function stripPrimary(config: LandingConfig): LandingConfig {
+  if (config.theme.overrides?.primary === undefined) return config
+  const overrides = { ...config.theme.overrides }
+  delete overrides.primary
+  return { ...config, theme: { ...config.theme, overrides } }
 }
 
 // ── setMotion: setea el nivel de movimiento del renderer ──────────────────────────────

@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import type { CSSProperties } from 'react'
 import { heroData } from '@/lib/landing/schema'
 import { Kicker, PillButton, NoiseField } from '@/components/landing/_premium'
 import type { PublicBusiness } from '@/lib/types'
@@ -25,6 +26,14 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
   const ctaLabel = d.cta_label ?? 'Reservar turno'
   const hasImage = Boolean(d.image)
 
+  // Ajustes de presentación del CMS (schema los acota; ausentes = el look de hoy).
+  // scaleStyle devuelve `undefined` cuando la escala es 100 → NO se emite estilo inline y el
+  // markup de las landings existentes queda byte-idéntico (el clamp() de la clase sigue mandando).
+  // Cuando hay escala, se multiplica el MISMO clamp() responsive en vez de pisarlo con px fijos.
+  const imageOpacity = d.image_opacity ?? 100
+  const scaleStyle = (pct: number | undefined, clamp: string): CSSProperties | undefined =>
+    pct === undefined || pct === 100 ? undefined : { fontSize: `calc(${clamp} * ${pct / 100})` }
+
   return (
     <section
       // frj-reveal: reveal de entrada (subtle/premium). El motion es 100% CSS (globals.css);
@@ -43,7 +52,14 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
               SOLO premium). El overflow-hidden lo aporta .frj-zoom en premium; el <img> sigue
               siendo el LCP, arriba del fold, con preload (no se difiere la carga). Fuera de premium
               el wrapper queda estático (sin transform). */}
-          <div className="frj-zoom absolute inset-0 -z-10">
+          {/* La opacidad va en ESTA capa (la de la foto), no en la <section>: así el texto, el
+              scrim y el topbar quedan a opacidad plena y solo la foto se funde hacia el
+              --background de la página. Bajarla NO compromete el contraste AA del texto: el scrim
+              sigue aplicándose encima (D7-03). 100 = sin estilo inline (idéntico a hoy). */}
+          <div
+            className="frj-zoom absolute inset-0 -z-10"
+            style={imageOpacity === 100 ? undefined : { opacity: imageOpacity / 100 }}
+          >
             {/* Imagen full-bleed (next/image, remotePatterns ya configurado en 07-01).
                 preload=true: Next 16 reemplaza el viejo prop de carga priorizada (deprecado)
                 por `preload`, que inserta el <link rel=preload> en el <head> — mismo efecto LCP. */}
@@ -109,6 +125,9 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
         {d.kicker && (
           <Kicker
             className={`mb-[0.7em] ${hasImage ? 'frj-kicker-on-photo' : 'frj-kicker-on-primary'}`}
+            // El clamp base del kicker vive en .frj-kicker (globals.css); lo repetimos acá SOLO
+            // para multiplicarlo. Si cambia allá, cambiar acá.
+            style={scaleStyle(d.kicker_scale, 'clamp(10px, 1.15cqw, 13px)')}
           >
             {d.kicker}
           </Kicker>
@@ -116,12 +135,18 @@ export function Hero({ data, business }: { data: unknown; business: PublicBusine
 
         {/* ÚNICO <h1> de la página (D7-02/D7-09): nunca se oculta, fallback a business.name.
             Display más chico que antes (clamp menor) para acercar la escala al nombre del topbar. */}
-        <h1 className="frj-display mb-[0.5em] text-[clamp(34px,9.5cqw,108px)]">
+        <h1
+          className="frj-display mb-[0.5em] text-[clamp(34px,9.5cqw,108px)]"
+          style={scaleStyle(d.headline_scale, 'clamp(34px, 9.5cqw, 108px)')}
+        >
           {headline}
         </h1>
 
         {d.subhead && (
-          <p className="mb-[1.5em] max-w-[30ch] text-[clamp(15px,2cqw,22px)] font-normal leading-[1.45] opacity-90">
+          <p
+            className="mb-[1.5em] max-w-[30ch] text-[clamp(15px,2cqw,22px)] font-normal leading-[1.45] opacity-90"
+            style={scaleStyle(d.subhead_scale, 'clamp(15px, 2cqw, 22px)')}
+          >
             {d.subhead}
           </p>
         )}

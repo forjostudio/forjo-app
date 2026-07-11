@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLandingConfig, DEFAULT_LANDING_CONFIG, rsvData } from '@/lib/landing/schema'
+import { parseLandingConfig, DEFAULT_LANDING_CONFIG, rsvData, heroData } from '@/lib/landing/schema'
 
 // ── Tests del parser fail-safe de landing config (D-10) ──────────────────────────
 // Puros: NO dependen de Supabase ni de las 3 creds, así que corren SIEMPRE (no van bajo
@@ -107,5 +107,56 @@ describe('rsvData (espejo de galleryData)', () => {
 
   it('objeto vacío → {} (todos los campos opcionales)', () => {
     expect(rsvData.parse({})).toEqual({})
+  })
+})
+
+// ── heroData: ajustes de presentación (opacidad + escalas de texto del CMS) ──────────
+describe('heroData — ajustes de presentación', () => {
+  it('acepta opacidad y escalas dentro de rango', () => {
+    const d = heroData.parse({
+      headline: 'Hola',
+      image_opacity: 50,
+      headline_scale: 130,
+      kicker_scale: 90,
+      subhead_scale: 100,
+    })
+    expect(d).toMatchObject({
+      image_opacity: 50,
+      headline_scale: 130,
+      kicker_scale: 90,
+      subhead_scale: 100,
+    })
+  })
+
+  // ESTE es el test que justifica el .catch(undefined) POR CAMPO. Con solo el .catch({}) del
+  // objeto, un número fuera de rango tiraba TODO el heroData a {} y el dueño perdía el copy
+  // (headline/subhead/imagen) de golpe. Acá el valor malo degrada a undefined (= el default) y
+  // el resto sobrevive.
+  it('un valor fuera de rango degrada SOLO ese ajuste y NO borra el copy', () => {
+    const d = heroData.parse({
+      headline: 'No me borres',
+      subhead: 'Yo tampoco',
+      image: 'https://x.test/a.jpg',
+      image_opacity: 500,
+      headline_scale: -20,
+    })
+    expect(d.headline).toBe('No me borres')
+    expect(d.subhead).toBe('Yo tampoco')
+    expect(d.image).toBe('https://x.test/a.jpg')
+    expect(d.image_opacity).toBeUndefined()
+    expect(d.headline_scale).toBeUndefined()
+  })
+
+  it('lo mismo con un tipo equivocado (string en vez de número)', () => {
+    const d = heroData.parse({ headline: 'Sigo acá', image_opacity: 'mucha' })
+    expect(d.headline).toBe('Sigo acá')
+    expect(d.image_opacity).toBeUndefined()
+  })
+
+  // Ausentes = el look de hoy: cero regresión en las landings ya publicadas.
+  it('sin los campos nuevos no inventa defaults (ausente = 100 lo decide el renderer)', () => {
+    const d = heroData.parse({ headline: 'Vieja' })
+    expect(d.image_opacity).toBeUndefined()
+    expect(d.headline_scale).toBeUndefined()
   })
 })

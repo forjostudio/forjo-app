@@ -1,10 +1,11 @@
 'use client'
 
 import { useId, useState, type ReactNode } from 'react'
-import { ImageIcon } from 'lucide-react'
+import { ImageIcon, Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
   heroData,
@@ -91,6 +92,95 @@ function TextField({
       ) : (
         <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} />
       )}
+    </div>
+  )
+}
+
+// NumberStepper: campo numérico editable + botones − / +. Lo usan los ajustes de presentación del
+// hero (opacidad de la foto, tamaño de cada texto).
+// Dos decisiones que importan:
+//  1) El valor SIEMPRE se clampea al [min,max] del schema antes de escribir al borrador. Si el
+//     dueño tipea 500, se guarda el max — nunca un valor que el Zod del render vaya a descartar
+//     (un valor fuera de rango degradaría a undefined y el ajuste "no haría nada", que se lee
+//     como bug).
+//  2) Se permite el campo VACÍO mientras se tipea (estado local) sin escribir al borrador: si no,
+//     borrar para reescribir haría saltar el valor a min en cada tecla.
+function NumberStepper({
+  label,
+  hint,
+  value,
+  onChange,
+  min,
+  max,
+  step = 5,
+}: {
+  label: string
+  hint?: string
+  value: number
+  onChange: (v: number) => void
+  min: number
+  max: number
+  step?: number
+}) {
+  const id = useId()
+  const [text, setText] = useState(String(value))
+  const clamp = (n: number) => Math.min(max, Math.max(min, Math.round(n)))
+
+  // Sincroniza el texto cuando el valor cambia desde afuera (ej. los botones − / +).
+  function commit(n: number) {
+    const c = clamp(n)
+    setText(String(c))
+    onChange(c)
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>
+        {label} {hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}
+      </Label>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="min-h-11 min-w-11 shrink-0"
+          aria-label={`Disminuir ${label}`}
+          disabled={value <= min}
+          onClick={() => commit(value - step)}
+        >
+          <Minus className="size-4" />
+        </Button>
+        <Input
+          id={id}
+          inputMode="numeric"
+          value={text}
+          className="max-w-[92px] text-center font-mono"
+          onChange={(e) => {
+            const raw = e.target.value
+            setText(raw)
+            // Vacío o a medio tipear → no escribimos al borrador todavía.
+            if (raw.trim() === '') return
+            const n = Number(raw)
+            if (Number.isFinite(n)) onChange(clamp(n))
+          }}
+          // Al salir del campo normalizamos lo que quedó escrito (vacío/basura → el valor vigente).
+          onBlur={() => {
+            const n = Number(text)
+            commit(Number.isFinite(n) && text.trim() !== '' ? n : value)
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="min-h-11 min-w-11 shrink-0"
+          aria-label={`Aumentar ${label}`}
+          disabled={value >= max}
+          onClick={() => commit(value + step)}
+        >
+          <Plus className="size-4" />
+        </Button>
+      </div>
     </div>
   )
 }
@@ -258,6 +348,59 @@ export function SectionForm(props: SectionFormProps) {
             onChange={(v) => onDataChange({ cta_label: v })}
           />
           {renderImage(imageSlot, { field: 'hero.image', kind: 'single', label: 'Imagen de portada' })}
+
+          {/* ── Ajustes de presentación (solo Portada) ───────────────────────────────────
+              La opacidad se muestra SOLO si hay foto: sin foto el hero rinde el campo de color
+              (NoiseField) y el control no tendría sobre qué actuar. */}
+          <div className="space-y-4 rounded-md border border-dashed p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Ajustes de portada
+            </p>
+
+            {d.image ? (
+              <NumberStepper
+                label="Opacidad del fondo"
+                hint="(0-100) · 100 = foto a full"
+                value={d.image_opacity ?? 100}
+                onChange={(v) => onDataChange({ image_opacity: v })}
+                min={0}
+                max={100}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Subí una imagen de portada para poder ajustar su opacidad.
+              </p>
+            )}
+
+            <NumberStepper
+              label="Tamaño del título"
+              hint="(%)"
+              value={d.headline_scale ?? 100}
+              onChange={(v) => onDataChange({ headline_scale: v })}
+              min={70}
+              max={160}
+            />
+            {d.kicker && (
+              <NumberStepper
+                label="Tamaño de la bajada"
+                hint="(%)"
+                value={d.kicker_scale ?? 100}
+                onChange={(v) => onDataChange({ kicker_scale: v })}
+                min={70}
+                max={160}
+              />
+            )}
+            {d.subhead && (
+              <NumberStepper
+                label="Tamaño del subtítulo"
+                hint="(%)"
+                value={d.subhead_scale ?? 100}
+                onChange={(v) => onDataChange({ subhead_scale: v })}
+                min={70}
+                max={160}
+              />
+            )}
+          </div>
         </div>
       )
     }
