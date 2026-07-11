@@ -4,9 +4,14 @@ import { shouldHideAbout } from '@/lib/landing/derive'
 import { Kicker, GhostIndex } from '@/components/landing/_premium'
 
 // ── Sección About (RSC) ─────────────────────────────────────────────────────────────
-// Por qué RSC sin 'use client': contenido editorial puro, sin estado ni interactividad.
+// Por qué RSC sin 'use client': contenido editorial puro, sin estado propio.
 // aboutData (07-01) lleva `.catch({})` → data malformado → {}. Empty-state (D7-08):
 // sin body NI imagen → la sección se oculta entera (return null).
+//
+// LIGHTBOX (260711-iww): el portrait AHORA SE AMPLÍA (<button>, no <div>) — visor de 1 solo
+// ítem (el controlador oculta las flechas cuando images.length === 1). La sección SIGUE SIENDO
+// RSC: el botón NO lleva onClick, solo emite los data-attributes del contrato
+// (lib/landing/lightbox.ts); el click lo captura por delegación el controlador <PhotoLightbox/>.
 //
 // Restyle F8.1 (D81-08, mock 04-screen.png): layout editorial 2-col (lead display + portrait
 // aspect 4/5 con tag overlay primary), número fantasma decorativo. SIN imagen degrada con
@@ -69,7 +74,16 @@ export function About({ data, index }: { data: unknown; index?: number | string 
           // frj-zoom: scale-in 1.08->1 SOLO premium; lift: hover brightness+translateY SOLO premium.
           // NO cambia sizes/loading del <Image> (no diferimos la carga). El overflow-hidden es de
           // esta tile (.frj-zoom lo refuerza en premium), no ancestro del booking.
-          <div className="frj-zoom lift relative aspect-[4/5] w-full overflow-hidden rounded-[2px]">
+          // p-0 + cursor-pointer + focus-visible: ver gallery.tsx (mismo tratamiento del <button>).
+          <button
+            type="button"
+            // Contrato del lightbox (fuente de verdad: lib/landing/lightbox.ts). Grupo "about":
+            // una sola foto → visor de 1 ítem, sin flechas.
+            data-frj-lightbox="about"
+            data-frj-src={d.image}
+            aria-label="Ampliar foto"
+            className="frj-zoom lift relative aspect-[4/5] w-full cursor-pointer overflow-hidden rounded-[2px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+          >
             <Image
               src={d.image}
               alt=""
@@ -77,10 +91,12 @@ export function About({ data, index }: { data: unknown; index?: number | string 
               sizes="(min-width: 768px) 40vw, 100vw"
               className="object-cover"
             />
+            {/* Tag overlay: contenido NO interactivo dentro del botón (sin handler propio) →
+                no anida un interactivo dentro de otro. */}
             <span className="absolute bottom-0 left-0 bg-primary px-3 py-2 font-[family-name:var(--frj-font-mono)] text-[10px] uppercase tracking-[0.18em] text-[color:var(--frj-on-primary)]">
               Conocé el espacio
             </span>
-          </div>
+          </button>
         )}
       </div>
     </section>

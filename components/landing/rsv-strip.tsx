@@ -3,9 +3,14 @@ import { rsvData } from '@/lib/landing/schema'
 import { Kicker } from '@/components/landing/_premium'
 
 // ── Galería RSV — strip de confianza ARRIBA de la reserva (RSC) ───────────────────────
-// Por qué RSC sin 'use client': header + fila de fotos estática, sin estado ni
-// interactividad (el scroll horizontal es NATIVO, swipe/wheel, sin flechas). Marcarlo
-// client arrastraría el árbol al bundle sin ganancia (RESEARCH Anti-Pattern).
+// Por qué RSC sin 'use client': header + fila de fotos, sin estado propio (el scroll
+// horizontal es NATIVO, swipe/wheel, sin flechas). Marcarlo client arrastraría el árbol al
+// bundle sin ganancia (RESEARCH Anti-Pattern).
+//
+// LIGHTBOX (260711-iww): las fotos del strip AHORA SE AMPLÍAN (<button>, no <div>) — ya no son
+// decorativas. La sección SIGUE SIENDO RSC: el botón NO lleva onClick, solo emite los
+// data-attributes del contrato (lib/landing/lightbox.ts) y el controlador global
+// <PhotoLightbox/> captura el click POR DELEGACIÓN (mismo patrón que LandingMotion).
 //
 // INVARIANTE CAJA NEGRA (RSV-02 / MOTION-04 / Pitfall 4/8 de v0.10): este bloque es
 // HERMANO del widget de reserva, va ANTES de él dentro de <section id="reservar">, y
@@ -63,22 +68,28 @@ export function RsvStrip({ data }: { data: unknown }) {
           NUNCA en <section id="reservar"> ni en un ancestro del widget. Scroll nativo por
           swipe/wheel, sin flechas. gap 8px; padding lateral fluido para alinear con el head y
           dejar peek de la 3ª foto en mobile. */}
-      <div
-        className="flex gap-[8px] overflow-x-auto px-[clamp(20px,5cqw,64px)]"
-        // Fotos de ambiente decorativas: no es una lista interactiva navegable con teclado
-        // (sin lightbox, igual que gallery). No agregamos controles focuseables.
-        aria-hidden="true"
-      >
+      {/* SIN aria-hidden: las fotos del strip ahora son <button> focuseables. Un aria-hidden acá
+          sería una violación WCAG (elemento focuseable dentro de un subárbol oculto para las
+          tecnologías asistivas) y dispara warning del browser. El overflow-x-auto y la relación
+          de HERMANO con el widget quedan intactos (invariante caja negra de arriba). */}
+      <div className="flex gap-[8px] overflow-x-auto px-[clamp(20px,5cqw,64px)]">
         {images.map((src, i) => (
-          <div
+          <button
             key={`${src}-${i}`}
+            type="button"
+            // Contrato del lightbox (fuente de verdad: lib/landing/lightbox.ts). Grupo "rsv": el
+            // carrusel del visor son las fotos del strip, separado del de la galería.
+            data-frj-lightbox="rsv"
+            data-frj-src={src}
+            aria-label="Ampliar foto"
             // Tile: alto fijo 128px mobile / 168px ≥768px, aspect-ratio 4/3 (ancho derivado →
             // ≈171px mobile / ≈224px desktop). El aspect-ratio + alto fijo RESERVAN el espacio
             // (CLS-safe, sin salto de layout). shrink-0 evita que el flex las comprima.
             // El placeholder mientras carga = --frj-surface-2 (espejo de gallery). frj-zoom
             // (scale-in) + lift (hover) van sobre las FOTOS del strip, SOLO premium — nunca sobre
             // el contenedor del widget (matiz 3 / T-OA7-01). El overflow-hidden es de la TILE.
-            className="frj-zoom lift relative h-[128px] shrink-0 overflow-hidden rounded-[12px] border border-[color:var(--frj-hair)] bg-[color:var(--frj-surface-2)] aspect-[4/3] md:h-[168px]"
+            // p-0 + cursor-pointer + focus-visible: ver gallery.tsx (mismo tratamiento del <button>).
+            className="frj-zoom lift relative h-[128px] shrink-0 cursor-pointer overflow-hidden rounded-[12px] border border-[color:var(--frj-hair)] bg-[color:var(--frj-surface-2)] p-0 aspect-[4/3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current md:h-[168px]"
           >
             <Image
               src={src}
@@ -90,7 +101,7 @@ export function RsvStrip({ data }: { data: unknown }) {
               sizes="(min-width: 768px) 224px, 171px"
               className="object-cover"
             />
-          </div>
+          </button>
         ))}
       </div>
     </div>

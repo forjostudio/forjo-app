@@ -13,7 +13,13 @@ import { Kicker, GhostIndex } from '@/components/landing/_premium'
 // (grid-auto-rows) con backfill nativo de huecos (grid-auto-flow:dense) y fotos a DOBLE ANCHO
 // (.wide). La altura de cada celda la fija .frj-gallery-grid (grid-auto-rows), no un aspect
 // por tile; la imagen `fill` + object-cover llena la celda. CLS-safe (la fila reserva su alto).
-// Tiles NO interactivos (sin lightbox, igual que F7). Cero hex: solo tokens / utilidades.
+// Cero hex: solo tokens / utilidades.
+//
+// LIGHTBOX (260711-iww): las tiles AHORA SON INTERACTIVAS (<button>, no <div>) y abren el visor
+// a pantalla completa. Pero la sección SIGUE SIENDO RSC, sin 'use client': el botón NO lleva
+// onClick — solo emite los data-attributes del contrato (lib/landing/lightbox.ts) y el
+// controlador global <PhotoLightbox/> captura el click POR DELEGACIÓN. Mismo patrón que
+// LandingMotion: cero árbol al bundle.
 
 // ── Doble ancho determinista (placeholder hasta que el editor lo setee) ───────────────
 // isWide(i): replica el ritmo del mockup (una foto ancha cada 4, en la 3ª posición del ciclo).
@@ -52,17 +58,30 @@ export function Gallery({ data, index }: { data: unknown; index?: number | strin
           del stagger del controlador JS (90ms/item por índice de hermano .frj-reveal). */}
       <div className="frj-gallery-grid frj-stagger px-[6px]">
         {images.map((src, i) => (
-          <div
+          <button
             key={`${src}-${i}`}
+            // type="button": sin esto, un <button> dentro de un <form> submitea (submit fantasma).
+            type="button"
+            // Contrato del lightbox — los nombres de los atributos son LITERALES acá porque JSX no
+            // acepta claves computadas en atributos estáticos, pero la FUENTE DE VERDAD es
+            // lib/landing/lightbox.ts (LIGHTBOX_GROUP_ATTR / LIGHTBOX_SRC_ATTR): si cambian allá,
+            // hay que cambiarlos acá. El grupo ("gallery") define el carrusel del visor.
+            data-frj-lightbox="gallery"
+            data-frj-src={src}
+            aria-label="Ampliar foto"
             // frj-reveal: entrada escalonada (el controlador IO le pone el transition-delay por
             // índice dentro del .frj-stagger). frj-zoom: scale-in 1.08->1 SOLO premium. lift: hover
             // brightness+translateY SOLO premium. Sin clases de aspect: el alto lo fija
             // grid-auto-rows y la imagen `fill` llena la celda. .wide (doble ancho) por índice
             // determinista. El overflow-hidden es de la tile, nunca ancestro del booking.
+            // Un <button> como grid item se "blockifica" → .wide (grid-column: span 2) sigue andando.
             className={cn(
               // rounded-[12px] + hairline: valores del mockup aprobado (las tiles van redondeadas,
               // no a canto vivo). El overflow-hidden recorta la foto al radio.
               'frj-reveal frj-zoom lift relative overflow-hidden rounded-[12px] border border-[color:var(--frj-hair)] bg-[color:var(--frj-surface-2)]',
+              // p-0: el <button> trae padding de UA. cursor-pointer: Tailwind v4 NO se lo pone a
+              // los <button> por defecto. focus-visible: estado de foco visible (WCAG, no negociable).
+              'cursor-pointer p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current',
               isWide(i) && 'wide',
             )}
           >
@@ -75,7 +94,7 @@ export function Gallery({ data, index }: { data: unknown; index?: number | strin
               sizes="(min-width: 768px) 33vw, 50vw"
               className="object-cover"
             />
-          </div>
+          </button>
         ))}
       </div>
     </section>
