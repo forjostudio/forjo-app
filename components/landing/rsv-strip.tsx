@@ -78,7 +78,7 @@ export function RsvStrip({ data }: { data: unknown }) {
             // El placeholder mientras carga = --frj-surface-2 (espejo de gallery). frj-zoom
             // (scale-in) + lift (hover) van sobre las FOTOS del strip, SOLO premium — nunca sobre
             // el contenedor del widget (matiz 3 / T-OA7-01). El overflow-hidden es de la TILE.
-            className="frj-zoom lift relative h-[128px] shrink-0 overflow-hidden rounded-[8px] bg-[color:var(--frj-surface-2)] aspect-[4/3] md:h-[168px]"
+            className="frj-zoom lift relative h-[128px] shrink-0 overflow-hidden rounded-[12px] border border-[color:var(--frj-hair)] bg-[color:var(--frj-surface-2)] aspect-[4/3] md:h-[168px]"
           >
             <Image
               src={src}
