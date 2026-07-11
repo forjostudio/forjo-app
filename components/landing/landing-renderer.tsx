@@ -36,6 +36,7 @@ import { Hours, HoursInner, isHoursVisible } from '@/components/landing/hours'
 import { GhostIndex } from '@/components/landing/_premium'
 import { Cta } from '@/components/landing/cta'
 import { LandingMotion } from '@/components/landing/landing-motion'
+import { PhotoLightbox } from '@/components/landing/photo-lightbox'
 import { aboutData, galleryData } from '@/lib/landing/schema'
 import { normalizeMotion } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -175,6 +176,13 @@ export function LandingRenderer({ config, business, services, professionals, tim
           DOM (retorna null). Con level='none' no toca nada (estático). NUNCA observa el widget de
           booking: solo nodos .frj-reveal, que por markup nunca son su ancestro (T-OA7-01). */}
       <LandingMotion level={motionLevel} />
+      {/* Controlador del visor de fotos (galería / strip RSV / about). Mismo patrón que
+          LandingMotion: client component único, montado una vez, que captura los clicks de las
+          fotos POR DELEGACIÓN sobre el markup del server → las 3 secciones siguen siendo RSC.
+          CAJA NEGRA: no renderiza DOM inline — el overlay se portalea a document.body con
+          createPortal, así que JAMÁS envuelve al widget de reserva ni crea containing block que
+          rompa el position:fixed de vaul/sonner/react-day-picker (D-07). */}
+      <PhotoLightbox />
       {sections.map((s, i) => {
         const index = nextIndexFor(s)
         // switch (NO Record map): cada sección recibe props heterogéneas y el switch da

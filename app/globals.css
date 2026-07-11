@@ -609,3 +609,142 @@
     transform: none;
   }
 }
+
+/* =========================================================================
+   LIGHTBOX DE FOTOS (visor a pantalla completa con carrusel peek).
+
+   POR QUÉ ESTE BLOQUE VIVE FUERA DEL SCOPE .frj-site: el overlay se portalea a
+   document.body con createPortal (photo-lightbox.tsx). Dos motivos, los dos duros:
+     1) Ningún ancestro con transform/overflow/filter puede atraparlo (un
+        position:fixed dentro de un ancestro transformado deja de ser fixed).
+     2) CAJA NEGRA DEL BOOKING (D-07): viviendo en <body>, el overlay NUNCA es
+        ancestro de <section id="reservar"> → no crea containing block que rompa el
+        position:fixed de vaul (drawers), sonner (toasts) ni react-day-picker
+        (popover del calendario).
+   Como el overlay NO es descendiente de .frj-site, acá NO se puede usar
+   @container / cqw (queda fuera del container-type de .frj-site): se usan MEDIA
+   QUERIES y unidades de viewport.
+
+   POR QUÉ rgb() translúcido y no tokens de paleta (misma convención que
+   .frj-kicker-on-photo y las sombras de .lift): un visor de fotos tiene que ser
+   oscuro en TODA paleta y en ambos modos (claro/oscuro) — la foto manda, el chrome
+   desaparece. near-black (10 10 10), nunca negro puro.
+   ========================================================================= */
+
+/* Backdrop. Cierra con onClick (el click en X/flechas/track/figura hace stopPropagation:
+   ver el bug del doble cierre documentado en photo-lightbox.tsx). */
+.frj-lightbox {
+  /* D-03 — ANCHO DEL SLIDE, el valor a ajustar si el peek no se ve. GOTCHA REAL: a una
+     foto VERTICAL la limita el max-height del frame, así que un slide MUY ANCHO la deja
+     centrada con aire a los costados y ese aire TAPA el peek de las vecinas (parece que
+     el carrusel no funciona). Si con una foto vertical no asoma la vecina: BAJAR este
+     valor (mobile y/o desktop) hasta que se vea el pedacito. */
+  --frj-lb-cardw: 80vw;
+  --frj-lb-gap: 12px;
+
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(10 10 10 / 0.94);
+  /* El scroll del visor no encadena al documento de atrás (ni al pull-to-refresh). */
+  overscroll-behavior: contain;
+}
+@media (min-width: 768px) {
+  .frj-lightbox {
+    --frj-lb-cardw: 58vw;
+  }
+}
+
+/* Track del carrusel. El swipe en celular SALE GRATIS: es scroll NATIVO con scroll-snap.
+   PROHIBIDO agregar touch/drag handlers (D-01) — el nativo tiene la inercia, el rubber-band
+   y la accesibilidad que un handler a mano nunca replica. */
+.frj-lb-track {
+  /* position:relative → el offsetLeft de los slides es relativo AL TRACK, que es justo lo
+     que consume centeredScrollLeft() (lib/landing/lightbox.ts). Sin esto, offsetLeft se
+     mide contra otro offsetParent y el centrado sale corrido. */
+  position: relative;
+  display: flex;
+  gap: var(--frj-lb-gap);
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  /* D-02 — SIN ESTO LA PRIMERA Y LA ÚLTIMA FOTO NO PUEDEN CENTRARSE: sin padding, el
+     scroll se termina antes de que el snap-align:center las pueda traer al centro y quedan
+     pegadas al borde. El padding es exactamente el "medio hueco" que sobra a cada lado. */
+  padding-inline: calc((100% - var(--frj-lb-cardw)) / 2);
+  overscroll-behavior-x: contain;
+  scrollbar-width: none; /* Firefox */
+}
+.frj-lb-track::-webkit-scrollbar {
+  display: none; /* Chromium/WebKit */
+}
+
+/* Slide. Estado por defecto = VECINA: asomando y atenuada (el peek de D-01). */
+.frj-lb-slide {
+  flex: 0 0 var(--frj-lb-cardw);
+  scroll-snap-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  opacity: 0.35;
+  transform: scale(0.92);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
+}
+/* Slide activo (lo marca el IntersectionObserver del controlador). */
+.frj-lb-slide.is-active {
+  opacity: 1;
+  transform: none;
+}
+
+/* Frame de la foto: contenedor del <Image fill> con object-contain.
+   La doble declaración de height es fallback progresivo: los navegadores sin dvh se quedan
+   con el vh (el navegador descarta la declaración que no entiende). */
+.frj-lb-frame {
+  position: relative;
+  width: 100%;
+  height: 78vh;
+  height: 78dvh;
+}
+
+/* Chrome del visor (X y flechas). Touch target ≥44px (guideline Apple/Google), no negociable. */
+.frj-lb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  color: rgb(255 255 255 / 0.85);
+  background: rgb(255 255 255 / 0.08);
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+.frj-lb-btn:hover {
+  color: rgb(255 255 255);
+  background: rgb(255 255 255 / 0.16);
+}
+/* Estado de foco visible: no negociable (el visor se navega con teclado). */
+.frj-lb-btn:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.9);
+  outline-offset: 2px;
+}
+
+/* Reduced motion: el CARRUSEL SIGUE FUNCIONANDO (el scroll-snap es nativo, no es animación);
+   solo se apagan las transiciones de scale/opacity y el scroll suave. */
+@media (prefers-reduced-motion: reduce) {
+  .frj-lb-track {
+    scroll-behavior: auto;
+  }
+  .frj-lb-slide {
+    transition: none;
+  }
+}
