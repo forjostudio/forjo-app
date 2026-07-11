@@ -47,6 +47,11 @@ type View = {
 export function PhotoLightbox() {
   const [view, setView] = useState<View | null>(null)
 
+  // Espejo del view para leerlo desde callbacks estables (moveBy) sin meterlo en sus deps: así las
+  // flechas/el teclado no re-suscriben los efectos en cada navegación. Se sincroniza en un EFECTO,
+  // nunca en render (escribir un ref durante el render está prohibido — react-hooks/refs).
+  const viewRef = useRef<View | null>(null)
+
   // Cierre IDEMPOTENTE (bug 2): una vez que el cierre arrancó, cualquier segundo disparo
   // (el burbujeo, un popstate que llega tarde, un doble tap) es un no-op. Sin esto, dos
   // cierres = dos history.back() = el usuario fuera de la página.
@@ -147,31 +152,67 @@ export function PhotoLightbox() {
     const track = trackRef.current
     const slide = track?.children[i]
     if (!track || !(slide instanceof HTMLElement)) return
-    // scrollLeft directo, NO scrollIntoView: scrollIntoView puede scrollear también a los
-    // ANCESTROS (incluido el documento de atrás) y descolocar la página al cerrar.
-    const prev = track.style.scrollBehavior
-    if (instant) track.style.scrollBehavior = 'auto'
-    track.scrollLeft = centeredScrollLeft({
+
+    const left = centeredScrollLeft({
       slideOffsetLeft: slide.offsetLeft,
       slideWidth: slide.clientWidth,
       trackWidth: track.clientWidth,
     })
-    if (instant) track.style.scrollBehavior = prev
+
+    // BUG iOS (real, visto en iPhone): Safari PELEA el scroll programático cuando el track tiene
+    // `scroll-snap-type: x mandatory` — el motor de snap revierte el scroll que pedimos y las
+    // flechas parecen muertas (el SWIPE sí anda, porque ese scroll es NATIVO, no programático).
+    // Chrome desktop sí respeta la asignación, por eso no se notaba ahí.
+    // Fix: soltamos el snap mientras dura el scroll programático y lo devolvemos cuando asienta.
+    // Y usamos `scrollTo` en vez de `scrollLeft = x`, que es lo que iOS honra de verdad.
+    // NO usamos scrollIntoView: scrollearía también los ANCESTROS y descolocaría la página de atrás.
+    const prevSnap = track.style.scrollSnapType
+    track.style.scrollSnapType = 'none'
+    track.scrollTo({ left, behavior: instant ? 'auto' : 'smooth' })
+
+    const restoreSnap = () => {
+      track.style.scrollSnapType = prevSnap
+    }
+    if (instant) {
+      restoreSnap()
+      return
+    }
+    // El snap se devuelve recién cuando el scroll suave TERMINA: si lo devolvemos antes, snapea en
+    // pleno vuelo y corta la animación. `scrollend` no existe en Safari < 17 → timeout de respaldo
+    // (el `done` hace que el que llegue primero gane, sin restaurar dos veces).
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      track.removeEventListener('scrollend', finish)
+      restoreSnap()
+    }
+    track.addEventListener('scrollend', finish)
+    window.setTimeout(finish, 700)
   }, [])
 
-  // moveBy (delta) y no goTo (absoluto): con el update funcional, el teclado y las flechas no
-  // necesitan `view` en sus deps → los efectos no se re-suscriben en cada navegación.
+  // moveBy (delta) y no goTo (absoluto): el índice siguiente se calcula del `view` vigente vía ref,
+  // así las flechas y el teclado no necesitan `view` en sus deps → los efectos no se re-suscriben.
+  // El scroll va FUERA del updater de setView: un updater tiene que ser PURO (React lo invoca dos
+  // veces en StrictMode → scrollearía dos veces).
   const moveBy = useCallback(
     (delta: number) => {
-      setView((v) => {
-        if (!v) return v
-        const next = wrapIndex(v.index + delta, v.images.length)
-        centerSlide(next, false)
-        return { ...v, index: next }
-      })
+      const v = viewRef.current
+      if (!v) return
+      const next = wrapIndex(v.index + delta, v.images.length)
+      // Avanzamos el ref YA (estamos en un handler, no en render → permitido): si el usuario toca la
+      // flecha dos veces rápido, el 2º click lee el índice nuevo y no pisa al 1º.
+      viewRef.current = { ...v, index: next }
+      setView({ ...v, index: next })
+      centerSlide(next, false)
     },
     [centerSlide],
   )
+
+  // Sincroniza el espejo con el estado (apertura, cierre, y cualquier cambio que no venga de moveBy).
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
 
   // ── Apertura: centrar YA en la foto tocada + foco en la X ───────────────────────────
   useEffect(() => {
