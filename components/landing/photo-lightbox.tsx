@@ -8,8 +8,11 @@ import {
   LIGHTBOX_HASH,
   LIGHTBOX_GROUP_ATTR,
   LIGHTBOX_SRC_ATTR,
+  slideStep,
+  scrollLeftForIndex,
+  indexFromScroll,
+  clampIndex,
   wrapIndex,
-  centeredScrollLeft,
   shouldConsumeHistoryEntry,
 } from '@/lib/landing/lightbox'
 
@@ -46,11 +49,6 @@ type View = {
 
 export function PhotoLightbox() {
   const [view, setView] = useState<View | null>(null)
-
-  // Espejo del view para leerlo desde callbacks estables (moveBy) sin meterlo en sus deps: así las
-  // flechas/el teclado no re-suscriben los efectos en cada navegación. Se sincroniza en un EFECTO,
-  // nunca en render (escribir un ref durante el render está prohibido — react-hooks/refs).
-  const viewRef = useRef<View | null>(null)
 
   // Cierre IDEMPOTENTE (bug 2): una vez que el cierre arrancó, cualquier segundo disparo
   // (el burbujeo, un popstate que llega tarde, un doble tap) es un no-op. Sin esto, dos
@@ -146,103 +144,72 @@ export function PhotoLightbox() {
     return () => window.removeEventListener('popstate', onPop)
   }, [isOpen])
 
-  // ── Navegación: centrar un slide dentro del track ───────────────────────────────────
-  // Centrado compartido por la navegación y por la apertura (una sola fuente de verdad).
-  const centerSlide = useCallback((i: number, instant: boolean) => {
-    const track = trackRef.current
-    const slide = track?.children[i]
-    if (!track || !(slide instanceof HTMLElement)) return
+  // ── Mecánica del carrusel: EL SCROLL MANDA, el índice lo sigue ──────────────────────
+  //
+  // Modelo copiado de dongiovanni-web (probado en producción). El índice NO ordena el scroll:
+  // se DERIVA de él. Consecuencias, todas buenas:
+  //   · el atenuado/peek de las vecinas sigue al dedo EN VIVO durante el swipe;
+  //   · las flechas leen el scroll REAL y piden scrollTo smooth → nunca hay dos fuentes de verdad
+  //     que se desincronicen, y el snap del navegador no tiene contra qué pelear.
+  // El modelo anterior (estado → `scrollLeft = x`) causaba el bug de iPhone: Safari revierte el
+  // scroll programático en un track con `scroll-snap-type: mandatory` → las flechas morían.
 
-    const left = centeredScrollLeft({
-      slideOffsetLeft: slide.offsetLeft,
-      slideWidth: slide.clientWidth,
-      trackWidth: track.clientWidth,
+  /** Paso entre slides, medido del DOM real (ancho + gap). */
+  const stepOf = useCallback((track: HTMLElement): number => {
+    const a = track.children[0]
+    const b = track.children[1]
+    return slideStep({
+      firstOffsetLeft: a instanceof HTMLElement ? a.offsetLeft : 0,
+      secondOffsetLeft: b instanceof HTMLElement ? b.offsetLeft : null,
+      fallbackWidth: track.clientWidth,
     })
-
-    // BUG iOS (real, visto en iPhone): Safari PELEA el scroll programático cuando el track tiene
-    // `scroll-snap-type: x mandatory` — el motor de snap revierte el scroll que pedimos y las
-    // flechas parecen muertas (el SWIPE sí anda, porque ese scroll es NATIVO, no programático).
-    // Chrome desktop sí respeta la asignación, por eso no se notaba ahí.
-    // Fix: soltamos el snap mientras dura el scroll programático y lo devolvemos cuando asienta.
-    // Y usamos `scrollTo` en vez de `scrollLeft = x`, que es lo que iOS honra de verdad.
-    // NO usamos scrollIntoView: scrollearía también los ANCESTROS y descolocaría la página de atrás.
-    const prevSnap = track.style.scrollSnapType
-    track.style.scrollSnapType = 'none'
-    track.scrollTo({ left, behavior: instant ? 'auto' : 'smooth' })
-
-    const restoreSnap = () => {
-      track.style.scrollSnapType = prevSnap
-    }
-    if (instant) {
-      restoreSnap()
-      return
-    }
-    // El snap se devuelve recién cuando el scroll suave TERMINA: si lo devolvemos antes, snapea en
-    // pleno vuelo y corta la animación. `scrollend` no existe en Safari < 17 → timeout de respaldo
-    // (el `done` hace que el que llegue primero gane, sin restaurar dos veces).
-    let done = false
-    const finish = () => {
-      if (done) return
-      done = true
-      track.removeEventListener('scrollend', finish)
-      restoreSnap()
-    }
-    track.addEventListener('scrollend', finish)
-    window.setTimeout(finish, 700)
   }, [])
 
-  // moveBy (delta) y no goTo (absoluto): el índice siguiente se calcula del `view` vigente vía ref,
-  // así las flechas y el teclado no necesitan `view` en sus deps → los efectos no se re-suscriben.
-  // El scroll va FUERA del updater de setView: un updater tiene que ser PURO (React lo invoca dos
-  // veces en StrictMode → scrollearía dos veces).
-  const moveBy = useCallback(
-    (delta: number) => {
-      const v = viewRef.current
-      if (!v) return
-      const next = wrapIndex(v.index + delta, v.images.length)
-      // Avanzamos el ref YA (estamos en un handler, no en render → permitido): si el usuario toca la
-      // flecha dos veces rápido, el 2º click lee el índice nuevo y no pisa al 1º.
-      viewRef.current = { ...v, index: next }
-      setView({ ...v, index: next })
-      centerSlide(next, false)
+  // Flechas y teclado: leen el scroll VIGENTE, suman ±1 y piden un scroll suave. CLAMPEADO (no da
+  // la vuelta): en los extremos la flecha se deshabilita, como en la referencia.
+  const go = useCallback(
+    (dir: number) => {
+      const track = trackRef.current
+      if (!track) return
+      const count = track.children.length
+      if (count === 0) return
+      const step = stepOf(track)
+      const target = clampIndex(Math.round(track.scrollLeft / step) + dir, count)
+      track.scrollTo({ left: scrollLeftForIndex(target, step), behavior: 'smooth' })
     },
-    [centerSlide],
+    [stepOf],
   )
 
-  // Sincroniza el espejo con el estado (apertura, cierre, y cualquier cambio que no venga de moveBy).
-  useEffect(() => {
-    viewRef.current = view
-  }, [view])
+  // El índice activo (resaltado + contador) se recalcula del scroll real. Es lo que hace que el
+  // peek acompañe al dedo en vez de saltar recién al soltar.
+  const onTrackScroll = useCallback(() => {
+    const track = trackRef.current
+    if (!track) return
+    const count = track.children.length
+    const next = indexFromScroll({
+      scrollLeft: track.scrollLeft,
+      step: stepOf(track),
+      count,
+    })
+    setView((v) => (v && v.index !== next ? { ...v, index: next } : v))
+  }, [stepOf])
 
   // ── Apertura: centrar YA en la foto tocada + foco en la X ───────────────────────────
   useEffect(() => {
     if (openId === undefined) return
-    // Salto instantáneo: al abrir, la foto tocada tiene que estar centrada de una, sin scroll
-    // animado desde el borde. openIndexRef = el índice con el que se abrió (no cambia al navegar).
-    centerSlide(openIndexRef.current, true)
+    const track = trackRef.current
+    if (!track) return
+    // Salto INSTANTÁNEO (scrollLeft directo, sin smooth): al abrir, la foto tocada tiene que estar
+    // centrada de una, no scrollear desde el borde. Acá el snap no molesta porque no hay animación
+    // que revertir. openIndexRef = el índice con el que se abrió.
+    track.scrollLeft = scrollLeftForIndex(openIndexRef.current, stepOf(track))
     // Foco al abrir → la X (a11y: el foco entra al diálogo, no queda atrás en la página).
     closeBtnRef.current?.focus()
-  }, [openId, centerSlide])
+  }, [openId, stepOf])
 
-  // ── Slide activo: IntersectionObserver con root = el track ──────────────────────────
-  useEffect(() => {
-    const track = trackRef.current
-    if (openId === undefined || !track) return
-
-    // threshold 0.6 alcanza: con cardw 58-80vw, una vecina nunca llega a estar 60% visible
-    // dentro del track (siempre queda cortada por el borde) → solo la centrada matchea.
-    // IO nativo, cero dependencias (mismo patrón que LandingMotion).
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          entry.target.classList.toggle('is-active', entry.isIntersecting)
-        }
-      },
-      { root: track, threshold: 0.6 },
-    )
-    for (const slide of Array.from(track.children)) io.observe(slide)
-    return () => io.disconnect()
-  }, [openId])
+  // NOTA: ya no hay IntersectionObserver para marcar el slide activo. El índice se deriva del
+  // scroll (onTrackScroll) y de ahí sale tanto el resaltado como el contador — una sola fuente de
+  // verdad, y el peek acompaña al dedo en vivo.
 
   // ── Teclado: Esc cierra, ←/→ navegan, Tab cicla dentro del overlay ──────────────────
   useEffect(() => {
@@ -254,11 +221,11 @@ export function PhotoLightbox() {
         return
       }
       if (e.key === 'ArrowRight') {
-        moveBy(1)
+        go(1)
         return
       }
       if (e.key === 'ArrowLeft') {
-        moveBy(-1)
+        go(-1)
         return
       }
       // Trampa de foco mínima: el Tab cicla entre los botones del overlay y no se escapa al
@@ -276,7 +243,7 @@ export function PhotoLightbox() {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [isOpen, moveBy, closeFromUi])
+  }, [isOpen, go, closeFromUi])
 
   // ── Scroll lock del fondo ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -323,26 +290,31 @@ export function PhotoLightbox() {
         <X className="size-5" aria-hidden="true" />
       </button>
 
+      {/* Flechas: CLAMPEADAS (no dan la vuelta) → se deshabilitan en los extremos, como la
+          referencia. En CELULAR no se muestran (frj-lb-nav las oculta ≤768px): ahí se navega con
+          swipe nativo, que es más natural que apuntarle a un botón chico con el pulgar. */}
       {multiple && (
         <>
           <button
             type="button"
-            className="frj-lb-btn absolute left-[12px] top-1/2 -translate-y-1/2"
+            className="frj-lb-btn frj-lb-nav absolute left-[12px] top-1/2 -translate-y-1/2"
             aria-label="Anterior"
+            disabled={view.index === 0}
             onClick={(e) => {
               e.stopPropagation() // navegar NO es cerrar (bug 2)
-              moveBy(-1)
+              go(-1)
             }}
           >
             <ChevronLeft className="size-6" aria-hidden="true" />
           </button>
           <button
             type="button"
-            className="frj-lb-btn absolute right-[12px] top-1/2 -translate-y-1/2"
+            className="frj-lb-btn frj-lb-nav absolute right-[12px] top-1/2 -translate-y-1/2"
             aria-label="Siguiente"
+            disabled={view.index >= view.images.length - 1}
             onClick={(e) => {
               e.stopPropagation() // navegar NO es cerrar (bug 2)
-              moveBy(1)
+              go(1)
             }}
           >
             <ChevronRight className="size-6" aria-hidden="true" />
@@ -351,12 +323,20 @@ export function PhotoLightbox() {
       )}
 
       {/* Track: scroll-snap NATIVO. El swipe del celular sale gratis — PROHIBIDO agregar
-          touch/drag handlers (D-01). El stopPropagation evita que tocar el carrusel cierre. */}
-      <div ref={trackRef} className="frj-lb-track" onClick={(e) => e.stopPropagation()}>
+          touch/drag handlers (D-01). El stopPropagation evita que tocar el carrusel cierre.
+          onScroll: de acá sale el índice activo (el scroll manda) → el resaltado sigue al dedo. */}
+      <div
+        ref={trackRef}
+        className="frj-lb-track"
+        onScroll={onTrackScroll}
+        onClick={(e) => e.stopPropagation()}
+      >
         {view.images.map((src, i) => (
           <figure
             key={`${src}-${i}`}
-            className="frj-lb-slide"
+            // is-active sale del índice DERIVADO del scroll (ya no de un IntersectionObserver):
+            // una sola fuente de verdad para el resaltado y el contador.
+            className={i === view.index ? 'frj-lb-slide is-active' : 'frj-lb-slide'}
             // El click en la FIGURA tampoco cierra (bug 2): tocar la foto no es tocar el fondo.
             onClick={(e) => e.stopPropagation()}
           >
@@ -374,6 +354,13 @@ export function PhotoLightbox() {
           </figure>
         ))}
       </div>
+
+      {/* Contador n/total: en celular es la ÚNICA señal de posición (no hay flechas). */}
+      {multiple && (
+        <div className="frj-lb-counter" aria-live="polite">
+          {view.index + 1} / {view.images.length}
+        </div>
+      )}
     </div>,
     document.body,
   )

@@ -4,7 +4,10 @@ import {
   LIGHTBOX_GROUP_ATTR,
   LIGHTBOX_SRC_ATTR,
   wrapIndex,
-  centeredScrollLeft,
+  slideStep,
+  scrollLeftForIndex,
+  clampIndex,
+  indexFromScroll,
   shouldConsumeHistoryEntry,
 } from './lightbox'
 
@@ -33,40 +36,85 @@ describe('constantes del contrato (RSC ↔ controlador cliente)', () => {
   })
 })
 
-describe('wrapIndex — índice circular seguro', () => {
-  it('envuelve al pasarse del final: wrapIndex(3, 3) → 0', () => {
+describe('wrapIndex — índice CIRCULAR (solo para la trampa de foco del Tab)', () => {
+  // Ojo: el carrusel NO usa esto (clampea). Acá envolver es lo correcto: el Tab tiene que ciclar
+  // entre los botones del visor y no escaparse a la página de atrás.
+  it('cicla en ambos sentidos', () => {
     expect(wrapIndex(3, 3)).toBe(0)
-  })
-
-  it('envuelve hacia atrás: wrapIndex(-1, 3) → 2', () => {
     expect(wrapIndex(-1, 3)).toBe(2)
-  })
-
-  it('deja pasar un índice válido: wrapIndex(1, 3) → 1', () => {
     expect(wrapIndex(1, 3)).toBe(1)
   })
 
-  // len 0 es el caso que rompe la aritmética modular (división por cero → NaN → scrollLeft NaN
-  // → el track no scrollea y el visor queda en blanco). Guarda explícita.
-  it('con len 0 devuelve 0 (no divide por cero ni devuelve NaN)', () => {
-    const r = wrapIndex(0, 0)
-    expect(r).toBe(0)
-    expect(Number.isNaN(r)).toBe(false)
+  // len 0 → el módulo da NaN y `list[NaN].focus()` tira. Guarda explícita.
+  it('con len 0 devuelve 0 (no NaN)', () => {
+    expect(wrapIndex(0, 0)).toBe(0)
   })
 })
 
-describe('centeredScrollLeft — scrollLeft que centra un slide en el track', () => {
-  it('centra el slide: offsetLeft 500 + w/2 (150) - trackW/2 (500) → 150', () => {
-    expect(
-      centeredScrollLeft({ slideOffsetLeft: 500, slideWidth: 300, trackWidth: 1000 }),
-    ).toBe(150)
+describe('clampIndex — índice CLAMPEADO (las flechas no dan la vuelta)', () => {
+  it('deja pasar un índice válido', () => {
+    expect(clampIndex(1, 3)).toBe(1)
   })
 
-  // El PRIMER slide, gracias al padding-inline del track (D-02), ya queda centrado en
-  // scrollLeft 0: la cuenta da negativo y un scrollLeft negativo no existe. Clamp obligatorio.
-  it('nunca devuelve negativo (clamp a 0) — el primer slide ya está centrado en scrollLeft 0', () => {
-    expect(centeredScrollLeft({ slideOffsetLeft: 0, slideWidth: 300, trackWidth: 1000 })).toBe(0)
-    expect(centeredScrollLeft({ slideOffsetLeft: 100, slideWidth: 300, trackWidth: 1000 })).toBe(0)
+  it('se queda en los extremos en vez de envolver (0 y count-1)', () => {
+    expect(clampIndex(-1, 3)).toBe(0)
+    expect(clampIndex(3, 3)).toBe(2)
+  })
+
+  it('con count 0 devuelve 0 (no devuelve -1 ni NaN)', () => {
+    expect(clampIndex(0, 0)).toBe(0)
+  })
+})
+
+describe('slideStep — paso entre slides (ancho + gap)', () => {
+  it('lo mide como la distancia entre los offsetLeft de dos slides consecutivos', () => {
+    expect(
+      slideStep({ firstOffsetLeft: 100, secondOffsetLeft: 412, fallbackWidth: 999 }),
+    ).toBe(312)
+  })
+
+  // Con 0 o 1 slide no hay dos offsets que restar → fallback al ancho del track.
+  it('con un solo slide cae al fallbackWidth', () => {
+    expect(slideStep({ firstOffsetLeft: 0, secondOffsetLeft: null, fallbackWidth: 460 })).toBe(460)
+  })
+
+  // El guard que importa: un step 0 haría scrollLeft/0 → Infinity/NaN → el visor queda en blanco
+  // SIN error visible. Nunca puede devolver 0.
+  it('nunca devuelve 0 (un step 0 rompería la división scroll↔índice)', () => {
+    expect(slideStep({ firstOffsetLeft: 0, secondOffsetLeft: 0, fallbackWidth: 0 })).toBe(1)
+  })
+})
+
+describe('scrollLeftForIndex — scrollLeft que centra al slide i', () => {
+  // La cuenta es i * step gracias al padding-inline del track: el slide 0 YA nace centrado en
+  // scrollLeft 0, y cada siguiente se centra un step más a la derecha.
+  it('centra el slide i en i * step', () => {
+    expect(scrollLeftForIndex(0, 312)).toBe(0)
+    expect(scrollLeftForIndex(2, 312)).toBe(624)
+  })
+
+  it('nunca devuelve negativo', () => {
+    expect(scrollLeftForIndex(-1, 312)).toBe(0)
+  })
+})
+
+describe('indexFromScroll — EL SCROLL MANDA: el índice activo se deriva de él', () => {
+  // Esta es la pieza que hace que el resaltado/peek siga al dedo en vivo durante el swipe (y que
+  // las flechas nunca se desincronicen de dónde quedó el carrusel).
+  it('redondea al slide más centrado', () => {
+    expect(indexFromScroll({ scrollLeft: 0, step: 300, count: 4 })).toBe(0)
+    expect(indexFromScroll({ scrollLeft: 140, step: 300, count: 4 })).toBe(0) // todavía más cerca del 0
+    expect(indexFromScroll({ scrollLeft: 160, step: 300, count: 4 })).toBe(1) // ya pasó la mitad
+    expect(indexFromScroll({ scrollLeft: 600, step: 300, count: 4 })).toBe(2)
+  })
+
+  it('clampea al final (el rubber-band del celular puede pasarse del último)', () => {
+    expect(indexFromScroll({ scrollLeft: 99999, step: 300, count: 4 })).toBe(3)
+  })
+
+  it('con step 0 o count 0 devuelve 0 (sin división por cero ni NaN)', () => {
+    expect(indexFromScroll({ scrollLeft: 500, step: 0, count: 4 })).toBe(0)
+    expect(indexFromScroll({ scrollLeft: 500, step: 300, count: 0 })).toBe(0)
   })
 })
 

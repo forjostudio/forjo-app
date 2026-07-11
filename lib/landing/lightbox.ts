@@ -36,35 +36,82 @@ export const LIGHTBOX_SRC_ATTR = 'data-frj-src'
 /** Grupos de fotos ampliables (D-06). El hero NO entra: es fondo/LCP, no se toca. */
 export type LightboxGroup = 'gallery' | 'rsv' | 'about'
 
+// ── Mecánica del carrusel: el SCROLL manda, el índice lo sigue ──────────────────────────
+//
+// POR QUÉ este modelo (copiado de dongiovanni-web, probado en producción) y no un índice en
+// estado que ORDENA el scroll:
+//   1. El índice activo se DERIVA del scrollLeft real (indexFromScroll) → el resaltado/atenuado
+//      de las vecinas sigue al dedo EN VIVO durante el swipe, en vez de saltar al final.
+//   2. Las flechas leen el scroll real, suman ±1 y piden `scrollTo({behavior:'smooth'})`. Nunca
+//      hay dos fuentes de verdad, así que el estado no se puede desincronizar de dónde quedó el
+//      dedo (y el snap del navegador no tiene contra qué pelear).
+// El modelo anterior (estado → scrollLeft = x) causaba un bug REAL en iPhone: Safari revierte el
+// scroll programático en un track con `scroll-snap-type: mandatory` y las flechas quedaban muertas.
+
 /**
- * Índice circular seguro (las flechas y las teclas ←/→ dan la vuelta).
+ * Paso entre slides = distancia entre los bordes izquierdos de dos slides consecutivos
+ * (ancho + gap). Es lo que mapea scroll ↔ índice.
  *
- * El caso `len === 0` está guardado a propósito: el módulo aritmético con 0 devuelve NaN, y un
- * NaN termina en `track.scrollLeft = NaN` → el track no scrollea y el visor queda en blanco sin
- * ningún error visible.
+ * `fallbackWidth` cubre el caso de 0 o 1 slide (no hay dos offsets que restar). El guard contra
+ * 0 es obligatorio: un step 0 haría `scrollLeft / 0` → Infinity/NaN → el visor queda en blanco
+ * sin ningún error visible.
+ */
+export function slideStep({
+  firstOffsetLeft,
+  secondOffsetLeft,
+  fallbackWidth,
+}: {
+  firstOffsetLeft: number
+  secondOffsetLeft: number | null
+  fallbackWidth: number
+}): number {
+  const step = secondOffsetLeft === null ? fallbackWidth : secondOffsetLeft - firstOffsetLeft
+  return step > 0 ? step : 1
+}
+
+/**
+ * scrollLeft que deja CENTRADO al slide `i`: simplemente `i * step`.
+ *
+ * Por qué la cuenta es tan simple: el track lleva `padding-inline: calc((100% - cardw) / 2)`, así
+ * que el slide 0 YA nace centrado con scrollLeft 0. A partir de ahí cada slide se centra un `step`
+ * más a la derecha. Sin ese padding habría que restar `(trackW - cardw)/2` a mano.
+ */
+export function scrollLeftForIndex(i: number, step: number): number {
+  const target = i * step
+  return target > 0 ? target : 0
+}
+
+/**
+ * Índice CIRCULAR. OJO: NO es para el carrusel (ese clampea, ver clampIndex) — es para la TRAMPA
+ * DE FOCO: el Tab dentro del visor tiene que CICLAR entre sus botones y no escaparse a la página
+ * de atrás. Ahí envolver sí es el comportamiento correcto.
+ *
+ * El guard de `len === 0` es obligatorio: el módulo con 0 devuelve NaN y `list[NaN].focus()` tira.
  */
 export function wrapIndex(i: number, len: number): number {
   if (len <= 0) return 0
   return ((i % len) + len) % len
 }
 
-/**
- * scrollLeft que deja un slide CENTRADO dentro del track: `offsetLeft + w/2 - trackW/2`.
- *
- * Clamp a 0 obligatorio: gracias al `padding-inline` del track (D-02), el PRIMER slide ya queda
- * centrado en scrollLeft 0 y la cuenta da negativo. Un scrollLeft negativo no existe.
- */
-export function centeredScrollLeft({
-  slideOffsetLeft,
-  slideWidth,
-  trackWidth,
+/** Índice CLAMPEADO (no circular): en los extremos las flechas se deshabilitan, no dan la vuelta. */
+export function clampIndex(i: number, count: number): number {
+  if (count <= 0) return 0
+  if (i < 0) return 0
+  return i > count - 1 ? count - 1 : i
+}
+
+/** Índice activo derivado del scroll real del track (el redondeo elige el slide más centrado). */
+export function indexFromScroll({
+  scrollLeft,
+  step,
+  count,
 }: {
-  slideOffsetLeft: number
-  slideWidth: number
-  trackWidth: number
+  scrollLeft: number
+  step: number
+  count: number
 }): number {
-  const target = slideOffsetLeft + slideWidth / 2 - trackWidth / 2
-  return target > 0 ? target : 0
+  if (count <= 0 || step <= 0) return 0
+  return clampIndex(Math.round(scrollLeft / step), count)
 }
 
 /**

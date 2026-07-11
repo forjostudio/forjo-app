@@ -639,8 +639,10 @@
      centrada con aire a los costados y ese aire TAPA el peek de las vecinas (parece que
      el carrusel no funciona). Si con una foto vertical no asoma la vecina: BAJAR este
      valor (mobile y/o desktop) hasta que se vea el pedacito. */
-  --frj-lb-cardw: 80vw;
-  --frj-lb-gap: 12px;
+  /* El `min(..., px)` es el CAP: sin él, en un monitor grande 58vw es un slide gigante y el peek
+     se pierde igual. Valores tomados de dongiovanni-web (probados en producción). */
+  --frj-lb-cardw: min(80vw, 460px);
+  --frj-lb-gap: clamp(14px, 3vw, 34px);
 
   position: fixed;
   inset: 0;
@@ -648,13 +650,32 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(10 10 10 / 0.94);
+  padding: 12px;
+  background: rgb(10 10 10 / 0.93);
+  /* Blur del fondo: separa el visor de la página y hace que la foto respire. */
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: frj-lb-fade 0.3s ease-out;
   /* El scroll del visor no encadena al documento de atrás (ni al pull-to-refresh). */
   overscroll-behavior: contain;
 }
+@keyframes frj-lb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 @media (min-width: 768px) {
   .frj-lightbox {
-    --frj-lb-cardw: 58vw;
+    --frj-lb-cardw: min(58vw, 700px);
+    padding: 24px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frj-lightbox {
+    animation: none;
   }
 }
 
@@ -695,10 +716,11 @@
   opacity: 0.35;
   transform: scale(0.92);
   transition:
-    opacity 0.35s ease,
-    transform 0.35s ease;
+    opacity 0.45s ease-out,
+    transform 0.45s ease-out;
 }
-/* Slide activo (lo marca el IntersectionObserver del controlador). */
+/* Slide activo. Lo marca el ÍNDICE DERIVADO DEL SCROLL (no un IntersectionObserver): por eso el
+   resaltado acompaña al dedo en vivo durante el swipe en vez de saltar recién al soltar. */
 .frj-lb-slide.is-active {
   opacity: 1;
   transform: none;
@@ -710,8 +732,28 @@
 .frj-lb-frame {
   position: relative;
   width: 100%;
-  height: 78vh;
-  height: 78dvh;
+  height: 74vh;
+  height: 74dvh;
+  filter: drop-shadow(0 30px 60px rgb(0 0 0 / 0.55));
+}
+@media (min-width: 768px) {
+  .frj-lb-frame {
+    height: 78vh;
+    height: 78dvh;
+  }
+}
+
+/* Contador n/total. En CELULAR es la única señal de posición (no hay flechas). */
+.frj-lb-counter {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--frj-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  color: rgb(255 255 255 / 0.7);
+  pointer-events: none;
 }
 
 /* Chrome del visor (X y flechas). Touch target ≥44px (guideline Apple/Google), no negociable. */
@@ -736,6 +778,18 @@
 .frj-lb-btn:focus-visible {
   outline: 2px solid rgb(255 255 255 / 0.9);
   outline-offset: 2px;
+}
+/* Flechas en los extremos: clampeadas (no dan la vuelta) → se apagan visualmente. */
+.frj-lb-nav:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+/* EN CELULAR NO HAY FLECHAS: se navega con SWIPE nativo, que es lo natural con el pulgar (y así
+   no compiten con el gesto). La X y el contador quedan. Copiado de dongiovanni-web. */
+@media (max-width: 767px) {
+  .frj-lb-nav {
+    display: none;
+  }
 }
 
 /* Reduced motion: el CARRUSEL SIGUE FUNCIONANDO (el scroll-snap es nativo, no es animación);
