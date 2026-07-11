@@ -37,6 +37,11 @@ export interface BuilderInput {
   location?: { title?: string; map_url?: string; show_address?: boolean }
   hours?: { title?: string }
   cta?: { headline?: string }
+  // rsv: fotos de confianza que van ARRIBA del widget de reserva (sección `booking`). Son fotos
+  // de la sucursal/ambiente que el cliente ve JUSTO ANTES de reservar. Si el operador no las
+  // pasa, se reusan las primeras de la galería (ver RSV_FALLBACK_COUNT) para que el strip no
+  // salga vacío — el dueño después las cambia desde el CMS.
+  rsv?: { header?: string; intro?: string; images?: string[] }
 }
 
 // Pistas de marca para recommendTheme. Todo opcional: el operador puede no expresar nada.
@@ -70,6 +75,10 @@ function isHttpUrl(value: unknown): value is string {
 function str(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
 }
+
+// Cuántas fotos de la galería se reusan para el strip de la reserva cuando el operador no pasó
+// fotos dedicadas. 3 = las que entran en el strip sin scrollear en desktop.
+const RSV_FALLBACK_COUNT = 3
 
 // onlyValidUrls: filtra un array de candidatas dejando solo URLs http/https válidas.
 function onlyValidUrls(images: unknown): string[] | undefined {
@@ -166,7 +175,33 @@ export function buildLandingConfig(input: BuilderInput, theme: LandingTheme): La
     sections.push({ type: 'cta', enabled: true, order: order++, data: ctaData })
   }
 
-  return { theme, sections }
+  // booking (con las fotos de la reserva) — VA ÚLTIMA, después del cta: el `order++` en secuencia
+  // le da el orden final, igual que la booking que inyecta orderedSections cuando el config no la
+  // trae (order: Infinity). Se emite SOLO si hay fotos/copy para el strip; si no, no se pushea y
+  // orderedSections inyecta la booking pelada → el bloque de reserva queda byte-idéntico a hoy.
+  //
+  // POR QUÉ acá y no en orderedSections: orderedSections USA la booking del config si viene (solo
+  // la inyecta si falta), así que emitirla con `data` es lo que hace que RsvStrip tenga fotos. Sin
+  // esto, la skill nunca poblaba rsvData y el strip de confianza no aparecía en ninguna web.
+  const rsvImages =
+    onlyValidUrls(input.rsv?.images) ??
+    onlyValidUrls(input.gallery?.images)?.slice(0, RSV_FALLBACK_COUNT)
+  const rsvData = pick({
+    header: str(input.rsv?.header),
+    intro: str(input.rsv?.intro),
+    images: rsvImages,
+  })
+  if (Object.keys(rsvData).length > 0) {
+    sections.push({ type: 'booking', enabled: true, order: order++, data: rsvData })
+  }
+
+  // motion: 'premium' — DE AUTORÍA, no de parse (D-04 de la Phase 12). El parser NO inyecta
+  // default a propósito (así una landing vieja sin `motion` sigue estática y no cambia sola); es
+  // QUIEN ESCRIBE el config el que decide el nivel. La skill escribe webs nuevas, así que arranca
+  // en premium: reveal + scale-in de fotos + lift en hover (el tratamiento aprobado). El dueño lo
+  // baja a subtle/none cuando quiera desde el editor (Estilo visual → Movimiento).
+  // Sin esta clave, normalizeMotion(undefined) → 'none' → la web salía ESTÁTICA.
+  return { theme, sections, motion: 'premium' }
 }
 
 // ── recommendTheme (SKILL-04) ─────────────────────────────────────────────────────

@@ -166,7 +166,7 @@ async function rehostImage(
   supabase: SupabaseClient,
   businessId: string,
   localPath: string,
-  role: 'hero' | 'gallery' | 'about',
+  role: 'hero' | 'gallery' | 'about' | 'rsv',
 ): Promise<string> {
   const raw = await readFile(localPath) // bytes del disco (el SKILL.md ya los dejó localmente)
 
@@ -271,6 +271,13 @@ async function runWrite(
     if (input.gallery?.images?.length) {
       input.gallery.images = await Promise.all(
         input.gallery.images.map((p) => rehostImage(supabase, businessId, p, 'gallery')),
+      )
+    }
+    // rsv: las fotos del strip de la reserva. Si el operador NO las pasa, el builder cae a las
+    // primeras de la galería (ya re-hosteadas arriba) y acá no hay nada que hacer.
+    if (input.rsv?.images?.length) {
+      input.rsv.images = await Promise.all(
+        input.rsv.images.map((p) => rehostImage(supabase, businessId, p, 'rsv')),
       )
     }
   } catch (e) {

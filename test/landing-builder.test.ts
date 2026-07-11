@@ -58,6 +58,8 @@ describe('buildLandingConfig — mapeo por sección (SKILL-01)', () => {
   )
 
   it('arma una sección por bloque presente, en orden fijo ascendente', () => {
+    // booking va al final: `full` trae fotos de galería, así que el builder emite el strip de la
+    // reserva reusándolas (antes la booking nunca se emitía y el strip quedaba vacío siempre).
     expect(full.sections.map((s) => s.type)).toEqual([
       'hero',
       'about',
@@ -66,15 +68,22 @@ describe('buildLandingConfig — mapeo por sección (SKILL-01)', () => {
       'location',
       'hours',
       'cta',
+      'booking',
     ])
-    // order ascendente 0..6
-    expect(full.sections.map((s) => s.order)).toEqual([0, 1, 2, 3, 4, 5, 6])
+    // order ascendente 0..7
+    expect(full.sections.map((s) => s.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
     // todas enabled
     expect(full.sections.every((s) => s.enabled === true)).toBe(true)
   })
 
-  it('booking NO está en el array (la inyecta orderedSections)', () => {
-    expect(full.sections.some((s) => s.type === 'booking')).toBe(false)
+  // El invariante viejo era "booking NUNCA está en el array". Cambió a propósito: la booking se
+  // emite CON `data` (rsvData) para que el strip de confianza tenga fotos. Lo que se conserva es
+  // que SIN fotos no se emite → orderedSections la inyecta pelada y el bloque de reserva queda
+  // byte-idéntico a hoy.
+  it('booking se emite SOLO si hay fotos para el strip (si no, la inyecta orderedSections)', () => {
+    expect(full.sections.some((s) => s.type === 'booking')).toBe(true)
+    const sinFotos = buildLandingConfig(input({ gallery: undefined, rsv: undefined }), THEME)
+    expect(sinFotos.sections.some((s) => s.type === 'booking')).toBe(false)
   })
 
   it('el theme del envelope es el LandingTheme recibido', () => {
@@ -266,5 +275,68 @@ describe('recommendTheme (SKILL-04)', () => {
     expect(recommendTheme({ vertical: 'general' }).overrides?.font).toBeUndefined()
     // belleza → 'elegante' (sugerencia por vertical) → incluido
     expect(recommendTheme({ vertical: 'belleza' }).overrides?.font).toBe('elegante')
+  })
+})
+
+// ── El wire-up que faltaba: motion + fotos de la reserva ──────────────────────────────
+// Antes de esto, la skill armaba webs que salían ESTÁTICAS (sin `motion`, normalizeMotion
+// devolvía 'none') y SIN el strip de confianza arriba de la reserva (nadie poblaba rsvData).
+// El renderer tenía las dos features desde v0.16, pero el builder nunca las escribía.
+describe('buildLandingConfig — motion de autoría', () => {
+  it('escribe motion: premium (sin esta clave la web sale estática: normalizeMotion(undefined) → none)', () => {
+    expect(buildLandingConfig(input(), THEME).motion).toBe('premium')
+  })
+})
+
+describe('buildLandingConfig — fotos de la reserva (rsvData en la sección booking)', () => {
+  const bookingOf = (cfg: ReturnType<typeof buildLandingConfig>) =>
+    cfg.sections.find((s) => s.type === 'booking')
+
+  it('usa las fotos dedicadas de rsv cuando el operador las pasa', () => {
+    const cfg = buildLandingConfig(
+      input({
+        rsv: { header: 'Vení a conocernos', images: ['https://x.test/a.jpg'] },
+        gallery: { images: ['https://x.test/g1.jpg', 'https://x.test/g2.jpg'] },
+      }),
+      THEME,
+    )
+    expect(bookingOf(cfg)?.data).toMatchObject({
+      header: 'Vení a conocernos',
+      images: ['https://x.test/a.jpg'],
+    })
+  })
+
+  it('sin fotos dedicadas, reusa las primeras 3 de la galería (el strip no sale vacío)', () => {
+    const cfg = buildLandingConfig(
+      input({
+        gallery: {
+          images: [
+            'https://x.test/1.jpg',
+            'https://x.test/2.jpg',
+            'https://x.test/3.jpg',
+            'https://x.test/4.jpg',
+          ],
+        },
+      }),
+      THEME,
+    )
+    expect(bookingOf(cfg)?.data).toMatchObject({
+      images: ['https://x.test/1.jpg', 'https://x.test/2.jpg', 'https://x.test/3.jpg'],
+    })
+  })
+
+  it('la booking va ÚLTIMA (después del cta), como la que inyecta orderedSections', () => {
+    const cfg = buildLandingConfig(
+      input({ gallery: { images: ['https://x.test/1.jpg'] }, cta: { headline: 'Reservá' } }),
+      THEME,
+    )
+    const last = [...cfg.sections].sort((a, b) => a.order - b.order).at(-1)
+    expect(last?.type).toBe('booking')
+  })
+
+  // Sin fotos NO se emite la sección: orderedSections inyecta la booking pelada y el bloque de
+  // reserva queda byte-idéntico a hoy (RsvStrip devuelve null con images vacío).
+  it('sin ninguna foto no emite la sección booking (el bloque de reserva no cambia)', () => {
+    expect(bookingOf(buildLandingConfig(input(), THEME))).toBeUndefined()
   })
 })

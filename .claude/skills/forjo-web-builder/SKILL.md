@@ -185,11 +185,21 @@ clave la estripa Zod):
 - `location`: `{ title?, map_url?, show_address? }`.
 - `hours`: `{ title? }`.
 - `cta`: `{ headline? }`.
-- **NUNCA `booking`**: la sección de reservas la inyecta el renderer sola (LAND-02). No la pongas
-  en el config.
+- `rsv`: `{ header?, intro?, images? }` — las **fotos de confianza que van ARRIBA del widget de
+  reserva**: la sucursal / el ambiente, lo último que el cliente ve antes de reservar. Si no pasás
+  `rsv.images`, el builder **reusa las primeras 3 de la galería** para que el strip no salga vacío
+  (el dueño después las cambia desde el CMS). Si no hay ninguna foto en ningún lado, el strip no se
+  renderiza y el bloque de reserva queda como siempre.
+- **El widget de reserva en sí NO se configura** (LAND-02): `BookingClient` es una caja negra que
+  el renderer monta solo. `rsv` solo decora lo de arriba; no toca el flujo de reservas.
 
-Las imágenes (`hero.image`, `about.image`, `gallery.images[]`) van como **RUTAS LOCALES** del
-disco (las que dejó el scrape o el operador). El script las re-hostea — no pongas URLs de IG.
+Las imágenes (`hero.image`, `about.image`, `gallery.images[]`, `rsv.images[]`) van como **RUTAS
+LOCALES** del disco (las que dejó el scrape o el operador). El script las re-hostea — no pongas URLs
+de IG.
+
+**Movimiento:** el builder escribe `motion: 'premium'` solo (reveal al entrar en viewport +
+scale-in de las fotos + lift en hover). No hay que pasar nada. El dueño lo baja a `subtle` o `none`
+desde el CMS (**Estilo visual → Movimiento**) si lo quiere más quieto.
 
 Para el **tema**, lo normal es **NO pasar nada**: por default el landing hereda el `theme/palette/font`
 que el negocio ya configuró en su **Apariencia** (la misma identidad de su web de reservas). El script
