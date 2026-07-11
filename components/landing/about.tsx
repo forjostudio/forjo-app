@@ -82,7 +82,9 @@ export function About({ data, index }: { data: unknown; index?: number | string 
             data-frj-lightbox="about"
             data-frj-src={d.image}
             aria-label="Ampliar foto"
-            className="frj-zoom lift relative aspect-[4/5] w-full cursor-pointer overflow-hidden rounded-[2px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+            // rounded-[12px] + hairline: radio unificado de TODAS las fotos del landing
+            // (galería + strip RSV + about). Un solo valor, sin 2/8/12 mezclados.
+            className="frj-zoom lift relative aspect-[4/5] w-full cursor-pointer overflow-hidden rounded-[12px] border border-[color:var(--frj-hair)] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
           >
             <Image
               src={d.image}

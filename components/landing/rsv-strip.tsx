@@ -72,7 +72,11 @@ export function RsvStrip({ data }: { data: unknown }) {
           sería una violación WCAG (elemento focuseable dentro de un subárbol oculto para las
           tecnologías asistivas) y dispara warning del browser. El overflow-x-auto y la relación
           de HERMANO con el widget quedan intactos (invariante caja negra de arriba). */}
-      <div className="flex gap-[8px] overflow-x-auto px-[clamp(20px,5cqw,64px)]">
+      {/* justify-content: SAFE center — con pocas fotos (no llenan la fila) quedan CENTRADAS en vez
+          de pegadas a la izquierda con un hueco muerto a la derecha. El `safe` es la clave: si las
+          fotos DESBORDAN, degrada a `start` en vez de centrar — si centrás contenido que desborda,
+          el navegador recorta el principio y las primeras fotos quedan INALCANZABLES al scrollear. */}
+      <div className="flex gap-[8px] overflow-x-auto px-[clamp(20px,5cqw,64px)] [justify-content:safe_center]">
         {images.map((src, i) => (
           <button
             key={`${src}-${i}`}
