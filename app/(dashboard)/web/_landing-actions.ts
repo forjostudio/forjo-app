@@ -52,12 +52,20 @@ export async function saveLandingConfig(
     if (!user) return { ok: false, error: 'unauthorized' }
 
     // 4. Negocio resuelto de la SESIÓN (owner_id = auth.uid()), nunca de un business_id del body.
+    //    Se trae has_web_custom en el MISMO select: es el entitlement del add-on de web (PUB-01).
     const { data: business } = await supabase
       .from('businesses')
-      .select('id')
+      .select('id, has_web_custom')
       .eq('owner_id', user.id)
       .single()
     if (!business) return { ok: false, error: 'no_business' }
+
+    // 4b. ENTITLEMENT (gate real, server-side): sin web a medida contratada, NO se escribe. Gatear
+    //     solo la page sería cosmético — un POST directo a la action la saltearía. Acá se corta.
+    //     has_web_custom la togglea el admin desde el CRM con service-role; el trigger
+    //     businesses_protect_admin_columns la revierte ante cualquier UPDATE que no sea service_role,
+    //     así que el dueño NO puede auto-otorgársela para desbloquear el CMS (anti-tampering).
+    if (!business.has_web_custom) return { ok: false, error: 'not_entitled' }
 
     // 5. Validación estricta reject-on-invalid: un config inválido NO se escribe (no 500, no default).
     const parsed = parseLandingConfigForWrite(input)

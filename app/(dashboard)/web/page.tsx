@@ -46,6 +46,17 @@ export default async function WebEditorPage() {
     .single()
   if (!business) redirect('/onboarding')
 
+  // 4b. ENTITLEMENT por negocio (PUB-01): el CMS es un add-on, no una feature de plan. Solo puede
+  //     editarse la web de un negocio que efectivamente TIENE web a medida (has_web_custom).
+  //     Por qué esta columna y no el plan: (a) es el entitlement real (el admin la togglea desde el
+  //     CRM cuando el cliente contrata/paga la web); (b) el trigger businesses_protect_admin_columns
+  //     la REVIERTE ante cualquier UPDATE que no sea service_role → el dueño NO puede auto-otorgársela
+  //     (gate a prueba de tampering); (c) sin web a medida no hay nada que editar.
+  //     notFound() y no redirect: para un negocio sin el add-on, la ruta directamente "no existe".
+  //     Esto es solo la puerta de la UI — el gate que DE VERDAD importa vive en saveLandingConfig
+  //     (defensa en profundidad: una page sin este check igual no podría escribir).
+  if (!business.has_web_custom) notFound()
+
   // 5. Datos del preview: los 5 datasets que el LandingRenderer consume además del config, todos
   //    acotados a este tenant. Los selects de schedule_exceptions y locations piden EXACTAMENTE las
   //    columnas que declaran ExceptionLite/LocationLite del renderer (landing-renderer.tsx:47-48),

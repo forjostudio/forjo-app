@@ -72,6 +72,10 @@ interface Props {
 // Mapa de códigos de error de saveLandingConfig → toast en español (14-UI-SPEC §6, D-03c).
 const SAVE_ERROR_COPY: Record<string, string> = {
   cms_disabled: 'El editor no está disponible en este momento.',
+  // not_entitled: el negocio no tiene el add-on de web a medida (has_web_custom). En la práctica
+  // no debería verse — la page ya hace notFound() sin el entitlement — pero el write path lo
+  // rechaza igual (defensa en profundidad), así que el código tiene su copy.
+  not_entitled: 'Tu plan no incluye la edición de la web. Escribinos para activarla.',
   unauthorized: 'Tu sesión expiró. Volvé a iniciar sesión.',
   no_business: 'No encontramos tu negocio. Recargá la página.',
   invalid_config: 'Hay un dato inválido en tu web. Revisá los campos marcados.',

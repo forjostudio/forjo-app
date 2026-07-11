@@ -155,6 +155,40 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
     expect(check?.landing_config).toMatchObject(cfg)
   })
 
+  // ── Entitlement del CMS (PUB-01): el dueño NO puede auto-otorgarse has_web_custom ──────────────
+  // El gate del editor (page + saveLandingConfig) exige has_web_custom = true. Ese gate solo sirve
+  // si el dueño no puede prendérselo solo. Quien lo protege es el trigger
+  // businesses_protect_admin_columns: ante cualquier UPDATE que no sea service_role, revierte
+  // has_web_custom/has_whatsapp/plan/plan_status al valor viejo. Ojo con el falso verde: el UPDATE
+  // NO devuelve error (el trigger no lanza, REVIERTE en silencio) → la aserción real es que el
+  // valor EFECTIVO en la fila sigue en false. Aserción con anon-key; service-role solo para leer.
+  it('entitlement: A NO puede auto-otorgarse has_web_custom (trigger lo revierte)', async () => {
+    // Estado de partida: el fixture crea los negocios con has_web_custom = false (DEFAULT).
+    const { data: before } = await seeded.admin
+      .from('businesses')
+      .select('has_web_custom')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(before?.has_web_custom).toBe(false)
+
+    // A (sesión anon del dueño) intenta prendérselo sobre SU PROPIA fila. La policy RLS `owner access`
+    // le permite el UPDATE de su fila, así que esto NO falla por RLS — lo ataja el trigger.
+    await anonA
+      .from('businesses')
+      .update({ has_web_custom: true })
+      .eq('id', seeded.bizA)
+      .select('id')
+
+    // La aserción que importa: el valor efectivo NO cambió. Sin esto, el dueño desbloquearía el CMS
+    // (y su write path) por su cuenta.
+    const { data: after } = await seeded.admin
+      .from('businesses')
+      .select('has_web_custom')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(after?.has_web_custom).toBe(false)
+  })
+
   // ── D-10: la vista acotada public_businesses tras agregar landing_config (migración 030) ──────
   // CFG-02: public_businesses ahora expone landing_config a anon por columna explícita, SIN
   // re-abrir la fuga de secretos de v0.9. Estos 3 casos usan SOLO anon-key (anonA/anonB), nunca
