@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { cn } from '@/lib/utils'
 import { rsvData } from '@/lib/landing/schema'
 import { Kicker } from '@/components/landing/_premium'
 
@@ -48,7 +49,16 @@ export function RsvStrip({ data }: { data: unknown }) {
     // es un HERMANO (no un descendiente). El opacity/transform del reveal vive en este <div>, no
     // sube a la <section> ni a ningún ancestro del widget (T-OA7-01 / MOTION-04). Sin overflow/
     // transform propio de este contenedor (el overflow-x del strip vive en su div interno).
-    <div className="frj-reveal pb-[clamp(24px,4cqw,40px)]">
+    <div
+      className={cn(
+        'frj-reveal pb-[clamp(24px,4cqw,40px)]',
+        // SIN título: el bloque solo tenía padding-bottom → las fotos quedaban PEGADAS al borde
+        // de arriba y todo el aire caía abajo (asimétrico). Con padding-top igual al bottom, el
+        // strip queda ópticamente centrado en su espacio. CON título no hace falta: el header ya
+        // aporta el aire superior (su mb).
+        !hasHead && 'pt-[clamp(24px,4cqw,40px)]',
+      )}
+    >
       {/* Head editorial (mismo par que las demás secciones): Kicker opcional + <h2> + intro
           opcional. <h2> respeta la jerarquía (el <h1> es exclusivo del hero, D7-02). Solo se
           renderiza si el config trae header (sin fallback impuesto). Padding lateral fluido. */}
