@@ -42,6 +42,21 @@ export const THEMES: ThemeDef[] = [
   { id: 'cyber', name: 'Cyber', meta: 'Neón · futurista', bg: '#080611', fg: '#dff6ff', chips: ['#00e5ff', '#ff2e7e', '#3dff9e'], glow: true },
 ]
 
+// La tipografía de títulos que trae CADA theme. ESPEJO de --font-heading en app/themes.css
+// (forjo vive en :root/[data-theme='forjo'] de globals.css). Si allá cambia una fuente, cambiarla acá.
+//
+// Existe para poder RENDERIZAR una muestra de la opción "Automática" del selector de fuentes. Esa
+// opción significa "la del estilo visual elegido", y su preview usaba var(--font-heading) — que se
+// resuelve CONTRA EL ELEMENTO donde se pinta, o sea contra el PANEL. Resultado: la muestra de
+// "Automática" mostraba siempre la fuente del theme del panel (la Orbitron de Cyber), sin importar
+// qué theme tuviera elegido el landing. Con este mapa la muestra usa la fuente del theme SELECCIONADO.
+export const THEME_HEADING_FONT: Record<string, string> = {
+  forjo: 'var(--font-archivo), system-ui, sans-serif',
+  modern: 'var(--font-jakarta), system-ui, sans-serif',
+  spa: 'var(--font-cormorant), Georgia, serif',
+  cyber: 'var(--font-orbitron), system-ui, sans-serif',
+}
+
 // Cada theme trae su propia familia de acentos. Las de Forjo son las "clásicas".
 export const THEME_PALETTES: Record<string, PaletteDef[]> = {
   forjo: [

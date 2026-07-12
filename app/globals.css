@@ -556,6 +556,28 @@
   );
 }
 
+/* ── Fuga de las reglas DESCENDIENTES de los themes hacia el landing anidado ──────────
+   themes.css define reglas con selector DESCENDIENTE, ej:
+       [data-theme="cyber"] h1, h2, h3 { text-transform: uppercase }
+   Un selector así matchea CUALQUIER h1 que cuelgue de un ancestro cyber — incluido el landing,
+   que declara SU PROPIO theme en su <main>. Declarar data-theme='spa' en el landing cambia los
+   TOKENS (por eso la font-family sí pasa a la serif de Spa: se resuelve en el elemento), pero NO
+   desactiva la regla del ancestro. Y en el empate de especificidad (0,1,1 vs 0,1,1) gana la que va
+   última en el archivo, que es cyber. Resultado: en el preview del CMS, un landing Spa dentro de un
+   panel Cyber salía con la serif correcta pero EN MAYÚSCULAS.
+   En la web pública no se nota: ahí el <html> lleva el MISMO theme que el landing. Es un bug
+   exclusivo del preview, donde el landing vive adentro del panel.
+   Fix: neutralizamos el text-transform dentro del landing y lo REPONEMOS solo si su theme/fuente
+   PROPIOS lo piden. Especificidad (0,2,1) > la de la fuga (0,1,1), así que gana siempre.
+   Solo text-transform: es la única de estas props que el landing nunca quiere heredar. */
+.frj-site[data-theme] :is(h1, h2, h3) {
+  text-transform: none;
+}
+.frj-site[data-theme='cyber'] :is(h1, h2, h3),
+.frj-site[data-font='tech'] :is(h1, h2, h3) {
+  text-transform: uppercase;
+}
+
 /* Sombra del bloque editorial del hero CUANDO HAY FOTO.
    El problema que resuelve: el texto blanco apoyado sobre la foto se leía "pegado", plano,
    como un sticker. Dos capas (la receta de los títulos sobre imagen):

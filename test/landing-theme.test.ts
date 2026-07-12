@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isSafeColor, resolveLandingTheme, normalizeMotion, normalizeMode } from '@/lib/landing/theme'
+import { THEMES, THEME_HEADING_FONT } from '@/lib/theme-config'
 import { normalizeTheme, THEME_DEFAULT_PAL } from '@/lib/theme-config'
 
 // ── Tests puros de resolución/validación de tema (Fase 8, THEME-01/02) ────────────
@@ -292,5 +293,18 @@ describe('resolveLandingTheme — mode', () => {
 
   it('sin override → light', () => {
     expect(resolveLandingTheme({ preset: 'forjo' }, {}).mode).toBe('light')
+  })
+})
+
+// ── El mapa theme → fuente de títulos debe cubrir TODOS los themes ────────────────────
+// THEME_HEADING_FONT es un ESPEJO a mano de --font-heading en themes.css (no hay forma de leer
+// el CSS desde TS). Si mañana se agrega un theme y se olvidan de sumarlo acá, la muestra de la
+// opción "Automática" del selector de fuentes cae a var(--font-heading) y vuelve el bug: mostraría
+// la fuente del PANEL en vez de la del theme elegido. Este test lo caza.
+describe('THEME_HEADING_FONT', () => {
+  it('tiene una entrada por cada theme del set', () => {
+    for (const t of THEMES) {
+      expect(THEME_HEADING_FONT[t.id], `falta la fuente de títulos del theme "${t.id}"`).toBeTruthy()
+    }
   })
 })

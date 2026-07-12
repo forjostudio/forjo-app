@@ -7,6 +7,7 @@ import {
   THEMES,
   THEME_PALETTES,
   THEME_DEFAULT_PAL,
+  THEME_HEADING_FONT,
   FONTS,
   normalizeTheme,
   normalizePalette,
@@ -190,10 +191,18 @@ export function ThemeControls({ theme, onChange, motion, onMotionChange }: Theme
                   active ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-muted-foreground',
                 )}
               >
-                {/* La muestra "Aa" se rinde con la fuente real (css var del FontDef). */}
+                {/* La muestra "Aa" se rinde con la fuente real.
+                    Ojo con 'auto': su FontDef.css es var(--font-heading), que se resuelve CONTRA EL
+                    ELEMENTO donde se pinta — o sea contra el PANEL, no contra el landing. Por eso la
+                    muestra de "Automática" salía siempre con la fuente del theme del panel (la
+                    Orbitron de Cyber) aunque el landing tuviera Spa. Para 'auto' usamos la fuente
+                    del theme SELECCIONADO (THEME_HEADING_FONT), que es lo que "Automática" promete. */}
                 <span
                   className="text-lg font-bold leading-none"
-                  style={{ fontFamily: f.css }}
+                  style={{
+                    fontFamily:
+                      f.id === 'auto' ? THEME_HEADING_FONT[activePreset] ?? f.css : f.css,
+                  }}
                   aria-hidden="true"
                 >
                   Aa
