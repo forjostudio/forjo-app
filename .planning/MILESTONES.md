@@ -1,5 +1,21 @@
 # Milestones
 
+## v0.17 Landing Polish + CMS usable (Shipped: 2026-07-12)
+
+**Sin fases GSD:** 23 commits de polish reactivo sobre feedback de UAT, directo a `main`. Cero migraciones. 40 archivos, +3740/−296. Suite: 484/484.
+
+**Key accomplishments:**
+
+- **Motion reescrito a IntersectionObserver.** Se REVISITÓ el invariante "CSS-first, sin JS" de la Phase 12: `animation-timeline: view()` es baseline **solo Chromium**, así que el motion era invisible en Safari/Firefox/iOS — la mitad de los visitantes. Verificado en iPhone después del cambio.
+- **Lightbox de fotos** (galería, strip RSV, about): carrusel scroll-snap con peek, swipe nativo, cierre con el botón atrás del celular. Modelo "el scroll manda, el índice lo sigue" — que además disuelve el bug de iOS donde el scroll programático peleaba con el snap mandatory y las flechas quedaban muertas. Secciones siguen siendo RSC (delegación por data-attributes) y el overlay se portea a `document.body` (booking = caja negra por construcción).
+- **La skill emite `motion: 'premium'` + fotos del strip de reserva.** El renderer soportaba las dos features desde v0.16 pero `buildLandingConfig` nunca las escribía → toda web armada por la skill salía ESTÁTICA y sin strip. Modo de falla silencioso: no rompía nada, la feature simplemente no existía para negocios nuevos.
+- **El landing declara y APLICA su propio contexto visual.** Antes heredaba tema/fuente/modo del ancestro: en el preview del CMS tomaba el tema del PANEL (la vista previa mentía) y en la web pública tomaba el claro/oscuro del VISITANTE. Requirió tres piezas: `[data-theme='forjo']` como selector real (forjo era "la ausencia del atributo", que solo funciona en `<html>`), `.frj-site` aplicando `background/color/font-family` (declarar los tokens no alcanza: el fondo se pinta en `body` y la fuente se computa en `html`), y neutralizar las reglas descendientes de `themes.css` que se filtraban al landing anidado.
+- **CMS: ajustes de portada** (opacidad de la foto + tamaño de título/bajada/subtítulo), **selector de tipografía**, **modo claro/oscuro**, **botones editables en el CTA** (con allowlist de protocolo: `javascript:` parsea como URL válida y estos valores van a un `<a href>` público). Se QUITÓ "Color principal" (pisaba el acento de cualquier paleta y dejaba los swatches decorativos) con limpieza del override al cargar.
+- **Gating del CMS por `has_web_custom`** (PUB-01): el gate real está en la Server Action, no en la page — gatear solo la page es cosmético, un POST directo la saltea. El trigger `businesses_protect_admin_columns` revierte el flag ante cualquier UPDATE no-service_role → el dueño no puede auto-otorgárselo.
+- **Botón flotante de WhatsApp** (sticky, no fixed: un fixed se escaparía del marco del preview, y crear un containing block está prohibido porque rompe los overlays del booking) y **badge de reCAPTCHA oculto** con la atribución de texto obligatoria por el ToS de Google.
+
+---
+
 ## v0.16 Web Builder — Ampliación + CMS (Shipped: 2026-07-10)
 
 **Phases completed:** 4 phases, 9 plans, 11 tasks
