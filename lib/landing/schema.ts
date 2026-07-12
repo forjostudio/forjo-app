@@ -167,9 +167,52 @@ export const locationData = z
   .catch({})
 export type LocationData = z.infer<typeof locationData>
 
+// ⚠ SEGURIDAD — por qué NO alcanza z.string().url() para el href de un botón.
+// `z.url()` valida que el string PARSEE como URL, y `javascript:alert(1)` parsea perfecto. En una
+// imagen daba igual (un src javascript: no ejecuta), pero estos valores van a un <a href> del sitio
+// PÚBLICO: un href javascript: es XSS directo, y el dueño de un negocio podría pegarlo sin saber
+// lo que hace (o alguien podría inyectarlo si mañana se abre otro camino de escritura).
+// Acá acotamos por PROTOCOLO con una allowlist (http/https), que es la única defensa que sirve.
+// Mismo espíritu que isSafeColor con los hex.
+const safeLinkUrl = z.string().refine(
+  (v) => {
+    try {
+      const u = new URL(v)
+      return u.protocol === 'https:' || u.protocol === 'http:'
+    } catch {
+      return false
+    }
+  },
+  { message: 'La URL debe empezar con https://' },
+)
+
+// Botón extra del CTA (ej. Instagram, la carta, cómo llegar). Label + destino externo.
+const ctaLink = z.object({
+  label: z.string().min(1),
+  url: safeLinkUrl,
+})
+export type CtaLink = z.infer<typeof ctaLink>
+
 export const ctaData = z
   .object({
     headline: z.string().optional(),
+    // Texto del botón que ancla a la reserva (#reservar). Ausente → 'Reservar turno'.
+    primary_label: z.string().optional(),
+    // Botones extra, en orden. Tope 3: el CTA tiene UN objetivo (reservar) y llenarlo de botones
+    // compite con él. El de WhatsApp NO se cuenta acá — sale solo de businesses.whatsapp.
+    //
+    // El preprocess FILTRA los ítems inválidos en vez de dejar caer el array entero. La diferencia
+    // importa en el editor: sin esto, apenas tocás "Agregar botón" nace un ítem vacío (inválido) →
+    // el array falla → el .catch lo tira a undefined → los botones que YA tenías cargados
+    // DESAPARECEN del preview mientras tipeás. Con el filtro, el botón a medio escribir simplemente
+    // todavía no se muestra, y los válidos siguen ahí. En el render público hace lo mismo con un
+    // link corrupto: se cae ese, no todos.
+    links: z
+      .preprocess(
+        (v) => (Array.isArray(v) ? v.filter((x) => ctaLink.safeParse(x).success) : v),
+        z.array(ctaLink).max(3).optional(),
+      )
+      .catch(undefined),
   })
   .catch({})
 export type CtaData = z.infer<typeof ctaData>

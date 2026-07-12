@@ -712,6 +712,37 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 : (requireDeposit ? `Pagar seña $${Number(business.deposit_amount).toLocaleString('es-AR')}` : 'Confirmar turno')}
             </Button>
 
+            {/* ⚠ ATRIBUCIÓN DE reCAPTCHA — OBLIGATORIA, NO ES DECORATIVA.
+                Ocultamos el badge flotante de Google (.grecaptcha-badge en globals.css) porque
+                queda pegado en una esquina de todas las páginas del sitio y ensucia el diseño.
+                Los términos de reCAPTCHA PERMITEN esconderlo, pero SOLO si se muestra esta
+                leyenda con los dos links en el flujo del usuario. Sin esto, ocultar el badge
+                viola el ToS de Google (y pueden cortar la key).
+                Si algún día se saca este texto, hay que volver a mostrar el badge. Van juntos. */}
+            {siteKey && (
+              <p className="mt-3 text-center text-[11px] leading-relaxed text-muted-foreground">
+                Protegido por reCAPTCHA. Aplican la{' '}
+                <a
+                  href="https://policies.google.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  Política de Privacidad
+                </a>{' '}
+                y los{' '}
+                <a
+                  href="https://policies.google.com/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  Términos del Servicio
+                </a>{' '}
+                de Google.
+              </p>
+            )}
+
             {requireDeposit && (
               <p className="text-xs text-center text-muted-foreground">
                 Serás redirigido a MercadoPago para abonar la seña.

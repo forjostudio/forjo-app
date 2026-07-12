@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLandingConfig, DEFAULT_LANDING_CONFIG, rsvData, heroData } from '@/lib/landing/schema'
+import { parseLandingConfig, DEFAULT_LANDING_CONFIG, rsvData, heroData, ctaData } from '@/lib/landing/schema'
 
 // ── Tests del parser fail-safe de landing config (D-10) ──────────────────────────
 // Puros: NO dependen de Supabase ni de las 3 creds, así que corren SIEMPRE (no van bajo
@@ -158,5 +158,41 @@ describe('heroData — ajustes de presentación', () => {
     const d = heroData.parse({ headline: 'Vieja' })
     expect(d.image_opacity).toBeUndefined()
     expect(d.headline_scale).toBeUndefined()
+  })
+})
+
+// ── Botones del CTA ──────────────────────────────────────────────────────────────────
+describe('ctaData — botones extra', () => {
+  it('acepta label + url https', () => {
+    const d = ctaData.parse({ links: [{ label: 'Instagram', url: 'https://instagram.com/x' }] })
+    expect(d.links).toEqual([{ label: 'Instagram', url: 'https://instagram.com/x' }])
+  })
+
+  // EL test de seguridad. z.url() dejaría pasar `javascript:` (parsea como URL perfectamente), y
+  // estos valores van a un <a href> del sitio PÚBLICO ⇒ XSS. Se acota por PROTOCOLO.
+  it('RECHAZA un href javascript: (XSS) y otros protocolos', () => {
+    for (const url of ['javascript:alert(1)', 'data:text/html,<script>a()</script>', 'file:///etc/passwd']) {
+      const d = ctaData.parse({ headline: 'Hola', links: [{ label: 'X', url }] })
+      expect(d.links ?? [], `no debe pasar: ${url}`).toEqual([])
+      // y NO se lleva puesto el resto del data
+      expect(d.headline).toBe('Hola')
+    }
+  })
+
+  // Los ítems inválidos se FILTRAN, no tiran el array entero. En el editor eso es lo que evita que
+  // los botones ya cargados desaparezcan del preview mientras tipeás uno nuevo (nace vacío).
+  it('un botón a medio escribir no borra a los que ya estaban', () => {
+    const d = ctaData.parse({
+      links: [
+        { label: 'Instagram', url: 'https://instagram.com/x' },
+        { label: '', url: '' }, // el recién agregado, todavía vacío
+      ],
+    })
+    expect(d.links).toEqual([{ label: 'Instagram', url: 'https://instagram.com/x' }])
+  })
+
+  it('tope de 3 botones', () => {
+    const many = Array.from({ length: 4 }, (_, i) => ({ label: `B${i}`, url: `https://x.test/${i}` }))
+    expect(ctaData.parse({ links: many }).links).toBeUndefined() // excede el max → cae el campo
   })
 })

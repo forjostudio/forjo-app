@@ -71,8 +71,25 @@ export function Cta({
             variant="on-photo"
             className="[&]:border-[color:var(--frj-on-primary)]/40 [&]:bg-transparent [&]:text-[color:var(--frj-on-primary)] [&_.frj-btn-circ]:bg-[color:color-mix(in_oklab,var(--frj-on-primary)_22%,transparent)]"
           >
-            Reservar turno
+            {d.primary_label ?? 'Reservar turno'}
           </PillButton>
+
+          {/* Botones extra del dueño (Instagram, la carta, cómo llegar…). Externos SIEMPRE:
+              target _blank + rel noopener. El protocolo ya viene acotado a http/https por el
+              schema (safeLinkUrl) — un href javascript: sería XSS y ni siquiera llega hasta acá.
+              Mismo estilo outline que el ancla: el CTA tiene UN objetivo (reservar) y estos son
+              subordinados; si compitieran visualmente, matarían la conversión. */}
+          {d.links?.map((l) => (
+            <PillButton
+              key={`${l.label}-${l.url}`}
+              href={l.url}
+              variant="on-photo"
+              external
+              className="[&]:border-[color:var(--frj-on-primary)]/40 [&]:bg-transparent [&]:text-[color:var(--frj-on-primary)] [&_.frj-btn-circ]:bg-[color:color-mix(in_oklab,var(--frj-on-primary)_22%,transparent)]"
+            >
+              {l.label}
+            </PillButton>
+          ))}
         </div>
       </div>
     </section>

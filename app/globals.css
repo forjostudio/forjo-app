@@ -556,6 +556,19 @@
   );
 }
 
+/* ── Badge flotante de reCAPTCHA ──────────────────────────────────────────────────────
+   Google lo inyecta pegado a una esquina de la ventana, en TODAS las páginas donde carga el
+   script, y no hay forma de moverlo. Ensucia el diseño de la web del negocio.
+   ⚠ Esconderlo está PERMITIDO por los términos de reCAPTCHA, pero SOLO si el flujo muestra la
+   atribución en texto con los links a la Política de Privacidad y a los Términos de Google. Esa
+   leyenda vive debajo del botón de confirmar en booking-client.tsx. LAS DOS COSAS VAN JUNTAS: si
+   se saca ese texto, hay que volver a mostrar el badge, o se viola el ToS (y Google puede cortar
+   la key del sitio).
+   visibility:hidden (no display:none) porque el widget sigue necesitando existir y medir. */
+.grecaptcha-badge {
+  visibility: hidden;
+}
+
 /* ── Fuga de las reglas DESCENDIENTES de los themes hacia el landing anidado ──────────
    themes.css define reglas con selector DESCENDIENTE, ej:
        [data-theme="cyber"] h1, h2, h3 { text-transform: uppercase }

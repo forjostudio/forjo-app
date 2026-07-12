@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState, type ReactNode } from 'react'
-import { ImageIcon, Minus, Plus } from 'lucide-react'
+import { ImageIcon, Minus, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -316,7 +316,7 @@ function renderImage(imageSlot: ImageSlot | undefined, spec: ImageSlotSpec): Rea
 
 // ── Dispatcher: un form por section.type ────────────────────────────────────────────────
 export function SectionForm(props: SectionFormProps) {
-  const { section, onDataChange, services, locations, timeBlocks, imageSlot } = props
+  const { section, onDataChange, services, locations, timeBlocks, business, imageSlot } = props
 
   switch (section.type) {
     case 'hero': {
@@ -540,6 +540,7 @@ export function SectionForm(props: SectionFormProps) {
 
     case 'cta': {
       const d = ctaData.parse(section.data)
+      const links = d.links ?? []
       return (
         <div className="space-y-4">
           <TextField
@@ -547,6 +548,75 @@ export function SectionForm(props: SectionFormProps) {
             value={d.headline ?? ''}
             onChange={(v) => onDataChange({ headline: v })}
           />
+          <TextField
+            label="Texto del botón de reserva"
+            optional
+            value={d.primary_label ?? ''}
+            onChange={(v) => onDataChange({ primary_label: v })}
+          />
+
+          {/* Botones extra (Instagram, la carta, cómo llegar…). El de WhatsApp NO se lista acá:
+              sale solo del número del negocio. */}
+          <div className="space-y-3 rounded-md border border-dashed p-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Botones extra
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {business.whatsapp
+                  ? 'El botón de WhatsApp ya aparece solo, con el número de tu negocio.'
+                  : 'Cargá tu WhatsApp en Negocio para que aparezca también ese botón.'}
+              </p>
+            </div>
+
+            {links.map((l, i) => (
+              <div key={i} className="space-y-2 rounded-md border bg-secondary/40 p-2.5">
+                <TextField
+                  label="Texto del botón"
+                  value={l.label}
+                  onChange={(v) =>
+                    onDataChange({ links: links.map((x, j) => (j === i ? { ...x, label: v } : x)) })
+                  }
+                />
+                <UrlField
+                  label="Enlace"
+                  value={l.url}
+                  onChange={(v) =>
+                    onDataChange({ links: links.map((x, j) => (j === i ? { ...x, url: v } : x)) })
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-9 text-destructive hover:text-destructive"
+                  onClick={() => onDataChange({ links: links.filter((_, j) => j !== i) })}
+                >
+                  <Trash2 className="size-4" />
+                  Quitar botón
+                </Button>
+              </div>
+            ))}
+
+            {/* Tope de 3 (el schema también lo corta). El CTA tiene UN objetivo —reservar— y cada
+                botón que se suma compite con él. */}
+            {links.length < 3 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 w-full"
+                onClick={() => onDataChange({ links: [...links, { label: '', url: '' }] })}
+              >
+                <Plus className="size-4" />
+                Agregar botón
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Máximo 3 botones extra: más opciones compiten con el de reservar.
+              </p>
+            )}
+          </div>
         </div>
       )
     }
