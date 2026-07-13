@@ -80,7 +80,12 @@ Detalle completo archivado en [`milestones/v0.16-ROADMAP.md`](../../milestones/v
   4. El dueño descarta el borrador y el editor vuelve a mostrar exactamente lo que está al aire.
   5. Cero sorpresas en la transición: un negocio que ya tenía su landing publicada la sigue viendo idéntica (y abre el editor viendo una copia fiel de lo publicado); un negocio que nunca publicó sigue viendo su página de reservas de siempre, y al publicar por primera vez su web a medida la reemplaza (go-live implícito).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 15-01-PLAN.md — Migración 050 (`businesses.landing_draft`, aditiva) + 4 tests de aislamiento del borrador (wave 1)
+- [ ] 15-02-PLAN.md — Write path: `saveLandingDraft` / `publishLanding()` / `discardLandingDraft()` + los 2 configs en `page.tsx` + compare canónico (wave 2)
+- [ ] 15-03-PLAN.md — Barra publish (3 acciones · 3 estados), dialogs de go-live y descarte, toasts, token `--warning` (wave 3)
 
 **UI hint**: yes
 
@@ -133,7 +138,7 @@ Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer e
 | 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete | 2026-07-07 |
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete | 2026-07-08 |
 | 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
-| 15. Borrador y publicación (núcleo) | v0.18 | 0/? | Not started | - |
+| 15. Borrador y publicación (núcleo) | v0.18 | 0/3 | Planned | - |
 | 16. La web nace como borrador (skill) | v0.18 | 0/? | Not started | - |
 | 17. Exponer el CMS a clientes reales | v0.18 | 0/? | Not started | - |
 
