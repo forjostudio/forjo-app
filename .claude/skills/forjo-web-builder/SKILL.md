@@ -71,7 +71,8 @@ Las claves del landing en ese JSON son dos cosas distintas y no se confunden:
 | `pendiente_de_aprobacion` | **EL BORRADOR** (columna `landing_draft`): lo que ve el dueño en su editor y **todavía NO salió al aire**. |
 | `nunca_publico` | `true` → el negocio nunca publicó: su `/[slug]` sigue mostrando la reserva simple. |
 | `tiene_cambios_sin_publicar` | `true` → el dueño tiene trabajo suyo pendiente de publicar. |
-| `partes_sin_publicar` | Qué partes difieren de lo publicado (ej. `["hero","gallery"]`). |
+| `partes_sin_publicar` | Qué partes difieren de lo publicado (ej. `["hero","gallery"]`). Viene `[]` cuando **no se puede diffear** (nunca publicó, o alguna columna está rota) — eso **no** significa "no hay cambios": mirá `tiene_cambios_sin_publicar`. |
+| `publicado_roto` / `borrador_roto` | `true` → esa columna **está en la DB pero no valida** contra el schema. El diff **no es confiable** y el script avisa igual (ante duda, avisar). |
 
 - Si el slug no existe → el script lo reporta; pará y pedí el slug correcto.
 - **La escritura por defecto NO toca lo publicado**: escribe el **borrador** (`landing_draft`) y es el
@@ -264,10 +265,21 @@ proyecto. Mostrá:
 - **Destino de la escritura** (decilo siempre, explícito): `landing_draft` → **borrador**, el dueño lo
   revisa y lo publica desde su panel. O, **solo si el operador pidió `--publish`**: borrador **+ AL
   AIRE** (la web se publica ya).
-- **Aviso de choque, si aplica.** Si el `--inspect` del paso 2 marcó `tiene_cambios_sin_publicar`,
-  mostralo acá, con el copy del script:
+- **Aviso de choque, si aplica.** El `--inspect` del paso 2 **ya imprime la línea exacta** debajo del
+  JSON (empieza con `⚠`). **Copiala tal cual** — no la re-redactes ni la resumas. Tiene **cuatro
+  formas** según el estado de la fila, y cada una dice algo distinto:
 
-  `⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: hero, gallery. Si seguís, los pisás.`
+  | Cuándo (lo que devuelve el `--inspect`) | El aviso |
+  |---|---|
+  | `borrador_roto: true` | `⚠ El dueño TIENE un borrador en la DB, pero NO lo puedo leer (no valida contra el schema): no puedo decirte si tiene trabajo sin publicar ni qué partes difieren. Si seguís, lo pisás.` |
+  | `publicado_roto: true` (y hay borrador) | `⚠ La web publicada está en la DB, pero NO la puedo leer (no valida contra el schema): no puedo comparar el borrador del dueño contra ella. Si seguís, pisás el borrador.` |
+  | `tiene_cambios_sin_publicar: true` **y** `nunca_publico: true` (`partes_sin_publicar` viene `[]` a propósito: no hay contra qué diffear) | `⚠ El dueño tiene un borrador sin publicar (este negocio NUNCA publicó su web: /<slug> sigue mostrando la reserva simple). Si seguís, lo pisás.` |
+  | `tiene_cambios_sin_publicar: true` **y** `nunca_publico: false` | `⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: hero, gallery. Si seguís, los pisás.` |
+
+  ⚠ **No armes la lista de secciones vos.** Si `partes_sin_publicar` viene `[]` (los tres primeros
+  casos), renderizar el template de la última fila deja un `Secciones que difieren de lo publicado: .`
+  vacío y sin sentido, en el único punto de control humano del flujo. Usá la línea que ya imprimió el
+  script.
 
   El operador decide **en el momento, con el dato a la vista**. El flujo **NO aborta ni obliga a
   re-correr nada**: el caso limpio (el 95%) no paga fricción. Si el operador no quiere pisar el trabajo
