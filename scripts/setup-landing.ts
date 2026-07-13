@@ -9,22 +9,32 @@
 //
 // QUÉ hace — DOS modos:
 //   · `--inspect <slug>`  → READ-ONLY. Imprime un resumen del negocio (id, nombre, vertical, tema
-//     actual, servicios activos, estado del landing_config). NO sube nada, NO hace UPDATE. Es el
-//     insumo que el SKILL.md muestra en el checkpoint humano antes de aprobar la escritura (research Q2).
+//     actual, servicios activos) y las DOS columnas del landing por separado: `al_aire`
+//     (`landing_config` — lo que ve cualquier visitante) y `pendiente_de_aprobacion`
+//     (`landing_draft` — lo que ve el dueño en su editor y todavía NO salió al aire), más el flag de
+//     cambios sin publicar (SKILL-08 / D-05). NO sube nada, NO hace UPDATE. Es el insumo que el
+//     SKILL.md muestra en el checkpoint humano antes de aprobar la escritura (research Q2).
 //   · ESCRITURA → recibe el slug y un payload JSON (`--config <path>`): la materia prima del config
 //     (un BuilderInput de lib/landing/builder.ts) con las imágenes como RUTAS LOCALES, más brand hints.
-//     Resuelve slug→business_id, sube cada imagen local re-encodeada con sharp a
-//     `landing-assets/{businessId}/{uuid}.{ext}`, reemplaza las rutas por URLs públicas de Storage,
-//     arma el config con buildLandingConfig + recommendTheme, lo VALIDA con parseLandingConfig (gate
-//     SKILL-04) y recién entonces hace `UPDATE ... WHERE id = businessId` (por id, NO por slug).
+//     Resuelve slug→business_id, AVISA si el dueño tiene cambios sin publicar (D-01/D-02), sube cada
+//     imagen local re-encodeada con sharp a `landing-assets/{businessId}/{uuid}.{ext}`, reemplaza las
+//     rutas por URLs públicas de Storage, arma el config con buildLandingConfig + recommendTheme, lo
+//     VALIDA con el gate ESTRICTO de escritura (`parseLandingConfigForWrite` — reject-on-invalid) y
+//     recién entonces hace `UPDATE ... WHERE id = businessId` (por id, NO por slug).
+//
+//     ⚠ POR DEFECTO ESCRIBE SOLO EL BORRADOR (`landing_draft`) — Phase 16 / SKILL-07. La web que arma
+//     el operador NACE COMO BORRADOR y NO aparece en `/[slug]`: espera a que el dueño la mire y la
+//     publique desde su panel. Publicar es OPT-IN EXPLÍCITO con `--publish`, que escribe las DOS
+//     columnas con el mismo objeto validado (D-03/D-03b) e imprime antes qué web está por reemplazar.
 //
 // POR QUÉ el payload llega por archivo JSON (`--config <path>`) y no por arg inline:
 //   PowerShell pelea con el quoting de JSON en la CLI; un archivo temporal evita ese infierno y deja
 //   el flujo del SKILL.md trivial (escribe un .json, llama al script con su ruta).
 //
 // USO (local, con .env.local cargado):
-//   npm run setup:landing -- --inspect <slug>
-//   npm run setup:landing -- --slug <slug> --config <ruta-al-payload.json>
+//   npm run setup:landing -- --inspect <slug>                                    (read-only)
+//   npm run setup:landing -- --slug <slug> --config <ruta.json>                  (escribe el BORRADOR)
+//   npm run setup:landing -- --slug <slug> --config <ruta.json> --publish        (borrador + AL AIRE)
 //
 // Cero deps npm nuevas: tsx/dotenv/@supabase/supabase-js/sharp/zod ya están (RESEARCH §Package Audit).
 
@@ -37,8 +47,12 @@ import sharp from 'sharp'
 
 import { buildLandingConfig, recommendTheme } from '@/lib/landing/builder'
 import type { BuilderInput, BrandHints } from '@/lib/landing/builder'
-import { parseLandingConfig, DEFAULT_LANDING_CONFIG } from '@/lib/landing/schema'
+// parseLandingConfig es el validador FAIL-SAFE de LECTURA: acá se importa SOLO para el camino de
+// lectura (readLandingState, que compara las dos columnas). El write path usa el ESTRICTO de
+// @/lib/landing/write — ver el GATE de runWrite.
+import { parseLandingConfig } from '@/lib/landing/schema'
 import type { LandingConfig } from '@/lib/landing/schema'
+import { parseLandingConfigForWrite, landingWriteColumns } from '@/lib/landing/write'
 import { diffConfigParts } from '@/lib/landing/editor-draft'
 import type { ConfigPart } from '@/lib/landing/editor-draft'
 
@@ -356,12 +370,18 @@ function extToContentType(ext: string): string {
 
 // ── MODO ESCRITURA ──────────────────────────────────────────────────────────────────
 // Orden EXACTO (Pitfall 3: nada se escribe hasta tener todo resuelto y validado):
-//   1) resolver business_id  2) re-hostear imágenes  3) armar config con builder
-//   4) GATE parseLandingConfig  5) UPDATE por id  6) imprimir preview.
+//   1) resolver business_id  2) leer el estado draft/publicado  3) AVISO de choque (D-01/D-02)
+//   4) re-hostear imágenes  5) armar config con builder  6) GATE estricto de escritura
+//   7) pre-print de --publish  8) UPDATE por id  9) mensaje de cierre.
+//
+// `publish` es OPT-IN EXPLÍCITO (el flag `--publish`, resuelto en main() por presencia del token):
+// nunca por defecto, nunca inferido de otra cosa. Con publish=false se escribe SOLO `landing_draft`
+// (SKILL-07): la web nace como borrador.
 async function runWrite(
   supabase: SupabaseClient,
   slug: string,
   configPath: string,
+  publish: boolean,
 ) {
   // Leer + parsear el payload JSON (BuilderInput + brand hints) que dejó el SKILL.md.
   let payload: WritePayload
@@ -389,7 +409,31 @@ async function runWrite(
   }
   const businessId = biz.id
 
-  // 2) Re-hostear cada imagen local referenciada en el payload, reemplazando la ruta por la URL
+  // 2) Leer el estado de las DOS columnas ANTES de tocar nada (ni una imagen subida todavía).
+  const estado = readLandingState(biz)
+
+  // 3) AVISO DE CHOQUE operador ↔ dueño (D-01/D-02). Desde la Phase 16 hay DOS escritores sobre
+  //    `landing_draft`: el dueño (desde su editor) y este script. Si el dueño tiene cambios sin
+  //    publicar, esta escritura se los pisa — y no hay historial ni undo.
+  //
+  //    ⚠ AVISA, NO ABORTA — y NO se le agrega una confirmación interactiva. A propósito:
+  //    EL CHECKPOINT HUMANO VIVE EN EL SKILL.md (paso 6). Cuando este proceso Node arranca, la
+  //    escritura YA está aprobada por el operador; el script solo IMPRIME el dato con el que se
+  //    decidió. Quien bloquea es el flujo de la skill, no el proceso. Además el repo no tiene UNA
+  //    sola confirmación interactiva en NINGÚN script —ni con el módulo nativo de Node ni con una lib
+  //    de terceros— y no es el momento de inventar el patrón. NO "arreglar" esto agregando una.
+  if (estado.tieneCambiosSinPublicar && estado.borradorSinComparar) {
+    console.log(
+      '⚠ El dueño tiene un borrador sin publicar (este negocio NUNCA publicó su web). Si seguís, lo pisás.',
+    )
+  } else if (estado.tieneCambiosSinPublicar) {
+    console.log(
+      '⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: ' +
+        `${estado.partes.map(formatPart).join(', ')}. Si seguís, los pisás.`,
+    )
+  }
+
+  // 4) Re-hostear cada imagen local referenciada en el payload, reemplazando la ruta por la URL
   //    pública de Storage. Se hace ANTES de armar el config para que el builder reciba URLs válidas
   //    (el builder filtra con .url() estricto — una ruta local no pasaría y se perdería la imagen).
   const input: BuilderInput = structuredClone(payload.input)
@@ -418,7 +462,7 @@ async function runWrite(
     return
   }
 
-  // 3) Armar el tema (recommendTheme) y el config (buildLandingConfig) con la lógica pura de 10-01.
+  // 5) Armar el tema (recommendTheme) y el config (buildLandingConfig) con la lógica pura de 10-01.
   //    Por DEFAULT el landing hereda el theme/palette/font que el negocio YA configuró en Apariencia
   //    (la misma identidad de su web de reservas): partimos de la fila `businesses` y el payload solo
   //    PISA si el operador pasó un override explícito. Así la landing matchea el booking salvo que se
@@ -433,39 +477,104 @@ async function runWrite(
   const theme = recommendTheme(brand)
   const landingConfig = buildLandingConfig(input, theme)
 
-  // 4) GATE (SKILL-04 / T-10-06): validar con parseLandingConfig ANTES de escribir. Si devuelve null
-  //    o el DEFAULT (señal de inválido) → abortar SIN UPDATE. Nunca escribir un config que rompería el render.
-  const parsed = parseLandingConfig(landingConfig)
-  if (!parsed || parsed === DEFAULT_LANDING_CONFIG) {
-    console.error('[setup-landing] el config armado NO pasó parseLandingConfig — abortado, no se escribe.')
+  // 6) GATE (SKILL-04 / T-10-06): validar ANTES de escribir. Config inválido → CERO UPDATE.
+  //
+  // POR QUÉ CAMBIÓ EL VALIDADOR (era `parseLandingConfig`, el de LECTURA): son contratos OPUESTOS.
+  //   · `parseLandingConfig` es FAIL-SAFE: ante un `data` de sección inválido lo degrada a `{}` EN
+  //     SILENCIO (los esquemas del render llevan `.catch({})` colgado) y devuelve un config que
+  //     "parsea bien". En un WRITE PATH eso es peor que no validar: se persiste la degradación y el
+  //     operador pierde la sección ENTERA sin que nadie se entere. El chequeo viejo contra
+  //     DEFAULT_LANDING_CONFIG solo agarraba el caso en que el config COMPLETO era basura.
+  //   · `parseLandingConfigForWrite` (lib/landing/write.ts) es el ESTRICTO de escritura: rechaza
+  //     ruidosamente (`invalid_config` / `config_too_large`), valida el `data` de CADA sección contra
+  //     el esquema de SU tipo (variantes `Strict`, sin `.catch`), aplica la allowlist de protocolo en
+  //     TODAS las URLs (un `javascript:` ni siquiera llega a la DB) y topea el config en 256 KB.
+  // Es exactamente la clase de bug que cerró T-15-16, en el único write path que quedaba afuera.
+  const parsed = parseLandingConfigForWrite(landingConfig)
+  if (!parsed.ok) {
+    console.error(
+      `[setup-landing] el config armado NO pasó el gate de escritura (${parsed.error}) — abortado, no se escribe nada.`,
+    )
     process.exitCode = 1
     return
   }
 
-  // 5) UPDATE filtrado por id resuelto del slug (NUNCA por slug — Pitfall 6 / T-10-07). Aislamiento por business_id.
+  // 7) PRE-PRINT de --publish (D-03): antes de reemplazar la web al aire, decir QUÉ se reemplaza.
+  if (publish) {
+    if (estado.nuncaPublico) {
+      console.log(
+        `[setup-landing] --publish: este negocio NUNCA publicó — esto es su GO-LIVE ` +
+          `(su /${slug} deja de mostrar la reserva simple y pasa a mostrar esta web).`,
+      )
+    } else {
+      const prev = estado.published! // no es null: nuncaPublico === false
+      const activas = prev.sections
+        .filter((s) => s.enabled)
+        .sort((a, b) => a.order - b.order)
+        .map((s) => s.type)
+      console.log('[setup-landing] --publish: vas a REEMPLAZAR la web que está al aire.')
+      console.log(
+        `  Web actual → secciones activas: ${activas.join(', ') || '(ninguna)'} · ` +
+          `tema: ${prev.theme.preset}${prev.theme.overrides?.palette ? ` / ${prev.theme.overrides.palette}` : ''}`,
+      )
+    }
+  }
+
+  // 8) UPDATE filtrado por id resuelto del slug (NUNCA por slug — Pitfall 6 / T-10-07). Aislamiento
+  //    por business_id.
   //
-  // ⚠ SE ESCRIBEN LAS DOS COLUMNAS, y no es "por las dudas": desde Phase 15 (migración 050) el dato
-  // está partido en `landing_config` = LO PUBLICADO y `landing_draft` = LO QUE EL DUEÑO EDITA. Este
-  // script ES un publish (el operador arma la web y la deja al aire), así que tiene que dejar el
-  // MISMO invariante que publishLanding(): después de escribir, draft == published.
-  // Si escribiera solo landing_config, el borrador del dueño quedaría desincronizado (con la web
-  // VIEJA): al abrir /web vería su borrador anterior, el indicador le diría "Guardado — sin
-  // publicar" y el botón Publicar —que es exactamente lo que la barra le pide tocar— REVERTIRÍA la
-  // web que el operador acaba de armar. No hay historial ni undo: sería pérdida de datos silenciosa.
+  // ⚠ QUÉ COLUMNAS SE ESCRIBEN, Y POR QUÉ CAMBIÓ EL DEFAULT (Phase 16 — SKILL-07 / D-03 / D-03b).
+  // La decisión NO vive inline acá: la toma `landingWriteColumns(config, publish)` (lib/landing/write.ts),
+  // que está unit-testeada en test/landing-write.test.ts. Este script no es unit-testeable
+  // (side-effects, process.argv, service-role), y la regresión #1 de la fase —"el script pisa la web
+  // publicada"— no puede quedar sin UN SOLO test que la agarre. No la re-implementes inline.
+  //
+  //   · publish=false (DEFAULT) → { landing_draft }. La clave `landing_config` NI EXISTE en el
+  //     payload: la web al aire queda INTACTA. La web que arma el operador NACE COMO BORRADOR y
+  //     espera la aprobación del dueño desde su panel. Éste es el cambio de la fase: hasta Phase 15
+  //     el script era el ÚNICO escritor de la columna y publicaba al instante; hoy hay DOS escritores
+  //     y publicar sin que NADIE haya mirado la web es el bug que este milestone viene a matar.
+  //   · publish=true → las DOS columnas con el MISMO objeto parseado (`parsed.data`), byte-idénticas.
+  //
+  // POR QUÉ `--publish` ESCRIBE LAS DOS Y NO SOLO `landing_config` (incidente REAL del commit
+  // `f98ed6b`, fix CR-01 — sigue VIGENTE en este camino, es la razón de D-03b): desde Phase 15 el dato
+  // está partido en `landing_config` = LO PUBLICADO y `landing_draft` = LO QUE EL DUEÑO EDITA. Si al
+  // publicar se escribiera solo `landing_config`, el borrador del dueño quedaría desincronizado con la
+  // web VIEJA: al abrir /web vería su borrador anterior, el indicador le diría "Guardado — sin
+  // publicar" y el botón Publicar —que es exactamente lo que la barra le pide tocar— REVERTIRÍA la web
+  // que el operador acaba de publicar. No hay historial ni undo: pérdida de datos silenciosa. Con las
+  // dos columnas idénticas, `deriveEditorState` le muestra `✓ Publicado`, que es la verdad.
   const { error: updErr } = await supabase
     .from('businesses')
-    .update({ landing_config: parsed, landing_draft: parsed })
+    .update(landingWriteColumns(parsed.data, publish))
     .eq('id', businessId)
   if (updErr) {
-    console.error('[setup-landing] UPDATE de landing_config/landing_draft falló:', updErr.message)
+    console.error(
+      `[setup-landing] UPDATE de ${publish ? 'landing_draft + landing_config' : 'landing_draft'} falló:`,
+      updErr.message,
+    )
     process.exitCode = 1
     return
   }
 
-  // 6) Preview inmediata: /[slug] es force-dynamic → sirve el config nuevo en el próximo request.
+  // 9) Mensaje de cierre, bifurcado por camino.
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
-  console.log(`✓ landing_config + landing_draft actualizados para "${slug}" (business ${businessId}).`)
-  console.log(`  Preview (force-dynamic, inmediata): ${appUrl}/${slug}`)
+  if (publish) {
+    // /[slug] es force-dynamic → sirve el config nuevo en el próximo request, sin deploy.
+    console.log(`✓ Publicado: landing_config + landing_draft actualizados para "${slug}" (business ${businessId}).`)
+    console.log(`  Al aire (force-dynamic, inmediato): ${appUrl}/${slug}`)
+  } else {
+    // SIN URL de preview a propósito: por defecto NO hay nada que ver en /<slug> (la web al aire, si
+    // la hay, es la VIEJA). El preview compartible por link está explícitamente Out of Scope.
+    console.log(
+      `✓ Borrador (landing_draft) actualizado para "${slug}" (business ${businessId}). NO se tocó lo publicado.`,
+    )
+    console.log('  El dueño la revisa y la publica desde su panel (/web).')
+    console.log(
+      `  Solo si el dueño dio el OK, publicala desde acá:\n` +
+        `    npm run setup:landing -- --slug ${slug} --config ${configPath} --publish`,
+    )
+  }
 }
 
 async function main() {
@@ -510,7 +619,8 @@ async function main() {
     process.exitCode = 1
     return
   }
-  await runWrite(supabase, slug, configPath)
+  // `--publish` es OPT-IN EXPLÍCITO (token exacto en argv): sin él, la escritura va SOLO al borrador.
+  await runWrite(supabase, slug, configPath, hasFlag('publish'))
 }
 
 main().catch((e) => {
