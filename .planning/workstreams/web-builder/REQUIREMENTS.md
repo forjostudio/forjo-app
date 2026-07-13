@@ -22,9 +22,9 @@ Actores: **dueño** (negocio que gestiona su web desde el panel), **visitante** 
 ### Borrador y publicación (PUB)
 
 - [x] **PUB-03**: La página pública muestra SOLO lo publicado — el dueño guarda un cambio en el editor y la web al aire NO cambia hasta que publica.
-- [ ] **PUB-04**: El dueño puede publicar su borrador desde el editor y ver el cambio reflejado en su web pública.
-- [ ] **PUB-05**: El editor le muestra al dueño si tiene cambios sin publicar — distingue "guardado" de "publicado". (Hoy son la misma cosa y el copy dice "Todo guardado", que pasaría a ser engañoso.)
-- [ ] **PUB-06**: El dueño puede descartar su borrador y volver a lo que está publicado.
+- [x] **PUB-04**: El dueño puede publicar su borrador desde el editor y ver el cambio reflejado en su web pública.
+- [x] **PUB-05**: El editor le muestra al dueño si tiene cambios sin publicar — distingue "guardado" de "publicado". (Hoy son la misma cosa y el copy dice "Todo guardado", que pasaría a ser engañoso.)
+- [x] **PUB-06**: El dueño puede descartar su borrador y volver a lo que está publicado.
 - [x] **PUB-07**: Go-live — un negocio que nunca publicó sigue viendo su página de reservas de siempre; al publicar por primera vez, su web a medida la reemplaza.
 - [x] **PUB-08**: Las landings que YA están al aire siguen exactamente igual después de la migración, y su borrador arranca como copia fiel de lo publicado (cero regresión).
 
@@ -60,9 +60,9 @@ Actores: **dueño** (negocio que gestiona su web desde el panel), **visitante** 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PUB-03 | Phase 15 — Borrador y publicación (núcleo) | Complete |
-| PUB-04 | Phase 15 — Borrador y publicación (núcleo) | Pending |
-| PUB-05 | Phase 15 — Borrador y publicación (núcleo) | Pending |
-| PUB-06 | Phase 15 — Borrador y publicación (núcleo) | Pending |
+| PUB-04 | Phase 15 — Borrador y publicación (núcleo) | Complete |
+| PUB-05 | Phase 15 — Borrador y publicación (núcleo) | Complete |
+| PUB-06 | Phase 15 — Borrador y publicación (núcleo) | Complete |
 | PUB-07 | Phase 15 — Borrador y publicación (núcleo) | Complete |
 | PUB-08 | Phase 15 — Borrador y publicación (núcleo) | Complete |
 | SKILL-07 | Phase 16 — La web nace como borrador (skill del operador) | Pending |

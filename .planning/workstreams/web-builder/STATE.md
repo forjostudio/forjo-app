@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: executing
-stopped_at: Phase 15 planned (3 planes, 3 waves)
-last_updated: "2026-07-13T12:33:33.231Z"
-last_activity: 2026-07-13 -- Phase 15 execution started
+stopped_at: Completed 15-02-PLAN.md (write path del borrador + publicar/descartar)
+last_updated: "2026-07-13T12:55:00.000Z"
+last_activity: 2026-07-13 -- Phase 15 plan 02 completo (3 Server Actions + compare canónico)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 ## Current Position
 
 Phase: 15 (Borrador y publicación (núcleo)) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
-Last activity: 2026-07-13 -- Phase 15 execution started
+Last activity: 2026-07-13 -- Phase 15 plan 02 completo (3 Server Actions + compare canónico)
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
 
@@ -36,15 +36,15 @@ Progreso: `[░░░░░░░░░░] 0/3 fases`
 
 **Velocity:**
 
-- Total plans completed (v0.18): 1
-- Average duration: 18 min
-- Total execution time: 0.3 hours
+- Total plans completed (v0.18): 2
+- Average duration: 20 min
+- Total execution time: 0.7 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 15 | 1/3 | 18 min | 18 min |
+| 15 | 2/3 | 40 min | 20 min |
 | 16 | TBD | - | - |
 | 17 | TBD | - | - |
 
@@ -77,6 +77,9 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 - [v0.16 / Phase 14]: borrador en memoria + `savedBaseline` + `isDirty` ya existen en `web-client.tsx`; los mutadores puros viven en `lib/landing/editor-draft.ts` (testeados). PUB-05 reusa ese andamiaje, no lo reinventa.
 - [v0.17]: el gate `has_web_custom` YA está enforced en la Server Action; lo que resta de PUB-01 es **retirar el flag global `CMS_ENABLED`** y exponer la entrada en el panel.
 - [Phase 15-01]: businesses.landing_draft = columna jsonb nullable sin DEFAULT (migr. 050, aditiva + backfill idempotente). Hereda la RLS de businesses; la vista public_businesses NO se toca y 4 tests anon-key lo prueban. Prod: aplicar A MANO + NOTIFY pgrst ANTES del deploy.
+- [Phase 15-02]: `saveLandingDraft(input)` escribe el BORRADOR (el nombre `saveLandingConfig` ya no existe). `publishLanding()` y `discardLandingDraft()` son de **CERO argumentos**: copia server-side entre columnas (SELECT + UPDATE — PostgREST no hace `SET col_a = col_b`), con Zod estricto sobre el borrador LEÍDO DE LA DB al publicar (`invalid_draft`). Cero service-role, cero `revalidatePath` (`/[slug]` es force-dynamic).
+- [Phase 15-02]: **Desviación declarada de D-03** — el compare draft-vs-published usa un stringify **CANÓNICO** (`configsEqual` en `lib/landing/editor-draft.ts`), no `JSON.stringify` crudo: Postgres reordena las claves del `jsonb` y el compare crudo dejaría "Guardado — sin publicar" trabado para siempre. Misma semántica (estado derivado del contenido, sin flag ni timestamp), otro mecanismo. NO "simplificar" de vuelta.
+- [Phase 15-02]: contrato page → client = `initialDraft` (`landing_draft ?? landing_config`, coalesce defensivo) + `publishedConfig` (`landing_config ?? null`, donde **null ⇒ nunca publicó**: dispara go-live y el empty-state).
 
 ### Pending Todos
 
@@ -113,9 +116,9 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 
 ## Session Continuity
 
-Last session: 2026-07-13T12:33:00.671Z
-Stopped at: Phase 15 planned (3 planes, 3 waves) — Ready to execute
-Resume file: .planning/workstreams/web-builder/phases/15-borrador-y-publicaci-n-n-cleo/15-01-PLAN.md
+Last session: 2026-07-13T12:55:00.000Z
+Stopped at: Completed 15-02-PLAN.md — sigue la wave 3 (15-03: barra publish, dialogs y toasts)
+Resume file: .planning/workstreams/web-builder/phases/15-borrador-y-publicaci-n-n-cleo/15-03-PLAN.md
 
 ## Operator Next Steps
 
