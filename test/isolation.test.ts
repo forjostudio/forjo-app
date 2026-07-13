@@ -112,32 +112,44 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
   // La garantía de SC2 es RLS (no la Server Action, que ni siquiera acepta un bizA del body). Se
   // prueba con el UPDATE directo anon-key, idéntico al caso de appointments: apuntamos por `id` a la
   // fila de A y dejamos que la policy `owner_id = auth.uid()` deniegue. anon-key SOLO en la aserción;
-  // seeded.admin únicamente para el check independiente del efecto (Pitfall 3, NO es la aserción RLS).
+  // seeded.admin únicamente para SEMBRAR el centinela y para el check independiente del efecto
+  // (Pitfall 3, NO es la aserción RLS).
+  //
+  // CENTINELA (y no "asumir que la columna arranca en null"): cada caso siembra con service-role el
+  // valor del que parte y verifica que el intento cross-tenant NO lo cambió. Así el test NO depende
+  // del estado que dejaron los otros casos ⇒ la suite aguanta --sequence.shuffle / it.concurrent /
+  // un caso nuevo insertado en el medio. Esta suite es el control de seguridad central del milestone:
+  // no puede ponerse roja (ni verde) por el orden en que corrieron los tests.
 
   it('cross-WRITE landing_config: B no puede escribir el config de A (SC2)', async () => {
+    // Centinela sembrado con service-role: el valor del que parte la fila de A, sea cual sea el
+    // estado que hayan dejado los demás casos.
+    const sentinel = { theme: { preset: 'forjo' }, sections: [], __sentinel: 'config-A' }
+    await seeded.admin.from('businesses').update({ landing_config: sentinel }).eq('id', seeded.bizA)
+
     // anonB (sesión de B) apunta EXPLÍCITAMENTE a la fila de A (por id, NO por owner/business_id):
     // dejamos que RLS deniegue. Un config válido cualquiera como payload.
     const { data, error } = await anonB
       .from('businesses')
-      .update({ landing_config: { theme: { preset: 'forjo' }, sections: [] } })
+      .update({ landing_config: { theme: { preset: 'hackeado' }, sections: [] } })
       .eq('id', seeded.bizA)
       .select('id')
     // Denegación RLS: error, o 0 filas afectadas. Cualquiera de las dos es válida.
     expect(error !== null || (data ?? []).length === 0).toBe(true)
 
-    // Check INDEPENDIENTE del efecto con service-role (NO es la aserción de RLS): A nunca escribió su
-    // config (el fixture lo deja null) y el intento de B tampoco lo tocó → sigue null.
+    // Check INDEPENDIENTE del efecto con service-role (NO es la aserción de RLS): el write de B NO
+    // pasó → la fila de A sigue con el centinela intacto.
     const { data: check } = await seeded.admin
       .from('businesses')
       .select('landing_config')
       .eq('id', seeded.bizA)
       .single()
-    expect(check?.landing_config).toBeNull()
+    expect(check?.landing_config).toMatchObject({ __sentinel: 'config-A' })
   })
 
   it('same-tenant WRITE landing_config: A SÍ escribe el suyo (happy path)', async () => {
-    // anonA escribe SU propio landing_config: la policy owner_id = auth.uid() lo permite. Va DESPUÉS
-    // del cross-write de B para que el "quedó null tras el intento de B" del it anterior sea limpio.
+    // anonA escribe SU propio landing_config: la policy owner_id = auth.uid() lo permite. Independiente
+    // del orden: no asume ningún valor de partida, solo que el UPDATE del dueño surte efecto.
     const cfg = { theme: { preset: 'forjo' }, sections: [] }
     const { error } = await anonA
       .from('businesses')
@@ -236,9 +248,11 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
   // lo evita POR CONSTRUCCIÓN (no toca la vista); estos 4 casos lo convierten en un test que se pone
   // rojo si alguien la "completa por simetría con landing_config".
   // Misma disciplina que el resto del archivo (Pitfall 12): las aserciones usan SOLO anon-key
-  // autenticado (anonA/anonB); seeded.admin únicamente para el check independiente del efecto.
-  // ORDEN: el cross-WRITE (que asierta que el borrador de A sigue null) va ANTES del same-tenant
-  // (que lo escribe). Invertirlos rompería la aserción del cross-write.
+  // autenticado (anonA/anonB); seeded.admin únicamente para sembrar el centinela y para el check
+  // independiente del efecto.
+  // ORDEN: NINGUNO de estos casos depende del que corrió antes. El cross-WRITE siembra su propio
+  // centinela con service-role y verifica que el intento de B no lo movió, en vez de asumir que la
+  // columna arranca en null (eso lo acoplaba al same-tenant, que la escribe).
 
   it('el borrador NO se expone en la vista pública (public_businesses NO tiene landing_draft)', async () => {
     // Aserción central de seguridad de la fase: la columna no existe en la vista → PostgREST erra
@@ -260,29 +274,34 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
   })
 
   it('cross-WRITE landing_draft: B no puede escribir el borrador de A', async () => {
+    // Centinela sembrado con service-role ANTES del intento de B: el caso NO depende del estado
+    // inicial de la fila (antes asumía landing_draft === null, lo cual lo acoplaba al orden de los
+    // tests — justo lo que esta suite no puede permitirse).
+    const sentinel = { theme: { preset: 'forjo' }, sections: [], __sentinel: 'draft-A' }
+    await seeded.admin.from('businesses').update({ landing_draft: sentinel }).eq('id', seeded.bizA)
+
     // anonB apunta EXPLÍCITAMENTE a la fila de A (por id) y deja que RLS deniegue.
     const { data, error } = await anonB
       .from('businesses')
-      .update({ landing_draft: { theme: { preset: 'forjo' }, sections: [] } })
+      .update({ landing_draft: { theme: { preset: 'hackeado' }, sections: [] } })
       .eq('id', seeded.bizA)
       .select('id')
     // Denegación RLS: error, o 0 filas afectadas. Cualquiera de las dos es válida.
     expect(error !== null || (data ?? []).length === 0).toBe(true)
 
-    // Check INDEPENDIENTE del efecto con service-role (NO es la aserción de RLS): el fixture crea la
-    // fila con landing_draft null (la 050 solo backfillea desde un landing_config no-null) y el
-    // intento de B no la tocó → sigue null.
+    // Check INDEPENDIENTE del efecto con service-role (NO es la aserción de RLS): el write de B no
+    // pasó → el borrador de A sigue siendo el centinela, byte por byte.
     const { data: check } = await seeded.admin
       .from('businesses')
       .select('landing_draft')
       .eq('id', seeded.bizA)
       .single()
-    expect(check?.landing_draft).toBeNull()
+    expect(check?.landing_draft).toMatchObject({ __sentinel: 'draft-A' })
   })
 
   it('same-tenant WRITE landing_draft: A SÍ escribe su propio borrador (happy path)', async () => {
     // La policy owner_id = auth.uid() permite al dueño escribir SU borrador: el aislamiento no puede
-    // ser "nadie escribe nada". Va DESPUÉS del cross-write para que aquella aserción de null sea limpia.
+    // ser "nadie escribe nada". Independiente del orden: no asume ningún valor de partida.
     const cfg = { theme: { preset: 'forjo' }, sections: [] }
     const { error } = await anonA
       .from('businesses')
