@@ -230,6 +230,10 @@ async function runInspect(
   }
   const serviceNames = (services ?? []).map((s) => (s as { name: string }).name)
 
+  // Estado derivado de las DOS columnas (D-05): qué está al aire, qué está pendiente, y si el dueño
+  // tiene trabajo sin publicar. Es el MISMO cálculo que dispara el aviso de choque del write path.
+  const estado = readLandingState(biz)
+
   // Resumen legible (JSON estructurado: fácil de mostrar y de parsear desde el SKILL.md).
   const resumen = {
     id: biz.id,
@@ -245,14 +249,44 @@ async function runInspect(
     whatsapp: biz.whatsapp,
     servicios_activos: serviceNames.length,
     servicios: serviceNames,
-    // Volcado COMPLETO del landing_config actual (o null si no hay). Es el insumo con el que la skill
-    // reconstruye el BuilderInput/brand de una landing SIN payload guardado (previa a la persistencia
-    // de payloads) sin re-tipear todo el copy a mano (D-04, habilita SC2 de SKILL-05). Sigue read-only:
-    // solo se imprime. Si ya hay config, re-correr la escritura lo SOBRE-ESCRIBE (A4).
-    landing_config: biz.landing_config ?? null,
+    // ── Las DOS columnas del landing, POR SEPARADO y con el nombre de lo que son (D-05 / SKILL-08) ──
+    // Se vuelcan los valores CRUDOS de la fila (no los parseados de `estado`): el operador tiene que
+    // ver lo que REALMENTE hay en la DB, no una versión degradada por el validador fail-safe.
+    //
+    // Es también el insumo con el que la skill reconstruye el BuilderInput/brand de una landing SIN
+    // payload guardado, sin re-tipear todo el copy a mano (D-04, habilita SC2 de SKILL-05). El modo
+    // edición parte SIEMPRE de `pendiente_de_aprobacion` (el borrador es "lo último que se tocó" e
+    // incluye los retoques que el dueño no publicó) y cae a `al_aire` solo si no hay borrador.
+    //
+    // Sigue read-only: acá solo se imprime. Y desde la Phase 16 re-correr la escritura YA NO
+    // sobre-escribe lo publicado: por defecto escribe SOLO el borrador (`landing_draft`) y la web al
+    // aire queda intacta hasta que el dueño la publique. Únicamente `--publish` reemplaza `al_aire`.
+    al_aire: biz.landing_config ?? null, // LO PUBLICADO: lo que ve cualquier visitante en /[slug] ahora
+    pendiente_de_aprobacion: biz.landing_draft ?? null, // EL BORRADOR: lo que ve el dueño en su editor
+    nunca_publico: estado.nuncaPublico, // true → /[slug] todavía muestra la página de reservas simple
+    tiene_cambios_sin_publicar: estado.tieneCambiosSinPublicar,
+    partes_sin_publicar: estado.partes.map(formatPart), // [] si no hay nada pendiente o si nunca publicó
   }
   console.log('[setup-landing] inspect (read-only) —', slug)
   console.log(JSON.stringify(resumen, null, 2))
+
+  // Renglón humano DEBAJO del JSON: deja obvio el caso "el dueño tiene cambios sin publicar" sin
+  // obligar a leer el JSON entero. Es el mismo caso que dispara el aviso de choque de D-01/D-02.
+  if (estado.tieneCambiosSinPublicar && estado.borradorSinComparar) {
+    console.log(
+      '⚠ El dueño tiene un borrador sin publicar (este negocio NUNCA publicó su web: ' +
+        `/${slug} sigue mostrando la reserva simple).`,
+    )
+  } else if (estado.tieneCambiosSinPublicar) {
+    console.log(
+      '⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: ' +
+        `${estado.partes.map(formatPart).join(', ')}. Si seguís, los pisás.`,
+    )
+  } else if (!estado.nuncaPublico) {
+    console.log('✓ Borrador y publicado coinciden: no hay nada pendiente de aprobación.')
+  } else {
+    console.log('· Este negocio no tiene web: ni publicada ni en borrador.')
+  }
 }
 
 // ── Pipeline de imágenes: descarga/lee → re-encode sharp → upload service-role ──────
@@ -466,8 +500,12 @@ async function main() {
   if (!slug || !configPath) {
     console.error(
       '[setup-landing] uso:\n' +
-        '  npm run setup:landing -- --inspect <slug>            (read-only)\n' +
-        '  npm run setup:landing -- --slug <slug> --config <ruta.json>   (escritura)',
+        '  npm run setup:landing -- --inspect <slug>\n' +
+        '      read-only: vuelca lo que está AL AIRE y lo que quedó PENDIENTE DE APROBACIÓN.\n' +
+        '  npm run setup:landing -- --slug <slug> --config <ruta.json>\n' +
+        '      escribe el BORRADOR (landing_draft). NO toca la web al aire: el dueño la publica desde /web.\n' +
+        '  npm run setup:landing -- --slug <slug> --config <ruta.json> --publish\n' +
+        '      escribe el borrador Y LO PUBLICA (la web sale al aire ya). Solo con el OK del dueño.',
     )
     process.exitCode = 1
     return
