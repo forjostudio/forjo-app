@@ -50,7 +50,10 @@ import type { BuilderInput, BrandHints } from '@/lib/landing/builder'
 // parseLandingConfig es el validador FAIL-SAFE de LECTURA: acá se importa SOLO para el camino de
 // lectura (readLandingState, que compara las dos columnas). El write path usa el ESTRICTO de
 // @/lib/landing/write — ver el GATE de runWrite.
-import { parseLandingConfig } from '@/lib/landing/schema'
+// `landingConfigSchema` (el z.object crudo) se importa SOLO para distinguir "columna presente pero
+// ROTA" de "columna ausente": `parseLandingConfig` tapa esa diferencia devolviendo el DEFAULT (ver
+// readLandingState). No se usa para escribir — el write path tiene su propio gate estricto.
+import { parseLandingConfig, landingConfigSchema } from '@/lib/landing/schema'
 import type { LandingConfig } from '@/lib/landing/schema'
 import { parseLandingConfigForWrite, landingWriteColumns } from '@/lib/landing/write'
 import { diffConfigParts } from '@/lib/landing/editor-draft'
@@ -159,27 +162,68 @@ async function resolveBusiness(
 //     en el caso limpio es un aviso que el operador aprende a IGNORAR — perdería su señal justo en el
 //     caso que D-01 quiere cubrir.
 //   · D-02 pide QUÉ partes difieren, y `configsEqual` devuelve un booleano: no alcanza.
-function readLandingState(biz: { landing_config: unknown; landing_draft: unknown }): {
+//
+// ── "PRESENTE PERO ROTO" ≠ "AUSENTE" (y no se puede tratar como "igual") ───────────────────────────
+// `parseLandingConfig` es fail-safe: ante un valor PRESENTE pero que no valida devuelve
+// DEFAULT_LANDING_CONFIG, NO null. Si se lo usa a secas para comparar, las dos columnas rotas colapsan
+// al MISMO default ⇒ `diffConfigParts` devuelve `[]` ⇒ "no hay cambios sin publicar" ⇒ NINGÚN aviso, y
+// el UPDATE le pisa al dueño un borrador REAL en silencio. Es exactamente el escenario que D-01 existe
+// para cubrir, entrando por la puerta de atrás. Idem el pre-print de `--publish`: con `landing_config`
+// roto le describiría al operador una web que NO existe en la DB, justo cuando la va a reemplazar.
+// Por eso acá se pregunta APARTE, con el schema crudo, si cada columna presente valida — y si no
+// valida, NO se compara: SE AVISA. Regla: ante duda, avisar (un aviso de más cuesta un WhatsApp; uno
+// de menos cuesta el trabajo del dueño, que no tiene undo).
+interface LandingState {
   published: LandingConfig | null
   draft: LandingConfig | null
+  publicadoRoto: boolean
+  borradorRoto: boolean
   nuncaPublico: boolean
   borradorSinComparar: boolean
   partes: ConfigPart[]
   tieneCambiosSinPublicar: boolean
-} {
+}
+
+function readLandingState(biz: { landing_config: unknown; landing_draft: unknown }): LandingState {
+  // "Roto" = presente en la DB pero el schema NO lo acepta tal cual (lo que `parseLandingConfig` tapa
+  // devolviendo el DEFAULT). Un valor ausente (null/undefined) NO es roto: es un negocio sin web.
+  const publicadoRoto =
+    biz.landing_config != null && !landingConfigSchema.safeParse(biz.landing_config).success
+  const borradorRoto =
+    biz.landing_draft != null && !landingConfigSchema.safeParse(biz.landing_draft).success
+
   const published = parseLandingConfig(biz.landing_config)
   const draft = parseLandingConfig(biz.landing_draft)
   const nuncaPublico = published === null
 
-  // Sin borrador → no hay nada pendiente de aprobación, no hay nada que pisar.
+  // Sin borrador → no hay nada pendiente de aprobación, no hay nada que pisar. (Ojo: `draft === null`
+  // solo pasa cuando la columna está VACÍA; un borrador roto no cae acá, cae en el branch de abajo.)
   if (draft === null) {
     return {
       published,
       draft,
+      publicadoRoto,
+      borradorRoto,
       nuncaPublico,
       borradorSinComparar: false,
       partes: [],
       tieneCambiosSinPublicar: false,
+    }
+  }
+
+  // Alguna de las dos columnas está PRESENTE PERO ROTA → la comparación es IMPOSIBLE (el lado roto es
+  // un DEFAULT inventado, no el dato real). No se puede PROBAR que el dueño no tenga trabajo sin
+  // publicar ⇒ se avisa. `partes: []` a propósito: no hay diff honesto que mostrar.
+  if (borradorRoto || publicadoRoto) {
+    return {
+      published,
+      draft,
+      publicadoRoto,
+      borradorRoto,
+      nuncaPublico,
+      borradorSinComparar: false,
+      partes: [],
+      tieneCambiosSinPublicar: true,
     }
   }
 
@@ -189,6 +233,8 @@ function readLandingState(biz: { landing_config: unknown; landing_draft: unknown
     return {
       published,
       draft,
+      publicadoRoto,
+      borradorRoto,
       nuncaPublico,
       borradorSinComparar: true,
       partes: [],
@@ -200,6 +246,8 @@ function readLandingState(biz: { landing_config: unknown; landing_draft: unknown
   return {
     published,
     draft,
+    publicadoRoto,
+    borradorRoto,
     nuncaPublico,
     borradorSinComparar: false,
     partes,
@@ -213,6 +261,42 @@ function formatPart(p: ConfigPart): string {
   if (p === 'theme') return 'tema'
   if (p === 'motion') return 'movimiento'
   return p // las 8 secciones se imprimen tal cual: hero, about, services, gallery, location, hours, cta, booking
+}
+
+// ── EL aviso de choque (D-01/D-02), en UN solo lugar ────────────────────────────────────────────────
+// Devuelve la línea a imprimir, o null si no hay nada que avisar. Lo comparten `--inspect` y el write
+// path A PROPÓSITO: es EL MISMO dato, y el SKILL.md (paso 6) le pide al operador que copie el aviso
+// del `--inspect` al checkpoint humano. Si las dos superficies tuvieran su propio copy, podrían
+// divergir — y el operador aprobaría una escritura mirando un aviso que no es el que el script imprime.
+//
+// AVISA, NO ABORTA (y no se le agrega una confirmación interactiva): el checkpoint bloqueante vive en
+// el SKILL.md. Cuando este proceso arranca, la escritura YA está aprobada.
+function avisoDeChoque(estado: LandingState, slug: string): string | null {
+  if (estado.borradorRoto) {
+    return (
+      '⚠ El dueño TIENE un borrador en la DB, pero NO lo puedo leer (no valida contra el schema): no ' +
+      'puedo decirte si tiene trabajo sin publicar ni qué partes difieren. Si seguís, lo pisás.'
+    )
+  }
+  if (estado.publicadoRoto && estado.tieneCambiosSinPublicar) {
+    return (
+      '⚠ La web publicada está en la DB, pero NO la puedo leer (no valida contra el schema): no puedo ' +
+      'comparar el borrador del dueño contra ella. Si seguís, pisás el borrador.'
+    )
+  }
+  if (estado.tieneCambiosSinPublicar && estado.borradorSinComparar) {
+    return (
+      '⚠ El dueño tiene un borrador sin publicar (este negocio NUNCA publicó su web: ' +
+      `/${slug} sigue mostrando la reserva simple). Si seguís, lo pisás.`
+    )
+  }
+  if (estado.tieneCambiosSinPublicar) {
+    return (
+      '⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: ' +
+      `${estado.partes.map(formatPart).join(', ')}. Si seguís, los pisás.`
+    )
+  }
+  return null
 }
 
 // ── MODO INSPECT (read-only) ────────────────────────────────────────────────────────
@@ -280,26 +364,28 @@ async function runInspect(
     nunca_publico: estado.nuncaPublico, // true → /[slug] todavía muestra la página de reservas simple
     tiene_cambios_sin_publicar: estado.tieneCambiosSinPublicar,
     partes_sin_publicar: estado.partes.map(formatPart), // [] si no hay nada pendiente o si nunca publicó
+    // Columna PRESENTE en la DB que NO valida contra el schema. Si alguna es `true`, el diff de arriba
+    // NO es confiable (el lado roto se leyó como un DEFAULT inventado) y por eso se avisa igual.
+    publicado_roto: estado.publicadoRoto,
+    borrador_roto: estado.borradorRoto,
   }
   console.log('[setup-landing] inspect (read-only) —', slug)
   console.log(JSON.stringify(resumen, null, 2))
 
   // Renglón humano DEBAJO del JSON: deja obvio el caso "el dueño tiene cambios sin publicar" sin
-  // obligar a leer el JSON entero. Es el mismo caso que dispara el aviso de choque de D-01/D-02.
-  if (estado.tieneCambiosSinPublicar && estado.borradorSinComparar) {
-    console.log(
-      '⚠ El dueño tiene un borrador sin publicar (este negocio NUNCA publicó su web: ' +
-        `/${slug} sigue mostrando la reserva simple).`,
-    )
-  } else if (estado.tieneCambiosSinPublicar) {
-    console.log(
-      '⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: ' +
-        `${estado.partes.map(formatPart).join(', ')}. Si seguís, los pisás.`,
-    )
-  } else if (!estado.nuncaPublico) {
-    console.log('✓ Borrador y publicado coinciden: no hay nada pendiente de aprobación.')
-  } else {
+  // obligar a leer el JSON entero. Es EXACTAMENTE el mismo aviso (misma función) que imprime el write
+  // path — el operador lo copia tal cual al checkpoint del SKILL.md (paso 6).
+  const aviso = avisoDeChoque(estado, slug)
+  if (aviso) {
+    console.log(aviso)
+  } else if (estado.nuncaPublico) {
     console.log('· Este negocio no tiene web: ni publicada ni en borrador.')
+  } else if (estado.draft === null) {
+    // NO es "coinciden": es que NO HAY borrador. El dueño publicó y nunca volvió a abrir su editor.
+    // Decir "coinciden" acá sería afirmar algo falso sobre la fila, justo en el insumo del checkpoint.
+    console.log('· No hay borrador: el dueño nunca abrió su editor. Al aire está la web publicada.')
+  } else {
+    console.log('✓ Borrador y publicado coinciden: no hay nada pendiente de aprobación.')
   }
 }
 
@@ -467,16 +553,11 @@ async function runWrite(
   //    decidió. Quien bloquea es el flujo de la skill, no el proceso. Además el repo no tiene UNA
   //    sola confirmación interactiva en NINGÚN script —ni con el módulo nativo de Node ni con una lib
   //    de terceros— y no es el momento de inventar el patrón. NO "arreglar" esto agregando una.
-  if (estado.tieneCambiosSinPublicar && estado.borradorSinComparar) {
-    console.log(
-      '⚠ El dueño tiene un borrador sin publicar (este negocio NUNCA publicó su web). Si seguís, lo pisás.',
-    )
-  } else if (estado.tieneCambiosSinPublicar) {
-    console.log(
-      '⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: ' +
-        `${estado.partes.map(formatPart).join(', ')}. Si seguís, los pisás.`,
-    )
-  }
+  //
+  //    Es LA MISMA función que usa `--inspect` (avisoDeChoque): el aviso que el operador aprobó en el
+  //    checkpoint y el que imprime la escritura no pueden divergir.
+  const aviso = avisoDeChoque(estado, slug)
+  if (aviso) console.log(aviso)
 
   // 4) Armar el tema (recommendTheme) con la lógica pura de 10-01.
   //    Por DEFAULT el landing hereda el theme/palette/font que el negocio YA configuró en Apariencia
@@ -571,6 +652,15 @@ async function runWrite(
       console.log(
         `[setup-landing] --publish: este negocio NUNCA publicó — esto es su GO-LIVE ` +
           `(su /${slug} deja de mostrar la reserva simple y pasa a mostrar esta web).`,
+      )
+    } else if (estado.publicadoRoto) {
+      // `estado.published` acá es el DEFAULT que inventó el validador fail-safe, NO la web real.
+      // Listar SUS secciones sería describirle al operador un objeto que no existe en la DB, justo
+      // en el segundo en que la va a reemplazar. Se dice la verdad: no se pudo leer.
+      console.log('[setup-landing] --publish: vas a REEMPLAZAR la web que está al aire.')
+      console.log(
+        '  ⚠ No pude leer la web publicada (el `landing_config` de la DB no valida contra el schema): ' +
+          'no puedo decirte qué secciones ni qué tema tiene hoy.',
       )
     } else {
       const prev = estado.published! // no es null: nuncaPublico === false
