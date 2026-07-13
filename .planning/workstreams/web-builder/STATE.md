@@ -4,12 +4,12 @@ milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: executing
 stopped_at: Phase 16 context gathered
-last_updated: "2026-07-13T17:55:35.734Z"
-last_activity: 2026-07-13 -- Phase 16 planning complete
+last_updated: "2026-07-13T19:07:58.442Z"
+last_activity: 2026-07-13 -- Phase 16 execution started
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 3
+  total_plans: 6
   completed_plans: 3
   percent: 33
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`): v0.18 CMS Publish / Go-live")
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados. (v0.18 separa borrador de publicado SIN debilitar el write path owner-only que aseguró v0.16.)
-**Current focus:** Phase 15 — Borrador y publicación (núcleo)
+**Current focus:** Phase 16 — la-web-nace-como-borrador-skill-del-operador
 
 ## Current Position
 
-Phase: 16
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-13 -- Phase 16 planning complete
+Phase: 16 (la-web-nace-como-borrador-skill-del-operador) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 16
+Last activity: 2026-07-13 -- Phase 16 execution started
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
 
