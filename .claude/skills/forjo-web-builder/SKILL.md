@@ -295,11 +295,17 @@ npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json
 ```
 
 El script, en orden: resuelve `business_id` del slug → avisa si el dueño tiene trabajo sin publicar →
-re-hostea cada imagen local a `landing-assets/{businessId}/{uuid}.webp` (re-encode con sharp) y
-reemplaza las rutas por URLs públicas de Storage → arma el config con `buildLandingConfig` +
+**pre-valida el config** con placeholders (si el payload es inválido, aborta **antes de subir un solo
+byte** al bucket) → re-hostea cada imagen local a `landing-assets/{businessId}/{sha256}.webp`
+(re-encode con sharp; la key sale del **contenido**, así que re-subir la misma foto da la **misma
+URL**) y reemplaza las rutas por URLs públicas de Storage → arma el config con `buildLandingConfig` +
 `recommendTheme` → **GATE ESTRICTO** `parseLandingConfigForWrite` (SKILL-04: rechaza ruidosamente con
 `invalid_config` / `config_too_large`; **NO** degrada una sección inválida a `{}`) →
 `UPDATE ... WHERE id = businessId` (por id, NUNCA por slug) escribiendo **SOLO `landing_draft`**.
+
+Las imágenes que ya son **URLs de nuestro bucket** (el caso del MODO EDICIÓN, cuando el payload se
+reconstruyó desde `--inspect`) **se dejan pasar tal cual**: no se re-suben. Cualquier **otra** URL
+externa (CDN de IG, web del negocio) el script la **rechaza**: se descarga y se pasa la ruta local.
 
 **La web NO sale al aire.** Lo que escribe este comando es el **borrador**: `/[slug]` sigue mostrando
 lo que ya había (su web vieja, o la reserva simple). **El dueño la revisa en su editor (`/web`) y la

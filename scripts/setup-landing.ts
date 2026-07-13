@@ -17,8 +17,9 @@
 //   · ESCRITURA → recibe el slug y un payload JSON (`--config <path>`): la materia prima del config
 //     (un BuilderInput de lib/landing/builder.ts) con las imágenes como RUTAS LOCALES, más brand hints.
 //     Resuelve slug→business_id, AVISA si el dueño tiene cambios sin publicar (D-01/D-02), sube cada
-//     imagen local re-encodeada con sharp a `landing-assets/{businessId}/{uuid}.{ext}`, reemplaza las
-//     rutas por URLs públicas de Storage, arma el config con buildLandingConfig + recommendTheme, lo
+//     imagen local re-encodeada con sharp a `landing-assets/{businessId}/{sha256}.{ext}` (key derivada
+//     del CONTENIDO → re-correr el mismo payload da las MISMAS URLs: la escritura es idempotente),
+//     reemplaza las rutas por URLs públicas de Storage, arma el config con buildLandingConfig + recommendTheme, lo
 //     VALIDA con el gate ESTRICTO de escritura (`parseLandingConfigForWrite` — reject-on-invalid) y
 //     recién entonces hace `UPDATE ... WHERE id = businessId` (por id, NO por slug).
 //
@@ -40,7 +41,7 @@
 
 import { config as loadEnv } from 'dotenv'
 import { readFile } from 'node:fs/promises'
-import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
@@ -363,10 +364,23 @@ async function rehostImage(
 
   // namespacing OBLIGATORIO por {businessId}/ (Pitfall 3 / T-10-04): el service-role bypassa RLS,
   // pero la frontera de aislamiento cross-tenant es esta convención de path.
-  const key = `${businessId}/${randomUUID()}.${ext}`
+  //
+  // ── LA KEY SE DERIVA DEL CONTENIDO (sha256), NO de un randomUUID() ────────────────────────────
+  // Con un uuid nuevo por corrida, re-escribir el MISMO payload producía URLs NUEVAS ⇒ el config
+  // resultante nunca era igual al anterior. Dos daños: (1) la promesa de idempotencia del SKILL.md
+  // (D-06) era falsa; (2) tras una re-escritura del borrador, `landing_draft` difería de
+  // `landing_config` SOLO por las URLs y el `--inspect` siguiente le gritaba al operador "el dueño
+  // tiene cambios sin publicar: hero, gallery…" — atribuyéndole al dueño lo que había hecho el
+  // propio operador. Un aviso que grita en el caso limpio es un aviso que se aprende a IGNORAR, y
+  // ese aviso es justo la señal que esta fase construyó (D-01/D-02). Además duplicaba objetos en el
+  // bucket público en cada corrida y los viejos no los borraba nadie.
+  // Con la key = hash del contenido: re-subir la MISMA foto escribe la MISMA key (upsert → no-op) y
+  // devuelve la MISMA URL. Misma foto ⇒ mismo config, byte a byte.
+  const digest = createHash('sha256').update(buffer).digest('hex').slice(0, 32)
+  const key = `${businessId}/${digest}.${ext}`
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(key, buffer, { contentType, upsert: false })
+    .upload(key, buffer, { contentType, upsert: true })
   if (error) {
     throw new Error(`upload de ${localPathOrUrl} a ${key} falló: ${error.message}`)
   }
