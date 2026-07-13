@@ -355,7 +355,8 @@ CREATE TABLE IF NOT EXISTS "public"."businesses" (
     "mp_user_id" "text",
     "landing_config" "jsonb",
     "has_web_custom" boolean DEFAULT false NOT NULL,
-    "has_whatsapp" boolean DEFAULT false NOT NULL
+    "has_whatsapp" boolean DEFAULT false NOT NULL,
+    "landing_draft" "jsonb"
 );
 
 
