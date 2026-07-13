@@ -4,8 +4,8 @@ milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: verifying
 stopped_at: Completado 15-03-PLAN.md — fase 15 lista para verify-work
-last_updated: "2026-07-13T12:59:56.651Z"
-last_activity: 2026-07-13 -- Phase 15 plan 02 completo (3 Server Actions + compare canónico)
+last_updated: "2026-07-13T15:15:23.944Z"
+last_activity: 2026-07-13
 progress:
   total_phases: 3
   completed_phases: 1
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 
 ## Current Position
 
-Phase: 15 (Borrador y publicación (núcleo)) — EXECUTING
-Plan: 3 of 3
+Phase: 16
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-13 -- Phase 15 plan 02 completo (3 Server Actions + compare canónico)
+Last activity: 2026-07-13
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
 
@@ -44,7 +44,7 @@ Progreso: `[░░░░░░░░░░] 0/3 fases`
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 15 | 2/3 | 40 min | 20 min |
+| 15 | 3 | - | - |
 | 16 | TBD | - | - |
 | 17 | TBD | - | - |
 

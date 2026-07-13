@@ -1,8 +1,9 @@
 ---
 phase: 15-borrador-y-publicaci-n-n-cleo
 verified: 2026-07-13T10:35:00Z
-status: human_needed
-score: 12/12 must-haves verified (código+tests) — 1 bloque de checks end-to-end pendiente (human_verify_mode: end-of-phase)
+status: passed
+score: 12/12 must-haves verified (código+tests) + 6/6 checks end-to-end PASS en UAT sobre producción (2026-07-13)
+uat_result: "6/6 PASS. Corrido en un preview de Vercel apuntado al Supabase de PROD, contra dos negocios reales: /estudio-test (ya publicado, para la regresión del backfill) y /estudio (virgen, para go-live y empty-state). Un bug de copy encontrado durante el UAT y cerrado en 6c48258 (ver más abajo)."
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
