@@ -38,6 +38,9 @@ import sharp from 'sharp'
 import { buildLandingConfig, recommendTheme } from '@/lib/landing/builder'
 import type { BuilderInput, BrandHints } from '@/lib/landing/builder'
 import { parseLandingConfig, DEFAULT_LANDING_CONFIG } from '@/lib/landing/schema'
+import type { LandingConfig } from '@/lib/landing/schema'
+import { diffConfigParts } from '@/lib/landing/editor-draft'
+import type { ConfigPart } from '@/lib/landing/editor-draft'
 
 // Vitest/Next cargan .env.local solos; un script suelto bajo tsx NO. Lo cargamos con dotenv
 // (igual que scripts/setup-admin.ts — cero deps nuevas) para tener el service-role en el entorno.
@@ -70,9 +73,21 @@ function getFlag(name: string): string | undefined {
   return undefined
 }
 
+// Lee un flag BOOLEANO `--nombre`: true si el token EXACTO está en argv, false si no.
+// POR QUÉ no alcanza getFlag('publish'): getFlag devuelve el argv SIGUIENTE al flag, así que
+// `--publish --slug x` daría `'--slug'` (truthy por accidente) y `--publish` suelto al final daría
+// `undefined` (falsy, justo cuando el operador SÍ lo pidió). Un flag booleano se pregunta por
+// presencia, no por valor.
+function hasFlag(name: string): boolean {
+  return process.argv.slice(2).includes(`--${name}`)
+}
+
 // ── Resolución del negocio por slug (compartida por inspect y escritura) ────────────
 // Consulta la tabla BASE `businesses` con service-role (bypassa RLS): trae las columnas que el
 // resumen/escritura necesitan. Devuelve la fila o null si el slug no existe.
+// Trae LAS DOS columnas del landing: `landing_config` (LO PUBLICADO) y `landing_draft` (EL BORRADOR
+// que edita el dueño). Hasta la Phase 16 el script escribía `landing_draft` A CIEGAS y nunca la leía
+// — de ahí salían el aviso de choque imposible (D-01) y el `--inspect` incompleto (D-05).
 async function resolveBusiness(
   supabase: SupabaseClient,
   slug: string,
@@ -80,7 +95,7 @@ async function resolveBusiness(
   const { data, error } = await supabase
     .from('businesses')
     .select(
-      'id, name, slug, vertical, theme, palette, font, primary_color, whatsapp, landing_config',
+      'id, name, slug, vertical, theme, palette, font, primary_color, whatsapp, landing_config, landing_draft',
     )
     .eq('slug', slug)
     .maybeSingle()
@@ -100,7 +115,90 @@ async function resolveBusiness(
     primary_color: string | null
     whatsapp: string | null
     landing_config: unknown
+    landing_draft: unknown
   } | null
+}
+
+// ── readLandingState: el estado del landing derivado de las DOS columnas (D-01/D-02/D-05) ──────────
+//
+// Deriva, de la fila cruda, lo que consumen el aviso de choque (D-01/D-02) y `--inspect` (D-05).
+// NO escribe nada: es lectura pura sobre lo que ya trajo resolveBusiness.
+//
+// QUÉ VALIDADOR USA Y POR QUÉ: acá va `parseLandingConfig` (@/lib/landing/schema), el validador
+// FAIL-SAFE de LECTURA. Es el correcto en este lado: estamos LEYENDO las dos columnas para
+// COMPARARLAS, y un config ya roto en la DB no debe tumbar el script (justo ahí es cuando el operador
+// más necesita poder inspeccionar y avisar). El validador ESTRICTO (`parseLandingConfigForWrite`) es
+// el del WRITE PATH y vive en el gate de runWrite: al ESCRIBIR, degradar en silencio significa
+// PERSISTIR la degradación (perder una sección entera sin que nadie se entere). Son dos contratos
+// OPUESTOS y no se intercambian — confundirlos en el otro sentido es exactamente el bug que esta fase
+// viene a corregir.
+//
+// ── DESVIACIÓN DECLARADA DE D-01 — leer antes de "simplificar" esto de vuelta a configsEqual ───────
+// D-01 dice, textual: "detecta si `landing_draft` ≠ `landing_config` con `configsEqual`". La
+// INTENCIÓN se cumple al pie de la letra (avisar cuando el dueño tiene trabajo sin publicar); lo que
+// cambia es el MECANISMO: la señal es `diffConfigParts(draft, published).length > 0`, que es
+// `configsEqual` aplicado POR PARTE más una normalización previa de AMBOS lados. Por qué es mejor y
+// no es opcional:
+//   · `buildLandingConfig` OMITE las secciones vacías (emite ~5) y el editor del dueño las
+//     MATERIALIZA a las 8 fijas (`enabled:false`) al guardar. Con `configsEqual` crudo, un dueño que
+//     solo abrió el editor y guardó SIN cambiar nada visible dispararía el aviso. Un aviso que grita
+//     en el caso limpio es un aviso que el operador aprende a IGNORAR — perdería su señal justo en el
+//     caso que D-01 quiere cubrir.
+//   · D-02 pide QUÉ partes difieren, y `configsEqual` devuelve un booleano: no alcanza.
+function readLandingState(biz: { landing_config: unknown; landing_draft: unknown }): {
+  published: LandingConfig | null
+  draft: LandingConfig | null
+  nuncaPublico: boolean
+  borradorSinComparar: boolean
+  partes: ConfigPart[]
+  tieneCambiosSinPublicar: boolean
+} {
+  const published = parseLandingConfig(biz.landing_config)
+  const draft = parseLandingConfig(biz.landing_draft)
+  const nuncaPublico = published === null
+
+  // Sin borrador → no hay nada pendiente de aprobación, no hay nada que pisar.
+  if (draft === null) {
+    return {
+      published,
+      draft,
+      nuncaPublico,
+      borradorSinComparar: false,
+      partes: [],
+      tieneCambiosSinPublicar: false,
+    }
+  }
+
+  // Hay borrador pero el negocio NUNCA publicó: no existe contra qué diffear (TODO el borrador está
+  // pendiente). Es un caso legítimo, no un error — su `/[slug]` sigue mostrando la reserva simple.
+  if (published === null) {
+    return {
+      published,
+      draft,
+      nuncaPublico,
+      borradorSinComparar: true,
+      partes: [],
+      tieneCambiosSinPublicar: true,
+    }
+  }
+
+  const partes = diffConfigParts(draft, published)
+  return {
+    published,
+    draft,
+    nuncaPublico,
+    borradorSinComparar: false,
+    partes,
+    tieneCambiosSinPublicar: partes.length > 0,
+  }
+}
+
+// Etiqueta legible de cada parte del config para el operador. Es PRESENTACIÓN: vive acá y no en el
+// módulo puro (que devuelve las claves del config, no copy).
+function formatPart(p: ConfigPart): string {
+  if (p === 'theme') return 'tema'
+  if (p === 'motion') return 'movimiento'
+  return p // las 8 secciones se imprimen tal cual: hero, about, services, gallery, location, hours, cta, booking
 }
 
 // ── MODO INSPECT (read-only) ────────────────────────────────────────────────────────
