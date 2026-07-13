@@ -103,3 +103,39 @@ export function parseLandingConfigForWrite(
 
   return { ok: true, data: parsed }
 }
+
+// ── landingWriteColumns: QUÉ COLUMNAS escribe el operador (Phase 16 — SKILL-07 / D-03 / D-03b) ────
+//
+// LA DECISIÓN DE SKILL-07: la web que arma el operador con la skill `forjo-web-builder` NACE COMO
+// BORRADOR (`landing_draft`) y NO sale al aire hasta que el dueño la mira y la publica desde su panel.
+// El default es draft-only. Publicar es OPT-IN EXPLÍCITO (`--publish`): nunca por defecto, nunca en
+// silencio. Sin esto, correr la skill sobre un negocio que YA tiene web publicada le pisaría la web
+// AL AIRE —delante de todo visitante, `/[slug]` es force-dynamic— sin que nadie la haya mirado. Y el
+// milestone entero (el auto-armado con el pago del add-on) existe para que eso no pueda pasar.
+//
+// POR QUÉ EL CAMINO `--publish` ESCRIBE LAS DOS COLUMNAS con el MISMO objeto parseado (D-03b):
+// desde la Phase 15 el dato está partido en `landing_config` = LO PUBLICADO y `landing_draft` = LO QUE
+// EL DUEÑO EDITA. Si al publicar se escribiera SOLO `landing_config`, el borrador del dueño quedaría
+// desincronizado con la web VIEJA: al abrir /web vería su borrador anterior, el indicador le diría
+// "Guardado — sin publicar" y el botón Publicar —que es exactamente lo que la barra le pide tocar—
+// REVERTIRÍA la web que el operador acaba de publicar. No hay historial ni undo: sería pérdida de
+// datos silenciosa. Ése es el incidente que documentó el commit `f98ed6b` (fix CR-01) y SIGUE VIGENTE
+// en el camino `--publish`. Con las dos columnas byte-idénticas, `deriveEditorState` le muestra al
+// dueño `✓ Publicado`, que es la verdad.
+//
+// La clave `landing_config` NO EXISTE en el payload del camino default — ni siquiera como `undefined`:
+// PostgREST manda las claves PRESENTES del objeto y un `undefined` explícito es una fuente de bugs.
+//
+// POR QUÉ VIVE ACÁ (módulo puro) y no inline en `scripts/setup-landing.ts`: el script no es
+// unit-testeable (side-effects, `process.argv`, service-role). Si esta decisión viviera adentro del
+// script, la regresión #1 de la fase —"el script pisa la web publicada"— no tendría NI UN SOLO test
+// que la agarre. Acá es una assertion de Vitest (`test/landing-write.test.ts`).
+export function landingWriteColumns(
+  config: LandingConfig,
+  publish: boolean,
+): { landing_draft: LandingConfig; landing_config?: LandingConfig } {
+  // El MISMO objeto en las dos claves a propósito (no un clon): post-`--publish` las dos columnas
+  // quedan byte-idénticas.
+  if (publish) return { landing_draft: config, landing_config: config }
+  return { landing_draft: config }
+}
