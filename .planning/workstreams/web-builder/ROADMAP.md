@@ -116,7 +116,22 @@ Plans:
   2. El dueño revisa esa web en su editor y, al publicarla, recién ahí sale al aire — cerrando el circuito operador → dueño → público.
   3. `--inspect` muestra **borrador y publicado por separado**, de modo que el operador sabe qué está al aire y qué quedó pendiente de aprobación.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 16-01-PLAN.md — Capa pura: `diffConfigParts` (compare canónico por parte, D-01/D-02/D-05) + `landingWriteColumns` (draft-only por defecto, D-03/D-03b) + sus tests (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 16-02-PLAN.md — `scripts/setup-landing.ts`: lee `landing_draft`, gate estricto `parseLandingConfigForWrite`, aviso de choque, `--publish` opt-in, `--inspect` con las dos columnas (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 16-03-PLAN.md — `.claude/skills/forjo-web-builder/SKILL.md`: edición desde el borrador (D-04), aviso en el checkpoint, `--publish` con el OK del dueño, guardrail "la web nace como borrador" (wave 3)
+
+**UI hint**: no (script local + SKILL.md — no toca la superficie web)
 
 **Threat note**: Bajo riesgo de aislamiento — la skill NO abre superficie web nueva: sigue escribiendo por el **script local service-role** de v0.10 (fuera del runtime web), con checkpoint humano pre-escritura. El cuidado propio de esta fase es de **regresión de producto**: el script no debe tocar `landing_config` de un negocio que ya está publicado (escribir el borrador no puede pisar lo que está al aire), y el modo edición de Phase 11 debe partir del borrador, no de lo publicado, para no re-publicar sin querer.
 
@@ -147,7 +162,7 @@ Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer e
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete | 2026-07-08 |
 | 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
 | 15. Borrador y publicación (núcleo) | v0.18 | 3/3 | Complete    | 2026-07-13 |
-| 16. La web nace como borrador (skill) | v0.18 | 0/? | Not started | - |
+| 16. La web nace como borrador (skill) | v0.18 | 0/3 | Planned | - |
 | 17. Exponer el CMS a clientes reales | v0.18 | 0/? | Not started | - |
 
 ## Requirement Coverage (v0.18)
