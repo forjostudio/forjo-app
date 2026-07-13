@@ -61,7 +61,7 @@ Detalle completo archivado en [`milestones/v0.16-ROADMAP.md`](../../milestones/v
 
 > **Por qué PUB-01 va ÚLTIMO:** exponer el editor a clientes reales mientras cada guardado todavía sale al aire es exactamente el error que este milestone viene a evitar. El CMS solo se abre cuando (a) guardar ya no publica y (b) la web armada por la skill nace como borrador. El orden no es preferencia: es el contenido del milestone.
 
-- [ ] **Phase 15: Borrador y publicación (núcleo)** - `landing_draft` (migración aditiva) + el CMS escribe el borrador + botón Publicar/Descartar + el estado real de "cambios sin publicar"; la web pública sigue leyendo SOLO lo publicado
+- [x] **Phase 15: Borrador y publicación (núcleo)** - `landing_draft` (migración aditiva) + el CMS escribe el borrador + botón Publicar/Descartar + el estado real de "cambios sin publicar"; la web pública sigue leyendo SOLO lo publicado (completed 2026-07-13)
 - [ ] **Phase 16: La web nace como borrador (skill del operador)** - `scripts/setup-landing.ts` escribe el borrador, no lo publicado; `--inspect` muestra borrador y publicado por separado
 - [ ] **Phase 17: Exponer el CMS a clientes reales** - Se retira el flag global `CMS_ENABLED`; `has_web_custom` queda como ÚNICO gate del editor
 
@@ -80,7 +80,7 @@ Detalle completo archivado en [`milestones/v0.16-ROADMAP.md`](../../milestones/v
   4. El dueño descarta el borrador y el editor vuelve a mostrar exactamente lo que está al aire.
   5. Cero sorpresas en la transición: un negocio que ya tenía su landing publicada la sigue viendo idéntica (y abre el editor viendo una copia fiel de lo publicado); un negocio que nunca publicó sigue viendo su página de reservas de siempre, y al publicar por primera vez su web a medida la reemplaza (go-live implícito).
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -93,7 +93,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 15-03-PLAN.md — Barra publish (3 acciones · 3 estados), dialogs de go-live y descarte, toasts, token `--warning` (wave 3)
+- [x] 15-03-PLAN.md — Barra publish (3 acciones · 3 estados), dialogs de go-live y descarte, toasts, token `--warning` (wave 3)
 
 **UI hint**: yes
 
@@ -146,7 +146,7 @@ Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer e
 | 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete | 2026-07-07 |
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete | 2026-07-08 |
 | 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
-| 15. Borrador y publicación (núcleo) | v0.18 | 2/3 | In Progress|  |
+| 15. Borrador y publicación (núcleo) | v0.18 | 3/3 | Complete   | 2026-07-13 |
 | 16. La web nace como borrador (skill) | v0.18 | 0/? | Not started | - |
 | 17. Exponer el CMS a clientes reales | v0.18 | 0/? | Not started | - |
 

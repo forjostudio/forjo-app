@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.18
 milestone_name: CMS Publish / Go-live
-status: executing
-stopped_at: Completed 15-02-PLAN.md (write path del borrador + publicar/descartar)
-last_updated: "2026-07-13T12:55:00.000Z"
+status: verifying
+stopped_at: Completado 15-03-PLAN.md — fase 15 lista para verify-work
+last_updated: "2026-07-13T12:59:56.651Z"
 last_activity: 2026-07-13 -- Phase 15 plan 02 completo (3 Server Actions + compare canónico)
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 33
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 
 Phase: 15 (Borrador y publicación (núcleo)) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-13 -- Phase 15 plan 02 completo (3 Server Actions + compare canónico)
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
@@ -54,6 +54,7 @@ Progreso: `[░░░░░░░░░░] 0/3 fases`
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 15 P03 | 25min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,7 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 - [Phase 15-02]: `saveLandingDraft(input)` escribe el BORRADOR (el nombre `saveLandingConfig` ya no existe). `publishLanding()` y `discardLandingDraft()` son de **CERO argumentos**: copia server-side entre columnas (SELECT + UPDATE — PostgREST no hace `SET col_a = col_b`), con Zod estricto sobre el borrador LEÍDO DE LA DB al publicar (`invalid_draft`). Cero service-role, cero `revalidatePath` (`/[slug]` es force-dynamic).
 - [Phase 15-02]: **Desviación declarada de D-03** — el compare draft-vs-published usa un stringify **CANÓNICO** (`configsEqual` en `lib/landing/editor-draft.ts`), no `JSON.stringify` crudo: Postgres reordena las claves del `jsonb` y el compare crudo dejaría "Guardado — sin publicar" trabado para siempre. Misma semántica (estado derivado del contenido, sin flag ni timestamp), otro mecanismo. NO "simplificar" de vuelta.
 - [Phase 15-02]: contrato page → client = `initialDraft` (`landing_draft ?? landing_config`, coalesce defensivo) + `publishedConfig` (`landing_config ?? null`, donde **null ⇒ nunca publicó**: dispara go-live y el empty-state).
+- [Phase ?]: 15-03: publicar encadena guardar → publicar SIEMPRE (D-04); el estado post-publicacion se resuelve en memoria (cero revalidatePath / router.refresh)
 
 ### Pending Todos
 
@@ -116,9 +118,9 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 
 ## Session Continuity
 
-Last session: 2026-07-13T12:55:00.000Z
-Stopped at: Completed 15-02-PLAN.md — sigue la wave 3 (15-03: barra publish, dialogs y toasts)
-Resume file: .planning/workstreams/web-builder/phases/15-borrador-y-publicaci-n-n-cleo/15-03-PLAN.md
+Last session: 2026-07-13T12:59:56.632Z
+Stopped at: Completado 15-03-PLAN.md — fase 15 lista para verify-work
+Resume file: None
 
 ## Operator Next Steps
 
