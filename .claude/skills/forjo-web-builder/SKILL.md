@@ -39,7 +39,8 @@ operador. Si falta info, la pedís — no la rellenás.
 - **Toda la escritura la hace `scripts/setup-landing.ts`** vía service-role local (D10-01 / SKILL-04).
   La frontera de seguridad es la máquina del operador, no un endpoint. **NUNCA** expongas un
   endpoint web para esto, ni metas secretos en el config o en la vista `public_businesses`.
-- La capa de plantilla (schema + renderer + temas) ya existe: vos solo armás el `landing_config`.
+- La capa de plantilla (schema + renderer + temas) ya existe: vos solo armás el **config del landing**
+  (que por defecto se escribe en el **borrador**, `businesses.landing_draft` — ver paso 7).
 
 ---
 
@@ -129,6 +130,11 @@ corto que parte de lo último que se escribió y toca solo el campo pedido.
    computado comparando el payload viejo contra el nuevo. **NO muestres el config entero.** El diff
    contiene solo copy/imágenes/tema — nunca credenciales ni columnas sensibles del tenant. Esperá
    aprobación explícita, con el mismo ethos bloqueante del paso 6.
+
+   Sumá los **mismos dos ítems del paso 6**: el **destino de la escritura** (borrador, o borrador + al
+   aire si se pidió `--publish`) y, si el `--inspect` marcó `tiene_cambios_sin_publicar`, el **aviso de
+   choque**. Acá es donde más riesgo hay de pisar el trabajo del dueño: estás retocando una web que él
+   ya puede haber tocado.
 
 5. **Re-escribí (idempotente, D-06).** Corré el mismo comando del paso 7 con el payload editado:
 
