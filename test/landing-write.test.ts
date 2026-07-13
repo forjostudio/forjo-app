@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { parseLandingConfigForWrite, MAX_CONFIG_BYTES } from '@/lib/landing/write'
+import {
+  parseLandingConfigForWrite,
+  landingWriteColumns,
+  MAX_CONFIG_BYTES,
+} from '@/lib/landing/write'
 import { parseLandingConfig, DEFAULT_LANDING_CONFIG, SECTION_TYPES } from '@/lib/landing/schema'
+import type { LandingConfig } from '@/lib/landing/schema'
 
 // ── Tests del WRITE path del landing_config (T-15-16) ──────────────────────────────────────────
 // El punto entero de este archivo: leer y escribir tienen contratos OPUESTOS.
@@ -296,5 +301,60 @@ describe('el read path sigue siendo fail-safe (no lo rompimos)', () => {
 
   it('null sigue devolviendo null (passthrough legacy)', () => {
     expect(parseLandingConfig(null)).toBeNull()
+  })
+})
+
+// ── landingWriteColumns (Phase 16, SKILL-07 / D-03 / D-03b) ─────────────────────────────────────
+// La decisión que sostiene la fase entera: la web que arma el operador NACE COMO BORRADOR. El
+// default NO puede tocar `landing_config` — si lo tocara, correr la skill sobre un negocio ya
+// publicado le pisaría la web AL AIRE sin que nadie la mire (T-16-01). Vive en un módulo puro y no
+// inline en scripts/setup-landing.ts justamente para que exista este test: el script no es
+// unit-testeable (side-effects, process.argv, service-role).
+describe('landingWriteColumns (qué columnas escribe el operador según --publish)', () => {
+  // Config válido real, salido del propio write path (no un objeto a mano).
+  function validConfig(): LandingConfig {
+    const r = parseLandingConfigForWrite(wrap('hero', { headline: 'Cortes con oficio' }))
+    if (!r.ok) throw new Error('el config de prueba debería ser válido')
+    return r.data
+  }
+
+  it('por defecto (publish=false) escribe SOLO landing_draft', () => {
+    const cfg = validConfig()
+    expect(Object.keys(landingWriteColumns(cfg, false))).toEqual(['landing_draft'])
+  })
+
+  it('por defecto la clave landing_config NO EXISTE en el payload (T-16-01)', () => {
+    // `in`, no `=== undefined`: PostgREST manda las claves PRESENTES. Un `landing_config: undefined`
+    // explícito es una fuente de bugs — la clave no tiene que estar, ni siquiera vacía.
+    const r = landingWriteColumns(validConfig(), false)
+    expect('landing_config' in r).toBe(false)
+  })
+
+  it('por defecto landing_draft es EL MISMO objeto parseado (sin clonar)', () => {
+    const cfg = validConfig()
+    expect(landingWriteColumns(cfg, false).landing_draft).toBe(cfg)
+  })
+
+  it('con --publish escribe las DOS columnas', () => {
+    const r = landingWriteColumns(validConfig(), true)
+    expect(Object.keys(r).sort()).toEqual(['landing_config', 'landing_draft'])
+  })
+
+  it('con --publish las dos columnas son EL MISMO objeto (invariante D-03b, incidente f98ed6b)', () => {
+    // Byte-idénticas ⇒ el dueño abre su editor en "✓ Publicado" y no en un falso "sin publicar"
+    // cuyo botón Publicar revertiría la web que el operador acaba de publicar.
+    const cfg = validConfig()
+    const r = landingWriteColumns(cfg, true)
+    expect(r.landing_draft).toBe(cfg)
+    expect(r.landing_config).toBe(cfg)
+    expect(r.landing_config).toBe(r.landing_draft)
+  })
+
+  it('es pura: no muta el config recibido', () => {
+    const cfg = validConfig()
+    const snap = structuredClone(cfg)
+    landingWriteColumns(cfg, false)
+    landingWriteColumns(cfg, true)
+    expect(cfg).toEqual(snap)
   })
 })
