@@ -42,7 +42,6 @@
 import { config as loadEnv } from 'dotenv'
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import path from 'node:path'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
 
@@ -342,9 +341,9 @@ async function rehostImage(
 
   const raw = await readFile(localPathOrUrl) // bytes del disco (el SKILL.md ya los dejó localmente)
 
-  let buffer: Buffer = raw
-  let ext = 'webp'
-  let contentType = 'image/webp'
+  const ext = 'webp'
+  const contentType = 'image/webp'
+  let buffer: Buffer
   try {
     // Re-encode a WebP + resize al ancho del rol (sin agrandar). Normaliza extensiones raras de IG.
     buffer = await sharp(raw)
@@ -352,14 +351,18 @@ async function rehostImage(
       .webp({ quality: 82 })
       .toBuffer()
   } catch (e) {
-    // Degradación fail-safe: subir el binario original tal cual, derivando ext/content-type del path.
-    console.error(
-      `[setup-landing] sharp falló para ${localPathOrUrl} (${e instanceof Error ? e.message : e}); ` +
-        'subo el binario original tal cual.',
+    // ⚠ ABORTA, NO DEGRADA (y NO se "arregla" volviendo a subir el binario crudo).
+    // Antes esto caía a subir el archivo ORIGINAL tal cual con el content-type de la extensión. Pero
+    // que sharp no pueda decodificarlo es EXACTAMENTE la señal de que ESO NO ES UNA IMAGEN: el
+    // resultado era un archivo arbitrario del disco del operador servido desde un bucket `public:true`
+    // (migr. 030), en una URL adivinable, y esa URL entraba al config (pasa `safeLinkUrl`: es https).
+    // Un path equivocado en el payload publicaba el contenido de ese archivo. Es la misma doctrina que
+    // el resto de la fase: en el WRITE PATH, un input inválido aborta ruidosamente — degradar en
+    // silencio es peor que fallar.
+    throw new Error(
+      `${localPathOrUrl} no es una imagen decodificable (${e instanceof Error ? e.message : e}). ` +
+        'Revisá la ruta en el payload; no se sube nada.',
     )
-    buffer = raw
-    ext = (path.extname(localPathOrUrl).replace('.', '') || 'bin').toLowerCase()
-    contentType = extToContentType(ext)
   }
 
   // namespacing OBLIGATORIO por {businessId}/ (Pitfall 3 / T-10-04): el service-role bypassa RLS,
@@ -388,30 +391,33 @@ async function rehostImage(
   return supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
 }
 
-// Mapeo mínimo extensión → content-type para la degradación (sharp ya da image/webp en el camino feliz).
-function extToContentType(ext: string): string {
-  switch (ext) {
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg'
-    case 'png':
-      return 'image/png'
-    case 'webp':
-      return 'image/webp'
-    case 'gif':
-      return 'image/gif'
-    case 'avif':
-      return 'image/avif'
-    default:
-      return 'application/octet-stream'
-  }
+// Reemplaza CADA imagen del payload por un placeholder https VÁLIDO, para poder armar y GATEAR el
+// config ANTES de subir un solo byte al bucket (paso 5). El builder y el gate solo miran la FORMA de
+// la URL (`safeLinkUrl` = allowlist de protocolo http/https): un config armado con placeholders tiene
+// EXACTAMENTE la misma forma que el final — mismas secciones habilitadas, mismo copy, mismo tema.
+// Sin esto, un payload que el gate va a rechazar igual dejaba objetos PÚBLICOS huérfanos en Storage
+// (el paso de subida corría antes del gate) que nadie limpia nunca.
+function withPlaceholderImages(input: BuilderInput): BuilderInput {
+  const clone: BuilderInput = structuredClone(input)
+  let n = 0
+  const ph = () => `https://placeholder.invalid/${n++}.webp`
+  if (clone.hero?.image) clone.hero.image = ph()
+  if (clone.about?.image) clone.about.image = ph()
+  if (clone.gallery?.images?.length) clone.gallery.images = clone.gallery.images.map(() => ph())
+  if (clone.rsv?.images?.length) clone.rsv.images = clone.rsv.images.map(() => ph())
+  return clone
 }
 
 // ── MODO ESCRITURA ──────────────────────────────────────────────────────────────────
 // Orden EXACTO (Pitfall 3: nada se escribe hasta tener todo resuelto y validado):
 //   1) resolver business_id  2) leer el estado draft/publicado  3) AVISO de choque (D-01/D-02)
-//   4) re-hostear imágenes  5) armar config con builder  6) GATE estricto de escritura
-//   7) pre-print de --publish  8) UPDATE por id  9) mensaje de cierre.
+//   4) tema (recommendTheme)  5) PRE-GATE del config con placeholders — nada se sube si no valida
+//   6) re-hostear imágenes  7) armar el config real  8) GATE estricto de escritura
+//   9) pre-print de --publish  10) UPDATE por id  11) mensaje de cierre.
+//
+// El paso 5 NO es redundante con el 8: el 8 valida lo que REALMENTE se persiste (con las URLs de
+// Storage ya resueltas) y es el gate que manda. El 5 existe para que un payload inválido no ensucie
+// antes un bucket PÚBLICO con objetos que nadie va a borrar. Los dos se quedan.
 //
 // `publish` es OPT-IN EXPLÍCITO (el flag `--publish`, resuelto en main() por presencia del token):
 // nunca por defecto, nunca inferido de otra cosa. Con publish=false se escribe SOLO `landing_draft`
@@ -472,9 +478,42 @@ async function runWrite(
     )
   }
 
-  // 4) Re-hostear cada imagen local referenciada en el payload, reemplazando la ruta por la URL
-  //    pública de Storage. Se hace ANTES de armar el config para que el builder reciba URLs válidas
-  //    (el builder filtra con .url() estricto — una ruta local no pasaría y se perdería la imagen).
+  // 4) Armar el tema (recommendTheme) con la lógica pura de 10-01.
+  //    Por DEFAULT el landing hereda el theme/palette/font que el negocio YA configuró en Apariencia
+  //    (la misma identidad de su web de reservas): partimos de la fila `businesses` y el payload solo
+  //    PISA si el operador pasó un override explícito. Así la landing matchea el booking salvo que se
+  //    pida lo contrario; recommendTheme solo adivina por vertical cuando el negocio no configuró nada.
+  const brand: BrandHints = {
+    vertical: payload.brand?.vertical ?? biz.vertical,
+    theme: payload.brand?.theme ?? biz.theme,
+    palette: payload.brand?.palette ?? biz.palette,
+    font: payload.brand?.font ?? biz.font,
+    primary_color: payload.brand?.primary_color ?? biz.primary_color,
+  }
+  const theme = recommendTheme(brand)
+
+  // 5) PRE-GATE: validar el config ANTES de subir NADA al bucket público.
+  //    Se arma el config con las imágenes reemplazadas por placeholders https (la forma es idéntica a
+  //    la del config final: el gate valida protocolo, no dominio). Si el payload es basura, el script
+  //    aborta ACÁ — con el bucket intacto. Antes la subida corría antes del gate: un config rechazado
+  //    dejaba objetos públicos huérfanos en Storage, y el header de este bloque ("nada se escribe
+  //    hasta tener todo resuelto y validado") era, en ese punto, falso.
+  const preGate = parseLandingConfigForWrite(
+    buildLandingConfig(withPlaceholderImages(payload.input), theme),
+  )
+  if (!preGate.ok) {
+    console.error(
+      `[setup-landing] el config NO pasa el gate de escritura (${preGate.error}) — abortado ANTES de ` +
+        'subir ninguna imagen. Revisá el payload; el bucket quedó intacto.',
+    )
+    process.exitCode = 1
+    return
+  }
+
+  // 6) Re-hostear cada imagen local referenciada en el payload, reemplazando la ruta por la URL
+  //    pública de Storage. Se hace ANTES de armar el config real para que el builder reciba URLs
+  //    válidas (el builder filtra con .url() estricto — una ruta local no pasaría y se perdería la
+  //    imagen). Las imágenes que YA son URLs de nuestro bucket pasan de largo (MODO EDICIÓN, D-04).
   const input: BuilderInput = structuredClone(payload.input)
   try {
     if (input.hero?.image) {
@@ -501,22 +540,10 @@ async function runWrite(
     return
   }
 
-  // 5) Armar el tema (recommendTheme) y el config (buildLandingConfig) con la lógica pura de 10-01.
-  //    Por DEFAULT el landing hereda el theme/palette/font que el negocio YA configuró en Apariencia
-  //    (la misma identidad de su web de reservas): partimos de la fila `businesses` y el payload solo
-  //    PISA si el operador pasó un override explícito. Así la landing matchea el booking salvo que se
-  //    pida lo contrario; recommendTheme solo adivina por vertical cuando el negocio no configuró nada.
-  const brand: BrandHints = {
-    vertical: payload.brand?.vertical ?? biz.vertical,
-    theme: payload.brand?.theme ?? biz.theme,
-    palette: payload.brand?.palette ?? biz.palette,
-    font: payload.brand?.font ?? biz.font,
-    primary_color: payload.brand?.primary_color ?? biz.primary_color,
-  }
-  const theme = recommendTheme(brand)
+  // 7) Armar el config REAL (buildLandingConfig) con las URLs de Storage ya resueltas.
   const landingConfig = buildLandingConfig(input, theme)
 
-  // 6) GATE (SKILL-04 / T-10-06): validar ANTES de escribir. Config inválido → CERO UPDATE.
+  // 8) GATE (SKILL-04 / T-10-06): validar ANTES de escribir. Config inválido → CERO UPDATE.
   //
   // POR QUÉ CAMBIÓ EL VALIDADOR (era `parseLandingConfig`, el de LECTURA): son contratos OPUESTOS.
   //   · `parseLandingConfig` es FAIL-SAFE: ante un `data` de sección inválido lo degrada a `{}` EN
@@ -538,7 +565,7 @@ async function runWrite(
     return
   }
 
-  // 7) PRE-PRINT de --publish (D-03): antes de reemplazar la web al aire, decir QUÉ se reemplaza.
+  // 9) PRE-PRINT de --publish (D-03): antes de reemplazar la web al aire, decir QUÉ se reemplaza.
   if (publish) {
     if (estado.nuncaPublico) {
       console.log(
@@ -559,7 +586,7 @@ async function runWrite(
     }
   }
 
-  // 8) UPDATE filtrado por id resuelto del slug (NUNCA por slug — Pitfall 6 / T-10-07). Aislamiento
+  // 10) UPDATE filtrado por id resuelto del slug (NUNCA por slug — Pitfall 6 / T-10-07). Aislamiento
   //    por business_id.
   //
   // ⚠ QUÉ COLUMNAS SE ESCRIBEN, Y POR QUÉ CAMBIÓ EL DEFAULT (Phase 16 — SKILL-07 / D-03 / D-03b).
@@ -596,7 +623,7 @@ async function runWrite(
     return
   }
 
-  // 9) Mensaje de cierre, bifurcado por camino.
+  // 11) Mensaje de cierre, bifurcado por camino.
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
   if (publish) {
     // /[slug] es force-dynamic → sirve el config nuevo en el próximo request, sin deploy.

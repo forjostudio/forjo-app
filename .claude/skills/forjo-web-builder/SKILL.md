@@ -311,9 +311,10 @@ externa (CDN de IG, web del negocio) el script la **rechaza**: se descarga y se 
 lo que ya había (su web vieja, o la reserva simple). **El dueño la revisa en su editor (`/web`) y la
 publica él.**
 
-Si el script **aborta** (el gate estricto rechaza el config con `invalid_config` / `config_too_large`,
-o falla el re-hosteo) → reportá el error tal cual y **NO reintentes a ciegas**. Revisá el payload y
-volvé al checkpoint.
+Si el script **aborta** (el gate rechaza el config con `invalid_config` / `config_too_large`, o falla
+el re-hosteo: una ruta que no existe, un archivo que **no es una imagen decodificable**, o una URL
+externa donde iba una ruta local) → reportá el error tal cual y **NO reintentes a ciegas**. Revisá el
+payload y volvé al checkpoint. El script **nunca degrada**: no sube un archivo que no pudo decodificar.
 
 **Avisarle al dueño que su web está lista: por WhatsApp, vos.** No hay **nada en código** que lo
 notifique (ni mail ni badge) — no lo inventes ni lo prometas.
