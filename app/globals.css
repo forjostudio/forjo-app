@@ -37,6 +37,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -86,6 +87,7 @@
   --border: #d9ceb4;
   --input: #d9ceb4;
   --destructive: #b23a26;
+  --warning: #8a5a12;   /* ámbar oscuro sobre crema #f3ead8 → 4.97:1 (AA texto normal). Palette-independiente */
 
   --sidebar: #efe3cd;
   --sidebar-foreground: #1a1714;
@@ -126,6 +128,7 @@
   --border: oklch(0.94 0.03 80 / 12%);
   --input: oklch(0.94 0.03 80 / 14%);
   --destructive: #e05c43;
+  --warning: #e6b53f;   /* ámbar Bauhaus sobre #1a1714 → 8.75:1 (AAA) */
 
   --sidebar: #141110;
   --sidebar-foreground: #f3ead8;
