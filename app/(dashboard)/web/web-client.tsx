@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
+import { Check, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -26,7 +27,7 @@ import {
   isDirty,
   deriveEditorState,
 } from '@/lib/landing/editor-draft'
-import { saveLandingDraft } from './_landing-actions'
+import { saveLandingDraft, publishLanding, discardLandingDraft } from './_landing-actions'
 import { SectionListPanel } from './_sections/section-list'
 import { ThemeControls } from './_sections/theme-controls'
 
@@ -75,9 +76,11 @@ interface Props {
   locations: LocationLite[]
 }
 
-// Mapa de códigos de error de saveLandingDraft → toast en español (14-UI-SPEC §6, D-03c). 15-03 lo
-// extiende a ACTION_ERROR_COPY con los códigos de publicar/descartar (no_draft, invalid_draft, …).
-const SAVE_ERROR_COPY: Record<string, string> = {
+// Mapa ÚNICO de códigos de error → toast en español, compartido por las 3 acciones (15-UI-SPEC
+// §Errores). Las 3 espejan el mismo patrón de Server Action owner-only (D-16) y devuelven el mismo
+// { ok:false, error:'<snake>' }, así que un solo mapa alcanza. Fallback: código desconocido →
+// server_error. Regla de CLAUDE.md: todo error dice QUÉ pasó + QUÉ hacer.
+const ACTION_ERROR_COPY: Record<string, string> = {
   cms_disabled: 'El editor no está disponible en este momento.',
   // not_entitled: el negocio no tiene el add-on de web a medida (has_web_custom). En la práctica
   // no debería verse — la page ya hace notFound() sin el entitlement — pero el write path lo
@@ -86,8 +89,33 @@ const SAVE_ERROR_COPY: Record<string, string> = {
   unauthorized: 'Tu sesión expiró. Volvé a iniciar sesión.',
   no_business: 'No encontramos tu negocio. Recargá la página.',
   invalid_config: 'Hay un dato inválido en tu web. Revisá los campos marcados.',
-  update_failed: 'No se pudieron guardar los cambios. Probá de nuevo.',
-  server_error: 'Ocurrió un error al guardar. Probá de nuevo en unos segundos.',
+  update_failed: 'No se pudo guardar el borrador. Probá de nuevo.',
+  server_error: 'Ocurrió un error. Probá de nuevo en unos segundos.',
+  // Códigos de Phase 15 (publicar / descartar).
+  no_draft: 'No hay nada para publicar. Guardá algún cambio primero.',
+  publish_failed: 'No se pudo publicar tu web. Probá de nuevo.',
+  discard_failed: 'No se pudo descartar el borrador. Probá de nuevo.',
+  invalid_draft: 'El borrador tiene un dato inválido y no se puede publicar. Revisá los campos marcados.',
+}
+
+// ── Indicador de 3 estados excluyentes (D-06 / 15-UI-SPEC §5) ────────────────────────────
+// El estado NUNCA se comunica solo por color (WCAG 1.4.1): cada uno tiene su propio texto y el
+// publicado además cambia de glifo (punto → check). Mismo tamaño y peso en los 3 (nada de bold).
+type EditorState = 'unsaved' | 'unpublished' | 'published'
+const STATE_LABEL: Record<EditorState, string> = {
+  unsaved: 'Cambios sin guardar',
+  unpublished: 'Guardado — sin publicar',
+  published: 'Publicado',
+}
+const STATE_TONE: Record<EditorState, string> = {
+  unsaved: 'text-primary',
+  unpublished: 'text-warning',
+  published: 'text-muted-foreground',
+}
+const STATE_DOT: Record<EditorState, string> = {
+  unsaved: 'bg-primary',
+  unpublished: 'bg-warning',
+  published: '', // el estado publicado usa el ícono Check, no el punto
 }
 
 export function WebEditorClient({
@@ -100,9 +128,6 @@ export function WebEditorClient({
   exceptions,
   locations,
 }: Props) {
-  // Empty-state = NUNCA PUBLICÓ (publishedConfig null), no "no tiene borrador": desde Phase 15 un
-  // negocio puede tener su borrador guardado y su web todavía sin salir al aire (estado 2 de la matriz).
-  const isEmpty = publishedConfig === null || publishedConfig === undefined
   // Borrador inicial: el config parseado, o el DEFAULT sembrado (D-03 / §7).
   // stripPrimary: se quitó el control "Color principal" del editor (pisaba el acento de cualquier
   // paleta y dejaba los swatches decorativos). Normalizamos ACÁ, en el seed, porque `seeded`
@@ -118,12 +143,14 @@ export function WebEditorClient({
   // guardado abriría el editor diciendo "sin publicar" sin haber tocado nada — falso positivo
   // permanente. ÚNICA asimetría legítima: null se PRESERVA como null (señal de "nunca publicó"), no
   // se coacciona a DEFAULT_LANDING_CONFIG.
-  const publishedBaseline = useMemo<LandingConfig | null>(
-    () =>
-      publishedConfig === null || publishedConfig === undefined
-        ? null
-        : stripPrimary(parseLandingConfig(publishedConfig)!),
-    [publishedConfig],
+  // Es ESTADO, no memo: al publicar con éxito lo publicado pasa a ser el borrador actual EN MEMORIA
+  // (D-02/D-10) — sin refetch, sin router.refresh(), sin revalidatePath (la web pública es
+  // force-dynamic: no hay caché que invalidar, y revalidar desde una Server Function refrescaría
+  // todas las páginas del panel ya visitadas).
+  const [publishedBaseline, setPublishedBaseline] = useState<LandingConfig | null>(() =>
+    publishedConfig === null || publishedConfig === undefined
+      ? null
+      : stripPrimary(parseLandingConfig(publishedConfig)!),
   )
 
   const [draft, setDraft] = useState<LandingConfig>(seeded)
@@ -132,16 +159,33 @@ export function WebEditorClient({
   // Contador de uploads en vuelo (lo suben/bajan los controles de imagen, 14-03). >0 → bloquea Save (L9).
   const [uploading, setUploading] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [discarding, setDiscarding] = useState(false)
   // Mobile: toggle Editar / Vista previa (§1). Desktop es split y este estado se ignora.
   const [mobileView, setMobileView] = useState<'edit' | 'preview'>('edit')
-  // Confirm-on-exit dialog.
-  const [showExitConfirm, setShowExitConfirm] = useState(false)
+  // Dialog destructivo de descarte (el de go-live llega en la tarea 3 de este plan).
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
 
   const dirty = isDirty(draft, savedBaseline)
   // Estado del editor derivado del CONTENIDO (D-03/D-06), sin flag ni timestamp en la DB: manda
-  // "sin guardar"; si no, "sin publicar" (incluye el caso nunca-publicó); si no, "publicado". Los
-  // botones Publicar/Descartar y los dialogs los enchufa 15-03 sobre este mismo valor.
+  // "sin guardar"; si no, "sin publicar" (incluye el caso nunca-publicó); si no, "publicado".
   const editorState = deriveEditorState({ draft, savedBaseline, published: publishedBaseline })
+  // NUNCA PUBLICÓ: la señal que dispara el dialog de go-live (D-08 — exactamente una vez en la vida
+  // del negocio, derivada de los datos, sin casilla "no volver a mostrar") y el aviso de empty-state.
+  // Sale del baseline EN MEMORIA, así que tras la primera publicación deja de ser true sin recargar.
+  const neverPublished = publishedBaseline === null
+  // ¿El borrador sigue siendo la plantilla base sembrada? Decide CUÁL de las dos variantes del aviso
+  // se muestra (§9). NO es un chequeo de calidad y no bloquea nada (D-11).
+  const draftIsPristine = !isDirty(draft, DEFAULT_LANDING_CONFIG)
+
+  // Matriz de habilitación (15-UI-SPEC §4). Uploads en vuelo bloquean las 3 acciones (L9 de Phase 14).
+  const busy = saving || publishing || discarding
+  const blocked = busy || uploading > 0
+  const canDiscard = !blocked && editorState !== 'published'
+  const canSave = !blocked && editorState === 'unsaved'
+  // D-04: Publicar queda habilitado TAMBIÉN con cambios sin guardar (encadena guardar → publicar).
+  // Deshabilitarlo por "hay cambios sin guardar" era un dead-end visual.
+  const canPublish = !blocked && editorState !== 'published'
 
   // ── Callbacks de mutación del borrador (todo pasa por editor-draft.ts) ──────────────────
   const onMove = useCallback(
@@ -177,7 +221,7 @@ export function WebEditorClient({
   // Phase 15: guardar YA NO publica. Escribe businesses.landing_draft y la web al aire no se mueve
   // (PUB-03) — de ahí el copy nuevo del toast. Publicar es una decisión aparte (barra de 15-03).
   async function handleSave() {
-    if (saving || !dirty || uploading > 0) return
+    if (!canSave) return
     setSaving(true)
     const res = await saveLandingDraft(draft)
     setSaving(false)
@@ -186,8 +230,88 @@ export function WebEditorClient({
       // D-03c: limpiar el flag de cambios sin guardar → baseline pasa a ser el draft actual.
       setSavedBaseline(draft)
     } else {
-      toast.error(SAVE_ERROR_COPY[res.error] ?? SAVE_ERROR_COPY.server_error)
+      toast.error(ACTION_ERROR_COPY[res.error] ?? ACTION_ERROR_COPY.server_error)
     }
+  }
+
+  // Abre la web pública REAL en otra pestaña (D-07/D-10): el preview del editor muestra SIEMPRE el
+  // borrador; lo publicado se ve en /[slug] de verdad, no en una simulación. Sin window.opener.
+  function openPublicSite() {
+    window.open(`/${business.slug}`, '_blank', 'noopener,noreferrer')
+  }
+
+  // ── Publicar (D-04 en su forma fuerte): GUARDA SIEMPRE ANTES DE PUBLICAR ─────────────────
+  // No es `if (dirty) save()`. publishLanding() copia el borrador DE LA DB, y un negocio nuevo ve la
+  // plantilla base sembrada EN MEMORIA con landing_draft = NULL en la DB: sin el guardado previo,
+  // Publicar devolvería "No hay nada para publicar" mientras el dueño mira su preview lleno. El
+  // criterio de desempate de la fase es "el dueño nunca publica algo distinto de lo que ve".
+  // D-11: acá NO se evalúa completitud del config. El único filtro de contenido es el Zod estricto
+  // del server (código invalid_draft). Nada de checklist blando ni mínimos de contenido.
+  async function runPublish() {
+    if (blocked || editorState === 'published') return
+    setPublishing(true)
+    // 1. Guardado implícito. Durante todo el encadenado el botón dice "Publicando…" — para el dueño
+    //    es UNA sola acción, no parpadea "Guardando…" → "Publicando…".
+    const saved = await saveLandingDraft(draft)
+    if (!saved.ok) {
+      // El guardado falló ⇒ NO se publica (publicaríamos algo distinto de lo que ve el dueño).
+      setPublishing(false)
+      toast.error(ACTION_ERROR_COPY[saved.error] ?? ACTION_ERROR_COPY.server_error)
+      return
+    }
+    // El borrador YA quedó en la DB: pase lo que pase con la publicación, el estado es recuperable.
+    setSavedBaseline(draft)
+
+    // 2. La publicación (sin argumentos: lo que sale al aire se lee de la DB, T-15-05).
+    const res = await publishLanding()
+    setPublishing(false)
+    if (!res.ok) {
+      toast.error(ACTION_ERROR_COPY[res.error] ?? ACTION_ERROR_COPY.server_error)
+      return
+    }
+
+    // 3. Post-publicación EN MEMORIA (sin refetch ni invalidación de caché): lo publicado pasa a ser
+    //    el borrador actual ⇒ el indicador cae en "✓ Publicado" y las 3 acciones se apagan.
+    const firstTime = publishedBaseline === null
+    setPublishedBaseline(draft)
+    toast.success(firstTime ? 'Tu web está al aire' : 'Cambios publicados', {
+      duration: 6000,
+      action: { label: 'Ver mi web', onClick: openPublicSite },
+    })
+  }
+
+  // Click en Publicar. La tarea 3 de este plan intercala acá el dialog de go-live cuando el negocio
+  // nunca publicó (D-08); las publicaciones siguientes publican de un click.
+  function handlePublishClick() {
+    void runPublish()
+  }
+
+  // ── Descartar (D-12/D-13/D-14): el borrador vuelve a ser copia fiel de lo publicado ──────
+  // D-14 (PROHIBICIÓN): NO se toca Storage. Las fotos que el dueño había subido al borrador quedan
+  // huérfanas —benignas y owner-scoped bajo el prefijo de assets del propio negocio— y así se
+  // quedan. Diffear URLs draft-vs-publicado para borrar objetos es alto riesgo: un borrado mal
+  // calculado se lleva puesta una foto que SÍ está al aire.
+  async function runDiscard() {
+    if (blocked || editorState === 'published') return
+    setDiscarding(true)
+    const res = await discardLandingDraft()
+    setDiscarding(false)
+    setShowDiscardConfirm(false)
+    if (!res.ok) {
+      toast.error(ACTION_ERROR_COPY[res.error] ?? ACTION_ERROR_COPY.server_error)
+      return
+    }
+    // Reconstrucción EN MEMORIA: si ya publicó, el borrador vuelve a ser copia fiel de lo publicado;
+    // si nunca publicó (D-13), se RE-SIEMBRA la plantilla base (mismo camino de empty-state de Phase
+    // 14) y reaparece el aviso. Nunca queda un editor vacío ni un estado "sin web" nuevo.
+    const restored = publishedBaseline ?? stripPrimary(DEFAULT_LANDING_CONFIG)
+    setDraft(restored)
+    setSavedBaseline(restored)
+    toast.success(
+      publishedBaseline !== null
+        ? 'Descartaste el borrador'
+        : 'Descartaste el borrador. Volviste a la plantilla base.',
+    )
   }
 
   // ── Confirm-on-exit: beforeunload nativo cuando hay cambios sin guardar (D-03b) ─────────
@@ -239,9 +363,28 @@ export function WebEditorClient({
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6">
-      <header className="mb-6">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">Gestión</p>
-        <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold">Tu web</h1>
+      <header className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Gestión</p>
+          <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold">Tu web</h1>
+        </div>
+        {/* "Ver mi web" (D-07): NO es un toggle Borrador|Publicado — el preview muestra siempre el
+            borrador y lo publicado se ve en la web pública DE VERDAD. Siempre visible y habilitado,
+            incluso si nunca publicó: en ese caso muestra su página de reservas de siempre, y eso es
+            la verdad. Desktop → header; mobile → fila 1 de la barra (a 375px no entran 4 controles). */}
+        <a
+          href={`/${business.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Ver mi web (abre en una pestaña nueva)"
+          className={cn(
+            buttonVariants({ variant: 'ghost' }),
+            'hidden min-h-11 text-muted-foreground hover:text-foreground sm:inline-flex',
+          )}
+        >
+          Ver mi web
+          <ExternalLink aria-hidden="true" className="size-4" />
+        </a>
       </header>
 
       {/* Mobile: segmented Editar / Vista previa (§1). Oculto en desktop (split). */}
@@ -280,14 +423,31 @@ export function WebEditorClient({
             mobileView === 'preview' && 'hidden lg:block',
           )}
         >
-          {isEmpty && (
+          {/* Aviso de empty-state (§9). La condición es NUNCA PUBLICÓ (no "el borrador venía vacío"):
+              ese es el hecho relevante. Ya publicó ⇒ sin aviso, el indicador de la barra ya cuenta la
+              historia. Dos variantes según si el borrador es la plantilla base o ya tiene contenido
+              (p. ej. se lo armó el operador). */}
+          {neverPublished && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-              <p className="text-sm font-semibold">Tu web todavía no está publicada</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Editá cada sección y guardá tu borrador: los cambios se ven en la vista previa, pero{' '}
-                <strong>nadie los ve todavía</strong>. Tu página seguirá mostrando las reservas de
-                siempre hasta que publiques.
-              </p>
+              {draftIsPristine ? (
+                <>
+                  <p className="text-sm font-semibold">Todavía no personalizaste tu web</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Arrancá desde la plantilla base y editá cada sección. Guardar no publica nada: los
+                    cambios salen al aire recién cuando tocás <strong>Publicar</strong>. Mientras
+                    tanto, forjo.studio/{business.slug} sigue mostrando tu página de reservas.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold">Tu web todavía no está publicada</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Esto es un borrador: solo lo ves vos. Quien entra a forjo.studio/{business.slug} ve
+                    tu página de reservas de siempre. Revisalo, editá lo que quieras y tocá{' '}
+                    <strong>Publicar</strong> cuando esté listo.
+                  </p>
+                </>
+              )}
             </div>
           )}
 
@@ -310,32 +470,81 @@ export function WebEditorClient({
             onMotionChange={onMotionChange}
           />
 
-          {/* Save bar sticky (§6): Save nunca detrás del scroll. */}
-          <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t bg-background/95 py-3 backdrop-blur supports-backdrop-filter:bg-background/80">
-            {/* Indicador de 3 estados excluyentes (D-06). Los botones Publicar / Descartar y sus
-                dialogs llegan en 15-03; acá solo se refleja el estado ya derivado. */}
-            <span
-              className={cn(
-                'text-xs',
-                editorState === 'published' ? 'text-muted-foreground' : 'text-primary',
-              )}
-              aria-live="polite"
-            >
-              {editorState === 'published' ? (
-                'Publicado'
-              ) : (
-                <>
+          {/* ── Barra publish sticky (D-05, §2): UNA sola barra con TODAS las acciones ─────────
+              Sin panel nuevo y sin acciones en el header (única excepción: el link "Ver mi web" en
+              desktop). Mobile (<sm): 2 filas — [estado · Ver mi web] / [Descartar · Guardar ·
+              Publicar]. Desktop: una fila. Las 3 acciones son min-h-11 (44px) en TODOS los viewports:
+              publicar es la acción más cara del editor, no se toca de casualidad. */}
+          <div className="sticky bottom-0 flex flex-col gap-2 border-t bg-background/95 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex items-center justify-between gap-3">
+              {/* Indicador de 3 estados EXCLUYENTES (D-06 / §5). Los 4 estados en vuelo (uploads,
+                  guardando, publicando, descartando) son overlays transitorios, no un 4º estado. El
+                  punto va aria-hidden: el texto es la fuente de verdad y nunca se trunca. */}
+              <span
+                aria-live="polite"
+                className={cn(
+                  'flex items-center text-xs',
+                  uploading > 0 ? 'text-muted-foreground' : STATE_TONE[editorState],
+                )}
+              >
+                {uploading === 0 && editorState === 'published' ? (
+                  <Check aria-hidden="true" className="mr-1.5 size-3.5 shrink-0" />
+                ) : (
                   <span
                     aria-hidden="true"
-                    className="mr-1.5 inline-block size-2 rounded-full bg-primary align-middle"
+                    className={cn(
+                      'mr-1.5 inline-block size-2 shrink-0 rounded-full',
+                      uploading > 0 ? 'bg-muted-foreground' : STATE_DOT[editorState],
+                    )}
                   />
-                  {editorState === 'unsaved' ? 'Cambios sin guardar' : 'Guardado — sin publicar'}
-                </>
-              )}
-            </span>
-            <Button onClick={handleSave} disabled={saving || !dirty || uploading > 0}>
-              {saving ? 'Guardando…' : 'Guardar cambios'}
-            </Button>
+                )}
+                {uploading > 0 ? 'Subiendo imágenes…' : STATE_LABEL[editorState]}
+              </span>
+
+              {/* Mobile: el link vive en la fila 1 (en desktop está en el header). */}
+              <a
+                href={`/${business.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Ver mi web (abre en una pestaña nueva)"
+                className={cn(
+                  buttonVariants({ variant: 'ghost' }),
+                  'min-h-11 shrink-0 text-muted-foreground hover:text-foreground sm:hidden',
+                )}
+              >
+                Ver mi web
+                <ExternalLink aria-hidden="true" className="size-4" />
+              </a>
+            </div>
+
+            {/* Orden visual: Descartar · Guardar · Publicar. Lo destructivo lejos del destino natural
+                del barrido; el único CTA primario de la pantalla (Publicar) al final. Descartar no
+                lleva rojo acá: el rojo aparece recién en el dialog, donde la acción es irreversible. */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                className="min-h-11 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowDiscardConfirm(true)}
+                disabled={!canDiscard}
+              >
+                {discarding ? 'Descartando…' : 'Descartar'}
+              </Button>
+              <Button
+                variant="secondary"
+                className="min-h-11 flex-1 sm:flex-none"
+                onClick={handleSave}
+                disabled={!canSave}
+              >
+                {saving ? 'Guardando…' : 'Guardar'}
+              </Button>
+              <Button
+                className="min-h-11 flex-1 sm:flex-none"
+                onClick={handlePublishClick}
+                disabled={!canPublish}
+              >
+                {publishing ? 'Publicando…' : 'Publicar'}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -350,22 +559,39 @@ export function WebEditorClient({
         </div>
       </div>
 
-      {/* Confirm-on-exit dialog (D-03b): lo dispara la navegación interna interceptada por 14-02+
-          (los enlaces del panel). El shell expone el control; el prompt de recarga usa beforeunload. */}
-      <Dialog open={showExitConfirm} onOpenChange={setShowExitConfirm}>
+      {/* ── Dialog de descartar (PUB-06, D-12/D-13/D-14) ────────────────────────────────────
+          Recicla el bloque de confirm-on-exit (que era código muerto: el prompt de recarga lo hace
+          el beforeunload nativo). Descartar es IRREVERSIBLE (no hay historial) → merece fricción:
+          sin undo y sin toast-deshacer. Foco inicial en "Seguir editando", la opción segura.
+          D-14: el copy NO menciona las fotos. Al descartar, los objetos subidos al borrador quedan
+          huérfanos y Storage no se toca — prometer una limpieza que no ocurre sería mentir. */}
+      <Dialog open={showDiscardConfirm} onOpenChange={(o) => !discarding && setShowDiscardConfirm(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tenés cambios sin guardar</DialogTitle>
+            <DialogTitle>¿Descartar los cambios?</DialogTitle>
             <DialogDescription>
-              Si salís ahora perdés los cambios que no guardaste.
+              {neverPublished
+                ? `Vas a perder todos los cambios que hiciste. Tu web todavía no está publicada, así que forjo.studio/${business.slug} va a seguir mostrando tu página de reservas de siempre.`
+                : 'Vas a perder todos los cambios que no publicaste. Tu web al aire no se toca.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowExitConfirm(false)}>
+            <Button
+              variant="ghost"
+              autoFocus
+              className="min-h-11"
+              onClick={() => setShowDiscardConfirm(false)}
+              disabled={discarding}
+            >
               Seguir editando
             </Button>
-            <Button variant="destructive" onClick={() => setShowExitConfirm(false)}>
-              Descartar cambios
+            <Button
+              variant="destructive"
+              className="min-h-11"
+              onClick={() => void runDiscard()}
+              disabled={discarding}
+            >
+              {discarding ? 'Descartando…' : 'Descartar cambios'}
             </Button>
           </DialogFooter>
         </DialogContent>
