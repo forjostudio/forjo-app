@@ -1,0 +1,16 @@
+# Lo de .planning/ SE VERSIONA (ver el comentario en el .gitignore raíz).
+# Acá solo va lo genuinamente transitorio: estado de sesión y artefactos regenerables.
+
+# Puntero del workstream activo: cambia en cada sesión y por operador. Es estado local,
+# no una decisión del proyecto. Versionarlo genera conflictos de merge por nada.
+active-workstream
+
+# Handoffs de pausa de sesión (se regeneran con /gsd:pause-work).
+**/.continue-here.md
+
+# Salida del pre-pase estructural de code-review (fallow): derivada del código, regenerable.
+**/FALLOW.json
+**/FALLOW-normalized.json
+
+# Jobs asincrónicos en vuelo: estado de runtime, no artefacto de planning.
+async-jobs/

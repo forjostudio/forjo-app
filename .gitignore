@@ -61,8 +61,11 @@ next-env.d.ts
 # Persistentes para editar/re-correr, pero NO se versionan (datos por cliente + paths locales).
 landing-payloads/
 
-# Artefactos de planning que genera GSD al usar el workflow
-.planning/
+# .planning/ SE VERSIONA. Es el "por qué" del código: las decisiones LOCKED de cada fase, el
+# research que encontró las trampas (ej. Postgres reordena las claves del jsonb), los code reviews.
+# Sin esto en git, cada sesión nueva lo re-deriva o lo pierde. Además GSD corre con commit_docs:true,
+# así que ignorarlo peleaba contra la propia herramienta en cada workflow.
+# Lo transitorio se ignora desde .planning/.gitignore.
 
 # Material de diseño (handoff): referencia local, no código de la app
 Forjo Studio-handoff/
