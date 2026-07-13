@@ -2,9 +2,11 @@
 name: forjo-web-builder
 description: >
   Arma la web de marca a medida de un negocio de Forjo Gestión: junta marca + contenido,
-  lo mapea al `landing_config`, recomienda tema, sube imágenes y deja la preview viva en
-  su `/[slug]` con las reservas nativas ya integradas. Produce el config POR SLUG y devuelve
-  la URL de preview. Activá esta skill cuando el operador diga cosas como "armale la web a
+  lo mapea al config del landing, recomienda tema, sube imágenes y deja la web armada
+  COMO BORRADOR, con las reservas nativas ya integradas, esperando la aprobación del
+  dueño (que la publica desde su panel). Produce el config POR SLUG y devuelve el estado:
+  borrador escrito, qué partes cambian, y si choca con trabajo sin publicar del dueño.
+  Activá esta skill cuando el operador diga cosas como "armale la web a
   [cliente]", "personalizar la web de un negocio", "generar landing para [slug]", "hacele una
   web estilo jjotalab a [cliente]", "convertir el Instagram de [cliente] en su página de
   reservas", o cualquier variante de generar/personalizar la landing de un negocio existente.
@@ -17,8 +19,12 @@ description: >
 Orquestás el flujo punta a punta para darle a un cliente de Forjo Gestión su web de marca a
 medida (estilo jjotalab.com) **dentro de Forjo**, servida por `/[slug]`, con el sistema de
 reservas ya existente integrado nativamente. No programás nada nuevo por cliente: el resultado
-es una fila `businesses.landing_config` poblada + imágenes en Storage. El config es **dato, no
-código** → aplicar una web es escribir la fila, instantáneo, sin deploy.
+es una fila de `businesses` con el config del landing + imágenes en Storage. El config es **dato,
+no código** → **no hay deploy**: escribir la fila alcanza y es instantáneo.
+
+Pero entre esa escritura y el público hay **una aprobación del dueño**. Por defecto la web que armás
+va al **borrador** (`businesses.landing_draft`) y **no sale al aire**: el dueño la mira en su editor y
+la publica él. Ese es el circuito: **operador → dueño → público**.
 
 **Regla fundamental (heredada de instagram-a-web): no inventes ningún dato.** No inventes
 servicios, precios, testimonios ni biografía. Todo sale del negocio real (tabla) o del scrape/
@@ -315,8 +321,21 @@ sin decírselo.**
 
 ### 8. OUTPUT
 
-Devolvé la **URL de preview** (`/[slug]` es `force-dynamic` → inmediata, sin deploy) + un resumen
-de lo armado (secciones, tema, cantidad de imágenes re-hosteadas). El script ya imprime la URL.
+Bifurcado, igual que el mensaje de cierre del script:
+
+**Por defecto (escritura del borrador) — NO hay URL de preview pública.** Devolvé:
+
+- el **resumen de lo armado**: secciones habilitadas, tema, cantidad de imágenes re-hosteadas;
+- que quedó **como borrador** (`landing_draft`) y que **lo publicado no se tocó**;
+- el **próximo paso real**: avisarle al dueño **por WhatsApp** para que entre a su panel (`/web`), lo
+  revise y lo publique.
+
+**No inventes un link de preview.** El preview compartible por link está **fuera de alcance**
+(REQUIREMENTS §Out of Scope) y `/[slug]` sigue mostrando la web vieja (o la reserva simple): mandarle
+esa URL al operador como si fuera la web nueva es mentirle sobre el estado.
+
+**Con `--publish`:** ahí sí, devolvé la **URL de `/[slug]`** (`force-dynamic` → inmediata, sin deploy).
+El script ya la imprime.
 
 ---
 
@@ -334,8 +353,13 @@ de lo armado (secciones, tema, cantidad de imágenes re-hosteadas). El script ya
 - **NUNCA campos sensibles** en el config ni en la vista `public_businesses`.
 - **Re-host OBLIGATORIO de imágenes** (SKILL-03): nunca referencies el CDN de IG en runtime.
   Las URLs de IG caducan; solo se descargan localmente y el script las re-hostea a `landing-assets`.
-- **Escritura SOLO por `setup:landing`** (service-role local): cero endpoint web, gate Zod
-  obligatorio. La skill nunca escribe directo a la DB.
+- **Escritura SOLO por `setup:landing`** (service-role local): cero endpoint web, **gate estricto de
+  escritura obligatorio** (`parseLandingConfigForWrite`: rechaza el config inválido, no lo degrada).
+  La skill nunca escribe directo a la DB.
+- **La web NACE COMO BORRADOR**: la escritura por defecto va a `landing_draft` y **NO sale al aire**.
+  **Publicar es del dueño.** `--publish` existe, es **opt-in explícito** y **solo se usa con el OK del
+  dueño**: nunca por defecto, nunca silencioso. Si el dueño tiene cambios sin publicar, el aviso del
+  checkpoint (paso 6) es de **lectura obligatoria** antes de seguir.
 - **UI/UX del CLAUDE global** como criterio (jerarquía visual, mobile-first 375px, WCAG AA,
   microcopy de botones), pero **sin inventar datos**: todo sale del negocio real o del operador.
 
