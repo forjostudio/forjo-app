@@ -188,14 +188,78 @@ export function setMotion(
   return { ...config, motion: level }
 }
 
+// ── canonical + configsEqual: comparación estructural INSENSIBLE al orden de claves ───
+//
+// DESVIACIÓN DECLARADA DE D-03 (Phase 15) — leer antes de "simplificar" esto de vuelta.
+// D-03 dice, textual: *"«Cambios sin publicar» = comparación estructural draft ≠ published (mismo
+// criterio que el isDirty de lib/landing/editor-draft.ts: JSON.stringify deep-compare). No hay flag
+// ni timestamp de publicación: el estado se DERIVA del contenido."*
+// La INTENCIÓN de D-03 se cumple al pie de la letra: el estado se deriva por comparación estructural
+// del contenido, sin flag, sin timestamp, sin estado nuevo más allá de la columna landing_draft.
+// Lo que cambia es el MECANISMO: en vez de JSON.stringify crudo se serializa con las claves
+// ORDENADAS. Por qué, y por qué no es opcional:
+//
+//   Los dos baselines que compara el editor NO vienen del mismo lugar.
+//     · savedBaseline sale del objeto EN MEMORIA (tras guardar: setSavedBaseline(draft)), con el
+//       orden de claves que le dejaron los mutadores de este módulo.
+//     · published vuelve de un ROUND-TRIP POR jsonb, y Postgres REORDENA las claves de un jsonb
+//       (las almacena por longitud + orden binario, no por orden de inserción).
+//   Con JSON.stringify crudo, dos configs SEMÁNTICAMENTE IDÉNTICOS serializan distinto ⇒ el
+//   indicador queda clavado en "● Guardado — sin publicar" PARA SIEMPRE y el botón Publicar nunca
+//   se apaga. Es el bug más probable de la fase y NO lo agarra el type-check.
+//
+// Ordenar las claves antes de serializar mata esa clase entera de falso positivo. Para un MISMO
+// objeto el resultado es idéntico al de hoy: la desviación es de implementación, no de semántica.
+// El orden de los ARRAYS sí se preserva: el orden de las secciones es significativo.
+function canonical(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonical)
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.keys(v as Record<string, unknown>)
+        .sort()
+        .map((k) => [k, canonical((v as Record<string, unknown>)[k])]),
+    )
+  }
+  return v
+}
+
+export function configsEqual(a: LandingConfig, b: LandingConfig): boolean {
+  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
+}
+
 // ── isDirty: comparación estructural borrador-vs-guardado ─────────────────────────────
-// Devuelve true si difieren. Usamos JSON.stringify (deep-equal barato y suficiente: el config es
-// JSON plano, sin funciones/undefined significativos ni ciclos). Lo consume la save bar (indicador
-// de cambios sin guardar) y el confirm-on-exit. Nota: JSON.stringify es sensible al orden de
-// claves, pero como todos los mutadores parten del mismo config y hacen spread, el orden de claves
-// se mantiene estable entre borrador y baseline — no hay falsos positivos por reordenamiento.
+// Devuelve true si difieren. Mismo contrato público de siempre (lo consumen la barra de acciones y
+// el confirm-on-exit), ahora montado sobre configsEqual: deep-equal barato (el config es JSON plano,
+// sin funciones, sin ciclos) pero canónico. Antes esta nota afirmaba que el orden de claves se
+// mantenía estable entre borrador y baseline porque los mutadores parten del mismo config y hacen
+// spread — eso valía cuando AMBOS lados salían de memoria. Desde Phase 15 uno de los lados puede
+// venir de la DB (jsonb reordena), así que esa premisa ya no se sostiene: ver el bloque de arriba.
 export function isDirty(current: LandingConfig, saved: LandingConfig): boolean {
-  return JSON.stringify(current) !== JSON.stringify(saved)
+  return !configsEqual(current, saved)
+}
+
+// ── deriveEditorState: los 3 estados del editor, derivados del CONTENIDO (D-03 / D-06) ─
+// Excluyentes y con esta precedencia exacta:
+//   1. draft ≠ savedBaseline                          → 'unsaved'      (● Cambios sin guardar)
+//   2. published === null  ó  savedBaseline ≠ published → 'unpublished'  (● Guardado — sin publicar)
+//   3. si no                                          → 'published'    (✓ Publicado)
+// published === null significa "nunca publicó" (landing_config IS NULL): ese negocio SIEMPRE tiene
+// algo para publicar, así que este helper NUNCA devuelve 'published' en ese caso — es lo que
+// habilita el botón Publicar y el dialog de go-live (D-08) sin guardar un flag en la DB.
+// Puro: sin React, sin fetch, sin estado. La UI (15-03) solo consume el resultado.
+export function deriveEditorState({
+  draft,
+  savedBaseline,
+  published,
+}: {
+  draft: LandingConfig
+  savedBaseline: LandingConfig
+  published: LandingConfig | null
+}): 'unsaved' | 'unpublished' | 'published' {
+  if (!configsEqual(draft, savedBaseline)) return 'unsaved'
+  if (published === null) return 'unpublished'
+  if (!configsEqual(savedBaseline, published)) return 'unpublished'
+  return 'published'
 }
 
 // Re-export del tipo Section por conveniencia de los consumidores del shell (tipado del stub).
