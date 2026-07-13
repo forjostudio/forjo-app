@@ -247,6 +247,8 @@ export function isDirty(current: LandingConfig, saved: LandingConfig): boolean {
 // algo para publicar, así que este helper NUNCA devuelve 'published' en ese caso — es lo que
 // habilita el botón Publicar y el dialog de go-live (D-08) sin guardar un flag en la DB.
 // Puro: sin React, sin fetch, sin estado. La UI (15-03) solo consume el resultado.
+export type EditorState = 'unsaved' | 'unpublished' | 'published'
+
 export function deriveEditorState({
   draft,
   savedBaseline,
@@ -255,11 +257,47 @@ export function deriveEditorState({
   draft: LandingConfig
   savedBaseline: LandingConfig
   published: LandingConfig | null
-}): 'unsaved' | 'unpublished' | 'published' {
+}): EditorState {
   if (!configsEqual(draft, savedBaseline)) return 'unsaved'
   if (published === null) return 'unpublished'
   if (!configsEqual(savedBaseline, published)) return 'unpublished'
   return 'published'
+}
+
+// ── deriveStateLabel: el TEXTO del indicador (la máquina de estados NO cambia, D-06) ───
+// Los 3 estados de deriveEditorState siguen siendo 3 y excluyentes. Lo que este helper resuelve es
+// que 'unpublished' mete DOS situaciones distintas en la misma bolsa, y el label fijo mentía en una:
+//
+//   · guardé cambios y no los publiqué   → landing_draft tiene contenido → "Guardado — sin publicar" ✔
+//   · negocio nuevo / descarté sin haber publicado nunca → landing_draft IS NULL → NO HAY NADA
+//     GUARDADO, pero el editor igual mostraba "Guardado — sin publicar". Es falso: el borrador que
+//     ve el dueño es la plantilla base sembrada EN MEMORIA (D-13), no una fila persistida.
+//
+// El desempate necesita un dato que la máquina de estados no tiene (ni debe tener: es puramente
+// estructural, compara CONTENIDO): si existe o no un borrador PERSISTIDO. Por eso entra como
+// parámetro — lo sabe la page (landing_draft !== null al cargar) y lo mantiene vivo el cliente
+// (guardar/publicar ⇒ true; descartar sin haber publicado nunca ⇒ false).
+// Puro, sin React: el componente consume el resultado, no reimplementa la decisión inline.
+const STATE_LABEL: Record<EditorState, string> = {
+  unsaved: 'Cambios sin guardar',
+  unpublished: 'Guardado — sin publicar',
+  published: 'Publicado',
+}
+
+export function deriveStateLabel({
+  editorState,
+  published,
+  hasPersistedDraft,
+}: {
+  editorState: EditorState
+  published: LandingConfig | null
+  hasPersistedDraft: boolean
+}): string {
+  // Único caso especial: nunca publicó Y no hay borrador guardado ⇒ no hay NADA persistido.
+  if (editorState === 'unpublished' && published === null && !hasPersistedDraft) {
+    return 'Sin publicar'
+  }
+  return STATE_LABEL[editorState]
 }
 
 // Re-export del tipo Section por conveniencia de los consumidores del shell (tipado del stub).

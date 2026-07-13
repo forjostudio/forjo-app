@@ -26,7 +26,9 @@ import {
   stripPrimary,
   isDirty,
   deriveEditorState,
+  deriveStateLabel,
 } from '@/lib/landing/editor-draft'
+import type { EditorState } from '@/lib/landing/editor-draft'
 import { saveLandingDraft, publishLanding, discardLandingDraft } from './_landing-actions'
 import { SectionListPanel } from './_sections/section-list'
 import { ThemeControls } from './_sections/theme-controls'
@@ -74,6 +76,11 @@ interface Props {
   // landing_config crudo (jsonb): baseline de "lo publicado". **null ⇒ NUNCA PUBLICÓ** — es la señal
   // que dispara el aviso de empty-state y (en 15-03) el dialog de go-live. No se coacciona a DEFAULT.
   publishedConfig: unknown
+  // ¿Había un borrador PERSISTIDO (landing_draft !== null) al cargar? No se puede inferir de
+  // initialDraft: ese viene con coalesce a lo publicado. Es el desempate del label del indicador
+  // (deriveStateLabel): sin borrador guardado y sin publicar, el cartel dice "Sin publicar", no
+  // "Guardado — sin publicar". Es la semilla de un estado vivo (guardar/publicar/descartar lo mueven).
+  hasPersistedDraft: boolean
   services: Service[]
   professionals: Professional[]
   timeBlocks: TimeBlock[]
@@ -106,12 +113,10 @@ const ACTION_ERROR_COPY: Record<string, string> = {
 // ── Indicador de 3 estados excluyentes (D-06 / 15-UI-SPEC §5) ────────────────────────────
 // El estado NUNCA se comunica solo por color (WCAG 1.4.1): cada uno tiene su propio texto y el
 // publicado además cambia de glifo (punto → check). Mismo tamaño y peso en los 3 (nada de bold).
-type EditorState = 'unsaved' | 'unpublished' | 'published'
-const STATE_LABEL: Record<EditorState, string> = {
-  unsaved: 'Cambios sin guardar',
-  unpublished: 'Guardado — sin publicar',
-  published: 'Publicado',
-}
+// El TEXTO lo decide deriveStateLabel (lib/landing/editor-draft.ts, puro y testeado): dentro de
+// 'unpublished' hay dos verdades distintas ("guardado, sin publicar" vs. "sin publicar", cuando no
+// hay NADA persistido) y el label las distingue. El tono y el glifo NO: 'unpublished' es un solo
+// estado y se pinta igual en los dos casos.
 const STATE_TONE: Record<EditorState, string> = {
   unsaved: 'text-primary',
   unpublished: 'text-warning',
@@ -127,6 +132,7 @@ export function WebEditorClient({
   business,
   initialDraft,
   publishedConfig,
+  hasPersistedDraft: initialHasPersistedDraft,
   services,
   professionals,
   timeBlocks,
@@ -161,6 +167,14 @@ export function WebEditorClient({
   const [draft, setDraft] = useState<LandingConfig>(seeded)
   // Baseline de "lo último guardado" para isDirty/confirm-on-exit. Al Guardar con éxito → draft.
   const [savedBaseline, setSavedBaseline] = useState<LandingConfig>(seeded)
+  // ¿Hay un borrador PERSISTIDO en la DB (landing_draft !== null)? Semilla = el hecho crudo que trae
+  // la page; de ahí en más es estado vivo, porque las 3 acciones lo mueven:
+  //   · guardar OK / publicar OK (que guarda primero) → true
+  //   · descartar OK sin haber publicado nunca → la Server Action escribe landing_draft = NULL → false
+  //   · descartar OK con web publicada → el borrador queda = lo publicado → sigue true
+  // Solo alimenta el TEXTO del indicador (deriveStateLabel). No toca la máquina de estados ni los
+  // gates de habilitación (canSave/canPublish/canDiscard).
+  const [hasPersistedDraft, setHasPersistedDraft] = useState(initialHasPersistedDraft)
   // Contador de uploads en vuelo (lo suben/bajan los controles de imagen, 14-03). >0 → bloquea Save (L9).
   const [uploading, setUploading] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -176,6 +190,13 @@ export function WebEditorClient({
   // Estado del editor derivado del CONTENIDO (D-03/D-06), sin flag ni timestamp en la DB: manda
   // "sin guardar"; si no, "sin publicar" (incluye el caso nunca-publicó); si no, "publicado".
   const editorState = deriveEditorState({ draft, savedBaseline, published: publishedBaseline })
+  // El texto del indicador: mismo estado, pero 'unpublished' sin nada persistido dice "Sin publicar"
+  // en vez de afirmar un "Guardado" que no existe.
+  const stateLabel = deriveStateLabel({
+    editorState,
+    published: publishedBaseline,
+    hasPersistedDraft,
+  })
   // NUNCA PUBLICÓ: la señal que dispara el dialog de go-live (D-08 — exactamente una vez en la vida
   // del negocio, derivada de los datos, sin casilla "no volver a mostrar") y el aviso de empty-state.
   // Sale del baseline EN MEMORIA, así que tras la primera publicación deja de ser true sin recargar.
@@ -189,12 +210,13 @@ export function WebEditorClient({
   const blocked = busy || uploading > 0
   const canDiscard = !blocked && editorState !== 'published'
   // Guardar queda habilitado en TODO lo que no sea 'publicado' (no solo con cambios sin guardar).
-  // Por qué: tras Descartar SIN haber publicado nunca, la DB queda con landing_draft = NULL y el
-  // editor re-siembra la plantilla base en memoria (D-13) ⇒ draft == savedBaseline ⇒ el indicador
-  // decía "Guardado — sin publicar" (falso: no hay nada guardado) y Guardar quedaba DESHABILITADO,
-  // así que el dueño no podía materializar ese "guardado" que la UI le afirmaba. Guardar un borrador
-  // idéntico es idempotente y barato (un UPDATE de una fila), así que habilitarlo elimina el
-  // dead-end sin inventar un 4º estado.
+  // Por qué: hay dos situaciones —negocio nuevo, y Descartar SIN haber publicado nunca— en las que la
+  // DB queda con landing_draft = NULL mientras el editor muestra la plantilla base sembrada EN MEMORIA
+  // (D-13) ⇒ draft == savedBaseline ⇒ 'unpublished' sin nada persistido. Sin este `canSave`, Guardar
+  // quedaba DESHABILITADO y el dueño no tenía forma de materializar su borrador: dead-end. Guardar un
+  // borrador idéntico es idempotente y barato (un UPDATE de una fila).
+  // (El indicador, además, ya no miente en ese caso: dice "Sin publicar", no "Guardado — sin publicar"
+  // — ver deriveStateLabel. Sigue siendo el MISMO estado 'unpublished': no hay 4º estado.)
   const canSave = !blocked && editorState !== 'published'
   // D-04: Publicar queda habilitado TAMBIÉN con cambios sin guardar (encadena guardar → publicar).
   // Deshabilitarlo por "hay cambios sin guardar" era un dead-end visual.
@@ -242,6 +264,8 @@ export function WebEditorClient({
       toast.success('Borrador guardado')
       // D-03c: limpiar el flag de cambios sin guardar → baseline pasa a ser el draft actual.
       setSavedBaseline(draft)
+      // Ya hay un borrador REAL en la DB: el indicador puede decir "Guardado — sin publicar" sin mentir.
+      setHasPersistedDraft(true)
     } else {
       toast.error(ACTION_ERROR_COPY[res.error] ?? ACTION_ERROR_COPY.server_error)
     }
@@ -276,6 +300,7 @@ export function WebEditorClient({
     }
     // El borrador YA quedó en la DB: pase lo que pase con la publicación, el estado es recuperable.
     setSavedBaseline(draft)
+    setHasPersistedDraft(true)
 
     // 2. La publicación (sin argumentos: lo que sale al aire se lee de la DB, T-15-05).
     const res = await publishLanding()
@@ -329,6 +354,11 @@ export function WebEditorClient({
     const restored = publishedBaseline ?? stripPrimary(DEFAULT_LANDING_CONFIG)
     setDraft(restored)
     setSavedBaseline(restored)
+    // Qué quedó en la DB tras el descarte (ver _landing-actions.ts → landing_draft = landing_config ?? null):
+    //   · ya publicó ⇒ el borrador quedó = lo publicado ⇒ SIGUE habiendo borrador persistido.
+    //   · nunca publicó ⇒ landing_draft = NULL ⇒ NO hay nada guardado, y el indicador debe decir
+    //     "Sin publicar" (no "Guardado — sin publicar": esa era la mentira original).
+    setHasPersistedDraft(publishedBaseline !== null)
     toast.success(
       publishedBaseline !== null
         ? 'Descartaste el borrador'
@@ -522,7 +552,7 @@ export function WebEditorClient({
                     )}
                   />
                 )}
-                {uploading > 0 ? 'Subiendo imágenes…' : STATE_LABEL[editorState]}
+                {uploading > 0 ? 'Subiendo imágenes…' : stateLabel}
               </span>
 
               {/* Mobile: el link vive en la fila 1 (en desktop está en el header). */}

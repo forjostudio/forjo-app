@@ -107,9 +107,14 @@ export default async function WebEditorPage() {
   //    Se DESESTRUCTURAN fuera del business: los dos jsonb ya viajan como props propias, y dejarlos
   //    también dentro de `business` los mandaría DOS VECES en el payload RSC (con una galería cargada
   //    el config no es chico).
+  //    El coalesce de initialDraft COLAPSA un dato que el indicador de estado necesita: si HABÍA o no
+  //    un borrador persistido. Sin eso, un negocio nuevo (landing_draft IS NULL) abría el editor con
+  //    el cartel "Guardado — sin publicar" — falso, no hay nada guardado. Por eso el hecho crudo
+  //    (draftRaw !== null) viaja como prop propia; el coalesce queda intacto (es defensivo, ver arriba).
   const { landing_config: publishedRaw, landing_draft: draftRaw, ...publicBusiness } = business
   const publishedConfig = publishedRaw ?? null
   const initialDraft = draftRaw ?? publishedConfig
+  const hasPersistedDraft = draftRaw !== null && draftRaw !== undefined
 
   return (
     <WebEditorClient
@@ -119,6 +124,7 @@ export default async function WebEditorPage() {
       business={publicBusiness}
       initialDraft={initialDraft}
       publishedConfig={publishedConfig}
+      hasPersistedDraft={hasPersistedDraft}
       services={services || []}
       professionals={professionals || []}
       timeBlocks={timeBlocks || []}

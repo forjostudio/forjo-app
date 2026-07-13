@@ -10,6 +10,7 @@ import {
   stripPrimary,
   configsEqual,
   deriveEditorState,
+  deriveStateLabel,
 } from '@/lib/landing/editor-draft'
 import { SECTION_TYPES } from '@/lib/landing/schema'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -447,6 +448,70 @@ describe('deriveEditorState (máquina de 3 estados, derivada del contenido)', ()
     } as unknown as LandingConfig
     expect(deriveEditorState({ draft: cfg, savedBaseline: cfg, published: fromDb })).toBe(
       'published',
+    )
+  })
+})
+
+// ── deriveStateLabel: el TEXTO del indicador (los 3 estados NO cambian, D-06) ──────────────
+// El bug que cierra: 'unpublished' mete dos situaciones distintas en la misma bolsa, y el label fijo
+// afirmaba "Guardado" incluso cuando landing_draft era NULL (negocio nuevo / descarte sin publicar).
+describe('deriveStateLabel (el texto del indicador; 3 estados, 4 textos)', () => {
+  it('negocio NUEVO (nunca publicó, sin borrador persistido) ⇒ "Sin publicar"', () => {
+    expect(
+      deriveStateLabel({ editorState: 'unpublished', published: null, hasPersistedDraft: false }),
+    ).toBe('Sin publicar')
+  })
+
+  it('guardó pero nunca publicó (borrador persistido) ⇒ "Guardado — sin publicar"', () => {
+    expect(
+      deriveStateLabel({ editorState: 'unpublished', published: null, hasPersistedDraft: true }),
+    ).toBe('Guardado — sin publicar')
+  })
+
+  it('guardó cambios sobre una web YA publicada ⇒ "Guardado — sin publicar"', () => {
+    expect(
+      deriveStateLabel({
+        editorState: 'unpublished',
+        published: baseConfig(),
+        hasPersistedDraft: true,
+      }),
+    ).toBe('Guardado — sin publicar')
+  })
+
+  it('todo publicado ⇒ "Publicado"', () => {
+    expect(
+      deriveStateLabel({
+        editorState: 'published',
+        published: baseConfig(),
+        hasPersistedDraft: true,
+      }),
+    ).toBe('Publicado')
+  })
+
+  it('cambios sin guardar ⇒ "Cambios sin guardar" (gana sobre todo lo demás)', () => {
+    // Ni siquiera el caso "nunca publicó + sin borrador persistido" lo pisa: la precedencia del
+    // estado manda, y el texto especial es EXCLUSIVO de 'unpublished'.
+    expect(
+      deriveStateLabel({ editorState: 'unsaved', published: null, hasPersistedDraft: false }),
+    ).toBe('Cambios sin guardar')
+    expect(
+      deriveStateLabel({ editorState: 'unsaved', published: baseConfig(), hasPersistedDraft: true }),
+    ).toBe('Cambios sin guardar')
+  })
+
+  it('descartar sin haber publicado nunca deja el editor en "Sin publicar" (el bug del UAT)', () => {
+    // Tras Descartar con published === null: la Server Action escribe landing_draft = NULL y el
+    // editor re-siembra la plantilla base EN MEMORIA ⇒ draft == savedBaseline ⇒ 'unpublished', pero
+    // NO hay nada guardado.
+    const reseeded = baseConfig()
+    const state = deriveEditorState({
+      draft: reseeded,
+      savedBaseline: reseeded,
+      published: null,
+    })
+    expect(state).toBe('unpublished')
+    expect(deriveStateLabel({ editorState: state, published: null, hasPersistedDraft: false })).toBe(
+      'Sin publicar',
     )
   })
 })
