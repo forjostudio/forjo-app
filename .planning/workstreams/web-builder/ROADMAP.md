@@ -116,7 +116,7 @@ Plans:
   2. El dueño revisa esa web en su editor y, al publicarla, recién ahí sale al aire — cerrando el circuito operador → dueño → público.
   3. `--inspect` muestra **borrador y publicado por separado**, de modo que el operador sabe qué está al aire y qué quedó pendiente de aprobación.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -125,7 +125,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 16-02-PLAN.md — `scripts/setup-landing.ts`: lee `landing_draft`, gate estricto `parseLandingConfigForWrite`, aviso de choque, `--publish` opt-in, `--inspect` con las dos columnas (wave 2)
+- [x] 16-02-PLAN.md — `scripts/setup-landing.ts`: lee `landing_draft`, gate estricto `parseLandingConfigForWrite`, aviso de choque, `--publish` opt-in, `--inspect` con las dos columnas (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -162,7 +162,7 @@ Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer e
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete | 2026-07-08 |
 | 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
 | 15. Borrador y publicación (núcleo) | v0.18 | 3/3 | Complete    | 2026-07-13 |
-| 16. La web nace como borrador (skill) | v0.18 | 1/3 | In Progress|  |
+| 16. La web nace como borrador (skill) | v0.18 | 2/3 | In Progress|  |
 | 17. Exponer el CMS a clientes reales | v0.18 | 0/? | Not started | - |
 
 ## Requirement Coverage (v0.18)
