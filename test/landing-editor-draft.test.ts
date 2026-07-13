@@ -8,6 +8,8 @@ import {
   isDirty,
   normalizeSections,
   stripPrimary,
+  configsEqual,
+  deriveEditorState,
 } from '@/lib/landing/editor-draft'
 import { SECTION_TYPES } from '@/lib/landing/schema'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -357,5 +359,94 @@ describe('setTheme — elegir un preset resetea los overrides de abajo', () => {
     expect(out.theme.preset).toBe('spa')
     expect(out.theme.overrides?.palette).toBe('sage')
     expect(out.theme.overrides).not.toHaveProperty('font') // sin override → manda la fuente del theme
+  })
+})
+
+// ── Compare CANÓNICO draft-vs-published (Phase 15 / PUB-05, D-03) ──────────────────────────
+// El caso que da sentido a todo esto es el primero: lo publicado vuelve de un round-trip por jsonb
+// (Postgres REORDENA las claves) y el borrador vive en memoria con el orden que le dejaron los
+// mutadores. Con JSON.stringify crudo, dos configs IDÉNTICOS serializan distinto → "Guardado — sin
+// publicar" eterno. Sin el canónico, este primer test falla: es la prueba de que la mitigación sirve.
+describe('configsEqual (compare canónico, insensible al orden de claves)', () => {
+  it('dos configs con las MISMAS claves en distinto orden son iguales', () => {
+    const a = {
+      theme: { preset: 'forjo', overrides: { palette: 'red', mode: 'light' } },
+      motion: 'subtle',
+      sections: [{ type: 'hero', enabled: true, order: 0, data: { title: 'Hola', subtitle: 'X' } }],
+    } as unknown as LandingConfig
+    // Mismo contenido, claves emitidas en otro orden (top-level, theme.overrides y section.data).
+    const b = {
+      motion: 'subtle',
+      sections: [{ order: 0, data: { subtitle: 'X', title: 'Hola' }, type: 'hero', enabled: true }],
+      theme: { overrides: { mode: 'light', palette: 'red' }, preset: 'forjo' },
+    } as unknown as LandingConfig
+
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b)) // el stringify crudo los ve distintos…
+    expect(configsEqual(a, b)).toBe(true) // …y el canónico, iguales
+    expect(isDirty(a, b)).toBe(false) // isDirty queda montado encima
+  })
+
+  it('una diferencia real de valor los hace distintos', () => {
+    const a = baseConfig()
+    const b = setMotion(baseConfig(), 'premium')
+    expect(configsEqual(a, b)).toBe(false)
+    expect(isDirty(a, b)).toBe(true)
+  })
+
+  it('distinta longitud de array los hace distintos', () => {
+    const a = baseConfig()
+    const b: LandingConfig = { ...a, sections: a.sections.slice(0, -1) }
+    expect(configsEqual(a, b)).toBe(false)
+  })
+
+  it('el ORDEN de un array SÍ es significativo (las secciones no se ordenan)', () => {
+    const a = baseConfig()
+    const b: LandingConfig = { ...a, sections: [...a.sections].reverse() }
+    expect(configsEqual(a, b)).toBe(false)
+  })
+})
+
+// ── deriveEditorState: los 3 estados excluyentes con precedencia (D-03 / D-06) ─────────────
+describe('deriveEditorState (máquina de 3 estados, derivada del contenido)', () => {
+  it('draft ≠ savedBaseline ⇒ "unsaved" (precede a todo lo demás)', () => {
+    const saved = baseConfig()
+    const draft = setMotion(baseConfig(), 'premium')
+    // published === saved: aun así manda "unsaved".
+    expect(deriveEditorState({ draft, savedBaseline: saved, published: saved })).toBe('unsaved')
+    // …y también cuando encima hay cambios sin publicar (excluyentes, con precedencia).
+    expect(deriveEditorState({ draft, savedBaseline: saved, published: null })).toBe('unsaved')
+  })
+
+  it('guardado pero savedBaseline ≠ published ⇒ "unpublished"', () => {
+    const cfg = baseConfig()
+    const published = setMotion(baseConfig(), 'none')
+    expect(deriveEditorState({ draft: cfg, savedBaseline: cfg, published })).toBe('unpublished')
+  })
+
+  it('published === null (nunca publicó) ⇒ NUNCA devuelve "published"', () => {
+    const cfg = baseConfig()
+    expect(deriveEditorState({ draft: cfg, savedBaseline: cfg, published: null })).toBe(
+      'unpublished',
+    )
+  })
+
+  it('draft == savedBaseline == published ⇒ "published"', () => {
+    const cfg = baseConfig()
+    expect(deriveEditorState({ draft: cfg, savedBaseline: cfg, published: baseConfig() })).toBe(
+      'published',
+    )
+  })
+
+  it('"published" tolera el reordenamiento de claves del jsonb (usa el compare canónico)', () => {
+    const cfg = baseConfig()
+    // Lo publicado vuelve de la DB con las claves en otro orden: sigue siendo el MISMO config.
+    const fromDb = {
+      sections: cfg.sections.map((s) => ({ order: s.order, enabled: s.enabled, type: s.type })),
+      motion: cfg.motion,
+      theme: { overrides: cfg.theme.overrides, preset: cfg.theme.preset },
+    } as unknown as LandingConfig
+    expect(deriveEditorState({ draft: cfg, savedBaseline: cfg, published: fromDb })).toBe(
+      'published',
+    )
   })
 })
