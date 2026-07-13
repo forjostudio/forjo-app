@@ -308,13 +308,38 @@ async function runInspect(
 // landing-assets/{businessId}/{uuid}.webp. Si sharp falla, DEGRADA a subir el binario original tal
 // cual con su content-type (fail-safe — no bloquear SKILL-03). Devuelve la URL pública de Storage.
 // NUNCA referencia el CDN de IG: solo entra al config la URL pública del bucket (SKILL-03 / Pitfall 1).
+//
+// ── PASSTHROUGH de lo que YA está en NUESTRO Storage (MODO EDICIÓN — D-04) ──────────────────────
+// El SKILL.md, cuando no existe `landing-payloads/<slug>.json`, le ordena al agente reconstruir el
+// BuilderInput DESDE el volcado de `--inspect` (`pendiente_de_aprobacion`). En esas columnas las
+// imágenes NO son rutas del disco: son URLs https del bucket (ya re-hosteadas por una corrida
+// anterior). Tratarlas como rutas locales tira ENOENT en readFile y el flujo documentado como
+// "regla dura" NUNCA puede terminar; y el workaround obvio del agente (dropear los campos de imagen
+// "porque no son rutas") le BORRA las fotos al dueño en silencio — el builder omite las secciones
+// vacías. Por eso una URL de NUESTRO bucket se devuelve tal cual, sin re-subir.
+//
+// Se acota al PREFIJO DEL BUCKET PROPIO a propósito (no a "cualquier http(s)"): una URL del CDN de
+// IG que se cuele por error tiene que SEGUIR siendo rechazada — nunca hot-link (SKILL-03 / Pitfall 1),
+// esas URLs caducan y la foto desaparece de la web del dueño sin que nadie toque nada.
 async function rehostImage(
   supabase: SupabaseClient,
   businessId: string,
-  localPath: string,
+  localPathOrUrl: string,
   role: 'hero' | 'gallery' | 'about' | 'rsv',
 ): Promise<string> {
-  const raw = await readFile(localPath) // bytes del disco (el SKILL.md ya los dejó localmente)
+  if (/^https?:\/\//i.test(localPathOrUrl)) {
+    // Prefijo público del bucket, derivado del cliente (no hardcodea el project-ref):
+    // `https://<ref>.supabase.co/storage/v1/object/public/landing-assets/`
+    const bucketPublicPrefix = supabase.storage.from(BUCKET).getPublicUrl('').data.publicUrl
+    if (localPathOrUrl.startsWith(bucketPublicPrefix)) return localPathOrUrl
+    throw new Error(
+      `${localPathOrUrl} es una URL EXTERNA. Las imágenes van como RUTA LOCAL del disco: el script ` +
+        'las re-hostea al bucket (SKILL-03 — nunca hot-link al CDN de IG, esas URLs caducan). ' +
+        'Descargala primero y pasá la ruta.',
+    )
+  }
+
+  const raw = await readFile(localPathOrUrl) // bytes del disco (el SKILL.md ya los dejó localmente)
 
   let buffer: Buffer = raw
   let ext = 'webp'
@@ -328,11 +353,11 @@ async function rehostImage(
   } catch (e) {
     // Degradación fail-safe: subir el binario original tal cual, derivando ext/content-type del path.
     console.error(
-      `[setup-landing] sharp falló para ${localPath} (${e instanceof Error ? e.message : e}); ` +
+      `[setup-landing] sharp falló para ${localPathOrUrl} (${e instanceof Error ? e.message : e}); ` +
         'subo el binario original tal cual.',
     )
     buffer = raw
-    ext = (path.extname(localPath).replace('.', '') || 'bin').toLowerCase()
+    ext = (path.extname(localPathOrUrl).replace('.', '') || 'bin').toLowerCase()
     contentType = extToContentType(ext)
   }
 
@@ -343,7 +368,7 @@ async function rehostImage(
     .from(BUCKET)
     .upload(key, buffer, { contentType, upsert: false })
   if (error) {
-    throw new Error(`upload de ${localPath} a ${key} falló: ${error.message}`)
+    throw new Error(`upload de ${localPathOrUrl} a ${key} falló: ${error.message}`)
   }
   // getPublicUrl construye la URL sin hardcodear el project-ref (el bucket es public:true, migr. 030).
   return supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
