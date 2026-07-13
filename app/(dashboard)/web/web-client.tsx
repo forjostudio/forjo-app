@@ -47,7 +47,12 @@ import { ThemeControls } from './_sections/theme-controls'
 //     BORRADOR — desde Phase 15 guardar NO publica: la web al aire no se mueve, PUB-03); mapea
 //     los 6 códigos de error a toasts (14-UI-SPEC §6). Deshabilitada sin cambios o con uploads en
 //     vuelo (L9). Éxito → baseline = draft (limpia el flag de cambios sin guardar, D-03c).
-//   - CONFIRM-ON-EXIT: beforeunload + dialog cuando hay cambios sin guardar (D-03b).
+//   - GUARD DE SALIDA: SOLO `beforeunload` (recargar / cerrar pestaña / salir del sitio) cuando hay
+//     cambios sin guardar. La navegación INTERNA del panel (los <Link> del sidebar, el botón atrás
+//     del router) NO está interceptada: beforeunload no dispara en las navegaciones client-side de
+//     Next, así que un click en "Turnos" con el borrador sucio lo descarta sin preguntar. Es un ítem
+//     DIFERIDO a propósito (15-CONTEXT §Deferred: interceptar la nav del App Router de Next 16 es
+//     no-trivial), no un olvido. El <Dialog> que este comentario prometía se recicló para Descartar.
 //   - EMPTY-STATE: config null → siembra DEFAULT_LANDING_CONFIG y muestra el notice (§7); el preview
 //     igual renderiza el default.
 
@@ -331,7 +336,9 @@ export function WebEditorClient({
     )
   }
 
-  // ── Confirm-on-exit: beforeunload nativo cuando hay cambios sin guardar (D-03b) ─────────
+  // ── Guard de salida: beforeunload NATIVO cuando hay cambios sin guardar (D-03b) ─────────
+  // Cubre recargar, cerrar la pestaña y salir del sitio. NO cubre la navegación interna del panel
+  // (ver la cabecera del archivo): eso es un ítem diferido, no un bug silencioso.
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
       if (!dirty) return

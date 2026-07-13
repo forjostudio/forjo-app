@@ -13,7 +13,8 @@ import { WebEditorClient } from './web-client'
 // Por qué cada decisión de seguridad:
 //   (a) FLAG PRIMERO (fail-closed): CMS_ENABLED === 'true' se lee como PRIMER paso, antes de crear
 //       el client, getUser o cualquier fetch. Con el flag off → notFound() (la ruta "no existe").
-//       Misma expresión literal que _landing-actions.ts:33 (threat note d de Phase 13 / T-14-02).
+//       Misma expresión literal que el CMS_ENABLED de _landing-actions.ts (threat note d de Phase
+//       13 / T-14-02). Sin número de línea: los punteros de línea envejecen mal y terminan mintiendo.
 //   (b) SESSION CLIENT, nunca service-role: createClient() de @/lib/supabase/server (anon + cookies,
 //       RLS activo). PROHIBIDO el service-role/admin client en la superficie web (T-14-04, heredado T-13-02).
 //   (c) AISLAMIENTO POR TENANT: los 5 datasets del preview se fetchean con .eq('business_id',
@@ -60,13 +61,14 @@ export default async function WebEditorPage() {
   //     la REVIERTE ante cualquier UPDATE que no sea service_role → el dueño NO puede auto-otorgársela
   //     (gate a prueba de tampering); (c) sin web a medida no hay nada que editar.
   //     notFound() y no redirect: para un negocio sin el add-on, la ruta directamente "no existe".
-  //     Esto es solo la puerta de la UI — el gate que DE VERDAD importa vive en saveLandingConfig
-  //     (defensa en profundidad: una page sin este check igual no podría escribir).
+  //     Esto es solo la puerta de la UI — el gate que DE VERDAD importa vive en las 3 Server Actions
+  //     (saveLandingDraft / publishLanding / discardLandingDraft: cada una re-chequea has_web_custom).
+  //     Defensa en profundidad: una page sin este check igual no podría escribir.
   if (!business.has_web_custom) notFound()
 
   // 5. Datos del preview: los 5 datasets que el LandingRenderer consume además del config, todos
   //    acotados a este tenant. Los selects de schedule_exceptions y locations piden EXACTAMENTE las
-  //    columnas que declaran ExceptionLite/LocationLite del renderer (landing-renderer.tsx:47-48),
+  //    columnas que declaran los tipos ExceptionLite/LocationLite del renderer (landing-renderer.tsx),
   //    para que el cast a los Props del renderer sea seguro. schedule_exceptions se filtra desde hoy
   //    (las pasadas no afectan el preview), igual que [slug]/page.tsx.
   const todayStr = new Date().toISOString().slice(0, 10)
