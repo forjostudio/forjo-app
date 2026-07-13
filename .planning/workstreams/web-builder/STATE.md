@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: planning
-last_updated: "2026-07-13T00:00:58.539Z"
-last_activity: 2026-07-13
+last_updated: "2026-07-12T00:00:00.000Z"
+last_activity: 2026-07-12
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,23 +17,25 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-07)
+See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`): v0.18 CMS Publish / Go-live")
 
-**Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados. (v0.16 suma edición self-serve del landing + motion premium SIN debilitar este invariante.)
-**Current focus:** Phase 14 — CMS editor UI
+**Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados. (v0.18 separa borrador de publicado SIN debilitar el write path owner-only que aseguró v0.16.)
+**Current focus:** Phase 15 — Borrador y publicación (núcleo)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 15 — Borrador y publicación (núcleo)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-13 — Milestone v0.18 started
+Status: Roadmap creado, sin planificar
+Last activity: 2026-07-12 — ROADMAP v0.18 creado (Phases 15-17, 9/9 requisitos mapeados)
+
+Progreso: `[░░░░░░░░░░] 0/3 fases`
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed (v0.16): 0
+- Total plans completed (v0.18): 0
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -41,93 +43,79 @@ Last activity: 2026-07-13 — Milestone v0.18 started
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 11 | 2 | - | - |
-| 12 | 2 | - | - |
-| 13 | 1 | - | - |
-| 14 | TBD | - | - |
+| 15 | TBD | - | - |
+| 16 | TBD | - | - |
+| 17 | TBD | - | - |
 
 **Recent Trend:**
 
-- Last 5 plans: — (v0.10 cerrado; métricas históricas en milestones/v0.10)
+- Último milestone (v0.16, Phases 11-14): 9 plans, 4 fases, ~3 días.
 - Trend: —
 
 *Updated after each plan completion*
-| Phase 11 P01 | 15m | 2 tasks | 2 files |
-| Phase 11 P02 | ~20m | 2 tasks | 1 files |
-| Phase 12 P01 | 9 | 2 tasks | 9 files |
-| Phase 14 P01 | 8 | 3 tasks | 7 files |
-| Phase 14 P02 | 22 | 2 tasks | 4 files |
-| Phase 14 P04 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Decisiones LOCKED del milestone v0.16 (no re-litigar en discuss-phase) — de PROJECT.md + `forjo-webbuilder-skill-ampliacion.md`:
+Decisiones LOCKED del milestone v0.18 (no re-litigar en discuss-phase) — de PROJECT.md:
 
-- [v0.16]: Premium DENTRO del modelo actual (web-scrolling = referencia de movimiento, NO output HTML; bespoke per-cliente descartado)
-- [v0.16]: `prefers-reduced-motion` off → estático SIEMPRE
-- [v0.16]: **Booking = caja negra** — sin transform/overflow/scroll-timeline alrededor del widget (vale para MOTION y RSV); el motion/las fotos van AROUND, nunca dentro del contenedor de reserva
-- [v0.16]: Fail-safe motion/config — `motion` o `landing_config` ausente/roto → estático actual, cero regresión; `landing_config` null sigue renderizando la página pre-v0.10
-- [v0.16]: LCP del hero no se degrada (imagen sigue `priority`)
-- [v0.16]: **El CMS escribe `landing_config` por un path autenticado owner-only (RLS por tenant + Zod)** — NUNCA service-role ni endpoint anónimo en la superficie web (invariante multi-tenant, Core Value)
-- [v0.16]: CMS detrás de feature flag este milestone — NO expuesto a clientes; sin publish/go-live (EDIT-07 es el borde; publish → v2 PUB-01/02)
-- [v0.16]: Build order LOCKED — skill (11) → motion+RSV schema (12) → CMS foundation (13) → CMS editor UI (14); el schema (`motion` + galería de reserva) existe ANTES del CMS porque el editor lo expone
-- [v0.16]: Set de secciones FIJO — EDIT-03 solo reordena/togglea, sin layout libre / drag-and-drop de secciones nuevas
-- [v0.10 carryover]: `landing_config` viaja por la vista `public_businesses` por columnas explícitas — sin re-abrir la fuga de secretos de v0.9
-- [v0.10 carryover]: `parseLandingConfig` total — `null → null` (passthrough legacy); `presente-pero-inválido → DEFAULT_LANDING_CONFIG`; `safeParse` exclusivo; `.strip()` de claves desconocidas
-- [Phase 11]: MODO EDICIÓN: retocar sin rehacer desde landing-payloads/<slug>.json (o --inspect), diff acotado a campo, re-escritura idempotente
-- [Phase 11]: FUENTES DE CONTENIDO: operador estructurado, web (WebFetch), IG (instaloader best-effort con fallthrough); instaloader reemplaza el Playwright de instagram-a-web
-- [Phase ?]: F12-01: default subtle es de autoria (skill), no de render — parseLandingConfig sin default de motion (D-04)
-- [Phase ?]: F12-01: motion 100% CSS-first (animation-timeline: view()), cero use client nuevo, gated por @supports + prefers-reduced-motion
-- [Phase ?]: 14-01: editor CMS shell — preview WYSIWYG del LandingRenderer real dirigido por borrador; tema al wrapper del preview; save por saveLandingConfig overwrite-total; 3 sub-editores como stubs con props-contract final
-- [Phase 14]: normalizeSections (editor-draft.ts, no en el seed): el panel CMS materializa las 8 secciones fijas on-demand en los mutadores; faltantes ocultas salvo hero/booking
-- [Phase 14]: 14-03 EDIT-02: upload de imágenes browser→Storage con session client bajo `{business_id}/` (RLS owner-write, migr.030); barrera de aislamiento extraída a `lib/landing/editor-upload.ts` puro (buildUploadPath primer segmento=businessId + section sanitizada) testeado 13/13; controles single+grid sin service-role. UAT end-to-end pendiente (Storage local OFF)
+- [v0.18]: **`landing_config` = LO PUBLICADO; `landing_draft` = lo que se edita.** `/[slug]` lee SOLO lo publicado. Publicar copia el borrador encima.
+- [v0.18]: **Migración ADITIVA** (la próxima libre es la **050**; 049 es la última aplicada): `landing_draft` nace copiando `landing_config`. Las landings ya al aire NO se bajan (PUB-08). Se valida con `supabase db reset` local; a prod se aplica A MANO, coordinada con el deploy (nunca `db push`).
+- [v0.18]: **Go-live IMPLÍCITO** — publicar por primera vez = salir al aire. NO se agrega columna `web_live`: menos estado, nada que se desincronice del contenido. Se apoya en `parseLandingConfig(null) → null` = negocio legacy → reserva simple (camino que YA existe y está probado).
+- [v0.18]: **La skill/script escribe el BORRADOR**, no lo publicado (SKILL-07). Es lo que convierte a este milestone en el prerequisito del auto-armado con el pago del add-on.
+- [v0.18]: **Build order LOCKED: 15 (núcleo publish) → 16 (skill → borrador) → 17 (exponer el CMS).** PUB-01 va ÚLTIMO: exponer el editor a clientes reales mientras cada guardado todavía sale al aire sería el error exacto que el milestone viene a evitar.
+- [v0.18]: Se mantienen TODOS los invariantes de v0.16 — write path **owner-only** (session client anon+cookies + RLS por tenant + Zod estricto reject-on-invalid), **NUNCA service-role** en la superficie web de escritura, booking = **caja negra**, fail-safe del config (roto → `DEFAULT_LANDING_CONFIG`, `/[slug]` nunca 500ea).
+- [v0.18]: El gate del add-on (`has_web_custom`) se chequea en la **Server Action**, no solo en la page: gatear solo la page es cosmético, un POST directo la saltea. La columna está protegida por el trigger `businesses_protect_admin_columns` (revierte en silencio los UPDATE no-service_role).
+
+Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
+
+- [v0.10]: `landing_config` viaja por la vista `public_businesses` **por columnas explícitas** — sin re-abrir la fuga de secretos de v0.9. `landing_draft` NO puede entrar ahí.
+- [v0.10]: `parseLandingConfig` total — `null → null` (passthrough legacy); `presente-pero-inválido → DEFAULT_LANDING_CONFIG`; `safeParse` exclusivo; `.strip()` de claves desconocidas.
+- [v0.16 / Phase 13]: `saveLandingConfig` (`app/(dashboard)/web/_landing-actions.ts`) = Server Action owner-only, `business_id` de la SESIÓN, `parseLandingConfigForWrite` (`lib/landing/write.ts`), overwrite-total con `.select('id')`. SECURED 7/7. Es el molde de publish/descartar.
+- [v0.16 / Phase 14]: borrador en memoria + `savedBaseline` + `isDirty` ya existen en `web-client.tsx`; los mutadores puros viven en `lib/landing/editor-draft.ts` (testeados). PUB-05 reusa ese andamiaje, no lo reinventa.
+- [v0.17]: el gate `has_web_custom` YA está enforced en la Server Action; lo que resta de PUB-01 es **retirar el flag global `CMS_ENABLED`** y exponer la entrada en el panel.
 
 ### Pending Todos
 
-- [Operativo v0.9 — carryover]: Cargar los 4 GitHub Secrets para que los tests de aislamiento (TEST-01) corran en CI. Phase 13 extiende ese test (write path owner-only); el CI debe estar verde.
+- [Operativo v0.9 — carryover]: Cargar los 4 GitHub Secrets para que los tests de aislamiento (TEST-01) corran en CI. Phase 15 extiende ese test (`landing_draft` no se filtra a `anon`, no se cruza entre tenants); el CI debe estar verde.
 
 ### Blockers/Concerns
 
-[Riesgos de diseño del milestone — mitigados por el orden de fases y las threat notes del ROADMAP]
-
-- [MERGE v0.16 — OPERATIVO / CRÍTICO]: El código de este milestone vive en la rama **`gsd/gestion-rebrand`**, NO en `gsd/web-builder` (que quedó **stale**: gestion-rebrand la contiene y está +253 commits). Phase 11 se commiteó acá (`907a9f7`,`55d5b26`,`5aae090`,`89d6305`,`0c6acd3`). `branching_strategy: none` → execute-phase NO cambia de rama. La rama fuente del merge del milestone es `gsd/gestion-rebrand`; mergear contra `gsd/web-builder` PIERDE v0.16. Detalle + checklist: `.planning/todos/pending/2026-07-07-merge-v016-desde-gestion-rebrand-no-web-builder.md`.
-- [WORKSTREAM POINTER — OPERATIVO]: Antes de correr `/gsd:*-phase N --ws web-builder` (fases 12-14) hay que setear el pointer activo: `gsd-tools query workstream set web-builder`. El flag `--ws` solo scopea una llamada suelta; los subagentes ejecutores resuelven STATE/ROADMAP por el pointer activo (estaba en `gestion-rebrand`, ya archivado) — sin el switch escriben en el workstream equivocado.
-
-- [Phase 12 — REGRESIÓN]: El motion y la galería RSV NO pueden envolver `BookingClient` en transform/overflow/scroll-timeline (rompe vaul/date-picker/sonner — Pitfall 4/8 de v0.10). Motion solo en secciones editoriales; galería FUERA del `<section id="reservar">` interactivo. Verificar reserva real con y sin seña.
-- [Phase 12 — FAIL-SAFE]: `motion` ausente/inválido → estático; `landing_config` null → legacy byte-idéntico. Piso no-negociable de todo path de render.
-- [Phase 13 — SEGURIDAD / SECURITY-SENSITIVE]: El write path del CMS debe ser owner-only por RLS + `.eq('business_id', …)` de la sesión; PROHIBIDO service-role o endpoint anónimo en la web; Zod `safeParse` + `.strip()` antes de escribir (no re-abrir la fuga de secretos de v0.9). Extender el test de aislamiento anon-key al write path. Flag apaga la ruta entera. → correr `/gsd:secure-phase 13`.
-- [Phase 14 — STORAGE]: Upload de imágenes SOLO bajo `{business_id}/` en `landing-assets` (RLS owner-write del bucket, ya existe de v0.10); rechazar escritura fuera del prefijo del dueño. Preview no expone datos de otro tenant; booking sigue caja negra dentro del preview.
-- [Next 16 — carryover]: consultar `node_modules/next/dist/docs/` antes de asumir comportamiento (server actions, cache de RSC bajo `force-dynamic`, scroll-driven animations en el App Router).
+- [RAMA — OPERATIVO / CRÍTICO]: El código del web-builder vive en la rama **`gsd/gestion-rebrand`**, NO en `gsd/web-builder` (stale). `branching_strategy: none` → execute-phase NO cambia de rama: hacer checkout ANTES.
+- [WORKSTREAM POINTER — OPERATIVO]: Antes de correr `/gsd:*-phase N --ws web-builder` hay que setear el pointer activo (`gsd-tools query workstream set web-builder`). El flag `--ws` solo scopea una llamada suelta; los subagentes ejecutores resuelven STATE/ROADMAP por el pointer activo.
+- [Phase 15 — SECURITY-SENSITIVE]: migración + write path. `landing_draft` NO se expone a `anon` (ni por la vista pública), publicar/descartar son copia server-side (nunca un config del body como "lo publicado"), Zod estricto, cero service-role en la web. → correr `/gsd:secure-phase 15`.
+- [Phase 15 — REGRESIÓN]: PUB-08 es el riesgo real de la migración. Un negocio ya publicado tiene que ver su landing **idéntica** después del deploy, y abrir el editor viendo una copia fiel. Verificar con datos reales antes de prod.
+- [Phase 17 — SECURITY-SENSITIVE]: sacar `CMS_ENABLED` retira el kill-switch fail-closed; `has_web_custom` queda como ÚNICO gate y tiene que sostener solo (chequeado en CADA acción, `business_id` de sesión, trigger de la columna verificado). Barrer restos del flag: ninguna ruta puede quedar con un chequeo muerto que la deje abierta. → correr `/gsd:secure-phase 17`.
+- [Next 16 — carryover]: consultar `node_modules/next/dist/docs/` antes de asumir comportamiento (server actions, revalidación/cache de RSC bajo `force-dynamic`).
 
 ### Roadmap Evolution
 
-- [2026-07-07] Roadmap v0.16 creado: 4 fases (11-14) desde Phase 11, granularidad coarse, 15/15 requirements mapeados.
+- [2026-07-07] Roadmap v0.16 creado: 4 fases (11-14), coarse, 15/15 requirements mapeados. SHIPPED 2026-07-10.
+- [2026-07-12] Roadmap v0.18 creado: 3 fases (15-17), coarse, 9/9 requirements mapeados. Orden LOCKED núcleo → skill → exposición.
 
 ## Deferred Items
 
-Items reconocidos y diferidos a milestones posteriores (v2):
-
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| PUB | Exponer CMS a clientes en el nav (PUB-01) | Deferred | v0.16 scope lock |
-| PUB | Flujo publish/go-live draft→publicado (PUB-02) | Deferred | v0.16 scope lock |
-| OPS | Venta in-app + `landing_status` (OPS-01) | Deferred | v0.16 scope lock |
-| OPS | URLs por-negocio + dominio propio (OPS-02/03) | Deferred | v0.16 scope lock |
-| FU | Rediseño premium full-bleed del template (FU-2) | Deferred | milestone de estilo aparte |
-| FU | Alto del drawer de reservas en mobile (FU-1) | Deferred | polish de booking aparte |
-| FU | Tuning del "feel premium" del motion + encuadre de fotos strip/galería (más amplitud reveal/parallax, aspect de tiles) — el operador lo vio funcionando pero lo quiere más marcado | Deferred | Phase 12 UAT (2026-07-07) |
-| FU | Layout estilo Meitre (`sommabar.meitre.com`): foto full-bleed de fondo + tarjeta de reserva flotando arriba/centrada — referencia que le gusta al operador para el rediseño premium (junto con FU-2) | Deferred | Phase 12 UAT (2026-07-07) |
-| BESPOKE | Sitio standalone vía API (D6) | Deferred | milestone aparte |
+| AUTO | Auto-armado de la web al confirmarse el pago del add-on (MercadoPago) | Deferred | v0.18 scope lock — milestone propio; v0.18 es su prerequisito |
+| CMS | Video de fondo en el hero | Blocked | Infra: bucket `landing-assets` solo imágenes ≤2 MB (config en el dashboard de Supabase) |
+| CMS | Toggle "foto ancha" en la galería del editor | Deferred | Cambio de contrato de datos (el flag no existe en el schema) |
+| CMS | Confirm-on-exit por navegación interna | Deferred | Interceptar la nav del App Router de Next 16 es no-trivial |
+| PUB | Columna `web_live` / interruptor explícito on-off | Out of scope | El go-live implícito logra lo mismo con menos estado |
+| PUB | Historial de versiones / rollback | Out of scope | El borrador cubre el grueso del valor |
+| PUB | Preview compartible por link | Out of scope | Agrega superficie pública nueva sin desbloquear nada |
+| FU | Rediseño premium full-bleed / layout Meitre + tuning del "feel premium" del motion | Deferred | Pasada de estilo design-first aparte |
+| OPS | Venta in-app + URLs por-negocio / dominio propio (OPS-01/02/03) | Deferred | v0.16 scope lock |
+| BUG | Modal "Elegí tu plan" muestra "99 agendas" en prod (`NEXT_PUBLIC_PLANS_UNLIMITED`) | Deferred | Fuera del web-builder |
 
 ## Session Continuity
 
-Last session: 2026-07-09T21:59:21.801Z
-Stopped at: Completed 14-03-PLAN.md
+Last session: 2026-07-12
+Stopped at: ROADMAP v0.18 creado
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- `gsd-tools query workstream set web-builder` (pointer activo) + checkout de `gsd/gestion-rebrand`
+- `/gsd:plan-phase 15 --ws web-builder`

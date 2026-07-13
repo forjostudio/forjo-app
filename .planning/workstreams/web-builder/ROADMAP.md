@@ -4,19 +4,21 @@
 
 - ✅ **v0.9 Security Hardening** — Phases 1-5 (shipped 2026-06-17, workstream base)
 - ✅ **v0.10 Web Builder** — Phases 6-10 (shipped 2026-06-23, archivado en `milestones/v0.10-*`)
-- 🚧 **v0.16 Web Builder — Ampliación + CMS** — Phases 11-14 (in progress)
+- ✅ **v0.16 Web Builder — Ampliación + CMS** — Phases 11-14 (shipped 2026-07-10, archivado en `milestones/v0.16-*`)
+- ✅ **v0.17 Landing Polish + CMS usable** — sin fases GSD (polish reactivo, shipped 2026-07-12 — ver `MILESTONES.md`)
+- 🚧 **v0.18 CMS Publish / Go-live** — Phases 15-17 (in progress)
 
-Detalle v0.9 archivado en [`milestones/v0.9-ROADMAP.md`](../../milestones/v0.9-ROADMAP.md). Detalle v0.10 archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v0.10-ROADMAP.md).
+Detalle archivado: [`milestones/v0.9-ROADMAP.md`](../../milestones/v0.9-ROADMAP.md) · [`milestones/v0.10-ROADMAP.md`](../../milestones/v0.10-ROADMAP.md) · [`milestones/v0.16-ROADMAP.md`](../../milestones/v0.16-ROADMAP.md).
 
-**Milestone Goal (v0.16):** Elevar el web-builder sin cambiar el modelo (data-not-código, booking nativo, secciones FIJAS): darle al dueño un editor visual (CMS self-serve, detrás de flag) para gestionar su propia landing, sumar movimiento premium data-driven, permitir fotos alrededor de la reserva, y mejorar la skill del operador (modo edición + más fuentes). Con **cero regresión** y todos los invariantes de v0.9/v0.10 intactos: aislamiento multi-tenant (el CMS escribe por un path autenticado owner-only con RLS + Zod, NUNCA service-role ni endpoint anónimo en la web), booking = **caja negra** (sin transform/overflow/scroll-timeline alrededor del widget), fail-safe (`motion`/`landing_config` ausente o roto → estático actual), y `prefers-reduced-motion` off → estático SIEMPRE.
+**Milestone Goal (v0.18):** Que el dueño edite su web **sin que cada tecla salga al aire**, y que su web salga a producción **cuando él lo decide**. `landing_config` pasa a significar **lo PUBLICADO** y `landing_draft` **lo que se está editando**; la página pública lee SOLO lo publicado y publicar copia el borrador encima. Con eso, el CMS se puede abrir a clientes reales (`has_web_custom` como único gate) y la web que arma la skill nace como borrador esperando aprobación — el prerequisito del auto-armado con el pago del add-on.
 
 ## Phases
 
 **Phase Numbering:**
 
-- El workstream `web-builder` continúa la numeración: v0.10 cerró en Phase 10, este milestone arranca en **Phase 11**.
-- Integer phases (11, 12, …): trabajo planeado del milestone.
-- Decimal phases (12.1, …): inserciones urgentes (marcadas INSERTED).
+- El workstream `web-builder` **continúa** la numeración: v0.16 cerró en Phase 14, este milestone arranca en **Phase 15**.
+- Integer phases (15, 16, 17): trabajo planeado del milestone.
+- Decimal phases (15.1, …): inserciones urgentes (marcadas INSERTED).
 
 <details>
 <summary>✅ v0.9 Security Hardening (Phases 1-5) — SHIPPED 2026-06-17</summary>
@@ -39,128 +41,117 @@ Detalle v0.9 archivado en [`milestones/v0.9-ROADMAP.md`](../../milestones/v0.9-R
 - [x] Phase 9: SEO, OG & Performance (3/3 plans) — completed 2026-06-22
 - [x] Phase 10: Skill `forjo-web-builder` (3/3 plans) — completed 2026-06-23
 
-Detalle completo archivado en [`milestones/v0.10-ROADMAP.md`](../../milestones/v0.10-ROADMAP.md).
+</details>
+
+<details>
+<summary>✅ v0.16 Web Builder — Ampliación + CMS (Phases 11-14) — SHIPPED 2026-07-10</summary>
+
+- [x] Phase 11: Skill — modo edición + fuentes de contenido (2/2 plans, SKILL-05/06) — completed 2026-07-07
+- [x] Phase 12: Premium motion + fotos en la reserva (2/2 plans, MOTION-01..04, RSV-01/02) — completed 2026-07-07
+- [x] Phase 13: CMS foundation — write path owner-only + flag (1/1 plan, EDIT-05/07) — completed 2026-07-08
+- [x] Phase 14: CMS editor UI (4/4 plans, EDIT-01..04, EDIT-06) — completed 2026-07-09
+
+Detalle completo archivado en [`milestones/v0.16-ROADMAP.md`](../../milestones/v0.16-ROADMAP.md).
 
 </details>
 
-### 🚧 v0.16 Web Builder — Ampliación + CMS (In Progress)
+### 🚧 v0.18 CMS Publish / Go-live (In Progress)
 
-**Milestone Goal:** ver arriba. Build order LOCKED: skill (11) → motion + reserva media / schema (12) → CMS foundation (13) → CMS editor UI (14). El schema (`motion` + galería de reserva) existe ANTES del CMS porque el editor expone esos campos.
+**Build order LOCKED:** núcleo borrador/publicar (15) → la skill escribe el borrador (16) → **recién ahí** se expone el CMS (17).
 
-- [x] **Phase 11: Skill — modo edición + fuentes de contenido** - Retoque idempotente de landings existentes desde el payload guardado + fuentes de contenido en orden de confiabilidad (operador → web existente → IG best-effort) (completed 2026-07-07)
-- [x] **Phase 12: Premium motion + fotos en la reserva (renderer + schema)** - Campo `landing_config.motion` fail-safe con scroll-reveal/parallax CSS-first alrededor de las secciones editoriales + galería alrededor del widget de reserva; booking caja negra intacto (completed 2026-07-07)
-- [x] **Phase 13: CMS foundation — write path owner-only + flag** - Path autenticado owner-only (RLS por tenant + Zod) para escribir `landing_config` desde el panel, detrás de feature flag, sin service-role ni endpoint anónimo (completed 2026-07-08)
-- [x] **Phase 14: CMS editor UI** - Editor visual completo: copy/imágenes por sección (incl. galería RSV), reorden/on-off del set FIJO, tema/paleta/motion, y preview de los cambios (completed 2026-07-09)
+> **Por qué PUB-01 va ÚLTIMO:** exponer el editor a clientes reales mientras cada guardado todavía sale al aire es exactamente el error que este milestone viene a evitar. El CMS solo se abre cuando (a) guardar ya no publica y (b) la web armada por la skill nace como borrador. El orden no es preferencia: es el contenido del milestone.
+
+- [ ] **Phase 15: Borrador y publicación (núcleo)** - `landing_draft` (migración aditiva) + el CMS escribe el borrador + botón Publicar/Descartar + el estado real de "cambios sin publicar"; la web pública sigue leyendo SOLO lo publicado
+- [ ] **Phase 16: La web nace como borrador (skill del operador)** - `scripts/setup-landing.ts` escribe el borrador, no lo publicado; `--inspect` muestra borrador y publicado por separado
+- [ ] **Phase 17: Exponer el CMS a clientes reales** - Se retira el flag global `CMS_ENABLED`; `has_web_custom` queda como ÚNICO gate del editor
 
 ## Phase Details
 
-### Phase 11: Skill — modo edición + fuentes de contenido
+### Phase 15: Borrador y publicación (núcleo)
 
-**Goal**: El operador de Forjo Studio puede retocar una landing ya publicada sin rehacerla y armar el contenido desde varias fuentes en orden de confiabilidad — todo dentro de la skill `forjo-web-builder`, sin tocar el renderer ni el schema. Pieza chica, standalone, cero riesgo de seguridad (reusa el write path service-role local ya existente de v0.10).
-**Depends on**: Nothing nuevo (opera sobre la skill + `scripts/setup-landing.ts` de Phase 10, ya shipped)
-**Requirements**: SKILL-05, SKILL-06
+**Goal**: El dueño puede editar y guardar su web sin que nada de eso salga al aire, y su web pública cambia solo cuando él aprieta "Publicar". `landing_config` = lo publicado, `landing_draft` = lo que se está editando; `/[slug]` lee SOLO lo publicado. Es el núcleo del milestone: sin esto, ni la skill ni la exposición del CMS son seguras de entregar. **Fase security-sensitive: toca la migración y el write path owner-only que aseguró v0.16 (Core Value).**
+**Depends on**: Nothing nuevo (opera sobre el CMS de v0.16 Phases 13-14, ya shipped)
+**Requirements**: PUB-03, PUB-04, PUB-05, PUB-06, PUB-07, PUB-08
 **Success Criteria** (what must be TRUE):
 
-  1. El operador pide un cambio puntual ("cambiá el headline", "sumá 3 fotos a la galería") y la skill parte de `landing-payloads/<slug>.json`, aplica SOLO ese campo, muestra un checkpoint acotado (diff antes→después de lo tocado, no el config entero) y re-escribe idempotente (re-correr el mismo payload da el mismo resultado).
-  2. Si no existe el payload guardado (landing anterior a la persistencia de payloads), la skill reconstruye el estado con `npm run setup:landing -- --inspect <slug>`, avisa que va a re-escribir el config completo y pide al operador lo que el inspect no devuelve (el copy).
-  3. La skill arma el contenido probando fuentes en orden — entrada estructurada del operador (la más confiable) → web existente del negocio → Instagram best-effort — y si una falla cae a la siguiente sin bloquearse.
-  4. Todo el copy nuevo pasa por el `humanizador` y las imágenes se referencian como rutas locales re-hosteadas por el script (nunca hot-link al CDN de origen).
+  1. El dueño guarda un cambio en el editor y su web pública **no cambia**: `/[slug]` sigue mostrando exactamente lo que estaba antes.
+  2. El dueño toca "Publicar" y su web pública pasa a mostrar el cambio (borrador → publicado, en un solo movimiento).
+  3. El editor distingue **guardado** de **publicado**: le avisa al dueño que tiene cambios sin publicar, y deja de avisarle después de publicar.
+  4. El dueño descarta el borrador y el editor vuelve a mostrar exactamente lo que está al aire.
+  5. Cero sorpresas en la transición: un negocio que ya tenía su landing publicada la sigue viendo idéntica (y abre el editor viendo una copia fiel de lo publicado); un negocio que nunca publicó sigue viendo su página de reservas de siempre, y al publicar por primera vez su web a medida la reemplaza (go-live implícito).
 
-**Threat note**: Bajo riesgo. La skill NO abre superficie web nueva — sigue escribiendo por el script local service-role de v0.10 (SKILL-04), con el mismo checkpoint humano pre-escritura. El único cuidado: el diff acotado no debe filtrar secretos del payload (el payload no contiene secretos de tenant, solo copy/imágenes/tema).
-
-**Plans**: 2/2 plans complete
-
-- [x] 11-01-PLAN.md — Artefactos de código: extender `--inspect` (read-only, D-04) + copiar `scripts/instagram-cosechar.py` (D-03)
-- [x] 11-02-PLAN.md — Skill: sección MODO EDICIÓN (SKILL-05) + paso FUENTES DE CONTENIDO con pipeline instaloader (SKILL-06)
-
-### Phase 12: Premium motion + fotos en la reserva (renderer + schema)
-
-**Goal**: El visitante ve movimiento premium data-driven (scroll-reveal + parallax sutil) en las secciones editoriales de la landing, y el dueño puede mostrar fotos de sucursal/servicio alrededor de la sección de reserva — todo desde `landing_config`, con el widget de reserva como caja negra intocable y cero regresión. Este es el trabajo de SCHEMA que habilita al CMS: el campo `motion` y la galería de reserva viven en `schema.ts`/`landing_config` antes de que el editor (Phase 14) los exponga.
-**Depends on**: Phase 11 (orden del milestone; técnicamente independiente de la skill, pero encadena el workstream)
-**Requirements**: MOTION-01, MOTION-02, MOTION-03, MOTION-04, RSV-01, RSV-02
-**Success Criteria** (what must be TRUE):
-
-  1. El envelope de `landing_config` acepta `motion: 'none' | 'subtle' | 'premium'` (default `subtle`), por negocio y sin deploy; un valor ausente, inválido o roto cae al render estático actual vía `parseLandingConfig` (fail-safe, cero regresión).
-  2. El visitante ve reveals de entrada (scroll-reveal, ease-out ≤300ms, solo `transform`/`opacity`) y parallax sutil del hero/imágenes (`transform: translateY`, nunca `background-attachment: fixed`) en las secciones editoriales; el LCP del hero no se degrada (imagen sigue `priority`).
-  3. Con `prefers-reduced-motion` activo el motion se apaga y el render es estático; el motion envuelve SOLO secciones editoriales y NUNCA el contenedor de `BookingClient`.
-  4. El landing muestra la galería de sucursal/servicio (header/intro/galería adyacente) configurable desde `landing_config` alrededor de la sección de reserva; sin contenido, la sección se comporta como hoy (empty-state, cero regresión).
-  5. El widget interactivo de reserva NO queda envuelto en `transform`/`overflow`/scroll-timeline ni se re-estiliza por dentro — disponibilidad, seña y el flujo de MercadoPago no regresionan (invariante caja negra verificado con vaul/sonner/react-day-picker).
-
-**Plans**: 2/2 plans complete
-**Wave 1**
-
-- [x] 12-01-PLAN.md — Schema (`motion` + `rsvData`) + `normalizeMotion` + motor de motion CSS-first en `.frj-site` + `data-motion`/clases en el renderer y editoriales + hero a `preload` (MOTION-01..04)
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 12-02-PLAN.md — `RsvStrip` (header + strip horizontal, empty-state safe) montado como hermano del widget + checkpoint funcional de la caja negra (reserva con/sin seña) (RSV-01/02)
+**Plans**: TBD
 
 **UI hint**: yes
 
-**Threat note**: Riesgo = regresión, no aislamiento. El motion y la galería RSV comparten el mismo peligro que Pitfall 4/8 de v0.10: envolver el booking en transform/overflow rompe vaul/date-picker/toasts. Contrato de props de `BookingClient` congelado; el `<section id="reservar">` solo puede llevar la galería FUERA del contenedor interactivo. Verificar: `landing_config` null → legacy byte-idéntico, `motion` roto → estático, reserva real (con y sin seña) sin diferencia.
+**Threat note** (SECURITY-SENSITIVE — correr `/gsd:secure-phase 15`):
 
-### Phase 13: CMS foundation — write path owner-only + flag
+- **Migración 050 (la próxima libre; 049 es la última aplicada)** — ADITIVA y no destructiva: `landing_draft jsonb` nace copiando `landing_config` (`UPDATE … SET landing_draft = landing_config`). Nadie se cae del aire (PUB-08). Se valida con `supabase db reset` local; a prod se aplica **a mano**, coordinada con el deploy (nunca `db push`).
+- **RLS de la columna nueva**: `landing_draft` es contenido del tenant y va sobre `businesses` — hay que verificar explícitamente que **no se filtre a `anon`**. La vista pública (`public_businesses`) expone columnas explícitas: el borrador **NO** puede entrar ahí. El test de aislamiento anon-key (TEST-01, `test/isolation.test.ts`) se extiende: anon no lee `landing_draft` de nadie, y un dueño no lee/escribe el borrador de otro negocio.
+- **Write path**: todo (guardar borrador, publicar, descartar) pasa por la Server Action **owner-only** existente (session client anon+cookies, RLS activo, `business_id` de la SESIÓN, Zod estricto `parseLandingConfigForWrite` reject-on-invalid). **PROHIBIDO service-role en la superficie web.** Publicar es copia server-side de draft→published: nunca se acepta un config del body como "lo que se publica".
+- **Gate del add-on**: publicar/descartar se gatean en la **acción**, igual que guardar — gatear solo la page es cosmético, un POST directo la saltea. `has_web_custom` sigue protegida por el trigger `businesses_protect_admin_columns` (revierte en silencio cualquier UPDATE no-service_role).
+- **Fail-safe intacto**: `parseLandingConfig(null) → null` = negocio legacy → `/[slug]` renderiza la reserva simple (PUB-07 se apoya en ese camino, que ya existe y está probado); presente-pero-inválido → `DEFAULT_LANDING_CONFIG` (la pública nunca 500ea). Booking = caja negra.
 
-**Goal**: Existe un path autenticado owner-only para que el dueño escriba su propio `landing_config` desde el panel — con RLS por tenant + validación Zod del config completo — detrás de un feature flag, sin exponerse a clientes y sin flujo publish/go-live. Es la capa de persistencia segura sobre la que se monta el editor (Phase 14); se verifica de forma independiente antes de construir UI encima. **Fase security-sensitive: toca el invariante multi-tenant (Core Value).**
-**Depends on**: Phase 12 (el schema `motion` + galería RSV ya existe; el write path valida el config final que definen 12 y v0.10)
-**Requirements**: EDIT-05, EDIT-07
+### Phase 16: La web nace como borrador (skill del operador)
+
+**Goal**: La web que arma el operador con la skill queda esperando la aprobación del dueño en vez de salir cruda al público. `scripts/setup-landing.ts` escribe `landing_draft`; publicar sigue siendo una decisión del dueño desde su panel. Es la pieza que convierte a este milestone en el prerequisito real del auto-armado con el pago del add-on.
+**Depends on**: Phase 15 (necesita que `landing_draft` exista y que publicar/descartar funcionen desde el panel)
+**Requirements**: SKILL-07, SKILL-08
 **Success Criteria** (what must be TRUE):
 
-  1. Un dueño autenticado puede persistir su `landing_config` por un path owner-only (server action o route handler con sesión), y el config se valida con el Zod compartido (`parseLandingConfig`) antes de escribir — un config inválido se rechaza sin corromper el guardado ni tirar 500.
-  2. La escritura pasa por RLS por tenant: un dueño NO puede escribir el `landing_config` de otro negocio (verificado por un test de aislamiento con dos sesiones anon autenticadas, al estilo TEST-01); nunca se usa service-role ni un endpoint de escritura anónimo en la superficie web.
-  3. El CMS vive detrás de un feature flag y NO aparece en el nav del dashboard para clientes en este milestone; su exposición + el flujo publish/go-live quedan explícitamente fuera de alcance (EDIT-07 es el borde).
+  1. El operador corre la skill sobre un negocio y la web armada **no aparece** en `/[slug]`: aparece en el editor del dueño como borrador sin publicar (y el negocio que nunca publicó sigue mostrando su reserva simple mientras tanto).
+  2. El dueño revisa esa web en su editor y, al publicarla, recién ahí sale al aire — cerrando el circuito operador → dueño → público.
+  3. `--inspect` muestra **borrador y publicado por separado**, de modo que el operador sabe qué está al aire y qué quedó pendiente de aprobación.
 
-**Plans**: 1/1 plans complete
+**Plans**: TBD
 
-- [x] 13-01-PLAN.md — Validador de escritura estricto (`parseLandingConfigForWrite`, reject-on-invalid) + Server Action owner-only `saveLandingConfig` (session client, flag `CMS_ENABLED` fail-closed, business_id de sesión) + extensión del test de aislamiento SC2 (cross-write denegado + same-tenant permitido). Sin migración, cero service-role. (EDIT-05, EDIT-07)
+**Threat note**: Bajo riesgo de aislamiento — la skill NO abre superficie web nueva: sigue escribiendo por el **script local service-role** de v0.10 (fuera del runtime web), con checkpoint humano pre-escritura. El cuidado propio de esta fase es de **regresión de producto**: el script no debe tocar `landing_config` de un negocio que ya está publicado (escribir el borrador no puede pisar lo que está al aire), y el modo edición de Phase 11 debe partir del borrador, no de lo publicado, para no re-publicar sin querer.
 
-**Threat note** (SECURITY-SENSITIVE — flag esta fase para secure-phase): (a) **Aislamiento de tenant**: el write path debe ser owner-only por RLS + `.eq('business_id', …)` de la sesión; nunca confiar en un `business_id` del body. (b) **Sin service-role en la web**: prohibido `createAdminClient()` en cualquier route/action que escriba config desde el panel — solo el cliente de sesión (anon + cookies, RLS activo). (c) **Validación Zod estricta**: `safeParse` + `.strip()` de claves desconocidas antes de escribir, para no re-abrir la fuga de secretos que v0.9 cerró ni inyectar campos no permitidos. (d) **Feature flag**: el flag apaga la ruta entera; verificar que un cliente sin el flag no llega ni al render del editor. El test de aislamiento anon-key de v0.9/v0.10 se extiende al write path.
+### Phase 17: Exponer el CMS a clientes reales
 
-### Phase 14: CMS editor UI
-
-**Goal**: El dueño edita toda su landing desde un editor visual en el panel — copy por sección, imágenes (subir/reemplazar/borrar, incluida la galería alrededor de la reserva), reorden y on/off del set FIJO de secciones, preset de tema + paleta + `motion` — y ve un preview de los cambios antes de que impacten. Todo escribe por el path owner-only de la Phase 13.
-**Depends on**: Phase 13 (usa el write path owner-only + flag) y Phase 12 (expone `motion` + galería RSV en el editor)
-**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-06
+**Goal**: El add-on es el único gate: un dueño con `has_web_custom` entra a su editor desde el panel sin que exista ningún flag de entorno, y uno sin el add-on no llega ni escribiendo directo. Va última a propósito: recién acá el CMS es seguro de mostrar, porque guardar ya no publica (15) y la web armada nace como borrador (16). **Fase security-sensitive: se retira un kill-switch fail-closed y queda un solo gate en pie.**
+**Depends on**: Phase 16 (y por lo tanto Phase 15) — el orden es una decisión LOCKED del milestone, no una preferencia
+**Requirements**: PUB-01
 **Success Criteria** (what must be TRUE):
 
-  1. El dueño edita los textos/copy de cada sección (Hero, About, CTA, etc.) desde el editor y ve el cambio reflejado.
-  2. El dueño sube, reemplaza y borra imágenes por sección — incluida la galería alrededor de la reserva (RSV) — re-hosteadas en el bucket `landing-assets` namespaced por `business_id` (nunca escribe fuera de su prefijo `{business_id}/`).
-  3. El dueño reordena y prende/apaga las secciones habilitadas (`order`/`enabled`) dentro del set FIJO (sin layout libre / drag-and-drop de secciones nuevas).
-  4. El dueño elige preset de tema y ajusta paleta/color primario y `motion` dentro del set permitido, viendo el resultado aplicado.
-  5. El dueño ve un preview de su landing con los cambios (WYSIWYG o preview lado a lado) antes de persistir por el path owner-only.
+  1. Un dueño con el add-on `has_web_custom` encuentra la entrada a su web en el panel y edita/publica sin que ninguna variable de entorno lo habilite.
+  2. Un dueño sin el add-on no llega al editor **ni logra escribir su landing aunque postee directo a la Server Action** (el gate vive en la acción, no solo en la page).
+  3. Para todo lo demás no cambia nada: los negocios sin add-on siguen viendo su `/[slug]` exactamente igual, y las landings publicadas siguen al aire.
 
-**Plans**: 4/4 plans complete
-**Wave 1**
+**Plans**: TBD
 
-- [x] 14-01-PLAN.md — Shell del editor: page gateada por `CMS_ENABLED` + client con borrador, preview en vivo del renderer real y save bar (EDIT-06) [wave 1]
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 14-02-PLAN.md — Panel de secciones (reorden/toggle del set FIJO) + forms de copy por sección (EDIT-03, EDIT-01) [wave 2]
-- [x] 14-03-PLAN.md — Controles de imagen single + grid RSV, upload owner-only a `landing-assets/{business_id}/` (EDIT-02) [wave 2]
-- [x] 14-04-PLAN.md — Controles de tema/paleta/primary/motion apuntados a `landing_config.theme` (EDIT-04) [wave 2]
-
-**UI hint**: yes
-
-**Threat note**: Hereda el invariante de la Phase 13 (toda escritura por el path owner-only, cero service-role, Zod). Riesgo propio: el **upload de imágenes** debe escribir SOLO bajo `{business_id}/` en `landing-assets` (RLS owner-write del bucket, ya existente de v0.10) — un intento fuera del prefijo del dueño se rechaza. El preview no debe exponer datos de otro tenant. Booking sigue caja negra dentro del preview.
+**Threat note** (SECURITY-SENSITIVE — correr `/gsd:secure-phase 17`): sacar `CMS_ENABLED` **retira el kill-switch global fail-closed** que hasta hoy apagaba la ruta entera. Al quedar `has_web_custom` como único gate, ese gate tiene que sostener solo: (a) chequeado en **cada** Server Action del CMS (guardar, publicar, descartar, upload), no solo en la page; (b) resuelto contra el `business_id` de la **sesión** (nunca del body); (c) el trigger `businesses_protect_admin_columns` debe seguir impidiendo que el dueño se auto-otorgue el flag (revierte en silencio los UPDATE no-service_role) — verificarlo, no asumirlo. Además: el editor pasa de ser inalcanzable a ser una superficie autenticada real → los uploads a `landing-assets/{business_id}/` y el preview vuelven a estar en el radar de aislamiento (heredado de Phase 14, SECURED 16/16). Barrer restos del flag: ninguna ruta puede quedar con un chequeo muerto que la deje abierta.
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 11 → 12 → 13 → 14
+Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer el CMS antes del núcleo publish sería el bug del milestone)
 
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
-| 6. Schema, Storage & Safe Foundation | v0.10 | 2/2 | Complete | 2026-06-17 |
-| 7. Renderer & Section Components | v0.10 | 4/4 | Complete | 2026-06-18 |
-| 8. Theming | v0.10 | 2/2 | Complete | 2026-06-19 |
-| 8.1 Re-diseño premium del template | v0.10 | 4/4 | Complete | 2026-06-20 |
-| 9. SEO, OG & Performance | v0.10 | 3/3 | Complete | 2026-06-22 |
-| 10. Skill `forjo-web-builder` | v0.10 | 3/3 | Complete | 2026-06-23 |
-| 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete    | 2026-07-07 |
-| 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete    | 2026-07-07 |
-| 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete    | 2026-07-08 |
-| 14. CMS editor UI | v0.16 | 4/4 | Complete   | 2026-07-09 |
+| 11. Skill — modo edición + fuentes | v0.16 | 2/2 | Complete | 2026-07-07 |
+| 12. Premium motion + fotos en la reserva | v0.16 | 2/2 | Complete | 2026-07-07 |
+| 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete | 2026-07-08 |
+| 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
+| 15. Borrador y publicación (núcleo) | v0.18 | 0/? | Not started | - |
+| 16. La web nace como borrador (skill) | v0.18 | 0/? | Not started | - |
+| 17. Exponer el CMS a clientes reales | v0.18 | 0/? | Not started | - |
+
+## Requirement Coverage (v0.18)
+
+| Requirement | Phase |
+|-------------|-------|
+| PUB-03 | Phase 15 |
+| PUB-04 | Phase 15 |
+| PUB-05 | Phase 15 |
+| PUB-06 | Phase 15 |
+| PUB-07 | Phase 15 |
+| PUB-08 | Phase 15 |
+| SKILL-07 | Phase 16 |
+| SKILL-08 | Phase 16 |
+| PUB-01 | Phase 17 |
+
+**Cobertura: 9/9 requisitos v1 mapeados, cada uno a exactamente una fase. Sin huérfanos.**
 
 ---
-*Next: `/gsd:plan-phase 11 --ws web-builder`*
+*Next: `/gsd:plan-phase 15 --ws web-builder`*

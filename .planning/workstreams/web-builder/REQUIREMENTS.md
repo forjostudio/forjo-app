@@ -59,4 +59,16 @@ Actores: **dueño** (negocio que gestiona su web desde el panel), **visitante** 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(lo completa el roadmap)_ | | |
+| PUB-03 | Phase 15 — Borrador y publicación (núcleo) | Pending |
+| PUB-04 | Phase 15 — Borrador y publicación (núcleo) | Pending |
+| PUB-05 | Phase 15 — Borrador y publicación (núcleo) | Pending |
+| PUB-06 | Phase 15 — Borrador y publicación (núcleo) | Pending |
+| PUB-07 | Phase 15 — Borrador y publicación (núcleo) | Pending |
+| PUB-08 | Phase 15 — Borrador y publicación (núcleo) | Pending |
+| SKILL-07 | Phase 16 — La web nace como borrador (skill del operador) | Pending |
+| SKILL-08 | Phase 16 — La web nace como borrador (skill del operador) | Pending |
+| PUB-01 | Phase 17 — Exponer el CMS a clientes reales | Pending |
+
+**Cobertura: 9/9 — sin huérfanos, sin duplicados.**
+
+Orden LOCKED: **15 → 16 → 17**. PUB-01 (exponer el CMS) va ÚLTIMO a propósito: abrir el editor a clientes reales mientras cada guardado todavía sale al aire sería exactamente el error que este milestone viene a evitar.
