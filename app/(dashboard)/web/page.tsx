@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
-import type { PublicBusiness } from '@/lib/types'
 import { WebEditorClient } from './web-client'
 
 // ── Editor CMS: ruta server gateada por flag (Phase 14, D-07) ──────────────────────────
@@ -37,11 +36,19 @@ export default async function WebEditorPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // 4. Negocio de la SESIÓN (owner_id = auth.uid()). select('*') trae landing_config + theme/palette/
-  //    font (fallback para resolveLandingTheme del preview). Nunca un business_id del cliente.
+  // 4. Negocio de la SESIÓN (owner_id = auth.uid()), con COLUMNAS EXPLÍCITAS. Nunca un business_id
+  //    del cliente, y nunca select('*'): esta fila viaja entera al bundle del cliente (el business es
+  //    prop de un Client Component), así que un '*' publicaría en el payload RSC notification_email,
+  //    plan/plan_status, mp_subscription_id, mp_user_id, owner_id… y bastaría con que mañana alguien
+  //    agregue una columna sensible a `businesses` para que se filtre sola. La lista es exactamente
+  //    lo que consume el LandingRenderer + el BookingClient del preview (misma lista que
+  //    app/[slug]/page.tsx), MÁS: theme/palette/font (fallback de resolveLandingTheme en el preview),
+  //    has_web_custom (el gate del add-on) y los dos configs.
   const { data: business } = await supabase
     .from('businesses')
-    .select('*')
+    .select(
+      'id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, palette, theme, font, has_web_custom, landing_config, landing_draft',
+    )
     .eq('owner_id', user.id)
     .single()
   if (!business) redirect('/onboarding')
@@ -95,14 +102,19 @@ export default async function WebEditorPage() {
   //        DEFENSIVO: la migración no produce el estado (publicado presente, borrador ausente), pero
   //        un rollback parcial o una fila tocada a mano sí podrían — y sin el coalesce un dueño con
   //        la web AL AIRE abriría el editor con una plantilla vacía. null acá = arranca del DEFAULT.
-  //    El tipo Business no declara ninguna de las dos columnas (igual que hoy) → cast puntual.
-  const b = business as { landing_config?: unknown; landing_draft?: unknown }
-  const publishedConfig = b.landing_config ?? null
-  const initialDraft = b.landing_draft ?? publishedConfig
+  //    Se DESESTRUCTURAN fuera del business: los dos jsonb ya viajan como props propias, y dejarlos
+  //    también dentro de `business` los mandaría DOS VECES en el payload RSC (con una galería cargada
+  //    el config no es chico).
+  const { landing_config: publishedRaw, landing_draft: draftRaw, ...publicBusiness } = business
+  const publishedConfig = publishedRaw ?? null
+  const initialDraft = draftRaw ?? publishedConfig
 
   return (
     <WebEditorClient
-      business={business as unknown as PublicBusiness}
+      // Sin cast: `publicBusiness` YA es el subconjunto público (columnas explícitas, sin
+      // notification_email). El `as unknown as PublicBusiness` de antes era una mentira — el tipo
+      // excluye notification_email pero el objeto en runtime lo traía, y viajaba al navegador.
+      business={publicBusiness}
       initialDraft={initialDraft}
       publishedConfig={publishedConfig}
       services={services || []}
