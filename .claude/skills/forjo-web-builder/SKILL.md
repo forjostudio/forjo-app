@@ -67,8 +67,8 @@ Las claves del landing en ese JSON son dos cosas distintas y no se confunden:
 
 | Clave | Qué es |
 |---|---|
-| `al_aire` | **LO PUBLICADO**: lo que ve cualquier visitante en `/[slug]` ahora mismo. |
-| `pendiente_de_aprobacion` | **EL BORRADOR**: lo que ve el dueño en su editor y **todavía NO salió al aire**. |
+| `al_aire` | **LO PUBLICADO** (columna `landing_config`): lo que ve cualquier visitante en `/[slug]` ahora mismo. |
+| `pendiente_de_aprobacion` | **EL BORRADOR** (columna `landing_draft`): lo que ve el dueño en su editor y **todavía NO salió al aire**. |
 | `nunca_publico` | `true` → el negocio nunca publicó: su `/[slug]` sigue mostrando la reserva simple. |
 | `tiene_cambios_sin_publicar` | `true` → el dueño tiene trabajo suyo pendiente de publicar. |
 | `partes_sin_publicar` | Qué partes difieren de lo publicado (ej. `["hero","gallery"]`). |
