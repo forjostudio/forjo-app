@@ -83,6 +83,30 @@ export function parseLandingConfig(raw: unknown): LandingConfig | null {
 // NUNCA tira ni cierra el envelope F6. Defensa por-sección, no por-config.
 // booking NO lee data; Hours deriva solo de time_blocks → ninguno tiene esquema acá.
 
+// ⚠ SEGURIDAD — por qué NO alcanza z.string().url() para NINGUNA url del config.
+// `z.url()` valida que el string PARSEE como URL, y `javascript:alert(1)` parsea perfecto. Estos
+// valores salen al HTML del sitio PÚBLICO: en un <a href> un `javascript:` es XSS directo, y en un
+// <img src> un `data:` permite servir contenido arbitrario desde el origen del sitio (ninguna de
+// estas imágenes pasa por next/image con allowlist de dominios). El dueño de un negocio podría
+// pegar cualquiera de las dos cosas sin saber lo que hace — o alguien inyectarla si mañana se abre
+// otro camino de escritura. Acá acotamos por PROTOCOLO con una allowlist (http/https), que es la
+// única defensa que sirve. Mismo espíritu que isSafeColor con los hex.
+//
+// Se declara ANTES de las secciones porque TODAS lo usan (map_url, imágenes, botones del CTA): un
+// const a nivel de módulo referenciado antes de su definición tira ReferenceError (TDZ) al evaluar
+// los z.object() del import.
+const safeLinkUrl = z.string().refine(
+  (v) => {
+    try {
+      const u = new URL(v)
+      return u.protocol === 'https:' || u.protocol === 'http:'
+    } catch {
+      return false
+    }
+  },
+  { message: 'La URL debe empezar con https://' },
+)
+
 export const heroData = z
   .object({
     headline: z.string().optional(),
@@ -90,7 +114,9 @@ export const heroData = z
     // genérico; la skill lo puebla con la ciudad y la saca del headline.
     kicker: z.string().optional(),
     subhead: z.string().optional(),
-    image: z.string().url().optional(),
+    // safeLinkUrl (no z.url()): allowlist http/https — un `data:` URI acá sería contenido
+    // arbitrario servido desde el origen del sitio público (no pasa por next/image).
+    image: safeLinkUrl.optional(),
     cta_label: z.string().optional(),
 
     // ── Ajustes de PRESENTACIÓN del hero (editables desde el CMS) ──────────────────────
@@ -119,7 +145,7 @@ export const aboutData = z
   .object({
     title: z.string().optional(),
     body: z.string().optional(),
-    image: z.string().url().optional(),
+    image: safeLinkUrl.optional(), // allowlist http/https (ver safeLinkUrl)
   })
   .catch({})
 export type AboutData = z.infer<typeof aboutData>
@@ -136,7 +162,7 @@ export type ServicesData = z.infer<typeof servicesData>
 export const galleryData = z
   .object({
     title: z.string().optional(),
-    images: z.array(z.string().url()).optional(),
+    images: z.array(safeLinkUrl).optional(), // allowlist http/https (ver safeLinkUrl)
   })
   .catch({})
 export type GalleryData = z.infer<typeof galleryData>
@@ -145,46 +171,33 @@ export type GalleryData = z.infer<typeof galleryData>
 // reusa `galleryData` (D-03b: fotos de confianza de la sucursal/ambiente ANTES de reservar).
 // Espejo VERBATIM del patrón de galleryData: z.object({...}).catch({}) — un data roto degrada
 // a {} → empty-state (RSV-01, la sección booking queda byte-idéntica a hoy). NO usar record
-// dinámico (Pitfall 4 / Zod v4 exige 2 args). `images` con z.string().url() (control V5 input
+// dinámico (Pitfall 4 / Zod v4 exige 2 args). `images` con safeLinkUrl (control V5 input
 // validation): evita renderizar URL no-http en el Plan 02 — una url inválida invalida el
 // objeto entero → {} (el .catch({}) lo captura).
 export const rsvData = z
   .object({
     header: z.string().optional(),
     intro: z.string().optional(),
-    images: z.array(z.string().url()).optional(),
+    images: z.array(safeLinkUrl).optional(), // allowlist http/https (ver safeLinkUrl)
   })
   .catch({})
 export type RsvData = z.infer<typeof rsvData>
 
 // Las locations vienen de la tabla (D7-06); map_url/show_address vienen del config (Assumption A2).
+//
+// map_url va a un <a href target="_blank"> del sitio PÚBLICO (components/landing/location.tsx) ⇒
+// safeLinkUrl, NO z.url(): un `javascript:` parsea como URL válida y sería XSS almacenado
+// (cualquier visitante que toque "Ver en el mapa" ejecutaría script en el origen del sitio). El
+// .catch({}) de abajo sigue haciendo su trabajo: un map_url con protocolo raro degrada la sección
+// (sin link) — nunca tira la página.
 export const locationData = z
   .object({
     title: z.string().optional(),
-    map_url: z.string().url().optional(),
+    map_url: safeLinkUrl.optional(),
     show_address: z.boolean().optional(),
   })
   .catch({})
 export type LocationData = z.infer<typeof locationData>
-
-// ⚠ SEGURIDAD — por qué NO alcanza z.string().url() para el href de un botón.
-// `z.url()` valida que el string PARSEE como URL, y `javascript:alert(1)` parsea perfecto. En una
-// imagen daba igual (un src javascript: no ejecuta), pero estos valores van a un <a href> del sitio
-// PÚBLICO: un href javascript: es XSS directo, y el dueño de un negocio podría pegarlo sin saber
-// lo que hace (o alguien podría inyectarlo si mañana se abre otro camino de escritura).
-// Acá acotamos por PROTOCOLO con una allowlist (http/https), que es la única defensa que sirve.
-// Mismo espíritu que isSafeColor con los hex.
-const safeLinkUrl = z.string().refine(
-  (v) => {
-    try {
-      const u = new URL(v)
-      return u.protocol === 'https:' || u.protocol === 'http:'
-    } catch {
-      return false
-    }
-  },
-  { message: 'La URL debe empezar con https://' },
-)
 
 // Botón extra del CTA (ej. Instagram, la carta, cómo llegar). Label + destino externo.
 const ctaLink = z.object({

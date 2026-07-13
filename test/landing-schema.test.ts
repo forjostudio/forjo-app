@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { parseLandingConfig, DEFAULT_LANDING_CONFIG, rsvData, heroData, ctaData } from '@/lib/landing/schema'
+import {
+  parseLandingConfig,
+  DEFAULT_LANDING_CONFIG,
+  rsvData,
+  heroData,
+  ctaData,
+  locationData,
+  aboutData,
+  galleryData,
+} from '@/lib/landing/schema'
 
 // ── Tests del parser fail-safe de landing config (D-10) ──────────────────────────
 // Puros: NO dependen de Supabase ni de las 3 creds, así que corren SIEMPRE (no van bajo
@@ -194,5 +203,49 @@ describe('ctaData — botones extra', () => {
   it('tope de 3 botones', () => {
     const many = Array.from({ length: 4 }, (_, i) => ({ label: `B${i}`, url: `https://x.test/${i}` }))
     expect(ctaData.parse({ links: many }).links).toBeUndefined() // excede el max → cae el campo
+  })
+})
+
+// ── Allowlist de protocolo en TODAS las URLs del config (CR-02) ──────────────────────────
+// `z.string().url()` acepta `javascript:alert(1)` (parsea como URL perfectamente). map_url termina
+// en un <a href target="_blank"> de la web PÚBLICA ⇒ XSS almacenado; las imágenes terminan en un
+// <img src> sin next/image ⇒ un `data:` sirve contenido arbitrario desde el origen del sitio.
+// La defensa es la allowlist de protocolo (safeLinkUrl, http/https), la misma que ya usaba ctaLink.
+describe('safeLinkUrl — protocolo acotado en map_url e imágenes', () => {
+  it('map_url: RECHAZA javascript: y otros protocolos (XSS almacenado)', () => {
+    for (const url of ['javascript:alert(1)', 'data:text/html,<script>a()</script>', 'file:///etc/passwd']) {
+      const d = locationData.parse({ title: 'Dónde estamos', map_url: url })
+      expect(d.map_url, `no debe pasar: ${url}`).toBeUndefined()
+    }
+  })
+
+  it('map_url: un https:// válido pasa intacto', () => {
+    const d = locationData.parse({ title: 'Dónde estamos', map_url: 'https://maps.google.com/?q=forjo' })
+    expect(d.map_url).toBe('https://maps.google.com/?q=forjo')
+    expect(d.title).toBe('Dónde estamos')
+  })
+
+  it('map_url inválido degrada la sección pero NO tira la página (fail-safe del renderer)', () => {
+    // El .catch({}) del objeto es el fail-safe: parsear NUNCA tira, y /[slug] sigue renderizando
+    // (la sección location cae a sus fallbacks: sin link al mapa).
+    expect(() => locationData.parse({ map_url: 'javascript:alert(1)' })).not.toThrow()
+    expect(parseLandingConfig({
+      theme: { preset: 'forjo' },
+      sections: [{ type: 'location', enabled: true, order: 0, data: { map_url: 'javascript:alert(1)' } }],
+    })).not.toBeNull()
+  })
+
+  it('imágenes (hero/about/gallery/rsv): un data: URI no pasa; https sí', () => {
+    const evil = 'data:text/html,<script>a()</script>'
+    expect(heroData.parse({ headline: 'X', image: evil }).image).toBeUndefined()
+    expect(aboutData.parse({ image: evil }).image).toBeUndefined()
+    expect(galleryData.parse({ images: [evil] }).images).toBeUndefined()
+    expect(rsvData.parse({ images: [evil] }).images).toBeUndefined()
+
+    const ok = 'https://cdn.test/foto.jpg'
+    expect(heroData.parse({ image: ok }).image).toBe(ok)
+    expect(aboutData.parse({ image: ok }).image).toBe(ok)
+    expect(galleryData.parse({ images: [ok] }).images).toEqual([ok])
+    expect(rsvData.parse({ images: [ok] }).images).toEqual([ok])
   })
 })
