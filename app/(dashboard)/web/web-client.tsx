@@ -183,7 +183,14 @@ export function WebEditorClient({
   const busy = saving || publishing || discarding
   const blocked = busy || uploading > 0
   const canDiscard = !blocked && editorState !== 'published'
-  const canSave = !blocked && editorState === 'unsaved'
+  // Guardar queda habilitado en TODO lo que no sea 'publicado' (no solo con cambios sin guardar).
+  // Por qué: tras Descartar SIN haber publicado nunca, la DB queda con landing_draft = NULL y el
+  // editor re-siembra la plantilla base en memoria (D-13) ⇒ draft == savedBaseline ⇒ el indicador
+  // decía "Guardado — sin publicar" (falso: no hay nada guardado) y Guardar quedaba DESHABILITADO,
+  // así que el dueño no podía materializar ese "guardado" que la UI le afirmaba. Guardar un borrador
+  // idéntico es idempotente y barato (un UPDATE de una fila), así que habilitarlo elimina el
+  // dead-end sin inventar un 4º estado.
+  const canSave = !blocked && editorState !== 'published'
   // D-04: Publicar queda habilitado TAMBIÉN con cambios sin guardar (encadena guardar → publicar).
   // Deshabilitarlo por "hay cambios sin guardar" era un dead-end visual.
   const canPublish = !blocked && editorState !== 'published'
@@ -311,6 +318,9 @@ export function WebEditorClient({
     // Reconstrucción EN MEMORIA: si ya publicó, el borrador vuelve a ser copia fiel de lo publicado;
     // si nunca publicó (D-13), se RE-SIEMBRA la plantilla base (mismo camino de empty-state de Phase
     // 14) y reaparece el aviso. Nunca queda un editor vacío ni un estado "sin web" nuevo.
+    // OJO en el caso nunca-publicó: la DB queda SIN borrador (landing_draft = NULL) y esta plantilla
+    // es una semilla EN MEMORIA, no algo guardado. Por eso Guardar sigue habilitado en 'unpublished'
+    // (ver canSave): el dueño puede materializarla cuando quiera, sin dead-end.
     const restored = publishedBaseline ?? stripPrimary(DEFAULT_LANDING_CONFIG)
     setDraft(restored)
     setSavedBaseline(restored)
