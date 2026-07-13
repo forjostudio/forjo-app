@@ -11,6 +11,7 @@ import {
   configsEqual,
   deriveEditorState,
   deriveStateLabel,
+  diffConfigParts,
 } from '@/lib/landing/editor-draft'
 import { SECTION_TYPES } from '@/lib/landing/schema'
 import type { LandingConfig } from '@/lib/landing/schema'
@@ -513,5 +514,137 @@ describe('deriveStateLabel (el texto del indicador; 3 estados, 4 textos)', () =>
     expect(deriveStateLabel({ editorState: state, published: null, hasPersistedDraft: false })).toBe(
       'Sin publicar',
     )
+  })
+})
+
+// ── diffConfigParts (Phase 16, D-01/D-02/D-05) ────────────────────────────────────────
+// El motor del aviso de choque operador↔dueño: qué PARTES del config difieren entre el
+// borrador y lo publicado. Dos invariantes que el type-check NO agarra y que estos tests sí:
+//   1. el compare es CANÓNICO (Postgres reordena las claves del jsonb → un stringify crudo
+//      diría "distinto" siempre y el aviso sería ruido);
+//   2. ambos lados se NORMALIZAN antes de comparar (el builder emite 5 secciones, el editor
+//      del dueño las materializa a 8 → sin normalizar, abrir el editor y guardar sin tocar
+//      nada dispararía el aviso con todas las secciones listadas: falso positivo).
+describe('diffConfigParts (qué partes del config difieren entre borrador y publicado)', () => {
+  it('dos configs idénticos no difieren en nada', () => {
+    expect(diffConfigParts(baseConfig(), baseConfig())).toEqual([])
+  })
+
+  it('el mismo config con las claves en distinto orden (round-trip por jsonb) NO difiere', () => {
+    // Lo que devuelve Postgres: mismas claves, otro orden (jsonb las almacena por longitud +
+    // orden binario, no por orden de inserción). Se construye a mano, sin mockear Supabase.
+    const a: LandingConfig = {
+      theme: { preset: 'forjo', overrides: { palette: 'red', mode: 'dark' } },
+      motion: 'subtle',
+      sections: SECTION_TYPES.map((type, i) => ({
+        type,
+        enabled: true,
+        order: i,
+        data: { title: 'T', subtitle: 'S' },
+      })),
+    }
+    const b = {
+      motion: 'subtle',
+      sections: SECTION_TYPES.map((type, i) => ({
+        order: i,
+        data: { subtitle: 'S', title: 'T' },
+        type,
+        enabled: true,
+      })),
+      theme: { overrides: { mode: 'dark', palette: 'red' }, preset: 'forjo' },
+    } as unknown as LandingConfig
+    expect(diffConfigParts(a, b)).toEqual([])
+  })
+
+  it('cambiar hero.data.headline difiere solo en hero', () => {
+    const a = baseConfig()
+    const b = setSectionData(baseConfig(), 'hero', { headline: 'Otro titular' })
+    expect(diffConfigParts(a, b)).toEqual(['hero'])
+  })
+
+  it('cambiar hero y gallery difiere en las dos, en orden de SECTION_TYPES', () => {
+    const a = baseConfig()
+    let b = setSectionData(baseConfig(), 'gallery', { images: ['https://cdn.test/1.jpg'] })
+    b = setSectionData(b, 'hero', { headline: 'Otro titular' })
+    expect(diffConfigParts(a, b)).toEqual(['hero', 'gallery'])
+  })
+
+  it('togglear enabled de "about" difiere solo en about', () => {
+    const a = baseConfig()
+    const b = toggleSection(baseConfig(), 'about')
+    expect(diffConfigParts(a, b)).toEqual(['about'])
+  })
+
+  it('reordenar hero↔about difiere en las dos (el order cuenta como cambio)', () => {
+    const a = baseConfig()
+    const b = moveSection(baseConfig(), 'about', 'up')
+    expect(diffConfigParts(a, b)).toEqual(['hero', 'about'])
+  })
+
+  it('cambiar theme.overrides.palette difiere solo en theme', () => {
+    const a = baseConfig()
+    const b = setTheme(baseConfig(), { palette: 'blue' })
+    expect(diffConfigParts(a, b)).toEqual(['theme'])
+  })
+
+  it('cambiar theme.preset difiere solo en theme', () => {
+    const a = baseConfig()
+    const b = setTheme(baseConfig(), { preset: 'meitre' })
+    expect(diffConfigParts(a, b)).toEqual(['theme'])
+  })
+
+  it('cambiar motion de premium a subtle difiere solo en motion', () => {
+    const a = setMotion(baseConfig(), 'premium')
+    const b = setMotion(baseConfig(), 'subtle')
+    expect(diffConfigParts(a, b)).toEqual(['motion'])
+  })
+
+  it('ANTI-FALSO-POSITIVO: 5 secciones (builder) vs 8 materializadas (editor) NO difieren', () => {
+    // El config que emite buildLandingConfig: omite las secciones vacías.
+    const delBuilder: LandingConfig = {
+      theme: { preset: 'forjo', overrides: { palette: 'red' } },
+      motion: 'subtle',
+      sections: [
+        { type: 'hero', enabled: true, order: 0, data: { headline: 'Cortes con oficio' } },
+        { type: 'services', enabled: true, order: 1 },
+        { type: 'booking', enabled: true, order: 2 },
+      ],
+    }
+    // El mismo config tras pasar por el editor del dueño: las 8 materializadas (las faltantes
+    // en enabled:false) con el `order` contiguo que les asigna normalizeSections. Escrito A MANO
+    // a propósito: si se derivara con normalizeSections, el test no probaría nada.
+    const delEditor: LandingConfig = {
+      theme: { preset: 'forjo', overrides: { palette: 'red' } },
+      motion: 'subtle',
+      sections: [
+        { type: 'hero', enabled: true, order: 0, data: { headline: 'Cortes con oficio' } },
+        { type: 'about', enabled: false, order: 1 },
+        { type: 'services', enabled: true, order: 2 },
+        { type: 'booking', enabled: true, order: 3 },
+        { type: 'gallery', enabled: false, order: 4 },
+        { type: 'location', enabled: false, order: 5 },
+        { type: 'hours', enabled: false, order: 6 },
+        { type: 'cta', enabled: false, order: 7 },
+      ],
+    }
+    expect(diffConfigParts(delBuilder, delEditor)).toEqual([])
+  })
+
+  it('el orden del resultado es determinista: secciones (SECTION_TYPES), luego theme, luego motion', () => {
+    const a = setMotion(baseConfig(), 'premium')
+    let b = setSectionData(baseConfig(), 'hero', { headline: 'Otro' })
+    b = setTheme(b, { palette: 'blue' })
+    b = setMotion(b, 'none')
+    expect(diffConfigParts(a, b)).toEqual(['hero', 'theme', 'motion'])
+  })
+
+  it('es PURA: no muta ninguno de los dos argumentos', () => {
+    const a = baseConfig()
+    const b = toggleSection(baseConfig(), 'about')
+    const snapA = structuredClone(a)
+    const snapB = structuredClone(b)
+    diffConfigParts(a, b)
+    expect(a).toEqual(snapA)
+    expect(b).toEqual(snapB)
   })
 })
