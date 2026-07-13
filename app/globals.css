@@ -234,6 +234,8 @@
   --border: #d9ceb4;
   --input: #d9ceb4;
   --destructive: #b23a26;
+  --warning: #8a5a12;   /* mismo valor que :root — sin esto heredaría el ámbar de .dark (#e6b53f)
+                           sobre el crema de acá: ~1.9:1, ilegible. Simetría con --destructive. */
   --sidebar: #efe3cd;
   --sidebar-foreground: #1a1714;
   --sidebar-border: #ddd1b7;
