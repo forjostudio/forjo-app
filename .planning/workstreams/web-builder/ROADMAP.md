@@ -62,7 +62,7 @@ Detalle completo archivado en [`milestones/v0.16-ROADMAP.md`](../../milestones/v
 > **Por qué PUB-01 va ÚLTIMO:** exponer el editor a clientes reales mientras cada guardado todavía sale al aire es exactamente el error que este milestone viene a evitar. El CMS solo se abre cuando (a) guardar ya no publica y (b) la web armada por la skill nace como borrador. El orden no es preferencia: es el contenido del milestone.
 
 - [x] **Phase 15: Borrador y publicación (núcleo)** - `landing_draft` (migración aditiva) + el CMS escribe el borrador + botón Publicar/Descartar + el estado real de "cambios sin publicar"; la web pública sigue leyendo SOLO lo publicado (completed 2026-07-13)
-- [ ] **Phase 16: La web nace como borrador (skill del operador)** - `scripts/setup-landing.ts` escribe el borrador, no lo publicado; `--inspect` muestra borrador y publicado por separado
+- [x] **Phase 16: La web nace como borrador (skill del operador)** - `scripts/setup-landing.ts` escribe el borrador, no lo publicado; `--inspect` muestra borrador y publicado por separado (completed 2026-07-13)
 - [ ] **Phase 17: Exponer el CMS a clientes reales** - Se retira el flag global `CMS_ENABLED`; `has_web_custom` queda como ÚNICO gate del editor
 
 ## Phase Details
@@ -116,7 +116,7 @@ Plans:
   2. El dueño revisa esa web en su editor y, al publicarla, recién ahí sale al aire — cerrando el circuito operador → dueño → público.
   3. `--inspect` muestra **borrador y publicado por separado**, de modo que el operador sabe qué está al aire y qué quedó pendiente de aprobación.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -129,7 +129,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 16-03-PLAN.md — `.claude/skills/forjo-web-builder/SKILL.md`: edición desde el borrador (D-04), aviso en el checkpoint, `--publish` con el OK del dueño, guardrail "la web nace como borrador" (wave 3)
+- [x] 16-03-PLAN.md — `.claude/skills/forjo-web-builder/SKILL.md`: edición desde el borrador (D-04), aviso en el checkpoint, `--publish` con el OK del dueño, guardrail "la web nace como borrador" (wave 3)
 
 **UI hint**: no (script local + SKILL.md — no toca la superficie web)
 
@@ -162,7 +162,7 @@ Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer e
 | 13. CMS foundation — write path owner-only + flag | v0.16 | 1/1 | Complete | 2026-07-08 |
 | 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
 | 15. Borrador y publicación (núcleo) | v0.18 | 3/3 | Complete    | 2026-07-13 |
-| 16. La web nace como borrador (skill) | v0.18 | 2/3 | In Progress|  |
+| 16. La web nace como borrador (skill) | v0.18 | 3/3 | Complete   | 2026-07-13 |
 | 17. Exponer el CMS a clientes reales | v0.18 | 0/? | Not started | - |
 
 ## Requirement Coverage (v0.18)
