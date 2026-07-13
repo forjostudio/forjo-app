@@ -101,6 +101,9 @@ const ACTION_ERROR_COPY: Record<string, string> = {
   unauthorized: 'Tu sesión expiró. Volvé a iniciar sesión.',
   no_business: 'No encontramos tu negocio. Recargá la página.',
   invalid_config: 'Hay un dato inválido en tu web. Revisá los campos marcados.',
+  // T-15-16: tope de tamaño del config (256 KB). Inalcanzable escribiendo copy a mano (el config real
+  // pesa ~2 KB); si aparece, es un payload inflado, no un error del dueño.
+  config_too_large: 'Tu web tiene demasiado contenido para guardarse. Quitá algo de texto o fotos.',
   update_failed: 'No se pudo guardar el borrador. Probá de nuevo.',
   server_error: 'Ocurrió un error. Probá de nuevo en unos segundos.',
   // Códigos de Phase 15 (publicar / descartar).

@@ -171,8 +171,14 @@ export async function publishLanding(): Promise<Result> {
 
     // 6. Zod ESTRICTO sobre lo LEÍDO DE LA DB (no sobre un body): reject-on-invalid, nunca coerción a
     //    DEFAULT (eso es el contrato de RENDER, no el de ESCRITURA). Un borrador corrupto no sale al aire.
+    //    Desde T-15-16 el parse valida TAMBIÉN el `data` de cada sección por tipo y topea el tamaño:
+    //    un borrador escrito fuera de la app (script del operador con service-role, versión vieja del
+    //    editor) con un `javascript:` adentro NO se publica. El código de tamaño se propaga tal cual —
+    //    decirle "hay un dato inválido" a un dueño cuyo config pesa 300 KB sería mentirle.
     const parsed = parseLandingConfigForWrite(business.landing_draft)
-    if (!parsed.ok) return { ok: false, error: 'invalid_draft' }
+    if (!parsed.ok) {
+      return { ok: false, error: parsed.error === 'config_too_large' ? 'config_too_large' : 'invalid_draft' }
+    }
 
     // 7. La copia. Solo landing_config; el BORRADOR QUEDA INTACTO (D-02: post-publicación draft ==
     //    published, y el editor lo refleja sin refetch). `.select('id')` detecta el update no-op.

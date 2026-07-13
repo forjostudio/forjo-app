@@ -82,6 +82,17 @@ export function parseLandingConfig(raw: unknown): LandingConfig | null {
 // si el data está malformado → devuelve `{}` → la sección usa sus fallbacks (o se oculta),
 // NUNCA tira ni cierra el envelope F6. Defensa por-sección, no por-config.
 // booking NO lee data; Hours deriva solo de time_blocks → ninguno tiene esquema acá.
+//
+// ⚠ DOS VARIANTES POR SECCIÓN (T-15-16). Leer y escribir tienen contratos OPUESTOS:
+//   · `xxxData`       = `xxxDataStrict.catch({})` → contrato de RENDER (fail-safe). Un data roto
+//                        degrada a `{}` y la sección usa sus fallbacks. La web pública NUNCA 500ea.
+//                        Es lo que consumen los componentes de components/landing/**. NO SE TOCA.
+//   · `xxxDataStrict` = el z.object CRUDO, sin el `.catch({})` colgado → contrato de ESCRITURA
+//                        (reject-on-invalid, lib/landing/write.ts). Reusar la variante con catch en
+//                        el write path sería PEOR que no validar: un `data` inválido safe-parsearía
+//                        con éxito devolviendo `{}` y el dueño perdería la sección entera EN SILENCIO.
+// Los `.catch()` POR CAMPO (las escalas del hero, cta.links) SÍ viven dentro de la variante strict a
+// propósito: degradan ESE campo (no persisten el valor basura) sin hacerle perder el copy al dueño.
 
 // ⚠ SEGURIDAD — por qué NO alcanza z.string().url() para NINGUNA url del config.
 // `z.url()` valida que el string PARSEE como URL, y `javascript:alert(1)` parsea perfecto. Estos
@@ -107,7 +118,7 @@ const safeLinkUrl = z.string().refine(
   { message: 'La URL debe empezar con https://' },
 )
 
-export const heroData = z
+export const heroDataStrict = z
   .object({
     headline: z.string().optional(),
     // kicker: eyebrow editorial del hero (ej. la ciudad/zona del negocio). Reemplaza al rubro
@@ -138,33 +149,30 @@ export const heroData = z
     kicker_scale: z.number().int().min(70).max(160).optional().catch(undefined),
     subhead_scale: z.number().int().min(70).max(160).optional().catch(undefined),
   })
-  .catch({})
+export const heroData = heroDataStrict.catch({})
 export type HeroData = z.infer<typeof heroData>
 
-export const aboutData = z
-  .object({
-    title: z.string().optional(),
-    body: z.string().optional(),
-    image: safeLinkUrl.optional(), // allowlist http/https (ver safeLinkUrl)
-  })
-  .catch({})
+export const aboutDataStrict = z.object({
+  title: z.string().optional(),
+  body: z.string().optional(),
+  image: safeLinkUrl.optional(), // allowlist http/https (ver safeLinkUrl)
+})
+export const aboutData = aboutDataStrict.catch({})
 export type AboutData = z.infer<typeof aboutData>
 
 // La LISTA de servicios viene de la tabla `services` (D7-06): el data solo aporta título/subtítulo.
-export const servicesData = z
-  .object({
-    title: z.string().optional(),
-    subtitle: z.string().optional(),
-  })
-  .catch({})
+export const servicesDataStrict = z.object({
+  title: z.string().optional(),
+  subtitle: z.string().optional(),
+})
+export const servicesData = servicesDataStrict.catch({})
 export type ServicesData = z.infer<typeof servicesData>
 
-export const galleryData = z
-  .object({
-    title: z.string().optional(),
-    images: z.array(safeLinkUrl).optional(), // allowlist http/https (ver safeLinkUrl)
-  })
-  .catch({})
+export const galleryDataStrict = z.object({
+  title: z.string().optional(),
+  images: z.array(safeLinkUrl).optional(), // allowlist http/https (ver safeLinkUrl)
+})
+export const galleryData = galleryDataStrict.catch({})
 export type GalleryData = z.infer<typeof galleryData>
 
 // Data de la galería de la RESERVA (F12, RSV — la CONSUME el Plan 02). Campo dedicado, NO
@@ -174,13 +182,12 @@ export type GalleryData = z.infer<typeof galleryData>
 // dinámico (Pitfall 4 / Zod v4 exige 2 args). `images` con safeLinkUrl (control V5 input
 // validation): evita renderizar URL no-http en el Plan 02 — una url inválida invalida el
 // objeto entero → {} (el .catch({}) lo captura).
-export const rsvData = z
-  .object({
-    header: z.string().optional(),
-    intro: z.string().optional(),
-    images: z.array(safeLinkUrl).optional(), // allowlist http/https (ver safeLinkUrl)
-  })
-  .catch({})
+export const rsvDataStrict = z.object({
+  header: z.string().optional(),
+  intro: z.string().optional(),
+  images: z.array(safeLinkUrl).optional(), // allowlist http/https (ver safeLinkUrl)
+})
+export const rsvData = rsvDataStrict.catch({})
 export type RsvData = z.infer<typeof rsvData>
 
 // Las locations vienen de la tabla (D7-06); map_url/show_address vienen del config (Assumption A2).
@@ -190,14 +197,26 @@ export type RsvData = z.infer<typeof rsvData>
 // (cualquier visitante que toque "Ver en el mapa" ejecutaría script en el origen del sitio). El
 // .catch({}) de abajo sigue haciendo su trabajo: un map_url con protocolo raro degrada la sección
 // (sin link) — nunca tira la página.
-export const locationData = z
-  .object({
-    title: z.string().optional(),
-    map_url: safeLinkUrl.optional(),
-    show_address: z.boolean().optional(),
-  })
-  .catch({})
+export const locationDataStrict = z.object({
+  title: z.string().optional(),
+  map_url: safeLinkUrl.optional(),
+  show_address: z.boolean().optional(),
+})
+export const locationData = locationDataStrict.catch({})
 export type LocationData = z.infer<typeof locationData>
+
+// ── hours: la ÚNICA sección sin esquema de render ─────────────────────────────────────────
+// Hours deriva 100% de `time_blocks`; su `data` no se edita en el CMS (el form es read-only,
+// _sections/section-forms.tsx:514) y el config real de producción trae la sección SIN `data`.
+// Pero el renderer SÍ lee un `title` opcional de forma defensiva (components/landing/hours.tsx:81)
+// y `buildLandingConfig` puede emitirlo (lib/landing/builder.ts:167) → si el write path rechazara
+// `{ title }`, un dueño cuya web armó el operador con ese título NO PODRÍA GUARDAR NUNCA.
+// Por eso el contrato de escritura de hours es EXACTAMENTE el que ya existe en el código: `title`
+// opcional y NADA MÁS. Cualquier otra clave se estripa; cualquier otra forma (un string, un número)
+// se RECHAZA. Solo existe la variante strict: el render no la usa (lee con readTitle a mano).
+export const hoursDataStrict = z.object({
+  title: z.string().optional(),
+})
 
 // Botón extra del CTA (ej. Instagram, la carta, cómo llegar). Label + destino externo.
 const ctaLink = z.object({
@@ -206,7 +225,7 @@ const ctaLink = z.object({
 })
 export type CtaLink = z.infer<typeof ctaLink>
 
-export const ctaData = z
+export const ctaDataStrict = z
   .object({
     headline: z.string().optional(),
     // Texto del botón que ancla a la reserva (#reservar). Ausente → 'Reservar turno'.
@@ -227,5 +246,5 @@ export const ctaData = z
       )
       .catch(undefined),
   })
-  .catch({})
+export const ctaData = ctaDataStrict.catch({})
 export type CtaData = z.infer<typeof ctaData>
