@@ -2,13 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.18
 milestone_name: CMS Publish / Go-live
-status: planning
-last_updated: "2026-07-12T00:00:00.000Z"
-last_activity: 2026-07-12
+status: Ready to execute
+stopped_at: Phase 15 planned (3 planes, 3 waves)
+last_updated: "2026-07-13T01:14:41.588Z"
+last_activity: 2026-07-12 — Phase 15 planificada: 3 planes / 3 waves, PUB-03..PUB-08 (6/6), D-01..D-15 (15/15), plan-checker PASSED
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -25,9 +26,9 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 ## Current Position
 
 Phase: 15 — Borrador y publicación (núcleo)
-Plan: —
-Status: Roadmap creado, sin planificar
-Last activity: 2026-07-12 — ROADMAP v0.18 creado (Phases 15-17, 9/9 requisitos mapeados)
+Plan: 0/3 (15-01 migración+aislamiento · 15-02 acciones+estado · 15-03 UI publish)
+Status: Ready to execute
+Last activity: 2026-07-12 — Phase 15 planificada: 3 planes / 3 waves, plan-checker PASSED (10/10 checks duros), cobertura 6/6 reqs + 15/15 decisiones
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
 
@@ -111,11 +112,13 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 
 ## Session Continuity
 
-Last session: 2026-07-12
-Stopped at: ROADMAP v0.18 creado
-Resume file: None
+Last session: 2026-07-13T01:14:41.577Z
+Stopped at: Phase 15 planned (3 planes, 3 waves) — Ready to execute
+Resume file: .planning/workstreams/web-builder/phases/15-borrador-y-publicaci-n-n-cleo/15-01-PLAN.md
 
 ## Operator Next Steps
 
 - `gsd-tools query workstream set web-builder` (pointer activo) + checkout de `gsd/gestion-rebrand`
-- `/gsd:plan-phase 15 --ws web-builder`
+- Docker corriendo + `.env.test.local` apuntando al Supabase local (si no, los tests de aislamiento salen `skipped` = falso positivo de seguridad en una fase security-sensitive)
+- `/gsd:execute-phase 15 --ws web-builder`
+- Después: `/gsd:secure-phase 15` (fase SECURITY-SENSITIVE) y `/gsd:verify-work 15`

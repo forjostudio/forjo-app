@@ -83,8 +83,16 @@ Detalle completo archivado en [`milestones/v0.16-ROADMAP.md`](../../milestones/v
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 15-01-PLAN.md — Migración 050 (`businesses.landing_draft`, aditiva) + 4 tests de aislamiento del borrador (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 15-02-PLAN.md — Write path: `saveLandingDraft` / `publishLanding()` / `discardLandingDraft()` + los 2 configs en `page.tsx` + compare canónico (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 15-03-PLAN.md — Barra publish (3 acciones · 3 estados), dialogs de go-live y descarte, toasts, token `--warning` (wave 3)
 
 **UI hint**: yes
