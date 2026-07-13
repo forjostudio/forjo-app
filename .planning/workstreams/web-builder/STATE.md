@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.16
-milestone_name: Web Builder — Ampliación + CMS
-status: Awaiting next milestone
-stopped_at: Completed 14-03-PLAN.md
-last_updated: "2026-07-10T18:52:44.423Z"
-last_activity: 2026-07-10 — Milestone v0.16 completed and archived
+milestone: v0.18
+milestone_name: CMS Publish / Go-live
+status: planning
+last_updated: "2026-07-13T00:00:58.539Z"
+last_activity: 2026-07-13
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 
 ## Current Position
 
-Phase: Milestone v0.16 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-10 — Milestone v0.16 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-13 — Milestone v0.18 started
 
 ## Performance Metrics
 
