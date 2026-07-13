@@ -163,7 +163,8 @@ export function WebEditorClient({
   const [discarding, setDiscarding] = useState(false)
   // Mobile: toggle Editar / Vista previa (§1). Desktop es split y este estado se ignora.
   const [mobileView, setMobileView] = useState<'edit' | 'preview'>('edit')
-  // Dialog destructivo de descarte (el de go-live llega en la tarea 3 de este plan).
+  // Dialogs de la barra publish: go-live (primera publicación) y descarte destructivo.
+  const [showGoLive, setShowGoLive] = useState(false)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
 
   const dirty = isDirty(draft, savedBaseline)
@@ -254,8 +255,10 @@ export function WebEditorClient({
     //    es UNA sola acción, no parpadea "Guardando…" → "Publicando…".
     const saved = await saveLandingDraft(draft)
     if (!saved.ok) {
-      // El guardado falló ⇒ NO se publica (publicaríamos algo distinto de lo que ve el dueño).
+      // El guardado falló ⇒ NO se publica (publicaríamos algo distinto de lo que ve el dueño). El
+      // dialog se cierra recién acá, con la respuesta en la mano, y el borrador queda intacto.
       setPublishing(false)
+      setShowGoLive(false)
       toast.error(ACTION_ERROR_COPY[saved.error] ?? ACTION_ERROR_COPY.server_error)
       return
     }
@@ -265,6 +268,7 @@ export function WebEditorClient({
     // 2. La publicación (sin argumentos: lo que sale al aire se lee de la DB, T-15-05).
     const res = await publishLanding()
     setPublishing(false)
+    setShowGoLive(false)
     if (!res.ok) {
       toast.error(ACTION_ERROR_COPY[res.error] ?? ACTION_ERROR_COPY.server_error)
       return
@@ -280,10 +284,13 @@ export function WebEditorClient({
     })
   }
 
-  // Click en Publicar. La tarea 3 de este plan intercala acá el dialog de go-live cuando el negocio
-  // nunca publicó (D-08); las publicaciones siguientes publican de un click.
+  // Click en Publicar: la PRIMERA publicación del negocio pasa por el dialog de go-live (D-08 — la
+  // condición se deriva de los datos, así que aparece exactamente una vez en la vida del negocio);
+  // las siguientes publican de un click, sin dialog.
   function handlePublishClick() {
-    void runPublish()
+    if (blocked || editorState === 'published') return
+    if (neverPublished) setShowGoLive(true)
+    else void runPublish()
   }
 
   // ── Descartar (D-12/D-13/D-14): el borrador vuelve a ser copia fiel de lo publicado ──────
@@ -559,10 +566,52 @@ export function WebEditorClient({
         </div>
       </div>
 
+      {/* ── Dialog de go-live (PUB-04/PUB-07, D-08/D-09) ─────────────────────────────────────
+          Solo se abre si el negocio NUNCA publicó (publishedBaseline === null). La condición se
+          deriva de los datos ⇒ aparece exactamente una vez en la vida del negocio, sin casilla "no
+          volver a mostrar" ni preferencia persistida.
+          D-11 (PROHIBICIÓN): el dialog SOLO CONFIRMA, no evalúa nada. No hay chequeo de calidad
+          pre-publicación (checklist blando, "tu hero no tiene título", mínimos de contenido): si el
+          Zod estricto del server acepta el borrador, se publica. El renderer es fail-safe con
+          secciones vacías y el dueño ve exactamente lo que va a salir, en su preview.
+          El confirmatorio NO es destructivo: publicar no destruye nada y es reversible editando y
+          volviendo a publicar. Foco inicial en [Publicar]. */}
+      <Dialog open={showGoLive} onOpenChange={(o) => !publishing && setShowGoLive(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Publicar tu web</DialogTitle>
+            <DialogDescription>
+              {`A partir de ahora, quien entre a forjo.studio/${business.slug} va a ver tu web en vez de la página de reservas simple. Las reservas siguen funcionando igual, dentro de tu web.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => setShowGoLive(false)}
+              disabled={publishing}
+            >
+              Cancelar
+            </Button>
+            {/* El dialog NO se cierra antes de la respuesta: el botón pasa a "Publicando…" + disabled
+                mientras corre el encadenado guardar → publicar. */}
+            <Button
+              autoFocus
+              className="min-h-11"
+              onClick={() => void runPublish()}
+              disabled={publishing}
+            >
+              {publishing ? 'Publicando…' : 'Publicar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Dialog de descartar (PUB-06, D-12/D-13/D-14) ────────────────────────────────────
           Recicla el bloque de confirm-on-exit (que era código muerto: el prompt de recarga lo hace
           el beforeunload nativo). Descartar es IRREVERSIBLE (no hay historial) → merece fricción:
-          sin undo y sin toast-deshacer. Foco inicial en "Seguir editando", la opción segura.
+          sin undo y sin toast-deshacer. El foco inicial va en la opción SEGURA (la de cancelar), no
+          en la destructiva.
           D-14: el copy NO menciona las fotos. Al descartar, los objetos subidos al borrador quedan
           huérfanos y Storage no se toca — prometer una limpieza que no ocurre sería mentir. */}
       <Dialog open={showDiscardConfirm} onOpenChange={(o) => !discarding && setShowDiscardConfirm(o)}>
