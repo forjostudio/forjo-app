@@ -53,11 +53,25 @@ npm run setup:landing -- --inspect <slug>
 ```
 
 Imprime un JSON read-only: `id`, `nombre`, `vertical`, `tema_actual` (theme/palette/font/
-primary_color), `whatsapp`, `servicios_activos` + lista de `servicios`, y si el `landing_config`
-ya está `poblado` o `null`. **No escribe nada** — re-correrlo da el mismo output.
+primary_color), `whatsapp`, `servicios_activos` + lista de `servicios`, y **las DOS columnas del
+landing por separado**. **No escribe nada** — re-correrlo da el mismo output.
+
+Las claves del landing en ese JSON son dos cosas distintas y no se confunden:
+
+| Clave | Qué es |
+|---|---|
+| `al_aire` | **LO PUBLICADO**: lo que ve cualquier visitante en `/[slug]` ahora mismo. |
+| `pendiente_de_aprobacion` | **EL BORRADOR**: lo que ve el dueño en su editor y **todavía NO salió al aire**. |
+| `nunca_publico` | `true` → el negocio nunca publicó: su `/[slug]` sigue mostrando la reserva simple. |
+| `tiene_cambios_sin_publicar` | `true` → el dueño tiene trabajo suyo pendiente de publicar. |
+| `partes_sin_publicar` | Qué partes difieren de lo publicado (ej. `["hero","gallery"]`). |
 
 - Si el slug no existe → el script lo reporta; pará y pedí el slug correcto.
-- Si ya tiene `landing_config: poblado`, avisá al operador que la escritura lo **sobre-escribe**.
+- **La escritura por defecto NO toca lo publicado**: escribe el **borrador** (`landing_draft`) y es el
+  **dueño** quien lo publica desde su panel. Ya no hay sobre-escritura de la web al aire, salvo que se
+  pida `--publish` explícitamente (paso 7).
+- Si `tiene_cambios_sin_publicar` es `true`, el dueño tiene trabajo sin publicar → **ese dato se lleva
+  al checkpoint del paso 6**. Acá no se decide nada: se anota y se muestra cuando toca aprobar.
 - **`services` se deriva sola de la tabla** (D10-04): la skill NO arma una lista de servicios.
   De la sección services solo definís **título/subtítulo**; los items los pone el renderer.
 
@@ -79,10 +93,23 @@ corto que parte de lo último que se escribió y toca solo el campo pedido.
      npm run setup:landing -- --inspect <slug>
      ```
 
-     El `--inspect` extendido **vuelca el `landing_config` completo** (copy incluido), así que el
-     operador **no re-tipea todo**: solo confirma o retoca. Avisale que, al escribir, se va a
-     **re-generar el config completo** a partir del payload reconstruido. Si algún campo del config
-     volcado no alcanza para reconstruir lo que necesitás, pedíselo puntualmente al operador.
+     **De qué columna partís (regla dura, no es una preferencia):** reconstruí el `BuilderInput` /
+     `brand` **SIEMPRE desde `pendiente_de_aprobacion`** (el borrador). **Solo si esa clave es `null`**
+     (negocio legacy, sin borrador) caés a `al_aire` (lo publicado).
+
+     **Por qué:** el borrador es **lo último que se tocó** e incluye **los retoques que el dueño hizo y
+     no publicó**. Partir de lo publicado los **descartaría en silencio** al re-escribir: es la misma
+     pérdida que el aviso de choque del paso 6 viene a evitar, pero **por la puerta de atrás**, donde
+     ningún aviso es posible. Lo único que puede pisar el trabajo del dueño es una decisión **avisada**
+     del operador, nunca un default silencioso.
+
+     Si el dueño rompió su borrador y quiere volver a lo que está al aire, **eso no se resuelve desde
+     acá**: lo resuelve él con el botón **"Descartar"** de SU editor, que es donde corresponde.
+
+     El volcado trae el copy completo, así que el operador **no re-tipea todo**: solo confirma o
+     retoca. Avisale que, al escribir, se va a **re-generar el config completo** a partir del payload
+     reconstruido. Si algún campo del config volcado no alcanza para reconstruir lo que necesitás,
+     pedíselo puntualmente al operador.
 
 2. **Aplicá SOLO el cambio pedido** sobre `input`/`brand` del payload (ej. `hero.headline`, sumar
    `gallery.images`, cambiar `palette`). **No toques lo que no se pidió** — el resto queda idéntico.
@@ -103,9 +130,10 @@ corto que parte de lo último que se escribió y toca solo el campo pedido.
    npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json
    ```
 
-   Re-correr con el mismo payload da el mismo resultado: el script re-arma el `landing_config`
-   completo de forma determinista. "Aplicar solo el campo" = editar solo ese campo del payload,
-   **no** un patch parcial de la DB.
+   Re-correr con el mismo payload da el mismo resultado: el script re-arma el config completo de
+   forma determinista y lo escribe en el **borrador**. "Aplicar solo el campo" = editar solo ese campo
+   del payload, **no** un patch parcial de la DB. El retoque **tampoco sale al aire solo**: lo publica
+   el dueño (o el operador con `--publish`, y solo con el OK del dueño — paso 7).
 
 ---
 
@@ -221,6 +249,22 @@ proyecto. Mostrá:
 - **Tema** elegido: preset / palette / font / primary.
 - **Imágenes** a subir (lista de rutas locales, por rol: hero / about / gallery).
 - **Copy final** (ya humanizado) de cada sección.
+- **Destino de la escritura** (decilo siempre, explícito): `landing_draft` → **borrador**, el dueño lo
+  revisa y lo publica desde su panel. O, **solo si el operador pidió `--publish`**: borrador **+ AL
+  AIRE** (la web se publica ya).
+- **Aviso de choque, si aplica.** Si el `--inspect` del paso 2 marcó `tiene_cambios_sin_publicar`,
+  mostralo acá, con el copy del script:
+
+  `⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: hero, gallery. Si seguís, los pisás.`
+
+  El operador decide **en el momento, con el dato a la vista**. El flujo **NO aborta ni obliga a
+  re-correr nada**: el caso limpio (el 95%) no paga fricción. Si el operador no quiere pisar el trabajo
+  del dueño, para acá y le escribe por WhatsApp — es una decisión suya, no del script.
+
+**El checkpoint bloqueante vive ACÁ, no en el script.** `scripts/setup-landing.ts` **solo imprime** el
+aviso: no tiene confirmación interactiva. Cuando el proceso Node arranca, la escritura **ya está
+aprobada**. Si este paso no muestra el aviso, el aviso se pierde en el scroll y el trabajo del dueño se
+pisa sin que nadie lo haya decidido.
 
 **Nada se sube ni se escribe hasta que el operador apruebe.** Si rechaza → no escribís nada,
 ajustás según el feedback y volvés a mostrar el checkpoint.
@@ -238,13 +282,36 @@ escribir). Si ya existe `landing-payloads/<slug>.json`, partí de ese y editá l
 npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json
 ```
 
-El script, en orden: resuelve `business_id` del slug → re-hostea cada imagen local a
-`landing-assets/{businessId}/{uuid}.webp` (re-encode con sharp) y reemplaza las rutas por URLs
-públicas de Storage → arma el config con `buildLandingConfig` + `recommendTheme` → **GATE**
-`parseLandingConfig` (SKILL-04) → `UPDATE ... WHERE id = businessId` (por id, NUNCA por slug).
+El script, en orden: resuelve `business_id` del slug → avisa si el dueño tiene trabajo sin publicar →
+re-hostea cada imagen local a `landing-assets/{businessId}/{uuid}.webp` (re-encode con sharp) y
+reemplaza las rutas por URLs públicas de Storage → arma el config con `buildLandingConfig` +
+`recommendTheme` → **GATE ESTRICTO** `parseLandingConfigForWrite` (SKILL-04: rechaza ruidosamente con
+`invalid_config` / `config_too_large`; **NO** degrada una sección inválida a `{}`) →
+`UPDATE ... WHERE id = businessId` (por id, NUNCA por slug) escribiendo **SOLO `landing_draft`**.
 
-Si el script **aborta** (el gate Zod falla, o falla el re-hosteo) → reportá el error tal cual y
-**NO reintentes a ciegas**. Revisá el payload y volvé al checkpoint.
+**La web NO sale al aire.** Lo que escribe este comando es el **borrador**: `/[slug]` sigue mostrando
+lo que ya había (su web vieja, o la reserva simple). **El dueño la revisa en su editor (`/web`) y la
+publica él.**
+
+Si el script **aborta** (el gate estricto rechaza el config con `invalid_config` / `config_too_large`,
+o falla el re-hosteo) → reportá el error tal cual y **NO reintentes a ciegas**. Revisá el payload y
+volvé al checkpoint.
+
+**Avisarle al dueño que su web está lista: por WhatsApp, vos.** No hay **nada en código** que lo
+notifique (ni mail ni badge) — no lo inventes ni lo prometas.
+
+#### `--publish` (opt-in — solo con el OK explícito del dueño)
+
+```powershell
+npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json --publish
+```
+
+Escribe **las dos columnas** (borrador **+** publicado) con el mismo config validado, y **antes**
+imprime qué web está por reemplazar (o avisa que es el **GO-LIVE** del negocio, si nunca publicó).
+
+**Regla dura: `--publish` solo se usa cuando el DUEÑO dio el OK explícito.** El caso real es el dueño
+que pide "hacémela y subila" y nunca entra al panel. **Nunca por defecto, nunca "por las dudas", nunca
+sin decírselo.**
 
 ### 8. OUTPUT
 
