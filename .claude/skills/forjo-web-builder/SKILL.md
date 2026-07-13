@@ -2,9 +2,11 @@
 name: forjo-web-builder
 description: >
   Arma la web de marca a medida de un negocio de Forjo Gestión: junta marca + contenido,
-  lo mapea al `landing_config`, recomienda tema, sube imágenes y deja la preview viva en
-  su `/[slug]` con las reservas nativas ya integradas. Produce el config POR SLUG y devuelve
-  la URL de preview. Activá esta skill cuando el operador diga cosas como "armale la web a
+  lo mapea al config del landing, recomienda tema, sube imágenes y deja la web armada
+  COMO BORRADOR, con las reservas nativas ya integradas, esperando la aprobación del
+  dueño (que la publica desde su panel). Produce el config POR SLUG y devuelve el estado:
+  borrador escrito, qué partes cambian, y si choca con trabajo sin publicar del dueño.
+  Activá esta skill cuando el operador diga cosas como "armale la web a
   [cliente]", "personalizar la web de un negocio", "generar landing para [slug]", "hacele una
   web estilo jjotalab a [cliente]", "convertir el Instagram de [cliente] en su página de
   reservas", o cualquier variante de generar/personalizar la landing de un negocio existente.
@@ -17,8 +19,12 @@ description: >
 Orquestás el flujo punta a punta para darle a un cliente de Forjo Gestión su web de marca a
 medida (estilo jjotalab.com) **dentro de Forjo**, servida por `/[slug]`, con el sistema de
 reservas ya existente integrado nativamente. No programás nada nuevo por cliente: el resultado
-es una fila `businesses.landing_config` poblada + imágenes en Storage. El config es **dato, no
-código** → aplicar una web es escribir la fila, instantáneo, sin deploy.
+es una fila de `businesses` con el config del landing + imágenes en Storage. El config es **dato,
+no código** → **no hay deploy**: escribir la fila alcanza y es instantáneo.
+
+Pero entre esa escritura y el público hay **una aprobación del dueño**. Por defecto la web que armás
+va al **borrador** (`businesses.landing_draft`) y **no sale al aire**: el dueño la mira en su editor y
+la publica él. Ese es el circuito: **operador → dueño → público**.
 
 **Regla fundamental (heredada de instagram-a-web): no inventes ningún dato.** No inventes
 servicios, precios, testimonios ni biografía. Todo sale del negocio real (tabla) o del scrape/
@@ -33,7 +39,8 @@ operador. Si falta info, la pedís — no la rellenás.
 - **Toda la escritura la hace `scripts/setup-landing.ts`** vía service-role local (D10-01 / SKILL-04).
   La frontera de seguridad es la máquina del operador, no un endpoint. **NUNCA** expongas un
   endpoint web para esto, ni metas secretos en el config o en la vista `public_businesses`.
-- La capa de plantilla (schema + renderer + temas) ya existe: vos solo armás el `landing_config`.
+- La capa de plantilla (schema + renderer + temas) ya existe: vos solo armás el **config del landing**
+  (que por defecto se escribe en el **borrador**, `businesses.landing_draft` — ver paso 7).
 
 ---
 
@@ -53,11 +60,25 @@ npm run setup:landing -- --inspect <slug>
 ```
 
 Imprime un JSON read-only: `id`, `nombre`, `vertical`, `tema_actual` (theme/palette/font/
-primary_color), `whatsapp`, `servicios_activos` + lista de `servicios`, y si el `landing_config`
-ya está `poblado` o `null`. **No escribe nada** — re-correrlo da el mismo output.
+primary_color), `whatsapp`, `servicios_activos` + lista de `servicios`, y **las DOS columnas del
+landing por separado**. **No escribe nada** — re-correrlo da el mismo output.
+
+Las claves del landing en ese JSON son dos cosas distintas y no se confunden:
+
+| Clave | Qué es |
+|---|---|
+| `al_aire` | **LO PUBLICADO** (columna `landing_config`): lo que ve cualquier visitante en `/[slug]` ahora mismo. |
+| `pendiente_de_aprobacion` | **EL BORRADOR** (columna `landing_draft`): lo que ve el dueño en su editor y **todavía NO salió al aire**. |
+| `nunca_publico` | `true` → el negocio nunca publicó: su `/[slug]` sigue mostrando la reserva simple. |
+| `tiene_cambios_sin_publicar` | `true` → el dueño tiene trabajo suyo pendiente de publicar. |
+| `partes_sin_publicar` | Qué partes difieren de lo publicado (ej. `["hero","gallery"]`). |
 
 - Si el slug no existe → el script lo reporta; pará y pedí el slug correcto.
-- Si ya tiene `landing_config: poblado`, avisá al operador que la escritura lo **sobre-escribe**.
+- **La escritura por defecto NO toca lo publicado**: escribe el **borrador** (`landing_draft`) y es el
+  **dueño** quien lo publica desde su panel. Ya no hay sobre-escritura de la web al aire, salvo que se
+  pida `--publish` explícitamente (paso 7).
+- Si `tiene_cambios_sin_publicar` es `true`, el dueño tiene trabajo sin publicar → **ese dato se lleva
+  al checkpoint del paso 6**. Acá no se decide nada: se anota y se muestra cuando toca aprobar.
 - **`services` se deriva sola de la tabla** (D10-04): la skill NO arma una lista de servicios.
   De la sección services solo definís **título/subtítulo**; los items los pone el renderer.
 
@@ -79,10 +100,23 @@ corto que parte de lo último que se escribió y toca solo el campo pedido.
      npm run setup:landing -- --inspect <slug>
      ```
 
-     El `--inspect` extendido **vuelca el `landing_config` completo** (copy incluido), así que el
-     operador **no re-tipea todo**: solo confirma o retoca. Avisale que, al escribir, se va a
-     **re-generar el config completo** a partir del payload reconstruido. Si algún campo del config
-     volcado no alcanza para reconstruir lo que necesitás, pedíselo puntualmente al operador.
+     **De qué columna partís (regla dura, no es una preferencia):** reconstruí el `BuilderInput` /
+     `brand` **SIEMPRE desde `pendiente_de_aprobacion`** (el borrador). **Solo si esa clave es `null`**
+     (negocio legacy, sin borrador) caés a `al_aire` (lo publicado).
+
+     **Por qué:** el borrador es **lo último que se tocó** e incluye **los retoques que el dueño hizo y
+     no publicó**. Partir de lo publicado los **descartaría en silencio** al re-escribir: es la misma
+     pérdida que el aviso de choque del paso 6 viene a evitar, pero **por la puerta de atrás**, donde
+     ningún aviso es posible. Lo único que puede pisar el trabajo del dueño es una decisión **avisada**
+     del operador, nunca un default silencioso.
+
+     Si el dueño rompió su borrador y quiere volver a lo que está al aire, **eso no se resuelve desde
+     acá**: lo resuelve él con el botón **"Descartar"** de SU editor, que es donde corresponde.
+
+     El volcado trae el copy completo, así que el operador **no re-tipea todo**: solo confirma o
+     retoca. Avisale que, al escribir, se va a **re-generar el config completo** a partir del payload
+     reconstruido. Si algún campo del config volcado no alcanza para reconstruir lo que necesitás,
+     pedíselo puntualmente al operador.
 
 2. **Aplicá SOLO el cambio pedido** sobre `input`/`brand` del payload (ej. `hero.headline`, sumar
    `gallery.images`, cambiar `palette`). **No toques lo que no se pidió** — el resto queda idéntico.
@@ -97,15 +131,21 @@ corto que parte de lo último que se escribió y toca solo el campo pedido.
    contiene solo copy/imágenes/tema — nunca credenciales ni columnas sensibles del tenant. Esperá
    aprobación explícita, con el mismo ethos bloqueante del paso 6.
 
+   Sumá los **mismos dos ítems del paso 6**: el **destino de la escritura** (borrador, o borrador + al
+   aire si se pidió `--publish`) y, si el `--inspect` marcó `tiene_cambios_sin_publicar`, el **aviso de
+   choque**. Acá es donde más riesgo hay de pisar el trabajo del dueño: estás retocando una web que él
+   ya puede haber tocado.
+
 5. **Re-escribí (idempotente, D-06).** Corré el mismo comando del paso 7 con el payload editado:
 
    ```powershell
    npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json
    ```
 
-   Re-correr con el mismo payload da el mismo resultado: el script re-arma el `landing_config`
-   completo de forma determinista. "Aplicar solo el campo" = editar solo ese campo del payload,
-   **no** un patch parcial de la DB.
+   Re-correr con el mismo payload da el mismo resultado: el script re-arma el config completo de
+   forma determinista y lo escribe en el **borrador**. "Aplicar solo el campo" = editar solo ese campo
+   del payload, **no** un patch parcial de la DB. El retoque **tampoco sale al aire solo**: lo publica
+   el dueño (o el operador con `--publish`, y solo con el OK del dueño — paso 7).
 
 ---
 
@@ -221,6 +261,22 @@ proyecto. Mostrá:
 - **Tema** elegido: preset / palette / font / primary.
 - **Imágenes** a subir (lista de rutas locales, por rol: hero / about / gallery).
 - **Copy final** (ya humanizado) de cada sección.
+- **Destino de la escritura** (decilo siempre, explícito): `landing_draft` → **borrador**, el dueño lo
+  revisa y lo publica desde su panel. O, **solo si el operador pidió `--publish`**: borrador **+ AL
+  AIRE** (la web se publica ya).
+- **Aviso de choque, si aplica.** Si el `--inspect` del paso 2 marcó `tiene_cambios_sin_publicar`,
+  mostralo acá, con el copy del script:
+
+  `⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: hero, gallery. Si seguís, los pisás.`
+
+  El operador decide **en el momento, con el dato a la vista**. El flujo **NO aborta ni obliga a
+  re-correr nada**: el caso limpio (el 95%) no paga fricción. Si el operador no quiere pisar el trabajo
+  del dueño, para acá y le escribe por WhatsApp — es una decisión suya, no del script.
+
+**El checkpoint bloqueante vive ACÁ, no en el script.** `scripts/setup-landing.ts` **solo imprime** el
+aviso: no tiene confirmación interactiva. Cuando el proceso Node arranca, la escritura **ya está
+aprobada**. Si este paso no muestra el aviso, el aviso se pierde en el scroll y el trabajo del dueño se
+pisa sin que nadie lo haya decidido.
 
 **Nada se sube ni se escribe hasta que el operador apruebe.** Si rechaza → no escribís nada,
 ajustás según el feedback y volvés a mostrar el checkpoint.
@@ -238,18 +294,54 @@ escribir). Si ya existe `landing-payloads/<slug>.json`, partí de ese y editá l
 npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json
 ```
 
-El script, en orden: resuelve `business_id` del slug → re-hostea cada imagen local a
-`landing-assets/{businessId}/{uuid}.webp` (re-encode con sharp) y reemplaza las rutas por URLs
-públicas de Storage → arma el config con `buildLandingConfig` + `recommendTheme` → **GATE**
-`parseLandingConfig` (SKILL-04) → `UPDATE ... WHERE id = businessId` (por id, NUNCA por slug).
+El script, en orden: resuelve `business_id` del slug → avisa si el dueño tiene trabajo sin publicar →
+re-hostea cada imagen local a `landing-assets/{businessId}/{uuid}.webp` (re-encode con sharp) y
+reemplaza las rutas por URLs públicas de Storage → arma el config con `buildLandingConfig` +
+`recommendTheme` → **GATE ESTRICTO** `parseLandingConfigForWrite` (SKILL-04: rechaza ruidosamente con
+`invalid_config` / `config_too_large`; **NO** degrada una sección inválida a `{}`) →
+`UPDATE ... WHERE id = businessId` (por id, NUNCA por slug) escribiendo **SOLO `landing_draft`**.
 
-Si el script **aborta** (el gate Zod falla, o falla el re-hosteo) → reportá el error tal cual y
-**NO reintentes a ciegas**. Revisá el payload y volvé al checkpoint.
+**La web NO sale al aire.** Lo que escribe este comando es el **borrador**: `/[slug]` sigue mostrando
+lo que ya había (su web vieja, o la reserva simple). **El dueño la revisa en su editor (`/web`) y la
+publica él.**
+
+Si el script **aborta** (el gate estricto rechaza el config con `invalid_config` / `config_too_large`,
+o falla el re-hosteo) → reportá el error tal cual y **NO reintentes a ciegas**. Revisá el payload y
+volvé al checkpoint.
+
+**Avisarle al dueño que su web está lista: por WhatsApp, vos.** No hay **nada en código** que lo
+notifique (ni mail ni badge) — no lo inventes ni lo prometas.
+
+#### `--publish` (opt-in — solo con el OK explícito del dueño)
+
+```powershell
+npm run setup:landing -- --slug <slug> --config landing-payloads/<slug>.json --publish
+```
+
+Escribe **las dos columnas** (borrador **+** publicado) con el mismo config validado, y **antes**
+imprime qué web está por reemplazar (o avisa que es el **GO-LIVE** del negocio, si nunca publicó).
+
+**Regla dura: `--publish` solo se usa cuando el DUEÑO dio el OK explícito.** El caso real es el dueño
+que pide "hacémela y subila" y nunca entra al panel. **Nunca por defecto, nunca "por las dudas", nunca
+sin decírselo.**
 
 ### 8. OUTPUT
 
-Devolvé la **URL de preview** (`/[slug]` es `force-dynamic` → inmediata, sin deploy) + un resumen
-de lo armado (secciones, tema, cantidad de imágenes re-hosteadas). El script ya imprime la URL.
+Bifurcado, igual que el mensaje de cierre del script:
+
+**Por defecto (escritura del borrador) — NO hay URL de preview pública.** Devolvé:
+
+- el **resumen de lo armado**: secciones habilitadas, tema, cantidad de imágenes re-hosteadas;
+- que quedó **como borrador** (`landing_draft`) y que **lo publicado no se tocó**;
+- el **próximo paso real**: avisarle al dueño **por WhatsApp** para que entre a su panel (`/web`), lo
+  revise y lo publique.
+
+**No inventes un link de preview.** El preview compartible por link está **fuera de alcance**
+(REQUIREMENTS §Out of Scope) y `/[slug]` sigue mostrando la web vieja (o la reserva simple): mandarle
+esa URL al operador como si fuera la web nueva es mentirle sobre el estado.
+
+**Con `--publish`:** ahí sí, devolvé la **URL de `/[slug]`** (`force-dynamic` → inmediata, sin deploy).
+El script ya la imprime.
 
 ---
 
@@ -267,8 +359,13 @@ de lo armado (secciones, tema, cantidad de imágenes re-hosteadas). El script ya
 - **NUNCA campos sensibles** en el config ni en la vista `public_businesses`.
 - **Re-host OBLIGATORIO de imágenes** (SKILL-03): nunca referencies el CDN de IG en runtime.
   Las URLs de IG caducan; solo se descargan localmente y el script las re-hostea a `landing-assets`.
-- **Escritura SOLO por `setup:landing`** (service-role local): cero endpoint web, gate Zod
-  obligatorio. La skill nunca escribe directo a la DB.
+- **Escritura SOLO por `setup:landing`** (service-role local): cero endpoint web, **gate estricto de
+  escritura obligatorio** (`parseLandingConfigForWrite`: rechaza el config inválido, no lo degrada).
+  La skill nunca escribe directo a la DB.
+- **La web NACE COMO BORRADOR**: la escritura por defecto va a `landing_draft` y **NO sale al aire**.
+  **Publicar es del dueño.** `--publish` existe, es **opt-in explícito** y **solo se usa con el OK del
+  dueño**: nunca por defecto, nunca silencioso. Si el dueño tiene cambios sin publicar, el aviso del
+  checkpoint (paso 6) es de **lectura obligatoria** antes de seguir.
 - **UI/UX del CLAUDE global** como criterio (jerarquía visual, mobile-first 375px, WCAG AA,
   microcopy de botones), pero **sin inventar datos**: todo sale del negocio real o del operador.
 
