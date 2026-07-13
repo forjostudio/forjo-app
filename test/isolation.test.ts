@@ -228,4 +228,75 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
       .single()
     expect(error).not.toBeNull()
   })
+
+  // ── landing_draft: aislamiento del BORRADOR (Phase 15 / PUB-03, migración 050) ─────────────────
+  // El borrador es contenido del tenant y vive en `businesses`. Su único agujero posible es la vista
+  // public_businesses (security-DEFINER, bypassa RLS a propósito): cualquier columna que entre ahí
+  // queda legible por anon y por CUALQUIER usuario autenticado de CUALQUIER tenant. La migración 050
+  // lo evita POR CONSTRUCCIÓN (no toca la vista); estos 4 casos lo convierten en un test que se pone
+  // rojo si alguien la "completa por simetría con landing_config".
+  // Misma disciplina que el resto del archivo (Pitfall 12): las aserciones usan SOLO anon-key
+  // autenticado (anonA/anonB); seeded.admin únicamente para el check independiente del efecto.
+  // ORDEN: el cross-WRITE (que asierta que el borrador de A sigue null) va ANTES del same-tenant
+  // (que lo escribe). Invertirlos rompería la aserción del cross-write.
+
+  it('el borrador NO se expone en la vista pública (public_businesses NO tiene landing_draft)', async () => {
+    // Aserción central de seguridad de la fase: la columna no existe en la vista → PostgREST erra
+    // ("column does not exist"). Si algún día devuelve una fila, el borrador de TODOS los negocios
+    // está al aire.
+    const { error } = await anonA
+      .from('public_businesses')
+      .select('landing_draft')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(error).not.toBeNull()
+  })
+
+  it('cross-READ landing_draft: B no ve el borrador de A (RLS, SIN filtro business_id)', async () => {
+    // Sin .eq(): dejamos que RLS oculte la fila de A. Si la policy `owner access` se cayera, la fila
+    // de A aparecería en lo que ve B. Filtrar por id testearía nuestro WHERE, no la RLS.
+    const { data } = await anonB.from('businesses').select('id, landing_draft')
+    expect((data ?? []).some((r) => r.id === seeded.bizA)).toBe(false)
+  })
+
+  it('cross-WRITE landing_draft: B no puede escribir el borrador de A', async () => {
+    // anonB apunta EXPLÍCITAMENTE a la fila de A (por id) y deja que RLS deniegue.
+    const { data, error } = await anonB
+      .from('businesses')
+      .update({ landing_draft: { theme: { preset: 'forjo' }, sections: [] } })
+      .eq('id', seeded.bizA)
+      .select('id')
+    // Denegación RLS: error, o 0 filas afectadas. Cualquiera de las dos es válida.
+    expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+    // Check INDEPENDIENTE del efecto con service-role (NO es la aserción de RLS): el fixture crea la
+    // fila con landing_draft null (la 050 solo backfillea desde un landing_config no-null) y el
+    // intento de B no la tocó → sigue null.
+    const { data: check } = await seeded.admin
+      .from('businesses')
+      .select('landing_draft')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(check?.landing_draft).toBeNull()
+  })
+
+  it('same-tenant WRITE landing_draft: A SÍ escribe su propio borrador (happy path)', async () => {
+    // La policy owner_id = auth.uid() permite al dueño escribir SU borrador: el aislamiento no puede
+    // ser "nadie escribe nada". Va DESPUÉS del cross-write para que aquella aserción de null sea limpia.
+    const cfg = { theme: { preset: 'forjo' }, sections: [] }
+    const { error } = await anonA
+      .from('businesses')
+      .update({ landing_draft: cfg })
+      .eq('id', seeded.bizA)
+      .select('id')
+    expect(error).toBeNull()
+
+    // Check de efecto con service-role (no es la aserción RLS): el borrador quedó persistido en A.
+    const { data: check } = await seeded.admin
+      .from('businesses')
+      .select('landing_draft')
+      .eq('id', seeded.bizA)
+      .single()
+    expect(check?.landing_draft).toMatchObject(cfg)
+  })
 })
