@@ -300,5 +300,59 @@ export function deriveStateLabel({
   return STATE_LABEL[editorState]
 }
 
+// ── diffConfigParts: QUÉ PARTES difieren entre dos configs (Phase 16 — D-01/D-02/D-05) ─
+//
+// Para qué existe: desde la Phase 16 hay DOS escritores sobre la misma columna `landing_draft`
+// —el dueño (desde su editor) y el operador (desde `scripts/setup-landing.ts`)—. Si el dueño tiene
+// cambios sin publicar y el operador corre la skill, se los pisa EN SILENCIO. No hay historial ni
+// undo: sería pérdida de datos. Esta función es el motor del aviso de choque que el script imprime
+// en el checkpoint humano pre-escritura (D-01/D-02):
+//   ⚠ El dueño tiene cambios sin publicar. Secciones que difieren de lo publicado: hero, gallery.
+// y del flag derivado de `--inspect` (D-05), que vuelca borrador y publicado por separado.
+// Devuelve las partes, no un diff campo-por-campo: con el nombre de la sección alcanza para decidir,
+// y un diff-er de JSON sería código para mantener sin valor real (D-02).
+//
+// POR QUÉ NORMALIZA LOS DOS LADOS antes de comparar (`normalizeSections`): los dos configs NO vienen
+// del mismo lugar. `buildLandingConfig` OMITE las secciones vacías (emite ~5) y el editor del dueño
+// las MATERIALIZA a las 8 fijas con `enabled:false`. Sin normalizar, un negocio cuyo dueño solo abrió
+// el editor y guardó —sin cambiar NADA visible— dispararía el aviso listando todas las secciones
+// materializadas. Sería ruido: el aviso perdería su señal justo en el caso que D-01 quiere cubrir, y
+// el operador aprendería a ignorarlo. La mera materialización NO es un cambio del dueño.
+//
+// POR QUÉ USA `canonical` (privada, arriba) y NO un `JSON.stringify` crudo: uno de los dos lados
+// vuelve de un round-trip por `jsonb` y Postgres REORDENA las claves. Con stringify crudo, dos configs
+// SEMÁNTICAMENTE IDÉNTICOS serializan distinto ⇒ el aviso saltaría SIEMPRE. Es el bug más probable de
+// la fase y el type-check NO lo agarra.
+//
+// PURA: no muta ninguno de los dos argumentos (normalizeSections y canonical devuelven objetos nuevos).
+export type ConfigPart = SectionType | 'theme' | 'motion'
+
+export function diffConfigParts(a: LandingConfig, b: LandingConfig): ConfigPart[] {
+  const na = normalizeSections(a)
+  const nb = normalizeSections(b)
+  const byTypeA = new Map(na.sections.map((s) => [s.type, s]))
+  const byTypeB = new Map(nb.sections.map((s) => [s.type, s]))
+
+  const parts: ConfigPart[] = []
+
+  // Secciones, en el orden canónico de SECTION_TYPES (resultado determinista). Se compara la sección
+  // COMPLETA: `type`, `enabled`, `order` y `data`. El `order` cuenta: si el dueño reordenó su web y no
+  // lo publicó, eso ES un cambio sin publicar que el operador está por pisar.
+  for (const type of SECTION_TYPES) {
+    const sa = byTypeA.get(type)
+    const sb = byTypeB.get(type)
+    if (JSON.stringify(canonical(sa)) !== JSON.stringify(canonical(sb))) parts.push(type)
+  }
+
+  // Después el tema (mismo compare canónico: `overrides` es un record y sus claves también reordenan).
+  if (JSON.stringify(canonical(na.theme)) !== JSON.stringify(canonical(nb.theme))) parts.push('theme')
+
+  // Y por último el movimiento: es un escalar ('none'|'subtle'|'premium') o `undefined` en los configs
+  // viejos (pre-F12). `undefined` es un valor VÁLIDO de comparación acá, no un caso de error.
+  if (na.motion !== nb.motion) parts.push('motion')
+
+  return parts
+}
+
 // Re-export del tipo Section por conveniencia de los consumidores del shell (tipado del stub).
 export type { Section }
