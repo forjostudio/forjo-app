@@ -25,7 +25,7 @@ import {
   stripPrimary,
   isDirty,
 } from '@/lib/landing/editor-draft'
-import { saveLandingConfig } from './_landing-actions'
+import { saveLandingDraft } from './_landing-actions'
 import { SectionListPanel } from './_sections/section-list'
 import { ThemeControls } from './_sections/theme-controls'
 
@@ -147,14 +147,16 @@ export function WebEditorClient({
     setUploading((n) => Math.max(0, n + delta))
   }, [])
 
-  // ── Guardar: config COMPLETO (el draft) → saveLandingConfig (overwrite-total) ───────────
+  // ── Guardar: config COMPLETO (el draft) → saveLandingDraft (overwrite-total del BORRADOR) ───────
+  // Phase 15: guardar YA NO publica. Escribe businesses.landing_draft y la web al aire no se mueve
+  // (PUB-03) — de ahí el copy nuevo del toast. Publicar es una decisión aparte (barra de 15-03).
   async function handleSave() {
     if (saving || !dirty || uploading > 0) return
     setSaving(true)
-    const res = await saveLandingConfig(draft)
+    const res = await saveLandingDraft(draft)
     setSaving(false)
     if (res.ok) {
-      toast.success('Cambios guardados')
+      toast.success('Borrador guardado')
       // D-03c: limpiar el flag de cambios sin guardar → baseline pasa a ser el draft actual.
       setSavedBaseline(draft)
     } else {
