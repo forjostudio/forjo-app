@@ -311,19 +311,28 @@ async function runWrite(
   }
 
   // 5) UPDATE filtrado por id resuelto del slug (NUNCA por slug — Pitfall 6 / T-10-07). Aislamiento por business_id.
+  //
+  // ⚠ SE ESCRIBEN LAS DOS COLUMNAS, y no es "por las dudas": desde Phase 15 (migración 050) el dato
+  // está partido en `landing_config` = LO PUBLICADO y `landing_draft` = LO QUE EL DUEÑO EDITA. Este
+  // script ES un publish (el operador arma la web y la deja al aire), así que tiene que dejar el
+  // MISMO invariante que publishLanding(): después de escribir, draft == published.
+  // Si escribiera solo landing_config, el borrador del dueño quedaría desincronizado (con la web
+  // VIEJA): al abrir /web vería su borrador anterior, el indicador le diría "Guardado — sin
+  // publicar" y el botón Publicar —que es exactamente lo que la barra le pide tocar— REVERTIRÍA la
+  // web que el operador acaba de armar. No hay historial ni undo: sería pérdida de datos silenciosa.
   const { error: updErr } = await supabase
     .from('businesses')
-    .update({ landing_config: parsed })
+    .update({ landing_config: parsed, landing_draft: parsed })
     .eq('id', businessId)
   if (updErr) {
-    console.error('[setup-landing] UPDATE de landing_config falló:', updErr.message)
+    console.error('[setup-landing] UPDATE de landing_config/landing_draft falló:', updErr.message)
     process.exitCode = 1
     return
   }
 
   // 6) Preview inmediata: /[slug] es force-dynamic → sirve el config nuevo en el próximo request.
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
-  console.log(`✓ landing_config actualizado para "${slug}" (business ${businessId}).`)
+  console.log(`✓ landing_config + landing_draft actualizados para "${slug}" (business ${businessId}).`)
   console.log(`  Preview (force-dynamic, inmediata): ${appUrl}/${slug}`)
 }
 
