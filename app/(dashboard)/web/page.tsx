@@ -85,15 +85,26 @@ export default async function WebEditorPage() {
       .or('is_active.is.null,is_active.eq.true'),
   ])
 
-  // 6. El initialConfig se pasa CRUDO (business.landing_config, jsonb): el cliente lo parsea con
-  //    parseLandingConfig y siembra DEFAULT_LANDING_CONFIG si es null (D-03 / empty-state §7). El
-  //    tipo Business no declara landing_config (igual que [slug]/page.tsx) → cast puntual.
-  const initialConfig = (business as { landing_config?: unknown }).landing_config ?? null
+  // 6. Los DOS configs, crudos (jsonb), al cliente. Phase 15 parte el dato en dos (migración 050) y
+  //    el editor necesita ambos baselines para derivar sus 3 estados en memoria, sin estado nuevo en
+  //    la DB (D-03) y sin un round-trip extra:
+  //      · publishedConfig = landing_config → LO PUBLICADO (lo único que ve un visitante).
+  //        **null significa "NUNCA PUBLICÓ"**: es la señal de la que dependen el dialog de go-live
+  //        (D-08) y el aviso de empty-state. Se preserva como null, NO se coacciona a la plantilla.
+  //      · initialDraft = landing_draft ?? publishedConfig → LO QUE SE EDITA. El coalesce es
+  //        DEFENSIVO: la migración no produce el estado (publicado presente, borrador ausente), pero
+  //        un rollback parcial o una fila tocada a mano sí podrían — y sin el coalesce un dueño con
+  //        la web AL AIRE abriría el editor con una plantilla vacía. null acá = arranca del DEFAULT.
+  //    El tipo Business no declara ninguna de las dos columnas (igual que hoy) → cast puntual.
+  const b = business as { landing_config?: unknown; landing_draft?: unknown }
+  const publishedConfig = b.landing_config ?? null
+  const initialDraft = b.landing_draft ?? publishedConfig
 
   return (
     <WebEditorClient
       business={business as unknown as PublicBusiness}
-      initialConfig={initialConfig}
+      initialDraft={initialDraft}
+      publishedConfig={publishedConfig}
       services={services || []}
       professionals={professionals || []}
       timeBlocks={timeBlocks || []}

@@ -24,6 +24,7 @@ import {
   setMotion,
   stripPrimary,
   isDirty,
+  deriveEditorState,
 } from '@/lib/landing/editor-draft'
 import { saveLandingDraft } from './_landing-actions'
 import { SectionListPanel } from './_sections/section-list'
@@ -41,7 +42,8 @@ import { ThemeControls } from './_sections/theme-controls'
 //     al WRAPPER del preview vía data-attributes + --primary inline (L6: NUNCA al <html>, repintaría
 //     el chrome del panel). El overflow/scroll del marco va en el contenedor EXTERNO, nunca sobre un
 //     ancestro de #reservar dentro de .frj-site (L7: rompería vaul/sonner/date-picker del booking).
-//   - SAVE BAR: arma el config COMPLETO (el draft) y llama saveLandingConfig (overwrite-total); mapea
+//   - SAVE BAR: arma el config COMPLETO (el draft) y llama saveLandingDraft (overwrite-total del
+//     BORRADOR — desde Phase 15 guardar NO publica: la web al aire no se mueve, PUB-03); mapea
 //     los 6 códigos de error a toasts (14-UI-SPEC §6). Deshabilitada sin cambios o con uploads en
 //     vuelo (L9). Éxito → baseline = draft (limpia el flag de cambios sin guardar, D-03c).
 //   - CONFIRM-ON-EXIT: beforeunload + dialog cuando hay cambios sin guardar (D-03b).
@@ -60,8 +62,12 @@ type ExceptionLite = {
 
 interface Props {
   business: PublicBusiness
-  // landing_config crudo (jsonb): se parsea acá y se siembra DEFAULT si es null (D-03).
-  initialConfig: unknown
+  // landing_draft crudo (jsonb), con coalesce a lo publicado: semilla del borrador en memoria y
+  // baseline de "lo guardado". null → se siembra DEFAULT_LANDING_CONFIG (D-03 / empty-state).
+  initialDraft: unknown
+  // landing_config crudo (jsonb): baseline de "lo publicado". **null ⇒ NUNCA PUBLICÓ** — es la señal
+  // que dispara el aviso de empty-state y (en 15-03) el dialog de go-live. No se coacciona a DEFAULT.
+  publishedConfig: unknown
   services: Service[]
   professionals: Professional[]
   timeBlocks: TimeBlock[]
@@ -69,7 +75,8 @@ interface Props {
   locations: LocationLite[]
 }
 
-// Mapa de códigos de error de saveLandingConfig → toast en español (14-UI-SPEC §6, D-03c).
+// Mapa de códigos de error de saveLandingDraft → toast en español (14-UI-SPEC §6, D-03c). 15-03 lo
+// extiende a ACTION_ERROR_COPY con los códigos de publicar/descartar (no_draft, invalid_draft, …).
 const SAVE_ERROR_COPY: Record<string, string> = {
   cms_disabled: 'El editor no está disponible en este momento.',
   // not_entitled: el negocio no tiene el add-on de web a medida (has_web_custom). En la práctica
@@ -85,23 +92,38 @@ const SAVE_ERROR_COPY: Record<string, string> = {
 
 export function WebEditorClient({
   business,
-  initialConfig,
+  initialDraft,
+  publishedConfig,
   services,
   professionals,
   timeBlocks,
   exceptions,
   locations,
 }: Props) {
-  // Si el negocio nunca optó por una landing, initialConfig es null → empty-state + seed del DEFAULT.
-  const isEmpty = initialConfig === null || initialConfig === undefined
+  // Empty-state = NUNCA PUBLICÓ (publishedConfig null), no "no tiene borrador": desde Phase 15 un
+  // negocio puede tener su borrador guardado y su web todavía sin salir al aire (estado 2 de la matriz).
+  const isEmpty = publishedConfig === null || publishedConfig === undefined
   // Borrador inicial: el config parseado, o el DEFAULT sembrado (D-03 / §7).
   // stripPrimary: se quitó el control "Color principal" del editor (pisaba el acento de cualquier
   // paleta y dejaba los swatches decorativos). Normalizamos ACÁ, en el seed, porque `seeded`
   // alimenta a la vez el borrador Y el baseline → el editor NO abre marcado como "cambios sin
   // guardar", pero el primary ya no pisa nada y el próximo guardado lo persiste limpio.
   const seeded = useMemo<LandingConfig>(
-    () => stripPrimary(parseLandingConfig(initialConfig) ?? DEFAULT_LANDING_CONFIG),
-    [initialConfig],
+    () => stripPrimary(parseLandingConfig(initialDraft) ?? DEFAULT_LANDING_CONFIG),
+    [initialDraft],
+  )
+
+  // Baseline de LO PUBLICADO. Pasa por EL MISMO pipeline de normalización que el borrador: si el
+  // publicado se parseara distinto (p. ej. sin stripPrimary), un negocio con un `overrides.primary`
+  // guardado abriría el editor diciendo "sin publicar" sin haber tocado nada — falso positivo
+  // permanente. ÚNICA asimetría legítima: null se PRESERVA como null (señal de "nunca publicó"), no
+  // se coacciona a DEFAULT_LANDING_CONFIG.
+  const publishedBaseline = useMemo<LandingConfig | null>(
+    () =>
+      publishedConfig === null || publishedConfig === undefined
+        ? null
+        : stripPrimary(parseLandingConfig(publishedConfig)!),
+    [publishedConfig],
   )
 
   const [draft, setDraft] = useState<LandingConfig>(seeded)
@@ -116,6 +138,10 @@ export function WebEditorClient({
   const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   const dirty = isDirty(draft, savedBaseline)
+  // Estado del editor derivado del CONTENIDO (D-03/D-06), sin flag ni timestamp en la DB: manda
+  // "sin guardar"; si no, "sin publicar" (incluye el caso nunca-publicó); si no, "publicado". Los
+  // botones Publicar/Descartar y los dialogs los enchufa 15-03 sobre este mismo valor.
+  const editorState = deriveEditorState({ draft, savedBaseline, published: publishedBaseline })
 
   // ── Callbacks de mutación del borrador (todo pasa por editor-draft.ts) ──────────────────
   const onMove = useCallback(
@@ -256,10 +282,11 @@ export function WebEditorClient({
         >
           {isEmpty && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-              <p className="text-sm font-semibold">Todavía no personalizaste tu web</p>
+              <p className="text-sm font-semibold">Tu web todavía no está publicada</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Arrancá desde la plantilla base y editá cada sección. Los cambios se ven en la vista
-                previa; se publican recién cuando tocás <strong>Guardar cambios</strong>.
+                Editá cada sección y guardá tu borrador: los cambios se ven en la vista previa, pero{' '}
+                <strong>nadie los ve todavía</strong>. Tu página seguirá mostrando las reservas de
+                siempre hasta que publiques.
               </p>
             </div>
           )}
@@ -285,20 +312,25 @@ export function WebEditorClient({
 
           {/* Save bar sticky (§6): Save nunca detrás del scroll. */}
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t bg-background/95 py-3 backdrop-blur supports-backdrop-filter:bg-background/80">
+            {/* Indicador de 3 estados excluyentes (D-06). Los botones Publicar / Descartar y sus
+                dialogs llegan en 15-03; acá solo se refleja el estado ya derivado. */}
             <span
-              className={cn('text-xs', dirty ? 'text-primary' : 'text-muted-foreground')}
+              className={cn(
+                'text-xs',
+                editorState === 'published' ? 'text-muted-foreground' : 'text-primary',
+              )}
               aria-live="polite"
             >
-              {dirty ? (
+              {editorState === 'published' ? (
+                'Publicado'
+              ) : (
                 <>
                   <span
                     aria-hidden="true"
                     className="mr-1.5 inline-block size-2 rounded-full bg-primary align-middle"
                   />
-                  Cambios sin guardar
+                  {editorState === 'unsaved' ? 'Cambios sin guardar' : 'Guardado — sin publicar'}
                 </>
-              ) : (
-                'Todo guardado'
               )}
             </span>
             <Button onClick={handleSave} disabled={saving || !dirty || uploading > 0}>
