@@ -34,8 +34,8 @@ Actores: **dueño** (negocio que gestiona su web desde el panel), **visitante** 
 
 ### Skill del operador (SKILL)
 
-- [ ] **SKILL-07**: `scripts/setup-landing.ts` escribe el BORRADOR, no lo publicado: la web armada por la skill NO sale al público hasta que el dueño la mira y publica.
-- [ ] **SKILL-08**: El operador puede inspeccionar borrador y publicado por separado (`--inspect`), para saber qué está al aire y qué quedó pendiente de publicar.
+- [x] **SKILL-07**: `scripts/setup-landing.ts` escribe el BORRADOR, no lo publicado: la web armada por la skill NO sale al público hasta que el dueño la mira y publica.
+- [x] **SKILL-08**: El operador puede inspeccionar borrador y publicado por separado (`--inspect`), para saber qué está al aire y qué quedó pendiente de publicar.
 
 ## Future Requirements (diferidos)
 
@@ -65,8 +65,8 @@ Actores: **dueño** (negocio que gestiona su web desde el panel), **visitante** 
 | PUB-06 | Phase 15 — Borrador y publicación (núcleo) | Complete |
 | PUB-07 | Phase 15 — Borrador y publicación (núcleo) | Complete |
 | PUB-08 | Phase 15 — Borrador y publicación (núcleo) | Complete |
-| SKILL-07 | Phase 16 — La web nace como borrador (skill del operador) | Pending |
-| SKILL-08 | Phase 16 — La web nace como borrador (skill del operador) | Pending |
+| SKILL-07 | Phase 16 — La web nace como borrador (skill del operador) | Complete |
+| SKILL-08 | Phase 16 — La web nace como borrador (skill del operador) | Complete |
 | PUB-01 | Phase 17 — Exponer el CMS a clientes reales | Pending |
 
 **Cobertura: 9/9 — sin huérfanos, sin duplicados.**

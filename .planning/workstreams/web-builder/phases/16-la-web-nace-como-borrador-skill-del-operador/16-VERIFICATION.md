@@ -1,7 +1,8 @@
 ---
 phase: 16-la-web-nace-como-borrador-skill-del-operador
 verified: 2026-07-13T18:00:00Z
-status: human_needed
+status: passed
+human_verification_resolved: 2026-07-14 (UAT 3/3 pass — ver 16-UAT.md)
 score: 12/12 must-haves verified (code-level)
 behavior_unverified: 0
 overrides_applied: 0

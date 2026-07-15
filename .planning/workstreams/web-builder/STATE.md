@@ -4,14 +4,14 @@ milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: executing
 stopped_at: Phase 16 context gathered
-last_updated: "2026-07-13T19:07:58.442Z"
-last_activity: 2026-07-13 -- Phase 16 execution started
+last_updated: "2026-07-15T02:52:00.297Z"
+last_activity: 2026-07-15
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 3
-  percent: 33
+  completed_plans: 6
+  percent: 67
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 
 ## Current Position
 
-Phase: 16 (la-web-nace-como-borrador-skill-del-operador) — EXECUTING
-Plan: 1 of 3
+Phase: 17
+Plan: Not started
 Status: Executing Phase 16
-Last activity: 2026-07-13 -- Phase 16 execution started
+Last activity: 2026-07-15
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
 
@@ -45,7 +45,7 @@ Progreso: `[░░░░░░░░░░] 0/3 fases`
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 15 | 3 | - | - |
-| 16 | TBD | - | - |
+| 16 | 3 | - | - |
 | 17 | TBD | - | - |
 
 **Recent Trend:**
