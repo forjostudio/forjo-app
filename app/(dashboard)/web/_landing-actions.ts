@@ -48,19 +48,16 @@ import { parseLandingConfigForWrite } from '@/lib/landing/write'
 //   (b) business_id de la SESIÓN, nunca del body: se resuelve con `.eq('owner_id', user.id).single()` y el
 //       .update apunta a `.eq('id', business.id)`. Un `business_id` que venga en `input` se IGNORA por
 //       construcción → un POST directo no puede escribir la fila de otro tenant (anti-tampering, T-13-01).
-//   (c) FLAG PRIMERO (fail-closed): el kill-switch global es el PRIMER early-return, antes de crear el
-//       client, `getUser` o cualquier efecto. Ausente o ≠ 'true' → OFF (T-13-04). Phase 14 reusa el MISMO
-//       flag para gatear el render del editor server-side.
+//   (c) GATE ÚNICO = ENTITLEMENT POR SESIÓN: retirado el kill-switch global de entorno, el add-on
+//       `has_web_custom` resuelto de la SESIÓN (owner_id = auth.uid()) queda como ÚNICO guard de
+//       escritura. Cada acción lo re-chequea (early-return not_entitled): un POST directo de un
+//       no-entitled se corta acá, aunque la page ya lo mande al upsell (defensa en profundidad).
 //   (d) LIMITACIÓN CONOCIDA (para /gsd:secure-phase 13): con la policy RLS `FOR ALL`, el propio dueño
 //       puede técnicamente escribir su columna vía anon-key directo (igual que hoy escribe theme/palette
 //       desde settings-client.tsx). Esta action NO cierra ese bypass a nivel DB — agrega validación Zod
 //       no-bypasseable en el PATH OFICIAL del producto (el único que Phase 14 expone). NO viola el Core
 //       Value: sigue siendo owner-only y el aislamiento cross-tenant (B no escribe la fila de A) queda
 //       intacto y probado por SC2 (test/isolation.test.ts).
-
-// Kill-switch global del CMS (D-01/D-01b). Server-only (NO NEXT_PUBLIC_*), fail-closed: solo el valor
-// exacto 'true' enciende; ausente o cualquier otro valor → false. Espeja el patrón de MP_MODE.
-const CMS_ENABLED = process.env.CMS_ENABLED === 'true'
 
 // Shape de dominio compartido por las 3 acciones (convención del repo: { ok } | { ok, error snake }).
 type Result = { ok: true } | { ok: false; error: string }
@@ -71,9 +68,6 @@ type Result = { ok: true } | { ok: false; error: string }
 // existe (sin alias): un call site que siga escribiendo lo publicado sería una regresión silenciosa
 // de PUB-03, así que tiene que romper el type-check, no compilar.
 export async function saveLandingDraft(input: unknown): Promise<Result> {
-  // 1. Flag primero — kill-switch global. Con el flag off el request NO escribe ni resuelve sesión.
-  if (!CMS_ENABLED) return { ok: false, error: 'cms_disabled' }
-
   // Efectos de red (pasos 2-6) envueltos en try/catch: un error inesperado (red, Supabase caído)
   // devuelve un error de dominio { ok:false, error:'server_error' } en vez de tirar un throw sin
   // capturar fuera de la Server Action (WR-03). Los early-returns de dominio de abajo NO tiran.
@@ -137,9 +131,6 @@ export async function saveLandingDraft(input: unknown): Promise<Result> {
 // contenido): sería una capa de reglas de producto nueva a mantener en sync con el schema, el renderer
 // ya es fail-safe con secciones vacías, y el dueño ve EXACTAMENTE lo que va a salir en su preview.
 export async function publishLanding(): Promise<Result> {
-  // 1. Flag primero — kill-switch global, fail-closed, antes de cualquier efecto.
-  if (!CMS_ENABLED) return { ok: false, error: 'cms_disabled' }
-
   try {
     // 2. Session client (anon + cookies, RLS activo). PROHIBIDO createAdminClient()/service-role acá.
     const supabase = await createClient()
@@ -205,9 +196,6 @@ export async function publishLanding(): Promise<Result> {
 // contrato de lectura (parseLandingConfig) es fail-safe. Validarlo dejaría a un negocio con un config
 // viejo/raro sin poder descartar nunca — un dead-end sin salida.
 export async function discardLandingDraft(): Promise<Result> {
-  // 1. Flag primero — fail-closed.
-  if (!CMS_ENABLED) return { ok: false, error: 'cms_disabled' }
-
   try {
     // 2. Session client (anon + cookies, RLS activo). Nunca service-role.
     const supabase = await createClient()

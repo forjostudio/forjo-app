@@ -93,9 +93,8 @@ interface Props {
 // { ok:false, error:'<snake>' }, así que un solo mapa alcanza. Fallback: código desconocido →
 // server_error. Regla de CLAUDE.md: todo error dice QUÉ pasó + QUÉ hacer.
 const ACTION_ERROR_COPY: Record<string, string> = {
-  cms_disabled: 'El editor no está disponible en este momento.',
   // not_entitled: el negocio no tiene el add-on de web a medida (has_web_custom). En la práctica
-  // no debería verse — la page ya hace notFound() sin el entitlement — pero el write path lo
+  // no debería verse — la page ya renderiza el upsell sin el entitlement — pero el write path lo
   // rechaza igual (defensa en profundidad), así que el código tiene su copy.
   not_entitled: 'Tu plan no incluye la edición de la web. Escribinos para activarla.',
   unauthorized: 'Tu sesión expiró. Volvé a iniciar sesión.',
