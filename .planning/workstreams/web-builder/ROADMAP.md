@@ -63,7 +63,7 @@ Detalle completo archivado en [`milestones/v0.16-ROADMAP.md`](../../milestones/v
 
 - [x] **Phase 15: Borrador y publicación (núcleo)** - `landing_draft` (migración aditiva) + el CMS escribe el borrador + botón Publicar/Descartar + el estado real de "cambios sin publicar"; la web pública sigue leyendo SOLO lo publicado (completed 2026-07-13)
 - [x] **Phase 16: La web nace como borrador (skill del operador)** - `scripts/setup-landing.ts` escribe el borrador, no lo publicado; `--inspect` muestra borrador y publicado por separado (completed 2026-07-13)
-- [ ] **Phase 17: Exponer el CMS a clientes reales** - Se retira el flag global `CMS_ENABLED`; `has_web_custom` queda como ÚNICO gate del editor
+- [x] **Phase 17: Exponer el CMS a clientes reales** - Se retira el flag global `CMS_ENABLED`; `has_web_custom` queda como ÚNICO gate del editor (completed 2026-07-15)
 
 ## Phase Details
 
@@ -146,13 +146,13 @@ Plans:
   2. Un dueño sin el add-on no llega al editor **ni logra escribir su landing aunque postee directo a la Server Action** (el gate vive en la acción, no solo en la page).
   3. Para todo lo demás no cambia nada: los negocios sin add-on siguen viendo su `/[slug]` exactamente igual, y las landings publicadas siguen al aire.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1** *(paralelos — sin solape de archivos)*
 
 - [x] 17-01-PLAN.md — Retirar el flag de entorno (barrido de las 3 superficies TS) + render condicional editor/upsell (`_web-upsell.tsx`) + ítem "Mi web" en el sidebar (visible a todos los verticales)
-- [ ] 17-02-PLAN.md — Migración 051: gatear el upload por `has_web_custom` en la RLS del bucket `landing-assets` + test de aislamiento + checkpoint de verificación contra Storage prod-like (autonomous: false)
+- [x] 17-02-PLAN.md — Migración 051: gatear el upload por `has_web_custom` en la RLS del bucket `landing-assets` + test de aislamiento + checkpoint de verificación contra Storage prod-like (autonomous: false)
 
 **Threat note** (SECURITY-SENSITIVE — correr `/gsd:secure-phase 17`): sacar `CMS_ENABLED` **retira el kill-switch global fail-closed** que hasta hoy apagaba la ruta entera. Al quedar `has_web_custom` como único gate, ese gate tiene que sostener solo: (a) chequeado en **cada** Server Action del CMS (guardar, publicar, descartar, upload), no solo en la page; (b) resuelto contra el `business_id` de la **sesión** (nunca del body); (c) el trigger `businesses_protect_admin_columns` debe seguir impidiendo que el dueño se auto-otorgue el flag (revierte en silencio los UPDATE no-service_role) — verificarlo, no asumirlo. Además: el editor pasa de ser inalcanzable a ser una superficie autenticada real → los uploads a `landing-assets/{business_id}/` y el preview vuelven a estar en el radar de aislamiento (heredado de Phase 14, SECURED 16/16). Barrer restos del flag: ninguna ruta puede quedar con un chequeo muerto que la deje abierta.
 
@@ -169,7 +169,7 @@ Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer e
 | 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
 | 15. Borrador y publicación (núcleo) | v0.18 | 3/3 | Complete    | 2026-07-13 |
 | 16. La web nace como borrador (skill) | v0.18 | 3/3 | Complete    | 2026-07-13 |
-| 17. Exponer el CMS a clientes reales | v0.18 | 1/2 | In Progress|  |
+| 17. Exponer el CMS a clientes reales | v0.18 | 2/2 | Complete   | 2026-07-15 |
 
 ## Requirement Coverage (v0.18)
 

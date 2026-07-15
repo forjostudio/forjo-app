@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: executing
-stopped_at: Phase 17 context gathered
-last_updated: "2026-07-15T14:04:41.697Z"
-last_activity: 2026-07-15 -- Phase 17 execution started
+stopped_at: Phase 17 plan 02 complete (upload gate verified in prod)
+last_updated: "2026-07-15T14:30:00.000Z"
+last_activity: 2026-07-15 -- Phase 17 plan 02 complete
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
-  percent: 67
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 
 ## Current Position
 
-Phase: 17 (exponer-el-cms-a-clientes-reales) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute
-Last activity: 2026-07-15 -- Phase 17 execution started
+Phase: 17 (exponer-el-cms-a-clientes-reales) — COMPLETE
+Plan: 2 of 2 — DONE
+Status: Fase completa (2/2 plans). Milestone v0.18 con las 3 fases cerradas; pendiente /gsd:secure-phase 17 + deploy go-live (runbook en 17-02-SUMMARY).
+Last activity: 2026-07-15 -- Phase 17 plan 02 complete
 
-Progreso: `[░░░░░░░░░░] 0/3 fases`
+Progreso: `[██████████] 3/3 fases`
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progreso: `[░░░░░░░░░░] 0/3 fases`
 *Updated after each plan completion*
 | Phase 15 P03 | 25min | 3 tasks | 2 files |
 | Phase 17 P01 | 9min | 3 tasks | 6 files |
+| Phase 17 P02 | 12min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 - [Phase ?]: 15-03: publicar encadena guardar → publicar SIEMPRE (D-04); el estado post-publicacion se resuelve en memoria (cero revalidatePath / router.refresh)
 - [Phase ?]: 17-01: has_web_custom por sesion queda como unico gate del CMS; retirado el flag de entorno CMS_ENABLED.
 - [Phase ?]: 17-01: el item de nav 'Mi web' se muestra a los 4 verticales (superficie de venta); el gate editor/upsell vive en la page, no en el nav.
+- [Phase 17-02]: el gate del upload (4ª superficie del CMS) vive en la RLS del bucket landing-assets (migr. 051: AND has_web_custom = true en INSERT+UPDATE), NO en la app — el editor sube DIRECTO a Storage y la policy es el único punto no-bypasseable. DELETE queda owner-only sin gatear (T-17-07 accept). SC2 verificado EN PROD (rechazo no-entitled + happy path entitled + bypass service-role esperado + no-regresión logo/skill).
+- [Phase 17-02]: DDL sobre storage.objects guardado por to_regclass('storage.objects') IS NOT NULL + EXECUTE dinámico → no-op en local (storage OFF, baseline replayable), gate real en prod/staging. Test de upload-gate guardado por RUN_STORAGE_TESTS.
 
 ### Pending Todos
 
@@ -121,9 +124,9 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 
 ## Session Continuity
 
-Last session: 2026-07-15T14:04:23.325Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/workstreams/web-builder/phases/17-exponer-el-cms-a-clientes-reales/17-CONTEXT.md
+Last session: 2026-07-15T14:30:00.000Z
+Stopped at: Phase 17 plan 02 complete (upload gate migr. 051 verified in prod)
+Resume file: None
 
 ## Operator Next Steps
 
