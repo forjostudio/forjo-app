@@ -169,7 +169,7 @@ Phases execute in numeric order: 15 → 16 → 17 (el orden es LOCKED: exponer e
 | 14. CMS editor UI | v0.16 | 4/4 | Complete | 2026-07-09 |
 | 15. Borrador y publicación (núcleo) | v0.18 | 3/3 | Complete    | 2026-07-13 |
 | 16. La web nace como borrador (skill) | v0.18 | 3/3 | Complete    | 2026-07-13 |
-| 17. Exponer el CMS a clientes reales | v0.18 | 2/2 | Complete   | 2026-07-15 |
+| 17. Exponer el CMS a clientes reales | v0.18 | 2/2 | Complete    | 2026-07-15 |
 
 ## Requirement Coverage (v0.18)
 

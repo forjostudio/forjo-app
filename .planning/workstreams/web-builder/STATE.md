@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.18
 milestone_name: CMS Publish / Go-live
-status: executing
-stopped_at: Phase 17 plan 02 complete (upload gate verified in prod)
-last_updated: "2026-07-15T14:30:00.000Z"
-last_activity: 2026-07-15 -- Phase 17 plan 02 complete
+status: "Fase completa (2/2 plans). Milestone v0.18 con las 3 fases cerradas; pendiente /gsd:secure-phase 17 + deploy go-live (runbook en 17-02-SUMMARY)."
+stopped_at: Phase 17 plan 02 complete (upload gate migr. 051 verified in prod)
+last_updated: "2026-07-15T18:27:42.646Z"
+last_activity: 2026-07-15
 progress:
   total_phases: 3
   completed_phases: 3
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 
 ## Current Position
 
-Phase: 17 (exponer-el-cms-a-clientes-reales) — COMPLETE
-Plan: 2 of 2 — DONE
+Phase: 17
+Plan: Not started
 Status: Fase completa (2/2 plans). Milestone v0.18 con las 3 fases cerradas; pendiente /gsd:secure-phase 17 + deploy go-live (runbook en 17-02-SUMMARY).
-Last activity: 2026-07-15 -- Phase 17 plan 02 complete
+Last activity: 2026-07-15
 
 Progreso: `[██████████] 3/3 fases`
 
@@ -46,7 +46,7 @@ Progreso: `[██████████] 3/3 fases`
 |-------|-------|-------|----------|
 | 15 | 3 | - | - |
 | 16 | 3 | - | - |
-| 17 | TBD | - | - |
+| 17 | 2 | - | - |
 
 **Recent Trend:**
 
