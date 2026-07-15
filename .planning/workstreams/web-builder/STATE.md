@@ -4,8 +4,8 @@ milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: executing
 stopped_at: Phase 17 context gathered
-last_updated: "2026-07-15T03:42:58.880Z"
-last_activity: 2026-07-15
+last_updated: "2026-07-15T13:19:42.906Z"
+last_activity: 2026-07-15 -- Phase 17 planning complete
 progress:
   total_phases: 3
   completed_phases: 2
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 
 Phase: 17
 Plan: Not started
-Status: Executing Phase 16
-Last activity: 2026-07-15
+Status: Ready to execute
+Last activity: 2026-07-15 -- Phase 17 planning complete
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
 
