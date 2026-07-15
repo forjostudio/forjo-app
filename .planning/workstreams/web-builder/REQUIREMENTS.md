@@ -30,7 +30,7 @@ Actores: **dueño** (negocio que gestiona su web desde el panel), **visitante** 
 
 ### Exposición del CMS (PUB — diferido de v0.16)
 
-- [ ] **PUB-01**: El CMS se expone a los clientes en el dashboard, con `has_web_custom` (el add-on real) como ÚNICO gate — sin el flag global `CMS_ENABLED`.
+- [x] **PUB-01**: El CMS se expone a los clientes en el dashboard, con `has_web_custom` (el add-on real) como ÚNICO gate — sin el flag global `CMS_ENABLED`.
 
 ### Skill del operador (SKILL)
 
@@ -67,7 +67,7 @@ Actores: **dueño** (negocio que gestiona su web desde el panel), **visitante** 
 | PUB-08 | Phase 15 — Borrador y publicación (núcleo) | Complete |
 | SKILL-07 | Phase 16 — La web nace como borrador (skill del operador) | Complete |
 | SKILL-08 | Phase 16 — La web nace como borrador (skill del operador) | Complete |
-| PUB-01 | Phase 17 — Exponer el CMS a clientes reales | Pending |
+| PUB-01 | Phase 17 — Exponer el CMS a clientes reales | Complete |
 
 **Cobertura: 9/9 — sin huérfanos, sin duplicados.**
 

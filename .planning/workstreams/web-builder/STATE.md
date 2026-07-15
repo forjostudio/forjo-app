@@ -4,13 +4,13 @@ milestone: v0.18
 milestone_name: CMS Publish / Go-live
 status: executing
 stopped_at: Phase 17 context gathered
-last_updated: "2026-07-15T13:19:42.906Z"
-last_activity: 2026-07-15 -- Phase 17 planning complete
+last_updated: "2026-07-15T14:04:41.697Z"
+last_activity: 2026-07-15 -- Phase 17 execution started
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
   percent: 67
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`): v0.18 CMS Publish / Go-live")
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados. (v0.18 separa borrador de publicado SIN debilitar el write path owner-only que aseguró v0.16.)
-**Current focus:** Phase 16 — la-web-nace-como-borrador-skill-del-operador
+**Current focus:** Phase 17 — exponer-el-cms-a-clientes-reales
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
+Phase: 17 (exponer-el-cms-a-clientes-reales) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-15 -- Phase 17 planning complete
+Last activity: 2026-07-15 -- Phase 17 execution started
 
 Progreso: `[░░░░░░░░░░] 0/3 fases`
 
@@ -55,6 +55,7 @@ Progreso: `[░░░░░░░░░░] 0/3 fases`
 
 *Updated after each plan completion*
 | Phase 15 P03 | 25min | 3 tasks | 2 files |
+| Phase 17 P01 | 9min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,8 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 - [Phase 15-02]: **Desviación declarada de D-03** — el compare draft-vs-published usa un stringify **CANÓNICO** (`configsEqual` en `lib/landing/editor-draft.ts`), no `JSON.stringify` crudo: Postgres reordena las claves del `jsonb` y el compare crudo dejaría "Guardado — sin publicar" trabado para siempre. Misma semántica (estado derivado del contenido, sin flag ni timestamp), otro mecanismo. NO "simplificar" de vuelta.
 - [Phase 15-02]: contrato page → client = `initialDraft` (`landing_draft ?? landing_config`, coalesce defensivo) + `publishedConfig` (`landing_config ?? null`, donde **null ⇒ nunca publicó**: dispara go-live y el empty-state).
 - [Phase ?]: 15-03: publicar encadena guardar → publicar SIEMPRE (D-04); el estado post-publicacion se resuelve en memoria (cero revalidatePath / router.refresh)
+- [Phase ?]: 17-01: has_web_custom por sesion queda como unico gate del CMS; retirado el flag de entorno CMS_ENABLED.
+- [Phase ?]: 17-01: el item de nav 'Mi web' se muestra a los 4 verticales (superficie de venta); el gate editor/upsell vive en la page, no en el nav.
 
 ### Pending Todos
 
@@ -118,7 +121,7 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 
 ## Session Continuity
 
-Last session: 2026-07-15T03:42:53.636Z
+Last session: 2026-07-15T14:04:23.325Z
 Stopped at: Phase 17 context gathered
 Resume file: .planning/workstreams/web-builder/phases/17-exponer-el-cms-a-clientes-reales/17-CONTEXT.md
 
