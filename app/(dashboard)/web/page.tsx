@@ -1,43 +1,37 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect, notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { WebEditorClient } from './web-client'
+import { WebUpsell } from './_web-upsell'
 
-// ── Editor CMS: ruta server gateada por flag (Phase 14, D-07) ──────────────────────────
+// ── Editor CMS: ruta server gateada por el add-on has_web_custom (Phase 17, PUB-01) ──────────────
 //
 // El editor visual del dueño vive en app/(dashboard)/web/ junto a _landing-actions.ts. Esta page
-// es Server Component: (1) fail-closed por CMS_ENABLED, (2) resuelve el business de la SESIÓN,
-// (3) server-fetchea UNA vez los datos que el LandingRenderer necesita para el preview (D-01b) y
-// (4) monta el client editor. Cero exposición en nav (EDIT-07): se accede sólo por URL directa
-// mientras el flag esté encendido.
+// es Server Component: (1) resuelve el business de la SESIÓN, (2) ramifica por el entitlement
+// has_web_custom — con el add-on server-fetchea UNA vez los datos del preview (D-01b) y monta el
+// editor; sin el add-on renderiza el upsell "Web a medida" (venta) en vez de un 404. Retirado el
+// kill-switch global de entorno (Phase 17), has_web_custom es el ÚNICO gate y sostiene solo.
 //
 // Por qué cada decisión de seguridad:
-//   (a) FLAG PRIMERO (fail-closed): CMS_ENABLED === 'true' se lee como PRIMER paso, antes de crear
-//       el client, getUser o cualquier fetch. Con el flag off → notFound() (la ruta "no existe").
-//       Misma expresión literal que el CMS_ENABLED de _landing-actions.ts (threat note d de Phase
-//       13 / T-14-02). Sin número de línea: los punteros de línea envejecen mal y terminan mintiendo.
+//   (a) GATE ÚNICO = ENTITLEMENT POR SESIÓN: has_web_custom se resuelve del business de owner_id =
+//       auth.uid() (nunca de un body). Decide editor vs upsell. Es solo la puerta de LECTURA — el
+//       gate que DE VERDAD importa vive en las 3 Server Actions (cada una re-chequea has_web_custom).
 //   (b) SESSION CLIENT, nunca service-role: createClient() de @/lib/supabase/server (anon + cookies,
 //       RLS activo). PROHIBIDO el service-role/admin client en la superficie web (T-14-04, heredado T-13-02).
 //   (c) AISLAMIENTO POR TENANT: los 5 datasets del preview se fetchean con .eq('business_id',
 //       business.id) del business de la sesión — sin fetch cross-tenant (T-14-03). El owner es un
 //       actor autenticado y la RLS de las tablas base aplica (mismo patrón que settings/page.tsx).
 
-// Kill-switch global del CMS. Server-only (NO NEXT_PUBLIC_*), fail-closed: sólo 'true' enciende.
-const CMS_ENABLED = process.env.CMS_ENABLED === 'true'
-
 export default async function WebEditorPage() {
-  // 1. Flag primero — fail-closed. Sin flag la ruta no renderiza NADA (notFound antes de todo).
-  if (!CMS_ENABLED) notFound()
-
-  // 2. Session client (anon + cookies, RLS). Nunca service-role acá.
+  // 1. Session client (anon + cookies, RLS). Nunca service-role acá.
   const supabase = await createClient()
 
-  // 3. Sesión del dueño.
+  // 2. Sesión del dueño.
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // 4. Negocio de la SESIÓN (owner_id = auth.uid()), con COLUMNAS EXPLÍCITAS. Nunca un business_id
+  // 3. Negocio de la SESIÓN (owner_id = auth.uid()), con COLUMNAS EXPLÍCITAS. Nunca un business_id
   //    del cliente, y nunca select('*'): esta fila viaja entera al bundle del cliente (el business es
   //    prop de un Client Component), así que un '*' publicaría en el payload RSC notification_email,
   //    plan/plan_status, mp_subscription_id, mp_user_id, owner_id… y bastaría con que mañana alguien
@@ -54,19 +48,22 @@ export default async function WebEditorPage() {
     .single()
   if (!business) redirect('/onboarding')
 
-  // 4b. ENTITLEMENT por negocio (PUB-01): el CMS es un add-on, no una feature de plan. Solo puede
-  //     editarse la web de un negocio que efectivamente TIENE web a medida (has_web_custom).
+  // 3b. ENTITLEMENT por negocio (PUB-01): el CMS es un add-on, no una feature de plan. Solo edita la
+  //     web un negocio que efectivamente TIENE web a medida (has_web_custom).
   //     Por qué esta columna y no el plan: (a) es el entitlement real (el admin la togglea desde el
   //     CRM cuando el cliente contrata/paga la web); (b) el trigger businesses_protect_admin_columns
   //     la REVIERTE ante cualquier UPDATE que no sea service_role → el dueño NO puede auto-otorgársela
   //     (gate a prueba de tampering); (c) sin web a medida no hay nada que editar.
-  //     notFound() y no redirect: para un negocio sin el add-on, la ruta directamente "no existe".
-  //     Esto es solo la puerta de la UI — el gate que DE VERDAD importa vive en las 3 Server Actions
-  //     (saveLandingDraft / publishLanding / discardLandingDraft: cada una re-chequea has_web_custom).
-  //     Defensa en profundidad: una page sin este check igual no podría escribir.
-  if (!business.has_web_custom) notFound()
+  //     Sin el add-on → upsell "Web a medida" (venta), NO un 404. Se resuelve ANTES del Promise.all del
+  //     preview, así un no-entitled no dispara las ~5 queries. Esto es solo la puerta de LECTURA — el
+  //     gate que DE VERDAD importa vive en las 3 Server Actions (saveLandingDraft / publishLanding /
+  //     discardLandingDraft: cada una re-chequea has_web_custom). Defensa en profundidad: una page sin
+  //     este check igual no podría escribir.
+  if (!business.has_web_custom) {
+    return <WebUpsell slug={business.slug} />
+  }
 
-  // 5. Datos del preview: los 5 datasets que el LandingRenderer consume además del config, todos
+  // 4. Datos del preview: los 5 datasets que el LandingRenderer consume además del config, todos
   //    acotados a este tenant. Los selects de schedule_exceptions y locations piden EXACTAMENTE las
   //    columnas que declaran los tipos ExceptionLite/LocationLite del renderer (landing-renderer.tsx),
   //    para que el cast a los Props del renderer sea seguro. schedule_exceptions se filtra desde hoy
@@ -94,7 +91,7 @@ export default async function WebEditorPage() {
       .or('is_active.is.null,is_active.eq.true'),
   ])
 
-  // 6. Los DOS configs, crudos (jsonb), al cliente. Phase 15 parte el dato en dos (migración 050) y
+  // 5. Los DOS configs, crudos (jsonb), al cliente. Phase 15 parte el dato en dos (migración 050) y
   //    el editor necesita ambos baselines para derivar sus 3 estados en memoria, sin estado nuevo en
   //    la DB (D-03) y sin un round-trip extra:
   //      · publishedConfig = landing_config → LO PUBLICADO (lo único que ve un visitante).
