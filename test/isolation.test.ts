@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { hasSupabaseCreds } from './env'
+import { hasSupabaseCreds, hasStorageTests } from './env'
 import { seedTwoTenants, teardown, type SeededTenants } from './helpers/supabase-fixtures'
 
 // ── Tests de aislamiento multi-tenant (RLS owner-level) — D-02 + D-03 + D-06 ─────────────
@@ -199,6 +199,33 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
       .eq('id', seeded.bizA)
       .single()
     expect(after?.has_web_custom).toBe(false)
+  })
+
+  // ── Upload-gate del CMS: un no-entitled NO puede subir a landing-assets (RLS bucket, migr. 051) ──
+  // El upload de imágenes del editor va DIRECTO browser→Storage con el session client (no pasa por
+  // Server Action), así que su único gate no-bypasseable es la RLS del bucket. La migr. 051 le agrega
+  // `AND has_web_custom = true` al subquery de INSERT/UPDATE → un dueño sin el add-on queda afuera.
+  //
+  // GUARDADO por hasStorageTests (RUN_STORAGE_TESTS=true): el Storage local está OFF
+  // (config.toml [storage] enabled=false), así que en local este caso SKIPEA limpio en vez de fallar
+  // por "storage no disponible" (evita el falso rojo). Corre en staging/CI con Storage hosteado.
+  // Aserción con anon-key (sesión del dueño A), NUNCA service-role (Pitfall 12): el service-role
+  // bypassaría la RLS del bucket y daría un falso verde.
+  it.skipIf(!hasStorageTests)('upload-gate: A sin has_web_custom NO puede subir a landing-assets (SC2, migr. 051)', async () => {
+    // Centinela de partida (order-independent, como el resto de la suite): forzamos has_web_custom=false
+    // con service-role antes de la aserción, sin depender de que un caso previo lo haya dejado así.
+    await seeded.admin.from('businesses').update({ has_web_custom: false }).eq('id', seeded.bizA)
+
+    // anonA (sesión del dueño A) sube a SU PROPIO prefijo {bizA}/. Sin el add-on, la RLS del bucket
+    // rechaza: el subquery `owner_id = auth.uid() AND has_web_custom = true` no matchea → violación de policy.
+    const probe = new Blob(['x'], { type: 'image/jpeg' })
+    const { data, error } = await anonA.storage
+      .from('landing-assets')
+      .upload(`${seeded.bizA}/probe-${Date.now()}.jpg`, probe, { upsert: false })
+
+    // Denegación de la RLS del bucket: error presente y sin objeto creado.
+    expect(error).not.toBeNull()
+    expect(data).toBeNull()
   })
 
   // ── D-10: la vista acotada public_businesses tras agregar landing_config (migración 030) ──────

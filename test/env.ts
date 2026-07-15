@@ -14,6 +14,13 @@ export const hasSupabaseCreds =
 export const hasWebhookSecret =
   !!process.env.MP_WEBHOOK_SECRET || !!process.env.MP_WEBHOOK_SECRET_TEST
 
+// hasStorageTests: flag EXPLÍCITO para correr los tests que golpean el Storage API (p. ej. el
+// upload-gate de landing-assets, migr. 051). El Storage local está OFF (supabase/config.toml →
+// [storage] enabled = false), así que en local estos casos deben SKIPEAR limpio en vez de fallar
+// por "storage no disponible" (evita el falso rojo). Se prende SOLO en staging/CI con Storage
+// hosteado (RUN_STORAGE_TESTS=true), donde el gate del bucket se puede verificar de verdad.
+export const hasStorageTests = process.env.RUN_STORAGE_TESTS === 'true'
+
 if (!hasSupabaseCreds) {
   // Aviso (no error): el job sigue verde, solo se skipean los tests de aislamiento (D-03).
   console.warn(
