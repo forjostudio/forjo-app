@@ -55,7 +55,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
     },
     // La Historia Clínica vive dentro de la ficha del paciente (sección colapsable),
     // ya no como item de menú propio.
-    menu: ['dashboard', 'appointments', 'agenda', 'patients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'settings'],
+    menu: ['dashboard', 'appointments', 'agenda', 'patients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'web', 'settings'],
     features: {
       clinical_history: true,
       insurance: true, // obra social
@@ -77,7 +77,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       resource: 'Profesional',
       resources: 'Equipo',
     },
-    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'settings'],
+    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'web', 'settings'],
     features: {
       preferences: true, // color, alergias, productos
       service_photos: true, // antes/después
@@ -98,7 +98,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       resource: 'Profesional',
       resources: 'Equipo',
     },
-    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'settings'],
+    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'equipo', 'consultorios', 'negocio', 'web', 'settings'],
     features: {},
   },
   canchas: {
@@ -119,7 +119,7 @@ export const VERTICALS: Record<VerticalKey, VerticalConfig> = {
       resources: 'Canchas',
     },
     // Sin 'equipo' ni 'patients' (D-02): el rubro no tiene staff, el bookable es la cancha.
-    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'consultorios', 'negocio', 'settings'],
+    menu: ['dashboard', 'appointments', 'agenda', 'clients', 'finances', 'servicios', 'consultorios', 'negocio', 'web', 'settings'],
     features: {},
   },
 }

@@ -14,6 +14,7 @@ import {
   Users,
   UserCog,
   Store,
+  Globe,
   Tag,
   MapPin,
   BarChart3,
@@ -39,7 +40,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon }
 const NAV_GROUPS: { section: string; keys: string[] }[] = [
   { section: 'PANEL', keys: ['dashboard'] },
   { section: 'AGENDA', keys: ['appointments', 'agenda', 'clients', 'patients'] },
-  { section: 'GESTIÓN', keys: ['servicios', 'equipo', 'consultorios', 'negocio'] },
+  { section: 'GESTIÓN', keys: ['servicios', 'equipo', 'consultorios', 'negocio', 'web'] },
   { section: 'REPORTES', keys: ['finances'] },
   { section: 'AJUSTES', keys: ['settings'] },
 ]
@@ -58,6 +59,10 @@ function buildNavGroups(business: Business): { section: string; items: NavItem[]
     appointments: { href: '/appointments', label: t.appointments, icon: Calendar },
     agenda: { href: '/agenda', label: 'Agenda', icon: CalendarClock },
     negocio: { href: '/negocio', label: 'Negocio', icon: Store },
+    // "Mi web" (→ editor /web, gate has_web_custom decide editor vs upsell). Visible a TODOS los
+    // verticales a propósito: es superficie de venta del add-on (D-01), NO se gatea por has_web_custom.
+    // Distinto del link flotante "Ver mi página" (ese va al público /[slug] en pestaña nueva).
+    web: { href: '/web', label: 'Mi web', icon: Globe },
     servicios: { href: '/servicios', label: t.services, icon: Tag },
     equipo: { href: '/equipo', label: 'Equipo', icon: UserCog },
     consultorios: { href: '/consultorios', label: t.locations, icon: MapPin },
