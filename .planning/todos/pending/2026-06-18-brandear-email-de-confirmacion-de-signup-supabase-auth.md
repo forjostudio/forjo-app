@@ -2,6 +2,7 @@
 created: 2026-06-18T15:39:45.362Z
 title: Brandear email de confirmación de signup (Supabase Auth)
 area: auth
+resolves_phase: 6
 files: []
 ---
 
