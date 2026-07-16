@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -53,14 +54,10 @@ export default function LoginPage() {
           <path d="M360 480 L470 480 L470 590 Z" fill="rgba(255,255,255,.08)" />
           <rect x="300" y="300" width="50" height="50" fill="rgba(255,255,255,.12)" />
         </svg>
-        <div className="relative flex items-center gap-3">
-          <svg width="30" height="38" viewBox="0 0 64 80" aria-hidden="true">
-            <rect x="6" y="6" width="14" height="68" fill="currentColor" />
-            <rect x="20" y="6" width="38" height="14" fill="#f4c543" />
-            <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="rgba(255,255,255,.65)" />
-            <circle cx="56" cy="13" r="6" fill="rgba(255,255,255,.85)" />
-          </svg>
-          <span className="font-[family-name:var(--font-heading)] font-black text-2xl">Forjo <span className="font-medium opacity-85">Studio</span></span>
+        {/* Variante crema FIJA, sin swap dark/light: el panel es siempre bg-primary (color saturado
+            de marca), así que nunca hay fondo claro posible. */}
+        <div className="relative">
+          <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto" />
         </div>
         <h2 className="relative font-[family-name:var(--font-heading)] font-black uppercase leading-none tracking-tight text-[clamp(30px,4vw,46px)]">
           Tus turnos,<br />clientes y<br />finanzas en<br />un solo lugar.
