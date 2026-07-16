@@ -60,16 +60,30 @@ export default function LoginPage() {
           <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto" />
         </div>
         <h2 className="relative font-[family-name:var(--font-heading)] font-black uppercase leading-none tracking-tight text-[clamp(30px,4vw,46px)]">
-          Tus turnos,<br />clientes y<br />finanzas en<br />un solo lugar.
+          Tu agenda,<br />clientes y<br />finanzas en<br />un solo lugar.
         </h2>
-        <p className="relative text-sm opacity-80">© Forjo Studio · Gestión de turnos para tu negocio</p>
+        {/* Crédito "hecho con Forjo Studio" — mismo copy/link que el footer de la página de reservas
+            (app/[slug]/booking-client.tsx). El estilo NO se copia: aquel vive sobre fondo neutro y usa
+            text-muted-foreground/foreground; acá el panel es bg-primary, así que va opacidad sobre
+            primary-foreground. Sin la marca F del original: su rect rojo se pierde sobre el naranja. */}
+        <p className="relative text-sm opacity-80">
+          hecho con{' '}
+          <a
+            href="https://www.forjo.studio"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-[family-name:var(--font-archivo)] opacity-100 hover:opacity-80 transition-opacity"
+          >
+            <span className="font-semibold">Forjo</span> Studio
+          </a>
+        </p>
       </div>
 
       {/* Columna derecha — formulario */}
       <div className="w-full md:w-[440px] flex items-center justify-center p-8 sm:p-10">
         <div className="w-full max-w-[340px]">
           <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold">Iniciá sesión</h1>
-          <p className="text-muted-foreground text-sm mt-1.5 mb-6">Entrá a tu panel de Forjo Studio</p>
+          <p className="text-muted-foreground text-sm mt-1.5 mb-6">Entrá a tu panel de Forjo Gestión</p>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
