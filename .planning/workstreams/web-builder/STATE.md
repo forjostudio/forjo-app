@@ -100,6 +100,12 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 - [Phase 17 — SECURITY-SENSITIVE]: sacar `CMS_ENABLED` retira el kill-switch fail-closed; `has_web_custom` queda como ÚNICO gate y tiene que sostener solo (chequeado en CADA acción, `business_id` de sesión, trigger de la columna verificado). Barrer restos del flag: ninguna ruta puede quedar con un chequeo muerto que la deje abierta. → correr `/gsd:secure-phase 17`.
 - [Next 16 — carryover]: consultar `node_modules/next/dist/docs/` antes de asumir comportamiento (server actions, revalidación/cache de RSC bajo `force-dynamic`).
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260716-ide | Logo de marca con variantes dark/light en login y crear cuenta | 2026-07-16 | 5bcd1c2 | [260716-ide-logo-de-marca-con-variantes-dark-light-e](../../quick/260716-ide-logo-de-marca-con-variantes-dark-light-e/) |
+
 ### Roadmap Evolution
 
 - [2026-07-07] Roadmap v0.16 creado: 4 fases (11-14), coarse, 15/15 requirements mapeados. SHIPPED 2026-07-10.
