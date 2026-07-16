@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -61,7 +62,13 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary">Forjo <span className="font-medium opacity-85">Studio</span></h1>
+          {/* Par tinta/crema con swap: el fondo acá es temático (bg-background), claro u oscuro según
+              el tema. El nombre accesible del h1 lo aporta el alt de la imagen visible; la variante
+              oculta usa display:none, así que sale del árbol de accesibilidad y no duplica el texto. */}
+          <h1 className="flex items-center justify-center">
+            <Image src="/brand/forjo-gestion-lockup-tinta.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto dark:hidden" />
+            <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="hidden h-10 w-auto dark:block" />
+          </h1>
           <p className="text-muted-foreground mt-1">Creá tu negocio en minutos</p>
         </div>
         <Card>
