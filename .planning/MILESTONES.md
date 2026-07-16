@@ -1,5 +1,26 @@
 # Milestones
 
+## v0.18 CMS Publish / Go-live (Shipped: 2026-07-16)
+
+**Delivered:** Guardar dejó de publicar — el CMS ahora tiene borrador real (`landing_draft`) vs publicado (`landing_config`), la web que arma la skill nace esperando aprobación, y el editor se expuso a clientes reales con el add-on `has_web_custom` como único gate (sin flag de entorno).
+
+**Phases completed:** 3 phases (15-17), 8 plans, 15 tasks
+**Stats:** 78 commits · 21 archivos de código (+2720/-308) · 2026-07-13 → 2026-07-16 (4 días)
+**Git range:** `9ded2dd` (feat(15-01): migración 050) → `6ad8f6f` (SECURED 10/10) · shipped en `main`
+**Migraciones:** 050 (`landing_draft`) + 051 (gate del upload en la RLS de `landing-assets`) — ambas aplicadas a prod a mano
+**Seguridad:** Fases 15 y 17 security-sensitive → SECURED (18/18 y 10/10). Requisitos: 9/9 completos (PUB-01, PUB-03..08, SKILL-07/08).
+
+**Key accomplishments:**
+
+- `businesses.landing_draft` (jsonb nullable, migración 050) con backfill idempotente desde `landing_config`, y 4 tests anon-key que prueban —no asumen— que el borrador es invisible para `anon` y para cualquier otro tenant.
+- El editor deja de escribir la web pública: `saveLandingDraft` persiste el borrador, `publishLanding()` y `discardLandingDraft()` copian entre columnas server-side sin aceptar un solo byte del cliente, y el editor deriva sus 3 estados de un compare canónico inmune al reordenamiento de claves del `jsonb`.
+- El editor pasa de "guardar = publicar" a un borrador explícito: una sola barra sticky con `[estado] · Descartar · Guardar · Publicar`, un indicador de 3 estados excluyentes, el dialog de go-live que aparece exactamente una vez en la vida del negocio, y publicar que guarda SIEMPRE antes de publicar.
+- La web que arma el operador con la skill nace como BORRADOR: `scripts/setup-landing.ts` escribe `landing_draft` (publicar sigue siendo decisión del dueño), con `--inspect` que vuelca al-aire y pendiente-de-aprobación por separado, aviso de choque contra trabajo sin publicar, y key de Storage derivada del contenido (sha256) para que la escritura sea idempotente de verdad.
+- Retiro del kill-switch global CMS_ENABLED de las 3 superficies TS del CMS, dejando has_web_custom como único gate, con upsell 'Web a medida' para no-entitled y entrada 'Mi web' en el sidebar para los 4 verticales.
+- Migración 051 que agrega `AND has_web_custom = true` a las policies INSERT+UPDATE del bucket `landing-assets`, cerrando SC2 en la 4ª superficie del CMS (el upload de imágenes) en la RLS — el único punto no-bypasseable del upload directo a Storage — verificado en PROD.
+
+---
+
 ## v0.17 Landing Polish + CMS usable (Shipped: 2026-07-12)
 
 **Sin fases GSD:** 23 commits de polish reactivo sobre feedback de UAT, directo a `main`. Cero migraciones. 40 archivos, +3740/−296. Suite: 484/484.

@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.18
 milestone_name: CMS Publish / Go-live
-status: "Fase completa (2/2 plans). Milestone v0.18 con las 3 fases cerradas; pendiente /gsd:secure-phase 17 + deploy go-live (runbook en 17-02-SUMMARY)."
+status: Awaiting next milestone
 stopped_at: Phase 17 plan 02 complete (upload gate migr. 051 verified in prod)
-last_updated: "2026-07-15T18:27:42.646Z"
-last_activity: 2026-07-15
+last_updated: "2026-07-16T15:44:08.756Z"
+last_activity: 2026-07-16 — Milestone v0.18 completed and archived
 progress:
   total_phases: 3
   completed_phases: 3
@@ -25,12 +25,10 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `web-builder`
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Fase completa (2/2 plans). Milestone v0.18 con las 3 fases cerradas; pendiente /gsd:secure-phase 17 + deploy go-live (runbook en 17-02-SUMMARY).
-Last activity: 2026-07-15
-
-Progreso: `[██████████] 3/3 fases`
+Phase: Milestone v0.18 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-16 — Milestone v0.18 completed and archived
 
 ## Performance Metrics
 
@@ -130,7 +128,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- `gsd-tools query workstream set web-builder` (pointer activo) + checkout de `gsd/gestion-rebrand`
-- Docker corriendo + `.env.test.local` apuntando al Supabase local (si no, los tests de aislamiento salen `skipped` = falso positivo de seguridad en una fase security-sensitive)
-- `/gsd:execute-phase 15 --ws web-builder`
-- Después: `/gsd:secure-phase 15` (fase SECURITY-SENSITIVE) y `/gsd:verify-work 15`
+- Start the next milestone with /gsd-new-milestone

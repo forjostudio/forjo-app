@@ -17,9 +17,18 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 - **Success metric**: lanzamiento sin incidentes de fuga de datos entre tenants ni de pagos falsificados.
 - **Strategy notes**: milestone pre-lanzamiento; ver `.planning/security-hardening-brief.md` y `.planning/codebase/CONCERNS.md` (auditoría 2026-06-15).
 
-## Current Milestone (workstream `web-builder`): v0.18 CMS Publish / Go-live
+## Workstream `web-builder`: v0.18 CMS Publish / Go-live — ✅ SHIPPED 2026-07-16
 
-> v0.16 Web Builder — Ampliación + CMS (shipped 2026-07-10, Phases 11-14) archivado en `.planning/milestones/v0.16-*`. v0.17 Landing Polish (shipped 2026-07-12) fue polish reactivo sin fases GSD. Este milestone continúa el workstream desde **Phase 15**.
+> Archivado en `.planning/milestones/v0.18-*` (Phases 15-17, 8 plans). Historial del workstream: v0.10 (Phases 6-10) · v0.16 (11-14) · v0.17 (polish reactivo, sin fases GSD) · v0.18 (15-17). El próximo milestone arranca en **Phase 18**.
+
+**Qué shipeó:** guardar dejó de publicar. `landing_config` = lo PUBLICADO, `landing_draft` = lo que se está editando; `/[slug]` lee SOLO lo publicado y publicar copia el borrador encima. La web que arma la skill nace como borrador esperando aprobación, y el CMS quedó expuesto a clientes reales con `has_web_custom` (el add-on) como ÚNICO gate — sin flag de entorno. Migraciones **050** + **051** aplicadas a prod. Fases 15 y 17 security-sensitive → SECURED 18/18 y 10/10.
+
+**Qué desbloquea:** el norte del web-builder — el **auto-armado de la web al confirmarse el pago del add-on en MercadoPago** (milestone propio). Este milestone era su prerequisito literal: una web autogenerada ya no puede salir cruda al público. Ver memoria `web-builder-automation-northstar`.
+
+**Deferred que siguen abiertos:** video de hero (BLOQUEADO por el bucket `landing-assets` — solo imágenes ≤2 MB, hay que tocarlo a mano en Supabase); toggle "foto ancha" en la galería; confirm-on-exit por nav interna; rediseño full-bleed (Meitre); rediseño del upsell "Web a medida" (sin add-on); bug de prod del modal "99 agendas". Ver `.planning/todos/pending/`.
+
+<details>
+<summary>Detalle del milestone (histórico)</summary>
 
 **Goal:** Que el dueño edite su web sin que cada tecla salga al aire, y que su web salga a producción **cuando él lo decide** — cerrando el prerequisito que bloquea el auto-armado de la web con el pago del add-on.
 
@@ -42,6 +51,8 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 - La skill/script escribe el **borrador**, no lo publicado.
 - Se mantienen TODOS los invariantes de v0.16: write path **owner-only** (session client + RLS por tenant + Zod estricto reject-on-invalid), **NUNCA service-role** en la superficie web de escritura, booking = caja negra, fail-safe del config (roto → default, `/[slug]` nunca 500ea).
 - El gate del add-on (`has_web_custom`) se chequea en la **Server Action**, no solo en la page: gatear solo la page es cosmético, un POST directo la saltea.
+
+</details>
 
 ## Current Milestone (workstream `crm`): v0.11 Consola CRM
 
@@ -93,6 +104,9 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 - ✓ **SEC-04** Gating de `plan_status` (blocklist `expired`/`cancelled`) en booking público — v0.9
 - ✓ **TEST-01** Suite Vitest (aislamiento multi-tenant anon-key + ambos webhooks) ejecutable en CI — v0.9
 - ✓ Cierre extra: policy abierta `public read appointments USING(true)` — agujero cross-tenant que el test de aislamiento cazó — v0.9 (migración 029)
+- ✓ **PUB-03..PUB-08** Borrador vs publicado (`landing_draft` / `landing_config`): guardar no publica, publicar/descartar son copia server-side (nunca se acepta el config del body), estado de 3 vías, go-live implícito, cero regresión en las landings ya al aire — v0.18 (migración 050)
+- ✓ **SKILL-07, SKILL-08** La skill del operador escribe el BORRADOR (`--publish` opt-in) y `--inspect` separa lo-al-aire de lo-pendiente-de-aprobación — v0.18
+- ✓ **PUB-01** CMS expuesto a clientes reales con `has_web_custom` como ÚNICO gate (sin `CMS_ENABLED`), chequeado en las 4 superficies incl. el upload directo a Storage vía RLS — v0.18 (migración 051)
 
 ### Active
 
@@ -164,4 +178,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-07 — started v0.16 Web Builder Ampliación + CMS milestone (workstream `web-builder`, continúa desde Phase 11); v0.9–v0.15 shipped y archivados*
+*Last updated: 2026-07-16 after v0.18 CMS Publish / Go-live milestone (workstream `web-builder`, Phases 15-17 shipped a prod); v0.9–v0.18 shipped y archivados. Próximo del workstream: Phase 18 — candidato natural, el auto-armado con el pago del add-on (`web-builder-automation-northstar`).*
