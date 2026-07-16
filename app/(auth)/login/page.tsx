@@ -54,10 +54,12 @@ export default function LoginPage() {
           <path d="M360 480 L470 480 L470 590 Z" fill="rgba(255,255,255,.08)" />
           <rect x="300" y="300" width="50" height="50" fill="rgba(255,255,255,.12)" />
         </svg>
-        {/* Variante crema FIJA, sin swap dark/light: el panel es siempre bg-primary (color saturado
-            de marca), así que nunca hay fondo claro posible. */}
+        {/* Variante crema FULL y FIJA, sin swap dark/light: el panel es siempre bg-primary (naranja
+            saturado de marca), así que nunca hay fondo claro posible. Va la "full" y no la crema
+            bicolor (la de register): en esa, "gestión" es gris/topo — pensado para fondo neutro
+            oscuro — y sobre el naranja se pierde. La full lleva "forjo" Y "gestión" en crema. */}
         <div className="relative">
-          <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto" />
+          <Image src="/brand/forjo-gestion-lockup-crema-full.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto" />
         </div>
         <h2 className="relative font-[family-name:var(--font-heading)] font-black uppercase leading-none tracking-tight text-[clamp(30px,4vw,46px)]">
           Tu agenda,<br />clientes y<br />finanzas en<br />un solo lugar.
