@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
 status: roadmapped
-last_updated: "2026-07-16T20:05:00.000Z"
-last_activity: 2026-07-16
+stopped_at: Phase 4 context gathered
+last_updated: "2026-07-16T23:15:48.541Z"
+last_activity: 2026-07-16 — ROADMAP de v0.19 creado (Phases 4-6, 8/8 requisitos mapeados)
 progress:
   total_phases: 3
   completed_phases: 0
@@ -41,9 +42,11 @@ Tres agujeros verificados contra código:
 1. **No hay recuperación de contraseña.** `app/(auth)/` = solo `login` y `register`; cero
    `resetPasswordForEmail` en el repo. Un dueño que olvida su contraseña queda afuera sin salida
    self-serve.
+
 2. **No existe `/auth/callback`** (intercambio de código por sesión). Los callbacks que hay
    (`api/google/callback`, `api/mercadopago/callback`) son de **integraciones**, otro flujo.
    **Reset y Google comparten esa ruta** → es la pieza de infra común del milestone.
+
 3. **Los mails son de Supabase, no de Forjo**: inglés, sin marca, `noreply@mail.app.supabase.io`,
    pie "powered by Supabase".
 
@@ -65,14 +68,18 @@ Decisiones de fase ABIERTAS (resolver en discuss-phase, NO lockeadas en el roadm
   `register/page.tsx:47` hace `signUp()` y empuja a `/onboarding` con un toast "Revisá tu email".
   Si la confirmación está ON, `signUp` no devuelve sesión → el proxy rebota a `/login` y el
   toast+push son engañosos. Define AUTH-06 y **alimenta MAIL-01 (P6)**.
+
 - **P4 — Redirect URLs en previews:** las previews de Vercel tienen dominio dinámico. ¿Wildcard en
   la allowlist o auth simplemente no anda en preview? Mismo problema que pegó con reCAPTCHA en el
   UAT de Phase 14. Afecta el UAT de P4 y P5.
+
 - **P4 — Forma de `/auth/callback`:** route handler que rutea por tipo de flujo (recovery vs oauth),
   contemplando desde ya que P5 lo reusa sin reescribirlo.
+
 - **P5 — Account linking (AUTH-05): LA decisión del milestone.** Supabase vincula identidades o tira
   error según la config y según si el mail está verificado. Definir explícitamente y **probar los
   dos órdenes** (contraseña→Google y Google→contraseña). Cruza con el hallazgo de AUTH-06.
+
 - **P6 — SMTP: Resend vs solo plantillas.** Resend unifica remitente con los mails de turnos y saca
   el "powered by Supabase", pero requiere dominio + DNS (SPF/DKIM). Solo-plantillas es más rápido
   pero deja `noreply@mail.app.supabase.io` → MAIL-01/02 quedarían a medias.
@@ -92,17 +99,22 @@ None yet.
 
 - **Checkpoints humanos bloqueantes (`autonomous: false`) — buena parte del milestone es config
   externa**, igual que la migración 051 de v0.18:
+
   - **P4:** allowlist de Redirect URLs en el Dashboard de Supabase (`/auth/callback` en prod + lo que
     se decida para previews). Sin eso el link del mail no vuelve a la app.
+
   - **P5:** Google Cloud (redirect URI del callback de Supabase en las credenciales OAuth que ya
     existen) + Dashboard de Supabase (habilitar provider de Google con client ID/secret).
+
   - **P6 (el grueso de la fase):** Supabase Auth → SMTP custom + plantillas (Confirm signup, Reset
     password) + Resend (dominio) + **DNS** (SPF/DKIM en Cloudflare). Verificación por envío real.
+
 - **Superficie de autenticación → `/gsd:secure-phase` en P4 y P5** (y acotado en P6). No es
   RLS/multi-tenant, pero un agujero acá entrega cuentas enteras: open redirect en el callback, fuga
   del token de recovery, user enumeration en "olvidé mi contraseña", y **account takeover por
   linking automático sobre un email no verificado** (P5). En P6 los tokens viajan dentro de las
   plantillas.
+
 - **AUTH-05 puede morder a un cliente que ya paga:** si el linking sale mal, un dueño registrado con
   contraseña que entra con Google puede quedar mirando el negocio de nadie. Probar los dos órdenes.
 
@@ -118,9 +130,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-16
-Stopped at: ROADMAP de v0.19 creado (Phases 4-6, cobertura 8/8) — ninguna fase planeada aún
-Resume file: .planning/workstreams/onboarding/ROADMAP.md
+Last session: 2026-07-16T23:15:48.510Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/workstreams/onboarding/phases/04-recuperar-la-cuenta-auth-callback-reset/04-CONTEXT.md
 Next: `/gsd:discuss-phase 4 --ws onboarding`
 
 ## Performance Metrics
