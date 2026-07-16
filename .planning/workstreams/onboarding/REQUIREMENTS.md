@@ -96,7 +96,29 @@ cómo una persona pasa de no tener cuenta a estar adentro. Mismo embudo, misma h
 ## Traceability
 
 > Mapeo creado por gsd-roadmapper al crear ROADMAP.md. Cada requirement mapea a exactamente una fase.
+> Cobertura: **8/8 requisitos v1 mapeados**, sin huérfanos ni duplicados.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(lo completa el roadmap)_ | | |
+| AUTH-01 | Phase 4 — Recuperar la cuenta (`/auth/callback` + reset) | Pending |
+| AUTH-02 | Phase 4 — Recuperar la cuenta (`/auth/callback` + reset) | Pending |
+| AUTH-06 | Phase 4 — Recuperar la cuenta (`/auth/callback` + reset) | Pending |
+| AUTH-03 | Phase 5 — Entrar con Google | Pending |
+| AUTH-04 | Phase 5 — Entrar con Google | Pending |
+| AUTH-05 | Phase 5 — Entrar con Google | Pending |
+| MAIL-01 | Phase 6 — Mails de cuenta con marca Forjo | Pending |
+| MAIL-02 | Phase 6 — Mails de cuenta con marca Forjo | Pending |
+
+**Notas del mapeo:**
+
+- **`/auth/callback` vive solo en Phase 4** (AUTH-02) y Phase 5 lo **reusa** — no se duplica ni se
+  re-implementa en dos fases.
+- **AUTH-06 va en Phase 4** porque su insumo es el research de esa fase (¿`confirm email` está ON y
+  bloquea?), que es la misma config de Auth que gobierna el reset. Ese hallazgo **alimenta MAIL-01**
+  en Phase 6.
+- **AUTH-04 es verificar, no construir** (el onboarding ya maneja "autenticado sin negocio") → va
+  pegado a Google en Phase 5.
+- **AUTH-05 (account linking) NO queda suelto al final**: es decisión + verificación de la Phase 5,
+  donde efectivamente se toca Google.
+- **MAIL-02 va después del reset** (Phase 4): un mail de recuperación no sirve de nada si no hay a
+  dónde recuperar.

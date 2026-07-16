@@ -1,121 +1,150 @@
-# Roadmap: Forjo App — Onboarding (v0.14)
+# Roadmap: Forjo App — Onboarding (workstream `onboarding`)
 
-> Workstream `onboarding`. Numeración de fases reiniciada en Phase 1 (workstream nuevo). PROJECT.md compartido en `.planning/PROJECT.md`; requirements en `.planning/workstreams/onboarding/REQUIREMENTS.md`. Scopear comandos GSD con `--ws onboarding`.
+## Milestones
+
+- ✅ **v0.14 Onboarding** — Phases 1-3 (shipped 2026-07-04, archivado en `milestones/v0.14-*`)
+- 🔨 **v0.19 Cuenta y acceso** — Phases 4-6 (activo)
+
+Detalle archivado: [`milestones/v0.14-ROADMAP.md`](../../milestones/v0.14-ROADMAP.md).
 
 ## Overview
 
-Este milestone cierra dos brechas del alta de negocios que hoy generan fricción y datos divergentes. No agrega features al onboarding: **arregla y pule lo que ya existe**.
+v0.14 cubrió el **wizard de creación del negocio**. v0.19 es el **paso anterior del mismo recorrido**: cómo una persona pasa de no tener cuenta a estar adentro. Mismo embudo, misma historia — por eso vive en este workstream y continúa su numeración.
 
-La primera brecha es de **datos**: el paso "Horarios de atención" del onboarding escribe en `business_hours`, pero el **panel de agenda** y el **booking público** leen `time_blocks` — así que los horarios que carga el negocio en el alta NO llegan a donde se reserva. Y `business_hours` ya no está huérfana: hoy la leen la **landing pública** (`lib/landing/derive.ts`, `components/landing/hours.tsx`) y el **agente de WhatsApp** (`lib/agent-context.ts`, `app/api/agent/context/route.ts`). Hay dos fuentes de horarios divergentes. Phase 1 unifica esa fuente sin romper a ninguno de los cuatro lectores actuales (panel, booking, landing, agente). El riesgo dominante acá NO es aislamiento (los horarios ya viven bajo `business_id`), sino **regresión**: no romper lo que hoy funciona.
+Hoy hay tres agujeros en esa puerta de entrada, verificados contra código:
 
-La segunda brecha es de **UX**: el flujo de alta obliga a completar pasos que el negocio quizás quiera dejar para después, y tiene fricciones de presentación (labels, feedback, orden). Phase 2 agrega un botón "Omitir" en los pasos no obligatorios (completables luego desde el panel) y hace un repaso general del flujo, sin rediseño visual completo ni pasos/campos nuevos.
+1. **No se puede recuperar una contraseña.** `app/(auth)/` tiene solo `login` y `register`; cero ocurrencias de `resetPasswordForEmail`. Un dueño que olvida su contraseña queda afuera de su negocio, sin salida self-serve.
+2. **No existe `/auth/callback`** — la ruta que intercambia código por sesión. Los callbacks que hay (`api/google/callback`, `api/mercadopago/callback`) son de **integraciones** (Calendar, MP), otro flujo. **Reset y Google necesitan esa misma ruta**: es la pieza de infraestructura común y la razón por la que el milestone no se hace de a un feature suelto.
+3. **Los mails de cuenta son de Supabase, no de Forjo**: inglés, sin marca, remitente `noreply@mail.app.supabase.io`, pie "powered by Supabase".
 
-El faseo va datos → UX: primero se unifica de dónde salen los horarios (Phase 1), y recién sobre esa base se pule el flujo de alta (Phase 2), porque el rework de UX del paso de horarios se apoya en que la fuente ya esté reconciliada.
+El faseo va **infraestructura + reset → Google → mails**:
+
+- La **Phase 4** construye `/auth/callback` una sola vez (no se duplica en ninguna otra fase) y lo estrena con el flujo de recuperación, que es el que hoy no existe y deja gente afuera. También cierra la coherencia del alta (AUTH-06), porque el research que define si `confirm email` está ON y bloquea vive acá: es la misma config de Auth que gobierna el reset.
+- La **Phase 5** monta Google encima del callback ya construido y probado, y resuelve la trampa real del milestone: el **account linking** (mismo mail con contraseña y con Google → una sola cuenta, no dos ni un error opaco). Ahí también se verifica —no se construye— el hand-off al onboarding, que ya sabe manejar "autenticado sin negocio".
+- La **Phase 6** cierra la marca de los mails. Va última a propósito: brandea los dos mails que para entonces **existen y tienen a dónde llevar** (MAIL-02 no sirve de nada sin flujo de reset), y concentra el grueso de la config externa —SMTP, dominio, DNS, plantillas— en una fase pensada como config + verificación, en vez de mezclarla con código autónomo.
+
+**Nota operativa:** buena parte del milestone es **config externa** (Dashboard de Supabase: redirect URLs, provider de Google, SMTP, plantillas; Google Cloud: redirect URI). Eso implica **checkpoints humanos bloqueantes** (`autonomous: false`), igual que la migración 051 de v0.18. Están señalados por fase.
 
 ## Phases
 
 **Phase Numbering:**
 
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (1.1, 1.2): Urgent insertions (marked with INSERTED)
+- El workstream `onboarding` **continúa** la numeración: v0.14 cerró en Phase 3, v0.19 arranca en **Phase 4**.
+- Integer phases: trabajo planeado del milestone.
+- Decimal phases (4.1, …): inserciones urgentes (marcadas INSERTED).
 
-Faseo: reconciliación de horarios → rework UX del onboarding (los datos se unifican antes de pulir el flujo que los carga).
+<details>
+<summary>✅ v0.14 Onboarding (Phases 1-3) — SHIPPED 2026-07-04</summary>
 
-- [x] **Phase 1: Reconciliación de horarios** - Unificar la fuente de horarios para que lo que se carga en el onboarding llegue al panel de agenda + booking público, y que landing + agente de WhatsApp muestren lo mismo (sin divergencia `business_hours` ↔ `time_blocks`) (completed 2026-07-03)
-- [x] **Phase 2: Rework UX del onboarding** - Botón "Omitir" en los pasos no obligatorios (completar después desde el panel) + repaso general del flujo (labels visibles, feedback inmediato, orden lógico) (completed 2026-07-04)
-- [x] **Phase 3: Rework del selector de rubro** - Reducir a 4 rubros (Salud, Belleza/Estética/Spa, General, Canchas) + campo personalizable siempre visible con sugerencia por rubro y leyenda "Así aparecerá en tu página de reservas", aplicado en el onboarding y en la configuración del dashboard (completed 2026-07-04)
+- [x] Phase 1: Reconciliación de horarios (3/3 plans, SCHED-01/02) — completed 2026-07-03 — migr. 046 (DROP `business_hours`, `time_blocks` = fuente única)
+- [x] Phase 2: Rework UX del onboarding (1/1 plan, ONB-01/02) — completed 2026-07-04 — "Omitir por ahora" + stepper dinámico
+- [x] Phase 3: Rework del selector de rubro (3/3 plans, ONB-RUBRO-01/02) — completed 2026-07-04 — migr. 047 (backfill `vertical`), 4 rubros + campo libre
+
+Detalle completo archivado en [`milestones/v0.14-ROADMAP.md`](../../milestones/v0.14-ROADMAP.md).
+
+</details>
+
+### v0.19 Cuenta y acceso (activo)
+
+Faseo: infraestructura de callback + recuperación → Google (con account linking) → mails branded. El orden es **load-bearing**: `/auth/callback` se construye una vez en Phase 4 y Google lo reusa; los mails se brandean cuando los flujos que los disparan ya existen.
+
+- [ ] **Phase 4: Recuperar la cuenta (`/auth/callback` + reset)** - La ruta de intercambio de código por sesión, estrenada con el flujo completo de recuperación de contraseña, y un alta que es honesta sobre la confirmación
+- [ ] **Phase 5: Entrar con Google** - Alta e inicio de sesión con Google sobre el callback ya construido, con account linking resuelto y el hand-off al onboarding verificado
+- [ ] **Phase 6: Mails de cuenta con marca Forjo** - Los mails de confirmación y recuperación llegan en español, con marca y desde un remitente de Forjo — sin "powered by Supabase"
 
 ## Phase Details
 
-### Phase 1: Reconciliación de horarios
+### Phase 4: Recuperar la cuenta (`/auth/callback` + reset)
 
-**Goal**: Que los horarios que el negocio carga en el paso "Horarios de atención" del onboarding se reflejen efectivamente en el **panel de agenda** y en el **booking público** (hoy leen `time_blocks`, pero el onboarding escribe `business_hours`), y que la **landing pública** y el **agente de WhatsApp** (hoy lectores de `business_hours`) muestren exactamente los mismos horarios — una sola fuente de verdad, sin divergencia entre las dos tablas y con **cero regresión** en ninguno de los cuatro lectores actuales.
-**Depends on**: Nothing (first phase)
-**Requirements**: SCHED-01, SCHED-02
+**Goal**: Que un dueño que olvidó su contraseña pueda volver a entrar solo, sin escribirle a nadie — construyendo en el camino `/auth/callback`, la ruta de intercambio de código por sesión que hoy no existe y que Phase 5 va a reusar tal cual. Incluye cerrar la coherencia del alta: que lo que el usuario ve al registrarse coincida con lo que Auth realmente hace.
+
+**Depends on**: Nothing (primera fase del milestone; el workstream viene de Phase 3 completa)
+
+**Requirements**: AUTH-01, AUTH-02, AUTH-06
+
 **Success Criteria** (what must be TRUE):
 
-  1. Un negocio carga sus horarios en el paso "Horarios de atención" del onboarding y esos horarios aparecen en el **panel de agenda** y se usan efectivamente para reservar en el **booking público** (los horarios del alta llegan a donde se reserva).
-  2. La **landing pública** (`components/landing/hours.tsx` vía `lib/landing/derive.ts`) y el **agente de WhatsApp** (`app/api/agent/context/route.ts` vía `lib/agent-context.ts`) muestran los mismos horarios que el panel/booking — cero divergencia entre `business_hours` y `time_blocks`.
-  3. Los cuatro lectores actuales (panel de agenda, booking público, landing, agente) siguen funcionando sin regresión: ningún negocio existente pierde ni ve cambiados sus horarios tras la unificación.
-  4. Editar los horarios desde el panel de agenda se refleja de forma consistente en todos los lectores (una sola fuente de verdad; no hay que cargarlos dos veces en dos lugares distintos).
+  1. Un dueño que olvidó su contraseña entra al login, pone su email, pide el link y recibe el mail de recuperación (con la plantilla que haya en ese momento — la marca es Phase 6).
+  2. Con ese link, el dueño setea una contraseña nueva y **queda adentro de su panel** — sin pasar de nuevo por el login, sin pantalla muerta y sin error opaco si el link ya venció o ya se usó (le dice qué pasó y cómo pedir otro).
+  3. La contraseña nueva funciona: cierra sesión, vuelve a entrar con ella, y la vieja ya no sirve.
+  4. El registro es honesto: lo que el usuario lee después de crear la cuenta y a dónde lo mandan coincide con lo que Auth hace de verdad — si confirmar el mail es obligatorio, no se lo manda a una pantalla que lo va a rebotar al login.
 
-**Plans**: 3/3 plans complete
+**Plans**: TBD
 
-Plans:
-**Wave 1**
+**Phase-level decision (defer to discuss-phase)**:
 
-- [x] 01-01-PLAN.md — Onboarding escribe `time_blocks` (con horario partido) en vez de `business_hours` (SCHED-01) · wave 1
-- [x] 01-02-PLAN.md — Agente de WhatsApp lee `time_blocks` (único lector vivo restante; la landing ya migró en web-builder) (SCHED-02) · wave 1
+- **¿`confirm email` está ON y bloquea hoy?** — es **research de fase, NO asumir**. `register/page.tsx:47` hace `signUp()` y empuja directo a `/onboarding` con un toast "Revisá tu email". Si la confirmación está ON, `signUp` no devuelve sesión → el proxy debería rebotar a `/login`, y el toast+push serían engañosos. El hallazgo define AUTH-06 (¿cambio de copy + redirect honesto, o el mail de confirmación es un gate real?) y **alimenta MAIL-01 en Phase 6** (cuánto importa brandear un mail que quizás nadie necesita abrir).
+- **Redirect URLs en previews** — las previews de Vercel tienen dominio dinámico. Decidir si se allowlistean (wildcard) o si auth simplemente no anda en preview. Mismo problema que ya pegó con reCAPTCHA en el UAT de Phase 14. Afecta cómo se hace el UAT de esta fase y de la 5.
+- **Forma de `/auth/callback`** — route handler que intercambia el código y rutea por tipo de flujo (recovery vs oauth), contemplando desde ya que Phase 5 lo va a reusar sin reescribirlo.
 
-**Wave 2** *(blocked on Wave 1 completion)*
+**Checkpoint humano (`autonomous: false`)**: allowlist de **Redirect URLs** en el Dashboard de Supabase (`/auth/callback` en prod + lo que se decida para previews). Sin eso el link del mail no vuelve a la app.
 
-- [x] 01-03-PLAN.md — DROP `business_hours` (migr. 045) + regenerar schema.sql + quitar tipo `BusinessHour` (SCHED-02 / SCHED-DROP-01 folded) · wave 2, aplicación a prod MANUAL
+**Threat note — corré `/gsd:secure-phase`**: esta fase **es la superficie de autenticación**. Toca tokens de recuperación, intercambio de código por sesión y redirect URLs. Riesgos a cubrir: **open redirect** vía el parámetro de retorno del callback (allowlist, nunca reflejar lo que venga); fuga del token de recovery en la URL/`Referer`/logs; que el reset no exija sesión válida del token (cualquiera setearía la contraseña de cualquiera); **user enumeration** en "olvidé mi contraseña" (la respuesta debe ser idéntica exista o no el mail); y reuso/expiración del link. No es RLS/multi-tenant, pero un agujero acá entrega cuentas enteras.
 
-**Phase-level decision (defer to discuss-phase)**: **cuál es la tabla canónica de horarios.** Opciones a evaluar en discuss-phase (NO lockear acá): (a) migrar el onboarding a escribir `time_blocks` (lo que ya leen panel/booking) y migrar los lectores de `business_hours` (landing/agente) a `time_blocks` — `time_blocks` como única fuente; (b) mantener `business_hours` como fuente y hacer que panel/booking la lean; (c) una vista/sincronización que mantenga ambas coherentes de forma transitoria. Evaluar qué **minimiza migración** y **no rompe a los lectores actuales** (panel, booking, landing, agente). La deprecación/eliminación de la tabla perdedora queda diferida (SCHED-DROP-01, v2), así que la opción elegida puede mantener ambas tablas transitoriamente si eso reduce riesgo de regresión.
+### Phase 5: Entrar con Google
 
-**Security/Integrity relevance**: Bajo (regresión, no aislamiento). Los horarios son datos por tenant y ya viven bajo `business_id` en ambas tablas — toda query/escritura respeta el aislamiento multi-tenant ya vigente (RLS + filtro `business_id`), y esta fase no lo debilita. El riesgo real es de **regresión**: romper landing/agente/panel/booking que hoy funcionan, o corromper/perder horarios de negocios existentes durante la reconciliación. Si la decisión de fase agrega una migración (nueva `04x+` sobre el baseline v0.13), debe ser aditiva, validada con `supabase db reset` local antes de prod, y no exponer horarios de un tenant a otro ni a `anon` más allá de la vista pública acotada ya vigente (`public_business_hours`).
+**Goal**: Que una persona pueda crear su cuenta e iniciar sesión con Google sin contraseña, reusando el `/auth/callback` que dejó la Phase 4, y que el caso borde que puede morder —el mismo email con contraseña **y** con Google— termine en **una sola cuenta** con comportamiento predecible. El hand-off al onboarding se **verifica**, no se construye: `onboarding/page.tsx` ya resuelve `getUser()` y crea el negocio para un usuario autenticado sin negocio.
 
-### Phase 2: Rework UX del onboarding
+**Depends on**: Phase 4 (reusa `/auth/callback`; no lo re-implementa)
 
-**Goal**: Reducir la fricción del flujo de alta sobre `app/(onboarding)/onboarding/page.tsx` y sus pasos, con dos cambios acotados: (1) un botón **"Omitir"** en los pasos **no obligatorios**, que deja el paso sin completar y le permite al negocio llegar al dashboard y completarlo después desde el panel; (2) un **repaso general de UX** del flujo existente — labels siempre visibles (no solo placeholders), feedback inmediato en las acciones, y orden lógico de los pasos. Es un rework de presentación/UX sobre pasos ya existentes: NO se agregan pasos ni campos nuevos, NO es un rediseño visual completo, y no introduce datos de tenant nuevos.
-**Depends on**: Phase 1
-**Requirements**: ONB-01, ONB-02
+**Requirements**: AUTH-03, AUTH-04, AUTH-05
+
 **Success Criteria** (what must be TRUE):
 
-  1. El usuario ve un botón "Omitir" en los pasos no obligatorios del onboarding, lo usa, y llega al dashboard con esos pasos sin completar (sin quedar trabado en el alta).
-  2. Un paso omitido en el alta se puede completar después desde el panel (el negocio no pierde la posibilidad de cargar lo que salteó).
-  3. Los pasos obligatorios (los que no se pueden omitir) siguen exigiéndose: el flujo distingue claramente qué es opcional y qué no, y no deja avanzar sin lo crucial.
-  4. El flujo se siente más claro y sin fricción: labels siempre visibles, feedback inmediato en las acciones (errores/confirmaciones), y orden lógico de los pasos — sin campos ni pasos nuevos.
+  1. Una persona sin cuenta entra con "Continuar con Google", elige su cuenta, y queda autenticada en Forjo sin haber inventado ninguna contraseña.
+  2. Ese usuario nuevo **cae en el onboarding y crea su negocio**, igual que uno de email/contraseña — y al terminar llega a su panel (verificación del carril que ya existe, no un flujo nuevo).
+  3. Un usuario que ya entró con Google vuelve más tarde y entra directo a su panel: la segunda vez es un login, no un alta duplicada.
+  4. El mismo email registrado antes con contraseña entra después con Google (y al revés) y termina en **una sola cuenta** con sus datos y su negocio intactos — nunca una cuenta duplicada ni un error opaco. Si la decisión de fase es bloquear el cruce, el usuario ve un mensaje que le dice exactamente qué hacer.
 
-**Plans**: 1/1 plans complete
-
-Plans:
-**Wave 1**
-
-- [x] 02-01-PLAN.md — Rework UX del onboarding: "Omitir por ahora" en pasos opcionales + stepper dinámico (canchas) + header fijo de Servicios + validación inline onBlur + precio 0 (ONB-01, ONB-02) · wave 1
-
-**UI hint**: yes
-
-**Phase-level decision (defer to discuss-phase)**: **qué pasos son "no obligatorios" (omitibles) y cuáles no.** Definir en discuss-phase el set exacto de pasos que llevan botón "Omitir" vs. los obligatorios, y **cómo se representa un paso omitido** para que el panel sepa que quedó pendiente (marcar el paso como incompleto vs. simplemente dejar el dato vacío). El indicador de "onboarding incompleto" en el panel que recuerde completar los pasos omitidos queda diferido (ONB-PROGRESS-01, v2), así que en v0.14 alcanza con que el dato quede completable desde el panel, sin un recordatorio dedicado.
-
-**Security/Integrity relevance**: Bajo (UX). Es rework de presentación/UX sobre pasos existentes del onboarding; no agrega datos de tenant nuevos ni toca el aislamiento. El onboarding escribe sobre el negocio del usuario autenticado (patrón ya vigente); "Omitir" no debilita ninguna validación server-side ni permite escribir sobre otro tenant. El único cuidado de integridad es no permitir omitir un paso que sea prerrequisito real de otro (que el flujo quede en un estado inconsistente); eso se acota al definir el set de pasos obligatorios vs. omitibles en discuss-phase.
-
-### Phase 3: Rework del selector de rubro
-
-**Goal**: Simplificar el selector de rubro a **4 opciones** (Salud, Belleza/Estética/Spa, General, Canchas — los 4 `VerticalKey` que ya existen) y sumar un **campo personalizable siempre visible** (texto libre) que muestra una **sugerencia por rubro** (placeholder tipo "Ej: …") y una **leyenda "Así aparecerá en tu página de reservas"**. El rubro elegido resuelve el vertical (terminología/menú/features); el texto libre es la etiqueta visible del negocio en la **página pública de reservas**. Aplica tanto al **onboarding** (paso "Tu negocio") como a la **configuración del negocio en el dashboard**. Cero regresión en la resolución de vertical de negocios existentes.
-**Depends on**: Phase 2
-**Requirements**: ONB-RUBRO-01, ONB-RUBRO-02
-**Success Criteria** (what must be TRUE):
-
-  1. El usuario ve 4 rubros (Salud, Belleza/Estética/Spa, General, Canchas), elige uno, y **siempre** aparece un campo para personalizar el rubro con una sugerencia acorde ("Ej: …") — sin depender de tocar "Otro" (que hoy además está roto: el campo no aparece).
-  2. El texto personalizado se guarda y **aparece en la página pública de reservas** como categoría del negocio ("así aparecerá…"); el rubro elegido define terminología/menú/features (vertical).
-  3. El **mismo selector** (4 rubros + campo personalizable) está en la **configuración del negocio en el dashboard**, consistente con el onboarding.
-  4. **Cero regresión**: negocios existentes siguen resolviendo su vertical/terminología correctamente (sin migración destructiva); el auto-ocultar Profesionales en canchas (D-03 de Phase 2) sigue funcionando con el nuevo modelo.
-
-**Plans**: 3/3 plans complete
-
-- [x] 03-01-PLAN.md — Migración 047 (backfill vertical) + rework de lib/verticals.ts (label belleza, vaciar types, helpers RUBRO_PLACEHOLDERS/getVerticalLabel, borrar dead code) + test del CASE
-- [x] 03-02-PLAN.md — Selector de 4 rubros + campo libre siempre visible en onboarding y settings (re-key auto-hide canchas/canGoNext/hints al vertical elegido)
-- [x] 03-03-PLAN.md — Fallback de categoría (getVerticalLabel) en ambos booking clients (genérico + canchas)
+**Plans**: TBD
 
 **UI hint**: yes
 
 **Phase-level decision (defer to discuss-phase)**:
 
-- **Mapeo de datos:** rubro elegido → columna `vertical`; texto libre → columna `type` (etiqueta visible). Confirmar que `resolveVertical` (ya prefiere `vertical`) y la lógica de canchas del onboarding (hoy keyea `getVerticalKeyByType(type)`) se pasan al **rubro elegido** sin romper negocios existentes (que tienen `type` granular).
-- **Sugerencia por IA:** hoy la clasificación elige de `ALL_BUSINESS_TYPES` (lista cerrada de subtipos). Con texto libre cambia de sentido: mantener / adaptar / quitar.
-- **¿El campo personalizable es obligatorio u opcional?** Qué se muestra en booking si queda vacío (fallback al label del rubro).
-- **Placeholders por rubro** (propuesta del usuario): Salud "Ej: Lic. en Psicología, Kinesiólogo" · Belleza/Estética/Spa "Ej: Barbería, Masajista, Depilación" · General "Ej: Lavaautos, Tatuajes, Fotógrafo" · Canchas "Ej: Canchas de fútbol".
+- **Account linking (AUTH-05) — LA decisión del milestone.** Supabase vincula identidades o tira error según la config y según si el mail está verificado. Definir el comportamiento **explícitamente** y después **probarlo con los dos órdenes** (contraseña→Google y Google→contraseña). Es decisión + verificación, no cosmética: si esto sale mal, un cliente que ya paga se queda mirando el negocio de nadie. Cruza con el hallazgo de AUTH-06 (si el mail está verificado o no cambia el comportamiento del linking).
+- **Botón de Google en login y register**, o solo en uno. Sin rediseño visual de las pantallas (out of scope, se tocaron recién en el quick `260716-ide`).
 
-**Security/Integrity relevance**: Bajo-Medio (regresión, no aislamiento). Rubro/`type`/`vertical` ya viven bajo `business_id`; esta fase no agrega aislamiento nuevo. Pero toca el **modelo de resolución de vertical usado en toda la app** (terminología, menú, landing, agente) + la **página pública de reservas**. Riesgo dominante = **regresión** en negocios existentes (mismo cuidado que Phase 1): no cambiar el vertical resuelto de un negocio ya creado. Todo cambio de datos debe ser **aditivo/no destructivo**; el texto libre en `type` expuesto en booking es data pública ya acotada.
+**Checkpoint humano (`autonomous: false`)**: (a) **Google Cloud** — agregar el redirect URI del callback de Supabase a las credenciales OAuth que ya existen (`client_secret_*.json`, hoy usadas por Calendar); (b) **Dashboard de Supabase** — habilitar el provider de Google con client ID/secret. Sin esto el botón no puede probarse ni existir.
+
+**Threat note — corré `/gsd:secure-phase`**: OAuth + account linking. Riesgos a cubrir: **account takeover por linking automático** sobre un email no verificado (el ataque clásico: registro con el mail de otro y me lo apropio cuando entra por Google); qué identidad manda si los dos existen; reuso del callback con `state`/PKCE; y el mismo open-redirect de Phase 4 sobre el retorno del OAuth. Comparte superficie con Phase 4 — verificar que el callback endurecido allá siga endurecido acá.
+
+### Phase 6: Mails de cuenta con marca Forjo
+
+**Goal**: Que los mails que Forjo manda para crear y recuperar una cuenta dejen de parecer de Supabase: español, marca Forjo, remitente de Forjo, sin "powered by Supabase". Va última porque brandea los dos mails que para entonces **existen y llevan a algún lado** (el de recuperación no existe hasta la Phase 4), y porque concentra el grueso de la config externa —SMTP, dominio, DNS, plantillas— en una fase de config + verificación en vez de mezclarla con código autónomo.
+
+**Depends on**: Phase 4 (el mail de recuperación necesita el flujo de reset y su link; el hallazgo de AUTH-06 define cuánto pesa el de confirmación). Phase 5 no lo bloquea, pero corriendo después ya se sabe cuántos usuarios llegan pre-verificados por Google.
+
+**Requirements**: MAIL-01, MAIL-02
+
+**Success Criteria** (what must be TRUE):
+
+  1. Al crear una cuenta con email/contraseña, el mail de confirmación llega **en español, con la marca Forjo y desde un remitente de Forjo** — sin "powered by Supabase" ni `noreply@mail.app.supabase.io`.
+  2. Al pedir recuperar la contraseña, el mail llega con **la misma marca y el mismo remitente** — los dos se ven de la misma familia, no de dos productos distintos.
+  3. Los links de los dos mails **siguen funcionando end-to-end** tras el cambio de plantilla y de remitente: confirmar deja la cuenta confirmada, recuperar deja al dueño seteando su contraseña nueva y adentro del panel (cero regresión sobre lo que cerró la Phase 4).
+  4. Los mails **llegan a la bandeja de entrada**, no a spam, en Gmail — probado con un envío real desde el remitente configurado.
+
+**Plans**: TBD
+
+**Phase-level decision (defer to discuss-phase)**:
+
+- **SMTP: Resend vs solo editar las plantillas del default.** Resend ya está cableado para los transaccionales de turnos (`lib/email.ts`) → unifica el remitente con los mails que el negocio ya manda y saca el "powered by Supabase", pero requiere configurar dominio + DNS (SPF/DKIM). Editar solo las plantillas es más rápido, pero el remitente sigue siendo `noreply@mail.app.supabase.io` — o sea, MAIL-01/02 quedan a medias. Decidir con el criterio del requisito ("desde un remitente de Forjo"), no con el de menor esfuerzo.
+- **Qué dominio/remitente** (`no-reply@forjo.studio` vs el que ya usa `lib/email.ts`) y si se reusa el dominio ya verificado en Resend.
+
+**Checkpoint humano (`autonomous: false`) — el grueso de la fase**: Dashboard de Supabase (Auth → SMTP custom + plantillas de Confirm signup y Reset password) + Resend (dominio) + **DNS** (SPF/DKIM en Cloudflare). Nada de esto lo puede hacer el agente: van en un plan con instrucciones exactas y verificación por envío real.
+
+**Threat note — corré `/gsd:secure-phase` (alcance acotado)**: las plantillas de Auth llevan **tokens de sesión en sus links** (`{{ .ConfirmationURL }}` / `{{ .TokenHash }}`). Riesgos: romper o exponer el token al reescribir la plantilla; meter un `redirect_to` arbitrario en el template (open redirect por otra puerta); y credenciales SMTP en el lugar equivocado (van al Dashboard de Supabase, **nunca** a `NEXT_PUBLIC_*` ni al repo). Menor superficie que 4 y 5, pero es el canal por el que viaja el token.
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth/callback` (4) antes de Google (5); los flujos de mail (4) antes de brandearlos (6).
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Reconciliación de horarios | 3/3 | Complete    | 2026-07-03 |
-| 2. Rework UX del onboarding | 1/1 | Complete   | 2026-07-04 |
-| 3. Rework del selector de rubro | 3/3 | Complete   | 2026-07-04 |
+| Phase | Milestone | Plans | Status | Completed |
+|-------|-----------|-------|--------|-----------|
+| 1. Reconciliación de horarios | v0.14 | 3/3 | Complete | 2026-07-03 |
+| 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
+| 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
+| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 0/? | Not started | - |
+| 5. Entrar con Google | v0.19 | 0/? | Not started | - |
+| 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |

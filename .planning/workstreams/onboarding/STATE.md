@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
-status: planning
-last_updated: "2026-07-16T19:19:54.903Z"
+status: roadmapped
+last_updated: "2026-07-16T20:05:00.000Z"
 last_activity: 2026-07-16
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -22,23 +22,38 @@ Requirements: .planning/workstreams/onboarding/REQUIREMENTS.md
 Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados (aislamiento multi-tenant + integridad de pagos).
-**Current focus:** Phase 03 — rework-del-selector-de-rubro
+**Current focus:** Phase 4 — Recuperar la cuenta (`/auth/callback` + reset)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 4 — Recuperar la cuenta (`/auth/callback` + reset)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-16 — Milestone v0.19 started
+Status: Roadmap creado — listo para discuss-phase
+Last activity: 2026-07-16 — ROADMAP de v0.19 creado (Phases 4-6, 8/8 requisitos mapeados)
 
 ## Milestone Context
 
-v0.14 no agrega features al onboarding: **arregla y pule lo existente**. Dos brechas:
+**v0.19 Cuenta y acceso** — el paso ANTERIOR al wizard que cerró v0.14: cómo una persona pasa de no
+tener cuenta a estar adentro. Numeración continúa desde Phase 4 (v0.14 cerró en Phase 3).
 
-1. **Datos (Phase 1):** el paso "Horarios de atención" escribe en `business_hours`, pero panel de agenda + booking público leen `time_blocks` → los horarios del alta no llegan a donde se reserva. `business_hours` NO está huérfana: la leen landing (`lib/landing/derive.ts`, `components/landing/hours.tsx`) y agente WhatsApp (`lib/agent-context.ts`, `app/api/agent/context/route.ts`). Dos fuentes divergentes → unificar sin romper a los 4 lectores. Riesgo dominante = **regresión**, no aislamiento (los horarios ya viven bajo `business_id`).
-2. **UX (Phase 2):** botón "Omitir" en pasos no obligatorios (completables luego desde el panel) + repaso general del flujo (labels visibles, feedback inmediato, orden lógico). Rework de presentación sobre `app/(onboarding)/onboarding/page.tsx`, sin pasos/campos nuevos ni rediseño completo.
+Tres agujeros verificados contra código:
 
-Faseo: reconciliación de horarios (P1) → rework UX del onboarding (P2, depende de P1).
+1. **No hay recuperación de contraseña.** `app/(auth)/` = solo `login` y `register`; cero
+   `resetPasswordForEmail` en el repo. Un dueño que olvida su contraseña queda afuera sin salida
+   self-serve.
+2. **No existe `/auth/callback`** (intercambio de código por sesión). Los callbacks que hay
+   (`api/google/callback`, `api/mercadopago/callback`) son de **integraciones**, otro flujo.
+   **Reset y Google comparten esa ruta** → es la pieza de infra común del milestone.
+3. **Los mails son de Supabase, no de Forjo**: inglés, sin marca, `noreply@mail.app.supabase.io`,
+   pie "powered by Supabase".
+
+Faseo (orden **load-bearing**): callback + reset (P4) → Google sobre el callback ya construido
+(P5) → mails branded cuando los flujos que los disparan ya existen (P6).
+
+**A favor (verificado, no asumido):** el onboarding ya maneja "autenticado sin negocio"
+(`onboarding/page.tsx` → `getUser()`) → AUTH-04 es **verificar, no construir**. Google Cloud ya
+tiene credenciales OAuth (`client_secret_*.json`, usadas por Calendar) → falta un redirect URI, no
+la cuenta entera. Resend ya está cableado en `lib/email.ts` → candidato natural para el SMTP.
 
 ## Accumulated Context
 
@@ -46,11 +61,28 @@ Faseo: reconciliación de horarios (P1) → rework UX del onboarding (P2, depend
 
 Decisiones de fase ABIERTAS (resolver en discuss-phase, NO lockeadas en el roadmap):
 
-- **P1:** ¿cuál es la tabla canónica de horarios? — (a) `time_blocks` como fuente (migrar onboarding a escribirla + migrar landing/agente a leerla); (b) `business_hours` como fuente (panel/booking la leen); (c) vista/sincronización que mantenga ambas coherentes. Criterio: minimizar migración + cero regresión en los 4 lectores. La deprecación de la tabla perdedora está diferida (SCHED-DROP-01, v2) → se puede mantener ambas transitoriamente.
-- **P2:** ¿qué pasos son "no obligatorios" (omitibles) y cómo se representa un paso omitido para que el panel sepa que quedó pendiente? El indicador de "onboarding incompleto" en el panel está diferido (ONB-PROGRESS-01, v2) → en v0.14 alcanza con que el dato quede completable desde el panel, sin recordatorio dedicado.
-- [Phase 01]: Onboarding escribe time_blocks (fuente única) con horario partido en vez de business_hours (D-01/D-04, SCHED-01)
-- [Phase ?]: 01-03: DROP business_hours (migr 046) — time_blocks fuente unica; DROP a prod diferido al usuario
-- [Phase ?]: 02-01: navegación del wizard por posición en visibleSteps (no s+1) para saltar Profesionales en canchas; precio 0 = servicio gratuito; header con lockup de marca
+- **P4 — ¿`confirm email` está ON y bloquea hoy?** Es **research de fase, NO asumir**.
+  `register/page.tsx:47` hace `signUp()` y empuja a `/onboarding` con un toast "Revisá tu email".
+  Si la confirmación está ON, `signUp` no devuelve sesión → el proxy rebota a `/login` y el
+  toast+push son engañosos. Define AUTH-06 y **alimenta MAIL-01 (P6)**.
+- **P4 — Redirect URLs en previews:** las previews de Vercel tienen dominio dinámico. ¿Wildcard en
+  la allowlist o auth simplemente no anda en preview? Mismo problema que pegó con reCAPTCHA en el
+  UAT de Phase 14. Afecta el UAT de P4 y P5.
+- **P4 — Forma de `/auth/callback`:** route handler que rutea por tipo de flujo (recovery vs oauth),
+  contemplando desde ya que P5 lo reusa sin reescribirlo.
+- **P5 — Account linking (AUTH-05): LA decisión del milestone.** Supabase vincula identidades o tira
+  error según la config y según si el mail está verificado. Definir explícitamente y **probar los
+  dos órdenes** (contraseña→Google y Google→contraseña). Cruza con el hallazgo de AUTH-06.
+- **P6 — SMTP: Resend vs solo plantillas.** Resend unifica remitente con los mails de turnos y saca
+  el "powered by Supabase", pero requiere dominio + DNS (SPF/DKIM). Solo-plantillas es más rápido
+  pero deja `noreply@mail.app.supabase.io` → MAIL-01/02 quedarían a medias.
+
+Histórico v0.14 (cerrado):
+
+- [Phase 01]: Onboarding escribe `time_blocks` (fuente única) con horario partido en vez de `business_hours` (SCHED-01)
+- [Phase 01]: 01-03 — DROP `business_hours` (migr. 046); `time_blocks` = fuente única
+- [Phase 02]: navegación del wizard por posición en `visibleSteps` (no `s+1`) para saltar Profesionales en canchas; precio 0 = servicio gratuito; header con lockup de marca
+- [Phase 03]: rubro elegido → columna `vertical`; texto libre → columna `type` (etiqueta visible en booking); migr. 047 de backfill
 
 ### Pending Todos
 
@@ -58,30 +90,46 @@ None yet.
 
 ### Blockers/Concerns
 
-- **Regresión de horarios (P1):** landing, agente de WhatsApp, panel de agenda y booking público leen horarios hoy — cualquier reconciliación debe validarse contra los 4 sin perder ni cambiar los horarios de negocios existentes.
+- **Checkpoints humanos bloqueantes (`autonomous: false`) — buena parte del milestone es config
+  externa**, igual que la migración 051 de v0.18:
+  - **P4:** allowlist de Redirect URLs en el Dashboard de Supabase (`/auth/callback` en prod + lo que
+    se decida para previews). Sin eso el link del mail no vuelve a la app.
+  - **P5:** Google Cloud (redirect URI del callback de Supabase en las credenciales OAuth que ya
+    existen) + Dashboard de Supabase (habilitar provider de Google con client ID/secret).
+  - **P6 (el grueso de la fase):** Supabase Auth → SMTP custom + plantillas (Confirm signup, Reset
+    password) + Resend (dominio) + **DNS** (SPF/DKIM en Cloudflare). Verificación por envío real.
+- **Superficie de autenticación → `/gsd:secure-phase` en P4 y P5** (y acotado en P6). No es
+  RLS/multi-tenant, pero un agujero acá entrega cuentas enteras: open redirect en el callback, fuga
+  del token de recovery, user enumeration en "olvidé mi contraseña", y **account takeover por
+  linking automático sobre un email no verificado** (P5). En P6 los tokens viajan dentro de las
+  plantillas.
+- **AUTH-05 puede morder a un cliente que ya paga:** si el linking sale mal, un dueño registrado con
+  contraseña que entra con Google puede quedar mirando el negocio de nadie. Probar los dos órdenes.
 
-## Deferred Items (v2 / future — NO en v0.14)
+## Deferred Items (v2 / future — NO en v0.19)
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Schema | SCHED-DROP-01 (deprecar/eliminar la tabla de horarios perdedora una vez unificada la fuente) | Deferred | v0.14 scoping |
-| Onboarding | ONB-PROGRESS-01 (indicador de "onboarding incompleto" en el panel que recuerde completar pasos omitidos) | Deferred | v0.14 scoping |
+| Auth | AUTH-OAUTH-02 (otros proveedores: Apple, Facebook) | Deferred | v0.19 scoping |
+| Auth | AUTH-MAGIC-01 (magic link / passwordless) | Deferred | v0.19 scoping |
+| Auth | AUTH-MFA-01 (2FA / MFA) | Deferred | v0.19 scoping |
+| Panel | Paleta de colores propia (arrastra el bug del `overrides.primary` en el CMS) | Milestone aparte | v0.19 scoping |
+| Booking | Categorización de servicios (decisión de modelo: columna vs tabla) | Milestone aparte | v0.19 scoping |
 
 ## Session Continuity
 
-Last session: 2026-07-04T19:48:59.221Z
-Stopped at: Phase 3 planned (3 plans, 2 waves) — ready to execute
-Resume file: .planning/workstreams/onboarding/phases/03-rework-del-selector-de-rubro/03-01-PLAN.md
-Next: `/gsd:discuss-phase 1 --ws onboarding`
+Last session: 2026-07-16
+Stopped at: ROADMAP de v0.19 creado (Phases 4-6, cobertura 8/8) — ninguna fase planeada aún
+Resume file: .planning/workstreams/onboarding/ROADMAP.md
+Next: `/gsd:discuss-phase 4 --ws onboarding`
 
 ## Performance Metrics
 
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
-| — | — | — | — |
 | Phase 01 P01 | 5min | 2 tasks | 1 files |
 | Phase 01 P02 | 12min | 2 tasks | 3 files |
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- `/gsd:discuss-phase 4 --ws onboarding` — arrancar la Phase 4 (research de `confirm email` incluido)
