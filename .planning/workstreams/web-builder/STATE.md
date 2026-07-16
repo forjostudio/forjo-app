@@ -93,7 +93,7 @@ Carryover relevante de v0.10/v0.16 (base sobre la que se construye):
 
 ### Blockers/Concerns
 
-- [RAMA — OPERATIVO / CRÍTICO]: El código del web-builder vive en la rama **`gsd/gestion-rebrand`**, NO en `gsd/web-builder` (stale). `branching_strategy: none` → execute-phase NO cambia de rama: hacer checkout ANTES.
+- [RAMA — OPERATIVO]: v0.18 se mergeó a **`main`** y la rama `gsd/gestion-rebrand` **fue BORRADA** (2026-07-16, local + remoto; estaba 100% mergeada). El workstream ya NO tiene rama propia viva: **el laburo nuevo sale de `main`**. `branching_strategy: none` → execute-phase NO crea ni cambia de rama; si querés aislar el próximo milestone, creá la rama a mano desde `main` ANTES de ejecutar. Ojo: `gsd/web-builder` sigue existiendo pero está **stale** (no usarla).
 - [WORKSTREAM POINTER — OPERATIVO]: Antes de correr `/gsd:*-phase N --ws web-builder` hay que setear el pointer activo (`gsd-tools query workstream set web-builder`). El flag `--ws` solo scopea una llamada suelta; los subagentes ejecutores resuelven STATE/ROADMAP por el pointer activo.
 - [Phase 15 — SECURITY-SENSITIVE]: migración + write path. `landing_draft` NO se expone a `anon` (ni por la vista pública), publicar/descartar son copia server-side (nunca un config del body como "lo publicado"), Zod estricto, cero service-role en la web. → correr `/gsd:secure-phase 15`.
 - [Phase 15 — REGRESIÓN]: PUB-08 es el riesgo real de la migración. Un negocio ya publicado tiene que ver su landing **idéntica** después del deploy, y abrir el editor viendo una copia fiel. Verificar con datos reales antes de prod.
