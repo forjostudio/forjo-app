@@ -1,76 +1,97 @@
-# Requirements — v0.14 Onboarding
+# Requirements — v0.19 Cuenta y acceso
 
-**Milestone:** v0.14 — Onboarding
+**Milestone:** v0.19 — Cuenta y acceso
 **Workstream:** onboarding
-**Defined:** 2026-07-02
-**Branch:** `gsd/onboarding` (desde main, con v0.13 ya shipeado)
+**Defined:** 2026-07-16
+**Numeración:** continúa el workstream desde **Phase 4** (v0.14 cerró en Phase 3)
 
-> **Goal:** Que el onboarding traslade correctamente los horarios (reconciliando las dos tablas en
-> uso, `business_hours` ↔ `time_blocks`, sin romper landing/agente/panel/booking) y que el flujo de
-> alta sea más usable (omitir pasos no obligatorios + repaso general).
+> **Goal:** Que una persona pueda crear su cuenta, entrar y recuperarla sin fricción — y que los
+> mails de cuenta parezcan de Forjo, no de Supabase.
 
-## Contexto del bug (verificado 2026-07-02 contra código)
+## Por qué este milestone vive en el workstream `onboarding`
 
-- El paso "Horarios de atención" del onboarding (`app/(onboarding)/onboarding/page.tsx:209`) escribe
-  en **`business_hours`**.
+v0.14 cubrió el wizard de creación del negocio. Esto es el **paso anterior del mismo recorrido**:
+cómo una persona pasa de no tener cuenta a estar adentro. Mismo embudo, misma historia.
 
-- El **panel de agenda** (`app/(dashboard)/agenda/*`) y el **booking público** (`app/[slug]/page.tsx`)
-  leen **`time_blocks`** → los horarios del onboarding NO llegan ahí.
+## Contexto (verificado 2026-07-16 contra código, no asumido)
 
-- Pero `business_hours` **ya no está huérfana**: la leen la **landing** (`lib/landing/derive.ts`,
-  `components/landing/hours.tsx`) y el **agente de WhatsApp** (`lib/agent-context.ts`,
-  `app/api/agent/context/route.ts`). → Hay **dos fuentes de horarios divergentes**; la fuente
-  canónica se lockea en el discuss/plan de la Phase 1.
+- **No existe recuperación de contraseña.** `app/(auth)/` tiene solo `login` y `register`; cero
+  ocurrencias de `resetPasswordForEmail` en el repo.
+- **No existe `/auth/callback`** (la ruta que intercambia código por sesión). Los callbacks que hay
+  — `app/api/google/callback`, `app/api/mercadopago/callback` — son de **integraciones** (Calendar,
+  MP), otro flujo. **Reset y Google necesitan esa misma ruta: por eso van juntos y no de a uno.**
+- **Los mails salen del default de Supabase:** inglés, sin marca, remitente
+  `noreply@mail.app.supabase.io`, pie "powered by Supabase".
+- **A favor:** Resend ya está cableado para los transaccionales de turnos (`lib/email.ts`) →
+  candidato natural para el SMTP custom. Google Cloud ya tiene credenciales OAuth
+  (`client_secret_*.json`, las usa Calendar) → falta un redirect URI para el callback de Supabase,
+  no la cuenta entera.
+- **A favor:** el onboarding ya maneja "usuario autenticado sin negocio" (`onboarding/page.tsx`
+  resuelve `getUser()` y crea el negocio) → un usuario que entra por Google cae en ese carril sin
+  inventar flujo nuevo (AUTH-04 es verificar, no construir).
+- **⚠ A VERIFICAR en el research de fase (NO asumir):** si `confirm email` está ON y bloquea hoy.
+  `register/page.tsx:47` hace `signUp()` y empuja directo a `/onboarding` con un toast "Revisá tu
+  email para confirmarla". Si la confirmación está ON, `signUp` no devuelve sesión → el proxy
+  debería rebotar a `/login`. **Define si el mail de confirmación es un gate real o decorativo** —
+  y por lo tanto cuánto importa MAIL-01. De ahí sale AUTH-06.
 
 ## v1 Requirements
 
-### Horarios — reconciliación (SCHED)
+### Recuperar contraseña (AUTH)
 
-- [x] **SCHED-01**: Los horarios que el negocio carga en el onboarding se reflejan en el **panel de
-  agenda** y en el **booking público** (los horarios del alta efectivamente se usan para reservar).
+- [ ] **AUTH-01**: Un dueño que olvidó su contraseña puede pedir un link de recuperación desde el
+  login, poniendo su email.
 
-- [x] **SCHED-02**: La **landing pública** y el **agente de WhatsApp** muestran los mismos horarios
-  que el panel/booking — una sola fuente de verdad, sin divergencia entre `business_hours` y
-  `time_blocks` (cero regresión en los lectores actuales).
+- [ ] **AUTH-02**: Con ese link, el dueño setea una contraseña nueva y entra a su panel.
 
-### Onboarding — UX (ONB)
+### Iniciar sesión con Google (AUTH)
 
-- [x] **ONB-01**: El usuario puede **omitir** los pasos no obligatorios del onboarding y completarlos
-  después desde el panel (botón "Omitir" en los pasos no cruciales).
+- [ ] **AUTH-03**: Una persona puede crear su cuenta e iniciar sesión con Google, sin contraseña.
 
-- [x] **ONB-02**: El flujo de onboarding es claro y sin fricción — labels siempre visibles, feedback
-  inmediato, orden lógico de los pasos (repaso general de UX).
+- [ ] **AUTH-04**: Un usuario que entra por Google por primera vez cae en el onboarding y crea su
+  negocio, igual que uno de email/contraseña.
 
-### Onboarding — selector de rubro (RUBRO)
+- [ ] **AUTH-05**: Si el mismo email ya tiene cuenta con contraseña y después entra con Google (o al
+  revés), el resultado es **una sola cuenta** con comportamiento predecible — nunca una cuenta
+  duplicada ni un error opaco.
 
-- [x] **ONB-RUBRO-01**: El selector de rubro se reduce a **4 opciones** (Salud, Belleza/Estética/Spa,
-  General, Canchas) y muestra **siempre** un campo personalizable (texto libre) con una **sugerencia por
-  rubro** (placeholder "Ej: …") y la leyenda **"Así aparecerá en tu página de reservas"** — en el
-  onboarding (paso "Tu negocio"). Reemplaza la lista larga de subtipos y el campo de "Otro" (hoy roto).
+### Mails de cuenta (MAIL)
 
-- [x] **ONB-RUBRO-02**: El **mismo selector** (4 rubros + campo personalizable) está en la **configuración
-  del negocio en el dashboard**, y el texto libre se **muestra como categoría del negocio en la página
-  pública de reservas**. El rubro elegido resuelve el vertical (terminología/menú/features) sin regresión
-  para negocios existentes.
+- [ ] **MAIL-01**: El mail de confirmación de cuenta llega en español, con la marca Forjo y desde un
+  remitente de Forjo — sin "powered by Supabase".
 
-## v2 / Future Requirements
+- [ ] **MAIL-02**: El mail de recuperación de contraseña llega con la misma marca y remitente.
 
-Reconocidos pero diferidos — no entran en v0.14.
+### Coherencia del alta (AUTH)
 
-- **SCHED-DROP-01**: Deprecar/eliminar la tabla perdedora (`business_hours` o `time_blocks`) una vez
-  unificada la fuente y migrados todos los lectores — limpieza de esquema (candidata si la Phase 1
-  decide mantener ambas tablas de forma transitoria).
+- [ ] **AUTH-06**: El registro es honesto sobre la confirmación: lo que el usuario ve (mensaje y a
+  dónde lo mandan) coincide con lo que Auth realmente hace — si confirmar es obligatorio, no se lo
+  manda a una pantalla que lo va a rebotar.
 
-- **ONB-PROGRESS-01**: Indicador de "onboarding incompleto" en el panel que recuerde completar los
-  pasos omitidos.
+## Decisiones abiertas (para discuss-phase)
+
+| Decisión | Por qué importa |
+|----------|-----------------|
+| **Account linking** (AUTH-05) | Supabase vincula identidades o tira error según la config y según si el mail está verificado. Es LA trampa del milestone: define si un cliente que se registró con contraseña puede después entrar con Google sin quedar duplicado. Es decisión, no código. |
+| **SMTP: Resend vs solo plantillas** | Resend unifica el remitente con los mails de turnos y saca el "powered by Supabase", pero requiere configurar dominio + DNS. Editar solo las plantillas del default es más rápido, pero el remitente sigue siendo `noreply@mail.app.supabase.io`. |
+| **Redirect URLs en previews** | Las previews de Vercel tienen dominio dinámico. Decidir si se allowlistean (wildcard) o si auth simplemente no anda en preview. Mismo problema que ya pegó con reCAPTCHA en el UAT de Phase 14. |
+
+## Future Requirements (diferidos)
+
+- **AUTH-OAUTH-02**: Otros proveedores (Apple, Facebook) — Google primero; el resto es repetir el
+  patrón si aparece demanda real.
+- **AUTH-MAGIC-01**: Magic link / passwordless — Google cubre el grueso del "no quiero contraseña".
+- **AUTH-MFA-01**: 2FA / MFA — sin demanda ni requisito regulatorio hoy.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Rediseño visual completo del onboarding | El scope es reconciliar horarios + fricción del flujo (omitir/claridad), no un rebrand |
-| Nuevos pasos/campos en el onboarding | No se agregan capacidades nuevas al alta; se arregla y pule lo existente |
-| Cambios al motor de agenda/booking (time_blocks) más allá de recibir los horarios del onboarding | El motor v0.12 no se re-toca; solo se unifica de dónde salen los horarios |
+| Paleta de colores propia (Apariencia + CMS) | Dominio distinto (personalización del panel). Además arrastra un bug de base ya detectado: el editor CMS no refleja un `overrides.primary` custom (todo del 14/07) — hay que cerrarlo ANTES de montarle UI encima. Milestone aparte. |
+| Categorización de servicios | Dominio distinto (booking público). La decisión real es de modelo (columna `category` vs tabla `service_categories`) → necesita su propio discuss. Milestone aparte. |
+| Rediseño del upsell "Web a medida" | Follow-up de v0.18, capturado en `.planning/todos/pending/2026-07-16-redisenar-upsell-web-a-medida.md`. |
+| Rediseño visual de login/register | Recién se tocaron (quick `260716-ide`: lockup de marca dark/light + copy del panel). No se re-litiga acá. |
+| Cambios al onboarding wizard | v0.14 lo cerró. Este milestone llega hasta la puerta del wizard, no lo re-toca (salvo verificar el hand-off de AUTH-04). |
 
 ## Traceability
 
@@ -78,9 +99,4 @@ Reconocidos pero diferidos — no entran en v0.14.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHED-01 | Phase 1 | Complete |
-| SCHED-02 | Phase 1 | Complete |
-| ONB-01 | Phase 2 | Complete |
-| ONB-02 | Phase 2 | Complete |
-| ONB-RUBRO-01 | Phase 3 | Complete |
-| ONB-RUBRO-02 | Phase 3 | Complete |
+| _(lo completa el roadmap)_ | | |

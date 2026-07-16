@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.14
-milestone_name: Onboarding
-status: Awaiting next milestone
-stopped_at: Phase 3 planned (3 plans, 2 waves) — ready to execute
-last_updated: "2026-07-04T22:32:46.001Z"
-last_activity: 2026-07-04 — Milestone v0.14 completed and archived
+milestone: v0.19
+milestone_name: Cuenta y acceso
+status: planning
+last_updated: "2026-07-16T19:19:54.903Z"
+last_activity: 2026-07-16
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -27,10 +26,10 @@ Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 ## Current Position
 
-Phase: Milestone v0.14 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-04 — Milestone v0.14 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-16 — Milestone v0.19 started
 
 ## Milestone Context
 

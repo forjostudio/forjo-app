@@ -54,6 +54,35 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 </details>
 
+## Current Milestone (workstream `onboarding`): v0.19 Cuenta y acceso
+
+> v0.14 Onboarding (shipped 2026-07-04, Phases 1-3: reconciliación de horarios, rework UX del alta, selector de rubro) archivado. Este milestone **continúa el workstream desde Phase 4**: el paso ANTERIOR del mismo recorrido — cómo una persona pasa de no tener cuenta a estar adentro.
+
+**Goal:** Que una persona pueda crear su cuenta, entrar y recuperarla sin fricción — y que los mails de cuenta parezcan de Forjo, no de Supabase.
+
+**Target features:**
+- **A. Recuperar contraseña:** flujo completo (pedir link por mail → setear contraseña nueva). Hoy NO existe: `app/(auth)/` solo tiene `login` y `register`.
+- **B. Mails de cuenta branded:** SMTP propio (candidato: **Resend**, ya cableado para los transaccionales de turnos en `lib/email.ts`) + plantillas en español con marca. Hoy salen de la plantilla default de Supabase: inglés, sin marca, remitente `noreply@mail.app.supabase.io`, pie "powered by Supabase".
+- **C. Iniciar sesión con Google.**
+- **D. `/auth/callback`:** la ruta de intercambio de código por sesión. No existe (los callbacks actuales — `api/google/callback`, `api/mercadopago/callback` — son de integraciones, otro flujo). **La comparten B y C: es la razón por la que van juntas.**
+
+**Por qué las tres juntas y no una por una:** comparten `/auth/callback`, la allowlist de redirect URLs de Supabase y el trabajo de SMTP/plantillas. Separarlas = tocar las tres cosas dos veces. Además Google **reduce** el peso del mail de confirmación (los usuarios de Google llegan pre-verificados) pero no lo elimina: los de contraseña lo siguen recibiendo, y el mail de reset es inevitable.
+
+**Lo que ya está a favor (verificado en código, no asumido):**
+- El **onboarding ya maneja "usuario autenticado sin negocio"** (`onboarding/page.tsx` resuelve `getUser()` y crea el negocio) → un usuario que entra por Google cae en ese carril sin inventar flujo nuevo.
+- **Google Cloud ya tiene credenciales OAuth** (`client_secret_*.json`, las usa Calendar) → falta un redirect URI apuntando al callback de Supabase, no la cuenta entera.
+
+**A VERIFICAR en el research de fase (no asumir):**
+- **¿La confirmación de email está ON y bloquea hoy?** `register/page.tsx:47` hace `signUp()` y empuja directo a `/onboarding` con un toast "Revisá tu email". Si `confirm email` está ON, `signUp` no devuelve sesión → el proxy debería rebotar a `/login`, y el toast+push serían engañosos. **Esto define si el mail de confirmación es un gate real o decorativo** — y por lo tanto cuánto importa.
+
+**Decisiones abiertas (para discuss-phase):**
+- **Account linking:** qué pasa si alguien se registró con `x@gmail.com` + contraseña y después entra con Google con el mismo mail (Supabase vincula identidades o tira error, según config). Es LA decisión que puede morder.
+- **SMTP:** Resend (unifica remitente con los mails de turnos, saca el "powered by Supabase") vs solo editar las plantillas del default.
+
+**Fuera de alcance:** paleta de colores propia y categorización de servicios (dominios distintos — panel y booking; milestone aparte). Rediseño del upsell "Web a medida" (todo capturado).
+
+**Nota operativa:** buena parte del milestone es **config externa en el Dashboard de Supabase** (SMTP, plantillas, redirect URLs, provider de Google) + Google Cloud → va a necesitar checkpoint humano bloqueante, como la migración 051 de v0.18.
+
 ## Current Milestone (workstream `crm`): v0.11 Consola CRM
 
 **Goal:** Centro de operaciones interno de Forjo Studio — un CRM propio de 3 capas (ventas/pipeline, comunicaciones WhatsApp+mail, admin de plataforma) que cubre el ciclo completo lead → cliente → soporte → métricas sin tocar las consolas de Supabase/MercadoPago por separado. Operador único (`is_admin`). Diseño aprobado (Claude Design); build nativo por fases. Numeración de fases reiniciada en Phase 1.
@@ -178,4 +207,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-16 after v0.18 CMS Publish / Go-live milestone (workstream `web-builder`, Phases 15-17 shipped a prod); v0.9–v0.18 shipped y archivados. Próximo del workstream: Phase 18 — candidato natural, el auto-armado con el pago del add-on (`web-builder-automation-northstar`).*
+*Last updated: 2026-07-16 — v0.18 CMS Publish / Go-live shipped (ws `web-builder`, Phases 15-17) y v0.19 Cuenta y acceso iniciado (ws `onboarding`, continúa en Phase 4). v0.9–v0.18 shipped y archivados. Pendiente del ws `web-builder`: Phase 18 — candidato natural, el auto-armado con el pago del add-on (`web-builder-automation-northstar`).*
