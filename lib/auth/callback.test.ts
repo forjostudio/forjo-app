@@ -5,9 +5,9 @@ import { parseCallbackParams, resolveDestination, INVALID_LINK_DEST } from '@/li
 // REGLA DURA: vitest.setup.ts:13 hace config({ path: '.env.local' }) y ese archivo apunta a
 // PRODUCCIÓN. Un test que llamara a signUp/resetPasswordForEmail crearía usuarios reales y quemaría
 // la cuota de mails en prod. Por eso este archivo importa SOLO de @/lib/auth/callback y no hace red:
-// nada de describe.skipIf(!hasSupabaseCreds) ni de import de test/env.ts — eso es la marca de un test
-// de integración (contra-ejemplo: test/booking-public-regression.test.ts:20). El analog correcto es
-// lib/crm-reports.test.ts.
+// nada de skipear condicionalmente el describe según haya credenciales, ni de importar el helper de
+// entorno de la carpeta test/ — eso es la marca de un test de integración (contra-ejemplo:
+// test/booking-public-regression.test.ts:20). El analog correcto es lib/crm-reports.test.ts.
 
 const sp = (s: string) => new URLSearchParams(s)
 
