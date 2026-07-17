@@ -64,7 +64,14 @@ export default function RegisterPage() {
       email: data.email,
       password: data.password,
     })
-    if (error) {
+    // D-14 (anti-enumeration): un mail YA registrado NO puede distinguirse de uno nuevo, o el alta se
+    // vuelve un oráculo de quién tiene cuenta en Forjo. GoTrue NO ofusca: devuelve 422 con
+    // error.code === 'user_already_exists' (verificado contra el GoTrue local). Por eso la garantía la
+    // hace ESTRUCTURAL este código — no la respuesta del backend: ese caso se trata idéntico a un alta
+    // nueva (misma pantalla "revisá tu mail", sin revelar nada). Se detecta por error.code, no por el
+    // .message, que es texto en inglés y cambia según locale/versión. El toast queda SOLO para errores
+    // de forma (contraseña débil, mail inválido, rate limit): esos no filtran existencia de cuenta.
+    if (error && error.code !== 'user_already_exists') {
       toast.error(error.message)
       setLoading(false)
       return

@@ -156,16 +156,18 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+site_url = "http://localhost:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-# El valor anterior tenía un typo preexistente: usaba esquema TLS, con site_url en texto plano y sin TLS
-# local ([api.tls] enabled = false). Esa entrada no matcheaba nada útil.
-# El matcher de Supabase es LITERAL por host: `localhost` NO es lo mismo que `127.0.0.1`. El UAT local se
-# abre en 127.0.0.1:3000 (que es lo que ya dice site_url), NUNCA en localhost:3000, o el link del mail
-# vuelve rebotado.
-additional_redirect_urls = ["http://127.0.0.1:3000", "http://127.0.0.1:3000/auth/callback"]
+# HOST DEL UAT LOCAL = `localhost` (NO 127.0.0.1). El matcher de Supabase es literal por host y la cookie
+# de sesión también es por host, así que TODO tiene que estar en el mismo: el link del mail ({{ .SiteURL }}),
+# el navegador donde se abre, y el redirect que arma el callback. El callback usa `new URL(dest, request.url)`
+# y en `next dev` request.url SIEMPRE reporta `localhost` (Next lo normaliza; probado: ni entrar por
+# 127.0.0.1 ni `next dev -H 127.0.0.1` lo cambian). Con site_url en 127.0.0.1 el flujo se rompía: el mail
+# apuntaba a 127.0.0.1, el callback redirigía a localhost, la cookie no cruzaba y el reset caía en
+# invalid_link. Por eso el host local es localhost. (Prod es indistinto: un solo host, gestion.forjo.studio.)
+additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/auth/callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
