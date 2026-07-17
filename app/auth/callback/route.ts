@@ -2,10 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { parseCallbackParams, resolveDestination, INVALID_LINK_DEST } from '@/lib/auth/callback'
 
-// Callback de los links de mail: canjea el token_hash por una sesión (cookies) y manda al destino que
-// corresponde al tipo de link. Estrena `recovery` (D-03) y `signup` (D-13).
+// Callback de auth con DOS ramas: (a) OAuth (Phase 5) vuelve con `?code=`/`?error=` → se canjea con
+// exchangeCodeForSession y va a /dashboard; (b) links de mail (Phase 4) traen `token_hash`+`type` → se
+// canjean con verifyOtp y van al destino del tipo (`recovery` D-03, `signup` D-13). El ruteo es por
+// presencia de `code`/`error`, no por `type`: si no hay ninguno, cae al path de mail.
 //
-// Por qué token_hash + verifyOtp y NO code + exchangeCodeForSession: @supabase/ssr fuerza
+// Por qué el mail usa token_hash + verifyOtp y NO code + exchangeCodeForSession: @supabase/ssr fuerza
 // flowType: 'pkce', y exchangeCodeForSession exige el code_verifier que dejó en el storage el navegador
 // que INICIÓ el flujo. Un link de mail se abre en cualquier lado — típicamente el webview in-app de
 // Gmail — donde ese verifier no existe y el canje falla (H-03). verifyOtp no depende del navegador de
@@ -25,6 +27,47 @@ export async function GET(request: NextRequest) {
   // navegador debe hacer GET del destino.
   const fail = () => NextResponse.redirect(new URL(INVALID_LINK_DEST, request.url), 303)
 
+  // ── RAMA OAUTH (Phase 5) ─────────────────────────────────────────────────────────────────────
+  // OAuth vuelve al /auth/callback con `?code=` (o `?error=` si el consent se canceló). Se rutea por
+  // PRESENCIA de `code`/`error`, NO por `type`: 'oauth' nunca entra en ALLOWED_TYPES (Hallazgo Crítico
+  // #2 del 05-RESEARCH). Va ANTES del parse de token_hash; si no hay ni error ni code, cae al path de
+  // mail de Phase 4, intacto.
+  //
+  // El error de OAuth NO reusa fail(): fail() manda a /forgot-password?error=invalid_link, que habla de
+  // recuperación de contraseña — el "error opaco" que D-05 prohíbe para un fallo de Google. Rama propia
+  // → /login?error=oauth (D-08), que cubre tanto el fallo del canje como la cancelación del consent.
+
+  // Cancelación del consent / error de Google (D-08). Supabase reenvía el error/error_description de
+  // Google al redirectTo. ⚠ Nunca loguear request.url ni el error_description: pueden llevar datos en la
+  // query y terminan en los logs de Vercel (T-05-04, mismo criterio que T-04-02).
+  if (request.nextUrl.searchParams.get('error')) {
+    console.error('[auth/callback] oauth error branch')
+    return NextResponse.redirect(new URL('/login?error=oauth', request.url), 303)
+  }
+
+  // Canje del code (AUTH-03). exchangeCodeForSession usa el MISMO cliente anon+cookies que el path de
+  // mail: lee el code_verifier PKCE de la cookie del navegador de ORIGEN (por eso OAuth puede usar
+  // code/PKCE mientras el mail usó token_hash — el link de mail se abre en el webview de Gmail, donde
+  // ese verifier no existe; H-03). NUNCA el cliente de service role: este endpoint lo alcanza un usuario
+  // anónimo y el service role bypassa RLS (T-05-05, espejo de T-04-04).
+  const code = request.nextUrl.searchParams.get('code')
+  if (code) {
+    const supabase = await createClient()
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (error) {
+      // Solo el .message: nunca la URL ni el code (T-05-04).
+      console.error('[auth/callback] exchangeCodeForSession:', error.message)
+      return NextResponse.redirect(new URL('/login?error=oauth', request.url), 303)
+    }
+    // Destino server-side desde la tabla (T-05-02): '/dashboard', NO de ningún parámetro de la URL. El
+    // layout de (dashboard) rutea al nuevo (→onboarding) y al recurrente (→dashboard). URL limpia + 303
+    // + Referrer-Policy:no-referrer igual que el path de mail: el code sale de la barra y del Referer.
+    const dest = resolveDestination('oauth')
+    const res = NextResponse.redirect(new URL(dest, request.url), 303)
+    res.headers.set('Referrer-Policy', 'no-referrer')
+    return res
+  }
+
   // 1 — PARSE + VALIDAR. Todo lo que viene en la URL es input no confiable (usuario anónimo).
   const parsed = parseCallbackParams(request.nextUrl.searchParams)
   if (!parsed.ok) {
@@ -42,9 +85,9 @@ export async function GET(request: NextRequest) {
   // route handler cookies() es escribible, así que su catch no dispara. No escribir un cliente nuevo.
   const supabase = await createClient()
 
-  // 2 — CANJEAR. ÚNICO punto de extensión de la Phase 5: acá suma la rama `code` →
-  // exchangeCodeForSession para el oauth, sin tocar los pasos 1, 3 ni 4 (D-13; ROADMAP §Phase 5:
-  // "suma oauth, no reescribe"). verifyOtp quema el token (single-use) y respeta otp_expiry (D-19).
+  // 2 — CANJEAR (path de mail). La rama OAuth (code → exchangeCodeForSession) ya está resuelta ARRIBA,
+  // antes del parse: acá solo corre el verifyOtp del mail, sin cambios de Phase 4 (D-07: "suma oauth, no
+  // reescribe"). verifyOtp quema el token (single-use) y respeta otp_expiry (D-19).
   const { error } = await supabase.auth.verifyOtp({
     token_hash: parsed.token_hash,
     type: parsed.type,
