@@ -79,7 +79,8 @@ Dos superficies, dos fases. El **wizard de alta** (Phase 7) junta los dos bugs q
   3. Un usuario autenticado sin negocio puede cerrar sesión / volver al login desde el onboarding, sin quedar obligado a crear un negocio. (ONB-02)
   4. El dueño puede subir el logo del negocio en el primer paso; el archivo sube al bucket de storage con path aislado por tenant y queda asociado al negocio creado. (ONB-03)
   5. El wizard ya no muestra el selector de paleta; el negocio nuevo arranca con la paleta default y la paleta sigue editable en Ajustes → Apariencia. (ONB-04)
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 07-01-PLAN.md — Endpoint service-role de slug (ONB-01) + salida del wizard (ONB-02) + logo en el paso 1 (ONB-03) + sacar la paleta (ONB-04)
 **UI hint**: yes
 **Threat model** (ONB-01): chequeo de slug sobre el espacio global multi-tenant. Hoy `checkSlug` corre con el browser client bajo RLS (`businesses` solo tiene policy `owner access`) → un futuro-owner no ve ninguna fila → siempre "disponible", y el choque salta recién en el insert (`businesses_slug_key`). El chequeo tiene que ver TODOS los slugs. Opciones (a definir en discuss/plan): RPC `security definer` que devuelve solo un booleano (requiere migración numerada, coordinada con deploy) o endpoint service-role que resuelve existencia por slug (patrón `app/api/booking/availability/route.ts`, sin migración). Invariante duro: la respuesta NO puede filtrar id/owner/nombre ni ningún otro dato del negocio dueño del slug. → `/gsd:secure-phase`.
 **Nota de scope** (ONB-03): la RLS INSERT del bucket `landing-assets` (migr. 030) exige que el primer segmento del path sea un negocio del owner autenticado — pero en el paso 1 el negocio TODAVÍA no existe. El orden upload↔insert (subir tras crear el negocio y asociarlo, o path temporal user-scoped) se resuelve en plan-phase; el patrón puro de path/validación de `lib/landing/editor-upload.ts` se reusa igual.
@@ -111,5 +112,5 @@ v0.20: 7 → 8. Las dos fases son **independientes** (superficies distintas: wiz
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
 | 5. Entrar con Google | v0.19 | 3/3 | Complete   | 2026-07-17 |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 2/2 | Complete   | 2026-07-17 |
-| 7. Onboarding wizard — robustez + pulido | v0.20 | TBD | Not started | - |
+| 7. Onboarding wizard — robustez + pulido | v0.20 | 0/1 | Not started | - |
 | 8. Auth siempre con tema Forjo | v0.20 | TBD | Not started | - |
