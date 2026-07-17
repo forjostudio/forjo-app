@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
-status: executing
+status: Awaiting next milestone
 stopped_at: Phase 6 planned (2 plans, 2 waves, checker PASS)
-last_updated: "2026-07-17T21:17:26.305Z"
-last_activity: 2026-07-17 -- Phase 06 execution started
+last_updated: "2026-07-17T22:22:03.170Z"
+last_activity: 2026-07-17 — Milestone v0.19 completed and archived
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 9
-  percent: 67
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -27,11 +27,10 @@ Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 ## Current Position
 
-Phase: 06 (mails-de-cuenta-con-marca-forjo) — EXECUTING
-Plan: 1 of 2
-Total Plans in Phase: 2
-Status: Executing Phase 06
-Last activity: 2026-07-17 -- Phase 06 execution started
+Phase: Milestone v0.19 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-17 — Milestone v0.19 completed and archived
 
 ## Milestone Context
 
@@ -145,4 +144,4 @@ Next: `/gsd:discuss-phase 4 --ws onboarding`
 
 ## Operator Next Steps
 
-- `/gsd:discuss-phase 4 --ws onboarding` — arrancar la Phase 4 (research de `confirm email` incluido)
+- Start the next milestone with /gsd-new-milestone

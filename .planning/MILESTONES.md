@@ -1,5 +1,23 @@
 # Milestones
 
+## v0.19 Cuenta y acceso (Shipped: 2026-07-17)
+
+**Phases completed:** 3 phases, 11 plans, 11 tasks
+
+**Key accomplishments:**
+
+- Ruta `/auth/callback` que canjea el `token_hash` del mail por sesión vía `verifyOtp` y rutea `recovery` → `/reset-password` y `signup` → `/onboarding`, con la validación y la tabla de destinos aisladas en un módulo puro cubierto por 8 tests sin red ni credenciales.
+- Task 1 — `lib/auth/route-lists.ts` (commit `22d83eb`).
+- `app/(auth)/(split)/layout.tsx`
+- Las dos pantallas del recorrido de recuperación: pedir el link con una respuesta idéntica exista o no la cuenta, y setear la contraseña nueva quedando adentro del panel con las otras sesiones cerradas.
+- `/register` ya no festeja una cuenta inusable ni empuja al usuario a una ruta protegida que el proxy iba a rebotar: el alta termina en el estado "revisá tu mail" dentro del mismo card, con reenvío y cooldown de 60s, y un mail ya registrado se ve idéntico a uno nuevo.
+- El flujo de recuperación y el alta honesta quedaron verificados de punta a punta: los links del mail entregan `token_hash` a `/auth/callback`, y el UAT confirmó los 4 criterios del ROADMAP y los 3 blockers de seguridad.
+- El /auth/callback de Phase 4 ahora detecta el retorno de Google por ?code=, lo canjea con exchangeCodeForSession y manda a /dashboard; un fallo o una cancelación caen en /login?error=oauth, con el path de mail intacto.
+- Google OAuth quedó habilitado en prod y verificado end-to-end: alta y login con Google funcionan, y el account linking (la trampa del milestone) resuelve a una sola cuenta en los dos órdenes.
+- Los mails de confirmación y recuperación dejaron de parecer de Supabase: llegan en español, con marca Forjo, desde `no-reply@forjo.studio`. UAT prod confirmado por el dueño ("anduvo").
+
+---
+
 ## v0.18 CMS Publish / Go-live (Shipped: 2026-07-16)
 
 **Delivered:** Guardar dejó de publicar — el CMS ahora tiene borrador real (`landing_draft`) vs publicado (`landing_config`), la web que arma la skill nace esperando aprobación, y el editor se expuso a clientes reales con el add-on `has_web_custom` como único gate (sin flag de entorno).
