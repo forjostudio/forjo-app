@@ -50,7 +50,7 @@ Faseo: infraestructura de callback + recuperación → Google (con account linki
 
 - [x] **Phase 4: Recuperar la cuenta (`/auth/callback` + reset)** - La ruta de intercambio de código por sesión, estrenada con el flujo completo de recuperación de contraseña, y un alta que es honesta sobre la confirmación
 - [x] **Phase 5: Entrar con Google** - Alta e inicio de sesión con Google sobre el callback ya construido, con account linking resuelto y el hand-off al onboarding verificado
-- [ ] **Phase 6: Mails de cuenta con marca Forjo** - Los mails de confirmación y recuperación llegan en español, con marca y desde un remitente de Forjo — sin "powered by Supabase"
+- [x] **Phase 6: Mails de cuenta con marca Forjo** - Los mails de confirmación y recuperación llegan en español, con marca y desde un remitente de Forjo — sin "powered by Supabase"
 
 ## Phase Details
 
@@ -177,7 +177,7 @@ Plans:
   3. Los links de los dos mails **siguen funcionando end-to-end** tras el cambio de plantilla y de remitente: confirmar deja la cuenta confirmada, recuperar deja al dueño seteando su contraseña nueva y adentro del panel (cero regresión sobre lo que cerró la Phase 4).
   4. Los mails **llegan a la bandeja de entrada**, no a spam, en Gmail — probado con un envío real desde el remitente configurado.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -186,7 +186,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md — **Checkpoint humano** (Resend: dominio verificado + API key dedicada · Supabase: custom SMTP + pegar templates) + UAT local (Mailpit) y prod (envío real a Gmail: remitente, marca, inbox-no-spam)
+- [x] 06-02-PLAN.md — **Checkpoint humano** (Resend: dominio verificado + API key dedicada · Supabase: custom SMTP + pegar templates) + UAT local (Mailpit) y prod (envío real a Gmail: remitente, marca, inbox-no-spam)
 
 **Phase-level decision (RESUELTAS — ver `06-CONTEXT.md` y `06-RESEARCH.md`)**:
 
@@ -214,4 +214,4 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
 | 5. Entrar con Google | v0.19 | 3/3 | Complete   | 2026-07-17 |
-| 6. Mails de cuenta con marca Forjo | v0.19 | 1/2 | In Progress|  |
+| 6. Mails de cuenta con marca Forjo | v0.19 | 2/2 | Complete   | 2026-07-17 |
