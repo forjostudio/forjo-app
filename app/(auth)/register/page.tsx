@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useForm } from 'react-hook-form'
@@ -9,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { CheckYourEmail } from '@/components/auth/check-your-email'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,8 +26,10 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export default function RegisterPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
+  // La dirección a la que salió el mail de confirmación. Mientras es null se ve el form; cuando
+  // tiene valor, el card pasa al estado "revisá tu mail" (D-12).
+  const [sent, setSent] = useState<string | null>(null)
   const supabase = createClient()
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
@@ -42,6 +44,19 @@ export default function RegisterPage() {
     }
   }, [])
 
+  // Con enable_confirmations ON (verificado en prod: mailer_autoconfirm = false), signUp NO devuelve
+  // sesión: crea el usuario y manda el mail, nada más. Por eso el alta termina acá, en un estado
+  // "revisá tu mail", y NO en una navegación: mandar al usuario recién registrado a una ruta
+  // protegida lo hacía rebotar al login (el proxy no encuentra sesión y redirige), después de
+  // felicitarlo por una cuenta que todavía no podía usar. Eso es lo que arregla AUTH-06.
+  //
+  // Un mail YA registrado devuelve el mismo shape que uno nuevo, y la UI lo muestra igual A PROPÓSITO
+  // (D-14): si el alta distinguiera los dos casos, sería un oráculo para averiguar quién tiene cuenta
+  // en Forjo probando direcciones ajenas (user enumeration). El toast de la rama de error se queda
+  // porque cubre errores de forma (contraseña débil, mail inválido, rate limit), no de existencia.
+  //
+  // No se pasa `options`: el destino del link lo fija el template del mail con {{ .SiteURL }}, así que
+  // un valor mandado desde el cliente se ignora — y no hay superficie que un atacante pueda apuntar.
   async function onSubmit(data: FormData) {
     setLoading(true)
     const { error } = await supabase.auth.signUp({
@@ -53,9 +68,7 @@ export default function RegisterPage() {
       setLoading(false)
       return
     }
-    toast.success('Cuenta creada. Revisá tu email para confirmarla.')
-    router.push('/onboarding')
-    router.refresh()
+    setSent(data.email)
   }
 
   return (
@@ -72,6 +85,30 @@ export default function RegisterPage() {
           <p className="text-muted-foreground mt-1">Creá tu negocio en minutos</p>
         </div>
         <Card>
+          {/* D-12: se reemplaza el CONTENIDO del card, no la página. El card centrado y el lockup de
+              arriba se conservan tal cual (D-10: /register no se mueve al split ni se rediseña). En
+              este estado el CardHeader no se renderiza: el título lo pone CheckYourEmail. */}
+          {sent !== null ? (
+            <CardContent>
+              <CheckYourEmail
+                email={sent}
+                title="Revisá tu mail"
+                description={<>Te mandamos un mail a <strong>{sent}</strong>. Confirmá tu cuenta para entrar.</>}
+                // El resultado se descarta a propósito: mostrar un error acá reintroduciría el
+                // oráculo de enumeration que D-14 cierra en el submit.
+                onResend={async () => {
+                  await supabase.auth.resend({ type: 'signup', email: sent })
+                }}
+              >
+                <p className="text-center text-sm text-muted-foreground mt-4">
+                  <Link href="/login" className="text-primary hover:underline">
+                    Volver al login
+                  </Link>
+                </p>
+              </CheckYourEmail>
+            </CardContent>
+          ) : (
+          <>
           <CardHeader>
             <CardTitle>Crear cuenta</CardTitle>
             <CardDescription>Empezá gratis, sin tarjeta de crédito</CardDescription>
@@ -125,6 +162,8 @@ export default function RegisterPage() {
               </Link>
             </p>
           </CardContent>
+          </>
+          )}
         </Card>
       </div>
     </div>
