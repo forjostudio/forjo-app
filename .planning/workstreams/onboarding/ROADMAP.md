@@ -85,7 +85,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 04-06-PLAN.md — Config local versionada + **checkpoint humano** (Dashboard: Redirect URLs + href de los 2 templates) + UAT
+- [x] 04-06-PLAN.md — Config local versionada + **checkpoint humano** (Dashboard: Redirect URLs + href de los 2 templates) + UAT
 
 **Phase-level decision (RESUELTAS — ver `04-CONTEXT.md` y `04-RESEARCH.md`)**:
 
@@ -187,6 +187,6 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 1. Reconciliación de horarios | v0.14 | 3/3 | Complete | 2026-07-03 |
 | 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
-| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 5/6 | In Progress|  |
+| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
 | 5. Entrar con Google | v0.19 | 0/? | Not started | - |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
