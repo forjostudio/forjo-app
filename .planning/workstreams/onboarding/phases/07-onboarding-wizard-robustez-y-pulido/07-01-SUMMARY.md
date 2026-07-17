@@ -100,6 +100,11 @@ None - sin migración, sin nuevas env vars, sin config de Dashboard (`businesses
 - Fase autónoma completa. `/gsd:secure-phase 7` es obligatorio al cierre (ONB-01 es multi-tenant + service-role; verificar T-07-01..04).
 - Diferido a propósito: ONB-05 (theming de auth) es Phase 8.
 
+## Self-Check: PASSED
+
+- Archivos verificados en disco: `app/api/onboarding/slug-available/route.ts`, `app/(onboarding)/onboarding/page.tsx`, `07-01-SUMMARY.md` — todos FOUND.
+- Commits verificados: `3399c03`, `49b603c`, `dbb5c4e`, `4998600` — todos FOUND. Working tree limpio.
+
 ---
 *Phase: 07-onboarding-wizard-robustez-y-pulido*
 *Completed: 2026-07-17*
