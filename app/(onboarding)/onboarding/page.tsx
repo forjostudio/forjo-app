@@ -11,23 +11,13 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles } from 'lucide-react'
+import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-
-// Paletas curadas de marca (mismas que Configuración → Apariencia). El swatch es el
-// primary en claro; se persiste en businesses.palette y tiñe panel + página pública.
-const PALETTES: { key: string; label: string; swatch: string }[] = [
-  { key: 'red', label: 'Rojo', swatch: '#d94a2b' },
-  { key: 'blue', label: 'Azul', swatch: '#2a5fa5' },
-  { key: 'yellow', label: 'Amarillo', swatch: '#c8901a' },
-  { key: 'green', label: 'Verde', swatch: '#2f8a5b' },
-  { key: 'ink', label: 'Tinta', swatch: '#1a1714' },
-]
 
 // Estado del paso de horarios: un día → { enabled, blocks[] }, donde cada bloque es una ventana
 // simple { start_time, end_time }. Modelo N-bloques/día para soportar horario partido (D-04, ej.
@@ -93,13 +83,6 @@ export default function OnboardingPage() {
   const [whatsappError, setWhatsappError] = useState<string | undefined>()
   const [address, setAddress] = useState('')
   const [instagram, setInstagram] = useState('')
-  const [palette, setPalette] = useState('red')
-
-  function selectPalette(key: string) {
-    setPalette(key)
-    // Feedback inmediato: tiñe el onboarding al instante (igual que Apariencia).
-    document.documentElement.dataset.palette = key
-  }
 
   // Step 2 - Services
   const [services, setServices] = useState<Service[]>([{ name: '', duration_minutes: 30, price: 0 }])
@@ -110,17 +93,27 @@ export default function OnboardingPage() {
   // Step 4 - Hours (día → { enabled, blocks[] }, índice = day_of_week)
   const [dayStates, setDayStates] = useState<DayState[]>(DEFAULT_DAY_STATES)
 
+  // Chequeo de disponibilidad de slug vía el endpoint service-role (ONB-01, D-01/D-03). ANTES corría
+  // bajo RLS (supabase.from('businesses')): un futuro-owner no veía slugs ajenos → decía "disponible"
+  // en falso y el negocio recién fallaba en el insert con el opaco "Error al crear el negocio". El
+  // endpoint ve el espacio global multi-tenant y devuelve SOLO { available: boolean }.
   const checkSlug = useCallback(async (value: string) => {
     if (!value || value.length < 3) return
     setSlugChecking(true)
-    const { data } = await supabase
-      .from('businesses')
-      .select('slug')
-      .eq('slug', value)
-      .single()
-    setSlugAvailable(!data)
-    setSlugChecking(false)
-  }, [supabase])
+    try {
+      const res = await fetch(`/api/onboarding/slug-available?slug=${encodeURIComponent(value)}`)
+      const json = await res.json()
+      // Fail-safe: SOLO available === true habilita el slug. Cualquier otra respuesta (400/401/
+      // shape raro) deja slugAvailable en false → nunca falso-positivo de disponibilidad.
+      setSlugAvailable(json.available === true)
+    } catch {
+      // Error de red → estado indeterminado (null), NUNCA "disponible" (Pitfall 5). El insert
+      // conserva su guardia businesses_slug_key como red final ante la carrera.
+      setSlugAvailable(null)
+    } finally {
+      setSlugChecking(false)
+    }
+  }, [])
 
   useEffect(() => {
     const slugified = name
@@ -140,6 +133,15 @@ export default function OnboardingPage() {
   function handleSlugChange(val: string) {
     const clean = val.toLowerCase().replace(/[^a-z0-9-]/g, '')
     setSlug(clean)
+  }
+
+  // Salida del wizard (ONB-02, D-04): un usuario autenticado sin negocio queda atrapado en el
+  // onboarding (ej. entró con la cuenta de Google equivocada en el UAT de Phase 5). Cierra sesión y
+  // vuelve a /login. Mismo patrón canónico que sidebar.tsx (signOut + push + refresh).
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
   }
 
   // Services
@@ -296,9 +298,11 @@ export default function OnboardingPage() {
           whatsapp: whatsappNorm,
           address: address || null,
           instagram: instagram || null,
-          palette,
-          // back-compat: la columna primary_color sigue existiendo; la derivamos del swatch.
-          primary_color: PALETTES.find(p => p.key === palette)?.swatch ?? '#d94a2b',
+          // Paleta default (ONB-04, D-06): el wizard ya no ofrece el selector; el negocio arranca con
+          // la paleta 'red' (el default histórico) y la edita después en Ajustes → Apariencia.
+          palette: 'red',
+          // back-compat: la columna primary_color sigue existiendo; es el swatch del 'red'.
+          primary_color: '#d94a2b',
         })
         .select()
         .single()
@@ -411,7 +415,17 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen p-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-8">
-        <div className="text-center mb-8">
+        <div className="relative text-center mb-8">
+          {/* Salida discreta arriba a la derecha (ONB-02): no compite con el lockup centrado. Visible
+              en todos los pasos para que el usuario con la cuenta equivocada pueda salir siempre. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="absolute right-0 top-0 gap-1.5 text-muted-foreground"
+          >
+            <LogOut className="w-4 h-4" /> Cerrar sesión
+          </Button>
           <div className="flex items-center justify-center">
             <Image src="/brand/forjo-gestion-lockup-tinta.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto dark:hidden" />
             <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="hidden h-10 w-auto dark:block" />
@@ -560,32 +574,6 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label>Dirección <span className="text-muted-foreground">(opcional)</span></Label>
                 <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Av. Corrientes 1234, CABA" />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Paleta de marca</Label>
-                <div className="flex flex-wrap gap-2">
-                  {PALETTES.map(p => {
-                    const active = palette === p.key
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => selectPalette(p.key)}
-                        aria-pressed={active}
-                        title={p.label}
-                        className={cn(
-                          'h-9 w-16 rounded-sm border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                          active ? 'border-foreground' : 'border-transparent hover:border-muted-foreground/50'
-                        )}
-                        style={{ backgroundColor: p.swatch }}
-                      >
-                        <span className="sr-only">{p.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">Tiñe tu panel y tu página pública de reservas. Podés cambiarla luego en Configuración.</p>
               </div>
             </div>
           )}
