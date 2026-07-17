@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-07-17T20:54:57.296Z"
+stopped_at: Phase 6 planned (2 plans, 2 waves, checker PASS)
+last_updated: "2026-07-17T21:15:11.702Z"
 last_activity: 2026-07-17 -- Phase 04 execution started
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 9
+  total_plans: 11
   completed_plans: 9
   percent: 67
 ---
@@ -131,9 +131,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-17T20:54:57.286Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/workstreams/onboarding/phases/06-mails-de-cuenta-con-marca-forjo/06-CONTEXT.md
+Last session: 2026-07-17T21:15:11.694Z
+Stopped at: Phase 6 planned (2 plans, 2 waves, checker PASS)
+Resume file: .planning/workstreams/onboarding/phases/06-mails-de-cuenta-con-marca-forjo/06-01-PLAN.md
 Next: `/gsd:discuss-phase 4 --ws onboarding`
 
 ## Performance Metrics
