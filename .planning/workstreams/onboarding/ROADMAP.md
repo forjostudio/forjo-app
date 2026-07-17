@@ -64,36 +64,44 @@ Dos superficies, dos fases. El **wizard de alta** (Phase 7) junta los dos bugs q
 
 **Sin checkpoints humanos externos** (a diferencia de v0.19): todo es código de app + storage ya existente, sin config en el Dashboard de Supabase. Único checkpoint posible: si ONB-01 se resuelve con una RPC `security definer`, la migración numerada se coordina con el deploy (patrón de siempre); si se resuelve con endpoint service-role no hay migración. Se decide en discuss/plan.
 
-- [ ] **Phase 7: Onboarding wizard — robustez + pulido** (ONB-01/02/03/04) — chequeo de slug global (fail-early, sin fuga), salida del wizard, logo en el paso 1, sacar la paleta del wizard
+- [x] **Phase 7: Onboarding wizard — robustez + pulido** (ONB-01/02/03/04) — chequeo de slug global (fail-early, sin fuga), salida del wizard, logo en el paso 1, sacar la paleta del wizard (completed 2026-07-17)
 - [ ] **Phase 8: Auth siempre con tema Forjo** (ONB-05) — login/register/forgot/reset nunca heredan la paleta del tenant, ni al cerrar sesión
 
 ## Phase Details (v0.20)
 
 ### Phase 7: Onboarding wizard — robustez + pulido
+
 **Goal**: El alta de un negocio nuevo es robusta y más simple — nunca falla al final con un error opaco de slug, tiene una salida clara si el usuario no quiere crear el negocio, deja subir el logo desde el primer paso, y se simplifica sacando el selector de paleta.
 **Depends on**: Nada (extiende el wizard ya shippeado en v0.14; independiente de la Phase 8)
 **Requirements**: ONB-01, ONB-02, ONB-03, ONB-04
 **Success Criteria** (lo que debe ser VERDADERO):
+
   1. Al escribir el nombre/URL, el chequeo de disponibilidad detecta un slug YA usado por CUALQUIER negocio (no solo los del propio owner) y muestra "✗ Ya está en uso" ANTES de finalizar — nunca se llega al insert con el opaco "Error al crear el negocio". (ONB-01)
   2. El chequeo global de slug devuelve SOLO existencia (booleano) — cero datos del negocio dueño del slug; verificado como no-fuga cross-tenant. (ONB-01)
   3. Un usuario autenticado sin negocio puede cerrar sesión / volver al login desde el onboarding, sin quedar obligado a crear un negocio. (ONB-02)
   4. El dueño puede subir el logo del negocio en el primer paso; el archivo sube al bucket de storage con path aislado por tenant y queda asociado al negocio creado. (ONB-03)
   5. El wizard ya no muestra el selector de paleta; el negocio nuevo arranca con la paleta default y la paleta sigue editable en Ajustes → Apariencia. (ONB-04)
-**Plans**: 1 plan
-  - [ ] 07-01-PLAN.md — Endpoint service-role de slug (ONB-01) + salida del wizard (ONB-02) + logo en el paso 1 (ONB-03) + sacar la paleta (ONB-04)
+
+**Plans**: 1/1 plans complete
+
+  - [x] 07-01-PLAN.md — Endpoint service-role de slug (ONB-01) + salida del wizard (ONB-02) + logo en el paso 1 (ONB-03) + sacar la paleta (ONB-04)
+
 **UI hint**: yes
 **Threat model** (ONB-01): chequeo de slug sobre el espacio global multi-tenant. Hoy `checkSlug` corre con el browser client bajo RLS (`businesses` solo tiene policy `owner access`) → un futuro-owner no ve ninguna fila → siempre "disponible", y el choque salta recién en el insert (`businesses_slug_key`). El chequeo tiene que ver TODOS los slugs. Opciones (a definir en discuss/plan): RPC `security definer` que devuelve solo un booleano (requiere migración numerada, coordinada con deploy) o endpoint service-role que resuelve existencia por slug (patrón `app/api/booking/availability/route.ts`, sin migración). Invariante duro: la respuesta NO puede filtrar id/owner/nombre ni ningún otro dato del negocio dueño del slug. → `/gsd:secure-phase`.
 **Nota de scope** (ONB-03): la RLS INSERT del bucket `landing-assets` (migr. 030) exige que el primer segmento del path sea un negocio del owner autenticado — pero en el paso 1 el negocio TODAVÍA no existe. El orden upload↔insert (subir tras crear el negocio y asociarlo, o path temporal user-scoped) se resuelve en plan-phase; el patrón puro de path/validación de `lib/landing/editor-upload.ts` se reusa igual.
 
 ### Phase 8: Auth siempre con tema Forjo
+
 **Goal**: Las pantallas de login, register, forgot-password y reset-password se ven SIEMPRE Forjo (claro/oscuro según la preferencia del usuario), nunca la paleta del tenant — incluso al cerrar sesión desde el dashboard de un negocio con paleta propia.
 **Depends on**: Nada (superficie distinta a la Phase 7; ejecutable en paralelo, se corre después de la 7 solo por orden numérico)
 **Requirements**: ONB-05
 **Success Criteria** (lo que debe ser VERDADERO):
+
   1. Al cerrar sesión desde un dashboard con paleta NO-default, las 4 pantallas de auth se pintan con la paleta/tema Forjo default, no con la del tenant. (ONB-05)
   2. Las 4 pantallas de auth respetan la preferencia claro/oscuro del usuario (next-themes) — el reset de paleta no fuerza un modo. (ONB-05)
   3. Entrar directo a `/login` o `/register` (sin pasar por el dashboard) también se ve Forjo. (ONB-05)
   4. REGRESIÓN: el dashboard del negocio y su página pública `/[slug]` siguen mostrando su paleta/tema/fuente propios — el reset de auth no se filtró a esas superficies. (ONB-05)
+
 **Plans**: TBD
 **UI hint**: yes
 **Nota (capa de theming)**: el mecanismo del bug es el `<html>` persistente entre navegaciones SPA — `PaletteScript` del dashboard setea `data-palette` / `data-theme` en `document.documentElement` y ese atributo sobrevive al navegar a `/login`. El fix resetea a Forjo default (`data-palette=red`, borrar `data-theme` / `data-font`) en la superficie `(auth)`, que hoy son DOS layouts: el grupo anidado `(split)` (login/forgot/reset) y `register` (sin split). El reset toca SOLO paleta/tema/fuente; el modo claro/oscuro (clase `.dark` de next-themes) NO se toca.
@@ -112,5 +120,5 @@ v0.20: 7 → 8. Las dos fases son **independientes** (superficies distintas: wiz
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
 | 5. Entrar con Google | v0.19 | 3/3 | Complete   | 2026-07-17 |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 2/2 | Complete   | 2026-07-17 |
-| 7. Onboarding wizard — robustez + pulido | v0.20 | 0/1 | Not started | - |
+| 7. Onboarding wizard — robustez + pulido | v0.20 | 1/1 | Complete   | 2026-07-17 |
 | 8. Auth siempre con tema Forjo | v0.20 | TBD | Not started | - |
