@@ -74,9 +74,9 @@ Faseo: infraestructura de callback + recuperación → Google (con account linki
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — `/auth/callback`: piezas puras (`lib/auth/callback.ts`) + route handler con `token_hash`/`verifyOtp`
-- [ ] 04-02-PLAN.md — Proxy: las 3 listas del Edge (`/auth` a `MAINT_EXEMPT`, 3 rutas a `KNOWN_PREFIXES`, `isAuthRoute` intacta) + test de regresión
-- [ ] 04-03-PLAN.md — Layout split del route group anidado `(auth)/(split)/` + link "¿Olvidaste tu contraseña?" + componente compartido "revisá tu mail"
+- [x] 04-01-PLAN.md — `/auth/callback`: piezas puras (`lib/auth/callback.ts`) + route handler con `token_hash`/`verifyOtp`
+- [x] 04-02-PLAN.md — Proxy: las 3 listas del Edge (`/auth` a `MAINT_EXEMPT`, 3 rutas a `KNOWN_PREFIXES`, `isAuthRoute` intacta) + test de regresión
+- [x] 04-03-PLAN.md — Layout split del route group anidado `(auth)/(split)/` + link "¿Olvidaste tu contraseña?" + componente compartido "revisá tu mail"
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -187,6 +187,6 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 1. Reconciliación de horarios | v0.14 | 3/3 | Complete | 2026-07-03 |
 | 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
-| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 0/6 | Planned | - |
+| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 3/6 | In Progress|  |
 | 5. Entrar con Google | v0.19 | 0/? | Not started | - |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
