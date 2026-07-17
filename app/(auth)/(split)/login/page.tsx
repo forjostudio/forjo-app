@@ -76,7 +76,18 @@ export default function LoginPage() {
           {loading ? 'Ingresando...' : 'Entrar'}
         </Button>
       </form>
-      <p className="text-center text-sm text-muted-foreground mt-5">
+      {/* Zona de links secundarios (D-04): el link de recuperación va debajo del botón Entrar y
+          arriba del link de registro, no en la fila del label Contraseña, para que los links
+          secundarios queden agrupados en un solo lugar.
+          El py-2 no es estético: un link de una línea en text-sm no llega a los 44px de touch target
+          que pide CLAUDE.md §UI/UX; el mt-2 compensa el padding para que la separación visual con el
+          botón quede en la escala de siempre. */}
+      <p className="text-center text-sm mt-2">
+        <Link href="/forgot-password" className="text-primary hover:underline inline-block py-2">
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </p>
+      <p className="text-center text-sm text-muted-foreground mt-1">
         ¿No tenés cuenta?{' '}
         <Link href="/register" className="text-primary font-medium hover:underline">
           Creá tu negocio
