@@ -160,7 +160,12 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# El valor anterior tenía un typo preexistente: usaba esquema TLS, con site_url en texto plano y sin TLS
+# local ([api.tls] enabled = false). Esa entrada no matcheaba nada útil.
+# El matcher de Supabase es LITERAL por host: `localhost` NO es lo mismo que `127.0.0.1`. El UAT local se
+# abre en 127.0.0.1:3000 (que es lo que ya dice site_url), NUNCA en localhost:3000, o el link del mail
+# vuelve rebotado.
+additional_redirect_urls = ["http://127.0.0.1:3000", "http://127.0.0.1:3000/auth/callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -223,7 +228,11 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# D-23 — paridad con producción, donde el gate de confirmación YA está ON (verificado read-only en el
+# research: mailer_autoconfirm = false, 3 usuarios, 0 sin confirmar). Prenderlo acá deja el flag
+# VERSIONADO y documentado en el repo, no solo en un Dashboard que nadie mira. Es la única forma de
+# reproducir el gate de prod y probar el link de confirmación sin tocar producción.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -247,6 +256,21 @@ otp_expiry = 3600
 # [auth.email.template.invite]
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
+
+# H-02 — Templates versionados. ACÁ SE CAMBIA SOLO LA MECÁNICA DEL LINK, nada más.
+# El template default de Supabase arma el href con una variable que pasa por /auth/v1/verify y vuelve
+# con `?code=`: nunca entrega el token_hash que espera app/auth/callback/route.ts, así que el link muere
+# en /forgot-password?error=invalid_link. Los templates de ./supabase/templates/ arreglan ese href.
+# El content_path deja el href en el repo → el UAT local no depende de ningún Dashboard.
+# Los `subject` quedan en INGLÉS y parecidos a los defaults a propósito: el idioma, la marca y el
+# remitente son Phase 6 (MAIL-01). El mail sigue siendo el feo de Supabase, y está bien.
+[auth.email.template.recovery]
+subject = "Reset Your Password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm Your Signup"
+content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
