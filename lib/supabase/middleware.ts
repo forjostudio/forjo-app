@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isAuthRoute, isDashboardRoute } from '@/lib/auth/route-lists'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -28,26 +29,14 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
-  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
-  const isDashboardRoute = pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/appointments') ||
-    pathname.startsWith('/clients') ||
-    pathname.startsWith('/finances') ||
-    pathname.startsWith('/settings') ||
-    pathname.startsWith('/onboarding') ||
-    // CRM super-admin (D3, defensa en profundidad): un request a /admin sin
-    // sesion se corta en el Edge antes de llegar al layout. Aca solo se
-    // garantiza que HAY sesion; el chequeo de rol is_admin vive en el layout
-    // del CRM (FND-01), no en el middleware.
-    pathname.startsWith('/admin')
 
-  if (!user && isDashboardRoute) {
+  if (!user && isDashboardRoute(pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  if (user && isAuthRoute) {
+  if (user && isAuthRoute(pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
