@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles, LogOut } from 'lucide-react'
+import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles, LogOut, Image as ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
@@ -83,6 +83,25 @@ export default function OnboardingPage() {
   const [whatsappError, setWhatsappError] = useState<string | undefined>()
   const [address, setAddress] = useState('')
   const [instagram, setInstagram] = useState('')
+  // Logo del negocio (ONB-03): se elige/previsualiza en el paso 1 pero se sube al FINALIZAR (la RLS
+  // del bucket `logos` exige que el negocio ya exista). logoFile = archivo elegido; logoPreview =
+  // objectURL para el avatar; ref para disparar el input file oculto.
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+
+  // Validación cliente del logo (mitigación T-07-03): tipo ∈ {jpeg,png,webp} y tamaño ≤ 2MB antes de
+  // aceptar el archivo. Verbatim del molde de settings-client.uploadLogo. La barrera no-bypasseable
+  // sigue siendo la policy del bucket del lado server; esto es feedback temprano.
+  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { toast.error('El archivo no puede superar 2MB'); return }
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) { toast.error('Formato no soportado. Usá JPG, PNG o WebP'); return }
+    setLogoFile(file)
+    setLogoPreview(URL.createObjectURL(file))
+  }
 
   // Step 2 - Services
   const [services, setServices] = useState<Service[]>([{ name: '', duration_minutes: 30, price: 0 }])
@@ -309,6 +328,28 @@ export default function OnboardingPage() {
 
       if (bizError) throw bizError
 
+      // Upload del logo al bucket `logos` (ONB-03, D-05). Timing: DESPUÉS de crear el negocio porque
+      // la RLS del bucket exige que el negocio exista (path keyeado por business.id). El path lo arma
+      // el server con business.id de la sesión (UUID de confianza, NO del cliente → mitigación T-07-02
+      // path traversal). Best-effort: el negocio ya existe, así que un fallo del upload/update se
+      // loguea y NO rompe el redirect al dashboard (mismo criterio que linkLeadOnSignup, T-04-09).
+      if (logoFile) {
+        try {
+          const ext = logoFile.name.split('.').pop()?.toLowerCase() || 'jpg'
+          const path = `${business.id}/logo.${ext}`
+          const bucket = supabase.storage.from('logos')
+          const { error: uploadErr } = await bucket.upload(path, logoFile, { upsert: true })
+          if (!uploadErr) {
+            const { data: { publicUrl } } = bucket.getPublicUrl(path)
+            await supabase.from('businesses').update({ logo_url: `${publicUrl}?t=${Date.now()}` }).eq('id', business.id)
+          } else {
+            console.error('[onboarding/logo]', uploadErr.message)
+          }
+        } catch (logoErr) {
+          console.error('[onboarding/logo]', logoErr instanceof Error ? logoErr.message : logoErr)
+        }
+      }
+
       // priceError es solo estado de UI (validación inline): NO se envía al insert (columna inexistente
       // en services). Se arma la fila con los campos de dominio explícitos. Precio 0 se persiste tal cual
       // (servicio gratuito, D-09).
@@ -470,6 +511,58 @@ export default function OnboardingPage() {
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Tu negocio</h2>
+
+              {/* Logo (ONB-03): se elige acá y se sube al finalizar. Avatar redondo + input file oculto,
+                  mismo layout que Ajustes → Negocio. Sin botón "Guardar": el upload es al finalizar. */}
+              <div className="space-y-2">
+                <Label>Logo del negocio <span className="text-muted-foreground">(opcional)</span></Label>
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    {logoPreview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={logoPreview}
+                        alt="Logo"
+                        className="w-20 h-20 rounded-full object-cover border border-border"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center">
+                        {name ? (
+                          <span className="text-2xl font-bold text-primary">{name.charAt(0).toUpperCase()}</span>
+                        ) : (
+                          <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp"
+                      className="hidden"
+                      onChange={handleLogoSelect}
+                    />
+                    <div className="flex gap-2 flex-wrap">
+                      <Button size="sm" variant="outline" onClick={() => logoInputRef.current?.click()}>
+                        {logoPreview ? 'Cambiar logo' : 'Subir logo'}
+                      </Button>
+                      {logoPreview && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-400 border-red-500/30"
+                          onClick={() => { setLogoPreview(null); setLogoFile(null) }}
+                        >
+                          Quitar
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">JPG, PNG o WebP · Máximo 2MB</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nombre del negocio *</Label>
