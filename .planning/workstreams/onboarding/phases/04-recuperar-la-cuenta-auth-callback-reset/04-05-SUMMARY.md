@@ -145,3 +145,9 @@ El flujo end-to-end contra GoTrue real: alta → mail → link → onboarding **
 ---
 *Phase: 04-recuperar-la-cuenta-auth-callback-reset*
 *Completed: 2026-07-17*
+
+## Self-Check: PASSED
+
+Los 2 archivos declarados existen en disco y los 2 commits (`7bc80b5`, `d791a02`) están en el historial.
+Árbol limpio, sin `.env` trackeados ni borrados accidentales. Cero cambios en STATE.md / ROADMAP.md
+(los escribe el orquestador) y cero cambios en `components/auth/check-your-email.tsx` (dependencia del plan paralelo `04-04`).
