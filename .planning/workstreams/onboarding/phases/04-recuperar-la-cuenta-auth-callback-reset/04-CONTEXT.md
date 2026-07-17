@@ -90,7 +90,7 @@ no el mail — ver D-02 y D-14); y **reuso/expiración** del link (D-18, D-19).
 
 ### Política de confirmación de email (AUTH-06) — decisión de producto del usuario
 
-- **D-11:** **`enable_confirmations` = ON en prod: confirmar el mail es un GATE REAL.** `signUp` NO
+- **D-11 [informational]:** **`enable_confirmations` = ON en prod: confirmar el mail es un GATE REAL.** `signUp` NO
   devuelve sesión; el usuario no entra hasta confirmar.
   **Razón del usuario (textual):** *"tiene que haber una confirmación para que no se creen cuentas con
   mails random además de mails de otro"*.
@@ -102,6 +102,13 @@ no el mail — ver D-02 y D-14); y **reuso/expiración** del link (D-18, D-19).
   OFF "Supabase igual manda el mail feo". **Es falso.** Con el flag OFF, Supabase **NO manda ningún mail
   de confirmación** y el usuario queda auto-confirmado. Son la misma perilla: no existe "mail de
   confirmación que no bloquee". Esa corrección es la que llevó a esta decisión.
+  **`[informational]` — RESUELTO por research (2026-07-16, hallazgo H-01): ya estaba cumplido en prod.**
+  Probe read-only a `GET /auth/v1/settings`: `mailer_autoconfirm: false` (o sea, confirmación ON). 3
+  usuarios en prod, **0 sin confirmar**; el más reciente confirmó con un click real (30s entre
+  `created_at` y `email_confirmed_at`). **No hay trabajo que planear acá** — es una precondición ya
+  satisfecha, no una tarea. Lo que D-11 sí hace es sostener el resto: es la razón por la que AUTH-06
+  existe (`register/page.tsx:57` empuja a `/onboarding` sin sesión → el proxy lo rebota) y el piso
+  verificado que hereda la Phase 5. Ver `04-05-PLAN.md` (amenaza T-04-18) y `04-06-PLAN.md`.
 - **D-12:** Tras "Crear cuenta gratis", **el card se reemplaza por un estado "revisá tu mail"** (mismo
   patrón que D-02): "Te mandamos un mail a tu@email.com. Confirmá tu cuenta para entrar." + reenviar con
   cooldown 60s. **Muere el `router.push('/onboarding')` + toast "Revisá tu email para confirmarla"** de
@@ -115,11 +122,17 @@ no el mail — ver D-02 y D-14); y **reuso/expiración** del link (D-18, D-19).
   confirmación ON. Coherente con D-02 y con la razón de D-11: **el registro no puede ser un oráculo**
   para averiguar el mail de otro. El despistado que ya tenía cuenta está cubierto por el
   "¿Ya tenés cuenta? Iniciar sesión" que ya vive en el card.
-- **D-15:** **Si el research encuentra la confirmación OFF en prod, se prende** (checkpoint humano).
+- **D-15 [informational]:** **Si el research encuentra la confirmación OFF en prod, se prende** (checkpoint humano).
   Las cuentas existentes ya están auto-confirmadas (se crearon con el flag OFF), así que prender el flag
   **solo afecta a las altas nuevas** → riesgo bajo, sin migración ni tocar `auth.users` a mano. El
   research igual **reporta cuántos usuarios sin confirmar hay en prod**; si aparece alguno colgado, se
   resuelve a mano en el Dashboard.
+  **`[informational]` — NO DISPARÓ (2026-07-16, hallazgo H-01).** El condicional que abre D-15 ("si el
+  research encuentra la confirmación OFF") es falso: la encontró **ON** (ver D-11). No hay flag que
+  prender, no hay migración, y el conteo que D-15 pedía dio **0 usuarios sin confirmar** → tampoco hay
+  nadie colgado que resolver a mano. **Decisión muerta por resolución, no por olvido.** El checkpoint
+  humano de la fase sigue existiendo, pero con otro contenido: allowlist de Redirect URLs + Site URL
+  (D-20) y el `href` de los 2 templates (hallazgo H-02). Ver `04-06-PLAN.md`.
 
 ### Después del reset: destino, sesión y links muertos (AUTH-02)
 

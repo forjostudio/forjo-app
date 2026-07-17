@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
-status: roadmapped
-stopped_at: Phase 4 context gathered
-last_updated: "2026-07-16T23:15:48.541Z"
-last_activity: 2026-07-16 — ROADMAP de v0.19 creado (Phases 4-6, 8/8 requisitos mapeados)
+status: planned
+stopped_at: Phase 4 planned — 6 planes en 3 waves, checker PASSED
+last_updated: "2026-07-17T00:00:00.000Z"
+last_activity: 2026-07-17 — Phase 4 planeada: 6 planes / 3 waves (research + patterns + plan-checker PASSED)
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 6
   completed_plans: 0
   percent: 0
 ---
@@ -28,9 +28,10 @@ Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 ## Current Position
 
 Phase: 4 — Recuperar la cuenta (`/auth/callback` + reset)
-Plan: —
-Status: Roadmap creado — listo para discuss-phase
-Last activity: 2026-07-16 — ROADMAP de v0.19 creado (Phases 4-6, 8/8 requisitos mapeados)
+Plan: — (6 planeados, 3 waves)
+Total Plans in Phase: 6
+Status: Ready to execute
+Last activity: 2026-07-17 — Phase 4 planeada: 6 planes / 3 waves (research + patterns + plan-checker PASSED)
 
 ## Milestone Context
 

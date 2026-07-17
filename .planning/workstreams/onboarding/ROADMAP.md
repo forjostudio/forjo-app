@@ -72,11 +72,19 @@ Faseo: infraestructura de callback + recuperación → Google (con account linki
 **Plans**: 6 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 04-01-PLAN.md — `/auth/callback`: piezas puras (`lib/auth/callback.ts`) + route handler con `token_hash`/`verifyOtp`
 - [ ] 04-02-PLAN.md — Proxy: las 3 listas del Edge (`/auth` a `MAINT_EXEMPT`, 3 rutas a `KNOWN_PREFIXES`, `isAuthRoute` intacta) + test de regresión
 - [ ] 04-03-PLAN.md — Layout split del route group anidado `(auth)/(split)/` + link "¿Olvidaste tu contraseña?" + componente compartido "revisá tu mail"
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04-04-PLAN.md — `/forgot-password` (pedir el link, anti-enumeration) + `/reset-password` (contraseña nueva, cierre de otras sesiones)
 - [ ] 04-05-PLAN.md — AUTH-06: el alta deja de mentir (muere el push a `/onboarding` sin sesión)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 04-06-PLAN.md — Config local versionada + **checkpoint humano** (Dashboard: Redirect URLs + href de los 2 templates) + UAT
 
 **Phase-level decision (RESUELTAS — ver `04-CONTEXT.md` y `04-RESEARCH.md`)**:
@@ -85,8 +93,10 @@ Plans:
   **ON** (`mailer_autoconfirm: false`; 3 usuarios, **0 sin confirmar**). D-11 ya está cumplido y **D-15 no
   dispara**. Consecuencia: **AUTH-06 no es preventivo, es un bug vivo en prod** (`register/page.tsx:57` empuja a
   `/onboarding` sin sesión → el proxy rebota al login). **MAIL-01 conserva todo su peso en Phase 6.**
+
 - **Redirect URLs en previews** — **RESUELTO (D-20):** allowlist = **solo prod + local, sin wildcard**. Auth **no
   anda en previews**, asumido a propósito → el UAT es **en local + re-verificación en prod**.
+
 - **Forma de `/auth/callback`** — **RESUELTO (RESEARCH, evidencia estructural en `node_modules/`):**
   `token_hash` + `verifyOtp`, **no** `code` + `exchangeCodeForSession` (`@supabase/ssr` 0.10.3 fuerza
   `flowType: "pkce"` y el canje exige un `code_verifier` del navegador que inició el flujo — inexistente en el
