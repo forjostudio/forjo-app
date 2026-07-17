@@ -138,14 +138,25 @@ mismo tamaño, otro contenido.
   3. Un usuario que ya entró con Google vuelve más tarde y entra directo a su panel: la segunda vez es un login, no un alta duplicada.
   4. El mismo email registrado antes con contraseña entra después con Google (y al revés) y termina en **una sola cuenta** con sus datos y su negocio intactos — nunca una cuenta duplicada ni un error opaco. Si la decisión de fase es bloquear el cruce, el usuario ve un mensaje que le dice exactamente qué hacer.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Callback: rama `code`→`exchangeCodeForSession` + `DESTINATIONS.oauth='/dashboard'` + error propio a `/login?error=oauth` (reusa el callback de Phase 4, `oauth` NO entra en `ALLOWED_TYPES`)
+- [ ] 05-02-PLAN.md — Botón "Continuar con Google" compartido en login y register (glifo oficial, divisor "o") + aviso de `?error=oauth` en login
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 05-03-PLAN.md — **Checkpoint humano** (Google Cloud: redirect URI en credenciales existentes · Supabase: habilitar provider Google + allowlist sin wildcard) + UAT prod-first con cross-test de linking en los dos órdenes
 
 **UI hint**: yes
 
-**Phase-level decision (defer to discuss-phase)**:
+**Phase-level decision (RESUELTAS — ver `05-CONTEXT.md` y `05-RESEARCH.md`)**:
 
-- **Account linking (AUTH-05) — LA decisión del milestone.** Supabase vincula identidades o tira error según la config y según si el mail está verificado. Definir el comportamiento **explícitamente** y después **probarlo con los dos órdenes** (contraseña→Google y Google→contraseña). Es decisión + verificación, no cosmética: si esto sale mal, un cliente que ya paga se queda mirando el negocio de nadie. Cruza con el hallazgo de AUTH-06 (si el mail está verificado o no cambia el comportamiento del linking).
-- **Botón de Google en login y register**, o solo en uno. Sin rediseño visual de las pantallas (out of scope, se tocaron recién en el quick `260716-ide`).
+- **Account linking (AUTH-05) — RESUELTO (D-01, confirmado por el research):** **unificar en una sola cuenta.** Es el comportamiento **por defecto** de Supabase (auto-link), gateado por email verificado (garantizado por confirm-email ON en prod, H-01/D-02). **Sin código de linking, sin cambio de config** (`enable_manual_linking` queda `false`). Se **verifica** en los dos órdenes en el UAT (plan `05-03`), no se construye.
+- **Botón de Google — RESUELTO (D-03):** va en login **Y** en register. Sin rediseño visual — se suma al layout existente (plan `05-02`).
+- **Forma de la extensión del callback — RESUELTO (D-07, corregido por el research):** el route branchea por presencia de `?code=` → `exchangeCodeForSession`; el path `token_hash`/`verifyOtp` de Phase 4 queda intacto. `oauth` **NO** entra en `ALLOWED_TYPES` (solo `DESTINATIONS` gana la fila `oauth: '/dashboard'`). Fallo/cancelación caen en `/login?error=oauth`, nunca en el error de recuperación (D-05/D-08).
 
 **Checkpoint humano (`autonomous: false`)**: (a) **Google Cloud** — agregar el redirect URI del callback de Supabase a las credenciales OAuth que ya existen (`client_secret_*.json`, hoy usadas por Calendar); (b) **Dashboard de Supabase** — habilitar el provider de Google con client ID/secret. Sin esto el botón no puede probarse ni existir.
 
@@ -188,5 +199,5 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
-| 5. Entrar con Google | v0.19 | 0/? | Not started | - |
+| 5. Entrar con Google | v0.19 | 0/3 | Not started | - |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
