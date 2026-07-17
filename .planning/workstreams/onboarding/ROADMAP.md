@@ -177,9 +177,23 @@ Plans:
   3. Los links de los dos mails **siguen funcionando end-to-end** tras el cambio de plantilla y de remitente: confirmar deja la cuenta confirmada, recuperar deja al dueño seteando su contraseña nueva y adentro del panel (cero regresión sobre lo que cerró la Phase 4).
   4. Los mails **llegan a la bandeja de entrada**, no a spam, en Gmail — probado con un envío real desde el remitente configurado.
 
-**Plans**: TBD
+**Plans**: 2 plans
 
-**Phase-level decision (defer to discuss-phase)**:
+Plans:
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — Brandear los 2 templates (español + marca Forjo, misma familia) + subjects en español, con el href de `token_hash` intacto + guard test de vitest (continúa T-04-20)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 06-02-PLAN.md — **Checkpoint humano** (Resend: dominio verificado + API key dedicada · Supabase: custom SMTP + pegar templates) + UAT local (Mailpit) y prod (envío real a Gmail: remitente, marca, inbox-no-spam)
+
+**Phase-level decision (RESUELTAS — ver `06-CONTEXT.md` y `06-RESEARCH.md`)**:
+
+- **SMTP: Resend vs solo plantillas — RESUELTO (D-01):** custom SMTP vía Resend. Editar solo las plantillas dejaría el remitente `noreply@mail.app.supabase.io` → MAIL-01/02 a medias.
+- **Dominio/remitente — RESUELTO (D-02, D-03):** `forjo.studio` YA verificado en Resend (lo atestigua `lib/email.ts`); remitente dedicado `no-reply@forjo.studio` "Forjo". Cero DNS nuevo (Resend verifica el dominio, no la dirección; se confirma en el checkpoint).
+
+**Phase-level decision (original — pre-research)**:
 
 - **SMTP: Resend vs solo editar las plantillas del default.** Resend ya está cableado para los transaccionales de turnos (`lib/email.ts`) → unifica el remitente con los mails que el negocio ya manda y saca el "powered by Supabase", pero requiere configurar dominio + DNS (SPF/DKIM). Editar solo las plantillas es más rápido, pero el remitente sigue siendo `noreply@mail.app.supabase.io` — o sea, MAIL-01/02 quedan a medias. Decidir con el criterio del requisito ("desde un remitente de Forjo"), no con el de menor esfuerzo.
 - **Qué dominio/remitente** (`no-reply@forjo.studio` vs el que ya usa `lib/email.ts`) y si se reusa el dominio ya verificado en Resend.
@@ -200,4 +214,4 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
 | 5. Entrar con Google | v0.19 | 3/3 | Complete   | 2026-07-17 |
-| 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
+| 6. Mails de cuenta con marca Forjo | v0.19 | 0/2 | Planned | - |
