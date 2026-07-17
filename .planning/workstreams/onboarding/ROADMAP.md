@@ -49,7 +49,7 @@ Detalle completo archivado en [`milestones/v0.14-ROADMAP.md`](../../milestones/v
 Faseo: infraestructura de callback + recuperación → Google (con account linking) → mails branded. El orden es **load-bearing**: `/auth/callback` se construye una vez en Phase 4 y Google lo reusa; los mails se brandean cuando los flujos que los disparan ya existen.
 
 - [x] **Phase 4: Recuperar la cuenta (`/auth/callback` + reset)** - La ruta de intercambio de código por sesión, estrenada con el flujo completo de recuperación de contraseña, y un alta que es honesta sobre la confirmación
-- [ ] **Phase 5: Entrar con Google** - Alta e inicio de sesión con Google sobre el callback ya construido, con account linking resuelto y el hand-off al onboarding verificado
+- [x] **Phase 5: Entrar con Google** - Alta e inicio de sesión con Google sobre el callback ya construido, con account linking resuelto y el hand-off al onboarding verificado
 - [ ] **Phase 6: Mails de cuenta con marca Forjo** - Los mails de confirmación y recuperación llegan en español, con marca y desde un remitente de Forjo — sin "powered by Supabase"
 
 ## Phase Details
@@ -138,7 +138,7 @@ mismo tamaño, otro contenido.
   3. Un usuario que ya entró con Google vuelve más tarde y entra directo a su panel: la segunda vez es un login, no un alta duplicada.
   4. El mismo email registrado antes con contraseña entra después con Google (y al revés) y termina en **una sola cuenta** con sus datos y su negocio intactos — nunca una cuenta duplicada ni un error opaco. Si la decisión de fase es bloquear el cruce, el usuario ve un mensaje que le dice exactamente qué hacer.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -148,7 +148,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 05-03-PLAN.md — **Checkpoint humano** (Google Cloud: redirect URI en credenciales existentes · Supabase: habilitar provider Google + allowlist sin wildcard) + UAT prod-first con cross-test de linking en los dos órdenes
+- [x] 05-03-PLAN.md — **Checkpoint humano** (Google Cloud: redirect URI en credenciales existentes · Supabase: habilitar provider Google + allowlist sin wildcard) + UAT prod-first con cross-test de linking en los dos órdenes
 
 **UI hint**: yes
 
@@ -199,5 +199,5 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
-| 5. Entrar con Google | v0.19 | 2/3 | In Progress|  |
+| 5. Entrar con Google | v0.19 | 3/3 | Complete   | 2026-07-17 |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
