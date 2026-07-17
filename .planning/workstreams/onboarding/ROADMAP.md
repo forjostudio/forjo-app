@@ -177,12 +177,12 @@ Plans:
   3. Los links de los dos mails **siguen funcionando end-to-end** tras el cambio de plantilla y de remitente: confirmar deja la cuenta confirmada, recuperar deja al dueño seteando su contraseña nueva y adentro del panel (cero regresión sobre lo que cerró la Phase 4).
   4. Los mails **llegan a la bandeja de entrada**, no a spam, en Gmail — probado con un envío real desde el remitente configurado.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Brandear los 2 templates (español + marca Forjo, misma familia) + subjects en español, con el href de `token_hash` intacto + guard test de vitest (continúa T-04-20)
+- [x] 06-01-PLAN.md — Brandear los 2 templates (español + marca Forjo, misma familia) + subjects en español, con el href de `token_hash` intacto + guard test de vitest (continúa T-04-20)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -214,4 +214,4 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
 | 5. Entrar con Google | v0.19 | 3/3 | Complete   | 2026-07-17 |
-| 6. Mails de cuenta con marca Forjo | v0.19 | 0/2 | Planned | - |
+| 6. Mails de cuenta con marca Forjo | v0.19 | 1/2 | In Progress|  |
