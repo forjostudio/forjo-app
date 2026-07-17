@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
-status: Awaiting next milestone
+status: executing
 stopped_at: Phase 7 planned (1 plan, autónomo, checker PASS)
-last_updated: "2026-07-17T23:31:30.378Z"
-last_activity: 2026-07-17 — Milestone v0.19 completed and archived
+last_updated: "2026-07-17T23:33:10.423Z"
+last_activity: 2026-07-17 -- Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 6
@@ -23,14 +23,14 @@ Requirements: .planning/workstreams/onboarding/REQUIREMENTS.md
 Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados (aislamiento multi-tenant + integridad de pagos).
-**Current focus:** Phase 06 — mails-de-cuenta-con-marca-forjo
+**Current focus:** Phase 07 — onboarding-wizard-robustez-y-pulido
 
 ## Current Position
 
-Phase: Milestone v0.19 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-17 — Milestone v0.19 completed and archived
+Phase: 07 (onboarding-wizard-robustez-y-pulido) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 07
+Last activity: 2026-07-17 -- Phase 07 execution started
 
 ## Milestone Context
 
