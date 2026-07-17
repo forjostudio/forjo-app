@@ -264,14 +264,14 @@ otp_expiry = 3600
 # con `?code=`: nunca entrega el token_hash que espera app/auth/callback/route.ts, así que el link muere
 # en /forgot-password?error=invalid_link. Los templates de ./supabase/templates/ arreglan ese href.
 # El content_path deja el href en el repo → el UAT local no depende de ningún Dashboard.
-# Los `subject` quedan en INGLÉS y parecidos a los defaults a propósito: el idioma, la marca y el
-# remitente son Phase 6 (MAIL-01). El mail sigue siendo el feo de Supabase, y está bien.
+# Phase 6 (MAIL-01) YA tradujo los `subject` al español y brandeó los templates (Forjo). La mecánica
+# del link sigue intacta: content_path no cambia y el href de token_hash es el mismo de Phase 4.
 [auth.email.template.recovery]
-subject = "Reset Your Password"
+subject = "Restablecé tu contraseña"
 content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.confirmation]
-subject = "Confirm Your Signup"
+subject = "Confirmá tu cuenta en Forjo"
 content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize notification email template
