@@ -30,10 +30,10 @@ describe('parseCallbackParams', () => {
   })
 
   it('rechaza type fuera de la allowlist', () => {
-    // 'oauth' todavía NO está permitido: lo suma Phase 5 a ALLOWED_TYPES a propósito (D-13).
-    // Este test es el recordatorio de que ese día la allowlist cambia acá y en el módulo, no por
-    // accidente. El resto son tipos reales de EmailOtpType que esta fase no rutea, más un intento
-    // de path traversal.
+    // 'oauth' NUNCA entra en ALLOWED_TYPES: el ruteo de OAuth es por presencia de `code` en el route
+    // handler, no por `type` (Hallazgo Crítico #2 del 05-RESEARCH). Este test es la guardia permanente
+    // de que un `type=oauth` INYECTADO en un link de mail no se cuela al path de verifyOtp. El resto son
+    // tipos reales de EmailOtpType que esta fase no rutea, más un intento de path traversal.
     for (const t of ['oauth', 'magiclink', 'email_change', 'invite', '../../etc']) {
       expect(parseCallbackParams(sp(`token_hash=abc&type=${t}`)).ok).toBe(false)
     }
@@ -54,6 +54,7 @@ describe('resolveDestination', () => {
   it('mapea los tipos conocidos', () => {
     expect(resolveDestination('recovery')).toBe('/reset-password') // D-03
     expect(resolveDestination('signup')).toBe('/onboarding') // D-13
+    expect(resolveDestination('oauth')).toBe('/dashboard') // D-09 / AUTH-04
   })
 
   it('nunca refleja input desconocido (anti open redirect, T-04-01)', () => {

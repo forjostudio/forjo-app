@@ -17,15 +17,22 @@ import type { EmailOtpType } from '@supabase/supabase-js'
 // ── Constantes ─────────────────────────────────────────────────────────────────────────────────
 // Allowlist CERRADA, validada en RUNTIME. `EmailOtpType` incluye `(string & {})` (ver
 // node_modules/@supabase/auth-js/dist/module/lib/types.d.ts:704), o sea que el tipo acepta CUALQUIER
-// string: TypeScript no filtra nada acá. Phase 5 suma 'oauth' a este Set — hoy queda afuera a
-// propósito y lib/auth/callback.test.ts lo asierta.
+// string: TypeScript no filtra nada acá. Este Set valida el `type` del path de MAIL (OTP), y `oauth`
+// queda fuera a propósito y para siempre: OAuth vuelve con `?code=` y SIN `type`, así que se rutea por
+// presencia de `code` en el route handler, no por `type` (Hallazgo Crítico #2 del 05-RESEARCH). Meter
+// 'oauth' acá sería contraproducente: haría que un `token_hash=x&type=oauth` FABRICADO pasara el parse y
+// fuera a verifyOtp, que no entiende ese tipo. lib/auth/callback.test.ts lo asierta como guardia.
 const ALLOWED_TYPES = new Set<string>(['recovery', 'signup'])
 
 // Tabla de destinos: la ÚNICA fuente del redirect post-canje. Phase 5 agrega una fila, no reescribe.
 const DESTINATIONS: Record<string, string> = {
   recovery: '/reset-password', // D-03
   signup: '/onboarding', // D-13: usuario recién creado sin negocio → el wizard es lo único que puede hacer
-  // oauth: '/dashboard',      // ← Phase 5 agrega 1 fila. No reescribe nada.
+  // /dashboard y NO /onboarding (AUTH-04, D-09): el layout de (dashboard) ya rebota a /onboarding cuando
+  // el usuario no tiene negocio (app/(dashboard)/layout.tsx:23), así que UN solo destino sirve al usuario
+  // nuevo (→onboarding) y al recurrente (→dashboard). Apuntar directo a /onboarding rompería al
+  // recurrente (lo mandaría a re-onboardear).
+  oauth: '/dashboard',
 }
 
 // Único destino de error de todo el flujo (D-18): el error y su solución en la misma pantalla, en un
