@@ -1,0 +1,19 @@
+<!--
+  H-02 — Mail de confirmación de alta.
+
+  Mismo motivo que recovery.html: lo único que importa es el href. El default de Supabase apunta a una
+  variable que pasa por /auth/v1/verify y vuelve con `?code=`, que app/auth/callback/route.ts NO acepta.
+
+  El href usa {{ .SiteURL }} (valor de la CONFIG del proyecto), NO la variable de redirect que refleja
+  un valor venido del navegador (T-04-01).
+
+  `type=signup` tiene que coincidir EXACTO con la allowlist ALLOWED_TYPES de lib/auth/callback.ts. El
+  destino post-canje lo resuelve el handler server-side: signup → /onboarding (D-13).
+
+  El aspecto es a propósito el feo de Supabase, en inglés: marca, idioma y remitente son Phase 6
+  (MAIL-01).
+-->
+<h2>Confirm your signup</h2>
+
+<p>Follow this link to confirm your user:</p>
+<p><a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup">Confirm your mail</a></p>

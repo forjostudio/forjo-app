@@ -1,0 +1,22 @@
+<!--
+  H-02 — Mail de recuperación de contraseña.
+
+  Este template existe por UNA sola razón: el href. El default de Supabase apunta a una variable que
+  pasa por /auth/v1/verify y vuelve con `?code=`, que app/auth/callback/route.ts NO acepta — el link
+  muere en /forgot-password?error=invalid_link y nadie entiende por qué.
+
+  El href usa {{ .SiteURL }} (valor de la CONFIG del proyecto), NO la variable de redirect que refleja
+  un valor venido del navegador: los planes 04-04/04-05 decidieron no mandar ningún destino de retorno
+  justamente para no tener esa superficie (T-04-01). Así, local apunta a local y prod apunta a prod, y
+  no hay nada que un atacante pueda inyectar.
+
+  `type=recovery` tiene que coincidir EXACTO con la allowlist ALLOWED_TYPES de lib/auth/callback.ts, o
+  el parse falla y el link muere en invalid_link.
+
+  El aspecto es a propósito el feo de Supabase, en inglés: la marca, el idioma y el remitente son
+  Phase 6 (MAIL-01). No brandear, no traducir, no meter CSS acá.
+-->
+<h2>Reset Password</h2>
+
+<p>Follow this link to reset the password for your user:</p>
+<p><a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery">Reset Password</a></p>
