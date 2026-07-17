@@ -69,15 +69,47 @@ Faseo: infraestructura de callback + recuperación → Google (con account linki
   3. La contraseña nueva funciona: cierra sesión, vuelve a entrar con ella, y la vieja ya no sirve.
   4. El registro es honesto: lo que el usuario lee después de crear la cuenta y a dónde lo mandan coincide con lo que Auth hace de verdad — si confirmar el mail es obligatorio, no se lo manda a una pantalla que lo va a rebotar al login.
 
-**Plans**: TBD
+**Plans**: 6 plans
 
-**Phase-level decision (defer to discuss-phase)**:
+Plans:
+- [ ] 04-01-PLAN.md — `/auth/callback`: piezas puras (`lib/auth/callback.ts`) + route handler con `token_hash`/`verifyOtp`
+- [ ] 04-02-PLAN.md — Proxy: las 3 listas del Edge (`/auth` a `MAINT_EXEMPT`, 3 rutas a `KNOWN_PREFIXES`, `isAuthRoute` intacta) + test de regresión
+- [ ] 04-03-PLAN.md — Layout split del route group anidado `(auth)/(split)/` + link "¿Olvidaste tu contraseña?" + componente compartido "revisá tu mail"
+- [ ] 04-04-PLAN.md — `/forgot-password` (pedir el link, anti-enumeration) + `/reset-password` (contraseña nueva, cierre de otras sesiones)
+- [ ] 04-05-PLAN.md — AUTH-06: el alta deja de mentir (muere el push a `/onboarding` sin sesión)
+- [ ] 04-06-PLAN.md — Config local versionada + **checkpoint humano** (Dashboard: Redirect URLs + href de los 2 templates) + UAT
+
+**Phase-level decision (RESUELTAS — ver `04-CONTEXT.md` y `04-RESEARCH.md`)**:
+
+- **¿`confirm email` está ON y bloquea hoy?** — **RESUELTO (H-01, verificado read-only contra prod):** ya está
+  **ON** (`mailer_autoconfirm: false`; 3 usuarios, **0 sin confirmar**). D-11 ya está cumplido y **D-15 no
+  dispara**. Consecuencia: **AUTH-06 no es preventivo, es un bug vivo en prod** (`register/page.tsx:57` empuja a
+  `/onboarding` sin sesión → el proxy rebota al login). **MAIL-01 conserva todo su peso en Phase 6.**
+- **Redirect URLs en previews** — **RESUELTO (D-20):** allowlist = **solo prod + local, sin wildcard**. Auth **no
+  anda en previews**, asumido a propósito → el UAT es **en local + re-verificación en prod**.
+- **Forma de `/auth/callback`** — **RESUELTO (RESEARCH, evidencia estructural en `node_modules/`):**
+  `token_hash` + `verifyOtp`, **no** `code` + `exchangeCodeForSession` (`@supabase/ssr` 0.10.3 fuerza
+  `flowType: "pkce"` y el canje exige un `code_verifier` del navegador que inició el flujo — inexistente en el
+  webview in-app de una app de mail). Una sola ruta con dispatch por parámetro; Phase 5 **suma la rama `oauth`,
+  no reescribe**.
+
+<details>
+<summary>Texto original de las decisiones abiertas (pre-research)</summary>
 
 - **¿`confirm email` está ON y bloquea hoy?** — es **research de fase, NO asumir**. `register/page.tsx:47` hace `signUp()` y empuja directo a `/onboarding` con un toast "Revisá tu email". Si la confirmación está ON, `signUp` no devuelve sesión → el proxy debería rebotar a `/login`, y el toast+push serían engañosos. El hallazgo define AUTH-06 (¿cambio de copy + redirect honesto, o el mail de confirmación es un gate real?) y **alimenta MAIL-01 en Phase 6** (cuánto importa brandear un mail que quizás nadie necesita abrir).
 - **Redirect URLs en previews** — las previews de Vercel tienen dominio dinámico. Decidir si se allowlistean (wildcard) o si auth simplemente no anda en preview. Mismo problema que ya pegó con reCAPTCHA en el UAT de Phase 14. Afecta cómo se hace el UAT de esta fase y de la 5.
 - **Forma de `/auth/callback`** — route handler que intercambia el código y rutea por tipo de flujo (recovery vs oauth), contemplando desde ya que Phase 5 lo va a reusar sin reescribirlo.
 
-**Checkpoint humano (`autonomous: false`)**: allowlist de **Redirect URLs** en el Dashboard de Supabase (`/auth/callback` en prod + lo que se decida para previews). Sin eso el link del mail no vuelve a la app.
+</details>
+
+**Checkpoint humano (`autonomous: false`) — plan `04-06`**: en el Dashboard de Supabase de prod:
+(a) verificar **Site URL** (`https://gestion.forjo.studio`) — es load-bearing: los templates arman el link con
+`{{ .SiteURL }}`; (b) **allowlist de Redirect URLs** = prod + local, **sin wildcard de previews** (D-20);
+(c) **el `href` de los 2 templates** (`Reset Password` y `Confirm signup`) → `token_hash` (**H-02**: el
+`{{ .ConfirmationURL }}` default pasa por `/auth/v1/verify` y vuelve con `?code=`, **nunca** entrega `token_hash`
+→ sin este cambio el flujo falla siempre). **Solo el href**: idioma, marca y remitente son Phase 6 (MAIL-01).
+El checkpoint **pierde** el ítem "prender `enable_confirmations`" (H-01: ya está ON) y **gana** los 2 templates —
+mismo tamaño, otro contenido.
 
 **Threat note — corré `/gsd:secure-phase`**: esta fase **es la superficie de autenticación**. Toca tokens de recuperación, intercambio de código por sesión y redirect URLs. Riesgos a cubrir: **open redirect** vía el parámetro de retorno del callback (allowlist, nunca reflejar lo que venga); fuga del token de recovery en la URL/`Referer`/logs; que el reset no exija sesión válida del token (cualquiera setearía la contraseña de cualquiera); **user enumeration** en "olvidé mi contraseña" (la respuesta debe ser idéntica exista o no el mail); y reuso/expiración del link. No es RLS/multi-tenant, pero un agujero acá entrega cuentas enteras.
 
@@ -145,6 +177,6 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 1. Reconciliación de horarios | v0.14 | 3/3 | Complete | 2026-07-03 |
 | 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
-| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 0/? | Not started | - |
+| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 0/6 | Planned | - |
 | 5. Entrar con Google | v0.19 | 0/? | Not started | - |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
