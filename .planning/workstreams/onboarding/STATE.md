@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
 status: Awaiting next milestone
-stopped_at: Phase 6 planned (2 plans, 2 waves, checker PASS)
-last_updated: "2026-07-17T22:22:03.170Z"
+stopped_at: v0.20 Onboarding pulido — requirements + roadmap listos (Phases 7-8)
+last_updated: "2026-07-17T22:52:17.857Z"
 last_activity: 2026-07-17 — Milestone v0.19 completed and archived
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 18
+  completed_plans: 18
   percent: 100
 ---
 
@@ -130,9 +130,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-17T21:15:11.694Z
-Stopped at: Phase 6 planned (2 plans, 2 waves, checker PASS)
-Resume file: .planning/workstreams/onboarding/phases/06-mails-de-cuenta-con-marca-forjo/06-01-PLAN.md
+Last session: 2026-07-17T22:52:17.823Z
+Stopped at: v0.20 Onboarding pulido — requirements + roadmap listos (Phases 7-8)
+Resume file: .planning/workstreams/onboarding/ROADMAP.md
 Next: `/gsd:discuss-phase 4 --ws onboarding`
 
 ## Performance Metrics
