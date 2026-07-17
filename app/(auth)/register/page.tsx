@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { CheckYourEmail } from '@/components/auth/check-your-email'
+import { GoogleButton } from '@/components/auth/google-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
@@ -164,6 +165,20 @@ export default function RegisterPage() {
                 {loading ? 'Creando cuenta...' : 'Crear cuenta gratis'}
               </Button>
             </form>
+            {/* Botón de Google solo en el estado del form (sent === null): en "revisá tu mail" el usuario
+                ya se registró por email. Mismo divisor que /login, pero el chip de la "o" usa bg-card
+                (la superficie de este Card de shadcn) en vez de bg-background, para cortar la línea por
+                detrás del texto. El aviso de ?error=oauth NO va acá: el callback manda el error a
+                /login?error=oauth, una sola superficie de error (D-08). */}
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-card px-2 text-xs text-muted-foreground">o</span>
+              </div>
+            </div>
+            <GoogleButton />
             <p className="text-center text-sm text-muted-foreground mt-4">
               ¿Ya tenés cuenta?{' '}
               <Link href="/login" className="text-primary hover:underline">
