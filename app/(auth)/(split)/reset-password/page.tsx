@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { INVALID_LINK_DEST } from '@/lib/auth/callback'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 
 // Seteo de la contraseña nueva (AUTH-02). El split Bauhaus lo aporta el layout del route group
@@ -109,9 +109,8 @@ export default function ResetPasswordPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="password">Contraseña</Label>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             placeholder="••••••••"
             {...register('password')}
           />
@@ -121,9 +120,8 @@ export default function ResetPasswordPage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
-          <Input
+          <PasswordInput
             id="confirmPassword"
-            type="password"
             placeholder="••••••••"
             {...register('confirmPassword')}
           />
