@@ -4,8 +4,8 @@ milestone: v0.19
 milestone_name: Cuenta y acceso
 status: executing
 stopped_at: Phase 6 planned (2 plans, 2 waves, checker PASS)
-last_updated: "2026-07-17T21:15:11.702Z"
-last_activity: 2026-07-17 -- Phase 04 execution started
+last_updated: "2026-07-17T21:17:26.305Z"
+last_activity: 2026-07-17 -- Phase 06 execution started
 progress:
   total_phases: 3
   completed_phases: 2
@@ -23,15 +23,15 @@ Requirements: .planning/workstreams/onboarding/REQUIREMENTS.md
 Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados (aislamiento multi-tenant + integridad de pagos).
-**Current focus:** Phase 04 — recuperar-la-cuenta-auth-callback-reset
+**Current focus:** Phase 06 — mails-de-cuenta-con-marca-forjo
 
 ## Current Position
 
-Phase: 04 (recuperar-la-cuenta-auth-callback-reset) — EXECUTING
-Plan: 1 of 6
-Total Plans in Phase: 6
-Status: Executing Phase 04
-Last activity: 2026-07-17 -- Phase 04 execution started
+Phase: 06 (mails-de-cuenta-con-marca-forjo) — EXECUTING
+Plan: 1 of 2
+Total Plans in Phase: 2
+Status: Executing Phase 06
+Last activity: 2026-07-17 -- Phase 06 execution started
 
 ## Milestone Context
 
