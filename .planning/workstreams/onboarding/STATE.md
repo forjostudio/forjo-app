@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
 status: Awaiting next milestone
-stopped_at: v0.20 Onboarding pulido — requirements + roadmap listos (Phases 7-8)
-last_updated: "2026-07-17T22:52:17.857Z"
+stopped_at: Phase 7 context gathered
+last_updated: "2026-07-17T22:58:53.604Z"
 last_activity: 2026-07-17 — Milestone v0.19 completed and archived
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 6
   total_plans: 18
   completed_plans: 18
-  percent: 100
+  percent: 86
 ---
 
 # Project State
@@ -130,9 +130,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-17T22:52:17.823Z
-Stopped at: v0.20 Onboarding pulido — requirements + roadmap listos (Phases 7-8)
-Resume file: .planning/workstreams/onboarding/ROADMAP.md
+Last session: 2026-07-17T22:58:53.596Z
+Stopped at: Phase 7 context gathered
+Resume file: .planning/workstreams/onboarding/phases/07-onboarding-wizard-robustez-y-pulido/07-CONTEXT.md
 Next: `/gsd:discuss-phase 4 --ws onboarding`
 
 ## Performance Metrics
