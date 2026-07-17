@@ -48,7 +48,7 @@ Detalle completo archivado en [`milestones/v0.14-ROADMAP.md`](../../milestones/v
 
 Faseo: infraestructura de callback + recuperación → Google (con account linking) → mails branded. El orden es **load-bearing**: `/auth/callback` se construye una vez en Phase 4 y Google lo reusa; los mails se brandean cuando los flujos que los disparan ya existen.
 
-- [ ] **Phase 4: Recuperar la cuenta (`/auth/callback` + reset)** - La ruta de intercambio de código por sesión, estrenada con el flujo completo de recuperación de contraseña, y un alta que es honesta sobre la confirmación
+- [x] **Phase 4: Recuperar la cuenta (`/auth/callback` + reset)** - La ruta de intercambio de código por sesión, estrenada con el flujo completo de recuperación de contraseña, y un alta que es honesta sobre la confirmación
 - [ ] **Phase 5: Entrar con Google** - Alta e inicio de sesión con Google sobre el callback ya construido, con account linking resuelto y el hand-off al onboarding verificado
 - [ ] **Phase 6: Mails de cuenta con marca Forjo** - Los mails de confirmación y recuperación llegan en español, con marca y desde un remitente de Forjo — sin "powered by Supabase"
 
