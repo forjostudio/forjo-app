@@ -93,6 +93,9 @@ export default function RegisterPage() {
               <CheckYourEmail
                 email={sent}
                 title="Revisá tu mail"
+                // h2 y no h1: el lockup de arriba (el h1 de esta página) está fuera de este ternario
+                // y se renderiza igual en este estado. Con el default h1 quedaban dos h1 en /register.
+                headingLevel="h2"
                 description={<>Te mandamos un mail a <strong>{sent}</strong>. Confirmá tu cuenta para entrar.</>}
                 // El resultado se descarta a propósito: mostrar un error acá reintroduciría el
                 // oráculo de enumeration que D-14 cierra en el submit.

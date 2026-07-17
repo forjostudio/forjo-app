@@ -28,9 +28,16 @@ interface Props {
   onResend: () => Promise<void>
   /** El link secundario del pie: cada uso pone el suyo. */
   children?: React.ReactNode
+  /** Nivel del heading del título. Default 'h1' porque en /forgot-password este ES el encabezado
+   *  principal de la página. /register lo baja a 'h2': ahí el h1 ya lo ocupa el lockup de marca, que
+   *  vive fuera del ternario y por lo tanto se renderiza también en este estado — dos h1 en la misma
+   *  página rompen la jerarquía de headings. El tamaño lo fija la clase, no la etiqueta: bajar el
+   *  nivel no cambia nada visual (D-10). */
+  headingLevel?: 'h1' | 'h2'
 }
 
-export function CheckYourEmail({ email, title, description, onResend, children }: Props) {
+export function CheckYourEmail({ email, title, description, onResend, children, headingLevel = 'h1' }: Props) {
+  const Heading = headingLevel
   // Arranca BLOQUEADO apenas monta, no en 0: cuando este componente aparece, el primer mail acaba de
   // salir. Si arrancara en 0, el usuario clickea "Reenviar" al toque y quema la cuota — que es
   // exactamente lo que D-05 evita.
@@ -68,7 +75,7 @@ export function CheckYourEmail({ email, title, description, onResend, children }
 
   return (
     <>
-      <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold">{title}</h1>
+      <Heading className="font-[family-name:var(--font-heading)] text-2xl font-bold">{title}</Heading>
       <p className="text-muted-foreground text-sm mt-1.5 mb-6">{description}</p>
       {/* Sin aria-live en el texto del botón: el contador cambia cada segundo y spamearía a los
           lectores de pantalla. */}
