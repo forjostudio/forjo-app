@@ -138,3 +138,8 @@ componente de UI sin llamadas propias (el `onResend` lo inyecta el consumidor).
 | 1 | `7e936eb` | extraer el panel Bauhaus al layout del split |
 | 2 | `9f71e30` | link "¿Olvidaste tu contraseña?" en el login (D-04) |
 | 3 | `befece6` | componente "revisá tu mail" con reenvío y cooldown de 60s |
+
+## Self-Check: PASSED
+
+Los 3 artefactos declarados existen en disco, `app/(auth)/login/page.tsx` ya no existe, y los 4 commits de tareas
+(`59b65bf`, `7e936eb`, `9f71e30`, `befece6`) están en el historial.
