@@ -124,6 +124,22 @@ None en este plan. **Pero la fase sí tiene un checkpoint humano pendiente en `0
 - **No verificado acá (por diseño):** el flujo end-to-end contra GoTrue real. Requiere el template del mail (H-02) y el entorno local levantado — se cubre en el UAT del plan `04-06`.
 - **`/gsd:secure-phase` sigue siendo obligatorio** para esta fase. T-04-06 (los logs de acceso de Vercel guardan el path con el `token_hash`) quedó **aceptado** como riesgo residual y hay que documentarlo ahí, no ignorarlo.
 
+## Self-Check: PASSED
+
+- Archivos: los 3 creados existen en disco (`lib/auth/callback.ts`, `lib/auth/callback.test.ts`, `app/auth/callback/route.ts`).
+- Commits: los 4 de tarea existen en el log (`8a3ab5f`, `ba83092`, `b7e4e6a`, `83398bd`).
+- Árbol limpio, sin archivos sin trackear ni borrados accidentales.
+- Gates TDD: `test(8a3ab5f)` → `feat(ba83092)`, en ese orden. RED verificado fallando antes del GREEN.
+- Verificación del plan: `npx vitest run lib/auth/callback.test.ts` 8/8 · `npx tsc --noEmit` exit 0 · `npx eslint app/auth/callback/route.ts lib/auth/callback.ts` exit 0 · suite completa 513 passed / 49 skipped.
+
+## Known Stubs
+
+None — no hay valores hardcodeados ni placeholders. La fila `oauth` de `DESTINATIONS` está comentada a propósito (D-13: Phase 5 la agrega) y el test asierta que hoy se rechaza, así que no es un stub silencioso.
+
+## Threat Flags
+
+None — el plan no introduce superficie de seguridad fuera del `<threat_model>`. Sin endpoints nuevos más allá del callback planificado, sin cambios de schema, sin rutas de auth no contempladas.
+
 ---
 *Phase: 04-recuperar-la-cuenta-auth-callback-reset*
 *Completed: 2026-07-17*
