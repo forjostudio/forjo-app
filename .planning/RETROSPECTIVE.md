@@ -77,11 +77,41 @@ Guardar dejó de publicar, y el CMS se abrió a clientes reales:
 - CONC-01 flaky (timeout 5s bajo carga).
 - **El norte:** auto-armado de la web al confirmarse el pago del add-on en MP — este milestone fue su prerequisito, ahora está desbloqueado.
 
+## Milestone: v0.19 — Cuenta y acceso
+
+**Shipped:** 2026-07-17
+**Phases:** 3 (4-6) | **Plans:** 11 | **Workstream:** onboarding
+
+### What Was Built
+`/auth/callback` (canje de `token_hash`→sesión) + recuperación de contraseña + alta honesta (P4); entrar con Google con account linking a una sola cuenta (P5); mails de confirmación y recuperación con marca Forjo vía Resend SMTP (P6). Los 3 agujeros de la puerta de entrada, cerrados. Las 3 fases SECURED (22/22 · 9/9 · 6/6).
+
+### What Worked
+- **El UAT atrapó bugs reales que los tests no ven.** El más grave: D-14 (registrar un mail existente mostraba "User already registered" = oráculo de enumeration). El ciclo funcionó: el plan lo asumió mal, el UAT lo agarró, el fix lo cerró, secure-phase lo confirmó.
+- **La "decisión de peso" resultó la más barata.** El account linking (P5) era el comportamiento default de Supabase, gateado por email verificado que P4 ya garantizaba — cero código, cero config. El research lo confirmó antes de planificar.
+- **El split local+prod del UAT** (verificar template/link en Mailpit local, remitente/deliverability en prod) se reusó limpio en las 3 fases.
+
+### What Was Inefficient
+- **El defecto de los grep gates** pegó en 4 de 6 planes de P4 (criterios `grep -c "X" == 0` que chocan con el comentario que el mismo plan pide escribir). Se arregló en el `gsd-planner` a mitad del milestone (higiene language-aware) y no reapareció en P5/P6.
+- **Fricción de scaffolding:** las fases 5 y 6 no tenían carpeta (`find-phase` es directory-based, no lee la tabla del ROADMAP) → hubo que `scaffold phase-dir` a mano antes de discuss-phase.
+
+### Patterns Established
+- **Checkpoint humano `autonomous: false` para config externa** (Dashboard de Supabase, Google Cloud, Resend): último plan de la fase, con el UAT prod-first. Consistente en P4/P5/P6.
+- **Anti-enumeration estructural en el cliente:** no depender de que el backend ofusque (detectar `error.code`, mostrar siempre la misma pantalla).
+
+### Key Lessons
+- **Verificar las asunciones del plan contra el código/docs, no la letra.** El research corrigió D-07 (OAuth branch por `?code=`, no `oauth` en `ALLOWED_TYPES`); el "no llega el mail" del orden inverso era anti-enumeration por diseño, no un bug.
+- **El host local importa:** `next dev` normaliza `request.url` a `localhost`, así que todo el flujo de auth local tiene que estar en `localhost` (no 127.0.0.1) o la cookie no cruza.
+
+### Deuda / pendientes
+- **Bug de onboarding (slug collision bajo RLS):** el chequeo de slug no ve otros tenants → error opaco al crear negocio. Para el milestone de onboarding, anotado en memoria.
+- **Onboarding es un callejón sin salida** (no podés cambiar de cuenta una vez adentro) — surgió en el UAT de P5.
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Shipped | Nota |
 |-----------|--------|-------|---------|------|
 | v0.9 Security Hardening | 5 | 11 | 2026-06-17 | Primer milestone GSD; pre-lanzamiento |
 | v0.18 CMS Publish / Go-live | 3 | 8 | 2026-07-16 | Borrador/publicar + CMS abierto a clientes; 2 de 3 fases security-sensitive (SECURED 18/18 y 10/10) |
+| v0.19 Cuenta y acceso | 3 | 11 | 2026-07-17 | Auth completo (reset + Google + mails branded); las 3 fases SECURED; UAT atrapó D-14 (enumeration) |
 
 > Nota: v0.10–v0.17 no tienen sección de retrospective (no se corrió `/gsd:complete-milestone` con este archivo en su momento). La tabla salta de v0.9 a v0.18 a propósito.
