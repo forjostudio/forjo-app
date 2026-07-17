@@ -34,6 +34,13 @@ const nextConfig: NextConfig = {
   // NO se agrega caching ni 'use cache' acá: el constraint de Phase 6 sobre caching sigue
   // vigente; esta config solo toca `images`.
   images: imagePattern ? { remotePatterns: [imagePattern] } : undefined,
+
+  // Solo-dev: el UAT de auth exige entrar por 127.0.0.1 (Pitfall 7 — el link del mail de Supabase
+  // se arma con site_url = 127.0.0.1 y el matcher es literal por host). Pero Next sirve el dev server
+  // desde localhost y, por defecto, bloquea como cross-origin los recursos de dev (_next/*, HMR y los
+  // chunks del cliente) pedidos desde 127.0.0.1 → la página no hidrata y los forms caen al submit
+  // nativo (GET). Declarar el origin lo desbloquea. No afecta el build de producción.
+  allowedDevOrigins: ["127.0.0.1"],
 };
 
 export default nextConfig;
