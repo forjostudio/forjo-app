@@ -138,13 +138,13 @@ mismo tamaño, otro contenido.
   3. Un usuario que ya entró con Google vuelve más tarde y entra directo a su panel: la segunda vez es un login, no un alta duplicada.
   4. El mismo email registrado antes con contraseña entra después con Google (y al revés) y termina en **una sola cuenta** con sus datos y su negocio intactos — nunca una cuenta duplicada ni un error opaco. Si la decisión de fase es bloquear el cruce, el usuario ve un mensaje que le dice exactamente qué hacer.
 
-**Plans**: 3 plans
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Callback: rama `code`→`exchangeCodeForSession` + `DESTINATIONS.oauth='/dashboard'` + error propio a `/login?error=oauth` (reusa el callback de Phase 4, `oauth` NO entra en `ALLOWED_TYPES`)
-- [ ] 05-02-PLAN.md — Botón "Continuar con Google" compartido en login y register (glifo oficial, divisor "o") + aviso de `?error=oauth` en login
+- [x] 05-01-PLAN.md — Callback: rama `code`→`exchangeCodeForSession` + `DESTINATIONS.oauth='/dashboard'` + error propio a `/login?error=oauth` (reusa el callback de Phase 4, `oauth` NO entra en `ALLOWED_TYPES`)
+- [x] 05-02-PLAN.md — Botón "Continuar con Google" compartido en login y register (glifo oficial, divisor "o") + aviso de `?error=oauth` en login
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -199,5 +199,5 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
 | 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 6/6 | Complete   | 2026-07-17 |
-| 5. Entrar con Google | v0.19 | 0/3 | Not started | - |
+| 5. Entrar con Google | v0.19 | 2/3 | In Progress|  |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
