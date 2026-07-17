@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -11,23 +11,13 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles } from 'lucide-react'
+import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles, LogOut, Image as ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-
-// Paletas curadas de marca (mismas que Configuración → Apariencia). El swatch es el
-// primary en claro; se persiste en businesses.palette y tiñe panel + página pública.
-const PALETTES: { key: string; label: string; swatch: string }[] = [
-  { key: 'red', label: 'Rojo', swatch: '#d94a2b' },
-  { key: 'blue', label: 'Azul', swatch: '#2a5fa5' },
-  { key: 'yellow', label: 'Amarillo', swatch: '#c8901a' },
-  { key: 'green', label: 'Verde', swatch: '#2f8a5b' },
-  { key: 'ink', label: 'Tinta', swatch: '#1a1714' },
-]
 
 // Estado del paso de horarios: un día → { enabled, blocks[] }, donde cada bloque es una ventana
 // simple { start_time, end_time }. Modelo N-bloques/día para soportar horario partido (D-04, ej.
@@ -93,12 +83,24 @@ export default function OnboardingPage() {
   const [whatsappError, setWhatsappError] = useState<string | undefined>()
   const [address, setAddress] = useState('')
   const [instagram, setInstagram] = useState('')
-  const [palette, setPalette] = useState('red')
+  // Logo del negocio (ONB-03): se elige/previsualiza en el paso 1 pero se sube al FINALIZAR (la RLS
+  // del bucket `logos` exige que el negocio ya exista). logoFile = archivo elegido; logoPreview =
+  // objectURL para el avatar; ref para disparar el input file oculto.
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
-  function selectPalette(key: string) {
-    setPalette(key)
-    // Feedback inmediato: tiñe el onboarding al instante (igual que Apariencia).
-    document.documentElement.dataset.palette = key
+  // Validación cliente del logo (mitigación T-07-03): tipo ∈ {jpeg,png,webp} y tamaño ≤ 2MB antes de
+  // aceptar el archivo. Verbatim del molde de settings-client.uploadLogo. La barrera no-bypasseable
+  // sigue siendo la policy del bucket del lado server; esto es feedback temprano.
+  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { toast.error('El archivo no puede superar 2MB'); return }
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) { toast.error('Formato no soportado. Usá JPG, PNG o WebP'); return }
+    setLogoFile(file)
+    setLogoPreview(URL.createObjectURL(file))
   }
 
   // Step 2 - Services
@@ -110,17 +112,27 @@ export default function OnboardingPage() {
   // Step 4 - Hours (día → { enabled, blocks[] }, índice = day_of_week)
   const [dayStates, setDayStates] = useState<DayState[]>(DEFAULT_DAY_STATES)
 
+  // Chequeo de disponibilidad de slug vía el endpoint service-role (ONB-01, D-01/D-03). ANTES corría
+  // bajo RLS (supabase.from('businesses')): un futuro-owner no veía slugs ajenos → decía "disponible"
+  // en falso y el negocio recién fallaba en el insert con el opaco "Error al crear el negocio". El
+  // endpoint ve el espacio global multi-tenant y devuelve SOLO { available: boolean }.
   const checkSlug = useCallback(async (value: string) => {
     if (!value || value.length < 3) return
     setSlugChecking(true)
-    const { data } = await supabase
-      .from('businesses')
-      .select('slug')
-      .eq('slug', value)
-      .single()
-    setSlugAvailable(!data)
-    setSlugChecking(false)
-  }, [supabase])
+    try {
+      const res = await fetch(`/api/onboarding/slug-available?slug=${encodeURIComponent(value)}`)
+      const json = await res.json()
+      // Fail-safe: SOLO available === true habilita el slug. Cualquier otra respuesta (400/401/
+      // shape raro) deja slugAvailable en false → nunca falso-positivo de disponibilidad.
+      setSlugAvailable(json.available === true)
+    } catch {
+      // Error de red → estado indeterminado (null), NUNCA "disponible" (Pitfall 5). El insert
+      // conserva su guardia businesses_slug_key como red final ante la carrera.
+      setSlugAvailable(null)
+    } finally {
+      setSlugChecking(false)
+    }
+  }, [])
 
   useEffect(() => {
     const slugified = name
@@ -140,6 +152,15 @@ export default function OnboardingPage() {
   function handleSlugChange(val: string) {
     const clean = val.toLowerCase().replace(/[^a-z0-9-]/g, '')
     setSlug(clean)
+  }
+
+  // Salida del wizard (ONB-02, D-04): un usuario autenticado sin negocio queda atrapado en el
+  // onboarding (ej. entró con la cuenta de Google equivocada en el UAT de Phase 5). Cierra sesión y
+  // vuelve a /login. Mismo patrón canónico que sidebar.tsx (signOut + push + refresh).
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
   }
 
   // Services
@@ -296,14 +317,38 @@ export default function OnboardingPage() {
           whatsapp: whatsappNorm,
           address: address || null,
           instagram: instagram || null,
-          palette,
-          // back-compat: la columna primary_color sigue existiendo; la derivamos del swatch.
-          primary_color: PALETTES.find(p => p.key === palette)?.swatch ?? '#d94a2b',
+          // Paleta default (ONB-04, D-06): el wizard ya no ofrece el selector; el negocio arranca con
+          // la paleta 'red' (el default histórico) y la edita después en Ajustes → Apariencia.
+          palette: 'red',
+          // back-compat: la columna primary_color sigue existiendo; es el swatch del 'red'.
+          primary_color: '#d94a2b',
         })
         .select()
         .single()
 
       if (bizError) throw bizError
+
+      // Upload del logo al bucket `logos` (ONB-03, D-05). Timing: DESPUÉS de crear el negocio porque
+      // la RLS del bucket exige que el negocio exista (path keyeado por business.id). El path lo arma
+      // el server con business.id de la sesión (UUID de confianza, NO del cliente → mitigación T-07-02
+      // path traversal). Best-effort: el negocio ya existe, así que un fallo del upload/update se
+      // loguea y NO rompe el redirect al dashboard (mismo criterio que linkLeadOnSignup, T-04-09).
+      if (logoFile) {
+        try {
+          const ext = logoFile.name.split('.').pop()?.toLowerCase() || 'jpg'
+          const path = `${business.id}/logo.${ext}`
+          const bucket = supabase.storage.from('logos')
+          const { error: uploadErr } = await bucket.upload(path, logoFile, { upsert: true })
+          if (!uploadErr) {
+            const { data: { publicUrl } } = bucket.getPublicUrl(path)
+            await supabase.from('businesses').update({ logo_url: `${publicUrl}?t=${Date.now()}` }).eq('id', business.id)
+          } else {
+            console.error('[onboarding/logo]', uploadErr.message)
+          }
+        } catch (logoErr) {
+          console.error('[onboarding/logo]', logoErr instanceof Error ? logoErr.message : logoErr)
+        }
+      }
 
       // priceError es solo estado de UI (validación inline): NO se envía al insert (columna inexistente
       // en services). Se arma la fila con los campos de dominio explícitos. Precio 0 se persiste tal cual
@@ -411,7 +456,17 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen p-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-8">
-        <div className="text-center mb-8">
+        <div className="relative text-center mb-8">
+          {/* Salida discreta arriba a la derecha (ONB-02): no compite con el lockup centrado. Visible
+              en todos los pasos para que el usuario con la cuenta equivocada pueda salir siempre. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="absolute right-0 top-0 gap-1.5 text-muted-foreground"
+          >
+            <LogOut className="w-4 h-4" /> Cerrar sesión
+          </Button>
           <div className="flex items-center justify-center">
             <Image src="/brand/forjo-gestion-lockup-tinta.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto dark:hidden" />
             <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="hidden h-10 w-auto dark:block" />
@@ -456,6 +511,58 @@ export default function OnboardingPage() {
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Tu negocio</h2>
+
+              {/* Logo (ONB-03): se elige acá y se sube al finalizar. Avatar redondo + input file oculto,
+                  mismo layout que Ajustes → Negocio. Sin botón "Guardar": el upload es al finalizar. */}
+              <div className="space-y-2">
+                <Label>Logo del negocio <span className="text-muted-foreground">(opcional)</span></Label>
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    {logoPreview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={logoPreview}
+                        alt="Logo"
+                        className="w-20 h-20 rounded-full object-cover border border-border"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center">
+                        {name ? (
+                          <span className="text-2xl font-bold text-primary">{name.charAt(0).toUpperCase()}</span>
+                        ) : (
+                          <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp"
+                      className="hidden"
+                      onChange={handleLogoSelect}
+                    />
+                    <div className="flex gap-2 flex-wrap">
+                      <Button size="sm" variant="outline" onClick={() => logoInputRef.current?.click()}>
+                        {logoPreview ? 'Cambiar logo' : 'Subir logo'}
+                      </Button>
+                      {logoPreview && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-400 border-red-500/30"
+                          onClick={() => { setLogoPreview(null); setLogoFile(null) }}
+                        >
+                          Quitar
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">JPG, PNG o WebP · Máximo 2MB</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nombre del negocio *</Label>
@@ -560,32 +667,6 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label>Dirección <span className="text-muted-foreground">(opcional)</span></Label>
                 <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Av. Corrientes 1234, CABA" />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Paleta de marca</Label>
-                <div className="flex flex-wrap gap-2">
-                  {PALETTES.map(p => {
-                    const active = palette === p.key
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => selectPalette(p.key)}
-                        aria-pressed={active}
-                        title={p.label}
-                        className={cn(
-                          'h-9 w-16 rounded-sm border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                          active ? 'border-foreground' : 'border-transparent hover:border-muted-foreground/50'
-                        )}
-                        style={{ backgroundColor: p.swatch }}
-                      >
-                        <span className="sr-only">{p.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">Tiñe tu panel y tu página pública de reservas. Podés cambiarla luego en Configuración.</p>
               </div>
             </div>
           )}
