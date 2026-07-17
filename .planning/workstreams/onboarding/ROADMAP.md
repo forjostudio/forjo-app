@@ -80,8 +80,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-04-PLAN.md — `/forgot-password` (pedir el link, anti-enumeration) + `/reset-password` (contraseña nueva, cierre de otras sesiones)
-- [ ] 04-05-PLAN.md — AUTH-06: el alta deja de mentir (muere el push a `/onboarding` sin sesión)
+- [x] 04-04-PLAN.md — `/forgot-password` (pedir el link, anti-enumeration) + `/reset-password` (contraseña nueva, cierre de otras sesiones)
+- [x] 04-05-PLAN.md — AUTH-06: el alta deja de mentir (muere el push a `/onboarding` sin sesión)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -187,6 +187,6 @@ Phases execute in numeric order: 4 → 5 → 6. El orden es load-bearing: `/auth
 | 1. Reconciliación de horarios | v0.14 | 3/3 | Complete | 2026-07-03 |
 | 2. Rework UX del onboarding | v0.14 | 1/1 | Complete | 2026-07-04 |
 | 3. Rework del selector de rubro | v0.14 | 3/3 | Complete | 2026-07-04 |
-| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 3/6 | In Progress|  |
+| 4. Recuperar la cuenta (`/auth/callback` + reset) | v0.19 | 5/6 | In Progress|  |
 | 5. Entrar con Google | v0.19 | 0/? | Not started | - |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 0/? | Not started | - |
