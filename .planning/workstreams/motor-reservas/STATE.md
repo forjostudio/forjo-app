@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.22
 milestone_name: "— Turnos: alta manual y ventana de reserva"
-status: planning
+status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-18T19:46:40.614Z"
-last_activity: 2026-07-18 — Roadmap v0.22 creado (Phases 4-5, 4 requirements mapeados 100%)
+last_updated: "2026-07-18T20:31:47.841Z"
+last_activity: 2026-07-18 -- Phase 04 execution started
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 14
+  total_plans: 18
   completed_plans: 14
   percent: 60
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.22 agrega la ventana de reserva pública (con backstop server anti-tampering) y un aviso opt-in por mail al alta manual, sin reconstruir nada de v0.12.
-**Current focus:** Phase 4 — Ventana de reserva pública
+**Current focus:** Phase 04 — ventana-de-reserva-p-blica
 
 ## Current Position
 
-Phase: 4 of 5 (Ventana de reserva pública) — primera del milestone v0.22
-Plan: — (roadmap recién creado)
-Status: Ready to plan
-Last activity: 2026-07-18 — Roadmap v0.22 creado (Phases 4-5, 4 requirements mapeados 100%)
+Phase: 04 (ventana-de-reserva-p-blica) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 04
+Last activity: 2026-07-18 -- Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
