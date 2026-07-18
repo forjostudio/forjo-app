@@ -106,6 +106,34 @@ Guardar dejó de publicar, y el CMS se abrió a clientes reales:
 - **Bug de onboarding (slug collision bajo RLS):** el chequeo de slug no ve otros tenants → error opaco al crear negocio. Para el milestone de onboarding, anotado en memoria.
 - **Onboarding es un callejón sin salida** (no podés cambiar de cuenta una vez adentro) — surgió en el UAT de P5.
 
+## Milestone: v0.20 — Onboarding pulido
+
+**Shipped:** 2026-07-18
+**Phases:** 2 (7-8) | **Plans:** 2 | **Workstream:** onboarding
+
+### What Was Built
+Onboarding más robusto (fix del slug ciego por RLS vía endpoint service-role que devuelve solo un booleano + salida del callejón), logo en el paso 1, paleta fuera del wizard (queda en Ajustes), y las pantallas de auth siempre con tema Forjo (ResetThemeScript pre-paint). Ambas fases SECURED (5/5 · 4/4). Cerró la deuda de onboarding que destaparon los UAT de v0.19.
+
+### What Worked
+- **Milestone corto y quirúrgico:** 2 fases, 3 tareas, todo autónomo (sin migración ni checkpoint humano — a diferencia de v0.19). El research confirmó la autonomía temprano (columna `logo_url` ya existía, buckets ya existían) → cero fricción de deploy.
+- **El research corrigió decisiones antes de codear:** D-05 (el logo iba al bucket `logos`, no `landing-assets`) y el uso de `businesses.logo_url` existente — se ajustó el CONTEXT antes del planner, no en ejecución.
+- **Threat model honesto en Phase 8:** superficie casi nula documentada como accept/N-A con rationale, no threats manufacturados; secure-phase lo confirmó rápido.
+
+### What Was Inefficient
+- **Scaffolding manual de fases** (7 y 8, como 5 y 6 antes): `find-phase` es directory-based y no lee la tabla del ROADMAP → `scaffold phase-dir` a mano antes de cada discuss-phase. Fricción recurrente del workstream.
+
+### Patterns Established
+- **Endpoint service-role para chequeos multi-tenant que RLS ciega:** devolver SOLO el dato mínimo (un booleano de existencia), nunca el row — el molde de `booking/availability` reusado para el slug.
+- **ResetThemeScript:** espejo invertido de PaletteScript para fijar el tema del producto en superficies que no deben heredar la paleta del tenant.
+
+### Key Lessons
+- **La "decisión de peso" no siempre es la cara:** el bug de slug parecía pedir una migración RPC; el research mostró que un endpoint service-role sin migración lo resolvía igual, con la misma invariante de seguridad.
+- **UAT diferido honesto:** los efectos de runtime que el entorno local no puede probar (upload de logo con Storage off; theming cross-nav) se marcan explícitamente como UAT de staging, no se fingen unit-testeados.
+
+### Deuda / pendientes
+- **UAT de staging pendiente:** el upload real del logo (Phase 7) y el reset de tema cross-nav (Phase 8) se validan en staging con un negocio de paleta custom.
+- **Rediseño del login mobile:** capturado ([[rediseno-login-mobile-pendiente]]), próximo trabajo del workstream — amerita UI-SPEC.
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Shipped | Nota |
@@ -113,5 +141,6 @@ Guardar dejó de publicar, y el CMS se abrió a clientes reales:
 | v0.9 Security Hardening | 5 | 11 | 2026-06-17 | Primer milestone GSD; pre-lanzamiento |
 | v0.18 CMS Publish / Go-live | 3 | 8 | 2026-07-16 | Borrador/publicar + CMS abierto a clientes; 2 de 3 fases security-sensitive (SECURED 18/18 y 10/10) |
 | v0.19 Cuenta y acceso | 3 | 11 | 2026-07-17 | Auth completo (reset + Google + mails branded); las 3 fases SECURED; UAT atrapó D-14 (enumeration) |
+| v0.20 Onboarding pulido | 2 | 2 | 2026-07-18 | Onboarding robusto (slug fix + salida) + logo + auth siempre Forjo; ambas SECURED; 100% autónomo, sin checkpoint |
 
 > Nota: v0.10–v0.17 no tienen sección de retrospective (no se corrió `/gsd:complete-milestone` con este archivo en su momento). La tabla salta de v0.9 a v0.18 a propósito.
