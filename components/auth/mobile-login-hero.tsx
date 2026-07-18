@@ -128,7 +128,7 @@ export function MobileLoginHero() {
         {/* Cuerpo */}
         <div className="relative mt-auto">
           <h1 className="max-w-[11ch] font-[family-name:var(--font-archivo)] text-[clamp(30px,8.5vw,38px)] font-black uppercase leading-[1.02] tracking-[-.03em]">
-            Tu agenda, clientes y finanzas en un solo lugar.
+            Tu agenda, clientes y finanzas en <span className="text-[#d94a2b]">un solo lugar.</span>
           </h1>
           <p className="mb-[26px] mt-3 text-[15px] opacity-85">Gestioná tu negocio desde el celular</p>
           <div className="flex flex-col gap-[11px]">
