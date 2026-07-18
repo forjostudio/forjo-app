@@ -356,7 +356,9 @@ CREATE TABLE IF NOT EXISTS "public"."businesses" (
     "landing_config" "jsonb",
     "has_web_custom" boolean DEFAULT false NOT NULL,
     "has_whatsapp" boolean DEFAULT false NOT NULL,
-    "landing_draft" "jsonb"
+    "landing_draft" "jsonb",
+    "max_advance_days" integer DEFAULT 30,
+    "max_advance_date" "date"
 );
 
 
@@ -691,7 +693,9 @@ CREATE OR REPLACE VIEW "public"."public_businesses" AS
     "default_slot_duration",
     "buffer_minutes",
     "created_at",
-    "landing_config"
+    "landing_config",
+    "max_advance_days",
+    "max_advance_date"
    FROM "public"."businesses";
 
 
