@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, Check, RefreshCw, Users, Phone, Mail } from 'lucide-react'
+import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -301,6 +301,37 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     await supabase.from('businesses').update({ default_slot_duration: slotDuration, buffer_minutes: bufferMinutes }).eq('id', business.id)
     setSavingHours(false)
     toast.success('Horarios guardados')
+  }
+
+  // Ventana de reserva pública (BOOK-WINDOW-01): con cuánta anticipación puede reservar un cliente
+  // desde la página pública. Vive acá (junto a horarios y días especiales) porque es config de AGENDA,
+  // no de cobros. 3 modos mutuamente excluyentes (D-01): días rolling / sin límite / fecha exacta; el
+  // modo inicial se deriva de las columnas (fecha tiene precedencia, espeja effectiveBookingCutoff).
+  const [windowForm, setWindowForm] = useState<{ mode: 'dias' | 'sin_limite' | 'fecha'; days: number; date: string }>({
+    mode: business.max_advance_date ? 'fecha' : (business.max_advance_days && business.max_advance_days > 0 ? 'dias' : 'sin_limite'),
+    days: business.max_advance_days ?? 30,
+    date: business.max_advance_date ?? '',
+  })
+  const [savingWindow, setSavingWindow] = useState(false)
+  async function saveWindow() {
+    // Pitfall 4: los 3 modos son mutuamente excluyentes en la DB — se escribe la columna del modo
+    // activo y se nulea SIEMPRE la otra. Nunca dejar max_advance_days y max_advance_date a la vez.
+    let payload: { max_advance_days: number | null; max_advance_date: string | null }
+    if (windowForm.mode === 'dias') {
+      const days = Math.floor(windowForm.days)
+      if (!Number.isFinite(days) || days < 1) { toast.error('Ingresá un número de días mayor o igual a 1'); return }
+      payload = { max_advance_days: days, max_advance_date: null }
+    } else if (windowForm.mode === 'fecha') {
+      if (!windowForm.date) { toast.error('Elegí una fecha de corte'); return }
+      payload = { max_advance_days: null, max_advance_date: windowForm.date }
+    } else {
+      payload = { max_advance_days: null, max_advance_date: null }
+    }
+    setSavingWindow(true)
+    const { error } = await supabase.from('businesses').update(payload).eq('id', business.id)
+    setSavingWindow(false)
+    if (error) toast.error('Error al guardar')
+    else toast.success('Ventana de reserva guardada')
   }
 
   // ── Excepciones por fecha (capa 1) ──────────────────────────────────────────
@@ -729,6 +760,58 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             {savingHours ? 'Guardando...' : 'Guardar horarios'}
           </Button>
         </div>
+      </Card>
+
+      {/* Ventana de reserva pública (BOOK-WINDOW-01) — 3 modos mutuamente excluyentes (D-01). Va acá,
+          junto a horarios y días especiales, por ser config de agenda (no de cobros). */}
+      <Card className="p-6 space-y-4">
+        <div>
+          <p className="font-semibold text-sm flex items-center gap-1.5"><CalendarDays className="w-4 h-4" /> Ventana de reserva</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Limita con cuánta anticipación un cliente puede reservar desde tu página pública. No afecta los turnos que cargás manualmente.</p>
+        </div>
+
+        <fieldset className="space-y-3">
+          {/* Modo: días de anticipación */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <input type="radio" id="window_mode_dias" name="window_mode" className="w-4 h-4 accent-primary cursor-pointer"
+                checked={windowForm.mode === 'dias'} onChange={() => setWindowForm(f => ({ ...f, mode: 'dias' }))} />
+              <Label htmlFor="window_mode_dias" className="cursor-pointer">Hasta cierta cantidad de días de anticipación</Label>
+            </div>
+            {windowForm.mode === 'dias' && (
+              <div className="pl-7 space-y-1">
+                <Label htmlFor="window_days" className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Días de anticipación</Label>
+                <Input id="window_days" type="number" min={1} className="w-full sm:w-40" value={windowForm.days}
+                  onChange={e => setWindowForm(f => ({ ...f, days: parseInt(e.target.value) || 1 }))} />
+              </div>
+            )}
+          </div>
+
+          {/* Modo: sin límite */}
+          <div className="flex items-center gap-3">
+            <input type="radio" id="window_mode_sin_limite" name="window_mode" className="w-4 h-4 accent-primary cursor-pointer"
+              checked={windowForm.mode === 'sin_limite'} onChange={() => setWindowForm(f => ({ ...f, mode: 'sin_limite' }))} />
+            <Label htmlFor="window_mode_sin_limite" className="cursor-pointer">Sin límite</Label>
+          </div>
+
+          {/* Modo: fecha exacta */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <input type="radio" id="window_mode_fecha" name="window_mode" className="w-4 h-4 accent-primary cursor-pointer"
+                checked={windowForm.mode === 'fecha'} onChange={() => setWindowForm(f => ({ ...f, mode: 'fecha' }))} />
+              <Label htmlFor="window_mode_fecha" className="cursor-pointer">Hasta una fecha exacta</Label>
+            </div>
+            {windowForm.mode === 'fecha' && (
+              <div className="pl-7 space-y-1">
+                <Label htmlFor="window_date" className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="w-3 h-3" /> Fecha de corte (inclusive)</Label>
+                <Input id="window_date" type="date" className="w-full sm:w-52" value={windowForm.date}
+                  onChange={e => setWindowForm(f => ({ ...f, date: e.target.value }))} />
+              </div>
+            )}
+          </div>
+        </fieldset>
+
+        <Button onClick={saveWindow} disabled={savingWindow}>{savingWindow ? 'Guardando...' : 'Guardar'}</Button>
       </Card>
 
       {/* Excepciones por fecha — anular/cambiar un día puntual sobre la grilla semanal */}
