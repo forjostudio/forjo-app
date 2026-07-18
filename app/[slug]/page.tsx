@@ -44,7 +44,7 @@ export default async function PublicBookingPage({ params }: Props) {
   // resend_api_key, recaptcha_secret_key, google_refresh_token, …).
   const { data: business } = await supabase
     .from('public_businesses')
-    .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, landing_config')
+    .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, landing_config, max_advance_days, max_advance_date')
     .eq('slug', slug)
     .single()
 

@@ -39,6 +39,10 @@ export interface Business {
   default_slot_duration?: number | null
   // Descanso entre turnos (minutos). Gap mínimo entre turnos consecutivos. 0 = sin buffer.
   buffer_minutes?: number | null
+  // Ventana de reserva pública (BOOK-WINDOW). Cuánto en el futuro puede reservar el cliente en la
+  // página pública. Se lee vía la vista public_businesses (no la tabla). Ambos null = sin límite.
+  max_advance_days?: number | null // modo rolling: N días desde hoy (default 30 en DB). null/0 = sin límite.
+  max_advance_date?: string | null // modo fecha fija, ISO yyyy-mm-dd. Precedencia fecha > días.
   // MercadoPago Connect (OAuth): user_id de la cuenta MP. NO es secreto (es el id de cuenta);
   // el dashboard lo usa como flag (¿conectó por OAuth?) → se queda en Business.
   mp_user_id?: string | null
