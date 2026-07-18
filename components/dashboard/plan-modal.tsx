@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SUBSCRIPTION_PLANS } from '@/lib/subscription-plans'
-import { getPlanLimits } from '@/lib/plans'
+import { PLANS } from '@/lib/plans'
 import { cn } from '@/lib/utils'
 import { Check } from 'lucide-react'
 
@@ -82,7 +82,9 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
         <>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
           {Object.entries(SUBSCRIPTION_PLANS).map(([key, plan]) => {
-            const limits = getPlanLimits(key)
+            // El modal es superficie de VENTA → muestra el límite REAL del plan desde PLANS, no
+            // getPlanLimits (que con NEXT_PUBLIC_PLANS_UNLIMITED=true en prod devolvía 99 agendas).
+            const limits = PLANS[key as keyof typeof PLANS] ?? PLANS.basic
             const isRec = plan.recommended
             return (
               <div
