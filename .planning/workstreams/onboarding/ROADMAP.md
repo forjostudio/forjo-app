@@ -102,7 +102,10 @@ Dos superficies, dos fases. El **wizard de alta** (Phase 7) junta los dos bugs q
   3. Entrar directo a `/login` o `/register` (sin pasar por el dashboard) también se ve Forjo. (ONB-05)
   4. REGRESIÓN: el dashboard del negocio y su página pública `/[slug]` siguen mostrando su paleta/tema/fuente propios — el reset de auth no se filtró a esas superficies. (ONB-05)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+  - [ ] 08-01-PLAN.md — Crear `app/(auth)/layout.tsx` + `ResetThemeScript` (reset del tema del tenant a Forjo base en las 4 pantallas de auth) (ONB-05)
+
 **UI hint**: yes
 **Nota (capa de theming)**: el mecanismo del bug es el `<html>` persistente entre navegaciones SPA — `PaletteScript` del dashboard setea `data-palette` / `data-theme` en `document.documentElement` y ese atributo sobrevive al navegar a `/login`. El fix resetea a Forjo default (`data-palette=red`, borrar `data-theme` / `data-font`) en la superficie `(auth)`, que hoy son DOS layouts: el grupo anidado `(split)` (login/forgot/reset) y `register` (sin split). El reset toca SOLO paleta/tema/fuente; el modo claro/oscuro (clase `.dark` de next-themes) NO se toca.
 
@@ -121,4 +124,4 @@ v0.20: 7 → 8. Las dos fases son **independientes** (superficies distintas: wiz
 | 5. Entrar con Google | v0.19 | 3/3 | Complete   | 2026-07-17 |
 | 6. Mails de cuenta con marca Forjo | v0.19 | 2/2 | Complete   | 2026-07-17 |
 | 7. Onboarding wizard — robustez + pulido | v0.20 | 1/1 | Complete   | 2026-07-17 |
-| 8. Auth siempre con tema Forjo | v0.20 | TBD | Not started | - |
+| 8. Auth siempre con tema Forjo | v0.20 | 0/1 | Not started | - |
