@@ -5,6 +5,7 @@
 - ✅ **v0.14 Onboarding** — Phases 1-3 (shipped 2026-07-04, archivado en `milestones/v0.14-*`)
 - ✅ **v0.19 Cuenta y acceso** — Phases 4-6 (shipped 2026-07-17, archivado en `milestones/v0.19-*`)
 - ✅ **v0.20 "Onboarding pulido"** — Phases 7-8 (shipped 2026-07-18, archivado en `milestones/v0.20-*`)
+- 🔨 **v0.21 "Rediseño visual del login"** — Phase 9 (en curso — implementado, pendiente secure + ship)
 
 Detalle archivado: [`milestones/v0.14-ROADMAP.md`](../../milestones/v0.14-ROADMAP.md) · [`milestones/v0.19-ROADMAP.md`](../../milestones/v0.19-ROADMAP.md) · [`milestones/v0.20-ROADMAP.md`](../../milestones/v0.20-ROADMAP.md).
 
@@ -66,6 +67,16 @@ Detalle completo archivado en [`milestones/v0.20-ROADMAP.md`](../../milestones/v
 
 </details>
 
+## Active Milestone: v0.21 "Rediseño visual del login"
+
+Rediseño **visual** de las pantallas de auth del split (login/forgot/reset), mobile y desktop, **sin
+cambios de lógica** (LOGINUI-01/02/03). Mobile: hero full-screen dark + bottom sheet. Desktop: hero
+dark con formas rojas + form crema. Diseño fijo (no sigue claro/oscuro); preserva ONB-05.
+
+- [x] **Phase 9: Rediseño visual del login** (1/1 plan, LOGINUI-01/02/03) — implementado 2026-07-18
+  (retroactivo: specs cerradas + HTML de referencia). `MobileLoginHero` + `(split)/layout` dark/crema
+  + `.auth-cream-panel` + `useGoogleSignIn`. tsc/build ✓. Pendiente: secure-phase 9 + UAT visual.
+
 ## Progress
 
 **Execution Order:**
@@ -82,3 +93,4 @@ v0.20: 7 → 8. Las dos fases son **independientes** (superficies distintas: wiz
 | 6. Mails de cuenta con marca Forjo | v0.19 | 2/2 | Complete   | 2026-07-17 |
 | 7. Onboarding wizard — robustez + pulido | v0.20 | 1/1 | Complete   | 2026-07-17 |
 | 8. Auth siempre con tema Forjo | v0.20 | 1/1 | Complete   | 2026-07-18 |
+| 9. Rediseño visual del login | v0.21 | 1/1 | Complete (pend. secure) | 2026-07-18 |

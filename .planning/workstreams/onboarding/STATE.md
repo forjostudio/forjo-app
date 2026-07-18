@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.19
-milestone_name: Cuenta y acceso
-status: Awaiting next milestone
-stopped_at: Phase 8 planned (1 plan, autónomo, checker PASS) — última de v0.20
-last_updated: "2026-07-18T04:46:07.343Z"
-last_activity: 2026-07-18 — Milestone v0.20 completed and archived
+milestone: v0.21
+milestone_name: Rediseño visual del login
+status: planning
+last_updated: "2026-07-18T13:46:56.788Z"
+last_activity: 2026-07-18
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 20
-  completed_plans: 20
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -27,10 +26,10 @@ Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 ## Current Position
 
-Phase: Milestone v0.20 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-18 — Milestone v0.20 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-18 — Milestone v0.21 started
 
 ## Milestone Context
 

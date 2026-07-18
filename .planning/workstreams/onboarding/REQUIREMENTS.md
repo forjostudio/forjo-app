@@ -1,0 +1,33 @@
+# Requirements: Forjo App — v0.21 "Rediseño visual del login" (workstream `onboarding`)
+
+> Rediseño **visual** de las pantallas de auth del split. **Sin cambios de lógica**: se reusan los
+> flujos existentes (login con contraseña, Google OAuth, reset, links). Diseño **FIJO** (mobile: hero
+> dark + bottom sheet; desktop: hero dark + form crema), no sigue claro/oscuro; el reset de la paleta
+> del tenant de ONB-05 (Phase 8) se mantiene — todo es color Forjo hardcodeado.
+
+## v0.21 Requirements
+
+### Login UI
+
+- [ ] **LOGINUI-01**: En mobile (≤760px), la persona entra por un hero full-screen de marca (dark) con
+  3 CTAs — Iniciar sesión (abre un bottom sheet con el form email/contraseña), Crear cuenta, Continuar
+  con Google — en vez del formulario pelado.
+- [ ] **LOGINUI-02**: En desktop (≥760px), el split de auth (login/forgot-password/reset-password)
+  muestra un hero izquierdo **dark** con formas rojas + logo + headline con acento, y el panel del
+  formulario en **crema**.
+- [ ] **LOGINUI-03**: El diseño del split es **fijo** (dark hero + form crema / hero mobile dark) aunque
+  el usuario esté en modo oscuro, y **no hereda la paleta del tenant** (se preserva ONB-05).
+
+## Out of Scope
+
+- Rediseño visual de `/register` (mantiene su Card actual).
+- Cambios de lógica o de flujo de auth (login, OAuth, reset): sólo presentación.
+- Modo claro/oscuro adaptativo en el split: es un diseño fijo por decisión del usuario.
+
+## Traceability
+
+| REQ-ID | Phase |
+|--------|-------|
+| LOGINUI-01 | 9 |
+| LOGINUI-02 | 9 |
+| LOGINUI-03 | 9 |
