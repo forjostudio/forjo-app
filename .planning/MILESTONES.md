@@ -1,5 +1,19 @@
 # Milestones
 
+## v0.21 Rediseño visual del login (Shipped: 2026-07-18)
+
+**Phases completed:** 1 phase (Phase 9), 1 plan
+
+**Key accomplishments:**
+
+- Rediseño **visual** de las pantallas de auth del split (login/forgot/reset), mobile y desktop, **sin cambios de lógica** (reusa signInWithPassword/OAuth). Diseño **fijo** (no sigue claro/oscuro); preserva ONB-05.
+- Mobile (≤760px): `components/auth/mobile-login-hero.tsx` — overlay `fixed` con hero full-screen dark (#141110) + bottom sheet de login (3 CTAs: iniciar sesión/crear cuenta/Google). A11y: foco al abrir, cierre con Escape/scrim, `inert`, `role=dialog`, inputs 16px (sin zoom iOS).
+- Desktop (≥760px): `app/(auth)/(split)/layout.tsx` reescrito = hero izquierdo dark con formas rojas + F-icon SVG (reemplazó el `<Image>` lockup) + form **crema**, fijado con la clase `.auth-cream-panel` (globals.css) que pinea la paleta crema aunque el usuario esté en dark (el tema light del proyecto ya era crema).
+- `useGoogleSignIn` extraído de GoogleButton para que el `redirectTo` fijo (invariante T-05-02) viva en un solo lugar, compartido por el botón desktop y el CTA del hero mobile. Fixes de pulido: separador "o" con el color del panel, ojito visible sobre crema. `/register` fuera de scope.
+- SECURED 5/5 (secure-phase 9, threats_open: 0): redirect fijo verificado + skin acotado sin filtrar al theming global. tsc + eslint + `next build` en verde.
+
+---
+
 ## v0.20 Onboarding pulido (Shipped: 2026-07-18)
 
 **Phases completed:** 2 phases, 2 plans, 3 tasks
