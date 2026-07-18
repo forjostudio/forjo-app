@@ -143,7 +143,20 @@ Plans:
   4. Una reserva **pública** con fecha fuera de la ventana es rechazada por el servidor (`app/api/booking/create`) aunque el cliente manipule la request — el backstop no confía en el cliente.
   5. El alta manual autenticada del dueño NO queda limitada por la ventana: puede cargar turnos con cualquier anticipación.
 
-**Plans**: TBD
+**Plans**: 4 plans (2 waves)
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Foundation: migración 052 (columnas + vista public_businesses) + helper `lib/booking-window.ts` (hora AR, testeado) + tipos + read-path en page.tsx
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-02-PLAN.md — Control en Ajustes → Cobros (3 modos: días / sin límite / fecha exacta) que persiste max_advance_days/max_advance_date
+- [ ] 04-03-PLAN.md — Cap + texto "Reservas hasta el DD/MM" en los dos calendarios públicos gemelos (booking-client + canchas-booking-client)
+- [ ] 04-04-PLAN.md — Backstop server anti-tampering en booking/create (date_out_of_window/400) + test de exención del alta manual
+
+**Waves**: Wave 1 = 04-01 (plomería: schema + read-path + helper del que dependen las 3 capas). Wave 2 = 04-02 + 04-03 + 04-04 en paralelo (config UI · cap público · backstop server; archivos disjuntos, todos dependen del helper/tipos del Plan 01).
+
 **UI hint**: yes
 **Security/Integrity relevance**: BOOK-WINDOW-03 es un **backstop anti-tampering**: el servidor debe rechazar la fecha fuera de ventana sin confiar en el cliente (mismo patrón que el re-check de tenant/disponibilidad existente en `app/api/booking/create`). La migración agrega `businesses.max_advance_days` (aditiva, default sin límite → cero regresión): debe preservar RLS y NO exponer nada sensible; el valor de la ventana viaja al público por el read-path acotado ya existente (vista pública / config), nunca por una lectura ancha de `businesses` para `anon`. El secure-phase gate verifica: (a) el servidor caps la fecha en el flujo público aunque la UI se saltee; (b) el alta manual autenticada queda exenta sin abrir un bypass del anti-doble-booking; (c) la migración no filtra columnas de `businesses` a `anon`.
 
