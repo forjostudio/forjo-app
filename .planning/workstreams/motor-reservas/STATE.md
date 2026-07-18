@@ -4,13 +4,13 @@ milestone: v0.22
 milestone_name: "— Turnos: alta manual y ventana de reserva"
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-18T20:31:47.841Z"
+last_updated: "2026-07-18T20:50:36.021Z"
 last_activity: 2026-07-18 -- Phase 04 execution started
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 18
-  completed_plans: 14
+  completed_plans: 17
   percent: 60
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 04 (ventana-de-reserva-p-blica) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 04
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-07-18 -- Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 | 5 | TBD | - | - |
 
 *Updated after each plan completion*
+| Phase 04 P03 | ~15m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
