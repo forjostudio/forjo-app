@@ -19,7 +19,7 @@ Que las pantallas de auth (login, register, forgot-password, reset-password) use
 
 ### ONB-05 — Reset del tema en auth
 - **D-01:** El reset se hace en el **layout del route group `(auth)`** (`app/(auth)/layout.tsx` — confirmar en research si ya existe uno o hay que crearlo; las pantallas viven en `(auth)/(split)/*` y `(auth)/register`). Cubre TODOS los caminos de llegada a auth (logout, sesión vencida, entrar directo por URL), tanto SSR como navegación client-side — a diferencia de resetear solo en el flujo de logout, que deja agujeros.
-- **D-02:** El reset pone `data-palette="red"` y **borra** `data-theme`/`data-font` de `<html>` (los defaults del tema Forjo base, lo mismo que el root layout). Debe correr **antes de pintar** (script inline, como hace `PaletteScript`) para evitar el flash de la paleta del negocio.
+- **D-02:** El reset pone `data-palette="red"`, **borra** `data-theme`/`data-font`, y **`removeProperty('--primary')`** de `<html>` (los defaults del tema Forjo base + limpiar el override de `--primary` que `/[slug]` puede setear vía PaletteScript — hardening barato recomendado por el research). Debe correr **antes de pintar** (script inline, como hace `PaletteScript`; un `useEffect` NO sirve = post-paint = flash) para evitar el flash de la paleta del negocio en soft-nav.
 - **D-03:** **Respeta claro/oscuro** — NO toca la clase `.dark` que maneja next-themes ni el `ThemeProvider`. El usuario sigue en su modo elegido; solo se resetea la paleta/tema/fuente del tenant. "En dark o claro, pero siempre el tema Forjo."
 - **D-04 (invariante de no-regresión):** el reset está **acotado al layout de (auth)** → el dashboard y `/[slug]` conservan su paleta/tema/fuente intactos. El criterio de éxito incluye verificar que esos dos NO se rompan.
 
