@@ -1,16 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.22
-milestone_name: "Turnos: alta manual y ventana de reserva"
+milestone_name: "— Turnos: alta manual y ventana de reserva"
 status: planning
-last_updated: "2026-07-18T00:00:00.000Z"
-last_activity: 2026-07-18
+stopped_at: Phase 4 context gathered
+last_updated: "2026-07-18T19:46:40.614Z"
+last_activity: 2026-07-18 — Roadmap v0.22 creado (Phases 4-5, 4 requirements mapeados 100%)
 progress:
-  total_phases: 2
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 5
+  completed_phases: 3
+  total_plans: 14
+  completed_plans: 14
+  percent: 60
 ---
 
 # Project State
@@ -80,9 +81,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-18
-Stopped at: Roadmap v0.22 creado (Phases 4-5) + Traceability de REQUIREMENTS.md actualizada
-Resume file: None
+Last session: 2026-07-18T19:46:40.565Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/04-ventana-de-reserva-p-blica/04-CONTEXT.md
 
 ## Operator Next Steps
 
