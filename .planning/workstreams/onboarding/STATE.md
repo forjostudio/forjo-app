@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
-status: executing
+status: Awaiting next milestone
 stopped_at: Phase 8 planned (1 plan, autónomo, checker PASS) — última de v0.20
-last_updated: "2026-07-18T02:46:21.219Z"
-last_activity: 2026-07-18 -- Phase 08 execution started
+last_updated: "2026-07-18T04:46:07.343Z"
+last_activity: 2026-07-18 — Milestone v0.20 completed and archived
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 20
-  completed_plans: 19
-  percent: 88
+  completed_plans: 20
+  percent: 100
 ---
 
 # Project State
@@ -27,10 +27,10 @@ Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 ## Current Position
 
-Phase: 08 (auth-siempre-con-tema-forjo) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 08
-Last activity: 2026-07-18 -- Phase 08 execution started
+Phase: Milestone v0.20 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-18 — Milestone v0.20 completed and archived
 
 ## Milestone Context
 

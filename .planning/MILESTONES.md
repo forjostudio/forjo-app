@@ -1,5 +1,15 @@
 # Milestones
 
+## v0.20 Onboarding pulido (Shipped: 2026-07-18)
+
+**Phases completed:** 2 phases, 2 plans, 3 tasks
+
+**Key accomplishments:**
+
+- Endpoint service-role de disponibilidad de slug que devuelve solo un booleano (cierra el bug cross-tenant ONB-01 y la fuga T-07-01), más salida del wizard, logo al bucket `logos` y remoción del selector de paleta.
+
+---
+
 ## v0.19 Cuenta y acceso (Shipped: 2026-07-17)
 
 **Phases completed:** 3 phases, 11 plans, 11 tasks
