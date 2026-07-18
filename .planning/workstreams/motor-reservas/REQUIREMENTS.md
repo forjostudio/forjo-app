@@ -38,7 +38,7 @@
 
 | REQ-ID | Phase |
 |--------|-------|
-| BOOK-WINDOW-01 | — |
-| BOOK-WINDOW-02 | — |
-| BOOK-WINDOW-03 | — |
-| BOOK-NOTIFY-01 | — |
+| BOOK-WINDOW-01 | Phase 4 |
+| BOOK-WINDOW-02 | Phase 4 |
+| BOOK-WINDOW-03 | Phase 4 |
+| BOOK-NOTIFY-01 | Phase 5 |

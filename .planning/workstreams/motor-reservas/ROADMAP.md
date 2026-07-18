@@ -1,23 +1,32 @@
-# Roadmap: Forjo App — Motor de Reservas (v0.12)
+# Roadmap: Forjo App — Motor de Reservas (workstream `motor-reservas`)
 
-> Workstream `motor-reservas`. Numeración de fases reiniciada en Phase 1 (workstream nuevo). PROJECT.md compartido en `.planning/PROJECT.md`; requirements en `.planning/workstreams/motor-reservas/REQUIREMENTS.md`.
+> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30) y **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, activo). Numeración de fases **continua** por workstream: v0.22 arranca en **Phase 4**. PROJECT.md compartido en `.planning/PROJECT.md`; requirements en `.planning/workstreams/motor-reservas/REQUIREMENTS.md`.
 
 ## Overview
 
-El milestone convierte "agenda" de *1-turno-por-slot / 1-recurso = 1-profesional* en un recurso reservable real con capacidad (cupos grupales) y relaciones de espacio físico (canchas), más turnos manuales desde el panel — para desbloquear rubros nuevos (gimnasios, clases grupales, canchas). El núcleo de integridad que endureció v0.9 (constraints 011/013 + concurrencia anti-doble-booking) se toca con cuidado: cada fase preserva el aislamiento por tenant (RLS + `business_id`) y la garantía anti-doble-booking, con **cero regresión** para el caso 1-turno-por-slot. El faseo va por riesgo creciente: primero turnos manuales (no toca constraints), después cupos grupales (redefine constraints a capacity-aware + concurrencia anti-sobrecupo), y por último espacio compartido (exclusión acoplada entre agendas), construido sobre el modelo de capacidad/concurrencia de la fase anterior y recortable como fase final sin tocar lo entregado.
+**v0.12 (shipped):** El milestone convierte "agenda" de *1-turno-por-slot / 1-recurso = 1-profesional* en un recurso reservable real con capacidad (cupos grupales) y relaciones de espacio físico (canchas), más turnos manuales desde el panel — para desbloquear rubros nuevos (gimnasios, clases grupales, canchas). El núcleo de integridad que endureció v0.9 (constraints 011/013 + concurrencia anti-doble-booking) se toca con cuidado: cada fase preserva el aislamiento por tenant (RLS + `business_id`) y la garantía anti-doble-booking, con **cero regresión** para el caso 1-turno-por-slot. El faseo va por riesgo creciente: primero turnos manuales (no toca constraints), después cupos grupales (redefine constraints a capacity-aware + concurrencia anti-sobrecupo), y por último espacio compartido (exclusión acoplada entre agendas), construido sobre el modelo de capacidad/concurrencia de la fase anterior y recortable como fase final sin tocar lo entregado.
+
+**v0.22 — Turnos: alta manual y ventana de reserva (activo):** dos mejoras acotadas sobre el motor ya entregado, **sin reconstruir nada de v0.12**. (1) **Ventana de reserva:** el dueño limita hasta con cuánta anticipación puede reservar el público (una sola métrica global por negocio, `businesses.max_advance_days`, vacío/0 = sin límite); el tope se respeta en los **dos** calendarios públicos (general + canchas) y, como **backstop anti-tampering**, en el servidor (`app/api/booking/create`) — el alta manual autenticada queda **exenta**. (2) **Aviso al cliente:** el form "Nuevo turno" ya existente (v0.12: `app/api/appointments/create`) suma un checkbox **opt-in** para mandarle al cliente un mail de turno confirmado, respetando el default de v0.12 (no se manda salvo que se pida). Las dos mejoras son superficies distintas (público vs. alta autenticada) → una fase cada una.
 
 ## Phases
 
 **Phase Numbering:**
 
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- Integer phases: Planned milestone work (numeración **continua** por workstream; v0.22 arranca en Phase 4)
+- Decimal phases (4.1, 4.2): Urgent insertions (marked with INSERTED)
+
+### Milestone v0.12 — Motor de Reservas (shipped 2026-06-30)
 
 Faseo LOCKED por el encuadre §3 (manual → cupos → espacio).
 
 - [x] **Phase 1: Turnos Manuales** - El dueño crea turnos desde el panel reusando el pipeline de booking, sin tocar los constraints de integridad (completed 2026-06-26)
 - [x] **Phase 2: Cupos Grupales** - `capacity` por bloque + constraints capacity-aware + concurrencia atómica anti-sobrecupo, con cero regresión para cupo 1 (completed 2026-06-29)
 - [x] **Phase 3: Espacio Compartido** - Recurso/espacio físico + exclusión acoplada entre agendas que comparten espacio (cancha F11 = 3 cruzadas) (completed 2026-06-30)
+
+### Milestone v0.22 — Turnos: alta manual y ventana de reserva (activo)
+
+- [ ] **Phase 4: Ventana de reserva pública** - Tope de anticipación configurable (global por negocio) aplicado en los dos calendarios públicos + backstop anti-tampering en el servidor; el alta manual queda exenta
+- [ ] **Phase 5: Aviso al cliente en el alta manual** - Checkbox opt-in en el form "Nuevo turno" que le manda al cliente un mail de turno confirmado, respetando el default de v0.12 (no manda salvo que se pida)
 
 ## Phase Details
 
@@ -121,13 +130,48 @@ Plans:
 **UI hint**: yes
 **Security/Integrity relevance**: Extiende el anti-solape al nivel de espacio físico — mismo desafío de concurrencia que la Phase 2 (el chequeo de espacios libres + insert debe ser atómico, nunca `count` suelto). La config de espacios y el mapeo agenda→espacio son datos de tenant: tabla(s) nueva(s) con RLS habilitada + policies por operación + filtro por `business_id`; un negocio no puede mapear ni leer espacios de otro, ni acoplar disponibilidad cross-tenant. El secure-phase gate verifica: atomicidad anti-conflicto-de-espacio (CONC-03), aislamiento por tenant del modelo de espacios, y que la exclusión acoplada no filtre la grilla de un negocio a otro.
 
+### Phase 4: Ventana de reserva pública
+
+**Goal**: El dueño puede acotar hasta con cuánta anticipación un cliente reserva desde la página pública, y ese tope se respeta tanto en la UI de los dos calendarios como en el servidor (no se puede saltear manipulando la request). Aplica **solo al público**; el alta manual autenticada del dueño no se limita.
+**Depends on**: Phase 3 (base del motor de reservas ya entregada; sin dependencia funcional nueva — primera fase de v0.22)
+**Requirements**: BOOK-WINDOW-01, BOOK-WINDOW-02, BOOK-WINDOW-03
+**Success Criteria** (what must be TRUE):
+
+  1. El dueño configura en Ajustes la anticipación máxima de reserva en días, como una sola métrica **global por negocio** (`businesses.max_advance_days`); dejarla vacía o en 0 = sin límite (comportamiento actual, cero regresión).
+  2. En el calendario público general (`booking-client.tsx`) el cliente no puede navegar ni elegir un día más allá de la ventana: la navegación de mes queda capada y los días fuera de rango aparecen deshabilitados.
+  3. En el calendario público de canchas (`canchas-booking-client.tsx`) rige el mismo tope, con el mismo comportamiento de navegación capada y días deshabilitados.
+  4. Una reserva **pública** con fecha fuera de la ventana es rechazada por el servidor (`app/api/booking/create`) aunque el cliente manipule la request — el backstop no confía en el cliente.
+  5. El alta manual autenticada del dueño NO queda limitada por la ventana: puede cargar turnos con cualquier anticipación.
+
+**Plans**: TBD
+**UI hint**: yes
+**Security/Integrity relevance**: BOOK-WINDOW-03 es un **backstop anti-tampering**: el servidor debe rechazar la fecha fuera de ventana sin confiar en el cliente (mismo patrón que el re-check de tenant/disponibilidad existente en `app/api/booking/create`). La migración agrega `businesses.max_advance_days` (aditiva, default sin límite → cero regresión): debe preservar RLS y NO exponer nada sensible; el valor de la ventana viaja al público por el read-path acotado ya existente (vista pública / config), nunca por una lectura ancha de `businesses` para `anon`. El secure-phase gate verifica: (a) el servidor caps la fecha en el flujo público aunque la UI se saltee; (b) el alta manual autenticada queda exenta sin abrir un bypass del anti-doble-booking; (c) la migración no filtra columnas de `businesses` a `anon`.
+
+### Phase 5: Aviso al cliente en el alta manual
+
+**Goal**: Al cargar un turno manual desde el panel, el dueño puede optar por avisarle al cliente por mail que el turno quedó confirmado — **sin cambiar el default de v0.12** (no se manda mail salvo que el dueño lo pida). Reusa el alta manual autenticada existente (`app/api/appointments/create`) y el envío transaccional ya cableado; NO reconstruye el alta ni toca la sincronización con Google Calendar.
+**Depends on**: Phase 4 (secuencial dentro del milestone; sin dependencia funcional — es una superficie distinta: alta autenticada vs. público)
+**Requirements**: BOOK-NOTIFY-01
+**Success Criteria** (what must be TRUE):
+
+  1. El form "Nuevo turno" existente suma un checkbox "avisar al cliente por mail", **destildado por defecto** (respeta la decisión de v0.12: sin tildar, no se manda nada).
+  2. Con el checkbox tildado y un cliente que tiene email, el alta manual (`app/api/appointments/create`) le envía un mail de turno confirmado, reusando el envío transaccional existente (`lib/email.ts`).
+  3. Si el checkbox está destildado o el cliente no tiene email, no se manda ningún mail y el alta funciona exactamente igual que hoy.
+  4. La sincronización con Google Calendar del alta manual sigue igual — el aviso por mail no la altera.
+
+**Plans**: TBD
+**UI hint**: yes
+**Security/Integrity relevance**: Acción autenticada del dueño sobre un cliente de SU negocio. El envío debe usar los secretos de email acotados por tenant (`business_secrets` vía `getBusinessSecrets`, patrón v0.9) y mandar el mail SOLO al cliente del turno recién creado — sin exponer datos de otro tenant. El mail va como efecto best-effort en `after()` (patrón existente): si falla, se loguea y el alta NO se rompe. Bajo riesgo; no redefine constraints ni el flujo público.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, activo)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Turnos Manuales | 4/4 | Complete    | 2026-06-26 |
 | 2. Cupos Grupales | 5/5 | Complete   | 2026-06-29 |
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
+| 4. Ventana de reserva pública | 0/TBD | Not started | - |
+| 5. Aviso al cliente en el alta manual | 0/TBD | Not started | - |
