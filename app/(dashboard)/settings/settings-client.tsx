@@ -189,12 +189,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   async function selectTheme(t: string) {
     if (t === vtheme) return
-    // Cambiar de theme resetea la paleta al default de ese theme (sus ids son distintos).
+    // Elegir un estilo es la decisión de primer orden y RESETEA lo de abajo (mismo criterio que el
+    // CMS del landing, theme-controls.tsx selectPreset): la paleta al default del theme (sus ids son
+    // distintos) y la fuente a 'auto' (borra el override para que mande la tipografía del theme nuevo;
+    // sin esto, una fuente elegida a mano seguía pisando la del tema al cambiar de estilo).
     const newPal = THEME_DEFAULT_PAL[t] || 'red'
-    setVtheme(t); setPalette(newPal)
+    setVtheme(t); setPalette(newPal); setFont('auto')
     applyTheme(t)
+    applyFont('auto')
     document.documentElement.dataset.palette = newPal
-    const { error } = await supabase.from('businesses').update({ theme: t, palette: newPal }).eq('id', business.id)
+    const { error } = await supabase.from('businesses').update({ theme: t, palette: newPal, font: 'auto' }).eq('id', business.id)
     if (error) { toast.error('Error al guardar el estilo'); return }
     toast.success('Estilo actualizado')
   }
