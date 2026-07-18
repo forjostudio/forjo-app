@@ -1,98 +1,44 @@
-# Requirements: Forjo App — Motor de Reservas (v0.12)
+# Requirements: Forjo App — v0.22 "Turnos: alta manual y ventana de reserva" (workstream `motor-reservas`)
 
-**Defined:** 2026-06-25
-**Workstream:** motor-reservas
-**Core Value:** El núcleo de integridad de reservas que endureció v0.9 (anti-doble-booking) NO puede regresar: agregar capacidad (cupos) y relaciones de espacio físico nunca puede permitir sobrecupo, doble-reserva ni conflicto de espacio — ni siquiera bajo reservas concurrentes. Cero regresión para el caso 1-turno-por-slot.
-**Briefs:** `c:\Users\franc\Desktop\Forjo Studio\forjo-motor-reservas-encuadre.md` + `forjo-cupos-grupales-brief.md`
+> **Corrección de scope (2026-07-18):** el **alta manual de turnos ya está shipeada en v0.12**
+> (MANUAL-01/02/03: botón "Nuevo turno" en Agenda/Turnos → `app/api/appointments/create/route.ts`,
+> autenticado, reusa `createAppointmentCore`, sincroniza Google Calendar; NO manda mail al cliente por
+> decisión de v0.12). Por eso v0.22 NO reconstruye el alta manual: agrega el **límite de ventana de
+> reserva** (feature nueva) y un **aviso opt-in por mail** al alta manual existente.
 
-## v1 Requirements
+## v0.22 Requirements
 
-Requirements del milestone v0.12. Actores: **dueño/admin** (sesión autenticada del dashboard) y **cliente público** (booking anónimo en `/[slug]`). Faseo LOCKED por el encuadre §3: manual (C) → cupos (A) → espacio (B). El modelo "agenda como recurso" (genérico vs `professionals`+tipo) se decide en la fase de cupos contemplando ya el espacio compartido.
+### Ventana de reserva (BOOK-WINDOW)
 
-### Turnos Manuales (MANUAL) — pieza C
+- [ ] **BOOK-WINDOW-01**: El dueño configura en Ajustes la anticipación máxima con la que se puede
+  reservar (días), como una sola métrica **global por negocio** (`businesses.max_advance_days`; vacío/0
+  = sin límite).
+- [ ] **BOOK-WINDOW-02**: El calendario público no deja elegir un día más allá de la ventana, en los
+  **dos** calendarios (general `booking-client.tsx` y canchas `canchas-booking-client.tsx`): cap de la
+  navegación de mes + días fuera de ventana deshabilitados.
+- [ ] **BOOK-WINDOW-03**: El servidor rechaza una reserva **pública** con fecha fuera de la ventana
+  (backstop anti-tampering en `app/api/booking/create`; no se confía en el cliente). El alta manual
+  autenticada NO se limita (la ventana es solo del público).
 
-- [x] **MANUAL-01**: El dueño crea un turno desde el dashboard (reserva telefónica / walk-in) reusando el pipeline de `/api/booking/create` (validación, disponibilidad, anti-tampering de tenant, anti-doble-booking) desde su sesión autenticada, no por el flujo anónimo.
-- [x] **MANUAL-02**: Al crear un turno manual, el dueño elige un cliente existente o carga uno nuevo (nombre + contacto), que queda asociado al turno.
-- [x] **MANUAL-03**: El turno manual respeta la disponibilidad real del slot (cupo y, si existe, espacio compartido) igual que el booking público; no puede sobre-reservar.
-- [~] **MANUAL-04** (diferido a v2 — D-01): La seña es opcional para el turno manual (el dueño decide si la exige al cargarlo), independiente del flag de seña del servicio. _Fuera de Phase 1: el alta manual no maneja seña; el turno siempre queda `confirmed`._
+### Aviso al cliente en el alta manual (BOOK-NOTIFY)
 
-### Cupos Grupales (CUPOS) — pieza A
-
-- [x] **CUPOS-01**: El dueño define un cupo (capacidad) por bloque de horario en el editor de agenda; el default es 1 (= comportamiento individual actual, cero regresión).
-- [x] **CUPOS-02**: La página pública muestra un horario como "disponible" hasta que se completa el cupo, sin exponer cuántos lugares quedan.
-- [x] **CUPOS-03**: El sistema admite hasta `capacity` reservas en el mismo slot y rechaza la que excede el cupo con un error claro (`slot_full`), incluso ante reservas concurrentes que pelean el último lugar (anti-sobrecupo atómico).
-- [x] **CUPOS-04**: El dueño ve en la agenda el contador de ocupación por slot grupal (ej. 8/15) y la lista de inscriptos (roster).
-- [x] **CUPOS-05**: La seña se configura por servicio (pide / no pide), independiente de que el bloque sea individual o grupal.
-
-### Espacio Compartido (ESPACIO) — pieza B
-
-- [x] **ESPACIO-01**: El dueño/admin modela agendas como recursos con espacio(s) físico(s) asociado(s), donde una agenda puede ocupar uno o varios espacios (ej. cancha F11 = {A,B,C}; cada cruzada = {A} | {B} | {C}).
-- [x] **ESPACIO-02**: Reservar una agenda en un horario bloquea a todas las agendas que comparten alguno de sus espacios en el horario solapado (disponibilidad acoplada por espacio físico, en ambos sentidos: reservar la F11 bloquea las 3 cruzadas y viceversa).
-- [x] **ESPACIO-03**: El chequeo "¿todos los espacios libres?" + el insert es atómico, de modo que dos reservas concurrentes no pueden tomar agendas que comparten espacio en el mismo horario solapado.
-
-### Concurrencia & No-Regresión (CONC)
-
-- [x] **CONC-01**: La suite Vitest se extiende con un test de anti-sobrecupo concurrente: dos reservas simultáneas sobre el último lugar de un cupo no pueden ambas confirmar; la suite queda roja si entra `capacity + 1`.
-- [x] **CONC-02**: La suite se extiende con un test de no-regresión del caso 1-turno-por-slot: los constraints redefinidos a capacity-aware siguen rechazando la doble-reserva en bloques de cupo 1 (lo que protegen 011/013 hoy).
-- [x] **CONC-03**: La suite se extiende con un test de anti-conflicto-de-espacio: dos reservas simultáneas sobre agendas que comparten espacio físico no pueden ambas confirmar en el horario solapado.
-
-## v2 Requirements
-
-Reconocidos pero diferidos — no entran en el roadmap de v0.12.
-
-- **WAIT-01**: Lista de espera (waitlist) cuando un cupo grupal está lleno; al liberarse un lugar, avanza el primero de la lista.
-- **CANCEL-REOPEN-01**: Re-apertura automática del lugar al cancelar una reserva en un slot grupal (comportamiento exacto a confirmar en discuss-phase).
-- **GCAL-GROUP-01**: Estrategia de Google Calendar para clases grupales (1 evento con N asistentes vs N eventos) — a definir; no bloquea el motor de reservas.
+- [ ] **BOOK-NOTIFY-01**: El form "Nuevo turno" existente suma un checkbox **opt-in "avisar al cliente
+  por mail"** (default: sin tildar, respetando la decisión de v0.12). Si está tildado y el cliente tiene
+  email, el alta manual (`app/api/appointments/create`) le manda un mail de turno confirmado. Google
+  Calendar ya se sincroniza hoy, no cambia.
 
 ## Out of Scope
 
-| Feature | Reason |
-|---------|--------|
-| Generalizar el modelo de recurso más allá de lo que A+B necesitan | Gold-plating; el modelo se sofistica solo lo necesario para cupos + espacio compartido |
-| Lista de espera / waitlist | Diferido a v2 (WAIT-01); el MVP es "disponible hasta llenarse" |
-| Re-apertura automática de cupo al cancelar | Diferido a v2 (CANCEL-REOPEN-01); comportamiento a confirmar |
-| Timetable recurrente de clases (plantillas semanales auto-generadas) | El milestone modela capacidad por bloque, no la generación recurrente de clases |
-| Cobro / pricing por reserva grupal distinto al individual | La seña sigue el flag por servicio (CUPOS-05); no se agrega pricing nuevo |
+- **Reconstruir el alta manual** — ya existe (v0.12, MANUAL-01/02/03).
+- **Seña en el alta manual** (MANUAL-04, diferido a v2 en v0.12).
+- Ventana **por servicio** (se eligió global por negocio) y **anticipación mínima** (espejo del máximo, diferido).
+- **Enforcement server-side de límites de plan** ([[plan-model-agendas]], ítem aparte).
 
 ## Traceability
 
-> Mapeo creado por gsd-roadmapper al crear ROADMAP.md. Cada requirement mapea a exactamente una fase; cobertura objetivo 100%.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| MANUAL-01 | Phase 1 | Complete |
-| MANUAL-02 | Phase 1 | Complete |
-| MANUAL-03 | Phase 1 | Complete |
-| MANUAL-04 | Deferred (v2) | Out of Phase 1 (D-01) |
-| CUPOS-01 | Phase 2 | Complete |
-| CUPOS-02 | Phase 2 | Complete |
-| CUPOS-03 | Phase 2 | Complete |
-| CUPOS-04 | Phase 2 | Complete |
-| CUPOS-05 | Phase 2 | Complete |
-| ESPACIO-01 | Phase 3 | Complete |
-| ESPACIO-02 | Phase 3 | Complete |
-| ESPACIO-03 | Phase 3 | Complete |
-| CONC-01 | Phase 2 | Complete |
-| CONC-02 | Phase 2 | Complete |
-| CONC-03 | Phase 3 | Complete |
-
-### Phase → Requirements
-
-| Phase | Requirements | Count |
-|-------|--------------|-------|
-| Phase 1 — Turnos Manuales | MANUAL-01, MANUAL-02, MANUAL-03 (+ MANUAL-04 diferido a v2) | 3 activos + 1 diferido |
-| Phase 2 — Cupos Grupales | CUPOS-01, CUPOS-02, CUPOS-03, CUPOS-04, CUPOS-05, CONC-01, CONC-02 | 7 |
-| Phase 3 — Espacio Compartido | ESPACIO-01, ESPACIO-02, ESPACIO-03, CONC-03 | 4 |
-
-> Distribución CONC (concurrencia/no-regresión): CONC-01 (anti-sobrecupo) + CONC-02 (no-regresión cupo 1) van con la fase de cupos (Phase 2); CONC-03 (anti-conflicto-de-espacio) va con la fase de espacio (Phase 3). La suite Vitest extiende el molde TEST-01 de v0.9 (aislamiento anon-key + webhooks); los tests de concurrencia son la ingeniería real del milestone.
-
-> **MANUAL-04 diferido a v2 — decisión D-01** (CONTEXT de Phase 1, bloque `<deferred>`): el alta manual no maneja seña; el turno siempre queda `confirmed` (sin `expires_at`, sin `pending_payment`, sin link de pago ni mail de seña). Sale del alcance de Phase 1. Reconsiderar en un milestone futuro si aparece el caso de cobrar seña en reservas telefónicas.
-
-**Coverage:**
-
-- v1 requirements: 15 total (MANUAL 4 · CUPOS 5 · ESPACIO 3 · CONC 3)
-- Mapped to phases: 15/15 ✓
-- Unmapped: 0 ✓
-
----
-*Requirements defined: 2026-06-25 — workstream motor-reservas, numeración de fases reiniciada en Phase 1. Traceability mapeada por roadmapper 2026-06-25: 15/15, cada requirement a exactamente una fase.*
+| REQ-ID | Phase |
+|--------|-------|
+| BOOK-WINDOW-01 | — |
+| BOOK-WINDOW-02 | — |
+| BOOK-WINDOW-03 | — |
+| BOOK-NOTIFY-01 | — |

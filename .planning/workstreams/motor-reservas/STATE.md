@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.12
-milestone_name: Motor de Reservas
-status: Awaiting next milestone
-stopped_at: Phase 3 context gathered
-last_updated: "2026-06-30T15:33:40.906Z"
-last_activity: 2026-06-30 — Milestone v0.12 completed and archived
+milestone: v0.22
+milestone_name: "Turnos: alta manual y ventana de reserva"
+status: planning
+last_updated: "2026-07-18T17:46:09.849Z"
+last_activity: 2026-07-18
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 
 ## Current Position
 
-Phase: Milestone v0.12 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-30 — Milestone v0.12 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-18 — Milestone v0.22 started
 
 ## Performance Metrics
 
