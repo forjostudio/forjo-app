@@ -143,16 +143,17 @@ Plans:
   4. Una reserva **pública** con fecha fuera de la ventana es rechazada por el servidor (`app/api/booking/create`) aunque el cliente manipule la request — el backstop no confía en el cliente.
   5. El alta manual autenticada del dueño NO queda limitada por la ventana: puede cargar turnos con cualquier anticipación.
 
-**Plans**: 4 plans (2 waves)
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Foundation: migración 052 (columnas + vista public_businesses) + helper `lib/booking-window.ts` (hora AR, testeado) + tipos + read-path en page.tsx
+- [x] 04-01-PLAN.md — Foundation: migración 052 (columnas + vista public_businesses) + helper `lib/booking-window.ts` (hora AR, testeado) + tipos + read-path en page.tsx
+
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 04-02-PLAN.md — Control en Ajustes → Cobros (3 modos: días / sin límite / fecha exacta) que persiste max_advance_days/max_advance_date
-- [ ] 04-03-PLAN.md — Cap + texto "Reservas hasta el DD/MM" en los dos calendarios públicos gemelos (booking-client + canchas-booking-client)
+- [x] 04-02-PLAN.md — Control en Ajustes → Cobros (3 modos: días / sin límite / fecha exacta) que persiste max_advance_days/max_advance_date
+- [x] 04-03-PLAN.md — Cap + texto "Reservas hasta el DD/MM" en los dos calendarios públicos gemelos (booking-client + canchas-booking-client)
 - [ ] 04-04-PLAN.md — Backstop server anti-tampering en booking/create (date_out_of_window/400) + test de exención del alta manual
 
 **Waves**: Wave 1 = 04-01 (plomería: schema + read-path + helper del que dependen las 3 capas). Wave 2 = 04-02 + 04-03 + 04-04 en paralelo (config UI · cap público · backstop server; archivos disjuntos, todos dependen del helper/tipos del Plan 01).
@@ -186,5 +187,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 1. Turnos Manuales | 4/4 | Complete    | 2026-06-26 |
 | 2. Cupos Grupales | 5/5 | Complete   | 2026-06-29 |
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
-| 4. Ventana de reserva pública | 0/TBD | Not started | - |
+| 4. Ventana de reserva pública | 3/4 | In Progress|  |
 | 5. Aviso al cliente en el alta manual | 0/TBD | Not started | - |

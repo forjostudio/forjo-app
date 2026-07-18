@@ -13,9 +13,11 @@
 - [ ] **BOOK-WINDOW-01**: El dueño configura en Ajustes la anticipación máxima con la que se puede
   reservar (días), como una sola métrica **global por negocio** (`businesses.max_advance_days`; vacío/0
   = sin límite).
-- [ ] **BOOK-WINDOW-02**: El calendario público no deja elegir un día más allá de la ventana, en los
+
+- [x] **BOOK-WINDOW-02**: El calendario público no deja elegir un día más allá de la ventana, en los
   **dos** calendarios (general `booking-client.tsx` y canchas `canchas-booking-client.tsx`): cap de la
   navegación de mes + días fuera de ventana deshabilitados.
+
 - [ ] **BOOK-WINDOW-03**: El servidor rechaza una reserva **pública** con fecha fuera de la ventana
   (backstop anti-tampering en `app/api/booking/create`; no se confía en el cliente). El alta manual
   autenticada NO se limita (la ventana es solo del público).
