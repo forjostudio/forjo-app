@@ -53,6 +53,13 @@ describe.skipIf(!hasSupabaseCreds)('booking público de canchas', () => {
     // buffer 0: turnos consecutivos sin hueco (ALQUILER-03). El service base del fixture no se usa acá
     // (las canchas traen su propio service via provisionCancha).
     t = await seedOneTenant({ bufferMinutes: 0 })
+    // Backstop de ventana (BOOK-WINDOW-03, Plan 04): la migr. 052 puso max_advance_days DEFAULT 30, así
+    // que todo negocio sembrado nace con ventana de 30 días. Estos tests reservan sobre la DATE sentinela
+    // '2031-03-03' (5 años en el futuro, elegida para no chocar con turnos pasados) y NO son sobre la
+    // ventana sino sobre la derivación de service de canchas → se opta explícitamente por "sin límite"
+    // (null) para que el backstop no rechace la fecha lejana. La cobertura de la ventana vive en
+    // lib/booking-window.test.ts + test/booking-window-exemption.test.ts.
+    await t.admin.from('businesses').update({ max_advance_days: null, max_advance_date: null }).eq('id', t.businessId)
     const { data: bizRow } = await t.admin.from('businesses').select('slug').eq('id', t.businessId).single()
     slug = bizRow?.slug as string
 
