@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.19
 milestone_name: Cuenta y acceso
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-07-18T00:54:10.781Z"
+stopped_at: Phase 8 planned (1 plan, autónomo, checker PASS) — última de v0.20
+last_updated: "2026-07-18T02:07:48.741Z"
 last_activity: 2026-07-17 -- Phase 07 execution started
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 19
+  total_plans: 20
   completed_plans: 19
   percent: 88
 ---
@@ -130,9 +130,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-18T00:54:10.770Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/workstreams/onboarding/phases/08-auth-siempre-con-tema-forjo/08-CONTEXT.md
+Last session: 2026-07-18T02:07:48.729Z
+Stopped at: Phase 8 planned (1 plan, autónomo, checker PASS) — última de v0.20
+Resume file: .planning/workstreams/onboarding/phases/08-auth-siempre-con-tema-forjo/08-01-PLAN.md
 Next: `/gsd:discuss-phase 4 --ws onboarding`
 
 ## Performance Metrics
