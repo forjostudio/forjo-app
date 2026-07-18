@@ -716,6 +716,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [savingDeposit, setSavingDeposit] = useState(false)
   const [cleaningUp, setCleaningUp] = useState(false)
 
+  // Ventana de reserva pública (BOOK-WINDOW-01). 3 modos mutuamente excluyentes (D-01): días de
+  // anticipación (rolling) / sin límite / fecha exacta. El modo inicial se deriva de las columnas
+  // que llegan por props: fecha fija tiene precedencia (espeja la del helper effectiveBookingCutoff).
+  const [windowForm, setWindowForm] = useState<{ mode: 'dias' | 'sin_limite' | 'fecha'; days: number; date: string }>({
+    mode: business.max_advance_date ? 'fecha' : (business.max_advance_days && business.max_advance_days > 0 ? 'dias' : 'sin_limite'),
+    days: business.max_advance_days ?? 30,
+    date: business.max_advance_date ?? '',
+  })
+  const [savingWindow, setSavingWindow] = useState(false)
+
   const [notifForm, setNotifForm] = useState({
     // notification_email NO es secreto → sigue en businesses. resend_* vienen de secrets (D-05).
     notification_email: business.notification_email || '',
@@ -756,6 +766,26 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setSavingDeposit(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Configuración de seña guardada')
+  }
+  async function saveWindow() {
+    // Pitfall 4: los 3 modos son mutuamente excluyentes en la DB — se escribe la columna del modo
+    // activo y se nulea SIEMPRE la otra. Nunca dejar max_advance_days y max_advance_date seteadas a la vez.
+    let payload: { max_advance_days: number | null; max_advance_date: string | null }
+    if (windowForm.mode === 'dias') {
+      const days = Math.floor(windowForm.days)
+      if (!Number.isFinite(days) || days < 1) { toast.error('Ingresá un número de días mayor o igual a 1'); return }
+      payload = { max_advance_days: days, max_advance_date: null }
+    } else if (windowForm.mode === 'fecha') {
+      if (!windowForm.date) { toast.error('Elegí una fecha de corte'); return }
+      payload = { max_advance_days: null, max_advance_date: windowForm.date }
+    } else {
+      payload = { max_advance_days: null, max_advance_date: null }
+    }
+    setSavingWindow(true)
+    const { error } = await supabase.from('businesses').update(payload).eq('id', business.id)
+    setSavingWindow(false)
+    if (error) toast.error('Error al guardar')
+    else toast.success('Ventana de reserva guardada')
   }
   async function cleanupExpired() {
     setCleaningUp(true)
