@@ -4,8 +4,8 @@ milestone: v0.19
 milestone_name: Cuenta y acceso
 status: executing
 stopped_at: Phase 8 planned (1 plan, autónomo, checker PASS) — última de v0.20
-last_updated: "2026-07-18T02:07:48.741Z"
-last_activity: 2026-07-17 -- Phase 07 execution started
+last_updated: "2026-07-18T02:46:21.219Z"
+last_activity: 2026-07-18 -- Phase 08 execution started
 progress:
   total_phases: 8
   completed_phases: 7
@@ -23,14 +23,14 @@ Requirements: .planning/workstreams/onboarding/REQUIREMENTS.md
 Roadmap: .planning/workstreams/onboarding/ROADMAP.md
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no pueden ser forzados ni falsificados (aislamiento multi-tenant + integridad de pagos).
-**Current focus:** Phase 07 — onboarding-wizard-robustez-y-pulido
+**Current focus:** Phase 08 — auth-siempre-con-tema-forjo
 
 ## Current Position
 
-Phase: 07 (onboarding-wizard-robustez-y-pulido) — EXECUTING
+Phase: 08 (auth-siempre-con-tema-forjo) — EXECUTING
 Plan: 1 of 1
-Status: Executing Phase 07
-Last activity: 2026-07-17 -- Phase 07 execution started
+Status: Executing Phase 08
+Last activity: 2026-07-18 -- Phase 08 execution started
 
 ## Milestone Context
 
