@@ -5,6 +5,7 @@ import { verifyRecaptcha } from '@/lib/recaptcha'
 import { sendPendingPaymentEmail, sendExpiredHoldEmail } from '@/lib/email'
 import { createCalendarEvent } from '@/lib/google-calendar'
 import { createAppointmentCore } from '@/lib/booking-core'
+import { isDateOutOfWindow } from '@/lib/booking-window'
 
 // Creación de un turno PÚBLICO server-side. Reemplaza el insert directo con anon key.
 // Cierra de una: reCAPTCHA fail-closed (no bypasseable desde el cliente), validación de que
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   // resend_from, google_refresh_token) viven en business_secrets (D-02) y se traen aparte.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, plan_status')
+    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, plan_status, max_advance_days, max_advance_date')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
@@ -65,6 +66,18 @@ export async function POST(request: Request) {
   // reCAPTCHA / servicio / slot. El negocio existe pero no está habilitado → 403 (no 404/409).
   if (['expired', 'cancelled', 'suspended'].includes(business.plan_status)) {
     return Response.json({ ok: false, error: 'plan_inactive' }, { status: 403 })
+  }
+
+  // ── Backstop de ventana de reserva (BOOK-WINDOW-03, capa de AUTORIDAD del enforcement en 3 capas) ──
+  // El cap del calendario público (Plan 03) es solo UX y se puede saltear manipulando la request; ACÁ
+  // el server es la autoridad y NO confía en el cliente. Se valida con el helper compartido en hora AR
+  // (D-07: el server corre en UTC en Vercel, el helper resuelve "hoy" en zona Argentina) para coincidir
+  // EXACTAMENTE con el corte que ve el calendario (misma fuente de verdad → sin drift). Corte inclusive.
+  // Corre TEMPRANO —tras el gate de plan y ANTES del insert de client— para que una fecha fuera de
+  // ventana no deje filas `clients` huérfanas (Pitfall 3). 400 = validación de input, consistente con
+  // missing_fields. Solo gatea reservas NUEVAS (D-06): no toca turnos ya reservados.
+  if (isDateOutOfWindow(business, date)) {
+    return Response.json({ ok: false, error: 'date_out_of_window' }, { status: 400 })
   }
 
   // Secretos email/calendar por tenant desde business_secrets (vía getBusinessSecrets,
