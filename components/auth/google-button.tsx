@@ -19,12 +19,15 @@ import { Button } from '@/components/ui/button'
 // El glifo de Google va inline como SVG (Pitfall 5): lucide-react NO trae el logo oficial multicolor,
 // y los brand guidelines de Google Sign-In lo exigen. No se instala ningún paquete de íconos de marca.
 
-export function GoogleButton() {
+// Hook con el flujo OAuth de Google, compartido por el GoogleButton (desktop) y el CTA de Google del
+// hero mobile (components/auth/mobile-login-hero.tsx). Se extrae para que el `redirectTo` fijo —
+// invariante de seguridad T-05-02 (anti open-redirect)— viva en UN solo lugar y no se duplique.
+export function useGoogleSignIn() {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
 
   async function signIn() {
-    // Deshabilita el botón para evitar doble click (design system §UI/UX).
+    // Deshabilita el control para evitar doble click (design system §UI/UX).
     setLoading(true)
     try {
       await supabase.auth.signInWithOAuth({
@@ -35,13 +38,19 @@ export function GoogleButton() {
         },
       })
       // signInWithOAuth redirige el navegador al consent de Google: en el camino feliz esta página se
-      // va, así que no hace falta resetear `loading`. El único caso donde el botón sigue en pantalla es
+      // va, así que no hace falta resetear `loading`. El único caso donde el control sigue en pantalla es
       // un error de red al iniciar el round-trip → se cubre en el catch.
     } catch {
       setLoading(false)
       toast.error('No se pudo conectar con Google, probá de nuevo')
     }
   }
+
+  return { signIn, loading }
+}
+
+export function GoogleButton() {
+  const { signIn, loading } = useGoogleSignIn()
 
   return (
     <Button

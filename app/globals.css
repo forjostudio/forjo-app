@@ -161,6 +161,38 @@
 .dark[data-palette="ink"] { --primary:#f3ead8; --accent:#f3ead8; --ring:#f3ead8; --sidebar-primary:#f3ead8; --primary-foreground:#1a1714; --accent-foreground:#1a1714; --sidebar-primary-foreground:#1a1714; --chart-1:#cabfa6; }
 
 /* =========================================================================
+   AUTH SPLIT — skin crema FIJO del panel derecho (login/forgot/reset).
+   El tema light del proyecto ya es crema; esto lo FIJA aunque el usuario esté
+   en dark (ONB-05 mantiene claro/oscuro, pero el split es un diseño fijo:
+   hero dark + form crema) y ajusta campos/tamaños a la referencia. Se aplica
+   con .auth-cream-panel en (auth)/(split)/layout.tsx; los componentes shadcn
+   heredan los tokens sin tocar el JSX de los forms. Plano (sin @layer) a
+   propósito: así le gana a las variantes dark: de Input/Button.
+   ========================================================================= */
+.auth-cream-panel {
+  --background:#fff9ec; --foreground:#1a1714;
+  --card:#fff9ec; --card-foreground:#1a1714;
+  --primary:#d94a2b; --primary-foreground:#ffffff;
+  --muted:#f0e5cd; --muted-foreground:#6b6253;
+  --border:#d9cbb0; --input:#d9cbb0; --ring:#d94a2b;
+  --destructive:#b23a26; --radius:10px;
+  background:#f3ead8; color:#1a1714;
+}
+.auth-cream-panel [data-slot="input"] {
+  height:auto; min-height:44px; padding:12px 14px; font-size:15px;
+  background-color:#fff9ec; border-color:#d9cbb0; color:#1a1714;
+}
+.auth-cream-panel [data-slot="input"].pr-9 { padding-right:46px } /* deja lugar al ojito */
+.auth-cream-panel [data-slot="input"]::placeholder { color:#a89b82 }
+.auth-cream-panel [data-slot="input"]:focus-visible { border-color:#d94a2b }
+.auth-cream-panel [data-slot="button"] { min-height:46px }
+.auth-cream-panel a:hover { color:#c23f22 } /* links #d94a2b → #c23f22 al hover (ref) */
+/* Ojito de PasswordInput: el muted (#6b6253) queda lavado sobre crema → tono más oscuro y visible.
+   Se ancla al aria-label (Mostrar/Ocultar contraseña) para no tocar el componente compartido. */
+.auth-cream-panel button[aria-label*="contrase"] { color:#5a5044 }
+.auth-cream-panel button[aria-label*="contrase"]:hover { color:#1a1714 }
+
+/* =========================================================================
    CRM SHELL — accent divergente del super-admin (FND-04).
    Acento AMARILLO primario (la app es rojo) + un SOLO rojo de marca para
    peligro. Scopeado a .crm-shell para que NUNCA se filtre al dashboard ni al

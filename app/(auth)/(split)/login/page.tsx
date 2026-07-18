@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { GoogleButton } from '@/components/auth/google-button'
+import { MobileLoginHero } from '@/components/auth/mobile-login-hero'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
@@ -66,6 +67,10 @@ export default function LoginPage() {
 
   return (
     <>
+      {/* Desktop (≥760px): el split lado-a-lado de siempre. En mobile lo reemplaza <MobileLoginHero />
+          (hero full-screen + bottom sheet), que se monta abajo como overlay fixed. Se oculta acá — y no
+          en el layout— porque el (split)/layout es compartido con forgot/reset, que NO llevan hero. */}
+      <div className="hidden min-[760px]:block">
       {/* El aviso va arriba del todo para que sea lo primero que se ve al volver con ?error=oauth. El
           boundary de Suspense es OBLIGATORIO: en el build de prod, un client component estático que lee
           search params rompe el build sin él (mismo motivo que forgot-password, use-search-params.md de
@@ -103,15 +108,16 @@ export default function LoginPage() {
           {loading ? 'Ingresando...' : 'Entrar'}
         </Button>
       </form>
-      {/* Divisor "o" entre el form y el botón de Google. El chip de la "o" lleva bg-background — la
-          superficie del split que aporta SplitAuthLayout — para cortar la línea por detrás del texto.
-          En /register el mismo divisor usa bg-card porque ahí la superficie es el Card de shadcn. */}
+      {/* Divisor "o" entre el form y el botón de Google. El chip lleva el color del panel crema
+          (#f3ead8) para cortar la línea por detrás del texto: NO usa bg-background porque en el skin
+          .auth-cream-panel ese token es #fff9ec (la superficie de los campos, más clara que el panel),
+          y quedaría una caja visible. En /register el divisor usa bg-card (la superficie del Card). */}
       <div className="relative my-4">
         <div className="absolute inset-0 flex items-center" aria-hidden="true">
           <span className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center">
-          <span className="bg-background px-2 text-xs text-muted-foreground">o</span>
+          <span className="bg-[#f3ead8] px-2 text-xs text-muted-foreground">o</span>
         </div>
       </div>
       <GoogleButton />
@@ -132,6 +138,10 @@ export default function LoginPage() {
           Creá tu negocio
         </Link>
       </p>
+      </div>
+      {/* Mobile (≤760px): hero full-screen + bottom sheet. Overlay fixed inset-0 que tapa la columna
+          del form; en desktop queda display:none (min-[760px]:hidden) y manda el split de arriba. */}
+      <MobileLoginHero />
     </>
   )
 }
