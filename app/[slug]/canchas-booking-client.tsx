@@ -14,10 +14,11 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore } from 'date-fns'
+import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore, isAfter } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import type { PublicBusiness, PublicCancha, TimeBlock } from '@/lib/types'
+import { effectiveBookingCutoff } from '@/lib/booking-window'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -127,6 +128,10 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
     return eachDayOfInterval({ start, end })
   }, [calMonth])
   const thisMonth = startOfMonth(new Date())
+  // Ventana de reserva pública (BOOK-WINDOW-02): corte inclusive en hora AR (helper del Plan 01).
+  // Cap de UX — la autoridad real es el backstop server (D-08). null = sin límite. Gemelo de booking-client.
+  const cutoff = useMemo(() => effectiveBookingCutoff(business), [business])
+  const cutoffMonth = cutoff ? startOfMonth(cutoff) : null
 
   async function handleDateSelect(date: Date | undefined) {
     if (!date || !selectedCancha) return
@@ -419,7 +424,8 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
                 <button
                   type="button"
                   onClick={() => setCalMonth(m => addMonths(m, 1))}
-                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  disabled={cutoffMonth != null && !isBefore(startOfMonth(calMonth), cutoffMonth)}
+                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
                   aria-label="Mes siguiente"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -435,7 +441,7 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
                   const inMonth = isSameMonth(d, calMonth)
                   const isPast = isBefore(d, startOfDay(new Date()))
                   const isOpen = isDayOpen(d)
-                  const disabled = !inMonth || isPast || !isOpen
+                  const disabled = !inMonth || isPast || !isOpen || (cutoff != null && isAfter(startOfDay(d), cutoff))
                   const sel = selectedDate != null && isSameDay(d, selectedDate)
                   return (
                     <button
@@ -458,6 +464,11 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
                 })}
               </div>
             </div>
+
+            {/* D-05: aviso del corte de la ventana de reserva (solo si hay límite). */}
+            {cutoff && (
+              <p className="mt-2 text-xs text-muted-foreground text-center">Reservas hasta el {format(cutoff, 'dd/MM')}</p>
+            )}
 
             {/* Horario — duración fija de la cancha, sin picker */}
             {selectedDate && (
