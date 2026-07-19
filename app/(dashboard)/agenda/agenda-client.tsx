@@ -10,7 +10,7 @@ import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Card } from '@/components/ui/card'
-import { TimeField } from '@/components/ui/time-field'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -685,16 +685,18 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                         {/* Hora + cupo en UNA sola línea: los inputs de hora (flex-1) se achican, el cupo
                             y la × van fijos. La leyenda "Cupo" se omite en la línea por espacio (title/aria). */}
                         <div className="flex items-center gap-1.5">
-                          <TimeField
+                          <Input
+                            type="time"
                             value={block.start_time}
-                            onChange={v => updateBlock(day, idx, 'start_time', v)}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
+                            onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                           />
                           <span className="shrink-0 text-xs text-muted-foreground">→</span>
-                          <TimeField
+                          <Input
+                            type="time"
                             value={block.end_time}
-                            onChange={v => updateBlock(day, idx, 'end_time', v)}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
+                            onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                           />
                           {/* Cupo (CUPOS-01): stepper −/+ con el número EDITABLE a mano. min 1 = individual. */}
                           <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border" title="Cupo (lugares por bloque)">
@@ -959,9 +961,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <div className="border-t border-border pt-3 space-y-2">
               <p className="text-xs font-medium">Horario especial</p>
               <div className="flex items-center gap-2">
-                <TimeField value={excBulk.start} onChange={v => setExcBulk(s => ({ ...s, start: v }))} className="w-full text-sm h-8" />
+                <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-full text-sm h-8" />
                 <span className="text-muted-foreground text-sm">→</span>
-                <TimeField value={excBulk.end} onChange={v => setExcBulk(s => ({ ...s, end: v }))} className="w-full text-sm h-8" />
+                <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-full text-sm h-8" />
               </div>
               <Button size="sm" className="w-full" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar horario especial</Button>
             </div>
