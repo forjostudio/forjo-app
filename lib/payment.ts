@@ -149,6 +149,15 @@ export async function createDepositPreference(
     }),
   })
 
+  // Token inválido/revocado por el negocio (no detectable por expiración): MP responde 401 al cobrar.
+  // Marcamos la conexión caída y devolvemos el error server-side. NO cambiamos el flujo público ni
+  // caemos a reservar-sin-seña (D-08): solo se loguea el motivo real (MPCONN-06, D-04).
+  if (mpRes.status === 401) {
+    console.error(`[mp/deposit] cobro rechazado 401 (token inválido/revocado) — negocio ${business.id}; conexión caída`)
+    await setMpConnectionStatus(business.id, 'error')
+    return { ok: false, error: 'La conexión con MercadoPago del negocio no está activa', status: 502 }
+  }
+
   const preference = await mpRes.json()
   if (!preference.init_point) {
     console.error('MP preference error:', JSON.stringify(preference))

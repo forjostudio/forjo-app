@@ -42,9 +42,14 @@ export async function GET(request: NextRequest) {
 
   // mp_user_id NO es secreto (es el id de cuenta MP, el dashboard lo usa como flag de conexión)
   // → se queda en businesses. Lo escribimos con el session client (autorizado por owner_id).
+  // La reconexión = conexión sana: seteamos mp_connection_status='connected' en el mismo update
+  // owner-scoped (RLS owner-only), así se sana SOLO el negocio del dueño (MPCONN-05, D-06).
   const { error: bizErr } = await supabase
     .from('businesses')
-    .update({ mp_user_id: tokens.user_id != null ? String(tokens.user_id) : null })
+    .update({
+      mp_user_id: tokens.user_id != null ? String(tokens.user_id) : null,
+      mp_connection_status: 'connected',
+    })
     .eq('owner_id', user.id)
   if (bizErr) {
     console.error('[mp/callback] guardar mp_user_id falló:', bizErr.message)
