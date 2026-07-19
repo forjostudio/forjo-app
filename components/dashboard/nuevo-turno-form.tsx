@@ -134,6 +134,8 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  // Aviso opt-in al cliente por mail (D-01): default OFF. El remount via key={open} lo resetea al reabrir.
+  const [notifyClient, setNotifyClient] = useState(false)
 
   // Cliente: seleccionado de la lista (combobox) o creado inline.
   const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null)
@@ -143,6 +145,9 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
   const [newClientContact, setNewClientContact] = useState('')
 
   const searchListId = useId()
+
+  // El opt-in de aviso solo aplica si el cliente elegido/creado tiene email cargado (D-01).
+  const clientHasEmail = !!selectedClient?.email
 
   // ── Combobox: filtro en memoria sobre clients (ya cargados por business_id) ────────────────
   const filteredClients = useMemo(() => {
@@ -236,6 +241,7 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
           date,
           time,
           notes: notes.trim() || null,
+          notify: notifyClient && clientHasEmail,
         }),
       })
     } catch {
@@ -467,6 +473,31 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
       <div className="space-y-1.5">
         <Label htmlFor={`${searchListId}-notes`}>Notas (opcional)</Label>
         <Input id={`${searchListId}-notes`} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alguna referencia del turno" />
+      </div>
+
+      {/* Aviso opt-in al cliente por mail (D-01) — checkbox nativo (no hay ui/checkbox), default OFF.
+          Deshabilitado con hint cuando el cliente no tiene email; se habilita al elegir/crear uno con email. */}
+      <div className="space-y-1">
+        <label
+          htmlFor={`${searchListId}-notify`}
+          className={cn(
+            'flex items-center gap-2.5 text-sm',
+            clientHasEmail ? 'cursor-pointer' : 'cursor-not-allowed text-muted-foreground',
+          )}
+        >
+          <input
+            id={`${searchListId}-notify`}
+            type="checkbox"
+            checked={notifyClient && clientHasEmail}
+            disabled={!clientHasEmail}
+            onChange={(e) => setNotifyClient(e.target.checked)}
+            className="h-4 w-4 accent-primary rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed"
+          />
+          Avisar al cliente por mail
+        </label>
+        {!clientHasEmail && (
+          <p className="text-xs text-muted-foreground">Agregá un email del cliente para poder avisarle.</p>
+        )}
       </div>
 
       {/* Submit — min-h 44px para touch (WCAG AA), disabled + loading anti doble-submit */}
