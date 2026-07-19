@@ -694,14 +694,14 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             type="time"
                             value={block.start_time}
                             onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                            className="min-w-0 flex-1 px-1.5 text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                           />
                           <span className="shrink-0 text-xs text-muted-foreground">→</span>
                           <Input
                             type="time"
                             value={block.end_time}
                             onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                            className="min-w-0 flex-1 px-1.5 text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                           />
                           {/* Cupo (CUPOS-01): stepper −/+ con el número EDITABLE a mano. min 1 = individual. */}
                           <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border" title="Cupo (lugares por bloque)">
