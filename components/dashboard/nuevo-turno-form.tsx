@@ -17,8 +17,11 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Check, UserPlus, ChevronLeft } from 'lucide-react'
+import { Plus, Check, UserPlus, ChevronLeft, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Calendar } from '@/components/ui/calendar'
+import { format, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
 
 // ── Hook responsive mínimo (sin dependencias) ───────────────────────────────────────────────
 // Dialog y Drawer son portales con estado propio; renderizar uno u otro pide un breakpoint en JS,
@@ -131,6 +134,7 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
   const [professionalId, setProfessionalId] = useState(prefill?.professionalId || 'none')
   const [locationId, setLocationId] = useState('')
   const [date, setDate] = useState(prefill?.date || '')
+  const [dateOpen, setDateOpen] = useState(false)
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -146,8 +150,10 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
 
   const searchListId = useId()
 
-  // El opt-in de aviso solo aplica si el cliente elegido/creado tiene email cargado (D-01).
-  const clientHasEmail = !!selectedClient?.email
+  // El opt-in de aviso aplica si hay email — sea del cliente ya elegido/confirmado, o del que se está
+  // creando inline (así el checkbox se habilita sin exigir confirmar el cliente primero).
+  const pendingNewEmail = creatingClient && newClientContact.includes('@') ? newClientContact.trim() : null
+  const clientHasEmail = !!(selectedClient?.email || pendingNewEmail)
 
   // ── Combobox: filtro en memoria sobre clients (ya cargados por business_id) ────────────────
   const filteredClients = useMemo(() => {
@@ -211,15 +217,23 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
   }
 
   async function handleSubmit() {
-    // Hay un cliente nuevo en progreso sin confirmar (creatingClient): el genérico "Completá el
-    // cliente..." sería engañoso (el contacto ya está cargado, falta confirmarlo). Mensaje específico.
+    // Cliente efectivo: si hay uno nuevo en progreso (creatingClient), se deriva de los inputs SIN
+    // exigir el click extra de "Crear nuevo cliente" — "Agregar turno" da de alta al cliente (el
+    // endpoint lo persiste con dedupe). Si ya está elegido/confirmado, se usa ese.
+    let client = selectedClient
     if (creatingClient) {
-      toast.error(dedupeMatch
-        ? 'Ese contacto ya existe. Usá el cliente existente o cambiá el contacto.'
-        : 'Confirmá o cancelá el cliente nuevo antes de agregar el turno.')
-      return
+      if (dedupeMatch) {
+        toast.error('Ese contacto ya existe. Usá el cliente existente o cambiá el contacto.')
+        return
+      }
+      const name = newClientName.trim()
+      const contact = newClientContact.trim()
+      if (!name) { toast.error('Ingresá el nombre del cliente.'); return }
+      if (!contact) { toast.error('Ingresá un teléfono o email del cliente.'); return }
+      const isEmail = contact.includes('@')
+      client = { id: null, name, phone: isEmail ? null : contact, email: isEmail ? contact : null }
     }
-    if (!selectedClient || !serviceId || !date || !time) {
+    if (!client || !serviceId || !date || !time) {
       toast.error('Completá el cliente, el servicio y el horario.')
       return
     }
@@ -231,17 +245,17 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId: selectedClient.id,
-          clientName: selectedClient.name,
-          clientPhone: selectedClient.phone,
-          clientEmail: selectedClient.email,
+          clientId: client.id,
+          clientName: client.name,
+          clientPhone: client.phone,
+          clientEmail: client.email,
           serviceId,
           professionalId: professionalId === 'none' ? null : professionalId,
           locationId: locationId || null,
           date,
           time,
           notes: notes.trim() || null,
-          notify: notifyClient && clientHasEmail,
+          notify: notifyClient && !!client.email,
         }),
       })
     } catch {
@@ -278,8 +292,25 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
                 )}
               </div>
             </div>
-            <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => setSelectedClient(null)}>
-              Cambiar
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="flex-shrink-0"
+              onClick={() => {
+                if (selectedClient.id === null) {
+                  // Cliente nuevo (todavía no persistido) → EDITAR: volver al form con los datos, sin borrarlos.
+                  setNewClientName(selectedClient.name)
+                  setNewClientContact(selectedClient.email || selectedClient.phone || '')
+                  setSelectedClient(null)
+                  setCreatingClient(true)
+                } else {
+                  // Cliente existente → volver a buscar/elegir otro.
+                  setSelectedClient(null)
+                }
+              }}
+            >
+              {selectedClient.id === null ? 'Editar' : 'Cambiar'}
             </Button>
           </div>
         ) : creatingClient ? (
@@ -454,17 +485,47 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
         </div>
       )}
 
-      {/* Fecha + Hora — hora libre (D-06), sin restringir a los slots de availability */}
+      {/* Fecha + Hora — hora libre (D-06). La fecha usa un calendario estilado que se despliega debajo
+          (a ancho completo) y se cierra al elegir un día, en vez del date input nativo. */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor={`${searchListId}-date`}>Fecha</Label>
-          <Input id={`${searchListId}-date`} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Label>Fecha</Label>
+          <button
+            type="button"
+            onClick={() => setDateOpen((o) => !o)}
+            aria-expanded={dateOpen}
+            className="flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-ring focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <span className={cn('truncate capitalize', !date && 'text-muted-foreground normal-case')}>
+              {date ? format(parseISO(date), "EEE d 'de' MMM", { locale: es }) : 'Elegí una fecha'}
+            </span>
+            <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${searchListId}-time`}>Hora</Label>
-          <Input id={`${searchListId}-time`} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          <Input
+            id={`${searchListId}-time`}
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="text-center max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+          />
         </div>
       </div>
+      {dateOpen && (
+        <div className="rounded-lg border border-border bg-card">
+          <Calendar
+            mode="single"
+            selected={date ? parseISO(date) : undefined}
+            onSelect={(d) => {
+              if (d) setDate(format(d, 'yyyy-MM-dd'))
+              setDateOpen(false)
+            }}
+            disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+          />
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
         Podés agendar a cualquier hora libre, aunque esté fuera de tu horario de atención.
       </p>
