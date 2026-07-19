@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import type { Client, Service, Professional, Location } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TimeField } from '@/components/ui/time-field'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
@@ -612,12 +613,11 @@ function TurnoFormBody({ onClose, requestClose, dirtyRef, clients, services, pro
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${searchListId}-time`}>Hora</Label>
-          <Input
+          <TimeField
             id={`${searchListId}-time`}
-            type="time"
             value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="text-center max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+            onChange={setTime}
+            className="text-center"
           />
         </div>
       </div>

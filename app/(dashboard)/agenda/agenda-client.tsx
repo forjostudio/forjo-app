@@ -10,7 +10,7 @@ import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { TimeField } from '@/components/ui/time-field'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -362,7 +362,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }
 
   // Selección de días. excSel = días elegidos; el panel lateral opera sobre ellos (1 o varios).
-  const [excMulti, setExcMulti] = useState(false)
   const [excSel, setExcSel] = useState<Set<string>>(new Set())
   const [excBulk, setExcBulk] = useState({ start: '09:00', end: '18:00' })
   // "Aplicar a:" — a qué consultorios aplica la excepción. '__all__' = global (todo el negocio).
@@ -379,8 +378,8 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }
   // Ancla para la selección por rango (Shift). Es el último día clickeado sin modificadores.
   const [excAnchor, setExcAnchor] = useState<string | null>(null)
-  // Selección estilo Windows: click = un día · Shift = rango hacia el futuro · Ctrl/Cmd = sumar
-  // individuales. En modo "Seleccionar varios" el click simple ya suma (para touch sin teclado).
+  // Selección siempre múltiple (funciona en touch sin teclado): cada tap suma o
+  // quita el día. Shift + otro día = rango hacia el futuro. Se confirma en el panel.
   function handleDayClick(d: Date, ev: MouseEvent) {
     const ds = format(d, 'yyyy-MM-dd')
     if (ev.shiftKey && excAnchor && ds >= excAnchor) {
@@ -391,11 +390,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       setExcSel(new Set(range))
       return
     }
-    if (ev.ctrlKey || ev.metaKey || excMulti) {
-      setExcSel(s => { const n = new Set(s); if (n.has(ds)) n.delete(ds); else n.add(ds); return n })
-    } else {
-      setExcSel(new Set([ds]))
-    }
+    setExcSel(s => { const n = new Set(s); if (n.has(ds)) n.delete(ds); else n.add(ds); return n })
     setExcAnchor(ds)
   }
   // Resumen de la selección para el panel (1 día = fecha completa; varios = conteo + rango).
@@ -412,7 +407,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     const { data, error } = await supabase.from('schedule_exceptions').upsert(rows, { onConflict: 'business_id,date,location_id' }).select()
     if (error) { toast.error('Error al guardar'); return }
     setExceptions(prev => mergeExceptions(prev, data as ScheduleException[]))
-    setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
+    setExcSel(new Set()); setExcAnchor(null)
     toast.success(`${dates.length} día${dates.length > 1 ? 's' : ''} cerrado${dates.length > 1 ? 's' : ''}`)
   }
   async function bulkSpecialDays(dates: string[], start: string, end: string) {
@@ -422,7 +417,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     const { data, error } = await supabase.from('schedule_exceptions').upsert(rows, { onConflict: 'business_id,date,location_id' }).select()
     if (error) { toast.error('Error al guardar'); return }
     setExceptions(prev => mergeExceptions(prev, data as ScheduleException[]))
-    setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
+    setExcSel(new Set()); setExcAnchor(null)
     toast.success(`Horario especial en ${dates.length} día${dates.length > 1 ? 's' : ''}`)
   }
   async function bulkClearDays(dates: string[]) {
@@ -432,7 +427,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     const { error } = await q
     if (error) { toast.error('Error'); return }
     setExceptions(prev => prev.filter(e => !(dates.includes(e.date) && excMatchesTarget(e))))
-    setExcSel(new Set()); setExcMulti(false); setExcAnchor(null)
+    setExcSel(new Set()); setExcAnchor(null)
     toast.success('Excepciones quitadas')
   }
 
@@ -690,18 +685,16 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                         {/* Hora + cupo en UNA sola línea: los inputs de hora (flex-1) se achican, el cupo
                             y la × van fijos. La leyenda "Cupo" se omite en la línea por espacio (title/aria). */}
                         <div className="flex items-center gap-1.5">
-                          <Input
-                            type="time"
+                          <TimeField
                             value={block.start_time}
-                            onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                            onChange={v => updateBlock(day, idx, 'start_time', v)}
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
                           />
                           <span className="shrink-0 text-xs text-muted-foreground">→</span>
-                          <Input
-                            type="time"
+                          <TimeField
                             value={block.end_time}
-                            onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                            onChange={v => updateBlock(day, idx, 'end_time', v)}
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
                           />
                           {/* Cupo (CUPOS-01): stepper −/+ con el número EDITABLE a mano. min 1 = individual. */}
                           <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border" title="Cupo (lugares por bloque)">
@@ -877,11 +870,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-semibold text-sm">Días especiales</p>
-            <p className="text-xs text-muted-foreground">{excMulti ? 'Tocá los días que quieras y elegí qué hacer en el panel.' : 'Tocá un día para anularlo o cambiarle el horario. Shift = rango · Ctrl = varios.'}</p>
+            <p className="text-xs text-muted-foreground">Tocá los días que quieras. Shift = rango. Elegí qué hacer en el panel.</p>
           </div>
-          <Button variant={excMulti ? 'default' : 'outline'} size="sm" className="flex-shrink-0" onClick={() => { setExcMulti(v => !v); setExcSel(new Set()); setExcAnchor(null) }}>
-            {excMulti ? 'Listo' : 'Seleccionar varios'}
-          </Button>
+          {excSel.size > 0 && (
+            <Button variant="outline" size="sm" className="flex-shrink-0" onClick={() => { setExcSel(new Set()); setExcAnchor(null) }}>
+              Limpiar
+            </Button>
+          )}
         </div>
         <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
           <div className="max-w-sm w-full">
@@ -964,9 +959,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <div className="border-t border-border pt-3 space-y-2">
               <p className="text-xs font-medium">Horario especial</p>
               <div className="flex items-center gap-2">
-                <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-full text-sm h-8" />
+                <TimeField value={excBulk.start} onChange={v => setExcBulk(s => ({ ...s, start: v }))} className="w-full text-sm h-8" />
                 <span className="text-muted-foreground text-sm">→</span>
-                <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-full text-sm h-8" />
+                <TimeField value={excBulk.end} onChange={v => setExcBulk(s => ({ ...s, end: v }))} className="w-full text-sm h-8" />
               </div>
               <Button size="sm" className="w-full" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar horario especial</Button>
             </div>
