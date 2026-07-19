@@ -46,6 +46,12 @@ export interface Business {
   // MercadoPago Connect (OAuth): user_id de la cuenta MP. NO es secreto (es el id de cuenta);
   // el dashboard lo usa como flag (¿conectó por OAuth?) → se queda en Business.
   mp_user_id?: string | null
+  // Estado durable de la conexión de MercadoPago Connect (migración 053, MPCONN-03). Valores conocidos:
+  // 'connected' (sano) | 'error' (caído). Se escribe server-side (service-role) desde
+  // getValidMpAccessToken/createDepositPreference/callback OAuth; la Phase 2 lo lee del `business`
+  // resuelto por owner_id. Tipado string | null (no unión estricta) para no romper ante un futuro
+  // 'revoked' sin re-migrar (mismo criterio que mp_user_id).
+  mp_connection_status?: string | null
   // Plans
   plan?: string | null
   plan_status?: string | null

@@ -1,0 +1,34 @@
+-- 053 — businesses.mp_connection_status: estado durable de la conexión de MercadoPago Connect (MPCONN-03).
+--
+-- Contexto (Phase 1 mp-connect — MPCONN-03, D-01/D-02):
+--   Cuando el token OAuth del negocio (MercadoPago Connect, con el que cobra señas a sus clientes) deja
+--   de refrescar —MP rechaza el refresh, o el refresh es OK pero falla la persistencia del token rotado—
+--   hoy el cobro cae en silencio. Necesitamos un flag DURABLE de "conexión sana vs caída" que el resolver
+--   de token (Plan 01-02) escriba y la Phase 2 (dashboard) lea para avisarle al dueño que reconecte.
+--
+-- Qué hace:
+--   1. ALTER TABLE businesses:
+--      - mp_connection_status text NOT NULL DEFAULT 'connected' → D-01: text-enum, NO boolean, por
+--        extensibilidad barata (futuro 'revoked' sin re-migrar). Valores: 'connected' (sano) | 'error'
+--        (caído). El DEFAULT backfillea TODAS las filas existentes a 'connected': los negocios ya
+--        conectados se asumen sanos hasta que un fallo real los marque a 'error'.
+--      - Vive en `businesses` (no en `business_secrets`) porque el dashboard YA lee `business` por
+--        owner_id y `mp_user_id` vive ahí → la Phase 2 lo consume sin query nuevo (D-01).
+--
+-- Qué NO hace (invariantes del proyecto):
+--   - NO toca la vista pública acotada (la que expone datos a `anon`): el flag es dato INTERNO del
+--     dueño, no público. Por eso NO se agrega la columna al select de esa vista (a diferencia de 052,
+--     que sí sumaba config pública). El dashboard lo lee con la sesión del dueño (RLS owner-only).
+--   - NO agrega ni modifica policies RLS: businesses YA tiene RLS + policies owner-only. La columna es
+--     aditiva y la lee el dueño con su sesión; la ESCRITURA del flag la hace el server con service-role
+--     (createAdminClient, keyed por business_id). Agregar una policy sería un error.
+--   - NO se aplica vía push remoto. La ÚNICA validación es `supabase db reset` local (PG17), que replaya
+--     el baseline numerado + migraciones en orden hasta la 053. Prod se aplica A MANO ANTES del deploy
+--     del código de esta fase (la columna debe existir antes de que el código intente escribirla; si no
+--     existe, las escrituras del flag fallan best-effort — el cobro no se rompe, pero el estado no
+--     persiste) + `NOTIFY pgrst, 'reload schema';`. Tras aplicar, regenerar `supabase/schema.sql`
+--     (patrón del repo, igual que 037/039/042/043/052).
+
+-- ── businesses.mp_connection_status: estado durable de la conexión de MercadoPago Connect ──────────
+ALTER TABLE "public"."businesses"
+  ADD COLUMN IF NOT EXISTS "mp_connection_status" text NOT NULL DEFAULT 'connected';
