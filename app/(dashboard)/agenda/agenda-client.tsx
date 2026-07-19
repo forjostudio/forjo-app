@@ -670,65 +670,71 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             const dayBlocks = dayStates[day].blocks.map((block, idx) => ({ block, idx })).filter(({ block }) => (block.location_id || '') === activeLoc)
             const dayOpen = dayBlocks.length > 0
             return (
-              <div key={day} className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => toggleDay(day)}
-                    className={cn(
-                      'w-28 text-xs font-semibold py-1.5 px-3 rounded transition-colors flex-shrink-0',
-                      dayOpen ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-                    )}
-                  >
-                    {DAYS[day]}
-                  </button>
-                  {!dayOpen && <span className="text-sm text-muted-foreground">Cerrado</span>}
-                </div>
+              <div key={day} className="space-y-2 sm:max-w-md">
+                {/* Día: chip full-width y centrado (parecido al onboarding, mejor en mobile). */}
+                <button
+                  onClick={() => toggleDay(day)}
+                  className={cn(
+                    'w-full text-center text-sm font-semibold py-2 px-3 rounded transition-colors',
+                    dayOpen ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                  )}
+                >
+                  {DAYS[day]}
+                </button>
+                {!dayOpen && <p className="text-center text-xs text-muted-foreground">Cerrado — tocá el día para abrirlo</p>}
 
                 {dayOpen && (
-                  <div className="pl-4 space-y-2">
+                  <div className="space-y-2">
                     {dayBlocks.map(({ block, idx }) => (
                       <div key={idx} className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        {/* Hora + cupo en UNA sola línea: los inputs de hora (flex-1) se achican, el cupo
+                            y la × van fijos. La leyenda "Cupo" se omite en la línea por espacio (title/aria). */}
+                        <div className="flex items-center gap-1.5">
                           <Input
                             type="time"
                             value={block.start_time}
                             onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                            className="w-28 text-sm"
+                            className="min-w-0 flex-1 px-2 text-sm"
                           />
-                          <span className="text-muted-foreground text-sm">→</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">→</span>
                           <Input
                             type="time"
                             value={block.end_time}
                             onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                            className="w-28 text-sm"
+                            className="min-w-0 flex-1 px-2 text-sm"
                           />
-                          {/* Cupo (CUPOS-01): lugares del bloque, con stepper −/+ (mejor en mobile que el input numérico). min 1 = individual (CHECK capacity >= 1 en la migración). */}
-                          <div className="flex items-center gap-1.5">
-                            <Label className="text-xs text-muted-foreground">Cupo</Label>
-                            <div className="flex items-center overflow-hidden rounded-md border border-border">
-                              <button
-                                type="button"
-                                aria-label="Menos cupo"
-                                disabled={block.capacity <= 1}
-                                onClick={() => updateBlock(day, idx, 'capacity', Math.max(1, block.capacity - 1))}
-                                className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-                              >
-                                <Minus className="h-3.5 w-3.5" />
-                              </button>
-                              <span className="w-8 text-center text-sm tabular-nums" aria-live="polite" aria-label={`Cupo ${block.capacity}`}>{block.capacity}</span>
-                              <button
-                                type="button"
-                                aria-label="Más cupo"
-                                onClick={() => updateBlock(day, idx, 'capacity', block.capacity + 1)}
-                                className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                          {/* Cupo (CUPOS-01): stepper −/+ con el número EDITABLE a mano. min 1 = individual. */}
+                          <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border" title="Cupo (lugares por bloque)">
+                            <button
+                              type="button"
+                              aria-label="Menos cupo"
+                              disabled={block.capacity <= 1}
+                              onClick={() => updateBlock(day, idx, 'capacity', Math.max(1, block.capacity - 1))}
+                              className="flex h-8 w-7 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              value={block.capacity}
+                              onFocus={e => e.target.select()}
+                              onChange={e => updateBlock(day, idx, 'capacity', Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                              className="h-8 w-9 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              aria-label="Cupo (lugares por bloque)"
+                            />
+                            <button
+                              type="button"
+                              aria-label="Más cupo"
+                              onClick={() => updateBlock(day, idx, 'capacity', block.capacity + 1)}
+                              className="flex h-8 w-7 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
                           </div>
                           <button
                             onClick={() => removeBlock(day, idx)}
-                            className="text-muted-foreground hover:text-red-400 transition-colors"
+                            className="shrink-0 text-muted-foreground hover:text-red-400 transition-colors"
                             title="Eliminar bloque"
                           >
                             <X className="w-4 h-4" />
@@ -797,7 +803,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
-                    <span className="w-12 text-center text-sm tabular-nums" aria-live="polite" aria-label={`${windowForm.days} días`}>{windowForm.days}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={windowForm.days}
+                      onFocus={e => e.target.select()}
+                      onChange={e => setWindowForm(f => ({ ...f, days: Math.max(1, Math.floor(Number(e.target.value) || 1)) }))}
+                      className="h-8 w-12 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      aria-label="Días de anticipación"
+                    />
                     <button
                       type="button"
                       aria-label="Más días"
