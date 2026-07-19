@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.22
 milestone_name: "— Turnos: alta manual y ventana de reserva"
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-07-18T20:50:36.021Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-07-19T05:14:09.934Z"
 last_activity: 2026-07-18 -- Phase 04 execution started
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 18
-  completed_plans: 17
-  percent: 60
+  completed_plans: 18
+  percent: 80
 ---
 
 # Project State
@@ -82,9 +82,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-18T19:46:40.565Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/04-ventana-de-reserva-p-blica/04-CONTEXT.md
+Last session: 2026-07-19T05:14:09.920Z
+Stopped at: Phase 5 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/05-aviso-al-cliente-en-el-alta-manual/05-CONTEXT.md
 
 ## Operator Next Steps
 
