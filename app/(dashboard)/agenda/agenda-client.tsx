@@ -785,10 +785,28 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             </div>
             {windowForm.mode === 'dias' && (
               <div className="pl-7 space-y-1">
-                <Label htmlFor="window_days" className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Días de anticipación</Label>
+                <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Días de anticipación</Label>
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <Input id="window_days" type="number" min={1} className="w-24" value={windowForm.days}
-                    onChange={e => setWindowForm(f => ({ ...f, days: parseInt(e.target.value) || 1 }))} />
+                  <div className="flex items-center overflow-hidden rounded-md border border-border">
+                    <button
+                      type="button"
+                      aria-label="Menos días"
+                      disabled={windowForm.days <= 1}
+                      onClick={() => setWindowForm(f => ({ ...f, days: Math.max(1, f.days - 1) }))}
+                      className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="w-12 text-center text-sm tabular-nums" aria-live="polite" aria-label={`${windowForm.days} días`}>{windowForm.days}</span>
+                    <button
+                      type="button"
+                      aria-label="Más días"
+                      onClick={() => setWindowForm(f => ({ ...f, days: f.days + 1 }))}
+                      className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   {windowForm.days >= 1 && (() => {
                     const d = addDays(todayInAR(), windowForm.days)
                     return (
