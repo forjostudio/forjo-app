@@ -204,6 +204,125 @@ export async function sendConfirmationEmail({
   console.log(`📧 Confirmación enviada a ${to}`)
 }
 
+// Email al cliente cuando EL DUEÑO carga un turno a mano desde el panel y tildó "avisar al cliente"
+// (BOOK-NOTIFY-01 / D-03). Confirmación LIMPIA: servicio, fecha, hora, negocio + link de cancelar.
+// A DIFERENCIA de sendConfirmationEmail, NO recibe ni muestra precio/seña/saldo: el alta manual no
+// maneja seña, así que reusar aquel template mostraría "$0 de seña" y un total confuso. Reusa los
+// helpers del módulo (resolveSender, fmtDate, renderEmailHeader, normalizeArWhatsApp, resendSend) para
+// mantener idéntico el branding/marca y no duplicar el resolver de sender ni el POST a Resend.
+export async function sendManualBookingConfirmation({
+  to,
+  clientName,
+  service,
+  date,
+  time,
+  businessName,
+  businessSlug,
+  primaryColor,
+  logoUrl,
+  whatsapp,
+  cancelToken,
+  resendApiKey,
+  resendFrom,
+}: {
+  to: string
+  clientName: string
+  service: string
+  date: string
+  time: string
+  businessName: string
+  businessSlug: string
+  primaryColor?: string | null
+  logoUrl?: string | null
+  whatsapp?: string | null
+  // Opcional: si el core no devolvió cancelToken, el mail va sin botón de cancelar (degradación D-04).
+  cancelToken?: string | null
+  resendApiKey?: string | null
+  resendFrom?: string | null
+}) {
+  // Resuelve key + from (display name = nombre del negocio; el resolver ya sanitiza el header From →
+  // cubre header-injection, T-05-04). Tira error claro si usa key propia sin remitente.
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
+  const fecha = fmtDate(date)
+  const hora = time.slice(0, 5)
+
+  // Branding parametrizado idéntico al resto de los mails: acento = color del negocio, fallback rojo Forjo.
+  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
+  // Botón de cancelar SOLO si hay token (D-04): sin token, se omite en vez de romper el envío.
+  const cancelUrl = cancelToken ? `${baseUrl}/cancelar/${cancelToken}` : ''
+  // Normaliza por las dudas (idempotente): si no es un número usable, se omite el link.
+  const waDigits = normalizeArWhatsApp(whatsapp)
+  const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
+  const headerInner = renderEmailHeader(businessName, logoUrl)
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+      <tr><td style="background:${accent};padding:32px 40px;border-radius:12px 12px 0 0;text-align:center;">
+        ${headerInner}
+      </td></tr>
+
+      <tr><td style="background:#ffffff;padding:40px 40px 32px;">
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">¡Tu turno está confirmado!</p>
+        <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
+          Hola <strong>${clientName}</strong>, aquí está el resumen de tu reserva en <strong>${businessName}</strong>.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
+          <tr><td style="padding:20px 22px 6px;">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:14px;">Detalle del turno</div>
+          </td></tr>
+          <tr><td style="padding:0 22px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${fecha}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;">Hora</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;text-align:right;">${hora} hs</td>
+              </tr>
+            </table>
+          </td></tr>
+        </table>
+
+        ${cancelUrl ? `<p style="font-size:13px;color:#777;line-height:1.7;margin:0 0 16px;">¿Necesitás cancelar o reprogramar tu turno?</p>
+        <table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
+          <a href="${cancelUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Cancelar turno</a>
+        </td></tr></table>` : ''}
+        ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
+      </td></tr>
+
+      <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+
+  await resendSend(key, {
+    from,
+    to: [to],
+    subject: `✅ Turno confirmado — ${businessName} · ${fecha} ${hora} hs`,
+    html,
+    text: `¡Hola ${clientName}! Tu turno en ${businessName} está confirmado.\n\nServicio: ${service}\nFecha: ${fecha}\nHora: ${hora} hs${cancelUrl ? `\n\n¿Necesitás cancelar? ${cancelUrl}` : ''}`,
+  })
+  console.log(`📧 Confirmación (alta manual) enviada a ${to}`)
+}
+
 export async function sendAdminNotification({
   to,
   clientName,
