@@ -173,7 +173,19 @@ Plans:
   3. Si el checkbox está destildado o el cliente no tiene email, no se manda ningún mail y el alta funciona exactamente igual que hoy.
   4. La sincronización con Google Calendar del alta manual sigue igual — el aviso por mail no la altera.
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Mail `sendManualBookingConfirmation` en lib/email.ts (confirmación limpia sin precio/seña, D-03) + test puro
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 05-02-PLAN.md — Wiring: flag `notify` + select de business ampliado + mail en after() en appointments/create; checkbox opt-in (default OFF, disabled+hint sin email) en nuevo-turno-form + checkpoint humano
+
+**Waves**: Wave 1 = 05-01 (el template del mail, que el endpoint importa). Wave 2 = 05-02 (endpoint + form; depende del template de Wave 1).
+
 **UI hint**: yes
 **Security/Integrity relevance**: Acción autenticada del dueño sobre un cliente de SU negocio. El envío debe usar los secretos de email acotados por tenant (`business_secrets` vía `getBusinessSecrets`, patrón v0.9) y mandar el mail SOLO al cliente del turno recién creado — sin exponer datos de otro tenant. El mail va como efecto best-effort en `after()` (patrón existente): si falla, se loguea y el alta NO se rompe. Bajo riesgo; no redefine constraints ni el flujo público.
 
@@ -188,4 +200,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 2. Cupos Grupales | 5/5 | Complete   | 2026-06-29 |
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
 | 4. Ventana de reserva pública | 3/4 | In Progress|  |
-| 5. Aviso al cliente en el alta manual | 0/TBD | Not started | - |
+| 5. Aviso al cliente en el alta manual | 0/2 | Not started | - |
