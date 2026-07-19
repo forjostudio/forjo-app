@@ -111,6 +111,10 @@ export function buildMpAuthUrl(state: string): string {
     platform_id: 'mp',
     redirect_uri: mpRedirectUri(),
     state,
+    // scope explícito (D-07): garantiza que MP emita refresh_token (raíz de este milestone; sin él el
+    // refresh dependería de un grant default frágil). No altera negocios ya conectados (su token/refresh
+    // ya existen); aplica a conexiones/reconexiones nuevas.
+    scope: 'offline_access read write',
   })
   return `${MP_AUTH_BASE}?${p.toString()}`
 }
