@@ -1,11 +1,12 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.23
-milestone_name: Resiliencia de MercadoPago Connect
+milestone_name: — Resiliencia de MercadoPago Connect
+current_plan: N/A
 status: Roadmap ready
-stopped_at: Roadmap created (2 phases, 6/6 requirements mapped)
-last_updated: "2026-07-19T18:35:18.930Z"
-last_activity: 2026-07-19 — Roadmap creado (Phases 1-2)
+stopped_at: Phase 1 context gathered
+last_updated: "2026-07-19T19:00:04.809Z"
+last_activity: 2026-07-19 — Roadmap creado (2 fases, cobertura 6/6)
 progress:
   total_phases: 2
   completed_phases: 0
@@ -80,9 +81,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-19
-Stopped at: Roadmap creado (2 fases, 6/6 requirements mapeados)
-Resume file: None
+Last session: 2026-07-19T19:00:04.801Z
+Stopped at: Phase 1 context gathered
+Resume file: .planning/workstreams/mp-connect/phases/01-detecci-n-y-estado-de-conexi-n-ca-da/01-CONTEXT.md
 
 ## Operator Next Steps
 
