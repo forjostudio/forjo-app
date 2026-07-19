@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { refreshMpToken } from '@/lib/mercadopago'
+import { setMpConnectionStatus } from '@/lib/mp-connection'
 
 const MP_API = 'https://api.mercadopago.com'
 
@@ -35,23 +36,29 @@ interface MpTokenBusiness {
 // menos de 24 h. Persiste el nuevo token + el refresh rotado + la expiración en business_secrets
 // (NO en businesses): MP rota el refresh token en cada uso, así que este write es load-bearing —
 // si quedara apuntando a businesses, tras el drop de 028 la próxima rotación se perdería (T-01-07).
-// Para tokens cargados a mano (sin refresh_token) devuelve el actual tal cual. Si el refresh falla,
-// también cae al token actual (best-effort, no rompe el cobro).
+// Para tokens cargados a mano (sin refresh_token) devuelve el actual tal cual. Si MP rechaza el
+// refresh o falla persistir el token rotado single-use, la conexión se trata como CAÍDA: se marca
+// 'error' y se devuelve null (NO se cobra con un token vencido/no persistido — D-03, MPCONN-01/02).
+// Un refresh OK con persistencia OK auto-sana el flag a 'connected' (D-05).
 export async function getValidMpAccessToken(business: MpTokenBusiness): Promise<string | null> {
   const current = business.mp_access_token
+  // Token manual (sin refresh_token) y token sano: caminos intactos, NO escriben el flag (cero regresión).
   if (!business.mp_refresh_token) return current
   const expMs = business.mp_token_expires_at ? new Date(business.mp_token_expires_at).getTime() : 0
   if (expMs && expMs > Date.now() + 24 * 60 * 60 * 1000) return current
 
   const refreshed = await refreshMpToken(business.mp_refresh_token)
   if (!refreshed?.access_token) {
-    console.error(`[mp] refresh falló (negocio ${business.id}); uso el token actual`)
-    return current
+    // MP rechazó el refresh → conexión caída. Fin del fallback mudo: NO devolvemos el token vencido,
+    // marcamos 'error' para que el dashboard (Phase 2) avise al dueño (MPCONN-01).
+    console.error(`[mp] refresh rechazado por MP (negocio ${business.id}) — conexión caída, no cobro con token vencido`)
+    await setMpConnectionStatus(business.id, 'error')
+    return null
   }
   const newExpiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null
   const supabase = createAdminClient()
   // Escritura de la rotación a business_secrets keyed por business_id (NO businesses).
-  await supabase
+  const { error: persistErr } = await supabase
     .from('business_secrets')
     .update({
       mp_access_token: refreshed.access_token,
@@ -59,6 +66,16 @@ export async function getValidMpAccessToken(business: MpTokenBusiness): Promise<
       mp_token_expires_at: newExpiresAt,
     })
     .eq('business_id', business.id)
+  if (persistErr) {
+    // El refresh es single-use: MP ya rotó el refresh_token pero no pudimos guardar el reemplazo →
+    // la conexión quedó rota. NO devolvemos el token nuevo (el próximo refresh fallará con el viejo).
+    const msg = persistErr instanceof Error ? persistErr.message : persistErr
+    console.error(`[mp] falló persistir el token rotado (negocio ${business.id}) — refresh single-use consumido sin guardar; conexión caída`, msg)
+    await setMpConnectionStatus(business.id, 'error')
+    return null
+  }
+  // Persistencia OK: auto-sana el flag si venía en 'error' (idempotente — D-05).
+  await setMpConnectionStatus(business.id, 'connected')
   console.log(`[mp] access_token refrescado (negocio ${business.id})`)
   return refreshed.access_token
 }
