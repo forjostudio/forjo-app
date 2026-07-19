@@ -7,6 +7,7 @@ import {
   type DayButton,
   type Locale,
 } from "react-day-picker"
+import { es } from "date-fns/locale"
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -18,7 +19,7 @@ function Calendar({
   showOutsideDays = true,
   captionLayout = "label",
   buttonVariant = "ghost",
-  locale,
+  locale = es,
   formatters,
   components,
   ...props
@@ -26,6 +27,10 @@ function Calendar({
   buttonVariant?: React.ComponentProps<typeof Button>["variant"]
 }) {
   const defaultClassNames = getDefaultClassNames()
+  // App en español: capitalizamos mes y días para igualar el calendario estático
+  // de "Días especiales" ("Julio 2026", "Lu Ma Mi Ju Vi Sá Do"). El locale es (date-fns)
+  // ya arranca la semana en lunes.
+  const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
   return (
     <DayPicker
@@ -40,7 +45,21 @@ function Calendar({
       locale={locale}
       formatters={{
         formatMonthDropdown: (date) =>
-          date.toLocaleString(locale?.code, { month: "short" }),
+          capitalize(date.toLocaleString(locale?.code, { month: "short" })),
+        formatCaption: (date) =>
+          capitalize(
+            date.toLocaleDateString(locale?.code, {
+              month: "long",
+              year: "numeric",
+            })
+          ),
+        formatWeekdayName: (date) => {
+          // "lun." → "Lu", "sáb." → "Sá", "dom." → "Do"
+          const two = date
+            .toLocaleDateString(locale?.code, { weekday: "short" })
+            .slice(0, 2)
+          return capitalize(two)
+        },
         ...formatters,
       }}
       classNames={{
