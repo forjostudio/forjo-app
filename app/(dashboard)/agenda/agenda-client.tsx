@@ -13,11 +13,13 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail } from 'lucide-react'
+import { Plus, Minus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
+import { todayInAR } from '@/lib/booking-window'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { NuevoTurnoForm } from '@/components/dashboard/nuevo-turno-form'
 
@@ -700,26 +702,29 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
                             className="w-28 text-sm"
                           />
-                          <Input
-                            value={block.label}
-                            onChange={e => updateBlock(day, idx, 'label', e.target.value)}
-                            placeholder="Mañana, Tarde... (opcional)"
-                            className="w-40 text-sm"
-                          />
-                          {/* Cupo (CUPOS-01): lugares del bloque. min 1 = individual (CHECK capacity >= 1 en la migración). */}
+                          {/* Cupo (CUPOS-01): lugares del bloque, con stepper −/+ (mejor en mobile que el input numérico). min 1 = individual (CHECK capacity >= 1 en la migración). */}
                           <div className="flex items-center gap-1.5">
-                            <Label htmlFor={`cupo-${day}-${idx}`} className="text-xs text-muted-foreground">Cupo</Label>
-                            <Input
-                              id={`cupo-${day}-${idx}`}
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={block.capacity}
-                              onChange={e => updateBlock(day, idx, 'capacity', Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-                              className="w-16 text-sm"
-                              title="Cupo (lugares por bloque)"
-                              aria-label="Cupo (lugares por bloque)"
-                            />
+                            <Label className="text-xs text-muted-foreground">Cupo</Label>
+                            <div className="flex items-center overflow-hidden rounded-md border border-border">
+                              <button
+                                type="button"
+                                aria-label="Menos cupo"
+                                disabled={block.capacity <= 1}
+                                onClick={() => updateBlock(day, idx, 'capacity', Math.max(1, block.capacity - 1))}
+                                className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </button>
+                              <span className="w-8 text-center text-sm tabular-nums" aria-live="polite" aria-label={`Cupo ${block.capacity}`}>{block.capacity}</span>
+                              <button
+                                type="button"
+                                aria-label="Más cupo"
+                                onClick={() => updateBlock(day, idx, 'capacity', block.capacity + 1)}
+                                className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                           <button
                             onClick={() => removeBlock(day, idx)}
@@ -781,8 +786,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             {windowForm.mode === 'dias' && (
               <div className="pl-7 space-y-1">
                 <Label htmlFor="window_days" className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Días de anticipación</Label>
-                <Input id="window_days" type="number" min={1} className="w-full sm:w-40" value={windowForm.days}
-                  onChange={e => setWindowForm(f => ({ ...f, days: parseInt(e.target.value) || 1 }))} />
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <Input id="window_days" type="number" min={1} className="w-24" value={windowForm.days}
+                    onChange={e => setWindowForm(f => ({ ...f, days: parseInt(e.target.value) || 1 }))} />
+                  {windowForm.days >= 1 && (
+                    <span className="text-sm font-medium text-primary">
+                      Se puede reservar hasta el {format(addDays(todayInAR(), windowForm.days), "d 'de' MMMM 'de' yyyy", { locale: es })}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -802,10 +814,21 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
               <Label htmlFor="window_mode_fecha" className="cursor-pointer">Hasta una fecha exacta</Label>
             </div>
             {windowForm.mode === 'fecha' && (
-              <div className="pl-7 space-y-1">
-                <Label htmlFor="window_date" className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="w-3 h-3" /> Fecha de corte (inclusive)</Label>
-                <Input id="window_date" type="date" className="w-full sm:w-52" value={windowForm.date}
-                  onChange={e => setWindowForm(f => ({ ...f, date: e.target.value }))} />
+              <div className="pl-7 space-y-1.5">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="w-3 h-3" /> Fecha de corte (inclusive)</Label>
+                <div className="inline-block rounded-lg border border-border bg-card">
+                  <Calendar
+                    mode="single"
+                    selected={windowForm.date ? parseISO(windowForm.date) : undefined}
+                    onSelect={d => setWindowForm(f => ({ ...f, date: d ? format(d, 'yyyy-MM-dd') : '' }))}
+                    disabled={d => d < startOfDay(new Date())}
+                  />
+                </div>
+                {windowForm.date && (
+                  <p className="text-sm font-medium text-primary">
+                    Se puede reservar hasta el {format(parseISO(windowForm.date), "d 'de' MMMM 'de' yyyy", { locale: es })} inclusive
+                  </p>
+                )}
               </div>
             )}
           </div>
