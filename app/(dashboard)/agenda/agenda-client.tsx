@@ -789,11 +789,14 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                   <Input id="window_days" type="number" min={1} className="w-24" value={windowForm.days}
                     onChange={e => setWindowForm(f => ({ ...f, days: parseInt(e.target.value) || 1 }))} />
-                  {windowForm.days >= 1 && (
-                    <span className="text-sm font-medium text-primary">
-                      Se puede reservar hasta el {format(addDays(todayInAR(), windowForm.days), "d 'de' MMMM 'de' yyyy", { locale: es })}
-                    </span>
-                  )}
+                  {windowForm.days >= 1 && (() => {
+                    const d = addDays(todayInAR(), windowForm.days)
+                    return (
+                      <span className="text-sm font-medium text-primary">
+                        Hasta el <span className="capitalize">{format(d, 'EEE', { locale: es }).replace('.', '')}</span> {format(d, 'dd/MM')}
+                      </span>
+                    )
+                  })()}
                 </div>
               </div>
             )}
@@ -826,7 +829,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 </div>
                 {windowForm.date && (
                   <p className="text-sm font-medium text-primary">
-                    Se puede reservar hasta el {format(parseISO(windowForm.date), "d 'de' MMMM 'de' yyyy", { locale: es })} inclusive
+                    Hasta el <span className="capitalize">{format(parseISO(windowForm.date), 'EEE', { locale: es }).replace('.', '')}</span> {format(parseISO(windowForm.date), 'dd/MM')}
                   </p>
                 )}
               </div>
