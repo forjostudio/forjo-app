@@ -115,6 +115,19 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones LOCKED (no re-litigar en discuss-phase):** cupo **por profesional/horario** en `time_blocks` (default 1 = cero regresión, NO en el servicio); seña **configurable por servicio** (independiente de individual/grupal); público ve "disponible" hasta llenarse, **NO** ve lugares restantes; admin ve contador + roster; concurrencia anti-sobrecupo = **chequeo atómico deliberado** (lock por slot / `SELECT … FOR UPDATE` / serializable), nunca `count` simple sin lock; **faseo manual→cupos→espacio**, B recortable como fase final sin tocar lo entregado; el modelo "agenda como recurso" (genérico vs `professionals`+tipo) se decide **una vez** en la fase de cupos contemplando ya el espacio compartido (B), para no pagar una migración después. Briefs: `c:\Users\franc\Desktop\Forjo Studio\forjo-motor-reservas-encuadre.md` + `forjo-cupos-grupales-brief.md`.
 
+## Current Milestone (workstream `mp-connect`): v0.23 Resiliencia de MercadoPago Connect
+
+**Goal:** Que un fallo de refresh del token OAuth **del negocio** (MercadoPago Connect / cobro de señas) no degrade en silencio: la conexión caída se detecta, se persiste, se avisa en el dashboard y se limpia al reconectar. Integridad de pagos; NO toca el flujo de suscripciones de los planes (token de plataforma). Numeración de fases del workstream desde Phase 1.
+
+**Target features:**
+- **Detección de conexión caída (backend):** el resolver de token (`getValidMpAccessToken`, `lib/payment.ts`) deja de caer en fallback mudo — refresh rechazado por MP o fallo de persistencia del token rotado (single-use) marcan la conexión como caída y no cobran con token vencido; log server-side del motivo real.
+- **Estado persistente:** flag durable en `businesses` (propuesta `mp_connection_status`) sano vs caído; migración numerada idempotente sin aplicar; reconexión OAuth exitosa (callback) limpia el flag.
+- **Aviso en el dashboard:** donde hoy dice "Conectado" por `mp_user_id` (`settings-client.tsx`), reflejar el estado real con aviso de reconexión cuando está caída.
+
+**Out of scope este milestone (deferred):** flujo de suscripciones (otro token); cifrado de tokens en `business_secrets` (deuda #3); reintento automático de cobros; aviso por mail al negocio; `scope=offline_access read write` explícito (deuda #2, evaluar en discuss).
+
+**Decisiones (propuestas del diagnóstico, confirmables en discuss-phase):** flag `businesses.mp_connection_status text default 'connected'` (sano=`'connected'`, caído=`'error'`) — en `businesses` porque el dashboard ya lee `business` y `mp_user_id` vive ahí; migración **053** idempotente NO aplicada (orden coordinado con el deploy); pasa por **secure-phase** (integridad de pagos). Aplican skills `mercadopago-connect` + `supabase-multitenant-rls`.
+
 ## Requirements
 
 ### Validated
