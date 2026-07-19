@@ -19,7 +19,7 @@ El faseo va por superficie y riesgo: primero el backend de integridad de pagos (
 
 ### Milestone v0.23 — Resiliencia de MercadoPago Connect
 
-- [ ] **Phase 1: Detección y estado de conexión caída** - El resolver de token deja de caer en fallback mudo (refresh rechazado o token rotado sin persistir → conexión caída, no cobra), el estado se persiste durable en `businesses` (migración 053 idempotente, sin aplicar), se loguea el motivo real y la reconexión OAuth limpia el flag
+- [x] **Phase 1: Detección y estado de conexión caída** - El resolver de token deja de caer en fallback mudo (refresh rechazado o token rotado sin persistir → conexión caída, no cobra), el estado se persiste durable en `businesses` (migración 053 idempotente, sin aplicar), se loguea el motivo real y la reconexión OAuth limpia el flag (completed 2026-07-19)
 - [ ] **Phase 2: Aviso de reconexión en el dashboard** - El dashboard refleja el estado real: con la conexión caída muestra un aviso de reconexión (con acceso al flujo OAuth existente) en vez de un "Conectado" engañoso
 
 ## Phase Details
@@ -40,10 +40,10 @@ El faseo va por superficie y riesgo: primero el backend de integridad de pagos (
   4. Una reconexión OAuth exitosa (callback `app/api/mercadopago/callback/route.ts`) vuelve a marcar la conexión del negocio como sana (limpia el flag a "conectado"), y solo la de SU negocio (MPCONN-05).
   5. Ningún cobro de seña falla de forma muda: cuando no puede hacerse por token inválido / conexión caída, queda un log server-side con severidad indicando el motivo real (MPCONN-06).
 
-**Plans**: 2 plans
+**Plans**: 2/2 plans complete
 
-- [ ] 01-01-PLAN.md — Migración 053 (columna `mp_connection_status`) + helper server-only `setMpConnectionStatus` (keyed por business_id) + campo en `interface Business` + scope OAuth explícito (Wave 1)
-- [ ] 01-02-PLAN.md — Resolver sin fallback mudo (refresh-fail / persist-fail → conexión caída, no cobra) + auto-heal + detección de 401 en el cobro + limpieza del flag en la reconexión OAuth + logging (Wave 2)
+- [x] 01-01-PLAN.md — Migración 053 (columna `mp_connection_status`) + helper server-only `setMpConnectionStatus` (keyed por business_id) + campo en `interface Business` + scope OAuth explícito (Wave 1)
+- [x] 01-02-PLAN.md — Resolver sin fallback mudo (refresh-fail / persist-fail → conexión caída, no cobra) + auto-heal + detección de 401 en el cobro + limpieza del flag en la reconexión OAuth + logging (Wave 2)
 
 **Security/Integrity relevance**: Fase **security-sensitive** (pasa por secure-phase). Toca el resolver de token del cobro de señas (integridad de pagos), la rotación single-use del `refresh_token` (una escritura fallida sin detectar deja la conexión rota) y una tabla de tenant (`businesses`). Invariantes a sostener: (a) NO cobrar nunca con un token vencido/no persistido — el "fallback mudo" actual es exactamente el bug a cerrar; (b) el flag `mp_connection_status` vive en `businesses` bajo RLS, keyed por `business_id`/`owner_id` — un negocio no puede leer ni cambiar el estado de conexión de otro, y `anon` no lo ve; (c) NO tocar el flujo de suscripciones de los planes (token de plataforma `MP_FORJO_ACCESS_TOKEN`, otro flujo); (d) la migración 053 es idempotente y NO se aplica por el flujo — checkpoint humano coordina migración + deploy (baseline: última aplicada 052 de v0.22 → la próxima es 053). Aplican las skills `mercadopago-connect` y `supabase-multitenant-rls`. El secure-phase gate verifica: cero cobro con token inválido (MPCONN-01/02), aislamiento por tenant del flag (MPCONN-03/05), y que el log no filtre secretos de token.
 
@@ -75,5 +75,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Detección y estado de conexión caída | 0/2 | Not started | - |
+| 1. Detección y estado de conexión caída | 2/2 | Complete   | 2026-07-19 |
 | 2. Aviso de reconexión en el dashboard | 0/? | Not started | - |

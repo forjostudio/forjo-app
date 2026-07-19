@@ -19,10 +19,10 @@ está caída. Es el punto frágil #1 de la skill `mercadopago-connect`.
 
 ### Detección y estado de conexión (MPCONN)
 
-- [ ] **MPCONN-01**: Si MP rechaza el refresh del `refresh_token`, el resolver NO sigue con un token
+- [x] **MPCONN-01**: Si MP rechaza el refresh del `refresh_token`, el resolver NO sigue con un token
   vencido: trata la conexión como caída y no intenta cobrar con ese token.
 
-- [ ] **MPCONN-02**: Si falla la persistencia del token rotado (access + refresh + expiry nuevos) tras
+- [x] **MPCONN-02**: Si falla la persistencia del token rotado (access + refresh + expiry nuevos) tras
   un refresh exitoso, también se trata la conexión como caída — no se deja un `refresh_token`
   single-use consumido sin persistir el nuevo.
 
@@ -31,9 +31,9 @@ está caída. Es el punto frágil #1 de la skill `mercadopago-connect`.
   "conexión caída". Migración numerada e idempotente en `supabase/migrations/` (propuesta 053), NO
   aplicada por el flujo — se coordina el orden con el deploy. Aislamiento por tenant intacto.
 
-- [ ] **MPCONN-05**: Una reconexión OAuth exitosa (callback) limpia el flag → vuelve a "sano".
+- [x] **MPCONN-05**: Una reconexión OAuth exitosa (callback) limpia el flag → vuelve a "sano".
 
-- [ ] **MPCONN-06**: Cuando un cobro de seña no puede hacerse por token inválido/conexión caída, se
+- [x] **MPCONN-06**: Cuando un cobro de seña no puede hacerse por token inválido/conexión caída, se
   loguea server-side con severidad el motivo real; sin fallo mudo.
 
 ### Dashboard (MPCONN)
