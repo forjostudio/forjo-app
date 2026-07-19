@@ -7,7 +7,7 @@
 // mostramos un combobox de clientes (filtro en memoria, command.tsx NO existe) con crear-nuevo inline,
 // y traducimos los errores del endpoint a los toasts del UI-SPEC. Sin control de seña (D-01).
 
-import { useState, useMemo, useId, useSyncExternalStore, useCallback } from 'react'
+import { useState, useMemo, useId, useSyncExternalStore, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import type { Client, Service, Professional, Location } from '@/lib/types'
@@ -82,10 +82,31 @@ interface Props {
 export function NuevoTurnoForm({ open, onOpenChange, clients, services, professionals, locations, prefill, onCreated }: Props) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
+  // Anti-descarte accidental (UX): si el form tiene datos cargados, cualquier cierre (click afuera,
+  // Escape, X o Cancelar) pide confirmación en vez de borrar todo. `dirtyRef` lo actualiza el body en
+  // cada render; el cierre por ÉXITO (submit) usa onClose directo y NO pasa por esta confirmación.
+  const dirtyRef = useRef(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
+
+  const requestClose = useCallback(
+    (next: boolean) => {
+      if (!next && dirtyRef.current) { setDiscardOpen(true); return }
+      onOpenChange(next)
+    },
+    [onOpenChange],
+  )
+  const confirmDiscard = useCallback(() => {
+    setDiscardOpen(false)
+    dirtyRef.current = false
+    onOpenChange(false)
+  }, [onOpenChange])
+
   const body = (
     <TurnoFormBody
       key={open ? 'open' : 'closed'}
-      onOpenChange={onOpenChange}
+      onClose={() => onOpenChange(false)}
+      requestClose={() => requestClose(false)}
+      dirtyRef={dirtyRef}
       clients={clients}
       services={services}
       professionals={professionals}
@@ -95,22 +116,19 @@ export function NuevoTurnoForm({ open, onOpenChange, clients, services, professi
     />
   )
 
-  // Desktop ≥768px → Dialog · mobile <768px → Drawer (vaul). D-09.
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuevo turno</DialogTitle>
-          </DialogHeader>
-          {body}
-        </DialogContent>
-      </Dialog>
-    )
-  }
-
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
+  // Desktop ≥768px → Dialog · mobile <768px → Drawer (vaul). D-09. onOpenChange = requestClose:
+  // intercepta click-afuera/Escape/X para confirmar si hay datos.
+  const shell = isDesktop ? (
+    <Dialog open={open} onOpenChange={requestClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nuevo turno</DialogTitle>
+        </DialogHeader>
+        {body}
+      </DialogContent>
+    </Dialog>
+  ) : (
+    <Drawer open={open} onOpenChange={requestClose}>
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle>Nuevo turno</DrawerTitle>
@@ -119,11 +137,40 @@ export function NuevoTurnoForm({ open, onOpenChange, clients, services, professi
       </DrawerContent>
     </Drawer>
   )
+
+  return (
+    <>
+      {shell}
+      {/* Confirmación de descarte (UX): evita perder el turno por un click afuera sin querer. */}
+      <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>¿Descartar el turno?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Vas a perder los datos que cargaste.</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setDiscardOpen(false)}>Seguir editando</Button>
+            <Button type="button" variant="destructive" onClick={confirmDiscard}>Descartar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }
 
-type BodyProps = Omit<Props, 'open'>
+type BodyProps = {
+  onClose: () => void
+  requestClose: () => void
+  dirtyRef: { current: boolean }
+  clients: Client[]
+  services: Service[]
+  professionals: Professional[]
+  locations: Location[]
+  prefill?: { date?: string; professionalId?: string }
+  onCreated?: () => void
+}
 
-function TurnoFormBody({ onOpenChange, clients, services, professionals, locations, prefill, onCreated }: BodyProps) {
+function TurnoFormBody({ onClose, requestClose, dirtyRef, clients, services, professionals, locations, prefill, onCreated }: BodyProps) {
   const router = useRouter()
 
   // Consultorios activos (igual criterio que el resto del dashboard).
@@ -140,6 +187,10 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
   const [saving, setSaving] = useState(false)
   // Aviso opt-in al cliente por mail (D-01): default OFF. El remount via key={open} lo resetea al reabrir.
   const [notifyClient, setNotifyClient] = useState(false)
+  // Paso del form: 'form' = carga · 'confirm' = resumen + confirmación antes de crear (UX).
+  const [step, setStep] = useState<'form' | 'confirm'>('form')
+  // Cliente ya resuelto (derivado si era nuevo) para el resumen del paso confirm.
+  const [pendingClient, setPendingClient] = useState<SelectedClient | null>(null)
 
   // Cliente: seleccionado de la lista (combobox) o creado inline.
   const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null)
@@ -154,6 +205,15 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
   // creando inline (así el checkbox se habilita sin exigir confirmar el cliente primero).
   const pendingNewEmail = creatingClient && newClientContact.includes('@') ? newClientContact.trim() : null
   const clientHasEmail = !!(selectedClient?.email || pendingNewEmail)
+
+  // El form está "sucio" si se tocó algún campo → habilita la confirmación de descarte del shell.
+  const isDirty = !!(
+    selectedClient || creatingClient || serviceId || date || time ||
+    notes.trim() || newClientName.trim() || newClientContact.trim()
+  )
+  // El ref se actualiza en un effect (no en render): el shell lo lee en el handler de cierre, que
+  // corre siempre después de los effects, así que refleja el último estado.
+  useEffect(() => { dirtyRef.current = isDirty }, [isDirty, dirtyRef])
 
   // ── Combobox: filtro en memoria sobre clients (ya cargados por business_id) ────────────────
   const filteredClients = useMemo(() => {
@@ -216,10 +276,10 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
     if (dedupeMatch) pickClient(dedupeMatch)
   }
 
-  async function handleSubmit() {
-    // Cliente efectivo: si hay uno nuevo en progreso (creatingClient), se deriva de los inputs SIN
-    // exigir el click extra de "Crear nuevo cliente" — "Agregar turno" da de alta al cliente (el
-    // endpoint lo persiste con dedupe). Si ya está elegido/confirmado, se usa ese.
+  // Paso 1 — validar + derivar el cliente efectivo, y pasar al RESUMEN/confirmación (no crea todavía).
+  // Si hay un cliente nuevo en progreso (creatingClient), se deriva de los inputs SIN exigir el click
+  // extra de "Crear nuevo cliente" — el endpoint lo persiste con dedupe.
+  function goToConfirm() {
     let client = selectedClient
     if (creatingClient) {
       if (dedupeMatch) {
@@ -237,6 +297,14 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
       toast.error('Completá el cliente, el servicio y el horario.')
       return
     }
+    setPendingClient(client)
+    setStep('confirm')
+  }
+
+  // Paso 2 — crear el turno con el cliente ya resuelto en el resumen.
+  async function doSubmit() {
+    const client = pendingClient
+    if (!client) { setStep('form'); return }
     setSaving(true)
     let res: Response
     try {
@@ -266,13 +334,47 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
     const data = await res.json().catch(() => null)
     setSaving(false)
     if (!res.ok || !data?.ok) {
+      // Un error puntual (ej. slot_taken) vuelve al form para corregir.
+      setStep('form')
       toast.error(errorToast(data?.error))
       return
     }
+    dirtyRef.current = false
     toast.success('Turno agregado')
-    onOpenChange(false)
+    onClose()
     if (onCreated) onCreated()
     else router.refresh()
+  }
+
+  // ── Paso de confirmación (UX): resumen breve + aviso de mail, antes de crear el turno ────────
+  if (step === 'confirm' && pendingClient) {
+    const svc = services.find((s) => s.id === serviceId)
+    const willNotify = notifyClient && !!pendingClient.email
+    return (
+      <div className="space-y-4">
+        <div className="space-y-1.5 rounded-lg border border-border bg-card p-3.5 text-sm">
+          <div className="flex gap-2"><span className="w-20 shrink-0 text-muted-foreground">Cliente</span><span className="font-medium">{pendingClient.name}</span></div>
+          <div className="flex gap-2"><span className="w-20 shrink-0 text-muted-foreground">Servicio</span><span className="font-medium">{svc ? svc.name : '—'}</span></div>
+          <div className="flex gap-2"><span className="w-20 shrink-0 text-muted-foreground">Cuándo</span><span className="font-medium capitalize">{format(parseISO(date), "EEE d 'de' MMM", { locale: es })} · {time}</span></div>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {willNotify ? (
+            <>Se le va a enviar un <span className="font-medium text-foreground">mail de confirmación</span> a {pendingClient.email}.</>
+          ) : (
+            <>No se le va a enviar mail al cliente.</>
+          )}
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" className="min-h-11" onClick={() => setStep('form')} disabled={saving}>
+            Volver
+          </Button>
+          <Button type="button" className="min-h-11 gap-1.5" onClick={doSubmit} disabled={saving}>
+            <Check className={cn('w-4 h-4', saving && 'hidden')} />
+            {saving ? 'Agregando...' : 'Confirmar y agregar'}
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   // ── Cuerpo del form (compartido entre Dialog y Drawer vía el shell de NuevoTurnoForm) ────────
@@ -433,7 +535,7 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
               })()}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="start" alignItemWithTrigger={false}>
             {services.map((s) => (
               <SelectItem key={s.id} value={s.id}>
                 {s.name} — {s.duration_minutes}min — ${Number(s.price).toLocaleString('es-AR')}
@@ -454,7 +556,7 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
                 : <span className="text-muted-foreground">Sin preferencia</span>}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="start" alignItemWithTrigger={false}>
             <SelectItem value="none">Sin preferencia</SelectItem>
             {professionals.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -475,7 +577,7 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
                   : <span className="text-muted-foreground">Sin especificar</span>}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent align="start" alignItemWithTrigger={false}>
               <SelectItem value="none">Sin especificar</SelectItem>
               {activeLocations.map((l) => (
                 <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
@@ -563,12 +665,12 @@ function TurnoFormBody({ onOpenChange, clients, services, professionals, locatio
 
       {/* Submit — min-h 44px para touch (WCAG AA), disabled + loading anti doble-submit */}
       <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>
+        <Button type="button" variant="outline" className="min-h-11" onClick={requestClose}>
           Cancelar
         </Button>
-        <Button type="button" className="min-h-11 gap-1.5" onClick={handleSubmit} disabled={saving}>
-          <Plus className={cn('w-4 h-4', saving && 'hidden')} />
-          {saving ? 'Agregando...' : 'Agregar turno'}
+        <Button type="button" className="min-h-11 gap-1.5" onClick={goToConfirm}>
+          <Plus className="w-4 h-4" />
+          Agregar turno
         </Button>
       </div>
     </div>
