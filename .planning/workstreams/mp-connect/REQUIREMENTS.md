@@ -56,9 +56,9 @@ está caída. Es el punto frágil #1 de la skill `mercadopago-connect`.
 
 | REQ-ID | Phase |
 |--------|-------|
-| MPCONN-01 | — |
-| MPCONN-02 | — |
-| MPCONN-03 | — |
-| MPCONN-04 | — |
-| MPCONN-05 | — |
-| MPCONN-06 | — |
+| MPCONN-01 | Phase 1 |
+| MPCONN-02 | Phase 1 |
+| MPCONN-03 | Phase 1 |
+| MPCONN-04 | Phase 2 |
+| MPCONN-05 | Phase 1 |
+| MPCONN-06 | Phase 1 |
