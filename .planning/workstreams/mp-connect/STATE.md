@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.23
 milestone_name: — Resiliencia de MercadoPago Connect
-current_plan: N/A
-status: Roadmap ready
+current_plan: 1
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-19T19:00:04.809Z"
-last_activity: 2026-07-19 — Roadmap creado (2 fases, cobertura 6/6)
+last_updated: "2026-07-19T19:58:30.902Z"
+last_activity: 2026-07-19 -- Phase 1 execution started
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -22,19 +22,19 @@ progress:
 See: .planning/PROJECT.md (sección "Current Milestone (workstream `mp-connect`)")
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse. v0.23 endurece la resiliencia del token OAuth **del negocio** (MercadoPago Connect / cobro de señas): un fallo de refresh deja de degradar en silencio — se detecta, se persiste, se avisa en el dashboard y se limpia al reconectar. NO toca el flujo de suscripciones de los planes (token de plataforma).
-**Current focus:** Phase 1 — Detección y estado de conexión caída (backend, integridad de pagos)
+**Current focus:** Phase 1 — Detección y estado de conexión caída
 
 ## Current Position
 
-Phase: Not started (roadmap listo)
-Plan: —
-Status: Roadmap ready — próximo paso planificar Phase 1
-Last activity: 2026-07-19 — Roadmap creado (2 fases, cobertura 6/6)
+Phase: 1 (Detección y estado de conexión caída) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 1
+Last activity: 2026-07-19 -- Phase 1 execution started
 
 ## Progress
 
 **Phases Complete:** 0/2
-**Current Plan:** N/A
+**Current Plan:** 1
 
 ## Performance Metrics
 
