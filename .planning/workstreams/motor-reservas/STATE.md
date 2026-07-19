@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.22
 milestone_name: "— Turnos: alta manual y ventana de reserva"
-status: executing
+status: Awaiting next milestone
 stopped_at: Phase 5 context gathered
-last_updated: "2026-07-19T05:14:09.934Z"
-last_activity: 2026-07-18 -- Phase 04 execution started
+last_updated: "2026-07-19T06:30:33.638Z"
+last_activity: 2026-07-19 — Milestone v0.22 completed and archived
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 18
-  completed_plans: 18
-  percent: 80
+  completed_phases: 5
+  total_plans: 20
+  completed_plans: 20
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 04 (ventana-de-reserva-p-blica) — EXECUTING
-Plan: 2 of 4
-Status: Ready to execute
-Last activity: 2026-07-18 -- Phase 04 execution started
-
-Progress: [░░░░░░░░░░] 0%
+Phase: Milestone v0.22 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-19 — Milestone v0.22 completed and archived
 
 ## Performance Metrics
 
@@ -88,4 +86,4 @@ Resume file: .planning/workstreams/motor-reservas/phases/05-aviso-al-cliente-en-
 
 ## Operator Next Steps
 
-- Planificar la Phase 4 con `/gsd:plan-phase 4 --ws motor-reservas` (o `/gsd:discuss-phase 4 --ws motor-reservas` si querés fijar contexto antes de planear).
+- Start the next milestone with /gsd-new-milestone

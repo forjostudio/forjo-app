@@ -1,5 +1,20 @@
 # Milestones
 
+## v0.22 Turnos: alta manual y ventana de reserva (Shipped: 2026-07-19)
+
+**Phases completed:** 2 phases (4-5), 6 plans
+
+**Key accomplishments:**
+
+- **Ventana de reserva pública (Phase 4):** migración 052 (`max_advance_days`/`max_advance_date` en `businesses` + recreada la vista acotada `public_businesses` + grant) + helper puro `lib/booking-window.ts` (corte INCLUSIVE en hora AR, 3 modos: días rolling / fecha fija / sin límite), compartido bit-a-bit por los calendarios y el backstop.
+- Control de la ventana en la **Agenda** (junto a horarios y días especiales): 3 modos con stepper editable −/+ y calendario estilado; los DOS calendarios públicos (general + canchas) capan la navegación de mes + los días fuera de ventana y muestran "Reservas hasta el DD/MM".
+- **Backstop server anti-tampering** en `app/api/booking/create` (`isDateOutOfWindow` server-side en hora AR, antes del insert de client → `date_out_of_window`/400): rechaza fechas fuera de ventana aunque el cliente manipule la request. El alta manual autenticada queda EXENTA por diseño. SECURED 11/11.
+- **Aviso opt-in por mail al cliente en el alta manual (Phase 5):** template nuevo `sendManualBookingConfirmation` (confirmación limpia — servicio/fecha/hora/negocio + link de cancelar, SIN precio/seña); checkbox "avisar al cliente por mail" en "Nuevo turno" (default OFF, deshabilitado con hint sin email); el mail va en un `after()` best-effort separado del de Google Calendar, gateado por `notify + email`, secretos acotados por `getBusinessSecrets`. SECURED 8/8.
+- Pulido UX del alta manual (tras UAT): "Agregar turno" da de alta al cliente nuevo sin click extra, "Editar" preserva los datos del cliente en creación, calendario estilado para la fecha, confirmación de descarte al cerrar sin querer, paso de resumen antes de crear, y los desplegables (Servicio/Profesional) caen hacia abajo en vez de solaparse sobre el campo.
+- Migración 052 aplicada a mano en prod; el alta manual reusa `createAppointmentCore` intacto (sin tocar el motor de reservas de v0.12).
+
+---
+
 ## v0.21 Rediseño visual del login (Shipped: 2026-07-18)
 
 **Phases completed:** 1 phase (Phase 9), 1 plan
