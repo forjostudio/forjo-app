@@ -389,8 +389,11 @@ function TurnoFormBody({ onClose, requestClose, dirtyRef, clients, services, pro
               <Check className="w-4 h-4 text-primary flex-shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{selectedClient.name}</p>
-                {(selectedClient.phone || selectedClient.email) && (
-                  <p className="text-xs text-muted-foreground truncate">{selectedClient.phone || selectedClient.email}</p>
+                {selectedClient.phone && (
+                  <p className="text-xs text-muted-foreground truncate">{selectedClient.phone}</p>
+                )}
+                {selectedClient.email && (
+                  <p className="text-xs text-muted-foreground truncate">{selectedClient.email}</p>
                 )}
               </div>
             </div>
@@ -497,8 +500,11 @@ function TurnoFormBody({ onClose, requestClose, dirtyRef, clients, services, pro
                         className="w-full text-left px-3 py-1.5 hover:bg-secondary/60 transition-colors"
                       >
                         <span className="text-sm font-medium">{c.name}</span>
-                        {(c.phone || c.email) && (
-                          <span className="block text-xs text-muted-foreground truncate">{c.phone || c.email}</span>
+                        {c.phone && (
+                          <span className="block text-xs text-muted-foreground truncate">{c.phone}</span>
+                        )}
+                        {c.email && (
+                          <span className="block text-xs text-muted-foreground truncate">{c.email}</span>
                         )}
                       </button>
                     </li>
