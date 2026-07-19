@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { createCalendarEvent } from '@/lib/google-calendar'
 import { createAppointmentCore } from '@/lib/booking-core'
+import { sendManualBookingConfirmation } from '@/lib/email'
 
 // Alta MANUAL de turno desde el dashboard (autenticada). A diferencia del booking PÚBLICO
 // (app/api/booking/create — service role, tenant por slug), este endpoint corre con la SESIÓN
@@ -29,9 +30,11 @@ export async function POST(request: Request) {
 
   // Tenant = ACTOR: el negocio se resuelve por owner_id de la sesión, no por slug ni por un id del
   // cliente (T-01-06). Solo columnas NO secretas (los secretos viven en business_secrets, D-02).
+  // El branding del mail (slug, primary_color, logo_url, whatsapp) es aditivo y NO secreto; pasar el
+  // objeto ampliado a createAppointmentCore es inocuo (el core solo usa id/buffer_minutes por tipado).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, address, buffer_minutes')
+    .select('id, name, address, buffer_minutes, slug, primary_color, logo_url, whatsapp')
     .eq('owner_id', user.id)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
@@ -54,6 +57,8 @@ export async function POST(request: Request) {
   const clientPhone = typeof body.clientPhone === 'string' && body.clientPhone.trim() ? body.clientPhone.trim() : null
   const clientEmail = typeof body.clientEmail === 'string' && body.clientEmail.trim() ? body.clientEmail.trim() : null
   const notes = typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim().slice(0, 1000) : null
+  // Aviso opt-in al cliente (D-01): default OFF; el server re-gatea igual por clientEmail presente.
+  const notify = body.notify === true
 
   if (!clientName || !serviceId || !date || !time) {
     return Response.json({ ok: false, error: 'missing_fields' }, { status: 400 })
@@ -121,6 +126,39 @@ export async function POST(request: Request) {
         if (eventId) await supabase.from('appointments').update({ google_event_id: eventId }).eq('id', apptId)
       } catch (e) {
         console.error(`[appointments/create] gcal FALLÓ (turno ${apptId}):`, e instanceof Error ? e.message : e)
+      }
+    })
+  }
+
+  // ── Aviso opt-in al cliente por mail — after() SEPARADO y best-effort (D-02) ─────────────────
+  // Espeja el patrón del booking público (app/api/booking/create): secretos acotados al propio
+  // tenant vía getBusinessSecrets, envío en after() para no demorar la respuesta, try/catch propio.
+  // Gate: solo si el dueño tildó el opt-in (notify) Y el cliente tiene email. Si el mail falla, se
+  // loguea y el alta NO se rompe (el turno ya quedó creado). Mail LIMPIO sin precio/seña (Plan 01).
+  if (notify && clientEmail && result.appointmentId) {
+    const apptId = result.appointmentId
+    const serviceName = result.serviceName
+    const cancelToken = result.cancelToken
+    after(async () => {
+      try {
+        const secrets = await getBusinessSecrets(business.id)
+        await sendManualBookingConfirmation({
+          to: clientEmail,
+          clientName,
+          service: serviceName,
+          date,
+          time,
+          businessName: business.name,
+          businessSlug: business.slug,
+          primaryColor: business.primary_color,
+          logoUrl: business.logo_url,
+          whatsapp: business.whatsapp,
+          cancelToken, // si es falsy, Plan 01 degrada y manda sin botón de cancelar (D-04)
+          resendApiKey: secrets.resend_api_key,
+          resendFrom: secrets.resend_from,
+        })
+      } catch (e) {
+        console.error(`[appointments/create] email confirmación FALLÓ (turno ${apptId}):`, e instanceof Error ? e.message : e)
       }
     })
   }
