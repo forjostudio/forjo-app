@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin, TriangleAlert } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { getVerticalKeyByType, VERTICALS, RUBRO_PLACEHOLDERS, resolveVertical, type VerticalKey } from '@/lib/verticals'
@@ -131,6 +131,21 @@ interface Props {
   mpConnectEnabled: boolean
   // Qué mostrar: 'config' = pestañas de Configuración; el resto = una sección suelta (sidebar).
   view?: SettingsView
+}
+
+// Isotipo MercadoPago — SVG inline decorativo (patrón google-button)
+// El repo no usa paquetes de íconos de marca: el logo va inline a mano, decorativo (aria-hidden,
+// el nombre accesible lo da el texto). Brand hex permitido acá igual que la 'G' de google-button.
+function MpLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <ellipse cx="256" cy="256" rx="250" ry="160" fill="#009EE3" />
+      <path
+        d="M120 296c40 46 90 70 136 70s96-24 136-70c-14-14-29-12-45-1-26 17-58 26-91 26s-65-9-91-26c-16-11-31-13-45 1z"
+        fill="#FFE600"
+      />
+    </svg>
+  )
 }
 
 export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], mpConnectEnabled, view = 'config' }: Props) {
@@ -696,7 +711,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [savingMp, setSavingMp] = useState(false)
   // Conexión por MercadoPago Connect (OAuth): mp_user_id presente = conectado por botón.
   // mp_user_id NO es secreto → sigue en businesses.
-  const mpConnected = !!business.mp_user_id
+  // Conectado sano SOLO si hay cuenta OAuth y el flag no está caído (D-01).
+  const mpConnected = !!business.mp_user_id && business.mp_connection_status !== 'error'
+  // La cuenta estuvo conectada por OAuth y se cayó (Phase 1 dejó el flag en 'error').
+  const mpConnectionError = !!business.mp_user_id && business.mp_connection_status === 'error'
   // Pegar el token a mano: avanzado. Abierto si ya hay token manual (sin user_id de OAuth).
   const [mpManual, setMpManual] = useState(!!secrets.mp_access_token && !business.mp_user_id)
   const [disconnectingMp, setDisconnectingMp] = useState(false)
@@ -1581,22 +1599,43 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           {/* MercadoPago */}
           <Card className="p-6 space-y-4">
             <div>
-              <p className="font-semibold text-sm">MercadoPago</p>
+              <div className="flex items-center gap-2">
+                <MpLogo className="size-4" />
+                <p className="font-semibold text-sm">MercadoPago</p>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">Conectá tu cuenta para cobrar las señas de los turnos.</p>
             </div>
 
             {mpConnectEnabled && (
               mpConnected ? (
+                // Estado sano (D-09): "Conectado" limpio, sin el número de cuenta.
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" /> Conectado {business.mp_user_id ? <span className="text-foreground">· cuenta #{business.mp_user_id}</span> : null}
+                    <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" /> Conectado
                   </p>
                   <Button variant="outline" size="sm" onClick={disconnectMp} disabled={disconnectingMp}>
                     {disconnectingMp ? 'Desconectando...' : 'Desconectar'}
                   </Button>
                 </div>
+              ) : mpConnectionError ? (
+                // Estado caído (D-02/03/04): aviso ámbar recuperable + Reconectar (reusa el OAuth existente).
+                <div role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 space-y-3">
+                  <p className="text-sm font-medium text-warning flex items-start gap-2">
+                    <TriangleAlert aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    Tu conexión con MercadoPago se interrumpió, reconectá tu cuenta para seguir cobrando señas.
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button onClick={() => { window.location.href = '/api/mercadopago/connect' }}>Reconectar</Button>
+                    <Button variant="outline" size="sm" onClick={disconnectMp} disabled={disconnectingMp}>
+                      {disconnectingMp ? 'Desconectando...' : 'Desconectar'}
+                    </Button>
+                  </div>
+                </div>
               ) : (
-                <Button onClick={() => { window.location.href = '/api/mercadopago/connect' }}>Conectar con MercadoPago</Button>
+                <Button onClick={() => { window.location.href = '/api/mercadopago/connect' }}>
+                  <MpLogo className="size-4" />
+                  Conectar con MercadoPago
+                </Button>
               )
             )}
 
