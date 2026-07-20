@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
-status: roadmap-complete
-stopped_at: Phase 6 context gathered
-last_updated: "2026-07-20T21:35:21.632Z"
-last_activity: 2026-07-20 — ROADMAP v0.24 creado (Phases 6-7), Traceability 6/6
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-07-20T23:08:19.268Z"
+last_activity: 2026-07-20 -- Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 20
-  completed_plans: 20
+  total_plans: 25
+  completed_plans: 21
   percent: 71
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.24 agrega abonos semanales (turno fijo recurrente): alta manual por el dueño + generación forward de los turnos respetando 011/013 + cupos + espacio compartido + cancelación por link en el mail / panel. **Solo reserva** (el cobro recurrente es futuro; el modelo se diseña extensible).
-**Current focus:** Phase 6 — Modelo del abono + alta manual + generación forward (security-sensitive)
+**Current focus:** Phase 06 — modelo-del-abono-alta-manual-generaci-n-forward
 
 ## Current Position
 
-Phase: Not started (roadmap aprobado, sin planificar)
-Plan: —
-Status: Roadmap complete — listo para /gsd-plan-phase 6 --ws motor-reservas
-Last activity: 2026-07-20 — ROADMAP v0.24 creado (Phases 6-7), Traceability 6/6
+Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-07-20 -- Phase 06 execution started
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Last activity: 2026-07-20 — ROADMAP v0.24 creado (Phases 6-7), Traceability 6/
 | 7 | TBD | - | - |
 
 *Updated after each plan completion*
+| Phase 06 P01 | 20min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Heredadas del workstream (siguen vigentes):
 
 - Núcleo anti-doble-booking = RPC atómico `book_slot_atomic` (cupos capacity-aware + advisory lock por espacio compartido). La generación forward del abono DEBE insertar por este mismo camino atómico, nunca por insert directo.
 - Cupo por `time_blocks.capacity` (default 1 = cero regresión); público ve "disponible/lleno" sin lugares restantes.
+- [Phase 06]: book_slot_atomic intacto: abono_id se setea con UPDATE post-insert fuera del RPC (etiqueta no-constraint)
+- [Phase 06]: schema.sql editado quirúrgicamente (no dump) porque el CLI v2.107 reordena el archivo entero
 
 ### Pending Todos
 
@@ -94,8 +97,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20T21:35:21.614Z
-Stopped at: Phase 6 context gathered
+Last session: 2026-07-20T23:08:19.254Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: .planning/workstreams/motor-reservas/phases/06-modelo-del-abono-alta-manual-generaci-n-forward/06-CONTEXT.md
 
 ## Operator Next Steps

@@ -12,6 +12,7 @@
   aparte. El **cobro recurrente automático** (MP preapproval por cliente) es un milestone FUTURO — pero
   el **modelo de datos del abono se diseña extensible** para sumarlo sin re-migrar (sofisticar el dato
   ahora es barato; la UI/scope se mantiene simple).
+
 - **Alta manual por el dueño** (no pública en v1).
 - **Recurrencia semanal** (mismo día y hora cada semana). No quincenal/mensual en v1.
 - **Indefinido hasta cancelar.** El cliente puede cancelar la suscripción desde un **link en el mail**
@@ -21,18 +22,18 @@
 
 ### Abonos recurrentes (ABONO)
 
-- [ ] **ABONO-01**: El dueño crea un abono semanal desde el panel para un cliente: cliente + servicio
+- [x] **ABONO-01**: El dueño crea un abono semanal desde el panel para un cliente: cliente + servicio
   (o cancha) + profesional/consultorio (según vertical) + día de la semana + hora, **indefinido hasta
   cancelar**. Reusa el pipeline de alta de turno existente (validación, anti-tampering de tenant).
 
-- [ ] **ABONO-02**: El sistema **genera los turnos del abono hacia adelante** (ventana rolling de N
+- [x] **ABONO-02**: El sistema **genera los turnos del abono hacia adelante** (ventana rolling de N
   semanas), cada uno como un `appointment` real que **respeta la integridad anti-doble-booking**
   (constraints 011/013), **cupos/capacity** y **exclusión por espacio compartido** (canchas). Si una
   ocurrencia choca con un turno existente, un día cerrado o una excepción de horario, se maneja sin
   romper el resto de la serie (saltear la ocurrencia y/o avisar — el comportamiento exacto se cierra en
   discuss-phase). Cada turno generado queda **vinculado al abono** (para poder cancelar la serie).
 
-- [ ] **ABONO-03**: El **modelo de datos del abono es extensible** para sumar cobro recurrente automático
+- [x] **ABONO-03**: El **modelo de datos del abono es extensible** para sumar cobro recurrente automático
   a futuro (entidad/campos que no obliguen a re-migrar cuando se agregue el cobro), pero v0.24 **NO cobra**.
 
 - [ ] **ABONO-04**: El cliente recibe un **mail** (patrón del mail de confirmación actual) con un link
