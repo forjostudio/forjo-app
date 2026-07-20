@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.23
 milestone_name: — Resiliencia de MercadoPago Connect
 current_plan: 1
-status: verifying
+status: Awaiting next milestone
 stopped_at: Phase 2 context gathered
-last_updated: "2026-07-20T03:15:24.366Z"
-last_activity: 2026-07-20 -- Phase 2 execution started
+last_updated: "2026-07-20T17:08:02.848Z"
+last_activity: 2026-07-20 — Milestone v0.23 completed and archived
 progress:
   total_phases: 2
   completed_phases: 2
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (sección "Current Milestone (workstream `mp-connect`)
 
 ## Current Position
 
-Phase: 2 (Aviso de reconexión en el dashboard) — EXECUTING
-Plan: 1 of 1
-Status: Phase complete — ready for verification
-Last activity: 2026-07-20 -- Phase 2 execution started
+Phase: Milestone v0.23 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-20 — Milestone v0.23 completed and archived
 
 ## Progress
 
@@ -89,4 +89,4 @@ Resume file: .planning/workstreams/mp-connect/phases/02-aviso-de-reconexi-n-en-e
 
 ## Operator Next Steps
 
-- Planificar la Phase 1 con `/gsd:discuss-phase 1 --ws mp-connect` (o `/gsd:plan-phase 1 --ws mp-connect`).
+- Start the next milestone with /gsd-new-milestone

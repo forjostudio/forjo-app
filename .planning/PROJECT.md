@@ -115,7 +115,7 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones LOCKED (no re-litigar en discuss-phase):** cupo **por profesional/horario** en `time_blocks` (default 1 = cero regresión, NO en el servicio); seña **configurable por servicio** (independiente de individual/grupal); público ve "disponible" hasta llenarse, **NO** ve lugares restantes; admin ve contador + roster; concurrencia anti-sobrecupo = **chequeo atómico deliberado** (lock por slot / `SELECT … FOR UPDATE` / serializable), nunca `count` simple sin lock; **faseo manual→cupos→espacio**, B recortable como fase final sin tocar lo entregado; el modelo "agenda como recurso" (genérico vs `professionals`+tipo) se decide **una vez** en la fase de cupos contemplando ya el espacio compartido (B), para no pagar una migración después. Briefs: `c:\Users\franc\Desktop\Forjo Studio\forjo-motor-reservas-encuadre.md` + `forjo-cupos-grupales-brief.md`.
 
-## Current Milestone (workstream `mp-connect`): v0.23 Resiliencia de MercadoPago Connect
+## Milestone (workstream `mp-connect`): v0.23 Resiliencia de MercadoPago Connect — SHIPPED 2026-07-20 (tag v0.23)
 
 **Goal:** Que un fallo de refresh del token OAuth **del negocio** (MercadoPago Connect / cobro de señas) no degrade en silencio: la conexión caída se detecta, se persiste, se avisa en el dashboard y se limpia al reconectar. Integridad de pagos; NO toca el flujo de suscripciones de los planes (token de plataforma). Numeración de fases del workstream desde Phase 1.
 

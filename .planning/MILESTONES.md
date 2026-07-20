@@ -1,5 +1,17 @@
 # Milestones
 
+## v0.23 Resiliencia de MercadoPago Connect (Shipped: 2026-07-20)
+
+**Phases completed:** 2 phases, 3 plans, 7 tasks
+
+**Key accomplishments:**
+
+- Columna durable `businesses.mp_connection_status` (migración 053) + primitiva server-only `setMpConnectionStatus` keyed por business_id + `scope` OAuth explícito para garantizar `refresh_token`.
+- `getValidMpAccessToken` deja de devolver el token vencido/no persistido: refresh rechazado o persist-fail del rotado single-use → marca la conexión `'error'` y devuelve `null`; un refresh OK auto-sana a `'connected'`; un 401 en el cobro marca la caída; la reconexión OAuth limpia el flag. Todo fallo queda logueado server-side con el motivo real, sin exponer tokens.
+- El dashboard refleja el estado REAL de MercadoPago Connect: card de tres estados (Conectado limpio / aviso ámbar de reconexión / Conectar) + banner global persistente, reusando el OAuth existente, con logo de MP inline y el TabsList de Negocio prolijo en mobile.
+
+---
+
 ## v0.22 Turnos: alta manual y ventana de reserva (Shipped: 2026-07-19)
 
 **Phases completed:** 2 phases (4-5), 6 plans

@@ -134,6 +134,39 @@ Onboarding más robusto (fix del slug ciego por RLS vía endpoint service-role q
 - **UAT de staging pendiente:** el upload real del logo (Phase 7) y el reset de tema cross-nav (Phase 8) se validan en staging con un negocio de paleta custom.
 - **Rediseño del login mobile:** capturado ([[rediseno-login-mobile-pendiente]]), próximo trabajo del workstream — amerita UI-SPEC.
 
+## Milestone: v0.23 — Resiliencia de MercadoPago Connect
+
+**Shipped:** 2026-07-20
+**Phases:** 2 | **Plans:** 3 | **Workstream:** `mp-connect` (nuevo)
+
+### What Was Built
+Se cerró el fallback silencioso del refresh del token OAuth del negocio (MercadoPago Connect): el
+resolver deja de devolver el token vencido/no persistido, marca la conexión caída (flag durable
+`businesses.mp_connection_status`, migr. 053), auto-sana al refrescar OK, detecta el 401 del cobro y
+limpia el flag al reconectar — todo logueado server-side sin exponer tokens. El dashboard refleja el
+estado real: card de 3 estados + banner global de reconexión. SECURED 13/13 (P1) + 5/5 (P2).
+
+### What Worked
+- El diagnóstico técnico previo (leer el código real antes de scopear) hizo que discuss/plan fueran
+  directos y sin research. El faseo backend→UI dejó el gate de secure-phase justo en la parte sensible.
+- Los PNG oficiales del usuario recortados con sharp resolvieron los logos de marca que el SVG rendía mal.
+
+### What Was Inefficient
+- **Logos de marca:** varias iteraciones perdidas intentando SVG inline (MP: aro navy grueso por
+  `fill-rule`; GCal: "31" mal reconstruido). Lección: para logos de marca, pedir el PNG oficial y
+  recortarlo con sharp en chip blanco, no reconstruir SVG. (Anotado en la memoria de la sesión.)
+- El `human_needed` de la UAT visual quedó abierto hasta el cierre; se resolvió marcándolo passed tras
+  la UAT informal extensa del usuario en prod.
+
+### Patterns Established
+- Logo de marca = PNG oficial recortado con sharp (`public/*.png`) en chip blanco `size-6` vía `next/image`.
+- Flag de estado de integración durable en `businesses` (no en `business_secrets`) para que el dashboard lo lea sin query nuevo.
+- OAuth con retorno al origen vía `?from=` mapeado contra lista cerrada (anti open-redirect).
+
+### Key Lessons
+- Los SVG oficiales de marca no siempre rinden fiel en navegador (fill-rule / paths complejos) — el raster oficial es más confiable.
+- La migración a prod se coordina a mano ANTES del deploy del código (053 aplicada por el usuario antes del merge).
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Shipped | Nota |
