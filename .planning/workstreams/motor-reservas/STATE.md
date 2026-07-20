@@ -4,13 +4,13 @@ milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
 stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-07-20T23:16:09.372Z"
+last_updated: "2026-07-20T23:26:33.257Z"
 last_activity: 2026-07-20 -- Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 25
-  completed_plans: 22
+  completed_plans: 23
   percent: 71
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-20 -- Phase 06 execution started
 
@@ -48,6 +48,7 @@ Last activity: 2026-07-20 -- Phase 06 execution started
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
 | Phase 06 P02 | 18min | 2 tasks | 2 files |
+| Phase 06 P03 | 22min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 06]: schema.sql editado quirúrgicamente (no dump) porque el CLI v2.107 reordena el archivo entero
 - [Phase ?]: 06-02: motor de abono materializa cada ocurrencia vía createAppointmentCore (nunca insert directo); skip-and-record ante conflicto
 - [Phase ?]: 06-02: schedule_exception closed=false (horario especial) OVERRIDE la grilla semanal para ese dia (autoridad unica de horario)
+- [Phase ?]: 06-03: endpoint POST /api/abonos/create valida professional/service/location por business_id y deriva serviceId de la cancha server-side (anti-tampering); insert anon+RLS, nunca admin
+- [Phase ?]: 06-03: el alta persiste generated_until + skipped_occurrences.slice(-50) (cap compartido con el cron 06-04) tras correr la primera tanda por el motor
 
 ### Pending Todos
 
@@ -100,7 +103,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20T23:15:41.058Z
+Last session: 2026-07-20T23:26:09.996Z
 Stopped at: Completed 06-01-PLAN.md
 Resume file: .planning/workstreams/motor-reservas/phases/06-modelo-del-abono-alta-manual-generaci-n-forward/06-CONTEXT.md
 
