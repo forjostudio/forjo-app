@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin, TriangleAlert } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin, TriangleAlert, CalendarClock, RefreshCw } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { getVerticalKeyByType, VERTICALS, RUBRO_PLACEHOLDERS, resolveVertical, type VerticalKey } from '@/lib/verticals'
@@ -129,26 +129,17 @@ interface Props {
   initialSpaces?: Space[]
   initialAgendaSpaces?: AgendaSpace[]
   mpConnectEnabled: boolean
+  // Google Calendar (mismo estado/conexión que el control de la Agenda): presencia del refresh_token
+  // (booleano, nunca el token) + si la integración está configurada. Se leen server-side en negocio/page.
+  googleEnabled?: boolean
+  googleConnected?: boolean
+  // Email del dueño (sesión) para autocargar el campo de notificaciones cuando aún no hay uno seteado.
+  ownerEmail?: string | null
   // Qué mostrar: 'config' = pestañas de Configuración; el resto = una sección suelta (sidebar).
   view?: SettingsView
 }
 
-// Isotipo MercadoPago — SVG inline decorativo (patrón google-button)
-// El repo no usa paquetes de íconos de marca: el logo va inline a mano, decorativo (aria-hidden,
-// el nombre accesible lo da el texto). Brand hex permitido acá igual que la 'G' de google-button.
-function MpLogo({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <ellipse cx="256" cy="256" rx="250" ry="160" fill="#009EE3" />
-      <path
-        d="M120 296c40 46 90 70 136 70s96-24 136-70c-14-14-29-12-45-1-26 17-58 26-91 26s-65-9-91-26c-16-11-31-13-45 1z"
-        fill="#FFE600"
-      />
-    </svg>
-  )
-}
-
-export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], mpConnectEnabled, view = 'config' }: Props) {
+export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], mpConnectEnabled, googleEnabled = false, googleConnected = false, ownerEmail = null, view = 'config' }: Props) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -726,6 +717,30 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     else toast.error('No se pudo desconectar')
   }
 
+  // ── Google Calendar (misma conexión que el control de la Agenda) ──────────────
+  // Comparte los endpoints /api/google/* → conectar/desconectar/sincronizar acá refleja lo mismo
+  // que en la Agenda (el token vive en business_secrets, keyed por business_id). Conectar hace un
+  // full redirect al OAuth de Google, cuyo callback vuelve a /agenda (hardcodeado).
+  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false)
+  async function disconnectGoogle() {
+    setDisconnectingGoogle(true)
+    const res = await fetch('/api/google/disconnect', { method: 'POST' })
+    setDisconnectingGoogle(false)
+    if (res.ok) { toast.success('Google Calendar desconectado'); router.refresh() }
+    else toast.error('No se pudo desconectar')
+  }
+  const [syncingGoogle, setSyncingGoogle] = useState(false)
+  async function syncGoogle() {
+    setSyncingGoogle(true)
+    try {
+      const res = await fetch('/api/google/sync', { method: 'POST' })
+      if (res.ok) toast.success('Turnos sincronizados con Google Calendar')
+      else toast.error('No se pudo sincronizar')
+    } finally {
+      setSyncingGoogle(false)
+    }
+  }
+
   const [depositForm, setDepositForm] = useState({
     require_deposit: business.require_deposit || false,
     deposit_amount: business.deposit_amount || 0,
@@ -736,7 +751,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   const [notifForm, setNotifForm] = useState({
     // notification_email NO es secreto → sigue en businesses. resend_* vienen de secrets (D-05).
-    notification_email: business.notification_email || '',
+    // Autocarga: si el negocio todavía no seteó un email, precargamos el del dueño (sesión) como
+    // fallback — no pisa un valor ya guardado.
+    notification_email: business.notification_email || ownerEmail || '',
     resend_api_key: secrets.resend_api_key || '',
     resend_from: secrets.resend_from || '',
   })
@@ -845,11 +862,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             Configuración. El label de la 4ª es literal "Notificaciones/Mails" (brief §3) aunque el
             value siga siendo 'notificaciones'. */}
         {isNegocio && (
-          <TabsList className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
-            <TabsTrigger value="business">Datos del negocio</TabsTrigger>
-            <TabsTrigger value="cobros">Cobros</TabsTrigger>
-            <TabsTrigger value="integraciones">Integraciones</TabsTrigger>
-            <TabsTrigger value="notificaciones">Notificaciones/Mails</TabsTrigger>
+          <TabsList className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
+            <TabsTrigger value="business" className="py-1.5">Datos del negocio</TabsTrigger>
+            <TabsTrigger value="cobros" className="py-1.5">Cobros</TabsTrigger>
+            <TabsTrigger value="integraciones" className="py-1.5">Integraciones</TabsTrigger>
+            <TabsTrigger value="notificaciones" className="py-1.5">Notificaciones/Mails</TabsTrigger>
           </TabsList>
         )}
         {/* TabsList de Configuración reducido a 3 (NAV-02): Cobros/Integraciones/Notificaciones se
@@ -1599,10 +1616,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           {/* MercadoPago */}
           <Card className="p-6 space-y-4">
             <div>
-              <div className="flex items-center gap-2">
-                <MpLogo className="size-4" />
-                <p className="font-semibold text-sm">MercadoPago</p>
-              </div>
+              <p className="font-semibold text-sm">MercadoPago</p>
               <p className="text-xs text-muted-foreground mt-0.5">Conectá tu cuenta para cobrar las señas de los turnos.</p>
             </div>
 
@@ -1633,7 +1647,6 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 </div>
               ) : (
                 <Button onClick={() => { window.location.href = '/api/mercadopago/connect' }}>
-                  <MpLogo className="size-4" />
                   Conectar con MercadoPago
                 </Button>
               )
@@ -1660,6 +1673,37 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               </div>
             )}
           </Card>
+
+          {/* Google Calendar — misma conexión/estado que el control de la Agenda (endpoints /api/google/*).
+              Conectar/desconectar/sincronizar acá refleja lo mismo que allá. */}
+          {googleEnabled && (
+            <Card className="p-6 space-y-4">
+              <div>
+                <p className="font-semibold text-sm">Google Calendar</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Sincronizá los turnos con tu Google Calendar. Es la misma conexión que ves en la Agenda.</p>
+              </div>
+              {googleConnected ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" /> Conectado
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="outline" size="sm" onClick={syncGoogle} disabled={syncingGoogle}>
+                      <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${syncingGoogle ? 'animate-spin' : ''}`} />
+                      {syncingGoogle ? 'Sincronizando...' : 'Sincronizar'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={disconnectGoogle} disabled={disconnectingGoogle}>
+                      {disconnectingGoogle ? 'Desconectando...' : 'Desconectar'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button onClick={() => { window.location.href = '/api/google/connect' }}>
+                  <CalendarClock className="w-4 h-4 mr-1.5" /> Conectar Google Calendar
+                </Button>
+              )}
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Notificaciones ── */}

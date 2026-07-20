@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
+import { googleConfigured } from '@/lib/google-calendar'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { SettingsClient } from '../settings/settings-client'
 
@@ -27,6 +28,9 @@ export default async function NegocioPage() {
       initialProfessionals={[]}
       initialLocations={[]}
       mpConnectEnabled={mpConnectConfigured()}
+      googleEnabled={googleConfigured()}
+      googleConnected={!!secrets.google_refresh_token}
+      ownerEmail={user.email ?? null}
       view="negocio"
     />
   )
