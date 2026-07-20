@@ -845,7 +845,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             Configuración. El label de la 4ª es literal "Notificaciones/Mails" (brief §3) aunque el
             value siga siendo 'notificaciones'. */}
         {isNegocio && (
-          <TabsList className="grid grid-cols-3 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:flex-wrap w-full lg:w-fit h-auto">
             <TabsTrigger value="business">Datos del negocio</TabsTrigger>
             <TabsTrigger value="cobros">Cobros</TabsTrigger>
             <TabsTrigger value="integraciones">Integraciones</TabsTrigger>
