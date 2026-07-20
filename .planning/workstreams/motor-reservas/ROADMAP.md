@@ -211,7 +211,7 @@ Plans:
   4. El **cron diario existente** de Vercel extiende la ventana rolling hacia adelante (genera las semanas nuevas al acercarse el borde), sin agregar ningún cron más frecuente que el diario permitido por Hobby.
   5. Un negocio solo ve y crea abonos de SU negocio (RLS + `business_id`); el modelo de datos del abono admite sumar cobro recurrente automático a futuro sin re-migrar (v0.24 no cobra).
 
-**Plans**: 1/5 plans executed
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
@@ -220,7 +220,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 06-02-PLAN.md — Motor `lib/abono-generation.ts` (generación forward vía `createAppointmentCore`, skip-and-record ante conflicto, `abono_id`, idempotente) + tests
+- [x] 06-02-PLAN.md — Motor `lib/abono-generation.ts` (generación forward vía `createAppointmentCore`, skip-and-record ante conflicto, `abono_id`, idempotente) + tests
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -264,5 +264,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
-| 6. Modelo del abono + alta manual + generación forward | 1/5 | In Progress|  |
+| 6. Modelo del abono + alta manual + generación forward | 2/5 | In Progress|  |
 | 7. Cancelación del abono (mail + panel) | 0/TBD | Not started | - |

@@ -4,13 +4,13 @@ milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
 stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-07-20T23:08:19.268Z"
+last_updated: "2026-07-20T23:16:09.372Z"
 last_activity: 2026-07-20 -- Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 25
-  completed_plans: 21
+  completed_plans: 22
   percent: 71
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-20 -- Phase 06 execution started
 
@@ -47,6 +47,7 @@ Last activity: 2026-07-20 -- Phase 06 execution started
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
+| Phase 06 P02 | 18min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Heredadas del workstream (siguen vigentes):
 - Cupo por `time_blocks.capacity` (default 1 = cero regresión); público ve "disponible/lleno" sin lugares restantes.
 - [Phase 06]: book_slot_atomic intacto: abono_id se setea con UPDATE post-insert fuera del RPC (etiqueta no-constraint)
 - [Phase 06]: schema.sql editado quirúrgicamente (no dump) porque el CLI v2.107 reordena el archivo entero
+- [Phase ?]: 06-02: motor de abono materializa cada ocurrencia vía createAppointmentCore (nunca insert directo); skip-and-record ante conflicto
+- [Phase ?]: 06-02: schedule_exception closed=false (horario especial) OVERRIDE la grilla semanal para ese dia (autoridad unica de horario)
 
 ### Pending Todos
 
@@ -97,7 +100,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20T23:08:19.254Z
+Last session: 2026-07-20T23:15:41.058Z
 Stopped at: Completed 06-01-PLAN.md
 Resume file: .planning/workstreams/motor-reservas/phases/06-modelo-del-abono-alta-manual-generaci-n-forward/06-CONTEXT.md
 
