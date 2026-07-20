@@ -1,16 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.24
-milestone_name: Turnos fijos / Abonos recurrentes
+milestone_name: — Turnos fijos / Abonos recurrentes
 status: roadmap-complete
-last_updated: "2026-07-20T21:10:00.000Z"
-last_activity: 2026-07-20
+stopped_at: Phase 6 context gathered
+last_updated: "2026-07-20T21:35:21.632Z"
+last_activity: 2026-07-20 — ROADMAP v0.24 creado (Phases 6-7), Traceability 6/6
 progress:
-  total_phases: 2
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 7
+  completed_phases: 5
+  total_plans: 20
+  completed_plans: 20
+  percent: 71
 ---
 
 # Project State
@@ -93,9 +94,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20T21:10:00.000Z
-Stopped at: ROADMAP v0.24 creado (Phases 6-7), Traceability 6/6 mapeada
-Resume file: .planning/workstreams/motor-reservas/ROADMAP.md
+Last session: 2026-07-20T21:35:21.614Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/06-modelo-del-abono-alta-manual-generaci-n-forward/06-CONTEXT.md
 
 ## Operator Next Steps
 
