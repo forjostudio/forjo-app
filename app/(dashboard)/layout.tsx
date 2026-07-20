@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { PlanBanner } from '@/components/dashboard/plan-banner'
 import { TestModeBanner } from '@/components/dashboard/test-mode-banner'
+import { MpConnectionBanner } from '@/components/dashboard/mp-connection-banner'
 import { VerticalProvider } from '@/lib/use-terminology'
 import { resolveVertical } from '@/lib/verticals'
 import { PaletteScript } from '@/components/palette-script'
@@ -42,6 +43,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <Sidebar business={business} />
         <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">
           <TestModeBanner />
+          <MpConnectionBanner connectionError={business.mp_connection_status === 'error' && !!business.mp_user_id} />
           <Suspense fallback={null}>
             <PlanBanner planStatus={planStatus} daysLeft={daysLeft} />
           </Suspense>
