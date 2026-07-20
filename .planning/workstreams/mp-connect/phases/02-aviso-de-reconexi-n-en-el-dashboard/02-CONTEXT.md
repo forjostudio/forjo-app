@@ -45,6 +45,25 @@ NO toca backend/token/cobros (eso es Phase 1). NO cambia el flujo OAuth (lo reus
   dismissable) mientras la conexión esté caída — es bloqueante de ingresos (no puede cobrar señas),
   consistente con que `PlanBanner` también es persistente. CTA "Reconectar" → `/api/mercadopago/connect`.
 
+### Polish de diseño de la card de MercadoPago (agregado por el usuario)
+- **D-08:** Sumar el **logo de MercadoPago** a la card, espejando el patrón de marca del proyecto:
+  **SVG inline** (como la "G" multicolor de Google en `components/auth/google-button.tsx` — el repo NO
+  usa paquetes de íconos de marca, inline a mano). El logo va en el botón "Conectar con MercadoPago" y/o
+  como marca de la card, decorativo (`aria-hidden`, el nombre accesible lo da el texto). Ordenar la card
+  para que se vea prolija, coherente con el resto de Integraciones.
+- **D-09:** En el estado conectado, **sacar el "· cuenta #{mp_user_id}"** — no le dice nada al dueño.
+  Mostrar solo "Conectado" limpio (con el check verde actual). El **mail de la cuenta MP queda DIFERIDO**
+  (requiere llamar a `GET /users/me` de MP en el callback + guardarlo con una migración nueva — fuera de
+  esta fase de diseño). `mp_user_id` se sigue usando SOLO como flag de conexión (la lógica de D-01 no cambia).
+
+### Fix del TabsList de Negocio en mobile (agregado por el usuario)
+- **D-10:** El `TabsList` del hub Negocio ([settings-client.tsx:830](../../../../../app/(dashboard)/settings/settings-client.tsx))
+  tiene 4 tabs (Datos del negocio · Cobros · Integraciones · Notificaciones/Mails) con `grid-cols-3` en
+  mobile → la 4ª tab cae a una segunda fila y queda **fuera** del contenedor redondeado (se ve rota, ver
+  captura del usuario). Fix: que en mobile las 4 entren prolijas dentro del pill (ej. `grid-cols-2` = 2×2,
+  o el layout que quede consistente con el design system). NO cambiar los labels (el de la 4ª es literal
+  "Notificaciones/Mails" por decisión previa). Mantener el comportamiento `sm:`/`lg:` actual.
+
 ### Aislamiento por tenant / seguridad
 - **D-07:** El estado se lee del `business` ya resuelto por `owner_id` (tanto en `layout.tsx:17-21` como en
   `negocio/page.tsx` → `settings-client`). NUNCA se muestra el estado de otro negocio. Solo se expone el
@@ -110,6 +129,7 @@ persistente porque bloquea el cobro de señas (ingresos), igual criterio que el 
 
 - **Aviso por mail al negocio** cuando la conexión cae — diferido desde Phase 1, sigue fuera de scope (v0.23 avisa solo en el dashboard).
 - Aviso contextual en la pantalla de **Finanzas/cobros** específicamente (más allá del banner global) — no pedido; si se quiere, fase aparte.
+- **Mostrar el mail de la cuenta MP** en la card (en vez del número) — requiere `GET /users/me` de MP en el callback + guardar el email (migración nueva). Diferido a un follow-up; en esta fase solo se saca el número (D-09).
 
 </deferred>
 
