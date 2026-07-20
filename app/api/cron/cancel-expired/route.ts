@@ -3,6 +3,8 @@ import { getBusinessSecrets, type BusinessSecrets } from '@/lib/business-secrets
 import { sendExpiredHoldEmail } from '@/lib/email'
 import { getPlanPrices } from '@/lib/plan-prices'
 import { computeSnapshotRows, type BizRow } from '@/lib/crm-reports'
+import { generateAbonoOccurrences } from '@/lib/abono-generation'
+import { todayInAR } from '@/lib/booking-window'
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -40,6 +42,139 @@ async function writeMonthlySnapshot(supabase: SupabaseClient): Promise<number> {
   }
 }
 
+// Cap del array skipped_occurrences persistido en cada abono: se guarda SOLO la cola más reciente (las
+// últimas 50). Un abono `active` es INDEFINIDO: el cron appendea skips cada día que encuentra conflictos,
+// así que sin techo el JSONB crecería para siempre. Es el MISMO cap que usa el alta manual (Plan 03) →
+// los dos puntos de escritura coinciden. Se conserva la semántica de ACUMULACIÓN (append) y sólo se
+// recorta la cola retenida.
+const SKIPPED_CAP = 50
+
+// 'yyyy-MM-dd' de un Date por sus componentes LOCALES (todayInAR devuelve medianoche local del día
+// calendario AR). Idéntico al helper del alta (app/api/abonos/create) para que ambos bordes de ventana
+// coincidan con la misma noción de "hoy" (hora AR, no new Date() crudo en UTC).
+function toISODate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// addDaysISO: suma días a un 'yyyy-MM-dd' en UTC puro (no cruza DST ni desfasa el día). Comparar strings
+// 'yyyy-MM-dd' lexicográficamente equivale a comparar fechas.
+function addDaysISO(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+export type ExtendAbonosResult = {
+  abonosExtended: number
+  abonoOccurrencesGenerated: number
+  abonoOccurrencesSkipped: number
+}
+
+// Extensión de la ventana rolling de los abonos activos (ABONO-06, D-05/D-06): piggyback en el cron
+// DIARIO existente (Vercel Hobby = 1 cron/día, NO se agrega un cron nuevo ni se toca vercel.json —
+// T-06-18). Best-effort en su PROPIO try/catch (mismo criterio que writeMonthlySnapshot): un fallo de la
+// extensión NO aborta cancel-expired. Además cada abono se procesa en su propio try/catch → un abono que
+// falla no frena a los demás ni al cron (T-06-17).
+//
+// Por cada abono `active` genera SOLO la cola nueva (desde generated_until+1 día, o hoy si nunca se
+// generó, hasta hoy + abono_window_weeks) reusando el motor del Plan 02 (generateAbonoOccurrences →
+// createAppointmentCore, núcleo atómico) — NUNCA un insert directo (T-06-15). Ante conflicto la ocurrencia
+// se saltea y se acumula en skipped, sin pisar el turno ajeno (D-06). Luego avanza generated_until al borde
+// (idempotente: re-correr sobre la misma ventana el mismo día es no-op) y appendea los skipped nuevos
+// (capados a SKIPPED_CAP). El cron corre con service-role (sin sesión → RLS NO aplica): el aislamiento por
+// tenant lo da el motor, que filtra TODA query por el business_id del abono, y el UPDATE del abono lleva
+// `.eq('business_id', ...)` (T-06-16).
+export async function extendAbonoWindows(supabase: SupabaseClient): Promise<ExtendAbonosResult> {
+  const out: ExtendAbonosResult = { abonosExtended: 0, abonoOccurrencesGenerated: 0, abonoOccurrencesSkipped: 0 }
+  try {
+    // El business es el tenant del abono: traemos id + buffer_minutes (lo usa el core) + abono_window_weeks
+    // (borde de la ventana, migr. 054) por join to-one. Con service-role no hay RLS; iteramos por abono.
+    const { data: abonos, error } = await supabase
+      .from('abonos')
+      .select(
+        'id, business_id, client_id, day_of_week, start_time, service_id, professional_id, location_id, generated_until, skipped_occurrences, businesses(id, buffer_minutes, abono_window_weeks)'
+      )
+      .eq('status', 'active')
+    if (error) {
+      console.error('[cron/abono-extend] abonos read error:', error.message)
+      return out
+    }
+    if (!abonos || abonos.length === 0) return out
+
+    // "Hoy" en hora AR (no new Date() crudo): el server corre en UTC en Vercel — misma fuente de verdad
+    // del borde que la ventana de reserva pública y el alta del abono.
+    const today = todayInAR()
+    const todayStr = toISODate(today)
+
+    for (const abono of abonos) {
+      try {
+        const biz = abono.businesses as unknown as
+          | { id: string; buffer_minutes: number | null; abono_window_weeks: number | null }
+          | null
+        if (!biz?.id) continue
+
+        // Borde de la ventana para ESTE negocio: hoy + abono_window_weeks*7 (default 8). Mismo cálculo que
+        // el alta (componentes locales sobre todayInAR).
+        const windowWeeks = Number(biz.abono_window_weeks) || 8
+        const toDate = toISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + windowWeeks * 7))
+
+        // fromDate = SOLO la cola nueva: el mayor entre hoy y (generated_until + 1 día). Si el abono nunca
+        // se generó (generated_until null), arranca hoy. Si la ventana ya está cubierta (fromDate > toDate)
+        // no hay cola → se saltea (idempotencia del rolling: re-correr el mismo día es no-op).
+        const generatedUntil = abono.generated_until as string | null
+        const nextAfterGenerated = generatedUntil ? addDaysISO(generatedUntil, 1) : todayStr
+        const fromDate = nextAfterGenerated > todayStr ? nextAfterGenerated : todayStr
+        if (fromDate > toDate) continue
+
+        const result = await generateAbonoOccurrences({
+          supabase,
+          business: { id: biz.id, buffer_minutes: biz.buffer_minutes },
+          abono: {
+            id: abono.id as string,
+            client_id: abono.client_id as string | null,
+            day_of_week: abono.day_of_week as number,
+            start_time: abono.start_time as string,
+            service_id: abono.service_id as string | null,
+            professional_id: abono.professional_id as string | null,
+            location_id: abono.location_id as string | null,
+          },
+          fromDate,
+          toDate,
+        })
+
+        // Persistir el estado rolling (el motor es PURO, no toca la fila): avanzar generated_until al borde
+        // y ACUMULAR los skipped nuevos sobre los existentes, capando a la cola más reciente (SKIPPED_CAP).
+        // UPDATE acotado por id + business_id (tenant, T-06-16).
+        const existingSkipped = Array.isArray(abono.skipped_occurrences)
+          ? (abono.skipped_occurrences as { date: string; reason: string }[])
+          : []
+        await supabase
+          .from('abonos')
+          .update({
+            generated_until: toDate,
+            skipped_occurrences: [...existingSkipped, ...result.skipped].slice(-SKIPPED_CAP),
+          })
+          .eq('id', abono.id)
+          .eq('business_id', abono.business_id)
+
+        out.abonosExtended++
+        out.abonoOccurrencesGenerated += result.created.length
+        out.abonoOccurrencesSkipped += result.skipped.length
+      } catch (e) {
+        // Un abono que falla NO frena al resto ni al cron (T-06-17).
+        console.error(`[cron/abono-extend] abono ${abono.id} FALLÓ:`, e instanceof Error ? e.message : e)
+      }
+    }
+    return out
+  } catch (e) {
+    console.error('[cron/abono-extend] FALLÓ:', e instanceof Error ? e.message : e)
+    return out
+  }
+}
+
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -63,9 +198,11 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: fetchErr.message }, { status: 500 })
   }
   if (!expiring || expiring.length === 0) {
-    // Sin holds vencidos hoy, pero el snapshot mensual igual debe correr (es diario/idempotente, D-01).
+    // Sin holds vencidos hoy, pero el snapshot mensual y la extensión de abonos igual deben correr
+    // (ambos diarios/idempotentes/best-effort, D-01/D-05).
     const snapshotRows = await writeMonthlySnapshot(supabase)
-    return Response.json({ cancelled: 0, snapshotRows })
+    const abonos = await extendAbonoWindows(supabase)
+    return Response.json({ cancelled: 0, snapshotRows, ...abonos })
   }
 
   const ids = expiring.map(a => a.id)
@@ -117,5 +254,9 @@ export async function GET(request: NextRequest) {
   // Snapshot mensual de MRR (best-effort, idempotente) tras la lógica de cancel-expired (D-01).
   const snapshotRows = await writeMonthlySnapshot(supabase)
 
-  return Response.json({ cancelled: ids.length, emailed, snapshotRows })
+  // Extensión de la ventana rolling de abonos activos (best-effort, idempotente, D-05); su propio
+  // try/catch → no aborta cancel-expired aunque falle.
+  const abonos = await extendAbonoWindows(supabase)
+
+  return Response.json({ cancelled: ids.length, emailed, snapshotRows, ...abonos })
 }
