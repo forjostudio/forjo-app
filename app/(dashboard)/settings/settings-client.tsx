@@ -884,10 +884,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             específico) que aplastaba el grid a 32px. Cada trigger llena su celda (w-full). Desktop: fila. */}
         {isNegocio && (
           <TabsList className="grid grid-cols-2 gap-1.5 lg:flex lg:flex-wrap w-full lg:w-fit !h-auto">
-            <TabsTrigger value="business" className="w-full lg:w-auto py-1.5">Datos del negocio</TabsTrigger>
+            <TabsTrigger value="business" className="w-full lg:w-auto py-1.5">Datos</TabsTrigger>
             <TabsTrigger value="cobros" className="w-full lg:w-auto py-1.5">Cobros</TabsTrigger>
             <TabsTrigger value="integraciones" className="w-full lg:w-auto py-1.5">Integraciones</TabsTrigger>
-            <TabsTrigger value="notificaciones" className="w-full lg:w-auto py-1.5">Notificaciones/Mails</TabsTrigger>
+            <TabsTrigger value="notificaciones" className="w-full lg:w-auto py-1.5">Notificaciones/Mail</TabsTrigger>
           </TabsList>
         )}
         {/* TabsList de Configuración reducido a 3 (NAV-02): Cobros/Integraciones/Notificaciones se
