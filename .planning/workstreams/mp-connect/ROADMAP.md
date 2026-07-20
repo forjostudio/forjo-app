@@ -20,7 +20,7 @@ El faseo va por superficie y riesgo: primero el backend de integridad de pagos (
 ### Milestone v0.23 — Resiliencia de MercadoPago Connect
 
 - [x] **Phase 1: Detección y estado de conexión caída** - El resolver de token deja de caer en fallback mudo (refresh rechazado o token rotado sin persistir → conexión caída, no cobra), el estado se persiste durable en `businesses` (migración 053 idempotente, sin aplicar), se loguea el motivo real y la reconexión OAuth limpia el flag (completed 2026-07-19)
-- [ ] **Phase 2: Aviso de reconexión en el dashboard** - El dashboard refleja el estado real: con la conexión caída muestra un aviso de reconexión (con acceso al flujo OAuth existente) en vez de un "Conectado" engañoso
+- [x] **Phase 2: Aviso de reconexión en el dashboard** - El dashboard refleja el estado real: con la conexión caída muestra un aviso de reconexión (con acceso al flujo OAuth existente) en vez de un "Conectado" engañoso (completed 2026-07-20)
 
 ## Phase Details
 
@@ -62,9 +62,9 @@ El faseo va por superficie y riesgo: primero el backend de integridad de pagos (
   3. El aviso de reconexión da acceso al flujo OAuth de reconexión ya existente, sin obligar a desvincular la cuenta primero.
   4. El estado que ve el dueño es el de SU negocio: el dashboard lo lee del `business` resuelto por `owner_id` (aislamiento por tenant), sin reflejar el estado de conexión de otro negocio.
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 
-- [ ] 02-01-PLAN.md — mpConnected según el flag (D-01) + aviso ámbar "caído" en la card de MercadoPago (D-02/D-03/D-04) + banner global nuevo `mp-connection-banner.tsx` montado en el layout (D-05/D-06) + polish: logo de MP inline (D-08), estado conectado sin número de cuenta (D-09) y fix del TabsList de Negocio en mobile (D-10), reusando el OAuth existente (Wave 1)
+- [x] 02-01-PLAN.md — mpConnected según el flag (D-01) + aviso ámbar "caído" en la card de MercadoPago (D-02/D-03/D-04) + banner global nuevo `mp-connection-banner.tsx` montado en el layout (D-05/D-06) + polish: logo de MP inline (D-08), estado conectado sin número de cuenta (D-09) y fix del TabsList de Negocio en mobile (D-10), reusando el OAuth existente (Wave 1)
 
 **UI hint**: yes
 
@@ -78,4 +78,4 @@ Phases execute in numeric order: 1 → 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Detección y estado de conexión caída | 2/2 | Complete   | 2026-07-19 |
-| 2. Aviso de reconexión en el dashboard | 0/1 | Not started | - |
+| 2. Aviso de reconexión en el dashboard | 1/1 | Complete   | 2026-07-20 |

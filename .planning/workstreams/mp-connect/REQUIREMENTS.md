@@ -38,7 +38,7 @@ está caída. Es el punto frágil #1 de la skill `mercadopago-connect`.
 
 ### Dashboard (MPCONN)
 
-- [ ] **MPCONN-04**: El dashboard refleja el estado real: si la conexión está caída (flag en error con
+- [x] **MPCONN-04**: El dashboard refleja el estado real: si la conexión está caída (flag en error con
   `mp_user_id` presente), muestra un aviso claro de reconexión ("Tu conexión con MercadoPago se
   interrumpió, reconectá tu cuenta para seguir cobrando señas") con acceso al flujo OAuth existente,
   en lugar de mostrar "Conectado".
