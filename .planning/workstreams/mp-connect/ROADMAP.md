@@ -64,7 +64,7 @@ El faseo va por superficie y riesgo: primero el backend de integridad de pagos (
 
 **Plans**: 1 plan
 
-- [ ] 02-01-PLAN.md — mpConnected según el flag (D-01) + aviso ámbar "caído" en la card de MercadoPago (D-02/D-03/D-04) + banner global nuevo `mp-connection-banner.tsx` montado en el layout (D-05/D-06), reusando el OAuth existente (Wave 1)
+- [ ] 02-01-PLAN.md — mpConnected según el flag (D-01) + aviso ámbar "caído" en la card de MercadoPago (D-02/D-03/D-04) + banner global nuevo `mp-connection-banner.tsx` montado en el layout (D-05/D-06) + polish: logo de MP inline (D-08), estado conectado sin número de cuenta (D-09) y fix del TabsList de Negocio en mobile (D-10), reusando el OAuth existente (Wave 1)
 
 **UI hint**: yes
 
