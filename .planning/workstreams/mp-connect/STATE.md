@@ -4,8 +4,8 @@ milestone: v0.23
 milestone_name: — Resiliencia de MercadoPago Connect
 current_plan: 1
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-07-19T20:53:41.892Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-07-20T01:11:56.855Z"
 last_activity: 2026-07-19 -- Phase 1 execution started
 progress:
   total_phases: 2
@@ -82,9 +82,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-19T19:00:04.801Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/workstreams/mp-connect/phases/01-detecci-n-y-estado-de-conexi-n-ca-da/01-CONTEXT.md
+Last session: 2026-07-20T01:11:56.843Z
+Stopped at: Phase 2 context gathered
+Resume file: .planning/workstreams/mp-connect/phases/02-aviso-de-reconexi-n-en-el-dashboard/02-CONTEXT.md
 
 ## Operator Next Steps
 
