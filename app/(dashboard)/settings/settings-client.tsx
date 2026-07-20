@@ -179,10 +179,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // el efecto solo corra al montar /negocio (nunca en /settings).
   useEffect(() => {
     if (!isNegocio) return
-    const mp = new URLSearchParams(window.location.search).get('mp')
-    if (!mp) return
+    const params = new URLSearchParams(window.location.search)
+    const mp = params.get('mp')
+    const google = params.get('google')
+    if (!mp && !google) return
     if (mp === 'connected') toast.success('MercadoPago conectado')
     else if (mp === 'error') toast.error('No se pudo conectar con MercadoPago')
+    // Google Calendar también vuelve acá cuando se conecta desde Integraciones (?from=negocio).
+    if (google === 'connected') toast.success('Google Calendar conectado')
+    else if (google === 'error') toast.error('No se pudo conectar con Google Calendar')
     setNegocioTab('integraciones')
     window.history.replaceState(null, '', '/negocio')
   }, [isNegocio])
@@ -1717,7 +1722,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   </div>
                 </div>
               ) : (
-                <Button onClick={() => { window.location.href = '/api/google/connect' }}>
+                <Button onClick={() => { window.location.href = '/api/google/connect?from=negocio' }}>
                   <CalendarClock className="w-4 h-4 mr-1.5" /> Conectar Google Calendar
                 </Button>
               )}

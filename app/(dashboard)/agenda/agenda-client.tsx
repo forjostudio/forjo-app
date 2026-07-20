@@ -519,7 +519,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 </Button>
               </>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => { window.location.href = '/api/google/connect' }}>
+              <Button variant="outline" size="sm" onClick={() => { window.location.href = '/api/google/connect?from=agenda' }}>
                 <CalendarClock className="w-3.5 h-3.5 mr-1.5" /> Conectar Google Calendar
               </Button>
             )
