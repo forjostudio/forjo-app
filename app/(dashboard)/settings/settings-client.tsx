@@ -147,21 +147,10 @@ function MpLogo({ className }: { className?: string }) {
   return <Image src="/mercadopago-isotipo.png" alt="" width={35} height={26} className={className} />
 }
 
-// Ícono oficial de Google Calendar (SVG inline decorativo, aria-hidden — el nombre accesible lo da el
-// texto). Multicolor de marca, mismo patrón que la 'G' de google-button / el isotipo de MP.
+// Ícono de Google Calendar: PNG oficial del usuario, con el fondo cuadriculado limpiado a blanco
+// y recortado al ícono (public/google-calendar.png). Va en chip blanco. Decorativo (alt vacío).
 function GoogleCalendarLogo({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path fill="#fff" d="M152 47H48v106h104z"/>
-      <path fill="#ea4335" d="M152 200l48-48h-48z"/>
-      <path fill="#fbbc04" d="M200 48h-48v104h48z"/>
-      <path fill="#34a853" d="M152 152H48v48h104z"/>
-      <path fill="#188038" d="M0 152v32c0 8.837 7.163 16 16 16h32v-48z"/>
-      <path fill="#1967d2" d="M200 48V16c0-8.837-7.163-16-16-16h-32v48z"/>
-      <path fill="#4285f4" d="M152 0H16C7.163 0 0 7.163 0 16v136h48V48h104z"/>
-      <path fill="#4285f4" d="M67.19 106.98c-2.28-1.54-3.86-3.79-4.72-6.76l7.51-3.1c.48 1.83 1.32 3.24 2.52 4.24 1.19 1 2.66 1.49 4.37 1.49 1.75 0 3.24-.53 4.48-1.6 1.24-1.06 1.86-2.43 1.86-4.08 0-1.69-.65-3.07-1.96-4.14-1.31-1.07-2.95-1.6-4.9-1.6h-4.34v-7.43h3.9c1.68 0 3.1-.45 4.25-1.36 1.15-.9 1.73-2.15 1.73-3.73 0-1.41-.51-2.53-1.54-3.37-1.03-.84-2.33-1.26-3.92-1.26-1.55 0-2.78.41-3.69 1.24-.92.83-1.59 1.83-1.9 2.94l-7.43-3.1c.72-2.04 2.02-3.84 3.92-5.39 1.9-1.55 4.34-2.33 7.29-2.33 2.18 0 4.14.42 5.88 1.27 1.74.85 3.11 2.02 4.09 3.51.98 1.49 1.47 3.16 1.47 5.02 0 1.9-.46 3.51-1.37 4.83-.91 1.32-2.03 2.33-3.36 3.04v.44c1.76.74 3.2 1.87 4.34 3.39 1.13 1.52 1.71 3.34 1.71 5.46 0 2.12-.54 4.01-1.62 5.67-1.08 1.66-2.57 2.97-4.46 3.92-1.9.95-4.02 1.44-6.39 1.44-2.75.01-5.29-.78-7.58-2.32zM103.7 78.2l-8.25 5.96-4.13-6.26 14.82-10.69h5.68v50.42h-8.16z"/>
-    </svg>
-  )
+  return <Image src="/google-calendar.png" alt="" width={20} height={20} className={className} />
 }
 
 export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], mpConnectEnabled, googleEnabled = false, googleConnected = false, ownerEmail = null, view = 'config' }: Props) {
@@ -1722,7 +1711,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             <Card className="p-6 space-y-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <GoogleCalendarLogo className="h-4 w-auto" />
+                  <span className="inline-flex items-center justify-center rounded-md bg-white p-1">
+                    <GoogleCalendarLogo className="h-4 w-auto" />
+                  </span>
                   <p className="font-semibold text-sm">Google Calendar</p>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">Sincronizá los turnos con tu Google Calendar. Es la misma conexión que ves en la Agenda.</p>
