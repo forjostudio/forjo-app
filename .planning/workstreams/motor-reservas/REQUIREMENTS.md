@@ -58,9 +58,9 @@
 
 | REQ-ID | Phase |
 |--------|-------|
-| ABONO-01 | — |
-| ABONO-02 | — |
-| ABONO-03 | — |
-| ABONO-04 | — |
-| ABONO-05 | — |
-| ABONO-06 | — |
+| ABONO-01 | Phase 6 |
+| ABONO-02 | Phase 6 |
+| ABONO-03 | Phase 6 |
+| ABONO-04 | Phase 7 |
+| ABONO-05 | Phase 7 |
+| ABONO-06 | Phase 6 |
