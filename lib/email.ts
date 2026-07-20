@@ -323,6 +323,125 @@ export async function sendManualBookingConfirmation({
   console.log(`📧 Confirmación (alta manual) enviada a ${to}`)
 }
 
+// Email al cliente cuando EL DUEÑO da de alta un ABONO (serie de turnos FIJOS recurrentes) desde el
+// panel (ABONO-01 / D-08). A diferencia de un turno suelto, NO describe una fecha puntual: describe el
+// turno fijo SEMANAL — "todos los lunes 10:00 hs" — que el negocio le reservó al cliente todas las
+// semanas. Se manda UNA sola vez, al crear el abono (los turnos que la generación forward materializa
+// semana a semana NO mandan mail cada uno, D-08). NO muestra precio/seña: v0.24 no cobra el abono (D-08).
+// Reusa los helpers del módulo (resolveSender, renderEmailHeader, normalizeArWhatsApp, resendSend) para
+// mantener idéntico el branding y no duplicar el resolver de sender (que ya sanitiza el header From) ni
+// el POST a Resend. `cancelUrl` queda OPCIONAL y HOY no se pasa: el link de cancelar la SERIE es Phase 7;
+// el template ya lo contempla para sumarlo sin reescribir nada (degradación: sin url, no se muestra botón).
+export async function sendAbonoConfirmation({
+  to,
+  clientName,
+  service,
+  dayLabel,
+  time,
+  businessName,
+  businessSlug,
+  primaryColor,
+  logoUrl,
+  whatsapp,
+  cancelUrl,
+  resendApiKey,
+  resendFrom,
+}: {
+  to: string
+  clientName: string
+  service: string
+  dayLabel: string // ej. "todos los lunes" (derivado de day_of_week por el caller)
+  time: string
+  businessName: string
+  businessSlug: string
+  primaryColor?: string | null
+  logoUrl?: string | null
+  whatsapp?: string | null
+  // Opcional y SIN uso en v0.24: el link de cancelar la serie llega en Phase 7. Sin url → sin botón.
+  cancelUrl?: string | null
+  resendApiKey?: string | null
+  resendFrom?: string | null
+}) {
+  // Resuelve key + from (display name = nombre del negocio; el resolver ya sanitiza el header From →
+  // cubre header-injection). Tira error claro si usa key propia sin remitente.
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
+  const hora = time.slice(0, 5)
+
+  // Branding parametrizado idéntico al resto de los mails: acento = color del negocio, fallback rojo Forjo.
+  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  const cancel = cancelUrl && cancelUrl.trim() ? cancelUrl.trim() : ''
+  // Normaliza por las dudas (idempotente): si no es un número usable, se omite el link.
+  const waDigits = normalizeArWhatsApp(whatsapp)
+  const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
+  const headerInner = renderEmailHeader(businessName, logoUrl)
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+      <tr><td style="background:${accent};padding:32px 40px;border-radius:12px 12px 0 0;text-align:center;">
+        ${headerInner}
+      </td></tr>
+
+      <tr><td style="background:#ffffff;padding:40px 40px 32px;">
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu turno fijo quedó agendado</p>
+        <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
+          Hola <strong>${clientName}</strong>, <strong>${businessName}</strong> te reservó un turno fijo <strong>todas las semanas</strong>. Este es el horario que quedó guardado para vos.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
+          <tr><td style="padding:20px 22px 6px;">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:14px;">Tu turno fijo semanal</div>
+          </td></tr>
+          <tr><td style="padding:0 22px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Se repite</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;text-transform:capitalize;">${dayLabel}</td>
+              </tr>
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;">Hora</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;text-align:right;">${hora} hs</td>
+              </tr>
+            </table>
+          </td></tr>
+        </table>
+
+        <p style="font-size:13px;color:#777;line-height:1.7;margin:0;">Todas las semanas te vamos a esperar en ese mismo horario. Si algún día no vas a poder venir, avisanos y lo coordinamos.</p>
+        ${cancel ? `<table cellpadding="0" cellspacing="0" style="margin:16px 0 0;"><tr><td style="border-radius:8px;background:${accent};">
+          <a href="${cancel}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Cancelar turno fijo</a>
+        </td></tr></table>` : ''}
+        ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
+      </td></tr>
+
+      <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+
+  await resendSend(key, {
+    from,
+    to: [to],
+    subject: `Tu turno fijo quedó agendado — ${businessName}`,
+    html,
+    text: `¡Hola ${clientName}! ${businessName} te agendó un turno fijo semanal.\n\nServicio: ${service}\nSe repite: ${dayLabel}\nHora: ${hora} hs${cancel ? `\n\n¿Necesitás cancelar el turno fijo? ${cancel}` : ''}`,
+  })
+  console.log(`📧 Confirmación de abono enviada a ${to}`)
+}
+
 export async function sendAdminNotification({
   to,
   clientName,
