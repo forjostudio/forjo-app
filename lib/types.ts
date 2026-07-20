@@ -43,6 +43,9 @@ export interface Business {
   // página pública. Se lee vía la vista public_businesses (no la tabla). Ambos null = sin límite.
   max_advance_days?: number | null // modo rolling: N días desde hoy (default 30 en DB). null/0 = sin límite.
   max_advance_date?: string | null // modo fecha fija, ISO yyyy-mm-dd. Precedencia fecha > días.
+  // Ventana de generación forward del abono en semanas (migración 054, D-07); default 8 en la DB.
+  // Owner-updatable (el trigger businesses_protect_admin_columns no la protege). NO viaja al anon.
+  abono_window_weeks?: number | null
   // MercadoPago Connect (OAuth): user_id de la cuenta MP. NO es secreto (es el id de cuenta);
   // el dashboard lo usa como flag (¿conectó por OAuth?) → se queda en Business.
   mp_user_id?: string | null
@@ -245,10 +248,40 @@ export interface Appointment {
   // siempre seat 0). `is_group` = desnormalización (capacity > 1) que condiciona el EXCLUDE 013.
   seat?: number
   is_group?: boolean
+  // FK a la serie del abono (migración 054, D-03); marca el turno como 'fijo' en la agenda (D-09).
+  // null = turno suelto. Se setea con un UPDATE acotado tras el insert atómico (Plan 02).
+  abono_id?: string | null
   created_at: string
   professionals?: Professional
   services?: Service
   clients?: Client
+}
+
+// Abono = serie de turnos fijos recurrentes (semanal, mismo día/hora/cliente/servicio/agenda).
+// Migración 054 (ABONO-01/02/03, D-01). Espejo snake_case de la fila DB. RLS owner-only; el público
+// NUNCA lee abonos (D-10). El motor de generación forward (Plan 02) materializa turnos en `appointments`
+// dentro de una ventana rolling de `businesses.abono_window_weeks` semanas.
+export interface Abono {
+  id: string
+  business_id: string
+  client_id: string | null // ON DELETE SET NULL
+  service_id: string | null // ON DELETE RESTRICT (evita orfandad de generación)
+  professional_id: string | null // NULLABLE: bucket "sin profesional" según vertical
+  location_id: string | null // NULLABLE
+  // convención EXTRACT(dow): 0=domingo..6=sábado, idéntica a time_blocks.day_of_week y book_slot_atomic.
+  day_of_week: number
+  start_time: string // 'HH:mm[:ss]'
+  duration_minutes: number | null // snapshot de referencia; la generación usa la duración VIVA del service.
+  status: 'active' | 'cancelled'
+  cancel_token: string // token a NIVEL SERIE (link de cancelación, Phase 7)
+  generated_until: string | null // frontera de la ventana rolling (ISO yyyy-mm-dd); idempotencia forward.
+  skipped_occurrences: { date: string; reason: string }[] // D-06: ocurrencias salteadas por conflicto.
+  created_at: string
+  cancelled_at: string | null
+  // Columnas extensibles (D-02): diferido a v0.25 / cobro futuro — v0.24 NO las usa.
+  reminder_lead_hours?: number | null // v0.25: lead-time del recordatorio pagá-o-liberá
+  deposit_amount?: number | null // futuro: seña por ocurrencia
+  billing_subscription_id?: string | null // futuro: referencia a la suscripción de cobro por cliente
 }
 
 export interface ManualSale {
