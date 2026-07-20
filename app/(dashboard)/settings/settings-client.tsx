@@ -1640,7 +1640,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               <div className="flex items-center gap-2">
                 {/* Chip blanco: el isotipo oficial (aro azul marino) está pensado para fondo claro;
                     sobre la card oscura el navy se funde. El tile lo hace rendir con sus colores reales. */}
-                <span className="inline-flex items-center justify-center rounded-md bg-white p-1">
+                <span className="inline-flex items-center justify-center rounded-md bg-white size-6 shrink-0">
                   <MpLogo className="h-4 w-auto" />
                 </span>
                 <p className="font-semibold text-sm">MercadoPago</p>
@@ -1711,7 +1711,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             <Card className="p-6 space-y-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center rounded-md bg-white p-1">
+                  <span className="inline-flex items-center justify-center rounded-md bg-white size-6 shrink-0">
                     <GoogleCalendarLogo className="h-4 w-auto" />
                   </span>
                   <p className="font-semibold text-sm">Google Calendar</p>
