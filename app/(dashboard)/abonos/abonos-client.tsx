@@ -21,7 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle, Check } from 'lucide-react'
+import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle } from 'lucide-react'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { NuevoAbonoForm } from '@/components/dashboard/nuevo-abono-form'
 
@@ -154,7 +154,6 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
               const skipped = a.skipped_occurrences?.length ?? 0
               const bookable = a.services?.name || a.professionals?.name || '—'
               const total = a.total_occurrences // null = indefinido
-              const isCompleted = a.status === 'completed'
               return (
                 <li key={a.id}>
                   <button
@@ -175,15 +174,13 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        {/* El chip cuenta TURNOS ASIGNADOS, nunca dice "Completado": esa palabra se leía
-                            como "la serie ya terminó" cuando en realidad los turnos están por delante.
-                            El estado 'completed' (todas las sesiones ya asignadas) se marca sólo con el
-                            check, sin dominar la lectura. Copy coherente con el indefinido ("8 turnos"). */}
-                        <Badge variant={isCompleted ? 'outline' : 'secondary'} className="gap-1">
-                          {isCompleted ? <Check className="w-3 h-3" /> : <CalendarClock className="w-3 h-3" />}
-                          {total != null
-                            ? `${count} de ${total} turno${total === 1 ? '' : 's'}`
-                            : `${count} turno${count === 1 ? '' : 's'}`}
+                        {/* El chip cuenta TURNOS ASIGNADOS y NADA más — idéntico para finitos e
+                            indefinidos. Tanto "Completado" como "X de N" se leían como "la serie ya
+                            terminó", cuando en realidad esos turnos están por delante. La duración del
+                            abono (indefinido vs N sesiones) ya se comunica en el subtítulo de la fila. */}
+                        <Badge variant="secondary" className="gap-1">
+                          <CalendarClock className="w-3 h-3" />
+                          {`${count} turno${count === 1 ? '' : 's'}`}
                         </Badge>
                         {skipped > 0 && (
                           <Badge variant="destructive" className="gap-1"><AlertTriangle className="w-3 h-3" />{skipped} salteada{skipped === 1 ? '' : 's'}</Badge>
