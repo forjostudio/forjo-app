@@ -23,6 +23,11 @@ const START = '10:00'
 // 21:00 cae FUERA de la grilla semanal del fixture (lunes 08:00–20:00): D-06′ dice que igual se genera.
 const START_LATE = '21:00'
 
+// Espejo del tope duro del motor (MAX_OCCURRENCES_PER_RUN en lib/abono-generation.ts, GAP-01). Se
+// duplica acá a propósito: el test asierta el CONTRATO (el motor nunca recorre más de N ocurrencias en
+// una corrida), no el símbolo. Si el tope cambia, este número tiene que cambiar con intención.
+const MAX_OCCURRENCES_PER_RUN = 520
+
 describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences', () => {
   let t: SeededTenant
   let other: SeededTenant
@@ -360,4 +365,57 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
     expect(otherAfter?.abono_id).toBeNull()
     expect(otherAfter?.client_name).toBe('Turno Otro Negocio')
   })
+
+  // ── GAP-01 (T-06-08/17/24): el motor NO puede loopear sin fin con NINGUNA entrada ─────────────
+  // (7) Rango con formato inválido → vacío al toque, sin tocar la DB. El caso canónico es
+  // 'NaN-NaN-NaN': el toISODate de los callers arma el string a mano desde getFullYear()/getMonth()/
+  // getDate(), así que un Date inválido NO tira — produce esa cadena. Y la vieja guarda
+  // `fromDate > toDate` compara STRINGS: '2031-03-03' > 'NaN-NaN-NaN' es false ('2' < 'N'), así que
+  // no disparaba y el `for` iteraba para siempre. La validación de formato mata la clase entera.
+  it('7 — rango con formato inválido (incl. NaN-NaN-NaN) → devuelve vacío sin tocar la DB', async () => {
+    const bad: [string, string][] = [
+      ['NaN-NaN-NaN', 'NaN-NaN-NaN'],
+      [FROM, 'NaN-NaN-NaN'], // el caso explotable: from válido + to degenerado = loop infinito
+      ['NaN-NaN-NaN', TO],
+      ['', TO],
+      [FROM, ''],
+      ['2031-3-3', TO], // sin zero-pad: no es 'yyyy-MM-dd'
+      ['abc', 'def'],
+    ]
+    for (const [fromDate, toDate] of bad) {
+      const res = await generateAbonoOccurrences({ supabase, business: business(), abono: abono(), fromDate, toDate })
+      expect(res).toEqual({ created: [], skipped: [] })
+    }
+
+    // Ni un solo turno creado por ninguna de esas corridas.
+    const { count } = await t.admin
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', t.businessId)
+    expect(count).toBe(0)
+  }, 60_000)
+
+  // (8) Tope duro de iteraciones: aunque el rango sea válido pero absurdo (50 años ≈ 2600 lunes), el
+  // motor corta en MAX_OCCURRENCES_PER_RUN. Backstop puro: con la ventana clampeada a ≤52 semanas
+  // nunca se toca. Se usa el service de OTRO tenant para que el core corte en invalid_service (1
+  // query, sin insert): así el tope se cuenta barato y sin materializar 520 turnos reales.
+  it('8 — tope duro: un rango de 50 años termina y no supera MAX_OCCURRENCES_PER_RUN', async () => {
+    const res = await generateAbonoOccurrences({
+      supabase,
+      business: business(),
+      abono: { ...abono(), service_id: other.serviceId, professional_id: null, location_id: null },
+      fromDate: FROM,
+      toDate: '2081-03-03', // ~2609 lunes: 5x por encima del tope
+    })
+    expect(res.created).toEqual([])
+    expect(res.skipped.length).toBe(MAX_OCCURRENCES_PER_RUN)
+    expect(res.skipped.every((s) => s.reason === 'invalid_service')).toBe(true)
+
+    // El service ajeno nunca pudo reservar nada en este negocio.
+    const { count } = await t.admin
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', t.businessId)
+    expect(count).toBe(0)
+  }, 180_000)
 })
