@@ -9,8 +9,17 @@ import { createAppointmentCore } from './booking-core'
 // grieta de doble-booking porque saltearía el respaldo atómico de la DB. El único acceso directo a
 // appointments permitido acá es (a) el UPDATE acotado que etiqueta el turno con abono_id tras el
 // insert atómico (D-03), y (b) las lecturas de idempotencia. Ante conflicto (slot tomado / cupo lleno
-// / conflicto de espacio / día cerrado / fuera de horario) la ocurrencia se SALTEA y se registra en
-// `skipped`; jamás se pisa un turno ajeno pre-existente (D-06).
+// / conflicto de espacio / día cerrado) la ocurrencia se SALTEA y se registra en `skipped`; jamás se
+// pisa un turno ajeno pre-existente (D-06).
+//
+// POR QUÉ NO HAY GUARDA DE HORARIO (D-06′): el abono del dueño NO se gatea por la grilla semanal
+// (`time_blocks`) ni por el horario especial de una excepción `closed=false`. Razón: el alta MANUAL de
+// un turno (app/api/appointments/create) tampoco chequea horario — con la guarda puesta, el abono era
+// MÁS restrictivo que poner el mismo turno a mano, y el dueño no podía armar series fuera de horario
+// (turno a las 21:00, sábado sin bloque cargado, etc.). Se conserva SÓLO el skip `day_closed`
+// (excepción `closed=true` = feriado): ahí el negocio explícitamente NO abre. Quitar una guarda
+// PRE-core no relaja el anti-doble-booking: 011/013/cupo/espacio siguen siendo atómicos en la DB y un
+// slot tomado sigue devolviendo slot_taken (T-06-22).
 //
 // El motor es PURO respecto de la fila del abono: NO persiste generated_until ni appendea
 // skipped_occurrences. Eso lo hacen los callers (Plan 03 alta manual, Plan 04 cron) con el resultado
@@ -40,19 +49,17 @@ export type GenerateAbonoInput = {
   abono: AbonoForGeneration
   fromDate: string // 'yyyy-MM-dd' inclusive
   toDate: string // 'yyyy-MM-dd' inclusive
+  // Tope de turnos REALES a crear en esta corrida (D-07′, abono FINITO de N sesiones). El caller pasa
+  // `maxCreated = N − generados`; al alcanzarlo el loop CORTA. Ausente → indefinido (recorre todo el
+  // rango). Sólo `created` cuenta: un CHOQUE (skipped) NO consume sesión, así que el finito sigue a la
+  // semana siguiente hasta juntar N turnos reales. maxCreated sólo ACOTA la generación, nunca la fuerza:
+  // no altera ninguna validación del core (T-06-23).
+  maxCreated?: number
 }
 
 export type GenerateAbonoResult = {
   created: string[] // fechas 'yyyy-MM-dd' de las ocurrencias generadas OK
   skipped: { date: string; reason: string }[] // ocurrencias salteadas + razón (D-06)
-}
-
-// timeToMinutes: 'HH:mm' o 'HH:mm:ss' → minutos desde medianoche. time_blocks/schedule_exceptions
-// vienen como 'HH:mm:ss'; start_time del abono puede venir con o sin segundos. Ignoramos los segundos
-// (la grilla del negocio es a nivel minuto).
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
 }
 
 // addDaysUTC: aritmética de fechas en UTC puro para no cruzar DST ni desfasar el día. Devuelve
@@ -64,7 +71,7 @@ function addDaysUTC(dateStr: string, days: number): string {
 }
 
 export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promise<GenerateAbonoResult> {
-  const { supabase, business, abono, fromDate, toDate } = input
+  const { supabase, business, abono, fromDate, toDate, maxCreated } = input
   const created: string[] = []
   const skipped: { date: string; reason: string }[] = []
 
@@ -91,19 +98,7 @@ export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promi
     }
   }
 
-  const reqMinutes = timeToMinutes(abono.start_time)
   const timeHHmm = abono.start_time.slice(0, 5) // el core espera 'HH:mm'
-
-  // Grilla semanal del negocio para este day_of_week (fallback cuando NO hay excepción especial ese día).
-  // Se lee UNA vez (no cambia por fecha, solo por day_of_week). Filtra por business_id (aislamiento).
-  const { data: weeklyBlocks } = await supabase
-    .from('time_blocks')
-    .select('start_time, end_time')
-    .eq('business_id', business.id)
-    .eq('day_of_week', abono.day_of_week)
-  const withinWeeklyGrid = (weeklyBlocks || []).some(
-    b => timeToMinutes(b.start_time as string) <= reqMinutes && reqMinutes < timeToMinutes(b.end_time as string)
-  )
 
   // (2) Iterar SOLO las fechas del rango cuyo dow == abono.day_of_week. Se calcula la primera fecha
   // que matchea desde fromDate y se avanza de a 7 días (NO día a día: acota el loop, T-06-08).
@@ -112,14 +107,21 @@ export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promi
   let date = addDaysUTC(fromDate, firstDelta)
 
   for (; date <= toDate; date = addDaysUTC(date, 7)) {
-    // (3) Guardas de "el negocio abre a esta hora" que el core NO evalúa (el core valida disponibilidad
-    // de slot, no si el negocio está abierto). Precedencia por fecha:
-    //   schedule_exception (día puntual) SOBRE la grilla semanal (time_blocks).
-    // Se traen TODAS las excepciones de esa fecha aplicables al abono (global location_id=null O el
-    // location del abono) y se elige la MÁS específica (la que matchea el location gana sobre la global).
+    // (2b) Tope del abono FINITO (D-07′): ya juntamos las sesiones pedidas en esta corrida → cortar.
+    // Se evalúa sobre `created` (turnos REALES), NO sobre las fechas recorridas: un choque no consume
+    // sesión. Va ANTES de cualquier query para no gastar viajes a la DB de más.
+    if (maxCreated != null && created.length >= maxCreated) break
+
+    // (3) Única guarda pre-core que queda (D-06′): DÍA CERRADO. Se traen las schedule_exceptions de esa
+    // fecha aplicables al abono (global location_id=null O el location del abono) y se elige la MÁS
+    // específica (la del location gana sobre la global). Si esa excepción dice `closed=true`, el negocio
+    // explícitamente NO abre ese día → se saltea sin llamar al core. Cualquier otro caso (sin excepción,
+    // excepción closed=false con horario especial que no cubre la hora, hora fuera de la grilla semanal)
+    // SIGUE DE LARGO hacia el core: el dueño puede armar la serie a la hora que quiera, igual que cuando
+    // carga un turno a mano. El core es el que decide si el slot está libre.
     const { data: exceptions } = await supabase
       .from('schedule_exceptions')
-      .select('closed, start_time, end_time, location_id')
+      .select('closed, location_id')
       .eq('business_id', business.id)
       .eq('date', date)
 
@@ -132,32 +134,10 @@ export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promi
       applicable.find(e => e.location_id == null) ??
       null
 
-    if (exc) {
-      // Excepción presente: es la ÚNICA autoridad de horario para ESE día (anula la grilla semanal).
-      if (exc.closed === true) {
-        // Día cerrado por excepción (global o del location del abono) → saltear, no llamar al core.
-        skipped.push({ date, reason: 'day_closed' })
-        continue
-      }
-      // closed=false → horario ESPECIAL: la ventana abierta de ese día es EXACTAMENTE [start_time,
-      // end_time), y OVERRIDE la grilla semanal. Si start_time del abono queda fuera de esa ventana
-      // especial (aunque cayera dentro del bloque semanal), la ocurrencia va fuera de horario. No se
-      // exige además un time_block: la excepción manda sola ese día (D-06 / precedencia por fecha).
-      const start = exc.start_time as string | null
-      const end = exc.end_time as string | null
-      const withinSpecial =
-        start != null && end != null && timeToMinutes(start) <= reqMinutes && reqMinutes < timeToMinutes(end)
-      if (!withinSpecial) {
-        skipped.push({ date, reason: 'out_of_hours' })
-        continue
-      }
-    } else {
-      // Sin excepción ese día → cae la grilla semanal (time_blocks): start_time debe caer en la ventana
-      // [start_time, end_time) de al menos un bloque de ese day_of_week; si no, fuera de horario.
-      if (!withinWeeklyGrid) {
-        skipped.push({ date, reason: 'out_of_hours' })
-        continue
-      }
+    // Día cerrado por excepción (global o del location del abono) → saltear, no llamar al core.
+    if (exc?.closed === true) {
+      skipped.push({ date, reason: 'day_closed' })
+      continue
     }
 
     // (4) Idempotencia: si ya existe un turno (business_id, abono_id, date) NO cancelado, esta fecha ya
