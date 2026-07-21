@@ -4,6 +4,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
+import { useDrawerPortalContainer } from "@/components/ui/drawer"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
 const Select = SelectPrimitive.Root
@@ -64,14 +65,26 @@ function SelectContent({
   align = "center",
   alignOffset = 0,
   alignItemWithTrigger = true,
+  container,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
-  >) {
+  > &
+  Pick<SelectPrimitive.Portal.Props, "container">) {
+  // Dentro de un Drawer (vaul, mobile) el popup DEBE montarse en el subárbol del drawer: vaul es
+  // modal y bloquea los pointer-events de todo lo que vive afuera, así que un portal a <body> se ve
+  // pero no se puede clickear. Prioridad: `container` explícito (escape hatch) > contexto del drawer.
+  // Si no hay ninguno (caso normal, fuera de drawers) NO se pasa `container` y el Portal se comporta
+  // exactamente como antes.
+  const drawerContainer = useDrawerPortalContainer()
+  const portalContainer = container ?? drawerContainer
+
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal
+      {...(portalContainer ? { container: portalContainer } : {})}
+    >
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
