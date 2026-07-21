@@ -25,6 +25,8 @@ import { todayInAR } from '@/lib/booking-window'
 //   5. Corre la PRIMERA TANDA de generación (hasta el borde de la ventana abono_window_weeks) vía el
 //      motor del Plan 02 (generateAbonoOccurrences → createAppointmentCore, T-06-13): CERO insert
 //      directo a appointments acá tampoco. Persiste generated_until + skipped_occurrences (capado).
+//      Si el abono es FINITO de N sesiones (total_occurrences, D-07′) la tanda va acotada por
+//      `maxCreated = N` y, si ya juntó sus N turnos reales, la fila queda en status 'completed'.
 //   6. Manda UN solo mail al cliente al crear (D-08), best-effort en after(); los turnos generados
 //      semana a semana NO mandan mail cada uno.
 
@@ -33,6 +35,13 @@ import { todayInAR } from '@/lib/booking-window'
 // mantener el cap idéntico en ambos puntos de escritura evita el crecimiento sin techo del JSONB. Al
 // crear el array es chico (acotado por la ventana), así que acá es sólo un guardrail consistente.
 const SKIPPED_CAP = 50
+
+// Techo defensivo de `totalOccurrences` (D-07′). Un abono semanal de 520 sesiones son 10 años: cualquier
+// valor por encima es basura o tampering. Dos razones para acotarlo acá: (a) la columna es `int` — un
+// número enorme (1e10) pasaría el narrowing y reventaría el INSERT con un 500 inútil; (b) mantiene el
+// finito dentro de un orden de magnitud sano. Un valor fuera de rango NO es error: degrada a INDEFINIDO
+// (el comportamiento previo a esta feature), nunca a "más sesiones de las pedidas".
+const MAX_TOTAL_OCCURRENCES = 520
 
 // Etiquetas de día (plural) para el mail: convención EXTRACT(dow) 0=domingo..6=sábado, idéntica a
 // time_blocks / booking-core / abonos.day_of_week. "todos los <día>".
@@ -85,6 +94,17 @@ export async function POST(request: Request) {
   const clientName = typeof body.clientName === 'string' ? body.clientName.trim() : ''
   const clientPhone = typeof body.clientPhone === 'string' && body.clientPhone.trim() ? body.clientPhone.trim() : null
   const clientEmail = typeof body.clientEmail === 'string' && body.clientEmail.trim() ? body.clientEmail.trim() : null
+  // Duración del abono (D-07′): entero 1..MAX → FINITO de N sesiones; cualquier otra cosa (ausente, null,
+  // 0, negativo, no-entero, string, absurdo) → INDEFINIDO (null = rolling sin fin, lo de siempre). El
+  // narrowing es defensivo en la dirección segura: un valor forjado nunca inventa un finito raro ni
+  // rompe el INSERT; a lo sumo el abono queda indefinido y el dueño lo da de baja cuando quiera.
+  const totalOccurrences =
+    typeof body.totalOccurrences === 'number' &&
+    Number.isInteger(body.totalOccurrences) &&
+    body.totalOccurrences > 0 &&
+    body.totalOccurrences <= MAX_TOTAL_OCCURRENCES
+      ? body.totalOccurrences
+      : null
 
   // Guard de campos mínimos: cliente + día de la semana válido (0..6) + hora, y (serviceId) O
   // (professionalId presente — el vertical canchas manda la cancha y el server deriva el service).
@@ -155,6 +175,7 @@ export async function POST(request: Request) {
       day_of_week: dayOfWeek,
       start_time: time,
       duration_minutes: Number(service.duration_minutes) || null,
+      total_occurrences: totalOccurrences, // null = indefinido; N = finito de N sesiones (D-07′)
       status: 'active',
     })
     .select('id, cancel_token, client_id, day_of_week, start_time, service_id, professional_id, location_id')
@@ -186,14 +207,32 @@ export async function POST(request: Request) {
     },
     fromDate,
     toDate,
+    // FINITO (D-07′): tope de turnos REALES de esta tanda = N (recién creado, no hay generados todavía).
+    // Un choque NO consume sesión, así que el motor sigue a la semana siguiente dentro de la ventana
+    // hasta juntar N. INDEFINIDO: sin tope, recorre toda la ventana como siempre.
+    maxCreated: totalOccurrences ?? undefined,
   })
 
+  // FINITO: ¿ya juntó sus N sesiones? Se RECUENTA contra la DB en vez de confiar en result.created.length,
+  // porque el motor NO suma las ocurrencias ya materializadas (su `continue` de idempotencia no incrementa
+  // `created`). Contar los turnos reales es lo único que hace converger el finito a exactamente N —
+  // el cron usa el mismo conteo para calcular su `maxCreated = N − generados`. Query acotada por
+  // business_id (T-06-25).
+  const completed =
+    totalOccurrences != null &&
+    (await countAbonoAppointments(supabase, business.id, abono.id as string)) >= totalOccurrences
+
   // Persistir el estado rolling en la fila del abono (el motor es PURO, no lo toca): la frontera de la
-  // ventana ya generada (generated_until) y las ocurrencias salteadas (capadas a las últimas 50 — mismo
-  // cap que el cron del Plan 04). UPDATE acotado por id + business_id (tenant, T-06-11).
+  // ventana ya generada (generated_until), las ocurrencias salteadas (capadas a las últimas 50 — mismo
+  // cap que el cron del Plan 04) y, si el finito ya llegó a N, el estado 'completed' (el cron deja de
+  // extenderlo). UPDATE acotado por id + business_id (tenant, T-06-11).
   await supabase
     .from('abonos')
-    .update({ generated_until: toDate, skipped_occurrences: result.skipped.slice(-SKIPPED_CAP) })
+    .update({
+      generated_until: toDate,
+      skipped_occurrences: result.skipped.slice(-SKIPPED_CAP),
+      ...(completed ? { status: 'completed' } : {}),
+    })
     .eq('id', abono.id)
     .eq('business_id', business.id)
 
@@ -232,6 +271,26 @@ export async function POST(request: Request) {
     generated: result.created.length,
     skipped: result.skipped.length,
   })
+}
+
+// ── Turnos REALES ya generados por una serie (D-07′) ────────────────────────────────────────────
+// Cuenta los appointments NO cancelados etiquetados con ese abono_id. Es la fuente de verdad del
+// progreso del abono finito: un choque no consume sesión (no crea turno) y un turno cancelado deja de
+// contar (se regenerará en la próxima ventana). SIEMPRE acotado por business_id (tenant, T-06-25).
+// El cron (app/api/cron/cancel-expired) tiene el MISMO conteo — los dos puntos que deciden 'completed'
+// usan idéntico criterio, igual que ya pasa con SKIPPED_CAP y toISODate.
+async function countAbonoAppointments(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  abonoId: string,
+): Promise<number> {
+  const { count } = await supabase
+    .from('appointments')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId)
+    .eq('abono_id', abonoId)
+    .neq('status', 'cancelled')
+  return count ?? 0
 }
 
 // ── Helper de dedupe de cliente (mismo criterio que appointments/create :: resolveClientId) ─────

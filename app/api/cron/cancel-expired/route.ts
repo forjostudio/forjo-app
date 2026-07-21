@@ -67,6 +67,23 @@ function addDaysISO(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+// ── Turnos REALES ya generados por una serie (D-07′) ────────────────────────────────────────────
+// Cuenta los appointments NO cancelados etiquetados con ese abono_id. Es la fuente de verdad del
+// progreso del abono FINITO: un choque no consume sesión (no crea turno) y un turno cancelado deja de
+// contar. NO se puede usar result.created.length del motor: su `continue` de idempotencia (ocurrencia ya
+// materializada) NO incrementa `created`, así que un re-run devolvería 0 y el finito se pasaría de N.
+// SIEMPRE acotado por business_id (tenant, T-06-16/T-06-25). El alta manual (app/api/abonos/create) hace
+// el MISMO conteo — los dos puntos que deciden 'completed' comparten criterio (igual que SKIPPED_CAP).
+async function countAbonoAppointments(supabase: SupabaseClient, businessId: string, abonoId: string): Promise<number> {
+  const { count } = await supabase
+    .from('appointments')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId)
+    .eq('abono_id', abonoId)
+    .neq('status', 'cancelled')
+  return count ?? 0
+}
+
 export type ExtendAbonosResult = {
   abonosExtended: number
   abonoOccurrencesGenerated: number
@@ -83,7 +100,10 @@ export type ExtendAbonosResult = {
 // generó, hasta hoy + abono_window_weeks) reusando el motor del Plan 02 (generateAbonoOccurrences →
 // createAppointmentCore, núcleo atómico) — NUNCA un insert directo (T-06-15). Ante conflicto la ocurrencia
 // se saltea y se acumula en skipped, sin pisar el turno ajeno (D-06). Luego avanza generated_until al borde
-// (idempotente: re-correr sobre la misma ventana el mismo día es no-op) y appendea los skipped nuevos
+// (idempotente: re-correr sobre la misma ventana el mismo día es no-op) y appendea los skipped nuevos.
+// Los abonos FINITOS de N sesiones (total_occurrences, D-07′) usan el MISMO mecanismo rolling pero
+// acotado por `maxCreated = N − turnos reales generados`; al llegar a N pasan a 'completed' y dejan de
+// entrar al select. Los INDEFINIDOS (total_occurrences null) siguen extendiéndose para siempre
 // (capados a SKIPPED_CAP). El cron corre con service-role (sin sesión → RLS NO aplica): el aislamiento por
 // tenant lo da el motor, que filtra TODA query por el business_id del abono, y el UPDATE del abono lleva
 // `.eq('business_id', ...)` (T-06-16).
@@ -95,9 +115,9 @@ export async function extendAbonoWindows(supabase: SupabaseClient): Promise<Exte
     const { data: abonos, error } = await supabase
       .from('abonos')
       .select(
-        'id, business_id, client_id, day_of_week, start_time, service_id, professional_id, location_id, generated_until, skipped_occurrences, businesses(id, buffer_minutes, abono_window_weeks)'
+        'id, business_id, client_id, day_of_week, start_time, service_id, professional_id, location_id, total_occurrences, generated_until, skipped_occurrences, businesses(id, buffer_minutes, abono_window_weeks)'
       )
-      .eq('status', 'active')
+      .eq('status', 'active') // 'completed' (finito que ya juntó sus N) y 'cancelled' quedan afuera (D-07′)
     if (error) {
       console.error('[cron/abono-extend] abonos read error:', error.message)
       return out
@@ -121,6 +141,29 @@ export async function extendAbonoWindows(supabase: SupabaseClient): Promise<Exte
         const windowWeeks = Number(biz.abono_window_weeks) || 8
         const toDate = toISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + windowWeeks * 7))
 
+        // ── Abono FINITO de N sesiones (D-07′) ────────────────────────────────────────────────────
+        // Se resuelve ANTES del corte por ventana cubierta (fromDate > toDate): un finito que ya llegó a
+        // N tiene la ventana cubierta, y si saliéramos por ese `continue` nunca se marcaría 'completed'.
+        // El tope de ESTA corrida es N − turnos REALES ya generados (un choque no consume sesión), así
+        // que el finito converge a exactamente N aunque tarde varias ventanas. maxCreated sólo ACOTA la
+        // generación, nunca la fuerza: ninguna validación del core se relaja (T-06-23).
+        const totalOccurrences = abono.total_occurrences as number | null
+        let maxCreated: number | undefined
+        if (totalOccurrences != null) {
+          const generated = await countAbonoAppointments(supabase, abono.business_id as string, abono.id as string)
+          if (generated >= totalOccurrences) {
+            // Ya juntó sus N: se cierra la serie y el cron deja de extenderla (no vuelve a entrar al
+            // select de arriba). UPDATE acotado por id + business_id (tenant, T-06-16).
+            await supabase
+              .from('abonos')
+              .update({ status: 'completed' })
+              .eq('id', abono.id)
+              .eq('business_id', abono.business_id)
+            continue
+          }
+          maxCreated = totalOccurrences - generated
+        }
+
         // fromDate = SOLO la cola nueva: el mayor entre hoy y (generated_until + 1 día). Si el abono nunca
         // se generó (generated_until null), arranca hoy. Si la ventana ya está cubierta (fromDate > toDate)
         // no hay cola → se saltea (idempotencia del rolling: re-correr el mismo día es no-op).
@@ -143,11 +186,19 @@ export async function extendAbonoWindows(supabase: SupabaseClient): Promise<Exte
           },
           fromDate,
           toDate,
+          maxCreated, // undefined en los indefinidos (rolling sin tope), N − generados en los finitos
         })
+
+        // ¿El finito llegó a N con esta tanda? Se RECUENTA contra la DB (mismo criterio que arriba y que
+        // el alta manual): result.created.length no alcanza porque no incluye lo ya materializado.
+        const completed =
+          totalOccurrences != null &&
+          (await countAbonoAppointments(supabase, abono.business_id as string, abono.id as string)) >= totalOccurrences
 
         // Persistir el estado rolling (el motor es PURO, no toca la fila): avanzar generated_until al borde
         // y ACUMULAR los skipped nuevos sobre los existentes, capando a la cola más reciente (SKIPPED_CAP).
-        // UPDATE acotado por id + business_id (tenant, T-06-16).
+        // Si el finito ya juntó sus N, la serie se cierra en el mismo UPDATE ('completed' → deja de entrar
+        // al select de abonos activos). UPDATE acotado por id + business_id (tenant, T-06-16).
         const existingSkipped = Array.isArray(abono.skipped_occurrences)
           ? (abono.skipped_occurrences as { date: string; reason: string }[])
           : []
@@ -156,6 +207,7 @@ export async function extendAbonoWindows(supabase: SupabaseClient): Promise<Exte
           .update({
             generated_until: toDate,
             skipped_occurrences: [...existingSkipped, ...result.skipped].slice(-SKIPPED_CAP),
+            ...(completed ? { status: 'completed' } : {}),
           })
           .eq('id', abono.id)
           .eq('business_id', abono.business_id)
