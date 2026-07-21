@@ -84,6 +84,14 @@ async function resendSend(key: string, payload: Record<string, unknown>) {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    // Timeout duro (WR-05). Sin abortar, una degradación de Resend cuelga al handler que espera
+    // este POST hasta el límite de la función serverless; en la vía pública eso hace que el cliente
+    // vea "no pudimos dar de baja el turno fijo" para una baja que SÍ se ejecutó. 10 s es holgado
+    // para un POST a una API de mail y queda muy por debajo del límite de la función.
+    // Al abortar, fetch rechaza con TimeoutError: resendSend ya propaga cualquier error al caller y
+    // los dos call sites de la baja lo envuelven en try/catch con console.error → no hace falta
+    // manejo nuevo acá.
+    signal: AbortSignal.timeout(10_000),
   })
   if (!res.ok) {
     const err = await res.text()
@@ -597,7 +605,10 @@ ${rowsHtml}
     html,
     text: `Hola ${clientName}, tu turno fijo semanal en ${businessName} se dio de baja.\n${servicio ? `\nServicio: ${servicio}` : ''}\nSe repetía: ${dayLabel}\nHora: ${hora} hs\nTurnos cancelados: ${turnosLabel}${ultimo ? `\nÚltimo turno cancelado: ${ultimo}` : ''}\n\nPodés reservar un turno suelto cuando quieras: ${bookingUrl}`,
   })
-  console.log(`📧 Baja de turno fijo enviada a ${to}`)
+  // Log SIN PII (IN-03): no se interpola el destinatario. La convención del proyecto pide prefijo de
+  // módulo y nada de datos personales en los logs (la app maneja el vertical salud, Ley 25.326). El
+  // contexto por abono lo aportan los console.error de los route handlers, que solo loguean ids.
+  console.log('📧 [abonos/cancel] mail de baja enviado al cliente')
 }
 
 // Aviso al DUEÑO de que EL CLIENTE dio de baja su turno fijo desde el link público del mail (D-13).
@@ -725,7 +736,8 @@ ${rowsHtml}
     html,
     text: `${statusLabel}\n\nCliente: ${clientName}\nTeléfono: ${clientPhone || '—'}\nEmail: ${clientEmail || '—'}\n${servicio ? `\nServicio: ${servicio}` : ''}\nSe repetía: ${dayLabel}\nHora: ${hora} hs\nTurnos cancelados: ${turnosLabel}${ultimo ? `\nÚltimo turno cancelado: ${ultimo}` : ''}`,
   })
-  console.log(`🔔 Aviso de baja de turno fijo enviado a ${to}`)
+  // Log SIN PII (IN-03), mismo criterio que el mail al cliente.
+  console.log('🔔 [abonos/cancel] aviso de baja enviado al dueño')
 }
 
 export async function sendAdminNotification({

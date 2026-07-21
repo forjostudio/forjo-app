@@ -243,6 +243,24 @@ describe('Escapado de HTML de los valores dinámicos (WR-02)', () => {
   })
 })
 
+describe('Timeout duro del POST a Resend (WR-05)', () => {
+  it('Test 20 — el POST a Resend viaja con un AbortSignal (no puede colgar el request path)', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE })
+    const opts = fetchMock.mock.calls[0][1] as { signal?: AbortSignal }
+    expect(opts.signal).toBeDefined()
+    expect(opts.signal).toBeInstanceOf(AbortSignal)
+    expect(opts.signal!.aborted).toBe(false)
+  })
+
+  it('Test 21 — el aviso al dueño también viaja con AbortSignal', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledAdminNotification({ ...ADMIN_BASE })
+    const opts = fetchMock.mock.calls[0][1] as { signal?: AbortSignal }
+    expect(opts.signal).toBeDefined()
+  })
+})
+
 describe('Política anti-avalancha D-14 (LOCKED) — N turnos cancelados ≠ N mails', () => {
   it('Test 12 — una baja de 7 turnos manda UN solo mail al cliente', async () => {
     const fetchMock = stubFetchOk()
