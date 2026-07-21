@@ -4,14 +4,14 @@ milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-07-21T17:41:01.995Z"
-last_activity: "2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción"
+last_updated: "2026-07-21T18:16:14.597Z"
+last_activity: 2026-07-21 -- Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 28
+  total_plans: 33
   completed_plans: 28
-  percent: 86
+  percent: 85
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.24 agrega abonos semanales (turno fijo recurrente): alta manual por el dueño + generación forward de los turnos respetando 011/013 + cupos + espacio compartido + cancelación por link en el mail / panel. **Solo reserva** (el cobro recurrente es futuro; el modelo se diseña extensible).
-**Current focus:** Phase 06 — modelo-del-abono-alta-manual-generaci-n-forward
+**Current focus:** Phase 07 — cancelaci-n-del-abono-mail-panel
 
 ## Current Position
 
-Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — COMPLETE
-Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción
+Phase: 07 (cancelaci-n-del-abono-mail-panel) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 07
+Last activity: 2026-07-21 -- Phase 07 execution started
 
 **Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
 

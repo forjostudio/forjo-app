@@ -257,13 +257,13 @@ Plans:
   3. Al darse de baja por cualquiera de las dos vías, el sistema **deja de generar turnos futuros** de esa serie (el cron ya no la extiende).
   4. Los turnos futuros **ya generados** se manejan según lo definido en discuss-phase (cancelarlos o dejarlos), de forma consistente entre la baja por mail y la baja por panel.
 
-**Plans**: 0/5 plans complete
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — Motor compartido `lib/abono-cancel.ts` (baja idempotente, doble scoping `abono_id`+`business_id`, corte "hoy" en fecha AR) + tests puros y contra la DB
-- [ ] 07-02-PLAN.md — Templates de baja de serie en `lib/email.ts` (mail al cliente + aviso al dueño, UN solo mail por vía) + test del payload
+- [x] 07-01-PLAN.md — Motor compartido `lib/abono-cancel.ts` (baja idempotente, doble scoping `abono_id`+`business_id`, corte "hoy" en fecha AR) + tests puros y contra la DB
+- [x] 07-02-PLAN.md — Templates de baja de serie en `lib/email.ts` (mail al cliente + aviso al dueño, UN solo mail por vía) + test del payload
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -292,4 +292,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
-| 7. Cancelación del abono (mail + panel) | 0/5 | Planned | - |
+| 7. Cancelación del abono (mail + panel) | 2/5 | In Progress|  |
