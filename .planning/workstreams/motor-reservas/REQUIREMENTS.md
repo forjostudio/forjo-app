@@ -29,9 +29,16 @@
 - [x] **ABONO-02**: El sistema **genera los turnos del abono hacia adelante** (ventana rolling de N
   semanas), cada uno como un `appointment` real que **respeta la integridad anti-doble-booking**
   (constraints 011/013), **cupos/capacity** y **exclusión por espacio compartido** (canchas). Si una
-  ocurrencia choca con un turno existente, un día cerrado o una excepción de horario, se maneja sin
-  romper el resto de la serie (saltear la ocurrencia y/o avisar — el comportamiento exacto se cierra en
-  discuss-phase). Cada turno generado queda **vinculado al abono** (para poder cancelar la serie).
+  ocurrencia choca con un turno existente o un **día cerrado** (excepción `closed=true`), se maneja sin
+  romper el resto de la serie (saltear + registrar). **NO** se saltea por horario semanal: el abono del
+  dueño no se gatea por `time_blocks` (D-06′, igual que el alta manual). Cada turno generado queda
+  **vinculado al abono** (para poder cancelar la serie).
+
+- [ ] **ABONO-07** (post-UAT, D-07′, Plan 06-06): cada abono es **Indefinido** (rolling, canchas) o
+  **Finito de N sesiones** (kinesiólogo: 5/10/15, termina). Modelo: `abonos.total_occurrences`
+  (null=indefinido); al generar el turno N el abono pasa a `completed` y el cron deja de extenderlo.
+  Un choque NO consume sesión (se buscan N turnos reales). El detalle muestra "Último: <fecha real>"
+  y, si es finito, "Sesiones: X de N".
 
 - [x] **ABONO-03**: El **modelo de datos del abono es extensible** para sumar cobro recurrente automático
   a futuro (entidad/campos que no obliguen a re-migrar cuando se agregue el cobro), pero v0.24 **NO cobra**.
@@ -43,7 +50,7 @@
 - [ ] **ABONO-05**: El dueño puede **dar de baja el abono desde el panel** (deja de generar; el manejo de
   los turnos futuros ya generados —cancelarlos o dejarlos— se define en discuss-phase).
 
-- [ ] **ABONO-06**: La **generación forward es automática** y extiende la ventana con el tiempo, corriendo
+- [x] **ABONO-06**: La **generación forward es automática** y extiende la ventana con el tiempo, corriendo
   en el **cron diario existente** de Vercel (Hobby: NO agregar crons más frecuentes que diario). El alta
   del abono genera la primera tanda; el cron mantiene la ventana hacia adelante.
 
@@ -65,3 +72,4 @@
 | ABONO-04 | Phase 7 |
 | ABONO-05 | Phase 7 |
 | ABONO-06 | Phase 6 |
+| ABONO-07 | Phase 6 (Plan 06-06) |

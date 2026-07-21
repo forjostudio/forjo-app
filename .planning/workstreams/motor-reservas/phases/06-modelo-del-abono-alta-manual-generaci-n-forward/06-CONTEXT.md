@@ -142,7 +142,35 @@ mantener el scope de v0.24 en "solo reserva".
 
 </deferred>
 
+<revisions>
+## Revisiones post-UAT (2026-07-20) — Plan 06-06
+
+UAT del checkpoint 06-05 pasó funcionalmente; el usuario pidió 3 cambios que reversan decisiones
+lockeadas + suman modelo. Confirmados y lockeados:
+
+- **D-06′ (revisa D-06 — horario):** el abono del dueño **NO se gatea por horario semanal**. Se
+  quita el skip `out_of_hours` (grilla `time_blocks` + narrowing de horario especial `closed=false`).
+  Se **conserva** sólo el skip `day_closed` (excepción `closed=true` = feriado). Razón: el alta manual
+  de turno del dueño (`app/api/appointments/create`) tampoco chequea horario → el abono era más
+  restrictivo que poner un turno a mano. El anti-doble-booking del core NO se toca (quitar una guarda
+  pre-core no relaja los constraints 011/013/cupo/espacio; un slot tomado sigue devolviendo slot_taken).
+- **D-07′ (revisa D-07 — ventana → finito/indefinido por abono):** cada abono es **Indefinido**
+  (canchas) o **Finito de N sesiones** (kinesiólogo: 5/10/15 y termina). Nueva columna
+  `abonos.total_occurrences int null` (null=indefinido; N=finito), `status` suma `'completed'`. La
+  migración **054 se EDITA** (aún NO en prod → barato). El `businesses.abono_window_weeks` queda como
+  **horizonte rolling de los INDEFINIDOS**. Los finitos reusan el MISMO mecanismo rolling acotado por
+  `maxCreated = N − generados`; al llegar a N → `status='completed'` y el cron deja de extenderlos.
+  **Un choque (conflicto) NO consume sesión**: el motor sigue a la semana siguiente hasta juntar N
+  turnos reales (idempotencia + rolling del cron convergen a N; tope de seguridad = el horizonte de la
+  ventana por corrida).
+- **D-09′ (display):** el detalle muestra **"Último: <fecha del último turno real>"** (max date de los
+  appointments del abono), no `generated_until` (que caía cualquier día de semana). Para finitos,
+  además **"Sesiones: X de N"**.
+- **Sin cambio:** baja del abono = Phase 7 (ABONO-05); **editar** serie viva = diferido (fuera de v0.24).
+
+</revisions>
+
 ---
 
 *Phase: 6-Modelo del abono + alta manual + generación forward*
-*Context gathered: 2026-07-20*
+*Context gathered: 2026-07-20 · Revisado post-UAT: 2026-07-20*
