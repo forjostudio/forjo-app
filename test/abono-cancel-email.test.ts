@@ -60,10 +60,18 @@ function stubFetchOk(): Mock {
   return fetchMock
 }
 
-// Parsea el body JSON del primer POST capturado.
-function capturedPayload(fetchMock: Mock): { html: string; text: string; subject: string } {
-  const body = (fetchMock.mock.calls[0][1] as { body: string }).body
+// Parsea el body JSON del POST número `i` capturado. Cuando un test hace MÁS DE UN envío, leer
+// siempre la llamada 0 deja el segundo caso sin asertar (falsa confianza, WR-09): por eso el índice.
+function payloadAt(fetchMock: Mock, i: number): { html: string; text: string; subject: string } {
+  const call = fetchMock.mock.calls[i]
+  if (!call) throw new Error(`no hay POST capturado en el índice ${i}`)
+  const body = (call[1] as { body: string }).body
   return JSON.parse(body)
+}
+
+// Parsea el body JSON del primer POST capturado (azúcar para los tests de un solo envío).
+function capturedPayload(fetchMock: Mock): { html: string; text: string; subject: string } {
+  return payloadAt(fetchMock, 0)
 }
 
 afterEach(() => {
@@ -106,16 +114,19 @@ describe('sendAbonoCancelledEmail — mail de baja de serie al cliente (D-03/D-1
     expect(text).toContain('Martes 15 de septiembre')
   })
 
-  it('Test 5 — sin lastDate (undefined o null) no aparece el bloque de última fecha y no rompe', async () => {
+  it('Test 5 — sin lastDate: LOS DOS casos (null en el envío 0, undefined en el 1) se asiertan por índice', async () => {
     const fetchMock = stubFetchOk()
     await sendAbonoCancelledEmail({ ...BASE, lastDate: null })
     await sendAbonoCancelledEmail({ ...BASE, lastDate: undefined })
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    const { html, text } = capturedPayload(fetchMock)
-    expect(html).not.toContain('Último turno cancelado')
-    expect(text).not.toContain('Último turno cancelado')
-    // El resto del resumen sigue estando.
-    expect(html).toContain('Turnos cancelados')
+    // El caso `undefined` viaja en el POST 1: leer siempre el 0 lo dejaba sin cubrir (WR-09).
+    for (const i of [0, 1]) {
+      const { html, text } = payloadAt(fetchMock, i)
+      expect(html, `envío ${i}`).not.toContain('Último turno cancelado')
+      expect(text, `envío ${i}`).not.toContain('Último turno cancelado')
+      // El resto del resumen sigue estando.
+      expect(html, `envío ${i}`).toContain('Turnos cancelados')
+    }
   })
 
   it('Test 6 — el html linkea a la página pública del negocio con el businessSlug (D-12)', async () => {
@@ -174,12 +185,96 @@ describe('sendAbonoCancelledAdminNotification — aviso al dueño (D-13)', () =>
     expect(html).toContain('https://wa.me/5491155554444')
   })
 
-  it('Test 11 — sin lastDate no aparece el bloque de última fecha y no rompe', async () => {
+  it('Test 11 — sin lastDate (null en el envío 0, undefined en el 1) no aparece el bloque de última fecha', async () => {
     const fetchMock = stubFetchOk()
     await sendAbonoCancelledAdminNotification({ ...ADMIN_BASE, lastDate: null })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await sendAbonoCancelledAdminNotification({ ...ADMIN_BASE, lastDate: undefined })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // Espejo del Test 5: el aviso al dueño también tiene que tolerar `undefined` (WR-09).
+    for (const i of [0, 1]) {
+      const { html, text } = payloadAt(fetchMock, i)
+      expect(html, `envío ${i}`).not.toContain('Último turno cancelado')
+      expect(text, `envío ${i}`).not.toContain('Último turno cancelado')
+      expect(html, `envío ${i}`).toContain('Turnos cancelados')
+    }
+  })
+})
+
+// ── Escapado de HTML (WR-02) ────────────────────────────────────────────────────────────────────────
+// `clients.name` viene de la superficie ANÓNIMA de booking (POST /api/booking/create) y termina
+// renderizado en el mail que el DUEÑO lee como confiable. Sin escapar, un nombre con markup planta
+// links de terceros dentro de un mensaje con el branding del negocio (inyección de contenido +
+// phishing dirigido), y cualquier `<` legítimo rompe el layout.
+const EVIL_NAME = 'Ana <a href="https://evil.example/phish">Actualizá tus datos</a>'
+
+describe('Escapado de HTML de los valores dinámicos (WR-02)', () => {
+  it('Test 15 — escapado: un nombre con markup NO llega como link al mail del cliente', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE, clientName: EVIL_NAME })
     const { html } = capturedPayload(fetchMock)
-    expect(html).not.toContain('Último turno cancelado')
+    // El dominio del atacante no queda dentro de ningún href...
+    expect(html).not.toContain('href="https://evil.example')
+    // ...y la etiqueta de apertura viaja como TEXTO escapado.
+    expect(html).not.toContain('<a href="https://evil.example')
+    expect(html).toContain('&lt;a href=&quot;https://evil.example/phish&quot;&gt;')
+  })
+
+  it('Test 16 — escapado: un nombre con markup NO llega como link al aviso del dueño', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledAdminNotification({ ...ADMIN_BASE, clientName: EVIL_NAME })
+    const { html } = capturedPayload(fetchMock)
+    expect(html).not.toContain('href="https://evil.example')
+    expect(html).not.toContain('<a href="https://evil.example')
+    expect(html).toContain('&lt;a href=&quot;https://evil.example/phish&quot;&gt;')
+  })
+
+  it('Test 17 — escapado: un servicio con comillas dobles y simples no rompe ningún atributo', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE, service: `Corte "premium" de Jo's & Co` })
+    const { html, text } = capturedPayload(fetchMock)
+    expect(html).toContain('Corte &quot;premium&quot; de Jo&#39;s &amp; Co')
+    expect(html).not.toContain('Corte "premium"')
+    // El text plano lo muestra tal cual (ahí las entidades se verían como basura).
+    expect(text).toContain(`Corte "premium" de Jo's & Co`)
+  })
+
+  it('Test 18 — escapado: un `<` legítimo sale como texto legible y no rompe el layout', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE, clientName: 'Ana < Bea' })
+    const { html, text } = capturedPayload(fetchMock)
+    expect(html).toContain('Ana &lt; Bea')
+    expect(html).not.toContain('Ana < Bea')
+    // El cuerpo `text` NO se escapa.
+    expect(text).toContain('Ana < Bea')
+  })
+
+  it('Test 19 — escapado: el teléfono y el email del cliente se escapan en el bloque Cliente del dueño', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledAdminNotification({
+      ...ADMIN_BASE,
+      clientEmail: 'ana<script>@example.com',
+    })
+    const { html } = capturedPayload(fetchMock)
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('ana&lt;script&gt;@example.com')
+  })
+})
+
+describe('Timeout duro del POST a Resend (WR-05)', () => {
+  it('Test 20 — el POST a Resend viaja con un AbortSignal (no puede colgar el request path)', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE })
+    const opts = fetchMock.mock.calls[0][1] as { signal?: AbortSignal }
+    expect(opts.signal).toBeDefined()
+    expect(opts.signal).toBeInstanceOf(AbortSignal)
+    expect(opts.signal!.aborted).toBe(false)
+  })
+
+  it('Test 21 — el aviso al dueño también viaja con AbortSignal', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledAdminNotification({ ...ADMIN_BASE })
+    const opts = fetchMock.mock.calls[0][1] as { signal?: AbortSignal }
+    expect(opts.signal).toBeDefined()
   })
 })
 
