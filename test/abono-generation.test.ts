@@ -20,6 +20,8 @@ const FROM = '2031-03-03'
 const TO = '2031-03-31'
 const MONDAYS = ['2031-03-03', '2031-03-10', '2031-03-17', '2031-03-24', '2031-03-31']
 const START = '10:00'
+// 21:00 cae FUERA de la grilla semanal del fixture (lunes 08:00–20:00): D-06′ dice que igual se genera.
+const START_LATE = '21:00'
 
 describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences', () => {
   let t: SeededTenant
@@ -27,6 +29,7 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
   let supabase: SupabaseClient
   let clientId: string
   let abonoId: string
+  let abonoLateId: string // abono a las 21:00 — FUERA de la grilla semanal (D-06′: ya no se saltea)
 
   beforeAll(async () => {
     t = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
@@ -62,6 +65,24 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
       .single()
     if (insAbono.error || !insAbono.data) throw new Error(`seed abono: ${insAbono.error?.message}`)
     abonoId = insAbono.data.id
+
+    // Segundo abono, MISMA serie pero a las 21:00 — fuera del bloque semanal 08:00–20:00. Existe para
+    // probar D-06′: el abono del dueño ya NO se gatea por horario semanal (antes daba out_of_hours).
+    const insAbonoLate = await t.admin
+      .from('abonos')
+      .insert({
+        business_id: t.businessId,
+        client_id: clientId,
+        service_id: t.serviceId,
+        professional_id: t.professionalId,
+        location_id: t.locationId,
+        day_of_week: 1,
+        start_time: START_LATE,
+      })
+      .select('id')
+      .single()
+    if (insAbonoLate.error || !insAbonoLate.data) throw new Error(`seed abono late: ${insAbonoLate.error?.message}`)
+    abonoLateId = insAbonoLate.data.id
   })
 
   afterAll(async () => {
@@ -199,28 +220,108 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
     expect(onClosed?.length).toBe(0)
   })
 
-  // (5) Horario especial (augmentation): schedule_exception closed=false cuya ventana EXCLUYE start_time
-  // → esa fecha cae en out_of_hours (la excepción OVERRIDE la grilla semanal), el core NO se llama, y el
-  // resto de la serie SÍ se genera. Prueba la precedencia por fecha del horario especial.
-  it('5 — saltea la fecha con horario especial (closed=false) que excluye la hora (out_of_hours)', async () => {
+  // (5) D-06′ — el abono del dueño NO se gatea por horario semanal: una serie a las 21:00, SIN ningún
+  // time_block que la cubra (la grilla del fixture es 08:00–20:00), SE GENERA igual. Antes esto daba
+  // out_of_hours; ese skip se eliminó porque el alta manual de turno del dueño tampoco chequea horario
+  // (el abono era MÁS restrictivo que poner el turno a mano). El anti-doble-booking del core no se toca.
+  it('5 — genera fuera de la grilla semanal (21:00 sin time_block): ya no hay skip out_of_hours', async () => {
+    const res = await generateAbonoOccurrences({
+      supabase,
+      business: business(),
+      abono: { ...abono(), id: abonoLateId, start_time: START_LATE },
+      fromDate: FROM,
+      toDate: TO,
+    })
+    expect(res.skipped).toEqual([])
+    expect([...res.created].sort()).toEqual(MONDAYS)
+
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('date, time')
+      .eq('business_id', t.businessId)
+      .eq('abono_id', abonoLateId)
+      .order('date')
+    expect(appts?.length).toBe(5)
+    expect(appts?.every(a => (a.time as string).slice(0, 5) === START_LATE)).toBe(true)
+  })
+
+  // (5b) Mismo D-06′ del lado de las excepciones: una schedule_exception closed=false con ventana
+  // 14:00–18:00 (que EXCLUYE las 10:00 del abono) ya NO saltea. Sólo closed=true corta (test 4).
+  it('5b — el horario especial (closed=false) que excluye la hora ya no saltea: genera igual', async () => {
     const specialDate = '2031-03-17'
-    // Ventana especial 14:00–18:00: 10:00 del abono queda FUERA, aunque caiga dentro del bloque semanal 08–20.
     const insExc = await t.admin
       .from('schedule_exceptions')
       .insert({ business_id: t.businessId, date: specialDate, closed: false, start_time: '14:00', end_time: '18:00', location_id: null })
     expect(insExc.error).toBeNull()
 
     const res = await generateAbonoOccurrences({ supabase, business: business(), abono: abono(), fromDate: FROM, toDate: TO })
-    expect(res.skipped).toEqual([{ date: specialDate, reason: 'out_of_hours' }])
-    expect([...res.created].sort()).toEqual(MONDAYS.filter(d => d !== specialDate))
+    expect(res.skipped).toEqual([])
+    expect([...res.created].sort()).toEqual(MONDAYS)
 
-    // NO se creó turno esa fecha (el core no fue llamado por estar fuera del horario especial).
     const { data: onSpecial } = await t.admin
       .from('appointments')
       .select('id')
       .eq('business_id', t.businessId)
+      .eq('abono_id', abonoId)
       .eq('date', specialDate)
-    expect(onSpecial?.length).toBe(0)
+    expect(onSpecial?.length).toBe(1)
+  })
+
+  // (5c) D-07′ — abono FINITO: maxCreated acota cuántos turnos REALES junta esta corrida. Con
+  // maxCreated=2 sobre un rango de 5 lunes se generan exactamente los 2 primeros y el loop CORTA
+  // (no se tocan las semanas siguientes; el resto lo extiende el cron con maxCreated = N − generados).
+  it('5c — maxCreated=2 sobre 5 semanas: genera exactamente 2 y corta', async () => {
+    const res = await generateAbonoOccurrences({
+      supabase,
+      business: business(),
+      abono: abono(),
+      fromDate: FROM,
+      toDate: TO,
+      maxCreated: 2,
+    })
+    expect(res.skipped).toEqual([])
+    expect(res.created).toEqual(MONDAYS.slice(0, 2))
+
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('date')
+      .eq('business_id', t.businessId)
+      .eq('abono_id', abonoId)
+      .order('date')
+    expect(appts?.map(a => a.date)).toEqual(MONDAYS.slice(0, 2))
+  })
+
+  // (5d) D-07′ — un CHOQUE no consume sesión: con el 2º lunes ocupado por un turno ajeno y maxCreated=2,
+  // el motor saltea esa fecha (slot_taken) y sigue hasta juntar 2 turnos REALES (lunes 1 y 3).
+  it('5d — un choque no consume sesión: maxCreated=2 junta 2 turnos reales salteando el ocupado', async () => {
+    const busyDate = MONDAYS[1]
+    const occ = await t.admin
+      .from('appointments')
+      .insert({
+        business_id: t.businessId,
+        client_name: 'Ocupante Ajeno',
+        service_id: t.serviceId,
+        professional_id: t.professionalId,
+        location_id: t.locationId,
+        date: busyDate,
+        time: START,
+        duration_minutes: 30,
+        status: 'confirmed',
+      })
+      .select('id')
+      .single()
+    expect(occ.error).toBeNull()
+
+    const res = await generateAbonoOccurrences({
+      supabase,
+      business: business(),
+      abono: abono(),
+      fromDate: FROM,
+      toDate: TO,
+      maxCreated: 2,
+    })
+    expect(res.skipped).toEqual([{ date: busyDate, reason: 'slot_taken' }])
+    expect(res.created).toEqual([MONDAYS[0], MONDAYS[2]])
   })
 
   // (6) Aislamiento (D-10): un turno de OTRO business en el mismo slot/fecha NO bloquea ni se toca.
