@@ -442,6 +442,265 @@ export async function sendAbonoConfirmation({
   console.log(`📧 Confirmación de abono enviada a ${to}`)
 }
 
+// Email al CLIENTE cuando su ABONO (turno fijo semanal) se da de BAJA (ABONO-04 / ABONO-05).
+// Se manda UNA SOLA VEZ por baja de serie y NUNCA uno por turno cancelado: dar de baja un abono
+// cancela N turnos futuros de una, y mandar N mails sería una avalancha (D-14 LOCKED). Por eso el
+// template recibe `cancelledCount` + `lastDate` YA CALCULADOS por el caller y los muestra como
+// RESUMEN — no itera fechas ni lista turno por turno (D-03/D-11).
+// Lo disparan las DOS vías: la del cliente (link de baja del mail) y la del dueño (panel). El cliente
+// se entera SIEMPRE de que su fijo desapareció, sin checkbox opt-in (D-15): tenía un horario semanal
+// reservado y que se esfume sin aviso es peor que un mail de más.
+// NO menciona importe de ningún tipo (ni precio ni seña): v0.24 no cobra el abono.
+// Reusa los helpers del módulo (resolveSender, fmtDate, renderEmailHeader, normalizeArWhatsApp,
+// resendSend) para no duplicar el resolver del header From (que ya sanitiza) ni el POST a Resend.
+export async function sendAbonoCancelledEmail({
+  to,
+  clientName,
+  service,
+  dayLabel,
+  time,
+  cancelledCount,
+  lastDate,
+  businessName,
+  businessSlug,
+  primaryColor,
+  logoUrl,
+  whatsapp,
+  resendApiKey,
+  resendFrom,
+}: {
+  to: string
+  clientName: string
+  // Puede llegar vacío: el caller no siempre tiene el servicio de la serie. Con '' el mail se
+  // renderiza igual, sin fila de detalle huérfana.
+  service: string
+  dayLabel: string // ej. "todos los lunes" (derivado de day_of_week por el caller)
+  time: string
+  cancelledCount: number // cuántos turnos futuros se cancelaron (ya contados por el caller)
+  lastDate?: string | null // ISO 'yyyy-MM-dd' del último turno cancelado; sin dato → no se muestra
+  businessName: string
+  businessSlug: string
+  primaryColor?: string | null
+  logoUrl?: string | null
+  whatsapp?: string | null
+  resendApiKey?: string | null
+  resendFrom?: string | null
+}) {
+  // Mismo preámbulo que el resto de los templates del módulo (branding por tenant).
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
+  const hora = time.slice(0, 5)
+  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  const waDigits = normalizeArWhatsApp(whatsapp)
+  const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
+  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
+  const bookingUrl = `${baseUrl}/${businessSlug}`
+
+  const servicio = (service || '').trim()
+  const ultimo = lastDate && lastDate.trim() ? fmtDate(lastDate.trim()) : ''
+  // Concordancia de número: 1 turno / N turnos.
+  const turnosLabel = cancelledCount === 1 ? '1 turno' : `${cancelledCount} turnos`
+
+  // Las filas se arman como lista para que las opcionales (servicio, última fecha) no dejen una
+  // fila vacía ni un borde colgando: el borde inferior se omite en la última fila real.
+  const rows: { label: string; value: string; capitalize?: boolean }[] = []
+  if (servicio) rows.push({ label: 'Servicio', value: servicio })
+  rows.push({ label: 'Se repetía', value: dayLabel, capitalize: true })
+  rows.push({ label: 'Hora', value: `${hora} hs` })
+  rows.push({ label: 'Turnos cancelados', value: turnosLabel })
+  if (ultimo) rows.push({ label: 'Último turno cancelado', value: ultimo })
+
+  const rowsHtml = rows
+    .map((r, i) => {
+      const border = i < rows.length - 1 ? 'border-bottom:1px solid #eee;' : ''
+      const caps = r.capitalize ? 'text-transform:capitalize;' : ''
+      return `              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;${border}">${r.label}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;${border}text-align:right;${caps}">${r.value}</td>
+              </tr>`
+    })
+    .join('\n')
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+      <tr><td style="background:${accent};padding:32px 40px;border-radius:12px 12px 0 0;text-align:center;">
+        ${headerInner}
+      </td></tr>
+
+      <tr><td style="background:#ffffff;padding:40px 40px 32px;">
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu turno fijo fue dado de baja</p>
+        <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
+          Hola <strong>${clientName}</strong>, tu turno fijo semanal en <strong>${businessName}</strong> se dio de baja. Ese horario ya no queda reservado para vos todas las semanas.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
+          <tr><td style="padding:20px 22px 6px;">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:14px;">Turno fijo dado de baja</div>
+          </td></tr>
+          <tr><td style="padding:0 22px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+${rowsHtml}
+            </table>
+          </td></tr>
+        </table>
+
+        <p style="font-size:14px;color:#444;line-height:1.7;margin:0 0 18px;">Podés seguir reservando turnos sueltos cuando quieras.</p>
+        <table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
+          <a href="${bookingUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Reservar un turno</a>
+        </td></tr></table>
+        ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
+      </td></tr>
+
+      <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+
+  await resendSend(key, {
+    from,
+    to: [to],
+    subject: `Tu turno fijo fue dado de baja — ${businessName}`,
+    html,
+    text: `Hola ${clientName}, tu turno fijo semanal en ${businessName} se dio de baja.\n${servicio ? `\nServicio: ${servicio}` : ''}\nSe repetía: ${dayLabel}\nHora: ${hora} hs\nTurnos cancelados: ${turnosLabel}${ultimo ? `\nÚltimo turno cancelado: ${ultimo}` : ''}\n\nPodés reservar un turno suelto cuando quieras: ${bookingUrl}`,
+  })
+  console.log(`📧 Baja de turno fijo enviada a ${to}`)
+}
+
+// Aviso al DUEÑO de que EL CLIENTE dio de baja su turno fijo desde el link público del mail (D-13).
+// Sale ÚNICAMENTE por esa vía: cuando la baja la hace el propio dueño desde el panel NO se manda
+// (ya la hizo él, avisarle de su propia acción es ruido).
+// Es un template PROPIO y no un flag más de sendAdminNotification: esa función está atada a
+// date/price/deposit de un turno suelto, y la baja de una serie no tiene ninguno de los tres.
+// Igual que el mail al cliente: UN solo aviso por baja, con el conteo y la última fecha como
+// resumen (D-14) y sin importes (v0.24 no cobra el abono).
+export async function sendAbonoCancelledAdminNotification({
+  to,
+  clientName,
+  clientPhone,
+  clientEmail,
+  service,
+  dayLabel,
+  time,
+  cancelledCount,
+  lastDate,
+  businessName,
+  logoUrl,
+  resendApiKey,
+  resendFrom,
+}: {
+  to: string
+  clientName: string
+  clientPhone?: string | null
+  clientEmail?: string | null
+  service: string
+  dayLabel: string
+  time: string
+  cancelledCount: number
+  lastDate?: string | null
+  businessName?: string | null
+  logoUrl?: string | null
+  resendApiKey?: string | null
+  resendFrom?: string | null
+}) {
+  const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
+  const hora = time.slice(0, 5)
+  const servicio = (service || '').trim()
+  const ultimo = lastDate && lastDate.trim() ? fmtDate(lastDate.trim()) : ''
+  const turnosLabel = cancelledCount === 1 ? '1 turno' : `${cancelledCount} turnos`
+  const statusLabel = '❌ Turno fijo dado de baja'
+  const eyebrow = '❌ Turno fijo dado de baja'
+  const badgeBg = '#fee2e2'
+  const badgeColor = '#991b1b'
+  const subject = `❌ Turno fijo dado de baja — ${clientName} · ${dayLabel} ${hora} hs`
+
+  const waPhone = clientPhone ? clientPhone.replace(/\D/g, '') : null
+
+  const rows: { label: string; value: string; capitalize?: boolean }[] = []
+  if (servicio) rows.push({ label: 'Servicio', value: servicio })
+  rows.push({ label: 'Se repetía', value: dayLabel, capitalize: true })
+  rows.push({ label: 'Hora', value: `${hora} hs` })
+  rows.push({ label: 'Turnos cancelados', value: turnosLabel })
+  if (ultimo) rows.push({ label: 'Último turno cancelado', value: ultimo })
+
+  const rowsHtml = rows
+    .map((r, i) => {
+      const border = i < rows.length - 1 ? 'border-bottom:1px solid #eee;' : ''
+      const caps = r.capitalize ? 'text-transform:capitalize;' : ''
+      return `              <tr>
+                <td style="font-size:12px;color:#999;padding:7px 0;${border}">${r.label}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:7px 0;${border}text-align:right;${caps}">${r.value}</td>
+              </tr>`
+    })
+    .join('\n')
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+
+      <tr><td style="background:#1a1714;padding:28px 36px;border-radius:12px 12px 0 0;text-align:center;">
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:10px;">${eyebrow}</div>
+        ${renderEmailHeader(businessName || '', logoUrl)}
+      </td></tr>
+
+      <tr><td style="background:#ffffff;padding:32px 36px;">
+        <div style="display:inline-block;background:${badgeBg};color:${badgeColor};font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;margin-bottom:20px;">${statusLabel}</div>
+
+        <p style="font-size:14px;color:#555;margin:0 0 20px;line-height:1.6;">El cliente dio de baja su turno fijo desde el link del mail. El horario semanal quedó liberado.</p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid #1a1714;border-radius:0 8px 8px 0;margin-bottom:20px;">
+          <tr><td style="padding:18px 20px;">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:12px;">Turno fijo</div>
+            <table width="100%" cellpadding="0" cellspacing="0">
+${rowsHtml}
+            </table>
+          </td></tr>
+        </table>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f9f9;border-radius:8px;">
+          <tr><td style="padding:16px 18px;">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;">Cliente</div>
+            <div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">${clientName}</div>
+            ${waPhone ? `<div style="font-size:13px;margin-bottom:6px;"><a href="https://wa.me/${waPhone}" style="color:#16a34a;font-weight:600;text-decoration:none;">📱 ${clientPhone} — Abrir WhatsApp →</a></div>` : ''}
+            ${clientEmail ? `<div style="font-size:13px;color:#555;">✉️ ${clientEmail}</div>` : ''}
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#1a1714;padding:18px 36px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:#555;">Forjo Gestión · Panel de administración</div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+
+  await resendSend(key, {
+    from,
+    to: [to],
+    subject,
+    html,
+    text: `${statusLabel}\n\nCliente: ${clientName}\nTeléfono: ${clientPhone || '—'}\nEmail: ${clientEmail || '—'}\n${servicio ? `\nServicio: ${servicio}` : ''}\nSe repetía: ${dayLabel}\nHora: ${hora} hs\nTurnos cancelados: ${turnosLabel}${ultimo ? `\nÚltimo turno cancelado: ${ultimo}` : ''}`,
+  })
+  console.log(`🔔 Aviso de baja de turno fijo enviado a ${to}`)
+}
+
 export async function sendAdminNotification({
   to,
   clientName,
