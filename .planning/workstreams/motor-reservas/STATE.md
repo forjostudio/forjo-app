@@ -4,7 +4,7 @@ milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-07-21T18:16:14.597Z"
+last_updated: "2026-07-21T20:58:37.440Z"
 last_activity: 2026-07-21 -- Phase 07 execution started
 progress:
   total_phases: 7
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 07 (cancelaci-n-del-abono-mail-panel) — EXECUTING
 Plan: 1 of 5
-Status: Executing Phase 07
+Status: Ready to execute
 Last activity: 2026-07-21 -- Phase 07 execution started
 
 **Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
