@@ -20,16 +20,17 @@ export default async function AbonosPage() {
 
   // Datos del negocio en paralelo. Toda query filtra por business.id (tenant). Los abonos traen los
   // nombres (cliente / servicio / cancha) por join para la lista; los appointments con abono_id se usan
-  // sólo para contar cuántos turnos generó cada serie (no cancelados).
+  // para contar cuántos turnos generó cada serie (no cancelados) y para saber la FECHA DEL ÚLTIMO turno
+  // real de cada una (D-09′) — por eso se trae también `date`.
   const [{ data: abonos }, { data: apptRows }, { data: services }, { data: professionals }, { data: locations }, { data: clients }] = await Promise.all([
     supabase
       .from('abonos')
-      .select('id, day_of_week, start_time, status, generated_until, skipped_occurrences, created_at, clients(name), services(name), professionals(name)')
+      .select('id, day_of_week, start_time, status, total_occurrences, generated_until, skipped_occurrences, created_at, clients(name), services(name), professionals(name)')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false }),
     supabase
       .from('appointments')
-      .select('abono_id')
+      .select('abono_id, date')
       .eq('business_id', business.id)
       .not('abono_id', 'is', null)
       .neq('status', 'cancelled'),
@@ -39,11 +40,18 @@ export default async function AbonosPage() {
     supabase.from('clients').select('*').eq('business_id', business.id).order('name', { ascending: true }),
   ])
 
-  // Conteo de turnos generados por abono (en memoria; el set ya viene acotado por business_id).
+  // Conteo de turnos generados por abono + fecha del ÚLTIMO turno real (D-09′), ambos en memoria: el
+  // set ya viene acotado por business_id (T-06-25). El "último" es el max `date` de los turnos NO
+  // cancelados de la serie — NO `generated_until`, que es la frontera de la ventana y cae cualquier día
+  // de la semana (por eso un abono de los jueves mostraba un martes). Como las fechas son ISO
+  // 'yyyy-MM-dd', comparar strings alcanza (orden lexicográfico = orden cronológico).
   const turnoCounts: Record<string, number> = {}
+  const lastTurnoDates: Record<string, string> = {}
   for (const r of apptRows || []) {
-    const id = (r as { abono_id: string | null }).abono_id
-    if (id) turnoCounts[id] = (turnoCounts[id] ?? 0) + 1
+    const { abono_id: id, date } = r as { abono_id: string | null; date: string | null }
+    if (!id) continue
+    turnoCounts[id] = (turnoCounts[id] ?? 0) + 1
+    if (date && (!lastTurnoDates[id] || date > lastTurnoDates[id])) lastTurnoDates[id] = date
   }
 
   return (
@@ -51,6 +59,7 @@ export default async function AbonosPage() {
       business={business}
       abonos={(abonos || []) as unknown as AbonoRow[]}
       turnoCounts={turnoCounts}
+      lastTurnoDates={lastTurnoDates}
       clients={clients || []}
       services={services || []}
       professionals={professionals || []}

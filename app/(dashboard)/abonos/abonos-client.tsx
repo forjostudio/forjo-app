@@ -21,7 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle } from 'lucide-react'
+import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle, Check } from 'lucide-react'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { NuevoAbonoForm } from '@/components/dashboard/nuevo-abono-form'
 
@@ -30,7 +30,8 @@ export type AbonoRow = {
   id: string
   day_of_week: number
   start_time: string
-  status: 'active' | 'cancelled'
+  status: 'active' | 'cancelled' | 'completed'
+  total_occurrences: number | null // null = indefinido; N = finito de N sesiones (D-07′)
   generated_until: string | null
   skipped_occurrences: { date: string; reason: string }[]
   created_at: string
@@ -42,11 +43,12 @@ export type AbonoRow = {
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 // Razón de salteo (motor de generación / booking-core) → texto en español para el dueño (D-06).
+// 'out_of_hours' YA NO EXISTE: el abono del dueño dejó de gatearse por la grilla semanal (D-06′) — el
+// motor sólo saltea por día cerrado (feriado) o por conflicto real del core.
 const SKIP_REASON_ES: Record<string, string> = {
   slot_taken: 'Horario ocupado',
   slot_full: 'Cupo lleno',
   day_closed: 'Día cerrado',
-  out_of_hours: 'Fuera de horario',
   space_conflict: 'Espacio ocupado',
   invalid_service: 'Servicio no disponible',
   invalid_professional: 'Recurso no disponible',
@@ -79,13 +81,15 @@ interface Props {
   business: Business
   abonos: AbonoRow[]
   turnoCounts: Record<string, number>
+  // Fecha ISO del ÚLTIMO turno real de cada serie (max date de los turnos no cancelados), D-09′.
+  lastTurnoDates: Record<string, string>
   clients: Client[]
   services: Service[]
   professionals: Professional[]
   locations: Location[]
 }
 
-export function AbonosClient({ business, abonos, turnoCounts, clients, services, professionals, locations }: Props) {
+export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, clients, services, professionals, locations }: Props) {
   const supabase = createClient()
   const router = useRouter()
   const isDesktop = useMediaQuery('(min-width: 768px)')
@@ -94,8 +98,9 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
   const [formOpen, setFormOpen] = useState(false)
   const [detailAbono, setDetailAbono] = useState<AbonoRow | null>(null)
 
-  // Solo se listan los abonos activos (los cancelados no arman turnos nuevos).
-  const activeAbonos = useMemo(() => abonos.filter((a) => a.status === 'active'), [abonos])
+  // Se listan los abonos vigentes: activos + completados (finitos que ya juntaron sus N sesiones, D-07′;
+  // siguen teniendo turnos en la agenda y el dueño necesita verlos). Los cancelados no se listan.
+  const visibleAbonos = useMemo(() => abonos.filter((a) => a.status !== 'cancelled'), [abonos])
 
   // ── Control de ventana de generación (abono_window_weeks, D-07) ────────────────────────────────
   const [windowWeeks, setWindowWeeks] = useState<number>(business.abono_window_weeks ?? 8)
@@ -117,7 +122,7 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
         <div>
           <PageEyebrow label="Abonos" />
           <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">Abonos</h1>
-          <p className="text-sm text-muted-foreground mt-1">Turnos fijos que se repiten cada semana. Se generan solos y podés ver qué semanas se saltearon por conflicto.</p>
+          <p className="text-sm text-muted-foreground mt-1">Turnos fijos que se repiten cada semana, indefinidos o por una cantidad de sesiones. Se generan solos y podés ver qué semanas se saltearon por conflicto.</p>
         </div>
         <div className="flex-shrink-0 sm:pt-1">
           <Button onClick={() => setFormOpen(true)} className="gap-2">
@@ -129,11 +134,11 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
       {/* Lista de abonos activos */}
       <Card className="p-6 space-y-4">
         <div>
-          <p className="font-semibold text-sm">Abonos activos</p>
+          <p className="font-semibold text-sm">Tus abonos</p>
           <p className="text-xs text-muted-foreground mt-0.5">Tocá un abono para ver la serie y las semanas salteadas.</p>
         </div>
 
-        {activeAbonos.length === 0 ? (
+        {visibleAbonos.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-2">
             <Repeat className="mx-auto h-6 w-6 text-muted-foreground" />
             <p className="text-sm font-medium">Todavía no tenés abonos</p>
@@ -144,10 +149,12 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
           </div>
         ) : (
           <ul className="space-y-2">
-            {activeAbonos.map((a) => {
+            {visibleAbonos.map((a) => {
               const count = turnoCounts[a.id] ?? 0
               const skipped = a.skipped_occurrences?.length ?? 0
               const bookable = a.services?.name || a.professionals?.name || '—'
+              const total = a.total_occurrences // null = indefinido
+              const isCompleted = a.status === 'completed'
               return (
                 <li key={a.id}>
                   <button
@@ -161,11 +168,21 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
                         <p className="text-xs text-muted-foreground truncate">{bookable}</p>
                         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Clock className="w-3 h-3 flex-shrink-0" />
-                          <span>Todos los {DAY_LABELS[a.day_of_week].toLowerCase()} · {hhmm(a.start_time)}</span>
+                          <span>
+                            Todos los {DAY_LABELS[a.day_of_week].toLowerCase()} · {hhmm(a.start_time)}
+                            {total != null && <> · {total} sesion{total === 1 ? '' : 'es'}</>}
+                          </span>
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <Badge variant="secondary" className="gap-1"><CalendarClock className="w-3 h-3" />{count} turno{count === 1 ? '' : 's'}</Badge>
+                        {isCompleted ? (
+                          <Badge variant="outline" className="gap-1"><Check className="w-3 h-3" />Completado</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="gap-1">
+                            <CalendarClock className="w-3 h-3" />
+                            {total != null ? `${count} de ${total}` : `${count} turno${count === 1 ? '' : 's'}`}
+                          </Badge>
+                        )}
                         {skipped > 0 && (
                           <Badge variant="destructive" className="gap-1"><AlertTriangle className="w-3 h-3" />{skipped} salteada{skipped === 1 ? '' : 's'}</Badge>
                         )}
@@ -183,7 +200,7 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
       <Card className="p-6 space-y-4">
         <div>
           <p className="font-semibold text-sm flex items-center gap-1.5"><CalendarClock className="w-4 h-4" /> Ventana de generación</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Con cuántas semanas de anticipación se generan los turnos de tus abonos. Se extiende sola día a día.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Con cuántas semanas de anticipación se generan los turnos de tus abonos <span className="font-medium text-foreground">indefinidos</span>. Se extiende sola día a día. Los abonos de N sesiones usan la misma ventana hasta completar sus sesiones.</p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Semanas hacia adelante</Label>
@@ -223,6 +240,8 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
       {detailAbono && (() => {
         const a = detailAbono
         const count = turnoCounts[a.id] ?? 0
+        const total = a.total_occurrences // null = indefinido
+        const lastDate = lastTurnoDates[a.id] ?? null
         const bookable = a.services?.name || a.professionals?.name || '—'
         const skipped = [...(a.skipped_occurrences ?? [])].sort((x, y) => x.date.localeCompare(y.date))
         const close = () => setDetailAbono(null)
@@ -237,9 +256,15 @@ export function AbonosClient({ business, abonos, turnoCounts, clients, services,
                 <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">{term.resource}</span><span className="font-medium">{a.professionals.name}</span></div>
               )}
               <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Cuándo</span><span className="font-medium capitalize">Todos los {DAY_LABELS[a.day_of_week].toLowerCase()} · {hhmm(a.start_time)}</span></div>
-              <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Generados</span><span className="font-medium">{count} turno{count === 1 ? '' : 's'}</span></div>
-              {a.generated_until && (
-                <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Hasta</span><span className="font-medium capitalize">{format(parseISO(a.generated_until), "EEE d 'de' MMM", { locale: es })}</span></div>
+              <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Duración</span><span className="font-medium">{total != null ? `${total} sesion${total === 1 ? '' : 'es'}` : 'Indefinido'}</span></div>
+              <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">{total != null ? 'Sesiones' : 'Generados'}</span><span className="font-medium">{total != null ? `${count} de ${total}` : `${count} turno${count === 1 ? '' : 's'}`}</span></div>
+              {/* Último turno REAL de la serie (D-09′): cae siempre en el día de la semana del abono.
+                  Antes se mostraba generated_until (frontera de la ventana), que caía cualquier día. */}
+              {lastDate && (
+                <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Último</span><span className="font-medium capitalize">{format(parseISO(lastDate), "EEE d 'de' MMM", { locale: es })}</span></div>
+              )}
+              {a.status === 'completed' && (
+                <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Estado</span><span className="font-medium text-primary">Completado</span></div>
               )}
             </div>
 

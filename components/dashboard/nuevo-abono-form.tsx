@@ -5,7 +5,8 @@
 // en mobile), MISMO combobox de cliente (filtro en memoria + crear-nuevo inline con dedupe optimista) y
 // MISMOS selects de servicio/profesional/consultorio por vertical. La ÚNICA diferencia con el alta de
 // turno suelto es el campo temporal: acá se pide **día de la semana** (0..6, domingo..sábado) + **hora**,
-// SIN fecha puntual — porque el abono es un turno fijo recurrente indefinido, no un turno con fecha.
+// SIN fecha puntual — porque el abono es un turno fijo recurrente, no un turno con fecha. Además se
+// elige la **duración** (D-07′): indefinido (default) o finito de N sesiones (totalOccurrences).
 // NO inserta directo a Supabase: postea a /api/abonos/create (Plan 03), que hace todo el anti-tampering
 // por business_id, la derivación de la cancha en el vertical canchas y el dedupe de cliente (autoridad
 // del servidor). Acá solo armamos el body y traducimos los errores del endpoint a toasts.
@@ -21,7 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Check, UserPlus, ChevronLeft, Repeat } from 'lucide-react'
+import { Plus, Minus, Check, UserPlus, ChevronLeft, Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Hook responsive mínimo (idéntico al de nuevo-turno-form) ─────────────────────────────────
@@ -45,6 +46,12 @@ function useMediaQuery(query: string): boolean {
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0] // Lunes → Domingo
 
+// Duración del abono (D-07′): tope de sesiones del FINITO. Espeja el techo defensivo del endpoint
+// (MAX_TOTAL_OCCURRENCES = 520 en app/api/abonos/create) para que el input NO pueda mandar un valor que
+// el server degrade silenciosamente a indefinido. Default 10 sesiones (uso típico del kinesiólogo: 5/10/15).
+const MAX_SESSIONS = 520
+const DEFAULT_SESSIONS = 10
+
 // Mapeo de error del endpoint → copy en español (mismo criterio que nuevo-turno-form).
 const ERROR_COPY: Record<string, string> = {
   invalid_service: 'Revisá el servicio o el profesional seleccionado.',
@@ -63,6 +70,13 @@ function normPhone(p: string | null | undefined) {
 }
 function normEmail(e: string | null | undefined) {
   return e ? e.toLowerCase().trim() : ''
+}
+
+// Sesiones del finito acotadas a 1..MAX_SESSIONS (entero). El server re-valida igual (autoridad), esto
+// sólo evita mandarle un valor que degradaría el abono a indefinido sin que el dueño se entere.
+function clampSessions(n: number): number {
+  const int = Math.floor(Number(n) || 1)
+  return Math.min(MAX_SESSIONS, Math.max(1, int))
 }
 
 type SelectedClient = { id: string | null; name: string; phone: string | null; email: string | null }
@@ -185,6 +199,10 @@ function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, ser
   const [locationId, setLocationId] = useState('')
   const [dayOfWeek, setDayOfWeek] = useState<string>('') // '' = sin elegir; se parsea a number al enviar
   const [time, setTime] = useState('')
+  // Duración (D-07′): 'indefinido' = se repite hasta darlo de baja (total_occurrences null);
+  // 'sesiones' = finito de N sesiones (total_occurrences = N → el abono termina solo en 'completed').
+  const [duracion, setDuracion] = useState<'indefinido' | 'sesiones'>('indefinido')
+  const [sessions, setSessions] = useState<number>(DEFAULT_SESSIONS)
   const [saving, setSaving] = useState(false)
 
   // Cliente: seleccionado de la lista (combobox) o creado inline.
@@ -199,7 +217,7 @@ function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, ser
   // El form está "sucio" si se tocó algún campo → habilita la confirmación de descarte del shell.
   const isDirty = !!(
     selectedClient || creatingClient || serviceId || dayOfWeek || time ||
-    newClientName.trim() || newClientContact.trim()
+    duracion === 'sesiones' || newClientName.trim() || newClientContact.trim()
   )
   useEffect(() => { dirtyRef.current = isDirty }, [isDirty, dirtyRef])
 
@@ -293,6 +311,8 @@ function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, ser
           locationId: locationId || null,
           dayOfWeek: Number(dayOfWeek),
           time,
+          // FINITO → N sesiones; INDEFINIDO → null (el server lo interpreta como rolling sin fin).
+          totalOccurrences: duracion === 'sesiones' ? clampSessions(sessions) : null,
         }),
       })
     } catch {
@@ -320,7 +340,12 @@ function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, ser
       {/* Aviso: es un turno FIJO semanal indefinido */}
       <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
         <Repeat className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-        <span>Un abono reserva el mismo día y hora <span className="font-medium text-foreground">todas las semanas</span>, de forma indefinida.</span>
+        <span>
+          Un abono reserva el mismo día y hora <span className="font-medium text-foreground">todas las semanas</span>
+          {duracion === 'sesiones'
+            ? <> hasta completar <span className="font-medium text-foreground">{clampSessions(sessions)} sesion{clampSessions(sessions) === 1 ? '' : 'es'}</span>.</>
+            : <>, de forma <span className="font-medium text-foreground">indefinida</span>.</>}
+        </span>
       </div>
 
       {/* Cliente — combobox + crear inline */}
@@ -552,8 +577,79 @@ function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, ser
           />
         </div>
       </div>
+      {/* Duración (D-07′) — Indefinido (default) o finito de N sesiones. Mismo patrón de radios nativos
+          + stepper que la Ventana de reserva de la Agenda (accent-primary, Label clickeable, sub-campo
+          revelado con sangría). El input sólo aparece al elegir "N sesiones". */}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium leading-none mb-2">Duración</legend>
+        <div className="flex items-center gap-3">
+          <input
+            type="radio"
+            id={`${fieldId}-dur-indefinido`}
+            name={`${fieldId}-duracion`}
+            className="w-4 h-4 accent-primary cursor-pointer"
+            checked={duracion === 'indefinido'}
+            onChange={() => setDuracion('indefinido')}
+          />
+          <Label htmlFor={`${fieldId}-dur-indefinido`} className="cursor-pointer font-normal">
+            Indefinido <span className="text-muted-foreground">(se repite hasta cancelar)</span>
+          </Label>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <input
+              type="radio"
+              id={`${fieldId}-dur-sesiones`}
+              name={`${fieldId}-duracion`}
+              className="w-4 h-4 accent-primary cursor-pointer"
+              checked={duracion === 'sesiones'}
+              onChange={() => setDuracion('sesiones')}
+            />
+            <Label htmlFor={`${fieldId}-dur-sesiones`} className="cursor-pointer font-normal">
+              Cantidad de sesiones <span className="text-muted-foreground">(termina solo)</span>
+            </Label>
+          </div>
+          {duracion === 'sesiones' && (
+            <div className="pl-7 space-y-1">
+              <Label htmlFor={`${fieldId}-sesiones`} className="text-xs text-muted-foreground">Sesiones</Label>
+              <div className="flex items-center overflow-hidden rounded-md border border-border w-fit">
+                <button
+                  type="button"
+                  aria-label="Menos sesiones"
+                  disabled={sessions <= 1}
+                  onClick={() => setSessions((s) => clampSessions(s - 1))}
+                  className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <input
+                  id={`${fieldId}-sesiones`}
+                  type="number"
+                  min={1}
+                  max={MAX_SESSIONS}
+                  value={sessions}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setSessions(clampSessions(Number(e.target.value)))}
+                  className="h-9 w-14 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <button
+                  type="button"
+                  aria-label="Más sesiones"
+                  disabled={sessions >= MAX_SESSIONS}
+                  onClick={() => setSessions((s) => clampSessions(s + 1))}
+                  className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </fieldset>
+
       <p className="text-xs text-muted-foreground">
-        Se generan los turnos de las próximas semanas automáticamente. Las semanas con conflicto se saltean y quedan listadas en el abono.
+        Se generan los turnos de las próximas semanas automáticamente. Las semanas con conflicto se saltean, quedan listadas en el abono y
+        {duracion === 'sesiones' ? ' no consumen sesión.' : ' se retoman la semana siguiente.'}
       </p>
 
       {/* Submit — min-h 44px para touch (WCAG AA), disabled + loading anti doble-submit */}
