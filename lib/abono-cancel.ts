@@ -63,7 +63,12 @@ export type AbonoCancelInput = {
 
 // Resumen del efecto (o del preview) de la baja: cuántos turnos futuros hay/hubo y cuál es el último.
 // Es lo que consumen el aviso previo de D-03 y la pantalla de éxito.
-export type AbonoCancelSummary = { count: number; lastDate: string | null }
+//
+// El flag `unknown` en true significa "NO SE PUDO CALCULAR", que es DISTINTO de "no hay turnos futuros"
+// (WR-04). El consumidor tiene que decirlo en pantalla — "no pudimos calcular cuántos turnos se
+// cancelan" — en vez de omitir el aviso previo: si lo omite, el cliente confirma una acción
+// irreversible sin el dato que D-03/D-11 declaran obligatorio para dar el consentimiento.
+export type AbonoCancelSummary = { count: number; lastDate: string | null; unknown?: boolean }
 
 export type CancelAbonoSeriesResult =
   // La serie YA estaba dada de baja: no se tocó ningún turno y el caller NO debe re-disparar mails (D-05).
@@ -74,22 +79,49 @@ export type CancelAbonoSeriesResult =
   | { ok: false; error: 'not_found' | 'update_failed' }
 
 /**
- * "Hoy" como 'yyyy-MM-dd' del día calendario ARGENTINO (D-02).
+ * Serializa un Date a 'yyyy-MM-dd' por sus componentes LOCALES (IN-02).
  *
- * `todayInAR()` (lib/booking-window) es la única fuente de verdad del día AR y devuelve medianoche
- * LOCAL de ese día. La serialización se arma con los componentes LOCALES del Date
- * (getFullYear / getMonth+1 / getDate) y NO con la representación UTC del instante: en Vercel el
- * proceso corre en UTC, así que recortar los 10 primeros caracteres del ISO string de esa medianoche
- * local devuelve el día equivocado en toda la franja cercana a la medianoche AR — y ahí el corte se
- * correría una jornada entera, dejando vivo (o matando de más) el turno del día. Mismo `toISODate`
- * que ya viven duplicados en app/api/abonos/create y en el cron; acá queda centralizado.
+ * NO se usa `toISOString().slice(0,10)` a propósito: en Vercel el proceso corre en UTC, así que
+ * recortar el ISO string de una medianoche LOCAL devuelve el día equivocado en toda la franja cercana
+ * a la medianoche AR — y ahí el corte de la baja se correría una jornada entera, dejando vivo (o
+ * matando de más) el turno del día.
+ *
+ * Esta es la implementación compartida: `app/api/abonos/create` y `app/api/cron/cancel-expired` tienen
+ * hoy su propia copia idéntica y la adoptan desde acá en el Plan 07-11.
  */
-export function todayISOInAR(): string {
-  const d = todayInAR()
+export function toISODate(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/**
+ * Etiqueta plural del día fijo de la serie para el mail y la pantalla (IN-01).
+ *
+ * Convención `EXTRACT(dow)` 0=domingo..6=sábado, la MISMA de time_blocks / booking-core /
+ * abonos.day_of_week. Devuelve SOLO la parte plural ('los martes'); el prefijo 'todos ' lo arma el
+ * caller, como venía haciéndolo.
+ *
+ * Existe porque la tabla estaba copiada en cuatro archivos con fallbacks DIVERGENTES: la vía pública
+ * dejaba la etiqueta VACÍA y la del panel una genérica, así que el mail de la MISMA baja decía cosas
+ * distintas según quién la ejecutara. Acá el fallback es UNO solo, definido una única vez abajo, para
+ * cualquier valor que no sea un entero en 0..6 (incluye NaN y no enteros).
+ */
+export function abonoDayLabel(dow: number): string {
+  const LABELS = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados']
+  if (!Number.isInteger(dow) || dow < 0 || dow > 6) return 'los días'
+  return LABELS[dow]
+}
+
+/**
+ * "Hoy" como 'yyyy-MM-dd' del día calendario ARGENTINO (D-02).
+ *
+ * `todayInAR()` (lib/booking-window) es la única fuente de verdad del día AR y devuelve medianoche
+ * LOCAL de ese día; la serialización la hace `toISODate` (ver arriba por qué no se recorta el ISO).
+ */
+export function todayISOInAR(): string {
+  return toISODate(todayInAR())
 }
 
 /**
@@ -145,10 +177,13 @@ export async function previewAbonoCancellation(input: AbonoCancelInput): Promise
     .neq('status', 'cancelled')
     .gte('date', cutoff)
 
-  // Degrada limpio: el preview es informativo, no puede romper la pantalla que lo muestra.
+  // NO degrada en silencio (WR-04). Devolver `{ count: 0 }` a secas hacía que el fallo de la query
+  // fuera indistinguible del caso legítimo "no hay turnos futuros": la pantalla ocultaba el aviso
+  // previo y el cliente terminaba confirmando una baja irreversible sin el dato que decide su
+  // consentimiento (D-03/D-11). El flag `unknown` obliga al consumidor a decir que no se pudo calcular.
   if (error) {
     console.error('[abonos/cancel] preview error:', error instanceof Error ? error.message : error)
-    return { count: 0, lastDate: null }
+    return { count: 0, lastDate: null, unknown: true }
   }
 
   const rows = (data ?? []) as { date: string | null; status?: string | null }[]
