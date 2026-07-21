@@ -257,7 +257,25 @@ Plans:
   3. Al darse de baja por cualquiera de las dos vías, el sistema **deja de generar turnos futuros** de esa serie (el cron ya no la extiende).
   4. Los turnos futuros **ya generados** se manejan según lo definido en discuss-phase (cancelarlos o dejarlos), de forma consistente entre la baja por mail y la baja por panel.
 
-**Plans**: TBD
+**Plans**: 0/5 plans complete
+
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — Motor compartido `lib/abono-cancel.ts` (baja idempotente, doble scoping `abono_id`+`business_id`, corte "hoy" en fecha AR) + tests puros y contra la DB
+- [ ] 07-02-PLAN.md — Templates de baja de serie en `lib/email.ts` (mail al cliente + aviso al dueño, UN solo mail por vía) + test del payload
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 07-03-PLAN.md — Vía del cliente: ruta NUEVA `app/abono/cancelar/[token]` + `POST /api/abonos/cancel/[token]` (404 genérico, preview conteo/última fecha) + `cancelUrl` en el mail de alta
+- [ ] 07-04-PLAN.md — Vía del dueño: `POST /api/abonos/cancel` autenticado + UX en `/abonos` (filtro Archivados, "Dar de baja" con confirmación, "Copiar link de baja")
+
+**Wave 3** *(blocked on Waves 2)*
+
+- [ ] 07-05-PLAN.md — Checkpoint humano: verificación end-to-end de las dos vías (mismo efecto sobre los turnos, un solo mail por destinatario, checklist visual)
+
+**Waves**: Wave 1 = 07-01 + 07-02 en paralelo (motor de baja · templates de mail; archivos disjuntos, sin dependencias). Wave 2 = 07-03 + 07-04 en paralelo (superficie pública · panel; archivos disjuntos, ambas dependen del motor y de los templates). Wave 3 = 07-05 (checkpoint, depende de las dos vías construidas).
+
 **UI hint**: yes
 **Security/Integrity relevance**: El **token de cancelación** del mail debe dar de baja **solo** el abono al que corresponde: token no adivinable, comparado con `timingSafeEqual` (patrón del cancel-token de turno actual), sin permitir cancelar la serie de otro tenant manipulando el link — un cliente no puede tocar el abono de otro negocio. La baja desde el panel es una acción autenticada del dueño sobre un abono de SU negocio (RLS + `business_id`/`owner_id`). Frenar la generación y (según decisión) cancelar los turnos futuros ya generados no puede tocar turnos de otra serie ni de otro tenant. Riesgo acotado frente a Phase 6 (no redefine constraints), pero toca aislamiento por tenant → el secure-phase gate verifica: scoping del token de cancelación a la serie correcta, aislamiento por tenant de la baja (mail y panel), y que frenar/cancelar la serie no afecte turnos ajenos.
 
@@ -274,4 +292,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
-| 7. Cancelación del abono (mail + panel) | 0/TBD | Not started | - |
+| 7. Cancelación del abono (mail + panel) | 0/5 | Planned | - |
