@@ -242,6 +242,7 @@ CREATE TABLE IF NOT EXISTS "public"."abonos" (
     "day_of_week" smallint NOT NULL,
     "start_time" time without time zone NOT NULL,
     "duration_minutes" integer,
+    "total_occurrences" integer,
     "status" "text" DEFAULT 'active'::"text" NOT NULL,
     "cancel_token" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "generated_until" "date",
@@ -252,7 +253,8 @@ CREATE TABLE IF NOT EXISTS "public"."abonos" (
     "deposit_amount" numeric,
     "billing_subscription_id" "text",
     CONSTRAINT "abonos_day_of_week_check" CHECK ((("day_of_week" >= 0) AND ("day_of_week" <= 6))),
-    CONSTRAINT "abonos_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'cancelled'::"text"])))
+    CONSTRAINT "abonos_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'cancelled'::"text", 'completed'::"text"]))),
+    CONSTRAINT "abonos_total_occurrences_check" CHECK ((("total_occurrences" IS NULL) OR ("total_occurrences" > 0)))
 );
 
 

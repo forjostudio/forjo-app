@@ -9,8 +9,9 @@
 --
 -- Qué hace:
 --   1. Crea `abonos`: la serie por negocio (D-01). Datos de tenant → RLS + 4 policies owner-only por
---      operación. Columnas base + columnas EXTENSIBLES nullable (D-02) para el cobro recurrente y el
---      flujo pagá-o-liberá de v0.25, presentes desde ya para NO re-migrar (v0.24 NO las usa).
+--      operación. Columnas base + `total_occurrences` (D-07′: null=indefinido / N=finito de N sesiones,
+--      con status 'completed' al llegar a N) + columnas EXTENSIBLES nullable (D-02) para el cobro
+--      recurrente y el flujo pagá-o-liberá de v0.25, presentes desde ya para NO re-migrar (v0.24 NO las usa).
 --   2. `appointments.abono_id` (D-03): FK nullable turno→serie, `on delete set null` (borrar un abono
 --      NO borra los turnos ya generados; solo los desvincula). Índice para el join por serie.
 --   3. `businesses.abono_window_weeks` (D-07): ventana de generación forward a nivel negocio, default 8.
@@ -47,7 +48,15 @@ CREATE TABLE IF NOT EXISTS "public"."abonos" (
   "day_of_week"        smallint NOT NULL CHECK ("day_of_week" BETWEEN 0 AND 6),
   "start_time"         time without time zone NOT NULL,
   "duration_minutes"   integer,  -- snapshot de referencia al crear; la generación usa la duración VIVA del service.
-  "status"             text NOT NULL DEFAULT 'active' CHECK ("status" IN ('active', 'cancelled')),
+  -- D-07′: duración de la SERIE. NULL = INDEFINIDO (rolling sin fin, ej. "cancha todos los martes");
+  -- N = FINITO de N sesiones (ej. "kinesiología, 10 sesiones y termina"). Los finitos reusan el MISMO
+  -- mecanismo rolling, acotado por maxCreated = N − generados; un choque NO consume sesión (se busca la
+  -- semana siguiente hasta juntar N turnos REALES). Al llegar a N el abono pasa a status='completed' y el
+  -- cron deja de extenderlo. Es metadata: NO participa de ninguna constraint (011/013/cupos/espacio).
+  "total_occurrences"  integer CHECK ("total_occurrences" IS NULL OR "total_occurrences" > 0),
+  -- 'completed' = el finito ya juntó sus N sesiones (estado terminal distinto de 'cancelled', que es baja
+  -- explícita del dueño). El cron sólo procesa 'active'.
+  "status"             text NOT NULL DEFAULT 'active' CHECK ("status" IN ('active', 'cancelled', 'completed')),
   "cancel_token"       uuid NOT NULL DEFAULT gen_random_uuid(),  -- token a NIVEL SERIE (link de cancelación, Phase 7).
   "generated_until"    date,  -- frontera de la ventana rolling; hace idempotente la generación forward.
   "skipped_occurrences" jsonb NOT NULL DEFAULT '[]'::jsonb,  -- D-06: array de {date, reason} salteadas por conflicto.

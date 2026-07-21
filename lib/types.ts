@@ -272,7 +272,10 @@ export interface Abono {
   day_of_week: number
   start_time: string // 'HH:mm[:ss]'
   duration_minutes: number | null // snapshot de referencia; la generación usa la duración VIVA del service.
-  status: 'active' | 'cancelled'
+  // D-07′: null = INDEFINIDO (rolling sin fin); N = FINITO de N sesiones. Un choque NO consume sesión:
+  // se buscan N turnos REALES. Al juntar N, el abono pasa a status 'completed' y el cron lo deja de extender.
+  total_occurrences: number | null
+  status: 'active' | 'cancelled' | 'completed' // 'completed' = finito que ya juntó sus N sesiones
   cancel_token: string // token a NIVEL SERIE (link de cancelación, Phase 7)
   generated_until: string | null // frontera de la ventana rolling (ISO yyyy-mm-dd); idempotencia forward.
   skipped_occurrences: { date: string; reason: string }[] // D-06: ocurrencias salteadas por conflicto.
