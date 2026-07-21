@@ -75,6 +75,33 @@ describe.skipIf(!hasSupabaseCreds)('abono-cancel: cancelAbonoSeries / previewAbo
     return out
   }
 
+  // Cuenta los turnos de la serie que siguen VIVOS del corte para adelante. Es la métrica exacta de
+  // CR-01: si después de una baja (o de su reintento) esto no da 0, la serie quedó dada de baja con
+  // turnos futuros que igual se le van a ocupar la agenda al negocio y a aparecerle al cliente.
+  async function liveFutureCount(tenant: SeededTenant, abonoId: string): Promise<number> {
+    const { data, error } = await tenant.admin
+      .from('appointments')
+      .select('id')
+      .eq('business_id', tenant.businessId)
+      .eq('abono_id', abonoId)
+      .gte('date', TODAY)
+      .neq('status', 'cancelled')
+    if (error) throw new Error(`liveFutureCount: ${error.message}`)
+    return (data || []).length
+  }
+
+  // Siembra EL ESTADO A MEDIAS de CR-01: la fila del abono ya volteada a 'cancelled' (paso (a) exitoso)
+  // pero sus turnos futuros todavía vivos (paso (c) fallido). Se escribe directo con service-role
+  // porque el motor, por diseño, no puede producir este estado a pedido: es el residuo de un fallo.
+  async function seedHalfCancelled(tenant: SeededTenant, abonoId: string) {
+    const { error } = await tenant.admin
+      .from('abonos')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+      .eq('id', abonoId)
+      .eq('business_id', tenant.businessId)
+    if (error) throw new Error(`seed estado a medias: ${error.message}`)
+  }
+
   async function abonoRow(tenant: SeededTenant, abonoId: string) {
     const { data } = await tenant.admin
       .from('abonos')
@@ -278,5 +305,78 @@ describe.skipIf(!hasSupabaseCreds)('abono-cancel: cancelAbonoSeries / previewAbo
       todayStr: TODAY,
     })
     expect(after).toEqual({ count: 0, lastDate: null })
+  })
+
+  // ── CR-01: el reintento REPARA una baja que quedó a medias ────────────────────────────────────
+  // Escenario real: (a) volteó la fila del abono, (c) falló (caída de red, timeout, deploy en el
+  // medio). La serie queda 'cancelled' con N turnos futuros VIVOS. Antes del barrido, el reintento
+  // era inútil: el gate atómico ya no matcheaba, caía en la rama (b) y devolvía alreadyCancelled →
+  // el panel y la pantalla pública decían "dado de baja" mientras los turnos seguían en la agenda.
+
+  it('9 — CR-01: el reintento sobre una serie a medias cancela los turnos futuros que quedaron vivos', async () => {
+    await seedHalfCancelled(t, abonoA)
+    // Precondición del bug: la fila ya está cancelada Y los 4 turnos futuros siguen vivos.
+    expect((await abonoRow(t, abonoA)).status).toBe('cancelled')
+    expect(await liveFutureCount(t, abonoA)).toBe(FUTURE_DATES.length)
+
+    const res = await cancelAbonoSeries({ supabase, businessId: t.businessId, abonoId: abonoA, todayStr: TODAY })
+
+    // Sigue informando alreadyCancelled: esta llamada NO fue la que volteó la serie, así que el caller
+    // no re-dispara mails (D-05/D-14). Pero el EFECTO ya quedó aplicado.
+    expect(res).toEqual({ ok: true, alreadyCancelled: true, cancelledCount: 0, lastDate: null })
+    expect(await liveFutureCount(t, abonoA)).toBe(0)
+
+    const st = await statusesOf(t, abonoA)
+    expect(st[TODAY]).toBe('cancelled')
+    expect(st[FUT_1]).toBe('cancelled')
+    expect(st[FUT_2]).toBe('cancelled')
+    expect(st[FUT_3]).toBe('cancelled')
+  })
+
+  it('10 — el barrido de reparación no resucita ni toca el pasado (D-02)', async () => {
+    await seedHalfCancelled(t, abonoA)
+    await cancelAbonoSeries({ supabase, businessId: t.businessId, abonoId: abonoA, todayStr: TODAY })
+
+    const st = await statusesOf(t, abonoA)
+    expect(st[PAST_1]).toBe('confirmed')
+    expect(st[PAST_2]).toBe('confirmed')
+  })
+
+  it('11 — el barrido de reparación no cruza series ni tenants (D-24, T-07-23)', async () => {
+    await seedHalfCancelled(t, abonoA)
+    const liveB = await liveFutureCount(t, abonoB)
+    const liveOther = await liveFutureCount(other, abonoOther)
+
+    await cancelAbonoSeries({ supabase, businessId: t.businessId, abonoId: abonoA, todayStr: TODAY })
+
+    // La otra serie del MISMO negocio y la del OTRO tenant quedan exactamente como estaban.
+    expect(await liveFutureCount(t, abonoB)).toBe(liveB)
+    expect(await liveFutureCount(other, abonoOther)).toBe(liveOther)
+    expect(Object.values(await statusesOf(t, abonoB)).every(s => s === 'confirmed')).toBe(true)
+    expect(Object.values(await statusesOf(other, abonoOther)).every(s => s === 'confirmed')).toBe(true)
+    expect((await abonoRow(t, abonoB)).status).toBe('active')
+    expect((await abonoRow(other, abonoOther)).status).toBe('active')
+  })
+
+  it('12 — el barrido es idempotente: la 3ª llamada no cambia nada', async () => {
+    await seedHalfCancelled(t, abonoA)
+    await cancelAbonoSeries({ supabase, businessId: t.businessId, abonoId: abonoA, todayStr: TODAY })
+    const before = await statusesOf(t, abonoA)
+
+    const third = await cancelAbonoSeries({ supabase, businessId: t.businessId, abonoId: abonoA, todayStr: TODAY })
+    expect(third).toEqual({ ok: true, alreadyCancelled: true, cancelledCount: 0, lastDate: null })
+    expect(await statusesOf(t, abonoA)).toEqual(before)
+    expect(await liveFutureCount(t, abonoA)).toBe(0)
+  })
+
+  it('13 — not_found no dispara ningún barrido: el par (abono, negocio) no resuelve fila', async () => {
+    const ghost = '00000000-0000-0000-0000-000000000000'
+    const res = await cancelAbonoSeries({ supabase, businessId: t.businessId, abonoId: ghost, todayStr: TODAY })
+    expect(res).toEqual({ ok: false, error: 'not_found' })
+
+    // Ninguna serie del negocio (ni del otro tenant) se vio afectada.
+    expect(await liveFutureCount(t, abonoA)).toBe(FUTURE_DATES.length)
+    expect(await liveFutureCount(t, abonoB)).toBe(FUTURE_DATES.length)
+    expect(await liveFutureCount(other, abonoOther)).toBe(FUTURE_DATES.length)
   })
 })

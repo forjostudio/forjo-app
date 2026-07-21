@@ -32,6 +32,16 @@ import { todayInAR } from './booking-window'
 //     (lib/abono-generation.ts no llama a createCalendarEvent). Si eso cambiara, la baja tendría que
 //     limpiarlos.
 //
+// LA BAJA NO ES ATÓMICA, PERO SÍ ES RECUPERABLE POR REINTENTO (CR-01). Los pasos 1 y 2 son DOS
+// escrituras separadas: si la segunda falla, la serie queda dada de baja con sus turnos futuros vivos.
+// Por eso la rama que detecta "esta serie ya estaba cancelada" NO se limita a informarlo: vuelve a
+// emitir la cancelación en masa antes de responder (barrido de reparación). El UPDATE es idempotente
+// por construcción — su `.neq('status','cancelled')` hace que, si no quedó nada pendiente, afecte 0
+// filas — así que reintentar REPARA en vez de tapar. Consecuencia directa sobre el vocabulario del
+// módulo: `alreadyCancelled: true` significa "esta llamada no fue la que volteó la serie" (y por lo
+// tanto no debe re-disparar mails, D-05/D-14), NUNCA "no hay nada que hacer". Cualquier reintento, por
+// cualquiera de las dos vías, deja el estado convergido.
+//
 // POR QUÉ EL UPDATE MASIVO LLEVA DOS FILTROS Y NO UNO (D-24): con service role no hay RLS, así que el
 // aislamiento lo dan EXCLUSIVAMENTE los filtros de la query. `.eq('abono_id', …)` sola alcanzaría para
 // no pisar otra serie, pero deja el tenant a merced de que el abonoId recibido sea realmente del
@@ -53,7 +63,12 @@ export type AbonoCancelInput = {
 
 // Resumen del efecto (o del preview) de la baja: cuántos turnos futuros hay/hubo y cuál es el último.
 // Es lo que consumen el aviso previo de D-03 y la pantalla de éxito.
-export type AbonoCancelSummary = { count: number; lastDate: string | null }
+//
+// El flag `unknown` en true significa "NO SE PUDO CALCULAR", que es DISTINTO de "no hay turnos futuros"
+// (WR-04). El consumidor tiene que decirlo en pantalla — "no pudimos calcular cuántos turnos se
+// cancelan" — en vez de omitir el aviso previo: si lo omite, el cliente confirma una acción
+// irreversible sin el dato que D-03/D-11 declaran obligatorio para dar el consentimiento.
+export type AbonoCancelSummary = { count: number; lastDate: string | null; unknown?: boolean }
 
 export type CancelAbonoSeriesResult =
   // La serie YA estaba dada de baja: no se tocó ningún turno y el caller NO debe re-disparar mails (D-05).
@@ -64,22 +79,49 @@ export type CancelAbonoSeriesResult =
   | { ok: false; error: 'not_found' | 'update_failed' }
 
 /**
- * "Hoy" como 'yyyy-MM-dd' del día calendario ARGENTINO (D-02).
+ * Serializa un Date a 'yyyy-MM-dd' por sus componentes LOCALES (IN-02).
  *
- * `todayInAR()` (lib/booking-window) es la única fuente de verdad del día AR y devuelve medianoche
- * LOCAL de ese día. La serialización se arma con los componentes LOCALES del Date
- * (getFullYear / getMonth+1 / getDate) y NO con la representación UTC del instante: en Vercel el
- * proceso corre en UTC, así que recortar los 10 primeros caracteres del ISO string de esa medianoche
- * local devuelve el día equivocado en toda la franja cercana a la medianoche AR — y ahí el corte se
- * correría una jornada entera, dejando vivo (o matando de más) el turno del día. Mismo `toISODate`
- * que ya viven duplicados en app/api/abonos/create y en el cron; acá queda centralizado.
+ * NO se usa `toISOString().slice(0,10)` a propósito: en Vercel el proceso corre en UTC, así que
+ * recortar el ISO string de una medianoche LOCAL devuelve el día equivocado en toda la franja cercana
+ * a la medianoche AR — y ahí el corte de la baja se correría una jornada entera, dejando vivo (o
+ * matando de más) el turno del día.
+ *
+ * Esta es la implementación compartida: `app/api/abonos/create` y `app/api/cron/cancel-expired` tienen
+ * hoy su propia copia idéntica y la adoptan desde acá en el Plan 07-11.
  */
-export function todayISOInAR(): string {
-  const d = todayInAR()
+export function toISODate(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/**
+ * Etiqueta plural del día fijo de la serie para el mail y la pantalla (IN-01).
+ *
+ * Convención `EXTRACT(dow)` 0=domingo..6=sábado, la MISMA de time_blocks / booking-core /
+ * abonos.day_of_week. Devuelve SOLO la parte plural ('los martes'); el prefijo 'todos ' lo arma el
+ * caller, como venía haciéndolo.
+ *
+ * Existe porque la tabla estaba copiada en cuatro archivos con fallbacks DIVERGENTES: la vía pública
+ * dejaba la etiqueta VACÍA y la del panel una genérica, así que el mail de la MISMA baja decía cosas
+ * distintas según quién la ejecutara. Acá el fallback es UNO solo, definido una única vez abajo, para
+ * cualquier valor que no sea un entero en 0..6 (incluye NaN y no enteros).
+ */
+export function abonoDayLabel(dow: number): string {
+  const LABELS = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados']
+  if (!Number.isInteger(dow) || dow < 0 || dow > 6) return 'los días'
+  return LABELS[dow]
+}
+
+/**
+ * "Hoy" como 'yyyy-MM-dd' del día calendario ARGENTINO (D-02).
+ *
+ * `todayInAR()` (lib/booking-window) es la única fuente de verdad del día AR y devuelve medianoche
+ * LOCAL de ese día; la serialización la hace `toISODate` (ver arriba por qué no se recorta el ISO).
+ */
+export function todayISOInAR(): string {
+  return toISODate(todayInAR())
 }
 
 /**
@@ -135,10 +177,13 @@ export async function previewAbonoCancellation(input: AbonoCancelInput): Promise
     .neq('status', 'cancelled')
     .gte('date', cutoff)
 
-  // Degrada limpio: el preview es informativo, no puede romper la pantalla que lo muestra.
+  // NO degrada en silencio (WR-04). Devolver `{ count: 0 }` a secas hacía que el fallo de la query
+  // fuera indistinguible del caso legítimo "no hay turnos futuros": la pantalla ocultaba el aviso
+  // previo y el cliente terminaba confirmando una baja irreversible sin el dato que decide su
+  // consentimiento (D-03/D-11). El flag `unknown` obliga al consumidor a decir que no se pudo calcular.
   if (error) {
     console.error('[abonos/cancel] preview error:', error instanceof Error ? error.message : error)
-    return { count: 0, lastDate: null }
+    return { count: 0, lastDate: null, unknown: true }
   }
 
   const rows = (data ?? []) as { date: string | null; status?: string | null }[]
@@ -192,7 +237,35 @@ export async function cancelAbonoSeries(input: AbonoCancelInput): Promise<Cancel
     // revela la existencia de un abono ajeno (D-22).
     if (!existing) return { ok: false, error: 'not_found' }
 
-    // Ya estaba dada de baja: no se toca un solo appointment y el caller no re-dispara mails (D-05).
+    // BARRIDO DE REPARACIÓN (CR-01, T-07-23). La serie ya estaba en 'cancelled', pero eso NO garantiza
+    // que sus turnos futuros hayan quedado cancelados: si una ejecución anterior falló entre (a) y (c),
+    // la fila está volteada y los turnos siguen vivos, y el gate atómico impide que un reintento vuelva
+    // a entrar por (c). Así que se re-emite acá el MISMO UPDATE, con los MISMOS cuatro filtros: los dos
+    // `.eq` son el doble scoping de D-24 (sin ellos el barrido alcanzaría otra serie del negocio o, con
+    // service role y sin RLS, otro tenant), `.gte('date', cutoff)` es la frontera INCLUSIVE de D-02 (no
+    // toca el pasado) y `.neq('status','cancelled')` es lo que lo vuelve idempotente: si no quedó nada
+    // pendiente afecta 0 filas. Nunca escribe un status distinto de 'cancelled': no resucita turnos ni
+    // reabre slots (D-04), así que no introduce ventana nueva de doble-booking.
+    const { error: repairErr } = await supabase
+      .from('appointments')
+      .update({ status: 'cancelled' })
+      .eq('business_id', businessId)
+      .eq('abono_id', abonoId)
+      .gte('date', cutoff)
+      .neq('status', 'cancelled')
+
+    if (repairErr) {
+      console.error(
+        `[abonos/cancel] barrido de reparación FALLÓ (abono ${abonoId}):`,
+        repairErr instanceof Error ? repairErr.message : repairErr,
+      )
+      return { ok: false, error: 'update_failed' }
+    }
+
+    // Ya estaba dada de baja: el caller no re-dispara mails (D-05). `cancelledCount` se mantiene en 0 A
+    // PROPÓSITO aunque el barrido haya reparado filas: el número que informa esta rama es "cuántos
+    // canceló ESTA baja", y la baja la ejecutó (o intentó) otra llamada. Devolver acá lo reparado haría
+    // que el panel y la pantalla pública le anuncien al usuario un efecto que él no produjo.
     return { ok: true, alreadyCancelled: true, cancelledCount: 0, lastDate: null }
   }
 
@@ -212,7 +285,10 @@ export async function cancelAbonoSeries(input: AbonoCancelInput): Promise<Cancel
 
   if (apptErr) {
     // La fila del abono YA quedó cancelada, así que la garantía crítica (frenar la generación forward)
-    // se sostiene aunque este UPDATE falle. Se informa el fallo y el caller decide si reintenta.
+    // se sostiene aunque este UPDATE falle. Pero la serie queda dada de baja CON turnos futuros vivos:
+    // este estado es inconsistente y hay que repararlo. El camino de recuperación es el barrido de la
+    // rama (b): como el gate atómico ya no vuelve a matchear, cualquier reintento — por el link del
+    // mail o por el panel — cae ahí y re-aplica esta misma cancelación en masa hasta dejarla en 0.
     console.error(
       `[abonos/cancel] cancelación en masa FALLÓ (abono ${abonoId}):`,
       apptErr instanceof Error ? apptErr.message : apptErr,
