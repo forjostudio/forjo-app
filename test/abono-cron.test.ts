@@ -53,9 +53,18 @@ function occurrences(fromStr: string, toStr: string, dow: number): string[] {
 }
 
 // Siembra una fila `abonos` con service-role (bypassa RLS, correcto para fixtures) y devuelve su id.
+// `totalOccurrences` (D-07′): null/ausente = INDEFINIDO (rolling sin fin); N = FINITO de N sesiones.
+// `status` permite sembrar un abono ya 'completed' (para probar que el cron NO lo vuelve a tocar).
 async function seedAbono(
   t: SeededTenant,
-  args: { clientId: string; dayOfWeek: number; time: string; generatedUntil: string | null }
+  args: {
+    clientId: string
+    dayOfWeek: number
+    time: string
+    generatedUntil: string | null
+    totalOccurrences?: number | null
+    status?: 'active' | 'cancelled' | 'completed'
+  }
 ): Promise<string> {
   const ins = await t.admin
     .from('abonos')
@@ -68,7 +77,8 @@ async function seedAbono(
       day_of_week: args.dayOfWeek,
       start_time: args.time,
       duration_minutes: t.serviceDurationMinutes,
-      status: 'active',
+      total_occurrences: args.totalOccurrences ?? null,
+      status: args.status ?? 'active',
       generated_until: args.generatedUntil,
     })
     .select('id')
@@ -264,5 +274,165 @@ describe.skipIf(!hasSupabaseCreds)('cron: extensión de la ventana rolling de ab
       .eq('business_id', t.businessId)
       .eq('abono_id', abonoOther)
     expect(crossCount).toBe(0)
+  })
+
+  // ── (6) FINITO (D-07′): el cron genera SOLO N turnos reales y marca el abono 'completed' ─────────
+  it('6 — finito de N sesiones: genera exactamente N turnos y pasa a status completed', async () => {
+    const N = 2
+    const abonoId = await seedAbono(t, {
+      clientId,
+      dayOfWeek: abonoDow,
+      time: TIME,
+      generatedUntil: addDaysISO(todayStr, -3),
+      totalOccurrences: N,
+    })
+    const expected = occurrences(todayStr, toDate, abonoDow)
+    expect(expected.length).toBeGreaterThan(N) // la ventana da de sobra: el tope lo pone N, no el rango
+
+    await extendAbonoWindows(t.admin)
+
+    // Exactamente N turnos, y son las N PRIMERAS ocurrencias del rango (el motor corta al llegar al tope).
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('date')
+      .eq('business_id', t.businessId)
+      .eq('abono_id', abonoId)
+      .order('date')
+    expect(appts?.map((a) => a.date)).toEqual(expected.slice(0, N))
+
+    // Al juntar sus N sesiones, el abono queda 'completed' (el cron deja de extenderlo).
+    const { data: abono } = await t.admin.from('abonos').select('status, total_occurrences').eq('id', abonoId).single()
+    expect(abono?.status).toBe('completed')
+    expect(abono?.total_occurrences).toBe(N)
+  })
+
+  // ── (7) El cron NO vuelve a tocar un abono 'completed' ───────────────────────────────────────────
+  it('7 — no toca los abonos completed: no genera turnos nuevos ni los cuenta como extendidos', async () => {
+    const abonoId = await seedAbono(t, {
+      clientId,
+      dayOfWeek: abonoDow,
+      time: TIME,
+      generatedUntil: addDaysISO(todayStr, -3),
+      totalOccurrences: 2,
+      status: 'completed',
+    })
+
+    const res = await extendAbonoWindows(t.admin)
+    expect(res.abonosExtended).toBe(0)
+
+    const { count } = await t.admin
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', t.businessId)
+      .eq('abono_id', abonoId)
+    expect(count).toBe(0)
+
+    // Sigue completed y su generated_until NO avanzó (el cron ni lo miró).
+    const { data: abono } = await t.admin.from('abonos').select('status, generated_until').eq('id', abonoId).single()
+    expect(abono?.status).toBe('completed')
+    expect(abono?.generated_until).toBe(addDaysISO(todayStr, -3))
+  })
+
+  // ── (8) Finito que YA juntó sus N (quedó 'active' por lo que sea) → se marca completed sin generar ─
+  it('8 — finito con N ya generados: lo marca completed y no genera ni un turno más', async () => {
+    const N = 2
+    const abonoId = await seedAbono(t, {
+      clientId,
+      dayOfWeek: abonoDow,
+      time: TIME,
+      generatedUntil: addDaysISO(todayStr, -3),
+      totalOccurrences: N,
+    })
+
+    // 1ª corrida: junta sus N y queda completed.
+    await extendAbonoWindows(t.admin)
+    const { data: appts1 } = await t.admin.from('appointments').select('id').eq('abono_id', abonoId)
+    expect(appts1?.length).toBe(N)
+
+    // Se lo vuelve a poner 'active' a mano (simula el abono que ya llegó a N pero sigue marcado activo):
+    // el cron debe reconocer que gen >= N, marcarlo completed y NO generar nada nuevo.
+    await t.admin.from('abonos').update({ status: 'active' }).eq('id', abonoId)
+
+    await extendAbonoWindows(t.admin)
+    const { data: appts2 } = await t.admin.from('appointments').select('id').eq('abono_id', abonoId)
+    expect(appts2?.length).toBe(N) // sin turnos nuevos
+
+    const { data: abono } = await t.admin.from('abonos').select('status').eq('id', abonoId).single()
+    expect(abono?.status).toBe('completed')
+  })
+
+  // ── (9) Un CHOQUE no consume sesión: el finito sigue a la semana siguiente hasta juntar N reales ──
+  it('9 — finito con conflicto: el choque no consume sesión, junta N turnos REALES y queda completed', async () => {
+    const N = 2
+    const expected = occurrences(todayStr, toDate, abonoDow)
+    expect(expected.length).toBeGreaterThan(N + 1)
+    const clash = expected[0] // ocupamos la 1ª ocurrencia con un turno ajeno (cupo 1 → slot lleno)
+
+    const seed = await createAppointmentCore({
+      supabase: t.admin,
+      business: { id: t.businessId, buffer_minutes: t.bufferMinutes },
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      date: clash,
+      time: TIME,
+      clientId: null,
+      clientName: 'Turno Ajeno',
+      clientPhone: null,
+      clientEmail: null,
+      notes: null,
+      requireDeposit: false,
+    })
+    expect(seed.ok).toBe(true)
+
+    const abonoId = await seedAbono(t, {
+      clientId,
+      dayOfWeek: abonoDow,
+      time: TIME,
+      generatedUntil: addDaysISO(todayStr, -3),
+      totalOccurrences: N,
+    })
+
+    await extendAbonoWindows(t.admin)
+
+    // El choque NO consumió sesión: se generaron las ocurrencias 2ª y 3ª (N turnos reales).
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('date')
+      .eq('business_id', t.businessId)
+      .eq('abono_id', abonoId)
+      .order('date')
+    expect(appts?.map((a) => a.date)).toEqual(expected.slice(1, 1 + N))
+
+    const { data: abono } = await t.admin.from('abonos').select('status, skipped_occurrences').eq('id', abonoId).single()
+    expect(abono?.status).toBe('completed')
+    const skipped = (abono?.skipped_occurrences ?? []) as { date: string; reason: string }[]
+    expect(skipped.some((s) => s.date === clash)).toBe(true)
+  })
+
+  // ── (10) INDEFINIDO: sin total_occurrences sigue rolling (toda la ventana) y NUNCA se completa ────
+  it('10 — indefinido: genera toda la ventana y sigue active (nunca pasa a completed)', async () => {
+    const abonoId = await seedAbono(t, {
+      clientId,
+      dayOfWeek: abonoDow,
+      time: TIME,
+      generatedUntil: addDaysISO(todayStr, -3),
+      totalOccurrences: null,
+    })
+    const expected = occurrences(todayStr, toDate, abonoDow)
+
+    await extendAbonoWindows(t.admin)
+
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('date')
+      .eq('business_id', t.businessId)
+      .eq('abono_id', abonoId)
+      .order('date')
+    expect(appts?.map((a) => a.date)).toEqual(expected)
+
+    const { data: abono } = await t.admin.from('abonos').select('status, total_occurrences').eq('id', abonoId).single()
+    expect(abono?.status).toBe('active')
+    expect(abono?.total_occurrences).toBeNull()
   })
 })

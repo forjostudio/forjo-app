@@ -45,6 +45,8 @@ async function altaAbono(
     clientId: string
     fromDate: string
     toDate: string
+    // Crudo, como llega del body: el helper aplica el MISMO narrowing defensivo del handler (D-07′).
+    totalOccurrences?: unknown
   },
 ): Promise<
   | { ok: false; error: string }
@@ -87,6 +89,12 @@ async function altaAbono(
     validLocationId = loc ? input.locationId : null
   }
 
+  // (d) Duración del abono (D-07′): entero 1..MAX → FINITO de N sesiones; cualquier otra cosa
+  //     (ausente, null, 0, negativo, no-entero, absurdo) → INDEFINIDO. Mismo narrowing que el handler.
+  const rawTotal = input.totalOccurrences
+  const totalOccurrences =
+    typeof rawTotal === 'number' && Number.isInteger(rawTotal) && rawTotal > 0 && rawTotal <= 520 ? rawTotal : null
+
   // insert abonos (anon+RLS).
   const { data: abono, error: insErr } = await supabase
     .from('abonos')
@@ -99,6 +107,7 @@ async function altaAbono(
       day_of_week: input.dayOfWeek,
       start_time: input.time,
       duration_minutes: Number(service.duration_minutes) || null,
+      total_occurrences: totalOccurrences,
       status: 'active',
     })
     .select('id, cancel_token, client_id, day_of_week, start_time, service_id, professional_id, location_id')
@@ -120,12 +129,30 @@ async function altaAbono(
     },
     fromDate: input.fromDate,
     toDate: input.toDate,
+    // Finito: tope de turnos REALES de esta tanda = N (todavía no hay generados). Indefinido: sin tope.
+    maxCreated: totalOccurrences ?? undefined,
   })
 
-  // persistir generated_until + skipped (capado a 50).
+  // Finito: recontar los turnos REALES del abono (no cancelados) y marcar completed si ya juntó sus N.
+  let completed = false
+  if (totalOccurrences != null) {
+    const { count } = await supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', businessId)
+      .eq('abono_id', abono.id)
+      .neq('status', 'cancelled')
+    completed = (count ?? 0) >= totalOccurrences
+  }
+
+  // persistir generated_until + skipped (capado a 50) + status completed si corresponde.
   await supabase
     .from('abonos')
-    .update({ generated_until: input.toDate, skipped_occurrences: result.skipped.slice(-50) })
+    .update({
+      generated_until: input.toDate,
+      skipped_occurrences: result.skipped.slice(-50),
+      ...(completed ? { status: 'completed' } : {}),
+    })
     .eq('id', abono.id)
     .eq('business_id', businessId)
 
@@ -318,6 +345,99 @@ describe.skipIf(!hasSupabaseCreds)('alta manual del abono (auth + anti-tampering
       .eq('abono_id', res.abonoId)
     expect(appts?.length).toBe(5)
     expect(appts?.every((a) => !a.email_sent)).toBe(true)
+  })
+
+  // ── (5) Alta FINITA (D-07′): N entra en la ventana → crea exactamente N y queda completed ────────
+  it('5 — alta finita: con N=3 crea 3 turnos (no 5), persiste total_occurrences y queda completed', async () => {
+    const res = await altaAbono(ownerAnon, t.businessId, t.bufferMinutes, {
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      dayOfWeek: DOW_MON,
+      time: START,
+      clientId,
+      fromDate: FROM,
+      toDate: TO,
+      totalOccurrences: 3,
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect([...res.created].sort()).toEqual(MONDAYS.slice(0, 3)) // corta al llegar al tope
+
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('date')
+      .eq('business_id', t.businessId)
+      .eq('abono_id', res.abonoId)
+      .order('date')
+    expect(appts?.map((a) => a.date)).toEqual(MONDAYS.slice(0, 3))
+
+    const { data: abono } = await t.admin
+      .from('abonos')
+      .select('total_occurrences, status')
+      .eq('id', res.abonoId)
+      .single()
+    expect(abono?.total_occurrences).toBe(3)
+    expect(abono?.status).toBe('completed') // ya juntó sus 3 sesiones en la primera tanda
+  })
+
+  // ── (6) Alta FINITA con N mayor que la ventana → genera lo que entra y sigue active (lo cierra el cron) ──
+  it('6 — alta finita con N=8 (no entra en la ventana): genera 5 y queda active para que el cron lo complete', async () => {
+    const res = await altaAbono(ownerAnon, t.businessId, t.bufferMinutes, {
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      dayOfWeek: DOW_MON,
+      time: START,
+      clientId,
+      fromDate: FROM,
+      toDate: TO,
+      totalOccurrences: 8,
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect([...res.created].sort()).toEqual(MONDAYS) // el rango, no N, es el límite acá
+
+    const { data: abono } = await t.admin
+      .from('abonos')
+      .select('total_occurrences, status')
+      .eq('id', res.abonoId)
+      .single()
+    expect(abono?.total_occurrences).toBe(8)
+    expect(abono?.status).toBe('active')
+  })
+
+  // ── (7) Narrowing defensivo: sin totalOccurrences (o basura) → INDEFINIDO, comportamiento previo ──
+  it('7 — indefinido: sin totalOccurrences (o valor inválido) la columna queda null y genera toda la ventana', async () => {
+    for (const raw of [undefined, null, 0, -3, 2.5, 'muchas'] as unknown[]) {
+      const res = await altaAbono(ownerAnon, t.businessId, t.bufferMinutes, {
+        serviceId: t.serviceId,
+        professionalId: t.professionalId,
+        locationId: t.locationId,
+        dayOfWeek: DOW_MON,
+        time: START,
+        clientId,
+        fromDate: FROM,
+        toDate: TO,
+        totalOccurrences: raw,
+      })
+      expect(res.ok).toBe(true)
+      if (!res.ok) return
+      expect([...res.created].sort()).toEqual(MONDAYS) // rolling: toda la ventana, sin tope
+
+      const { data: abono } = await t.admin
+        .from('abonos')
+        .select('total_occurrences, status')
+        .eq('id', res.abonoId)
+        .single()
+      expect(abono?.total_occurrences).toBeNull()
+      expect(abono?.status).toBe('active')
+
+      // Sólo el primer valor genera turnos (los siguientes chocan con la serie ya materializada): lo que
+      // se prueba acá es el narrowing → indefinido, así que limpiamos entre iteraciones.
+      await t.admin.from('appointments').delete().eq('business_id', t.businessId)
+      await t.admin.from('abonos').delete().eq('id', res.abonoId)
+    }
   })
 })
 
