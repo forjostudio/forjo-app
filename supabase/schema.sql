@@ -389,7 +389,8 @@ CREATE TABLE IF NOT EXISTS "public"."businesses" (
     "landing_draft" "jsonb",
     "max_advance_days" integer DEFAULT 30,
     "max_advance_date" "date",
-    "abono_window_weeks" integer DEFAULT 8
+    "abono_window_weeks" integer DEFAULT 8,
+    CONSTRAINT "businesses_abono_window_weeks_range" CHECK ((("abono_window_weeks" IS NULL) OR (("abono_window_weeks" >= 1) AND ("abono_window_weeks" <= 52))))
 );
 
 
