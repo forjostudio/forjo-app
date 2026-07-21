@@ -103,11 +103,19 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
   const visibleAbonos = useMemo(() => abonos.filter((a) => a.status !== 'cancelled'), [abonos])
 
   // ── Control de ventana de generación (abono_window_weeks, D-07) ────────────────────────────────
+  // Rango permitido 1..52 (GAP-01): la ventana dimensiona el loop del motor, que corre dentro del cron
+  // diario COMPARTIDO por todos los negocios. Esto es UX + coherencia con el server; la AUTORIDAD es el
+  // clamp server-side (app/api/abonos/create y app/api/cron/cancel-expired) más el CHECK de la migr. 055.
+  const WINDOW_MIN_WEEKS = 1
+  const WINDOW_MAX_WEEKS = 52
   const [windowWeeks, setWindowWeeks] = useState<number>(business.abono_window_weeks ?? 8)
   const [savingWindow, setSavingWindow] = useState(false)
   async function saveWindow() {
     const weeks = Math.floor(windowWeeks)
-    if (!Number.isFinite(weeks) || weeks < 1) { toast.error('Ingresá un número de semanas mayor o igual a 1'); return }
+    if (!Number.isFinite(weeks) || weeks < WINDOW_MIN_WEEKS || weeks > WINDOW_MAX_WEEKS) {
+      toast.error(`Ingresá un número de semanas entre ${WINDOW_MIN_WEEKS} y ${WINDOW_MAX_WEEKS}`)
+      return
+    }
     setSavingWindow(true)
     // Espejo del guardado de max_advance_days (Agenda): update de businesses por id con anon+RLS.
     const { error } = await supabase.from('businesses').update({ abono_window_weeks: weeks }).eq('id', business.id)
@@ -207,30 +215,37 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
             <button
               type="button"
               aria-label="Menos semanas"
-              disabled={windowWeeks <= 1}
-              onClick={() => setWindowWeeks((w) => Math.max(1, w - 1))}
+              disabled={windowWeeks <= WINDOW_MIN_WEEKS}
+              onClick={() => setWindowWeeks((w) => Math.max(WINDOW_MIN_WEEKS, w - 1))}
               className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
             <input
               type="number"
-              min={1}
+              min={WINDOW_MIN_WEEKS}
+              max={WINDOW_MAX_WEEKS}
               value={windowWeeks}
               onFocus={(e) => e.target.select()}
-              onChange={(e) => setWindowWeeks(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+              onChange={(e) =>
+                setWindowWeeks(
+                  Math.min(WINDOW_MAX_WEEKS, Math.max(WINDOW_MIN_WEEKS, Math.floor(Number(e.target.value) || WINDOW_MIN_WEEKS))),
+                )
+              }
               className="h-9 w-14 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               aria-label="Semanas hacia adelante"
             />
             <button
               type="button"
               aria-label="Más semanas"
-              onClick={() => setWindowWeeks((w) => w + 1)}
-              className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              disabled={windowWeeks >= WINDOW_MAX_WEEKS}
+              onClick={() => setWindowWeeks((w) => Math.min(WINDOW_MAX_WEEKS, w + 1))}
+              className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
+          <p className="text-xs text-muted-foreground">Entre {WINDOW_MIN_WEEKS} y {WINDOW_MAX_WEEKS} semanas (hasta 1 año de anticipación).</p>
         </div>
         <Button onClick={saveWindow} disabled={savingWindow}>{savingWindow ? 'Guardando...' : 'Guardar'}</Button>
       </Card>
