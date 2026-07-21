@@ -47,6 +47,26 @@ const MAX_TOTAL_OCCURRENCES = 520
 // time_blocks / booking-core / abonos.day_of_week. "todos los <día>".
 const DAY_LABELS = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados']
 
+// ── Ventana de generación forward: límites duros server-side (GAP-01, T-06-08/17/24) ───────────
+// `businesses.abono_window_weeks` es OWNER-WRITABLE (la escribe el panel con anon+RLS, igual que
+// max_advance_days) y dimensiona el loop del motor. Ese mismo loop corre DENTRO del ÚNICO cron diario
+// COMPARTIDO por todos los tenants (Vercel Hobby = 1 cron/día): un valor absurdo de UN solo dueño
+// (999999 → ~1.000.000 de iteraciones con 2 queries c/u; 2147483647 → el toDate degenera y el loop no
+// termina) degradaba o colgaba la generación de TODOS los negocios. Por eso el servidor NUNCA usa el
+// valor crudo de la columna: lo acota antes de calcular el rango. El CHECK de la DB (migr. 055) es
+// defensa en profundidad, NO la única barrera — el servidor no confía en la columna aunque la DB valide.
+const ABONO_WINDOW_DEFAULT_WEEKS = 8
+const ABONO_WINDOW_MAX_WEEKS = 52 // 1 año de anticipación: más que eso no es un caso de uso, es abuso.
+
+// clampWindowWeeks: entero SIEMPRE en 1..52. Semántica IDÉNTICA a la del cron
+// (app/api/cron/cancel-expired) — los dos bordes de ventana tienen que coincidir. No finito o < 1 →
+// default 8 (lo de siempre); > 52 → 52 (se recorta, no se rechaza: el dueño igual genera su serie).
+function clampWindowWeeks(raw: unknown): number {
+  const n = Math.trunc(Number(raw))
+  if (!Number.isFinite(n) || n < 1) return ABONO_WINDOW_DEFAULT_WEEKS
+  return n > ABONO_WINDOW_MAX_WEEKS ? ABONO_WINDOW_MAX_WEEKS : n
+}
+
 // 'yyyy-MM-dd' de un Date tomado en sus componentes LOCALES (todayInAR devuelve medianoche local del
 // día calendario AR). Consistente con cómo el motor compara strings 'yyyy-MM-dd'.
 function toISODate(d: Date): string {
@@ -187,8 +207,9 @@ export async function POST(request: Request) {
 
   // ── Primera tanda de generación (D-05): hoy (hora AR) → hoy + abono_window_weeks semanas ───────
   // El motor (Plan 02) materializa cada ocurrencia vía createAppointmentCore (núcleo atómico) y saltea+
-  // registra ante conflicto. Rango acotado por la ventana (default 8 semanas, D-07) → sin loop infinito.
-  const windowWeeks = Number(business.abono_window_weeks) || 8
+  // registra ante conflicto. El rango va acotado por la ventana CLAMPEADA a 1..52 (default 8, D-07):
+  // nunca por el valor crudo de la columna, que el dueño puede escribir sin techo (GAP-01).
+  const windowWeeks = clampWindowWeeks(business.abono_window_weeks)
   const today = todayInAR()
   const fromDate = toISODate(today)
   const toDate = toISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + windowWeeks * 7))

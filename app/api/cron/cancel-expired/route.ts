@@ -59,6 +59,26 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+// ── Ventana de generación forward: límites duros server-side (GAP-01, T-06-08/17/24) ───────────
+// `businesses.abono_window_weeks` es OWNER-WRITABLE (la escribe el panel con anon+RLS) y dimensiona el
+// loop del motor. Acá es CRÍTICO: este cron es el ÚNICO diario y lo COMPARTEN todos los tenants (Vercel
+// Hobby = 1 cron/día). Con el valor crudo, un solo dueño podía poner 999999 (~1.000.000 de iteraciones
+// con 2 queries c/u) o 2147483647 (el toDate degenera y el loop no termina) y la corrida entera quedaba
+// colgada: los abonos de TODOS los demás negocios nunca se extendían. El try/catch por abono NO alcanza
+// — un try/catch no interrumpe un loop infinito. Por eso el valor se acota ANTES de calcular el rango.
+// El CHECK de la DB (migr. 055) es defensa en profundidad, no la única barrera.
+const ABONO_WINDOW_DEFAULT_WEEKS = 8
+const ABONO_WINDOW_MAX_WEEKS = 52 // 1 año de anticipación: más que eso no es un caso de uso, es abuso.
+
+// clampWindowWeeks: entero SIEMPRE en 1..52. Semántica IDÉNTICA a la del alta manual
+// (app/api/abonos/create) — los dos bordes de ventana tienen que coincidir, igual que SKIPPED_CAP,
+// toISODate y countAbonoAppointments. No finito o < 1 → default 8; > 52 → 52.
+function clampWindowWeeks(raw: unknown): number {
+  const n = Math.trunc(Number(raw))
+  if (!Number.isFinite(n) || n < 1) return ABONO_WINDOW_DEFAULT_WEEKS
+  return n > ABONO_WINDOW_MAX_WEEKS ? ABONO_WINDOW_MAX_WEEKS : n
+}
+
 // addDaysISO: suma días a un 'yyyy-MM-dd' en UTC puro (no cruza DST ni desfasa el día). Comparar strings
 // 'yyyy-MM-dd' lexicográficamente equivale a comparar fechas.
 function addDaysISO(dateStr: string, days: number): string {
@@ -136,9 +156,10 @@ export async function extendAbonoWindows(supabase: SupabaseClient): Promise<Exte
           | null
         if (!biz?.id) continue
 
-        // Borde de la ventana para ESTE negocio: hoy + abono_window_weeks*7 (default 8). Mismo cálculo que
+        // Borde de la ventana para ESTE negocio: hoy + abono_window_weeks*7, con la ventana CLAMPEADA a
+        // 1..52 (default 8) — nunca el valor crudo de la columna (GAP-01). Mismo cálculo y mismo clamp que
         // el alta (componentes locales sobre todayInAR).
-        const windowWeeks = Number(biz.abono_window_weeks) || 8
+        const windowWeeks = clampWindowWeeks(biz.abono_window_weeks)
         const toDate = toISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + windowWeeks * 7))
 
         // ── Abono FINITO de N sesiones (D-07′) ────────────────────────────────────────────────────
