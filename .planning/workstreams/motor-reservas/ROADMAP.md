@@ -257,7 +257,7 @@ Plans:
   3. Al darse de baja por cualquiera de las dos vías, el sistema **deja de generar turnos futuros** de esa serie (el cron ya no la extiende).
   4. Los turnos futuros **ya generados** se manejan según lo definido en discuss-phase (cancelarlos o dejarlos), de forma consistente entre la baja por mail y la baja por panel.
 
-**Plans**: 5/5 plans complete
+**Plans**: 5/12 plans complete (build 5/5 · cierre del code review 0/7)
 
 Plans:
 **Wave 1**
@@ -274,7 +274,25 @@ Plans:
 
 - [x] 07-05-PLAN.md — Checkpoint humano: verificación end-to-end de las dos vías (mismo efecto sobre los turnos, un solo mail por destinatario, checklist visual)
 
-**Waves**: Wave 1 = 07-01 + 07-02 en paralelo (motor de baja · templates de mail; archivos disjuntos, sin dependencias). Wave 2 = 07-03 + 07-04 en paralelo (superficie pública · panel; archivos disjuntos, ambas dependen del motor y de los templates). Wave 3 = 07-05 (checkpoint, depende de las dos vías construidas).
+### Cierre del code review (07-REVIEW.md — 1 critical · 9 warnings · 5 info)
+
+**Wave 1 (gap closure)**
+
+- [ ] 07-06-PLAN.md — CR-01: la baja a medias se repara en el reintento en vez de reportar éxito falso · WR-04 preview que distingue fallo de cero · publica `abonoDayLabel`/`toISODate` (IN-01/IN-02)
+- [ ] 07-07-PLAN.md — WR-02 escapado de HTML en los dos mails nuevos + acotado del input anónimo · WR-05 timeout del POST a Resend · IN-03 logs sin PII · WR-09 test que asierta los dos envíos
+- [ ] 07-08-PLAN.md — WR-03: migración **056** con índice ÚNICO sobre `abonos.cancel_token` + `schema.sql` quirúrgico + checkpoint de aplicación manual en prod *(autonomous: false)*
+
+**Wave 2 (gap closure)** *(blocked on Wave 1)*
+
+- [ ] 07-09-PLAN.md — Superficie pública: WR-01 el servidor es la autoridad del número · WR-04 copy del preview no calculable · WR-05 `after()` · IN-04 noindex · IN-05 contraste y foco · IN-01/IN-02
+- [ ] 07-10-PLAN.md — Panel: WR-07 el `cancel_token` deja de viajar con el listado (endpoint on-demand `GET /api/abonos/cancel-link/[id]`) · WR-06 preview acotado por fecha y agregados exactos
+- [ ] 07-11-PLAN.md — IN-01/IN-02 en los callers restantes (`abonos/cancel`, `abonos/create`, cron): etiqueta del día y serialización de fecha desde el módulo compartido
+
+**Wave 3 (gap closure)** *(blocked on Wave 2)*
+
+- [ ] 07-12-PLAN.md — WR-08: `test/abono-cancel-routes.test.ts` (carrera real sobre el mismo token = 1 mail, 401/400/404, cero escrituras cruzadas) + gate final y auditoría de los 15 hallazgos
+
+**Waves**: *Build* — Wave 1 = 07-01 + 07-02 en paralelo (motor de baja · templates de mail; archivos disjuntos, sin dependencias). Wave 2 = 07-03 + 07-04 en paralelo (superficie pública · panel; archivos disjuntos, ambas dependen del motor y de los templates). Wave 3 = 07-05 (checkpoint, depende de las dos vías construidas). *Cierre del review* — Wave 1 = 07-06 + 07-07 + 07-08 en paralelo (motor · mails · migración; `files_modified` disjuntos). Wave 2 = 07-09 + 07-10 + 07-11 en paralelo (superficie pública · panel · callers restantes; disjuntos, todos consumen el módulo compartido del 07-06). Wave 3 = 07-12 (tests de ruta contra los handlers ya arreglados).
 
 **UI hint**: yes
 **Security/Integrity relevance**: El **token de cancelación** del mail debe dar de baja **solo** el abono al que corresponde: token no adivinable, comparado con `timingSafeEqual` (patrón del cancel-token de turno actual), sin permitir cancelar la serie de otro tenant manipulando el link — un cliente no puede tocar el abono de otro negocio. La baja desde el panel es una acción autenticada del dueño sobre un abono de SU negocio (RLS + `business_id`/`owner_id`). Frenar la generación y (según decisión) cancelar los turnos futuros ya generados no puede tocar turnos de otra serie ni de otro tenant. Riesgo acotado frente a Phase 6 (no redefine constraints), pero toca aislamiento por tenant → el secure-phase gate verifica: scoping del token de cancelación a la serie correcta, aislamiento por tenant de la baja (mail y panel), y que frenar/cancelar la serie no afecte turnos ajenos.
