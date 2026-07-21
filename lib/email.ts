@@ -29,6 +29,24 @@ function resolveSender(businessName?: string | null, resendApiKey?: string | nul
   return { key: globalKey, from: `"${fromDisplayName(businessName)}" <notificaciones@forjo.studio>` }
 }
 
+// Escapa un valor dinámico ANTES de interpolarlo dentro del HTML de un mail (WR-02).
+// Por qué existe: `clients.name` (y de ahí el nombre que muestran los mails) sale de la superficie
+// ANÓNIMA de booking — `POST /api/booking/create` lo toma del body sin sanitizar — y termina
+// renderizado en el aviso que EL DUEÑO lee como confiable. Sin escapar, cualquiera puede plantar un
+// ancla a un dominio propio dentro de un mensaje con el branding del negocio (inyección de contenido
+// y de links / phishing dirigido), y un `<` legítimo rompe el layout.
+// El ampersand va PRIMERO: si no, se doble-escapan las entidades que producen los reemplazos que siguen.
+// Solo para HTML: el `text` plano y el `subject` NO se escapan (ahí las entidades se verían como basura).
+function esc(s: unknown): string {
+  if (s === null || s === undefined) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function fmtDate(date: string): string {
   const [y, m, d] = date.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
@@ -46,13 +64,16 @@ function fmtPrice(n: number) {
 // siempre presente para reforzar la marca. Compartido por confirmación y cancelaciones.
 function renderEmailHeader(businessName: string, logoUrl?: string | null): string {
   const safeName = businessName || 'Forjo Gestión'
+  // Escapado ANTES de interpolar (WR-02): este header lo comparten TODOS los templates del módulo,
+  // así que el control queda en un solo lugar. Se escapa el resultado de `toUpperCase()`, no al revés:
+  // mayusculizar una entidad ya escapada produciría `&AMP;`.
   if (logoUrl) {
     return `<table cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;"><tr>
-        <td style="padding-right:12px;vertical-align:middle;"><img src="${logoUrl}" alt="${safeName}" height="44" style="max-height:44px;border-radius:8px;display:block;"/></td>
-        <td style="vertical-align:middle;"><div style="font-size:20px;font-weight:800;letter-spacing:1px;color:#ffffff;">${safeName.toUpperCase()}</div></td>
+        <td style="padding-right:12px;vertical-align:middle;"><img src="${esc(logoUrl)}" alt="${esc(safeName)}" height="44" style="max-height:44px;border-radius:8px;display:block;"/></td>
+        <td style="vertical-align:middle;"><div style="font-size:20px;font-weight:800;letter-spacing:1px;color:#ffffff;">${esc(safeName.toUpperCase())}</div></td>
       </tr></table>`
   }
-  return `<div style="font-size:22px;font-weight:800;letter-spacing:2px;color:#ffffff;">${safeName.toUpperCase()}</div>
+  return `<div style="font-size:22px;font-weight:800;letter-spacing:2px;color:#ffffff;">${esc(safeName.toUpperCase())}</div>
         <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:4px;letter-spacing:1px;text-transform:uppercase;">Gestión de turnos</div>`
 }
 
@@ -503,12 +524,14 @@ export async function sendAbonoCancelledEmail({
 
   // Las filas se arman como lista para que las opcionales (servicio, última fecha) no dejen una
   // fila vacía ni un borde colgando: el borde inferior se omite en la última fila real.
+  // Los `value` van ESCAPADOS (WR-02): estas filas se interpolan crudas dentro del HTML. Las
+  // versiones sin escapar (servicio, dayLabel, turnosLabel, ultimo) se siguen usando en el `text`.
   const rows: { label: string; value: string; capitalize?: boolean }[] = []
-  if (servicio) rows.push({ label: 'Servicio', value: servicio })
-  rows.push({ label: 'Se repetía', value: dayLabel, capitalize: true })
-  rows.push({ label: 'Hora', value: `${hora} hs` })
-  rows.push({ label: 'Turnos cancelados', value: turnosLabel })
-  if (ultimo) rows.push({ label: 'Último turno cancelado', value: ultimo })
+  if (servicio) rows.push({ label: 'Servicio', value: esc(servicio) })
+  rows.push({ label: 'Se repetía', value: esc(dayLabel), capitalize: true })
+  rows.push({ label: 'Hora', value: `${esc(hora)} hs` })
+  rows.push({ label: 'Turnos cancelados', value: esc(turnosLabel) })
+  if (ultimo) rows.push({ label: 'Último turno cancelado', value: esc(ultimo) })
 
   const rowsHtml = rows
     .map((r, i) => {
@@ -536,7 +559,7 @@ export async function sendAbonoCancelledEmail({
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
         <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu turno fijo fue dado de baja</p>
         <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, tu turno fijo semanal en <strong>${businessName}</strong> se dio de baja. Ese horario ya no queda reservado para vos todas las semanas.
+          Hola <strong>${esc(clientName)}</strong>, tu turno fijo semanal en <strong>${esc(businessName)}</strong> se dio de baja. Ese horario ya no queda reservado para vos todas las semanas.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -624,14 +647,18 @@ export async function sendAbonoCancelledAdminNotification({
   const badgeColor = '#991b1b'
   const subject = `❌ Turno fijo dado de baja — ${clientName} · ${dayLabel} ${hora} hs`
 
+  // Solo dígitos: el valor que va DENTRO del href de wa.me ya queda reducido por este reemplazo,
+  // así que no necesita `esc` (no es un olvido). El teléfono que se MUESTRA sí se escapa abajo.
   const waPhone = clientPhone ? clientPhone.replace(/\D/g, '') : null
 
+  // Los `value` van ESCAPADOS (WR-02) por el mismo motivo que en el mail al cliente: este aviso es
+  // el destinatario que busca la cadena de ataque (el dueño lo lee como confiable).
   const rows: { label: string; value: string; capitalize?: boolean }[] = []
-  if (servicio) rows.push({ label: 'Servicio', value: servicio })
-  rows.push({ label: 'Se repetía', value: dayLabel, capitalize: true })
-  rows.push({ label: 'Hora', value: `${hora} hs` })
-  rows.push({ label: 'Turnos cancelados', value: turnosLabel })
-  if (ultimo) rows.push({ label: 'Último turno cancelado', value: ultimo })
+  if (servicio) rows.push({ label: 'Servicio', value: esc(servicio) })
+  rows.push({ label: 'Se repetía', value: esc(dayLabel), capitalize: true })
+  rows.push({ label: 'Hora', value: `${esc(hora)} hs` })
+  rows.push({ label: 'Turnos cancelados', value: esc(turnosLabel) })
+  if (ultimo) rows.push({ label: 'Último turno cancelado', value: esc(ultimo) })
 
   const rowsHtml = rows
     .map((r, i) => {
@@ -674,9 +701,9 @@ ${rowsHtml}
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f9f9;border-radius:8px;">
           <tr><td style="padding:16px 18px;">
             <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;">Cliente</div>
-            <div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">${clientName}</div>
-            ${waPhone ? `<div style="font-size:13px;margin-bottom:6px;"><a href="https://wa.me/${waPhone}" style="color:#16a34a;font-weight:600;text-decoration:none;">📱 ${clientPhone} — Abrir WhatsApp →</a></div>` : ''}
-            ${clientEmail ? `<div style="font-size:13px;color:#555;">✉️ ${clientEmail}</div>` : ''}
+            <div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">${esc(clientName)}</div>
+            ${waPhone ? `<div style="font-size:13px;margin-bottom:6px;"><a href="https://wa.me/${waPhone}" style="color:#16a34a;font-weight:600;text-decoration:none;">📱 ${esc(clientPhone)} — Abrir WhatsApp →</a></div>` : ''}
+            ${clientEmail ? `<div style="font-size:13px;color:#555;">✉️ ${esc(clientEmail)}</div>` : ''}
           </td></tr>
         </table>
       </td></tr>
