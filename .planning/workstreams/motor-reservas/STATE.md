@@ -4,13 +4,13 @@ milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: verifying
 stopped_at: Completed 06-06-PLAN.md (cierre post-UAT D-06'/D-07'/D-09')
-last_updated: "2026-07-21T03:01:49.487Z"
+last_updated: "2026-07-21T13:10:14.463Z"
 last_activity: 2026-07-20 -- Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 26
-  completed_plans: 25
+  total_plans: 27
+  completed_plans: 26
   percent: 71
 ---
 
@@ -51,6 +51,7 @@ Last activity: 2026-07-20 -- Phase 06 execution started
 | Phase 06 P03 | 22min | 3 tasks | 3 files |
 | Phase 06 P04 | 20min | 2 tasks | 2 files |
 | Phase 6 P06 | 24min | 4 tasks | 12 files |
+| Phase 06 P07 | 13min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: D-06': el abono NO se gatea por horario semanal (solo day_closed); el core anti-doble-booking queda intacto
 - [Phase ?]: D-07': duracion por abono (total_occurrences null=indefinido / N=finito) + status completed; un choque no consume sesion
 - [Phase ?]: D-09': el detalle del abono muestra el ultimo turno REAL de la serie, no generated_until
+- [Phase ?]: 06-07: el arreglo del Select-dentro-del-Drawer vive en la capa compartida (contexto con el nodo del DrawerContent + container del Portal); fuera de un drawer NO se pasa container, cero regresion en los 9 archivos que usan Select
 
 ### Pending Todos
 
@@ -108,7 +110,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-21T03:01:49.478Z
+Last session: 2026-07-21T13:09:57.437Z
 Stopped at: Completed 06-06-PLAN.md (cierre post-UAT D-06'/D-07'/D-09')
 Resume file: None
 

@@ -211,9 +211,11 @@ Plans:
   4. El **cron diario existente** de Vercel extiende la ventana rolling hacia adelante (genera las semanas nuevas al acercarse el borde), sin agregar ningún cron más frecuente que el diario permitido por Hobby.
   5. Un negocio solo ve y crea abonos de SU negocio (RLS + `business_id`); el modelo de datos del abono admite sumar cobro recurrente automático a futuro sin re-migrar (v0.24 no cobra).
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
+
+- [x] 06-07-PLAN.md
 
 **Wave 1**
 
@@ -269,5 +271,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
-| 6. Modelo del abono + alta manual + generación forward | 5/6 | In Progress|  |
+| 6. Modelo del abono + alta manual + generación forward | 6/7 | In Progress|  |
 | 7. Cancelación del abono (mail + panel) | 0/TBD | Not started | - |
