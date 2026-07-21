@@ -34,7 +34,7 @@ Faseo LOCKED por el encuadre §3 (manual → cupos → espacio).
 
 Faseo por integridad: primero el modelo del abono + alta manual + generación forward (núcleo anti-doble-booking → **secure-phase**), después la cancelación (mail + panel), que depende de que la serie ya exista.
 
-- [ ] **Phase 6: Modelo del abono + alta manual + generación forward** - Entidad de abono semanal extensible (migración 054), alta manual por el dueño reusando el pipeline de alta de turno, y generación forward de los appointments (ventana rolling en el cron diario) respetando 011/013 + cupos + espacio compartido, cada turno vinculado al abono
+- [x] **Phase 6: Modelo del abono + alta manual + generación forward** - Entidad de abono semanal extensible (migración 054), alta manual por el dueño reusando el pipeline de alta de turno, y generación forward de los appointments (ventana rolling en el cron diario) respetando 011/013 + cupos + espacio compartido, cada turno vinculado al abono (completed 2026-07-21)
 - [ ] **Phase 7: Cancelación del abono (mail + panel)** - Link de "cancelar suscripción" en el mail (token a nivel serie) + baja del abono desde el panel del dueño; deja de generar turnos futuros y maneja los ya generados
 
 ## Phase Details
@@ -211,7 +211,7 @@ Plans:
   4. El **cron diario existente** de Vercel extiende la ventana rolling hacia adelante (genera las semanas nuevas al acercarse el borde), sin agregar ningún cron más frecuente que el diario permitido por Hobby.
   5. Un negocio solo ve y crea abonos de SU negocio (RLS + `business_id`); el modelo de datos del abono admite sumar cobro recurrente automático a futuro sin re-migrar (v0.24 no cobra).
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 
 Plans:
 
@@ -232,7 +232,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 06-05-PLAN.md — UI: sección /abonos (form día-de-la-semana + hora + control de ventana), badge "fijo/abono" en la agenda, detalle con ocurrencias salteadas + checkpoint humano
+- [x] 06-05-PLAN.md — UI: sección /abonos (form día-de-la-semana + hora + control de ventana), badge "fijo/abono" en la agenda, detalle con ocurrencias salteadas + checkpoint humano
 
 **Wave 5** *(cierre post-UAT, blocked on Wave 4)*
 
@@ -271,5 +271,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
-| 6. Modelo del abono + alta manual + generación forward | 6/7 | In Progress|  |
+| 6. Modelo del abono + alta manual + generación forward | 7/7 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 0/TBD | Not started | - |

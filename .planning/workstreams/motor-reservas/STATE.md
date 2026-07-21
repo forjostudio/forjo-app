@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: verifying
-stopped_at: Completed 06-06-PLAN.md (cierre post-UAT D-06'/D-07'/D-09')
-last_updated: "2026-07-21T13:10:14.463Z"
-last_activity: 2026-07-20 -- Phase 06 execution started
+stopped_at: Completed 06-05-PLAN.md (checkpoint humano APROBADO) — Phase 06 completa 7/7
+last_updated: "2026-07-21T13:31:04.675Z"
+last_activity: 2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 27
-  completed_plans: 26
-  percent: 71
+  completed_plans: 27
+  percent: 86
 ---
 
 # Project State
@@ -25,10 +25,12 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-07-20 -- Phase 06 execution started
+Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — COMPLETE
+Plan: 7 of 7
+Status: Phase complete (checkpoint humano de 06-05 APROBADO) — lista para verify/secure; Phase 07 (cancelación del abono) sin planificar
+Last activity: 2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción
+
+**Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
 
 ## Performance Metrics
 
@@ -36,7 +38,7 @@ Last activity: 2026-07-20 -- Phase 06 execution started
 
 - v0.12 (Phases 1-3, shipped 2026-06-30): 14 plans completados
 - v0.22 (Phases 4-5, shipped 2026-07-19): 6 plans completados
-- v0.24 (Phases 6-7): 0 plans completados
+- v0.24 (Phases 6-7): 7 plans completados (Phase 6 cerrada)
 
 **By Phase (v0.24):**
 
@@ -52,6 +54,7 @@ Last activity: 2026-07-20 -- Phase 06 execution started
 | Phase 06 P04 | 20min | 2 tasks | 2 files |
 | Phase 6 P06 | 24min | 4 tasks | 12 files |
 | Phase 06 P07 | 13min | 2 tasks | 3 files |
+| Phase 06 P05 | 11min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -80,6 +83,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: D-07': duracion por abono (total_occurrences null=indefinido / N=finito) + status completed; un choque no consume sesion
 - [Phase ?]: D-09': el detalle del abono muestra el ultimo turno REAL de la serie, no generated_until
 - [Phase ?]: 06-07: el arreglo del Select-dentro-del-Drawer vive en la capa compartida (contexto con el nodo del DrawerContent + container del Portal); fuera de un drawer NO se pasa container, cero regresion en los 9 archivos que usan Select
+- [Phase ?]: Migración 054 APLICADA A PRODUCCIÓN (2026-07-21): última migración en prod = 054, la próxima debe ser 055; el schema del abono ya no se puede enmendar en el lugar
+- [Phase ?]: Checkpoint 06-05 (human-verify, blocking) APROBADO tras 3 rondas de UAT; los hallazgos se cerraron en planes propios (06-06 D-06'/D-07'/D-09' · 06-07 portal del Select dentro del Drawer) sin re-abrir planes cerrados
 
 ### Pending Todos
 
@@ -110,8 +115,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-21T13:09:57.437Z
-Stopped at: Completed 06-06-PLAN.md (cierre post-UAT D-06'/D-07'/D-09')
+Last session: 2026-07-21T13:31:04.665Z
+Stopped at: Completed 06-05-PLAN.md (checkpoint humano APROBADO) — Phase 06 completa 7/7
 Resume file: None
 
 ## Operator Next Steps
