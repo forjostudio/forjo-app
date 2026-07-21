@@ -263,6 +263,16 @@ export async function POST(request: Request) {
   // alta NO se rompe (el abono y sus turnos ya quedaron creados). Los turnos generados NO mandan mail c/u.
   if (clientEmail) {
     const abonoId = abono.id as string
+    // Link de BAJA de la serie completa (D-16 / ABONO-04): es el botón que el cliente usa para dar de
+    // baja su turno fijo entero desde el mail, sin pasar por el negocio. El template ya contemplaba el
+    // hueco desde Phase 6 (`cancelUrl` opcional, botón condicional), así que acá sólo se llena. Apunta
+    // a la ruta pública nueva app/abono/cancelar/[token] — NO al cancel de turno suelto.
+    // El token se captura en un const propio (como abonoId) para que el closure del after() no dependa
+    // del objeto `abono` completo. Si por cualquier motivo viniera vacío, se manda `undefined` y el
+    // template degrada sin botón: preferible a un mail con una URL rota.
+    const cancelToken = typeof abono.cancel_token === 'string' ? abono.cancel_token : ''
+    const appBase = (process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio').replace(/\/+$/, '')
+    const cancelUrl = cancelToken ? `${appBase}/abono/cancelar/${cancelToken}` : undefined
     after(async () => {
       try {
         const secrets = await getBusinessSecrets(business.id)
@@ -277,6 +287,7 @@ export async function POST(request: Request) {
           primaryColor: business.primary_color,
           logoUrl: business.logo_url,
           whatsapp: business.whatsapp,
+          cancelUrl,
           resendApiKey: secrets.resend_api_key,
           resendFrom: secrets.resend_from,
         })
