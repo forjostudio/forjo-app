@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import type { Business, Client, Service, Professional, Location } from '@/lib/types'
 import { resolveVertical } from '@/lib/verticals'
+import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card } from '@/components/ui/card'
@@ -21,9 +22,10 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle } from 'lucide-react'
+import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle, Ban, Copy } from 'lucide-react'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { NuevoAbonoForm } from '@/components/dashboard/nuevo-abono-form'
+import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 
 // Fila de abono con los joins de nombre (cliente / servicio / cancha) que arma la page server.
 export type AbonoRow = {
@@ -35,12 +37,24 @@ export type AbonoRow = {
   generated_until: string | null
   skipped_occurrences: { date: string; reason: string }[]
   created_at: string
+  // Token de baja de la serie (D-17). Sólo se usa para armar el link copiable del detalle; nunca sale
+  // de esta página (D-25) — ver el comentario del select en page.tsx.
+  cancel_token: string
+  cancelled_at: string | null
   clients: { name: string } | null
   services: { name: string } | null
   professionals: { name: string } | null
 }
 
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+// Filtro del listado (D-20). La vista principal es de series VIVAS; lo que ya no genera turnos
+// (cancelled) o ya asignó todas sus sesiones (completed) vive bajo Archivados.
+type AbonoTab = 'activos' | 'archivados'
+const ABONO_TABS: { key: AbonoTab; label: string }[] = [
+  { key: 'activos', label: 'Activos' },
+  { key: 'archivados', label: 'Archivados' },
+]
 
 // Razón de salteo (motor de generación / booking-core) → texto en español para el dueño (D-06).
 // 'out_of_hours' YA NO EXISTE: el abono del dueño dejó de gatearse por la grilla semanal (D-06′) — el
@@ -83,13 +97,17 @@ interface Props {
   turnoCounts: Record<string, number>
   // Fecha ISO del ÚLTIMO turno real de cada serie (max date de los turnos no cancelados), D-09′.
   lastTurnoDates: Record<string, string>
+  // Preview de la baja por serie (D-03), calculado en el server con los MISMOS helpers que ejecuta el
+  // motor de baja: cuántos turnos FUTUROS se cancelarían y cuál sería el último.
+  futureTurnoCounts: Record<string, number>
+  lastFutureDates: Record<string, string | null>
   clients: Client[]
   services: Service[]
   professionals: Professional[]
   locations: Location[]
 }
 
-export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, clients, services, professionals, locations }: Props) {
+export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, futureTurnoCounts, lastFutureDates, clients, services, professionals, locations }: Props) {
   const supabase = createClient()
   const router = useRouter()
   const isDesktop = useMediaQuery('(min-width: 768px)')
@@ -97,10 +115,63 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
 
   const [formOpen, setFormOpen] = useState(false)
   const [detailAbono, setDetailAbono] = useState<AbonoRow | null>(null)
+  // Serie sobre la que se está por confirmar la baja. Manda el ConfirmDialog: se setea al tocar "Dar
+  // de baja" en el detalle, DESPUÉS de cerrar el detalle (no se anidan modales).
+  const [cancelTarget, setCancelTarget] = useState<AbonoRow | null>(null)
+  const [tab, setTab] = useState<AbonoTab>('activos')
 
-  // Se listan los abonos vigentes: activos + completados (finitos que ya juntaron sus N sesiones, D-07′;
-  // siguen teniendo turnos en la agenda y el dueño necesita verlos). Los cancelados no se listan.
-  const visibleAbonos = useMemo(() => abonos.filter((a) => a.status !== 'cancelled'), [abonos])
+  // Listado por tab (D-20). CAMBIO de comportamiento respecto de la versión previa: antes el memo sólo
+  // excluía los cancelados y dejaba los `completed` en la lista principal. Ahora la vista principal es
+  // de series VIVAS (`active`) y todo lo demás — cancelled + completed — vive bajo Archivados. Un
+  // finito que ya asignó sus N sesiones no es trabajo pendiente del dueño; sigue accesible (y se puede
+  // dar de baja, D-21) desde el otro tab.
+  const visibleAbonos = useMemo(
+    () => abonos.filter((a) => (tab === 'activos' ? a.status === 'active' : a.status !== 'active')),
+    [abonos, tab],
+  )
+  const tabCounts = useMemo(() => {
+    const activos = abonos.filter((a) => a.status === 'active').length
+    return { activos, archivados: abonos.length - activos }
+  }, [abonos])
+
+  // ── Copiar el link de baja del cliente (D-17) ──────────────────────────────────────────────────
+  // ÚNICO lugar donde el cancel_token sale a la vista: el dueño lo copia deliberadamente para mandarle
+  // el link a su cliente por WhatsApp (caso frecuente en canchas: cliente sin mail, o cliente que
+  // perdió el mail de alta). Es aceptable porque el token es de una serie de su propio negocio y es el
+  // mismo secreto que ya viaja en el mail de alta (D-25). No hay endpoint de reenvío de mail.
+  const copyCancelLink = useCallback(async (a: AbonoRow) => {
+    const url = `${window.location.origin}/abono/cancelar/${a.cancel_token}`
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable')
+      await navigator.clipboard.writeText(url)
+      toast.success('Link copiado')
+    } catch {
+      // Contexto no seguro (http) o permiso denegado: no se rompe la vista, se muestra el link para
+      // que el dueño lo copie a mano.
+      toast.error('No se pudo copiar automáticamente. Copiá este link:', { description: url })
+    }
+  }, [])
+
+  // ── Baja de la serie (ABONO-05) ────────────────────────────────────────────────────────────────
+  // Toda la baja corre server-side en el endpoint autenticado: el cliente no escribe una sola fila.
+  // Si algo falla se LANZA el error a propósito — el ConfirmDialog deja el diálogo abierto y muestra
+  // su toast (contrato del componente), así el dueño puede reintentar sin perder el contexto.
+  const confirmCancel = useCallback(async () => {
+    if (!cancelTarget) return
+    const res = await fetch('/api/abonos/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ abonoId: cancelTarget.id }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.ok) throw new Error(data?.error || 'cancel_failed')
+    // El número que se informa es el del SERVIDOR, no el del preview: entre que se cargó la página y
+    // se confirmó pudo cambiar algo, y la autoridad del efecto real es el motor de baja.
+    const n = Number(data.cancelledCount ?? 0)
+    toast.success(n > 0 ? `Abono dado de baja · ${n} turno${n === 1 ? '' : 's'} cancelado${n === 1 ? '' : 's'}` : 'Abono dado de baja')
+    setCancelTarget(null)
+    router.refresh() // la serie pasa a 'cancelled' → se mueve sola al tab Archivados
+  }, [cancelTarget, router])
 
   // ── Control de ventana de generación (abono_window_weeks, D-07) ────────────────────────────────
   // Rango permitido 1..52 (GAP-01): la ventana dimensiona el loop del motor, que corre dentro del cron
@@ -139,22 +210,49 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
         </div>
       </div>
 
-      {/* Lista de abonos activos */}
+      {/* Lista de abonos: activos por defecto, archivados (cancelados + completados) bajo el filtro */}
       <Card className="p-6 space-y-4">
-        <div>
-          <p className="font-semibold text-sm">Tus abonos</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Tocá un abono para ver la serie y las semanas salteadas.</p>
+        <div className="space-y-3">
+          <div>
+            <p className="font-semibold text-sm">Tus abonos</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Tocá un abono para ver la serie y las semanas salteadas.</p>
+          </div>
+          {/* Píldoras de filtro (D-20), mismo molde visual que los filtros de Clientes. */}
+          <div className="flex gap-1 flex-wrap">
+            {ABONO_TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                aria-pressed={tab === t.key}
+                className={cn(
+                  'px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
+                  tab === t.key ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t.label} ({tabCounts[t.key]})
+              </button>
+            ))}
+          </div>
         </div>
 
         {visibleAbonos.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-2">
-            <Repeat className="mx-auto h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium">Todavía no tenés abonos</p>
-            <p className="text-xs text-muted-foreground">Creá uno para reservar automáticamente el mismo día y hora todas las semanas.</p>
-            <Button variant="outline" size="sm" className="gap-1.5 mt-1" onClick={() => setFormOpen(true)}>
-              <Plus className="w-3.5 h-3.5" /> Nuevo abono
-            </Button>
-          </div>
+          tab === 'archivados' ? (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-2">
+              <Repeat className="mx-auto h-6 w-6 text-muted-foreground" />
+              <p className="text-sm font-medium">No hay abonos archivados</p>
+              <p className="text-xs text-muted-foreground">Acá van a aparecer los abonos que des de baja y los que ya asignaron todas sus sesiones.</p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-2">
+              <Repeat className="mx-auto h-6 w-6 text-muted-foreground" />
+              <p className="text-sm font-medium">Todavía no tenés abonos</p>
+              <p className="text-xs text-muted-foreground">Creá uno para reservar automáticamente el mismo día y hora todas las semanas.</p>
+              <Button variant="outline" size="sm" className="gap-1.5 mt-1" onClick={() => setFormOpen(true)}>
+                <Plus className="w-3.5 h-3.5" /> Nuevo abono
+              </Button>
+            </div>
+          )
         ) : (
           <ul className="space-y-2">
             {visibleAbonos.map((a) => {
@@ -302,6 +400,42 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
                 </ul>
               )}
             </div>
+
+            {/* Acciones de la serie (D-17/D-18/D-21). Viven SOLO acá, dentro del detalle: la tarjeta
+                del listado no ofrece ninguna acción destructiva — es fricción deliberada, y acá el
+                dueño ya tiene el contexto (día/hora, último turno, sesiones X de N). Tampoco hay
+                ninguna acción que devuelva la serie a activa: 'cancelled' es terminal (D-04). */}
+            <div className="space-y-2 border-t border-border pt-4">
+              <Button variant="outline" size="sm" className="w-full gap-1.5 sm:w-auto" onClick={() => copyCancelLink(a)}>
+                <Copy className="w-3.5 h-3.5" /> Copiar link de baja
+              </Button>
+              <p className="text-xs text-muted-foreground">Mandáselo por WhatsApp si tu cliente no tiene mail cargado: desde ese link puede darse de baja solo.</p>
+
+              {a.status !== 'cancelled' ? (
+                <div className="space-y-2 pt-2">
+                  {/* Se muestra también para 'completed' (D-21): sirve para cancelar de un saque los
+                      turnos futuros que le queden a un finito que ya asignó sus N sesiones. */}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full gap-1.5 sm:w-auto"
+                    onClick={() => {
+                      // Primero se cierra el detalle y recién después se abre la confirmación: no se
+                      // anidan modales.
+                      setDetailAbono(null)
+                      setCancelTarget(a)
+                    }}
+                  >
+                    <Ban className="w-3.5 h-3.5" /> Dar de baja
+                  </Button>
+                </div>
+              ) : (
+                <p className="pt-2 text-xs text-muted-foreground">
+                  Serie dada de baja
+                  {a.cancelled_at ? <> el <span className="capitalize">{format(parseISO(a.cancelled_at), "d 'de' MMMM 'de' yyyy", { locale: es })}</span></> : null}. No genera turnos nuevos.
+                </p>
+              )}
+            </div>
           </div>
         )
         return isDesktop ? (
@@ -322,6 +456,32 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
               <div className="overflow-y-auto px-4 pb-6">{body}</div>
             </DrawerContent>
           </Drawer>
+        )
+      })()}
+
+      {/* Confirmación de la baja (D-19). Nivel SIMPLE del ConfirmDialog (sin palabra a tipear): escribir
+          una palabra para confirmar es fricción excesiva para una acción rutinaria del negocio, pero
+          sin confirmación tampoco va. La descripción dice el número REAL de turnos que se cancelan y
+          hasta cuándo — es refuerzo de UX: la autorización de verdad vive en el endpoint. */}
+      {cancelTarget && (() => {
+        const t = cancelTarget
+        const n = futureTurnoCounts[t.id] ?? 0
+        const last = lastFutureDates[t.id] ?? null
+        const description =
+          n > 0
+            ? `Se cancelan ${n} turno${n === 1 ? '' : 's'} futuro${n === 1 ? '' : 's'} de esta serie${last ? `, el último el ${format(parseISO(last), "d 'de' MMMM", { locale: es })}` : ''}. Esta acción no se puede deshacer.`
+            : 'No quedan turnos futuros por cancelar. La serie deja de generar turnos nuevos. Esta acción no se puede deshacer.'
+        return (
+          <ConfirmDialog
+            open
+            onOpenChange={(o) => { if (!o) setCancelTarget(null) }}
+            title={`¿Dar de baja el turno fijo de ${t.clients?.name ?? 'este cliente'}?`}
+            description={description}
+            risk="alto"
+            confirmLabel="Dar de baja"
+            destructive
+            onConfirm={confirmCancel}
+          />
         )
       })()}
 
