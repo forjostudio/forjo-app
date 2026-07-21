@@ -139,6 +139,11 @@ mantener el scope de v0.24 en "solo reserva".
   Phase 6 (D-02) se diseña para soportarlo sin re-migrar.
 - **Cobro recurrente automático** (MP preapproval por cliente) — milestone posterior.
 - Recurrencia no-semanal; alta pública del abono; editar/reprogramar una serie viva; waitlist.
+- **Contador de sesiones restantes (pedido en UAT ronda 3, 2026-07-21):** hoy el chip del abono muestra
+  los turnos ASIGNADOS (cuenta fija). El dueño quiere un **contador que decrezca a medida que los turnos
+  se van completando** (ej. "quedan 7 de 10"), para llevar control de un bono de sesiones (caso
+  kinesiólogo). Requiere contar turnos por estado (completado/atendido vs pendiente), no sólo generados
+  → depende de que el turno tenga un estado de "cumplido" confiable. Feature nueva, NO es copy.
 
 </deferred>
 
