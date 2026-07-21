@@ -70,12 +70,39 @@ function addDaysUTC(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+// ── Backstops anti-loop del motor (GAP-01 / T-06-08, T-06-17, T-06-24) ─────────────────────────
+// El motor es la ÚLTIMA línea de defensa: tiene que ser IMPOSIBLE que loopee sin fin con CUALQUIER
+// entrada, venga de donde venga. Corre dentro del único cron diario COMPARTIDO por todos los tenants
+// (Vercel Hobby = 1 cron/día), así que un solo rango degenerado colgaba la generación de TODOS los
+// negocios — y el try/catch por abono del cron NO ataja un loop infinito.
+//
+// POR QUÉ NO ALCANZABA `if (fromDate > toDate) return`: es una comparación de STRINGS. Los callers
+// arman las fechas con un toISODate manual (getFullYear/getMonth/getDate + padStart), así que un Date
+// inválido NO tira: produce literalmente 'NaN-NaN-NaN'. Y '2026-07-21' > 'NaN-NaN-NaN' es FALSE
+// (porque '2' < 'N'), con lo cual la guarda no disparaba, `date <= toDate` era true para toda fecha
+// real y el `for` no terminaba nunca (2 queries por iteración). Validar el FORMATO mata la clase
+// entera de entradas degeneradas, no sólo el caso NaN conocido.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+// Tope duro de ocurrencias recorridas por corrida: 520 semanas ≈ 10 años. Es un BACKSTOP puro — con la
+// ventana clampeada server-side a ≤52 semanas nunca se toca (52 ocurrencias como mucho). Existe para
+// que ningún rango válido-pero-absurdo (ni ningún caller futuro) pueda convertir el motor en un loop
+// eterno: aunque el rango pida más, la corrida CORTA acá y el resto queda para la próxima.
+const MAX_OCCURRENCES_PER_RUN = 520
+
 export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promise<GenerateAbonoResult> {
   const { supabase, business, abono, fromDate, toDate, maxCreated } = input
   const created: string[] = []
   const skipped: { date: string; reason: string }[] = []
 
+  // (0) Rango con formato inválido → NADA que generar, se sale al toque y sin tocar la DB. No se LANZA:
+  // los dos callers son best-effort (el alta ya insertó la fila del abono; el cron itera todos los
+  // tenants), así que un throw acá rompería flujos que deben degradar limpio. Ver ISO_DATE_RE arriba:
+  // esto es lo que mata 'NaN-NaN-NaN' y cualquier otra fecha degenerada ANTES del loop (T-06-08).
+  if (!ISO_DATE_RE.test(fromDate) || !ISO_DATE_RE.test(toDate)) return { created, skipped }
+
   // Rango vacío o invertido → nada que generar (guarda defensiva; el caller acota la ventana, T-06-08).
+  // Ahora sí es un string-compare CONFIABLE: los dos lados ya matchean 'yyyy-MM-dd'.
   if (fromDate > toDate) return { created, skipped }
 
   // (1) Resolver una vez el cliente de la serie para copiar name/phone/email al core (el core NO
@@ -106,7 +133,17 @@ export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promi
   const firstDelta = (abono.day_of_week - fromDow + 7) % 7
   let date = addDaysUTC(fromDate, firstDelta)
 
+  // `occurrences` cuenta las ocurrencias RECORRIDAS (no las creadas): es el backstop de iteraciones,
+  // independiente de maxCreated (que sólo cuenta turnos reales y por eso no corta cuando todo choca).
+  let occurrences = 0
+
   for (; date <= toDate; date = addDaysUTC(date, 7)) {
+    // (2a) Backstop duro: la corrida jamás recorre más de MAX_OCCURRENCES_PER_RUN ocurrencias, aunque el
+    // rango pidiera más. Con la ventana clampeada (≤52 semanas) esto NO se alcanza nunca en operación
+    // normal → no cambia la semántica de generación de ningún rango sano (GAP-01).
+    if (occurrences >= MAX_OCCURRENCES_PER_RUN) break
+    occurrences++
+
     // (2b) Tope del abono FINITO (D-07′): ya juntamos las sesiones pedidas en esta corrida → cortar.
     // Se evalúa sobre `created` (turnos REALES), NO sobre las fechas recorridas: un choque no consume
     // sesión. Va ANTES de cualquier query para no gastar viajes a la DB de más.
