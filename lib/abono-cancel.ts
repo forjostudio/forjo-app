@@ -32,6 +32,16 @@ import { todayInAR } from './booking-window'
 //     (lib/abono-generation.ts no llama a createCalendarEvent). Si eso cambiara, la baja tendría que
 //     limpiarlos.
 //
+// LA BAJA NO ES ATÓMICA, PERO SÍ ES RECUPERABLE POR REINTENTO (CR-01). Los pasos 1 y 2 son DOS
+// escrituras separadas: si la segunda falla, la serie queda dada de baja con sus turnos futuros vivos.
+// Por eso la rama que detecta "esta serie ya estaba cancelada" NO se limita a informarlo: vuelve a
+// emitir la cancelación en masa antes de responder (barrido de reparación). El UPDATE es idempotente
+// por construcción — su `.neq('status','cancelled')` hace que, si no quedó nada pendiente, afecte 0
+// filas — así que reintentar REPARA en vez de tapar. Consecuencia directa sobre el vocabulario del
+// módulo: `alreadyCancelled: true` significa "esta llamada no fue la que volteó la serie" (y por lo
+// tanto no debe re-disparar mails, D-05/D-14), NUNCA "no hay nada que hacer". Cualquier reintento, por
+// cualquiera de las dos vías, deja el estado convergido.
+//
 // POR QUÉ EL UPDATE MASIVO LLEVA DOS FILTROS Y NO UNO (D-24): con service role no hay RLS, así que el
 // aislamiento lo dan EXCLUSIVAMENTE los filtros de la query. `.eq('abono_id', …)` sola alcanzaría para
 // no pisar otra serie, pero deja el tenant a merced de que el abonoId recibido sea realmente del
@@ -192,7 +202,35 @@ export async function cancelAbonoSeries(input: AbonoCancelInput): Promise<Cancel
     // revela la existencia de un abono ajeno (D-22).
     if (!existing) return { ok: false, error: 'not_found' }
 
-    // Ya estaba dada de baja: no se toca un solo appointment y el caller no re-dispara mails (D-05).
+    // BARRIDO DE REPARACIÓN (CR-01, T-07-23). La serie ya estaba en 'cancelled', pero eso NO garantiza
+    // que sus turnos futuros hayan quedado cancelados: si una ejecución anterior falló entre (a) y (c),
+    // la fila está volteada y los turnos siguen vivos, y el gate atómico impide que un reintento vuelva
+    // a entrar por (c). Así que se re-emite acá el MISMO UPDATE, con los MISMOS cuatro filtros: los dos
+    // `.eq` son el doble scoping de D-24 (sin ellos el barrido alcanzaría otra serie del negocio o, con
+    // service role y sin RLS, otro tenant), `.gte('date', cutoff)` es la frontera INCLUSIVE de D-02 (no
+    // toca el pasado) y `.neq('status','cancelled')` es lo que lo vuelve idempotente: si no quedó nada
+    // pendiente afecta 0 filas. Nunca escribe un status distinto de 'cancelled': no resucita turnos ni
+    // reabre slots (D-04), así que no introduce ventana nueva de doble-booking.
+    const { error: repairErr } = await supabase
+      .from('appointments')
+      .update({ status: 'cancelled' })
+      .eq('business_id', businessId)
+      .eq('abono_id', abonoId)
+      .gte('date', cutoff)
+      .neq('status', 'cancelled')
+
+    if (repairErr) {
+      console.error(
+        `[abonos/cancel] barrido de reparación FALLÓ (abono ${abonoId}):`,
+        repairErr instanceof Error ? repairErr.message : repairErr,
+      )
+      return { ok: false, error: 'update_failed' }
+    }
+
+    // Ya estaba dada de baja: el caller no re-dispara mails (D-05). `cancelledCount` se mantiene en 0 A
+    // PROPÓSITO aunque el barrido haya reparado filas: el número que informa esta rama es "cuántos
+    // canceló ESTA baja", y la baja la ejecutó (o intentó) otra llamada. Devolver acá lo reparado haría
+    // que el panel y la pantalla pública le anuncien al usuario un efecto que él no produjo.
     return { ok: true, alreadyCancelled: true, cancelledCount: 0, lastDate: null }
   }
 
@@ -212,7 +250,10 @@ export async function cancelAbonoSeries(input: AbonoCancelInput): Promise<Cancel
 
   if (apptErr) {
     // La fila del abono YA quedó cancelada, así que la garantía crítica (frenar la generación forward)
-    // se sostiene aunque este UPDATE falle. Se informa el fallo y el caller decide si reintenta.
+    // se sostiene aunque este UPDATE falle. Pero la serie queda dada de baja CON turnos futuros vivos:
+    // este estado es inconsistente y hay que repararlo. El camino de recuperación es el barrido de la
+    // rama (b): como el gate atómico ya no vuelve a matchear, cualquier reintento — por el link del
+    // mail o por el panel — cae ahí y re-aplica esta misma cancelación en masa hasta dejarla en 0.
     console.error(
       `[abonos/cancel] cancelación en masa FALLÓ (abono ${abonoId}):`,
       apptErr instanceof Error ? apptErr.message : apptErr,
