@@ -175,14 +175,16 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        {isCompleted ? (
-                          <Badge variant="outline" className="gap-1"><Check className="w-3 h-3" />Completado</Badge>
-                        ) : (
-                          <Badge variant="secondary" className="gap-1">
-                            <CalendarClock className="w-3 h-3" />
-                            {total != null ? `${count} de ${total}` : `${count} turno${count === 1 ? '' : 's'}`}
-                          </Badge>
-                        )}
+                        {/* El chip cuenta TURNOS ASIGNADOS, nunca dice "Completado": esa palabra se leía
+                            como "la serie ya terminó" cuando en realidad los turnos están por delante.
+                            El estado 'completed' (todas las sesiones ya asignadas) se marca sólo con el
+                            check, sin dominar la lectura. Copy coherente con el indefinido ("8 turnos"). */}
+                        <Badge variant={isCompleted ? 'outline' : 'secondary'} className="gap-1">
+                          {isCompleted ? <Check className="w-3 h-3" /> : <CalendarClock className="w-3 h-3" />}
+                          {total != null
+                            ? `${count} de ${total} turno${total === 1 ? '' : 's'}`
+                            : `${count} turno${count === 1 ? '' : 's'}`}
+                        </Badge>
                         {skipped > 0 && (
                           <Badge variant="destructive" className="gap-1"><AlertTriangle className="w-3 h-3" />{skipped} salteada{skipped === 1 ? '' : 's'}</Badge>
                         )}
@@ -263,8 +265,10 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, cl
               {lastDate && (
                 <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Último</span><span className="font-medium capitalize">{format(parseISO(lastDate), "EEE d 'de' MMM", { locale: es })}</span></div>
               )}
+              {/* 'completed' = ya se asignaron todas las sesiones, NO que la serie terminó (los turnos
+                  pueden seguir por delante). El copy describe la asignación, no una finalización. */}
               {a.status === 'completed' && (
-                <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Estado</span><span className="font-medium text-primary">Completado</span></div>
+                <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Estado</span><span className="font-medium text-primary">Todas las sesiones asignadas</span></div>
               )}
             </div>
 
