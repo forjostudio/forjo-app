@@ -1035,6 +1035,10 @@ CREATE INDEX "abonos_business_id_status_idx" ON "public"."abonos" USING "btree" 
 
 
 
+CREATE UNIQUE INDEX "abonos_cancel_token_idx" ON "public"."abonos" USING "btree" ("cancel_token");
+
+
+
 CREATE INDEX "appointments_abono_id_idx" ON "public"."appointments" USING "btree" ("abono_id");
 
 
