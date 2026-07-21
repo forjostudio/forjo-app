@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
-status: verifying
+status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-07-21T17:07:24.004Z"
+last_updated: "2026-07-21T17:41:01.995Z"
 last_activity: "2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción"
 progress:
   total_phases: 7
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — COMPLETE
 Plan: 7 of 7
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción
 
 **Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
