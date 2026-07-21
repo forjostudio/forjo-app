@@ -4,13 +4,13 @@ milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: verifying
 stopped_at: Completed 06-05-PLAN.md (checkpoint humano APROBADO) — Phase 06 completa 7/7
-last_updated: "2026-07-21T13:31:04.675Z"
-last_activity: 2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción
+last_updated: "2026-07-21T14:29:01.818Z"
+last_activity: "2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción"
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 27
-  completed_plans: 27
+  total_plans: 28
+  completed_plans: 28
   percent: 86
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — COMPLETE
 Plan: 7 of 7
-Status: Phase complete (checkpoint humano de 06-05 APROBADO) — lista para verify/secure; Phase 07 (cancelación del abono) sin planificar
+Status: Phase complete — ready for verification
 Last activity: 2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado + migración 054 en producción
 
 **Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
@@ -55,6 +55,7 @@ Last activity: 2026-07-21 -- Phase 06 completa (7/7): checkpoint 06-05 aprobado 
 | Phase 6 P06 | 24min | 4 tasks | 12 files |
 | Phase 06 P07 | 13min | 2 tasks | 3 files |
 | Phase 06 P05 | 11min | 3 tasks | 7 files |
+| Phase 06 P08 | 22min | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 06-07: el arreglo del Select-dentro-del-Drawer vive en la capa compartida (contexto con el nodo del DrawerContent + container del Portal); fuera de un drawer NO se pasa container, cero regresion en los 9 archivos que usan Select
 - [Phase ?]: Migración 054 APLICADA A PRODUCCIÓN (2026-07-21): última migración en prod = 054, la próxima debe ser 055; el schema del abono ya no se puede enmendar en el lugar
 - [Phase ?]: Checkpoint 06-05 (human-verify, blocking) APROBADO tras 3 rondas de UAT; los hallazgos se cerraron en planes propios (06-06 D-06'/D-07'/D-09' · 06-07 portal del Select dentro del Drawer) sin re-abrir planes cerrados
+- [Phase 06]: GAP-01 cerrado en 3 capas: clamp server-side 1..52 en los dos callers (la correccion real), motor con validacion de formato + tope de 520 iteraciones, y CHECK en la migracion 055 tras normalizar los valores existentes — La ventana era owner-writable sin techo y dimensionaba el loop del motor dentro del cron diario COMPARTIDO por todos los tenants: un dueno podia colgar la generacion de todos
 
 ### Pending Todos
 
@@ -115,7 +117,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-21T13:31:04.665Z
+Last session: 2026-07-21T14:28:33.341Z
 Stopped at: Completed 06-05-PLAN.md (checkpoint humano APROBADO) — Phase 06 completa 7/7
 Resume file: None
 
