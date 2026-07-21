@@ -183,6 +183,66 @@ describe('sendAbonoCancelledAdminNotification — aviso al dueño (D-13)', () =>
   })
 })
 
+// ── Escapado de HTML (WR-02) ────────────────────────────────────────────────────────────────────────
+// `clients.name` viene de la superficie ANÓNIMA de booking (POST /api/booking/create) y termina
+// renderizado en el mail que el DUEÑO lee como confiable. Sin escapar, un nombre con markup planta
+// links de terceros dentro de un mensaje con el branding del negocio (inyección de contenido +
+// phishing dirigido), y cualquier `<` legítimo rompe el layout.
+const EVIL_NAME = 'Ana <a href="https://evil.example/phish">Actualizá tus datos</a>'
+
+describe('Escapado de HTML de los valores dinámicos (WR-02)', () => {
+  it('Test 15 — escapado: un nombre con markup NO llega como link al mail del cliente', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE, clientName: EVIL_NAME })
+    const { html } = capturedPayload(fetchMock)
+    // El dominio del atacante no queda dentro de ningún href...
+    expect(html).not.toContain('href="https://evil.example')
+    // ...y la etiqueta de apertura viaja como TEXTO escapado.
+    expect(html).not.toContain('<a href="https://evil.example')
+    expect(html).toContain('&lt;a href=&quot;https://evil.example/phish&quot;&gt;')
+  })
+
+  it('Test 16 — escapado: un nombre con markup NO llega como link al aviso del dueño', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledAdminNotification({ ...ADMIN_BASE, clientName: EVIL_NAME })
+    const { html } = capturedPayload(fetchMock)
+    expect(html).not.toContain('href="https://evil.example')
+    expect(html).not.toContain('<a href="https://evil.example')
+    expect(html).toContain('&lt;a href=&quot;https://evil.example/phish&quot;&gt;')
+  })
+
+  it('Test 17 — escapado: un servicio con comillas dobles y simples no rompe ningún atributo', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE, service: `Corte "premium" de Jo's & Co` })
+    const { html, text } = capturedPayload(fetchMock)
+    expect(html).toContain('Corte &quot;premium&quot; de Jo&#39;s &amp; Co')
+    expect(html).not.toContain('Corte "premium"')
+    // El text plano lo muestra tal cual (ahí las entidades se verían como basura).
+    expect(text).toContain(`Corte "premium" de Jo's & Co`)
+  })
+
+  it('Test 18 — escapado: un `<` legítimo sale como texto legible y no rompe el layout', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledEmail({ ...BASE, clientName: 'Ana < Bea' })
+    const { html, text } = capturedPayload(fetchMock)
+    expect(html).toContain('Ana &lt; Bea')
+    expect(html).not.toContain('Ana < Bea')
+    // El cuerpo `text` NO se escapa.
+    expect(text).toContain('Ana < Bea')
+  })
+
+  it('Test 19 — escapado: el teléfono y el email del cliente se escapan en el bloque Cliente del dueño', async () => {
+    const fetchMock = stubFetchOk()
+    await sendAbonoCancelledAdminNotification({
+      ...ADMIN_BASE,
+      clientEmail: 'ana<script>@example.com',
+    })
+    const { html } = capturedPayload(fetchMock)
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('ana&lt;script&gt;@example.com')
+  })
+})
+
 describe('Política anti-avalancha D-14 (LOCKED) — N turnos cancelados ≠ N mails', () => {
   it('Test 12 — una baja de 7 turnos manda UN solo mail al cliente', async () => {
     const fetchMock = stubFetchOk()
