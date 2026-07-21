@@ -257,7 +257,7 @@ Plans:
   3. Al darse de baja por cualquiera de las dos vías, el sistema **deja de generar turnos futuros** de esa serie (el cron ya no la extiende).
   4. Los turnos futuros **ya generados** se manejan según lo definido en discuss-phase (cancelarlos o dejarlos), de forma consistente entre la baja por mail y la baja por panel.
 
-**Plans**: 2/5 plans executed
+**Plans**: 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -267,8 +267,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 07-03-PLAN.md — Vía del cliente: ruta NUEVA `app/abono/cancelar/[token]` + `POST /api/abonos/cancel/[token]` (404 genérico, preview conteo/última fecha) + `cancelUrl` en el mail de alta
-- [ ] 07-04-PLAN.md — Vía del dueño: `POST /api/abonos/cancel` autenticado + UX en `/abonos` (filtro Archivados, "Dar de baja" con confirmación, "Copiar link de baja")
+- [x] 07-03-PLAN.md — Vía del cliente: ruta NUEVA `app/abono/cancelar/[token]` + `POST /api/abonos/cancel/[token]` (404 genérico, preview conteo/última fecha) + `cancelUrl` en el mail de alta
+- [x] 07-04-PLAN.md — Vía del dueño: `POST /api/abonos/cancel` autenticado + UX en `/abonos` (filtro Archivados, "Dar de baja" con confirmación, "Copiar link de baja")
 
 **Wave 3** *(blocked on Waves 2)*
 
@@ -292,4 +292,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
-| 7. Cancelación del abono (mail + panel) | 2/5 | In Progress|  |
+| 7. Cancelación del abono (mail + panel) | 4/5 | In Progress|  |
