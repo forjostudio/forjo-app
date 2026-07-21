@@ -113,6 +113,11 @@ None - no external service configuration required.
 - La otra mitad de WR-05 (unificar el criterio de `after()` en la ruta pública de baja) queda para el **Plan 07-09**, como estaba previsto.
 - Para secure-phase: T-07-28/29/30/31 quedan mitigados; T-07-32 sigue siendo un `accept` documentado. Nuevo residual menor a considerar: los templates VIEJOS siguen interpolando valores sin escapar en su propio HTML (solo comparten el header ya escapado).
 
+## Self-Check: PASSED
+
+- Archivos verificados en disco: `lib/email.ts`, `app/api/booking/create/route.ts`, `test/abono-cancel-email.test.ts`, `07-07-SUMMARY.md`.
+- Commits verificados en git: `a6436d1`, `52dee64`, `61a68cc`, `e4fa098`.
+
 ---
 *Phase: 07-cancelaci-n-del-abono-mail-panel*
 *Completed: 2026-07-21*
