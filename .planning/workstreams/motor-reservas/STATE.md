@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
-status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-07-20T23:36:24.491Z"
+status: verifying
+stopped_at: Completed 06-06-PLAN.md (cierre post-UAT D-06'/D-07'/D-09')
+last_updated: "2026-07-21T03:01:49.487Z"
 last_activity: 2026-07-20 -- Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 25
-  completed_plans: 24
+  total_plans: 26
+  completed_plans: 25
   percent: 71
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 06 (modelo-del-abono-alta-manual-generaci-n-forward) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-20 -- Phase 06 execution started
 
 ## Performance Metrics
@@ -50,6 +50,7 @@ Last activity: 2026-07-20 -- Phase 06 execution started
 | Phase 06 P02 | 18min | 2 tasks | 2 files |
 | Phase 06 P03 | 22min | 3 tasks | 3 files |
 | Phase 06 P04 | 20min | 2 tasks | 2 files |
+| Phase 6 P06 | 24min | 4 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 06-02: schedule_exception closed=false (horario especial) OVERRIDE la grilla semanal para ese dia (autoridad unica de horario)
 - [Phase ?]: 06-03: endpoint POST /api/abonos/create valida professional/service/location por business_id y deriva serviceId de la cancha server-side (anti-tampering); insert anon+RLS, nunca admin
 - [Phase ?]: 06-03: el alta persiste generated_until + skipped_occurrences.slice(-50) (cap compartido con el cron 06-04) tras correr la primera tanda por el motor
+- [Phase ?]: D-06': el abono NO se gatea por horario semanal (solo day_closed); el core anti-doble-booking queda intacto
+- [Phase ?]: D-07': duracion por abono (total_occurrences null=indefinido / N=finito) + status completed; un choque no consume sesion
+- [Phase ?]: D-09': el detalle del abono muestra el ultimo turno REAL de la serie, no generated_until
 
 ### Pending Todos
 
@@ -104,9 +108,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20T23:36:09.424Z
-Stopped at: Completed 06-01-PLAN.md
-Resume file: .planning/workstreams/motor-reservas/phases/06-modelo-del-abono-alta-manual-generaci-n-forward/06-CONTEXT.md
+Last session: 2026-07-21T03:01:49.478Z
+Stopped at: Completed 06-06-PLAN.md (cierre post-UAT D-06'/D-07'/D-09')
+Resume file: None
 
 ## Operator Next Steps
 

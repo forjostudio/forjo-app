@@ -211,9 +211,10 @@ Plans:
   4. El **cron diario existente** de Vercel extiende la ventana rolling hacia adelante (genera las semanas nuevas al acercarse el borde), sin agregar ningún cron más frecuente que el diario permitido por Hobby.
   5. Un negocio solo ve y crea abonos de SU negocio (RLS + `business_id`); el modelo de datos del abono admite sumar cobro recurrente automático a futuro sin re-migrar (v0.24 no cobra).
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/6 plans executed
 
 Plans:
+
 **Wave 1**
 
 - [x] 06-01-PLAN.md — Migración 054 (tabla `abonos` extensible + FK `appointments.abono_id` + `businesses.abono_window_weeks`, RLS owner-only) + `supabase db reset` + schema.sql + tipos
@@ -231,7 +232,11 @@ Plans:
 
 - [ ] 06-05-PLAN.md — UI: sección /abonos (form día-de-la-semana + hora + control de ventana), badge "fijo/abono" en la agenda, detalle con ocurrencias salteadas + checkpoint humano
 
-**Waves**: Wave 1 = 06-01 (espinazo de datos). Wave 2 = 06-02 (motor, depende del schema/tipos). Wave 3 = 06-03 + 06-04 en paralelo (endpoint de alta · extensión del cron; archivos disjuntos, ambos dependen del motor). Wave 4 = 06-05 (UI, depende del endpoint).
+**Wave 5** *(cierre post-UAT, blocked on Wave 4)*
+
+- [x] 06-06-PLAN.md — Cierre post-UAT (D-06′ sin guarda de horario · D-07′ abono finito/indefinido con `total_occurrences` + `completed` · D-09′ "Último" real y "Sesiones X de N") + tests
+
+**Waves**: Wave 1 = 06-01 (espinazo de datos). Wave 2 = 06-02 (motor, depende del schema/tipos). Wave 3 = 06-03 + 06-04 en paralelo (endpoint de alta · extensión del cron; archivos disjuntos, ambos dependen del motor). Wave 4 = 06-05 (UI, depende del endpoint). Wave 5 = 06-06 (ajustes post-UAT sobre todo lo anterior).
 
 **UI hint**: yes
 **Security/Integrity relevance**: **Security-sensitive — secure-phase obligatorio.** Toca el núcleo anti-doble-booking (constraints 011/013 + concurrencia atómica) que endurecieron v0.9 y v0.12, y crea entidad(es) de tenant nuevas. Riesgos clave: (a) la generación forward debe insertar cada ocurrencia por el **mismo camino atómico** del motor (RPC `book_slot_atomic` / re-check capacity-aware / advisory lock por espacio) — nunca un insert directo que evada el anti-sobrecupo o el anti-solape de espacio compartido; una serie que genera N turnos no puede abrir una grieta de doble-booking bajo concurrencia con reservas públicas o manuales; (b) la migración nueva (**054**, idempotente, numerada, aplicada a mano y coordinada con el deploy — NO por este flujo) debe crear la tabla del abono con RLS habilitada + policies por operación con `with check` por `business_id`/`owner_id`, sin exponer nada a `anon`; el vínculo turno→abono no puede permitir leer o cancelar series de otro tenant; (c) el modelo extensible para cobro futuro no debe filtrar campos sensibles (tokens/pagos) ni al cliente ni a `anon`. El secure-phase gate verifica: la generación forward pasa por el chequeo atómico (cero grieta de doble-booking / sobrecupo / conflicto de espacio), aislamiento por tenant de la entidad abono + el vínculo turno→abono, y que la migración 054 no exponga datos a `anon`.
@@ -264,5 +269,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
-| 6. Modelo del abono + alta manual + generación forward | 4/5 | In Progress|  |
+| 6. Modelo del abono + alta manual + generación forward | 5/6 | In Progress|  |
 | 7. Cancelación del abono (mail + panel) | 0/TBD | Not started | - |

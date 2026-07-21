@@ -34,7 +34,7 @@
   dueño no se gatea por `time_blocks` (D-06′, igual que el alta manual). Cada turno generado queda
   **vinculado al abono** (para poder cancelar la serie).
 
-- [ ] **ABONO-07** (post-UAT, D-07′, Plan 06-06): cada abono es **Indefinido** (rolling, canchas) o
+- [x] **ABONO-07** (post-UAT, D-07′, Plan 06-06): cada abono es **Indefinido** (rolling, canchas) o
   **Finito de N sesiones** (kinesiólogo: 5/10/15, termina). Modelo: `abonos.total_occurrences`
   (null=indefinido); al generar el turno N el abono pasa a `completed` y el cron deja de extenderlo.
   Un choque NO consume sesión (se buscan N turnos reales). El detalle muestra "Último: <fecha real>"
