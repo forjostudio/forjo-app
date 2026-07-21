@@ -159,6 +159,12 @@ None — no hay configuración externa, ni migración, ni variable de entorno nu
 - **secure-phase**: las amenazas T-07-23..T-07-27 del plan quedan cubiertas por código + tests (T-07-26 sigue en `accept`, sin cambios).
 - Sin bloqueantes.
 
+## Self-Check: PASSED
+
+- Archivos verificados en disco: `lib/abono-cancel.ts`, `lib/abono-cancel.test.ts`, `test/abono-cancel.test.ts`, `07-06-SUMMARY.md` — los 4 presentes.
+- Commits verificados en `git log`: `bf004f5`, `bcaadf0`, `5316d5e`, `342496b`, `2d3e593` — los 5 presentes.
+- `git diff --diff-filter=D df2a7d6..HEAD` sin resultados: ningún archivo borrado en la tanda.
+
 ---
 *Phase: 07-cancelaci-n-del-abono-mail-panel*
 *Completed: 2026-07-21*
