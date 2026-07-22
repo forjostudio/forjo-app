@@ -5,6 +5,11 @@ import { getPlanPrices } from '@/lib/plan-prices'
 import { computeSnapshotRows, type BizRow } from '@/lib/crm-reports'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
 import { todayInAR } from '@/lib/booking-window'
+// Serialización 'yyyy-MM-dd' del día AR desde el motor compartido (IN-02): el alta, el cron y la baja
+// usan el MISMO símbolo, no tres copias que había que mantener coincidiendo a mano. Componentes
+// LOCALES del Date (todayInAR devuelve medianoche local del día calendario AR); nunca el ISO string
+// recortado en UTC, que en Vercel correría el corte una jornada entera.
+import { toISODate } from '@/lib/abono-cancel'
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -49,16 +54,6 @@ async function writeMonthlySnapshot(supabase: SupabaseClient): Promise<number> {
 // recorta la cola retenida.
 const SKIPPED_CAP = 50
 
-// 'yyyy-MM-dd' de un Date por sus componentes LOCALES (todayInAR devuelve medianoche local del día
-// calendario AR). Idéntico al helper del alta (app/api/abonos/create) para que ambos bordes de ventana
-// coincidan con la misma noción de "hoy" (hora AR, no new Date() crudo en UTC).
-function toISODate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
 // ── Ventana de generación forward: límites duros server-side (GAP-01, T-06-08/17/24) ───────────
 // `businesses.abono_window_weeks` es OWNER-WRITABLE (la escribe el panel con anon+RLS) y dimensiona el
 // loop del motor. Acá es CRÍTICO: este cron es el ÚNICO diario y lo COMPARTEN todos los tenants (Vercel
@@ -71,8 +66,9 @@ const ABONO_WINDOW_DEFAULT_WEEKS = 8
 const ABONO_WINDOW_MAX_WEEKS = 52 // 1 año de anticipación: más que eso no es un caso de uso, es abuso.
 
 // clampWindowWeeks: entero SIEMPRE en 1..52. Semántica IDÉNTICA a la del alta manual
-// (app/api/abonos/create) — los dos bordes de ventana tienen que coincidir, igual que SKIPPED_CAP,
-// toISODate y countAbonoAppointments. No finito o < 1 → default 8; > 52 → 52.
+// (app/api/abonos/create) — los dos bordes de ventana tienen que coincidir, igual que SKIPPED_CAP y
+// countAbonoAppointments. La serialización ya NO es una coincidencia sostenida a mano: toISODate es el
+// MISMO símbolo importado del motor (IN-02). No finito o < 1 → default 8; > 52 → 52.
 function clampWindowWeeks(raw: unknown): number {
   const n = Math.trunc(Number(raw))
   if (!Number.isFinite(n) || n < 1) return ABONO_WINDOW_DEFAULT_WEEKS
