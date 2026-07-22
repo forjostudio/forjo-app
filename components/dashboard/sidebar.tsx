@@ -16,6 +16,7 @@ import {
   Store,
   Globe,
   Tag,
+  Repeat,
   MapPin,
   BarChart3,
   Settings,
@@ -39,7 +40,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon }
 // items sobrevivientes no renderiza nada, ni su header.
 const NAV_GROUPS: { section: string; keys: string[] }[] = [
   { section: 'PANEL', keys: ['dashboard'] },
-  { section: 'AGENDA', keys: ['appointments', 'agenda', 'clients', 'patients'] },
+  { section: 'AGENDA', keys: ['appointments', 'agenda', 'abonos', 'clients', 'patients'] },
   { section: 'GESTIÓN', keys: ['servicios', 'equipo', 'consultorios', 'negocio', 'web'] },
   { section: 'REPORTES', keys: ['finances'] },
   { section: 'AJUSTES', keys: ['settings'] },
@@ -58,6 +59,7 @@ function buildNavGroups(business: Business): { section: string; items: NavItem[]
     dashboard: { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     appointments: { href: '/appointments', label: t.appointments, icon: Calendar },
     agenda: { href: '/agenda', label: 'Agenda', icon: CalendarClock },
+    abonos: { href: '/abonos', label: 'Abonos', icon: Repeat },
     negocio: { href: '/negocio', label: 'Negocio', icon: Store },
     // "Mi web" (→ editor /web, gate has_web_custom decide editor vs upsell). Visible a TODOS los
     // verticales a propósito: es superficie de venta del add-on (D-01), NO se gatea por has_web_custom.

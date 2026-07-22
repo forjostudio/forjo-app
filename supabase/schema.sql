@@ -232,6 +232,35 @@ SET default_tablespace = '';
 SET default_table_access_method = "heap";
 
 
+CREATE TABLE IF NOT EXISTS "public"."abonos" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "business_id" "uuid" NOT NULL,
+    "client_id" "uuid",
+    "service_id" "uuid",
+    "professional_id" "uuid",
+    "location_id" "uuid",
+    "day_of_week" smallint NOT NULL,
+    "start_time" time without time zone NOT NULL,
+    "duration_minutes" integer,
+    "total_occurrences" integer,
+    "status" "text" DEFAULT 'active'::"text" NOT NULL,
+    "cancel_token" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "generated_until" "date",
+    "skipped_occurrences" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "cancelled_at" timestamp with time zone,
+    "reminder_lead_hours" integer,
+    "deposit_amount" numeric,
+    "billing_subscription_id" "text",
+    CONSTRAINT "abonos_day_of_week_check" CHECK ((("day_of_week" >= 0) AND ("day_of_week" <= 6))),
+    CONSTRAINT "abonos_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'cancelled'::"text", 'completed'::"text"]))),
+    CONSTRAINT "abonos_total_occurrences_check" CHECK ((("total_occurrences" IS NULL) OR ("total_occurrences" > 0)))
+);
+
+
+ALTER TABLE "public"."abonos" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."agenda_spaces" (
     "business_id" "uuid" NOT NULL,
     "professional_id" "uuid" NOT NULL,
@@ -279,7 +308,8 @@ CREATE TABLE IF NOT EXISTS "public"."appointments" (
     "duration_minutes" integer,
     "google_event_id" "text",
     "seat" smallint DEFAULT 0 NOT NULL,
-    "is_group" boolean DEFAULT false NOT NULL
+    "is_group" boolean DEFAULT false NOT NULL,
+    "abono_id" "uuid"
 );
 
 
@@ -358,7 +388,9 @@ CREATE TABLE IF NOT EXISTS "public"."businesses" (
     "has_whatsapp" boolean DEFAULT false NOT NULL,
     "landing_draft" "jsonb",
     "max_advance_days" integer DEFAULT 30,
-    "max_advance_date" "date"
+    "max_advance_date" "date",
+    "abono_window_weeks" integer DEFAULT 8,
+    CONSTRAINT "businesses_abono_window_weeks_range" CHECK ((("abono_window_weeks" IS NULL) OR (("abono_window_weeks" >= 1) AND ("abono_window_weeks" <= 52))))
 );
 
 
@@ -831,6 +863,10 @@ CREATE TABLE IF NOT EXISTS "public"."time_blocks" (
 ALTER TABLE "public"."time_blocks" OWNER TO "postgres";
 
 
+ALTER TABLE ONLY "public"."abonos"
+    ADD CONSTRAINT "abonos_pkey" PRIMARY KEY ("id");
+
+
 ALTER TABLE ONLY "public"."agenda_spaces"
     ADD CONSTRAINT "agenda_spaces_pkey" PRIMARY KEY ("professional_id", "space_id");
 
@@ -991,6 +1027,22 @@ ALTER TABLE ONLY "public"."time_blocks"
 
 
 
+CREATE INDEX "abonos_business_id_idx" ON "public"."abonos" USING "btree" ("business_id");
+
+
+
+CREATE INDEX "abonos_business_id_status_idx" ON "public"."abonos" USING "btree" ("business_id", "status");
+
+
+
+CREATE UNIQUE INDEX "abonos_cancel_token_idx" ON "public"."abonos" USING "btree" ("cancel_token");
+
+
+
+CREATE INDEX "appointments_abono_id_idx" ON "public"."appointments" USING "btree" ("abono_id");
+
+
+
 CREATE UNIQUE INDEX "appointments_cancel_token_idx" ON "public"."appointments" USING "btree" ("cancel_token");
 
 
@@ -1111,6 +1163,31 @@ CREATE OR REPLACE TRIGGER "businesses_protect_admin_columns" BEFORE UPDATE ON "p
 
 
 
+ALTER TABLE ONLY "public"."abonos"
+    ADD CONSTRAINT "abonos_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."abonos"
+    ADD CONSTRAINT "abonos_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."clients"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."abonos"
+    ADD CONSTRAINT "abonos_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."abonos"
+    ADD CONSTRAINT "abonos_professional_id_fkey" FOREIGN KEY ("professional_id") REFERENCES "public"."professionals"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."abonos"
+    ADD CONSTRAINT "abonos_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE RESTRICT;
+
+
+
 ALTER TABLE ONLY "public"."agenda_spaces"
     ADD CONSTRAINT "agenda_spaces_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
 
@@ -1133,6 +1210,11 @@ ALTER TABLE ONLY "public"."appointment_spaces"
 
 ALTER TABLE ONLY "public"."appointment_spaces"
     ADD CONSTRAINT "appointment_spaces_space_id_fkey" FOREIGN KEY ("space_id") REFERENCES "public"."spaces"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."appointments"
+    ADD CONSTRAINT "appointments_abono_id_fkey" FOREIGN KEY ("abono_id") REFERENCES "public"."abonos"("id") ON DELETE SET NULL;
 
 
 
@@ -1392,6 +1474,35 @@ CREATE POLICY "admin read tags" ON "public"."tags" FOR SELECT USING ((( SELECT (
 
 
 CREATE POLICY "admin read tasks" ON "public"."tasks" FOR SELECT USING ((( SELECT (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'is_admin'::"text")) = 'true'::"text"));
+
+
+
+ALTER TABLE "public"."abonos" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "abonos tenant delete" ON "public"."abonos" FOR DELETE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "abonos tenant insert" ON "public"."abonos" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "abonos tenant select" ON "public"."abonos" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "abonos tenant update" ON "public"."abonos" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
 
 
 
@@ -3220,6 +3331,12 @@ GRANT ALL ON FUNCTION "public"."tstz_dist"(timestamp with time zone, timestamp w
 
 
 
+
+
+
+GRANT ALL ON TABLE "public"."abonos" TO "anon";
+GRANT ALL ON TABLE "public"."abonos" TO "authenticated";
+GRANT ALL ON TABLE "public"."abonos" TO "service_role";
 
 
 

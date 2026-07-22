@@ -1,6 +1,6 @@
 # Roadmap: Forjo App — Motor de Reservas (workstream `motor-reservas`)
 
-> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30) y **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, activo). Numeración de fases **continua** por workstream: v0.22 arranca en **Phase 4**. PROJECT.md compartido en `.planning/PROJECT.md`; requirements en `.planning/workstreams/motor-reservas/REQUIREMENTS.md`.
+> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19) y **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22). Numeración de fases **continua** por workstream: el próximo milestone arranca en **Phase 8**. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
 
 ## Overview
 
@@ -8,12 +8,14 @@
 
 **v0.22 — Turnos: alta manual y ventana de reserva (shipped 2026-07-19):** dos mejoras acotadas sobre el motor ya entregado, **sin reconstruir nada de v0.12**. (1) **Ventana de reserva:** el dueño limita hasta con cuánta anticipación puede reservar el público (una sola métrica global por negocio, `businesses.max_advance_days`, vacío/0 = sin límite); el tope se respeta en los **dos** calendarios públicos (general + canchas) y, como **backstop anti-tampering**, en el servidor (`app/api/booking/create`) — el alta manual autenticada queda **exenta**. (2) **Aviso al cliente:** el form "Nuevo turno" ya existente (v0.12: `app/api/appointments/create`) suma un checkbox **opt-in** para mandarle al cliente un mail de turno confirmado, respetando el default de v0.12 (no se manda salvo que se pida). Las dos mejoras son superficies distintas (público vs. alta autenticada) → una fase cada una.
 
+**v0.24 — Turnos fijos / Abonos recurrentes (shipped 2026-07-22):** capacidad NUEVA sobre el motor ya entregado: el dueño arma un **abono semanal** (turno fijo recurrente) para un cliente desde el panel; el sistema **genera los turnos hacia adelante** (ventana rolling, extendida por el cron diario existente) respetando la integridad anti-doble-booking (constraints 011/013), los cupos/capacity y la exclusión por espacio compartido (canchas); el cliente **cancela la suscripción** desde un link en el mail y el dueño la da de baja desde el panel. **Solo reserva** — el cobro recurrente automático es un milestone futuro, pero el **modelo de datos se diseña extensible** para sumarlo sin re-migrar. Toca el núcleo de integridad anti-doble-booking + el aislamiento por tenant → la fase del modelo/generación es **security-sensitive** (secure-phase obligatorio). El faseo va por integridad: primero el modelo + alta + generación forward (el núcleo sensible), después la cancelación (mail + panel), que depende de la serie ya existente.
+
 ## Phases
 
 **Phase Numbering:**
 
-- Integer phases: Planned milestone work (numeración **continua** por workstream; v0.22 arranca en Phase 4)
-- Decimal phases (4.1, 4.2): Urgent insertions (marked with INSERTED)
+- Integer phases: Planned milestone work (numeración **continua** por workstream; v0.24 arranca en Phase 6)
+- Decimal phases (6.1, 6.2): Urgent insertions (marked with INSERTED)
 
 ### Milestone v0.12 — Motor de Reservas (shipped 2026-06-30)
 
@@ -27,6 +29,13 @@ Faseo LOCKED por el encuadre §3 (manual → cupos → espacio).
 
 - [x] **Phase 4: Ventana de reserva pública** - Tope de anticipación configurable (global por negocio) aplicado en los dos calendarios públicos + backstop anti-tampering en el servidor; el alta manual queda exenta (completed 2026-07-19, SECURED 11/11)
 - [x] **Phase 5: Aviso al cliente en el alta manual** - Checkbox opt-in en el form "Nuevo turno" que le manda al cliente un mail de turno confirmado, respetando el default de v0.12 (completed 2026-07-19, SECURED 8/8)
+
+### Milestone v0.24 — Turnos fijos / Abonos recurrentes (shipped 2026-07-22)
+
+Faseo por integridad: primero el modelo del abono + alta manual + generación forward (núcleo anti-doble-booking → **secure-phase**), después la cancelación (mail + panel), que depende de que la serie ya exista.
+
+- [x] **Phase 6: Modelo del abono + alta manual + generación forward** - Entidad de abono semanal extensible (migración 054), alta manual por el dueño reusando el pipeline de alta de turno, y generación forward de los appointments (ventana rolling en el cron diario) respetando 011/013 + cupos + espacio compartido, cada turno vinculado al abono (completed 2026-07-21)
+- [x] **Phase 7: Cancelación del abono (mail + panel)** - Link de "cancelar suscripción" en el mail (token a nivel serie) + baja del abono desde el panel del dueño; deja de generar turnos futuros y maneja los ya generados (completed 2026-07-21)
 
 ## Phase Details
 
@@ -189,10 +198,109 @@ Plans:
 **UI hint**: yes
 **Security/Integrity relevance**: Acción autenticada del dueño sobre un cliente de SU negocio. El envío debe usar los secretos de email acotados por tenant (`business_secrets` vía `getBusinessSecrets`, patrón v0.9) y mandar el mail SOLO al cliente del turno recién creado — sin exponer datos de otro tenant. El mail va como efecto best-effort en `after()` (patrón existente): si falla, se loguea y el alta NO se rompe. Bajo riesgo; no redefine constraints ni el flujo público.
 
+### Phase 6: Modelo del abono + alta manual + generación forward
+
+**Goal**: El dueño arma un **abono semanal** (turno fijo recurrente) para un cliente desde el panel, y el sistema **genera automáticamente los turnos hacia adelante** (ventana rolling) como appointments reales que RESPETAN la integridad anti-doble-booking (constraints 011/013), los cupos/capacity y la exclusión por espacio compartido (canchas), cada uno vinculado al abono. El **modelo de datos del abono se diseña extensible** para sumar el cobro recurrente automático a futuro **sin re-migrar**, pero v0.24 **NO cobra**. Es el núcleo sensible del milestone: reusa el pipeline de alta de turno existente y su anti-tampering de tenant, y la generación corre en el **cron diario existente** de Vercel (Hobby — sin crons más frecuentes).
+**Depends on**: Phase 5 (última fase entregada del workstream; base del motor de reservas — booking-core / RPC atómico / cupos / espacios — ya entregada; sin dependencia funcional nueva de v0.22, primera fase de v0.24)
+**Requirements**: ABONO-01, ABONO-02, ABONO-03, ABONO-06
+**Success Criteria** (what must be TRUE):
+
+  1. El dueño crea un abono semanal desde el panel eligiendo cliente + servicio (o cancha) + profesional/consultorio (según vertical) + día de la semana + hora, **indefinido hasta cancelar**; la creación reusa la validación anti-tampering de tenant del alta de turno (service/professional/location/cancha re-validados por `business_id`, nunca se confía en IDs del cliente).
+  2. Al crear el abono, el sistema genera de inmediato los turnos de las próximas N semanas como appointments reales, **cada uno vinculado al abono**, respetando constraints 011/013, cupos/capacity y exclusión por espacio compartido (canchas) — con la misma garantía atómica anti-doble-booking del motor existente.
+  3. Una ocurrencia del abono que choca con un turno existente, un día cerrado o una excepción de horario **se saltea (y/o avisa) sin romper la generación del resto de la serie** (el comportamiento exacto se cierra en discuss-phase).
+  4. El **cron diario existente** de Vercel extiende la ventana rolling hacia adelante (genera las semanas nuevas al acercarse el borde), sin agregar ningún cron más frecuente que el diario permitido por Hobby.
+  5. Un negocio solo ve y crea abonos de SU negocio (RLS + `business_id`); el modelo de datos del abono admite sumar cobro recurrente automático a futuro sin re-migrar (v0.24 no cobra).
+
+**Plans**: 8/8 plans complete
+
+Plans:
+
+- [x] 06-08-PLAN.md
+
+- [x] 06-07-PLAN.md
+
+**Wave 1**
+
+- [x] 06-01-PLAN.md — Migración 054 (tabla `abonos` extensible + FK `appointments.abono_id` + `businesses.abono_window_weeks`, RLS owner-only) + `supabase db reset` + schema.sql + tipos
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [x] 06-02-PLAN.md — Motor `lib/abono-generation.ts` (generación forward vía `createAppointmentCore`, skip-and-record ante conflicto, `abono_id`, idempotente) + tests
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [x] 06-03-PLAN.md — Endpoint `POST /api/abonos/create` (auth por owner_id, anti-tampering, primera tanda, 1 mail) + `sendAbonoConfirmation` + tests
+- [x] 06-04-PLAN.md — Extensión de la ventana rolling en el cron diario `cancel-expired` (piggyback, best-effort) + tests
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [x] 06-05-PLAN.md — UI: sección /abonos (form día-de-la-semana + hora + control de ventana), badge "fijo/abono" en la agenda, detalle con ocurrencias salteadas + checkpoint humano
+
+**Wave 5** *(cierre post-UAT, blocked on Wave 4)*
+
+- [x] 06-06-PLAN.md — Cierre post-UAT (D-06′ sin guarda de horario · D-07′ abono finito/indefinido con `total_occurrences` + `completed` · D-09′ "Último" real y "Sesiones X de N") + tests
+
+**Waves**: Wave 1 = 06-01 (espinazo de datos). Wave 2 = 06-02 (motor, depende del schema/tipos). Wave 3 = 06-03 + 06-04 en paralelo (endpoint de alta · extensión del cron; archivos disjuntos, ambos dependen del motor). Wave 4 = 06-05 (UI, depende del endpoint). Wave 5 = 06-06 (ajustes post-UAT sobre todo lo anterior).
+
+**UI hint**: yes
+**Security/Integrity relevance**: **Security-sensitive — secure-phase obligatorio.** Toca el núcleo anti-doble-booking (constraints 011/013 + concurrencia atómica) que endurecieron v0.9 y v0.12, y crea entidad(es) de tenant nuevas. Riesgos clave: (a) la generación forward debe insertar cada ocurrencia por el **mismo camino atómico** del motor (RPC `book_slot_atomic` / re-check capacity-aware / advisory lock por espacio) — nunca un insert directo que evada el anti-sobrecupo o el anti-solape de espacio compartido; una serie que genera N turnos no puede abrir una grieta de doble-booking bajo concurrencia con reservas públicas o manuales; (b) la migración nueva (**054**, idempotente, numerada, aplicada a mano y coordinada con el deploy — NO por este flujo) debe crear la tabla del abono con RLS habilitada + policies por operación con `with check` por `business_id`/`owner_id`, sin exponer nada a `anon`; el vínculo turno→abono no puede permitir leer o cancelar series de otro tenant; (c) el modelo extensible para cobro futuro no debe filtrar campos sensibles (tokens/pagos) ni al cliente ni a `anon`. El secure-phase gate verifica: la generación forward pasa por el chequeo atómico (cero grieta de doble-booking / sobrecupo / conflicto de espacio), aislamiento por tenant de la entidad abono + el vínculo turno→abono, y que la migración 054 no exponga datos a `anon`.
+
+### Phase 7: Cancelación del abono (mail + panel)
+
+**Goal**: Tanto el **cliente** (desde un link en el mail) como el **dueño** (desde el panel del negocio) pueden dar de baja el abono completo. La baja **deja de generar turnos futuros** de la serie; el manejo de los turnos ya generados (cancelarlos o dejarlos) se aplica de forma consistente por ambas vías. Reusa el patrón del cancel-token de turno actual, pero elevado a **nivel serie** (da de baja el abono entero, no una sola ocurrencia).
+**Depends on**: Phase 6 (necesita la entidad abono + el vínculo turno→abono + la generación forward para poder darla de baja y frenarla)
+**Requirements**: ABONO-04, ABONO-05
+**Success Criteria** (what must be TRUE):
+
+  1. El cliente recibe un **mail** (patrón del mail de confirmación actual) con un link para **cancelar la suscripción**; abrir el link da de baja la **serie completa** del abono, no un turno suelto.
+  2. El dueño puede **dar de baja el abono desde el panel** del negocio.
+  3. Al darse de baja por cualquiera de las dos vías, el sistema **deja de generar turnos futuros** de esa serie (el cron ya no la extiende).
+  4. Los turnos futuros **ya generados** se manejan según lo definido en discuss-phase (cancelarlos o dejarlos), de forma consistente entre la baja por mail y la baja por panel.
+
+**Plans**: 12/12 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 07-01-PLAN.md — Motor compartido `lib/abono-cancel.ts` (baja idempotente, doble scoping `abono_id`+`business_id`, corte "hoy" en fecha AR) + tests puros y contra la DB
+- [x] 07-02-PLAN.md — Templates de baja de serie en `lib/email.ts` (mail al cliente + aviso al dueño, UN solo mail por vía) + test del payload
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [x] 07-03-PLAN.md — Vía del cliente: ruta NUEVA `app/abono/cancelar/[token]` + `POST /api/abonos/cancel/[token]` (404 genérico, preview conteo/última fecha) + `cancelUrl` en el mail de alta
+- [x] 07-04-PLAN.md — Vía del dueño: `POST /api/abonos/cancel` autenticado + UX en `/abonos` (filtro Archivados, "Dar de baja" con confirmación, "Copiar link de baja")
+
+**Wave 3** *(blocked on Waves 2)*
+
+- [x] 07-05-PLAN.md — Checkpoint humano: verificación end-to-end de las dos vías (mismo efecto sobre los turnos, un solo mail por destinatario, checklist visual)
+
+### Cierre del code review (07-REVIEW.md — 1 critical · 9 warnings · 5 info)
+
+**Wave 1 (gap closure)**
+
+- [x] 07-06-PLAN.md — CR-01: la baja a medias se repara en el reintento en vez de reportar éxito falso · WR-04 preview que distingue fallo de cero · publica `abonoDayLabel`/`toISODate` (IN-01/IN-02)
+- [x] 07-07-PLAN.md — WR-02 escapado de HTML en los dos mails nuevos + acotado del input anónimo · WR-05 timeout del POST a Resend · IN-03 logs sin PII · WR-09 test que asierta los dos envíos
+- [x] 07-08-PLAN.md — WR-03: migración **056** con índice ÚNICO sobre `abonos.cancel_token` + `schema.sql` quirúrgico + checkpoint de aplicación manual en prod *(autonomous: false)*
+
+**Wave 2 (gap closure)** *(blocked on Wave 1)*
+
+- [x] 07-09-PLAN.md — Superficie pública: WR-01 el servidor es la autoridad del número · WR-04 copy del preview no calculable · WR-05 `after()` · IN-04 noindex · IN-05 contraste y foco · IN-01/IN-02
+- [x] 07-10-PLAN.md — Panel: WR-07 el `cancel_token` deja de viajar con el listado (endpoint on-demand `GET /api/abonos/cancel-link/[id]`) · WR-06 preview acotado por fecha y agregados exactos
+- [x] 07-11-PLAN.md — IN-01/IN-02 en los callers restantes (`abonos/cancel`, `abonos/create`, cron): etiqueta del día y serialización de fecha desde el módulo compartido
+
+**Wave 3 (gap closure)** *(blocked on Wave 2)*
+
+- [x] 07-12-PLAN.md — WR-08: `test/abono-cancel-routes.test.ts` (carrera real sobre el mismo token = 1 mail, 401/400/404, cero escrituras cruzadas) + gate final y auditoría de los 15 hallazgos
+
+**Waves**: *Build* — Wave 1 = 07-01 + 07-02 en paralelo (motor de baja · templates de mail; archivos disjuntos, sin dependencias). Wave 2 = 07-03 + 07-04 en paralelo (superficie pública · panel; archivos disjuntos, ambas dependen del motor y de los templates). Wave 3 = 07-05 (checkpoint, depende de las dos vías construidas). *Cierre del review* — Wave 1 = 07-06 + 07-07 + 07-08 en paralelo (motor · mails · migración; `files_modified` disjuntos). Wave 2 = 07-09 + 07-10 + 07-11 en paralelo (superficie pública · panel · callers restantes; disjuntos, todos consumen el módulo compartido del 07-06). Wave 3 = 07-12 (tests de ruta contra los handlers ya arreglados).
+
+**UI hint**: yes
+**Security/Integrity relevance**: El **token de cancelación** del mail debe dar de baja **solo** el abono al que corresponde: token no adivinable, comparado con `timingSafeEqual` (patrón del cancel-token de turno actual), sin permitir cancelar la serie de otro tenant manipulando el link — un cliente no puede tocar el abono de otro negocio. La baja desde el panel es una acción autenticada del dueño sobre un abono de SU negocio (RLS + `business_id`/`owner_id`). Frenar la generación y (según decisión) cancelar los turnos futuros ya generados no puede tocar turnos de otra serie ni de otro tenant. Riesgo acotado frente a Phase 6 (no redefine constraints), pero toca aislamiento por tenant → el secure-phase gate verifica: scoping del token de cancelación a la serie correcta, aislamiento por tenant de la baja (mail y panel), y que frenar/cancelar la serie no afecte turnos ajenos.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, activo)
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped). El próximo milestone del workstream arranca en Phase 8.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -201,3 +309,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 3. Espacio Compartido | 5/5 | Complete    | 2026-06-30 |
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
+| 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
+| 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |

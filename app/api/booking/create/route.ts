@@ -32,7 +32,9 @@ export async function POST(request: Request) {
   const locationId = typeof body.locationId === 'string' ? body.locationId : null
   const date = typeof body.date === 'string' ? body.date : ''
   const time = typeof body.time === 'string' ? body.time : ''
-  const clientName = typeof body.clientName === 'string' ? body.clientName.trim() : ''
+  // Acotado defensivo del input ANÓNIMO (WR-02), mismo patrón que `notes`: este valor persiste en
+  // `clients.name` y de ahí lo renderizan los mails que el dueño lee (el escapado vive en lib/email).
+  const clientName = typeof body.clientName === 'string' ? body.clientName.trim().slice(0, 120) : ''
   const clientPhone = typeof body.clientPhone === 'string' && body.clientPhone.trim() ? body.clientPhone.trim() : null
   const clientEmail = typeof body.clientEmail === 'string' && body.clientEmail.trim() ? body.clientEmail.trim() : null
   const notes = typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim().slice(0, 1000) : null

@@ -16,7 +16,8 @@ import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Minus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Plus, Minus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail, Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveVertical } from '@/lib/verticals'
 import { todayInAR } from '@/lib/booking-window'
@@ -35,6 +36,8 @@ export type AgendaAppt = {
   client_email?: string | null
   duration_minutes: number | null
   location_id: string | null
+  // FK a la serie del abono (D-09): no nulo → el turno viene de un abono (badge "Fijo").
+  abono_id?: string | null
   services: { name?: string } | null
   professionals: { name?: string } | null
 }
@@ -581,6 +584,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     <>
                       <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
                       {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
+                      {/* Badge "Fijo" (D-09): el turno viene de un abono. Reusa el Badge del design system,
+                          sizeado para no romper la tarjeta compacta del turno. */}
+                      {a.abono_id && (
+                        <Badge variant="secondary" className="mt-0.5 h-4 gap-0.5 px-1 py-0 text-[9px] font-medium">
+                          <Repeat className="size-2.5!" /> Fijo
+                        </Badge>
+                      )}
                     </>
                   )
                   // Slot grupal → chip clickeable que abre el roster del slot (mismo date/time).

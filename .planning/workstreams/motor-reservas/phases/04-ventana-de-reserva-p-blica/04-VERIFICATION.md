@@ -1,7 +1,9 @@
 ---
 phase: 04-ventana-de-reserva-p-blica
 verified: 2026-07-18T21:06:22Z
-status: human_needed
+status: passed
+human_verified_at: 2026-07-22
+human_verified_by: operador (Forjo Studio)
 score: 5/5 must-haves verified (all 3 requirements + code-level truths)
 behavior_unverified: 0
 overrides_applied: 0
@@ -112,5 +114,23 @@ Nota aparte (no bloqueante): actualizar los checkboxes de `ROADMAP.md` (Phase 4 
 
 ---
 
+## Resolución del checkpoint humano — 2026-07-22
+
+Los dos ítems de `human_verification` fueron **ejecutados y aprobados por el operador** el 2026-07-22,
+durante el pre-close de la auditoría del milestone v0.24. El status pasa de `human_needed` a `passed`.
+
+| # | Ítem | Resultado |
+|---|------|-----------|
+| 1 | Ajustes → Cobros: alternar los 3 modos de ventana (días / sin límite / fecha exacta), guardar, refrescar y confirmar persistencia + nuleo de la columna del modo anterior | aprobado |
+| 2 | Página pública: corte del calendario, días deshabilitados, texto "Reservas hasta el DD/MM"; repetido en vertical canchas y en modo sin límite | aprobado |
+
+**Procedencia del dato:** confirmación directa del operador. Claude no observó la ejecución de estos
+dos checks — se registran por declaración, que es la naturaleza de un checkpoint humano. El código
+subyacente sí estaba verificado desde el 2026-07-18 (5/5 must-haves, lectura + tests + typecheck +
+DB real), y las 3 capas de enforcement (config → UI pública → backstop server) ya estaban confirmadas.
+
+---
+
 _Verified: 2026-07-18T21:06:22Z_
 _Verifier: Claude (gsd-verifier)_
+_Human checkpoint resolved: 2026-07-22 — operador (Forjo Studio)_

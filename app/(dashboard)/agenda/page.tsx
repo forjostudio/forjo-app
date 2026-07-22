@@ -32,7 +32,8 @@ export default async function AgendaPage() {
     supabase.from('appointments')
       // client_phone/client_email para el roster del admin (D-04). Datos propios del negocio
       // sobre SUS clientes; el set ya viene filtrado por business_id (aislamiento por tenant).
-      .select('id, date, time, status, client_name, client_phone, client_email, duration_minutes, location_id, services(name), professionals(name)')
+      // abono_id (migr. 054, D-09): marca el turno como parte de una serie fija → badge "Fijo" en la agenda.
+      .select('id, date, time, status, client_name, client_phone, client_email, duration_minutes, location_id, abono_id, services(name), professionals(name)')
       .eq('business_id', business.id)
       .gte('date', weekStartStr)
       .neq('status', 'cancelled')

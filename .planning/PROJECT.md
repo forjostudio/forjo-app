@@ -128,6 +128,20 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones (propuestas del diagnóstico, confirmables en discuss-phase):** flag `businesses.mp_connection_status text default 'connected'` (sano=`'connected'`, caído=`'error'`) — en `businesses` porque el dashboard ya lee `business` y `mp_user_id` vive ahí; migración **053** idempotente NO aplicada (orden coordinado con el deploy); pasa por **secure-phase** (integridad de pagos). Aplican skills `mercadopago-connect` + `supabase-multitenant-rls`.
 
+## Current Milestone (workstream `motor-reservas`): v0.24 Turnos fijos / Abonos recurrentes
+
+**Goal:** El dueño arma abonos **semanales** (turno fijo recurrente) para un cliente desde el panel; el sistema **genera los turnos hacia adelante** respetando la integridad anti-doble-booking; el cliente **cancela la suscripción** desde un link en el mail. **Solo reserva** (el cobro recurrente automático = milestone futuro; el modelo se diseña extensible). Numeración de fases del workstream desde **Phase 6**.
+
+**Target features:**
+- **Alta manual del abono** (cliente + servicio/cancha + profesional/consultorio + día + hora), semanal, indefinido hasta cancelar — reusando el pipeline de alta de turno.
+- **Generación forward** de los turnos (ventana rolling, cron diario de Vercel Hobby) respetando constraints 011/013 + cupos + espacio compartido (canchas) + días especiales; cada turno vinculado al abono.
+- **Mail al cliente** con link de "cancelar suscripción" (token → baja de la serie completa); baja del abono desde el panel para el dueño.
+- **Modelo de datos extensible** para el cobro recurrente futuro (sin construirlo en v0.24).
+
+**Out of scope este milestone (deferred):** cobro recurrente automático (MP preapproval por cliente); recurrencia no-semanal; alta pública del abono por el cliente; waitlist; editar/reprogramar una serie viva.
+
+**Decisiones LOCKED:** solo reserva (sin cobro) con modelo extensible; alta manual por el dueño (no pública); recurrencia semanal; indefinido hasta cancelar; cancelación por link en el mail + baja desde el panel; generación forward en el **cron DIARIO existente** (Vercel Hobby — sin crons más frecuentes). Toca el núcleo anti-doble-booking → **secure-phase**.
+
 ## Requirements
 
 ### Validated
