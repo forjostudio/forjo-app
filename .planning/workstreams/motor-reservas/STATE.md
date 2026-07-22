@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
-stopped_at: Completed 07-09-PLAN.md
-last_updated: "2026-07-22T00:25:10.731Z"
+stopped_at: Completed 07-10-PLAN.md
+last_updated: "2026-07-22T00:39:45.710Z"
 last_activity: 2026-07-21 -- Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 40
-  completed_plans: 36
-  percent: 86
+  completed_plans: 38
+  percent: 95
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 07 (cancelaci-n-del-abono-mail-panel) — EXECUTING
-Plan: 3 of 12
+Plan: 10 of 12 (07-10 completo; quedan 07-11 y 07-12)
 Status: Ready to execute
 Last activity: 2026-07-21 -- Phase 07 execution started
 
@@ -58,6 +58,7 @@ Last activity: 2026-07-21 -- Phase 07 execution started
 | Phase 06 P08 | 22min | 4 tasks | 7 files |
 | Phase 07 P08 | 26min | 4 tasks | 2 files |
 | Phase 07 P09 | 20min | 3 tasks | 5 files |
+| Phase 07 P10 | 20min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 07]: 07-09: los dos mails de la baja publica salen fuera del request path con after(), unificando el criterio con la via del panel — la respuesta deja de depender de la latencia de Resend
 - [Phase 07]: 07-09: el numero que informa la pantalla publica de baja sale SIEMPRE de la respuesta del servidor; el preview server-rendered es solo la estimacion del momento de la carga
 - [Phase 07]: 07-09: el color de texto sobre el acento del negocio se deriva de la luminancia WCAG (lib/contrast.ts) y el foco visible usa tokens del design system, porque con acentos de luminancia intermedia ningun candidato llega a 4.5:1
+- [Phase 07]: 07-10: la credencial de baja del abono NO viaja en el payload de /abonos; sale de GET /api/abonos/cancel-link/[id] con la sesion del dueno, una serie por vez y solo al tocar el boton — el token no rota ni vence (D-09): repartirlo en cada render dejaba una fuga permanente en HTML serializado, cache y cualquier captura de DOM (WR-07/D-25)
+- [Phase 07]: 07-10: los agregados por serie del panel usan count exact + limit(1) y el preview se acota con gte(date, cutoff) — traer todas las filas historicas para contarlas en memoria podia recortarse EN SILENCIO por el tope de filas de PostgREST y hacer que el dialogo subestimara el alcance de una baja irreversible (WR-06)
 
 ### Pending Todos
 
@@ -125,8 +128,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-22T00:25:10.710Z
-Stopped at: Completed 07-09-PLAN.md
+Last session: 2026-07-22T00:39:21.846Z
+Stopped at: Completed 07-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
