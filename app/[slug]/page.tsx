@@ -7,6 +7,10 @@ import type { PublicBusiness, Location, PublicCancha } from '@/lib/types'
 import { parseLandingConfig } from '@/lib/landing/schema'
 import { resolveVertical } from '@/lib/verticals'
 import { buildJsonLd } from '@/lib/landing/seo'
+import { ThemeOverrideScript } from '@/components/theme-override-script'
+import { EmbedHeightReporter } from '@/components/embed-height-reporter'
+import { parseThemeOverrides } from '@/lib/theme-config'
+import { isSafeColor } from '@/lib/landing/theme'
 
 // ── JSON-LD (SEO-03 / D9-04) ───────────────────────────────────────────────────────
 // Componente local que serializa el objeto TIPADO de buildJsonLd y lo emite en un
@@ -31,12 +35,23 @@ function JsonLdScript({ jsonLd }: { jsonLd: object | null }) {
 // datos viejos hasta el próximo deploy.
 export const dynamic = 'force-dynamic'
 
+// CSS del modo embed. El wizard monta sobre un contenedor `min-h-screen`: dentro de un iframe eso
+// hace que el contenido SIEMPRE llene el alto disponible, así que la altura que reporta
+// EmbedHeightReporter nunca bajaría (trinquete que solo crece). Neutralizarlo es lo que permite
+// que el iframe se ajuste al contenido real de cada paso. Va sin @layer, así gana a la utilidad
+// de Tailwind sin necesidad de !important.
+const EMBED_CSS = '.forjo-embed>*{min-height:0}'
+
 interface Props {
   params: Promise<{ slug: string }>
+  // Solo se leen para el modo embed (tema + auto-resize). La ruta ya es force-dynamic, así que
+  // acceder a searchParams no cambia su estrategia de render.
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-export default async function PublicBookingPage({ params }: Props) {
+export default async function PublicBookingPage({ params, searchParams }: Props) {
   const { slug } = await params
+  const sp = await searchParams
   const supabase = createPublicServerClient()
 
   // Vista pública acotada (migración 026): expone solo columnas no sensibles. NO leer la
@@ -93,6 +108,19 @@ export default async function PublicBookingPage({ params }: Props) {
     url: `${base}/${slug}`,
   })
 
+  // ── Modo EMBED (la web del cliente mete esta página en un iframe) ─────────────────────────
+  // Precedencia de tema: params de la URL → landing_config.theme → columnas del negocio.
+  // La web anfitriona manda su look para que el wizard matchee el sitio donde vive. Sin params
+  // no cambia NADA: un negocio sin web sigue tomando la apariencia de su panel (comportamiento
+  // intencional). Todo validado por allowlist antes de llegar al <script>.
+  const overrides = parseThemeOverrides(sp)
+  const rawPrimary = typeof sp.primary === 'string' ? sp.primary : undefined
+  const primary = isSafeColor(rawPrimary) ? rawPrimary : undefined
+  const hasThemeOverride = Boolean(overrides.theme || overrides.palette || overrides.font || primary)
+  // El embed solo aplica a la reserva pelada (negocio sin landing): embeber el mini-sitio entero
+  // dentro de otra web no es un caso soportado.
+  const isEmbed = sp.embed === '1' || sp.embed === 'true'
+
   // Gateo por vertical (D-05): en canchas el flujo de reserva es CanchasBookingClient (3 pasos,
   // sin profesional ni duración custom), leyendo public_canchas; el resto (salud/belleza/general)
   // renderiza BookingClient byte-idéntico. `vertical` ya se resolvió arriba (:76) — se reusa.
@@ -126,7 +154,16 @@ export default async function PublicBookingPage({ params }: Props) {
     return (
       <>
         <JsonLdScript jsonLd={jsonLd} />
-        {bookingNode}
+        {hasThemeOverride && <ThemeOverrideScript {...overrides} primary={primary} />}
+        {isEmbed ? (
+          <>
+            <style dangerouslySetInnerHTML={{ __html: EMBED_CSS }} />
+            <div className="forjo-embed">{bookingNode}</div>
+            <EmbedHeightReporter />
+          </>
+        ) : (
+          bookingNode
+        )}
       </>
     )
   }
@@ -137,6 +174,7 @@ export default async function PublicBookingPage({ params }: Props) {
   return (
     <>
       <JsonLdScript jsonLd={jsonLd} />
+      {hasThemeOverride && <ThemeOverrideScript {...overrides} primary={primary} />}
       <LandingRenderer
         config={landing}
         business={business as unknown as PublicBusiness}

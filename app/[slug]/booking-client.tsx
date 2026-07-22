@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { resolveVertical, getVerticalLabel } from '@/lib/verticals'
 import { cn } from '@/lib/utils'
+import { notifyEmbedScroll } from '@/lib/embed-bridge'
 
 interface Props {
   business: PublicBusiness
@@ -69,7 +70,13 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     // Doble rAF: esperamos a que el layout (slots recién pintados, imágenes) se asiente
     // antes de medir la posición, si no scrollIntoView calcula contra el layout viejo.
     requestAnimationFrame(() =>
-      requestAnimationFrame(() => el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block }))
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block })
+        // Modo embed: el scrollIntoView de arriba scrollea DENTRO del iframe (que no tiene scroll
+        // interno) y no reposiciona nada útil. Ya con el layout asentado, le mandamos al host el
+        // offset del target + el alto total, para que agrande y scrollee él. Fuera de embed, no-op.
+        notifyEmbedScroll(el)
+      })
     )
   }
   // Cada cambio de paso (menos el montaje inicial) reposiciona el scroll. En el paso de día/hora,

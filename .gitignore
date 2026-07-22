@@ -75,3 +75,6 @@ client_secret_*.json
 
 .env*
 supabase/.temp/
+
+# Caché local del hook de impeccable (herramienta de dev, no versionar)
+.impeccable/

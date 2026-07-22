@@ -117,3 +117,33 @@ export function normalizePalette(theme: string, palette?: string | null): string
   const list = THEME_PALETTES[theme] || THEME_PALETTES.forjo
   return palette && list.some(p => p.id === palette) ? palette : (THEME_DEFAULT_PAL[theme] || 'red')
 }
+
+// ── Overrides de tema por query param (caso EMBED) ────────────────────────────────
+// Cuando la reserva pública se embebe en la web del cliente, la web anfitriona manda su
+// propio look por la URL (?theme=&palette=&font=) para que el wizard matchee el sitio.
+// A diferencia de los normalize* de arriba, acá NO se coerciona a default: lo inválido o
+// ausente devuelve undefined, así el caller deja intacto lo que ya resolvió el layout
+// (que para un negocio SIN web es su apariencia de panel, y eso debe seguir igual).
+// Validación por ALLOWLIST contra los sets del motor — nunca se interpola un valor crudo.
+export function parseThemeOverrides(
+  sp: Record<string, string | string[] | undefined> | undefined
+): { theme?: string; palette?: string; font?: string } {
+  if (!sp) return {}
+  const one = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined)
+
+  const rawTheme = one(sp.theme)
+  const theme = rawTheme && THEMES.some(t => t.id === rawTheme) ? rawTheme : undefined
+
+  const rawFont = one(sp.font)
+  const font = rawFont && FONTS.some(f => f.id === rawFont) ? rawFont : undefined
+
+  // La paleta pertenece a un theme. Si vino theme en la URL se valida contra el suyo;
+  // si no, contra la unión (el CSS ignora un combo theme/paleta que no exista, sin romper).
+  const rawPalette = one(sp.palette)
+  const pool = theme
+    ? (THEME_PALETTES[theme] || [])
+    : Object.values(THEME_PALETTES).flat()
+  const palette = rawPalette && pool.some(p => p.id === rawPalette) ? rawPalette : undefined
+
+  return { theme, palette, font }
+}
