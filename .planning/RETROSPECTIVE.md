@@ -167,6 +167,51 @@ estado real: card de 3 estados + banner global de reconexión. SECURED 13/13 (P1
 - Los SVG oficiales de marca no siempre rinden fiel en navegador (fill-rule / paths complejos) — el raster oficial es más confiable.
 - La migración a prod se coordina a mano ANTES del deploy del código (053 aplicada por el usuario antes del merge).
 
+## Milestone: v0.24 — Turnos fijos / Abonos recurrentes
+
+**Shipped:** 2026-07-22
+**Phases:** 2 (6-7) | **Plans:** 20 | **Commits:** 118
+
+### What Was Built
+Capacidad nueva sobre el motor de reservas de v0.12, sin reconstruirlo:
+- Modelo del abono (migr. 054): tabla `abonos` con RLS owner-only, `appointments.abono_id`, ventana de generación por negocio. Extensible al cobro recurrente sin re-migrar.
+- Generación forward vía `createAppointmentCore` — el mismo núcleo atómico anti-doble-booking. Skip-and-record ante conflicto, nunca pisa.
+- Extensión de la ventana rolling como piggyback del cron diario existente (Vercel Hobby no admite más crons).
+- Panel `/abonos`: alta por día+hora, semanas salteadas con su razón, duración propia (indefinido / N sesiones).
+- Baja de la serie por dos vías (link del mail + panel) con UNA sola implementación, `cancelAbonoSeries`.
+- Gap closure de 15 hallazgos de code review en 7 planes, más migraciones 055 (CHECK de ventana) y 056 (índice UNIQUE del token).
+
+### What Worked
+- **El code review encontró un blocker real (CR-01) que ninguna suite había detectado**: el reintento de una baja parcial devolvía "ya cancelado" dejando turnos vivos. La cadena review → 7 planes de gap closure → verify lo cerró con test de concurrencia contra Postgres real.
+- **La UAT humana encontró dos bugs que el pipeline automatizado no podía encontrar**: un `catch` faltante que solo se manifiesta con la red caída, y un abono finito que se archivaba al crearlo con todos sus turnos por delante. Ninguno era detectable por grep ni por la suite (que corre en `environment: node`, sin DOM).
+- Los checkpoints humanos bloqueantes hicieron su trabajo: el de la migración 056 forzó verificar duplicados contra producción ANTES de crear un índice UNIQUE.
+- Separar el flag del motor (`completed` = "el cron ya no extiende") de la lectura de negocio ("terminado") resultó ser un fix de UI de un archivo, en vez de tocar el cron, el alta y la baja.
+
+### What Was Inefficient
+- **El aislamiento por worktree destruyó `node_modules`.** El worktree nace sin dependencias, el ejecutor creó un junction al `node_modules` real, y `git worktree remove --force` borró a través del enlace: 560 paquetes de 807. Se recuperó con `npm install`, pero las Waves 2 y 3 se corrieron en modo secuencial sobre el árbol principal para no repetirlo.
+- **`npx tsc` dio un falso verde.** Sin `node_modules/.bin/`, npx resuelve del registry un paquete llamado `tsc` que no es el compilador y **siempre sale 0**. Un plan entero se verificó así. Desde entonces todos los prompts de ejecutor prohíben `npx tsc` explícitamente.
+- Un ejecutor se colgó en el watchdog (600 s) corriendo la suite completa; el orquestador tuvo que correr el gate por fuera y despachar un agente de continuación acotado.
+- `milestone.complete` no es workstream-aware: generó la entrada de MILESTONES.md con las 7 fases del workstream (40 planes) en vez de las 2 del milestone, y con logros de v0.12. Hubo que reescribirla a mano.
+
+### Patterns Established
+- **Planes que dependen de la DB local o de `.env*` se despachan sin worktree**, secuencialmente sobre el árbol principal. El aislamiento no compensa cuando el plan necesita el entorno real.
+- **Verificación con binarios locales, nunca `npx`**, como restricción escrita en el prompt del ejecutor.
+- Una enmienda a una decisión LOCKED se registra **como enmienda con fecha y motivo**, no reescribiendo la decisión original (D-14/D-15).
+- Cuando el gate de un plan es imposible de satisfacer por construcción, el ejecutor lo reporta y verifica el invariante que ese gate protegía, en vez de aflojarlo.
+
+### Key Lessons
+- **Un chequeo de seguridad puede ser más angosto que el invariante que dice verificar.** El auditor dio D-07 ("las dos vías producen el mismo efecto") por verificado porque ninguna ruta escribía `appointments` directo. La UAT después encontró que las vías diferían en notificaciones — dentro del alcance literal de D-07, fuera del alcance del chequeo. Terminó siendo una decisión de producto, pero el hueco de verificación era real.
+- **La UAT humana no es ceremonia.** Los dos bugs que encontró eran invisibles para tests y greps por naturaleza: uno vive en el camino de red degradada, el otro en la lectura de un flag del motor como si fuera estado de negocio.
+- **Un falso positivo bien diagnosticado vale tanto como un bug.** El operador reportó "me archivó los dos abonos" como corrupción de datos; era `completed` vs `cancelled` bajo el mismo tab. Confirmarlo contra la base evitó un fix innecesario — y la confusión misma quedó registrada como deuda de UX.
+
+### Cost Observations
+- Modelo: opus para planner/executor/auditor, sonnet para verifier/checker.
+- Sesiones: 1 sesión larga para la Phase 7 completa (ejecución + review + gap closure + secure + UAT + 2 quick tasks + cierre de milestone).
+- Notable: el gap closure de 7 planes salió en 3 waves; las 2 primeras en paralelo con worktrees hasta el incidente, el resto secuencial. El modo secuencial resultó **más lento pero sin incidentes**, y con verificación real contra la DB local.
+
+---
+
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Shipped | Nota |
