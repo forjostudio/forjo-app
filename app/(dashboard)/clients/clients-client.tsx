@@ -768,7 +768,6 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                 </div>
                 {groupedByLetter[letter]?.map(client => {
                   const cs = clientStats[client.id]
-                  const num = clientNumberMap[client.id]
                   const isSelected = client.id === selectedId
                   return (
                     <button
@@ -788,16 +787,24 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                       )}>
                         {client.name.slice(0, 2).toUpperCase()}
                       </div>
-                      {/* Info */}
+                      {/* Info. El número de ficha NO se muestra acá (sigue en el detalle): muchos
+                          clientes se cargan solo con nombre de pila, así que el identificador útil en
+                          la lista es el mail — o el teléfono si no dejó mail. El badge de origen sube a
+                          la línea del nombre para dejarle el ancho completo a ese identificador. */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{client.name}</p>
                         <div className="flex items-center gap-2 min-w-0">
-                          <p className="text-xs text-muted-foreground truncate">{fichaNum(num)} · {cs?.visits ?? 0} visitas</p>
+                          <p className="text-sm font-medium truncate">{client.name}</p>
                           {/* Badge de origen (SC-2): estado no interactivo, coexiste con el status dot */}
-                          <Badge variant={ORIGIN_BADGE[client.origin].variant} className="flex-shrink-0">
+                          <Badge variant={ORIGIN_BADGE[client.origin].variant} className="flex-shrink-0 ml-auto">
                             {ORIGIN_BADGE[client.origin].label}
                           </Badge>
                         </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {client.email || client.phone
+                            ? <>{client.email || client.phone} · </>
+                            : null}
+                          {cs?.visits ?? 0} visitas
+                        </p>
                       </div>
                       {/* Status dot */}
                       <div className={cn('w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[cs?.status ?? 'new'])} title={STATUS_LABEL[cs?.status ?? 'new']} />

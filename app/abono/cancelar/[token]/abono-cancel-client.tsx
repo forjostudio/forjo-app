@@ -146,7 +146,9 @@ export function AbonoCancelClient({
               </p>
             ) : shownCount > 0 ? (
               <p className="text-muted-foreground pt-1">
-                Se cancelan <strong className="text-foreground">{turnosLabel} {view === 'done' ? 'que tenías reservados' : 'futuros'}</strong>
+                {/* Tiempo verbal según el momento: antes de confirmar la baja todavía no ocurrió
+                    ("se cancelan"), después ya ocurrió ("se cancelaron"). */}
+                Se cancela{view === 'done' ? 'ron' : 'n'} <strong className="text-foreground">{turnosLabel} {view === 'done' ? 'que tenías reservados' : 'futuros'}</strong>
                 {shownLastDate ? <>, el último el <strong className="text-foreground">{fmtDate(shownLastDate)}</strong></> : null}.
               </p>
             ) : null}
