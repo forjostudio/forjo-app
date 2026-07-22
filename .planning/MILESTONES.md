@@ -1,5 +1,24 @@
 # Milestones
 
+## v0.24 Turnos fijos / Abonos recurrentes (Shipped: 2026-07-22)
+
+**Phases completed:** 2 phases (6-7), 20 plans
+
+**Key accomplishments:**
+
+- **Modelo del abono (Phase 6):** migración 054 idempotente — tabla `abonos` con RLS owner-only (4 policies), `appointments.abono_id` (FK on delete set null) y `businesses.abono_window_weeks` (default 8), diseñada extensible para sumar el cobro recurrente sin re-migrar. `book_slot_atomic` intacto.
+- **Generación forward por el núcleo atómico:** `lib/abono-generation.ts` materializa cada ocurrencia semanal vía `createAppointmentCore` — el mismo camino anti-doble-booking del motor v0.12 — respetando cupos, exclusión por espacio compartido, día cerrado y horario especial. Ante conflicto SALTEA y registra la razón, sin pisar nada.
+- **Extensión sobre el cron diario existente:** la ventana rolling se extiende como piggyback best-effort dentro de `/api/cron/cancel-expired`, sin agregar ningún cron ni tocar `vercel.json` (límite de Vercel Hobby). Idempotente, con `skipped_occurrences` capado a 50.
+- **Panel `/abonos`:** alta por día de la semana + hora (sin fecha puntual), lista con su serie, detalle con las semanas salteadas y su razón en español, control de la ventana de generación, y badge "Fijo" en la agenda. Duración propia por abono (indefinido / N sesiones); un choque NO consume sesión.
+- **Baja de la serie por dos vías, una sola implementación (Phase 7):** `cancelAbonoSeries` en `lib/abono-cancel.ts` es la única, consumida por el link del mail (ruta nueva `/abono/cancelar/[token]`, sin tocar el cancel de turno suelto vivo en prod) y por el panel del dueño. La única diferencia entre las vías es el canal de autorización (D-07) — verificado con dos POST concurrentes contra Postgres real: exactamente 1 mail al cliente y 1 aviso al dueño.
+- **Endurecimiento tras code review:** 15 hallazgos cerrados en 7 planes de gap closure — reparación idempotente de una serie que quedó a medias (CR-01, el único blocker), `cancel_token` fuera del payload RSC + endpoint autenticado on-demand, índice UNIQUE en la base (migr. 056), escapado de HTML en los dos mails + timeout de 10 s a Resend, y la pantalla pública informando el número que devolvió el servidor en vez del preview viejo.
+- **Seguridad y deploy:** migraciones **054, 055 y 056** aplicadas a mano en producción. Phase 6 y Phase 7 SECURED (Phase 7: 68/68 amenazas, `threats_open: 0`). Suite completa: 723 tests verdes.
+
+**Known deferred items at close:** 2 (ver STATE.md → Deferred Items) — (1) la entrega real de los dos mails de baja solo es verificable post-deploy, porque `RESEND_API_KEY` está vacía en local; el escapado sí está cubierto por 21 tests. (2) el cupo con `capacity > 1` se cuenta por hora de inicio exacta y no por solape, así que turnos escalonados que se pisan superan el cupo → **v0.25**.
+
+---
+
+
 ## v0.23 Resiliencia de MercadoPago Connect (Shipped: 2026-07-20)
 
 **Phases completed:** 2 phases, 3 plans, 7 tasks

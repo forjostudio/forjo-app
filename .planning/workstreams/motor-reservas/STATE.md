@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
-status: verifying
+status: Awaiting next milestone
 stopped_at: Completado 07-12-PLAN.md (12/12 planes de la Phase 07)
-last_updated: "2026-07-22T12:45:28.990Z"
-last_activity: 2026-07-22
+last_updated: "2026-07-22T20:55:27.758Z"
+last_activity: 2026-07-22 — Milestone v0.24 completed and archived
 progress:
   total_phases: 7
   completed_phases: 7
@@ -21,16 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.24 agrega abonos semanales (turno fijo recurrente): alta manual por el dueño + generación forward de los turnos respetando 011/013 + cupos + espacio compartido + cancelación por link en el mail / panel. **Solo reserva** (el cobro recurrente es futuro; el modelo se diseña extensible).
-**Current focus:** Phase 07 — cancelaci-n-del-abono-mail-panel
+**Current focus:** v0.24 archivado. Próximo milestone del workstream: **v0.25 — cupo por solape** (arranca en Phase 8). Pendiente antes de arrancar: merge de `gsd/motor-reservas-v024` → `main` + deploy, y verificar los mails de baja en prod.
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
-Status: Listo para `/gsd:verify-work` y `/gsd:secure-phase 07 --ws motor-reservas`
-Last activity: 2026-07-22
-
-**Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
+Phase: Milestone v0.24 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-22 — Milestone v0.24 completed and archived
 
 ## Performance Metrics
 
@@ -137,6 +135,8 @@ Heredadas del workstream (siguen vigentes):
 | Abono | Alta pública del abono por el cliente (desde `/[slug]`) | v2 | 2026-07-20 |
 | Abono | Waitlist si el slot del abono está ocupado | v2 | 2026-07-20 |
 | Abono | Editar / reprogramar una serie viva (cambiar día/hora) | v2 | 2026-07-20 |
+| UAT | Fase 07 UAT en `partial`: el test 10 (entrega real de los 2 mails de baja + render del HTML escapado) quedó BLOCKED porque `RESEND_API_KEY` está vacía en `.env.local`. **Solo verificable en producción** — y prod requiere justamente este merge, así que es incerrable antes de shippear. El escapado (WR-02) sí está cubierto por los 21 casos de `test/abono-cancel-email.test.ts`. | verificar post-deploy | 2026-07-22 |
+| Motor | Cupo por solape: con `capacity > 1` el sobrecupo se cuenta por hora de inicio exacta y no por solape → turnos escalonados que se pisan superan el cupo. Diagnóstico completo en `todos/pending/2026-07-22-cupo-por-solape-*.md`. Requiere decisión de producto (clase grupal vs recurso simultáneo) y toca `book_slot_atomic` + `seat` + advisory lock. | **v0.25** | 2026-07-22 |
 | Ventana | Anticipación **mínima** (espejo del máximo) | v2 | 2026-07-18 |
 | Ventana | Ventana **por servicio** (se eligió global por negocio) | v2 | 2026-07-18 |
 | Alta manual | Seña en el alta manual (MANUAL-04) | v2 | 2026-06-25 |
@@ -150,5 +150,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Planificar la primera fase: `/gsd-plan-phase 6 --ws motor-reservas`
-- Phase 6 es **security-sensitive** (secure-phase obligatorio): toca el núcleo anti-doble-booking + crea entidad de tenant nueva (migración 054).
+- Start the next milestone with /gsd-new-milestone
