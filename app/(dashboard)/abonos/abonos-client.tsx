@@ -37,9 +37,9 @@ export type AbonoRow = {
   generated_until: string | null
   skipped_occurrences: { date: string; reason: string }[]
   created_at: string
-  // Token de baja de la serie (D-17). Sólo se usa para armar el link copiable del detalle; nunca sale
-  // de esta página (D-25) — ver el comentario del select en page.tsx.
-  cancel_token: string
+  // La CREDENCIAL DE BAJA de la serie NO forma parte de la fila que llega al browser (WR-07/D-25): no
+  // viaja en el payload de la página, se le pide al servidor recién cuando el dueño toca "Copiar link
+  // de baja". Ver el comentario del select en page.tsx.
   cancelled_at: string | null
   clients: { name: string } | null
   services: { name: string } | null
@@ -135,20 +135,35 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
   }, [abonos])
 
   // ── Copiar el link de baja del cliente (D-17) ──────────────────────────────────────────────────
-  // ÚNICO lugar donde el cancel_token sale a la vista: el dueño lo copia deliberadamente para mandarle
-  // el link a su cliente por WhatsApp (caso frecuente en canchas: cliente sin mail, o cliente que
-  // perdió el mail de alta). Es aceptable porque el token es de una serie de su propio negocio y es el
-  // mismo secreto que ya viaja en el mail de alta (D-25). No hay endpoint de reenvío de mail.
+  // ÚNICO lugar donde la credencial de baja sale a la vista: el dueño la copia deliberadamente para
+  // mandarle el link a su cliente por WhatsApp (caso frecuente en canchas: cliente sin mail, o cliente
+  // que perdió el mail de alta). La URL ya NO se arma acá: se le pide al endpoint autenticado, que la
+  // resuelve para ESA serie del propio negocio recién en este momento (WR-07/D-25). Así el secreto no
+  // viaja con el listado en cada render. No hay endpoint de reenvío de mail.
+  const [copyingLink, setCopyingLink] = useState(false)
   const copyCancelLink = useCallback(async (a: AbonoRow) => {
-    const url = `${window.location.origin}/abono/cancelar/${a.cancel_token}`
+    setCopyingLink(true)
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable')
-      await navigator.clipboard.writeText(url)
-      toast.success('Link copiado')
-    } catch {
-      // Contexto no seguro (http) o permiso denegado: no se rompe la vista, se muestra el link para
-      // que el dueño lo copie a mano.
-      toast.error('No se pudo copiar automáticamente. Copiá este link:', { description: url })
+      const res = await fetch(`/api/abonos/cancel-link/${a.id}`)
+      const data = await res.json().catch(() => null)
+      const url = typeof data?.url === 'string' ? data.url : ''
+      if (!res.ok || !data?.ok || !url) {
+        // Sin link no se escribe NADA al portapapeles: es preferible que el dueño reintente a que
+        // pegue en el WhatsApp de su cliente lo que hubiera copiado antes.
+        toast.error('No se pudo obtener el link de baja. Probá de nuevo.')
+        return
+      }
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable')
+        await navigator.clipboard.writeText(url)
+        toast.success('Link copiado')
+      } catch {
+        // Contexto no seguro (http) o permiso denegado: no se rompe la vista, se muestra el link para
+        // que el dueño lo copie a mano.
+        toast.error('No se pudo copiar automáticamente. Copiá este link:', { description: url })
+      }
+    } finally {
+      setCopyingLink(false)
     }
   }, [])
 
@@ -404,10 +419,12 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
             {/* Acciones de la serie (D-17/D-18/D-21). Viven SOLO acá, dentro del detalle: la tarjeta
                 del listado no ofrece ninguna acción destructiva — es fricción deliberada, y acá el
                 dueño ya tiene el contexto (día/hora, último turno, sesiones X de N). Tampoco hay
-                ninguna acción que devuelva la serie a activa: 'cancelled' es terminal (D-04). */}
+                ninguna acción que devuelva la serie a activa: 'cancelled' es terminal (D-04).
+                "Copiar link de baja" sigue siendo el ÚNICO lugar donde el dueño obtiene el link, pero
+                ahora la credencial la entrega el servidor recién al tocar el botón (WR-07). */}
             <div className="space-y-2 border-t border-border pt-4">
-              <Button variant="outline" size="sm" className="w-full gap-1.5 sm:w-auto" onClick={() => copyCancelLink(a)}>
-                <Copy className="w-3.5 h-3.5" /> Copiar link de baja
+              <Button variant="outline" size="sm" className="w-full gap-1.5 sm:w-auto" onClick={() => copyCancelLink(a)} disabled={copyingLink}>
+                <Copy className="w-3.5 h-3.5" /> {copyingLink ? 'Copiando...' : 'Copiar link de baja'}
               </Button>
               <p className="text-xs text-muted-foreground">Mandáselo por WhatsApp si tu cliente no tiene mail cargado: desde ese link puede darse de baja solo.</p>
 
