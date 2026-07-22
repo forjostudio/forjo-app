@@ -106,7 +106,9 @@ Heredadas del workstream (siguen vigentes):
 
 ### Pending Todos
 
-None yet.
+1 pendiente:
+
+- **[database]** Cupo por solape: con `capacity > 1` el control de sobrecupo cuenta por hora de inicio exacta y no por solape, asi que turnos escalonados que se pisan superan el cupo (reproducido: cupo 2 + 4 turnos simultaneos). El `EXCLUDE` anti-solape se apaga con `is_group = (capacity > 1)` y el conteo del RPC solo mira `date + time`. Requiere decidir la semantica de cupo (clase grupal = por hora de inicio, correcto hoy · recurso simultaneo = por solape, roto), y toca `book_slot_atomic`, la asignacion de `seat` y la granularidad del advisory lock. **NO es quick task** — fase propia + secure-phase. Ver `todos/pending/2026-07-22-cupo-por-solape-*.md`.
 
 ### Blockers/Concerns
 
