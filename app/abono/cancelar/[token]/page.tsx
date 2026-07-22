@@ -1,13 +1,18 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { previewAbonoCancellation } from '@/lib/abono-cancel'
+import { previewAbonoCancellation, abonoDayLabel, type AbonoCancelSummary } from '@/lib/abono-cancel'
+import { onAccentText } from '@/lib/contrast'
 import { PaletteScript } from '@/components/palette-script'
 import { AbonoCancelClient } from './abono-cancel-client'
 
-export const metadata = { title: 'Cancelar turno fijo' }
-
-// Etiquetas de día (plural) en la convención EXTRACT(dow) 0=domingo..6=sábado, idéntica a
-// abonos.day_of_week / time_blocks / booking-core. Arma el "todos los martes" de D-11.
-const DAY_LABELS = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados']
+// NOINDEX obligatorio (IN-04, T-07-38): la URL de esta página CONTIENE la credencial de baja
+// (`cancel_token`), que no rota ni vence (D-09), y la pantalla muestra el nombre del cliente, el
+// servicio y el horario. Si el link se filtra a un lugar crawleable (un foro, una captura pública, un
+// historial compartido), un buscador podría indexar la URL con el token adentro — y esa fuga sería
+// PERMANENTE, porque el token no se puede invalidar.
+export const metadata = {
+  title: 'Cancelar turno fijo',
+  robots: { index: false, follow: false },
+}
 
 // ── Página pública de BAJA DEL TURNO FIJO (ABONO-04) ────────────────────────────────────────────
 //
@@ -71,7 +76,7 @@ export default async function AbonoCancelarPage({ params }: { params: Promise<{ 
 
   // Preview del efecto (D-03/D-11). Si la serie ya está cancelada no hace falta: no hay nada que
   // cancelar y la pantalla no muestra números.
-  const preview =
+  const preview: AbonoCancelSummary =
     initialState === 'cancelled'
       ? { count: 0, lastDate: null }
       : await previewAbonoCancellation({
@@ -80,8 +85,20 @@ export default async function AbonoCancelarPage({ params }: { params: Promise<{ 
           abonoId: abono.id as string,
         })
 
+  // El preview NO se pudo calcular (WR-04): la query falló y el 0 sería indistinguible del caso
+  // legítimo "no hay turnos futuros". La pantalla lo DICE, en vez de ocultar en silencio el aviso
+  // previo de una acción irreversible (D-03/D-11).
+  const previewUnknown = preview.unknown === true
+
   const dow = Number(abono.day_of_week)
-  const dayLabel = DAY_LABELS[dow] ? `todos ${DAY_LABELS[dow]}` : ''
+  // Etiqueta plural del día desde el motor compartido (IN-01), con el MISMO fallback único que la vía
+  // del panel y el mail. El prefijo 'todos ' lo arma el caller. Arma el "todos los martes" de D-11.
+  const dayLabel = `todos ${abonoDayLabel(dow)}`
+
+  // Acento del negocio, calculado UNA sola vez (antes salía inline en el JSX) porque ahora también
+  // alimenta el color de TEXTO sobre ese acento (IN-05): `primary_color` lo edita el dueño y con un
+  // blanco fijo el CTA de una acción destructiva puede quedar por debajo de 4.5:1.
+  const accent = (business?.primary_color && business.primary_color.trim()) || '#d94a2b'
 
   return (
     <>
@@ -94,10 +111,12 @@ export default async function AbonoCancelarPage({ params }: { params: Promise<{ 
         time={String(abono.start_time ?? '')}
         cancelledCount={preview.count}
         lastDate={preview.lastDate}
+        previewUnknown={previewUnknown}
         businessName={business?.name ?? ''}
         businessSlug={business?.slug ?? ''}
         logoUrl={business?.logo_url ?? null}
-        accent={(business?.primary_color && business.primary_color.trim()) || '#d94a2b'}
+        accent={accent}
+        accentText={onAccentText(accent)}
         initialState={initialState}
       />
     </>
