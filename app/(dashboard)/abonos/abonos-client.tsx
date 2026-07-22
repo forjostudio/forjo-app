@@ -162,6 +162,12 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
         // que el dueño lo copie a mano.
         toast.error('No se pudo copiar automáticamente. Copiá este link:', { description: url })
       }
+    } catch {
+      // Fallo de RED (offline, datos móviles cortados, DNS caído): el `fetch` rechaza ANTES de que
+      // exista `res`, así que la rama HTTP de arriba no lo alcanza y la promesa quedaba sin capturar.
+      // Sin este bloque el dueño no ve NINGÚN mensaje y el botón parece no haber hecho nada. Mensaje
+      // genérico a propósito: el error capturado no se interpola en la UI.
+      toast.error('No se pudo obtener el link de baja. Probá de nuevo.')
     } finally {
       setCopyingLink(false)
     }
