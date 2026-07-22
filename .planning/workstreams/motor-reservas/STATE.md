@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-07-22T00:04:18.481Z"
+stopped_at: Completed 07-09-PLAN.md
+last_updated: "2026-07-22T00:25:10.731Z"
 last_activity: 2026-07-21 -- Phase 07 execution started
 progress:
   total_phases: 7
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 07 (cancelaci-n-del-abono-mail-panel) — EXECUTING
-Plan: 2 of 12
+Plan: 3 of 12
 Status: Ready to execute
 Last activity: 2026-07-21 -- Phase 07 execution started
 
@@ -57,6 +57,7 @@ Last activity: 2026-07-21 -- Phase 07 execution started
 | Phase 06 P05 | 11min | 3 tasks | 7 files |
 | Phase 06 P08 | 22min | 4 tasks | 7 files |
 | Phase 07 P08 | 26min | 4 tasks | 2 files |
+| Phase 07 P09 | 20min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 06]: GAP-01 cerrado en 3 capas: clamp server-side 1..52 en los dos callers (la correccion real), motor con validacion de formato + tope de 520 iteraciones, y CHECK en la migracion 055 tras normalizar los valores existentes — La ventana era owner-writable sin techo y dimensionaba el loop del motor dentro del cron diario COMPARTIDO por todos los tenants: un dueno podia colgar la generacion de todos
 - [Phase 07]: 07-08: la unicidad del cancel_token del abono la garantiza la BASE (migracion 056, indice UNIQUE) y no el default gen_random_uuid() — WR-03: appointments ya tenia su indice unico; abonos quedo sin el en la 054. La credencial de la via publica de baja no puede depender de la suerte del default
 - [Phase 07]: 07-08: migracion de constraint sobre datos existentes = verificacion previa con DO $$ + RAISE EXCEPTION accionable ANTES del DDL idempotente — CREATE UNIQUE INDEX sobre una tabla con duplicados falla con un error generico de Postgres que no dice que hacer
+- [Phase 07]: 07-09: los dos mails de la baja publica salen fuera del request path con after(), unificando el criterio con la via del panel — la respuesta deja de depender de la latencia de Resend
+- [Phase 07]: 07-09: el numero que informa la pantalla publica de baja sale SIEMPRE de la respuesta del servidor; el preview server-rendered es solo la estimacion del momento de la carga
+- [Phase 07]: 07-09: el color de texto sobre el acento del negocio se deriva de la luminancia WCAG (lib/contrast.ts) y el foco visible usa tokens del design system, porque con acentos de luminancia intermedia ningun candidato llega a 4.5:1
 
 ### Pending Todos
 
@@ -121,9 +125,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-22T00:04:18.464Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/07-cancelaci-n-del-abono-mail-panel/07-CONTEXT.md
+Last session: 2026-07-22T00:25:10.710Z
+Stopped at: Completed 07-09-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
