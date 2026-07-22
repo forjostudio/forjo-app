@@ -124,6 +124,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260722-n3a | Cerrar pendientes de la UAT de la fase 07: catch de red en copyCancelLink, enmienda de D-14/D-15, comentario de cancel/route.ts y disposicion de T-07-19 | 2026-07-22 | c23257e | [260722-n3a-cerrar-pendientes-de-la-uat-de-la-fase-0](./quick/260722-n3a-cerrar-pendientes-de-la-uat-de-la-fase-0/) |
+| 260722-nll | El abono finito cuyas N sesiones entran en la ventana ya no se archiva al crearlo: Activos incluye las series completed con turnos futuros (fix solo de UI, semantica del status intacta) | 2026-07-22 | d4e4bc7 | [260722-nll-un-abono-finito-cuyas-n-sesiones-entran-](./quick/260722-nll-un-abono-finito-cuyas-n-sesiones-entran-/) |
 
 ## Deferred Items
 
