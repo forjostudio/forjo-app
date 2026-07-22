@@ -1,7 +1,7 @@
 import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getBusinessSecrets } from '@/lib/business-secrets'
-import { cancelAbonoSeries } from '@/lib/abono-cancel'
+import { cancelAbonoSeries, abonoDayLabel } from '@/lib/abono-cancel'
 import { sendAbonoCancelledEmail } from '@/lib/email'
 
 // BAJA de la SERIE completa de un abono desde el PANEL del dueño (ABONO-05, D-23). Da de baja la
@@ -30,9 +30,9 @@ import { sendAbonoCancelledEmail } from '@/lib/email'
 // reservado y que desaparezca sin aviso es peor que un mail de más. UN solo mail por baja, nunca uno
 // por turno cancelado (D-14).
 
-// Etiquetas de día (plural) para el mail: convención EXTRACT(dow) 0=domingo..6=sábado, idéntica a
-// time_blocks / booking-core / abonos.day_of_week y a app/api/abonos/create. "todos los <día>".
-const DAY_LABELS = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados']
+// La etiqueta plural del día sale del motor compartido (IN-01): es la MISMA para las dos vías de baja
+// y para el alta, incluido su fallback. Tenerla copiada acá hacía que el mail de la misma baja dijera
+// cosas distintas según quién la ejecutara.
 
 // Forma de la fila que devuelve el select del abono. Los joins de Supabase llegan como objeto (o
 // null) cuando la FK es a-uno; se tipa acá para no arrastrar `any` hasta el mail.
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     const businessId = business.id as string
     const clientName = abono.clients?.name || 'Cliente'
     const serviceName = abono.services?.name || ''
-    const dayLabel = `todos ${DAY_LABELS[abono.day_of_week] ?? 'los días'}`
+    const dayLabel = `todos ${abonoDayLabel(abono.day_of_week)}`
     const time = String(abono.start_time).slice(0, 5)
     const cancelledCount = result.cancelledCount
     const lastDate = result.lastDate

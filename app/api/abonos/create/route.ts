@@ -4,6 +4,11 @@ import { getBusinessSecrets } from '@/lib/business-secrets'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
 import { sendAbonoConfirmation } from '@/lib/email'
 import { todayInAR } from '@/lib/booking-window'
+// Etiqueta del día y serialización 'yyyy-MM-dd' desde el motor compartido (IN-01/IN-02). El cuerpo de
+// la serialización es EXACTAMENTE el que estaba local: componentes locales del Date con padding a 2.
+// Nunca recortar el ISO string en UTC — en Vercel el proceso corre en UTC y el corte del día AR se
+// correría una jornada entera, desalineando el alta, el cron y la baja.
+import { abonoDayLabel, toISODate } from '@/lib/abono-cancel'
 
 // Alta MANUAL del ABONO (serie de turnos FIJOS recurrentes) desde el panel del dueño (ABONO-01, D-04).
 // Espeja app/api/appointments/create (alta manual de turno suelto): corre con la SESIÓN DEL DUEÑO —
@@ -43,10 +48,6 @@ const SKIPPED_CAP = 50
 // (el comportamiento previo a esta feature), nunca a "más sesiones de las pedidas".
 const MAX_TOTAL_OCCURRENCES = 520
 
-// Etiquetas de día (plural) para el mail: convención EXTRACT(dow) 0=domingo..6=sábado, idéntica a
-// time_blocks / booking-core / abonos.day_of_week. "todos los <día>".
-const DAY_LABELS = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados']
-
 // ── Ventana de generación forward: límites duros server-side (GAP-01, T-06-08/17/24) ───────────
 // `businesses.abono_window_weeks` es OWNER-WRITABLE (la escribe el panel con anon+RLS, igual que
 // max_advance_days) y dimensiona el loop del motor. Ese mismo loop corre DENTRO del ÚNICO cron diario
@@ -65,15 +66,6 @@ function clampWindowWeeks(raw: unknown): number {
   const n = Math.trunc(Number(raw))
   if (!Number.isFinite(n) || n < 1) return ABONO_WINDOW_DEFAULT_WEEKS
   return n > ABONO_WINDOW_MAX_WEEKS ? ABONO_WINDOW_MAX_WEEKS : n
-}
-
-// 'yyyy-MM-dd' de un Date tomado en sus componentes LOCALES (todayInAR devuelve medianoche local del
-// día calendario AR). Consistente con cómo el motor compara strings 'yyyy-MM-dd'.
-function toISODate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
 }
 
 export async function POST(request: Request) {
@@ -280,7 +272,7 @@ export async function POST(request: Request) {
           to: clientEmail,
           clientName,
           service: '', // el nombre del service es aditivo; el mail funciona sin él (evita un select extra)
-          dayLabel: `todos ${DAY_LABELS[dayOfWeek]}`,
+          dayLabel: `todos ${abonoDayLabel(dayOfWeek)}`,
           time,
           businessName: business.name,
           businessSlug: business.slug,
