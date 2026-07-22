@@ -120,7 +120,8 @@ root_cause: |
 
 total: 11
 passed: 8
-issues: 2
+issues: 1
+resolved_by_decision: 1
 pending: 0
 skipped: 0
 blocked: 1
@@ -138,7 +139,14 @@ blocked: 1
     - "Bloque catch en copyCancelLink que capture el rechazo de fetch (fallo de red) y muestre el mismo toast.error que ya cubre el fallo HTTP"
 
 - truth: "Las dos vías de baja son 100% consistentes también en notificaciones (D-14 LOCKED + D-15): un mail al cliente y un aviso al dueño"
-  status: failed
+  status: resolved_by_decision
+  resolution: |
+    DECISIÓN DEL USUARIO (2026-07-22): el comportamiento actual del CÓDIGO es el correcto y NO se
+    cambia. El aviso al dueño es un "recibo" de algo que le ocurrió, no de algo que él ejecutó:
+      - baja iniciada por el CLIENTE (link público) → mail al cliente + aviso al dueño
+      - baja iniciada por el DUEÑO (panel)          → solo mail al cliente
+    Lo que queda pendiente NO es código sino registro: enmendar D-14/D-15, corregir el comentario que
+    las cita truncadas, y re-evaluar T-07-19 para la vía del panel.
   reason: "Encontrado por lectura de código durante el test 10: app/api/abonos/cancel/route.ts (panel) manda SOLO el mail al cliente; app/api/abonos/cancel/[token]/route.ts (público) manda el del cliente Y el aviso al dueño. El comentario de cancel/route.ts:109 cita D-14/D-15 para justificar 'un solo mail al cliente', pero D-14 dice literalmente 'al cliente Y un aviso al dueño' y D-15 cierra con 'mantiene las dos vías 100% consistentes también en notificaciones'."
   severity: major
   test: 11
@@ -148,7 +156,9 @@ blocked: 1
     - "app/api/abonos/cancel/[token]/route.ts:182-183"
     - ".planning/workstreams/motor-reservas/phases/07-cancelaci-n-del-abono-mail-panel/07-CONTEXT.md:70-77"
   missing:
-    - "Llamada a sendAbonoCancelledAdminNotification en el after() de la vía del panel, con el mismo molde que la vía pública — o, si la omisión es deliberada, una enmienda EXPLÍCITA de D-14/D-15 registrada como desvío, más la re-evaluación de T-07-19 (baja sin rastro para el negocio) para esa vía"
+    - "07-CONTEXT.md: enmendar D-14 y D-15 para que digan que el aviso al dueño sale SOLO cuando la baja la inicia el cliente. Hoy D-14 (LOCKED) dice 'al cliente Y un aviso al dueño' sin distinguir vía, y D-15 afirma paridad total de notificaciones — las dos contradicen la decisión tomada."
+    - "app/api/abonos/cancel/route.ts:109: corregir el comentario. Cita 'D-14/D-15' para justificar un solo mail, que es justo lo contrario de lo que esas decisiones dicen hoy. Tras la enmienda debe citar el criterio del recibo."
+    - "07-SECURITY.md: re-evaluar T-07-19 (Repudiation, 'baja sin rastro para el negocio') para la vía del panel. El rastro por mail no existe ahí por diseño; queda el rastro en datos (abonos.cancelled_at + status y la fila bajo Archivados). Documentar esa disposición explícitamente en vez de dejarla implícita."
 
 ## Notas de entorno (no son gaps)
 
