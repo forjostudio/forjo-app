@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
-stopped_at: Completado 07-11-PLAN.md
-last_updated: "2026-07-22T00:47:06.093Z"
-last_activity: 2026-07-21 -- Phase 07 execution started
+stopped_at: Completado 07-12-PLAN.md
+last_updated: "2026-07-22T12:38:14.491Z"
+last_activity: "2026-07-22 -- Phase 07: 07-12 (cobertura a nivel ruta, WR-08) completado"
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 40
-  completed_plans: 39
-  percent: 86
+  completed_plans: 40
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 07 (cancelaci-n-del-abono-mail-panel) — EXECUTING
-Plan: 10 of 12 (07-10 completo; quedan 07-11 y 07-12)
-Status: Ready to execute
-Last activity: 2026-07-21 -- Phase 07 execution started
+Phase: 07 (cancelaci-n-del-abono-mail-panel) — PLANES EJECUTADOS (12/12)
+Plan: 12 of 12 (07-12 completo — cierra la tanda de gap closure del code review)
+Status: Listo para `/gsd:verify-work` y `/gsd:secure-phase 07 --ws motor-reservas`
+Last activity: 2026-07-22 -- Phase 07: 07-12 (cobertura a nivel ruta, WR-08) completado
 
 **Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
 
@@ -60,6 +60,7 @@ Last activity: 2026-07-21 -- Phase 07 execution started
 | Phase 07 P09 | 20min | 3 tasks | 5 files |
 | Phase 07 P10 | 20min | 3 tasks | 3 files |
 | Phase 07 P11 | 11min | 2 tasks | 3 files |
+| Phase 07 P12 | 55min | 3 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 07]: 07-09: el color de texto sobre el acento del negocio se deriva de la luminancia WCAG (lib/contrast.ts) y el foco visible usa tokens del design system, porque con acentos de luminancia intermedia ningun candidato llega a 4.5:1
 - [Phase 07]: 07-10: la credencial de baja del abono NO viaja en el payload de /abonos; sale de GET /api/abonos/cancel-link/[id] con la sesion del dueno, una serie por vez y solo al tocar el boton — el token no rota ni vence (D-09): repartirlo en cada render dejaba una fuga permanente en HTML serializado, cache y cualquier captura de DOM (WR-07/D-25)
 - [Phase 07]: 07-10: los agregados por serie del panel usan count exact + limit(1) y el preview se acota con gte(date, cutoff) — traer todas las filas historicas para contarlas en memoria podia recortarse EN SILENCIO por el tope de filas de PostgREST y hacer que el dialogo subestimara el alcance de una baja irreversible (WR-06)
+- [Phase 07]: 07-12: el anti-avalancha de la baja del abono (D-14/T-07-15) queda verificado por un test de CARRERA REAL contra la DB local (Promise.all de dos POST sobre el mismo cancel_token → 1 mail al cliente + 1 aviso al dueño), no por lectura de codigo — un doble del cliente Supabase no puede probar el gate atomico que serializa las dos requests
+- [Phase 07]: 07-12: para testear un route handler que despacha efectos con after() de Next 16 se mockea next/server PARCIALMENTE (importOriginal) reemplazando solo after por un ejecutor que guarda la promesa del callback; sin eso el handler tira porque en Vitest no hay request scope
+- [Phase 07]: 07-12: la prueba de mutacion del gate atomico que pedia el plan NO quedo evidenciada (el ejecutor original se colgo en el watchdog del harness al entrar a Task 3 y no dejo registro); se reporta como PENDIENTE para secure-phase, no como cumplida
 
 ### Pending Todos
 
@@ -129,8 +133,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-22T00:47:06.082Z
-Stopped at: Completado 07-11-PLAN.md
+Last session: 2026-07-22T12:36:59.603Z
+Stopped at: Completado 07-12-PLAN.md (12/12 planes de la Phase 07)
 Resume file: None
 
 ## Operator Next Steps

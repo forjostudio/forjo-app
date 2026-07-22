@@ -257,7 +257,7 @@ Plans:
   3. Al darse de baja por cualquiera de las dos vías, el sistema **deja de generar turnos futuros** de esa serie (el cron ya no la extiende).
   4. Los turnos futuros **ya generados** se manejan según lo definido en discuss-phase (cancelarlos o dejarlos), de forma consistente entre la baja por mail y la baja por panel.
 
-**Plans**: 11/12 plans executed
+**Plans**: 12/12 plans complete
 
 Plans:
 **Wave 1**
@@ -290,7 +290,7 @@ Plans:
 
 **Wave 3 (gap closure)** *(blocked on Wave 2)*
 
-- [ ] 07-12-PLAN.md — WR-08: `test/abono-cancel-routes.test.ts` (carrera real sobre el mismo token = 1 mail, 401/400/404, cero escrituras cruzadas) + gate final y auditoría de los 15 hallazgos
+- [x] 07-12-PLAN.md — WR-08: `test/abono-cancel-routes.test.ts` (carrera real sobre el mismo token = 1 mail, 401/400/404, cero escrituras cruzadas) + gate final y auditoría de los 15 hallazgos
 
 **Waves**: *Build* — Wave 1 = 07-01 + 07-02 en paralelo (motor de baja · templates de mail; archivos disjuntos, sin dependencias). Wave 2 = 07-03 + 07-04 en paralelo (superficie pública · panel; archivos disjuntos, ambas dependen del motor y de los templates). Wave 3 = 07-05 (checkpoint, depende de las dos vías construidas). *Cierre del review* — Wave 1 = 07-06 + 07-07 + 07-08 en paralelo (motor · mails · migración; `files_modified` disjuntos). Wave 2 = 07-09 + 07-10 + 07-11 en paralelo (superficie pública · panel · callers restantes; disjuntos, todos consumen el módulo compartido del 07-06). Wave 3 = 07-12 (tests de ruta contra los handlers ya arreglados).
 
@@ -310,4 +310,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
-| 7. Cancelación del abono (mail + panel) | 11/12 | In Progress|  |
+| 7. Cancelación del abono (mail + panel) | 12/12 | Complete   | 2026-07-22 |
