@@ -83,7 +83,7 @@ y se namespacean por plan.
 | T-07-16 | Tampering | flujo vivo de cancel de turno suelto | mitigate | ruta NUEVA (D-10); no se abren `/cancelar/[token]` ni `/api/cancel/[token]` | closed | `git log` de los dos archivos: último commit `74ed6af` (fase 01), ninguno de la fase 07 |
 | T-07-17 | Tampering | listas de ruteo del Edge | mitigate | no se agregan prefijos a `lib/auth/route-lists.ts` | closed | `grep "abono" lib/auth/route-lists.ts proxy.ts` → 0 matches; `KNOWN_PREFIXES` sin `/abono` ⇒ `proxy.ts:54-56` devuelve `NextResponse.next()` sin `updateSession` (idéntico a `/cancelar/[token]`) |
 | T-07-18 | Information Disclosure | contenido de la página pública | mitigate | sólo cliente/servicio/día/hora + resumen numérico de la propia serie | closed | `app/abono/cancelar/[token]/page.tsx:106-121` (props); `abono-cancel-client.tsx:136-153`; no se pasan `business_id` ni `abono_id` al cliente |
-| T-07-19 | Repudiation | baja sin rastro para el negocio | mitigate | D-13: aviso a `notification_email` + `cancelled_at` visible en el panel | closed | `app/api/abonos/cancel/[token]/route.ts:180-200`; `cancelled_at` escrito en `lib/abono-cancel.ts:212`, leído en `app/(dashboard)/abonos/page.tsx:39` |
+| T-07-19 | Repudiation | baja sin rastro para el negocio | mitigate | **disposición por vía.** Vía **pública** (la inicia el cliente): aviso a `businesses.notification_email` (D-13) **+** el rastro en datos. Vía **panel** (la ejecuta el propio dueño): ese mail NO existe **por diseño** — avisarle a alguien de algo que acaba de hacer él es redundante (D-14/D-15 enmendadas 2026-07-22) — así que el rastro es de DATOS: `abonos.cancelled_at` + `abonos.status = 'cancelled'`, más la fila visible bajo el tab **Archivados** de `/abonos` | closed | vía pública: `app/api/abonos/cancel/[token]/route.ts:180-200`. Rastro de datos (las dos vías, motor compartido): `cancelled_at` + `status` escritos en `lib/abono-cancel.ts:211-216`, leídos en `app/(dashboard)/abonos/page.tsx:39`; el tab Archivados filtra `status !== 'active'` en `app/(dashboard)/abonos/abonos-client.tsx:129` |
 
 ### Plan 07-04 — vía panel (endpoint autenticado + UI)
 
@@ -249,6 +249,7 @@ Superficie que apareció durante la implementación sin mapeo a una amenaza del 
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-07-22 | 68 | 68 (1 con verificación parcial: T-07-55) | 0 | gsd-security-auditor (Claude) |
+| 2026-07-22 | 68 | 68 — sin amenazas nuevas: la UAT de la fase (test 11) + la decisión del usuario del 2026-07-22 solo PRECISARON la disposición de T-07-19 para la vía del **panel**, donde el rastro es de datos (`cancelled_at` + `status` + fila en Archivados) y no de mail, porque ahí la baja la ejecuta el propio dueño | 0 | quick 260722-n3a (Claude) |
 
 ---
 
