@@ -116,7 +116,14 @@ None yet.
 - **[Phase 6 — comportamiento]** Manejo exacto de una ocurrencia que choca (turno existente / día cerrado / excepción de horario): saltear y/o avisar — **cerrar en discuss-phase**.
 - **[Phase 7 — token]** El token del link de cancelación debe scopear a la serie correcta (no adivinable + `timingSafeEqual`, patrón del cancel-token de turno) sin permitir cancelar el abono de otro tenant.
 - **[Phase 7 — turnos ya generados]** Qué pasa con los turnos futuros ya generados al dar de baja (cancelarlos o dejarlos), consistente entre baja por mail y por panel — **cerrar en discuss-phase**.
-- [Phase 7 — deploy] Prod esta en la migracion 054. Al deployar aplicar A MANO, en orden: 055_abono_window_bounds.sql -> 056_abonos_cancel_token_unique.sql -> NOTIFY pgrst, 'reload schema'. Pre-check hecho (2026-07-21): 0 cancel_token duplicados en prod. La proxima migracion del repo es la 057.
+- [Phase 7 — deploy] RESUELTO (2026-07-22): las migraciones **055** y **056 ya estan APLICADAS en produccion** (confirmado por el operador). Pre-check previo: 0 cancel_token duplicados en prod, por eso el indice UNIQUE entro limpio. La proxima migracion del repo es la **057**.
+- [Phase 7 — mails sin verificar en prod] `RESEND_API_KEY` esta **vacia** en `.env.local`, asi que en local no sale ningun mail (verificado contra api.resend.com: HTTP 401). El test 10 de la UAT quedo BLOCKED: la entrega real de los dos mails de baja y el render del HTML escapado (WR-02) siguen **sin verificar en produccion**. El escapado si esta cubierto por los 21 casos de `test/abono-cancel-email.test.ts`.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260722-n3a | Cerrar pendientes de la UAT de la fase 07: catch de red en copyCancelLink, enmienda de D-14/D-15, comentario de cancel/route.ts y disposicion de T-07-19 | 2026-07-22 | c23257e | [260722-n3a-cerrar-pendientes-de-la-uat-de-la-fase-0](./quick/260722-n3a-cerrar-pendientes-de-la-uat-de-la-fase-0/) |
 
 ## Deferred Items
 
