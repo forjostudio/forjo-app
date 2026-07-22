@@ -48,8 +48,9 @@ export type AbonoRow = {
 
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
-// Filtro del listado (D-20). La vista principal es de series VIVAS; lo que ya no genera turnos
-// (cancelled) o ya asignó todas sus sesiones (completed) vive bajo Archivados.
+// Filtro del listado (D-20). La vista principal es de series VIVAS; a Archivados va lo que ya no
+// genera turnos y no le queda nada por delante: las series dadas de baja (cancelled) y las finitas
+// que ya no tienen ningún turno futuro. Ver isAbonoActivo para el porqué del segundo caso.
 type AbonoTab = 'activos' | 'archivados'
 const ABONO_TABS: { key: AbonoTab; label: string }[] = [
   { key: 'activos', label: 'Activos' },
@@ -75,6 +76,23 @@ function skipReasonES(reason: string): string {
 // hh:mm de un 'HH:mm[:ss]'.
 function hhmm(t: string): string {
   return t.slice(0, 5)
+}
+
+// Predicado ÚNICO de "abono activo" para el panel: generadas ≠ dictadas.
+// `status` es un flag del MOTOR DE GENERACIÓN, no un estado de negocio. `'completed'` significa que la
+// serie finita ya juntó sus N sesiones y el cron dejó de extenderla (D-07′) — NO que esas sesiones ya
+// ocurrieron. Un abono finito cuyas N ocurrencias entran enteras en la ventana de generación nace
+// `'completed'` en el mismo alta, con sus N turnos TODAVÍA por delante: turnos reservados para el
+// cliente y trabajo pendiente del dueño. Por eso se archiva recién cuando no le queda ninguno.
+// El backend NO cambia con esto: el cron sigue filtrando por `'active'` para no reescanear series ya
+// terminadas, y la baja sigue aceptando `'completed'` a propósito (D-21). Acá sólo se corrige la
+// lectura que la UI hacía del flag.
+// El `?? 0` no es cosmético: una serie que no figura en el record no tiene turnos futuros contados y
+// debe archivarse.
+function isAbonoActivo(a: AbonoRow, futureCounts: Record<string, number>): boolean {
+  if (a.status === 'active') return true
+  if (a.status === 'completed') return (futureCounts[a.id] ?? 0) > 0
+  return false
 }
 
 // Dialog (desktop ≥768px) / Drawer vaul (mobile): breakpoint en JS, sin setState-in-effect.
@@ -120,19 +138,20 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
   const [cancelTarget, setCancelTarget] = useState<AbonoRow | null>(null)
   const [tab, setTab] = useState<AbonoTab>('activos')
 
-  // Listado por tab (D-20). CAMBIO de comportamiento respecto de la versión previa: antes el memo sólo
-  // excluía los cancelados y dejaba los `completed` en la lista principal. Ahora la vista principal es
-  // de series VIVAS (`active`) y todo lo demás — cancelled + completed — vive bajo Archivados. Un
-  // finito que ya asignó sus N sesiones no es trabajo pendiente del dueño; sigue accesible (y se puede
-  // dar de baja, D-21) desde el otro tab.
+  // Listado por tab (D-20). La vista principal es de series con TRABAJO POR DELANTE: las `active` se
+  // comportan igual que siempre y el cambio toca sólo a las `completed`, que se quedan acá mientras
+  // les queden turnos futuros (ver isAbonoActivo). Archivados es el complemento exacto, y sigue
+  // permitiendo dar de baja (D-21).
+  // El filtro y el contador llaman al MISMO predicado a propósito: si cada uno decidiera por su cuenta,
+  // el tab podría decir "Activos (1)" sobre una lista vacía.
   const visibleAbonos = useMemo(
-    () => abonos.filter((a) => (tab === 'activos' ? a.status === 'active' : a.status !== 'active')),
-    [abonos, tab],
+    () => abonos.filter((a) => isAbonoActivo(a, futureTurnoCounts) === (tab === 'activos')),
+    [abonos, tab, futureTurnoCounts],
   )
   const tabCounts = useMemo(() => {
-    const activos = abonos.filter((a) => a.status === 'active').length
+    const activos = abonos.filter((a) => isAbonoActivo(a, futureTurnoCounts)).length
     return { activos, archivados: abonos.length - activos }
-  }, [abonos])
+  }, [abonos, futureTurnoCounts])
 
   // ── Copiar el link de baja del cliente (D-17) ──────────────────────────────────────────────────
   // ÚNICO lugar donde la credencial de baja sale a la vista: el dueño la copia deliberadamente para
