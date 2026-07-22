@@ -4,14 +4,14 @@ milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-07-21T21:27:07.965Z"
+last_updated: "2026-07-22T00:04:18.481Z"
 last_activity: 2026-07-21 -- Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 40
-  completed_plans: 33
-  percent: 83
+  completed_plans: 36
+  percent: 86
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 07 (cancelaci-n-del-abono-mail-panel) — EXECUTING
-Plan: 1 of 12
-Status: Executing Phase 07
+Plan: 2 of 12
+Status: Ready to execute
 Last activity: 2026-07-21 -- Phase 07 execution started
 
 **Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
@@ -56,6 +56,7 @@ Last activity: 2026-07-21 -- Phase 07 execution started
 | Phase 06 P07 | 13min | 2 tasks | 3 files |
 | Phase 06 P05 | 11min | 3 tasks | 7 files |
 | Phase 06 P08 | 22min | 4 tasks | 7 files |
+| Phase 07 P08 | 26min | 4 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: Migración 054 APLICADA A PRODUCCIÓN (2026-07-21): última migración en prod = 054, la próxima debe ser 055; el schema del abono ya no se puede enmendar en el lugar
 - [Phase ?]: Checkpoint 06-05 (human-verify, blocking) APROBADO tras 3 rondas de UAT; los hallazgos se cerraron en planes propios (06-06 D-06'/D-07'/D-09' · 06-07 portal del Select dentro del Drawer) sin re-abrir planes cerrados
 - [Phase 06]: GAP-01 cerrado en 3 capas: clamp server-side 1..52 en los dos callers (la correccion real), motor con validacion de formato + tope de 520 iteraciones, y CHECK en la migracion 055 tras normalizar los valores existentes — La ventana era owner-writable sin techo y dimensionaba el loop del motor dentro del cron diario COMPARTIDO por todos los tenants: un dueno podia colgar la generacion de todos
+- [Phase 07]: 07-08: la unicidad del cancel_token del abono la garantiza la BASE (migracion 056, indice UNIQUE) y no el default gen_random_uuid() — WR-03: appointments ya tenia su indice unico; abonos quedo sin el en la 054. La credencial de la via publica de baja no puede depender de la suerte del default
+- [Phase 07]: 07-08: migracion de constraint sobre datos existentes = verificacion previa con DO $$ + RAISE EXCEPTION accionable ANTES del DDL idempotente — CREATE UNIQUE INDEX sobre una tabla con duplicados falla con un error generico de Postgres que no dice que hacer
 
 ### Pending Todos
 
@@ -100,6 +103,7 @@ None yet.
 - **[Phase 6 — comportamiento]** Manejo exacto de una ocurrencia que choca (turno existente / día cerrado / excepción de horario): saltear y/o avisar — **cerrar en discuss-phase**.
 - **[Phase 7 — token]** El token del link de cancelación debe scopear a la serie correcta (no adivinable + `timingSafeEqual`, patrón del cancel-token de turno) sin permitir cancelar el abono de otro tenant.
 - **[Phase 7 — turnos ya generados]** Qué pasa con los turnos futuros ya generados al dar de baja (cancelarlos o dejarlos), consistente entre baja por mail y por panel — **cerrar en discuss-phase**.
+- [Phase 7 — deploy] Prod esta en la migracion 054. Al deployar aplicar A MANO, en orden: 055_abono_window_bounds.sql -> 056_abonos_cancel_token_unique.sql -> NOTIFY pgrst, 'reload schema'. Pre-check hecho (2026-07-21): 0 cancel_token duplicados en prod. La proxima migracion del repo es la 057.
 
 ## Deferred Items
 
@@ -117,7 +121,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-21T17:07:23.979Z
+Last session: 2026-07-22T00:04:18.464Z
 Stopped at: Phase 7 context gathered
 Resume file: .planning/workstreams/motor-reservas/phases/07-cancelaci-n-del-abono-mail-panel/07-CONTEXT.md
 

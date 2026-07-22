@@ -43,11 +43,11 @@
 - [x] **ABONO-03**: El **modelo de datos del abono es extensible** para sumar cobro recurrente automático
   a futuro (entidad/campos que no obliguen a re-migrar cuando se agregue el cobro), pero v0.24 **NO cobra**.
 
-- [ ] **ABONO-04**: El cliente recibe un **mail** (patrón del mail de confirmación actual) con un link
+- [x] **ABONO-04**: El cliente recibe un **mail** (patrón del mail de confirmación actual) con un link
   para **cancelar la suscripción**: un token que da de baja la **serie completa** (deja de generar
   turnos futuros). Análogo al cancel-token de turno actual, pero a nivel abono.
 
-- [ ] **ABONO-05**: El dueño puede **dar de baja el abono desde el panel** (deja de generar; el manejo de
+- [x] **ABONO-05**: El dueño puede **dar de baja el abono desde el panel** (deja de generar; el manejo de
   los turnos futuros ya generados —cancelarlos o dejarlos— se define en discuss-phase).
 
 - [x] **ABONO-06**: La **generación forward es automática** y extiende la ventana con el tiempo, corriendo

@@ -157,6 +157,13 @@ Ninguno.
 - **Blocker operativo abierto hasta el deploy:** prod sigue en 054. Mientras no se apliquen 055 y 056 a mano, el índice único y el CHECK de la ventana NO existen en producción.
 - La numeración de migraciones queda en **056**; la próxima migración del repo debe ser la **057**.
 
+## Self-Check: PASSED
+
+- `supabase/migrations/056_abonos_cancel_token_unique.sql` — FOUND
+- `supabase/schema.sql` — FOUND
+- `.planning/.../07-08-SUMMARY.md` — FOUND
+- Commits `b5a3886`, `f20fd82`, `504a8e0` — FOUND en el historial
+
 ---
 *Phase: 07-cancelaci-n-del-abono-mail-panel*
 *Completed: 2026-07-21*

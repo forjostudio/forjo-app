@@ -257,7 +257,7 @@ Plans:
   3. Al darse de baja por cualquiera de las dos vías, el sistema **deja de generar turnos futuros** de esa serie (el cron ya no la extiende).
   4. Los turnos futuros **ya generados** se manejan según lo definido en discuss-phase (cancelarlos o dejarlos), de forma consistente entre la baja por mail y la baja por panel.
 
-**Plans**: 5/12 plans complete (build 5/5 · cierre del code review 0/7)
+**Plans**: 8/12 plans executed
 
 Plans:
 **Wave 1**
@@ -278,9 +278,9 @@ Plans:
 
 **Wave 1 (gap closure)**
 
-- [ ] 07-06-PLAN.md — CR-01: la baja a medias se repara en el reintento en vez de reportar éxito falso · WR-04 preview que distingue fallo de cero · publica `abonoDayLabel`/`toISODate` (IN-01/IN-02)
-- [ ] 07-07-PLAN.md — WR-02 escapado de HTML en los dos mails nuevos + acotado del input anónimo · WR-05 timeout del POST a Resend · IN-03 logs sin PII · WR-09 test que asierta los dos envíos
-- [ ] 07-08-PLAN.md — WR-03: migración **056** con índice ÚNICO sobre `abonos.cancel_token` + `schema.sql` quirúrgico + checkpoint de aplicación manual en prod *(autonomous: false)*
+- [x] 07-06-PLAN.md — CR-01: la baja a medias se repara en el reintento en vez de reportar éxito falso · WR-04 preview que distingue fallo de cero · publica `abonoDayLabel`/`toISODate` (IN-01/IN-02)
+- [x] 07-07-PLAN.md — WR-02 escapado de HTML en los dos mails nuevos + acotado del input anónimo · WR-05 timeout del POST a Resend · IN-03 logs sin PII · WR-09 test que asierta los dos envíos
+- [x] 07-08-PLAN.md — WR-03: migración **056** con índice ÚNICO sobre `abonos.cancel_token` + `schema.sql` quirúrgico + checkpoint de aplicación manual en prod *(autonomous: false)*
 
 **Wave 2 (gap closure)** *(blocked on Wave 1)*
 
@@ -310,4 +310,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
-| 7. Cancelación del abono (mail + panel) | 5/5 | Complete   | 2026-07-21 |
+| 7. Cancelación del abono (mail + panel) | 8/12 | In Progress|  |
