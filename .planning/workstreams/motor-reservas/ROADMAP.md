@@ -310,4 +310,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 4. Ventana de reserva pública | 4/4 | Complete | 2026-07-19 |
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
-| 7. Cancelación del abono (mail + panel) | 12/12 | Complete   | 2026-07-22 |
+| 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |

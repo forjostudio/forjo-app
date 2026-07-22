@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.24
 milestone_name: — Turnos fijos / Abonos recurrentes
-status: executing
-stopped_at: Completado 07-12-PLAN.md
-last_updated: "2026-07-22T12:38:14.491Z"
-last_activity: "2026-07-22 -- Phase 07: 07-12 (cobertura a nivel ruta, WR-08) completado"
+status: verifying
+stopped_at: Completado 07-12-PLAN.md (12/12 planes de la Phase 07)
+last_updated: "2026-07-22T12:45:28.990Z"
+last_activity: 2026-07-22
 progress:
   total_phases: 7
   completed_phases: 7
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 07 (cancelaci-n-del-abono-mail-panel) — PLANES EJECUTADOS (12/12)
-Plan: 12 of 12 (07-12 completo — cierra la tanda de gap closure del code review)
+Phase: 07
+Plan: Not started
 Status: Listo para `/gsd:verify-work` y `/gsd:secure-phase 07 --ws motor-reservas`
-Last activity: 2026-07-22 -- Phase 07: 07-12 (cobertura a nivel ruta, WR-08) completado
+Last activity: 2026-07-22
 
 **Deploy:** migración **054 YA APLICADA A PRODUCCIÓN** (2026-07-21). Última migración en prod = 054; la próxima debe numerarse **055**. El schema del abono ya no se puede enmendar en el lugar.
 
@@ -46,6 +46,7 @@ Last activity: 2026-07-22 -- Phase 07: 07-12 (cobertura a nivel ruta, WR-08) com
 |-------|-------|-------|----------|
 | 6 | TBD | - | - |
 | 7 | TBD | - | - |
+| 07 | 12 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
