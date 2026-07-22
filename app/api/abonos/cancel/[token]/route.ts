@@ -1,6 +1,7 @@
+import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getBusinessSecrets } from '@/lib/business-secrets'
-import { cancelAbonoSeries } from '@/lib/abono-cancel'
+import { getBusinessSecrets, type BusinessSecrets } from '@/lib/business-secrets'
+import { cancelAbonoSeries, abonoDayLabel } from '@/lib/abono-cancel'
 import { sendAbonoCancelledEmail, sendAbonoCancelledAdminNotification } from '@/lib/email'
 import type { NextRequest } from 'next/server'
 
@@ -36,10 +37,6 @@ import type { NextRequest } from 'next/server'
 //
 // NO hay limpieza de Google Calendar: los turnos generados por abono no crean eventos gcal
 // (lib/abono-generation.ts no llama a createCalendarEvent), así que no hay nada que borrar.
-
-// Etiquetas de día (plural) para el mail: convención EXTRACT(dow) 0=domingo..6=sábado, la MISMA que
-// usa el alta (app/api/abonos/create) para armar el "todos los martes" del mail de confirmación.
-const DAY_LABELS = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados']
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   // Next 16: `params` es una Promise y hay que await-earla.
@@ -109,61 +106,99 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   const client = abono.clients as { name?: string | null; email?: string | null; phone?: string | null } | null
   const serviceName = (abono.services as { name?: string } | null)?.name || ''
   const dow = Number(abono.day_of_week)
-  const dayLabel = DAY_LABELS[dow] ? `todos ${DAY_LABELS[dow]}` : ''
+  // Etiqueta plural del día desde el motor compartido (IN-01): convención EXTRACT(dow)
+  // 0=domingo..6=sábado, con el MISMO fallback único que usa la vía del panel. Antes esta ruta tenía
+  // su propia copia de la tabla, con fallback vacío: el mail de la MISMA baja decía cosas distintas
+  // según quién la ejecutara. El prefijo 'todos ' lo arma el caller, como siempre.
+  const dayLabel = `todos ${abonoDayLabel(dow)}`
   const time = String(abono.start_time ?? '')
 
-  // Mails con AWAIT y no con after(): en serverless, sobre esta superficie pública, el fetch a Resend
-  // se corta al hacer return si no se espera. Mismo criterio que el cancel de turno suelto.
-  // Secretos por tenant desde business_secrets (no venían en el join, Pitfall E).
-  const secrets = business?.id ? await getBusinessSecrets(business.id) : null
+  // ── LOS DOS MAILS SALEN FUERA DEL REQUEST PATH (WR-05, T-07-41) ───────────────────────────────
+  //
+  // Se despachan con `after` de next/server, EXACTAMENTE el mismo criterio que la vía del panel
+  // (app/api/abonos/cancel/route.ts). El comentario anterior afirmaba lo contrario — que "en
+  // serverless el fetch a Resend se corta al hacer return si no se espera" — y era falso en Next 16
+  // sobre Vercel: `after` existe justamente para esto y el callback corre con la respuesta ya enviada.
+  //
+  // Con los dos POST a Resend esperados EN SERIE dentro del handler, una degradación del proveedor
+  // colgaba la respuesta hasta el límite de la función: el cliente veía "No pudimos dar de baja el
+  // turno fijo" para una baja que SÍ se había ejecutado, y al reintentar caía en 'already_cancelled'.
+  // Sumado al timeout duro de `resendSend` (Plan 07-07), ni un proveedor colgado puede consumir el
+  // presupuesto de la función.
+  //
+  // Un solo callback con los dos envíos en secuencia: fuera del request path el orden ya no importa.
+  // Todo lo que el closure necesita se captura ANTES en consts; los secretos Resend por tenant se
+  // leen ADENTRO (no venían en el join, Pitfall E).
+  const abonoId = abono.id as string
+  const businessId = business?.id ?? ''
+  const clientEmail = client?.email ?? ''
+  const clientName = client?.name || ''
+  const clientPhone = client?.phone ?? undefined
+  const businessName = business?.name || ''
+  const businessSlug = business?.slug || ''
+  const primaryColor = business?.primary_color ?? null
+  const logoUrl = business?.logo_url ?? null
+  const whatsapp = business?.whatsapp ?? null
+  const notificationEmail = business?.notification_email ?? ''
 
-  // (1) UN mail al cliente, sólo si tiene email cargado.
-  if (client?.email && business) {
+  after(async () => {
+    let secrets: BusinessSecrets | null = null
     try {
-      await sendAbonoCancelledEmail({
-        to: client.email,
-        clientName: client.name || '',
-        service: serviceName,
-        dayLabel,
-        time,
-        cancelledCount,
-        lastDate,
-        businessName: business.name || '',
-        businessSlug: business.slug || '',
-        primaryColor: business.primary_color,
-        logoUrl: business.logo_url,
-        whatsapp: business.whatsapp,
-        resendApiKey: secrets?.resend_api_key,
-        resendFrom: secrets?.resend_from,
-      })
+      secrets = businessId ? await getBusinessSecrets(businessId) : null
     } catch (e) {
-      console.error(`[abonos/cancel] email cliente FALLÓ (abono ${abono.id}):`, e instanceof Error ? e.message : e)
+      // Sin secretos por tenant los envíos igual se intentan con la configuración global; la baja,
+      // que ya está confirmada en la base, nunca se rompe por esto.
+      console.error(`[abonos/cancel] secretos Resend FALLÓ (abono ${abonoId}):`, e instanceof Error ? e.message : e)
     }
-  }
 
-  // (2) UN aviso al dueño (D-13): la baja la hizo el cliente por el link público, el negocio tiene que
-  // enterarse. Sólo si tiene configurado el email de notificaciones.
-  if (business?.notification_email) {
-    try {
-      await sendAbonoCancelledAdminNotification({
-        to: business.notification_email,
-        clientName: client?.name || '',
-        clientPhone: client?.phone,
-        clientEmail: client?.email,
-        service: serviceName,
-        dayLabel,
-        time,
-        cancelledCount,
-        lastDate,
-        businessName: business.name || '',
-        logoUrl: business.logo_url,
-        resendApiKey: secrets?.resend_api_key,
-        resendFrom: secrets?.resend_from,
-      })
-    } catch (e) {
-      console.error(`[abonos/cancel] aviso al dueño FALLÓ (abono ${abono.id}):`, e instanceof Error ? e.message : e)
+    // (1) UN mail al cliente, sólo si tiene email cargado.
+    if (clientEmail && businessId) {
+      try {
+        await sendAbonoCancelledEmail({
+          to: clientEmail,
+          clientName,
+          service: serviceName,
+          dayLabel,
+          time,
+          cancelledCount,
+          lastDate,
+          businessName,
+          businessSlug,
+          primaryColor,
+          logoUrl,
+          whatsapp,
+          resendApiKey: secrets?.resend_api_key,
+          resendFrom: secrets?.resend_from,
+        })
+      } catch (e) {
+        console.error(`[abonos/cancel] email cliente FALLÓ (abono ${abonoId}):`, e instanceof Error ? e.message : e)
+      }
     }
-  }
+
+    // (2) UN aviso al dueño (D-13): la baja la hizo el cliente por el link público, el negocio tiene
+    // que enterarse. Sólo si tiene configurado el email de notificaciones.
+    if (notificationEmail) {
+      try {
+        await sendAbonoCancelledAdminNotification({
+          to: notificationEmail,
+          clientName,
+          clientPhone,
+          clientEmail: clientEmail || undefined,
+          service: serviceName,
+          dayLabel,
+          time,
+          cancelledCount,
+          lastDate,
+          businessName,
+          logoUrl,
+          resendApiKey: secrets?.resend_api_key,
+          resendFrom: secrets?.resend_from,
+        })
+      } catch (e) {
+        console.error(`[abonos/cancel] aviso al dueño FALLÓ (abono ${abonoId}):`, e instanceof Error ? e.message : e)
+      }
+    }
+  })
 
   return Response.json({ ok: true, cancelledCount, lastDate })
 }
