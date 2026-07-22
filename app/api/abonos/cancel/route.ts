@@ -106,9 +106,13 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, alreadyCancelled: true, cancelledCount: 0, lastDate: null })
   }
 
-  // (8) Baja efectiva → UN solo mail al cliente (D-14/D-15), best-effort en after() para no demorar
-  // la respuesta del panel. Todo lo que el closure necesita se captura ANTES en consts. Si el mail
-  // falla se loguea y la baja NO se rompe: los turnos ya quedaron cancelados.
+  // (8) Baja efectiva → UN solo mail, y va SOLO al cliente (D-14/D-15, enmendadas 2026-07-22). El
+  // aviso al dueño es el RECIBO de algo que le OCURRIÓ, no de algo que él ejecutó: acá la baja la
+  // ejecuta el propio dueño, así que avisarle sería redundante. Por eso ese aviso existe únicamente
+  // en la vía pública, donde la baja la inicia el CLIENTE.
+  // Best-effort en after() para no demorar la respuesta del panel. Todo lo que el closure necesita se
+  // captura ANTES en consts. Si el mail falla se loguea y la baja NO se rompe: los turnos ya quedaron
+  // cancelados.
   const clientEmail = abono.clients?.email?.trim() || ''
   if (clientEmail) {
     const businessId = business.id as string

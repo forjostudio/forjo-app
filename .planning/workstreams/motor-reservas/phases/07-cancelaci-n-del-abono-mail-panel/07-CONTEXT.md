@@ -71,10 +71,29 @@ del abono, ni nada del cobro / flujo pagá-o-liberá (v0.25).
   dueño. **NUNCA** un mail por turno cancelado (cancelar 7 turnos ≠ 7 mails). Coherente con D-08 de
   Phase 6 (un mail al crear, no uno por turno generado). Template nuevo en `lib/email.ts` siguiendo
   el patrón de `sendAbonoConfirmation` / `sendClientCancelEmail` (branding por tenant, `resolveSender`).
+  - **ENMENDADA 2026-07-22** — el aviso al dueño es un **recibo de algo que le OCURRIÓ**, no de algo
+    que él ejecutó: por la vía del panel la baja la ejecuta él mismo, así que avisarle sería
+    redundante. Queda por vía: **cliente** (link público) → mail al cliente **+** aviso al dueño;
+    **dueño** (panel) → **solo** mail al cliente. Lo que sigue **LOCKED e intacto** es el
+    anti-avalancha: UN mail por baja, NUNCA uno por turno cancelado — la enmienda solo precisa el
+    destinatario según la vía. Origen: UAT de la fase, test 11 (`07-UAT.md`, sección `## Gaps`,
+    entrada `resolved_by_decision`) + decisión del usuario del 2026-07-22. El **CÓDIGO no cambia**:
+    ya hace exactamente esto. La enmienda ALINEA D-14 con **D-13**, que ya decía "cuando el
+    **cliente** da de baja, se manda mail a `notification_email`" — D-13 nunca prometió el aviso al
+    dueño por la vía del panel.
 - **D-15 (baja por el dueño → mail al cliente SIEMPRE):** Cuando el dueño da de baja desde el panel,
   el cliente **siempre** recibe el mail de baja de serie (si tiene email cargado). Sin checkbox
   opt-in: el cliente tenía un fijo semanal reservado y que desaparezca sin aviso es peor que un mail
   de más. Esto mantiene las dos vías 100% consistentes también en notificaciones.
+  - **ENMENDADA 2026-07-22** — se cae la afirmación de **paridad total de notificaciones** entre las
+    dos vías; lo que sigue **en pie** es el núcleo de D-15: el cliente recibe SIEMPRE su mail cuando
+    el dueño da de baja (si tiene email cargado, sin opt-in). Criterio: el aviso al dueño es un
+    recibo de algo que le OCURRIÓ, y por el panel la baja la ejecuta él mismo, así que avisarle sería
+    redundante. Por vía: **cliente** → mail al cliente **+** aviso al dueño; **dueño** → **solo** mail
+    al cliente. Origen: UAT de la fase, test 11 (`07-UAT.md`, sección `## Gaps`, entrada
+    `resolved_by_decision`) + decisión del usuario del 2026-07-22. El **CÓDIGO no cambia**: ya hace
+    lo correcto. La enmienda ALINEA D-15 con **D-13**, que acotaba el aviso al dueño a la vía del
+    cliente.
 - **D-16 (`cancelUrl` del mail de alta):** `sendAbonoConfirmation` ya acepta `cancelUrl` (opcional,
   sin uso en v0.24). Esta fase lo **llena** en `app/api/abonos/create/route.ts` con la URL de la
   ruta de D-10, y el template renderiza el botón de "cancelar suscripción".
