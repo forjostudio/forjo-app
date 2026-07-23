@@ -54,25 +54,12 @@ function LocationInner({
         </h2>
       </div>
 
-      {/* 2-col editorial (mock `.frj-loc` 1.1fr/0.9fr): info-rows | mapa. Stack en mobile. */}
-      <div className="grid grid-cols-1 items-start gap-[clamp(24px,4cqw,48px)] md:grid-cols-[1.1fr_0.9fr] md:gap-[clamp(40px,6cqw,80px)]">
-        {/* Columna de info-rows (label mono uppercase + value), separadas por hairline. */}
-        <div>
-          {visibleLocations.map((loc) => (
-            <div
-              key={loc.id}
-              className="flex gap-[14px] border-b border-[color:var(--frj-hair)] py-[clamp(14px,2cqw,20px)] first:border-t"
-            >
-              <span className="min-w-[88px] flex-shrink-0 pt-[2px] font-[family-name:var(--frj-font-mono)] text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                {multi ? loc.name : 'Dirección'}
-              </span>
-              <span className="text-[clamp(14px,1.7cqw,18px)] leading-[1.45]">
-                {loc.address}
-              </span>
-            </div>
-          ))}
-        </div>
-
+      {/* Layout de una sola columna: mapa a lo ancho ARRIBA + dirección(es) escritas DEBAJO.
+          Antes era 2-col (dirección | mapa 0.9fr): cuando la sección va combinada con Hours
+          (media página) y la dirección no se muestra, el mapa quedaba flotando chiquito. El
+          `max-w-2xl` acota el ancho en el caso full-width (Location sola) para que no quede un
+          mapa enorme; en el combinado (media página) llena la columna. */}
+      <div className="flex max-w-2xl flex-col gap-[clamp(20px,3cqw,32px)]">
         {/* MAPA DE FALLBACK PREMIUM (D81-05): campo decorativo con gradiente + grid-lines + pin.
             aspect 16/11 reservado (CLS-safe). Decorativo → aria-hidden. Si hay map_url, enlace
             seguro superpuesto. NUNCA un bloque vacío. */}
@@ -100,6 +87,26 @@ function LocationInner({
             </a>
           )}
         </div>
+
+        {/* Dirección(es) escritas DEBAJO del mapa (solo si show_address está activo). Info-rows
+            con label mono uppercase + value, separadas por hairline. */}
+        {visibleLocations.length > 0 && (
+          <div>
+            {visibleLocations.map((loc) => (
+              <div
+                key={loc.id}
+                className="flex gap-[14px] border-b border-[color:var(--frj-hair)] py-[clamp(14px,2cqw,20px)] first:border-t"
+              >
+                <span className="min-w-[88px] flex-shrink-0 pt-[2px] font-[family-name:var(--frj-font-mono)] text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  {multi ? loc.name : 'Dirección'}
+                </span>
+                <span className="text-[clamp(14px,1.7cqw,18px)] leading-[1.45]">
+                  {loc.address}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   )
