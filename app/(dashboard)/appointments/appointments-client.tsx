@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Calendar } from '@/components/ui/calendar'
 import { Plus, Check, X, CheckCircle2, Phone, Mail, Trash2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -29,6 +30,26 @@ const STATUS_COLORS: Record<string, string> = {
   confirmed: 'bg-green-500/20 text-green-400 border-green-500/30',
   cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
   completed: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+}
+
+// Rango de fechas (strings 'yyyy-MM-dd') para los presets del filtro, relativos a `ref`.
+// La comparación luego es lexicográfica sobre strings ISO (= comparación cronológica),
+// igual patrón que ya usa el filtro con `a.date < today`. Semana = lunes a domingo.
+function dateRangeFor(mode: 'today' | 'week' | 'month', ref: Date): { from: string; to: string } {
+  if (mode === 'today') {
+    const d = format(ref, 'yyyy-MM-dd')
+    return { from: d, to: d }
+  }
+  if (mode === 'week') {
+    return {
+      from: format(startOfWeek(ref, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+      to: format(endOfWeek(ref, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+    }
+  }
+  return {
+    from: format(startOfMonth(ref), 'yyyy-MM-dd'),
+    to: format(endOfMonth(ref), 'yyyy-MM-dd'),
+  }
 }
 
 // Pill de estado y botones de acción de fila — componentes a nivel módulo (no se definen en
@@ -88,6 +109,9 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   const supabase = createClient()
   const [appointments, setAppointments] = useState(initialAppointments)
   const [filterDate, setFilterDate] = useState('')
+  const [dateMode, setDateMode] = useState<'none' | 'today' | 'week' | 'month' | 'custom'>('none')
+  const [dateOpen, setDateOpen] = useState(false)
+  const [calView, setCalView] = useState(false)
   const [filterPro, setFilterPro] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [tab, setTab] = useState<'proximos' | 'pasados' | 'todos'>('proximos')
@@ -103,7 +127,12 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   const filtered = appointments.filter(a => {
     if (tab === 'proximos' && (a.date < today || a.status === 'cancelled')) return false
     if (tab === 'pasados' && a.date >= today) return false
-    if (filterDate && a.date !== filterDate) return false
+    if (dateMode === 'custom') {
+      if (filterDate && a.date !== filterDate) return false
+    } else if (dateMode !== 'none') {
+      const r = dateRangeFor(dateMode, new Date())
+      if (a.date < r.from || a.date > r.to) return false
+    }
     if (filterPro !== 'all' && a.professional_id !== filterPro) return false
     if (filterStatus !== 'all' && a.status !== filterStatus) return false
     return true
