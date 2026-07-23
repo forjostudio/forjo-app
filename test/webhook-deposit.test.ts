@@ -50,7 +50,7 @@ vi.mock('@/lib/email', () => ({
   sendConfirmationEmail: vi.fn(),
   sendAdminNotification: vi.fn(),
   // Helper puro de branding (no toca red); acá no se asiertan colores/fuentes, stub inocuo.
-  emailBrandInputs: () => ({ palette: null, font: null, primaryOverride: null }),
+  emailBrandInputs: () => ({ palette: null, theme: null, font: null, primaryOverride: null }),
 }))
 vi.mock('@/lib/google-calendar', () => ({
   createCalendarEvent: vi.fn(),
