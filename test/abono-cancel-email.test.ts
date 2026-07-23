@@ -26,7 +26,7 @@ const BASE = {
   lastDate: '2026-09-15',
   businessName: 'Peluquería Test',
   businessSlug: 'peluqueria-test',
-  primaryColor: '#123456',
+  primaryOverride: '#123456',
   logoUrl: null,
   whatsapp: null,
   resendApiKey: 're_test_key',

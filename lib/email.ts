@@ -1,4 +1,86 @@
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
+import { onAccentText } from '@/lib/contrast'
+import { isSafeColor, resolveLandingTheme } from '@/lib/landing/theme'
+import type { LandingTheme } from '@/lib/landing/schema'
+
+// ── Branding del mail: color + fuente desde la MISMA fuente de verdad que la página pública ────────
+// Antes el acento salía de `businesses.primary_color` (un hex huérfano que el dueño no edita) y la
+// fuente estaba clavada. Ahora los mails espejan la precedencia de la página de reservas
+// (override del landing → paleta del negocio) vía brandEmail + emailBrandInputs.
+
+// Mapa PALETA → hex CLARO (variante light de globals.css, líneas 148-161). Literales fijos:
+// es la barrera anti style-injection (T-wxt-01) — este valor cruza a atributos style= del HTML,
+// así que NUNCA puede venir crudo de la DB. El mail va SIEMPRE sobre fondo claro.
+// Solo cubre las 5 paletas del theme forjo; una paleta de otro theme (modern/spa/cyber) no está
+// acá y cae al default rojo (limitación aceptada de esta iteración; la tabla se extiende a mano).
+const EMAIL_PALETTE_HEX: Record<string, string> = {
+  red: '#d94a2b',
+  blue: '#2a5fa5',
+  yellow: '#c8901a',
+  green: '#2f8a5b',
+  ink: '#1a1714',
+}
+
+// Mapa FONT id → familia de títulos + segmento fijo de la URL de Google Fonts (allowlist, T-wxt-02).
+// La URL SOLO se arma desde `googleFamily` (literal de este mapa); jamás desde el valor crudo de
+// `businesses.font`. Un id fuera de este mapa ('auto', null, desconocido) → sin <link>, fallback.
+const EMAIL_HEADING_FONT: Record<string, { googleFamily: string; familyStack: string }> = {
+  geometrica: { googleFamily: 'Plus+Jakarta+Sans', familyStack: "'Plus Jakarta Sans',Arial,sans-serif" },
+  bauhaus: { googleFamily: 'Archivo', familyStack: "'Archivo',Arial,sans-serif" },
+  elegante: { googleFamily: 'Cormorant+Garamond', familyStack: "'Cormorant Garamond',Georgia,serif" },
+  tech: { googleFamily: 'Orbitron', familyStack: "'Orbitron',Arial,sans-serif" },
+  suave: { googleFamily: 'Sora', familyStack: "'Sora',Arial,sans-serif" },
+}
+
+const EMAIL_DEFAULT_HEADING = "'Helvetica Neue',Arial,sans-serif"
+
+// Tokens de marca puros para un mail (unit-testeable). NO lee la DB: recibe ya resuelto el
+// palette/font/override (ver emailBrandInputs).
+export function brandEmail({
+  palette,
+  font,
+  primaryOverride,
+}: {
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+}): { accent: string; accentText: string; accentTextMuted: string; fontLink: string; headingFontFamily: string } {
+  // accent: un override REVALIDADO por isSafeColor (defensa en profundidad) gana; si no, el hex del
+  // mapa por paleta; si la paleta no está en el mapa o es null → rojo Forjo. Nunca un valor crudo.
+  const accent = primaryOverride && isSafeColor(primaryOverride)
+    ? primaryOverride
+    : EMAIL_PALETTE_HEX[palette ?? ''] ?? '#d94a2b'
+  const accentText = onAccentText(accent)
+  // Variante translúcida del texto de contraste para subtítulos/footers (menor jerarquía).
+  const accentTextMuted = accentText === '#ffffff' ? 'rgba(255,255,255,.7)' : 'rgba(26,23,20,.6)'
+
+  // Fuente de títulos por allowlist. `font` desconocido/'auto'/null → sin <link> y fallback seguro.
+  const fontDef = font ? EMAIL_HEADING_FONT[font] : undefined
+  let fontLink = ''
+  let headingFontFamily = EMAIL_DEFAULT_HEADING
+  if (fontDef) {
+    const { googleFamily, familyStack } = fontDef
+    // La URL interpola SOLO googleFamily (literal del mapa), NUNCA el argumento `font` crudo.
+    fontLink = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${googleFamily}:wght@400;600;700;800&display=swap"/>`
+    headingFontFamily = familyStack
+  }
+
+  return { accent, accentText, accentTextMuted, fontLink, headingFontFamily }
+}
+
+// Fila de negocio → inputs de brandEmail, ESPEJO EXACTO de app/[slug]/layout.tsx: el override del
+// landing pisa a la paleta del negocio (misma precedencia que ve la página pública). A PROPÓSITO
+// NO lee primary_color: ese campo huérfano deja de ser fuente de color del mail (T-wxt-04).
+export function emailBrandInputs(row: {
+  palette?: string | null
+  theme?: string | null
+  font?: string | null
+  landing_config?: unknown
+}): { palette: string; font: string; primaryOverride: string | null } {
+  const landingTheme = (row.landing_config as { theme?: LandingTheme } | null)?.theme
+  const t = resolveLandingTheme(landingTheme, { theme: row.theme, palette: row.palette, font: row.font })
+  return { palette: t.palette, font: t.font, primaryOverride: t.primary ?? null }
+}
 
 // Decide con qué key y qué "from" mandar, según la config del negocio:
 // - Key propia del negocio → hay que mandar desde SU dominio verificado (resend_from).
@@ -62,19 +144,31 @@ function fmtPrice(n: number) {
 // Header del email: logo + nombre del negocio JUNTOS cuando hay logo (antes mostraba solo
 // el logo). Sin logo, el nombre en grande + subtítulo (fallback de siempre). El nombre
 // siempre presente para reforzar la marca. Compartido por confirmación y cancelaciones.
-function renderEmailHeader(businessName: string, logoUrl?: string | null): string {
+// `opts` trae el color de contraste y la fuente de títulos ya resueltos por brandEmail (mismos para
+// todos los templates). El nombre del negocio se pinta con el texto de contraste sobre el acento
+// (legible en cualquier paleta) y con la fuente de títulos del negocio.
+function renderEmailHeader(
+  businessName: string,
+  logoUrl: string | null | undefined,
+  opts: { fontFamily: string; textColor: string; mutedColor: string },
+): string {
   const safeName = businessName || 'Forjo Gestión'
+  // Nombre local que NO empieza con 'font'/'palette'/'primary_color': el grep de seguridad de la
+  // Task 3 rechaza `${font...}` en un style= y `${opts.fontFamily}` lo matchearía por prefijo.
+  const headingFont = opts.fontFamily
+  const textColor = opts.textColor
+  const mutedColor = opts.mutedColor
   // Escapado ANTES de interpolar (WR-02): este header lo comparten TODOS los templates del módulo,
   // así que el control queda en un solo lugar. Se escapa el resultado de `toUpperCase()`, no al revés:
   // mayusculizar una entidad ya escapada produciría `&AMP;`.
   if (logoUrl) {
     return `<table cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;"><tr>
         <td style="padding-right:12px;vertical-align:middle;"><img src="${esc(logoUrl)}" alt="${esc(safeName)}" height="44" style="max-height:44px;border-radius:8px;display:block;"/></td>
-        <td style="vertical-align:middle;"><div style="font-size:20px;font-weight:800;letter-spacing:1px;color:#ffffff;">${esc(safeName.toUpperCase())}</div></td>
+        <td style="vertical-align:middle;"><div style="font-size:20px;font-weight:800;letter-spacing:1px;color:${textColor};font-family:${headingFont};">${esc(safeName.toUpperCase())}</div></td>
       </tr></table>`
   }
-  return `<div style="font-size:22px;font-weight:800;letter-spacing:2px;color:#ffffff;">${esc(safeName.toUpperCase())}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:4px;letter-spacing:1px;text-transform:uppercase;">Gestión de turnos</div>`
+  return `<div style="font-size:22px;font-weight:800;letter-spacing:2px;color:${textColor};font-family:${headingFont};">${esc(safeName.toUpperCase())}</div>
+        <div style="font-size:12px;color:${mutedColor};margin-top:4px;letter-spacing:1px;text-transform:uppercase;">Gestión de turnos</div>`
 }
 
 // POST crudo a Resend. Tira error con el detalle si Resend responde !ok (para que el
@@ -110,6 +204,9 @@ export async function sendConfirmationEmail({
   time,
   businessName,
   businessSlug,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   whatsapp,
@@ -126,6 +223,10 @@ export async function sendConfirmationEmail({
   time: string
   businessName: string
   businessSlug: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
@@ -140,9 +241,10 @@ export async function sendConfirmationEmail({
   const hora = time.slice(0, 5)
   const saldo = price - deposit
 
-  // Branding parametrizado: el acento toma el color del negocio (a futuro, la paleta del
-  // theme) sin reescribir el template. Fallback al rojo Forjo.
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  // Branding parametrizado desde la MISMA fuente de verdad que la página pública (paleta/override
+  // del landing) + fuente de títulos + texto de contraste legible en cualquier paleta.
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const cancelUrl = cancelToken ? `${baseUrl}/cancelar/${cancelToken}` : ''
   // Normaliza por las dudas (idempotente): cubre valores viejos sin normalizar. Si no es
@@ -150,11 +252,11 @@ export async function sendConfirmationEmail({
   const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
   // Header: logo + nombre del negocio juntos (o solo el nombre si no hay logo).
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -165,9 +267,9 @@ export async function sendConfirmationEmail({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">¡Tu turno está confirmado!</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">¡Tu turno está confirmado!</p>
         <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, aquí está el resumen de tu reserva en <strong>${businessName}</strong>.
+          Hola <strong>${esc(clientName)}</strong>, aquí está el resumen de tu reserva en <strong>${esc(businessName)}</strong>.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -178,7 +280,7 @@ export async function sendConfirmationEmail({
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
@@ -208,13 +310,13 @@ export async function sendConfirmationEmail({
 
         <p style="font-size:13px;color:#777;line-height:1.7;margin:0 0 16px;">¿Necesitás cancelar o reprogramar tu turno?</p>
         ${cancelUrl ? `<table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
-          <a href="${cancelUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Cancelar turno</a>
+          <a href="${cancelUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:${brand.accentText};text-decoration:none;border-radius:8px;">Cancelar turno</a>
         </td></tr></table>` : ''}
         ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión · forjo.studio/${esc(businessSlug)}</div>
       </td></tr>
 
     </table>
@@ -247,6 +349,9 @@ export async function sendManualBookingConfirmation({
   time,
   businessName,
   businessSlug,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   whatsapp,
@@ -261,6 +366,10 @@ export async function sendManualBookingConfirmation({
   time: string
   businessName: string
   businessSlug: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
@@ -275,19 +384,20 @@ export async function sendManualBookingConfirmation({
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
 
-  // Branding parametrizado idéntico al resto de los mails: acento = color del negocio, fallback rojo Forjo.
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  // Branding parametrizado idéntico al resto de los mails (paleta/override del landing + fuente).
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   // Botón de cancelar SOLO si hay token (D-04): sin token, se omite en vez de romper el envío.
   const cancelUrl = cancelToken ? `${baseUrl}/cancelar/${cancelToken}` : ''
   // Normaliza por las dudas (idempotente): si no es un número usable, se omite el link.
   const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -298,9 +408,9 @@ export async function sendManualBookingConfirmation({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">¡Tu turno está confirmado!</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">¡Tu turno está confirmado!</p>
         <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, aquí está el resumen de tu reserva en <strong>${businessName}</strong>.
+          Hola <strong>${esc(clientName)}</strong>, aquí está el resumen de tu reserva en <strong>${esc(businessName)}</strong>.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -311,7 +421,7 @@ export async function sendManualBookingConfirmation({
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
@@ -327,13 +437,13 @@ export async function sendManualBookingConfirmation({
 
         ${cancelUrl ? `<p style="font-size:13px;color:#777;line-height:1.7;margin:0 0 16px;">¿Necesitás cancelar o reprogramar tu turno?</p>
         <table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
-          <a href="${cancelUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Cancelar turno</a>
+          <a href="${cancelUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:${brand.accentText};text-decoration:none;border-radius:8px;">Cancelar turno</a>
         </td></tr></table>` : ''}
         ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión · forjo.studio/${esc(businessSlug)}</div>
       </td></tr>
 
     </table>
@@ -369,6 +479,9 @@ export async function sendAbonoConfirmation({
   time,
   businessName,
   businessSlug,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   whatsapp,
@@ -383,6 +496,10 @@ export async function sendAbonoConfirmation({
   time: string
   businessName: string
   businessSlug: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
@@ -396,17 +513,18 @@ export async function sendAbonoConfirmation({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const hora = time.slice(0, 5)
 
-  // Branding parametrizado idéntico al resto de los mails: acento = color del negocio, fallback rojo Forjo.
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  // Branding parametrizado idéntico al resto de los mails (paleta/override del landing + fuente).
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
   const cancel = cancelUrl && cancelUrl.trim() ? cancelUrl.trim() : ''
   // Normaliza por las dudas (idempotente): si no es un número usable, se omite el link.
   const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -417,9 +535,9 @@ export async function sendAbonoConfirmation({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu turno fijo quedó agendado</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">Tu turno fijo quedó agendado</p>
         <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, <strong>${businessName}</strong> te reservó un turno fijo <strong>todas las semanas</strong>. Este es el horario que quedó guardado para vos.
+          Hola <strong>${esc(clientName)}</strong>, <strong>${esc(businessName)}</strong> te reservó un turno fijo <strong>todas las semanas</strong>. Este es el horario que quedó guardado para vos.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -430,7 +548,7 @@ export async function sendAbonoConfirmation({
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Se repite</td>
@@ -446,13 +564,13 @@ export async function sendAbonoConfirmation({
 
         <p style="font-size:13px;color:#777;line-height:1.7;margin:0;">Todas las semanas te vamos a esperar en ese mismo horario. Si algún día no vas a poder venir, avisanos y lo coordinamos.</p>
         ${cancel ? `<table cellpadding="0" cellspacing="0" style="margin:16px 0 0;"><tr><td style="border-radius:8px;background:${accent};">
-          <a href="${cancel}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Cancelar turno fijo</a>
+          <a href="${cancel}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:${brand.accentText};text-decoration:none;border-radius:8px;">Cancelar turno fijo</a>
         </td></tr></table>` : ''}
         ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión · forjo.studio/${esc(businessSlug)}</div>
       </td></tr>
 
     </table>
@@ -492,6 +610,9 @@ export async function sendAbonoCancelledEmail({
   lastDate,
   businessName,
   businessSlug,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   whatsapp,
@@ -509,19 +630,25 @@ export async function sendAbonoCancelledEmail({
   lastDate?: string | null // ISO 'yyyy-MM-dd' del último turno cancelado; sin dato → no se muestra
   businessName: string
   businessSlug: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
 }) {
-  // Mismo preámbulo que el resto de los templates del módulo (branding por tenant).
+  // Mismo preámbulo que el resto de los templates del módulo (branding por tenant: paleta/override
+  // del landing + fuente + texto de contraste). El escapado de clientName/businessName/rows YA está.
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const hora = time.slice(0, 5)
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
   const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const bookingUrl = `${baseUrl}/${businessSlug}`
 
@@ -554,7 +681,7 @@ export async function sendAbonoCancelledEmail({
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -565,7 +692,7 @@ export async function sendAbonoCancelledEmail({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu turno fijo fue dado de baja</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">Tu turno fijo fue dado de baja</p>
         <p style="font-size:15px;color:#555;margin:0 0 32px;line-height:1.6;">
           Hola <strong>${esc(clientName)}</strong>, tu turno fijo semanal en <strong>${esc(businessName)}</strong> se dio de baja. Ese horario ya no queda reservado para vos todas las semanas.
         </p>
@@ -583,13 +710,13 @@ ${rowsHtml}
 
         <p style="font-size:14px;color:#444;line-height:1.7;margin:0 0 18px;">Podés seguir reservando turnos sueltos cuando quieras.</p>
         <table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
-          <a href="${bookingUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Reservar un turno</a>
+          <a href="${esc(bookingUrl)}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:${brand.accentText};text-decoration:none;border-radius:8px;">Reservar un turno</a>
         </td></tr></table>
         ${waUrl ? `<p style="margin:14px 0 0;font-size:13px;"><a href="${waUrl}" style="color:#16a34a;font-weight:600;text-decoration:none;">Escribinos por WhatsApp →</a></p>` : ''}
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión · forjo.studio/${esc(businessSlug)}</div>
       </td></tr>
 
     </table>
@@ -629,6 +756,10 @@ export async function sendAbonoCancelledAdminNotification({
   cancelledCount,
   lastDate,
   businessName,
+  palette,
+  font,
+  primaryOverride,
+  primaryColor,
   logoUrl,
   resendApiKey,
   resendFrom,
@@ -643,12 +774,20 @@ export async function sendAbonoCancelledAdminNotification({
   cancelledCount: number
   lastDate?: string | null
   businessName?: string | null
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
+  primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
 }) {
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const hora = time.slice(0, 5)
+  // UNIFICACIÓN con los mails al cliente: el aviso al dueño deja de usar el header oscuro fijo
+  // #1a1714 y pasa a la marca del negocio (paleta/override + fuente + texto de contraste).
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
   const servicio = (service || '').trim()
   const ultimo = lastDate && lastDate.trim() ? fmtDate(lastDate.trim()) : ''
   const turnosLabel = cancelledCount === 1 ? '1 turno' : `${cancelledCount} turnos`
@@ -684,15 +823,15 @@ export async function sendAbonoCancelledAdminNotification({
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/></head>
+<head><meta charset="UTF-8"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
     <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
 
-      <tr><td style="background:#1a1714;padding:28px 36px;border-radius:12px 12px 0 0;text-align:center;">
-        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:10px;">${eyebrow}</div>
-        ${renderEmailHeader(businessName || '', logoUrl)}
+      <tr><td style="background:${brand.accent};padding:28px 36px;border-radius:12px 12px 0 0;text-align:center;">
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:${brand.accentTextMuted};margin-bottom:10px;">${eyebrow}</div>
+        ${renderEmailHeader(businessName || '', logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })}
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:32px 36px;">
@@ -700,7 +839,7 @@ export async function sendAbonoCancelledAdminNotification({
 
         <p style="font-size:14px;color:#555;margin:0 0 20px;line-height:1.6;">El cliente dio de baja su turno fijo desde el link del mail. El horario semanal quedó liberado.</p>
 
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid #1a1714;border-radius:0 8px 8px 0;margin-bottom:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${brand.accent};border-radius:0 8px 8px 0;margin-bottom:20px;">
           <tr><td style="padding:18px 20px;">
             <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:12px;">Turno fijo</div>
             <table width="100%" cellpadding="0" cellspacing="0">
@@ -719,8 +858,8 @@ ${rowsHtml}
         </table>
       </td></tr>
 
-      <tr><td style="background:#1a1714;padding:18px 36px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:#555;">Forjo Gestión · Panel de administración</div>
+      <tr><td style="background:${brand.accent};padding:18px 36px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Forjo Gestión · Panel de administración</div>
       </td></tr>
 
     </table>
@@ -751,6 +890,10 @@ export async function sendAdminNotification({
   date,
   time,
   businessName,
+  palette,
+  font,
+  primaryOverride,
+  primaryColor,
   logoUrl,
   resendApiKey,
   resendFrom,
@@ -767,6 +910,11 @@ export async function sendAdminNotification({
   date: string
   time: string
   businessName?: string | null
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
+  primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
@@ -777,6 +925,9 @@ export async function sendAdminNotification({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
+  // UNIFICACIÓN con los mails al cliente: el aviso al dueño deja de usar el header oscuro fijo
+  // #1a1714 y pasa a la marca del negocio (paleta/override + fuente + texto de contraste).
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
   const statusLabel = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Pendiente de pago' : '✅ Pago confirmado')
   const eyebrow = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Reserva pendiente' : '✅ Reserva confirmada')
   const badgeBg = cancelled ? '#fee2e2' : (pending ? '#fef3c7' : '#dcfce7')
@@ -791,27 +942,27 @@ export async function sendAdminNotification({
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/></head>
+<head><meta charset="UTF-8"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
     <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
 
-      <tr><td style="background:#1a1714;padding:28px 36px;border-radius:12px 12px 0 0;text-align:center;">
-        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:10px;">${eyebrow}</div>
-        ${renderEmailHeader(businessName || '', logoUrl)}
+      <tr><td style="background:${brand.accent};padding:28px 36px;border-radius:12px 12px 0 0;text-align:center;">
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:${brand.accentTextMuted};margin-bottom:10px;">${eyebrow}</div>
+        ${renderEmailHeader(businessName || '', logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })}
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:32px 36px;">
         <div style="display:inline-block;background:${badgeBg};color:${badgeColor};font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;margin-bottom:20px;">${statusLabel}</div>
 
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid #1a1714;border-radius:0 8px 8px 0;margin-bottom:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${brand.accent};border-radius:0 8px 8px 0;margin-bottom:20px;">
           <tr><td style="padding:18px 20px;">
             <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:12px;">Turno</div>
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:7px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:7px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:7px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:7px 0;border-bottom:1px solid #eee;">Fecha</td>
@@ -823,7 +974,7 @@ export async function sendAdminNotification({
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0 0;">Total</td>
-                <td style="font-size:18px;font-weight:900;color:#1a1714;padding:8px 0 0;text-align:right;">${fmtPrice(price)}${deposit > 0 ? ` <span style="font-size:12px;color:#16a34a;font-weight:600;">(seña: ${fmtPrice(deposit)})</span>` : ''}</td>
+                <td style="font-size:18px;font-weight:900;color:${brand.accent};padding:8px 0 0;text-align:right;">${fmtPrice(price)}${deposit > 0 ? ` <span style="font-size:12px;color:#16a34a;font-weight:600;">(seña: ${fmtPrice(deposit)})</span>` : ''}</td>
               </tr>
             </table>
           </td></tr>
@@ -832,15 +983,15 @@ export async function sendAdminNotification({
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f9f9;border-radius:8px;">
           <tr><td style="padding:16px 18px;">
             <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;">Cliente</div>
-            <div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">${clientName}</div>
-            ${waPhone ? `<div style="font-size:13px;margin-bottom:6px;"><a href="https://wa.me/${waPhone}" style="color:#16a34a;font-weight:600;text-decoration:none;">📱 ${clientPhone} — Abrir WhatsApp →</a></div>` : ''}
-            ${clientEmail ? `<div style="font-size:13px;color:#555;">✉️ ${clientEmail}</div>` : ''}
+            <div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">${esc(clientName)}</div>
+            ${waPhone ? `<div style="font-size:13px;margin-bottom:6px;"><a href="https://wa.me/${waPhone}" style="color:#16a34a;font-weight:600;text-decoration:none;">📱 ${esc(clientPhone)} — Abrir WhatsApp →</a></div>` : ''}
+            ${clientEmail ? `<div style="font-size:13px;color:#555;">✉️ ${esc(clientEmail)}</div>` : ''}
           </td></tr>
         </table>
       </td></tr>
 
-      <tr><td style="background:#1a1714;padding:18px 36px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:#555;">Forjo Gestión · Panel de administración</div>
+      <tr><td style="background:${brand.accent};padding:18px 36px;border-radius:0 0 12px 12px;text-align:center;">
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Forjo Gestión · Panel de administración</div>
       </td></tr>
 
     </table>
@@ -870,6 +1021,9 @@ export async function sendBusinessCancelEmail({
   time,
   businessName,
   businessSlug,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   whatsapp,
@@ -885,6 +1039,10 @@ export async function sendBusinessCancelEmail({
   time: string
   businessName: string
   businessSlug: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
@@ -896,8 +1054,9 @@ export async function sendBusinessCancelEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
   // Solo mencionamos la devolución si efectivamente hubo seña abonada.
@@ -905,7 +1064,7 @@ export async function sendBusinessCancelEmail({
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -916,9 +1075,9 @@ export async function sendBusinessCancelEmail({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu turno fue cancelado</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">Tu turno fue cancelado</p>
         <p style="font-size:15px;color:#555;margin:0 0 28px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, lamentamos avisarte que <strong>${businessName}</strong> canceló el siguiente turno.
+          Hola <strong>${esc(clientName)}</strong>, lamentamos avisarte que <strong>${esc(businessName)}</strong> canceló el siguiente turno.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -929,7 +1088,7 @@ export async function sendBusinessCancelEmail({
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
@@ -956,7 +1115,7 @@ export async function sendBusinessCancelEmail({
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión · forjo.studio/${esc(businessSlug)}</div>
       </td></tr>
 
     </table>
@@ -986,6 +1145,9 @@ export async function sendClientCancelEmail({
   time,
   businessName,
   businessSlug,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   resendApiKey,
@@ -998,6 +1160,10 @@ export async function sendClientCancelEmail({
   time: string
   businessName: string
   businessSlug: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
@@ -1006,14 +1172,15 @@ export async function sendClientCancelEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const bookingUrl = `${baseUrl}/${businessSlug}`
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -1024,9 +1191,9 @@ export async function sendClientCancelEmail({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Turno cancelado</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">Turno cancelado</p>
         <p style="font-size:15px;color:#555;margin:0 0 28px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, confirmamos que cancelaste tu turno en <strong>${businessName}</strong>. El horario quedó liberado.
+          Hola <strong>${esc(clientName)}</strong>, confirmamos que cancelaste tu turno en <strong>${esc(businessName)}</strong>. El horario quedó liberado.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -1037,7 +1204,7 @@ export async function sendClientCancelEmail({
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
@@ -1053,12 +1220,12 @@ export async function sendClientCancelEmail({
 
         <p style="font-size:14px;color:#444;line-height:1.7;margin:0 0 18px;">¿Cambió tu plan? Podés sacar un nuevo turno cuando quieras.</p>
         <table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
-          <a href="${bookingUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Reservar otro turno</a>
+          <a href="${esc(bookingUrl)}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:${brand.accentText};text-decoration:none;border-radius:8px;">Reservar otro turno</a>
         </td></tr></table>
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión · forjo.studio/${esc(businessSlug)}</div>
       </td></tr>
 
     </table>
@@ -1087,6 +1254,9 @@ export async function sendPendingPaymentEmail({
   date,
   time,
   businessName,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   depositAmount,
@@ -1101,6 +1271,10 @@ export async function sendPendingPaymentEmail({
   date: string
   time: string
   businessName: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   depositAmount: number
@@ -1112,8 +1286,9 @@ export async function sendPendingPaymentEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const payUrl = `${baseUrl}/api/payment/retry/${token}`
   const cancelUrl = `${baseUrl}/cancelar/${token}`
@@ -1121,7 +1296,7 @@ export async function sendPendingPaymentEmail({
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -1132,9 +1307,9 @@ export async function sendPendingPaymentEmail({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Falta pagar la seña</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">Falta pagar la seña</p>
         <p style="font-size:15px;color:#555;margin:0 0 28px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, tu turno en <strong>${businessName}</strong> quedó reservado pero <strong>todavía no está confirmado</strong>: falta abonar la seña.
+          Hola <strong>${esc(clientName)}</strong>, tu turno en <strong>${esc(businessName)}</strong> quedó reservado pero <strong>todavía no está confirmado</strong>: falta abonar la seña.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -1142,7 +1317,7 @@ export async function sendPendingPaymentEmail({
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
@@ -1161,7 +1336,7 @@ export async function sendPendingPaymentEmail({
         </table>
 
         <table cellpadding="0" cellspacing="0" style="margin:0 0 14px;"><tr><td style="border-radius:8px;background:${accent};">
-          <a href="${payUrl}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Completar pago</a>
+          <a href="${payUrl}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:${brand.accentText};text-decoration:none;border-radius:8px;">Completar pago</a>
         </td></tr></table>
 
         <p style="font-size:13px;color:#777;line-height:1.7;margin:0 0 16px;">
@@ -1171,7 +1346,7 @@ export async function sendPendingPaymentEmail({
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión</div>
       </td></tr>
 
     </table>
@@ -1201,6 +1376,9 @@ export async function sendExpiredHoldEmail({
   time,
   businessName,
   businessSlug,
+  palette,
+  font,
+  primaryOverride,
   primaryColor,
   logoUrl,
   resendApiKey,
@@ -1213,6 +1391,10 @@ export async function sendExpiredHoldEmail({
   time: string
   businessName: string
   businessSlug: string
+  palette?: string | null
+  font?: string | null
+  primaryOverride?: string | null
+  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
   primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
@@ -1221,14 +1403,15 @@ export async function sendExpiredHoldEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const accent = (primaryColor && primaryColor.trim()) || '#d94a2b'
-  const headerInner = renderEmailHeader(businessName, logoUrl)
+  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const accent = brand.accent
+  const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const bookingUrl = `${baseUrl}/${businessSlug}`
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>${brand.fontLink}</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
   <tr><td align="center">
@@ -1239,9 +1422,9 @@ export async function sendExpiredHoldEmail({
       </td></tr>
 
       <tr><td style="background:#ffffff;padding:40px 40px 32px;">
-        <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">Tu reserva se canceló</p>
+        <p style="font-size:22px;font-weight:700;color:#1a1a1a;font-family:${brand.headingFontFamily};margin:0 0 8px;">Tu reserva se canceló</p>
         <p style="font-size:15px;color:#555;margin:0 0 28px;line-height:1.6;">
-          Hola <strong>${clientName}</strong>, tu reserva en <strong>${businessName}</strong> se canceló automáticamente porque no se completó el pago de la seña dentro del plazo. El horario quedó liberado.
+          Hola <strong>${esc(clientName)}</strong>, tu reserva en <strong>${esc(businessName)}</strong> se canceló automáticamente porque no se completó el pago de la seña dentro del plazo. El horario quedó liberado.
         </p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-left:4px solid ${accent};border-radius:0 8px 8px 0;margin-bottom:24px;">
@@ -1252,7 +1435,7 @@ export async function sendExpiredHoldEmail({
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
-                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${service}</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
@@ -1268,12 +1451,12 @@ export async function sendExpiredHoldEmail({
 
         <p style="font-size:14px;color:#444;line-height:1.7;margin:0 0 18px;">¿Lo querés intentar de nuevo? Reservá otro turno y completá la seña a tiempo.</p>
         <table cellpadding="0" cellspacing="0" style="margin:0;"><tr><td style="border-radius:8px;background:${accent};">
-          <a href="${bookingUrl}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Reservar otro turno</a>
+          <a href="${esc(bookingUrl)}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:${brand.accentText};text-decoration:none;border-radius:8px;">Reservar otro turno</a>
         </td></tr></table>
       </td></tr>
 
       <tr><td style="background:${accent};padding:20px 40px;border-radius:0 0 12px 12px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,.7);">Enviado por Forjo Gestión · forjo.studio/${businessSlug}</div>
+        <div style="font-size:11px;color:${brand.accentTextMuted};">Enviado por Forjo Gestión · forjo.studio/${esc(businessSlug)}</div>
       </td></tr>
 
     </table>
