@@ -25,8 +25,8 @@ import type { Location as LocationType } from '@/lib/types'
 // número fantasma (eso lo aporta el wrapper combinado). Sola → variant="full" (como hoy).
 
 // Predicado público para que el renderer decida combinar location+hours sin duplicar lógica.
-export function isLocationVisible(data: unknown, locations: LocationType[]): boolean {
-  return !shouldHideLocation(locationData.parse(data ?? {}), locations)
+export function isLocationVisible(data: unknown, locations: LocationType[], businessAddress?: string | null): boolean {
+  return !shouldHideLocation(locationData.parse(data ?? {}), locations, businessAddress)
 }
 
 // Bloque interno (head + 2-col info/mapa). Sin <section> ni padding de sección: reutilizable
@@ -34,15 +34,22 @@ export function isLocationVisible(data: unknown, locations: LocationType[]): boo
 function LocationInner({
   data,
   locations,
+  businessAddress,
 }: {
   data: unknown
   locations: LocationType[]
+  businessAddress?: string | null
 }) {
   const d = locationData.parse(data ?? {})
   // Dirección visible solo si el config lo habilita (show_address) y la sede tiene address.
   const showAddress = !!d.show_address
   const visibleLocations = showAddress ? locations.filter((l) => !!l.address) : []
   const multi = visibleLocations.length > 1
+  // Fallback single-location: si NO hay direcciones a nivel sede pero el negocio tiene
+  // businesses.address (el caso común: una barbería/salón con una sola dirección), mostramos esa.
+  // Mismo criterio que la página de confirmación de turno (locationAddress || business.address).
+  const fallbackAddress =
+    showAddress && visibleLocations.length === 0 && businessAddress?.trim() ? businessAddress.trim() : null
 
   return (
     <>
@@ -89,8 +96,9 @@ function LocationInner({
         </div>
 
         {/* Dirección(es) escritas DEBAJO del mapa (solo si show_address está activo). Info-rows
-            con label mono uppercase + value, separadas por hairline. */}
-        {visibleLocations.length > 0 && (
+            con label mono uppercase + value, separadas por hairline. Con el fallback single-location
+            (businesses.address) cuando ninguna sede tiene dirección propia. */}
+        {(visibleLocations.length > 0 || fallbackAddress) && (
           <div>
             {visibleLocations.map((loc) => (
               <div
@@ -105,6 +113,16 @@ function LocationInner({
                 </span>
               </div>
             ))}
+            {fallbackAddress && (
+              <div className="flex gap-[14px] border-b border-[color:var(--frj-hair)] py-[clamp(14px,2cqw,20px)] first:border-t">
+                <span className="min-w-[88px] flex-shrink-0 pt-[2px] font-[family-name:var(--frj-font-mono)] text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Dirección
+                </span>
+                <span className="text-[clamp(14px,1.7cqw,18px)] leading-[1.45]">
+                  {fallbackAddress}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -118,21 +136,24 @@ export { LocationInner }
 export function Location({
   data,
   locations,
+  businessAddress,
   index,
 }: {
   data: unknown
   locations: LocationType[]
+  businessAddress?: string | null
   index?: number | string
 }) {
   const d = locationData.parse(data ?? {})
-  // shouldHideLocation(data, locations): oculta si no hay map_url NI address visible.
-  if (shouldHideLocation(d, locations)) return null
+  // shouldHideLocation(data, locations, businessAddress): oculta si no hay map_url NI address visible
+  // (a nivel sede o del negocio).
+  if (shouldHideLocation(d, locations, businessAddress)) return null
 
   // Full-width (sola): su propia <section> + número fantasma secuencial (del renderer).
   return (
     <section className="relative px-[clamp(20px,5cqw,64px)] py-[clamp(56px,11cqw,150px)]">
       {index != null && <GhostIndex n={index} />}
-      <LocationInner data={data} locations={locations} />
+      <LocationInner data={data} locations={locations} businessAddress={businessAddress} />
     </section>
   )
 }

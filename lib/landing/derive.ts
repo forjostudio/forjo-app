@@ -87,10 +87,13 @@ export function shouldHideHours(timeBlocks: TimeBlock[]): boolean {
 export function shouldHideLocation(
   data: { map_url?: string; show_address?: boolean },
   locations: Location[],
+  // Fallback a la dirección del negocio (single-location: la dirección vive en businesses.address,
+  // no en una fila de locations). Mismo patrón que la página de confirmación de turno.
+  businessAddress?: string | null,
 ): boolean {
   if (data.map_url) return false
   const hasVisibleAddress =
-    !!data.show_address && locations.some((l) => !!l.address)
+    !!data.show_address && (locations.some((l) => !!l.address) || !!businessAddress?.trim())
   return !hasVisibleAddress
 }
 

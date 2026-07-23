@@ -114,7 +114,7 @@ export function LandingRenderer({ config, business, services, professionals, tim
   // Visibilidad de location/hours para decidir el combinado (predicados puros, sin React/Supabase).
   const locVisible =
     sections.some((s) => s.type === 'location') &&
-    isLocationVisible(dataOf('location'), locations as unknown as LocationType[])
+    isLocationVisible(dataOf('location'), locations as unknown as LocationType[], business.address)
   const hrsVisible =
     sections.some((s) => s.type === 'hours') && isHoursVisible(timeBlocks)
   const combine = locVisible && hrsVisible
@@ -164,7 +164,7 @@ export function LandingRenderer({ config, business, services, professionals, tim
         {index != null && <GhostIndex n={index} />}
         <div className="grid grid-cols-1 items-start gap-[clamp(40px,7cqw,80px)] md:grid-cols-2">
           <div>
-            <LocationInner data={dataOf('location')} locations={locations as unknown as LocationType[]} />
+            <LocationInner data={dataOf('location')} locations={locations as unknown as LocationType[]} businessAddress={business.address} />
           </div>
           <div>
             <HoursInner
@@ -250,7 +250,7 @@ export function LandingRenderer({ config, business, services, professionals, tim
             // Sola: full-width como hoy (respeta shouldHide). locations llega acotado. Reveal wrapper.
             return (
               <Reveal key={i}>
-                <Location data={s.data} locations={locations as unknown as LocationType[]} index={index} />
+                <Location data={s.data} locations={locations as unknown as LocationType[]} businessAddress={business.address} index={index} />
               </Reveal>
             )
           case 'hours':
