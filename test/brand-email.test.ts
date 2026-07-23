@@ -20,8 +20,31 @@ describe('brandEmail — mapa de color por paleta', () => {
   it('paleta null / desconocida cae al rojo Forjo por defecto', () => {
     expect(brandEmail({ palette: null }).accent).toBe('#d94a2b')
     expect(brandEmail({ palette: undefined }).accent).toBe('#d94a2b')
-    expect(brandEmail({ palette: 'indigo' }).accent).toBe('#d94a2b') // paleta de otro theme
+    expect(brandEmail({ palette: 'indigo' }).accent).toBe('#d94a2b') // paleta de otro theme SIN theme
     expect(brandEmail({}).accent).toBe('#d94a2b')
+  })
+})
+
+describe('brandEmail — color THEME-AWARE (themes no-forjo)', () => {
+  it('el acento sale de THEME_PALETTES según theme+palette, no del rojo Forjo', () => {
+    expect(brandEmail({ theme: 'cyber', palette: 'cyan' }).accent).toBe('#00e5ff')
+    expect(brandEmail({ theme: 'cyber', palette: 'amber' }).accent).toBe('#ffd23d')
+    expect(brandEmail({ theme: 'modern', palette: 'indigo' }).accent).toBe('#5b6ef5')
+    expect(brandEmail({ theme: 'spa', palette: 'sage' }).accent).toBe('#7e9b82')
+  })
+
+  it('theme forjo mantiene su color (cero regresión)', () => {
+    expect(brandEmail({ theme: 'forjo', palette: 'red' }).accent).toBe('#d94a2b')
+  })
+
+  it('theme/palette inválido cae al default del theme (allowlist, nunca crudo)', () => {
+    // theme desconocido → forjo; palette desconocida dentro del theme → default del theme.
+    expect(brandEmail({ theme: 'inexistente', palette: 'zzz' }).accent).toBe('#d94a2b')
+    expect(brandEmail({ theme: 'cyber', palette: 'zzz' }).accent).toBe('#00e5ff') // default cyber = cyan
+  })
+
+  it('el override válido sigue ganando sobre el color del theme', () => {
+    expect(brandEmail({ theme: 'cyber', palette: 'cyan', primaryOverride: '#abcdef' }).accent).toBe('#abcdef')
   })
 })
 
@@ -65,18 +88,24 @@ describe('brandEmail — fuente de títulos (allowlist)', () => {
     expect(brandEmail({ font: 'elegante' }).headingFontFamily).toContain('serif')
   })
 
-  it('auto / null / desconocido: sin link y con el fallback de siempre', () => {
-    for (const font of ['auto', null, undefined, 'inexistente']) {
-      const b = brandEmail({ font })
-      expect(b.fontLink).toBe('')
-      expect(b.headingFontFamily).toBe("'Helvetica Neue',Arial,sans-serif")
-    }
+  it('sin id de fuente explícito (auto/null/desconocido) resuelve la fuente del THEME', () => {
+    // font 'auto' + theme cyber → Orbitron (familia + link del allowlist del theme).
+    const cyber = brandEmail({ font: 'auto', theme: 'cyber' })
+    expect(cyber.headingFontFamily).toContain('Orbitron')
+    expect(cyber.fontLink).toContain('Orbitron')
+    // theme forjo + font auto → Archivo.
+    const forjo = brandEmail({ font: 'auto', theme: 'forjo' })
+    expect(forjo.headingFontFamily).toContain('Archivo')
+    expect(forjo.fontLink).toContain('Archivo')
+    // theme spa + font null → stack serif (Cormorant Garamond).
+    expect(brandEmail({ font: null, theme: 'spa' }).headingFontFamily).toContain('serif')
   })
 
   it('SEGURIDAD: un font desconocido nunca se interpola crudo en el link', () => {
     const evil = 'Orbitron:400");@import url(evil'
+    // Sin theme → forjo: el link se arma desde el allowlist del theme (Archivo), NUNCA del valor crudo.
     const b = brandEmail({ font: evil })
-    expect(b.fontLink).toBe('')
+    expect(b.fontLink).toContain('Archivo')
     expect(b.fontLink).not.toContain(evil)
     expect(b.fontLink).not.toContain('evil')
   })
@@ -97,6 +126,11 @@ describe('emailBrandInputs — fila de negocio → inputs (espejo de app/[slug]/
     const out = emailBrandInputs({ palette: 'blue', theme: 'forjo', font: 'auto' })
     expect(out.palette).toBe('blue')
     expect(out.primaryOverride).toBeNull()
+  })
+
+  it('devuelve el theme resuelto para que brandEmail lo use', () => {
+    expect(emailBrandInputs({ palette: 'cyan', theme: 'cyber', font: 'auto' }).theme).toBe('cyber')
+    expect(emailBrandInputs({ palette: 'sage', theme: 'spa', font: 'auto' }).theme).toBe('spa')
   })
 
   it('landing_config basura ({} o string) no rompe: cae al fallback', () => {
