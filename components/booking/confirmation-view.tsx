@@ -108,7 +108,7 @@ export function ConfirmationView({
           <circle cx="700" cy="30" r="60" fill="rgba(255,255,255,.10)" />
           <rect x="610" y="96" width="74" height="74" fill="rgba(0,0,0,.10)" />
         </svg>
-        <div className="max-w-xl mx-auto px-6 py-5 relative flex items-center gap-3">
+        <div className="max-w-lg mx-auto px-6 py-5 relative flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt={businessName} className="w-12 h-12 rounded-xl object-cover border border-white/20 flex-shrink-0" />
