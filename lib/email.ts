@@ -2,28 +2,29 @@ import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { onAccentText } from '@/lib/contrast'
 import { isSafeColor, resolveLandingTheme } from '@/lib/landing/theme'
 import type { LandingTheme } from '@/lib/landing/schema'
+import { THEME_PALETTES, normalizeTheme, normalizePalette } from '@/lib/theme-config'
 
 // ── Branding del mail: color + fuente desde la MISMA fuente de verdad que la página pública ────────
 // Antes el acento salía de `businesses.primary_color` (un hex huérfano que el dueño no edita) y la
 // fuente estaba clavada. Ahora los mails espejan la precedencia de la página de reservas
-// (override del landing → paleta del negocio) vía brandEmail + emailBrandInputs.
+// (override del landing → paleta/fuente del theme del negocio) vía brandEmail + emailBrandInputs.
 
-// Mapa PALETA → hex CLARO (variante light de globals.css, líneas 148-161). Literales fijos:
-// es la barrera anti style-injection (T-wxt-01) — este valor cruza a atributos style= del HTML,
-// así que NUNCA puede venir crudo de la DB. El mail va SIEMPRE sobre fondo claro.
-// Solo cubre las 5 paletas del theme forjo; una paleta de otro theme (modern/spa/cyber) no está
-// acá y cae al default rojo (limitación aceptada de esta iteración; la tabla se extiende a mano).
-const EMAIL_PALETTE_HEX: Record<string, string> = {
-  red: '#d94a2b',
-  blue: '#2a5fa5',
-  yellow: '#c8901a',
-  green: '#2f8a5b',
-  ink: '#1a1714',
+// COLOR (theme-aware): el acento sale del MISMO motor que resuelve la og:image (brandedHex de
+// app/[slug]/opengraph-image.tsx): normalizeTheme → normalizePalette → THEME_PALETTES[theme] por id →
+// swatches[0]. Es la barrera anti style-injection (T-tma-01): el color cruza a atributos style= del
+// HTML, así que sale SOLO de la tabla literal (allowlist), NUNCA crudo de la DB. El mail va SIEMPRE
+// sobre fondo claro; los swatches[0] de cada paleta son las variantes de acento ya usadas por la web.
+function themeAccentHex(theme?: string | null, palette?: string | null): string {
+  const t = normalizeTheme(theme)
+  const palId = normalizePalette(t, palette)
+  const list = THEME_PALETTES[t] || THEME_PALETTES.forjo
+  const pal = list.find((p) => p.id === palId) ?? list[0]
+  return pal?.swatches[0] ?? '#d94a2b'
 }
 
 // Mapa FONT id → familia de títulos + segmento fijo de la URL de Google Fonts (allowlist, T-wxt-02).
 // La URL SOLO se arma desde `googleFamily` (literal de este mapa); jamás desde el valor crudo de
-// `businesses.font`. Un id fuera de este mapa ('auto', null, desconocido) → sin <link>, fallback.
+// `businesses.font`. Un id fuera de este mapa ('auto', null, desconocido) cae a la fuente del THEME.
 const EMAIL_HEADING_FONT: Record<string, { googleFamily: string; familyStack: string }> = {
   geometrica: { googleFamily: 'Plus+Jakarta+Sans', familyStack: "'Plus Jakarta Sans',Arial,sans-serif" },
   bauhaus: { googleFamily: 'Archivo', familyStack: "'Archivo',Arial,sans-serif" },
@@ -32,30 +33,48 @@ const EMAIL_HEADING_FONT: Record<string, { googleFamily: string; familyStack: st
   suave: { googleFamily: 'Sora', familyStack: "'Sora',Arial,sans-serif" },
 }
 
+// Mapa THEME → fuente de títulos (mismo patrón y garantía de allowlist que EMAIL_HEADING_FONT,
+// T-tma-02). Cuando el negocio no fijó un id de fuente explícito ('auto'/null/desconocido), el mail
+// usa la fuente NATIVA de su theme — igual que su página pública. Valores verificados contra
+// app/layout.tsx (next/font: Archivo, Plus_Jakarta_Sans, Cormorant_Garamond, Orbitron),
+// app/themes.css (--font-heading por theme) y THEME_HEADING_FONT de theme-config.
+const THEME_EMAIL_FONT: Record<string, { googleFamily: string; familyStack: string }> = {
+  forjo: { googleFamily: 'Archivo', familyStack: "'Archivo',Arial,sans-serif" },
+  modern: { googleFamily: 'Plus+Jakarta+Sans', familyStack: "'Plus Jakarta Sans',Arial,sans-serif" },
+  spa: { googleFamily: 'Cormorant+Garamond', familyStack: "'Cormorant Garamond',Georgia,serif" },
+  cyber: { googleFamily: 'Orbitron', familyStack: "'Orbitron',Arial,sans-serif" },
+}
+
 const EMAIL_DEFAULT_HEADING = "'Helvetica Neue',Arial,sans-serif"
 
 // Tokens de marca puros para un mail (unit-testeable). NO lee la DB: recibe ya resuelto el
 // palette/font/override (ver emailBrandInputs).
 export function brandEmail({
+  theme,
   palette,
   font,
   primaryOverride,
 }: {
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
 }): { accent: string; accentText: string; accentTextMuted: string; fontLink: string; headingFontFamily: string } {
-  // accent: un override REVALIDADO por isSafeColor (defensa en profundidad) gana; si no, el hex del
-  // mapa por paleta; si la paleta no está en el mapa o es null → rojo Forjo. Nunca un valor crudo.
+  // accent: un override REVALIDADO por isSafeColor (defensa en profundidad) gana; si no, el acento
+  // del theme+paleta resuelto por el motor (allowlist THEME_PALETTES). Nunca un valor crudo.
   const accent = primaryOverride && isSafeColor(primaryOverride)
     ? primaryOverride
-    : EMAIL_PALETTE_HEX[palette ?? ''] ?? '#d94a2b'
+    : themeAccentHex(theme, palette)
   const accentText = onAccentText(accent)
   // Variante translúcida del texto de contraste para subtítulos/footers (menor jerarquía).
   const accentTextMuted = accentText === '#ffffff' ? 'rgba(255,255,255,.7)' : 'rgba(26,23,20,.6)'
 
-  // Fuente de títulos por allowlist. `font` desconocido/'auto'/null → sin <link> y fallback seguro.
-  const fontDef = font ? EMAIL_HEADING_FONT[font] : undefined
+  // Fuente de títulos por allowlist, con precedencia: (a) un `font` que es id explícito de
+  // EMAIL_HEADING_FONT gana (elección manual del dueño); (b) si no ('auto'/null/desconocido), la
+  // fuente NATIVA del theme (THEME_EMAIL_FONT, normalizeTheme siempre da una key válida); (c) red de
+  // seguridad última: fallback Helvetica sin <link>. En los tres casos la URL se arma SOLO desde el
+  // `googleFamily` literal del allowlist — jamás desde el valor crudo de theme/font (T-tma-02).
+  const fontDef = (font ? EMAIL_HEADING_FONT[font] : undefined) ?? THEME_EMAIL_FONT[normalizeTheme(theme)]
   let fontLink = ''
   let headingFontFamily = EMAIL_DEFAULT_HEADING
   if (fontDef) {
@@ -76,10 +95,11 @@ export function emailBrandInputs(row: {
   theme?: string | null
   font?: string | null
   landing_config?: unknown
-}): { palette: string; font: string; primaryOverride: string | null } {
+}): { palette: string; theme: string; font: string; primaryOverride: string | null } {
   const landingTheme = (row.landing_config as { theme?: LandingTheme } | null)?.theme
   const t = resolveLandingTheme(landingTheme, { theme: row.theme, palette: row.palette, font: row.font })
-  return { palette: t.palette, font: t.font, primaryOverride: t.primary ?? null }
+  // `theme` viaja para que brandEmail resuelva color+fuente por theme (espejo de la página pública).
+  return { palette: t.palette, theme: t.theme, font: t.font, primaryOverride: t.primary ?? null }
 }
 
 // Decide con qué key y qué "from" mandar, según la config del negocio:
@@ -204,6 +224,7 @@ export async function sendConfirmationEmail({
   time,
   businessName,
   businessSlug,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -222,6 +243,7 @@ export async function sendConfirmationEmail({
   time: string
   businessName: string
   businessSlug: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -240,7 +262,7 @@ export async function sendConfirmationEmail({
 
   // Branding parametrizado desde la MISMA fuente de verdad que la página pública (paleta/override
   // del landing) + fuente de títulos + texto de contraste legible en cualquier paleta.
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const cancelUrl = cancelToken ? `${baseUrl}/cancelar/${cancelToken}` : ''
@@ -346,6 +368,7 @@ export async function sendManualBookingConfirmation({
   time,
   businessName,
   businessSlug,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -362,6 +385,7 @@ export async function sendManualBookingConfirmation({
   time: string
   businessName: string
   businessSlug: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -379,7 +403,7 @@ export async function sendManualBookingConfirmation({
   const hora = time.slice(0, 5)
 
   // Branding parametrizado idéntico al resto de los mails (paleta/override del landing + fuente).
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   // Botón de cancelar SOLO si hay token (D-04): sin token, se omite en vez de romper el envío.
@@ -473,6 +497,7 @@ export async function sendAbonoConfirmation({
   time,
   businessName,
   businessSlug,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -489,6 +514,7 @@ export async function sendAbonoConfirmation({
   time: string
   businessName: string
   businessSlug: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -505,7 +531,7 @@ export async function sendAbonoConfirmation({
   const hora = time.slice(0, 5)
 
   // Branding parametrizado idéntico al resto de los mails (paleta/override del landing + fuente).
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const cancel = cancelUrl && cancelUrl.trim() ? cancelUrl.trim() : ''
   // Normaliza por las dudas (idempotente): si no es un número usable, se omite el link.
@@ -601,6 +627,7 @@ export async function sendAbonoCancelledEmail({
   lastDate,
   businessName,
   businessSlug,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -620,6 +647,7 @@ export async function sendAbonoCancelledEmail({
   lastDate?: string | null // ISO 'yyyy-MM-dd' del último turno cancelado; sin dato → no se muestra
   businessName: string
   businessSlug: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -632,7 +660,7 @@ export async function sendAbonoCancelledEmail({
   // del landing + fuente + texto de contraste). El escapado de clientName/businessName/rows YA está.
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
@@ -744,6 +772,7 @@ export async function sendAbonoCancelledAdminNotification({
   cancelledCount,
   lastDate,
   businessName,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -761,6 +790,7 @@ export async function sendAbonoCancelledAdminNotification({
   cancelledCount: number
   lastDate?: string | null
   businessName?: string | null
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -772,7 +802,7 @@ export async function sendAbonoCancelledAdminNotification({
   const hora = time.slice(0, 5)
   // UNIFICACIÓN con los mails al cliente: el aviso al dueño deja de usar el header oscuro fijo
   // #1a1714 y pasa a la marca del negocio (paleta/override + fuente + texto de contraste).
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const servicio = (service || '').trim()
   const ultimo = lastDate && lastDate.trim() ? fmtDate(lastDate.trim()) : ''
   const turnosLabel = cancelledCount === 1 ? '1 turno' : `${cancelledCount} turnos`
@@ -875,6 +905,7 @@ export async function sendAdminNotification({
   date,
   time,
   businessName,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -894,6 +925,7 @@ export async function sendAdminNotification({
   date: string
   time: string
   businessName?: string | null
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -909,7 +941,7 @@ export async function sendAdminNotification({
   const hora = time.slice(0, 5)
   // UNIFICACIÓN con los mails al cliente: el aviso al dueño deja de usar el header oscuro fijo
   // #1a1714 y pasa a la marca del negocio (paleta/override + fuente + texto de contraste).
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const statusLabel = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Pendiente de pago' : '✅ Pago confirmado')
   const eyebrow = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Reserva pendiente' : '✅ Reserva confirmada')
   const badgeBg = cancelled ? '#fee2e2' : (pending ? '#fef3c7' : '#dcfce7')
@@ -1003,6 +1035,7 @@ export async function sendBusinessCancelEmail({
   time,
   businessName,
   businessSlug,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -1020,6 +1053,7 @@ export async function sendBusinessCancelEmail({
   time: string
   businessName: string
   businessSlug: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -1033,7 +1067,7 @@ export async function sendBusinessCancelEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const waDigits = normalizeArWhatsApp(whatsapp)
@@ -1124,6 +1158,7 @@ export async function sendClientCancelEmail({
   time,
   businessName,
   businessSlug,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -1138,6 +1173,7 @@ export async function sendClientCancelEmail({
   time: string
   businessName: string
   businessSlug: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -1148,7 +1184,7 @@ export async function sendClientCancelEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
@@ -1230,6 +1266,7 @@ export async function sendPendingPaymentEmail({
   date,
   time,
   businessName,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -1246,6 +1283,7 @@ export async function sendPendingPaymentEmail({
   date: string
   time: string
   businessName: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -1259,7 +1297,7 @@ export async function sendPendingPaymentEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
@@ -1349,6 +1387,7 @@ export async function sendExpiredHoldEmail({
   time,
   businessName,
   businessSlug,
+  theme,
   palette,
   font,
   primaryOverride,
@@ -1363,6 +1402,7 @@ export async function sendExpiredHoldEmail({
   time: string
   businessName: string
   businessSlug: string
+  theme?: string | null
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
@@ -1373,7 +1413,7 @@ export async function sendExpiredHoldEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride })
+  const brand = brandEmail({ theme, palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
