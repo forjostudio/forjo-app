@@ -2,7 +2,7 @@ import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
-import { sendAbonoConfirmation } from '@/lib/email'
+import { sendAbonoConfirmation, emailBrandInputs } from '@/lib/email'
 import { todayInAR } from '@/lib/booking-window'
 // Etiqueta del día y serialización 'yyyy-MM-dd' desde el motor compartido (IN-01/IN-02). El cuerpo de
 // la serialización es EXACTAMENTE el que estaba local: componentes locales del Date con padding a 2.
@@ -84,10 +84,14 @@ export async function POST(request: Request) {
   // para el mail.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, buffer_minutes, slug, primary_color, logo_url, whatsapp, vertical, abono_window_weeks')
+    .select('id, name, buffer_minutes, slug, palette, theme, font, landing_config, logo_url, whatsapp, vertical, abono_window_weeks')
     .eq('owner_id', user.id)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Ya no se alimenta desde primary_color.
+  const brand = emailBrandInputs(business)
 
   // Parseo defensivo del body (molde de appointments/create): no se confía en el shape del cliente.
   let raw: unknown
@@ -276,7 +280,9 @@ export async function POST(request: Request) {
           time,
           businessName: business.name,
           businessSlug: business.slug,
-          primaryColor: business.primary_color,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url,
           whatsapp: business.whatsapp,
           cancelUrl,

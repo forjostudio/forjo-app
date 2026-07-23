@@ -1,6 +1,6 @@
 import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendConfirmationEmail, sendAdminNotification } from '@/lib/email'
+import { sendConfirmationEmail, sendAdminNotification, emailBrandInputs } from '@/lib/email'
 import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar'
 import { getValidMpAccessToken } from '@/lib/payment'
 import { getBusinessSecrets } from '@/lib/business-secrets'
@@ -62,7 +62,7 @@ async function processWebhook(slug: string, paymentId: string) {
   // nota en vez de devolver undefined silencioso y dejar de confirmar turnos pagados (D-03 / T-01-05).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, primary_color, logo_url, whatsapp, address, notification_email')
+    .select('id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp, address, notification_email')
     .eq('slug', slug)
     .single()
 
@@ -70,6 +70,10 @@ async function processWebhook(slug: string, paymentId: string) {
     console.log(`Webhook: negocio ${slug} no encontrado`)
     return
   }
+
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Ya no se alimenta desde primary_color.
+  const brand = emailBrandInputs(business)
 
   // Secretos del tenant desde business_secrets (vía getBusinessSecrets, service-role).
   const secrets = await getBusinessSecrets(business.id)
@@ -177,7 +181,9 @@ async function processWebhook(slug: string, paymentId: string) {
           time: appt.time,
           businessName: business.name,
           businessSlug: slug,
-          primaryColor: business.primary_color,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url,
           whatsapp: business.whatsapp,
           cancelToken: appt.cancel_token,
@@ -208,6 +214,9 @@ async function processWebhook(slug: string, paymentId: string) {
           date: appt.date,
           time: appt.time,
           businessName: business.name,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url,
           resendApiKey: secrets.resend_api_key,
           resendFrom: secrets.resend_from,

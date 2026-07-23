@@ -2,7 +2,7 @@ import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets, type BusinessSecrets } from '@/lib/business-secrets'
 import { cancelAbonoSeries, abonoDayLabel } from '@/lib/abono-cancel'
-import { sendAbonoCancelledEmail, sendAbonoCancelledAdminNotification } from '@/lib/email'
+import { sendAbonoCancelledEmail, sendAbonoCancelledAdminNotification, emailBrandInputs } from '@/lib/email'
 import type { NextRequest } from 'next/server'
 
 // ── BAJA PÚBLICA DE LA SERIE DEL ABONO por TOKEN (ABONO-04, vía cliente) ────────────────────────
@@ -56,7 +56,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   const { data: abono } = await supabase
     .from('abonos')
     .select(
-      'id, business_id, status, day_of_week, start_time, clients(name, email, phone), services(name), businesses(id, name, slug, primary_color, logo_url, notification_email, whatsapp)',
+      'id, business_id, status, day_of_week, start_time, clients(name, email, phone), services(name), businesses(id, name, slug, palette, theme, font, landing_config, logo_url, notification_email, whatsapp)',
     )
     .eq('cancel_token', token)
     .maybeSingle()
@@ -98,7 +98,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
     id?: string
     name?: string
     slug?: string
-    primary_color?: string | null
+    palette?: string | null
+    theme?: string | null
+    font?: string | null
+    landing_config?: unknown
     logo_url?: string | null
     notification_email?: string | null
     whatsapp?: string | null
@@ -136,7 +139,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   const clientPhone = client?.phone ?? undefined
   const businessName = business?.name || ''
   const businessSlug = business?.slug || ''
-  const primaryColor = business?.primary_color ?? null
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Con business null cae al default; los envíos van guardados por clientEmail/
+  // notificationEmail. Se captura en el closure del after() en lugar del viejo primaryColor.
+  const brand = emailBrandInputs(business ?? {})
   const logoUrl = business?.logo_url ?? null
   const whatsapp = business?.whatsapp ?? null
   const notificationEmail = business?.notification_email ?? ''
@@ -164,7 +170,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
           lastDate,
           businessName,
           businessSlug,
-          primaryColor,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl,
           whatsapp,
           resendApiKey: secrets?.resend_api_key,
@@ -190,6 +198,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
           cancelledCount,
           lastDate,
           businessName,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl,
           resendApiKey: secrets?.resend_api_key,
           resendFrom: secrets?.resend_from,

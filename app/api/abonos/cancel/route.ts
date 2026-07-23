@@ -2,7 +2,7 @@ import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { cancelAbonoSeries, abonoDayLabel } from '@/lib/abono-cancel'
-import { sendAbonoCancelledEmail } from '@/lib/email'
+import { sendAbonoCancelledEmail, emailBrandInputs } from '@/lib/email'
 
 // BAJA de la SERIE completa de un abono desde el PANEL del dueño (ABONO-05, D-23). Da de baja la
 // serie ENTERA — la fila `abonos` pasa a 'cancelled' (lo que frena la generación forward del cron) y
@@ -58,10 +58,14 @@ export async function POST(request: Request) {
   // Sólo columnas NO secretas (los secretos viven en business_secrets); el branding es para el mail.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, primary_color, logo_url, whatsapp')
+    .select('id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp')
     .eq('owner_id', user.id)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Ya no se alimenta desde primary_color.
+  const brand = emailBrandInputs(business)
 
   // (3) Parseo defensivo del body: no se confía en el shape del cliente.
   let raw: unknown
@@ -135,7 +139,9 @@ export async function POST(request: Request) {
           lastDate,
           businessName: business.name,
           businessSlug: business.slug,
-          primaryColor: business.primary_color,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url,
           whatsapp: business.whatsapp,
           resendApiKey: secrets.resend_api_key,

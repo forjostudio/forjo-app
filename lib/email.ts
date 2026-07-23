@@ -207,7 +207,6 @@ export async function sendConfirmationEmail({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   whatsapp,
   cancelToken,
@@ -226,8 +225,6 @@ export async function sendConfirmationEmail({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
   cancelToken?: string | null
@@ -243,7 +240,7 @@ export async function sendConfirmationEmail({
 
   // Branding parametrizado desde la MISMA fuente de verdad que la página pública (paleta/override
   // del landing) + fuente de títulos + texto de contraste legible en cualquier paleta.
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   const cancelUrl = cancelToken ? `${baseUrl}/cancelar/${cancelToken}` : ''
@@ -352,7 +349,6 @@ export async function sendManualBookingConfirmation({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   whatsapp,
   cancelToken,
@@ -369,8 +365,6 @@ export async function sendManualBookingConfirmation({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
   // Opcional: si el core no devolvió cancelToken, el mail va sin botón de cancelar (degradación D-04).
@@ -385,7 +379,7 @@ export async function sendManualBookingConfirmation({
   const hora = time.slice(0, 5)
 
   // Branding parametrizado idéntico al resto de los mails (paleta/override del landing + fuente).
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
   // Botón de cancelar SOLO si hay token (D-04): sin token, se omite en vez de romper el envío.
@@ -482,7 +476,6 @@ export async function sendAbonoConfirmation({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   whatsapp,
   cancelUrl,
@@ -499,8 +492,6 @@ export async function sendAbonoConfirmation({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
   // Opcional y SIN uso en v0.24: el link de cancelar la serie llega en Phase 7. Sin url → sin botón.
@@ -514,7 +505,7 @@ export async function sendAbonoConfirmation({
   const hora = time.slice(0, 5)
 
   // Branding parametrizado idéntico al resto de los mails (paleta/override del landing + fuente).
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const cancel = cancelUrl && cancelUrl.trim() ? cancelUrl.trim() : ''
   // Normaliza por las dudas (idempotente): si no es un número usable, se omite el link.
@@ -613,7 +604,6 @@ export async function sendAbonoCancelledEmail({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   whatsapp,
   resendApiKey,
@@ -633,8 +623,6 @@ export async function sendAbonoCancelledEmail({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
   resendApiKey?: string | null
@@ -644,7 +632,7 @@ export async function sendAbonoCancelledEmail({
   // del landing + fuente + texto de contraste). El escapado de clientName/businessName/rows YA está.
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const waDigits = normalizeArWhatsApp(whatsapp)
   const waUrl = waDigits ? `https://wa.me/${waDigits}` : ''
@@ -759,7 +747,6 @@ export async function sendAbonoCancelledAdminNotification({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   resendApiKey,
   resendFrom,
@@ -777,8 +764,6 @@ export async function sendAbonoCancelledAdminNotification({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
@@ -787,7 +772,7 @@ export async function sendAbonoCancelledAdminNotification({
   const hora = time.slice(0, 5)
   // UNIFICACIÓN con los mails al cliente: el aviso al dueño deja de usar el header oscuro fijo
   // #1a1714 y pasa a la marca del negocio (paleta/override + fuente + texto de contraste).
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const servicio = (service || '').trim()
   const ultimo = lastDate && lastDate.trim() ? fmtDate(lastDate.trim()) : ''
   const turnosLabel = cancelledCount === 1 ? '1 turno' : `${cancelledCount} turnos`
@@ -893,7 +878,6 @@ export async function sendAdminNotification({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   resendApiKey,
   resendFrom,
@@ -913,8 +897,6 @@ export async function sendAdminNotification({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
@@ -927,7 +909,7 @@ export async function sendAdminNotification({
   const hora = time.slice(0, 5)
   // UNIFICACIÓN con los mails al cliente: el aviso al dueño deja de usar el header oscuro fijo
   // #1a1714 y pasa a la marca del negocio (paleta/override + fuente + texto de contraste).
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const statusLabel = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Pendiente de pago' : '✅ Pago confirmado')
   const eyebrow = cancelled ? '❌ Turno cancelado' : (pending ? '⏳ Reserva pendiente' : '✅ Reserva confirmada')
   const badgeBg = cancelled ? '#fee2e2' : (pending ? '#fef3c7' : '#dcfce7')
@@ -1024,7 +1006,6 @@ export async function sendBusinessCancelEmail({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   whatsapp,
   depositPaid,
@@ -1042,8 +1023,6 @@ export async function sendBusinessCancelEmail({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   whatsapp?: string | null
   depositPaid?: boolean
@@ -1054,7 +1033,7 @@ export async function sendBusinessCancelEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const waDigits = normalizeArWhatsApp(whatsapp)
@@ -1148,7 +1127,6 @@ export async function sendClientCancelEmail({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   resendApiKey,
   resendFrom,
@@ -1163,8 +1141,6 @@ export async function sendClientCancelEmail({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
@@ -1172,7 +1148,7 @@ export async function sendClientCancelEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
@@ -1257,7 +1233,6 @@ export async function sendPendingPaymentEmail({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   depositAmount,
   expiryHours,
@@ -1274,8 +1249,6 @@ export async function sendPendingPaymentEmail({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   depositAmount: number
   expiryHours: number
@@ -1286,7 +1259,7 @@ export async function sendPendingPaymentEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
@@ -1379,7 +1352,6 @@ export async function sendExpiredHoldEmail({
   palette,
   font,
   primaryOverride,
-  primaryColor,
   logoUrl,
   resendApiKey,
   resendFrom,
@@ -1394,8 +1366,6 @@ export async function sendExpiredHoldEmail({
   palette?: string | null
   font?: string | null
   primaryOverride?: string | null
-  // Puente legacy: se elimina en la Task 3 una vez migrados todos los callers.
-  primaryColor?: string | null
   logoUrl?: string | null
   resendApiKey?: string | null
   resendFrom?: string | null
@@ -1403,7 +1373,7 @@ export async function sendExpiredHoldEmail({
   const { key, from } = resolveSender(businessName, resendApiKey, resendFrom)
   const fecha = fmtDate(date)
   const hora = time.slice(0, 5)
-  const brand = brandEmail({ palette, font, primaryOverride: primaryOverride ?? primaryColor })
+  const brand = brandEmail({ palette, font, primaryOverride })
   const accent = brand.accent
   const headerInner = renderEmailHeader(businessName, logoUrl, { fontFamily: brand.headingFontFamily, textColor: brand.accentText, mutedColor: brand.accentTextMuted })
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio'
