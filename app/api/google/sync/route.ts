@@ -76,6 +76,7 @@ export async function POST() {
           time: a.time,
           businessName: business.name || '',
           businessSlug: business.slug || '',
+          theme: brand.theme,
           palette: brand.palette,
           font: brand.font,
           primaryOverride: brand.primaryOverride,

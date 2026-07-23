@@ -79,7 +79,7 @@ vi.mock('@/lib/email', () => ({
   sendAbonoCancelledEmail: h.sendClientMail,
   sendAbonoCancelledAdminNotification: h.sendAdminMail,
   // Helper puro de branding (no toca red); acá no se asiertan colores/fuentes, stub inocuo.
-  emailBrandInputs: () => ({ palette: null, font: null, primaryOverride: null }),
+  emailBrandInputs: () => ({ palette: null, theme: null, font: null, primaryOverride: null }),
 }))
 
 // Secretos Resend por tenant: se leen dentro del after() de las dos vías. No se testean acá.

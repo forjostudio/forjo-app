@@ -139,6 +139,7 @@ export async function POST(request: Request) {
           lastDate,
           businessName: business.name,
           businessSlug: business.slug,
+          theme: brand.theme,
           palette: brand.palette,
           font: brand.font,
           primaryOverride: brand.primaryOverride,

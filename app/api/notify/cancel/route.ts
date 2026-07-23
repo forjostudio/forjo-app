@@ -117,6 +117,7 @@ export async function POST(request: Request) {
         time: appt.time,
         businessName: String(business.name || ''),
         businessSlug: String(business.slug || ''),
+        theme: brand.theme,
         palette: brand.palette,
         font: brand.font,
         primaryOverride: brand.primaryOverride,
