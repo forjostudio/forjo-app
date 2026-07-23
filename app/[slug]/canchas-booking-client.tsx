@@ -319,7 +319,7 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
           <rect x="600" y="120" width="90" height="90" fill="rgba(0,0,0,.10)" />
           <path d="M720 140 L760 140 L760 200 Z" fill="rgba(255,255,255,.08)" />
         </svg>
-        <div className="max-w-lg mx-auto px-6 py-10 relative flex items-center gap-4">
+        <div className="max-w-lg mx-auto px-6 py-10 relative flex items-center justify-center gap-4">
           {business.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -333,7 +333,8 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="text-[clamp(22px,6vw,34px)] font-black uppercase tracking-tight leading-[1.05] break-words font-[family-name:var(--font-heading)]">{business.name}</h1>
+            {/* Sin `uppercase` hardcodeado: la mayúscula la pone el theme (cyber/tech) cuando corresponde. */}
+            <h1 className="text-[clamp(22px,6vw,34px)] font-black tracking-tight leading-[1.05] break-words font-[family-name:var(--font-heading)]">{business.name}</h1>
             {/* Categoría del negocio: el texto libre `type` si existe, o el label del rubro como
                 fallback (D-03) — gemelo idéntico al de booking-client. Interpolado en JSX → auto-escape. */}
             {(business.type || getVerticalLabel(business)) && <p className="text-sm text-primary-foreground/80 mt-1.5">{business.type || getVerticalLabel(business)}</p>}
@@ -613,8 +614,8 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
           </svg>
           <span>
             hecho con{' '}
-            <a href="https://www.forjo.studio" target="_blank" rel="noopener noreferrer" className="font-[family-name:var(--font-archivo)] hover:text-foreground transition-colors">
-              <span className="font-semibold text-foreground">Forjo</span> Studio
+            <a href="https://gestion.forjo.studio" target="_blank" rel="noopener noreferrer" className="font-[family-name:var(--font-archivo)] hover:text-foreground transition-colors">
+              <span className="font-semibold text-foreground">Forjo</span> Gestión
             </a>
           </span>
         </div>

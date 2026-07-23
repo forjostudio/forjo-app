@@ -46,7 +46,7 @@ function waLink(whatsapp: string, text: string): string {
 }
 
 export function ConfirmationView({
-  businessName, businessType, logoUrl, address, mapsUrl, whatsapp, locationName, locationAddress, locationLabel,
+  businessName, businessType, businessSlug, logoUrl, address, mapsUrl, whatsapp, locationName, locationAddress, locationLabel,
   clientName, clientPhone, clientEmail,
   serviceName, durationMinutes, price, professionalName,
   date, time, code, depositPaid,
@@ -108,19 +108,23 @@ export function ConfirmationView({
           <circle cx="700" cy="30" r="60" fill="rgba(255,255,255,.10)" />
           <rect x="610" y="96" width="74" height="74" fill="rgba(0,0,0,.10)" />
         </svg>
-        <div className="max-w-lg mx-auto px-6 py-5 relative flex items-center gap-3">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={businessName} className="w-12 h-12 rounded-xl object-cover border border-white/20 flex-shrink-0" />
-          ) : (
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/15 font-[family-name:var(--font-heading)] font-black text-xl flex-shrink-0">
-              {businessName.charAt(0).toUpperCase()}
+        {/* Logo + nombre centrados y linkeados a la pág. de reservas del negocio (volver a reservar).
+            Sin `uppercase` hardcodeado: la mayúscula la pone el theme (cyber/tech) cuando corresponde. */}
+        <div className="max-w-lg mx-auto px-6 py-5 relative flex justify-center">
+          <a href={`/${businessSlug}`} className="flex items-center gap-3 min-w-0 hover:opacity-90 transition-opacity">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt={businessName} className="w-12 h-12 rounded-xl object-cover border border-white/20 flex-shrink-0" />
+            ) : (
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/15 font-[family-name:var(--font-heading)] font-black text-xl flex-shrink-0">
+                {businessName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-[clamp(20px,5.5vw,28px)] font-black tracking-tight leading-none font-[family-name:var(--font-heading)] truncate">{businessName}</p>
+              {businessType && <p className="text-sm text-primary-foreground/80 mt-1">{businessType}</p>}
             </div>
-          )}
-          <div className="min-w-0">
-            <p className="text-[clamp(20px,5.5vw,28px)] font-black uppercase tracking-tight leading-none font-[family-name:var(--font-heading)] truncate">{businessName}</p>
-            {businessType && <p className="text-sm text-primary-foreground/80 mt-1">{businessType}</p>}
-          </div>
+          </a>
         </div>
       </div>
 
@@ -205,8 +209,8 @@ export function ConfirmationView({
           </svg>
           <span>
             hecho con{' '}
-            <a href="https://www.forjo.studio" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
-              <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> Studio
+            <a href="https://gestion.forjo.studio" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+              <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> Gestión
             </a>
           </span>
         </div>
