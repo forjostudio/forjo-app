@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets, type BusinessSecrets } from '@/lib/business-secrets'
-import { sendExpiredHoldEmail } from '@/lib/email'
+import { sendExpiredHoldEmail, emailBrandInputs } from '@/lib/email'
 import { getPlanPrices } from '@/lib/plan-prices'
 import { computeSnapshotRows, type BizRow } from '@/lib/crm-reports'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
@@ -258,7 +258,7 @@ export async function GET(request: NextRequest) {
   // resuelven aparte con getBusinessSecrets, una sola vez por business_id distinto (abajo).
   const { data: expiring, error: fetchErr } = await supabase
     .from('appointments')
-    .select('id, date, time, client_name, client_email, services(name), businesses(id, name, slug, primary_color, logo_url)')
+    .select('id, date, time, client_name, client_email, services(name), businesses(id, name, slug, palette, theme, font, landing_config, logo_url)')
     .eq('status', 'pending_payment')
     .lt('expires_at', new Date().toISOString())
 
@@ -300,6 +300,9 @@ export async function GET(request: NextRequest) {
     const business = appt.businesses as unknown as Record<string, string | null> | null
     if (!appt.client_email || !business?.id) continue
     const secrets = await secretsFor(business.id)
+    // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+    // landing + fuente). El cast nombra la forma esperada; landing_config es jsonb (unknown).
+    const brand = emailBrandInputs(business as { palette?: string | null; theme?: string | null; font?: string | null; landing_config?: unknown })
     try {
       await sendExpiredHoldEmail({
         to: appt.client_email,
@@ -309,7 +312,9 @@ export async function GET(request: NextRequest) {
         time: appt.time,
         businessName: String(business.name || ''),
         businessSlug: String(business.slug || ''),
-        primaryColor: business.primary_color,
+        palette: brand.palette,
+        font: brand.font,
+        primaryOverride: brand.primaryOverride,
         logoUrl: business.logo_url,
         resendApiKey: secrets.resend_api_key,
         resendFrom: secrets.resend_from,

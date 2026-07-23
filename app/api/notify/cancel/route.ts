@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { deleteCalendarEvent } from '@/lib/google-calendar'
-import { sendBusinessCancelEmail } from '@/lib/email'
+import { sendBusinessCancelEmail, emailBrandInputs } from '@/lib/email'
 
 // Cancela un turno desde el panel y avisa al cliente por email ("cancelado por el negocio").
 // El endpoint es la ÚNICA autoridad del flujo: valida sesión + ownership, CANCELA él mismo
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     // logea y devuelve 500, no un 404 mentiroso).
     const { data: appt, error: apptErr } = await supabase
       .from('appointments')
-      .select('*, services(name), businesses(id, name, slug, primary_color, logo_url, whatsapp)')
+      .select('*, services(name), businesses(id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp)')
       .eq('id', appointmentId)
       .maybeSingle()
 
@@ -92,6 +92,10 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, cancelled: true, email_sent: false, reason: 'no_business_data' })
     }
 
+    // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+    // landing + fuente). El cast nombra la forma esperada; landing_config es jsonb (unknown).
+    const brand = emailBrandInputs(business as { palette?: string | null; theme?: string | null; font?: string | null; landing_config?: unknown })
+
     // Sin email del cliente no hay a quién avisar: cancelado igual, email no enviado.
     if (!appt.client_email) {
       return Response.json({ ok: true, cancelled: true, email_sent: false, reason: 'no_client_email' })
@@ -113,7 +117,9 @@ export async function POST(request: Request) {
         time: appt.time,
         businessName: String(business.name || ''),
         businessSlug: String(business.slug || ''),
-        primaryColor: business.primary_color as string | null,
+        palette: brand.palette,
+        font: brand.font,
+        primaryOverride: brand.primaryOverride,
         logoUrl: business.logo_url as string | null,
         whatsapp: business.whatsapp as string | null,
         depositPaid: appt.deposit_paid as boolean,

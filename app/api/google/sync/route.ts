@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getEventStatuses } from '@/lib/google-calendar'
-import { sendBusinessCancelEmail } from '@/lib/email'
+import { sendBusinessCancelEmail, emailBrandInputs } from '@/lib/email'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 
 // Sincronización inversa Google Calendar → panel: si el dueño borró o canceló el evento de un
@@ -17,12 +17,16 @@ export async function POST() {
   // business_secrets, migración 027). Solo columnas no secretas para armar el email.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, primary_color, logo_url, whatsapp')
+    .select('id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp')
     .eq('owner_id', user.id)
     .single()
   if (!business) {
     return NextResponse.json({ ok: false, error: 'not_connected' }, { status: 400 })
   }
+
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Ya no se alimenta desde primary_color.
+  const brand = emailBrandInputs(business)
 
   // Secretos server-side (service role) — google_refresh_token + resend_*; nunca viajan al cliente.
   const secrets = await getBusinessSecrets(business.id)
@@ -72,7 +76,9 @@ export async function POST() {
           time: a.time,
           businessName: business.name || '',
           businessSlug: business.slug || '',
-          primaryColor: business.primary_color,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url,
           whatsapp: business.whatsapp,
           depositPaid: a.deposit_paid as boolean,

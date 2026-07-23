@@ -2,7 +2,7 @@ import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { verifyRecaptcha } from '@/lib/recaptcha'
-import { sendPendingPaymentEmail, sendExpiredHoldEmail } from '@/lib/email'
+import { sendPendingPaymentEmail, sendExpiredHoldEmail, emailBrandInputs } from '@/lib/email'
 import { createCalendarEvent } from '@/lib/google-calendar'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { isDateOutOfWindow } from '@/lib/booking-window'
@@ -54,10 +54,14 @@ export async function POST(request: Request) {
   // resend_from, google_refresh_token) viven en business_secrets (D-02) y se traen aparte.
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, primary_color, logo_url, plan_status, max_advance_days, max_advance_date')
+    .select('id, name, slug, address, require_deposit, deposit_amount, deposit_expiry_hours, buffer_minutes, palette, theme, font, landing_config, logo_url, plan_status, max_advance_days, max_advance_date')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Se calcula una vez y se pasa a todos los send* (ya no via primary_color).
+  const brand = emailBrandInputs(business)
 
   // Gate de plan (SEC-04): un negocio con suscripción vencida o cancelada NO puede seguir
   // captando turnos por su link público. Se usa un BLOCKLIST explícito (no un allowlist): solo
@@ -187,7 +191,9 @@ export async function POST(request: Request) {
               time: h.time,
               businessName: String(business.name || ''),
               businessSlug: String(business.slug || ''),
-              primaryColor: business.primary_color as string | null,
+              palette: brand.palette,
+              font: brand.font,
+              primaryOverride: brand.primaryOverride,
               logoUrl: business.logo_url as string | null,
               resendApiKey: secrets.resend_api_key,
               resendFrom: secrets.resend_from,
@@ -243,7 +249,9 @@ export async function POST(request: Request) {
           date,
           time,
           businessName: String(business.name || ''),
-          primaryColor: business.primary_color as string | null,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url as string | null,
           depositAmount: Number(business.deposit_amount || 0),
           expiryHours,

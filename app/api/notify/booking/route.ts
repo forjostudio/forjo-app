@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets } from '@/lib/business-secrets'
-import { sendConfirmationEmail, sendAdminNotification } from '@/lib/email'
+import { sendConfirmationEmail, sendAdminNotification, emailBrandInputs } from '@/lib/email'
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     // (D-02) y se traen aparte vía getBusinessSecrets, no por el join.
     const { data: appt } = await supabase
       .from('appointments')
-      .select('*, services(name, price), businesses(id, name, slug, primary_color, logo_url, whatsapp, notification_email)')
+      .select('*, services(name, price), businesses(id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp, notification_email)')
       .eq('id', appointmentId)
       .eq('status', 'confirmed')
       .single()
@@ -24,6 +24,10 @@ export async function POST(request: Request) {
 
     const business = appt.businesses as Record<string, string | null | boolean | number> | null
     if (!business) return Response.json({ ok: false })
+
+    // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+    // landing + fuente). El cast nombra la forma esperada; landing_config es jsonb (unknown).
+    const brand = emailBrandInputs(business as { palette?: string | null; theme?: string | null; font?: string | null; landing_config?: unknown })
 
     const serviceName = (appt.services as { name?: string; price?: number } | null)?.name || ''
     const servicePrice = Number((appt.services as { name?: string; price?: number } | null)?.price || 0)
@@ -49,7 +53,9 @@ export async function POST(request: Request) {
           time: appt.time,
           businessName: String(business.name || ''),
           businessSlug: String(business.slug || ''),
-          primaryColor: business.primary_color as string | null,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url as string | null,
           whatsapp: business.whatsapp as string | null,
           cancelToken: appt.cancel_token as string | null,
@@ -83,6 +89,9 @@ export async function POST(request: Request) {
           date: appt.date,
           time: appt.time,
           businessName: String(business.name || ''),
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url as string | null,
           resendApiKey: resendKey,
           resendFrom,

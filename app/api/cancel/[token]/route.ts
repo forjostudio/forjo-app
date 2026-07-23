@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets } from '@/lib/business-secrets'
-import { sendClientCancelEmail, sendAdminNotification } from '@/lib/email'
+import { sendClientCancelEmail, sendAdminNotification, emailBrandInputs } from '@/lib/email'
 import { deleteCalendarEvent } from '@/lib/google-calendar'
 import type { NextRequest } from 'next/server'
 
@@ -19,7 +19,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   // secretos (resend_*, google_refresh_token) se obtienen con un fetch separado a business_secrets.
   const { data: appt } = await supabase
     .from('appointments')
-    .select('id, date, time, status, client_name, client_phone, client_email, deposit_amount, google_event_id, services(name, price), businesses(id, name, slug, primary_color, logo_url, notification_email)')
+    .select('id, date, time, status, client_name, client_phone, client_email, deposit_amount, google_event_id, services(name, price), businesses(id, name, slug, palette, theme, font, landing_config, logo_url, notification_email)')
     .eq('cancel_token', token)
     .single()
 
@@ -60,7 +60,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
   // corta al hacer return). El branding/remitente sale del propio negocio del turno
   // (aislamiento por tenant: no se confía en ningún input del cliente). Best-effort: si
   // falla, se logea el motivo real y NO se rompe la cancelación, que ya está confirmada.
-  const business = appt.businesses as { id?: string; name?: string; slug?: string; primary_color?: string | null; logo_url?: string | null; notification_email?: string | null } | null
+  const business = appt.businesses as { id?: string; name?: string; slug?: string; palette?: string | null; theme?: string | null; font?: string | null; landing_config?: unknown; logo_url?: string | null; notification_email?: string | null } | null
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Con business null los send* no corren (guardados abajo); {} cae al default.
+  const brand = emailBrandInputs(business ?? {})
 
   // Secretos por tenant desde business_secrets (Pitfall E: no venían en el join). Fallback a
   // businesses durante la transición 027→028 lo provee getBusinessSecrets.
@@ -84,7 +87,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
         time: appt.time,
         businessName: business.name || '',
         businessSlug: business.slug || '',
-        primaryColor: business.primary_color,
+        palette: brand.palette,
+        font: brand.font,
+        primaryOverride: brand.primaryOverride,
         logoUrl: business.logo_url,
         resendApiKey: secrets?.resend_api_key,
         resendFrom: secrets?.resend_from,
@@ -109,6 +114,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ to
         date: appt.date,
         time: appt.time,
         businessName: business.name || '',
+        palette: brand.palette,
+        font: brand.font,
+        primaryOverride: brand.primaryOverride,
         logoUrl: business.logo_url,
         resendApiKey: secrets?.resend_api_key,
         resendFrom: secrets?.resend_from,

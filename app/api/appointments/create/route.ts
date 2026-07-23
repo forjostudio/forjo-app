@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { createCalendarEvent } from '@/lib/google-calendar'
 import { createAppointmentCore } from '@/lib/booking-core'
-import { sendManualBookingConfirmation } from '@/lib/email'
+import { sendManualBookingConfirmation, emailBrandInputs } from '@/lib/email'
 
 // Alta MANUAL de turno desde el dashboard (autenticada). A diferencia del booking PÚBLICO
 // (app/api/booking/create — service role, tenant por slug), este endpoint corre con la SESIÓN
@@ -34,10 +34,14 @@ export async function POST(request: Request) {
   // objeto ampliado a createAppointmentCore es inocuo (el core solo usa id/buffer_minutes por tipado).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, address, buffer_minutes, slug, primary_color, logo_url, whatsapp')
+    .select('id, name, address, buffer_minutes, slug, palette, theme, font, landing_config, logo_url, whatsapp')
     .eq('owner_id', user.id)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+
+  // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
+  // landing + fuente). Ya no se alimenta desde primary_color.
+  const brand = emailBrandInputs(business)
 
   // Parseo defensivo del body (molde de booking/create/route.ts): no se confía en el shape del cliente.
   let raw: unknown
@@ -150,7 +154,9 @@ export async function POST(request: Request) {
           time,
           businessName: business.name,
           businessSlug: business.slug,
-          primaryColor: business.primary_color,
+          palette: brand.palette,
+          font: brand.font,
+          primaryOverride: brand.primaryOverride,
           logoUrl: business.logo_url,
           whatsapp: business.whatsapp,
           cancelToken, // si es falsy, Plan 01 degrada y manda sin botón de cancelar (D-04)
