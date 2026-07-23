@@ -1,18 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Appointment, Professional, Service, TimeBlock, Client, Location } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
-import { Plus, Check, X, CheckCircle2, Phone, Mail, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, Check, X, CheckCircle2, Phone, Mail, Trash2, RefreshCw, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { NuevoTurnoForm } from '@/components/dashboard/nuevo-turno-form'
@@ -121,8 +120,22 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   const [deleting, setDeleting] = useState(false)
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const dateRef = useRef<HTMLDivElement>(null)
 
   const today = format(new Date(), 'yyyy-MM-dd')
+
+  // Cierre del dropdown de fecha al hacer click fuera del control.
+  useEffect(() => {
+    if (!dateOpen) return
+    function onDown(e: MouseEvent) {
+      if (dateRef.current && !dateRef.current.contains(e.target as Node)) {
+        setDateOpen(false)
+        setCalView(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [dateOpen])
 
   const filtered = appointments.filter(a => {
     if (tab === 'proximos' && (a.date < today || a.status === 'cancelled')) return false
@@ -280,12 +293,42 @@ export function AppointmentsClient({ initialAppointments, professionals, service
 
       {/* Filtros secundarios */}
       <div className="flex flex-wrap gap-2">
-        <div className="relative">
-          <Input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="w-44 text-sm" />
-          {!filterDate && (
-            <span className="pointer-events-none absolute inset-0 flex items-center px-3 text-sm text-muted-foreground bg-background rounded-md border border-input">
-              Filtrar por fecha
+        <div className="relative" ref={dateRef}>
+          <button
+            type="button"
+            onClick={() => { setDateOpen(v => !v); setCalView(false) }}
+            className="h-8 w-44 flex items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
+          >
+            <span className={cn('truncate', dateMode === 'none' && 'text-muted-foreground')}>
+              {dateMode === 'none' && 'Fecha'}
+              {dateMode === 'today' && 'Hoy'}
+              {dateMode === 'week' && 'Esta semana'}
+              {dateMode === 'month' && 'Este mes'}
+              {dateMode === 'custom' && filterDate && format(parseISO(filterDate), "d 'de' MMM", { locale: es })}
             </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+          {dateOpen && (
+            <div className={cn('absolute z-50 mt-1 bg-popover border border-border rounded-md shadow-lg', calView ? 'w-fit' : 'w-44')}>
+              {!calView ? (
+                <>
+                  <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors" onClick={() => { setDateMode('today'); setDateOpen(false) }}>Hoy</button>
+                  <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors" onClick={() => { setDateMode('week'); setDateOpen(false) }}>Esta semana</button>
+                  <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors" onClick={() => { setDateMode('month'); setDateOpen(false) }}>Este mes</button>
+                  <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors" onClick={() => setCalView(true)}>Elegir fecha…</button>
+                </>
+              ) : (
+                <Calendar
+                  mode="single"
+                  selected={filterDate ? parseISO(filterDate) : undefined}
+                  onSelect={d => {
+                    if (d) { setFilterDate(format(d, 'yyyy-MM-dd')); setDateMode('custom') }
+                    setDateOpen(false)
+                    setCalView(false)
+                  }}
+                />
+              )}
+            </div>
           )}
         </div>
         <Select value={filterPro} onValueChange={v => setFilterPro(v ?? 'all')}>
@@ -306,8 +349,8 @@ export function AppointmentsClient({ initialAppointments, professionals, service
             {Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
-        {(filterDate || filterPro !== 'all' || filterStatus !== 'all') && (
-          <Button variant="ghost" size="sm" onClick={() => { setFilterDate(''); setFilterPro('all'); setFilterStatus('all') }}>
+        {(dateMode !== 'none' || filterPro !== 'all' || filterStatus !== 'all') && (
+          <Button variant="ghost" size="sm" onClick={() => { setDateMode('none'); setFilterDate(''); setDateOpen(false); setCalView(false); setFilterPro('all'); setFilterStatus('all') }}>
             Limpiar
           </Button>
         )}
