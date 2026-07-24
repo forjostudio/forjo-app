@@ -322,7 +322,19 @@ Plans:
   3. Un negocio que nunca configuró el mapeo —o que tiene un solo profesional— reserva exactamente como hoy: sin mapeo definido, todos los profesionales se consideran capaces de todos los servicios (default sensato, cero regresión, sin obligar a configurar nada).
   4. Un negocio del vertical **canchas** sigue reservando igual que antes: el mapeo nuevo convive con `professionals.service_id` sin pisarlo ni cambiar su significado.
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — Espinazo: migración 057 (tabla puente `professional_services` + RLS por op + índice inverso) + tipo `ProfessionalService` + helper puro `lib/staff-services.ts` (regla del comodín D-01/D-12) con tests + validación local `supabase db reset` *(autonomous: false)*
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 08-02-PLAN.md — UI: read-paths de `/equipo` (+ services) y `/servicios` (+ mapeo) + Bloque A editor de chips optimista (D-06) + Bloque B cobertura por servicio con aviso "sin cobertura" (D-08/D-10), gateados por vertical canchas y por <2 profesionales activos
+
+**Waves**: Wave 1 = 08-01 (modelo + regla, no toca UI ni motor). Wave 2 = 08-02 (UI, depende del tipo + helper + tabla del Plan 01; sin solape de archivos entre planes).
+
 **UI hint**: yes
 **Security/Integrity relevance**: Datos de tenant nuevos → la migración **057** (idempotente, numerada; última aplicada en prod = **056**) crea la tabla puente con **RLS habilitada + policies por operación con `with check`** por `business_id`/`owner_id`: un negocio no puede mapear un profesional suyo a un servicio de otro tenant, ni leer el mapeo ajeno. La escritura es una acción autenticada del dueño (sesión + RLS + `.eq('business_id', ...)`, nunca service-role), re-validando profesional y servicio por `business_id` sin confiar en IDs del cliente. La migración se aplica **A MANO** al Supabase de prod coordinada con el deploy, NO por el flujo GSD. No redefine constraints ni toca el RPC → riesgo acotado; la exposición del mapeo al público (si hace falta para la fase 10) debe salir por una vista acotada, nunca abriendo la tabla a `anon`.
 
@@ -392,7 +404,7 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
-| 8. Equipo — qué servicios hace cada profesional | 0/? | Not started | - |
+| 8. Equipo — qué servicios hace cada profesional | 0/2 | Not started | - |
 | 9. Asignación automática atómica de profesional | 0/? | Not started | - |
 | 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |
