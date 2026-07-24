@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
 status: planning
-stopped_at: Phase 8 context gathered
-last_updated: "2026-07-24T19:25:07.616Z"
+stopped_at: Phase 8 UI-SPEC approved
+last_updated: "2026-07-24T19:47:14.256Z"
 last_activity: 2026-07-24 — ROADMAP de v0.25 creado (Phases 8-11, 14/14 requisitos mapeados)
 progress:
   total_phases: 11
@@ -166,9 +166,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-24T19:25:07.597Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-CONTEXT.md
+Last session: 2026-07-24T19:47:14.242Z
+Stopped at: Phase 8 UI-SPEC approved
+Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-UI-SPEC.md
 
 ## Operator Next Steps
 
