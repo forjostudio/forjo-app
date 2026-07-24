@@ -43,7 +43,7 @@ Faseo por integridad: primero el modelo del abono + alta manual + generación fo
 
 Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignación, y la disponibilidad across staff necesita saber quién puede hacer qué. El backlog chico va al final, separado del motor.
 
-- [ ] **Phase 8: Equipo — qué servicios hace cada profesional** - Mapeo muchos a muchos staff↔servicios (migración 057, tabla puente propia) + config y cobertura desde el panel, sin tocar el motor de reservas
+- [x] **Phase 8: Equipo — qué servicios hace cada profesional** - Mapeo muchos a muchos staff↔servicios (migración 057, tabla puente propia) + config y cobertura desde el panel, sin tocar el motor de reservas (completed 2026-07-24)
 - [ ] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**)
 - [ ] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail
 - [ ] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación
@@ -320,7 +320,7 @@ Plans:
   3. Un negocio que nunca configuró el mapeo —o que tiene un solo profesional— reserva exactamente como hoy: sin mapeo definido, todos los profesionales se consideran capaces de todos los servicios (default sensato, cero regresión, sin obligar a configurar nada).
   4. Un negocio del vertical **canchas** sigue reservando igual que antes: el mapeo nuevo convive con `professionals.service_id` sin pisarlo ni cambiar su significado.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -329,7 +329,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 08-02-PLAN.md — UI: read-paths de `/equipo` (+ services) y `/servicios` (+ mapeo) + Bloque A editor de chips optimista (D-06) + Bloque B cobertura por servicio con aviso "sin cobertura" (D-08/D-10), gateados por vertical canchas y por <2 profesionales activos
+- [x] 08-02-PLAN.md — UI: read-paths de `/equipo` (+ services) y `/servicios` (+ mapeo) + Bloque A editor de chips optimista (D-06) + Bloque B cobertura por servicio con aviso "sin cobertura" (D-08/D-10), gateados por vertical canchas y por <2 profesionales activos
 
 **Waves**: Wave 1 = 08-01 (modelo + regla, no toca UI ni motor). Wave 2 = 08-02 (UI, depende del tipo + helper + tabla del Plan 01; sin solape de archivos entre planes).
 
@@ -401,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
-| 8. Equipo — qué servicios hace cada profesional | 1/2 | In Progress|  |
+| 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete   | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 0/? | Not started | - |
 | 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |

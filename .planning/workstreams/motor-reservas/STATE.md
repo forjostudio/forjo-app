@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
-status: executing
+status: verifying
 stopped_at: Phase 8 UI-SPEC approved
-last_updated: "2026-07-24T22:20:46.201Z"
-last_activity: 2026-07-24 -- Phase 08 execution started
+last_updated: "2026-07-24T23:29:40.003Z"
+last_activity: "2026-07-24 -- 08-01 cerrado: migr. 057 validada (reset 001→057 limpio), helper puro + tests, SUMMARY complete"
 progress:
   total_phases: 11
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 42
-  completed_plans: 40
-  percent: 64
+  completed_plans: 42
+  percent: 73
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 08 (equipo-qu-servicios-hace-cada-profesional) — EXECUTING
 Plan: 2 of 2 (08-01 COMPLETO 3/3; checkpoint [BLOCKING] 057 aprobado con evidencia del reset local)
-Status: Executing Phase 08 — 08-01 cerrado; 08-02 (Wave 2) lo maneja el orquestador
+Status: Phase complete — ready for verification
 Last activity: 2026-07-24 -- 08-01 cerrado: migr. 057 validada (reset 001→057 limpio), helper puro + tests, SUMMARY complete
 
 **Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
@@ -63,6 +63,7 @@ Last activity: 2026-07-24 -- 08-01 cerrado: migr. 057 validada (reset 001→057 
 | Phase 07 P11 | 11min | 2 tasks | 3 files |
 | Phase 07 P12 | 55min | 3 tasks | 1 file |
 | Phase 08 P01 (autónomo) | ~18min | 2 tasks | 5 files |
+| Phase 08 P08-02 | 22min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 07]: 07-12: el anti-avalancha de la baja del abono (D-14/T-07-15) queda verificado por un test de CARRERA REAL contra la DB local (Promise.all de dos POST sobre el mismo cancel_token → 1 mail al cliente + 1 aviso al dueño), no por lectura de codigo — un doble del cliente Supabase no puede probar el gate atomico que serializa las dos requests
 - [Phase 07]: 07-12: para testear un route handler que despacha efectos con after() de Next 16 se mockea next/server PARCIALMENTE (importOriginal) reemplazando solo after por un ejecutor que guarda la promesa del callback; sin eso el handler tira porque en Vitest no hay request scope
 - [Phase 07]: 07-12: la prueba de mutacion del gate atomico que pedia el plan NO quedo evidenciada (el ejecutor original se colgo en el watchdog del harness al entrar a Task 3 y no dejo registro); se reporta como PENDIENTE para secure-phase, no como cumplida
+- [Phase ?]: 08-02: escritura del mapeo profesional×servicio por browser client + RLS + .eq('business_id'), nunca service-role
+- [Phase ?]: 08-02: precedencia de toasts D-10 > D-02 acotada al servicio desmarcado; comodín/cobertura consumidos de lib/staff-services
 
 ### Pending Todos
 
@@ -170,7 +173,7 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-24
+Last session: 2026-07-24T23:29:01.800Z
 Stopped at: 08-01 COMPLETO (3/3); próximo = 08-02 (Wave 2, orquestador)
 Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-02-PLAN.md
 
