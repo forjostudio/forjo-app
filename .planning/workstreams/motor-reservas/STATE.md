@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: Reserva con varios profesionales (multi-staff)
 status: planning
-last_updated: "2026-07-24T18:36:20.920Z"
+last_updated: "2026-07-24T19:10:00.000Z"
 last_activity: 2026-07-24
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,15 +19,17 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-07-16)
 
-**Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.24 agrega abonos semanales (turno fijo recurrente): alta manual por el dueño + generación forward de los turnos respetando 011/013 + cupos + espacio compartido + cancelación por link en el mail / panel. **Solo reserva** (el cobro recurrente es futuro; el modelo se diseña extensible).
+**Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
 **Current focus:** **v0.25 — Reserva con varios profesionales (multi-staff)**, arranca en **Phase 8**. v0.24 shipped y verificado en prod (HEAD `9ee6243`). El **cupo por solape** NO es este milestone: se difirió a **v0.26** (independiente, toca el mismo RPC — no se meten dos cambios grandes al núcleo en el mismo ciclo).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 8 — Equipo: qué servicios hace cada profesional (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-24 — Milestone v0.25 started
+Status: Roadmap aprobado — listo para planificar la Phase 8
+Last activity: 2026-07-24 — ROADMAP de v0.25 creado (Phases 8-11, 14/14 requisitos mapeados)
+
+**Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
 
 ## Performance Metrics
 
@@ -64,7 +66,19 @@ Last activity: 2026-07-24 — Milestone v0.25 started
 
 ### Decisions
 
-Decisiones LOCKED de v0.24 (ver REQUIREMENTS.md + PROJECT.md):
+Decisiones LOCKED de v0.25 (ver REQUIREMENTS.md + PROJECT.md):
+
+- **Tres conceptos distintos, no confundir:** varias personas = varias agendas (`professionals`, esto es v0.25) · clase grupal = muchos clientes en UNA agenda (`time_blocks.capacity`, funciona hoy) · recurso simultáneo = capacity por solape (roto, **v0.26**). Tres barberos NO son "cupo 3".
+- **Mapeo staff↔servicios muchos a muchos en tabla puente propia** (migración **057**). **NO** se reusa `professionals.service_id`: es *single* y es el mecanismo de canchas (migr. 043).
+- **Sin mapeo definido = todos capaces de todo** (default sensato, cero regresión, no obliga a configurar).
+- **El cliente elige profesional O "cualquiera"** — las dos vías conviven.
+- **La asignación automática corre DENTRO del RPC atómico `book_slot_atomic`**, nunca en el cliente ni en dos pasos (leer libres → insertar es una carrera).
+- **Estrategia de asignación: el profesional con menos turnos ese día.** Hacerla configurable es v2, sin re-migrar.
+- **El profesional asignado se le muestra al cliente** (pantalla de confirmación + mail).
+- **Faseo:** 8 modelo+config (no toca el motor) → 9 asignación atómica (**secure-phase obligatorio**) → 10 superficies públicas → 11 backlog chico.
+- **Cupo por solape queda FUERA** (v0.26): independiente de multi-staff y sobre el mismo RPC — no se meten dos cambios grandes al núcleo en el mismo ciclo.
+
+Decisiones LOCKED de v0.24 (históricas, siguen vigentes):
 
 - **Solo reserva, sin cobro.** El cobro recurrente automático (MP preapproval por cliente) es milestone FUTURO; v0.24 deja el **modelo de datos extensible** para sumarlo sin re-migrar.
 - **Alta manual por el dueño** (no pública en v1), reusando el pipeline de alta de turno existente (validación + anti-tampering de tenant, `.eq('business_id', ...)`, re-validar service/professional/location/cancha).
@@ -109,6 +123,11 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
+- **[Phase 8 — migración]** La tabla puente staff↔servicios es la migración **057** (idempotente, numerada, RLS habilitada + policies por operación con `with check` por `business_id`/`owner_id`). Baseline: la última aplicada en prod es la **056** → la próxima es la **057**. Se aplica **A MANO** al Supabase de prod coordinada con el deploy (+ `NOTIFY pgrst, 'reload schema'` si toca cache) — **NO** por el flujo GSD.
+- **[Phase 9 — integridad]** La asignación de "cualquiera" tiene que ocurrir DENTRO de `book_slot_atomic`, bajo el mismo advisory lock / transacción `SECURITY DEFINER` que ya serializa el anti-sobrecupo y la exclusión por espacio. Cambiar la granularidad del lock no puede degradar `slot_full` ni `slot_taken`. Los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) entran por `createAppointmentCore`: un cambio de firma/semántica los afecta a los cuatro. **secure-phase obligatorio.** El RPC se modifica en una migración numerada nueva (`CREATE OR REPLACE FUNCTION`), aplicada a mano.
+- **[Phase 9 — tenant]** `book_slot_atomic` es `SECURITY DEFINER`: RLS NO la protege. Toda query nueva adentro debe filtrar por `business_id` explícito; el conjunto de candidatos se deriva server-side, nunca de IDs que mande el cliente.
+- **[Phase 10 — superficie pública]** `/api/booking/availability` pasa a agregar varias agendas: mantener el contrato acotado `{ ok, busy, full }` (D-06 LOCKED, el público no ve lugares restantes) y no filtrar la agenda interna. La lista de profesionales capaces por servicio sale por **vista acotada** (molde `public_professionals`/`public_services`), nunca abriendo la tabla puente a `anon`. Los dos calendarios públicos son **gemelos** — tocar uno sin el otro es la regresión clásica del workstream.
+- **[Phase 10 — decisión abierta]** Default del selector público ("cualquiera" vs. "elegí profesional") y si la opción "cualquiera" se muestra con un solo profesional — **cerrar en discuss-phase**.
 - **[Phase 6 — migración]** Migración nueva **054** (idempotente, numerada) crea la tabla del abono (recurring booking) + el vínculo turno→abono, con RLS habilitada + policies por operación con `with check` por `business_id`/`owner_id`. Baseline de migraciones: última aplicada = **053** (`mp_connection_status`, v0.23) → la próxima es **054**. Se aplica **A MANO** al Supabase de prod, coordinada con el deploy (+ `NOTIFY pgrst, 'reload schema'` si toca cache) — **NO** por el flujo GSD. Diseñar el esquema **extensible** para cobro recurrente futuro sin re-migrar.
 - **[Phase 6 — integridad]** La generación forward inserta cada ocurrencia por el RPC atómico existente (capacity-aware + advisory lock por espacio) → cero grieta de doble-booking / sobrecupo / conflicto de espacio bajo concurrencia con reservas públicas o manuales. **secure-phase obligatorio.**
 - **[Phase 6 — cron]** La extensión de la ventana corre en el **cron diario existente** (`vercel.json` → `0 3 * * *`, `/api/cron/cancel-expired` o un cron análogo). Vercel Hobby NO permite crons más frecuentes que diario — no agregar ninguno.
@@ -146,10 +165,10 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-22T12:36:59.603Z
-Stopped at: Completado 07-12-PLAN.md (12/12 planes de la Phase 07)
+Last session: 2026-07-24
+Stopped at: ROADMAP de v0.25 creado (Phases 8-11) — sin planes todavía
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Arrancar la Phase 8 con `/gsd:discuss-phase 8 --ws motor-reservas` (o `/gsd:plan-phase 8 --ws motor-reservas`).

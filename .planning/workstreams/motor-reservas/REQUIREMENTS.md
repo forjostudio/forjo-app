@@ -73,21 +73,28 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 
 ## Traceability
 
-| REQ-ID | Phase |
-|--------|-------|
-| STAFF-01 | — |
-| STAFF-02 | — |
-| STAFF-03 | — |
-| ASIGN-01 | — |
-| ASIGN-02 | — |
-| ASIGN-03 | — |
-| ASIGN-04 | — |
-| ASIGN-05 | — |
-| DISP-01 | — |
-| DISP-02 | — |
-| DISP-03 | — |
-| POLISH-01 | — |
-| POLISH-02 | — |
-| POLISH-03 | — |
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| STAFF-01 | Phase 8 — Equipo: qué servicios hace cada profesional | Pending |
+| STAFF-02 | Phase 8 — Equipo: qué servicios hace cada profesional | Pending |
+| STAFF-03 | Phase 8 — Equipo: qué servicios hace cada profesional | Pending |
+| ASIGN-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
+| ASIGN-02 | Phase 9 — Asignación automática atómica de profesional | Pending |
+| ASIGN-03 | Phase 9 — Asignación automática atómica de profesional | Pending |
+| ASIGN-04 | Phase 9 — Asignación automática atómica de profesional | Pending |
+| ASIGN-05 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
+| DISP-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
+| DISP-02 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
+| DISP-03 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
+| POLISH-01 | Phase 11 — Cierre de backlog | Pending |
+| POLISH-02 | Phase 11 — Cierre de backlog | Pending |
+| POLISH-03 | Phase 11 — Cierre de backlog | Pending |
 
-*(Se completa al crear el roadmap.)*
+**Cobertura: 14/14 requisitos mapeados, cada uno a UNA sola fase. Sin huérfanos ni duplicados.**
+
+| Phase | Requisitos |
+|-------|------------|
+| 8. Equipo — qué servicios hace cada profesional | STAFF-01, STAFF-02, STAFF-03 |
+| 9. Asignación automática atómica de profesional | ASIGN-02, ASIGN-03, ASIGN-04 |
+| 10. Reservar con "cualquiera" desde la página pública | ASIGN-01, ASIGN-05, DISP-01, DISP-02, DISP-03 |
+| 11. Cierre de backlog | POLISH-01, POLISH-02, POLISH-03 |

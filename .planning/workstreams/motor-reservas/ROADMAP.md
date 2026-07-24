@@ -1,6 +1,6 @@
 # Roadmap: Forjo App — Motor de Reservas (workstream `motor-reservas`)
 
-> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19) y **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22). Numeración de fases **continua** por workstream: el próximo milestone arranca en **Phase 8**. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
+> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19), **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22) y **v0.25 Reserva con varios profesionales / multi-staff** (Phases 8-11, en planificación). Numeración de fases **continua** por workstream: el próximo milestone arranca en **Phase 12**. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
 
 ## Overview
 
@@ -9,6 +9,9 @@
 **v0.22 — Turnos: alta manual y ventana de reserva (shipped 2026-07-19):** dos mejoras acotadas sobre el motor ya entregado, **sin reconstruir nada de v0.12**. (1) **Ventana de reserva:** el dueño limita hasta con cuánta anticipación puede reservar el público (una sola métrica global por negocio, `businesses.max_advance_days`, vacío/0 = sin límite); el tope se respeta en los **dos** calendarios públicos (general + canchas) y, como **backstop anti-tampering**, en el servidor (`app/api/booking/create`) — el alta manual autenticada queda **exenta**. (2) **Aviso al cliente:** el form "Nuevo turno" ya existente (v0.12: `app/api/appointments/create`) suma un checkbox **opt-in** para mandarle al cliente un mail de turno confirmado, respetando el default de v0.12 (no se manda salvo que se pida). Las dos mejoras son superficies distintas (público vs. alta autenticada) → una fase cada una.
 
 **v0.24 — Turnos fijos / Abonos recurrentes (shipped 2026-07-22):** capacidad NUEVA sobre el motor ya entregado: el dueño arma un **abono semanal** (turno fijo recurrente) para un cliente desde el panel; el sistema **genera los turnos hacia adelante** (ventana rolling, extendida por el cron diario existente) respetando la integridad anti-doble-booking (constraints 011/013), los cupos/capacity y la exclusión por espacio compartido (canchas); el cliente **cancela la suscripción** desde un link en el mail y el dueño la da de baja desde el panel. **Solo reserva** — el cobro recurrente automático es un milestone futuro, pero el **modelo de datos se diseña extensible** para sumarlo sin re-migrar. Toca el núcleo de integridad anti-doble-booking + el aislamiento por tenant → la fase del modelo/generación es **security-sensitive** (secure-phase obligatorio). El faseo va por integridad: primero el modelo + alta + generación forward (el núcleo sensible), después la cancelación (mail + panel), que depende de la serie ya existente.
+
+**v0.25 — Reserva con varios profesionales / multi-staff (Phases 8-11, en planificación):** capacidad NUEVA sobre el motor ya entregado, **sin reconstruirlo**. El negocio declara **qué servicios hace cada persona** del equipo (mapeo **muchos a muchos** propio, migración **057** — `professionals.service_id` es *single* y es el mecanismo de **canchas** (migr. 043): NO se toca ni se recicla), y el cliente reserva **eligiendo profesional o dejando "cualquiera"**; en ese caso el sistema le asigna uno **libre y capaz** eligiendo el que menos turnos tiene ese día. La asignación automática corre **DENTRO del RPC atómico `book_slot_atomic`** — leer profesionales libres y después insertar sería una carrera —, por lo que la fase de asignación es el punto de mayor riesgo del milestone (**secure-phase obligatorio**). El faseo va por dependencia y riesgo creciente: primero el **modelo + config del equipo** (no toca el motor), después la **asignación atómica** en el RPC (el núcleo anti-doble-booking), después la **disponibilidad across staff** en las superficies públicas (que necesita saber quién puede hacer qué), y al cierre un **backlog chico** independiente del motor. **Cero regresión obligatoria** en: canchas, abonos (generación forward por el mismo motor), cupos grupales (`time_blocks.capacity`) y exclusión por espacio compartido. **Fuera de alcance:** el **cupo por solape** (`capacity > 1` contado por hora de inicio exacta) — bug real y capturado, pero independiente de multi-staff y sobre el mismo RPC → **v0.26**, para no meter dos cambios grandes al núcleo en el mismo ciclo.
+
 
 ## Phases
 
@@ -36,6 +39,16 @@ Faseo por integridad: primero el modelo del abono + alta manual + generación fo
 
 - [x] **Phase 6: Modelo del abono + alta manual + generación forward** - Entidad de abono semanal extensible (migración 054), alta manual por el dueño reusando el pipeline de alta de turno, y generación forward de los appointments (ventana rolling en el cron diario) respetando 011/013 + cupos + espacio compartido, cada turno vinculado al abono (completed 2026-07-21)
 - [x] **Phase 7: Cancelación del abono (mail + panel)** - Link de "cancelar suscripción" en el mail (token a nivel serie) + baja del abono desde el panel del dueño; deja de generar turnos futuros y maneja los ya generados (completed 2026-07-21)
+
+### Milestone v0.25 — Reserva con varios profesionales / multi-staff (en planificación)
+
+Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignación, y la disponibilidad across staff necesita saber quién puede hacer qué. El backlog chico va al final, separado del motor.
+
+- [ ] **Phase 8: Equipo — qué servicios hace cada profesional** - Mapeo muchos a muchos staff↔servicios (migración 057, tabla puente propia) + config y cobertura desde el panel, sin tocar el motor de reservas
+- [ ] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**)
+- [ ] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail
+- [ ] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación
+
 
 ## Phase Details
 
@@ -297,10 +310,78 @@ Plans:
 **UI hint**: yes
 **Security/Integrity relevance**: El **token de cancelación** del mail debe dar de baja **solo** el abono al que corresponde: token no adivinable, comparado con `timingSafeEqual` (patrón del cancel-token de turno actual), sin permitir cancelar la serie de otro tenant manipulando el link — un cliente no puede tocar el abono de otro negocio. La baja desde el panel es una acción autenticada del dueño sobre un abono de SU negocio (RLS + `business_id`/`owner_id`). Frenar la generación y (según decisión) cancelar los turnos futuros ya generados no puede tocar turnos de otra serie ni de otro tenant. Riesgo acotado frente a Phase 6 (no redefine constraints), pero toca aislamiento por tenant → el secure-phase gate verifica: scoping del token de cancelación a la serie correcta, aislamiento por tenant de la baja (mail y panel), y que frenar/cancelar la serie no afecte turnos ajenos.
 
+### Phase 8: Equipo — qué servicios hace cada profesional
+
+**Goal**: El dueño puede declarar desde el panel **qué servicios sabe hacer cada persona** del equipo y ver la cobertura al revés (por servicio, quién lo ofrece), con un modelo **muchos a muchos** propio (tabla puente nueva, migración **057**) que NO toca ni recicla `professionals.service_id` (ese campo es *single* y es el mecanismo de canchas, migr. 043). Es la fase de menor riesgo: agrega datos de configuración y su UI, **sin tocar el motor de reservas** (`book_slot_atomic`, availability, constraints 011/013). Habilita las dos fases siguientes: sin saber quién puede hacer qué, no hay asignación automática ni disponibilidad across staff.
+**Depends on**: Phase 7 (última fase entregada del workstream; sin dependencia funcional nueva — primera fase de v0.25)
+**Requirements**: STAFF-01, STAFF-02, STAFF-03
+**Success Criteria** (what must be TRUE):
+
+  1. El dueño abre un profesional del equipo, marca los servicios que esa persona hace, guarda, y al volver a entrar el mapeo sigue ahí — un mismo servicio puede estar asignado a varias personas y una persona puede hacer varios servicios.
+  2. El dueño ve, por servicio, qué profesionales lo ofrecen, y detecta a simple vista un servicio que **no cubre nadie**.
+  3. Un negocio que nunca configuró el mapeo —o que tiene un solo profesional— reserva exactamente como hoy: sin mapeo definido, todos los profesionales se consideran capaces de todos los servicios (default sensato, cero regresión, sin obligar a configurar nada).
+  4. Un negocio del vertical **canchas** sigue reservando igual que antes: el mapeo nuevo convive con `professionals.service_id` sin pisarlo ni cambiar su significado.
+
+**Plans**: TBD
+**UI hint**: yes
+**Security/Integrity relevance**: Datos de tenant nuevos → la migración **057** (idempotente, numerada; última aplicada en prod = **056**) crea la tabla puente con **RLS habilitada + policies por operación con `with check`** por `business_id`/`owner_id`: un negocio no puede mapear un profesional suyo a un servicio de otro tenant, ni leer el mapeo ajeno. La escritura es una acción autenticada del dueño (sesión + RLS + `.eq('business_id', ...)`, nunca service-role), re-validando profesional y servicio por `business_id` sin confiar en IDs del cliente. La migración se aplica **A MANO** al Supabase de prod coordinada con el deploy, NO por el flujo GSD. No redefine constraints ni toca el RPC → riesgo acotado; la exposición del mapeo al público (si hace falta para la fase 10) debe salir por una vista acotada, nunca abriendo la tabla a `anon`.
+
+### Phase 9: Asignación automática atómica de profesional
+
+**Goal**: Una reserva que **no elige profesional** queda asignada a uno **libre y capaz** (que sabe hacer el servicio elegido), y esa elección ocurre **DENTRO del RPC atómico `book_slot_atomic`**, en la misma transacción que ya serializa el anti-sobrecupo y la exclusión por espacio compartido — nunca leyendo libres y después insertando, que sería una carrera. Entre varios candidatos gana el que **menos turnos tiene ese día** (reparto de carga). Es el punto de mayor riesgo del milestone: toca el núcleo anti-doble-booking que endurecieron v0.9 y v0.12 y que hoy sostiene canchas, abonos, cupos grupales y espacio compartido.
+**Depends on**: Phase 8 (necesita saber qué profesionales son capaces de cada servicio para poder elegir entre ellos)
+**Requirements**: ASIGN-02, ASIGN-03, ASIGN-04
+**Success Criteria** (what must be TRUE):
+
+  1. Una reserva pedida **sin profesional** queda confirmada con un profesional concreto asignado, que sabe hacer el servicio elegido y tenía ese horario libre.
+  2. Dos reservas de "cualquiera" sobre el mismo horario lanzadas **a la vez** terminan con dos profesionales **distintos**; si solo quedaba uno libre, una confirma y la otra es rechazada — nunca el mismo profesional dos veces ni una sobre-reserva.
+  3. Si ningún profesional capaz tiene ese horario libre, la reserva se rechaza con el error de disponibilidad de siempre (no se asigna a alguien ocupado ni se cae).
+  4. Entre varios profesionales libres y capaces, el turno cae en el que **menos turnos tiene ese día**.
+  5. Cero regresión verificada en los cuatro caminos que comparten el motor: elegir un profesional específico, reservar una cancha, generar la ocurrencia de un abono y llenar un cupo grupal se comportan exactamente como antes.
+
+**Plans**: TBD
+**UI hint**: no
+**Security/Integrity relevance**: **Security-sensitive — secure-phase obligatorio.** Reescribe el corazón de la integridad del producto. Riesgos clave: (a) **carrera de asignación** — leer profesionales libres fuera del RPC y después insertar permite que dos clientes concurrentes reciban el mismo profesional; la selección tiene que ocurrir bajo el mismo `pg_advisory_xact_lock` / la misma transacción `SECURITY DEFINER` que ya protege el conteo de ocupación y la exclusión por espacio; ampliar la granularidad del lock (de slot-por-agenda a slot-por-negocio/servicio) no puede degradar ni el anti-sobrecupo (`slot_full`) ni el anti-solape cross-espacio (`slot_taken`); (b) **regresión** de los cuatro consumidores del RPC (booking público, alta manual autenticada, generación forward de abonos, canchas) — todos entran por `createAppointmentCore`, así que un cambio de firma o de semántica del RPC los afecta a los cuatro a la vez; (c) **anti-tampering de tenant**: el conjunto de candidatos se deriva **server-side** del `business_id` resuelto por slug/sesión y del mapeo de la Phase 8, nunca de una lista de IDs que mande el cliente — un `professionalId` ajeno no puede colarse por la vía "cualquiera"; (d) la función es `SECURITY DEFINER`: cualquier query nueva adentro debe filtrar por `business_id` explícitamente, porque RLS no la protege. La modificación del RPC va en una **migración numerada nueva** (idempotente, `CREATE OR REPLACE FUNCTION`), aplicada a mano y coordinada con el deploy. El secure-phase gate verifica: atomicidad de la asignación bajo concurrencia real (test contra la DB, no lectura de código), cero regresión de los cuatro caminos, y aislamiento por tenant del conjunto de candidatos.
+
+### Phase 10: Reservar con "cualquiera" desde la página pública
+
+**Goal**: La capacidad que entregó la Phase 9 se vuelve visible y usable para el cliente final: en la página pública puede elegir un profesional específico **o** "cualquiera", la grilla de horarios refleja al **equipo entero** (un horario está libre si algún profesional capaz lo tiene libre), y al confirmar ve **quién le tocó** — en pantalla y en el mail. Elegir profesional específico sigue comportándose exactamente como hoy.
+**Depends on**: Phase 9 (la opción "cualquiera" solo se expone cuando el servidor ya sabe asignar de forma atómica) y Phase 8 (la disponibilidad across staff necesita el mapeo)
+**Requirements**: ASIGN-01, ASIGN-05, DISP-01, DISP-02, DISP-03
+**Success Criteria** (what must be TRUE):
+
+  1. En la reserva pública, elegido el servicio, el cliente puede elegir un profesional de la lista **o** la opción "cualquiera".
+  2. Con "cualquiera", un horario aparece disponible si **al menos un** profesional capaz lo tiene libre, y deja de ofrecerse cuando ninguno tiene lugar.
+  3. Elegido un profesional específico, la grilla de horarios es la de esa agenda — idéntica a hoy (cero regresión para el negocio de un solo profesional).
+  4. Al confirmar una reserva hecha con "cualquiera", el cliente ve el nombre del profesional asignado en la pantalla de confirmación y lo recibe en el mail de confirmación.
+  5. El calendario público de **canchas** (el gemelo `canchas-booking-client.tsx`) sigue funcionando igual que hoy: el cliente elige la cancha, sin opción "cualquiera".
+
+**Plans**: TBD
+**UI hint**: yes
+**Security/Integrity relevance**: Superficie **pública y anónima**. El endpoint `/api/booking/availability` pasa a agregar disponibilidad de varias agendas: debe mantener el contrato acotado que ya rige (`{ ok, busy, full }` — D-06 LOCKED: el público **no** ve cuántos lugares quedan) y **no filtrar** por el camino nuevo qué profesional está ocupado a qué hora, ni la agenda interna del negocio, más allá de lo que ya expone hoy. La lista de profesionales capaces por servicio se sirve por una **vista acotada** al estilo `public_professionals`/`public_services`, nunca abriendo la tabla puente a `anon`. El cliente puede mandar "sin profesional", pero **el servidor es la autoridad**: nada de aceptar un profesional pre-elegido por el front como si fuera la asignación, ni de confiar en un `professionalId` que no pertenezca al negocio del slug (anti-tampering existente intacto). El nombre del profesional asignado que se muestra/manda por mail sale del turno ya creado y del mismo tenant. La ventana de reserva (v0.22) y el gating de `plan_status` (SEC-04) siguen aplicando sin cambios. Los dos calendarios públicos son **gemelos**: tocar uno sin el otro es la regresión clásica de este workstream.
+
+**Decisión abierta (cerrar en discuss-phase)**: si el default del selector público es "cualquiera" o "elegí profesional", y si la opción "cualquiera" se muestra cuando el negocio tiene un solo profesional (candidato: ocultarla).
+
+### Phase 11: Cierre de backlog
+
+**Goal**: Cerrar los tres pendientes chicos e independientes que quedaron del ciclo anterior, sin tocar el motor de reservas: distinguir en Archivados una serie **cancelada** de una **completada**, sacar el error de eslint por `setState` dentro de `useEffect` en `clients-client.tsx`, y resolver de una sola vez el borde lateral acentuado de las **dos** pantallas de cancelación, tratándolas juntas para que no diverjan.
+**Depends on**: Phase 10 (secuencial dentro del milestone; sin dependencia funcional — ninguno de los tres ítems toca multi-staff)
+**Requirements**: POLISH-01, POLISH-02, POLISH-03
+**Success Criteria** (what must be TRUE):
+
+  1. En el tab **Archivados** de Abonos, el dueño distingue de un vistazo una serie **cancelada** de una **completada** (indicador propio por estado), sin abrir el detalle.
+  2. La pantalla de Clientes deja de disparar el error de eslint por `setState` dentro de `useEffect` (`clients-client.tsx:497`) y se comporta igual que hoy: búsqueda, filtros, alta y edición sin renders en cascada.
+  3. Las dos pantallas de cancelación (`/cancelar/[token]` y `/abono/cancelar/[token]`) quedan resueltas con el **mismo** criterio visual en el borde lateral acentuado — se ven consistentes entre sí.
+
+**Plans**: TBD
+**UI hint**: yes
+**Security/Integrity relevance**: Bajo riesgo. Los tres ítems son de presentación o de higiene de render; no tocan el motor de reservas, los constraints, el aislamiento por tenant ni el flujo de cancelación en sí. Único cuidado: las pantallas de cancelación son **públicas y anónimas** y ya están endurecidas (404 genérico, token no adivinable, el número lo informa el servidor, `noindex`, contraste derivado por luminancia) — el retoque visual no puede aflojar ninguna de esas propiedades ni cambiar qué datos se muestran antes de autenticar el token.
+
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped). El próximo milestone del workstream arranca en Phase 8.
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, en planificación). El próximo milestone del workstream arranca en Phase 12.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -311,3 +392,7 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
+| 8. Equipo — qué servicios hace cada profesional | 0/? | Not started | - |
+| 9. Asignación automática atómica de profesional | 0/? | Not started | - |
+| 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
+| 11. Cierre de backlog | 0/? | Not started | - |
