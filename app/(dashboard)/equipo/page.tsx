@@ -19,20 +19,25 @@ export default async function EquipoPage() {
 
   // spaces / agenda_spaces (motor-reservas / espacio compartido) viven en la vista Equipo (D-04):
   // el mapeo agenda→espacios se edita junto al CRUD de professionals. Cargados por tenant (RLS).
-  const [{ data: professionals }, { data: spaces }, { data: agendaSpaces }] = await Promise.all([
+  // services + professional_services (STAFF, migr. 057): el editor de chips (Bloque A) necesita los
+  // servicios del negocio como chips y las filas del mapeo. Todo por tenant (.eq('business_id') + RLS).
+  const [{ data: professionals }, { data: services }, { data: spaces }, { data: agendaSpaces }, { data: professionalServices }] = await Promise.all([
     supabase.from('professionals').select('*').eq('business_id', business.id).order('created_at'),
+    supabase.from('services').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('spaces').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('agenda_spaces').select('*').eq('business_id', business.id),
+    supabase.from('professional_services').select('*').eq('business_id', business.id),
   ])
 
   return (
     <SettingsClient
       business={business}
-      initialServices={[]}
+      initialServices={services || []}
       initialProfessionals={professionals || []}
       initialLocations={[]}
       initialSpaces={spaces || []}
       initialAgendaSpaces={agendaSpaces || []}
+      initialProfessionalServices={professionalServices || []}
       mpConnectEnabled={mpConnectConfigured()}
       view="equipo"
     />

@@ -16,12 +16,15 @@ export default async function ServiciosPage() {
   // Los cargamos por tenant (.eq('business_id') + RLS, defensa en profundidad). Para salud/belleza/
   // general estos datos no cambian el render de /servicios (el CRUD de servicios se mantiene igual):
   // el manager de canchas se gatea por vertical dentro del componente. NO redirigimos por vertical acá.
-  const [{ data: services }, { data: locations }, { data: professionals }, { data: spaces }, { data: agendaSpaces }] = await Promise.all([
+  // professional_services (STAFF, migr. 057): la cobertura por servicio (Bloque B) necesita las filas
+  // del mapeo. Por tenant (.eq('business_id') + RLS, defensa en profundidad).
+  const [{ data: services }, { data: locations }, { data: professionals }, { data: spaces }, { data: agendaSpaces }, { data: professionalServices }] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('locations').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('professionals').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('spaces').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('agenda_spaces').select('*').eq('business_id', business.id),
+    supabase.from('professional_services').select('*').eq('business_id', business.id),
   ])
 
   return (
@@ -32,6 +35,7 @@ export default async function ServiciosPage() {
       initialLocations={locations || []}
       initialSpaces={spaces || []}
       initialAgendaSpaces={agendaSpaces || []}
+      initialProfessionalServices={professionalServices || []}
       mpConnectEnabled={mpConnectConfigured()}
       view="servicios"
     />
