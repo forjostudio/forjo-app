@@ -8,7 +8,8 @@ import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace } from '@/lib/types'
+import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService } from '@/lib/types'
+import { isServiceCovered } from '@/lib/staff-services'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
@@ -129,6 +130,9 @@ interface Props {
   // las vistas de sidebar que no muestran la tab de Equipo (servicios/negocio/consultorios) no los pasan.
   initialSpaces?: Space[]
   initialAgendaSpaces?: AgendaSpace[]
+  // Mapeo profesional→servicio (migr. 057, STAFF v0.25). Cargado por tenant en equipo/servicios page.
+  // Opcional: solo lo pasan las vistas /equipo (editor) y /servicios (cobertura); default [].
+  initialProfessionalServices?: ProfessionalService[]
   mpConnectEnabled: boolean
   // Google Calendar (mismo estado/conexión que el control de la Agenda): presencia del refresh_token
   // (booleano, nunca el token) + si la integración está configurada. Se leen server-side en negocio/page.
@@ -153,7 +157,7 @@ function GoogleCalendarLogo({ className }: { className?: string }) {
   return <Image src="/google-calendar.png" alt="" width={20} height={20} className={className} />
 }
 
-export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], mpConnectEnabled, googleEnabled = false, googleConnected = false, ownerEmail = null, view = 'config' }: Props) {
+export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], initialProfessionalServices = [], mpConnectEnabled, googleEnabled = false, googleConnected = false, ownerEmail = null, view = 'config' }: Props) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -582,6 +586,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // porque la columna es NOT NULL, pero la policy lo valida (no es superficie falsificable).
   const [spaces, setSpaces] = useState<Space[]>(initialSpaces)
   const [agendaSpaces, setAgendaSpaces] = useState<AgendaSpace[]>(initialAgendaSpaces)
+  // Mapeo profesional→servicio (STAFF, D-01/D-06). Espeja el estado/patrón de agendaSpaces.
+  const [professionalServices, setProfessionalServices] = useState<ProfessionalService[]>(initialProfessionalServices)
   const [newSpaceName, setNewSpaceName] = useState('')
   const [savingSpace, setSavingSpace] = useState(false)
   // Término del eje según el rubro: 'Cancha'/'Canchas' para canchas, 'Profesional'/'Equipo' resto.
@@ -643,6 +649,56 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         // Rollback: quitar la fila agregada.
         setAgendaSpaces(prev => prev.filter(a => !(a.professional_id === professionalId && a.space_id === spaceId)))
         toast.error('Error al actualizar el mapeo')
+      }
+    }
+  }
+
+  // ── Mapeo profesional→servicio (STAFF, D-06) ────────────────────────────────
+  function isServiceMapped(professionalId: string, serviceId: string) {
+    return professionalServices.some(r => r.professional_id === professionalId && r.service_id === serviceId)
+  }
+
+  // Marca/desmarca qué servicio hace un profesional. Optimista con rollback (paridad exacta con
+  // toggleAgendaSpace). Escritura por el browser client con RLS + .eq('business_id') (defensa en
+  // profundidad), NUNCA service-role. Al DESMARCAR dispara como máximo UN toast con la precedencia del
+  // UI-SPEC: D-10 (ese servicio quedó sin cobertura) gana sobre D-02 (el profesional volvió a comodín);
+  // si la escritura falla, solo toast.error. Marcar nunca avisa: el chip pintado ES el feedback. La
+  // regla del comodín se consume del helper puro (@/lib/staff-services), no se reimplementa acá.
+  async function toggleProfessionalService(professionalId: string, serviceId: string) {
+    const mapped = isServiceMapped(professionalId, serviceId)
+    if (mapped) {
+      const next = professionalServices.filter(r => !(r.professional_id === professionalId && r.service_id === serviceId))
+      setProfessionalServices(next)
+      const { error } = await supabase
+        .from('professional_services')
+        .delete()
+        .eq('business_id', business.id)
+        .eq('professional_id', professionalId)
+        .eq('service_id', serviceId)
+      if (error) {
+        // Rollback: re-insertar la fila quitada.
+        setProfessionalServices(prev => [...prev, { business_id: business.id, professional_id: professionalId, service_id: serviceId }])
+        toast.error('No se pudo guardar el cambio. Revisá tu conexión y probá de nuevo.')
+        return
+      }
+      // Avisos post-escritura, sobre el estado ya aplicado y solo profesionales ACTIVOS (D-16).
+      const activePros = professionals.filter(p => p.active)
+      const svc = services.find(s => s.id === serviceId)
+      if (svc && !isServiceCovered(serviceId, activePros, next)) {
+        toast.warning(`Nadie ofrece "${svc.name}". Marcá a alguien para que lo cubra.`)
+      } else if (next.every(r => r.professional_id !== professionalId)) {
+        const pro = professionals.find(p => p.id === professionalId)
+        const proName = pro ? [pro.name, pro.last_name].filter(Boolean).join(' ') : ''
+        toast.info(`Sin nada marcado, ${proName} vuelve a ofrecerse para todo.`)
+      }
+    } else {
+      const row: ProfessionalService = { business_id: business.id, professional_id: professionalId, service_id: serviceId }
+      setProfessionalServices(prev => [...prev, row])
+      const { error } = await supabase.from('professional_services').insert(row)
+      if (error) {
+        // Rollback: quitar la fila agregada.
+        setProfessionalServices(prev => prev.filter(r => !(r.professional_id === professionalId && r.service_id === serviceId)))
+        toast.error('No se pudo guardar el cambio. Revisá tu conexión y probá de nuevo.')
       }
     }
   }
@@ -1414,6 +1470,66 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               </div>
             )}
           </Card>
+
+          {/* ── Bloque A: qué servicios hace cada profesional (STAFF, D-05/D-06) ──
+               Editor de chips optimista (view=equipo). Gates en orden (UI-SPEC): (1) NO canchas
+               (D-18, defensa en profundidad — /equipo ya redirige canchas antes de las queries),
+               (2) ≥2 profesionales ACTIVOS (D-07), (3) sin servicios → header + línea guía. Lista
+               solo profesionales activos; los chips = todos los services en orden created_at. El copy
+               evita el artículo antes de term.services (regla de género del UI-SPEC). */}
+          {!isCanchas && professionals.filter(p => p.active).length >= 2 && (
+            <Card className="p-6 space-y-4 mt-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Qué {term.services.toLowerCase()} hace cada {resourceWord.toLowerCase()}</p>
+                <p className="text-xs text-muted-foreground">
+                  Marcá qué hace cada {resourceWord.toLowerCase()}. Si no marcás nada, se ofrece para todo.
+                </p>
+              </div>
+              {services.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Primero agregá {term.services.toLowerCase()} en Servicios; después vas a poder marcar
+                  qué hace cada {resourceWord.toLowerCase()}.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {professionals.filter(p => p.active).map(p => {
+                    const fullName = [p.name, p.last_name].filter(Boolean).join(' ')
+                    // Comodín (D-01): 0 filas = hace todo. Se consume la misma noción del helper.
+                    const isWildcard = !professionalServices.some(r => r.professional_id === p.id)
+                    return (
+                      <div key={p.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
+                        <p className="text-sm font-medium truncate">{fullName}</p>
+                        {isWildcard && <p className="text-[11px] text-muted-foreground">Hace todo</p>}
+                        <div role="group" aria-label={`${term.services} de ${fullName}`} className="flex flex-wrap gap-2">
+                          {services.map(s => {
+                            const checked = isServiceMapped(p.id, s.id)
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => toggleProfessionalService(p.id, s.id)}
+                                aria-pressed={checked}
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-medium transition-colors',
+                                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                                  checked
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-border text-muted-foreground hover:border-primary hover:text-primary',
+                                )}
+                              >
+                                {checked && <Check aria-hidden="true" className="w-3.5 h-3.5" />}
+                                {s.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* ── Espacios físicos + mapeo agenda→espacios (motor-reservas / espacio compartido) ──
                Vive dentro de la tab de Equipo (D-04, sin pantalla nueva). El alta de espacios y el
