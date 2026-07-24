@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.24
-milestone_name: — Turnos fijos / Abonos recurrentes
-status: Awaiting next milestone
-stopped_at: Completado 07-12-PLAN.md (12/12 planes de la Phase 07)
-last_updated: "2026-07-22T20:55:27.758Z"
-last_activity: 2026-07-22 — Milestone v0.24 completed and archived
+milestone: v0.25
+milestone_name: Reserva con varios profesionales (multi-staff)
+status: planning
+last_updated: "2026-07-24T18:36:20.920Z"
+last_activity: 2026-07-24
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 40
-  completed_plans: 40
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.24 agrega abonos semanales (turno fijo recurrente): alta manual por el dueño + generación forward de los turnos respetando 011/013 + cupos + espacio compartido + cancelación por link en el mail / panel. **Solo reserva** (el cobro recurrente es futuro; el modelo se diseña extensible).
-**Current focus:** v0.24 archivado. Próximo milestone del workstream: **v0.25 — cupo por solape** (arranca en Phase 8). Pendiente antes de arrancar: merge de `gsd/motor-reservas-v024` → `main` + deploy, y verificar los mails de baja en prod.
+**Current focus:** **v0.25 — Reserva con varios profesionales (multi-staff)**, arranca en **Phase 8**. v0.24 shipped y verificado en prod (HEAD `9ee6243`). El **cupo por solape** NO es este milestone: se difirió a **v0.26** (independiente, toca el mismo RPC — no se meten dos cambios grandes al núcleo en el mismo ciclo).
 
 ## Current Position
 
-Phase: Milestone v0.24 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-22 — Milestone v0.24 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-24 — Milestone v0.25 started
 
 ## Performance Metrics
 

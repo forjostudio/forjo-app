@@ -128,7 +128,7 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones (propuestas del diagnóstico, confirmables en discuss-phase):** flag `businesses.mp_connection_status text default 'connected'` (sano=`'connected'`, caído=`'error'`) — en `businesses` porque el dashboard ya lee `business` y `mp_user_id` vive ahí; migración **053** idempotente NO aplicada (orden coordinado con el deploy); pasa por **secure-phase** (integridad de pagos). Aplican skills `mercadopago-connect` + `supabase-multitenant-rls`.
 
-## Current Milestone (workstream `motor-reservas`): v0.24 Turnos fijos / Abonos recurrentes
+## Milestone (workstream `motor-reservas`): v0.24 Turnos fijos / Abonos recurrentes — ✅ SHIPPED 2026-07-22 (tag v0.24)
 
 **Goal:** El dueño arma abonos **semanales** (turno fijo recurrente) para un cliente desde el panel; el sistema **genera los turnos hacia adelante** respetando la integridad anti-doble-booking; el cliente **cancela la suscripción** desde un link en el mail. **Solo reserva** (el cobro recurrente automático = milestone futuro; el modelo se diseña extensible). Numeración de fases del workstream desde **Phase 6**.
 
@@ -141,6 +141,23 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 **Out of scope este milestone (deferred):** cobro recurrente automático (MP preapproval por cliente); recurrencia no-semanal; alta pública del abono por el cliente; waitlist; editar/reprogramar una serie viva.
 
 **Decisiones LOCKED:** solo reserva (sin cobro) con modelo extensible; alta manual por el dueño (no pública); recurrencia semanal; indefinido hasta cancelar; cancelación por link en el mail + baja desde el panel; generación forward en el **cron DIARIO existente** (Vercel Hobby — sin crons más frecuentes). Toca el núcleo anti-doble-booking → **secure-phase**.
+
+## Current Milestone (workstream `motor-reservas`): v0.25 Reserva con varios profesionales (multi-staff)
+
+**Goal:** Un negocio con varias personas (ej. 3 barberos + 1 colorista) define **qué servicios hace cada una**, y el cliente reserva **eligiendo profesional o dejando "cualquiera"** — el sistema le asigna uno libre y capaz, de forma **atómica** (dos clientes pidiendo "cualquiera" a la vez nunca reciben el mismo). Numeración de fases del workstream desde **Phase 8**.
+
+**Target features:**
+- **Profesional ↔ servicios (muchos a muchos):** qué servicios sabe hacer cada persona. Hoy `professionals.service_id` es *single* y es el mecanismo de **canchas** (migr. 043) — NO se toca ni se reusa para esto.
+- **Opción "cualquiera"** en la reserva pública + **asignación automática atómica** de un profesional libre y capaz dentro del RPC.
+- **Disponibilidad across staff:** un horario aparece libre si **algún** profesional capaz lo tiene libre (hoy la disponibilidad se calcula sobre la agenda ya elegida).
+- **Elegir profesional específico sigue funcionando** exactamente como hoy (cero regresión para negocios de 1 profesional).
+- **Cierre de backlog chico:** chip Cancelado/Completado en Archivados · `setState`-in-effect en `clients-client.tsx:497` · borde lateral acentuado de las 2 pantallas de cancelación.
+
+**Out of scope este milestone (deferred):** **cupo por solape** (`capacity > 1` se cuenta por hora de inicio exacta, no por solape → turnos escalonados superan el cupo) — problema REAL y capturado, pero independiente de multi-staff y toca el mismo RPC: va a **v0.26** para no meter dos cambios grandes al núcleo en el mismo ciclo. Diagnóstico completo en `todos/pending/2026-07-22-cupo-por-solape-*.md`.
+
+**Distinción de modelo (clave, LOCKED):** tres conceptos que NO son lo mismo — (1) **varias personas** = varias agendas (`professionals`), que es lo que resuelve este milestone; (2) **clase grupal** = muchos clientes en UNA agenda (`time_blocks.capacity`, contado por hora de inicio, funciona hoy); (3) **recurso simultáneo** = capacity contado por solape (roto, v0.26). Tres barberos NO son "cupo 3".
+
+**Decisiones LOCKED:** el cliente puede elegir profesional **o** "cualquiera" (las dos vías); la asignación automática corre **dentro del RPC atómico** `book_slot_atomic` (nunca en el cliente ni en dos pasos); debe preservar sin regresión canchas (`professionals.service_id`), abonos (generación forward por el mismo motor), cupos grupales y exclusión por espacio compartido. Toca el núcleo anti-doble-booking → **secure-phase obligatorio**.
 
 ## Requirements
 
