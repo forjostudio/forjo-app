@@ -9,7 +9,7 @@ import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, norma
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService } from '@/lib/types'
-import { isServiceCovered } from '@/lib/staff-services'
+import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
@@ -1286,11 +1286,29 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               {services.map(s => {
                 const set = serviceLocSet(s)
                 const all = set.length === 0
+                // Bloque B — cobertura por servicio (STAFF, D-08). Solo lectura. Gates: ya estamos en
+                // la rama !isCanchas (D-18: única defensa, /servicios no redirige por vertical) + ≥2
+                // profesionales ACTIVOS (derivado de D-07). La lista y el booleano salen del helper puro
+                // (@/lib/staff-services): PROHIBIDO reimplementar la regla del comodín acá.
+                const activePros = professionals.filter(p => p.active)
+                const showCoverage = activePros.length >= 2
+                const coverageNames = showCoverage
+                  ? professionalsForService(s.id, activePros, professionalServices).map(p => [p.name, p.last_name].filter(Boolean).join(' '))
+                  : []
+                const covered = showCoverage ? isServiceCovered(s.id, activePros, professionalServices) : true
                 return (
                   <div key={s.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className={cn('text-sm font-medium', !s.active && 'line-through text-muted-foreground')}>{s.name}</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className={cn('text-sm font-medium truncate', !s.active && 'line-through text-muted-foreground')}>{s.name}</p>
+                          {showCoverage && !covered && (
+                            <span className="inline-flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full border border-warning/30 bg-warning/10 text-warning text-[11px] font-medium">
+                              <TriangleAlert aria-hidden="true" className="w-3 h-3" />
+                              Sin cobertura
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</p>
                       </div>
                       <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
@@ -1311,6 +1329,19 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                           <button key={l.id} type="button" onClick={() => toggleServiceLocation(s, l.id)} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', !all && set.includes(l.id) ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>{l.name}</button>
                         ))}
                       </div>
+                    )}
+                    {/* Cobertura (STAFF, D-08): quiénes lo hacen, o aviso persistente si nadie. Texto
+                        plano (solo lectura, sin pills). El copy NO afirma que sin cobertura "no se puede
+                        reservar": en esta fase el mapeo todavía no afecta la reserva pública. */}
+                    {showCoverage && (
+                      covered ? (
+                        <p className="text-[11px] text-muted-foreground">Lo hacen: <span className="text-foreground">{coverageNames.join(' · ')}</span></p>
+                      ) : (
+                        <p role="status" className="flex items-center gap-2 text-xs font-medium text-warning">
+                          <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>Nadie lo ofrece — asignalo en <Link href="/equipo" className="underline underline-offset-2">Equipo</Link></span>
+                        </p>
+                      )
                     )}
                   </div>
                 )
