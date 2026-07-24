@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 08 (equipo-qu-servicios-hace-cada-profesional) — EXECUTING
-Plan: 1 of 2 (08-01 porción autónoma HECHA; Task 3 [BLOCKING] `supabase db reset` PENDIENTE — checkpoint human-action)
-Status: Executing Phase 08 — 08-01 pausado en checkpoint
-Last activity: 2026-07-24 -- 08-01 migr. 057 + helper puro commiteados; esperando validación del reset local
+Plan: 2 of 2 (08-01 COMPLETO 3/3; checkpoint [BLOCKING] 057 aprobado con evidencia del reset local)
+Status: Executing Phase 08 — 08-01 cerrado; 08-02 (Wave 2) lo maneja el orquestador
+Last activity: 2026-07-24 -- 08-01 cerrado: migr. 057 validada (reset 001→057 limpio), helper puro + tests, SUMMARY complete
 
 **Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
 
@@ -128,7 +128,7 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
-- **[Phase 8 — migración]** La tabla puente staff↔servicios es la migración **057** — **YA CREADA en 08-01** (idempotente, RLS + 4 policies por op WITH CHECK, índice inverso; commit 77b3508) + `schema.sql` regenerado quirúrgicamente. Baseline: la última aplicada en prod es la **056** → la próxima es la **057**. **PENDIENTE de validar** con `npx supabase db reset` local (Task 3 [BLOCKING], checkpoint human-action — el reset es destructivo para dev local y necesita el stack corriendo). Se aplica **A MANO** al Supabase de prod coordinada con el deploy (+ `NOTIFY pgrst, 'reload schema'`) — **NO** por el flujo GSD.
+- **[Phase 8 — migración]** La tabla puente staff↔servicios es la migración **057** — **CREADA y VALIDADA en 08-01** (idempotente, RLS + 4 policies por op WITH CHECK, índice inverso; commit 77b3508) + `schema.sql` regenerado quirúrgicamente. Validada con `npx supabase db reset` local (replay 001→057 limpio, 057 aparece aplicada en `migration list --local`; 4 policies + índice + ENABLE RLS confirmados en schema.sql; anon sin policies). Baseline: la última aplicada en prod es la **056** → la próxima es la **057**. **PENDIENTE OPERATIVO:** aplicarla **A MANO** al Supabase de prod en el próximo deploy (+ `NOTIFY pgrst, 'reload schema'`) — **NO** por el flujo GSD.
 - **[Phase 9 — integridad]** La asignación de "cualquiera" tiene que ocurrir DENTRO de `book_slot_atomic`, bajo el mismo advisory lock / transacción `SECURITY DEFINER` que ya serializa el anti-sobrecupo y la exclusión por espacio. Cambiar la granularidad del lock no puede degradar `slot_full` ni `slot_taken`. Los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) entran por `createAppointmentCore`: un cambio de firma/semántica los afecta a los cuatro. **secure-phase obligatorio.** El RPC se modifica en una migración numerada nueva (`CREATE OR REPLACE FUNCTION`), aplicada a mano.
 - **[Phase 9 — tenant]** `book_slot_atomic` es `SECURITY DEFINER`: RLS NO la protege. Toda query nueva adentro debe filtrar por `business_id` explícito; el conjunto de candidatos se deriva server-side, nunca de IDs que mande el cliente.
 - **[Phase 10 — superficie pública]** `/api/booking/availability` pasa a agregar varias agendas: mantener el contrato acotado `{ ok, busy, full }` (D-06 LOCKED, el público no ve lugares restantes) y no filtrar la agenda interna. La lista de profesionales capaces por servicio sale por **vista acotada** (molde `public_professionals`/`public_services`), nunca abriendo la tabla puente a `anon`. Los dos calendarios públicos son **gemelos** — tocar uno sin el otro es la regresión clásica del workstream.
@@ -171,8 +171,8 @@ Heredadas del workstream (siguen vigentes):
 ## Session Continuity
 
 Last session: 2026-07-24
-Stopped at: 08-01 Task 3 [BLOCKING] — esperando `npx supabase db reset` local (checkpoint human-action)
-Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-01-PLAN.md
+Stopped at: 08-01 COMPLETO (3/3); próximo = 08-02 (Wave 2, orquestador)
+Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-02-PLAN.md
 
 ## Operator Next Steps
 

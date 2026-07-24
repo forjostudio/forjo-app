@@ -25,9 +25,9 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 
 ### Equipo y servicios
 
-- [ ] **STAFF-01**: El dueño define qué servicios puede hacer cada profesional (relación muchos a muchos) desde el panel.
-- [ ] **STAFF-02**: El dueño ve, por servicio, qué profesionales lo ofrecen — para detectar servicios sin cobertura.
-- [ ] **STAFF-03**: Un negocio de 1 profesional, o sin mapeo definido, sigue reservando exactamente como hoy (cero regresión; default sensato sin obligar a configurar).
+- [x] **STAFF-01**: El dueño define qué servicios puede hacer cada profesional (relación muchos a muchos) desde el panel.
+- [x] **STAFF-02**: El dueño ve, por servicio, qué profesionales lo ofrecen — para detectar servicios sin cobertura.
+- [x] **STAFF-03**: Un negocio de 1 profesional, o sin mapeo definido, sigue reservando exactamente como hoy (cero regresión; default sensato sin obligar a configurar).
 
 ### Reserva con "cualquiera"
 
@@ -75,9 +75,9 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| STAFF-01 | Phase 8 — Equipo: qué servicios hace cada profesional | Pending |
-| STAFF-02 | Phase 8 — Equipo: qué servicios hace cada profesional | Pending |
-| STAFF-03 | Phase 8 — Equipo: qué servicios hace cada profesional | Pending |
+| STAFF-01 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
+| STAFF-02 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
+| STAFF-03 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
 | ASIGN-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
 | ASIGN-02 | Phase 9 — Asignación automática atómica de profesional | Pending |
 | ASIGN-03 | Phase 9 — Asignación automática atómica de profesional | Pending |

@@ -12,7 +12,6 @@
 
 **v0.25 — Reserva con varios profesionales / multi-staff (Phases 8-11, en planificación):** capacidad NUEVA sobre el motor ya entregado, **sin reconstruirlo**. El negocio declara **qué servicios hace cada persona** del equipo (mapeo **muchos a muchos** propio, migración **057** — `professionals.service_id` es *single* y es el mecanismo de **canchas** (migr. 043): NO se toca ni se recicla), y el cliente reserva **eligiendo profesional o dejando "cualquiera"**; en ese caso el sistema le asigna uno **libre y capaz** eligiendo el que menos turnos tiene ese día. La asignación automática corre **DENTRO del RPC atómico `book_slot_atomic`** — leer profesionales libres y después insertar sería una carrera —, por lo que la fase de asignación es el punto de mayor riesgo del milestone (**secure-phase obligatorio**). El faseo va por dependencia y riesgo creciente: primero el **modelo + config del equipo** (no toca el motor), después la **asignación atómica** en el RPC (el núcleo anti-doble-booking), después la **disponibilidad across staff** en las superficies públicas (que necesita saber quién puede hacer qué), y al cierre un **backlog chico** independiente del motor. **Cero regresión obligatoria** en: canchas, abonos (generación forward por el mismo motor), cupos grupales (`time_blocks.capacity`) y exclusión por espacio compartido. **Fuera de alcance:** el **cupo por solape** (`capacity > 1` contado por hora de inicio exacta) — bug real y capturado, pero independiente de multi-staff y sobre el mismo RPC → **v0.26**, para no meter dos cambios grandes al núcleo en el mismo ciclo.
 
-
 ## Phases
 
 **Phase Numbering:**
@@ -48,7 +47,6 @@ Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignaci�
 - [ ] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**)
 - [ ] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail
 - [ ] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación
-
 
 ## Phase Details
 
@@ -322,12 +320,12 @@ Plans:
   3. Un negocio que nunca configuró el mapeo —o que tiene un solo profesional— reserva exactamente como hoy: sin mapeo definido, todos los profesionales se consideran capaces de todos los servicios (default sensato, cero regresión, sin obligar a configurar nada).
   4. Un negocio del vertical **canchas** sigue reservando igual que antes: el mapeo nuevo convive con `professionals.service_id` sin pisarlo ni cambiar su significado.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — Espinazo: migración 057 (tabla puente `professional_services` + RLS por op + índice inverso) + tipo `ProfessionalService` + helper puro `lib/staff-services.ts` (regla del comodín D-01/D-12) con tests + validación local `supabase db reset` *(autonomous: false)*
+- [x] 08-01-PLAN.md — Espinazo: migración 057 (tabla puente `professional_services` + RLS por op + índice inverso) + tipo `ProfessionalService` + helper puro `lib/staff-services.ts` (regla del comodín D-01/D-12) con tests + validación local `supabase db reset` *(autonomous: false)*
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -389,7 +387,6 @@ Plans:
 **UI hint**: yes
 **Security/Integrity relevance**: Bajo riesgo. Los tres ítems son de presentación o de higiene de render; no tocan el motor de reservas, los constraints, el aislamiento por tenant ni el flujo de cancelación en sí. Único cuidado: las pantallas de cancelación son **públicas y anónimas** y ya están endurecidas (404 genérico, token no adivinable, el número lo informa el servidor, `noindex`, contraste derivado por luminancia) — el retoque visual no puede aflojar ninguna de esas propiedades ni cambiar qué datos se muestran antes de autenticar el token.
 
-
 ## Progress
 
 **Execution Order:**
@@ -404,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
-| 8. Equipo — qué servicios hace cada profesional | 0/2 | Not started | - |
+| 8. Equipo — qué servicios hace cada profesional | 1/2 | In Progress|  |
 | 9. Asignación automática atómica de profesional | 0/? | Not started | - |
 | 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |
