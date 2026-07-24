@@ -151,6 +151,16 @@ export interface AgendaSpace {
   space_id: string
 }
 
+// Puente profesional↔servicio (migración 057). Mapea qué servicios sabe hacer cada persona del
+// equipo. business_id + FKs NOT NULL en la DB, PK (professional_id, service_id). Regla del comodín
+// (D-01): un profesional SIN filas se considera capaz de TODOS los servicios (ver lib/staff-services).
+// Campos snake_case espejo de la fila DB (convención del repo: la capa TS no renombra a camelCase).
+export interface ProfessionalService {
+  business_id: string
+  professional_id: string
+  service_id: string
+}
+
 // Cancha pública (vista acotada `public_canchas`, migr. 044). Forma que ve el anon en el
 // booking público de canchas: `id` = professional_id de la agenda-cancha; `price`/`duration_minutes`
 // salen del service 1:1 de la cancha (D-03). NUNCA expone `service_id` (vive solo en JOIN+WHERE).

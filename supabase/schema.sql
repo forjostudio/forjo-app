@@ -271,6 +271,16 @@ CREATE TABLE IF NOT EXISTS "public"."agenda_spaces" (
 ALTER TABLE "public"."agenda_spaces" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."professional_services" (
+    "business_id" "uuid" NOT NULL,
+    "professional_id" "uuid" NOT NULL,
+    "service_id" "uuid" NOT NULL
+);
+
+
+ALTER TABLE "public"."professional_services" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."appointment_spaces" (
     "appointment_id" "uuid" NOT NULL,
     "business_id" "uuid" NOT NULL,
@@ -872,6 +882,11 @@ ALTER TABLE ONLY "public"."agenda_spaces"
 
 
 
+ALTER TABLE ONLY "public"."professional_services"
+    ADD CONSTRAINT "professional_services_pkey" PRIMARY KEY ("professional_id", "service_id");
+
+
+
 ALTER TABLE ONLY "public"."appointment_spaces"
     ADD CONSTRAINT "appointment_spaces_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, "space_id" WITH =, "slot" WITH &&);
 
@@ -1032,6 +1047,10 @@ CREATE INDEX "abonos_business_id_idx" ON "public"."abonos" USING "btree" ("busin
 
 
 CREATE INDEX "abonos_business_id_status_idx" ON "public"."abonos" USING "btree" ("business_id", "status");
+
+
+
+CREATE INDEX "professional_services_by_service" ON "public"."professional_services" USING "btree" ("service_id", "professional_id");
 
 
 
@@ -1200,6 +1219,21 @@ ALTER TABLE ONLY "public"."agenda_spaces"
 
 ALTER TABLE ONLY "public"."agenda_spaces"
     ADD CONSTRAINT "agenda_spaces_space_id_fkey" FOREIGN KEY ("space_id") REFERENCES "public"."spaces"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."professional_services"
+    ADD CONSTRAINT "professional_services_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."professional_services"
+    ADD CONSTRAINT "professional_services_professional_id_fkey" FOREIGN KEY ("professional_id") REFERENCES "public"."professionals"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."professional_services"
+    ADD CONSTRAINT "professional_services_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE CASCADE;
 
 
 
@@ -1528,6 +1562,35 @@ CREATE POLICY "agenda_spaces tenant select" ON "public"."agenda_spaces" FOR SELE
 
 
 CREATE POLICY "agenda_spaces tenant update" ON "public"."agenda_spaces" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+ALTER TABLE "public"."professional_services" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "professional_services tenant delete" ON "public"."professional_services" FOR DELETE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "professional_services tenant insert" ON "public"."professional_services" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "professional_services tenant select" ON "public"."professional_services" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "professional_services tenant update" ON "public"."professional_services" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
   WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
@@ -3343,6 +3406,12 @@ GRANT ALL ON TABLE "public"."abonos" TO "service_role";
 GRANT ALL ON TABLE "public"."agenda_spaces" TO "anon";
 GRANT ALL ON TABLE "public"."agenda_spaces" TO "authenticated";
 GRANT ALL ON TABLE "public"."agenda_spaces" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."professional_services" TO "anon";
+GRANT ALL ON TABLE "public"."professional_services" TO "authenticated";
+GRANT ALL ON TABLE "public"."professional_services" TO "service_role";
 
 
 
