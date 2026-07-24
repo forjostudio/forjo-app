@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
-status: planning
+status: executing
 stopped_at: Phase 8 UI-SPEC approved
-last_updated: "2026-07-24T19:47:14.256Z"
-last_activity: 2026-07-24 — ROADMAP de v0.25 creado (Phases 8-11, 14/14 requisitos mapeados)
+last_updated: "2026-07-24T22:20:46.201Z"
+last_activity: 2026-07-24 -- Phase 08 execution started
 progress:
   total_phases: 11
   completed_phases: 7
-  total_plans: 40
+  total_plans: 42
   completed_plans: 40
   percent: 64
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** **v0.25 — Reserva con varios profesionales (multi-staff)**, arranca en **Phase 8**. v0.24 shipped y verificado en prod (HEAD `9ee6243`). El **cupo por solape** NO es este milestone: se difirió a **v0.26** (independiente, toca el mismo RPC — no se meten dos cambios grandes al núcleo en el mismo ciclo).
+**Current focus:** Phase 08 — equipo-qu-servicios-hace-cada-profesional
 
 ## Current Position
 
-Phase: 8 — Equipo: qué servicios hace cada profesional (not started)
-Plan: —
-Status: Roadmap aprobado — listo para planificar la Phase 8
-Last activity: 2026-07-24 — ROADMAP de v0.25 creado (Phases 8-11, 14/14 requisitos mapeados)
+Phase: 08 (equipo-qu-servicios-hace-cada-profesional) — EXECUTING
+Plan: 1 of 2 (08-01 porción autónoma HECHA; Task 3 [BLOCKING] `supabase db reset` PENDIENTE — checkpoint human-action)
+Status: Executing Phase 08 — 08-01 pausado en checkpoint
+Last activity: 2026-07-24 -- 08-01 migr. 057 + helper puro commiteados; esperando validación del reset local
 
 **Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
 
@@ -62,6 +62,7 @@ Last activity: 2026-07-24 — ROADMAP de v0.25 creado (Phases 8-11, 14/14 requis
 | Phase 07 P10 | 20min | 3 tasks | 3 files |
 | Phase 07 P11 | 11min | 2 tasks | 3 files |
 | Phase 07 P12 | 55min | 3 tasks | 1 file |
+| Phase 08 P01 (autónomo) | ~18min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,9 @@ Decisiones LOCKED de v0.25 (ver REQUIREMENTS.md + PROJECT.md):
 - **El profesional asignado se le muestra al cliente** (pantalla de confirmación + mail).
 - **Faseo:** 8 modelo+config (no toca el motor) → 9 asignación atómica (**secure-phase obligatorio**) → 10 superficies públicas → 11 backlog chico.
 - **Cupo por solape queda FUERA** (v0.26): independiente de multi-staff y sobre el mismo RPC — no se meten dos cambios grandes al núcleo en el mismo ciclo.
+
+- [Phase 08]: 08-01: migración **057** creada (tabla puente `professional_services`: business_id/professional_id/service_id NOT NULL, PK compuesta, ON DELETE CASCADE, RLS + 4 policies por op WITH CHECK por tenant, SIN anon, índice inverso `professional_services_by_service`) — hermana exacta de `agenda_spaces` (042), idempotente. NO toca `professionals.service_id` (canchas 043) ni el motor. Aplicación a prod = MANUAL/out-of-band + `NOTIFY pgrst 'reload schema'`, nunca por GSD.
+- [Phase 08]: 08-01: la regla del comodín (D-01, "sin filas = capaz de todo") vive SOLO en `lib/staff-services.ts` (helper puro, 8 tests) — fuente única para la UI (fase 8), el RPC (fase 9) y la grilla pública (fase 10); cero backfill en la DB. `isServiceCovered` = `professionalsForService().length > 0` por construcción (test lo verifica).
 
 Decisiones LOCKED de v0.24 (históricas, siguen vigentes):
 
@@ -124,7 +128,7 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
-- **[Phase 8 — migración]** La tabla puente staff↔servicios es la migración **057** (idempotente, numerada, RLS habilitada + policies por operación con `with check` por `business_id`/`owner_id`). Baseline: la última aplicada en prod es la **056** → la próxima es la **057**. Se aplica **A MANO** al Supabase de prod coordinada con el deploy (+ `NOTIFY pgrst, 'reload schema'` si toca cache) — **NO** por el flujo GSD.
+- **[Phase 8 — migración]** La tabla puente staff↔servicios es la migración **057** — **YA CREADA en 08-01** (idempotente, RLS + 4 policies por op WITH CHECK, índice inverso; commit 77b3508) + `schema.sql` regenerado quirúrgicamente. Baseline: la última aplicada en prod es la **056** → la próxima es la **057**. **PENDIENTE de validar** con `npx supabase db reset` local (Task 3 [BLOCKING], checkpoint human-action — el reset es destructivo para dev local y necesita el stack corriendo). Se aplica **A MANO** al Supabase de prod coordinada con el deploy (+ `NOTIFY pgrst, 'reload schema'`) — **NO** por el flujo GSD.
 - **[Phase 9 — integridad]** La asignación de "cualquiera" tiene que ocurrir DENTRO de `book_slot_atomic`, bajo el mismo advisory lock / transacción `SECURITY DEFINER` que ya serializa el anti-sobrecupo y la exclusión por espacio. Cambiar la granularidad del lock no puede degradar `slot_full` ni `slot_taken`. Los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) entran por `createAppointmentCore`: un cambio de firma/semántica los afecta a los cuatro. **secure-phase obligatorio.** El RPC se modifica en una migración numerada nueva (`CREATE OR REPLACE FUNCTION`), aplicada a mano.
 - **[Phase 9 — tenant]** `book_slot_atomic` es `SECURITY DEFINER`: RLS NO la protege. Toda query nueva adentro debe filtrar por `business_id` explícito; el conjunto de candidatos se deriva server-side, nunca de IDs que mande el cliente.
 - **[Phase 10 — superficie pública]** `/api/booking/availability` pasa a agregar varias agendas: mantener el contrato acotado `{ ok, busy, full }` (D-06 LOCKED, el público no ve lugares restantes) y no filtrar la agenda interna. La lista de profesionales capaces por servicio sale por **vista acotada** (molde `public_professionals`/`public_services`), nunca abriendo la tabla puente a `anon`. Los dos calendarios públicos son **gemelos** — tocar uno sin el otro es la regresión clásica del workstream.
@@ -166,9 +170,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-24T19:47:14.242Z
-Stopped at: Phase 8 UI-SPEC approved
-Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-UI-SPEC.md
+Last session: 2026-07-24
+Stopped at: 08-01 Task 3 [BLOCKING] — esperando `npx supabase db reset` local (checkpoint human-action)
+Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-01-PLAN.md
 
 ## Operator Next Steps
 
