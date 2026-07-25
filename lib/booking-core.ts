@@ -14,6 +14,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // se representa con este UUID cero para que coalesce(professional_id, sentinel) agrupe igual.
 const SENTINEL = '00000000-0000-0000-0000-000000000000'
 
+// Phase 9 ("cualquiera"): UUID centinela MÁGICO — DISTINTO del SENTINEL cero de "sin profesional".
+// Cuando el caller pide autoAssign, el core pasa este UUID como p_professional_id y el RPC
+// book_slot_atomic (migr. 058) elige, bajo el advisory lock, un profesional capaz+libre; nunca se
+// inserta este valor (el RPC inserta el pro REAL elegido). No confundir con SENTINEL.
+const ANY_PROFESSIONAL = '00000000-0000-0000-0000-000000000001'
+
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return h * 60 + m
@@ -44,6 +50,11 @@ export type CreateAppointmentInput = {
   // no se agrega el branch de seña al manual.
   requireDeposit?: boolean
   depositExpiryHours?: number
+  // Phase 9: "cualquiera" — el caller NO elige profesional y el RPC (migr. 058) asigna uno capaz +
+  // libre bajo el advisory lock (reparto de carga). Aditivo: los 4 callers actuales no lo setean →
+  // comportamiento byte-idéntico. Con autoAssign se saltea la resolución de professionalId y los
+  // re-checks JS (solo UX, no computables sin bucket concreto) — la autoridad es el RPC.
+  autoAssign?: boolean
 }
 
 export type CreateAppointmentResult =
@@ -76,6 +87,7 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     notes,
     requireDeposit = false,
     depositExpiryHours = 1,
+    autoAssign = false,
   } = input
 
   // Anti-tampering de tenant: el servicio debe ser de ESTE negocio y estar activo. De acá
@@ -91,8 +103,13 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
   }
 
   // El profesional (si se eligió) también debe ser del negocio.
+  // Phase 9 ("cualquiera", autoAssign): NO hay professionalId específico → se pasa el UUID mágico
+  // ANY_PROFESSIONAL al RPC (que elige el pro bajo el lock). Se saltea toda la resolución/anti-tampering
+  // de professionalId: el cliente NO manda ninguna lista de profesionales, solo el boolean (D-06).
   let proId: string | null = null
-  if (professionalId && professionalId !== 'none') {
+  if (autoAssign) {
+    proId = ANY_PROFESSIONAL
+  } else if (professionalId && professionalId !== 'none') {
     const { data: pro } = await supabase
       .from('professionals')
       .select('id')
@@ -103,108 +120,120 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     proId = pro.id
   }
 
-  // Re-check de disponibilidad por SOLAPAMIENTO (rango [inicio, fin), consistente con la
-  // exclusion constraint 013), no solo inicio exacto. Bucket por coalesce(sentinel).
-  const bucket = proId ?? SENTINEL
-  const nowMs = Date.now()
-  const buffer = Number(business.buffer_minutes) || 0
-  const reqStart = timeToMinutes(time)
-  const reqEnd = reqStart + Number(service.duration_minutes || 30)
-  const { data: clashes } = await supabase
-    .from('appointments')
-    .select('id, status, expires_at, professional_id, time, duration_minutes')
-    .eq('business_id', business.id)
-    .eq('date', date)
-    .in('status', ['confirmed', 'pending_payment'])
-
-  // Capacity del bloque que cubre este slot. MISMO join que book_slot_atomic (plantilla semanal:
-  // day_of_week + ventana start/end), MISMA convención de dow que EXTRACT(dow): 0=domingo..6=sábado
-  // (new Date('yyyy-MM-dd') parsea a medianoche UTC → getUTCDay() coincide con EXTRACT(dow) de la DB).
-  // Si no hay bloque que lo cubra → capacity 1 (comportamiento individual). El RPC es la AUTORIDAD
-  // atómica del cupo; este query es solo para decidir si el re-check JS (UX) debe rechazar temprano.
-  const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
-  const { data: capBlocks } = await supabase
-    .from('time_blocks')
-    .select('capacity')
-    .eq('business_id', business.id)
-    .eq('day_of_week', dow)
-    .lte('start_time', time)
-    .gt('end_time', time)
-  const slotCapacity = (capBlocks || []).reduce((max, b) => Math.max(max, Number(b.capacity) || 1), 1)
-
-  // Buffer (descanso entre turnos): ensancha cada turno ocupado para exigir un hueco mínimo.
-  const overlaps = (a: { time: string; duration_minutes: number | null }) => {
-    const aStart = timeToMinutes(a.time)
-    const aEnd = aStart + Number(a.duration_minutes || 30)
-    return reqStart < aEnd + buffer && reqEnd > aStart - buffer
-  }
-  const sameBucket = (clashes || []).filter(a => (a.professional_id ?? SENTINEL) === bucket && overlaps(a))
-
-  // ── Re-check de ESPACIO compartido (ESPACIO-02, solo UX) ─────────────────────────────
-  // Rechazo TEMPRANO si un espacio físico (cancha, sala) que esta agenda ocupa ya está tomado por
-  // una agenda hermana en un horario solapado. NO es la autoridad: la garantía atómica vive en el
-  // RPC del Plan 01 (book_slot_atomic — advisory lock por espacio + EXISTS anti-solape cross-bucket).
-  // Esto solo evita entrar al RPC para devolver un slot_taken más rápido y con mejor UX. Mismo estilo
-  // de query que el re-check de bucket (113-118), bucketización byte-idéntica con SENTINEL (Pitfall 1).
-  // Si la agenda no tiene espacios mapeados → skip total: ninguna query extra, camino cupos/individual
-  // byte-idéntico al de hoy. El bloqueo de espacio es independiente de la capacity (un espacio físico
-  // NO se comparte como un cupo — Pitfall 5): por eso este chequeo va aparte del `taken && slotCapacity`.
-  const { data: mySpaces } = await supabase
-    .from('agenda_spaces')
-    .select('space_id')
-    .eq('business_id', business.id)
-    .eq('professional_id', bucket)
-  if (mySpaces && mySpaces.length > 0) {
-    const { data: siblings } = await supabase
-      .from('agenda_spaces')
-      .select('professional_id')
-      .eq('business_id', business.id)
-      .in('space_id', mySpaces.map(s => s.space_id))
-      .neq('professional_id', bucket)
-    const siblingBuckets = new Set((siblings || []).map(s => s.professional_id as string))
-    // ¿Algún clash YA traído (mismo date, líneas 113-118) cae en una agenda hermana, solapa en
-    // tiempo y está "ocupado de verdad" (confirmed o hold no vencido)? → rechazo temprano.
-    const spaceClash = (clashes || []).some(a =>
-      siblingBuckets.has(a.professional_id ?? SENTINEL) &&
-      overlaps(a) &&
-      (a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
-    )
-    // Reusa slot_taken (NO se agrega space_taken): el público solo sabe "ocupado" (D-06).
-    if (spaceClash) return { ok: false, error: 'slot_taken', status: 409 }
-  }
-
-  // ¿Ocupado de verdad? confirmed, o pending_payment cuya seña NO venció (o aún sin setear).
-  const taken = sameBucket.some(a =>
-    a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
-  )
-  // Re-check JS capacity-aware (Pitfall 5 / A5): el rechazo temprano `slot_taken` por SOLAPAMIENTO
-  // solo aplica a bloques cupo 1, donde es el anti-doble-booking de duración variable de v0.9 (un
-  // turno de 60' que pisa parcialmente a otro de 30' — el RPC NO lo cubre, solo cuenta el slot exacto).
-  // En bloques GRUPALES (capacity > 1) NO rechazamos acá: todos los inscriptos comparten el MISMO slot
-  // exacto (D-03, duración fija) y un solape "consigo mismos" no es conflicto — la autoridad del cupo
-  // es el RPC (advisory lock + count vs capacity → slot_full). Rechazar acá bloquearía falsamente al
-  // 2º+ inscripto de la clase. Para cupo 1, capacity-aware ⇒ comportamiento byte-idéntico a hoy.
-  if (taken && slotCapacity <= 1) {
-    return { ok: false, error: 'slot_taken', status: 409 }
-  }
-
-  // Liberar "holds" vencidos que se solapan (pending_payment con seña expirada): la
-  // disponibilidad ya los muestra libres, pero las constraints los siguen contando hasta que
-  // el cron los cancele. Sin esto el slot se ve libre pero el insert choca. Los cancelamos
-  // acá mismo (consistente con cancel-expired), filtrando por business_id (tenant). El core
-  // NO manda mails: devuelve los ids cancelados en cancelledHoldIds y el caller decide qué hacer.
-  const expiredHoldIds = sameBucket
-    .filter(a => a.status === 'pending_payment' && a.expires_at != null && new Date(a.expires_at as string).getTime() <= nowMs)
-    .map(a => a.id)
+  // cancelledHoldIds: solo el flujo NO-autoAssign libera holds vencidos per-bucket (bloque gateado
+  // abajo). Con autoAssign no hay bucket concreto → queda vacío (la query de candidatos del RPC ya
+  // contempla expires_at). Se declara acá para estar disponible en el return en ambos caminos.
   let cancelledHoldIds: string[] = []
-  if (expiredHoldIds.length > 0) {
-    const { data: cancelledHolds } = await supabase
+
+  // ── Re-checks JS (SOLO UX, la autoridad es el RPC) — gateados por autoAssign ──────────────
+  // Phase 9: con autoAssign NO hay un bucket concreto (el RPC elige el profesional bajo el lock), así
+  // que estos re-checks (solape por bucket, espacio compartido, capacity-aware, liberación de holds)
+  // NO son computables acá y se saltean por completo: el RPC book_slot_atomic (migr. 058) es la
+  // autoridad y su query de candidatos ya contempla libertad + holds vigentes (expires_at). Con el
+  // flag falsy el flujo queda BYTE-IDÉNTICO al de hoy (los 4 callers actuales no setean autoAssign).
+  if (!autoAssign) {
+    // Re-check de disponibilidad por SOLAPAMIENTO (rango [inicio, fin), consistente con la
+    // exclusion constraint 013), no solo inicio exacto. Bucket por coalesce(sentinel).
+    const bucket = proId ?? SENTINEL
+    const nowMs = Date.now()
+    const buffer = Number(business.buffer_minutes) || 0
+    const reqStart = timeToMinutes(time)
+    const reqEnd = reqStart + Number(service.duration_minutes || 30)
+    const { data: clashes } = await supabase
       .from('appointments')
-      .update({ status: 'cancelled' })
-      .in('id', expiredHoldIds)
+      .select('id, status, expires_at, professional_id, time, duration_minutes')
       .eq('business_id', business.id)
-      .select('id')
-    cancelledHoldIds = (cancelledHolds || []).map(h => h.id as string)
+      .eq('date', date)
+      .in('status', ['confirmed', 'pending_payment'])
+
+    // Capacity del bloque que cubre este slot. MISMO join que book_slot_atomic (plantilla semanal:
+    // day_of_week + ventana start/end), MISMA convención de dow que EXTRACT(dow): 0=domingo..6=sábado
+    // (new Date('yyyy-MM-dd') parsea a medianoche UTC → getUTCDay() coincide con EXTRACT(dow) de la DB).
+    // Si no hay bloque que lo cubra → capacity 1 (comportamiento individual). El RPC es la AUTORIDAD
+    // atómica del cupo; este query es solo para decidir si el re-check JS (UX) debe rechazar temprano.
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
+    const { data: capBlocks } = await supabase
+      .from('time_blocks')
+      .select('capacity')
+      .eq('business_id', business.id)
+      .eq('day_of_week', dow)
+      .lte('start_time', time)
+      .gt('end_time', time)
+    const slotCapacity = (capBlocks || []).reduce((max, b) => Math.max(max, Number(b.capacity) || 1), 1)
+
+    // Buffer (descanso entre turnos): ensancha cada turno ocupado para exigir un hueco mínimo.
+    const overlaps = (a: { time: string; duration_minutes: number | null }) => {
+      const aStart = timeToMinutes(a.time)
+      const aEnd = aStart + Number(a.duration_minutes || 30)
+      return reqStart < aEnd + buffer && reqEnd > aStart - buffer
+    }
+    const sameBucket = (clashes || []).filter(a => (a.professional_id ?? SENTINEL) === bucket && overlaps(a))
+
+    // ── Re-check de ESPACIO compartido (ESPACIO-02, solo UX) ─────────────────────────────
+    // Rechazo TEMPRANO si un espacio físico (cancha, sala) que esta agenda ocupa ya está tomado por
+    // una agenda hermana en un horario solapado. NO es la autoridad: la garantía atómica vive en el
+    // RPC del Plan 01 (book_slot_atomic — advisory lock por espacio + EXISTS anti-solape cross-bucket).
+    // Esto solo evita entrar al RPC para devolver un slot_taken más rápido y con mejor UX. Mismo estilo
+    // de query que el re-check de bucket, bucketización byte-idéntica con SENTINEL (Pitfall 1).
+    // Si la agenda no tiene espacios mapeados → skip total: ninguna query extra, camino cupos/individual
+    // byte-idéntico al de hoy. El bloqueo de espacio es independiente de la capacity (un espacio físico
+    // NO se comparte como un cupo — Pitfall 5): por eso este chequeo va aparte del `taken && slotCapacity`.
+    const { data: mySpaces } = await supabase
+      .from('agenda_spaces')
+      .select('space_id')
+      .eq('business_id', business.id)
+      .eq('professional_id', bucket)
+    if (mySpaces && mySpaces.length > 0) {
+      const { data: siblings } = await supabase
+        .from('agenda_spaces')
+        .select('professional_id')
+        .eq('business_id', business.id)
+        .in('space_id', mySpaces.map(s => s.space_id))
+        .neq('professional_id', bucket)
+      const siblingBuckets = new Set((siblings || []).map(s => s.professional_id as string))
+      // ¿Algún clash YA traído (mismo date) cae en una agenda hermana, solapa en
+      // tiempo y está "ocupado de verdad" (confirmed o hold no vencido)? → rechazo temprano.
+      const spaceClash = (clashes || []).some(a =>
+        siblingBuckets.has(a.professional_id ?? SENTINEL) &&
+        overlaps(a) &&
+        (a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs)
+      )
+      // Reusa slot_taken (NO se agrega space_taken): el público solo sabe "ocupado" (D-06).
+      if (spaceClash) return { ok: false, error: 'slot_taken', status: 409 }
+    }
+
+    // ¿Ocupado de verdad? confirmed, o pending_payment cuya seña NO venció (o aún sin setear).
+    const taken = sameBucket.some(a =>
+      a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
+    )
+    // Re-check JS capacity-aware (Pitfall 5 / A5): el rechazo temprano `slot_taken` por SOLAPAMIENTO
+    // solo aplica a bloques cupo 1, donde es el anti-doble-booking de duración variable de v0.9 (un
+    // turno de 60' que pisa parcialmente a otro de 30' — el RPC NO lo cubre, solo cuenta el slot exacto).
+    // En bloques GRUPALES (capacity > 1) NO rechazamos acá: todos los inscriptos comparten el MISMO slot
+    // exacto (D-03, duración fija) y un solape "consigo mismos" no es conflicto — la autoridad del cupo
+    // es el RPC (advisory lock + count vs capacity → slot_full). Rechazar acá bloquearía falsamente al
+    // 2º+ inscripto de la clase. Para cupo 1, capacity-aware ⇒ comportamiento byte-idéntico a hoy.
+    if (taken && slotCapacity <= 1) {
+      return { ok: false, error: 'slot_taken', status: 409 }
+    }
+
+    // Liberar "holds" vencidos que se solapan (pending_payment con seña expirada): la
+    // disponibilidad ya los muestra libres, pero las constraints los siguen contando hasta que
+    // el cron los cancele. Sin esto el slot se ve libre pero el insert choca. Los cancelamos
+    // acá mismo (consistente con cancel-expired), filtrando por business_id (tenant). El core
+    // NO manda mails: devuelve los ids cancelados en cancelledHoldIds y el caller decide qué hacer.
+    const expiredHoldIds = sameBucket
+      .filter(a => a.status === 'pending_payment' && a.expires_at != null && new Date(a.expires_at as string).getTime() <= nowMs)
+      .map(a => a.id)
+    if (expiredHoldIds.length > 0) {
+      const { data: cancelledHolds } = await supabase
+        .from('appointments')
+        .update({ status: 'cancelled' })
+        .in('id', expiredHoldIds)
+        .eq('business_id', business.id)
+        .select('id')
+      cancelledHoldIds = (cancelledHolds || []).map(h => h.id as string)
+    }
   }
 
   const initialStatus: 'confirmed' | 'pending_payment' = requireDeposit ? 'pending_payment' : 'confirmed'
