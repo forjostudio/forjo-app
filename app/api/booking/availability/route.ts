@@ -1,4 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { professionalsForService } from '@/lib/staff-services'
+import type { Professional, ProfessionalService } from '@/lib/types'
 import type { NextRequest } from 'next/server'
 
 // Disponibilidad SIEMPRE fresca: nunca cachear (ni framework ni CDN ni browser). Un turno
@@ -20,15 +22,22 @@ export async function GET(request: NextRequest) {
   const slug = searchParams.get('slug') || ''
   const date = searchParams.get('date') || ''
   const professionalId = searchParams.get('professionalId') // ausente/'none' = sin preferencia
+  // Phase 10 ("Cualquiera"): la agregación across-staff se gatea con `any=1` + `serviceId`. El camino
+  // específico/omitido (sin `any`) NO lee estos params y queda byte-idéntico (DISP-02/D-08). Canchas
+  // nunca manda `any=1` (D-09).
+  const any = searchParams.get('any') === '1'
+  const serviceIdParam = searchParams.get('serviceId') || ''
   if (!slug || !date) {
     return Response.json({ ok: false, error: 'missing_params' }, { status: 400 })
   }
 
   const supabase = createAdminClient()
 
+  // buffer_minutes se suma al select para la rama `any` (freeness con descanso entre turnos); el camino
+  // específico NO lo usa → su respuesta no cambia (traer una columna extra no toca `busy`/`full`).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id')
+    .select('id, buffer_minutes')
     .eq('slug', slug)
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
@@ -72,6 +81,153 @@ export async function GET(request: NextRequest) {
       }
     }
     return cap || 1
+  }
+
+  // ── RAMA "Cualquiera" (Phase 10, DISP-01/03, D-06): agregación de disponibilidad across-staff ──────
+  // Gateada por `any=1` + `serviceId`. Retorna ANTES de tocar el bucketing específico de abajo, así que
+  // el camino de hoy (professionalId concreto / omitido) queda BYTE-IDÉNTICO (DISP-02/D-08).
+  //
+  // Por qué una rama y no reusar el bucket: "sin preferencia" cae al bucket SENTINEL (turnos con
+  // professional_id NULL); en multi-staff los turnos están bucketeados por cada pro real → SENTINEL
+  // estaría vacío y "Cualquiera" mostraría todo libre (Pitfall 1). La agregación real es la UNIÓN de
+  // disponibilidad de los capaces (un slot libre si AL MENOS UNO lo tiene libre), no un bucket.
+  //
+  // Por qué se devuelve en `full` y NO concatenando `busy`: el client aplica `busy` como solape
+  // (bloquea si CUALQUIER entrada solapa) → concatenar los `busy` de todos los pros daría la
+  // INTERSECCIÓN ("bloqueado si algún pro ocupado"), lo OPUESTO a la unión DISP-01. Por eso la unión se
+  // computa server-side a nivel de start-time: un start-time va a `full` (oculto) sólo si NINGÚN capaz
+  // lo tiene libre. `full` ya es booleano-por-slot → no filtra nada nuevo (D-06): jamás counts, jamás
+  // per-pro, jamás qué agenda bloqueó.
+  if (any && serviceIdParam) {
+    // 1. Duración del servicio, re-validada por business_id (anti-tampering aunque sea read: nunca
+    //    confiar en un serviceId ajeno). Sin service de este negocio → invalid_service (400).
+    const { data: svc } = await supabase
+      .from('services')
+      .select('duration_minutes')
+      .eq('id', serviceIdParam)
+      .eq('business_id', business.id)
+      .single()
+    if (!svc) return Response.json({ ok: false, error: 'invalid_service' }, { status: 400 })
+    const dur = Number(svc.duration_minutes) || 30
+    const buffer = Number(business.buffer_minutes) || 0
+
+    // 2. Profesionales CAPACES, espejando EXACTO el criterio de candidatos del RPC 058 (058:88-130):
+    //    active=true AND service_id IS NULL (excluir canchas — Pitfall 6) AND capacidad por comodín.
+    //    La regla del comodín (0 filas = capaz de todo) la resuelve `professionalsForService`
+    //    (lib/staff-services.ts) — fuente ÚNICA, NO reimplementar la regla acá. NO se filtra por sede:
+    //    el front no manda location y esta rama no la recibe (divergencia aceptada, RESEARCH A3);
+    //    el RPC sí filtra por sede y es la autoridad → un slot puntual raro puede caer en slot_taken.
+    const { data: prosRaw } = await supabase
+      .from('professionals')
+      .select('id')
+      .eq('business_id', business.id)
+      .eq('active', true)
+      .is('service_id', null)
+    const { data: bridgeRaw } = await supabase
+      .from('professional_services')
+      .select('business_id, professional_id, service_id')
+      .eq('business_id', business.id)
+    const capaces = professionalsForService(
+      serviceIdParam,
+      (prosRaw || []) as unknown as Professional[],
+      (bridgeRaw || []) as unknown as ProfessionalService[],
+    )
+    // Sin capaces (no debería pasar si el front gatea con ≥2, pero es superficie anónima): todo oculto.
+    // Igual el create está respaldado por el RPC (RAISE slot_taken → 409) si alguien fuerza la request.
+
+    // 3. Turnos vivos del negocio+fecha (ya traídos), bucketeados por professional_id REAL (no SENTINEL).
+    const nowMsAny = Date.now()
+    const liveAll = (appts || []).filter(
+      a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMsAny,
+    )
+    const liveByPro = new Map<string, typeof liveAll>()
+    for (const a of liveAll) {
+      const key = (a.professional_id as string | null) ?? SENTINEL
+      const arr = liveByPro.get(key)
+      if (arr) arr.push(a)
+      else liveByPro.set(key, [a])
+    }
+
+    // Espacio compartido (ESPACIO-02): computado POR-PRO. Un capaz cuyo espacio físico ya está ocupado
+    // por una agenda hermana en un horario solapado NO cuenta como libre. Se resuelve el mapa de
+    // espacios del negocio en UNA query y se derivan las agendas hermanas de cada capaz en memoria.
+    const { data: allSpaces } = await supabase
+      .from('agenda_spaces')
+      .select('professional_id, space_id')
+      .eq('business_id', business.id)
+    const spacesByPro = new Map<string, Set<string>>()
+    const prosBySpace = new Map<string, Set<string>>()
+    for (const s of allSpaces || []) {
+      const pid = s.professional_id as string
+      const sid = s.space_id as string
+      ;(spacesByPro.get(pid) ?? spacesByPro.set(pid, new Set()).get(pid)!).add(sid)
+      ;(prosBySpace.get(sid) ?? prosBySpace.set(sid, new Set()).get(sid)!).add(pid)
+    }
+    // Para cada capaz: el set de professional_id de las agendas HERMANAS (comparten ≥1 espacio), sin sí mismo.
+    const siblingsByPro = new Map<string, Set<string>>()
+    for (const pro of capaces) {
+      const mySpaces = spacesByPro.get(pro.id)
+      if (!mySpaces || mySpaces.size === 0) continue
+      const sibs = new Set<string>()
+      for (const sid of mySpaces) {
+        for (const other of prosBySpace.get(sid) || []) {
+          if (other !== pro.id) sibs.add(other)
+        }
+      }
+      if (sibs.size > 0) siblingsByPro.set(pro.id, sibs)
+    }
+
+    // Solape con buffer (mismo criterio que el re-check del core, booking-core.ts:165-169): un turno
+    // ocupa [inicio - buffer, fin + buffer). `a.time` viene como 'HH:MM:SS'; toMin tolera los segundos.
+    const overlaps = (a: { time: string; duration_minutes: number | null }, t: number) => {
+      const aStart = toMin(a.time)
+      const aEnd = aStart + Number(a.duration_minutes || 30)
+      return t < aEnd + buffer && t + dur > aStart - buffer
+    }
+    const minToHHMM = (t: number) =>
+      `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+
+    // 4. Enumerar la grilla semanal del `dow` a paso = duración (misma fórmula que el client:
+    //    for (t = open; t + dur <= close; t += dur) sobre los bloques del día). Para cada start-time,
+    //    un capaz está LIBRE si: (individual, cap<=1) ningún turno vivo suyo solapa [t,t+dur) con
+    //    buffer; (grupal, cap>1) su conteo en el slot exacto < capacity; Y su espacio no está bloqueado
+    //    por una hermana. El slot es agregado-disponible si AL MENOS UN capaz está libre; si NINGUNO,
+    //    va a `full` (en 'HH:MM'). (Caveat RESEARCH: horarios especiales que EXTIENDEN el día quedan
+    //    respaldados por el RPC — devuelve slot_taken si no hay capaz libre; aceptable.)
+    const startSet = new Set<string>()
+    for (const b of capBlocks || []) {
+      const open = toMin(b.start_time)
+      const close = toMin(b.end_time)
+      for (let t = open; t + dur <= close; t += dur) startSet.add(minToHHMM(t))
+    }
+    const fullAny: string[] = []
+    for (const hhmm of startSet) {
+      const t = toMin(hhmm)
+      const cap = capacityFor(hhmm)
+      const someoneFree = capaces.some(pro => {
+        const proAppts = liveByPro.get(pro.id) || []
+        if (cap <= 1) {
+          // Individual: cualquier solape (duración variable) con buffer bloquea al pro.
+          if (proAppts.some(a => overlaps(a, t))) return false
+        } else {
+          // Grupal (cupo): sólo bloquea si el pro ya llenó el slot EXACTO (count >= capacity), igual
+          // que `full` del camino de hoy. Un solape parcial NO cuenta (D-03, varios comparten el slot).
+          const countExact = proAppts.filter(a => (a.time as string).slice(0, 5) === hhmm).length
+          if (countExact >= cap) return false
+        }
+        // Espacio compartido: 1-a-la-vez, independiente de la capacity. Si una hermana ocupa el espacio
+        // en un horario solapado, el pro no está libre (se mira sobre TODOS los turnos vivos del negocio).
+        const sibs = siblingsByPro.get(pro.id)
+        if (sibs && liveAll.some(a => sibs.has((a.professional_id as string | null) ?? SENTINEL) && overlaps(a, t))) {
+          return false
+        }
+        return true
+      })
+      if (!someoneFree) fullAny.push(hhmm)
+    }
+
+    // D-06 (LOCKED): `busy` SIEMPRE vacío en esta rama; la unión colapsa a booleano-por-slot en `full`.
+    return Response.json({ ok: true, busy: [], full: fullAny }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
   // Filtramos por bucket de profesional (coalesce sentinel) y descartamos pending_payment
