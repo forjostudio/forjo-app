@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore, isAfter } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import type { PublicBusiness, Service, Professional, TimeBlock } from '@/lib/types'
+import type { PublicBusiness, Service, Professional, TimeBlock, ProfessionalService } from '@/lib/types'
 import { effectiveBookingCutoff } from '@/lib/booking-window'
+import { professionalsForService } from '@/lib/staff-services'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,6 +27,10 @@ interface Props {
   exceptions: { date: string; closed: boolean; start_time: string | null; end_time: string | null; location_id: string | null }[]
   // Consultorios/sucursales activos (capa 2a). Los slots se etiquetan con su consultorio.
   locations: { id: string; name: string; address: string | null; phone: string | null }[]
+  // Mapeo staff↔servicios (vista acotada public_professional_services, migr. 059). Se interpreta con
+  // la regla del comodín (lib/staff-services): 0 filas para un profesional = capaz de todos. Sirve
+  // para filtrar la lista de profesionales al servicio elegido y gatear "Cualquiera" (≥2 capaces).
+  professionalServices: ProfessionalService[]
 }
 
 function timeToMinutes(t: string) {
@@ -39,7 +44,7 @@ function minutesToTime(m: number) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
-export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations }: Props) {
+export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations, professionalServices }: Props) {
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedPro, setSelectedPro] = useState<Professional | null | 'none'>('none')
@@ -107,6 +112,22 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const locsWithHours = bookableLocs.filter(l => locHasBlocks(l.id))
   const needLocStep = locsWithHours.length > 1
   const resolvedLoc = needLocStep ? bookingLoc : (locsWithHours[0]?.id ?? null)
+
+  // ── "Cualquiera" / multi-staff (D-01/D-02/D-03) ──────────────────────────────────────────────
+  // Profesionales capaces del servicio elegido, según la regla del comodín (lib/staff-services:
+  // 0 filas mapeadas = capaz de todo). Sin servicio aún, la lista cruda. La lista del paso 2 se
+  // filtra a `capaces` y "Cualquiera" se gatea a 2+ capaces (D-02).
+  const capaces = selectedService
+    ? professionalsForService(selectedService.id, professionals, professionalServices)
+    : professionals
+  // La tarjeta "Cualquiera" ("El primero disponible") solo con 2+ capaces (D-02). Con ≤1 capaz el
+  // flujo se comporta como hoy: si hay 1 capaz se elige a esa persona; si hay 0 (sentinel o servicio
+  // sin cobertura) se mantiene el fallback "Sin preferencia" para no dejar el paso 2 sin salida.
+  const showAny = capaces.length >= 2
+  // "Cualquiera" activo ⇒ `selectedPro === 'none'` re-significa "asignación across-staff", pero SOLO
+  // cuando la tarjeta es visible (2+ capaces). Con ≤1 capaz, 'none' NO es "Cualquiera" (es el
+  // sentinel de hoy): availability y create se comportan igual que antes (D-05/D-08).
+  const isAny = selectedPro === 'none' && showAny
 
   const requireDeposit = Boolean(business.require_deposit) && Number(business.deposit_amount) > 0
   const siteKey = business.recaptcha_site_key || process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -231,6 +252,10 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     try {
       const params = new URLSearchParams({ slug: business.slug, date: dateStr })
       if (proId) params.set('professionalId', proId)
+      // "Cualquiera": la grilla se pide agregada (any=1&serviceId) — el server une la disponibilidad
+      // de los profesionales capaces y devuelve la unión en `full` con `busy:[]` (D-06, Plan 01). NUNCA
+      // se manda un professionalId como asignación. Camino específico (proId) o sentinel = como hoy.
+      else if (isAny) { params.set('any', '1'); params.set('serviceId', selectedService.id) }
       const res = await fetch(`/api/booking/availability?${params.toString()}`, { cache: 'no-store' })
       const data = await res.json().catch(() => null)
       if (res.ok && data?.ok) {
@@ -318,7 +343,11 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         body: JSON.stringify({
           slug: business.slug,
           serviceId: selectedService.id,
-          professionalId: proId,
+          // "Cualquiera" (D-05): mandamos el boolean `anyProfessional`, NUNCA un id como asignación.
+          // El server/RPC (Phase 9) es la autoridad de a quién le toca. Con "Cualquiera" el
+          // professionalId va en null; camino específico o sentinel mandan proId (null en sentinel).
+          professionalId: isAny ? null : proId,
+          anyProfessional: isAny,
           date: dateStr,
           time: selectedTime,
           locationId: selectedLocationId,
@@ -473,19 +502,39 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         {step === 2 && (
           <div className="space-y-3">
             <h2 className="text-lg font-semibold mb-4 font-[family-name:var(--font-heading)]">¿Con quién querés atenderte?</h2>
-            <button
-              onClick={() => { setSelectedPro('none'); setStep(3) }}
-              className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
-            >
-              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
-                ?
-              </div>
-              <div>
-                <p className="font-medium text-sm">Sin preferencia</p>
-                <p className="text-xs text-muted-foreground">Se asignará automáticamente</p>
-              </div>
-            </button>
-            {professionals.map(pro => (
+            {/* "Cualquiera" (D-02/D-03): tarjeta arriba de la lista, misma UI que un profesional,
+                SOLO con 2+ capaces del servicio. Reusa selectedPro='none' (asignación across-staff). */}
+            {showAny ? (
+              <button
+                onClick={() => { setSelectedPro('none'); setStep(3) }}
+                className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
+                  ?
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Cualquiera</p>
+                  <p className="text-xs text-muted-foreground">El primero disponible</p>
+                </div>
+              </button>
+            ) : capaces.length === 0 ? (
+              // Fallback sentinel / servicio sin cobertura (0 capaces): mantenemos la tarjeta de hoy
+              // para no dejar el paso 2 sin salida. selectedPro='none' cae en el bucket "sin
+              // profesional" del backend, idéntico a hoy (D-08).
+              <button
+                onClick={() => { setSelectedPro('none'); setStep(3) }}
+                className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
+                  ?
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Sin preferencia</p>
+                  <p className="text-xs text-muted-foreground">Se asignará automáticamente</p>
+                </div>
+              </button>
+            ) : null}
+            {capaces.map(pro => (
               <button
                 key={pro.id}
                 onClick={() => { setSelectedPro(pro); setStep(3) }}
@@ -541,7 +590,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
             {/* Resumen de lo ya elegido (servicio · profesional · consultorio) */}
             <div className="mb-4 rounded-md bg-card border border-border border-l-4 border-l-primary p-3 text-sm space-y-0.5">
               <p className="text-muted-foreground">Servicio: <span className="text-foreground">{selectedService?.name}</span></p>
-              <p className="text-muted-foreground">Profesional: <span className="text-foreground">{selectedPro && selectedPro !== 'none' ? selectedPro.name : 'Sin preferencia'}</span></p>
+              <p className="text-muted-foreground">Profesional: <span className="text-foreground">{selectedPro && selectedPro !== 'none' ? selectedPro.name : (isAny ? 'Cualquiera' : 'Sin preferencia')}</span></p>
               {resolvedLoc && (() => {
                 const loc = locations.find(l => l.id === resolvedLoc)
                 return (

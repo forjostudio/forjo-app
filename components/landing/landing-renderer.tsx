@@ -41,7 +41,7 @@ import { WhatsappFloat } from '@/components/landing/whatsapp-float'
 import { aboutData, galleryData } from '@/lib/landing/schema'
 import { normalizeMotion, resolveLandingTheme } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
-import type { PublicBusiness, Service, Professional, TimeBlock, Location as LocationType } from '@/lib/types'
+import type { PublicBusiness, Service, Professional, TimeBlock, Location as LocationType, ProfessionalService } from '@/lib/types'
 
 // Shapes acotados que page.tsx ya fetchea desde vistas públicas (skill RLS regla #4):
 // exceptions y locations llegan con SOLO las columnas no sensibles, idénticos a los
@@ -63,6 +63,10 @@ interface Props {
   // el vertical canchas). Así el renderer NO conoce el modelo canchas ni agrega queries: es un
   // slot ReactNode opaco. Si es undefined, cae en el BookingClient de siempre (otros verticales).
   bookingSlot?: ReactNode
+  // Mapeo staff↔servicios (migr. 059) para el BookingClient de fallback. Opcional: en la práctica
+  // page.tsx SIEMPRE pasa `bookingSlot` (ya resuelto por vertical), así que el fallback es un camino
+  // muerto; el default [] mantiene el tipo sin obligar a page.tsx a threadearlo por esta rama.
+  professionalServices?: ProfessionalService[]
 }
 
 // Tipos numerados (los que llevan número fantasma en el mock). hero/booking/cta NO numeran.
@@ -85,7 +89,7 @@ const Reveal = ({ children }: { children: ReactNode }) => (
   <div className="frj-reveal">{children}</div>
 )
 
-export function LandingRenderer({ config, business, services, professionals, timeBlocks, exceptions, locations, bookingSlot }: Props) {
+export function LandingRenderer({ config, business, services, professionals, timeBlocks, exceptions, locations, bookingSlot, professionalServices = [] }: Props) {
   // orderedSections: orden + filtro enabled + inyección de booking al final (D7-05).
   const sections = orderedSections(config.sections)
 
@@ -297,6 +301,7 @@ export function LandingRenderer({ config, business, services, professionals, tim
                     timeBlocks={timeBlocks}
                     exceptions={exceptions}
                     locations={locations}
+                    professionalServices={professionalServices}
                   />
                 )}
               </section>
