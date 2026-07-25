@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     // (D-02) y se traen aparte vía getBusinessSecrets, no por el join.
     const { data: appt } = await supabase
       .from('appointments')
-      .select('*, services(name, price), businesses(id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp, notification_email)')
+      .select('*, services(name, price), professionals(name), businesses(id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp, notification_email)')
       .eq('id', appointmentId)
       .eq('status', 'confirmed')
       .single()
@@ -31,6 +31,9 @@ export async function POST(request: Request) {
 
     const serviceName = (appt.services as { name?: string; price?: number } | null)?.name || ''
     const servicePrice = Number((appt.services as { name?: string; price?: number } | null)?.price || 0)
+    // Nombre del profesional asignado (ASIGN-05): del turno ya creado (join), nunca del front. Sin
+    // profesional (turno de un negocio sin profesionales nombrados) queda null → el mail no muestra fila.
+    const professionalName = (appt.professionals as { name?: string } | null)?.name || null
 
     // Secretos Resend por tenant desde business_secrets (vía getBusinessSecrets, service-role).
     const secrets = await getBusinessSecrets(appt.business_id as string)
@@ -51,6 +54,7 @@ export async function POST(request: Request) {
           deposit: 0,
           date: appt.date,
           time: appt.time,
+          professionalName,
           businessName: String(business.name || ''),
           businessSlug: String(business.slug || ''),
           theme: brand.theme,
