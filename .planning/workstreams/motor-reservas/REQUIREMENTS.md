@@ -32,9 +32,9 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 ### Reserva con "cualquiera"
 
 - [ ] **ASIGN-01**: En la reserva pública el cliente puede elegir un profesional específico **o** la opción "cualquiera".
-- [ ] **ASIGN-02**: Con "cualquiera", el sistema asigna automáticamente un profesional libre que sepa hacer el servicio elegido.
-- [ ] **ASIGN-03**: La asignación automática es **atómica**: dos reservas concurrentes de "cualquiera" sobre el mismo horario nunca reciben el mismo profesional ni sobre-reservan.
-- [ ] **ASIGN-04**: La asignación elige el profesional con **menos turnos ese día** (reparto de carga entre el equipo).
+- [x] **ASIGN-02**: Con "cualquiera", el sistema asigna automáticamente un profesional libre que sepa hacer el servicio elegido.
+- [x] **ASIGN-03**: La asignación automática es **atómica**: dos reservas concurrentes de "cualquiera" sobre el mismo horario nunca reciben el mismo profesional ni sobre-reservan.
+- [x] **ASIGN-04**: La asignación elige el profesional con **menos turnos ese día** (reparto de carga entre el equipo).
 - [ ] **ASIGN-05**: El cliente ve qué profesional le tocó en la pantalla de confirmación y en el mail.
 
 ### Disponibilidad
@@ -79,9 +79,9 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 | STAFF-02 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
 | STAFF-03 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
 | ASIGN-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
-| ASIGN-02 | Phase 9 — Asignación automática atómica de profesional | Pending |
-| ASIGN-03 | Phase 9 — Asignación automática atómica de profesional | Pending |
-| ASIGN-04 | Phase 9 — Asignación automática atómica de profesional | Pending |
+| ASIGN-02 | Phase 9 — Asignación automática atómica de profesional | Complete |
+| ASIGN-03 | Phase 9 — Asignación automática atómica de profesional | Complete |
+| ASIGN-04 | Phase 9 — Asignación automática atómica de profesional | Complete |
 | ASIGN-05 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
 | DISP-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
 | DISP-02 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |

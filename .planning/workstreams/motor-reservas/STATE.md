@@ -4,14 +4,14 @@ milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
 status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-07-25T16:08:08.085Z"
-last_activity: 2026-07-25 -- Phase 09 execution started
+last_updated: "2026-07-25T16:45:18.597Z"
+last_activity: 2026-07-25
 progress:
   total_phases: 11
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 44
-  completed_plans: 42
-  percent: 73
+  completed_plans: 44
+  percent: 82
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 09 (Asignación automática atómica de profesional) — EXECUTING
-Plan: 1 of 2
+Phase: 10
+Plan: Not started
 Status: Executing Phase 09
-Last activity: 2026-07-25 -- Phase 09 execution started
+Last activity: 2026-07-25
 
 **Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
 
@@ -48,6 +48,7 @@ Last activity: 2026-07-25 -- Phase 09 execution started
 | 7 | TBD | - | - |
 | 07 | 12 | - | - |
 | 08 | 2 | - | - |
+| 09 | 2 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
