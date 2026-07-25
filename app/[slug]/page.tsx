@@ -72,7 +72,7 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
 
   // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
   const todayStr = new Date().toISOString().slice(0, 10)
-  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }, { data: canchas }] = await Promise.all([
+  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }, { data: canchas }, { data: professionalServices }] = await Promise.all([
     // Vista pública acotada (migración 027): leer la vista, NO la tabla base `services` con anon
     // key. La vista ya filtra WHERE active = true, así que el .eq('active', true) es redundante
     // (consistente con cómo leemos public_professionals). Tras el DROP POLICY de 028, anon ya no
@@ -87,6 +87,13 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
     // name, price, duration_minutes }, SIN service_id. Query aditiva y barata: para salud/belleza/
     // general devuelve [] (no hay canchas) y no afecta su render. La usa el gateo por vertical abajo.
     supabase.from('public_canchas').select('*').eq('business_id', business.id),
+    // Vista pública acotada (migración 059): mapeo staff↔servicios (business_id, professional_id,
+    // service_id), SIN abrir la tabla puente `professional_services` a anon (D-07). La consume
+    // BookingClient con la regla del comodín (lib/staff-services) para gatear "Cualquiera" (≥2
+    // capaces, D-02) y filtrar la lista al servicio elegido. Fail-safe: si la vista todavía no está
+    // aplicada en la DB, el select devuelve []/error y el `|| []` lo neutraliza — el booking sigue
+    // funcionando (sin la vista, "Cualquiera" simplemente no se gatea con precisión).
+    supabase.from('public_professional_services').select('*').eq('business_id', business.id),
   ])
 
   // JSON-LD LocalBusiness (SEO-03 / D9-04): se construye SOLO con la data ya fetcheada
@@ -143,6 +150,7 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
       timeBlocks={timeBlocks || []}
       exceptions={exceptions || []}
       locations={locations || []}
+      professionalServices={professionalServices || []}
     />
   )
 
