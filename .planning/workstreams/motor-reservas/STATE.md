@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
 status: verifying
-stopped_at: Phase 8 UI-SPEC approved
-last_updated: "2026-07-24T23:29:40.003Z"
-last_activity: "2026-07-24 -- 08-01 cerrado: migr. 057 validada (reset 001→057 limpio), helper puro + tests, SUMMARY complete"
+stopped_at: 08-01 COMPLETO (3/3); próximo = 08-02 (Wave 2, orquestador)
+last_updated: "2026-07-25T14:27:30.385Z"
+last_activity: 2026-07-25
 progress:
   total_phases: 11
   completed_phases: 8
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 08 (equipo-qu-servicios-hace-cada-profesional) — EXECUTING
-Plan: 2 of 2 (08-01 COMPLETO 3/3; checkpoint [BLOCKING] 057 aprobado con evidencia del reset local)
+Phase: 9
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-24 -- 08-01 cerrado: migr. 057 validada (reset 001→057 limpio), helper puro + tests, SUMMARY complete
+Last activity: 2026-07-25
 
 **Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
 
@@ -47,6 +47,7 @@ Last activity: 2026-07-24 -- 08-01 cerrado: migr. 057 validada (reset 001→057 
 | 6 | TBD | - | - |
 | 7 | TBD | - | - |
 | 07 | 12 | - | - |
+| 08 | 2 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |

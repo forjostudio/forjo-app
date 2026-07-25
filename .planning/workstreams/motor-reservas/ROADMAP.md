@@ -401,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 5. Aviso al cliente en el alta manual | 2/2 | Complete | 2026-07-19 |
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
-| 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete   | 2026-07-24 |
+| 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 0/? | Not started | - |
 | 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |
