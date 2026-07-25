@@ -44,10 +44,11 @@ cosmetic: 1
 ## Gaps
 
 - truth: "El editor de /equipo no debe cambiar el alto de la tarjeta del profesional al marcar/desmarcar chips"
-  status: cosmetic
-  reason: "El texto 'Hace todo' (estado comodín, 0 servicios marcados) desaparece al marcar el primer chip y su ausencia altera el alto de la tarjeta → layout shift feo. Reubicarlo donde no afecte la altura (p. ej. reservar el espacio, o ponerlo inline en el header del profesional)."
+  status: resolved
+  reason: "El texto 'Hace todo' (estado comodín, 0 servicios marcados) desaparecía al marcar el primer chip y su ausencia alteraba el alto de la tarjeta → layout shift. RESUELTO en commit 2f68c0d: 'Hace todo' movido inline en la misma línea del nombre (flex items-baseline), así aparecer/desaparecer no cambia el alto."
   severity: cosmetic
   test: 1
   scope: phase-8
   artifacts: [app/(dashboard)/settings/settings-client.tsx]
   missing: []
+  fixed_in: 2f68c0d
