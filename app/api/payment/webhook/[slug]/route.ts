@@ -107,7 +107,7 @@ async function processWebhook(slug: string, paymentId: string) {
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('*, services(name, price)')
+    .select('*, services(name, price), professionals(name)')
     .eq('id', appointmentId)
     .single()
 
@@ -164,6 +164,9 @@ async function processWebhook(slug: string, paymentId: string) {
     const serviceName = (appt.services as { name?: string; price?: number } | null)?.name || ''
     const servicePrice = Number((appt.services as { name?: string; price?: number } | null)?.price || 0)
     const depositAmt = Number(appt.deposit_amount || 0)
+    // Nombre del profesional asignado (ASIGN-05): del turno ya creado (join), nunca del front. Path
+    // CON seña — sin esto el mail del flujo pagado quedaría sin el nombre (Pitfall 3). Null si no hay.
+    const professionalName = (appt.professionals as { name?: string } | null)?.name || null
 
     // Estamos dentro de after() → el 200 a MP ya se envió. Acá AWAIT: sin await el fetch
     // a Resend se corta cuando la función se congela. Si falla, se logea y se persiste flag.
@@ -179,6 +182,7 @@ async function processWebhook(slug: string, paymentId: string) {
           deposit: depositAmt,
           date: appt.date,
           time: appt.time,
+          professionalName,
           businessName: business.name,
           businessSlug: slug,
           theme: brand.theme,
