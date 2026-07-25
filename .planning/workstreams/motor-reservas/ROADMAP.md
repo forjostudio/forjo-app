@@ -349,12 +349,12 @@ Plans:
   4. Entre varios profesionales libres y capaces, el turno cae en el que **menos turnos tiene ese día**.
   5. Cero regresión verificada en los cuatro caminos que comparten el motor: elegir un profesional específico, reservar una cancha, generar la ocurrencia de un abono y llenar un cupo grupal se comportan exactamente como antes.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — Migración 058 (`book_slot_atomic`: lock ampliado a business_id+date+time + selección "cualquiera" con paridad-comodín + UUID mágico) + core `autoAssign` + apply local (`supabase db reset`)
+- [x] 09-01-PLAN.md — Migración 058 (`book_slot_atomic`: lock ampliado a business_id+date+time + selección "cualquiera" con paridad-comodín + UUID mágico) + core `autoAssign` + apply local (`supabase db reset`)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -414,6 +414,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
-| 9. Asignación automática atómica de profesional | 0/2 | Not started | - |
+| 9. Asignación automática atómica de profesional | 1/2 | In Progress|  |
 | 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |
