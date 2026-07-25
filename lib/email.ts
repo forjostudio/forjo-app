@@ -222,6 +222,7 @@ export async function sendConfirmationEmail({
   deposit,
   date,
   time,
+  professionalName,
   businessName,
   businessSlug,
   theme,
@@ -241,6 +242,10 @@ export async function sendConfirmationEmail({
   deposit: number
   date: string
   time: string
+  // Nombre del profesional asignado al turno (ASIGN-05). Sale del join professionals(name) del turno
+  // YA creado (mismo tenant), NUNCA de un dato del front (D-04/D-05). Opcional: sin profesional
+  // nombrado (sentinel de un negocio sin profesionales) no se muestra ninguna fila (D-04).
+  professionalName?: string | null
   businessName: string
   businessSlug: string
   theme?: string | null
@@ -301,6 +306,11 @@ export async function sendConfirmationEmail({
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Servicio</td>
                 <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(service)}</td>
               </tr>
+              ${professionalName ? `
+              <tr>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Profesional</td>
+                <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(professionalName)}</td>
+              </tr>` : ''}
               <tr>
                 <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Fecha</td>
                 <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${fecha}</td>
@@ -349,7 +359,7 @@ export async function sendConfirmationEmail({
     to: [to],
     subject: `✅ Turno confirmado — ${businessName} · ${fecha} ${hora} hs`,
     html,
-    text: `¡Hola ${clientName}! Tu turno en ${businessName} está confirmado.\n\nServicio: ${service}\nFecha: ${fecha}\nHora: ${hora} hs\nTotal: ${fmtPrice(price)}${deposit > 0 ? `\nSeña abonada: ${fmtPrice(deposit)}` : ''}`,
+    text: `¡Hola ${clientName}! Tu turno en ${businessName} está confirmado.\n\nServicio: ${service}${professionalName ? `\nProfesional: ${professionalName}` : ''}\nFecha: ${fecha}\nHora: ${hora} hs\nTotal: ${fmtPrice(price)}${deposit > 0 ? `\nSeña abonada: ${fmtPrice(deposit)}` : ''}`,
   })
   console.log(`📧 Confirmación enviada a ${to}`)
 }
