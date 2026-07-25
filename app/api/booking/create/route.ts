@@ -29,6 +29,13 @@ export async function POST(request: Request) {
   const slug = typeof body.slug === 'string' ? body.slug : ''
   const serviceId = typeof body.serviceId === 'string' ? body.serviceId : ''
   const professionalId = typeof body.professionalId === 'string' ? body.professionalId : null
+  // Phase 10 ("Cualquiera"): boolean ESTRICTO (=== true) — nunca se interpreta un id como asignación
+  // (D-05, servidor = autoridad). Con anyProfessional el core pasa autoAssign al RPC 058, que elige el
+  // profesional bajo el advisory lock. Si un cliente forja el flag en un negocio sin capaces, el RPC
+  // hace RAISE 'slot_taken' → 409 (fail-safe). Un professionalId del body NUNCA se usa como asignación
+  // de "Cualquiera": el path canchas (professionalId=cancha.id, sin anyProfessional) recorre el camino
+  // de hoy sin tocar esto (D-09).
+  const anyProfessional = body.anyProfessional === true
   const locationId = typeof body.locationId === 'string' ? body.locationId : null
   const date = typeof body.date === 'string' ? body.date : ''
   const time = typeof body.time === 'string' ? body.time : ''
@@ -163,6 +170,7 @@ export async function POST(request: Request) {
     notes,
     requireDeposit,
     depositExpiryHours: Number(business.deposit_expiry_hours) || 1,
+    autoAssign: anyProfessional,
   })
   if (!result.ok) {
     return Response.json({ ok: false, error: result.error }, { status: result.status })
