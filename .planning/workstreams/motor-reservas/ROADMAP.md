@@ -378,7 +378,28 @@ Plans:
   4. Al confirmar una reserva hecha con "cualquiera", el cliente ve el nombre del profesional asignado en la pantalla de confirmación y lo recibe en el mail de confirmación.
   5. El calendario público de **canchas** (el gemelo `canchas-booking-client.tsx`) sigue funcionando igual que hoy: el cliente elige la cancha, sin opción "cualquiera".
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 10-01-PLAN.md — Backend: migr 059 (`public_professional_services`) + rama de agregación `any=1&serviceId` en availability (DISP-01/03, D-06) + wiring `anyProfessional`→`autoAssign` en create (ASIGN-01, D-05)
+- [ ] 10-03-PLAN.md — Mail ASIGN-05: param `professionalName` en `sendConfirmationEmail` + los DOS callers (`notify/booking` sin seña, `payment/webhook` con seña)
+
+**Wave 2** *(blocked on 10-01)*
+
+- [ ] 10-02-PLAN.md — Front: read-path de `public_professional_services` en `page.tsx` + tarjeta "Cualquiera" gateada por 2+ capaces (D-02/D-03) + señal `any`/`anyProfessional` (D-05); canchas intacto (D-09)
+
+**Wave 3** *(blocked on 10-01, 10-02, 10-03)*
+
+- [ ] 10-04-PLAN.md — `[BLOCKING] supabase db reset` (apply local 059) + `test/booking-cualquiera-public.test.ts` (DISP-01/02/03 + ASIGN-05) + regresión de canchas/booking público/core
+
+**Wave 4** *(blocked on 10-04)*
+
+- [ ] 10-05-PLAN.md — Checkpoint humano: verificación end-to-end de la reserva pública con "Cualquiera" (con la vista 059 viva)
+
+**Waves**: Wave 1 = 10-01 + 10-03 en paralelo (backend/data + mail; `files_modified` disjuntos). Wave 2 = 10-02 (front; depende del contrato any/anyProfessional y de la vista del Plan 01). Wave 3 = 10-04 (reset local + tests + regresión; al final, tras todo el código). Wave 4 = 10-05 (checkpoint humano, tras el reset que deja la vista viva).
+
 **UI hint**: yes
 **Security/Integrity relevance**: Superficie **pública y anónima**. El endpoint `/api/booking/availability` pasa a agregar disponibilidad de varias agendas: debe mantener el contrato acotado que ya rige (`{ ok, busy, full }` — D-06 LOCKED: el público **no** ve cuántos lugares quedan) y **no filtrar** por el camino nuevo qué profesional está ocupado a qué hora, ni la agenda interna del negocio, más allá de lo que ya expone hoy. La lista de profesionales capaces por servicio se sirve por una **vista acotada** al estilo `public_professionals`/`public_services`, nunca abriendo la tabla puente a `anon`. El cliente puede mandar "sin profesional", pero **el servidor es la autoridad**: nada de aceptar un profesional pre-elegido por el front como si fuera la asignación, ni de confiar en un `professionalId` que no pertenezca al negocio del slug (anti-tampering existente intacto). El nombre del profesional asignado que se muestra/manda por mail sale del turno ya creado y del mismo tenant. La ventana de reserva (v0.22) y el gating de `plan_status` (SEC-04) siguen aplicando sin cambios. Los dos calendarios públicos son **gemelos**: tocar uno sin el otro es la regresión clásica de este workstream.
 
@@ -415,5 +436,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
-| 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
+| 10. Reservar con "cualquiera" desde la página pública | 0/5 | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |
