@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
 status: verifying
-stopped_at: 08-01 COMPLETO (3/3); próximo = 08-02 (Wave 2, orquestador)
-last_updated: "2026-07-25T14:27:30.385Z"
+stopped_at: Phase 9 context gathered
+last_updated: "2026-07-25T14:44:05.311Z"
 last_activity: 2026-07-25
 progress:
   total_phases: 11
@@ -174,9 +174,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-24T23:29:01.800Z
-Stopped at: 08-01 COMPLETO (3/3); próximo = 08-02 (Wave 2, orquestador)
-Resume file: .planning/workstreams/motor-reservas/phases/08-equipo-qu-servicios-hace-cada-profesional/08-02-PLAN.md
+Last session: 2026-07-25T14:44:05.291Z
+Stopped at: Phase 9 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/09-asignaci-n-autom-tica-at-mica-de-profesional/09-CONTEXT.md
 
 ## Operator Next Steps
 
