@@ -378,13 +378,13 @@ Plans:
   4. Al confirmar una reserva hecha con "cualquiera", el cliente ve el nombre del profesional asignado en la pantalla de confirmación y lo recibe en el mail de confirmación.
   5. El calendario público de **canchas** (el gemelo `canchas-booking-client.tsx`) sigue funcionando igual que hoy: el cliente elige la cancha, sin opción "cualquiera".
 
-**Plans**: 5 plans
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — Backend: migr 059 (`public_professional_services`) + rama de agregación `any=1&serviceId` en availability (DISP-01/03, D-06) + wiring `anyProfessional`→`autoAssign` en create (ASIGN-01, D-05)
-- [ ] 10-03-PLAN.md — Mail ASIGN-05: param `professionalName` en `sendConfirmationEmail` + los DOS callers (`notify/booking` sin seña, `payment/webhook` con seña)
+- [x] 10-01-PLAN.md — Backend: migr 059 (`public_professional_services`) + rama de agregación `any=1&serviceId` en availability (DISP-01/03, D-06) + wiring `anyProfessional`→`autoAssign` en create (ASIGN-01, D-05)
+- [x] 10-03-PLAN.md — Mail ASIGN-05: param `professionalName` en `sendConfirmationEmail` + los DOS callers (`notify/booking` sin seña, `payment/webhook` con seña)
 
 **Wave 2** *(blocked on 10-01)*
 
@@ -436,5 +436,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
-| 10. Reservar con "cualquiera" desde la página pública | 0/5 | Not started | - |
+| 10. Reservar con "cualquiera" desde la página pública | 2/5 | In Progress|  |
 | 11. Cierre de backlog | 0/? | Not started | - |

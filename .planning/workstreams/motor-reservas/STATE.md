@@ -4,12 +4,12 @@ milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
 status: executing
 stopped_at: Phase 10 context gathered
-last_updated: "2026-07-25T18:51:50.409Z"
-last_activity: 2026-07-25 -- Phase 10 planning complete
+last_updated: "2026-07-25T21:29:05.986Z"
+last_activity: 2026-07-25 -- Phase 10 execution started
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 44
+  total_plans: 49
   completed_plans: 44
   percent: 82
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 09 — Asignación automática atómica de profesional
+**Current focus:** Phase 10 — Reservar con cualquiera desde la página pública
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-25 -- Phase 10 planning complete
+Phase: 10 (Reservar con cualquiera desde la página pública) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 10
+Last activity: 2026-07-25 -- Phase 10 execution started
 
 **Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
 
