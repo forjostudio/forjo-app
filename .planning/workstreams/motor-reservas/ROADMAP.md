@@ -44,7 +44,7 @@ Faseo por integridad: primero el modelo del abono + alta manual + generación fo
 Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignación, y la disponibilidad across staff necesita saber quién puede hacer qué. El backlog chico va al final, separado del motor.
 
 - [x] **Phase 8: Equipo — qué servicios hace cada profesional** - Mapeo muchos a muchos staff↔servicios (migración 057, tabla puente propia) + config y cobertura desde el panel, sin tocar el motor de reservas (completed 2026-07-24)
-- [ ] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**)
+- [x] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**) (completed 2026-07-25)
 - [ ] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail
 - [ ] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación
 
@@ -349,7 +349,7 @@ Plans:
   4. Entre varios profesionales libres y capaces, el turno cae en el que **menos turnos tiene ese día**.
   5. Cero regresión verificada en los cuatro caminos que comparten el motor: elegir un profesional específico, reservar una cancha, generar la ocurrencia de un abono y llenar un cupo grupal se comportan exactamente como antes.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -358,7 +358,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 09-02-PLAN.md — Fixture `seedProfessionalService` + `test/staff-assignment.test.ts` (ASIGN-02/03/03b/04 + paridad-comodín + sede, carrera real) + regresión completa de los 4 caminos (D-11)
+- [x] 09-02-PLAN.md — Fixture `seedProfessionalService` + `test/staff-assignment.test.ts` (ASIGN-02/03/03b/04 + paridad-comodín + sede, carrera real) + regresión completa de los 4 caminos (D-11)
 
 **Waves**: Wave 1 = 09-01 (motor: migración + core + apply local, del que dependen los tests). Wave 2 = 09-02 (verificación: fixtures + tests de asignación/carrera + regresión; depende de la 058 aplicada localmente).
 
@@ -414,6 +414,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
-| 9. Asignación automática atómica de profesional | 1/2 | In Progress|  |
+| 9. Asignación automática atómica de profesional | 2/2 | Complete   | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |
