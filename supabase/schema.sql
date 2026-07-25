@@ -106,28 +106,88 @@ CREATE OR REPLACE FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "
     SET "search_path" TO 'public'
     AS $$
 DECLARE
-  v_bucket uuid := COALESCE(p_professional_id, '00000000-0000-0000-0000-000000000000'::uuid);
+  -- (058) profesional EFECTIVO que se inserta: arranca en p_professional_id y, si el caller mandó el
+  -- UUID mágico "cualquiera", se sobrescribe con el elegido bajo el lock. NUNCA se inserta el mágico.
+  v_effective_pro uuid := p_professional_id;
+  -- (058) ¿el caller pidió "cualquiera"? UUID mágico DISTINTO del sentinel cero ("sin profesional").
+  v_is_any boolean := (p_professional_id = '00000000-0000-0000-0000-000000000001'::uuid);
+  -- v_bucket se RECOMPUTA tras la selección con v_effective_pro (Pitfall 1: byte-idéntico al índice 011).
+  v_bucket uuid;
   v_capacity int;
   v_occupied int;
   v_seat smallint;
   v_space_ids uuid[];   -- (042) espacios físicos que ocupa la agenda reservada (vía agenda_spaces)
   v_sid uuid;           -- (042) iterador del FOREACH del lock por espacio
 BEGIN
-  -- 1. Lock por slot+bucket: serializa SOLO las reservas que pelean este mismo slot.
-  --    hashtextextended de la clave estable del slot → bigint para el advisory lock.
-  --    El COALESCE es byte-idéntico al del índice 011 y al count de abajo.
+  -- 1. (058, §GA1 / D-04) Lock del slot AMPLIADO a (business_id + date + time) — SIN v_bucket.
+  --    Serializa TODA reserva del mismo instante de inicio del negocio (específicas + "cualquiera")
+  --    antes de tocar espacio/cupo. Un lock más grueso serializa MÁS, nunca menos → no degrada
+  --    slot_full ni slot_taken. Es lo que hace que la selección de candidato (paso 2) vea un estado
+  --    consistente de todo el instante. hashtextextended → bigint (forma de un argumento, seed 0).
   PERFORM pg_advisory_xact_lock(hashtextextended(
-    p_business_id::text || v_bucket::text || p_date::text || p_time::text, 0));
+    p_business_id::text || p_date::text || p_time::text, 0));
+
+  -- 2. (058, §GA2 / D-01/D-02/D-03/D-07/D-08/D-10) Selección del profesional "cualquiera" BAJO el lock.
+  --    Solo si el caller pidió "cualquiera". La selección corre DESPUÉS del lock (Pitfall 2) y ANTES
+  --    del bloque de espacio (que necesita el pro elegido).
+  IF v_is_any THEN
+    SELECT p.id
+    INTO   v_effective_pro
+    FROM   professionals p
+    WHERE  p.business_id = p_business_id                            -- D-08 tenant explícito
+      AND  p.active = true                                          -- D-07 activos
+      AND  p.service_id IS NULL                                     -- excluir CANCHAS (Pitfall 6)
+      AND  (p.location_id = p_location_id OR p.location_id IS NULL) -- D-07/D-13 sede (sin-sede vale para todas)
+      AND  (  -- D-07 capaz: paridad-comodín EXACTA con staff-services.ts:48-52 (0 filas = capaz de todo).
+              NOT EXISTS (SELECT 1 FROM professional_services ps
+                          WHERE ps.business_id = p_business_id AND ps.professional_id = p.id)
+              OR EXISTS  (SELECT 1 FROM professional_services ps
+                          WHERE ps.business_id = p_business_id AND ps.professional_id = p.id
+                            AND ps.service_id = p_service_id)
+           )
+      AND  NOT EXISTS (  -- LIBRE: sin turno OCUPANTE solapado en su agenda ese día (espeja EXCLUDE 013 +
+                         --   la guarda expires_at del core, Pitfall 4).
+              SELECT 1 FROM appointments a
+              WHERE a.business_id = p_business_id
+                AND a.professional_id = p.id
+                AND a.date = p_date
+                AND a.status IN ('confirmed','pending_payment')
+                AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
+                AND tsrange(a.date + a.time,
+                            a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+                    && tsrange(p_date + p_time,
+                               p_date + p_time + make_interval(mins => p_duration))
+           )
+    ORDER BY (  -- D-02/D-03 carga = turnos NO cancelados del pro ese DÍA COMPLETO, TODAS las sedes/servicios.
+             SELECT count(*) FROM appointments a2
+             WHERE a2.business_id = p_business_id
+               AND a2.professional_id = p.id
+               AND a2.date = p_date
+               AND a2.status IN ('confirmed','pending_payment')
+               AND (a2.status = 'confirmed' OR a2.expires_at IS NULL OR a2.expires_at > now())
+           ) ASC,
+           p.created_at ASC,   -- D-01 desempate: alta más vieja (determinístico + self-balancing)
+           p.id ASC            -- D-01 tie-break secundario → tests reproducibles
+    LIMIT 1;
+
+    IF v_effective_pro IS NULL THEN
+      -- D-10: ningún capaz libre → el error de disponibilidad de siempre (rama slot_taken→409 del core).
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  -- (058) Recomputar el bucket con el pro EFECTIVO ya resuelto (Pitfall 1: literal byte-idéntico al 011).
+  v_bucket := COALESCE(v_effective_pro, '00000000-0000-0000-0000-000000000000'::uuid);
 
   -- 1b. (042) Exclusión acoplada por espacio físico — lock por conjunto de espacios + EXISTS.
   --     Resolver el set de espacios de la agenda reservada vía la puente. NOTA: se keya por
-  --     p_professional_id CRUDO (no v_bucket): la puente referencia professionals.id real; las
+  --     v_effective_pro (el pro REAL elegido): la puente referencia professionals.id real; las
   --     agendas sin profesional/sentinela no tienen espacios (Pitfall 1 / A2). Si la agenda no tiene
   --     espacios mapeados, v_space_ids queda NULL → sin lock de espacio, sin chequeo, cero overhead.
   SELECT array_agg(asp.space_id ORDER BY asp.space_id) INTO v_space_ids   -- ORDEN ASCENDENTE (anti-deadlock)
   FROM agenda_spaces asp
   WHERE asp.business_id = p_business_id
-    AND asp.professional_id = p_professional_id;
+    AND asp.professional_id = v_effective_pro;
 
   IF v_space_ids IS NOT NULL THEN
     -- Lock por CADA espacio en el orden ascendente del array_agg → ambas reservas que pelean un
@@ -150,7 +210,7 @@ BEGIN
         AND a.status IN ('confirmed', 'pending_payment')
         AND a.date = p_date
         AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid)
-            <> COALESCE(p_professional_id, '00000000-0000-0000-0000-000000000000'::uuid)   -- excluye self (Pitfall 3)
+            <> v_bucket   -- excluye self (Pitfall 3); v_bucket = COALESCE(v_effective_pro, sentinel)
         AND other.space_id = ANY (v_space_ids)                                              -- comparte ≥1 espacio
         AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
             && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))  -- solape de tiempo
@@ -195,7 +255,7 @@ BEGIN
     seat, is_group, notes, status, expires_at
   ) VALUES (
     p_business_id, p_client_id, p_client_name, p_client_phone, p_client_email,
-    p_service_id, p_professional_id, p_location_id, p_date, p_time, p_duration,
+    p_service_id, v_effective_pro, p_location_id, p_date, p_time, p_duration,   -- (058) el pro REAL, nunca el mágico
     v_seat, (v_capacity > 1), p_notes, p_status, p_expires_at
   )
   RETURNING appointments.id, appointments.cancel_token;
