@@ -162,6 +162,20 @@ export async function seedAgendaSpace(seeded: SeededTenant, args: { professional
   if (ins.error) throw new Error(`seed: insert agenda_space falló: ${ins.error?.message}`)
 }
 
+// seedProfessionalService: mapea un professional a un service en `professional_services` (puente de
+// la migr. 057, todas las columnas NOT NULL, PK compuesta (professional_id, service_id)). Molde EXACTO
+// de seedAgendaSpace: service-role insert, sin retorno (la PK no es un id sintético), throw en error.
+// Lo necesita staff-assignment.test.ts (Phase 9) para probar el mapeo EXPLÍCITO (≥1 fila = capaz solo
+// de lo mapeado) vs. la regla del comodín (0 filas = capaz de TODO): un pro mapeado a otro servicio NO
+// debe ser candidato de "cualquiera" para el servicio pedido. El teardown por CASCADE de business ya
+// borra professional_services.
+export async function seedProfessionalService(seeded: SeededTenant, args: { professionalId: string; serviceId: string }): Promise<void> {
+  const ins = await seeded.admin
+    .from('professional_services')
+    .insert({ business_id: seeded.businessId, professional_id: args.professionalId, service_id: args.serviceId })
+  if (ins.error) throw new Error(`seed: insert professional_service falló: ${ins.error?.message}`)
+}
+
 // teardownOneTenant: borra TODO lo creado, incluso si un test falló (try/finally como
 // supabase-fixtures.ts). Borrar el business CASCADEA a sus hijos (service/professional/location/
 // appointments vía ON DELETE CASCADE en business_id). El usuario auth NO cae por ese CASCADE →
