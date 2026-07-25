@@ -925,7 +925,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         <PageEyebrow label={isSection ? 'Gestión' : 'Ajustes'} />
         <h1 className="text-2xl font-bold mt-2 font-[family-name:var(--font-heading)]">
           {view === 'negocio' ? 'Negocio'
-            : view === 'servicios' ? 'Servicios'
+            : view === 'servicios' ? term.services
             : view === 'equipo' ? 'Equipo'
             : view === 'consultorios' ? term.locations
             : 'Configuración'}
@@ -1360,7 +1360,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 </div>
                 <div className="col-span-3 space-y-1">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
-                  <Input type="number" value={newService.price} onChange={e => setNewService(f => ({ ...f, price: parseFloat(e.target.value) }))} min={0} step={100} />
+                  <Input type="number" value={newService.price} onFocus={e => e.target.select()} onChange={e => setNewService(f => ({ ...f, price: parseFloat(e.target.value) }))} min={0} step={100} />
                 </div>
                 <div className="col-span-1">
                   <Button size="icon" onClick={addService} className="h-9 w-9"><Plus className="w-4 h-4" /></Button>
@@ -1402,7 +1402,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
-                    <Input type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} min={0} step={100} />
+                    <Input type="number" value={editSvcForm.price} onFocus={e => e.target.select()} onChange={e => setEditSvcForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} min={0} step={100} />
                   </div>
                 </div>
                 {activeLocations.length > 0 && (
@@ -1529,8 +1529,13 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     const isWildcard = !professionalServices.some(r => r.professional_id === p.id)
                     return (
                       <div key={p.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
-                        <p className="text-sm font-medium truncate">{fullName}</p>
-                        {isWildcard && <p className="text-[11px] text-muted-foreground">Hace todo</p>}
+                        {/* Nombre + "Hace todo" inline: el estado comodín va en la MISMA línea del
+                            nombre (no una fila aparte) para que aparecer/desaparecer al marcar el
+                            primer chip NO cambie el alto de la tarjeta (evita el layout shift). */}
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-sm font-medium truncate min-w-0">{fullName}</p>
+                          {isWildcard && <span className="shrink-0 text-[11px] font-normal text-muted-foreground">Hace todo</span>}
+                        </div>
                         <div role="group" aria-label={`${term.services} de ${fullName}`} className="flex flex-wrap gap-2">
                           {services.map(s => {
                             const checked = isServiceMapped(p.id, s.id)
