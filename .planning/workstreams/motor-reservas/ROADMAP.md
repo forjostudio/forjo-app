@@ -349,7 +349,19 @@ Plans:
   4. Entre varios profesionales libres y capaces, el turno cae en el que **menos turnos tiene ese día**.
   5. Cero regresión verificada en los cuatro caminos que comparten el motor: elegir un profesional específico, reservar una cancha, generar la ocurrencia de un abono y llenar un cupo grupal se comportan exactamente como antes.
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 09-01-PLAN.md — Migración 058 (`book_slot_atomic`: lock ampliado a business_id+date+time + selección "cualquiera" con paridad-comodín + UUID mágico) + core `autoAssign` + apply local (`supabase db reset`)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 09-02-PLAN.md — Fixture `seedProfessionalService` + `test/staff-assignment.test.ts` (ASIGN-02/03/03b/04 + paridad-comodín + sede, carrera real) + regresión completa de los 4 caminos (D-11)
+
+**Waves**: Wave 1 = 09-01 (motor: migración + core + apply local, del que dependen los tests). Wave 2 = 09-02 (verificación: fixtures + tests de asignación/carrera + regresión; depende de la 058 aplicada localmente).
+
 **UI hint**: no
 **Security/Integrity relevance**: **Security-sensitive — secure-phase obligatorio.** Reescribe el corazón de la integridad del producto. Riesgos clave: (a) **carrera de asignación** — leer profesionales libres fuera del RPC y después insertar permite que dos clientes concurrentes reciban el mismo profesional; la selección tiene que ocurrir bajo el mismo `pg_advisory_xact_lock` / la misma transacción `SECURITY DEFINER` que ya protege el conteo de ocupación y la exclusión por espacio; ampliar la granularidad del lock (de slot-por-agenda a slot-por-negocio/servicio) no puede degradar ni el anti-sobrecupo (`slot_full`) ni el anti-solape cross-espacio (`slot_taken`); (b) **regresión** de los cuatro consumidores del RPC (booking público, alta manual autenticada, generación forward de abonos, canchas) — todos entran por `createAppointmentCore`, así que un cambio de firma o de semántica del RPC los afecta a los cuatro a la vez; (c) **anti-tampering de tenant**: el conjunto de candidatos se deriva **server-side** del `business_id` resuelto por slug/sesión y del mapeo de la Phase 8, nunca de una lista de IDs que mande el cliente — un `professionalId` ajeno no puede colarse por la vía "cualquiera"; (d) la función es `SECURITY DEFINER`: cualquier query nueva adentro debe filtrar por `business_id` explícitamente, porque RLS no la protege. La modificación del RPC va en una **migración numerada nueva** (idempotente, `CREATE OR REPLACE FUNCTION`), aplicada a mano y coordinada con el deploy. El secure-phase gate verifica: atomicidad de la asignación bajo concurrencia real (test contra la DB, no lectura de código), cero regresión de los cuatro caminos, y aislamiento por tenant del conjunto de candidatos.
 
@@ -402,6 +414,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 6. Modelo del abono + alta manual + generación forward | 8/8 | Complete   | 2026-07-21 |
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
-| 9. Asignación automática atómica de profesional | 0/? | Not started | - |
+| 9. Asignación automática atómica de profesional | 0/2 | Not started | - |
 | 10. Reservar con "cualquiera" desde la página pública | 0/? | Not started | - |
 | 11. Cierre de backlog | 0/? | Not started | - |
