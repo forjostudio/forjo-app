@@ -4,8 +4,8 @@ milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
 status: executing
 stopped_at: Phase 10 context gathered
-last_updated: "2026-07-25T18:15:08.048Z"
-last_activity: 2026-07-25
+last_updated: "2026-07-25T18:51:50.409Z"
+last_activity: 2026-07-25 -- Phase 10 planning complete
 progress:
   total_phases: 11
   completed_phases: 9
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 10
 Plan: Not started
-Status: Executing Phase 09
-Last activity: 2026-07-25
+Status: Ready to execute
+Last activity: 2026-07-25 -- Phase 10 planning complete
 
 **Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
 
