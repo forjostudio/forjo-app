@@ -6,6 +6,7 @@ import { LandingRenderer } from '@/components/landing/landing-renderer'
 import type { PublicBusiness, Location, PublicCancha } from '@/lib/types'
 import { parseLandingConfig } from '@/lib/landing/schema'
 import { resolveVertical } from '@/lib/verticals'
+import { bookableServices } from '@/lib/staff-services'
 import { buildJsonLd } from '@/lib/landing/seo'
 import { ThemeOverrideScript } from '@/components/theme-override-script'
 import { EmbedHeightReporter } from '@/components/embed-height-reporter'
@@ -132,6 +133,12 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
   // sin profesional ni duración custom), leyendo public_canchas; el resto (salud/belleza/general)
   // renderiza BookingClient byte-idéntico. `vertical` ya se resolvió arriba (:76) — se reusa.
   const isCanchas = vertical.key === 'canchas'
+  // Gap UAT Phase 10: un servicio que NINGÚN profesional nombrado hace NO debe ofrecerse (hoy caía al
+  // fallback "Sin preferencia" y se reservaba contra el sentinel). Filtramos la lista SOLO para el
+  // selector de reserva con staff (BookingClient), aplicando la regla del comodín + la guarda de modo
+  // sentinel (0 profesionales nombrados → todos los servicios, sin regresión). El catálogo del
+  // LandingRenderer (superficie de marketing) NO se toca: sigue mostrando el catálogo completo.
+  const staffBookableServices = bookableServices(services || [], professionals || [], professionalServices || [])
   // El slot de booking resuelto por vertical: se usa tanto en la rama legacy (directo) como
   // dentro del LandingRenderer (como prop bookingSlot), para no acoplar el renderer al modelo canchas.
   const bookingNode = isCanchas ? (
@@ -145,7 +152,7 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
   ) : (
     <BookingClient
       business={business as unknown as PublicBusiness}
-      services={services || []}
+      services={staffBookableServices}
       professionals={professionals || []}
       timeBlocks={timeBlocks || []}
       exceptions={exceptions || []}

@@ -66,3 +66,22 @@ export function isServiceCovered(
 ): boolean {
   return professionalsForService(serviceId, activeProfessionals, bridge).length > 0
 }
+
+/**
+ * Los servicios RESERVABLES en la grilla pública con staff nombrado.
+ *
+ * Guarda CRÍTICA (gap UAT Phase 10): SOLO se filtra por cobertura cuando hay ≥1 profesional nombrado
+ * (`activeProfessionals.length > 0`). Con 0 profesionales nombrados el negocio opera en modo sentinel
+ * ("Sin preferencia" contra el UUID mágico) y TODOS los servicios siguen reservables: sin esta guarda
+ * `isServiceCovered` daría false para todo y ocultaría el catálogo entero de un negocio sin staff
+ * nombrado (regresión grave). Con staff nombrado + comodín (bridge vacío) `isServiceCovered` da true
+ * para todo → sin cambios. El filtro solo esconde un servicio cuando HAY mapeos y NINGUNO lo cubre.
+ */
+export function bookableServices(
+  services: Service[],
+  activeProfessionals: Professional[],
+  bridge: ProfessionalService[],
+): Service[] {
+  if (activeProfessionals.length === 0) return [...services] // modo sentinel: sin staff nombrado, todo reservable
+  return services.filter((s) => isServiceCovered(s.id, activeProfessionals, bridge))
+}
