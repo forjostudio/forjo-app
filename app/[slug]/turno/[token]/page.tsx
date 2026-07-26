@@ -33,7 +33,10 @@ export default async function TurnoConfirmacion({ params }: { params: Promise<{ 
   const service = appt.services as { name?: string; price?: number | null; duration_minutes?: number | null } | null
   const professional = appt.professionals as { name?: string } | null
   const location = appt.locations as { name?: string; address?: string | null } | null
-  const locationLabel = resolveVertical({ vertical: business?.vertical ?? null, type: business?.type ?? null }).terminology.location
+  const vertical = resolveVertical({ vertical: business?.vertical ?? null, type: business?.type ?? null })
+  const locationLabel = vertical.terminology.location
+  // Label del recurso según rubro: canchas usa su terminología ("Cancha"); staff (salud/belleza/general) → "Te atiende".
+  const professionalLabel = vertical.key === 'canchas' ? vertical.terminology.resource : 'Te atiende'
 
   return (
     <ConfirmationView
@@ -54,6 +57,7 @@ export default async function TurnoConfirmacion({ params }: { params: Promise<{ 
       durationMinutes={appt.duration_minutes ?? service?.duration_minutes ?? null}
       price={service?.price ?? null}
       professionalName={professional?.name ?? null}
+      professionalLabel={professionalLabel}
       date={appt.date}
       time={appt.time}
       code={bookingCode(token)}

@@ -223,6 +223,7 @@ export async function sendConfirmationEmail({
   date,
   time,
   professionalName,
+  professionalLabel = 'Te atiende',
   businessName,
   businessSlug,
   theme,
@@ -246,6 +247,9 @@ export async function sendConfirmationEmail({
   // YA creado (mismo tenant), NUNCA de un dato del front (D-04/D-05). Opcional: sin profesional
   // nombrado (sentinel de un negocio sin profesionales) no se muestra ninguna fila (D-04).
   professionalName?: string | null
+  // Etiqueta de la fila del profesional, resuelta por vertical por el caller (esta plantilla es
+  // compartida entre rubros con staff y canchas). Staff → "Te atiende"; canchas → "Cancha". Default 'Te atiende'.
+  professionalLabel?: string
   businessName: string
   businessSlug: string
   theme?: string | null
@@ -308,7 +312,7 @@ export async function sendConfirmationEmail({
               </tr>
               ${professionalName ? `
               <tr>
-                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">Profesional</td>
+                <td style="font-size:12px;color:#999;padding:8px 0;border-bottom:1px solid #eee;">${esc(professionalLabel)}</td>
                 <td style="font-size:13px;font-weight:600;color:#1a1a1a;padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${esc(professionalName)}</td>
               </tr>` : ''}
               <tr>
@@ -359,7 +363,7 @@ export async function sendConfirmationEmail({
     to: [to],
     subject: `✅ Turno confirmado — ${businessName} · ${fecha} ${hora} hs`,
     html,
-    text: `¡Hola ${clientName}! Tu turno en ${businessName} está confirmado.\n\nServicio: ${service}${professionalName ? `\nProfesional: ${professionalName}` : ''}\nFecha: ${fecha}\nHora: ${hora} hs\nTotal: ${fmtPrice(price)}${deposit > 0 ? `\nSeña abonada: ${fmtPrice(deposit)}` : ''}`,
+    text: `¡Hola ${clientName}! Tu turno en ${businessName} está confirmado.\n\nServicio: ${service}${professionalName ? `\n${professionalLabel}: ${professionalName}` : ''}\nFecha: ${fecha}\nHora: ${hora} hs\nTotal: ${fmtPrice(price)}${deposit > 0 ? `\nSeña abonada: ${fmtPrice(deposit)}` : ''}`,
   })
   console.log(`📧 Confirmación enviada a ${to}`)
 }

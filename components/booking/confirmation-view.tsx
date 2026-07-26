@@ -27,6 +27,10 @@ export interface ConfirmationViewProps {
   durationMinutes?: number | null
   price?: number | null
   professionalName?: string | null
+  // Etiqueta de la fila del profesional, resuelta por vertical (esta pantalla es COMPARTIDA con canchas).
+  // Rubros con staff (salud/belleza/general) → "Te atiende"; vertical canchas → la terminología del
+  // recurso ("Cancha"). Default sensato si no viene: "Te atiende".
+  professionalLabel?: string
   date: string // yyyy-MM-dd
   time: string // HH:mm[:ss]
   code: string
@@ -48,7 +52,7 @@ function waLink(whatsapp: string, text: string): string {
 export function ConfirmationView({
   businessName, businessType, businessSlug, logoUrl, address, mapsUrl, whatsapp, locationName, locationAddress, locationLabel,
   clientName, clientPhone, clientEmail,
-  serviceName, durationMinutes, price, professionalName,
+  serviceName, durationMinutes, price, professionalName, professionalLabel = 'Te atiende',
   date, time, code, depositPaid,
 }: ConfirmationViewProps) {
   const dt = parseISO(`${date}T${time.slice(0, 5)}:00`)
@@ -157,7 +161,7 @@ export function ConfirmationView({
             </span>
           </Row>
           {professionalName && (
-            <Row icon={<User />} label="Profesional">{professionalName}</Row>
+            <Row icon={<User />} label={professionalLabel}>{professionalName}</Row>
           )}
           {(placeName || placeAddress) && (
             <Row icon={<MapPin />} label={placeName ? (locationLabel || 'Consultorio') : 'Dirección'}>

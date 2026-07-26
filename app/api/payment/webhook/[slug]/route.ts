@@ -5,6 +5,7 @@ import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar'
 import { getValidMpAccessToken } from '@/lib/payment'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { verifyMPSignature } from '@/lib/mercadopago'
+import { resolveVertical } from '@/lib/verticals'
 import type { NextRequest } from 'next/server'
 
 const MP_API = 'https://api.mercadopago.com'
@@ -62,7 +63,7 @@ async function processWebhook(slug: string, paymentId: string) {
   // nota en vez de devolver undefined silencioso y dejar de confirmar turnos pagados (D-03 / T-01-05).
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp, address, notification_email')
+    .select('id, name, slug, vertical, type, palette, theme, font, landing_config, logo_url, whatsapp, address, notification_email')
     .eq('slug', slug)
     .single()
 
@@ -167,6 +168,9 @@ async function processWebhook(slug: string, paymentId: string) {
     // Nombre del profesional asignado (ASIGN-05): del turno ya creado (join), nunca del front. Path
     // CON seña — sin esto el mail del flujo pagado quedaría sin el nombre (Pitfall 3). Null si no hay.
     const professionalName = (appt.professionals as { name?: string } | null)?.name || null
+    // Label del recurso según rubro (plantilla compartida con canchas): canchas → "Cancha"; staff → "Te atiende".
+    const vertical = resolveVertical({ vertical: business.vertical, type: business.type })
+    const professionalLabel = vertical.key === 'canchas' ? vertical.terminology.resource : 'Te atiende'
 
     // Estamos dentro de after() → el 200 a MP ya se envió. Acá AWAIT: sin await el fetch
     // a Resend se corta cuando la función se congela. Si falla, se logea y se persiste flag.
@@ -183,6 +187,7 @@ async function processWebhook(slug: string, paymentId: string) {
           date: appt.date,
           time: appt.time,
           professionalName,
+          professionalLabel,
           businessName: business.name,
           businessSlug: slug,
           theme: brand.theme,
