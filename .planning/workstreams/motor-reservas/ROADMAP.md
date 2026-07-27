@@ -46,7 +46,7 @@ Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignaci�
 - [x] **Phase 8: Equipo — qué servicios hace cada profesional** - Mapeo muchos a muchos staff↔servicios (migración 057, tabla puente propia) + config y cobertura desde el panel, sin tocar el motor de reservas (completed 2026-07-24)
 - [x] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**) (completed 2026-07-25)
 - [x] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail (completed 2026-07-27)
-- [ ] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación
+- [x] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación (completed 2026-07-27)
 
 ## Phase Details
 
@@ -416,7 +416,7 @@ Plans:
   2. La pantalla de Clientes deja de disparar el error de eslint por `setState` dentro de `useEffect` (`clients-client.tsx:497`) y se comporta igual que hoy: búsqueda, filtros, alta y edición sin renders en cascada.
   3. Las dos pantallas de cancelación (`/cancelar/[token]` y `/abono/cancelar/[token]`) quedan resueltas con el **mismo** criterio visual en el borde lateral acentuado — se ven consistentes entre sí.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 **Wave 1** *(paralelo — sin solape de archivos)*
@@ -427,7 +427,7 @@ Plans:
 
 **Wave 2** *(bloqueada por 11-02 y 11-03)*
 
-- [ ] 11-04-PLAN.md — EXTRA-B wiring (D-05/D-06/D-07/D-08): función pura `anyCardPlacement` + orden de la tarjeta "Cualquiera" en el paso 2 + toggle en Ajustes (owner-only) + tests
+- [x] 11-04-PLAN.md — EXTRA-B wiring (D-05/D-06/D-07/D-08): función pura `anyCardPlacement` + orden de la tarjeta "Cualquiera" en el paso 2 + toggle en Ajustes (owner-only) + tests
 
 **Waves**: Wave 1 = 11-01 + 11-02 + 11-03 en paralelo (front polish · copy+fix · migración/read-path; `files_modified` disjuntos). Wave 2 = 11-04 (wiring+toggle; depende de la columna 061/tipo/read-path del 11-03 y va después del 11-02 por el conflicto en `settings-client.tsx`).
 
@@ -451,4 +451,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
-| 11. Cierre de backlog | 3/4 | In Progress|  |
+| 11. Cierre de backlog | 4/4 | Complete   | 2026-07-27 |
