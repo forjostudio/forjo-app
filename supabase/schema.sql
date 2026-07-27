@@ -812,7 +812,7 @@ CREATE OR REPLACE VIEW "public"."public_professionals" AS
     "active",
     "photo_url"
    FROM "public"."professionals"
-  WHERE ("active" = true);
+  WHERE (("active" = true) AND ("service_id" IS NULL));
 
 
 ALTER VIEW "public"."public_professionals" OWNER TO "postgres";
