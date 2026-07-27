@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
 status: executing
-stopped_at: Phase 10 context gathered
-last_updated: "2026-07-27T15:06:09.388Z"
+stopped_at: Phase 11 context gathered
+last_updated: "2026-07-27T15:44:37.803Z"
 last_activity: 2026-07-27
 progress:
   total_phases: 11
@@ -176,9 +176,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-25T18:15:08.018Z
-Stopped at: Phase 10 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/10-reservar-con-cualquiera-desde-la-p-gina-p-blica/10-CONTEXT.md
+Last session: 2026-07-27T15:44:37.786Z
+Stopped at: Phase 11 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/11-cierre-de-backlog/11-CONTEXT.md
 
 ## Operator Next Steps
 
