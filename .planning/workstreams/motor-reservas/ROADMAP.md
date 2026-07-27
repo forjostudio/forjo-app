@@ -416,14 +416,14 @@ Plans:
   2. La pantalla de Clientes deja de disparar el error de eslint por `setState` dentro de `useEffect` (`clients-client.tsx:497`) y se comporta igual que hoy: búsqueda, filtros, alta y edición sin renders en cascada.
   3. Las dos pantallas de cancelación (`/cancelar/[token]` y `/abono/cancelar/[token]`) quedan resueltas con el **mismo** criterio visual en el borde lateral acentuado — se ven consistentes entre sí.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1** *(paralelo — sin solape de archivos)*
 
 - [x] 11-01-PLAN.md — Los 3 pulidos: chip Cancelado/Completado en Archivados (POLISH-01/D-01), key-remount en clients-client (POLISH-02), borde gemelo + aceptación reviewable del side-tab (POLISH-03/D-03)
 - [x] 11-02-PLAN.md — EXTRA-A (D-04): copy de borrado bloqueado por FK (servicio/sede/cancha) + fix de `deleteProfessional` (captura 23503, fin del toast mentiroso)
-- [ ] 11-03-PLAN.md — EXTRA-B plomería (D-05/D-06/D-08): migración 061 `public_selector_default` + schema.sql + read-path público + `[BLOCKING] supabase db reset` local
+- [x] 11-03-PLAN.md — EXTRA-B plomería (D-05/D-06/D-08): migración 061 `public_selector_default` + schema.sql + read-path público + `[BLOCKING] supabase db reset` local
 
 **Wave 2** *(bloqueada por 11-02 y 11-03)*
 
@@ -451,4 +451,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
-| 11. Cierre de backlog | 2/4 | In Progress|  |
+| 11. Cierre de backlog | 3/4 | In Progress|  |
