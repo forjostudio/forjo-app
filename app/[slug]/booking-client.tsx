@@ -718,6 +718,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
 
             <div className="rounded-md p-4 space-y-1 text-sm mb-4 bg-card border border-border border-l-4 border-l-primary">
               <p className="text-muted-foreground">Servicio: <span className="text-foreground">{selectedService?.name}</span></p>
+              <p className="text-muted-foreground">Profesional: <span className="text-foreground">{selectedPro && selectedPro !== 'none' ? selectedPro.name : (isAny ? 'Cualquiera' : 'Sin preferencia')}</span></p>
               <p className="text-muted-foreground">
                 {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} a las <strong className="text-foreground">{selectedTime}</strong>
               </p>
