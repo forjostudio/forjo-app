@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import type { PublicBusiness, Service, Professional, TimeBlock, ProfessionalService } from '@/lib/types'
 import { effectiveBookingCutoff } from '@/lib/booking-window'
 import { professionalsForService } from '@/lib/staff-services'
+import { anyCardPlacement } from '@/lib/booking-selector'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -502,55 +503,73 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         {step === 2 && (
           <div className="space-y-3">
             <h2 className="text-lg font-semibold mb-4 font-[family-name:var(--font-heading)]">¿Con quién querés atenderte?</h2>
-            {/* "Cualquiera" (D-02/D-03): tarjeta arriba de la lista, misma UI que un profesional,
-                SOLO con 2+ capaces del servicio. Reusa selectedPro='none' (asignación across-staff). */}
-            {showAny ? (
-              <button
-                onClick={() => { setSelectedPro('none'); setStep(3) }}
-                className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
-              >
-                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
-                  ?
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Cualquiera</p>
-                  <p className="text-xs text-muted-foreground">El primero disponible</p>
-                </div>
-              </button>
-            ) : capaces.length === 0 ? (
+            {/* "Cualquiera" (D-02/D-03): tarjeta con la misma UI que un profesional, SOLO con 2+
+                capaces del servicio. Reusa selectedPro='none' (asignación across-staff). El ORDEN
+                respecto de la lista lo decide el setting del negocio (EXTRA-B, Opción A):
+                anyCardPlacement(business.public_selector_default) → 'first' = arriba (byte-idéntico a
+                hoy, D-06); 'last' = debajo de los profesionales (D-07). El gate `showAny` (≥2 capaces)
+                y el contrato de asignación no cambian — es solo orden de render (D-08). */}
+            {(() => {
+              const anyCard = (
+                <button
+                  key="any"
+                  onClick={() => { setSelectedPro('none'); setStep(3) }}
+                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
+                    ?
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Cualquiera</p>
+                    <p className="text-xs text-muted-foreground">El primero disponible</p>
+                  </div>
+                </button>
+              )
               // Fallback sentinel / servicio sin cobertura (0 capaces): mantenemos la tarjeta de hoy
               // para no dejar el paso 2 sin salida. selectedPro='none' cae en el bucket "sin
               // profesional" del backend, idéntico a hoy (D-08).
-              <button
-                onClick={() => { setSelectedPro('none'); setStep(3) }}
-                className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
-              >
-                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
-                  ?
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Sin preferencia</p>
-                  <p className="text-xs text-muted-foreground">Se asignará automáticamente</p>
-                </div>
-              </button>
-            ) : null}
-            {capaces.map(pro => (
-              <button
-                key={pro.id}
-                onClick={() => { setSelectedPro(pro); setStep(3) }}
-                className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
-              >
-                {pro.photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={pro.photo_url} alt={pro.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary text-primary-foreground font-semibold text-sm flex-shrink-0">
-                    {pro.name.charAt(0).toUpperCase()}
+              const sentinelCard = (
+                <button
+                  key="sentinel"
+                  onClick={() => { setSelectedPro('none'); setStep(3) }}
+                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
+                    ?
                   </div>
-                )}
-                <p className="font-medium text-sm">{pro.name}</p>
-              </button>
-            ))}
+                  <div>
+                    <p className="font-medium text-sm">Sin preferencia</p>
+                    <p className="text-xs text-muted-foreground">Se asignará automáticamente</p>
+                  </div>
+                </button>
+              )
+              const proList = capaces.map(pro => (
+                <button
+                  key={pro.id}
+                  onClick={() => { setSelectedPro(pro); setStep(3) }}
+                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+                >
+                  {pro.photo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={pro.photo_url} alt={pro.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary text-primary-foreground font-semibold text-sm flex-shrink-0">
+                      {pro.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="font-medium text-sm">{pro.name}</p>
+                </button>
+              ))
+              // Gate ≥2 capaces intacto (showAny). Con "Cualquiera" visible, el orden lo da el setting:
+              // 'last' = profesionales primero + "Cualquiera" al final; 'first'/default = como hoy.
+              if (showAny) {
+                return anyCardPlacement(business.public_selector_default) === 'last'
+                  ? <>{proList}{anyCard}</>
+                  : <>{anyCard}{proList}</>
+              }
+              // Sin "Cualquiera": 0 capaces → sentinel; 1 capaz → solo la lista (comportamiento de hoy).
+              return <>{capaces.length === 0 ? sentinelCard : null}{proList}</>
+            })()}
           </div>
         )}
 
