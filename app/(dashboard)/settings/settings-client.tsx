@@ -832,6 +832,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [savingDeposit, setSavingDeposit] = useState(false)
   const [cleaningUp, setCleaningUp] = useState(false)
 
+  // EXTRA-B: default del selector de profesional del booking público (enum 'any'|'choose', migr 061).
+  // 'any' = tarjeta "Cualquiera" arriba (recomendado, byte-idéntico a hoy); 'choose' = profesionales
+  // primero. Nullish → 'any' (default de la columna). Persiste owner-only (RLS), patrón require_deposit.
+  const [selectorDefault, setSelectorDefault] = useState<'any' | 'choose'>(
+    business.public_selector_default === 'choose' ? 'choose' : 'any'
+  )
+  const [savingSelector, setSavingSelector] = useState(false)
+
   const [notifForm, setNotifForm] = useState({
     // notification_email NO es secreto → sigue en businesses. resend_* vienen de secrets (D-05).
     // Autocarga: si el negocio todavía no seteó un email, precargamos el del dueño (sesión) como
@@ -874,6 +882,18 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setSavingDeposit(false)
     if (error) toast.error('Error al guardar')
     else toast.success('Configuración de seña guardada')
+  }
+  async function saveSelectorDefault(value: 'any' | 'choose') {
+    if (value === selectorDefault) return
+    const prev = selectorDefault
+    setSelectorDefault(value) // optimista: revertimos si la escritura falla
+    setSavingSelector(true)
+    // Owner-only por RLS + `.eq('id', business.id)` (patrón require_deposit, sin service-role). El
+    // enum emitido es siempre 'any'|'choose'; el CHECK de la 061 es el fail-closed en DB.
+    const { error } = await supabase.from('businesses').update({ public_selector_default: value }).eq('id', business.id)
+    setSavingSelector(false)
+    if (error) { setSelectorDefault(prev); toast.error('Error al guardar') }
+    else toast.success('Preferencia guardada')
   }
   async function cleanupExpired() {
     setCleaningUp(true)
@@ -1778,6 +1798,42 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               </div>
             )}
             <Button onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
+          </Card>
+
+          {/* Selección de profesional en el booking público (EXTRA-B) */}
+          <Card className="p-6 space-y-4">
+            <div>
+              <p className="font-semibold text-sm">Al reservar, ¿preseleccionar “Cualquiera”?</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Cuando un servicio tiene 2 o más profesionales, elegí cómo se muestra el paso de profesional en tu página de reservas.</p>
+            </div>
+            <div role="radiogroup" aria-label="Preselección del profesional" className="inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectorDefault === 'any'}
+                disabled={savingSelector}
+                onClick={() => saveSelectorDefault('any')}
+                className={cn(
+                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
+                  selectorDefault === 'any' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Sí, mostrar “Cualquiera” arriba
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectorDefault === 'choose'}
+                disabled={savingSelector}
+                onClick={() => saveSelectorDefault('choose')}
+                className={cn(
+                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
+                  selectorDefault === 'choose' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                No, que elijan un profesional
+              </button>
+            </div>
           </Card>
 
           {/* Limpieza de reservas con seña vencida */}
