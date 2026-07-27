@@ -46,6 +46,11 @@ export interface Business {
   // Ventana de generación forward del abono en semanas (migración 054, D-07); default 8 en la DB.
   // Owner-updatable (el trigger businesses_protect_admin_columns no la protege). NO viaja al anon.
   abono_window_weeks?: number | null
+  // Default del paso "Profesional" de la reserva pública (migración 061, EXTRA-B). 'any' = tarjeta
+  // "Cualquiera" primero/preseleccionada (comportamiento Phase 10, D-06); 'choose' = sin preselección,
+  // el cliente ve primero a las personas ("Cualquiera" sigue disponible con ≥2 capaces, D-07). Se lee
+  // vía la vista public_businesses (no la tabla). Es flag de presentación, no dato sensible.
+  public_selector_default?: 'any' | 'choose'
   // MercadoPago Connect (OAuth): user_id de la cuenta MP. NO es secreto (es el id de cuenta);
   // el dashboard lo usa como flag (¿conectó por OAuth?) → se queda en Business.
   mp_user_id?: string | null

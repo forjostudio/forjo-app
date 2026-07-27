@@ -460,7 +460,9 @@ CREATE TABLE IF NOT EXISTS "public"."businesses" (
     "max_advance_days" integer DEFAULT 30,
     "max_advance_date" "date",
     "abono_window_weeks" integer DEFAULT 8,
-    CONSTRAINT "businesses_abono_window_weeks_range" CHECK ((("abono_window_weeks" IS NULL) OR (("abono_window_weeks" >= 1) AND ("abono_window_weeks" <= 52))))
+    "public_selector_default" "text" DEFAULT 'any'::"text" NOT NULL,
+    CONSTRAINT "businesses_abono_window_weeks_range" CHECK ((("abono_window_weeks" IS NULL) OR (("abono_window_weeks" >= 1) AND ("abono_window_weeks" <= 52)))),
+    CONSTRAINT "businesses_public_selector_default_chk" CHECK (("public_selector_default" = ANY (ARRAY['any'::"text", 'choose'::"text"])))
 );
 
 
@@ -797,7 +799,8 @@ CREATE OR REPLACE VIEW "public"."public_businesses" AS
     "created_at",
     "landing_config",
     "max_advance_days",
-    "max_advance_date"
+    "max_advance_date",
+    "public_selector_default"
    FROM "public"."businesses";
 
 
