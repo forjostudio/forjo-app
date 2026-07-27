@@ -45,7 +45,7 @@ Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignaci�
 
 - [x] **Phase 8: Equipo — qué servicios hace cada profesional** - Mapeo muchos a muchos staff↔servicios (migración 057, tabla puente propia) + config y cobertura desde el panel, sin tocar el motor de reservas (completed 2026-07-24)
 - [x] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**) (completed 2026-07-25)
-- [ ] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail
+- [x] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail (completed 2026-07-27)
 - [ ] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación
 
 ## Phase Details
@@ -396,7 +396,7 @@ Plans:
 
 **Wave 4** *(blocked on 10-04)*
 
-- [ ] 10-05-PLAN.md — Checkpoint humano: verificación end-to-end de la reserva pública con "Cualquiera" (con la vista 059 viva)
+- [x] 10-05-PLAN.md — Checkpoint humano: verificación end-to-end de la reserva pública con "Cualquiera" (con la vista 059 viva)
 
 **Waves**: Wave 1 = 10-01 + 10-03 en paralelo (backend/data + mail; `files_modified` disjuntos). Wave 2 = 10-02 (front; depende del contrato any/anyProfessional y de la vista del Plan 01). Wave 3 = 10-04 (reset local + tests + regresión; al final, tras todo el código). Wave 4 = 10-05 (checkpoint humano, tras el reset que deja la vista viva).
 
@@ -436,5 +436,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 7. Cancelación del abono (mail + panel) | 12/12 | Complete    | 2026-07-22 |
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
-| 10. Reservar con "cualquiera" desde la página pública | 4/5 | In Progress|  |
+| 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 0/? | Not started | - |

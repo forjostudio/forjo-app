@@ -31,17 +31,17 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 
 ### Reserva con "cualquiera"
 
-- [ ] **ASIGN-01**: En la reserva pública el cliente puede elegir un profesional específico **o** la opción "cualquiera".
+- [x] **ASIGN-01**: En la reserva pública el cliente puede elegir un profesional específico **o** la opción "cualquiera".
 - [x] **ASIGN-02**: Con "cualquiera", el sistema asigna automáticamente un profesional libre que sepa hacer el servicio elegido.
 - [x] **ASIGN-03**: La asignación automática es **atómica**: dos reservas concurrentes de "cualquiera" sobre el mismo horario nunca reciben el mismo profesional ni sobre-reservan.
 - [x] **ASIGN-04**: La asignación elige el profesional con **menos turnos ese día** (reparto de carga entre el equipo).
-- [ ] **ASIGN-05**: El cliente ve qué profesional le tocó en la pantalla de confirmación y en el mail.
+- [x] **ASIGN-05**: El cliente ve qué profesional le tocó en la pantalla de confirmación y en el mail.
 
 ### Disponibilidad
 
-- [ ] **DISP-01**: Elegido un servicio, un horario aparece disponible si **algún** profesional capaz lo tiene libre.
-- [ ] **DISP-02**: Elegido un profesional específico, la disponibilidad es la de esa agenda (comportamiento actual, sin cambios).
-- [ ] **DISP-03**: Si ningún profesional capaz tiene lugar en un horario, ese horario no se ofrece.
+- [x] **DISP-01**: Elegido un servicio, un horario aparece disponible si **algún** profesional capaz lo tiene libre.
+- [x] **DISP-02**: Elegido un profesional específico, la disponibilidad es la de esa agenda (comportamiento actual, sin cambios).
+- [x] **DISP-03**: Si ningún profesional capaz tiene lugar en un horario, ese horario no se ofrece.
 
 ### Cierre de backlog
 
@@ -78,14 +78,14 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 | STAFF-01 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
 | STAFF-02 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
 | STAFF-03 | Phase 8 — Equipo: qué servicios hace cada profesional | Complete |
-| ASIGN-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
+| ASIGN-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
 | ASIGN-02 | Phase 9 — Asignación automática atómica de profesional | Complete |
 | ASIGN-03 | Phase 9 — Asignación automática atómica de profesional | Complete |
 | ASIGN-04 | Phase 9 — Asignación automática atómica de profesional | Complete |
-| ASIGN-05 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
-| DISP-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
-| DISP-02 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
-| DISP-03 | Phase 10 — Reservar con "cualquiera" desde la página pública | Pending |
+| ASIGN-05 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
+| DISP-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
+| DISP-02 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
+| DISP-03 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
 | POLISH-01 | Phase 11 — Cierre de backlog | Pending |
 | POLISH-02 | Phase 11 — Cierre de backlog | Pending |
 | POLISH-03 | Phase 11 — Cierre de backlog | Pending |
