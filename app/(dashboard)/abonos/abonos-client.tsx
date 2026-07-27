@@ -320,6 +320,17 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {/* Chip de ESTADO en Archivados (POLISH-01 / D-01): una serie dada de baja y
+                            una que ya asignó todas sus sesiones se veían idénticas. El chip las
+                            distingue de un vistazo con tokens semánticos (destructive/secondary, sin
+                            hex). Es puramente aditivo: se deriva del `status` que ya llega en la fila,
+                            NO re-interpreta isAbonoActivo. Solo en Archivados (ahí viven cancelled +
+                            completed); en Activos una 'completed' con turnos por delante no lleva chip. */}
+                        {tab === 'archivados' && (a.status === 'cancelled' || a.status === 'completed') && (
+                          <Badge variant={a.status === 'cancelled' ? 'destructive' : 'secondary'}>
+                            {a.status === 'cancelled' ? 'Cancelado' : 'Completado'}
+                          </Badge>
+                        )}
                         {/* El chip cuenta TURNOS ASIGNADOS y NADA más — idéntico para finitos e
                             indefinidos. Tanto "Completado" como "X de N" se leían como "la serie ya
                             terminó", cuando en realidad esos turnos están por delante. La duración del
