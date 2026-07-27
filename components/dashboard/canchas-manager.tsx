@@ -178,7 +178,7 @@ export function CanchasManager({
     if (!res.ok) {
       // FK: la cancha tiene turnos asociados → no se puede borrar; guiar a desactivar.
       toast.error(res.error === 'has_appointments'
-        ? 'No se puede eliminar: la cancha tiene turnos asociados. Desactivala en su lugar.'
+        ? 'No se puede eliminar: la cancha tiene turnos asociados, incluidos pasados y cancelados (cancelar no los borra). Desactivala para dejar de ofrecerla y conservar el historial, o borrá esos turnos primero.'
         : 'No se pudo eliminar la cancha')
       setDelCancha(null)
       return

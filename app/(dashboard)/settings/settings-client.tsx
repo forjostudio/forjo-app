@@ -400,7 +400,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // desactivar en vez de tocar el estado (el item sigue en la lista porque no filtramos).
     const { error } = await supabase.from('services').delete().eq('id', id).eq('business_id', business.id)
     if (error) {
-      if (error.code === '23503') toast.error('No se puede eliminar: el servicio tiene turnos asociados. Desactivalo en vez de borrarlo.')
+      if (error.code === '23503') toast.error('No se puede eliminar: el servicio tiene turnos asociados, incluidos pasados y cancelados (cancelar no los borra). Desactivalo para dejar de ofrecerlo y conservar el historial, o borrá esos turnos primero.')
       else toast.error('No se pudo eliminar el servicio')
       return
     }
@@ -571,8 +571,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   }
 
   async function deleteProfessional(id: string) {
-    // Defensa en profundidad: filtro explícito por business_id además de la RLS.
-    await supabase.from('professionals').delete().eq('id', id).eq('business_id', business.id)
+    // NO optimista: capturamos el error real (mismo patrón que deleteService). Defensa en profundidad
+    // con business_id además de la RLS. Si hay turnos asociados, el FK (23503) sobre appointments bloquea
+    // el borrado (professional_services/agenda_spaces caen por CASCADE, por eso el mensaje genérico "tiene
+    // turnos asociados" es correcto) → sugerimos desactivar SIN tocar el estado, en vez de mentir "eliminado".
+    const { error } = await supabase.from('professionals').delete().eq('id', id).eq('business_id', business.id)
+    if (error) {
+      if (error.code === '23503') toast.error('No se puede eliminar: el profesional tiene turnos asociados, incluidos pasados y cancelados (cancelar no los borra). Desactivalo para dejar de ofrecerlo y conservar el historial, o borrá esos turnos primero.')
+      else toast.error('No se pudo eliminar el profesional')
+      return
+    }
     setProfessionals(prev => prev.filter(p => p.id !== id))
     // Limpieza optimista del mapeo: al borrar la agenda, sus filas de agenda_spaces caen por FK
     // CASCADE en la DB; reflejarlo en el estado para que el UI no muestre mapeos huérfanos.
@@ -735,7 +743,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // tiene turnos → bloqueamos y sugerimos desactivar (soft-disable vía is_active).
     const { error } = await supabase.from('locations').delete().eq('id', id).eq('business_id', business.id)
     if (error) {
-      if (error.code === '23503') toast.error(`No se puede eliminar: el ${locWord} tiene turnos asociados. Desactivalo en vez de borrarlo.`)
+      if (error.code === '23503') toast.error(`No se puede eliminar: el ${locWord} tiene turnos asociados, incluidos pasados y cancelados (cancelar no los borra). Desactivalo para dejar de ofrecerlo y conservar el historial, o borrá esos turnos primero.`)
       else toast.error('No se pudo eliminar')
       return
     }
