@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { format, parseISO, differenceInDays, differenceInMonths, isSameMonth, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import {
   Search, Phone, Mail, Trash2, GitMerge, MessageCircle,
-  Edit2, X, ChevronLeft, ChevronDown, Lightbulb, TrendingUp, FileText, Shield,
+  Edit2, X, ChevronLeft, ChevronDown, Lightbulb, FileText, Shield,
   UserPlus, Download, Upload, AlertCircle, CheckCircle2, Loader2,
 } from 'lucide-react'
 import {
@@ -62,6 +62,27 @@ const ORIGIN_BADGE: Record<Client['origin'], { label: string; variant: 'outline'
   reserva: { label: 'Reserva', variant: 'outline' },
   manual: { label: 'Manual', variant: 'default' },
   importado: { label: 'Importado', variant: 'secondary' },
+}
+
+// Estadísticas derivadas por cliente (visitas, último, gasto). Tipo compartido entre el cómputo del
+// listado (clientStats) y el subcomponente de detalle.
+type ClientStats = { status: StatusKey; visits: number; lastDate: string | null; daysSinceLast: number; totalSpend: number }
+
+// Colores/labels del estado del turno en el historial de la ficha. A nivel de módulo (constantes puras)
+// para que el subcomponente de detalle los consuma sin recrearlos en cada render.
+const APPT_STATUS_COLOR: Record<string, string> = {
+  confirmed: 'text-green-400',
+  completed: 'text-blue-400',
+  cancelled: 'text-red-400',
+  pending: 'text-yellow-400',
+  pending_payment: 'text-amber-400',
+}
+const APPT_STATUS_LABEL: Record<string, string> = {
+  confirmed: 'Confirmado',
+  completed: 'Completado',
+  cancelled: 'Cancelado',
+  pending: 'Pendiente',
+  pending_payment: 'Pago pend.',
 }
 
 // ── Import CSV (DATA-03) — shapes de respuesta de los route handlers (Plan 02) ─────────────────
@@ -187,15 +208,13 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   const [filter, setFilter] = useState<FilterKey>('all')
   const [filterPro, setFilterPro] = useState('all')
   const [filterInsurance, setFilterInsurance] = useState('all')
-  const [editMode, setEditMode] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', insurance_name: '', insurance_number: '', preferences: '' })
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
+  // Estado del sub-form de detalle (editMode/editForm/notes/saving/historyExpanded) vive ahora en el
+  // subcomponente <ClientDetail>, que se remonta con key={selected.id} al cambiar de cliente. Ese
+  // remount reproduce el reset que antes hacía un useEffect(setState) — la regla
+  // react-hooks/set-state-in-effect (POLISH-02).
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [mergeModal, setMergeModal] = useState(false)
-  // Historia Clínica colapsable (solo salud): arranca colapsada y se cierra al cambiar de paciente.
-  const [historyExpanded, setHistoryExpanded] = useState(false)
 
   // ── Import CSV (DATA-03) ────────────────────────────────────────────────────
   // Un solo Dialog ancho que avanza por 4 etapas (UI-SPEC Opción A). El File se retiene en state
@@ -371,7 +390,6 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
     if (data) setClients(data as Client[])
   }
 
-  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const letterRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -466,81 +484,9 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   // ── Selected client data ──────────────────────────────────────────────────
   const selected = clients.find(c => c.id === selectedId) ?? null
   const selectedAppts = useMemo(() => selectedId ? appts.filter(a => a.client_id === selectedId).sort((a, b) => b.date < a.date ? -1 : 1) : [], [selectedId, appts])
-  const confirmedAppts = useMemo(() => selectedAppts.filter(a => ['confirmed', 'completed'].includes(a.status)), [selectedAppts])
   const stats = selectedId ? clientStats[selectedId] : null
 
-  const servicesBreakdown = useMemo(() => {
-    const map: Record<string, { count: number; price: number }> = {}
-    confirmedAppts.forEach(a => {
-      const name = getApptService(a)
-      if (!map[name]) map[name] = { count: 0, price: 0 }
-      map[name].count++
-      map[name].price = getApptPrice(a)
-    })
-    return Object.entries(map).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.count - a.count)
-  }, [confirmedAppts])
-
-  const visitChart = useMemo(() => {
-    const now = new Date()
-    return Array.from({ length: 6 }, (_, i) => {
-      const d = subMonths(now, 5 - i)
-      return {
-        name: format(d, 'MMM', { locale: es }),
-        visitas: selectedAppts.filter(a => a.status !== 'cancelled' && isSameMonth(parseISO(a.date), d)).length,
-      }
-    })
-  }, [selectedAppts])
-
-  // ── Effects ───────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!selected) return
-    setNotes(selected.notes || '')
-    setEditMode(false)
-    setHistoryExpanded(false)
-    setEditForm({
-      name: selected.name,
-      phone: selected.phone || '',
-      email: selected.email || '',
-      insurance_name: selected.insurance_name || '',
-      insurance_number: selected.insurance_number || '',
-      preferences: selected.preferences || '',
-    })
-  }, [selectedId]) // eslint-disable-line
-
   // ── Handlers ─────────────────────────────────────────────────────────────
-  function handleNotesChange(value: string) {
-    setNotes(value)
-    if (notesTimer.current) clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(async () => {
-      if (!selectedId) return
-      await supabase.from('clients').update({ notes: value }).eq('id', selectedId)
-      setClients(prev => prev.map(c => c.id === selectedId ? { ...c, notes: value } : c))
-    }, 800)
-  }
-
-  async function saveClient() {
-    if (!selectedId) return
-    setSaving(true)
-    const updates: Partial<Client> = {
-      name: editForm.name,
-      phone: editForm.phone || null,
-      email: editForm.email || null,
-    }
-    if (isSalud) {
-      updates.insurance_name = editForm.insurance_name || null
-      updates.insurance_number = editForm.insurance_number || null
-    }
-    if (isBelleza) {
-      updates.preferences = editForm.preferences || null
-    }
-    const { error } = await supabase.from('clients').update(updates).eq('id', selectedId)
-    setSaving(false)
-    if (error) { toast.error('Error al guardar'); return }
-    setClients(prev => prev.map(c => c.id === selectedId ? { ...c, ...updates } : c))
-    setEditMode(false)
-    toast.success('Cliente actualizado')
-  }
-
   async function deleteClient() {
     if (!selectedId) return
     const id = selectedId
@@ -619,22 +565,6 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   }
 
   const showDetail = selectedId !== null
-
-  // ── STATUS BADGE COLORS ───────────────────────────────────────────────────
-  const APPT_STATUS_COLOR: Record<string, string> = {
-    confirmed: 'text-green-400',
-    completed: 'text-blue-400',
-    cancelled: 'text-red-400',
-    pending: 'text-yellow-400',
-    pending_payment: 'text-amber-400',
-  }
-  const APPT_STATUS_LABEL: Record<string, string> = {
-    confirmed: 'Confirmado',
-    completed: 'Completado',
-    cancelled: 'Cancelado',
-    pending: 'Pendiente',
-    pending_payment: 'Pago pend.',
-  }
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
@@ -832,222 +762,27 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
           </div>
         )}
 
-        {/* Client detail */}
-        {selected && stats && (() => {
-          const num = clientNumberMap[selected.id]
-          const suggestion = getSuggestion(stats.visits, stats.daysSinceLast)
-          const avgTicket = stats.visits > 0 ? Math.round(stats.totalSpend / stats.visits) : 0
-          const waPhone = selected.phone ? '549' + selected.phone.replace(/\D/g, '').replace(/^(549|54)/, '') : null
-          const monthsSinceJoin = differenceInMonths(new Date(), parseISO(selected.created_at))
-
-          return (
-            <div className="p-4 sm:p-6 space-y-5 max-w-4xl">
-              {/* ── Back button (mobile) ── */}
-              <button onClick={() => setSelectedId(null)} className="lg:hidden flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2">
-                <ChevronLeft className="w-4 h-4" /> Volver
-              </button>
-
-              {/* ── Header ── */}
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={cn('text-xs font-bold tracking-widest px-2 py-0.5 rounded-full', STATUS_DOT[stats.status], 'text-black')}>
-                    {STATUS_LABEL[stats.status]}
-                  </span>
-                  <span className="text-xs text-muted-foreground font-mono">FICHA {fichaNum(num)}</span>
-                </div>
-
-                {editMode ? (
-                  <div className="space-y-2">
-                    <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                      className="text-2xl font-bold h-auto py-1" />
-                    <div className="flex gap-2">
-                      <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
-                        placeholder="Teléfono" className="h-8 text-sm" />
-                      <Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                        placeholder="Email" className="h-8 text-sm" />
-                    </div>
-                    {isSalud && (
-                      <div className="flex gap-2">
-                        <Input value={editForm.insurance_name} onChange={e => setEditForm(f => ({ ...f, insurance_name: e.target.value }))}
-                          placeholder="Obra social" className="h-8 text-sm" />
-                        <Input value={editForm.insurance_number} onChange={e => setEditForm(f => ({ ...f, insurance_number: e.target.value }))}
-                          placeholder="N° de afiliado" className="h-8 text-sm" />
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={saveClient} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
-                      <Button size="sm" variant="outline" onClick={() => setEditMode(false)}>Cancelar</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <h2 className="text-3xl font-bold tracking-tight uppercase">{selected.name}</h2>
-                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                      {selected.phone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{selected.phone}</span>}
-                      <span>alta hace {fmtSince(selected.created_at)}</span>
-                      {selected.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{selected.email}</span>}
-                      {isSalud && selected.insurance_name && (
-                        <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" />{selected.insurance_name}{selected.insurance_number ? ` · ${selected.insurance_number}` : ''}</span>
-                      )}
-                    </div>
-                    <div className="flex gap-2 pt-1 flex-wrap">
-                      {waPhone && (
-                        <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer">
-                          <Button size="sm" className="gap-1.5 bg-green-600 hover:bg-green-500 text-white h-8">
-                            <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-                          </Button>
-                        </a>
-                      )}
-                      <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => setEditMode(true)}>
-                        <Edit2 className="w-3.5 h-3.5" /> Editar
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5 h-8 text-red-400 hover:text-red-300 border-red-500/30"
-                        onClick={() => setConfirmDelete(true)}>
-                        <Trash2 className="w-3.5 h-3.5" /> Eliminar
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* ── Stats cards ── */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {[
-                  { label: 'VISITAS', value: stats.visits, sub: monthsSinceJoin > 0 ? `en ${monthsSinceJoin} meses` : 'este mes' },
-                  { label: 'GASTO TOTAL', value: `$${stats.totalSpend.toLocaleString('es-AR')}`, sub: 'histórico' },
-                  { label: 'TICKET PROM.', value: `$${avgTicket.toLocaleString('es-AR')}`, sub: 'por visita' },
-                  { label: 'ÚLTIMA VISITA', value: stats.lastDate ? fmtLastVisit(stats.lastDate) : '—', sub: '' },
-                ].map(card => (
-                  <div key={card.label} className="bg-card border border-border rounded-lg p-3">
-                    <p className="text-[10px] font-bold tracking-widest text-muted-foreground">{card.label}</p>
-                    <p className="text-base font-bold mt-1 leading-tight">{card.value}</p>
-                    {card.sub && <p className="text-[10px] text-muted-foreground mt-0.5">{card.sub}</p>}
-                  </div>
-                ))}
-              </div>
-
-              {/* ── Suggestion ── */}
-              <div className={cn('rounded-lg border p-4 flex items-start gap-3', suggestion.bg, suggestion.border)}>
-                <Lightbulb className={cn('w-4 h-4 flex-shrink-0 mt-0.5', suggestion.color)} />
-                <div className="flex-1">
-                  <p className={cn('text-xs font-bold tracking-widest mb-1', suggestion.color)}>{suggestion.label}</p>
-                  <p className="text-sm text-muted-foreground">{suggestion.text}</p>
-                </div>
-                <Button size="sm" variant="outline" className="h-7 text-xs flex-shrink-0"
-                  onClick={() => markStatus(suggestion.status)}>
-                  Marcar seguimiento
-                </Button>
-              </div>
-
-              {/* ── Services ── */}
-              {servicesBreakdown.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold tracking-widest text-muted-foreground">SERVICIOS REALIZADOS</h3>
-                  <div className="space-y-1.5">
-                    {servicesBreakdown.map(s => (
-                      <div key={s.name} className="flex items-center justify-between p-2.5 rounded-lg bg-card border border-border text-sm">
-                        <span className="flex-1 truncate">{s.name}</span>
-                        <div className="flex items-center gap-3 flex-shrink-0 text-muted-foreground text-xs">
-                          <span>{s.count} {s.count === 1 ? 'vez' : 'veces'}</span>
-                          <span className="font-medium text-foreground">${s.price.toLocaleString('es-AR')}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ── History + Chart ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* History */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold tracking-widest text-muted-foreground">
-                    HISTORIAL DE VISITAS ({selectedAppts.length})
-                  </h3>
-                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                    {selectedAppts.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-4 text-center">Sin visitas registradas</p>
-                    ) : selectedAppts.slice(0, 20).map(a => (
-                      <div key={a.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-card border border-border text-xs">
-                        <span className="text-muted-foreground w-16 flex-shrink-0">
-                          {format(parseISO(a.date), 'd MMM yy', { locale: es })}
-                        </span>
-                        <span className="font-mono w-10 flex-shrink-0">{a.time.slice(0, 5)}</span>
-                        <span className="flex-1 truncate text-foreground">{getApptService(a)}</span>
-                        <span className="text-muted-foreground">${getApptPrice(a).toLocaleString('es-AR')}</span>
-                        <span className={cn('w-16 text-right flex-shrink-0', APPT_STATUS_COLOR[a.status] || 'text-muted-foreground')}>
-                          {APPT_STATUS_LABEL[a.status] || a.status}
-                        </span>
-                        <button onClick={() => deleteAppt(a.id)} className="text-muted-foreground hover:text-red-400 transition-colors flex-shrink-0">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Chart */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold tracking-widest text-muted-foreground">VISITAS POR MES</h3>
-                  <div className="bg-card border border-border rounded-lg p-3">
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={visitChart}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                        <XAxis dataKey="name" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
-                        <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} allowDecimals={false} />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
-                          formatter={(v) => [Number(v), 'Visitas']}
-                        />
-                        <Bar dataKey="visitas" radius={[3, 3, 0, 0]} fill="var(--primary)" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Notas (única sección libre; reemplaza Ficha técnica + Preferencias) ── */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-bold tracking-widest text-muted-foreground">NOTAS</h3>
-                <Textarea
-                  value={notes}
-                  onChange={e => handleNotesChange(e.target.value)}
-                  placeholder="Preferencias, alergias, observaciones..."
-                  rows={6}
-                  className="bg-card resize-none text-sm"
-                />
-                <p className="text-[10px] text-muted-foreground">Guarda automáticamente</p>
-              </div>
-
-              {/* ── Historia Clínica (colapsable, solo salud) ── */}
-              {isSalud && (
-                <div className="space-y-3 border-t border-border pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setHistoryExpanded(v => !v)}
-                    aria-expanded={historyExpanded}
-                    className="flex items-center justify-between w-full text-left rounded-lg px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span className="text-sm font-bold tracking-wide flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" /> Historia Clínica
-                    </span>
-                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform duration-200', historyExpanded && 'rotate-180')} />
-                  </button>
-                  {historyExpanded && (
-                    <ClinicalHistoryPanel
-                      clientId={selected.id}
-                      businessId={businessId}
-                      initialInsuranceName={selected.insurance_name}
-                      initialInsuranceNumber={selected.insurance_number}
-                      onInsuranceSaved={(name, number) =>
-                        setClients(prev => prev.map(c => c.id === selected.id ? { ...c, insurance_name: name, insurance_number: number } : c))}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })()}
+        {/* Client detail — subcomponente remontado por key={selected.id} al cambiar de cliente
+            (POLISH-02): el remount reinicia editMode/editForm/notes/historyExpanded desde `client`,
+            reemplazando el useEffect(setState) que disparaba react-hooks/set-state-in-effect.
+            Búsqueda, filtros y alta siguen en este componente padre y no cambian. */}
+        {selected && stats && (
+          <ClientDetail
+            key={selected.id}
+            client={selected}
+            stats={stats}
+            num={clientNumberMap[selected.id]}
+            selectedAppts={selectedAppts}
+            isSalud={isSalud}
+            isBelleza={isBelleza}
+            businessId={businessId}
+            onBack={() => setSelectedId(null)}
+            onRequestDelete={() => setConfirmDelete(true)}
+            onMarkStatus={markStatus}
+            onDeleteAppt={deleteAppt}
+            onPatchClient={(patch) => setClients(prev => prev.map(c => c.id === selected.id ? { ...c, ...patch } : c))}
+          />
+        )}
       </div>
 
       {/* ── Confirm delete ── */}
@@ -1339,6 +1074,317 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ── ClientDetail ────────────────────────────────────────────────────────────
+// Panel de ficha/edición del cliente seleccionado. Se monta con key={client.id} desde el padre, así
+// AL CAMBIAR de cliente React lo REMONTA y los useState vuelven a su valor inicial derivado de
+// `client` — reproduciendo EXACTO el reset que antes hacía un useEffect(setState) y que disparaba la
+// regla react-hooks/set-state-in-effect (POLISH-02). notes/editForm son estado EDITABLE (el usuario
+// tipea encima), por eso el patrón correcto es remount-por-key y no "derivar en render".
+function ClientDetail({
+  client, stats, num, selectedAppts, isSalud, isBelleza, businessId,
+  onBack, onRequestDelete, onMarkStatus, onDeleteAppt, onPatchClient,
+}: {
+  client: Client
+  stats: ClientStats
+  num: number
+  selectedAppts: Appointment[]
+  isSalud: boolean
+  isBelleza: boolean
+  businessId: string
+  onBack: () => void
+  onRequestDelete: () => void
+  onMarkStatus: (status: string) => void
+  onDeleteAppt: (id: string) => void
+  onPatchClient: (patch: Partial<Client>) => void
+}) {
+  const supabase = createClient()
+
+  // Estado del sub-form, inicializado desde `client` (el remount por key lo reinicia al cambiar de cliente).
+  const [editMode, setEditMode] = useState(false)
+  const [editForm, setEditForm] = useState(() => ({
+    name: client.name,
+    phone: client.phone || '',
+    email: client.email || '',
+    insurance_name: client.insurance_name || '',
+    insurance_number: client.insurance_number || '',
+    preferences: client.preferences || '',
+  }))
+  const [notes, setNotes] = useState(() => client.notes || '')
+  const [saving, setSaving] = useState(false)
+  // Historia Clínica colapsable (solo salud): arranca colapsada; el remount la cierra al cambiar de paciente.
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const confirmedAppts = useMemo(() => selectedAppts.filter(a => ['confirmed', 'completed'].includes(a.status)), [selectedAppts])
+
+  const servicesBreakdown = useMemo(() => {
+    const map: Record<string, { count: number; price: number }> = {}
+    confirmedAppts.forEach(a => {
+      const name = getApptService(a)
+      if (!map[name]) map[name] = { count: 0, price: 0 }
+      map[name].count++
+      map[name].price = getApptPrice(a)
+    })
+    return Object.entries(map).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.count - a.count)
+  }, [confirmedAppts])
+
+  const visitChart = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = subMonths(now, 5 - i)
+      return {
+        name: format(d, 'MMM', { locale: es }),
+        visitas: selectedAppts.filter(a => a.status !== 'cancelled' && isSameMonth(parseISO(a.date), d)).length,
+      }
+    })
+  }, [selectedAppts])
+
+  // Autosave de notas con debounce (idéntico al original): escribe a Supabase y avisa al padre para
+  // sincronizar el estado del listado.
+  function handleNotesChange(value: string) {
+    setNotes(value)
+    if (notesTimer.current) clearTimeout(notesTimer.current)
+    notesTimer.current = setTimeout(async () => {
+      await supabase.from('clients').update({ notes: value }).eq('id', client.id)
+      onPatchClient({ notes: value })
+    }, 800)
+  }
+
+  async function saveClient() {
+    setSaving(true)
+    const updates: Partial<Client> = {
+      name: editForm.name,
+      phone: editForm.phone || null,
+      email: editForm.email || null,
+    }
+    if (isSalud) {
+      updates.insurance_name = editForm.insurance_name || null
+      updates.insurance_number = editForm.insurance_number || null
+    }
+    if (isBelleza) {
+      updates.preferences = editForm.preferences || null
+    }
+    const { error } = await supabase.from('clients').update(updates).eq('id', client.id)
+    setSaving(false)
+    if (error) { toast.error('Error al guardar'); return }
+    onPatchClient(updates)
+    setEditMode(false)
+    toast.success('Cliente actualizado')
+  }
+
+  const suggestion = getSuggestion(stats.visits, stats.daysSinceLast)
+  const avgTicket = stats.visits > 0 ? Math.round(stats.totalSpend / stats.visits) : 0
+  const waPhone = client.phone ? '549' + client.phone.replace(/\D/g, '').replace(/^(549|54)/, '') : null
+  const monthsSinceJoin = differenceInMonths(new Date(), parseISO(client.created_at))
+
+  return (
+    <div className="p-4 sm:p-6 space-y-5 max-w-4xl">
+      {/* ── Back button (mobile) ── */}
+      <button onClick={onBack} className="lg:hidden flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2">
+        <ChevronLeft className="w-4 h-4" /> Volver
+      </button>
+
+      {/* ── Header ── */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={cn('text-xs font-bold tracking-widest px-2 py-0.5 rounded-full', STATUS_DOT[stats.status], 'text-black')}>
+            {STATUS_LABEL[stats.status]}
+          </span>
+          <span className="text-xs text-muted-foreground font-mono">FICHA {fichaNum(num)}</span>
+        </div>
+
+        {editMode ? (
+          <div className="space-y-2">
+            <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+              className="text-2xl font-bold h-auto py-1" />
+            <div className="flex gap-2">
+              <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="Teléfono" className="h-8 text-sm" />
+              <Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="Email" className="h-8 text-sm" />
+            </div>
+            {isSalud && (
+              <div className="flex gap-2">
+                <Input value={editForm.insurance_name} onChange={e => setEditForm(f => ({ ...f, insurance_name: e.target.value }))}
+                  placeholder="Obra social" className="h-8 text-sm" />
+                <Input value={editForm.insurance_number} onChange={e => setEditForm(f => ({ ...f, insurance_number: e.target.value }))}
+                  placeholder="N° de afiliado" className="h-8 text-sm" />
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveClient} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
+              <Button size="sm" variant="outline" onClick={() => setEditMode(false)}>Cancelar</Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h2 className="text-3xl font-bold tracking-tight uppercase">{client.name}</h2>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              {client.phone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{client.phone}</span>}
+              <span>alta hace {fmtSince(client.created_at)}</span>
+              {client.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{client.email}</span>}
+              {isSalud && client.insurance_name && (
+                <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" />{client.insurance_name}{client.insurance_number ? ` · ${client.insurance_number}` : ''}</span>
+              )}
+            </div>
+            <div className="flex gap-2 pt-1 flex-wrap">
+              {waPhone && (
+                <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" className="gap-1.5 bg-green-600 hover:bg-green-500 text-white h-8">
+                    <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                  </Button>
+                </a>
+              )}
+              <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => setEditMode(true)}>
+                <Edit2 className="w-3.5 h-3.5" /> Editar
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-red-400 hover:text-red-300 border-red-500/30"
+                onClick={onRequestDelete}>
+                <Trash2 className="w-3.5 h-3.5" /> Eliminar
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Stats cards ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: 'VISITAS', value: stats.visits, sub: monthsSinceJoin > 0 ? `en ${monthsSinceJoin} meses` : 'este mes' },
+          { label: 'GASTO TOTAL', value: `$${stats.totalSpend.toLocaleString('es-AR')}`, sub: 'histórico' },
+          { label: 'TICKET PROM.', value: `$${avgTicket.toLocaleString('es-AR')}`, sub: 'por visita' },
+          { label: 'ÚLTIMA VISITA', value: stats.lastDate ? fmtLastVisit(stats.lastDate) : '—', sub: '' },
+        ].map(card => (
+          <div key={card.label} className="bg-card border border-border rounded-lg p-3">
+            <p className="text-[10px] font-bold tracking-widest text-muted-foreground">{card.label}</p>
+            <p className="text-base font-bold mt-1 leading-tight">{card.value}</p>
+            {card.sub && <p className="text-[10px] text-muted-foreground mt-0.5">{card.sub}</p>}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Suggestion ── */}
+      <div className={cn('rounded-lg border p-4 flex items-start gap-3', suggestion.bg, suggestion.border)}>
+        <Lightbulb className={cn('w-4 h-4 flex-shrink-0 mt-0.5', suggestion.color)} />
+        <div className="flex-1">
+          <p className={cn('text-xs font-bold tracking-widest mb-1', suggestion.color)}>{suggestion.label}</p>
+          <p className="text-sm text-muted-foreground">{suggestion.text}</p>
+        </div>
+        <Button size="sm" variant="outline" className="h-7 text-xs flex-shrink-0"
+          onClick={() => onMarkStatus(suggestion.status)}>
+          Marcar seguimiento
+        </Button>
+      </div>
+
+      {/* ── Services ── */}
+      {servicesBreakdown.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold tracking-widest text-muted-foreground">SERVICIOS REALIZADOS</h3>
+          <div className="space-y-1.5">
+            {servicesBreakdown.map(s => (
+              <div key={s.name} className="flex items-center justify-between p-2.5 rounded-lg bg-card border border-border text-sm">
+                <span className="flex-1 truncate">{s.name}</span>
+                <div className="flex items-center gap-3 flex-shrink-0 text-muted-foreground text-xs">
+                  <span>{s.count} {s.count === 1 ? 'vez' : 'veces'}</span>
+                  <span className="font-medium text-foreground">${s.price.toLocaleString('es-AR')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── History + Chart ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* History */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold tracking-widest text-muted-foreground">
+            HISTORIAL DE VISITAS ({selectedAppts.length})
+          </h3>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+            {selectedAppts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Sin visitas registradas</p>
+            ) : selectedAppts.slice(0, 20).map(a => (
+              <div key={a.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-card border border-border text-xs">
+                <span className="text-muted-foreground w-16 flex-shrink-0">
+                  {format(parseISO(a.date), 'd MMM yy', { locale: es })}
+                </span>
+                <span className="font-mono w-10 flex-shrink-0">{a.time.slice(0, 5)}</span>
+                <span className="flex-1 truncate text-foreground">{getApptService(a)}</span>
+                <span className="text-muted-foreground">${getApptPrice(a).toLocaleString('es-AR')}</span>
+                <span className={cn('w-16 text-right flex-shrink-0', APPT_STATUS_COLOR[a.status] || 'text-muted-foreground')}>
+                  {APPT_STATUS_LABEL[a.status] || a.status}
+                </span>
+                <button onClick={() => onDeleteAppt(a.id)} className="text-muted-foreground hover:text-red-400 transition-colors flex-shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Chart */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold tracking-widest text-muted-foreground">VISITAS POR MES</h3>
+          <div className="bg-card border border-border rounded-lg p-3">
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={visitChart}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="name" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
+                  formatter={(v) => [Number(v), 'Visitas']}
+                />
+                <Bar dataKey="visitas" radius={[3, 3, 0, 0]} fill="var(--primary)" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Notas (única sección libre; reemplaza Ficha técnica + Preferencias) ── */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-bold tracking-widest text-muted-foreground">NOTAS</h3>
+        <Textarea
+          value={notes}
+          onChange={e => handleNotesChange(e.target.value)}
+          placeholder="Preferencias, alergias, observaciones..."
+          rows={6}
+          className="bg-card resize-none text-sm"
+        />
+        <p className="text-[10px] text-muted-foreground">Guarda automáticamente</p>
+      </div>
+
+      {/* ── Historia Clínica (colapsable, solo salud) ── */}
+      {isSalud && (
+        <div className="space-y-3 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={() => setHistoryExpanded(v => !v)}
+            aria-expanded={historyExpanded}
+            className="flex items-center justify-between w-full text-left rounded-lg px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="text-sm font-bold tracking-wide flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" /> Historia Clínica
+            </span>
+            <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform duration-200', historyExpanded && 'rotate-180')} />
+          </button>
+          {historyExpanded && (
+            <ClinicalHistoryPanel
+              clientId={client.id}
+              businessId={businessId}
+              initialInsuranceName={client.insurance_name}
+              initialInsuranceNumber={client.insurance_number}
+              onInsuranceSaved={(name, number) => onPatchClient({ insurance_name: name, insurance_number: number })}
+            />
+          )}
+        </div>
+      )}
     </div>
   )
 }
