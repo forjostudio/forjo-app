@@ -1,20 +1,20 @@
 ---
-status: testing
+status: passed
 phase: 11-cierre-de-backlog
 source: [11-VERIFICATION.md]
 started: 2026-07-27
-updated: 2026-07-27
+updated: 2026-07-28
 ---
 
-## Current Test
+## Resultado: APROBADO (2026-07-28)
 
-number: 1
-name: POLISH-01 — chip Cancelado vs Completado en Archivados
-expected: |
-  En Abonos → tab Archivados, cada serie muestra un chip por estado: "Cancelado"
-  (destructive/muted) y "Completado" (secondary/success), distinguibles de un vistazo
-  sin abrir el detalle, con contraste legible.
-awaiting: user response
+UAT humano completo, 5/5 pass. Ajustes aplicados durante el UAT: chip "Completado" a verde
+`--chart-4` (el `--crm-success` no resolvía en el dashboard), y el toggle del selector movido de
+Negocio→Cobros a **Equipo** (arriba de "Espacios físicos compartidos"). Se cargó un abono
+`completed` a la DB local para poder ver el chip. Hallazgos pre-existentes (no de Phase 11)
+derivados al backlog: RiskBadge/`--crm-*` sin color fuera del CRM, abono cancelado muestra
+"Copiar link de baja", modal de borrado + solo-pasados, cliente nuevo en "Pausa", botones
+full-width app-wide.
 
 ## Tests
 
