@@ -327,7 +327,12 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                             NO re-interpreta isAbonoActivo. Solo en Archivados (ahí viven cancelled +
                             completed); en Activos una 'completed' con turnos por delante no lleva chip. */}
                         {tab === 'archivados' && (a.status === 'cancelled' || a.status === 'completed') && (
-                          <Badge variant={a.status === 'cancelled' ? 'destructive' : 'secondary'}>
+                          <Badge
+                            variant={a.status === 'cancelled' ? 'destructive' : 'secondary'}
+                            // Completado = verde --crm-success (éxito), mismo tratamiento tinte+texto que
+                            // maintenance-toggle.tsx; Cancelado usa el rojo de destructive. Sin hex (D-01).
+                            className={a.status === 'completed' ? 'bg-[var(--crm-success)]/15 text-[var(--crm-success)]' : undefined}
+                          >
                             {a.status === 'cancelled' ? 'Cancelado' : 'Completado'}
                           </Badge>
                         )}
