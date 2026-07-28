@@ -212,6 +212,33 @@ Capacidad nueva sobre el motor de reservas de v0.12, sin reconstruirlo:
 ---
 
 
+## Milestone: v0.25 — Multi-staff
+
+**Shipped:** 2026-07-28
+**Phases:** 4 (8-11) | **Plans:** 13
+
+### What Was Built
+Reserva con varios profesionales sobre el motor v0.12 sin reconstruirlo: mapeo staff↔servicios con regla del comodín (migr. 057), **asignación automática atómica** de "cualquiera" DENTRO de `book_slot_atomic` (migr. 058, reparto de carga + advisory lock ampliado), superficie pública "cualquiera" (migr. 059/060, disponibilidad agregada across-staff + nombre del pro en confirmación/mail), y cierre de backlog (chip de estado, fix eslint, default del selector configurable migr. 061). Migr. 057-061 en prod.
+
+### What Worked
+- **Riesgo creciente por fase**: modelo (no toca motor) → asignación atómica (secure obligatorio) → superficie pública → polish. El núcleo peligroso quedó aislado en una fase con secure-phase dedicado.
+- **research → pattern-map → plan → checker** atrapó bugs de diseño antes de ejecutar (el grep-gate self-invalidating de `security_invoker` en Phase 10, el `set-state-in-effect` real vs. exhaustive-deps en Phase 11).
+- **UAT real** encontró lo que el pipeline no: en Phase 10 el wiring `autoAssign` era inerte sin el boolean, en Phase 11 el chip verde no resolvía (`--crm-success` scopeado al CRM) y el "default preseleccionado" era inerte (el selector siempre exige tap → se resolvió como orden de tarjeta).
+
+### What Was Inefficient
+- Ejecutores secuenciales sobre `main` (sin worktree) por la trampa Windows+junction+env local — más lento pero necesario para los tests contra la Supabase LOCAL.
+- El CLI `milestone.complete` en un workstream acumulativo generó la entrada con counts/accomplishments de TODAS las fases (1-11) — hubo que reescribir la entrada a mano al scope real (8-11).
+- Deuda pre-existente que aflora en cada UAT (RiskBadge/`--crm-*` fuera del CRM, botones full-width, flakiness abono bajo `npm test` paralelo) — acumulada al backlog, no atacada.
+
+### Key Lessons
+- Para color/estado theme-aware fuera del CRM, usar los tokens globales (`--chart-4`), NUNCA `--crm-*` (scopeados).
+- Un "default/preselección" en un flujo que siempre exige un tap es inerte — la palanca observable hay que definirla en discuss (acá: orden/prominencia).
+- En un workstream acumulativo, la entrada de MILESTONES.md del CLI necesita curación manual al scope del milestone.
+
+### Cost Observations
+- Model mix: opus (research/plan/execute/secure) + sonnet (checker/verifier).
+- Todo el ciclo discuss→plan→execute→secure de las 4 fases corrió en sesión, con UAT humano intercalado.
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Shipped | Nota |

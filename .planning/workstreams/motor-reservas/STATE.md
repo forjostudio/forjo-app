@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.25
 milestone_name: — Reserva con varios profesionales / multi-staff
-status: executing
+status: Awaiting next milestone
 stopped_at: Phase 11 context gathered
-last_updated: "2026-07-28T22:36:08.558Z"
-last_activity: 2026-07-28
+last_updated: "2026-07-28T22:38:40.302Z"
+last_activity: 2026-07-28 — Milestone v0.25 completed and archived
 progress:
   total_phases: 11
   completed_phases: 11
@@ -25,12 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
-Status: Executing Phase 11
-Last activity: 2026-07-28
-
-**Fases del milestone:** 8 (Equipo: mapeo staff↔servicios, migr. 057) → 9 (Asignación atómica en `book_slot_atomic`, **secure-phase obligatorio**) → 10 (Reserva pública con "cualquiera" + disponibilidad across staff) → 11 (Cierre de backlog).
+Phase: Milestone v0.25 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-28 — Milestone v0.25 completed and archived
 
 ## Performance Metrics
 
@@ -183,4 +181,4 @@ Resume file: .planning/workstreams/motor-reservas/phases/11-cierre-de-backlog/11
 
 ## Operator Next Steps
 
-- Arrancar la Phase 8 con `/gsd:discuss-phase 8 --ws motor-reservas` (o `/gsd:plan-phase 8 --ws motor-reservas`).
+- Start the next milestone with /gsd-new-milestone

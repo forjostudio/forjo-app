@@ -1,5 +1,22 @@
 # Milestones
 
+## v0.25 Multi-staff (Shipped: 2026-07-28)
+
+**Phases completed:** 4 phases (8-11), 13 plans
+
+**Key accomplishments:**
+
+- **Equipo → qué servicios hace cada profesional (Phase 8):** tabla puente `professional_services` (migr. **057**, RLS por tenant + índice inverso) con la **regla del comodín** (0 filas mapeadas = capaz de todo) encapsulada en el helper puro `lib/staff-services.ts`; editor de chips servicio×profesional en `/equipo` (optimista, owner-RLS, nunca service-role) + cobertura "Sin cobertura" en `/servicios`. UAT 4/4 + SECURED 11/11.
+- **Asignación automática atómica (Phase 9):** migr. **058** reescribe `book_slot_atomic` (`CREATE OR REPLACE` puro, firma byte-idéntica) para que una reserva "cualquiera" elija un profesional **libre y capaz DENTRO** del advisory lock (nunca leer-libres→insertar), con reparto de carga por menos-turnos-del-día + desempate determinístico. Lock ampliado a `hash(business_id+date+time)` sin degradar `slot_full`/`slot_taken`; cero regresión de los 4 caminos del motor. Verify 7/7 + SECURED 6/6 (carrera real contra la DB).
+- **Reservar con "cualquiera" desde la página pública (Phase 10):** vista acotada `public_professional_services` (migr. **059**) + rama de agregación `any=1` en `/api/booking/availability` (unión de disponibilidad, contrato `{ok,busy,full}` intacto) + wiring `anyProfessional→autoAssign`; tarjeta "Cualquiera" gateada a ≥2 capaces, gemelo canchas intacto, y el nombre del profesional asignado en pantalla de confirmación + mail (vertical-aware "Te atiende"). Hardening migr. **060** (`public_professionals` excluye canchas). UAT PASS + SECURED 14/14.
+- **Cierre de backlog (Phase 11):** chip semántico Cancelado/Completado en Archivados, refactor `key`-remount que elimina el error `react-hooks/set-state-in-effect` en Clientes, y las 2 pantallas de cancelación consistentes (finding `side-tab` aceptado, sin tocar el endurecimiento); copy honesto de los toasts de borrado (el FK 23503 cuenta pasados/cancelados) + fix `deleteProfessional`, y el **default del selector configurable** por negocio (migr. **061** `businesses.public_selector_default`, toggle en Equipo, orden de la tarjeta) — sin tocar el motor. UAT 5/5.
+- **Deploy y seguridad:** migraciones **057, 058, 059, 060, 061** aplicadas a mano en producción. Las 3 fases sensibles SECURED (11/11 · 6/6 · 14/14, `threats_open: 0`). Suite completa 776+ tests verdes — cero regresión del núcleo anti-doble-booking que sostiene canchas, abonos, cupos grupales y espacio compartido.
+
+**Known deferred items at close:** backlog en `.planning/workstreams/motor-reservas/todos/pending/` — cupo por solape (capacity>1 → v0.26), mensaje de borrado modal + borrar-si-solo-pasados, botones full-width app-wide, y hallazgos de UAT (RiskBadge/`--crm-*` sin color fuera del CRM, abono cancelado muestra "Copiar link de baja", cliente nuevo cae en "Pausa").
+</content>
+
+---
+
 ## v0.24 Turnos fijos / Abonos recurrentes (Shipped: 2026-07-22)
 
 **Phases completed:** 2 phases (6-7), 20 plans
@@ -17,7 +34,6 @@
 **Known deferred items at close:** 2 (ver STATE.md → Deferred Items) — (1) la entrega real de los dos mails de baja solo es verificable post-deploy, porque `RESEND_API_KEY` está vacía en local; el escapado sí está cubierto por 21 tests. (2) el cupo con `capacity > 1` se cuenta por hora de inicio exacta y no por solape, así que turnos escalonados que se pisan superan el cupo → **v0.25**.
 
 ---
-
 
 ## v0.23 Resiliencia de MercadoPago Connect (Shipped: 2026-07-20)
 
