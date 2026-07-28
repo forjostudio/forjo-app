@@ -1698,6 +1698,43 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               </div>
             )}
           </Card>
+
+          {/* Selección de profesional en el booking público (EXTRA-B). Vive en Equipo porque define
+              cómo se ofrecen los profesionales en la reserva pública. */}
+          <Card className="p-6 space-y-4">
+            <div>
+              <p className="font-semibold text-sm">Al reservar, ¿preseleccionar “Cualquiera”?</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Cuando un servicio tiene 2 o más profesionales, elegí cómo se muestra el paso de profesional en tu página de reservas.</p>
+            </div>
+            <div role="radiogroup" aria-label="Preselección del profesional" className="inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectorDefault === 'any'}
+                disabled={savingSelector}
+                onClick={() => saveSelectorDefault('any')}
+                className={cn(
+                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
+                  selectorDefault === 'any' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Sí, mostrar “Cualquiera” arriba
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectorDefault === 'choose'}
+                disabled={savingSelector}
+                onClick={() => saveSelectorDefault('choose')}
+                className={cn(
+                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
+                  selectorDefault === 'choose' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                No, que elijan un profesional
+              </button>
+            </div>
+          </Card>
         </TabsContent>
 
         {/* ── Locations ── */}
@@ -1798,42 +1835,6 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               </div>
             )}
             <Button onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
-          </Card>
-
-          {/* Selección de profesional en el booking público (EXTRA-B) */}
-          <Card className="p-6 space-y-4">
-            <div>
-              <p className="font-semibold text-sm">Al reservar, ¿preseleccionar “Cualquiera”?</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Cuando un servicio tiene 2 o más profesionales, elegí cómo se muestra el paso de profesional en tu página de reservas.</p>
-            </div>
-            <div role="radiogroup" aria-label="Preselección del profesional" className="inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={selectorDefault === 'any'}
-                disabled={savingSelector}
-                onClick={() => saveSelectorDefault('any')}
-                className={cn(
-                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
-                  selectorDefault === 'any' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Sí, mostrar “Cualquiera” arriba
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={selectorDefault === 'choose'}
-                disabled={savingSelector}
-                onClick={() => saveSelectorDefault('choose')}
-                className={cn(
-                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
-                  selectorDefault === 'choose' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                No, que elijan un profesional
-              </button>
-            </div>
           </Card>
 
           {/* Limpieza de reservas con seña vencida */}
