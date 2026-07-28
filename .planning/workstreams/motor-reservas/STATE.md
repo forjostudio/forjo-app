@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.25
-milestone_name: — Reserva con varios profesionales / multi-staff
-status: Awaiting next milestone
-stopped_at: Phase 11 context gathered
-last_updated: "2026-07-28T22:38:40.302Z"
-last_activity: 2026-07-28 — Milestone v0.25 completed and archived
+milestone: v0.26
+milestone_name: Cupo por solape + cierre de backlog
+status: planning
+last_updated: "2026-07-28T23:15:10.358Z"
+last_activity: 2026-07-28
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 53
-  completed_plans: 53
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: Milestone v0.25 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-28 — Milestone v0.25 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-28 — Milestone v0.26 started
 
 ## Performance Metrics
 

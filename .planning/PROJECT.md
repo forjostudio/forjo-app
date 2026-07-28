@@ -142,7 +142,7 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones LOCKED:** solo reserva (sin cobro) con modelo extensible; alta manual por el dueño (no pública); recurrencia semanal; indefinido hasta cancelar; cancelación por link en el mail + baja desde el panel; generación forward en el **cron DIARIO existente** (Vercel Hobby — sin crons más frecuentes). Toca el núcleo anti-doble-booking → **secure-phase**.
 
-## Current Milestone (workstream `motor-reservas`): v0.25 Reserva con varios profesionales (multi-staff)
+## Milestone (workstream `motor-reservas`): v0.25 Reserva con varios profesionales (multi-staff) — ✅ SHIPPED 2026-07-28 (tag v0.25)
 
 **Goal:** Un negocio con varias personas (ej. 3 barberos + 1 colorista) define **qué servicios hace cada una**, y el cliente reserva **eligiendo profesional o dejando "cualquiera"** — el sistema le asigna uno libre y capaz, de forma **atómica** (dos clientes pidiendo "cualquiera" a la vez nunca reciben el mismo). Numeración de fases del workstream desde **Phase 8**.
 
@@ -158,6 +158,19 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 **Distinción de modelo (clave, LOCKED):** tres conceptos que NO son lo mismo — (1) **varias personas** = varias agendas (`professionals`), que es lo que resuelve este milestone; (2) **clase grupal** = muchos clientes en UNA agenda (`time_blocks.capacity`, contado por hora de inicio, funciona hoy); (3) **recurso simultáneo** = capacity contado por solape (roto, v0.26). Tres barberos NO son "cupo 3".
 
 **Decisiones LOCKED:** el cliente puede elegir profesional **o** "cualquiera" (las dos vías); la asignación automática corre **dentro del RPC atómico** `book_slot_atomic` (nunca en el cliente ni en dos pasos); debe preservar sin regresión canchas (`professionals.service_id`), abonos (generación forward por el mismo motor), cupos grupales y exclusión por espacio compartido. Toca el núcleo anti-doble-booking → **secure-phase obligatorio**.
+
+## Current Milestone (workstream `motor-reservas`): v0.26 Cupo por solape + cierre de backlog
+
+**Goal:** Que "cupo N" signifique lo correcto según el caso — *clase grupal* (contado por hora de inicio, ya anda) vs *recurso simultáneo* (contado por solape de intervalos, hoy roto) — elegido **por servicio**, controlado de forma **atómica** bajo concurrencia dentro del RPC `book_slot_atomic`, con **cero regresión** del núcleo anti-doble-booking (canchas, abonos, multi-staff, espacio compartido, cupo 1). Además cierra el backlog chico acumulado. Numeración del workstream desde **Phase 12** (continúa, no reinicia).
+
+**Target features:**
+- **A. Cupo por solape (plato principal):** flag **por servicio** "clase grupal / recurso simultáneo". Con recurso simultáneo el sobrecupo se cuenta por **solape de intervalos** (usando `duration_minutes`), no por hora de inicio exacta. Toca `book_slot_atomic`, la asignación de `seat` (separar criterio-de-cupo de posición-en-slot) y la **granularidad del advisory lock** (hoy por slot+bucket → dos reservas escalonadas toman locks distintos y se cuelan; pasa a bucket+día/ventana). Nuevo estado de rechazo consistente con `slot_full`. **secure-phase obligatorio** + tests de concurrencia contra la DB. Diagnóstico raíz cerrado en `todos/pending/2026-07-22-cupo-por-solape-*.md`.
+- **B. Borrado de servicio preservando historial (mediano):** el dueño puede **borrar** un servicio que solo tiene turnos pasados/cancelados; un **modal** bloquea el borrado si hay turnos **futuros** (ofrece desactivar). Los turnos pasados **sobreviven en el historial** (Finanzas / ficha del cliente = "historia clínica" del paciente) vía **desacople del FK** (lo robusto: el turno guarda un *snapshot* de nombre/precio del servicio al crearse). Migración + backfill + write-path del alta.
+- **C. Backlog chico (polish):** ancho consistente de botones de acción app-wide (hoy varios `w-full` poco intencionales en desktop) · `RiskBadge` "Alto" que se ve **con color fuera del CRM** (`--crm-danger` no definido fuera del scope) · un abono **cancelado** no debe mostrar "Copiar link de baja" · un cliente **nuevo** sin turnos cae en "Nuevas", no en "Pausa".
+
+**Out of scope este milestone (deferred):** cupo por solape derivado del vertical o global por negocio (se eligió **por servicio**); estrategia de asignación de seat configurable; waitlist al liberar cupo; anticipación mínima; ventana por servicio; cobro recurrente de abonos.
+
+**Decisiones LOCKED (no re-litigar en discuss-phase):** cupo por solape = **modo nuevo por servicio** que **coexiste** con clase grupal — NO reemplaza (reemplazar rompería las clases grupales, donde la clase de las 16:00 y la de las 17:00 no deben sumar entre sí); el control por solape corre **dentro del RPC atómico** con el advisory lock re-granularizado y el `seat` separado del criterio de cupo — nunca `count` sin lock; cambiar la granularidad del lock **no puede degradar** `slot_full`/`slot_taken` ni el caso cupo 1, y afecta a los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) → **secure-phase obligatorio**; borrado con solo-pasados **preserva el historial** (desacople/snapshot, NUNCA hard-delete de la historia); el copy de los 3 toasts de borrado ya está shipeado (no re-hacerlo). La columna exacta del flag por servicio y el mecanismo de desacople (snapshot vs otra vía) se cierran en discuss-phase. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
 
 ## Requirements
 
@@ -188,7 +201,8 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 - Web Builder v0.10 (shipped) — ver `.planning/milestones/v0.10-REQUIREMENTS.md`.
 - **Web Builder — Ampliación + CMS v0.16 (activo)** — ver `.planning/workstreams/web-builder/REQUIREMENTS.md` (modo edición + fuentes de la skill, premium motion, CMS self-serve owner-only, fotos alrededor de la reserva).
 - Consola CRM v0.11 (shipped) — ver `.planning/milestones/v0.11-REQUIREMENTS.md`.
-- **Motor de Reservas v0.12 (activo)** — ver `.planning/workstreams/motor-reservas/REQUIREMENTS.md` (turnos manuales, cupos grupales capacity-aware, espacio compartido, tests de concurrencia).
+- Motor de Reservas — historial del workstream (v0.12 · v0.22 · v0.24 · v0.25 shipped) archivado en `.planning/milestones/v0.*-REQUIREMENTS.md`.
+- **Motor de Reservas — v0.26 Cupo por solape + cierre de backlog (activo)** — ver `.planning/workstreams/motor-reservas/REQUIREMENTS.md` (cupo por solape por servicio en el RPC atómico, borrado de servicio preservando historial, backlog chico de polish).
 
 ### Out of Scope
 
@@ -251,4 +265,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-16 — v0.18 CMS Publish / Go-live shipped (ws `web-builder`, Phases 15-17) y v0.19 Cuenta y acceso iniciado (ws `onboarding`, continúa en Phase 4). v0.9–v0.18 shipped y archivados. Pendiente del ws `web-builder`: Phase 18 — candidato natural, el auto-armado con el pago del add-on (`web-builder-automation-northstar`).*
+*Last updated: 2026-07-28 — v0.25 Multi-staff shipped y archivado (ws `motor-reservas`, Phases 8-11, tag v0.25). Nuevo milestone activo **v0.26 Cupo por solape + cierre de backlog** (ws `motor-reservas`, continúa en Phase 12). v0.9–v0.25 shipped y archivados. Pendiente del ws `web-builder`: Phase 18 — auto-armado de la web con el pago del add-on (`web-builder-automation-northstar`).*
