@@ -45,9 +45,9 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 
 ### Cierre de backlog
 
-- [ ] **POLISH-01**: En el tab Archivados de Abonos se distingue a simple vista una serie **cancelada** de una **completada** (hoy se ven idénticas; el propio autor las confundió con corrupción de datos).
-- [ ] **POLISH-02**: Se corrige el `setState` dentro de `useEffect` en `clients-client.tsx:497` (error de eslint preexistente que dispara renders en cascada).
-- [ ] **POLISH-03**: Se resuelve el borde lateral acentuado de las 2 pantallas de cancelación (`/cancelar/[token]` y `/abono/cancelar/[token]`), tratándolas juntas para que no diverjan.
+- [x] **POLISH-01**: En el tab Archivados de Abonos se distingue a simple vista una serie **cancelada** de una **completada** (hoy se ven idénticas; el propio autor las confundió con corrupción de datos).
+- [x] **POLISH-02**: Se corrige el `setState` dentro de `useEffect` en `clients-client.tsx:497` (error de eslint preexistente que dispara renders en cascada).
+- [x] **POLISH-03**: Se resuelve el borde lateral acentuado de las 2 pantallas de cancelación (`/cancelar/[token]` y `/abono/cancelar/[token]`), tratándolas juntas para que no diverjan.
 
 ## Future Requirements (diferidos)
 
@@ -86,9 +86,9 @@ hoy hace imposible "corte 3 / color 1 al mismo horario".
 | DISP-01 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
 | DISP-02 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
 | DISP-03 | Phase 10 — Reservar con "cualquiera" desde la página pública | Complete |
-| POLISH-01 | Phase 11 — Cierre de backlog | Pending |
-| POLISH-02 | Phase 11 — Cierre de backlog | Pending |
-| POLISH-03 | Phase 11 — Cierre de backlog | Pending |
+| POLISH-01 | Phase 11 — Cierre de backlog | Complete |
+| POLISH-02 | Phase 11 — Cierre de backlog | Complete |
+| POLISH-03 | Phase 11 — Cierre de backlog | Complete |
 
 **Cobertura: 14/14 requisitos mapeados, cada uno a UNA sola fase. Sin huérfanos ni duplicados.**
 

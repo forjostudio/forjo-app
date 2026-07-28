@@ -451,4 +451,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 8. Equipo — qué servicios hace cada profesional | 2/2 | Complete    | 2026-07-24 |
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
-| 11. Cierre de backlog | 4/4 | Complete   | 2026-07-27 |
+| 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
