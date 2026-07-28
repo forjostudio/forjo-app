@@ -329,9 +329,10 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                         {tab === 'archivados' && (a.status === 'cancelled' || a.status === 'completed') && (
                           <Badge
                             variant={a.status === 'cancelled' ? 'destructive' : 'secondary'}
-                            // Completado = verde --crm-success (éxito), mismo tratamiento tinte+texto que
-                            // maintenance-toggle.tsx; Cancelado usa el rojo de destructive. Sin hex (D-01).
-                            className={a.status === 'completed' ? 'bg-[var(--crm-success)]/15 text-[var(--crm-success)]' : undefined}
+                            // Completado = verde éxito (--chart-4, verde Bauhaus GLOBAL en :root — NO
+                            // --crm-success, que está scopeado al CRM y no resuelve en el dashboard).
+                            // Tinte+texto como el patrón destructive; sin hex (D-01). Cancelado = rojo.
+                            className={a.status === 'completed' ? 'bg-[var(--chart-4)]/15 text-[var(--chart-4)]' : undefined}
                           >
                             {a.status === 'cancelled' ? 'Cancelado' : 'Completado'}
                           </Badge>
