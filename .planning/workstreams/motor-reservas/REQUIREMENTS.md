@@ -20,8 +20,10 @@ kinesiólogo con 2 camillas): turnos **escalonados** que se pisan superan el cup
 ```
 
 **Causa raíz (diagnóstico cerrado, verificado en código — `todos/pending/2026-07-22-cupo-por-solape-*.md`):**
+
 1. El `EXCLUDE` anti-solape se **apaga** con `is_group = (capacity > 1)` (necesario: con cupo > 1 el
    solape ES legal hasta el cupo), dejando el control en manos del conteo.
+
 2. El conteo del RPC (`042_...:209-218`) mira solo `date + time` idénticos; nunca considera
    `duration_minutes`. La misma función ya sabe razonar por intervalo (el chequeo de espacios usa
    `tsrange && tsrange`) — el cupo no lo usa.
@@ -44,11 +46,11 @@ Además se cierra el backlog chico acumulado (polish + un borrado de servicio qu
 
 ### Cupo por solape (recurso simultáneo)
 
-- [ ] **CUPO-01**: El dueño marca cada servicio como **clase grupal** (cupo contado por hora de inicio) o **recurso simultáneo** (cupo contado por solape), desde el panel.
-- [ ] **CUPO-02**: Con semántica **recurso simultáneo**, una reserva se rechaza cuando en su intervalo (inicio + `duration_minutes`) ya hay `capacity` turnos **solapados** — no por hora de inicio exacta.
-- [ ] **CUPO-03**: Con semántica **clase grupal**, el cupo se sigue contando por hora de inicio exacta (comportamiento actual, sin cambios).
-- [ ] **CUPO-04**: El control por solape es **atómico** bajo concurrencia: N+1 reservas escalonadas que se pisan sobre un recurso de cupo N nunca superan el cupo — verificado con un test de carrera contra la DB real.
-- [ ] **CUPO-05**: **Cero regresión** del núcleo anti-doble-booking: cupo 1, canchas, generación forward de abonos, multi-staff y exclusión por espacio compartido siguen exactamente igual; los estados `slot_full`/`slot_taken` no se degradan.
+- [x] **CUPO-01**: El dueño marca cada servicio como **clase grupal** (cupo contado por hora de inicio) o **recurso simultáneo** (cupo contado por solape), desde el panel.
+- [x] **CUPO-02**: Con semántica **recurso simultáneo**, una reserva se rechaza cuando en su intervalo (inicio + `duration_minutes`) ya hay `capacity` turnos **solapados** — no por hora de inicio exacta.
+- [x] **CUPO-03**: Con semántica **clase grupal**, el cupo se sigue contando por hora de inicio exacta (comportamiento actual, sin cambios).
+- [x] **CUPO-04**: El control por solape es **atómico** bajo concurrencia: N+1 reservas escalonadas que se pisan sobre un recurso de cupo N nunca superan el cupo — verificado con un test de carrera contra la DB real.
+- [x] **CUPO-05**: **Cero regresión** del núcleo anti-doble-booking: cupo 1, canchas, generación forward de abonos, multi-staff y exclusión por espacio compartido siguen exactamente igual; los estados `slot_full`/`slot_taken` no se degradan.
 
 ### Borrado de servicio preservando historial
 
@@ -95,11 +97,11 @@ Además se cierra el backlog chico acumulado (polish + un borrado de servicio qu
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| CUPO-01 | Phase 12 | Pending |
-| CUPO-02 | Phase 12 | Pending |
-| CUPO-03 | Phase 12 | Pending |
-| CUPO-04 | Phase 12 | Pending |
-| CUPO-05 | Phase 12 | Pending |
+| CUPO-01 | Phase 12 | Complete |
+| CUPO-02 | Phase 12 | Complete |
+| CUPO-03 | Phase 12 | Complete |
+| CUPO-04 | Phase 12 | Complete |
+| CUPO-05 | Phase 12 | Complete |
 | HIST-01 | Phase 13 | Pending |
 | HIST-02 | Phase 13 | Pending |
 | HIST-03 | Phase 13 | Pending |

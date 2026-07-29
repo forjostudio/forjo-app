@@ -457,12 +457,12 @@ Plans:
   4. N+1 reservas escalonadas concurrentes sobre un recurso de cupo N nunca superan el cupo — verificado con un test de carrera real contra la DB (CUPO-04).
   5. Cero regresión del núcleo: cupo 1, canchas, generación forward de abonos, multi-staff y exclusión por espacio compartido se comportan exactamente igual, y los estados `slot_full`/`slot_taken` no se degradan (CUPO-05).
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 12-01-PLAN.md — Espinazo: migración 062 (columnas `capacity_mode`/`capacity` + CHECKs idempotentes + `book_slot_atomic` mode-aware: lock por modo + gate por solape + `public_services` con `capacity_mode`) + tipo `Service` + `[BLOCKING] supabase db reset` local *(autonomous: false)*
+- [x] 12-01-PLAN.md — Espinazo: migración 062 (columnas `capacity_mode`/`capacity` + CHECKs idempotentes + `book_slot_atomic` mode-aware: lock por modo + gate por solape + `public_services` con `capacity_mode`) + tipo `Service` + `[BLOCKING] supabase db reset` local *(autonomous: false)*
 
 **Wave 2** *(blocked on 12-01)*
 
@@ -533,6 +533,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
-| 12. Cupo por solape (recurso simultáneo) | 0/4 | Not started | - |
+| 12. Cupo por solape (recurso simultáneo) | 1/4 | In Progress|  |
 | 13. Borrado de servicio preservando historial | 0/TBD | Not started | - |
 | 14. Cierre de backlog | 0/TBD | Not started | - |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
-status: planned
-stopped_at: Phase 12 planned — 4 plans (3 waves), ready to execute
-last_updated: "2026-07-29T15:00:29.000Z"
-last_activity: 2026-07-29 — Phase 12 planificada (4 planes, 3 waves; research + plan-checker PASSED)
+status: executing
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-07-29T16:13:10.752Z"
+last_activity: 2026-07-29 -- Phase 12 execution started
 progress:
   total_phases: 14
   completed_phases: 11
-  total_plans: 53
-  completed_plans: 53
+  total_plans: 57
+  completed_plans: 54
   percent: 79
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 12 — Cupo por solape (recurso simultáneo) — **secure-phase obligatorio**
+**Current focus:** Phase 12 — cupo-por-solape-recurso-simult-neo
 
 ## Current Position
 
-Phase: 12 — Cupo por solape (recurso simultáneo) (planned — ready to execute)
-Plan: 4 planes en 3 waves (W1: 12-01 · W2: 12-02 ∥ 12-03 · W3: 12-04)
-Status: Planificada — research + plan-checker PASSED, coverage gates 14/14 + CUPO-01..05, committed (1a43211, 86b24d3). Próximo: execute-phase.
-Last activity: 2026-07-29 — Phase 12 planificada (4 planes, 3 waves)
+Phase: 12 (cupo-por-solape-recurso-simult-neo) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-07-29 -- Phase 12 execution started
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Last activity: 2026-07-29 — Phase 12 planificada (4 planes, 3 waves)
 | Phase 07 P12 | 55min | 3 tasks | 1 file |
 | Phase 08 P01 (autónomo) | ~18min | 2 tasks | 5 files |
 | Phase 08 P08-02 | 22min | 3 tasks | 3 files |
+| Phase 12 P01 | 18min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 07]: 07-12: la prueba de mutacion del gate atomico que pedia el plan NO quedo evidenciada (el ejecutor original se colgo en el watchdog del harness al entrar a Task 3 y no dejo registro); se reporta como PENDIENTE para secure-phase, no como cumplida
 - [Phase ?]: 08-02: escritura del mapeo profesional×servicio por browser client + RLS + .eq('business_id'), nunca service-role
 - [Phase ?]: 08-02: precedencia de toasts D-10 > D-02 acotada al servicio desmarcado; comodín/cobertura consumidos de lib/staff-services
+- [Phase 12]: Cupo por modo: capacity_mode DEFAULT 'group_class' (cero regresion, incluidas canchas) y cada modo lee su fuente de cupo (services.capacity vs time_blocks.capacity)
+- [Phase 12]: Advisory lock re-granularizado por modo en book_slot_atomic: simultaneo = hash(business_id+service_id+date), resto inalterado; el lock de modo va primero -> orden anti-deadlock preservado
+- [Phase 12]: public_services expone solo capacity_mode; capacity (el N de lugares) queda server-side por el no-leak
 
 ### Pending Todos
 
@@ -175,9 +179,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-29T15:00:29.000Z
-Stopped at: Phase 12 planned — 4 plans, ready to execute
-Resume file: .planning/workstreams/motor-reservas/phases/12-cupo-por-solape-recurso-simult-neo/12-01-PLAN.md
+Last session: 2026-07-29T16:13:10.739Z
+Stopped at: Completed 12-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
