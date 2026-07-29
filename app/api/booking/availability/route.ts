@@ -261,14 +261,45 @@ export async function GET(request: NextRequest) {
       const cap = Number(svcMode.capacity) || 1
       const buffer = Number(business.buffer_minutes) || 0
       const nowMsSim = Date.now()
-      // Turnos VIVOS del MISMO servicio, de TODAS las agendas: el gate del RPC no bucketea por
-      // profesional — el "carril" de N lugares es del SERVICIO (D-03/D-04). Los holds vencidos no
-      // ocupan (mismo descarte de expires_at que el resto del endpoint).
-      const liveSvc = (appts || []).filter(
-        a =>
-          a.service_id === serviceIdParam &&
-          (a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMsSim),
+      // Agenda consultada. El `professionalId` que el client SÍ manda no se puede descartar: el motor
+      // (migr. 063) rechaza montar un turno simultáneo sobre un turno de OTRO servicio de la MISMA
+      // agenda, así que el read-path tiene que reflejarlo o el público ve libre lo que después falla
+      // — o, peor, se reserva mal (code-review CR-04).
+      const bucketSim = professionalId && professionalId !== 'none' ? professionalId : SENTINEL
+      // Turnos VIVOS del negocio+fecha (holds vencidos NO ocupan — mismo descarte que el resto del
+      // endpoint y que el gate del RPC).
+      const liveSim = (appts || []).filter(
+        a => a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMsSim,
       )
+      // (a) Carril del SERVICIO: cross-bucket, mismo service_id. El gate de cupo del RPC no bucketea
+      //     por profesional — los N lugares son del SERVICIO (D-03/D-04).
+      const liveSvc = liveSim.filter(a => a.service_id === serviceIdParam)
+      // (b1) Ocupación REAL de la agenda consultada por OTROS servicios: cada uno de esos turnos
+      //      bloquea el horario (el cupo del recurso es contra SÍ MISMO, nunca licencia para pisar
+      //      un turno ajeno). Los del PROPIO servicio quedan afuera a propósito: son el carril (a).
+      const liveBucketOther = liveSim.filter(
+        a => (a.professional_id ?? SENTINEL) === bucketSim && a.service_id !== serviceIdParam,
+      )
+      // (b2) Bloqueo por ESPACIO compartido (invariante endurecida en v0.12): si la agenda comparte
+      //      un espacio físico con otra, un turno solapado de la hermana ocupa el espacio y bloquea
+      //      este slot, sea cual sea el modo de cupo. Mismo par de queries que el camino de siempre
+      //      (service-role, filtrado por business_id: spaces/agenda_spaces no tienen read anon).
+      const { data: simMySpaces } = await supabase
+        .from('agenda_spaces')
+        .select('space_id')
+        .eq('business_id', business.id)
+        .eq('professional_id', bucketSim)
+      let liveSiblings: typeof liveSim = []
+      if (simMySpaces && simMySpaces.length > 0) {
+        const { data: simSib } = await supabase
+          .from('agenda_spaces')
+          .select('professional_id')
+          .eq('business_id', business.id)
+          .in('space_id', simMySpaces.map(s => s.space_id))
+          .neq('professional_id', bucketSim)
+        const simSiblingBuckets = new Set((simSib || []).map(s => s.professional_id as string))
+        liveSiblings = liveSim.filter(a => simSiblingBuckets.has(a.professional_id ?? SENTINEL))
+      }
       const overlaps = (a: { time: string; duration_minutes: number | null }, t: number) => {
         const aStart = toMin(a.time)
         const aEnd = aStart + Number(a.duration_minutes || 30)
@@ -285,17 +316,25 @@ export async function GET(request: NextRequest) {
         const close = toMin(b.end_time)
         for (let t = open; t + dur <= close; t += dur) startSet.add(minToHHMM(t))
       }
+      // `full` = UNIÓN de las tres condiciones de bloqueo: (a) el carril del servicio ya tiene `cap`
+      // turnos que pisan el intervalo, (b1) la agenda está ocupada por otro servicio, (b2) el espacio
+      // compartido está tomado por una agenda hermana.
       const fullSim: string[] = []
       for (const hhmm of startSet) {
         const t = toMin(hhmm)
         let n = 0
         for (const a of liveSvc) if (overlaps(a, t)) n++
-        if (n >= cap) fullSim.push(hhmm)
+        const laneFull = n >= cap
+        const bucketBusy = liveBucketOther.some(a => overlaps(a, t))
+        const spaceBusy = liveSiblings.some(a => overlaps(a, t))
+        if (laneFull || bucketBusy || spaceBusy) fullSim.push(hhmm)
       }
       // D-06/D-12 (no-leak): la ocupación colapsa a un BOOLEANO por slot en `full`; jamás el conteo,
-      // los lugares restantes ni `capacity` (que queda server-side). `busy` va SIEMPRE vacío: los
-      // solapes del propio servicio son LEGALES hasta el cupo y el client trata cada entrada de
-      // `busy` como conflicto por solapamiento — mandarlos ahí borraría el 2º lugar del recurso.
+      // los lugares restantes ni `capacity` (que queda server-side). Tampoco se filtra POR QUÉ está
+      // bloqueado (cupo lleno / agenda ocupada / espacio tomado): las tres condiciones se unifican en
+      // el mismo booleano. `busy` va SIEMPRE vacío: los solapes del propio servicio son LEGALES hasta
+      // el cupo y el client trata cada entrada de `busy` como conflicto por solapamiento — mandarlos
+      // ahí borraría el 2º lugar del recurso. El contrato `{ ok, busy, full }` no cambia.
       return Response.json({ ok: true, busy: [], full: fullSim }, { headers: { 'Cache-Control': 'no-store' } })
     }
     // `group_class`: sigue de largo al camino de siempre (byte-idéntico).
