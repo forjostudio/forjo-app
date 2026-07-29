@@ -1,16 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.26
-milestone_name: Cupo por solape + cierre de backlog
+milestone_name: — Cupo por solape + cierre de backlog
 status: planning
-last_updated: "2026-07-28T23:59:00.000Z"
-last_activity: 2026-07-28
+stopped_at: Phase 12 context gathered
+last_updated: "2026-07-29T03:20:31.136Z"
+last_activity: 2026-07-28 — Roadmap v0.26 creado (Phases 12-14)
 progress:
-  total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 14
+  completed_phases: 11
+  total_plans: 53
+  completed_plans: 53
+  percent: 79
 ---
 
 # Project State
@@ -174,9 +175,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-27T15:44:37.786Z
-Stopped at: Roadmap v0.26 creado (Phases 12-14) — próximo paso: /gsd:discuss-phase 12 --ws motor-reservas
-Resume file: .planning/workstreams/motor-reservas/ROADMAP.md
+Last session: 2026-07-29T03:20:31.118Z
+Stopped at: Phase 12 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/12-cupo-por-solape-recurso-simult-neo/12-CONTEXT.md
 
 ## Operator Next Steps
 
