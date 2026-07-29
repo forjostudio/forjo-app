@@ -42,6 +42,8 @@ function svc(id: string): Service {
     price: 0,
     description: null,
     active: true,
+    capacity_mode: 'group_class',
+    capacity: 1,
     created_at: '2026-01-01',
   }
 }

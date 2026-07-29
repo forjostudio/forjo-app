@@ -190,6 +190,15 @@ export interface Service {
   location_id?: string | null
   // Consultorios donde se ofrece el servicio. null/vacío = en todos. Reemplaza a location_id.
   location_ids?: string[] | null
+  // Qué significa el "cupo N" de este servicio (migr. 062, Phase 12):
+  //   'group_class'           = clase grupal: el cupo lo pone time_blocks.capacity y se cuenta por
+  //                             HORA DE INICIO EXACTA (comportamiento histórico). Es el DEFAULT.
+  //   'simultaneous_resource' = recurso simultáneo (ej. 2 camillas): el cupo es `capacity` (abajo) y
+  //                             se cuenta por SOLAPE de intervalos entre turnos del mismo servicio.
+  capacity_mode: 'group_class' | 'simultaneous_resource'
+  // Cupo N del recurso simultáneo. Lo lee SOLO el modo 'simultaneous_resource'; la clase grupal
+  // sigue leyendo time_blocks.capacity. DEFAULT 1 en la DB.
+  capacity: number
   created_at: string
 }
 

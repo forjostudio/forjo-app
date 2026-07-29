@@ -831,7 +831,11 @@ CREATE TABLE IF NOT EXISTS "public"."services" (
     "active" boolean DEFAULT true,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "location_id" "uuid",
-    "location_ids" "uuid"[]
+    "location_ids" "uuid"[],
+    "capacity_mode" "text" DEFAULT 'group_class'::"text" NOT NULL,
+    "capacity" smallint DEFAULT 1 NOT NULL,
+    CONSTRAINT "services_capacity_mode_chk" CHECK (("capacity_mode" = ANY (ARRAY['group_class'::"text", 'simultaneous_resource'::"text"]))),
+    CONSTRAINT "services_capacity_positive" CHECK (("capacity" >= 1))
 );
 
 
@@ -848,7 +852,8 @@ CREATE OR REPLACE VIEW "public"."public_services" AS
     "active",
     "location_id",
     "location_ids",
-    "created_at"
+    "created_at",
+    "capacity_mode"
    FROM "public"."services"
   WHERE ("active" = true);
 

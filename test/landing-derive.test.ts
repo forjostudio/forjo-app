@@ -172,6 +172,8 @@ describe('empty-state predicates (LAND-05)', () => {
     price: 1000,
     description: null,
     active: true,
+    capacity_mode: 'group_class',
+    capacity: 1,
     created_at: '2026-01-01',
   })
   const loc = (over: Partial<Location> = {}): Location => ({

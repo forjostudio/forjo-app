@@ -180,7 +180,8 @@ describe('canchas: provisionCancha', () => {
 
 describe('canchas: canchasFromData', () => {
   const svc = (id: string, name: string): Service => ({
-    id, business_id: BID, name, duration_minutes: 60, price: 100, description: null, active: true, created_at: '',
+    id, business_id: BID, name, duration_minutes: 60, price: 100, description: null, active: true,
+    capacity_mode: 'group_class', capacity: 1, created_at: '',
   })
   const pro = (id: string, service_id: string | null): Professional => ({
     id, business_id: BID, name: 'agenda', last_name: null, specialty: null, license_number: null,
@@ -214,7 +215,7 @@ describe('canchas: canchasFromData', () => {
 describe('canchas: deleteCancha', () => {
   const svc: Service = {
     id: 's1', business_id: BID, name: 'Cancha', duration_minutes: 60, price: 100,
-    description: null, active: true, created_at: '',
+    description: null, active: true, capacity_mode: 'group_class', capacity: 1, created_at: '',
   }
   const proBase: Professional = {
     id: 'p1', business_id: BID, name: 'agenda', last_name: null, specialty: null, license_number: null,
@@ -277,7 +278,7 @@ describe('canchas: deleteCancha', () => {
 describe('canchas: editCancha (fix rename — propaga el nombre a toda la tupla)', () => {
   const svc: Service = {
     id: 's1', business_id: BID, name: 'Cruzada', duration_minutes: 60, price: 100,
-    description: null, active: true, created_at: '',
+    description: null, active: true, capacity_mode: 'group_class', capacity: 1, created_at: '',
   }
   const pro: Professional = {
     id: 'p1', business_id: BID, name: 'Cruzada', last_name: null, specialty: null, license_number: null,
@@ -324,7 +325,7 @@ describe('canchas: editCancha (fix rename — propaga el nombre a toda la tupla)
 describe('canchas: setCanchaActive (toggle reversible)', () => {
   const svc: Service = {
     id: 's1', business_id: BID, name: 'C', duration_minutes: 60, price: 100,
-    description: null, active: false, created_at: '',
+    description: null, active: false, capacity_mode: 'group_class', capacity: 1, created_at: '',
   }
   const pro: Professional = {
     id: 'p1', business_id: BID, name: 'C', last_name: null, specialty: null, license_number: null,
