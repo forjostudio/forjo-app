@@ -2,6 +2,7 @@
 created: 2026-07-22T20:35:56.370Z
 title: "Cupo por solape: capacity > 1 no controla turnos escalonados"
 area: database
+resolves_phase: 12
 files:
   - supabase/migrations/042_spaces_and_coupled_exclusion.sql:209-218
   - supabase/schema.sql:886

@@ -2,6 +2,7 @@
 created: 2026-07-28T15:00:00.000Z
 title: "Revisar los botones full-width en toda la app"
 area: ux-polish
+resolves_phase: 14
 files:
   - app/(dashboard)/settings/settings-client.tsx
   - components/ui/button.tsx
