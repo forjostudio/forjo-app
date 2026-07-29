@@ -176,6 +176,28 @@ export async function seedProfessionalService(seeded: SeededTenant, args: { prof
   if (ins.error) throw new Error(`seed: insert professional_service falló: ${ins.error?.message}`)
 }
 
+// seedSimultaneousService: pone el service YA sembrado por seedOneTenant en modo RECURSO SIMULTÁNEO
+// (migr. 062): `capacity_mode = 'simultaneous_resource'` + `capacity = N`. Molde de seedProfessionalService
+// (service-role, sin retorno, throw en error), pero con UPDATE en vez de INSERT porque el service ya
+// existe y NO se toca la firma de seedOneTenant (la usan CONC-01/02/CUPOS, que deben seguir en el modo
+// grupal por DEFAULT).
+//
+// Por qué hace falta: el cupo del recurso simultáneo NO vive en `time_blocks.capacity` (esa es la fuente
+// de la clase grupal) sino en `services.capacity`, y el RPC book_slot_atomic bifurca por `capacity_mode`
+// leyendo el service ANTES del advisory lock (062:173-198). Sin este seteo, el service nace 'group_class'
+// (DEFAULT de la 062) y el test mediría el camino histórico, no el nuevo.
+//
+// ⚠ El tenant/service se comparte entre los tests del archivo: el que llame a este helper DEBE devolver
+// el service a los defaults ('group_class'/1) en el afterEach para no contaminar a los casos grupales.
+export async function seedSimultaneousService(seeded: SeededTenant, opts: { capacity: number }): Promise<void> {
+  const upd = await seeded.admin
+    .from('services')
+    .update({ capacity_mode: 'simultaneous_resource', capacity: opts.capacity })
+    .eq('id', seeded.serviceId)
+    .eq('business_id', seeded.businessId)
+  if (upd.error) throw new Error(`seed: update service simultáneo falló: ${upd.error.message}`)
+}
+
 // teardownOneTenant: borra TODO lo creado, incluso si un test falló (try/finally como
 // supabase-fixtures.ts). Borrar el business CASCADEA a sus hijos (service/professional/location/
 // appointments vía ON DELETE CASCADE en business_id). El usuario auth NO cae por ese CASCADE →

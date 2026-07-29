@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, seedSimultaneousService, type SeededTenant } from './helpers/booking-fixtures'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { GET as availabilityGET } from '@/app/api/booking/availability/route'
 import type { NextRequest } from 'next/server'
@@ -46,6 +46,14 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
       // (agenda_spaces antes que spaces por la FK; appointment_spaces cae por CASCADE de appointments).
       await t.admin.from('agenda_spaces').delete().eq('business_id', t.businessId)
       await t.admin.from('spaces').delete().eq('business_id', t.businessId)
+      // (Phase 12) Los casos CUPO-04/CUPO-02 ponen el service en modo RECURSO SIMULTÁNEO. El tenant y
+      // el service son COMPARTIDOS por todo el archivo, así que hay que devolverlos a los DEFAULT de la
+      // 062 ('group_class'/1) o los casos grupales (CONC-01/02, CUPOS-02/03) medirían el otro modo.
+      await t.admin
+        .from('services')
+        .update({ capacity_mode: 'group_class', capacity: 1 })
+        .eq('id', t.serviceId)
+        .eq('business_id', t.businessId)
     }
   })
 
@@ -81,6 +89,34 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
       .eq('time', time)
       .in('status', ['confirmed', 'pending_payment'])
     return (data || []).length
+  }
+
+  // ── Phase 12 (recurso simultáneo): assert DURO por INTERVALO, no por hora exacta ──────────────
+  // occupantsAt() sirve para el grupal (todos arrancan en el mismo `time`), pero el cupo del recurso
+  // simultáneo se decide por SOLAPE: los turnos escalonados (16:00 / 16:10 / 16:20) tienen `time`
+  // distinto y aun así comparten el instante [16:20,16:30). Este helper cuenta las filas del MISMO
+  // service_id cuyo intervalo [time, time + duration) CONTIENE el instante — el mismo conjunto que
+  // mira el gate del RPC (062:309-322: business_id + service_id + date + estados que ocupan). Se
+  // cuenta con t.admin contra la DB REAL, nunca con los retornos de createAppointmentCore: si el
+  // advisory lock service-day fallara habría N+1 filas y este assert es lo único que lo detecta.
+  function minutesOf(t24: string): number {
+    const [h, m] = t24.split(':').map(Number) // 'HH:MM' o 'HH:MM:SS' (Postgres devuelve con segundos)
+    return h * 60 + m
+  }
+  async function occupantsCovering(instant: string): Promise<number> {
+    const { data } = await t.admin
+      .from('appointments')
+      .select('time, duration_minutes')
+      .eq('business_id', t.businessId)
+      .eq('service_id', t.serviceId)
+      .eq('date', DATE)
+      .in('status', ['confirmed', 'pending_payment'])
+    const at = minutesOf(instant)
+    return (data || []).filter(a => {
+      const start = minutesOf(a.time as string)
+      const end = start + Number(a.duration_minutes ?? 30)
+      return at >= start && at < end // [inicio, fin) — mismo criterio semiabierto que tsrange &&
+    }).length
   }
 
   // CONC-01 — anti-sobrecupo bajo concurrencia. Con capacity=2 y 1 lugar ya ocupado, dos altas EN
@@ -308,5 +344,106 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     // Verificación DURA en la DB: exactamente 1 fila ocupa el slot a través de AMBAS agendas hermanas
     // (no 2). Si la exclusión por espacio se rompiera, habría 2 y este assert lo detecta.
     expect(await occupantsAt('09:00')).toBe(1)
+  })
+
+  // ── Phase 12 — cupo por SOLAPE del RECURSO SIMULTÁNEO (CUPO-04 / CUPO-02) ─────────────────────
+  //
+  // CUPO-04 — criterio de éxito DURO de la fase (D-08). Es el test que prueba la RE-GRANULARIZACIÓN
+  // del advisory lock (D-06), no solo el conteo por solape.
+  //
+  // Escenario: servicio 'simultaneous_resource' con capacity=2 (una kinesióloga con 2 camillas),
+  // duración 30'. TRES reservas ESCALONADAS lanzadas EN PARALELO cuyos intervalos comparten el
+  // instante [16:20,16:30):
+  //     A 16:00-16:30   B 16:10-16:40   C 16:20-16:50      (las 3 solapan entre sí de a pares)
+  // Como las 3 se pisan mutuamente, el resultado es DETERMINISTA sin importar quién gane la carrera:
+  // la 1ª ve 0 solapes, la 2ª ve 1 (< 2) y la 3ª ve 2 (>= 2) → exactamente 2 ok + 1 slot_full.
+  //
+  // Por qué prueba la re-granularización: con el lock VIEJO (hash(business_id+date+time), 058:82-83)
+  // los tres `time` distintos toman locks DISTINTOS, así que las tres transacciones cuentan el solape
+  // A LA VEZ (todas ven 0 ó 1 < 2) y las TRES insertan → 3 filas = SOBRECUPO (el bug de la fase 07).
+  // Con el lock service-day de la 062 (hash(business_id+service_id+date)) las tres serializan dentro
+  // de la DB y la última ve el estado ya comprometido → slot_full. Verificado A/B contra la DB local:
+  // restaurando el lock fino en la función, este mismo test devuelve 3 ok / 3 filas (falla); con la
+  // 062 devuelve 2 ok + 1 slot_full / 2 filas (pasa).
+  //
+  // Cada createAppointmentCore dispara su propio .rpc → request HTTP separado → transacción/conexión
+  // propia: la carrera es real y el lock de Postgres es lo ÚNICO que la serializa (T-12-16).
+  it('CUPO-04 — anti-sobrecupo por SOLAPE: tres reservas escalonadas concurrentes sobre cupo 2 dejan exactamente 2', async () => {
+    // El time_block define el DÍA/ventana (el modo simultáneo NO lee su capacity: su cupo es
+    // services.capacity — cada modo lee SU fuente, Pitfall 3). Se siembra con capacity 1 a propósito:
+    // es el caso real (un servicio individual que pasa a recurso simultáneo) y además probaría el
+    // LANDMINE del re-check JS si volviera (con slotCapacity=1 el early-return cortaría el 2º turno).
+    await seedTimeBlock(t, { capacity: 1 })
+    await seedSimultaneousService(t, { capacity: 2 })
+
+    const [a, b, c] = await Promise.all([
+      createAppointmentCore({ ...baseInput(), time: '16:00' }),
+      createAppointmentCore({ ...baseInput(), time: '16:10' }),
+      createAppointmentCore({ ...baseInput(), time: '16:20' }),
+    ])
+
+    const oks = [a, b, c].filter(r => r.ok)
+    const fulls = [a, b, c].filter(r => !r.ok && r.error === 'slot_full')
+    expect(oks.length).toBe(2)
+    expect(fulls.length).toBe(1)
+    for (const f of fulls) if (!f.ok) expect(f.status).toBe(409)
+
+    // Assert DURO contra el estado REAL de la DB: exactamente 2 turnos del servicio ocupan el instante
+    // compartido [16:20] — NUNCA 3. No se confía en los retornos del core (si el core mintiera o el
+    // lock fallara, acá aparecerían 3 filas).
+    expect(await occupantsCovering('16:20')).toBe(2)
+  })
+
+  // CUPO-02 — la 2ª/3ª reserva SOLAPADA se rechaza cuando el intervalo ya tiene `capacity` turnos, y
+  // NO por hora de inicio exacta. Versión SECUENCIAL (complemento de CUPO-04, que prueba la carrera):
+  // con cupo 2 las dos primeras escalonadas ENTRAN (antes del fix la 2ª moría en el re-check JS con
+  // slot_taken sin llegar al RPC — LANDMINE del Plan 12-02) y la 3ª, que solapa a ambas, recibe
+  // slot_full/409. Ningún `time` se repite: si el gate contara por hora exacta, las tres pasarían.
+  it('CUPO-02 — recurso simultáneo cupo 2: la 3ª reserva solapada se rechaza con slot_full', async () => {
+    await seedTimeBlock(t, { capacity: 1 })
+    await seedSimultaneousService(t, { capacity: 2 })
+
+    const first = await createAppointmentCore({ ...baseInput(), time: '16:00' })
+    expect(first.ok).toBe(true)
+    // La 2ª solapa a la 1ª y DEBE entrar (2ª camilla): es el caso que el early-return de booking-core
+    // cortaba con slot_taken antes de la 062/12-02.
+    const second = await createAppointmentCore({ ...baseInput(), time: '16:10' })
+    expect(second.ok).toBe(true)
+
+    // La 3ª pisa a las dos ([16:20,16:30) está ocupado por ambas) → cupo lleno.
+    const third = await createAppointmentCore({ ...baseInput(), time: '16:20' })
+    expect(third.ok).toBe(false)
+    if (!third.ok) {
+      expect(third.error).toBe('slot_full')
+      expect(third.status).toBe(409)
+    }
+
+    // Estado real: exactamente 2 filas ocupan el instante compartido (no 3) y la 3ª no entró.
+    expect(await occupantsCovering('16:20')).toBe(2)
+  })
+
+  // Simultáneo cupo 1 — no-regresión del caso degenerado. Un recurso simultáneo con capacity=1 debe
+  // comportarse como un servicio individual: la 2ª reserva SOLAPADA (aunque arranque en otro instante)
+  // se rechaza con 409 y sin sobre-reserva. El gate por solape la agarra primero (overlap 1 >= 1 →
+  // slot_full); el EXCLUDE gist 013 queda de respaldo atómico redundante porque con cupo 1 la fila
+  // nace is_group=false (062:336-340, decisión A4 del Plan 12-01). Se asierta el error EXACTO
+  // observado (slot_full) para que una degradación a slot_taken —o al revés— salte como regresión.
+  it('simultáneo cupo 1 — la 2ª reserva solapada se rechaza (409) sin sobre-reserva', async () => {
+    await seedTimeBlock(t, { capacity: 1 })
+    await seedSimultaneousService(t, { capacity: 1 })
+
+    const first = await createAppointmentCore({ ...baseInput(), time: '16:00' })
+    expect(first.ok).toBe(true)
+
+    // Arranca 10' después → `time` distinto (no lo agarraría un gate por hora exacta) pero solapa.
+    const second = await createAppointmentCore({ ...baseInput(), time: '16:10' })
+    expect(second.ok).toBe(false)
+    if (!second.ok) {
+      expect(second.error).toBe('slot_full')
+      expect(second.status).toBe(409)
+    }
+
+    // Assert duro: 1 sola fila ocupa el intervalo (la 2ª no entró).
+    expect(await occupantsCovering('16:10')).toBe(1)
   })
 })
