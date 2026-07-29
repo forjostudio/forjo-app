@@ -121,10 +121,16 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const capaces = selectedService
     ? professionalsForService(selectedService.id, professionals, professionalServices)
     : professionals
+  // Phase 12 (D-13): un servicio de RECURSO SIMULTÁNEO (2 camillas) exige elegir profesional. La
+  // asignación automática del RPC marca "ocupado" a quien tenga CUALQUIER turno solapado, así que
+  // no sabe usar la 2ª camilla → el combo "Cualquiera" + simultáneo no está soportado en v1 y la
+  // tarjeta se oculta (aunque haya 2+ capaces). Con la tarjeta oculta el cliente elige profesional,
+  // o cae al fallback de hoy si hay ≤1 capaz.
+  const isSimultaneousResource = selectedService?.capacity_mode === 'simultaneous_resource'
   // La tarjeta "Cualquiera" ("El primero disponible") solo con 2+ capaces (D-02). Con ≤1 capaz el
   // flujo se comporta como hoy: si hay 1 capaz se elige a esa persona; si hay 0 (sentinel o servicio
   // sin cobertura) se mantiene el fallback "Sin preferencia" para no dejar el paso 2 sin salida.
-  const showAny = capaces.length >= 2
+  const showAny = capaces.length >= 2 && !isSimultaneousResource
   // "Cualquiera" activo ⇒ `selectedPro === 'none'` re-significa "asignación across-staff", pero SOLO
   // cuando la tarjeta es visible (2+ capaces). Con ≤1 capaz, 'none' NO es "Cualquiera" (es el
   // sentinel de hoy): availability y create se comportan igual que antes (D-05/D-08).
@@ -257,6 +263,11 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
       // de los profesionales capaces y devuelve la unión en `full` con `busy:[]` (D-06, Plan 01). NUNCA
       // se manda un professionalId como asignación. Camino específico (proId) o sentinel = como hoy.
       else if (isAny) { params.set('any', '1'); params.set('serviceId', selectedService.id) }
+      // Phase 12 (D-12): en un servicio de RECURSO SIMULTÁNEO el server necesita saber QUÉ servicio
+      // es para contar el solape (el cupo se cuenta entre turnos del mismo service_id) y devolver
+      // "lleno" antes de que el cliente elija un horario que después falla. Solo el camino específico:
+      // el "Cualquiera" no se ofrece en simultáneo (D-13) y ya manda su propio serviceId.
+      if (!isAny && isSimultaneousResource) params.set('serviceId', selectedService.id)
       const res = await fetch(`/api/booking/availability?${params.toString()}`, { cache: 'no-store' })
       const data = await res.json().catch(() => null)
       if (res.ok && data?.ok) {
