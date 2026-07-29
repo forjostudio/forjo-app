@@ -54,7 +54,7 @@ Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignaci�
 
 Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado como una única unidad revisable (secure-phase obligatorio); el borrado de servicio con historial es un cambio mediano independiente; el polish va al cierre.
 
-- [x] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock re-granularizado + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking (**secure-phase obligatorio**) (completed 2026-07-29)
+- [ ] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock re-granularizado + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking (**secure-phase obligatorio**) — 4/4 planes ejecutados, verificación `human_needed` (UAT visual pendiente) + 4 BLOCKERs de code review abiertos
 - [ ] **Phase 13: Borrado de servicio preservando historial** - Borrar un servicio con solo turnos pasados; modal que bloquea si hay futuros y ofrece desactivar; los turnos pasados sobreviven en el historial (Finanzas / ficha del cliente) vía desacople del FK (snapshot de nombre/precio en el turno)
 - [ ] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa")
 
