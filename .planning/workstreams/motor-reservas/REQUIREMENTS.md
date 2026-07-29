@@ -95,15 +95,15 @@ Además se cierra el backlog chico acumulado (polish + un borrado de servicio qu
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| CUPO-01 | — | Pending |
-| CUPO-02 | — | Pending |
-| CUPO-03 | — | Pending |
-| CUPO-04 | — | Pending |
-| CUPO-05 | — | Pending |
-| HIST-01 | — | Pending |
-| HIST-02 | — | Pending |
-| HIST-03 | — | Pending |
-| POLISH-04 | — | Pending |
-| POLISH-05 | — | Pending |
-| POLISH-06 | — | Pending |
-| POLISH-07 | — | Pending |
+| CUPO-01 | Phase 12 | Pending |
+| CUPO-02 | Phase 12 | Pending |
+| CUPO-03 | Phase 12 | Pending |
+| CUPO-04 | Phase 12 | Pending |
+| CUPO-05 | Phase 12 | Pending |
+| HIST-01 | Phase 13 | Pending |
+| HIST-02 | Phase 13 | Pending |
+| HIST-03 | Phase 13 | Pending |
+| POLISH-04 | Phase 14 | Pending |
+| POLISH-05 | Phase 14 | Pending |
+| POLISH-06 | Phase 14 | Pending |
+| POLISH-07 | Phase 14 | Pending |

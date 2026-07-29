@@ -1,6 +1,6 @@
 # Roadmap: Forjo App — Motor de Reservas (workstream `motor-reservas`)
 
-> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19), **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22) y **v0.25 Reserva con varios profesionales / multi-staff** (Phases 8-11, shipped 2026-07-28). Numeración de fases **continua** por workstream: el próximo milestone arranca en **Phase 12**. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
+> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19), **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22) **v0.25 Reserva con varios profesionales / multi-staff** (Phases 8-11, shipped 2026-07-28) y **v0.26 Cupo por solape + cierre de backlog** (Phases 12-14, activo). Numeración de fases **continua** por workstream. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
 
 ## Overview
 
@@ -11,6 +11,8 @@
 **v0.24 — Turnos fijos / Abonos recurrentes (shipped 2026-07-22):** capacidad NUEVA sobre el motor ya entregado: el dueño arma un **abono semanal** (turno fijo recurrente) para un cliente desde el panel; el sistema **genera los turnos hacia adelante** (ventana rolling, extendida por el cron diario existente) respetando la integridad anti-doble-booking (constraints 011/013), los cupos/capacity y la exclusión por espacio compartido (canchas); el cliente **cancela la suscripción** desde un link en el mail y el dueño la da de baja desde el panel. **Solo reserva** — el cobro recurrente automático es un milestone futuro, pero el **modelo de datos se diseña extensible** para sumarlo sin re-migrar. Toca el núcleo de integridad anti-doble-booking + el aislamiento por tenant → la fase del modelo/generación es **security-sensitive** (secure-phase obligatorio). El faseo va por integridad: primero el modelo + alta + generación forward (el núcleo sensible), después la cancelación (mail + panel), que depende de la serie ya existente.
 
 **v0.25 — Reserva con varios profesionales / multi-staff (Phases 8-11, shipped 2026-07-28):** capacidad NUEVA sobre el motor ya entregado, **sin reconstruirlo**. El negocio declara **qué servicios hace cada persona** del equipo (mapeo **muchos a muchos** propio, migración **057** — `professionals.service_id` es *single* y es el mecanismo de **canchas** (migr. 043): NO se toca ni se recicla), y el cliente reserva **eligiendo profesional o dejando "cualquiera"**; en ese caso el sistema le asigna uno **libre y capaz** eligiendo el que menos turnos tiene ese día. La asignación automática corre **DENTRO del RPC atómico `book_slot_atomic`** — leer profesionales libres y después insertar sería una carrera —, por lo que la fase de asignación es el punto de mayor riesgo del milestone (**secure-phase obligatorio**). El faseo va por dependencia y riesgo creciente: primero el **modelo + config del equipo** (no toca el motor), después la **asignación atómica** en el RPC (el núcleo anti-doble-booking), después la **disponibilidad across staff** en las superficies públicas (que necesita saber quién puede hacer qué), y al cierre un **backlog chico** independiente del motor. **Cero regresión obligatoria** en: canchas, abonos (generación forward por el mismo motor), cupos grupales (`time_blocks.capacity`) y exclusión por espacio compartido. **Fuera de alcance:** el **cupo por solape** (`capacity > 1` contado por hora de inicio exacta) — bug real y capturado, pero independiente de multi-staff y sobre el mismo RPC → **v0.26**, para no meter dos cambios grandes al núcleo en el mismo ciclo.
+
+**v0.26 — Cupo por solape + cierre de backlog (Phases 12-14, activo):** cierra un bug de integridad capturado desde v0.12 y drena el backlog chico acumulado. El plato principal: hoy `time_blocks.capacity > 1` cuenta el sobrecupo **por hora de inicio exacta** — correcto para una *clase grupal* (yoga 16:00, cupo 10) pero **roto** para un *recurso simultáneo* (kinesiólogo con 2 camillas), donde turnos **escalonados** que se pisan superan el cupo. v0.26 separa las dos semánticas eligiéndolas **por servicio**: la de clase grupal queda intacta y se agrega un modo nuevo que **coexiste**, donde el cupo se cuenta por **solape de intervalos** (usando `duration_minutes`). El control corre **DENTRO del RPC atómico `book_slot_atomic`**, re-granularizando el advisory lock (hoy por slot+bucket — dos reservas escalonadas toman locks distintos y se cuelan; pasa a bucket+día/ventana) y separando la asignación de `seat` del criterio de cupo, con **cero regresión** de cupo 1, canchas, abonos, multi-staff y espacio compartido — es el punto de mayor riesgo (**secure-phase obligatorio** + tests de carrera contra la DB). Después, un **borrado de servicio que preserva el historial**: el dueño borra un servicio con solo turnos pasados/cancelados, un modal bloquea el borrado si hay futuros (ofrece desactivar), y los turnos pasados sobreviven en Finanzas / la ficha del cliente vía **desacople del FK** (snapshot de nombre/precio en el turno) — nunca hard-delete de la historia. Y al cierre, el **backlog chico de polish** (ancho de botones app-wide, `RiskBadge` con color fuera del CRM, un abono cancelado sin "Copiar link de baja", un cliente nuevo en "Nuevas" y no en "Pausa"), independiente del motor. El faseo va por riesgo: primero el cambio del motor (12, aislado como una única unidad revisable), después el borrado con historial (13, toca el write-path del alta pero es independiente del cupo), y por último el polish (14).
 
 ## Phases
 
@@ -47,6 +49,14 @@ Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignaci�
 - [x] **Phase 9: Asignación automática atómica de profesional** - "Cualquiera" resuelto DENTRO de `book_slot_atomic`: elige un profesional libre y capaz (el de menos turnos ese día) sin carreras ni sobre-reserva (**secure-phase obligatorio**) (completed 2026-07-25)
 - [x] **Phase 10: Reservar con "cualquiera" desde la página pública** - Opción "cualquiera" en el selector + disponibilidad across staff en la grilla + profesional asignado visible en la confirmación y el mail (completed 2026-07-27)
 - [x] **Phase 11: Cierre de backlog** - Chip Cancelado/Completado en Archivados de Abonos, `setState`-in-effect de `clients-client.tsx`, y el borde lateral de las 2 pantallas de cancelación (completed 2026-07-27)
+
+### Milestone v0.26 — Cupo por solape + cierre de backlog (Phases 12-14, activo)
+
+Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado como una única unidad revisable (secure-phase obligatorio); el borrado de servicio con historial es un cambio mediano independiente; el polish va al cierre.
+
+- [ ] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock re-granularizado + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking (**secure-phase obligatorio**)
+- [ ] **Phase 13: Borrado de servicio preservando historial** - Borrar un servicio con solo turnos pasados; modal que bloquea si hay futuros y ofrece desactivar; los turnos pasados sobreviven en el historial (Finanzas / ficha del cliente) vía desacople del FK (snapshot de nombre/precio en el turno)
+- [ ] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa")
 
 ## Phase Details
 
@@ -434,10 +444,65 @@ Plans:
 **UI hint**: yes
 **Security/Integrity relevance**: Bajo riesgo. Los tres ítems son de presentación o de higiene de render; no tocan el motor de reservas, los constraints, el aislamiento por tenant ni el flujo de cancelación en sí. Único cuidado: las pantallas de cancelación son **públicas y anónimas** y ya están endurecidas (404 genérico, token no adivinable, el número lo informa el servidor, `noindex`, contraste derivado por luminancia) — el retoque visual no puede aflojar ninguna de esas propiedades ni cambiar qué datos se muestran antes de autenticar el token.
 
+### Phase 12: Cupo por solape (recurso simultáneo)
+
+**Goal**: Que "cupo N" signifique lo correcto según el caso. El dueño marca cada servicio como **clase grupal** (cupo contado por hora de inicio exacta — comportamiento actual, intacto) o **recurso simultáneo** (cupo contado por **solape de intervalos** usando `duration_minutes`). El modo nuevo **coexiste** con el actual — NO lo reemplaza — y su control corre **DENTRO del RPC atómico `book_slot_atomic`**, re-granularizando el advisory lock (de slot+bucket a bucket+día/ventana, para que dos reservas escalonadas no tomen locks distintos y se cuelen) y separando la asignación de `seat` del criterio de cupo (el asiento sigue siendo posición dentro del slot exacto para no chocar con el índice único 011). Es el punto de mayor riesgo del milestone: toca el núcleo anti-doble-booking que endurecieron v0.9 y v0.12 y que hoy sostiene canchas, abonos, cupos grupales, multi-staff y espacio compartido, a través de los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas).
+**Depends on**: Phase 11 (última fase entregada del workstream; base del motor — booking-core / RPC atómico / cupos / espacios / multi-staff — ya entregada; sin dependencia funcional nueva, primera fase de v0.26)
+**Requirements**: CUPO-01, CUPO-02, CUPO-03, CUPO-04, CUPO-05
+**Success Criteria** (what must be TRUE):
+
+  1. El dueño marca cada servicio como "clase grupal" o "recurso simultáneo" desde el panel, y el modo persiste al volver a entrar (CUPO-01).
+  2. Con **recurso simultáneo**, una reserva se rechaza cuando en su intervalo (inicio + `duration_minutes`) ya hay `capacity` turnos **solapados** — turnos escalonados que se pisan sobre un recurso de cupo N ya no superan el cupo (CUPO-02).
+  3. Con **clase grupal**, el cupo se sigue contando por hora de inicio exacta: la clase de las 16:00 y la de las 17:00 no suman entre sí (comportamiento actual, sin cambios) (CUPO-03).
+  4. N+1 reservas escalonadas concurrentes sobre un recurso de cupo N nunca superan el cupo — verificado con un test de carrera real contra la DB (CUPO-04).
+  5. Cero regresión del núcleo: cupo 1, canchas, generación forward de abonos, multi-staff y exclusión por espacio compartido se comportan exactamente igual, y los estados `slot_full`/`slot_taken` no se degradan (CUPO-05).
+
+**Plans**: TBD
+
+**UI hint**: yes
+**Security/Integrity relevance**: **Security-sensitive — secure-phase obligatorio.** Modifica el corazón de la integridad del producto en una migración numerada nueva (`CREATE OR REPLACE FUNCTION`, aplicada a mano coordinada con el deploy — la última en prod es la **061**, la próxima la **062**). Riesgos clave: (a) **carrera de sobrecupo por solape** — el conteo por intervalo tiene que ocurrir bajo el mismo `pg_advisory_xact_lock` / la misma transacción `SECURITY DEFINER` que ya serializa el anti-sobrecupo y la exclusión por espacio; con la granularidad vieja (slot+bucket) dos reservas escalonadas toman locks distintos y se cuelan, así que el lock pasa a bucket+día/ventana **sin degradar** `slot_full`/`slot_taken` ni el caso cupo 1; (b) **regresión** de los cuatro consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) — todos entran por `createAppointmentCore`, un cambio de firma o semántica los afecta a los cuatro; (c) la asignación de `seat` no puede chocar con el índice único 011 (el cupo se evalúa por solape, el asiento sigue siendo posición en el slot exacto); (d) `book_slot_atomic` es `SECURITY DEFINER` (RLS no la protege): toda query nueva adentro filtra por `business_id` explícito, y el flag por servicio se re-valida por `business_id` sin confiar en IDs del cliente; (e) el flag por servicio (columna nueva) debe migrarse con default = clase grupal para cero regresión. El secure-phase gate verifica: atomicidad del anti-sobrecupo por solape bajo concurrencia real (test contra la DB, no lectura de código), cero regresión de los cuatro caminos + cupo 1, y aislamiento por tenant del conteo y del flag. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
+
+**Decisión abierta (cerrar en discuss-phase)**: la **columna exacta** del flag por servicio (nombre / tipo) y el mecanismo preciso de re-granularización del lock (bucket+día vs. ventana por servicio).
+
+### Phase 13: Borrado de servicio preservando historial
+
+**Goal**: El dueño puede **borrar** un servicio cuyos turnos son todos **pasados/cancelados**, y ese borrado **no destruye la historia**: los turnos pasados siguen visibles en Finanzas y en la ficha del cliente ("historia clínica" del paciente) con su nombre y precio, vía **desacople del FK** — el turno guarda un **snapshot** del nombre/precio del servicio al crearse. Si el servicio tiene turnos **futuros**, un **modal** bloquea el borrado, lo explica y ofrece la vía de **desactivar** (conservar y dejar de ofrecer). Cambio mediano y autocontenido: migración + backfill del snapshot + write-path del alta del turno + el modal de borrado. Independiente del cambio de cupo de la Phase 12.
+**Depends on**: Phase 12 (secuencial dentro del milestone; sin dependencia funcional — el borrado-con-historial es independiente del cupo por solape, aunque ambos tocan el write-path de creación de turnos por `createAppointmentCore`)
+**Requirements**: HIST-01, HIST-02, HIST-03
+**Success Criteria** (what must be TRUE):
+
+  1. El dueño borra un servicio cuyos turnos son todos pasados/cancelados (sin turnos futuros) y el servicio desaparece del panel (HIST-01).
+  2. Al intentar borrar un servicio con turnos **futuros**, un modal bloquea el borrado, lo explica y ofrece **desactivar** (conservar y dejar de ofrecer) en vez de borrar (HIST-02).
+  3. Un turno **pasado** de un servicio ya borrado sigue visible en el historial (Finanzas / ficha del cliente) con su nombre y precio, y los reportes no se rompen — vía desacople del FK / snapshot (HIST-03).
+
+**Plans**: TBD
+
+**UI hint**: yes
+**Security/Integrity relevance**: Riesgo acotado — NO redefine los constraints anti-doble-booking ni la lógica de concurrencia del RPC. El cuidado está en dos frentes: (a) la migración del snapshot (columna/s nuevas en `appointments` + backfill de los turnos históricos, idempotente y numerada — próxima **062**+, aplicada a mano coordinada con el deploy) debe preservar RLS + aislamiento por tenant; (b) el **write-path del alta** graba el snapshot al crear el turno y pasa por `createAppointmentCore` — el mismo camino de los cuatro consumidores del RPC — así que el cambio se verifica sin regresión en booking público, alta manual, abonos y canchas. El borrado y la desactivación son acciones autenticadas del dueño sobre un servicio de SU negocio (RLS + `.eq('business_id', ...)`); el chequeo de "tiene turnos futuros" se resuelve server-side por `business_id`. Se **descarta hard-delete de la historia**. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
+
+**Decisión abierta (cerrar en discuss-phase)**: el **mecanismo exacto de desacople** (snapshot de nombre/precio en el turno vs. otra vía — ej. FK `ON DELETE SET NULL` + columnas denormalizadas) y cómo lo consumen Finanzas y la ficha del cliente.
+
+### Phase 14: Cierre de backlog
+
+**Goal**: Drenar el backlog chico de polish acumulado, sin impacto en el motor de reservas ni en los constraints: unificar el ancho de los botones de acción app-wide (hoy varios `w-full` poco intencionales en desktop), que el `RiskBadge` "Alto" se vea **con color** fuera del CRM (hoy `--crm-danger` no está definido fuera del scope y el badge parece un pill gris), que un abono **cancelado** deje de mostrar "Copiar link de baja", y que un cliente **recién creado sin turnos** caiga en el filtro "Nuevas" y no en "Pausa".
+**Depends on**: Phase 13 (secuencial dentro del milestone; sin dependencia funcional — los cuatro ítems son de presentación / higiene y no tocan el motor)
+**Requirements**: POLISH-04, POLISH-05, POLISH-06, POLISH-07
+**Success Criteria** (what must be TRUE):
+
+  1. Los botones de acción del dashboard tienen ancho **consistente** app-wide en desktop (sin el `w-full` poco intencional), según un criterio único definido en discuss-phase (POLISH-04).
+  2. El `RiskBadge` "Alto" se muestra con **relleno semántico de peligro** también **fuera del CRM** (`--crm-danger` resuelto en el scope global), no como un pill gris (POLISH-05).
+  3. Una serie de abono con estado **cancelado** **no** muestra el botón "Copiar link de baja" (POLISH-06).
+  4. Un cliente **recién creado sin turnos** aparece en el filtro **"Nuevas"**, no en **"Pausa"** (">2 meses sin venir") (POLISH-07).
+
+**Plans**: TBD
+
+**UI hint**: yes
+**Security/Integrity relevance**: Bajo riesgo. Los cuatro ítems son de presentación o de lógica de filtro en el cliente; no tocan el motor de reservas, los constraints, el aislamiento por tenant ni el flujo de cancelación. **Cuidado transversal (POLISH-05):** `--crm-danger` es un **design token** — definirlo fuera del scope del CRM afecta también al CRM; el cambio debe respetar el token existente sin duplicar hex y sin alterar cómo se ve el badge dentro del CRM. La pantalla pública de baja del abono ya está endurecida (404 genérico, token no adivinable, `noindex`): POLISH-06 solo oculta un botón del **panel autenticado**, no toca esa superficie.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28). El próximo milestone del workstream arranca en Phase 12.
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, activo). Los tres milestones cerrados quedan en el historial; v0.26 arranca en Phase 12.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -452,3 +517,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
+| 12. Cupo por solape (recurso simultáneo) | 0/TBD | Not started | - |
+| 13. Borrado de servicio preservando historial | 0/TBD | Not started | - |
+| 14. Cierre de backlog | 0/TBD | Not started | - |

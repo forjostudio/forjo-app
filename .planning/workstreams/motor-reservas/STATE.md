@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: Cupo por solape + cierre de backlog
 status: planning
-last_updated: "2026-07-28T23:15:10.358Z"
+last_updated: "2026-07-28T23:59:00.000Z"
 last_activity: 2026-07-28
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 11 — Cierre de backlog
+**Current focus:** Phase 12 — Cupo por solape (recurso simultáneo) — **secure-phase obligatorio**
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 12 — Cupo por solape (recurso simultáneo) (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-28 — Milestone v0.26 started
+Status: Roadmap creado (v0.26 = Phases 12-14; 12/12 requirements mapeados, sin huérfanos) — esperando planificación de fase
+Last activity: 2026-07-28 — Roadmap v0.26 creado (Phases 12-14)
 
 ## Performance Metrics
 
@@ -175,9 +175,9 @@ Heredadas del workstream (siguen vigentes):
 ## Session Continuity
 
 Last session: 2026-07-27T15:44:37.786Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/11-cierre-de-backlog/11-CONTEXT.md
+Stopped at: Roadmap v0.26 creado (Phases 12-14) — próximo paso: /gsd:discuss-phase 12 --ws motor-reservas
+Resume file: .planning/workstreams/motor-reservas/ROADMAP.md
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Roadmap v0.26 listo. Próximo: `/gsd:discuss-phase 12 --ws motor-reservas` (Phase 12 es security-sensitive → secure-phase obligatorio).
