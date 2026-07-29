@@ -43,9 +43,12 @@ export async function GET(request: NextRequest) {
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
   // Turnos que ocupan slots: confirmed + pending_payment (consistente con el índice 011).
+  // `service_id` se suma para la rama de RECURSO SIMULTÁNEO (Phase 12): ahí el cupo se cuenta por
+  // solape entre turnos del MISMO servicio. Es aditivo — NUNCA se serializa en la respuesta (el
+  // público sigue recibiendo solo time/status/expires_at/duration_minutes).
   const { data: appts, error } = await supabase
     .from('appointments')
-    .select('time, status, expires_at, professional_id, duration_minutes')
+    .select('time, status, expires_at, professional_id, duration_minutes, service_id')
     .eq('business_id', business.id)
     .eq('date', date)
     .in('status', ['confirmed', 'pending_payment'])
@@ -228,6 +231,74 @@ export async function GET(request: NextRequest) {
 
     // D-06 (LOCKED): `busy` SIEMPRE vacío en esta rama; la unión colapsa a booleano-por-slot en `full`.
     return Response.json({ ok: true, busy: [], full: fullAny }, { headers: { 'Cache-Control': 'no-store' } })
+  }
+
+  // ── RAMA "RECURSO SIMULTÁNEO" (Phase 12, CUPO-02/D-12): el grid se vuelve OVERLAP-AWARE ─────────
+  // Un servicio `simultaneous_resource` (migr. 062) cuenta su cupo por SOLAPE de intervalos entre
+  // turnos del MISMO service_id (2 camillas ⇒ 2 turnos escalonados en paralelo), NO por hora de
+  // inicio exacta. Si el read-path no lo refleja, el público ve libre un horario que el RPC después
+  // rechaza con slot_full — por eso el grid espeja el gate del RPC (062:309-322): mismo conjunto
+  // (business_id + service_id + date + estados que ocupan) y mismo criterio de solape. Divergencia
+  // aceptada y ya conocida: acá el solape usa el buffer del negocio (UX) y el RPC usa `tsrange` sin
+  // buffer — la AUTORIDAD es el RPC (un slot límite raro cae en slot_full al reservar).
+  // Gateada por `serviceId`: si no llega (canchas — que nunca lo manda — o clientes viejos) o el
+  // servicio es `group_class` (default de toda fila existente), se cae al camino de siempre.
+  // Nota: si `any=1` venía con serviceId, la rama "Cualquiera" ya retornó arriba (D-13: el selector
+  // no ofrece "Cualquiera" en simultáneo).
+  if (serviceIdParam) {
+    // Anti-tampering aunque sea un read: el service se re-valida por business_id (mismo patrón que
+    // la rama `any`). Un serviceId de otro negocio no resuelve → invalid_service (400).
+    const { data: svcMode } = await supabase
+      .from('services')
+      .select('duration_minutes, capacity_mode, capacity')
+      .eq('id', serviceIdParam)
+      .eq('business_id', business.id)
+      .single()
+    if (!svcMode) return Response.json({ ok: false, error: 'invalid_service' }, { status: 400 })
+
+    if (svcMode.capacity_mode === 'simultaneous_resource') {
+      const dur = Number(svcMode.duration_minutes) || 30
+      const cap = Number(svcMode.capacity) || 1
+      const buffer = Number(business.buffer_minutes) || 0
+      const nowMsSim = Date.now()
+      // Turnos VIVOS del MISMO servicio, de TODAS las agendas: el gate del RPC no bucketea por
+      // profesional — el "carril" de N lugares es del SERVICIO (D-03/D-04). Los holds vencidos no
+      // ocupan (mismo descarte de expires_at que el resto del endpoint).
+      const liveSvc = (appts || []).filter(
+        a =>
+          a.service_id === serviceIdParam &&
+          (a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMsSim),
+      )
+      const overlaps = (a: { time: string; duration_minutes: number | null }, t: number) => {
+        const aStart = toMin(a.time)
+        const aEnd = aStart + Number(a.duration_minutes || 30)
+        return t < aEnd + buffer && t + dur > aStart - buffer
+      }
+      const minToHHMM = (t: number) =>
+        `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+      // Grilla del día a paso = duración (misma fórmula que el client y que la rama `any`). Caveat
+      // conocido: los horarios especiales que EXTIENDEN el día no están en `time_blocks`, así que
+      // esos start-times no se evalúan acá — quedan respaldados por el RPC (slot_full).
+      const startSet = new Set<string>()
+      for (const b of capBlocks || []) {
+        const open = toMin(b.start_time)
+        const close = toMin(b.end_time)
+        for (let t = open; t + dur <= close; t += dur) startSet.add(minToHHMM(t))
+      }
+      const fullSim: string[] = []
+      for (const hhmm of startSet) {
+        const t = toMin(hhmm)
+        let n = 0
+        for (const a of liveSvc) if (overlaps(a, t)) n++
+        if (n >= cap) fullSim.push(hhmm)
+      }
+      // D-06/D-12 (no-leak): la ocupación colapsa a un BOOLEANO por slot en `full`; jamás el conteo,
+      // los lugares restantes ni `capacity` (que queda server-side). `busy` va SIEMPRE vacío: los
+      // solapes del propio servicio son LEGALES hasta el cupo y el client trata cada entrada de
+      // `busy` como conflicto por solapamiento — mandarlos ahí borraría el 2º lugar del recurso.
+      return Response.json({ ok: true, busy: [], full: fullSim }, { headers: { 'Cache-Control': 'no-store' } })
+    }
+    // `group_class`: sigue de largo al camino de siempre (byte-idéntico).
   }
 
   // Filtramos por bucket de profesional (coalesce sentinel) y descartamos pending_payment
