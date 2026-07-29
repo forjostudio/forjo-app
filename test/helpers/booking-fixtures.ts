@@ -137,6 +137,30 @@ export async function seedProfessional(seeded: SeededTenant, opts?: { name?: str
   return ins.data.id
 }
 
+// seedService: siembra UN service activo ADICIONAL sobre un tenant ya sembrado y devuelve su id.
+// Molde directo del insert de service de seedOneTenant (líneas 71-77). Nace con los DEFAULT de la
+// 062 ('group_class' / capacity 1), es decir el camino histórico.
+//
+// Lo necesita el caso CR-02 (code-review de Phase 12): probar que un servicio SIMULTÁNEO no se puede
+// montar encima de un turno de OTRO servicio en la MISMA agenda. Hace falta un 2º service_id real del
+// mismo negocio; reusar t.serviceId no sirve (el gate por servicio distinto no se activaría). Helper
+// aparte para NO tocar la firma de seedOneTenant. El teardown por CASCADE de business ya lo borra.
+export async function seedService(seeded: SeededTenant, opts?: { durationMinutes?: number; name?: string }): Promise<string> {
+  const ins = await seeded.admin
+    .from('services')
+    .insert({
+      business_id: seeded.businessId,
+      name: opts?.name ?? `__test_svc_extra_${crypto.randomUUID().slice(0, 8)}`,
+      duration_minutes: opts?.durationMinutes ?? 30,
+      price: 100,
+      active: true,
+    })
+    .select('id')
+    .single()
+  if (ins.error || !ins.data) throw new Error(`seed: insert service extra falló: ${ins.error?.message}`)
+  return ins.data.id
+}
+
 // seedExpiredHold: inserta DIRECTO (service-role, sin pasar por el RPC) un turno `pending_payment`
 // cuya seña YA VENCIÓ (`expires_at` en el pasado). No se puede sembrar con createAppointmentCore: el
 // core siempre escribe un expires_at FUTURO. Es el fixture del caso CR-01 (code-review de Phase 12):

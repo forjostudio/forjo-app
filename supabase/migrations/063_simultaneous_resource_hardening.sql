@@ -1,6 +1,6 @@
 -- 063 — Endurecimiento del modo RECURSO SIMULTÁNEO (correcciones del code-review de Phase 12).
 --
--- Contexto (motor-reservas / Phase 12 — code-review CR-01):
+-- Contexto (motor-reservas / Phase 12 — code-review CR-01, CR-02):
 --   La 062 introdujo `services.capacity_mode = 'simultaneous_resource'` (cupo por SOLAPE) y ya está
 --   APLICADA A MANO EN PRODUCCIÓN ⇒ es historia inmutable: NO se edita. Esta migración la SUPERSEDE
 --   redefiniendo `book_slot_atomic` in-place con las tres correcciones del review. El cuerpo arranca
@@ -17,6 +17,22 @@
 --           diario ⇒ `slot_full` FALSO (availability mostraba el horario libre) y reserva perdida
 --           hasta 24 h. Se agrega la MISMA guarda que ya usa la función 80 líneas más arriba
 --           (selección "cualquiera") y que usa el read-path.
+--
+--   (CR-02) Un servicio simultáneo se podía montar ENCIMA de un turno de OTRO servicio de la misma
+--           agenda (doble-booking real). Para capacity > 1 se caían las TRES capas a la vez:
+--             1. el early-return JS se desactivaba con el flag `isSimultaneousResource`;
+--             2. el gate SQL solo miraba el MISMO `service_id`;
+--             3. la fila nacía `is_group = true` ⇒ FUERA del EXCLUDE gist 013 (que es
+--                `... WHERE (status IN (...) AND NOT is_group)`, migr. 041).
+--           Se agrega un gate por BUCKET, fail-closed: si el intervalo pedido solapa un turno vivo de
+--           OTRO servicio en la MISMA agenda ⇒ slot_taken.
+--
+--           DECISIÓN DE PRODUCTO (opción A del review): un servicio simultáneo SÍ puede compartir
+--           agenda con turnos individuales, pero el cruce con otro servicio se RECHAZA. Hacerlo
+--           configurable por el dueño (un flag por servicio del tipo "permitir solaparse con otros
+--           servicios") es un FOLLOW-UP deliberadamente fuera de alcance acá: el default tiene que
+--           BLOQUEAR, porque shippear "permitir" antes de que el dueño haya decidido nada es shippear
+--           el doble-booking. El cupo N del recurso sigue siendo cupo contra SÍ MISMO (D-04).
 --
 -- Qué NO hace (invariantes del proyecto):
 --   - NO edita la 062 (ya aplicada a mano en prod).
@@ -207,11 +223,42 @@ BEGIN
   -- 2/3/4. (062) Gate de cupo + asiento + is_group, BIFURCADOS por modo. Todo lo de acá abajo corre
   --        DESPUÉS de los advisory locks: nunca se decide disponibilidad con un count suelto (TOCTOU).
   IF v_mode = 'simultaneous_resource' THEN
+    -- ── (063, CR-02) Gate de EXCLUSIÓN POR AGENDA — va PRIMERO, fail-closed ────────────────────
+    -- El cupo N del recurso NO reemplaza la exclusión por agenda. Con capacity > 1 la fila nace
+    -- is_group = true y sale del EXCLUDE gist 013 (041: `... AND NOT is_group`), así que si el cruce
+    -- con OTROS servicios no se chequea acá NO lo chequea NADIE: ni el gist, ni el gate de abajo (que
+    -- filtra por el MISMO service_id), ni el re-check JS con autoAssign (que se saltea entero). Ese
+    -- era el doble-booking real: "camilla" (simultáneo, cupo 2) montándose sobre una "consulta"
+    -- confirmada de la misma agenda.
+    --
+    -- Semántica: los solapes del PROPIO servicio son legales hasta el cupo (los gatea el count de
+    -- abajo); cualquier solape con OTRO servicio del MISMO bucket es doble-booking → slot_taken.
+    -- Permitir el cruce es una decisión que le corresponde al dueño (flag por servicio = FOLLOW-UP
+    -- planificado, fuera de alcance acá): el default DEBE bloquear.
+    --
+    -- Mismos criterios que el resto del motor: bucket por COALESCE(professional_id, sentinel)
+    -- byte-idéntico al índice 011, holds VIGENTES únicamente, predicado tsrange && canónico,
+    -- business_id EXPLÍCITO (SECURITY DEFINER ⇒ la RLS no protege adentro).
+    IF EXISTS (
+      SELECT 1 FROM appointments a
+      WHERE a.business_id = p_business_id
+        AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+        AND a.service_id IS DISTINCT FROM p_service_id
+        AND a.date = p_date
+        AND a.status IN ('confirmed', 'pending_payment')
+        AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
+        AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+            && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))
+    ) THEN
+      -- slot_taken (NO slot_full): no es "cupo lleno" del recurso, es la agenda ocupada por otra cosa.
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+
     -- ── Recurso simultáneo (D-02/D-03): el cupo es de services.capacity y se cuenta por SOLAPE ──
     -- Compite SOLO contra turnos del MISMO service_id (carriles independientes, D-04): una consulta
-    -- normal de la misma persona a la misma hora NO resta contra el cupo de "camilla". El predicado
-    -- tsrange && tsrange es el canónico del motor (idéntico al EXCLUDE 013 de 041 y al bloque de
-    -- espacio de 042) → semántica de solape consistente. business_id EXPLÍCITO.
+    -- normal de la misma persona a la misma hora NO resta contra el cupo de "camilla" (y si pisa la
+    -- agenda ya la rechazó el gate de arriba). El predicado tsrange && tsrange es el canónico del
+    -- motor (idéntico al EXCLUDE 013 de 041 y al bloque de espacio de 042). business_id EXPLÍCITO.
     --
     -- (063, CR-01) Guarda de holds VIGENTES: los `pending_payment` con la seña ya vencida NO ocupan.
     -- Es la MISMA guarda que usa la selección "cualquiera" de arriba y que usa el read-path de

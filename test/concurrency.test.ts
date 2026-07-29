@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, seedSimultaneousService, seedExpiredHold, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, seedSimultaneousService, seedService, seedExpiredHold, type SeededTenant } from './helpers/booking-fixtures'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { GET as availabilityGET } from '@/app/api/booking/availability/route'
 import type { NextRequest } from 'next/server'
@@ -477,6 +477,67 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   })
 
   // ── Phase 12 / code-review — regresiones de los dos defectos REALES de reserva (CR-01, CR-02) ────
+
+  // CR-02 — el cupo del recurso NO reemplaza la exclusión por agenda (doble-booking real).
+  //
+  // Con la 062 sola caían las TRES capas a la vez para un simultáneo con cupo > 1: el early-return JS
+  // se desactivaba por el flag, el gate SQL solo miraba el MISMO service_id, y la fila nacía
+  // is_group = true → fuera del EXCLUDE gist 013. Resultado: un turno de "camilla" se montaba encima
+  // de una consulta normal ya confirmada en la MISMA agenda.
+  //
+  // Decisión del producto (fail-closed): un servicio simultáneo SÍ puede compartir agenda con turnos
+  // individuales, pero un solape con OTRO servicio del mismo bucket se RECHAZA. Hacerlo configurable
+  // por el dueño (flag por servicio) es un follow-up deliberadamente fuera de alcance: el default
+  // tiene que bloquear, porque shippear "permitir" antes de que el dueño decida nada es shippear el
+  // doble-booking.
+  //
+  // A/B verificado contra la DB local: con la función de la 062 este test da 2 turnos solapados en la
+  // agenda (la reserva ENTRA, `camilla.ok === true`); con la 063 da slot_taken en los DOS caminos y
+  // 1 sola fila. Se aserta el gate en las dos capas porque el camino `autoAssign` saltea el JS por
+  // completo (booking-core.ts:135) y la autoridad tiene que estar en la DB.
+  it('CR-02 — recurso simultáneo: un solape de OTRO servicio en la MISMA agenda se rechaza', async () => {
+    await seedTimeBlock(t, { capacity: 1 })
+    const otroServicio = await seedService(t, { durationMinutes: 30, name: '__test_svc_consulta' })
+
+    // 1) Turno normal (group_class, cupo 1) de OTRO servicio en la agenda del profesional: 16:00-16:30.
+    const consulta = await createAppointmentCore({ ...baseInput(), serviceId: otroServicio, time: '16:00' })
+    expect(consulta.ok).toBe(true)
+
+    // 2) El servicio del fixture pasa a RECURSO SIMULTÁNEO cupo 2 ("2 camillas").
+    await seedSimultaneousService(t, { capacity: 2 })
+
+    // 3) Reserva simultánea 16:10-16:40 en la MISMA agenda: solapa a la consulta. El cupo 2 es del
+    //    recurso contra SÍ MISMO; nunca autoriza pisar un turno de otro servicio.
+    const camilla = await createAppointmentCore({ ...baseInput(), time: '16:10' })
+    expect(camilla.ok).toBe(false)
+    if (!camilla.ok) {
+      expect(camilla.error).toBe('slot_taken')
+      expect(camilla.status).toBe(409)
+    }
+
+    // 4) Gate SQL (la autoridad): mismo intento llamando al RPC DIRECTO, sin pasar por el core — es lo
+    //    que ve el camino autoAssign, que saltea todos los re-checks JS.
+    const { error: rpcErr } = await t.admin.rpc('book_slot_atomic', {
+      p_business_id: t.businessId,
+      p_professional_id: t.professionalId,
+      p_service_id: t.serviceId,
+      p_location_id: t.locationId,
+      p_date: DATE,
+      p_time: '16:10',
+      p_duration: 30,
+      p_client_id: null,
+      p_client_name: '__test_rpc_directo',
+      p_client_phone: null,
+      p_client_email: null,
+      p_notes: null,
+      p_status: 'confirmed',
+      p_expires_at: null,
+    })
+    expect(rpcErr?.message ?? '').toContain('slot_taken')
+
+    // Assert DURO contra la DB: la agenda conserva UN solo turno cubriendo las 16:10 (no 2).
+    expect(await occupantsOfBucketCovering('16:10')).toBe(1)
+  })
 
   // CR-01 — un hold VENCIDO no consume cupo del carril simultáneo.
   //

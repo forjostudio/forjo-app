@@ -248,6 +248,28 @@ BEGIN
   -- 2/3/4. (062) Gate de cupo + asiento + is_group, BIFURCADOS por modo. Todo corre DESPUÉS del
   --        advisory lock: nunca se decide disponibilidad con un count suelto (TOCTOU).
   IF v_mode = 'simultaneous_resource' THEN
+    -- (063, CR-02) Gate de EXCLUSIÓN POR AGENDA, PRIMERO y fail-closed. Con capacity > 1 la fila nace
+    -- is_group = true y sale del EXCLUDE gist 013 (041: `AND NOT is_group`), el gate de abajo filtra
+    -- por el MISMO service_id y el re-check JS se saltea con autoAssign ⇒ sin este bloque NADIE impide
+    -- montar un turno simultáneo sobre un turno de OTRO servicio de la misma agenda (doble-booking).
+    -- Los solapes del PROPIO servicio son legales hasta el cupo (los gatea el count de abajo); el
+    -- cruce con otro servicio se RECHAZA. Hacerlo configurable por el dueño es un follow-up: el
+    -- default debe bloquear. Bucket byte-idéntico al índice 011, holds VIGENTES, business_id explícito.
+    IF EXISTS (
+      SELECT 1 FROM appointments a
+      WHERE a.business_id = p_business_id
+        AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+        AND a.service_id IS DISTINCT FROM p_service_id
+        AND a.date = p_date
+        AND a.status IN ('confirmed', 'pending_payment')
+        AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
+        AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+            && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))
+    ) THEN
+      -- slot_taken (NO slot_full): no es cupo lleno del recurso, es la agenda ocupada por otra cosa.
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+
     -- Recurso simultáneo (D-02/D-03): cupo de services.capacity contado por SOLAPE, compitiendo SOLO
     -- contra turnos del MISMO service_id (carriles independientes, D-04). Predicado tsrange &&
     -- canónico (idéntico al EXCLUDE 013 y al bloque de espacio de 042). business_id EXPLÍCITO.

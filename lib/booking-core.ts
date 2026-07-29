@@ -142,7 +142,9 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     const reqEnd = reqStart + Number(service.duration_minutes || 30)
     const { data: clashes } = await supabase
       .from('appointments')
-      .select('id, status, expires_at, professional_id, time, duration_minutes')
+      // service_id (code-review CR-02): el re-check del recurso simultáneo tiene que distinguir un
+      // solape del PROPIO servicio (legal hasta el cupo) de uno de OTRO servicio (doble-booking).
+      .select('id, status, expires_at, professional_id, time, duration_minutes, service_id')
       .eq('business_id', business.id)
       .eq('date', date)
       .in('status', ['confirmed', 'pending_payment'])
@@ -204,18 +206,26 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     }
 
     // ¿Ocupado de verdad? confirmed, o pending_payment cuya seña NO venció (o aún sin setear).
-    const taken = sameBucket.some(a =>
+    const isAlive = (a: { status: string; expires_at: string | null }) =>
       a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
-    )
+    const taken = sameBucket.some(isAlive)
     // Phase 12 (LANDMINE, CUPO-02): un servicio `simultaneous_resource` (migr. 062) cuenta su cupo
     // por SOLAPE de intervalos contra `services.capacity` (2 camillas = 2 turnos escalonados en
-    // paralelo). Su `time_block` normalmente tiene capacity 1, así que SIN este gate el early-return
-    // de abajo cortaría el 2º turno solapado con slot_taken y el recurso NUNCA se llenaría (rechaza
-    // en el 2º, no en cupo+1). Es el mismo razonamiento con el que el GRUPAL ya se exceptúa: un
-    // solape "consigo mismo" hasta el cupo NO es conflicto, y la autoridad del cupo es el RPC
-    // (advisory lock service-day + count por solape → slot_full). Para `group_class` (default de
-    // TODA fila existente, incluidas canchas) esto es false ⇒ flujo byte-idéntico a hoy.
+    // paralelo). Su `time_block` normalmente tiene capacity 1, así que si el early-return de abajo
+    // aplicara tal cual cortaría el 2º turno solapado con slot_taken y el recurso NUNCA se llenaría
+    // (rechazaría en el 2º, no en cupo+1). Es el mismo razonamiento con el que el GRUPAL ya se
+    // exceptúa: un solape "consigo mismo" hasta el cupo NO es conflicto, y la autoridad del cupo es
+    // el RPC. Para `group_class` (default de TODA fila existente, incluidas canchas) esto es false
+    // ⇒ flujo byte-idéntico a hoy.
     const isSimultaneousResource = service.capacity_mode === 'simultaneous_resource'
+    // Code-review CR-02: el bypass NO puede ser CIEGO. Lo legal es solaparse con el PROPIO servicio
+    // (hasta el cupo, que decide el RPC); un solape con OTRO servicio de la MISMA agenda sigue siendo
+    // doble-booking. Y para el modo simultáneo con cupo > 1 la fila nace `is_group = true`, o sea
+    // FUERA del EXCLUDE gist 013 (migr. 041: `... AND NOT is_group`), así que la base tampoco lo
+    // frenaría sola: el gate autoritativo vive en el RPC (migr. 063) y esto es su espejo de UX.
+    // Bloquear el cruce es el default fail-closed; que el dueño pueda habilitarlo por servicio es un
+    // follow-up planificado, deliberadamente fuera de alcance.
+    const takenByOtherService = sameBucket.some(a => isAlive(a) && a.service_id !== service.id)
     // Re-check JS capacity-aware (Pitfall 5 / A5): el rechazo temprano `slot_taken` por SOLAPAMIENTO
     // solo aplica a bloques cupo 1, donde es el anti-doble-booking de duración variable de v0.9 (un
     // turno de 60' que pisa parcialmente a otro de 30' — el RPC NO lo cubre, solo cuenta el slot exacto).
@@ -223,7 +233,8 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     // exacto (D-03, duración fija) y un solape "consigo mismos" no es conflicto — la autoridad del cupo
     // es el RPC (advisory lock + count vs capacity → slot_full). Rechazar acá bloquearía falsamente al
     // 2º+ inscripto de la clase. Para cupo 1, capacity-aware ⇒ comportamiento byte-idéntico a hoy.
-    if (taken && slotCapacity <= 1 && !isSimultaneousResource) {
+    const rejectEarly = isSimultaneousResource ? takenByOtherService : (taken && slotCapacity <= 1)
+    if (rejectEarly) {
       return { ok: false, error: 'slot_taken', status: 409 }
     }
 
