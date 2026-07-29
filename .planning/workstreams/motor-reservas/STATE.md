@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
-status: planning
-stopped_at: Phase 12 context gathered
-last_updated: "2026-07-29T03:20:31.136Z"
-last_activity: 2026-07-28 — Roadmap v0.26 creado (Phases 12-14)
+status: planned
+stopped_at: Phase 12 planned — 4 plans (3 waves), ready to execute
+last_updated: "2026-07-29T15:00:29.000Z"
+last_activity: 2026-07-29 — Phase 12 planificada (4 planes, 3 waves; research + plan-checker PASSED)
 progress:
   total_phases: 14
   completed_phases: 11
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 12 — Cupo por solape (recurso simultáneo) (not started)
-Plan: —
-Status: Roadmap creado (v0.26 = Phases 12-14; 12/12 requirements mapeados, sin huérfanos) — esperando planificación de fase
-Last activity: 2026-07-28 — Roadmap v0.26 creado (Phases 12-14)
+Phase: 12 — Cupo por solape (recurso simultáneo) (planned — ready to execute)
+Plan: 4 planes en 3 waves (W1: 12-01 · W2: 12-02 ∥ 12-03 · W3: 12-04)
+Status: Planificada — research + plan-checker PASSED, coverage gates 14/14 + CUPO-01..05, committed (1a43211, 86b24d3). Próximo: execute-phase.
+Last activity: 2026-07-29 — Phase 12 planificada (4 planes, 3 waves)
 
 ## Performance Metrics
 
@@ -175,10 +175,10 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-29T03:20:31.118Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/12-cupo-por-solape-recurso-simult-neo/12-CONTEXT.md
+Last session: 2026-07-29T15:00:29.000Z
+Stopped at: Phase 12 planned — 4 plans, ready to execute
+Resume file: .planning/workstreams/motor-reservas/phases/12-cupo-por-solape-recurso-simult-neo/12-01-PLAN.md
 
 ## Operator Next Steps
 
-- Roadmap v0.26 listo. Próximo: `/gsd:discuss-phase 12 --ws motor-reservas` (Phase 12 es security-sensitive → secure-phase obligatorio).
+- Phase 12 planificada (4 planes, 3 waves). Próximo: `/gsd:execute-phase 12 --ws motor-reservas`. Phase 12 es security-sensitive → **secure-phase obligatorio** después de ejecutar. Recordá: la migración **062** se aplica **A MANO** a prod coordinada con el deploy (última en prod = 061) + `NOTIFY pgrst, 'reload schema'`; local se valida con `supabase db reset`.
