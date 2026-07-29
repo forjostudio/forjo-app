@@ -106,6 +106,14 @@ CREATE OR REPLACE FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "
     SET "search_path" TO 'public'
     AS $$
 DECLARE
+  -- (062) modo de cupo del SERVICIO: 'group_class' (default histórico) | 'simultaneous_resource'.
+  v_mode text;
+  -- (062) cupo N del recurso simultáneo (services.capacity). Lo lee SOLO la rama simultánea.
+  v_svc_cap int;
+  -- (062) turnos del MISMO servicio que SOLAPAN el intervalo pedido (gate del modo simultáneo).
+  v_overlap int;
+  -- (062) is_group de la fila a insertar: cada modo lo deriva de SU fuente de cupo (LANDMINE 013).
+  v_is_group boolean;
   -- (058) profesional EFECTIVO que se inserta: arranca en p_professional_id y, si el caller mandó el
   -- UUID mágico "cualquiera", se sobrescribe con el elegido bajo el lock. NUNCA se inserta el mágico.
   v_effective_pro uuid := p_professional_id;
@@ -119,13 +127,30 @@ DECLARE
   v_space_ids uuid[];   -- (042) espacios físicos que ocupa la agenda reservada (vía agenda_spaces)
   v_sid uuid;           -- (042) iterador del FOREACH del lock por espacio
 BEGIN
-  -- 1. (058, §GA1 / D-04) Lock del slot AMPLIADO a (business_id + date + time) — SIN v_bucket.
-  --    Serializa TODA reserva del mismo instante de inicio del negocio (específicas + "cualquiera")
-  --    antes de tocar espacio/cupo. Un lock más grueso serializa MÁS, nunca menos → no degrada
-  --    slot_full ni slot_taken. Es lo que hace que la selección de candidato (paso 2) vea un estado
-  --    consistente de todo el instante. hashtextextended → bigint (forma de un argumento, seed 0).
-  PERFORM pg_advisory_xact_lock(hashtextextended(
-    p_business_id::text || p_date::text || p_time::text, 0));
+  -- 0. (062, D-07) Modo de cupo del servicio, leído ANTES del lock (es configuración, no compite en la
+  --    carrera — y define QUÉ lock tomar). business_id EXPLÍCITO: adentro de un SECURITY DEFINER la RLS
+  --    no aplica. COALESCE = fail-safe al modo histórico.
+  SELECT s.capacity_mode, COALESCE(s.capacity, 1)
+    INTO v_mode, v_svc_cap
+  FROM services s
+  WHERE s.id = p_service_id
+    AND s.business_id = p_business_id;
+  v_mode := COALESCE(v_mode, 'group_class');
+  v_svc_cap := COALESCE(v_svc_cap, 1);
+
+  -- 1. (062, D-06) Advisory lock del slot con la GRANULARIDAD que pide cada modo.
+  --    - 'simultaneous_resource': key (business_id + service_id + date) — el cupo se decide por SOLAPE,
+  --      así que hay que serializar TODAS las reservas de ese servicio ese día (las escalonadas tienen
+  --      `time` distinto y con el key fino no serializaban → sobrecupo).
+  --    - resto ('group_class', cupo 1, canchas, abonos): key de 058 INALTERADO (byte-idéntico).
+  --    En ambos casos el lock va PRIMERO, antes de los locks por espacio (042) ⇒ deadlock-free.
+  IF v_mode = 'simultaneous_resource' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      p_business_id::text || p_service_id::text || p_date::text, 0));
+  ELSE
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      p_business_id::text || p_date::text || p_time::text, 0));
+  END IF;
 
   -- 2. (058, §GA2 / D-01/D-02/D-03/D-07/D-08/D-10) Selección del profesional "cualquiera" BAJO el lock.
   --    Solo si el caller pidió "cualquiera". La selección corre DESPUÉS del lock (Pitfall 2) y ANTES
@@ -220,33 +245,70 @@ BEGIN
     END IF;
   END IF;
 
-  -- 2. Capacity del bloque que cubre este slot (plantilla semanal: day_of_week + ventana).
-  --    Si no hay bloque que lo cubra, default 1 (comportamiento individual). EXTRACT(dow) usa la
-  --    misma convención que time_blocks.day_of_week (0=domingo..6=sábado).
-  SELECT COALESCE(MAX(tb.capacity), 1) INTO v_capacity
-  FROM time_blocks tb
-  WHERE tb.business_id = p_business_id
-    AND tb.day_of_week = EXTRACT(dow FROM p_date)
-    AND p_time >= tb.start_time AND p_time < tb.end_time;
+  -- 2/3/4. (062) Gate de cupo + asiento + is_group, BIFURCADOS por modo. Todo corre DESPUÉS del
+  --        advisory lock: nunca se decide disponibilidad con un count suelto (TOCTOU).
+  IF v_mode = 'simultaneous_resource' THEN
+    -- Recurso simultáneo (D-02/D-03): cupo de services.capacity contado por SOLAPE, compitiendo SOLO
+    -- contra turnos del MISMO service_id (carriles independientes, D-04). Predicado tsrange &&
+    -- canónico (idéntico al EXCLUDE 013 y al bloque de espacio de 042). business_id EXPLÍCITO.
+    SELECT count(*) INTO v_overlap
+    FROM appointments a
+    WHERE a.business_id = p_business_id
+      AND a.service_id = p_service_id
+      AND a.date = p_date
+      AND a.status IN ('confirmed', 'pending_payment')
+      AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+          && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration));
 
-  -- 3. Ocupantes actuales del slot exacto (mismo bucket, mismo date+time, estados que ocupan).
-  --    Los holds vencidos ya los liberó el core ANTES del RPC, así que el count está limpio.
-  SELECT count(*) INTO v_occupied
-  FROM appointments a
-  WHERE a.business_id = p_business_id
-    AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
-    AND a.date = p_date AND a.time = p_time
-    AND a.status IN ('confirmed', 'pending_payment');
-
-  -- 4. Asignación de asiento + cero regresión cupo 1 (CONC-02). Sin cambio respecto de 041.
-  IF v_capacity > 1 THEN
-    IF v_occupied >= v_capacity THEN
+    IF v_overlap >= v_svc_cap THEN
       RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
     END IF;
+
+    -- El ASIENTO sigue atado al slot EXACTO (D-05): el índice 011 exige unicidad dentro del mismo
+    -- date+time. El solape es el GATE del cupo, nunca el criterio del asiento.
+    SELECT count(*) INTO v_occupied
+    FROM appointments a
+    WHERE a.business_id = p_business_id
+      AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+      AND a.date = p_date AND a.time = p_time
+      AND a.status IN ('confirmed', 'pending_payment');
     v_seat := v_occupied;
+
+    -- LANDMINE: el EXCLUDE gist 013 solo aplica a is_group = false. Un recurso de cupo > 1 DEBE nacer
+    -- is_group = true o el 2º turno solapado chocaría (23P01) y el recurso nunca se llenaría. Con cupo
+    -- 1 queda false a propósito: el EXCLUDE actúa de respaldo redundante con el gate por solape.
+    v_is_group := (v_svc_cap > 1);
   ELSE
-    -- Cupo 1: seat fijo en 0 → la 2ª reserva colisiona con el índice 011 (23505 → slot_taken).
-    v_seat := 0;
+    -- Clase grupal (default): comportamiento de 058 BYTE-IDÉNTICO — cupo por HORA DE INICIO EXACTA.
+    -- 2. Capacity del bloque que cubre este slot (plantilla semanal: day_of_week + ventana).
+    --    Si no hay bloque que lo cubra, default 1 (comportamiento individual). EXTRACT(dow) usa la
+    --    misma convención que time_blocks.day_of_week (0=domingo..6=sábado).
+    SELECT COALESCE(MAX(tb.capacity), 1) INTO v_capacity
+    FROM time_blocks tb
+    WHERE tb.business_id = p_business_id
+      AND tb.day_of_week = EXTRACT(dow FROM p_date)
+      AND p_time >= tb.start_time AND p_time < tb.end_time;
+
+    -- 3. Ocupantes actuales del slot exacto (mismo bucket, mismo date+time, estados que ocupan).
+    --    Los holds vencidos ya los liberó el core ANTES del RPC, así que el count está limpio.
+    SELECT count(*) INTO v_occupied
+    FROM appointments a
+    WHERE a.business_id = p_business_id
+      AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+      AND a.date = p_date AND a.time = p_time
+      AND a.status IN ('confirmed', 'pending_payment');
+
+    -- 4. Asignación de asiento + cero regresión cupo 1 (CONC-02). Sin cambio respecto de 041.
+    IF v_capacity > 1 THEN
+      IF v_occupied >= v_capacity THEN
+        RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
+      END IF;
+      v_seat := v_occupied;
+    ELSE
+      -- Cupo 1: seat fijo en 0 → la 2ª reserva colisiona con el índice 011 (23505 → slot_taken).
+      v_seat := 0;
+    END IF;
+    v_is_group := (v_capacity > 1);
   END IF;
   RETURN QUERY
   INSERT INTO appointments (
@@ -256,7 +318,7 @@ BEGIN
   ) VALUES (
     p_business_id, p_client_id, p_client_name, p_client_phone, p_client_email,
     p_service_id, v_effective_pro, p_location_id, p_date, p_time, p_duration,   -- (058) el pro REAL, nunca el mágico
-    v_seat, (v_capacity > 1), p_notes, p_status, p_expires_at
+    v_seat, v_is_group, p_notes, p_status, p_expires_at                          -- (062) is_group según el modo
   )
   RETURNING appointments.id, appointments.cancel_token;
 END;
