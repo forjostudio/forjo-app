@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-07-29T16:13:10.752Z"
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-07-29T16:22:53.724Z"
 last_activity: 2026-07-29 -- Phase 12 execution started
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 57
-  completed_plans: 54
+  completed_plans: 55
   percent: 79
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 12 (cupo-por-solape-recurso-simult-neo) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-29 -- Phase 12 execution started
 
@@ -67,6 +67,7 @@ Last activity: 2026-07-29 -- Phase 12 execution started
 | Phase 08 P01 (autónomo) | ~18min | 2 tasks | 5 files |
 | Phase 08 P08-02 | 22min | 3 tasks | 3 files |
 | Phase 12 P01 | 18min | 3 tasks | 6 files |
+| Phase 12 P02 | 12min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 12]: Cupo por modo: capacity_mode DEFAULT 'group_class' (cero regresion, incluidas canchas) y cada modo lee su fuente de cupo (services.capacity vs time_blocks.capacity)
 - [Phase 12]: Advisory lock re-granularizado por modo en book_slot_atomic: simultaneo = hash(business_id+service_id+date), resto inalterado; el lock de modo va primero -> orden anti-deadlock preservado
 - [Phase 12]: public_services expone solo capacity_mode; capacity (el N de lugares) queda server-side por el no-leak
+- [Phase ?]: 12-02: el read-path de disponibilidad cuenta el solape por service_id sin bucketear por profesional (espeja el gate del RPC 062) y devuelve busy vacio en modo simultaneo
 
 ### Pending Todos
 
@@ -179,8 +181,8 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-29T16:13:10.739Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-07-29T16:22:47.394Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

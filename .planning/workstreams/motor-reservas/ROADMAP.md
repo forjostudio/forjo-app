@@ -457,7 +457,7 @@ Plans:
   4. N+1 reservas escalonadas concurrentes sobre un recurso de cupo N nunca superan el cupo — verificado con un test de carrera real contra la DB (CUPO-04).
   5. Cero regresión del núcleo: cupo 1, canchas, generación forward de abonos, multi-staff y exclusión por espacio compartido se comportan exactamente igual, y los estados `slot_full`/`slot_taken` no se degradan (CUPO-05).
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -466,7 +466,7 @@ Plans:
 
 **Wave 2** *(blocked on 12-01)*
 
-- [ ] 12-02-PLAN.md — Camino público mode-aware: booking-core landmine (early-return de solape mode-aware) + availability rama específica overlap-aware (D-12) + booking-client oculta "Cualquiera" en simultáneo (D-13) + manda `serviceId`
+- [x] 12-02-PLAN.md — Camino público mode-aware: booking-core landmine (early-return de solape mode-aware) + availability rama específica overlap-aware (D-12) + booking-client oculta "Cualquiera" en simultáneo (D-13) + manda `serviceId`
 - [ ] 12-03-PLAN.md — UI del panel: segmented control "Clase grupal / Recurso simultáneo" + campo de cupo N en el editor de servicio (D-09/D-10) + indicador "lleno" en la agenda (D-11) + checkpoint humano *(autonomous: false)*
 
 **Wave 3** *(blocked on 12-01, 12-02)*
@@ -533,6 +533,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
-| 12. Cupo por solape (recurso simultáneo) | 1/4 | In Progress|  |
+| 12. Cupo por solape (recurso simultáneo) | 2/4 | In Progress|  |
 | 13. Borrado de servicio preservando historial | 0/TBD | Not started | - |
 | 14. Cierre de backlog | 0/TBD | Not started | - |
