@@ -137,6 +137,41 @@ export async function seedProfessional(seeded: SeededTenant, opts?: { name?: str
   return ins.data.id
 }
 
+// seedExpiredHold: inserta DIRECTO (service-role, sin pasar por el RPC) un turno `pending_payment`
+// cuya seña YA VENCIÓ (`expires_at` en el pasado). No se puede sembrar con createAppointmentCore: el
+// core siempre escribe un expires_at FUTURO. Es el fixture del caso CR-01 (code-review de Phase 12):
+// un hold vencido NO debe consumir cupo en el carril del recurso simultáneo.
+//
+// Se siembra en un bucket (professional) ELEGIBLE por el caller a propósito: el core solo libera los
+// holds vencidos de SU bucket antes del RPC, así que para probar el gate SQL hay que dejarlo en OTRA
+// agenda. seat 0 + is_group false = lo que escribiría el motor para un turno individual (el índice
+// 011 no choca porque el bucket es distinto).
+export async function seedExpiredHold(
+  seeded: SeededTenant,
+  args: { professionalId: string | null; serviceId: string; date: string; time: string; durationMinutes?: number },
+): Promise<string> {
+  const ins = await seeded.admin
+    .from('appointments')
+    .insert({
+      business_id: seeded.businessId,
+      service_id: args.serviceId,
+      professional_id: args.professionalId,
+      location_id: seeded.locationId,
+      date: args.date,
+      time: args.time,
+      duration_minutes: args.durationMinutes ?? seeded.serviceDurationMinutes,
+      client_name: '__test_hold_vencido',
+      status: 'pending_payment',
+      expires_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // venció hace 1 h
+      seat: 0,
+      is_group: false,
+    })
+    .select('id')
+    .single()
+  if (ins.error || !ins.data) throw new Error(`seed: insert hold vencido falló: ${ins.error?.message}`)
+  return ins.data.id
+}
+
 // seedSpace: siembra UN espacio físico (cancha A/B/C) en `spaces` por service-role y devuelve el
 // space_id. Molde de seedTimeBlock (service-role insert + throw en error). El RPC book_slot_atomic
 // (migración 042) lee los espacios que ocupa una agenda vía agenda_spaces y toma un advisory lock por

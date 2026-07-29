@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, seedSimultaneousService, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, seedSimultaneousService, seedExpiredHold, type SeededTenant } from './helpers/booking-fixtures'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { GET as availabilityGET } from '@/app/api/booking/availability/route'
 import type { NextRequest } from 'next/server'
@@ -116,6 +116,27 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
       const start = minutesOf(a.time as string)
       const end = start + Number(a.duration_minutes ?? 30)
       return at >= start && at < end // [inicio, fin) — mismo criterio semiabierto que tsrange &&
+    }).length
+  }
+
+  // Variante por AGENDA (bucket), sin filtrar por servicio: cuenta TODOS los turnos que ocupan la
+  // agenda del profesional del fixture en un instante dado. Es el assert del caso CR-02: la garantía
+  // que se prueba ahí no es "cuántos turnos de este servicio" (eso es el carril del cupo) sino
+  // "cuántos turnos, de cualquier servicio, se pisan en la MISMA agenda" — el anti-doble-booking de
+  // v0.9/v0.12 que el modo simultáneo NO puede desactivar.
+  async function occupantsOfBucketCovering(instant: string): Promise<number> {
+    const { data } = await t.admin
+      .from('appointments')
+      .select('time, duration_minutes')
+      .eq('business_id', t.businessId)
+      .eq('professional_id', t.professionalId)
+      .eq('date', DATE)
+      .in('status', ['confirmed', 'pending_payment'])
+    const at = minutesOf(instant)
+    return (data || []).filter(a => {
+      const start = minutesOf(a.time as string)
+      const end = start + Number(a.duration_minutes ?? 30)
+      return at >= start && at < end
     }).length
   }
 
@@ -453,5 +474,36 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
 
     // Assert duro: 1 sola fila ocupa el intervalo (la 2ª no entró).
     expect(await occupantsCovering('16:10')).toBe(1)
+  })
+
+  // ── Phase 12 / code-review — regresiones de los dos defectos REALES de reserva (CR-01, CR-02) ────
+
+  // CR-01 — un hold VENCIDO no consume cupo del carril simultáneo.
+  //
+  // El gate por solape de la 062 filtraba por status IN ('confirmed','pending_payment') sin descartar
+  // los `pending_payment` cuya seña ya venció. La justificación del camino grupal ("el core ya liberó
+  // los holds vencidos antes del RPC") NO aplica acá: el core libera los del SU bucket, y el carril
+  // simultáneo cuenta por service_id a través de TODAS las agendas. Un hold vencido de otro
+  // profesional restaba cupo hasta que corriera el cron diario → `slot_full` falso (availability
+  // mostraba el horario libre) y reserva perdida hasta 24 h.
+  //
+  // A/B verificado contra la DB local: con la 062 este test devuelve slot_full/409; con la 063 (que
+  // agrega la misma guarda `expires_at` que ya usaba la función 80 líneas más arriba) devuelve ok.
+  it('CR-01 — un hold VENCIDO no consume cupo del carril del recurso simultáneo', async () => {
+    await seedTimeBlock(t, { capacity: 1 })
+    await seedSimultaneousService(t, { capacity: 1 })
+
+    // Hold vencido del MISMO servicio en OTRA agenda: el core solo libera los holds vencidos de SU
+    // bucket antes del RPC, así que este llega VIVO al gate SQL (que cuenta cross-bucket).
+    const agendaB = await seedProfessional(t, { name: '__test_agenda_B_hold' })
+    await seedExpiredHold(t, { professionalId: agendaB, serviceId: t.serviceId, date: DATE, time: '16:00' })
+
+    // Cupo 1 y el único "ocupante" del intervalo es un hold ya vencido ⇒ el horario está LIBRE.
+    const res = await createAppointmentCore({ ...baseInput(), time: '16:10' })
+    expect(res.ok).toBe(true)
+
+    // Y el turno nuevo entró de verdad (1 fila viva del servicio cubriendo el instante; el hold
+    // vencido sigue en la tabla pero no cuenta).
+    expect(await occupantsOfBucketCovering('16:10')).toBe(1)
   })
 })

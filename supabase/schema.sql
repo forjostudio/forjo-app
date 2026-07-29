@@ -251,12 +251,16 @@ BEGIN
     -- Recurso simultáneo (D-02/D-03): cupo de services.capacity contado por SOLAPE, compitiendo SOLO
     -- contra turnos del MISMO service_id (carriles independientes, D-04). Predicado tsrange &&
     -- canónico (idéntico al EXCLUDE 013 y al bloque de espacio de 042). business_id EXPLÍCITO.
+    -- (063, CR-01) Guarda de holds VIGENTES: un `pending_payment` con la seña vencida NO ocupa. No se
+    -- puede delegar al core como hace la rama grupal (el core solo libera los holds de SU bucket y
+    -- este carril cuenta a través de TODAS las agendas) ⇒ daba `slot_full` falso hasta el cron diario.
     SELECT count(*) INTO v_overlap
     FROM appointments a
     WHERE a.business_id = p_business_id
       AND a.service_id = p_service_id
       AND a.date = p_date
       AND a.status IN ('confirmed', 'pending_payment')
+      AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
       AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
           && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration));
 

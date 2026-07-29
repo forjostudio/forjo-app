@@ -34,6 +34,9 @@ export type AgendaAppt = {
   // Contacto para el roster del admin (D-04). Datos propios del negocio sobre sus clientes.
   client_phone?: string | null
   client_email?: string | null
+  // Vencimiento de la seña de un `pending_payment` (code-review CR-01): un hold VENCIDO ya no ocupa
+  // lugar (el motor y availability lo descartan), así que tampoco puede contar para el aviso "lleno".
+  expires_at?: string | null
   duration_minutes: number | null
   location_id: string | null
   // FK a la serie del abono (D-09): no nulo → el turno viene de un abono (badge "Fijo").
@@ -486,11 +489,17 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // Se computa en memoria sobre initialAppointments (ya filtrados por business_id en el server).
   const overlapFullById = useMemo(() => {
     const full = new Map<string, { count: number; capacity: number }>()
+    // Un hold VENCIDO (pending_payment con la seña expirada) NO ocupa lugar: el motor lo descarta en
+    // el gate del RPC (migr. 063) y availability tampoco lo cuenta. Sin esta guarda el panel avisaba
+    // "lleno" sobre horarios que en realidad seguían reservables (code-review CR-01).
+    const nowMs = Date.now()
+    const isAlive = (a: AgendaAppt) =>
+      a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at).getTime() > nowMs
     // Carriles independientes por servicio y día (D-03/D-04): un servicio simultáneo solo compite
     // contra sí mismo.
     const lanes = new Map<string, AgendaAppt[]>()
     for (const a of initialAppointments) {
-      if (!a.service_id || !OCCUPYING_STATUSES.includes(a.status)) continue
+      if (!a.service_id || !OCCUPYING_STATUSES.includes(a.status) || !isAlive(a)) continue
       if (serviceById.get(a.service_id)?.capacity_mode !== 'simultaneous_resource') continue
       const key = `${a.service_id}|${a.date}`
       const arr = lanes.get(key) || []

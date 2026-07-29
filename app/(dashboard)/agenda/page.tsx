@@ -35,7 +35,10 @@ export default async function AgendaPage() {
       // abono_id (migr. 054, D-09): marca el turno como parte de una serie fija → badge "Fijo" en la agenda.
       // service_id (migr. 062, D-11): resuelve el modo de cupo del servicio para contar la ocupación
       // por SOLAPE de los recursos simultáneos (el join services(name) solo trae el nombre).
-      .select('id, date, time, status, client_name, client_phone, client_email, duration_minutes, location_id, abono_id, service_id, services(name), professionals(name)')
+      // expires_at (code-review CR-01): un hold `pending_payment` con la seña VENCIDA ya no ocupa
+      // lugar (el RPC y availability lo descartan), así que el aviso "lleno" por solape del panel
+      // tampoco puede contarlo. Sin esta columna el badge mentía hasta que corriera el cron diario.
+      .select('id, date, time, status, client_name, client_phone, client_email, expires_at, duration_minutes, location_id, abono_id, service_id, services(name), professionals(name)')
       .eq('business_id', business.id)
       .gte('date', weekStartStr)
       .neq('status', 'cancelled')
