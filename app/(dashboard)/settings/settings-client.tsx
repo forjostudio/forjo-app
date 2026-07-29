@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin, TriangleAlert, CalendarClock, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin, TriangleAlert, CalendarClock, RefreshCw, Users } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { getVerticalKeyByType, VERTICALS, RUBRO_PLACEHOLDERS, resolveVertical, type VerticalKey } from '@/lib/verticals'
@@ -93,6 +93,78 @@ function ProFields({ value, onChange, labels, showExtra }: {
             <Label>Email <span className="text-muted-foreground text-xs">(opcional)</span></Label>
             <Input type="email" value={value.email} onChange={e => set('email', e.target.value)} placeholder="profesional@email.com" />
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Modo de cupo del servicio (CUPO-01, migr. 062) ──────────────────────────
+// 'group_class' = comportamiento histórico: el cupo lo pone el BLOQUE de agenda (time_blocks.capacity)
+// y todos arrancan a la misma hora (clase de yoga). 'simultaneous_resource' = N turnos en paralelo
+// sobre el mismo recurso, contados por SOLAPE de intervalos contra services.capacity (2 camillas).
+// Los labels son FIJOS para todos los rubros (D-10): NO se rutean por lib/use-terminology.
+type CapacityMode = Service['capacity_mode']
+
+// El cupo N es un entero >= 1 (mismo CHECK que la DB). Un input vacío o basura cae a 1.
+function normalizeCapacity(n: number): number {
+  return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1
+}
+
+// Segmented control de modo + campo de cupo, reutilizado en alta (inline) y edición (dialog).
+// Molde del control: el radiogroup de "Preselección del profesional" (tab Equipo) — misma píldora
+// activa (bg-primary) y mismo contenedor bordeado. El campo N solo existe en modo simultáneo:
+// en clase grupal el cupo NO vive en el servicio (lo define el bloque de agenda), así que mostrarlo
+// mentiría sobre de dónde sale el número.
+function CapacityModeFields({ value, capacity, onChange, disabled }: {
+  value: CapacityMode
+  capacity: number
+  onChange: (patch: { capacity_mode?: CapacityMode; capacity?: number }) => void
+  disabled?: boolean
+}) {
+  const isSimultaneous = value === 'simultaneous_resource'
+  const opts: { key: CapacityMode; label: string }[] = [
+    { key: 'group_class', label: 'Clase grupal' },
+    { key: 'simultaneous_resource', label: 'Recurso simultáneo' },
+  ]
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Cómo se ocupa el cupo</Label>
+      <div role="radiogroup" aria-label="Cómo se ocupa el cupo" className="inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
+        {opts.map(o => (
+          <button
+            key={o.key}
+            type="button"
+            role="radio"
+            aria-checked={value === o.key}
+            disabled={disabled}
+            onClick={() => onChange({ capacity_mode: o.key })}
+            className={cn(
+              'min-h-11 px-3 py-2 rounded text-sm font-medium transition-colors disabled:opacity-60',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+              value === o.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        <span className="text-foreground">Clase grupal:</span> todos empiezan a la misma hora y comparten el cupo del horario (el número lo ponés en la grilla de la agenda).
+        {' '}<span className="text-foreground">Recurso simultáneo:</span> los turnos arrancan escalonados y se superponen, porque atendés varios a la vez (ej. 2 camillas).
+      </p>
+      {isSimultaneous && (
+        <div className="space-y-1 pt-1 max-w-[11rem]">
+          <Label className="text-xs text-muted-foreground">Cuántos a la vez</Label>
+          <Input
+            type="number"
+            value={capacity}
+            onFocus={e => e.target.select()}
+            onChange={e => onChange({ capacity: normalizeCapacity(parseInt(e.target.value)) })}
+            min={1}
+            step={1}
+            disabled={disabled}
+          />
         </div>
       )}
     </div>
@@ -380,18 +452,23 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // ── Tab 2 — Services ──────────────────────────────────────────────────────
   const [services, setServices] = useState<Service[]>(initialServices)
-  const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[] }>({ name: '', duration_minutes: 30, price: 0, location_ids: [] })
+  // capacity_mode/capacity (migr. 062): el default espeja el de la DB → un servicio nuevo nace en el
+  // modo histórico (cero regresión) y el dueño opta explícitamente por el recurso simultáneo.
+  const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
   const [delService, setDelService] = useState<Service | null>(null)
 
   async function addService() {
     if (!newService.name) return
-    const { name, duration_minutes, price, location_ids } = newService
+    const { name, duration_minutes, price, location_ids, capacity_mode } = newService
+    // El cupo N solo aplica al recurso simultáneo; en clase grupal se guarda 1 para que la columna
+    // no quede con un número que nadie lee (el cupo del grupal vive en time_blocks.capacity).
+    const capacity = capacity_mode === 'simultaneous_resource' ? normalizeCapacity(newService.capacity) : 1
     const { data, error } = await supabase.from('services')
-      .insert({ name, duration_minutes, price, location_ids: location_ids.length ? location_ids : null, business_id: business.id })
+      .insert({ name, duration_minutes, price, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id })
       .select().single()
     if (error) { toast.error('Error'); return }
     setServices(prev => [...prev, data as Service])
-    setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [] })
+    setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
     toast.success('Servicio agregado')
   }
   async function deleteService(id: string) {
@@ -424,11 +501,20 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // Edición de servicio (reusa el form de alta: nombre, duración, precio, consultorios).
   const [editSvc, setEditSvc] = useState<Service | null>(null)
-  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[] }>({ name: '', duration_minutes: 30, price: 0, location_ids: [] })
+  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
   const [savingEditSvc, setSavingEditSvc] = useState(false)
   function openEditService(s: Service) {
     setEditSvc(s)
-    setEditSvcForm({ name: s.name, duration_minutes: s.duration_minutes, price: Number(s.price), location_ids: serviceLocSet(s) })
+    // El fallback cubre filas viejas en memoria (el DEFAULT de la 062 ya las cubre en la DB):
+    // al reabrir, el modo y el cupo guardados vuelven seleccionados (CUPO-01).
+    setEditSvcForm({
+      name: s.name,
+      duration_minutes: s.duration_minutes,
+      price: Number(s.price),
+      location_ids: serviceLocSet(s),
+      capacity_mode: s.capacity_mode ?? 'group_class',
+      capacity: normalizeCapacity(Number(s.capacity)),
+    })
   }
   async function saveEditService() {
     if (!editSvc || !editSvcForm.name.trim()) return
@@ -440,6 +526,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       price: editSvcForm.price,
       location_ids: editSvcForm.location_ids.length ? editSvcForm.location_ids : null,
       location_id: null,
+      capacity_mode: editSvcForm.capacity_mode,
+      capacity: editSvcForm.capacity_mode === 'simultaneous_resource' ? normalizeCapacity(editSvcForm.capacity) : 1,
     }
     const { error } = await supabase.from('services').update(payload).eq('id', editSvc.id).eq('business_id', business.id)
     setSavingEditSvc(false)
@@ -1394,6 +1482,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   <Button size="icon" onClick={addService} className="h-9 w-9"><Plus className="w-4 h-4" /></Button>
                 </div>
               </div>
+              <CapacityModeFields
+                value={newService.capacity_mode}
+                capacity={newService.capacity}
+                onChange={patch => setNewService(f => ({ ...f, ...patch }))}
+              />
               {activeLocations.length > 0 && (
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> Se ofrece en</Label>
@@ -1433,6 +1526,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     <Input type="number" value={editSvcForm.price} onFocus={e => e.target.select()} onChange={e => setEditSvcForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} min={0} step={100} />
                   </div>
                 </div>
+                <CapacityModeFields
+                  value={editSvcForm.capacity_mode}
+                  capacity={editSvcForm.capacity}
+                  onChange={patch => setEditSvcForm(f => ({ ...f, ...patch }))}
+                  disabled={savingEditSvc}
+                />
                 {activeLocations.length > 0 && (
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> Se ofrece en</Label>
