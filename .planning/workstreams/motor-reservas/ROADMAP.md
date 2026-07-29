@@ -457,7 +457,23 @@ Plans:
   4. N+1 reservas escalonadas concurrentes sobre un recurso de cupo N nunca superan el cupo — verificado con un test de carrera real contra la DB (CUPO-04).
   5. Cero regresión del núcleo: cupo 1, canchas, generación forward de abonos, multi-staff y exclusión por espacio compartido se comportan exactamente igual, y los estados `slot_full`/`slot_taken` no se degradan (CUPO-05).
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 12-01-PLAN.md — Espinazo: migración 062 (columnas `capacity_mode`/`capacity` + CHECKs idempotentes + `book_slot_atomic` mode-aware: lock por modo + gate por solape + `public_services` con `capacity_mode`) + tipo `Service` + `[BLOCKING] supabase db reset` local *(autonomous: false)*
+
+**Wave 2** *(blocked on 12-01)*
+
+- [ ] 12-02-PLAN.md — Camino público mode-aware: booking-core landmine (early-return de solape mode-aware) + availability rama específica overlap-aware (D-12) + booking-client oculta "Cualquiera" en simultáneo (D-13) + manda `serviceId`
+- [ ] 12-03-PLAN.md — UI del panel: segmented control "Clase grupal / Recurso simultáneo" + campo de cupo N en el editor de servicio (D-09/D-10) + indicador "lleno" en la agenda (D-11) + checkpoint humano *(autonomous: false)*
+
+**Wave 3** *(blocked on 12-01, 12-02)*
+
+- [ ] 12-04-PLAN.md — Verificación: fixture `seedSimultaneousService` + casos CUPO-04 (carrera N+1 escalonada) / CUPO-02 / simultáneo cap 1 en `concurrency.test.ts` + `[BLOCKING] supabase db reset` + `npm run test` verde con regresión de las 4 vías (CUPO-05) *(autonomous: false)*
+
+**Waves**: Wave 1 = 12-01 (migración + RPC + tipos + apply local, del que dependen todos). Wave 2 = 12-02 + 12-03 en paralelo (camino público backend/read/selector · UI del panel; `files_modified` disjuntos, ambos dependen de las columnas/función del Plan 01). Wave 3 = 12-04 (tests de carrera + gate de reset + regresión; depende de la 062 y del core del Plan 02).
 
 **UI hint**: yes
 **Security/Integrity relevance**: **Security-sensitive — secure-phase obligatorio.** Modifica el corazón de la integridad del producto en una migración numerada nueva (`CREATE OR REPLACE FUNCTION`, aplicada a mano coordinada con el deploy — la última en prod es la **061**, la próxima la **062**). Riesgos clave: (a) **carrera de sobrecupo por solape** — el conteo por intervalo tiene que ocurrir bajo el mismo `pg_advisory_xact_lock` / la misma transacción `SECURITY DEFINER` que ya serializa el anti-sobrecupo y la exclusión por espacio; con la granularidad vieja (slot+bucket) dos reservas escalonadas toman locks distintos y se cuelan, así que el lock pasa a bucket+día/ventana **sin degradar** `slot_full`/`slot_taken` ni el caso cupo 1; (b) **regresión** de los cuatro consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) — todos entran por `createAppointmentCore`, un cambio de firma o semántica los afecta a los cuatro; (c) la asignación de `seat` no puede chocar con el índice único 011 (el cupo se evalúa por solape, el asiento sigue siendo posición en el slot exacto); (d) `book_slot_atomic` es `SECURITY DEFINER` (RLS no la protege): toda query nueva adentro filtra por `business_id` explícito, y el flag por servicio se re-valida por `business_id` sin confiar en IDs del cliente; (e) el flag por servicio (columna nueva) debe migrarse con default = clase grupal para cero regresión. El secure-phase gate verifica: atomicidad del anti-sobrecupo por solape bajo concurrencia real (test contra la DB, no lectura de código), cero regresión de los cuatro caminos + cupo 1, y aislamiento por tenant del conteo y del flag. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
@@ -517,6 +533,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
-| 12. Cupo por solape (recurso simultáneo) | 0/TBD | Not started | - |
+| 12. Cupo por solape (recurso simultáneo) | 0/4 | Not started | - |
 | 13. Borrado de servicio preservando historial | 0/TBD | Not started | - |
 | 14. Cierre de backlog | 0/TBD | Not started | - |
