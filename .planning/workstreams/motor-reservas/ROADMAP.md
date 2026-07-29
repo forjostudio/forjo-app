@@ -54,7 +54,7 @@ Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignaci�
 
 Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado como una única unidad revisable (secure-phase obligatorio); el borrado de servicio con historial es un cambio mediano independiente; el polish va al cierre.
 
-- [ ] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock re-granularizado + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking (**secure-phase obligatorio**)
+- [x] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock re-granularizado + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking (**secure-phase obligatorio**) (completed 2026-07-29)
 - [ ] **Phase 13: Borrado de servicio preservando historial** - Borrar un servicio con solo turnos pasados; modal que bloquea si hay futuros y ofrece desactivar; los turnos pasados sobreviven en el historial (Finanzas / ficha del cliente) vía desacople del FK (snapshot de nombre/precio en el turno)
 - [ ] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa")
 
@@ -457,7 +457,7 @@ Plans:
   4. N+1 reservas escalonadas concurrentes sobre un recurso de cupo N nunca superan el cupo — verificado con un test de carrera real contra la DB (CUPO-04).
   5. Cero regresión del núcleo: cupo 1, canchas, generación forward de abonos, multi-staff y exclusión por espacio compartido se comportan exactamente igual, y los estados `slot_full`/`slot_taken` no se degradan (CUPO-05).
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -471,7 +471,7 @@ Plans:
 
 **Wave 3** *(blocked on 12-01, 12-02)*
 
-- [ ] 12-04-PLAN.md — Verificación: fixture `seedSimultaneousService` + casos CUPO-04 (carrera N+1 escalonada) / CUPO-02 / simultáneo cap 1 en `concurrency.test.ts` + `[BLOCKING] supabase db reset` + `npm run test` verde con regresión de las 4 vías (CUPO-05) *(autonomous: false)*
+- [x] 12-04-PLAN.md — Verificación: fixture `seedSimultaneousService` + casos CUPO-04 (carrera N+1 escalonada) / CUPO-02 / simultáneo cap 1 en `concurrency.test.ts` + `[BLOCKING] supabase db reset` + `npm run test` verde con regresión de las 4 vías (CUPO-05) *(autonomous: false)*
 
 **Waves**: Wave 1 = 12-01 (migración + RPC + tipos + apply local, del que dependen todos). Wave 2 = 12-02 + 12-03 en paralelo (camino público backend/read/selector · UI del panel; `files_modified` disjuntos, ambos dependen de las columnas/función del Plan 01). Wave 3 = 12-04 (tests de carrera + gate de reset + regresión; depende de la 062 y del core del Plan 02).
 
@@ -533,6 +533,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
-| 12. Cupo por solape (recurso simultáneo) | 3/4 | In Progress|  |
+| 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete   | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 0/TBD | Not started | - |
 | 14. Cierre de backlog | 0/TBD | Not started | - |
