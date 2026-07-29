@@ -91,10 +91,11 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
   } = input
 
   // Anti-tampering de tenant: el servicio debe ser de ESTE negocio y estar activo. De acá
-  // sale la duración real (no se confía en nada del cliente).
+  // sale la duración real (no se confía en nada del cliente) y —desde la migr. 062— el MODO de
+  // cupo del servicio (`capacity_mode`/`capacity`), que decide si un solape es conflicto o no.
   const { data: service } = await supabase
     .from('services')
-    .select('id, name, active, duration_minutes, location_id')
+    .select('id, name, active, duration_minutes, location_id, capacity_mode, capacity')
     .eq('id', serviceId)
     .eq('business_id', business.id)
     .single()
@@ -206,6 +207,15 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     const taken = sameBucket.some(a =>
       a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at as string).getTime() > nowMs
     )
+    // Phase 12 (LANDMINE, CUPO-02): un servicio `simultaneous_resource` (migr. 062) cuenta su cupo
+    // por SOLAPE de intervalos contra `services.capacity` (2 camillas = 2 turnos escalonados en
+    // paralelo). Su `time_block` normalmente tiene capacity 1, así que SIN este gate el early-return
+    // de abajo cortaría el 2º turno solapado con slot_taken y el recurso NUNCA se llenaría (rechaza
+    // en el 2º, no en cupo+1). Es el mismo razonamiento con el que el GRUPAL ya se exceptúa: un
+    // solape "consigo mismo" hasta el cupo NO es conflicto, y la autoridad del cupo es el RPC
+    // (advisory lock service-day + count por solape → slot_full). Para `group_class` (default de
+    // TODA fila existente, incluidas canchas) esto es false ⇒ flujo byte-idéntico a hoy.
+    const isSimultaneousResource = service.capacity_mode === 'simultaneous_resource'
     // Re-check JS capacity-aware (Pitfall 5 / A5): el rechazo temprano `slot_taken` por SOLAPAMIENTO
     // solo aplica a bloques cupo 1, donde es el anti-doble-booking de duración variable de v0.9 (un
     // turno de 60' que pisa parcialmente a otro de 30' — el RPC NO lo cubre, solo cuenta el slot exacto).
@@ -213,7 +223,7 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     // exacto (D-03, duración fija) y un solape "consigo mismos" no es conflicto — la autoridad del cupo
     // es el RPC (advisory lock + count vs capacity → slot_full). Rechazar acá bloquearía falsamente al
     // 2º+ inscripto de la clase. Para cupo 1, capacity-aware ⇒ comportamiento byte-idéntico a hoy.
-    if (taken && slotCapacity <= 1) {
+    if (taken && slotCapacity <= 1 && !isSimultaneousResource) {
       return { ok: false, error: 'slot_taken', status: 409 }
     }
 
