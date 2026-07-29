@@ -1,12 +1,12 @@
 -- 063 — Endurecimiento del modo RECURSO SIMULTÁNEO (correcciones del code-review de Phase 12).
 --
--- Contexto (motor-reservas / Phase 12 — code-review CR-01, CR-02):
+-- Contexto (motor-reservas / Phase 12 — code-review CR-01, CR-02, CR-03):
 --   La 062 introdujo `services.capacity_mode = 'simultaneous_resource'` (cupo por SOLAPE) y ya está
 --   APLICADA A MANO EN PRODUCCIÓN ⇒ es historia inmutable: NO se edita. Esta migración la SUPERSEDE
 --   redefiniendo `book_slot_atomic` in-place con las tres correcciones del review. El cuerpo arranca
 --   del de la 062 y aplica los cambios encima; todo lo demás queda BYTE-IDÉNTICO.
 --
--- Qué corrige:
+-- Qué corrige (los tres agujeros que el review encontró en el anti-doble-booking del modo nuevo):
 --
 --   (CR-01) El gate por solape contaba holds VENCIDOS. El count filtraba por
 --           status IN ('confirmed','pending_payment') sin descartar los `pending_payment` cuya seña ya
@@ -33,6 +33,17 @@
 --           servicios") es un FOLLOW-UP deliberadamente fuera de alcance acá: el default tiene que
 --           BLOQUEAR, porque shippear "permitir" antes de que el dueño haya decidido nada es shippear
 --           el doble-booking. El cupo N del recurso sigue siendo cupo contra SÍ MISMO (D-04).
+--
+--   (CR-03) La re-granularización del lock rompía la serialización cross-modo que la 058 introdujo a
+--           propósito (§GA1). La 062 hacía que el modo simultáneo tomara hash(business+service+date)
+--           EN LUGAR de hash(business+date+time): dos claves ORTOGONALES, no una más gruesa ⇒ una
+--           reserva simultánea y una grupal del mismo instante dejaban de compartir lock. Eso reabría
+--           (1) `v_seat` calculado sin lock compartido (23505 espurio) y (2) la selección "cualquiera"
+--           eligiendo el mismo profesional en dos transacciones concurrentes (doble-booking real bajo
+--           concurrencia, justo lo que 058 §GA1 cerraba). Ahora el modo simultáneo toma LOS DOS locks
+--           y el de instante se toma SIEMPRE, en los dos modos. Orden GLOBAL FIJO —
+--           servicio-día → instante → espacios (042, ascendente)— idéntico en toda transacción, así
+--           que no se introduce ningún ciclo: deadlock-free.
 --
 -- Qué NO hace (invariantes del proyecto):
 --   - NO edita la 062 (ya aplicada a mano en prod).
@@ -100,29 +111,38 @@ BEGIN
   v_mode := COALESCE(v_mode, 'group_class');
   v_svc_cap := COALESCE(v_svc_cap, 1);
 
-  -- 1. (062, D-06) Advisory lock del slot, con la GRANULARIDAD que pide cada modo.
-  --    - 'simultaneous_resource': la carrera a serializar es la del SERVICIO ese DÍA, porque el cupo
-  --      se decide por SOLAPE y dos reservas escalonadas (16:00 y 16:15) tienen `time` distinto → con
-  --      el key fino tomaban locks DISTINTOS, no serializaban, y ambas pasaban el gate (= el sobrecupo
-  --      que la 062 corrige). El key (business_id + service_id + date) cubre exactamente el conjunto
-  --      sobre el que se cuenta. Cada servicio simultáneo tiene su propio carril (D-04).
-  --    - resto ('group_class', cupo 1, canchas, abonos): key de 058:82-83 INALTERADO → esas rutas
-  --      quedan byte-idénticas y no se les baja la concurrencia.
-  --    En AMBOS casos el lock se toma PRIMERO, antes de los locks por espacio (042, orden ascendente):
-  --    el orden parcial global `modo < espacios` se mantiene en toda transacción ⇒ deadlock-free.
+  -- 1. (063, CR-03) Advisory locks del slot. El modo simultáneo toma LOS DOS, en un orden GLOBAL FIJO.
+  --
+  --    (a) Lock de SERVICIO-DÍA — solo en 'simultaneous_resource' (062, D-06). El cupo de este modo se
+  --        decide por SOLAPE, y dos reservas escalonadas del mismo servicio (16:00 y 16:15) tienen
+  --        `time` distinto: sin este lock no serializan entre sí y ambas pasan el gate ⇒ sobrecupo
+  --        (el bug del UAT de la fase 07). El key cubre EXACTAMENTE el conjunto sobre el que se cuenta.
+  --
+  --    (b) Lock de INSTANTE (058 §GA1) — se toma SIEMPRE, en los DOS modos. La 062 lo había
+  --        REEMPLAZADO por (a) en el modo simultáneo, y (a) es ORTOGONAL, no más grueso: una reserva
+  --        simultánea y una grupal del mismo instante dejaban de compartir cualquier lock. Este lock
+  --        es lo que serializa `v_seat` (se computa contando el slot EXACTO del bucket: sin lock
+  --        compartido, dos transacciones de modos distintos obtienen el mismo seat → 23505 espurio) y
+  --        la selección "cualquiera" del paso 2 (sin él, dos requests concurrentes ven al mismo
+  --        profesional libre y ambas lo eligen; como una fila nace is_group=false y la otra true, el
+  --        EXCLUDE 013 tampoco las cruza ⇒ doble-booking REAL bajo concurrencia).
+  --
+  --    ORDEN: servicio-día → instante → espacios (042, ascendente). Es el MISMO orden en toda
+  --    transacción del sistema, así que no hay adquisición cruzada ⇒ deadlock-free (40P01 imposible
+  --    por esta vía). Para 'group_class' se toma exactamente UN lock, el mismo de 058 ⇒ byte-idéntico.
   --    hashtextextended → bigint (forma de un argumento, seed 0).
   IF v_mode = 'simultaneous_resource' THEN
     PERFORM pg_advisory_xact_lock(hashtextextended(
       p_business_id::text || p_service_id::text || p_date::text, 0));
-  ELSE
-    PERFORM pg_advisory_xact_lock(hashtextextended(
-      p_business_id::text || p_date::text || p_time::text, 0));
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    p_business_id::text || p_date::text || p_time::text, 0));
 
   -- 2. (058, §GA2 / D-01/D-02/D-03/D-07/D-08/D-10) Selección del profesional "cualquiera" BAJO el lock.
-  --    Solo si el caller pidió "cualquiera". La selección corre DESPUÉS del lock (Pitfall 2: correrla
-  --    antes reintroduce la carrera) y ANTES del bloque de espacio (que necesita el pro elegido).
-  --    (063) SIN CAMBIO respecto de 058/062.
+  --    Solo si el caller pidió "cualquiera". La selección corre DESPUÉS de los locks (Pitfall 2:
+  --    correrla antes reintroduce la carrera) y ANTES del bloque de espacio (que necesita el pro
+  --    elegido). (063) SIN CAMBIO respecto de 058/062, pero ahora vuelve a correr bajo el lock de
+  --    instante también en el modo simultáneo (CR-03).
   IF v_is_any THEN
     SELECT p.id
     INTO   v_effective_pro
@@ -283,7 +303,8 @@ BEGIN
     -- El ASIENTO sigue atado al slot EXACTO (D-05): el índice único 011 es (business, bucket, date,
     -- time, seat), así que el seat solo tiene que ser único DENTRO del mismo date+time. Dos turnos
     -- escalonados tienen `time` distinto → claves distintas → ambos seat 0 sin colisión. El solape es
-    -- el GATE del cupo, nunca el criterio del asiento.
+    -- el GATE del cupo, nunca el criterio del asiento. (063, CR-03) Este count ahora corre bajo el
+    -- lock de instante, que es lo que impide que dos modos distintos deriven el MISMO seat.
     SELECT count(*) INTO v_occupied
     FROM appointments a
     WHERE a.business_id = p_business_id

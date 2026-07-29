@@ -138,19 +138,21 @@ BEGIN
   v_mode := COALESCE(v_mode, 'group_class');
   v_svc_cap := COALESCE(v_svc_cap, 1);
 
-  -- 1. (062, D-06) Advisory lock del slot con la GRANULARIDAD que pide cada modo.
-  --    - 'simultaneous_resource': key (business_id + service_id + date) — el cupo se decide por SOLAPE,
-  --      así que hay que serializar TODAS las reservas de ese servicio ese día (las escalonadas tienen
-  --      `time` distinto y con el key fino no serializaban → sobrecupo).
-  --    - resto ('group_class', cupo 1, canchas, abonos): key de 058 INALTERADO (byte-idéntico).
-  --    En ambos casos el lock va PRIMERO, antes de los locks por espacio (042) ⇒ deadlock-free.
+  -- 1. (063, CR-03) Advisory locks del slot. El modo simultáneo toma LOS DOS, en orden GLOBAL FIJO.
+  --    (a) SERVICIO-DÍA, solo en 'simultaneous_resource' (062, D-06): el cupo se decide por SOLAPE y
+  --        las reservas escalonadas tienen `time` distinto → sin este lock no serializan (sobrecupo).
+  --    (b) INSTANTE (058 §GA1): se toma SIEMPRE, en los DOS modos. La 062 lo había REEMPLAZADO por (a)
+  --        en el modo simultáneo, y (a) es ORTOGONAL (no más grueso) ⇒ una reserva simultánea y una
+  --        grupal del mismo instante dejaban de compartir lock. Es lo que serializa `v_seat` (23505
+  --        espurio) y la selección "cualquiera" contra el resto de las reservas del mismo instante.
+  --    Orden servicio-día → instante → espacios (042, ascendente), idéntico en toda transacción ⇒
+  --    deadlock-free. Para 'group_class' se toma UN solo lock, el de 058 ⇒ byte-idéntico.
   IF v_mode = 'simultaneous_resource' THEN
     PERFORM pg_advisory_xact_lock(hashtextextended(
       p_business_id::text || p_service_id::text || p_date::text, 0));
-  ELSE
-    PERFORM pg_advisory_xact_lock(hashtextextended(
-      p_business_id::text || p_date::text || p_time::text, 0));
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    p_business_id::text || p_date::text || p_time::text, 0));
 
   -- 2. (058, §GA2 / D-01/D-02/D-03/D-07/D-08/D-10) Selección del profesional "cualquiera" BAJO el lock.
   --    Solo si el caller pidió "cualquiera". La selección corre DESPUÉS del lock (Pitfall 2) y ANTES
