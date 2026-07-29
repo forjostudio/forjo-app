@@ -376,6 +376,14 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     await seedTimeBlock(t, { capacity: 1 })
     await seedSimultaneousService(t, { capacity: 2 })
 
+    // WARM-UP OBLIGATORIO (si no, el test es un falso verde). Cada createAppointmentCore hace 5
+    // round-trips HTTP ANTES del .rpc; con el pool de conexiones frío, el 1er carril abre el socket y
+    // los otros dos esperan a que se abran los suyos → llegan al RPC ESCALONADOS y la carrera nunca
+    // ocurre (medido: sin warm-up, este mismo test PASA incluso con el lock viejo). Tres lecturas
+    // triviales en paralelo abren los 3 sockets sin tocar el estado, y a partir de ahí los tres
+    // carriles llegan al RPC juntos (medido: con el lock viejo, 3/3 corridas dan 3 ok = sobrecupo).
+    await Promise.all([1, 2, 3].map(() => t.admin.from('services').select('id').eq('id', t.serviceId)))
+
     const [a, b, c] = await Promise.all([
       createAppointmentCore({ ...baseInput(), time: '16:00' }),
       createAppointmentCore({ ...baseInput(), time: '16:10' }),
