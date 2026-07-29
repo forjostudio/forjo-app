@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-07-29T16:22:53.724Z"
+stopped_at: Completed 12-03-PLAN.md (UAT visual auto-aprobada, 5 pasos manuales PENDIENTES)
+last_updated: "2026-07-29T16:38:30.601Z"
 last_activity: 2026-07-29 -- Phase 12 execution started
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 57
-  completed_plans: 55
+  completed_plans: 56
   percent: 79
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 12 (cupo-por-solape-recurso-simult-neo) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-29 -- Phase 12 execution started
 
@@ -68,6 +68,7 @@ Last activity: 2026-07-29 -- Phase 12 execution started
 | Phase 08 P08-02 | 22min | 3 tasks | 3 files |
 | Phase 12 P01 | 18min | 3 tasks | 6 files |
 | Phase 12 P02 | 12min | 3 tasks | 3 files |
+| Phase 12 P03 | 12min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,10 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 12]: Advisory lock re-granularizado por modo en book_slot_atomic: simultaneo = hash(business_id+service_id+date), resto inalterado; el lock de modo va primero -> orden anti-deadlock preservado
 - [Phase 12]: public_services expone solo capacity_mode; capacity (el N de lugares) queda server-side por el no-leak
 - [Phase ?]: 12-02: el read-path de disponibilidad cuenta el solape por service_id sin bucketear por profesional (espeja el gate del RPC 062) y devuelve busy vacio en modo simultaneo
+- [Phase 12]: 12-03: el campo de cupo N solo existe en modo simultaneo; en clase grupal el cupo vive en time_blocks.capacity y el update escribe capacity=1
+- [Phase 12]: 12-03: un servicio simultaneo NO abre el roster grupal del slot; el aviso 'lleno' es POR TURNO (badge N/N por solape) y no por franja (D-11)
+- [Phase 12]: 12-03: labels y microcopy del modo de cupo FIJOS para todos los verticales (D-10); el badge dice 'N/N lleno', no 'N/N camillas' — a ratificar en la UAT visual
+- [Phase 12]: 12-03: el checkpoint bloqueante de UAT visual se AUTO-APROBO por workflow.auto_advance; los 5 pasos manuales siguen PENDIENTES (ver 12-03-SUMMARY, seccion 'Pendiente de UAT visual')
 
 ### Pending Todos
 
@@ -181,8 +186,8 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-29T16:22:47.394Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-07-29T16:38:30.581Z
+Stopped at: Completed 12-03-PLAN.md (UAT visual auto-aprobada, 5 pasos manuales PENDIENTES)
 Resume file: None
 
 ## Operator Next Steps
