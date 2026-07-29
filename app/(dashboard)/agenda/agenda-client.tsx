@@ -38,6 +38,9 @@ export type AgendaAppt = {
   location_id: string | null
   // FK a la serie del abono (D-09): no nulo → el turno viene de un abono (badge "Fijo").
   abono_id?: string | null
+  // FK al servicio (migr. 062, D-11): resuelve capacity_mode/capacity para el aviso "lleno" por
+  // solape de los recursos simultáneos. El join services(name) NO lo trae (solo el nombre).
+  service_id?: string | null
   services: { name?: string } | null
   professionals: { name?: string } | null
 }
@@ -471,6 +474,47 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     return cap || 1
   }, [initialTimeBlocks])
 
+  // ── Ocupación por SOLAPE del recurso simultáneo (CUPO-01, D-11) ─────────────
+  // Index de servicios por id: los `services` llegan del server ya filtrados por business_id.
+  const serviceById = useMemo(() => new Map(services.map(s => [s.id, s])), [services])
+
+  // Para un servicio 'simultaneous_resource' el cupo NO se cuenta por hora de inicio exacta (eso es
+  // el modelo grupal, contador "8/15" del roster) sino por INTERSECCIÓN de intervalos contra los
+  // turnos del MISMO service_id — el mismo conjunto que gatea el RPC (062): business_id + service_id
+  // + date + estados que ocupan. Devuelve turno → {ocupados, cupo} SOLO para los turnos cuyo
+  // intervalo ya alcanzó el cupo; para group_class y cupo 1 el mapa queda vacío (cero regresión).
+  // Se computa en memoria sobre initialAppointments (ya filtrados por business_id en el server).
+  const overlapFullById = useMemo(() => {
+    const full = new Map<string, { count: number; capacity: number }>()
+    // Carriles independientes por servicio y día (D-03/D-04): un servicio simultáneo solo compite
+    // contra sí mismo.
+    const lanes = new Map<string, AgendaAppt[]>()
+    for (const a of initialAppointments) {
+      if (!a.service_id || !OCCUPYING_STATUSES.includes(a.status)) continue
+      if (serviceById.get(a.service_id)?.capacity_mode !== 'simultaneous_resource') continue
+      const key = `${a.service_id}|${a.date}`
+      const arr = lanes.get(key) || []
+      arr.push(a)
+      lanes.set(key, arr)
+    }
+    for (const [key, list] of lanes) {
+      const svc = serviceById.get(key.slice(0, key.indexOf('|')))
+      const capacity = Math.max(1, Number(svc?.capacity) || 1)
+      for (const a of list) {
+        const aStart = timeToMin(a.time)
+        // Duración faltante → 30, igual que el COALESCE del RPC. Sin buffer: el gate del motor
+        // compara los intervalos crudos.
+        const aEnd = aStart + (a.duration_minutes ?? 30)
+        const count = list.filter(b => {
+          const bStart = timeToMin(b.time)
+          return bStart < aEnd && aStart < bStart + (b.duration_minutes ?? 30)
+        }).length
+        if (count >= capacity) full.set(a.id, { count, capacity })
+      }
+    }
+    return full
+  }, [initialAppointments, serviceById])
+
   // Roster del slot seleccionado: turnos del MISMO (date, time) que ocupan lugar (confirmed/pending),
   // + el cupo del bloque que cubre el slot. Contador "N/capacity".
   const roster = useMemo(() => {
@@ -578,12 +622,28 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 {dayAppts.length === 0 ? (
                   <span className="text-[10px] text-muted-foreground">{st === 'closed' ? 'Cerrado' : 'Sin turnos'}</span>
                 ) : dayAppts.map(a => {
-                  const isGroup = capacityFor(ds, a.time) > 1
+                  // Recurso simultáneo (D-11): los turnos se ven como filas individuales con su
+                  // propio horario (el solape se lee en la grilla) — NO abren el roster del slot,
+                  // porque su contador "8/15" por franja no aplica a horarios escalonados.
+                  const isSimultaneous = !!a.service_id && serviceById.get(a.service_id)?.capacity_mode === 'simultaneous_resource'
+                  const isGroup = !isSimultaneous && capacityFor(ds, a.time) > 1
+                  const overlapFull = overlapFullById.get(a.id)
                   const chipClass = cn('rounded px-1.5 py-1 text-[11px] leading-tight border break-words', statusChip(a.status))
                   const chipBody = (
                     <>
                       <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
                       {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
+                      {/* Aviso "lleno" (D-11): el intervalo de ESTE turno ya alcanzó el cupo del
+                          recurso. Dato exclusivo del admin (el público nunca ve la ocupación, D-06). */}
+                      {overlapFull && (
+                        <Badge
+                          variant="outline"
+                          title={`El cupo de este horario está completo (${overlapFull.count} de ${overlapFull.capacity} a la vez)`}
+                          className="mt-0.5 h-4 gap-0.5 border-warning/30 bg-warning/10 px-1 py-0 text-[9px] font-medium text-warning"
+                        >
+                          <Users className="size-2.5!" /><span className="tabular-nums">{overlapFull.count}/{overlapFull.capacity}</span> lleno
+                        </Badge>
+                      )}
                       {/* Badge "Fijo" (D-09): el turno viene de un abono. Reusa el Badge del design system,
                           sizeado para no romper la tarjeta compacta del turno. */}
                       {a.abono_id && (

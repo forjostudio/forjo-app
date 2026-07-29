@@ -33,7 +33,9 @@ export default async function AgendaPage() {
       // client_phone/client_email para el roster del admin (D-04). Datos propios del negocio
       // sobre SUS clientes; el set ya viene filtrado por business_id (aislamiento por tenant).
       // abono_id (migr. 054, D-09): marca el turno como parte de una serie fija → badge "Fijo" en la agenda.
-      .select('id, date, time, status, client_name, client_phone, client_email, duration_minutes, location_id, abono_id, services(name), professionals(name)')
+      // service_id (migr. 062, D-11): resuelve el modo de cupo del servicio para contar la ocupación
+      // por SOLAPE de los recursos simultáneos (el join services(name) solo trae el nombre).
+      .select('id, date, time, status, client_name, client_phone, client_email, duration_minutes, location_id, abono_id, service_id, services(name), professionals(name)')
       .eq('business_id', business.id)
       .gte('date', weekStartStr)
       .neq('status', 'cancelled')
