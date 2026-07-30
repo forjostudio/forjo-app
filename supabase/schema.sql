@@ -138,21 +138,21 @@ BEGIN
   v_mode := COALESCE(v_mode, 'group_class');
   v_svc_cap := COALESCE(v_svc_cap, 1);
 
-  -- 1. (063, CR-03) Advisory locks del slot. El modo simultáneo toma LOS DOS, en orden GLOBAL FIJO.
-  --    (a) SERVICIO-DÍA, solo en 'simultaneous_resource' (062, D-06): el cupo se decide por SOLAPE y
-  --        las reservas escalonadas tienen `time` distinto → sin este lock no serializan (sobrecupo).
-  --    (b) INSTANTE (058 §GA1): se toma SIEMPRE, en los DOS modos. La 062 lo había REEMPLAZADO por (a)
-  --        en el modo simultáneo, y (a) es ORTOGONAL (no más grueso) ⇒ una reserva simultánea y una
-  --        grupal del mismo instante dejaban de compartir lock. Es lo que serializa `v_seat` (23505
-  --        espurio) y la selección "cualquiera" contra el resto de las reservas del mismo instante.
-  --    Orden servicio-día → instante → espacios (042, ascendente), idéntico en toda transacción ⇒
-  --    deadlock-free. Para 'group_class' se toma UN solo lock, el de 058 ⇒ byte-idéntico.
-  IF v_mode = 'simultaneous_resource' THEN
-    PERFORM pg_advisory_xact_lock(hashtextextended(
-      p_business_id::text || p_service_id::text || p_date::text, 0));
-  END IF;
+  -- 1. (064, CR2-01) UN ÚNICO advisory lock de NEGOCIO-DÍA, en los DOS modos. Reemplaza y SUBSUME a
+  --    los dos locks de la 063 (servicio-día + instante). El EJE del invariante a serializar es
+  --    AGENDA-DÍA: los gates cross-servicio (rama simultánea + su espejo en la grupal) deciden sobre
+  --    TODA la agenda del día — los intervalos escalonados se pisan sin compartir `time`, y las filas
+  --    is_group=true están FUERA del EXCLUDE gist 013 ⇒ sin este lock esos gates son un count suelto
+  --    (TOCTOU) y el doble-booking cross-servicio entra bajo concurrencia (CR2-01).
+  --    NEGOCIO-día y no AGENDA-día porque con "cualquiera" (058) el bucket todavía no existe acá;
+  --    business_id + date sí se conocen de entrada. NO es regresión: es ESTRICTAMENTE MÁS GRUESO que
+  --    el lock de instante de 058 (§GA1) —business+date es prefijo de business+date+time— así que
+  --    preserva por construcción la vista consistente del instante para `v_seat` y para la selección
+  --    de candidato. COSTO ACEPTADO (aprobado): todas las reservas de un negocio en una fecha
+  --    serializan (RPC medido en 15-18 ms, key per-tenant). Un lock más fino REABRE CR2-01.
+  --    ORDEN GLOBAL: negocio-día → espacios (042, ascendente) ⇒ deadlock-free.
   PERFORM pg_advisory_xact_lock(hashtextextended(
-    p_business_id::text || p_date::text || p_time::text, 0));
+    p_business_id::text || p_date::text, 0));
 
   -- 2. (058, §GA2 / D-01/D-02/D-03/D-07/D-08/D-10) Selección del profesional "cualquiera" BAJO el lock.
   --    Solo si el caller pidió "cualquiera". La selección corre DESPUÉS del lock (Pitfall 2) y ANTES
@@ -215,6 +215,17 @@ BEGIN
   FROM agenda_spaces asp
   WHERE asp.business_id = p_business_id
     AND asp.professional_id = v_effective_pro;
+
+  -- (064, gap 3) RECURSO SIMULTÁNEO cupo > 1 + agenda con ESPACIO mapeado ⇒ RECHAZO EXPLÍCITO. Un
+  --   espacio es una sala/cancha FÍSICA y appointment_spaces_no_overlap (042) impone un turno por
+  --   espacio a la vez (capacidad 1): un recurso de cupo ≥ 2 sobre el mismo espacio es una
+  --   contradicción semántica, NO un bug a parchear relajando ese EXCLUDE (relajarlo borraría el
+  --   invariante de espacio compartido de v0.12). Antes fallaba solo y mal (el 2º turno moría con
+  --   23P01 → slot_taken mientras availability lo publicaba libre). Código PROPIO para no confundirlo
+  --   con slot_taken/slot_full. Con cupo 1 NO aplica (is_group=false ⇒ el EXCLUDE 013 lo cubre).
+  IF v_mode = 'simultaneous_resource' AND v_svc_cap > 1 AND v_space_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'simultaneous_space_conflict' USING ERRCODE = 'P0001';
+  END IF;
 
   IF v_space_ids IS NOT NULL THEN
     -- Lock por CADA espacio en el orden ascendente del array_agg → ambas reservas que pelean un
@@ -307,7 +318,38 @@ BEGIN
     -- 1 queda false a propósito: el EXCLUDE actúa de respaldo redundante con el gate por solape.
     v_is_group := (v_svc_cap > 1);
   ELSE
-    -- Clase grupal (default): comportamiento de 058 BYTE-IDÉNTICO — cupo por HORA DE INICIO EXACTA.
+    -- Clase grupal (default): cupo por HORA DE INICIO EXACTA.
+    --
+    -- (064, CR2-01 — eje INVERSO) Gate ESPEJO del gate cross-servicio de la rama simultánea. Sin él
+    -- este eje no tenía NINGÚN chequeo: una fila is_group=true de un recurso simultáneo está FUERA del
+    -- EXCLUDE gist 013, así que un turno grupal/individual se le montaba encima (con
+    -- time_blocks.capacity > 1 incluso SIN concurrencia; con capacity = 1 bajo concurrencia).
+    -- ALCANCE ACOTADO A PROPÓSITO: además de is_group=true + servicio distinto + solape, se exige que
+    -- el servicio de la fila preexistente esté en modo 'simultaneous_resource'. Sin esa condición se
+    -- rompe un caso legal HOY: time_blocks.capacity es del BLOQUE (no del servicio), así que con un
+    -- bloque de cupo 3 TODAS las filas nacen is_group=true y dos servicios distintos en el mismo slot
+    -- (Corte 10:00 + Color 10:00, mismo pro) son legales — bloquearlos sería drift de group_class.
+    IF EXISTS (
+      SELECT 1 FROM appointments a
+      WHERE a.business_id = p_business_id
+        AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+        AND a.service_id IS DISTINCT FROM p_service_id
+        AND a.date = p_date
+        AND a.is_group = true            -- solo las filas que se fueron del EXCLUDE 013
+        AND a.status IN ('confirmed', 'pending_payment')
+        AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
+        AND EXISTS (                     -- ...y se fueron por la feature nueva, no por cupo grupal
+              SELECT 1 FROM services s2
+              WHERE s2.id = a.service_id
+                AND s2.business_id = p_business_id
+                AND s2.capacity_mode = 'simultaneous_resource'
+            )
+        AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+            && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))
+    ) THEN
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+
     -- 2. Capacity del bloque que cubre este slot (plantilla semanal: day_of_week + ventana).
     --    Si no hay bloque que lo cubra, default 1 (comportamiento individual). EXTRACT(dow) usa la
     --    misma convención que time_blocks.day_of_week (0=domingo..6=sábado).
