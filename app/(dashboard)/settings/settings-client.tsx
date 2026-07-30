@@ -116,11 +116,41 @@ function normalizeCapacity(n: number): number {
 // activa (bg-primary) y mismo contenedor bordeado. El campo N solo existe en modo simultáneo:
 // en clase grupal el cupo NO vive en el servicio (lo define el bloque de agenda), así que mostrarlo
 // mentiría sobre de dónde sale el número.
-function CapacityModeFields({ value, capacity, onChange, disabled }: {
+// spacesBlockSimultaneous: ¿alguna de las agendas que puede recibir turnos de este servicio tiene un
+// ESPACIO físico mapeado (agenda_spaces)? Si sí, el modo "Recurso simultáneo" queda inhabilitado.
+//
+// Por qué (migr. 064, gap 3 del code-review 2): un espacio es una sala/cancha FÍSICA compartida entre
+// agendas y la base impone UN turno por espacio a la vez (appointment_spaces_no_overlap, migr. 042),
+// o sea capacidad 1. Un recurso de cupo ≥ 2 sobre ese mismo espacio es una contradicción semántica:
+// el RPC lo rechaza de entrada con `simultaneous_space_conflict`. Antes de la 064 la combinación se
+// podía guardar y fallaba sola y mal (el 2º turno moría con slot_taken mientras la página pública
+// seguía ofreciendo el horario). Gatearlo acá es lo que evita que el dueño llegue a ese estado.
+//
+// Quiénes son "las agendas del servicio": las mismas que calcula el bloque de cobertura de arriba —
+// professionalsForService (fuente ÚNICA de la regla del comodín, @/lib/staff-services). PROHIBIDO
+// reimplementar la regla acá. Para un servicio NUEVO (todavía sin id) valen los comodines: un
+// servicio recién creado no tiene filas en la puente, así que lo puede hacer cualquier pro sin mapeo.
+function spacesBlockSimultaneous(
+  serviceId: string | null,
+  activeProfessionals: Professional[],
+  professionalServices: ProfessionalService[],
+  agendaSpaces: AgendaSpace[],
+): boolean {
+  if (agendaSpaces.length === 0) return false
+  const mapped = new Set(agendaSpaces.map(a => a.professional_id))
+  // serviceId null (alta) → un id imposible: professionalsForService devuelve solo los comodines.
+  const agendas = professionalsForService(serviceId ?? '__nuevo__', activeProfessionals, professionalServices)
+  return agendas.some(p => mapped.has(p.id))
+}
+
+function CapacityModeFields({ value, capacity, onChange, disabled, simultaneousBlocked = false }: {
   value: CapacityMode
   capacity: number
   onChange: (patch: { capacity_mode?: CapacityMode; capacity?: number }) => void
   disabled?: boolean
+  // (064, gap 3) El servicio se atiende en una agenda con espacio físico mapeado ⇒ "Recurso
+  // simultáneo" no se puede elegir (el espacio es 1-a-la-vez; ver spacesBlockSimultaneous).
+  simultaneousBlocked?: boolean
 }) {
   const isSimultaneous = value === 'simultaneous_resource'
   const opts: { key: CapacityMode; label: string }[] = [
@@ -131,24 +161,41 @@ function CapacityModeFields({ value, capacity, onChange, disabled }: {
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Cómo se ocupa el cupo</Label>
       <div role="radiogroup" aria-label="Cómo se ocupa el cupo" className="inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
-        {opts.map(o => (
+        {opts.map(o => {
+          // El modo bloqueado sigue siendo visible (no se esconde la opción: el dueño tiene que
+          // entender POR QUÉ no está disponible), pero no se puede activar. Si el servicio YA estaba
+          // en ese modo, el botón del otro modo queda habilitado para poder salir.
+          const blocked = simultaneousBlocked && o.key === 'simultaneous_resource' && value !== o.key
+          return (
           <button
             key={o.key}
             type="button"
             role="radio"
             aria-checked={value === o.key}
-            disabled={disabled}
+            disabled={disabled || blocked}
             onClick={() => onChange({ capacity_mode: o.key })}
             className={cn(
               'min-h-11 px-3 py-2 rounded text-sm font-medium transition-colors disabled:opacity-60',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
               value === o.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+              blocked && 'cursor-not-allowed',
             )}
           >
             {o.label}
           </button>
-        ))}
+          )
+        })}
       </div>
+      {simultaneousBlocked && (
+        <p role="status" className="flex items-start gap-2 text-xs font-medium text-warning">
+          <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+          <span>
+            “Recurso simultáneo” no está disponible: este servicio se atiende en una agenda con un
+            espacio asignado, y un espacio se usa de a un turno por vez. Si querés varios en paralelo,
+            sacale el espacio a esa agenda en <Link href="/equipo" className="underline underline-offset-2">Equipo</Link>.
+          </span>
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         <span className="text-foreground">Clase grupal:</span> todos empiezan a la misma hora y comparten el cupo del horario (el número lo ponés en la grilla de la agenda).
         {' '}<span className="text-foreground">Recurso simultáneo:</span> los turnos arrancan escalonados y se superponen, porque atendés varios a la vez (ej. 2 camillas).
@@ -806,6 +853,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   const activeLocations = locations.filter(l => l.is_active !== false)
   const canAddLocation = true // sucursales sin tope de plan
+
+  // Agendas activas: base del bloque de cobertura por servicio (D-08) y del gate de "Recurso
+  // simultáneo" vs. espacios (064, gap 3). Se filtra a activas acá (D-16: el caller filtra, no el
+  // helper puro de @/lib/staff-services).
+  const activeProfessionals = professionals.filter(p => p.active)
 
   async function addLocation() {
     if (!newLocation.name.trim()) return
@@ -1486,6 +1538,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 value={newService.capacity_mode}
                 capacity={newService.capacity}
                 onChange={patch => setNewService(f => ({ ...f, ...patch }))}
+                simultaneousBlocked={spacesBlockSimultaneous(null, activeProfessionals, professionalServices, agendaSpaces)}
               />
               {activeLocations.length > 0 && (
                 <div className="space-y-1.5">
@@ -1531,6 +1584,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   capacity={editSvcForm.capacity}
                   onChange={patch => setEditSvcForm(f => ({ ...f, ...patch }))}
                   disabled={savingEditSvc}
+                  simultaneousBlocked={spacesBlockSimultaneous(editSvc?.id ?? null, activeProfessionals, professionalServices, agendaSpaces)}
                 />
                 {activeLocations.length > 0 && (
                   <div className="space-y-1.5">
