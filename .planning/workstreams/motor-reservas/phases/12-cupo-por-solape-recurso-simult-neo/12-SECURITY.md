@@ -139,13 +139,24 @@ que no revela nada de otro tenant y cuya alternativa era un `slot_taken` mentiro
 
 ## Condición de despliegue
 
-La fase **no está segura en producción** hasta que se aplique la **migración 064** a mano
-(prod hoy = 063), seguida de `NOTIFY pgrst, 'reload schema';`. Sin ella siguen abiertos en prod:
+**RESUELTA.** Las migraciones **062, 063 y 064 están todas aplicadas a mano en producción**
+(062/063 el 2026-07-29, 064 el 2026-07-30), cada una seguida de `NOTIFY pgrst, 'reload schema';`.
+
+Con la 064 en prod quedaron cerrados los tres huecos que dependían de ella:
 
 - el doble-booking cross-servicio escalonado bajo concurrencia (CR2-01 → T-12-01),
 - el eje inverso sin gate espejo (T-12-06),
 - la combinación simultáneo + espacio mapeado fallando como `slot_taken` mientras `availability`
-  publica el horario libre (T-12-01 / T-12-08 en su versión de prod).
+  publica el horario libre (T-12-01 / T-12-08).
+
+> Redacción original (histórica): esta sección decía "la fase **no está segura en producción** hasta
+> que se aplique la migración 064 a mano (prod hoy = 063)". Se escribió durante la auditoría, cuando
+> la 064 todavía no estaba aplicada. Corregida el 2026-07-30 tras la confirmación del usuario.
+
+**Pendiente de despliegue, no de seguridad:** el código de la fase sigue sin pushear. Prod corre las
+tres migraciones con el código anterior, lo cual es seguro — `capacity_mode` nace `'group_class'` por
+DEFAULT, no hubo backfill, la rama grupal es byte-idéntica, y sin la UI deployada ningún servicio
+puede marcarse como `simultaneous_resource`.
 
 ## Registro de auditoría
 
