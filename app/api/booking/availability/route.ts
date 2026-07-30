@@ -106,11 +106,20 @@ export async function GET(request: NextRequest) {
     //    confiar en un serviceId ajeno). Sin service de este negocio → invalid_service (400).
     const { data: svc } = await supabase
       .from('services')
-      .select('duration_minutes')
+      .select('duration_minutes, capacity_mode')
       .eq('id', serviceIdParam)
       .eq('business_id', business.id)
       .single()
     if (!svc) return Response.json({ ok: false, error: 'invalid_service' }, { status: 400 })
+    // T-12-11: el combo "Cualquiera" + RECURSO SIMULTÁNEO no está soportado (D-13) y el write-path lo
+    // rechaza con este mismo código (lib/booking-core.ts). El read-path TIENE que coincidir: servir acá
+    // la grilla agregada sería ofrecerle al público horarios que después mueren en el create. El gate de
+    // UI del selector es UX, no un control — este endpoint es anónimo y alcanzable directo, así que el
+    // rechazo vive acá. Se corta ANTES de la agregación across-staff; el camino específico / canchas /
+    // sin `any` no pasa por este bloque y queda byte-idéntico.
+    if (svc.capacity_mode === 'simultaneous_resource') {
+      return Response.json({ ok: false, error: 'any_professional_unsupported' }, { status: 400 })
+    }
     const dur = Number(svc.duration_minutes) || 30
     const buffer = Number(business.buffer_minutes) || 0
 

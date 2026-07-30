@@ -79,7 +79,13 @@ export type CreateAppointmentResult =
       // era indistinguible de un horario realmente ocupado. El panel ya no ofrece el modo para esos
       // servicios (settings-client.tsx), así que en la práctica solo lo puede ver una configuración
       // vieja o una request forzada por API.
-      error: 'invalid_service' | 'invalid_professional' | 'slot_taken' | 'slot_full' | 'simultaneous_space_conflict' | 'insert_failed'
+      // 'any_professional_unsupported' (T-12-11, secure-phase de Phase 12): se pidió "Cualquiera"
+      // (autoAssign) sobre un servicio en modo RECURSO SIMULTÁNEO. D-13 declara la combinación NO
+      // soportada: la asignación automática del RPC (058) marca "ocupado" a cualquier agenda con un
+      // solape, así que no sabe usar el 2º lugar del recurso. Código PROPIO a propósito: NO se colapsa
+      // en slot_taken (haría indistinguible un combo no soportado de un horario realmente ocupado) ni
+      // en invalid_service (el servicio es válido; lo que no se soporta es la VÍA de asignación).
+      error: 'invalid_service' | 'invalid_professional' | 'any_professional_unsupported' | 'slot_taken' | 'slot_full' | 'simultaneous_space_conflict' | 'insert_failed'
       status: 400 | 409 | 500
     }
 
@@ -113,6 +119,22 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     .single()
   if (!service || service.active === false) {
     return { ok: false, error: 'invalid_service', status: 400 }
+  }
+
+  // ── T-12-11: "Cualquiera" + RECURSO SIMULTÁNEO = combo NO soportado, rechazado ACÁ (server) ──────
+  // D-13 difiere la combinación: la asignación automática del RPC (058) considera "ocupada" a toda
+  // agenda con cualquier turno solapado, así que nunca ofrecería el 2º lugar del recurso simultáneo —
+  // el pedido termina en un slot_taken espurio (falla cerrado, pero degrada la disponibilidad).
+  //
+  // OJO al que venga después: el selector público YA oculta la tarjeta "Cualquiera" para estos
+  // servicios (`app/[slug]/booking-client.tsx`, D-13). Eso es UX, NO un control de seguridad — los
+  // endpoints públicos son alcanzables directo y un POST con `anyProfessional:true` forjado se saltea
+  // la UI entera. ESTE chequeo es el control real: NO lo borres por "redundante con el front".
+  //
+  // Va ANTES de la rama autoAssign (y del resto del trabajo) para no gastar queries en una request
+  // que ya está rechazada. 400 (request no soportada), no 409: no hay conflicto de horario.
+  if (autoAssign && service.capacity_mode === 'simultaneous_resource') {
+    return { ok: false, error: 'any_professional_unsupported', status: 400 }
   }
 
   // El profesional (si se eligió) también debe ser del negocio.

@@ -4,17 +4,17 @@ workstream: motor-reservas
 audited: 2026-07-30
 asvs_level: 2
 threats_total: 18
-threats_closed: 17
-threats_open: 1
+threats_closed: 18
+threats_open: 0
 threats_accepted: 1
-status: open_threats
+status: secured
 block_on: report-only
 ---
 
 # Phase 12 — Verificación de amenazas (secure-phase)
 
 **Fase:** 12 — Cupo por solape / recurso simultáneo
-**Cerradas:** 17/18 · **Abiertas:** 1/18 (T-12-11, no bloqueante por sí sola)
+**Cerradas:** 18/18 · **Abiertas:** 0/18 (T-12-11 cerrada el 2026-07-30 con control server-side)
 **Nivel ASVS aplicado:** 2 (multi-tenant con superficie anónima)
 
 ## Advertencia de método: el registro de amenazas está DESFASADO
@@ -66,6 +66,7 @@ prueba que **la 064 está aplicada en el Supabase local** — es la evidencia du
 | T-12-08 | Information Disclosure | mitigate | La rama simultánea del read-path colapsa a booleano por slot: `full` es la UNIÓN de carril lleno / agenda ocupada / espacio tomado / config imposible (`app/api/booking/availability/route.ts:330-338`) y devuelve `busy: []` (`:346`). Nunca viaja el conteo, los lugares restantes ni el motivo del bloqueo. Test negativo de fuga: `test/concurrency.test.ts:229` (CUPOS-02). |
 | T-12-09 | Tampering | mitigate | `serviceId` re-validado por tenant antes de usarse, en las dos ramas que lo aceptan: `app/api/booking/availability/route.ts:251-257` (rama simultánea → `invalid_service` 400) y `:107-113` (rama "Cualquiera"). Escritura: `lib/booking-core.ts:108-116`. |
 | T-12-10 | Tampering de integridad (LANDMINE) | mitigate | El early-return del core está gateado por modo y **no es ciego**: `lib/booking-core.ts:232` (`isSimultaneousResource`), `:240` (`takenByOtherService` — sólo el solape con OTRO servicio corta) y `:248` (`rejectEarly = isSimultaneousResource ? takenByOtherService : (taken && slotCapacity <= 1)`). Para `group_class` la expresión es literalmente la de antes ⇒ cero drift. Probado en las dos direcciones: `test/concurrency.test.ts:431-459` (la 2ª escalonada ENTRA) y `:498-540` (CR-02: el solape de otro servicio se rechaza). |
+| **T-12-11** | Tampering | mitigate | **CERRADA 2026-07-30 (control server-side, opción 1).** La mitigación ya NO es la UI: el combo "Cualquiera" + `simultaneous_resource` se rechaza en el SERVIDOR, en las dos superficies, con un código propio `any_professional_unsupported` (400). **Write-path:** `lib/booking-core.ts:130-138` — el gate corre inmediatamente después de resolver/validar el servicio por `business_id` (`:114-125`) y **antes** de la rama `autoAssign` (`:141`), así que un POST forjado muere sin tocar el RPC; el tipo del error se declara en `:82-88`. **Route:** `app/api/booking/create/route.ts:175-177` ya propaga `{ ok:false, error: result.error }` con `result.status` ⇒ el código sale al público como 400, sin special-case. **Read-path:** `app/api/booking/availability/route.ts:107-122` — la rama `any` extiende su re-validación por tenant a `capacity_mode` y devuelve el MISMO código/400 antes de la agregación across-staff, así que el público nunca ve una grilla para una combinación que el create rechaza. **UI:** el gate D-13 (`app/[slug]/booking-client.tsx:129-133`) se mantiene como UX y el nuevo código degrada a un mensaje en español (`:378-384`). Tests: `test/booking-cualquiera-public.test.ts:307-345` (POST forjado → 400 + **cero filas** en la DB + el MISMO POST sobre `group_class` sigue entrando) y `:352-386` (availability `any=1` → 400, y A/B que prueba que la grilla `any` de `group_class` queda byte-idéntica). **Fallando antes / pasando después:** el archivo daba 5/7 con los dos casos nuevos en rojo (`expected 200 to be 400` — o sea: la reserva forjada ENTRABA) y da **7/7** con el fix. Suite completa: **63 archivos / 792 pasados / 1 skipped / 0 fallos**; `./node_modules/.bin/tsc --noEmit` exit 0. Sin migración: el cierre es 100 % TypeScript (062/063/064 intactas). |
 | T-12-12 | Tampering de integridad | mitigate | `app/[slug]/canchas-booking-client.tsx` **no fue tocado en toda la fase**: `git log --name-only` sobre `app lib supabase test components` desde el inicio de la fase no lo lista. Canchas queda en `group_class` por el DEFAULT (`062:49-50`). `test/canchas-provision.test.ts` verde en la suite completa. |
 | T-12-13 | Tampering | mitigate | Doble capa: CHECK de la 062 a nivel DB (`062:55-66`) + escritura acotada al tenant en `app/(dashboard)/settings/settings-client.tsx:579` (`.update(payload).eq('id', ...).eq('business_id', business.id)`), con normalización previa `:577` y `:110-112`. |
 | T-12-14 | Elevation | mitigate | El panel usa el **browser client** (anon + RLS), nunca service-role: `settings-client.tsx:10` (`import { createClient } from '@/lib/supabase/client'`) y `:280`. Alta: `:513-514` (`business_id: business.id` explícito). Edición: `:579` (`.eq('business_id', business.id)`). Policy de respaldo: `supabase/schema.sql:1892` (`business member access ON public.services`). |
@@ -81,27 +82,24 @@ prueba que **la 064 está aplicada en el Supabase local** — es la evidencia du
 
 ### Abiertas
 
-| ID | Categoría | Mitigación esperada | Qué se buscó y no está |
-|----|-----------|---------------------|------------------------|
-| **T-12-11** | Tampering | "el selector oculta *Cualquiera* (D-13)" | **La mitigación declarada es un control de UI, no un control de seguridad — y no existe ningún control server-side equivalente.** Buscado en: `app/api/booking/create/route.ts:38` (`anyProfessional = body.anyProfessional === true`, sin ningún chequeo de `capacity_mode`), `:173` (se pasa tal cual a `autoAssign`), `lib/booking-core.ts:123-124` (con `autoAssign` se saltea la resolución de profesional **y los re-checks JS enteros**, `:147`), `app/api/booking/availability/route.ts:104` (la rama `any=1` no mira `capacity_mode`). El único gate es `app/[slug]/booking-client.tsx:129-133` (`showAny = capaces.length >= 2 && !isSimultaneousResource`), trivialmente evitable con un POST forjado. |
+Ninguna. **T-12-11 era la única y se cerró el 2026-07-30** con la opción 1 (control server-side); su
+verdicto vive ahora en la tabla de cerradas. Se deja el diagnóstico original como histórico:
 
-**Impacto real de T-12-11 (por qué no es BLOCKER pero sí queda abierta):** forzar el combo **no
-permite sobrecupo**. Con `autoAssign`, la selección de candidato del RPC exige agenda totalmente
-libre en el intervalo (`064:207-219`), el gate cross-servicio sigue corriendo sobre el bucket elegido
-(`064:325-338`) y el cupo se sigue contando por solape contra `services.capacity` a través de todas
-las agendas (`064:350-364`). El invariante de integridad se sostiene; lo que se degrada es la
-**disponibilidad**: el recurso simultáneo nunca ofrece su 2º lugar por esa vía y devuelve
-`slot_taken` espurio. Es decir, falla cerrado.
+**Estado previo (2026-07-30, antes del fix):** la mitigación declarada era *"el selector oculta
+Cualquiera (D-13)"* — un control de UI, no un control de seguridad, sin equivalente server-side.
+Buscado y NO encontrado en: `app/api/booking/create/route.ts:38` (`anyProfessional = body.anyProfessional === true`,
+sin chequeo de `capacity_mode`), `:173` (se pasaba tal cual a `autoAssign`), `lib/booking-core.ts`
+(con `autoAssign` se salteaba la resolución de profesional **y los re-checks JS enteros**),
+`app/api/booking/availability/route.ts:104` (la rama `any=1` no miraba `capacity_mode`). El único gate
+era `app/[slug]/booking-client.tsx:129-133`, evitable con un POST forjado.
 
-**Acción requerida — elegir una:**
-1. **Cerrar con control server-side** (recomendado): en `app/api/booking/create/route.ts`, tras
-   resolver el servicio, rechazar `anyProfessional === true` cuando
-   `capacity_mode === 'simultaneous_resource'` con un código propio; y en
-   `app/api/booking/availability/route.ts:104` no entrar a la rama `any` para servicios simultáneos.
-2. **Re-dispositar T-12-11 a `accept`** dejando asentado que el combo forzado degrada disponibilidad
-   pero no integridad, y que el riesgo residual es de UX del propio negocio.
-
-No corresponde parchear implementación desde este gate: queda como decisión del dueño de la fase.
+**Impacto medido (por qué no fue BLOCKER):** forzar el combo **no permitía sobrecupo**. Con
+`autoAssign`, la selección de candidato del RPC exige agenda totalmente libre en el intervalo
+(`064:207-219`), el gate cross-servicio corre sobre el bucket elegido (`064:325-338`) y el cupo se
+cuenta por solape contra `services.capacity` a través de todas las agendas (`064:350-364`). El
+invariante de integridad se sostenía; lo que se degradaba era la **disponibilidad**: el recurso
+simultáneo nunca ofrecía su 2º lugar por esa vía y devolvía `slot_taken` espurio (fail-closed).
+El fix convierte esa degradación silenciosa en un rechazo explícito y distinguible.
 
 ## Riesgos residuales (documentados, fuera del registro)
 
@@ -148,3 +146,29 @@ La fase **no está segura en producción** hasta que se aplique la **migración 
 - el eje inverso sin gate espejo (T-12-06),
 - la combinación simultáneo + espacio mapeado fallando como `slot_taken` mientras `availability`
   publica el horario libre (T-12-01 / T-12-08 en su versión de prod).
+
+## Registro de auditoría
+
+### 2026-07-30 — cierre de T-12-11 (control server-side)
+
+- **Disposición:** T-12-11 pasa de `open` a **`mitigate` / CLOSED**. Registro: **18/18 cerradas**,
+  **0 abiertas**, 1 aceptada (T-12-15, sin cambios). `status: secured`.
+- **Opción tomada:** la 1 (cerrar con control server-side). Se descartó re-dispositar a `accept`: el
+  combo forzado no rompe integridad, pero un control de UI no puede ser la mitigación registrada de
+  una amenaza de tampering sobre una superficie anónima.
+- **Alcance:** SOLO T-12-11. No se tocaron T-12-15 (riesgo aceptado) ni los residuales R-1/R-2/R-3
+  — **R-1 sigue abierto a propósito** (merece fase propia).
+- **Sin SQL:** el cierre es 100 % TypeScript. Las migraciones **062/063/064 no se tocaron** y **no se
+  escribió ninguna migración nueva** (las tres ya están aplicadas en producción según el dueño de la
+  fase, 2026-07-30 — dato que corrige la "Condición de despliegue" de arriba, redactada cuando la 064
+  todavía no estaba en prod; la sección se deja como estaba por trazabilidad histórica).
+- **Cambios:** `lib/booking-core.ts` (nuevo código `any_professional_unsupported` + gate previo a la
+  rama `autoAssign`), `app/api/booking/availability/route.ts` (rama `any` mode-aware, mismo código),
+  `app/[slug]/booking-client.tsx` (mensaje en español; el gate D-13 de UI se mantiene, marcado en el
+  comentario como UX y NO como el control, para que nadie lo borre por "redundante"),
+  `test/booking-cualquiera-public.test.ts` (2 casos nuevos).
+- **Evidencia ejecutada:** `npx vitest run test/booking-cualquiera-public.test.ts --no-file-parallelism`
+  → **5/7 antes** (los 2 casos nuevos en rojo con `expected 200 to be 400`: la request forjada entraba)
+  → **7/7 después**. `npm run test -- --no-file-parallelism` → **63 archivos / 792 pasados / 1 skipped /
+  0 fallos** (baseline previo: 790 pasados; +2 = los casos nuevos). `./node_modules/.bin/tsc --noEmit`
+  → exit 0.

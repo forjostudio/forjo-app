@@ -375,6 +375,12 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         setSubmitting(false)
         if (data?.error === 'slot_taken') {
           toast.error('Ese horario se acaba de ocupar, elegí otro.')
+        } else if (data?.error === 'any_professional_unsupported') {
+          // T-12-11: el server rechaza "Cualquiera" sobre un servicio de recurso simultáneo (D-13). La
+          // tarjeta ya está oculta arriba (showAny), así que esto sólo se ve con una pestaña vieja o un
+          // servicio que cambió de modo mientras el cliente reservaba: se pide elegir profesional en vez
+          // de un "Error al confirmar" genérico.
+          toast.error('Para este servicio tenés que elegir un profesional. Recargá la página e intentá de nuevo.')
         } else if (data?.error === 'recaptcha_failed') {
           toast.error('No pudimos verificar que no seas un bot. Recargá la página e intentá de nuevo.')
         } else {

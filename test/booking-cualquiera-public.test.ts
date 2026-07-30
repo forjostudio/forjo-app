@@ -8,6 +8,7 @@ import {
   seedTimeBlock,
   seedProfessional,
   seedProfessionalService,
+  seedSimultaneousService,
   type SeededTenant,
 } from './helpers/booking-fixtures'
 import { createAppointmentCore } from '@/lib/booking-core'
@@ -54,6 +55,20 @@ async function getAvailability(
   const url = `https://test.local/api/booking/availability?${sp.toString()}`
   const res = await availabilityGET(new Request(url) as unknown as NextRequest)
   return (await res.json()) as { ok: boolean; busy: { time: string }[]; full: string[] }
+}
+
+// Igual que getAvailability pero SIN asumir el contrato feliz: devuelve status + body crudo. Lo necesita
+// T-12-11, donde la rama "Cualquiera" ya no responde una grilla sino un rechazo { ok:false, error } 400.
+async function getAvailabilityRaw(
+  slug: string,
+  params: { professionalId?: string; any?: boolean; serviceId?: string },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const sp = new URLSearchParams({ slug, date: DATE })
+  if (params.professionalId) sp.set('professionalId', params.professionalId)
+  if (params.any) sp.set('any', '1')
+  if (params.serviceId) sp.set('serviceId', params.serviceId)
+  const res = await availabilityGET(new Request(`https://test.local/api/booking/availability?${sp.toString()}`) as unknown as NextRequest)
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> }
 }
 
 // POST al route handler real de create (mismo patrón que canchas-booking.test.ts). Ejercita el wiring
@@ -104,6 +119,14 @@ describe.skipIf(!hasSupabaseCreds)('reserva "Cualquiera" pública (DISP-01/02/03
     await t.admin.from('professional_services').delete().eq('business_id', t.businessId)
     await t.admin.from('professionals').delete().eq('business_id', t.businessId).neq('id', t.professionalId)
     await t.admin.from('professionals').update({ active: true, location_id: null, service_id: null }).eq('id', t.professionalId)
+    // (Phase 12 / T-12-11) Los casos de recurso simultáneo mutan el service del fixture; el tenant y el
+    // service son COMPARTIDOS por todo el archivo, así que hay que devolverlos a los DEFAULT de la 062
+    // ('group_class'/1) o los casos DISP-01/02/03 y ASIGN-05 medirían el otro modo (molde concurrency.test.ts).
+    await t.admin
+      .from('services')
+      .update({ capacity_mode: 'group_class', capacity: 1 })
+      .eq('id', t.serviceId)
+      .eq('business_id', t.businessId)
   })
 
   // Ocupa un slot por la vía ESPECÍFICA (autoAssign:false, professionalId concreto) → inserta un turno
@@ -267,5 +290,88 @@ describe.skipIf(!hasSupabaseCreds)('reserva "Cualquiera" pública (DISP-01/02/03
     expect(assigned).toBeNull() // sentinel → sin profesional
     const name = await proNameFor(body.appointmentId!)
     expect(name).toBeNull() // sin profesional → sin nombre en confirmación/mail
+  })
+
+  // ── T-12-11 (secure-phase) — el combo "Cualquiera" + recurso simultáneo se rechaza EN EL SERVIDOR ──
+  // D-13 dice que la combinación no está soportada (la asignación automática del RPC no es capacity-aware
+  // para un recurso simultáneo). Hasta este fix el ÚNICO gate era la tarjeta oculta del selector
+  // (booking-client.tsx) — una decisión de UI, no un control de seguridad: un POST forjado con
+  // `anyProfessional:true` entraba igual y degradaba la disponibilidad (el 2º lugar del recurso quedaba
+  // inalcanzable, con slot_taken espurio). El punto del test es EXACTAMENTE ese: la request que la UI
+  // nunca manda tiene que morir en el server.
+  it('T-12-11 — un create con anyProfessional:true sobre un servicio SIMULTÁNEO se rechaza server-side', async () => {
+    await seedProfessional(t, { name: '__test_proB' }) // 2 capaces: el rechazo NO es "no hay a quién asignar"
+    await seedSimultaneousService(t, { capacity: 2 })
+
+    const forged = {
+      slug,
+      serviceId: t.serviceId,
+      professionalId: null,
+      anyProfessional: true, // el flag que la UI (D-13) jamás manda para este servicio
+      date: DATE,
+      time: '09:00',
+      clientName: 'Cliente Forjado',
+    }
+    const { status, body } = await postCreate(forged)
+    // 400 (request no soportada), NO 409: no es un conflicto de horario. Código PROPIO: colapsarlo en
+    // slot_taken haría indistinguible un error de configuración de un choque real.
+    expect(status).toBe(400)
+    expect(body.ok).toBe(false)
+    expect(body.error).toBe('any_professional_unsupported')
+
+    // Fail-closed de verdad: no quedó NINGUNA fila (el rechazo corre antes del RPC).
+    const { data: rows } = await t.admin
+      .from('appointments')
+      .select('id')
+      .eq('business_id', t.businessId)
+      .eq('date', DATE)
+    expect((rows || []).length).toBe(0)
+
+    // Cero regresión de "Cualquiera" (Phase 10): el MISMO POST sobre un servicio `group_class` sigue
+    // entrando ⇒ lo que gatea es el MODO del servicio, no el flag.
+    await t.admin
+      .from('services')
+      .update({ capacity_mode: 'group_class', capacity: 1 })
+      .eq('id', t.serviceId)
+      .eq('business_id', t.businessId)
+    const grupal = await postCreate(forged)
+    expect(grupal.status).toBe(200)
+    expect(grupal.body.ok).toBe(true)
+    expect(await assignedProAt(grupal.body.appointmentId!)).not.toBeNull()
+  })
+
+  // ── T-12-11 (read-path) — availability y create tienen que ESTAR DE ACUERDO ──────────────────────
+  // Si el write-path rechaza el combo, el read-path no puede seguir sirviendo una grilla agregada para
+  // él: sería ofrecerle al público un horario que después falla. A/B en el mismo test: la respuesta con
+  // `group_class` se captura ANTES, se compara contra la de DESPUÉS de volver al modo default y tiene que
+  // ser idéntica (cero regresión de la rama `any`, el invariante de la fase).
+  it('T-12-11 (read) — availability con any=1 sobre un servicio SIMULTÁNEO devuelve el error, no la grilla', async () => {
+    await seedProfessional(t, { name: '__test_proB' })
+
+    // (A) group_class (default de toda fila existente): grilla agregada de hoy.
+    const antes = await getAvailability(slug, { any: true, serviceId: t.serviceId })
+    expect(antes.ok).toBe(true)
+    expect(antes.busy).toEqual([])
+
+    // (B) mismo request con el service en modo simultáneo → rechazo, mismo código que el write-path.
+    await seedSimultaneousService(t, { capacity: 2 })
+    const rechazo = await getAvailabilityRaw(slug, { any: true, serviceId: t.serviceId })
+    expect(rechazo.status).toBe(400)
+    expect(rechazo.body).toEqual({ ok: false, error: 'any_professional_unsupported' })
+
+    // (C) de vuelta a group_class: la grilla `any` es BYTE-IDÉNTICA a (A).
+    await t.admin
+      .from('services')
+      .update({ capacity_mode: 'group_class', capacity: 1 })
+      .eq('id', t.serviceId)
+      .eq('business_id', t.businessId)
+    const despues = await getAvailability(slug, { any: true, serviceId: t.serviceId })
+    expect(despues).toEqual(antes)
+
+    // Y el camino ESPECÍFICO (sin `any`) del servicio simultáneo sigue sirviendo su grilla: el gate es
+    // sólo sobre "Cualquiera", no sobre el modo (D-13 exige elegir profesional, no prohíbe reservar).
+    await seedSimultaneousService(t, { capacity: 2 })
+    const especifico = await getAvailability(slug, { professionalId: t.professionalId, serviceId: t.serviceId })
+    expect(especifico.ok).toBe(true)
   })
 })
