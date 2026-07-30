@@ -69,7 +69,19 @@ export type CreateAppointmentResult =
       // los ids para que el caller público dispare sus mails de hold-vencido en su propio after().
       cancelledHoldIds: string[]
     }
-  | { ok: false; error: 'invalid_service' | 'invalid_professional' | 'slot_taken' | 'slot_full' | 'insert_failed'; status: 400 | 409 | 500 }
+  | {
+      ok: false
+      // 'simultaneous_space_conflict' (migr. 064, gap 3 del code-review 2): el servicio es un RECURSO
+      // SIMULTÁNEO de cupo > 1 y su agenda tiene un ESPACIO físico mapeado (agenda_spaces). Es una
+      // contradicción de configuración, no "ocupado": el espacio es 1-a-la-vez por definición
+      // (appointment_spaces_no_overlap), así que un cupo ≥ 2 sobre él nunca puede materializarse.
+      // Código PROPIO a propósito: antes esta combinación devolvía slot_taken (23P01 del 2º turno) y
+      // era indistinguible de un horario realmente ocupado. El panel ya no ofrece el modo para esos
+      // servicios (settings-client.tsx), así que en la práctica solo lo puede ver una configuración
+      // vieja o una request forzada por API.
+      error: 'invalid_service' | 'invalid_professional' | 'slot_taken' | 'slot_full' | 'simultaneous_space_conflict' | 'insert_failed'
+      status: 400 | 409 | 500
+    }
 
 export async function createAppointmentCore(input: CreateAppointmentInput): Promise<CreateAppointmentResult> {
   const {
@@ -311,6 +323,15 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     .single()
 
   if (rpcErr || !appt) {
+    // (a0) RAISE 'simultaneous_space_conflict' (ERRCODE P0001 — migr. 064, gap 3): recurso simultáneo
+    //      con cupo > 1 sobre una agenda con espacio físico mapeado. Se chequea PRIMERO y se mapea a
+    //      su propio código (409) para NO colapsarlo en slot_taken: no es un horario ocupado, es una
+    //      configuración imposible (el espacio es 1-a-la-vez por definición, migr. 042). Antes de la
+    //      064 esto se manifestaba como un 23P01 en el 2º turno mientras availability publicaba el
+    //      horario como libre — el rechazo explícito es estrictamente mejor que esa mentira.
+    if (rpcErr?.message?.includes('simultaneous_space_conflict')) {
+      return { ok: false, error: 'simultaneous_space_conflict', status: 409 }
+    }
     // (a) RAISE 'slot_full' (ERRCODE P0001 — cupo grupal lleno) llega en `message` → slot_full (409).
     if (rpcErr?.message?.includes('slot_full')) {
       return { ok: false, error: 'slot_full', status: 409 }

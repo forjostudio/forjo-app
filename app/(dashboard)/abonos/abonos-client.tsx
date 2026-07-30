@@ -65,6 +65,8 @@ const SKIP_REASON_ES: Record<string, string> = {
   slot_full: 'Cupo lleno',
   day_closed: 'Día cerrado',
   space_conflict: 'Espacio ocupado',
+  // (064, gap 3) Config imposible: recurso simultáneo de cupo > 1 sobre una agenda con espacio físico.
+  simultaneous_space_conflict: 'El recurso simultáneo no puede usar un espacio compartido',
   invalid_service: 'Servicio no disponible',
   invalid_professional: 'Recurso no disponible',
   insert_failed: 'No se pudo reservar',

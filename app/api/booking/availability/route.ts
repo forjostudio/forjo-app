@@ -300,6 +300,14 @@ export async function GET(request: NextRequest) {
         const simSiblingBuckets = new Set((simSib || []).map(s => s.professional_id as string))
         liveSiblings = liveSim.filter(a => simSiblingBuckets.has(a.professional_id ?? SENTINEL))
       }
+      // (064, gap 3) Coherencia con el write-path: un recurso simultáneo de cupo > 1 sobre una agenda
+      // con espacio físico mapeado es una configuración IMPOSIBLE — el RPC la rechaza de entrada con
+      // `simultaneous_space_conflict` (el espacio es 1-a-la-vez por definición, migr. 042). Si el
+      // read-path siguiera publicando esos horarios como libres, el público reservaría y recibiría un
+      // rechazo en TODOS los slots: se ocultan enteros. No filtra nada nuevo (D-06): es el mismo
+      // booleano por slot que ya usa `full`, sin decir POR QUÉ. El panel ya impide crear esta
+      // combinación (settings-client.tsx); esto cubre a las configuraciones viejas.
+      const simSpaceBlocked = cap > 1 && !!simMySpaces && simMySpaces.length > 0
       const overlaps = (a: { time: string; duration_minutes: number | null }, t: number) => {
         const aStart = toMin(a.time)
         const aEnd = aStart + Number(a.duration_minutes || 30)
@@ -316,9 +324,9 @@ export async function GET(request: NextRequest) {
         const close = toMin(b.end_time)
         for (let t = open; t + dur <= close; t += dur) startSet.add(minToHHMM(t))
       }
-      // `full` = UNIÓN de las tres condiciones de bloqueo: (a) el carril del servicio ya tiene `cap`
-      // turnos que pisan el intervalo, (b1) la agenda está ocupada por otro servicio, (b2) el espacio
-      // compartido está tomado por una agenda hermana.
+      // `full` = UNIÓN de las condiciones de bloqueo: (a) el carril del servicio ya tiene `cap` turnos
+      // que pisan el intervalo, (b1) la agenda está ocupada por otro servicio, (b2) el espacio
+      // compartido está tomado por una agenda hermana, (c) la config es imposible (064, gap 3).
       const fullSim: string[] = []
       for (const hhmm of startSet) {
         const t = toMin(hhmm)
@@ -327,7 +335,7 @@ export async function GET(request: NextRequest) {
         const laneFull = n >= cap
         const bucketBusy = liveBucketOther.some(a => overlaps(a, t))
         const spaceBusy = liveSiblings.some(a => overlaps(a, t))
-        if (laneFull || bucketBusy || spaceBusy) fullSim.push(hhmm)
+        if (simSpaceBlocked || laneFull || bucketBusy || spaceBusy) fullSim.push(hhmm)
       }
       // D-06/D-12 (no-leak): la ocupación colapsa a un BOOLEANO por slot en `full`; jamás el conteo,
       // los lugares restantes ni `capacity` (que queda server-side). Tampoco se filtra POR QUÉ está
