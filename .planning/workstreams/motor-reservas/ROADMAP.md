@@ -54,7 +54,7 @@ Faseo por dependencia y riesgo: el mapeo staff↔servicios habilita la asignaci�
 
 Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado como una única unidad revisable (secure-phase obligatorio); el borrado de servicio con historial es un cambio mediano independiente; el polish va al cierre.
 
-- [ ] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock re-granularizado + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking (**secure-phase obligatorio**) — 4/4 planes ejecutados · code-review 2 rondas, 5 blockers cerrados (migr. 063 + 064) · SECURED 18/18 (`threats_open: 0`) · migr. 062/063/064 en prod · **falta solo la UAT visual** (`12-UAT.md`) para cerrar
+- [x] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock de negocio-día + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking — 4/4 planes · code-review 2 rondas, 5 blockers cerrados (migr. 063 + 064) · SECURED 18/18 (`threats_open: 0`) · UAT 5/5 · migr. 062/063/064 en prod (completed 2026-07-30)
 - [ ] **Phase 13: Borrado de servicio preservando historial** - Borrar un servicio con solo turnos pasados; modal que bloquea si hay futuros y ofrece desactivar; los turnos pasados sobreviven en el historial (Finanzas / ficha del cliente) vía desacople del FK (snapshot de nombre/precio en el turno)
 - [ ] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa")
 
@@ -533,6 +533,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 9. Asignación automática atómica de profesional | 2/2 | Complete    | 2026-07-25 |
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
-| 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete   | 2026-07-29 |
+| 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 0/TBD | Not started | - |
 | 14. Cierre de backlog | 0/TBD | Not started | - |

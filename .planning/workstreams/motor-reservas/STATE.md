@@ -4,8 +4,8 @@ milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: verifying
 stopped_at: Completado 12-04-PLAN.md (gate CUPO-05 verde, control negativo A/B demostrado)
-last_updated: "2026-07-29T16:52:36.782Z"
-last_activity: 2026-07-29 -- Phase 12 execution started
+last_updated: "2026-07-31T15:44:44.733Z"
+last_activity: 2026-07-31
 progress:
   total_phases: 14
   completed_phases: 12
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 12 (cupo-por-solape-recurso-simult-neo) — EXECUTING
-Plan: 4 of 4
+Phase: 13
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-29 -- Phase 12 execution started
+Last activity: 2026-07-31
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Last activity: 2026-07-29 -- Phase 12 execution started
 | 09 | 2 | - | - |
 | 10 | 5 | - | - |
 | 11 | 4 | - | - |
+| 12 | 4 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
