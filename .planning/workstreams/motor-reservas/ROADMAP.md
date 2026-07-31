@@ -491,12 +491,32 @@ Plans:
   2. Al intentar borrar un servicio con turnos **futuros**, un modal bloquea el borrado, lo explica y ofrece **desactivar** (conservar y dejar de ofrecer) en vez de borrar (HIST-02).
   3. Un turno **pasado** de un servicio ya borrado sigue visible en el historial (Finanzas / ficha del cliente) con su nombre y precio, y los reportes no se rompen — vía desacople del FK / snapshot (HIST-03).
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 13-01-PLAN.md — Migración 065: columnas de snapshot + backfill + FKs a `ON DELETE SET NULL` + triggers de snapshot y de gate de borrado; validación `supabase db reset` local + `schema.sql`
+
+**Wave 2** *(bloqueada por Wave 1)*
+
+- [ ] 13-02-PLAN.md — Helper puro `lib/appointment-service.ts` (fallback snapshot→join) + los 8 read-paths de historial (Finanzas, CSV, Dashboard `monthRevenue`, ficha del cliente, Turnos desktop+mobile, Abonos)
+- [ ] 13-03-PLAN.md — UX del borrado: `ConfirmDialog` extendido, pre-check + modal de dos estados con "Desactivar", `deleteService` discriminado, `toggleService` endurecido, tabs Activos/Desactivados y mapeo `P0001` en canchas
+
+**Wave 3** *(bloqueada por Wave 2)*
+
+- [ ] 13-04-PLAN.md — Tests de integración de los dos triggers (snapshot + gate) y verificación de cero regresión del write-path
+
+**Wave 4** *(bloqueada por Wave 3)*
+
+- [ ] 13-05-PLAN.md — UAT visual de los tres Success Criteria + runbook del apply manual de la 065 en prod
+
+**Waves**: Wave 1 = 13-01 (la migración habilita todo lo demás). Wave 2 = 13-02 + 13-03 en paralelo (no comparten archivos). Wave 3 = 13-04 (tests, dependen de migración + UI). Wave 4 = 13-05 (checkpoints humanos).
 
 **UI hint**: yes
 **Security/Integrity relevance**: Riesgo acotado — NO redefine los constraints anti-doble-booking ni la lógica de concurrencia del RPC. El cuidado está en dos frentes: (a) la migración del snapshot (columna/s nuevas en `appointments` + backfill de los turnos históricos, idempotente y numerada — próxima **062**+, aplicada a mano coordinada con el deploy) debe preservar RLS + aislamiento por tenant; (b) el **write-path del alta** graba el snapshot al crear el turno y pasa por `createAppointmentCore` — el mismo camino de los cuatro consumidores del RPC — así que el cambio se verifica sin regresión en booking público, alta manual, abonos y canchas. El borrado y la desactivación son acciones autenticadas del dueño sobre un servicio de SU negocio (RLS + `.eq('business_id', ...)`); el chequeo de "tiene turnos futuros" se resuelve server-side por `business_id`. Se **descarta hard-delete de la historia**. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
 
-**Decisión abierta (cerrar en discuss-phase)**: el **mecanismo exacto de desacople** (snapshot de nombre/precio en el turno vs. otra vía — ej. FK `ON DELETE SET NULL` + columnas denormalizadas) y cómo lo consumen Finanzas y la ficha del cliente.
+**Decisión abierta — CERRADA en `13-CONTEXT.md`**: el mecanismo de desacople es **snapshot inmutable de nombre/precio escrito por un trigger `BEFORE INSERT`** (D-01/D-02/D-03) + **FK `ON DELETE SET NULL` con backfill** (D-04), y lo consumen los read-paths de historial vía un helper puro con fallback snapshot→join (D-05/D-06). El gate de "tiene futuros / abono activo" vive en un trigger `BEFORE DELETE` (D-08/D-09/D-10).
 
 ### Phase 14: Cierre de backlog
 
