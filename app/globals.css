@@ -106,6 +106,14 @@
      var(--destructive-foreground): ese token no está mapeado en @theme, no lo consume nadie, y sus
      valores (blanco en modern, casi blanco en spa) dan 3.9:1 y 2.9:1 — por debajo de AA. */
 
+  /* HOVER de la superficie de peligro (WR-06). El botón destructivo tenía el mix con negro cableado
+     en la clase, y oscurecer NO siempre mejora: solo sube el contraste cuando el par es CLARO. En
+     dark el rojo es claro y el par es ink, así que oscurecer lo BAJABA (4.91:1 → 3.82:1, debajo de
+     AA justo en el look firma de la app). La regla es: el hover mueve la superficie en dirección
+     CONTRARIA al foreground con el que se lee, y por eso el token se declara junto al par —
+     quien redeclare --danger-foreground tiene que redeclarar este también. */
+  --danger-hover: color-mix(in oklch, var(--destructive), black 10%);   /* par crema → oscurecer: 5.40 → 6.71 */
+
   --sidebar: #efe3cd;
   --sidebar-foreground: #1a1714;
   --sidebar-border: #ddd1b7;
@@ -151,6 +159,8 @@
      a ink → 4.91:1 (AA). Mismo criterio que usan las paletas blue/green para --primary-foreground.
      --danger NO se redeclara: var(--destructive) ya resuelve al valor dark en este mismo elemento. */
   --danger-foreground: #1a1714;
+  /* Par ink ⇒ el hover ACLARA (oscurecer daba 3.82:1). 4.91 → 5.88. */
+  --danger-hover: color-mix(in oklch, var(--destructive), white 12%);
 
   --sidebar: #141110;
   --sidebar-foreground: #f3ead8;
@@ -242,6 +252,9 @@
      --danger; acá adentro sigue resolviendo EXACTAMENTE a --crm-danger (render byte-idéntico). */
   --danger: var(--crm-danger);
   --danger-foreground: var(--crm-danger-foreground);
+  /* El par del CRM es crema ⇒ oscurecer. Es EXACTAMENTE el mix que el botón destructivo tenía
+     cableado en su clase, así que el CRM se sigue viendo igual (render byte-idéntico). */
+  --danger-hover: color-mix(in oklch, var(--crm-danger), black 10%);
 
   /* info / success referencian las constantes Bauhaus (ya dark-aware) */
   --crm-info: var(--chart-2);     /* azul  */

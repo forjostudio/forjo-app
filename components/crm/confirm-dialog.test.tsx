@@ -162,4 +162,14 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     const normalCls = confirmButtonClass(false)
     expect(normalCls).toBe('')
   })
+
+  // WR-06: el hover también sale del token. Cablearlo como un mix con negro asumía que la superficie
+  // de peligro siempre es oscura y el texto claro; en dark es al revés y oscurecerla tiraba el
+  // contraste a 3.82:1. La dirección la sabe el theme, no el componente.
+  it('destructive: el hover referencia --danger-hover y NO calcula el color en la clase', () => {
+    const dangerCls = confirmButtonClass(true)
+    expect(dangerCls).toMatch(/hover:bg-\[var\(--danger-hover\)\]/)
+    expect(dangerCls).not.toMatch(/color-mix/)
+    expect(dangerCls).not.toMatch(/black_10%/)
+  })
 })

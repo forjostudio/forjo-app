@@ -39,6 +39,7 @@
      el mismo negro-navy del fondo dark de modern → 4.63:1. Este rojo NO cambia entre claro y oscuro
      (.dark[data-theme="modern"] no lo redeclara), así que un solo valor cubre los dos modos. */
   --danger-foreground:#0f1623;
+  --danger-hover:color-mix(in oklch, var(--destructive), white 12%);   /* par oscuro → aclarar: 4.63 → 5.60 */
 
   /* sidebar navy aún en modo claro — firma del look admin */
   --sidebar:color-mix(in oklab,#1b2334 90%,var(--tint));
@@ -106,6 +107,7 @@
   /* Ídem modern: el terracota de spa es claro, así que el par tiene que ser oscuro. #221f25 es el
      fondo dark del propio theme → 5.36:1 (el crema de Forjo daba 2.75:1). Vale para claro y oscuro. */
   --danger-foreground:#221f25;
+  --danger-hover:color-mix(in oklch, var(--destructive), white 12%);   /* par oscuro → aclarar: 5.36 → 6.23 */
 
   --sidebar:color-mix(in oklab,#e9e0d5 89%,var(--tint));
   --sidebar-foreground:#4c443d;
@@ -173,6 +175,7 @@
   /* El magenta neón es el más claro de todos: el par correcto es el casi-negro del theme → 5.73:1
      (con el crema de Forjo quedaba en 3.20:1). Vale para claro y oscuro. */
   --danger-foreground:#0a0410;
+  --danger-hover:color-mix(in oklch, var(--destructive), white 12%);   /* par oscuro → aclarar: 5.73 → 6.68 */
 
   --sidebar:color-mix(in oklab,#0a0714 92%,var(--tint));
   --sidebar-foreground:#bfe9f5;

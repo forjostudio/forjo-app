@@ -179,10 +179,17 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
  * POR QUÉ --danger y no --crm-danger (gap 13-05 #1): este dialog se reusa en el DASHBOARD desde 13-03,
  * y --crm-danger sólo existe dentro de .crm-shell — afuera la var no resolvía y el botón quedaba sin
  * fondo. La indirección vive en globals.css; acá NUNCA se referencia el token de un shell puntual.
+ *
+ * El hover TAMPOCO se calcula acá (WR-06). Estaba cableado como un mix con negro, que oscurece la
+ * superficie mientras el texto queda fijo: sirve cuando el par es crema sobre rojo oscuro (claro),
+ * pero en dark el rojo es claro y el par es ink, así que oscurecer bajaba el contraste a 3.82:1 —
+ * debajo de AA, y WCAG también aplica al hover. La dirección correcta depende del theme, o sea de
+ * información que solo tienen los tokens: por eso se referencia --danger-hover, que cada bloque
+ * declara junto a su --danger-foreground.
  */
 export function confirmButtonClass(destructive?: boolean): string {
   return destructive
-    ? 'bg-[var(--danger)] text-[var(--danger-foreground)] hover:bg-[color-mix(in_oklch,var(--danger),black_10%)]'
+    ? 'bg-[var(--danger)] text-[var(--danger-foreground)] hover:bg-[var(--danger-hover)]'
     : ''
 }
 
