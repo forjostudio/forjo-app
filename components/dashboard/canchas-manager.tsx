@@ -176,10 +176,21 @@ export function CanchasManager({
     const removedSpaceIds = dedicatedSpaceIds(target, agendaSpaces)
     const res = await deleteCancha(supabase, business.id, target, { hard: true, agendaSpaces })
     if (!res.ok) {
-      // FK: la cancha tiene turnos asociados → no se puede borrar; guiar a desactivar.
-      toast.error(res.error === 'has_appointments'
-        ? 'No se puede eliminar: la cancha tiene turnos asociados, incluidos pasados y cancelados (cancelar no los borra). Desactivala para dejar de ofrecerla y conservar el historial, o borrá esos turnos primero.'
-        : 'No se pudo eliminar la cancha')
+      // El motivo se traduce por CÓDIGO, no todo al mismo string (WR-01). Dos cambios de fondo:
+      //   · un abono activo NO se arregla mirando turnos — mandar al dueño a buscar reservas que no
+      //     existen lo deja dando vueltas.
+      //   · ya NO se sugiere "borrá esos turnos primero": esa es justamente la acción destructiva e
+      //     irreversible que esta fase existe para volver innecesaria. La salida es DESACTIVAR.
+      toast.error(
+        res.error === 'has_active_abono'
+          ? 'No se puede eliminar: la cancha tiene un abono activo. Desactivala para dejar de ofrecerla y conservar el historial.'
+          : res.error === 'has_appointments'
+            ? 'No se puede eliminar: la cancha tiene reservas asociadas. Desactivala para dejar de ofrecerla y conservar el historial.'
+            : res.error === 'rollback_failed'
+              // Caso raro (falló el borrado del servicio Y su rollback): la cancha puede haber quedado
+              // a medias. Se avisa explícito en vez de dejarla desaparecer en el próximo refresh.
+              ? 'No se pudo eliminar la cancha y tampoco restaurarla del todo. Recargá la página y revisá el listado antes de volver a intentar.'
+              : 'No se pudo eliminar la cancha')
       setDelCancha(null)
       return
     }
