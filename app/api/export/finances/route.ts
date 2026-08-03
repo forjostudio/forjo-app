@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { apptServiceName, apptServicePrice } from '@/lib/appointment-service'
 
 // Export CSV de finanzas (DATA-02) — route handler AUTENTICADO del dueño.
 //
@@ -45,7 +46,9 @@ export async function GET() {
   const [apptRes, salesRes, expRes] = await Promise.all([
     supabase
       .from('appointments')
-      .select('date, services(name, price)')
+      // Select ACOTADO: pide el snapshot del servicio (migr. 065) además del join. Sin él, un turno
+      // de un servicio ya borrado saldría en el CSV como "—" y $0, contradiciendo HIST-03.
+      .select('date, service_name, service_price, services(name, price)')
       .eq('business_id', business.id)
       .neq('status', 'cancelled'),
     supabase
@@ -61,14 +64,14 @@ export async function GET() {
   type Movimiento = { fecha: string; tipo: string; concepto: string; monto: number }
   const movimientos: Movimiento[] = []
 
-  // Turnos: concepto = nombre del servicio, monto = precio del servicio (0 si no hay).
+  // Turnos: concepto = nombre del servicio, monto = precio del servicio (0 si no hay). El helper
+  // resuelve snapshot → join (D-05), así que un servicio borrado conserva su nombre y su precio.
   for (const a of apptRes.data ?? []) {
-    const svc = a.services as { name?: string | null; price?: number | null } | null
     movimientos.push({
       fecha: a.date ?? '',
       tipo: 'turno',
-      concepto: svc?.name ?? '—',
-      monto: Number(svc?.price ?? 0),
+      concepto: apptServiceName(a),
+      monto: apptServicePrice(a),
     })
   }
 

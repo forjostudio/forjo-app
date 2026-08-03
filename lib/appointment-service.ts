@@ -28,11 +28,25 @@
  *
  * `service_price` admite `string` porque un `numeric` de PostgreSQL puede llegar serializado como
  * string por PostgREST según el driver/versión.
+ *
+ * `services` admite objeto O array: el embed `services(...)` de una relación many-to-one devuelve
+ * un objeto en runtime, pero supabase-js (sin tipos generados de la base) lo INFIERE como array en
+ * los `select` acotados. Aceptar las dos formas evita tener que castear en cada call-site — que es
+ * justo el cast inline que este helper vino a eliminar.
  */
+type ServiceJoin = { name?: string | null; price?: number | string | null }
+
 export type ServiceSnapshotRow = {
   service_name?: string | null
   service_price?: number | string | null
-  services?: { name?: string | null; price?: number | string | null } | null
+  services?: ServiceJoin | ServiceJoin[] | null
+}
+
+/** Normaliza el embed a objeto (ver la nota de `services` en ServiceSnapshotRow). */
+function joinedService(row: ServiceSnapshotRow): ServiceJoin | null {
+  const s = row.services
+  if (!s) return null
+  return Array.isArray(s) ? (s[0] ?? null) : s
 }
 
 /**
@@ -40,7 +54,7 @@ export type ServiceSnapshotRow = {
  * El `fallback` por defecto es el guion largo que ya usaba el historial.
  */
 export function apptServiceName(row: ServiceSnapshotRow, fallback = '—'): string {
-  return row.service_name ?? row.services?.name ?? fallback
+  return row.service_name ?? joinedService(row)?.name ?? fallback
 }
 
 /**
@@ -50,7 +64,7 @@ export function apptServiceName(row: ServiceSnapshotRow, fallback = '—'): stri
  * `??` y no `||`: un `service_price = 0` es un precio válido y tiene que ganarle al join.
  */
 export function apptServicePriceOrNull(row: ServiceSnapshotRow): number | null {
-  const raw = row.service_price ?? row.services?.price ?? null
+  const raw = row.service_price ?? joinedService(row)?.price ?? null
   if (raw === null || raw === undefined) return null
   const n = Number(raw)
   return Number.isFinite(n) ? n : null

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Users, DollarSign, TrendingUp } from 'lucide-react'
 import { sanitizeWidgetIds } from '@/lib/dashboard-widgets'
+import { apptServicePrice } from '@/lib/appointment-service'
 import { UpcomingAppointments, type UpcomingAppt } from '@/components/dashboard/upcoming-appointments'
 
 const STATUS_LABELS: Record<string, string> = {
@@ -81,9 +82,13 @@ export default async function DashboardPage() {
       .order('time'),
   ])
 
-  const monthRevenue = (monthData || []).reduce((sum, a) => {
-    return sum + ((a.services as { price?: number } | null)?.price || 0)
-  }, 0)
+  // Facturación del mes en curso. ESTE número sí lee el snapshot (D-05) aunque D-06 deje al
+  // Dashboard fuera: el mes en curso incluye turnos YA PASADOS, así que si el dueño borra un
+  // servicio a mitad de mes, sin el snapshot este total y el de Finanzas dejarían de coincidir.
+  // El resto del Dashboard (turnos de hoy, próximos) muestra turnos VIVOS, donde el servicio
+  // existe por definición: no se migra. El select de `monthData` es `select('*, services(price)')`
+  // — el `*` ya trae `service_price`, así que no hizo falta ampliarlo.
+  const monthRevenue = (monthData || []).reduce((sum, a) => sum + apptServicePrice(a), 0)
 
   // Selección de widgets del negocio (null = mostrar todos). Catálogo en lib/dashboard-widgets.
   const widgetSel = sanitizeWidgetIds(business.dashboard_widgets)

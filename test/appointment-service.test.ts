@@ -42,6 +42,14 @@ describe('apptServiceName', () => {
   it('sirve igual para una fila de abonos (misma forma estructural)', () => {
     expect(apptServiceName({ service_name: 'Clase de yoga', services: null })).toBe('Clase de yoga')
   })
+
+  it('acepta el embed en forma de array (como lo tipa supabase-js en los select acotados)', () => {
+    expect(apptServiceName({ service_name: null, services: [{ name: 'Corte' }] })).toBe('Corte')
+  })
+
+  it('un embed array vacío cae al fallback', () => {
+    expect(apptServiceName({ service_name: null, services: [] })).toBe('—')
+  })
 })
 
 describe('apptServicePrice', () => {
@@ -65,6 +73,10 @@ describe('apptServicePrice', () => {
 
   it('el snapshot GANA aunque el join tenga otro precio (D-03)', () => {
     expect(apptServicePrice({ service_price: 3000, services: { price: 5000 } })).toBe(3000)
+  })
+
+  it('acepta el embed en forma de array (como lo tipa supabase-js en los select acotados)', () => {
+    expect(apptServicePrice({ service_price: null, services: [{ price: 5000 }] })).toBe(5000)
   })
 })
 

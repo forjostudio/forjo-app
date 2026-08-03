@@ -6,6 +6,7 @@ import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Appointment, ManualSale, Expense, SavedProduct, Client, FixedExpense } from '@/lib/types'
+import { apptServiceName, apptServicePrice } from '@/lib/appointment-service'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -243,11 +244,14 @@ export function FinancesClient({ businessId }: Props) {
     const { from: pf, to: pt } = getPrevRange()
     if (pf && pt) {
       const [pA, pS, pE] = await Promise.all([
-        supabase.from('appointments').select('services(price)').eq('business_id', businessId).neq('status', 'cancelled').gte('date', pf).lte('date', pt),
+        // Select ACOTADO: pide explícitamente el snapshot (migr. 065). Si sólo se trajera
+        // `services(price)`, un turno de un servicio ya borrado sumaría 0 y el período anterior
+        // bajaría solo, sin ningún error visible.
+        supabase.from('appointments').select('service_price, services(price)').eq('business_id', businessId).neq('status', 'cancelled').gte('date', pf).lte('date', pt),
         supabase.from('manual_sales').select('amount, quantity').eq('business_id', businessId).gte('sale_date', pf).lte('sale_date', pt),
         supabase.from('expenses').select('amount').eq('business_id', businessId).gte('expense_date', pf).lte('expense_date', pt),
       ])
-      const pServices = (pA.data || []).reduce((s, x) => s + ((x.services as { price?: number } | null)?.price || 0), 0)
+      const pServices = (pA.data || []).reduce((s, x) => s + apptServicePrice(x), 0)
       const pSales = (pS.data || []).reduce((s, x) => s + Number(x.amount) * Number(x.quantity), 0)
       const pVar = (pE.data || []).reduce((s, x) => s + Number(x.amount), 0)
       const pMonths = customMode ? Math.max((differenceInCalendarDays(parseISO(pt), parseISO(pf)) + 1) / 30.44, 0) : 1
@@ -265,12 +269,14 @@ export function FinancesClient({ businessId }: Props) {
         const mFrom = format(startOfMonth(d), 'yyyy-MM-dd')
         const mTo = format(endOfMonth(d), 'yyyy-MM-dd')
         return Promise.all([
-          supabase.from('appointments').select('services(price)').eq('business_id', businessId).neq('status', 'cancelled').gte('date', mFrom).lte('date', mTo),
+          // Select ACOTADO: mismo motivo que el del período anterior — sin `service_price` el chart
+          // de 6 meses se hunde para los servicios borrados.
+          supabase.from('appointments').select('service_price, services(price)').eq('business_id', businessId).neq('status', 'cancelled').gte('date', mFrom).lte('date', mTo),
           supabase.from('manual_sales').select('amount, quantity').eq('business_id', businessId).gte('sale_date', mFrom).lte('sale_date', mTo),
           supabase.from('expenses').select('amount').eq('business_id', businessId).gte('expense_date', mFrom).lte('expense_date', mTo),
         ]).then(([a, s, e]) => ({
           name: format(d, 'MMM', { locale: es }),
-          ingresos: (a.data || []).reduce((sum, x) => sum + ((x.services as { price?: number } | null)?.price || 0), 0)
+          ingresos: (a.data || []).reduce((sum, x) => sum + apptServicePrice(x), 0)
             + (s.data || []).reduce((sum, x) => sum + Number(x.amount) * Number(x.quantity), 0),
           egresos: (e.data || []).reduce((sum, x) => sum + Number(x.amount), 0) + fixedMonthlyLocal,
         }))
@@ -285,7 +291,7 @@ export function FinancesClient({ businessId }: Props) {
 
   // ── Stats ───────────────────────────────────────────────────────────────────
   const { from: rangeFrom, to: rangeTo } = getDateRange()
-  const apptRevenue = appointments.reduce((s, a) => s + ((a.services as { price?: number } | null)?.price || 0), 0)
+  const apptRevenue = appointments.reduce((s, a) => s + apptServicePrice(a), 0)
   const salesRevenue = sales.reduce((s, x) => s + Number(x.amount) * Number(x.quantity), 0)
   const totalIncome = apptRevenue + salesRevenue
 
@@ -311,10 +317,9 @@ export function FinancesClient({ businessId }: Props) {
   // Ranking de servicios y productos por ingreso (turnos por servicio + ventas por descripción).
   const rankingMap = new Map<string, { label: string; total: number; count: number }>()
   for (const a of appointments) {
-    const svc = a.services as { name?: string; price?: number } | null
-    const label = svc?.name || 'Sin servicio'
+    const label = apptServiceName(a, 'Sin servicio')
     const cur = rankingMap.get(label) || { label, total: 0, count: 0 }
-    cur.total += svc?.price || 0
+    cur.total += apptServicePrice(a)
     cur.count += 1
     rankingMap.set(label, cur)
   }
@@ -515,7 +520,7 @@ export function FinancesClient({ businessId }: Props) {
 
     const inc = new Map<string, number>()
     const eg = new Map<string, number>()
-    for (const a of appointments) inc.set(a.date, (inc.get(a.date) || 0) + ((a.services as { price?: number } | null)?.price || 0))
+    for (const a of appointments) inc.set(a.date, (inc.get(a.date) || 0) + apptServicePrice(a))
     for (const s of sales) inc.set(s.sale_date, (inc.get(s.sale_date) || 0) + Number(s.amount) * Number(s.quantity))
     for (const e of expenses) eg.set(e.expense_date, (eg.get(e.expense_date) || 0) + Number(e.amount))
     if (!customMode) {
@@ -878,13 +883,12 @@ export function FinancesClient({ businessId }: Props) {
           {appointments.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-sm">Sin turnos en este período</p>
           ) : appointments.map(appt => {
-            const service = appt.services as { name?: string; price?: number } | null
             return (
               <div key={appt.id} className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border text-sm">
                 <span className="text-muted-foreground w-20 flex-shrink-0">{format(parseISO(appt.date), 'd MMM', { locale: es })} {appt.time.slice(0, 5)}</span>
                 <span className="flex-1 truncate font-medium">{appt.client_name}</span>
-                <span className="text-muted-foreground hidden sm:block truncate max-w-32">{service?.name}</span>
-                <span className="font-semibold">{fmtARS(service?.price || 0)}</span>
+                <span className="text-muted-foreground hidden sm:block truncate max-w-32">{apptServiceName(appt, '')}</span>
+                <span className="font-semibold">{fmtARS(apptServicePrice(appt))}</span>
                 {appt.payment_status === 'paid' ? (
                   <Badge className="bg-green-500/20 text-green-400 border-green-500/30 flex-shrink-0" variant="outline">Pagado</Badge>
                 ) : (
