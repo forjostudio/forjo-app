@@ -58,6 +58,22 @@ export interface ConfirmDialogProps {
   confirmLabel: string
   /** destructive ⇒ botón confirmar con fondo --crm-danger (no --destructive). */
   destructive?: boolean
+  /**
+   * Botón extra entre "Cancelar" y confirmar. Opcional y aditivo (sin él, footer de siempre).
+   * Ofrece una SALIDA ejecutable cuando la acción principal no se puede hacer (13-03/D-12:
+   * "Desactivar" ahí mismo, no mandar al dueño a buscar el switch). Disabled mientras loading.
+   */
+  secondaryAction?: { label: string; onClick: () => void | Promise<void> }
+  /**
+   * Oculta el confirmar. Opcional y aditivo (default: se muestra, como hoy). Es el estado
+   * *bloqueado* de 13-03/D-11: ofrecer un "Eliminar" que la DB ya se sabe que rechaza es mal UX.
+   */
+  hideConfirm?: boolean
+  /**
+   * Reemplaza el toast genérico del catch de handleConfirm (quien no la pasa no cambia). Deja al
+   * caller mostrar el motivo REAL del rechazo (ej. el message del trigger). El dialog no cierra.
+   */
+  onConfirmError?: (err: unknown) => void
   onConfirm: (reason?: string) => Promise<void>
 }
 
@@ -143,6 +159,20 @@ export function buildSubmitGuard({
 }
 
 /**
+ * Deriva qué botones muestra el footer, misma regla que computeConfirmState: el "qué se muestra"
+ * vive en un helper puro testeado, no inline en el render. Sin props nuevas devuelve el footer
+ * histórico ([Cancelar] [confirmLabel]). Si el confirmar se oculta, el secundario asciende a
+ * primario visual: si no, quedarían dos outline y ninguna acción evidente.
+ */
+export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary?: boolean }): {
+  showConfirm: boolean; showSecondary: boolean; secondaryVariant: 'default' | 'outline'
+} {
+  const showConfirm = !input.hideConfirm
+  const showSecondary = !!input.hasSecondary
+  return { showConfirm, showSecondary, secondaryVariant: !showConfirm && showSecondary ? 'default' : 'outline' }
+}
+
+/**
  * Clase del botón confirmar. destructive ⇒ --crm-danger + foreground cream (NUNCA --destructive,
  * UI-SPEC §"Riesgo badges"); si no ⇒ amarillo primario (foreground ink) que ya trae <Button>.
  */
@@ -168,6 +198,9 @@ export function ConfirmDialog({
   risk,
   confirmLabel,
   destructive,
+  secondaryAction,
+  hideConfirm,
+  onConfirmError,
   onConfirm,
 }: ConfirmDialogProps) {
   const [typed, setTyped] = React.useState('')
@@ -180,6 +213,7 @@ export function ConfirmDialog({
   const reasonHelpId = React.useId()
 
   const state = computeConfirmState({ confirmWord, requireReason, minReasonLength, typed, reason, loading })
+  const footer = computeFooterLayout({ hideConfirm, hasSecondary: !!secondaryAction })
 
   // Reset al cerrar (vía onOpenChange) — pero bloquear el cierre durante loading.
   const handleOpenChange = React.useCallback(
@@ -220,7 +254,10 @@ export function ConfirmDialog({
     } catch (err) {
       // error: dialog QUEDA abierto en estado ready; toast (UI-SPEC §"error").
       console.error('[confirm-dialog] acción falló:', err instanceof Error ? err.message : err)
-      toast.error('No se pudo completar la acción. Probá de nuevo o revisá tu conexión.')
+      // Si el caller trajo su propio handler, él sabe traducir el motivo real del rechazo; el
+      // genérico sólo aplica cuando nadie más se hace cargo.
+      if (onConfirmError) onConfirmError(err)
+      else toast.error('No se pudo completar la acción. Probá de nuevo o revisá tu conexión.')
     }
   }
 
@@ -279,22 +316,16 @@ export function ConfirmDialog({
           >
             Cancelar
           </DialogClose>
-          <Button
-            type="button"
-            onClick={handleConfirm}
-            disabled={!state.canConfirm}
-            aria-disabled={!state.canConfirm}
-            className={confirmButtonClass(destructive)}
-          >
-            {loading ? (
-              <>
-                <Loader2Icon className="animate-spin" />
-                Confirmando…
-              </>
-            ) : (
-              confirmLabel
-            )}
-          </Button>
+          {footer.showSecondary && secondaryAction && (
+            <Button type="button" variant={footer.secondaryVariant} disabled={loading} onClick={() => { void secondaryAction.onClick() }}>
+              {secondaryAction.label}
+            </Button>
+          )}
+          {footer.showConfirm && (
+            <Button type="button" onClick={handleConfirm} disabled={!state.canConfirm} aria-disabled={!state.canConfirm} className={confirmButtonClass(destructive)}>
+              {loading ? (<><Loader2Icon className="animate-spin" />Confirmando…</>) : confirmLabel}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
