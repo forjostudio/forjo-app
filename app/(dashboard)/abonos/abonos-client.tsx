@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import type { Business, Client, Service, Professional, Location } from '@/lib/types'
 import { resolveVertical } from '@/lib/verticals'
+import { apptServiceName } from '@/lib/appointment-service'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -41,6 +42,9 @@ export type AbonoRow = {
   // viaja en el payload de la página, se le pide al servidor recién cuando el dueño toca "Copiar link
   // de baja". Ver el comentario del select en page.tsx.
   cancelled_at: string | null
+  // Snapshot del nombre del servicio (migr. 065, D-09), lo escribe el trigger `abonos_service_snapshot_trg`.
+  // Opcional porque no todo `select` lo trae; se lee SIEMPRE vía apptServiceName (snapshot → join).
+  service_name?: string | null
   clients: { name: string } | null
   services: { name: string } | null
   professionals: { name: string } | null
@@ -300,7 +304,10 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
             {visibleAbonos.map((a) => {
               const count = turnoCounts[a.id] ?? 0
               const skipped = a.skipped_occurrences?.length ?? 0
-              const bookable = a.services?.name || a.professionals?.name || '—'
+              // Snapshot → join (D-09): fallback vacío para conservar la cadena `|| cancha || '—'`
+              // que ya tenía este sitio (una serie de cancha no tiene servicio).
+              const serviceName = apptServiceName(a, '')
+              const bookable = serviceName || a.professionals?.name || '—'
               const total = a.total_occurrences // null = indefinido
               return (
                 <li key={a.id}>
@@ -413,7 +420,10 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
         const count = turnoCounts[a.id] ?? 0
         const total = a.total_occurrences // null = indefinido
         const lastDate = lastTurnoDates[a.id] ?? null
-        const bookable = a.services?.name || a.professionals?.name || '—'
+        // Mismo fallback que la lista (D-09): el snapshot sostiene el nombre de una serie archivada
+        // cuyo servicio ya se borró.
+        const serviceName = apptServiceName(a, '')
+        const bookable = serviceName || a.professionals?.name || '—'
         const skipped = [...(a.skipped_occurrences ?? [])].sort((x, y) => x.date.localeCompare(y.date))
         const close = () => setDetailAbono(null)
         const title = `${a.clients?.name ?? 'Cliente'} · ${DAY_LABELS[a.day_of_week]} ${hhmm(a.start_time)}`
@@ -423,7 +433,7 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
             <div className="space-y-1.5 rounded-lg border border-border bg-card p-3.5 text-sm">
               <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Cliente</span><span className="font-medium">{a.clients?.name ?? '—'}</span></div>
               <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">{term.service}</span><span className="font-medium">{bookable}</span></div>
-              {a.professionals?.name && a.services?.name && (
+              {a.professionals?.name && serviceName && (
                 <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">{term.resource}</span><span className="font-medium">{a.professionals.name}</span></div>
               )}
               <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Cuándo</span><span className="font-medium capitalize">Todos los {DAY_LABELS[a.day_of_week].toLowerCase()} · {hhmm(a.start_time)}</span></div>

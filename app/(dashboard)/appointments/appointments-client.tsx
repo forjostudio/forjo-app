@@ -6,6 +6,7 @@ import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Appointment, Professional, Service, TimeBlock, Client, Location } from '@/lib/types'
+import { apptServiceName, apptServicePriceOrNull } from '@/lib/appointment-service'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -379,7 +380,10 @@ export function AppointmentsClient({ initialAppointments, professionals, service
               </thead>
               <tbody>
                 {filtered.map(appt => {
-                  const service = appt.services as { name?: string; price?: number } | null
+                  // Servicio del turno con fallback snapshot → join (D-05): en los tabs Pasados/Todos
+                  // puede venir de un servicio ya borrado. `price` distingue "sin precio" de "$0".
+                  const serviceName = apptServiceName(appt)
+                  const servicePrice = apptServicePriceOrNull(appt)
                   const professional = appt.professionals as { name?: string } | null
                   const phone = appt.client_phone
                   const waPhone = phone ? '549' + phone.replace(/\D/g, '').replace(/^(549|54)/, '') : null
@@ -406,9 +410,9 @@ export function AppointmentsClient({ initialAppointments, professionals, service
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 align-top">{service?.name || '—'}</td>
+                      <td className="px-4 py-3 align-top">{serviceName}</td>
                       <td className="px-4 py-3 align-top text-muted-foreground">{professional?.name || '—'}</td>
-                      <td className="px-4 py-3 align-top text-right font-medium whitespace-nowrap">{service?.price != null ? `$${Number(service.price).toLocaleString('es-AR')}` : '—'}</td>
+                      <td className="px-4 py-3 align-top text-right font-medium whitespace-nowrap">{servicePrice != null ? `$${servicePrice.toLocaleString('es-AR')}` : '—'}</td>
                       <td className="px-4 py-3 align-top"><StatusBadge appt={appt} /></td>
                       <td className="px-4 py-3 align-top"><RowActions appt={appt} onStatus={updateStatus} onCancel={setConfirmCancelId} onDelete={setConfirmDeleteId} /></td>
                     </tr>
@@ -421,7 +425,11 @@ export function AppointmentsClient({ initialAppointments, professionals, service
           {/* Mobile: tarjetas */}
           <div className="md:hidden space-y-2">
             {filtered.map(appt => {
-              const service = appt.services as { name?: string; price?: number } | null
+              // Mismo fallback que el render de desktop (son DOS renders del mismo dato). Acá el
+              // nombre se pide con fallback vacío para conservar el copy actual de la tarjeta, que
+              // no muestra guion cuando no hay servicio.
+              const serviceName = apptServiceName(appt, '')
+              const servicePrice = apptServicePriceOrNull(appt)
               const professional = appt.professionals as { name?: string } | null
               const phone = appt.client_phone
               const waPhone = phone ? '549' + phone.replace(/\D/g, '').replace(/^(549|54)/, '') : null
@@ -437,9 +445,9 @@ export function AppointmentsClient({ initialAppointments, professionals, service
                       <StatusBadge appt={appt} />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {service?.name}
+                      {serviceName}
                       {professional?.name && ` · ${professional.name}`}
-                      {service?.price != null && ` · $${Number(service.price).toLocaleString('es-AR')}`}
+                      {servicePrice != null && ` · $${servicePrice.toLocaleString('es-AR')}`}
                     </p>
                     {(phone || appt.client_email) && (
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">

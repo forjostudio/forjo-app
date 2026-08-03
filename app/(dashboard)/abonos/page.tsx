@@ -36,7 +36,10 @@ export default async function AbonosPage() {
       // la caché del navegador y en cualquier captura de DOM, y no rota ni vence (D-09). Ahora el link
       // se le pide al servidor recién cuando el dueño toca "Copiar link de baja"
       // (GET /api/abonos/cancel-link/[id]): D-17 sigue cubierto sin repartir la credencial (D-25).
-      .select('id, day_of_week, start_time, status, total_occurrences, generated_until, skipped_occurrences, created_at, cancelled_at, clients(name), services(name), professionals(name)')
+      // `service_name` es el SNAPSHOT del nombre del servicio (migr. 065, D-09): una serie archivada
+      // cuyo servicio se borró tiene `service_id` en NULL y el join `services(name)` vacío, así que
+      // sin esta columna la fila quedaría sin nombre. El join queda de red de seguridad.
+      .select('id, day_of_week, start_time, status, total_occurrences, generated_until, skipped_occurrences, created_at, cancelled_at, service_name, clients(name), services(name), professionals(name)')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false }),
     // Turnos FUTUROS etiquetados con un abono, acotados por fecha en la BASE (WR-06). Antes esta query

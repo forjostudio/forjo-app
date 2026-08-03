@@ -10,6 +10,10 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { Client, Appointment } from '@/lib/types'
 import { isValidPhone } from '@/lib/clients-create'
+// Historial de la ficha del cliente: nombre y precio del servicio con fallback snapshot → join
+// (D-05). Antes vivían acá como getApptService/getApptPrice; se promovieron al helper compartido
+// para que Finanzas, el CSV y Turnos no tengan cada uno su propia copia del ternario.
+import { apptServiceName, apptServicePrice } from '@/lib/appointment-service'
 import { useVertical } from '@/lib/use-terminology'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -140,13 +144,6 @@ function fmtLastVisit(dateStr: string): string {
   const d = format(parseISO(dateStr), "d 'de' MMMM", { locale: es })
   if (m === 0) return `este mes · ${d}`
   return `${m} ${m === 1 ? 'MES' : 'MESES'} · ${d}`
-}
-
-function getApptPrice(a: Appointment): number {
-  return (a.services as { price?: number } | null)?.price || 0
-}
-function getApptService(a: Appointment): string {
-  return (a.services as { name?: string } | null)?.name || '—'
 }
 
 function getSuggestion(visits: number, daysSinceLast: number) {
@@ -403,7 +400,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       const sorted = [...confirmed].sort((a, b) => b.date < a.date ? -1 : 1)
       const lastDate = sorted[0]?.date ?? null
       const daysSinceLast = lastDate ? differenceInDays(now, parseISO(lastDate)) : 999
-      const totalSpend = confirmed.reduce((s, a) => s + getApptPrice(a), 0)
+      const totalSpend = confirmed.reduce((s, a) => s + apptServicePrice(a), 0)
 
       let status: StatusKey
       if (daysSinceLast > 45) status = 'paused'
@@ -1124,10 +1121,10 @@ function ClientDetail({
   const servicesBreakdown = useMemo(() => {
     const map: Record<string, { count: number; price: number }> = {}
     confirmedAppts.forEach(a => {
-      const name = getApptService(a)
+      const name = apptServiceName(a)
       if (!map[name]) map[name] = { count: 0, price: 0 }
       map[name].count++
-      map[name].price = getApptPrice(a)
+      map[name].price = apptServicePrice(a)
     })
     return Object.entries(map).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.count - a.count)
   }, [confirmedAppts])
@@ -1314,8 +1311,8 @@ function ClientDetail({
                   {format(parseISO(a.date), 'd MMM yy', { locale: es })}
                 </span>
                 <span className="font-mono w-10 flex-shrink-0">{a.time.slice(0, 5)}</span>
-                <span className="flex-1 truncate text-foreground">{getApptService(a)}</span>
-                <span className="text-muted-foreground">${getApptPrice(a).toLocaleString('es-AR')}</span>
+                <span className="flex-1 truncate text-foreground">{apptServiceName(a)}</span>
+                <span className="text-muted-foreground">${apptServicePrice(a).toLocaleString('es-AR')}</span>
                 <span className={cn('w-16 text-right flex-shrink-0', APPT_STATUS_COLOR[a.status] || 'text-muted-foreground')}>
                   {APPT_STATUS_LABEL[a.status] || a.status}
                 </span>
