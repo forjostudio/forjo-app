@@ -59,6 +59,22 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 
+CREATE OR REPLACE FUNCTION "public"."abonos_service_snapshot"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+  -- Filtro por business_id OBLIGATORIO (SECURITY DEFINER ⇒ sin RLS). Sin match ⇒ NULL (fail-safe).
+  SELECT s."name" INTO NEW."service_name"
+    FROM services s WHERE s."id" = NEW."service_id" AND s."business_id" = NEW."business_id";
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."abonos_service_snapshot"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."appointment_spaces_cleanup"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -99,6 +115,23 @@ $$;
 
 
 ALTER FUNCTION "public"."appointment_spaces_populate"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."appointments_service_snapshot"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+  -- Filtro por business_id OBLIGATORIO (SECURITY DEFINER ⇒ sin RLS). Sobrescribe SIEMPRE: el cliente
+  -- no dicta el snapshot. Sin match ⇒ NULL y el historial cae al join de fallback (fail-safe).
+  SELECT s."name", s."price" INTO NEW."service_name", NEW."service_price"
+    FROM services s WHERE s."id" = NEW."service_id" AND s."business_id" = NEW."business_id";
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."appointments_service_snapshot"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) RETURNS TABLE("id" "uuid", "cancel_token" "uuid")
@@ -419,6 +452,38 @@ $$;
 
 ALTER FUNCTION "public"."businesses_protect_admin_columns"() OWNER TO "postgres";
 
+
+CREATE OR REPLACE FUNCTION "public"."services_block_delete"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
+BEGIN
+  -- Guard de cascada: en DELETE FROM businesses el padre ya no existe cuando cascadea a services.
+  IF OLD."business_id" IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM businesses b WHERE b."id" = OLD."business_id") THEN
+    RETURN OLD;
+  END IF;
+  -- IS DISTINCT FROM y no <>: status es NULLABLE y con <> esas filas evalúan NULL y ABREN el gate.
+  IF EXISTS (SELECT 1 FROM appointments a WHERE a."service_id" = OLD."id"
+       AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
+       AND a."date" >= v_today AND a."status" IS DISTINCT FROM 'cancelled') THEN
+    RAISE EXCEPTION 'service_has_future_appointments' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (SELECT 1 FROM abonos ab WHERE ab."service_id" = OLD."id"
+       AND (OLD."business_id" IS NULL OR ab."business_id" = OLD."business_id")
+       AND ab."status" = 'active') THEN
+    RAISE EXCEPTION 'service_has_active_abono' USING ERRCODE = 'P0001';
+  END IF;
+  -- RETURN OLD obligatorio: devolver NULL cancelaría el borrado SIN error y la UI diría "eliminado".
+  RETURN OLD;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."services_block_delete"() OWNER TO "postgres";
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -444,6 +509,7 @@ CREATE TABLE IF NOT EXISTS "public"."abonos" (
     "reminder_lead_hours" integer,
     "deposit_amount" numeric,
     "billing_subscription_id" "text",
+    "service_name" "text",
     CONSTRAINT "abonos_day_of_week_check" CHECK ((("day_of_week" >= 0) AND ("day_of_week" <= 6))),
     CONSTRAINT "abonos_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'cancelled'::"text", 'completed'::"text"]))),
     CONSTRAINT "abonos_total_occurrences_check" CHECK ((("total_occurrences" IS NULL) OR ("total_occurrences" > 0)))
@@ -511,7 +577,9 @@ CREATE TABLE IF NOT EXISTS "public"."appointments" (
     "google_event_id" "text",
     "seat" smallint DEFAULT 0 NOT NULL,
     "is_group" boolean DEFAULT false NOT NULL,
-    "abono_id" "uuid"
+    "abono_id" "uuid",
+    "service_name" "text",
+    "service_price" numeric(10,2)
 );
 
 
@@ -1380,6 +1448,10 @@ CREATE INDEX "time_blocks_location" ON "public"."time_blocks" USING "btree" ("lo
 
 
 
+CREATE OR REPLACE TRIGGER "abonos_service_snapshot_trg" BEFORE INSERT ON "public"."abonos" FOR EACH ROW EXECUTE FUNCTION "public"."abonos_service_snapshot"();
+
+
+
 CREATE OR REPLACE TRIGGER "appointment_spaces_cleanup_trg" AFTER UPDATE OF "status" ON "public"."appointments" FOR EACH ROW EXECUTE FUNCTION "public"."appointment_spaces_cleanup"();
 
 
@@ -1388,7 +1460,15 @@ CREATE OR REPLACE TRIGGER "appointment_spaces_populate_trg" AFTER INSERT ON "pub
 
 
 
+CREATE OR REPLACE TRIGGER "appointments_service_snapshot_trg" BEFORE INSERT ON "public"."appointments" FOR EACH ROW EXECUTE FUNCTION "public"."appointments_service_snapshot"();
+
+
+
 CREATE OR REPLACE TRIGGER "businesses_protect_admin_columns" BEFORE UPDATE ON "public"."businesses" FOR EACH ROW EXECUTE FUNCTION "public"."businesses_protect_admin_columns"();
+
+
+
+CREATE OR REPLACE TRIGGER "services_block_delete_trg" BEFORE DELETE ON "public"."services" FOR EACH ROW EXECUTE FUNCTION "public"."services_block_delete"();
 
 
 
@@ -1413,7 +1493,7 @@ ALTER TABLE ONLY "public"."abonos"
 
 
 ALTER TABLE ONLY "public"."abonos"
-    ADD CONSTRAINT "abonos_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE RESTRICT;
+    ADD CONSTRAINT "abonos_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE SET NULL;
 
 
 
@@ -1483,7 +1563,7 @@ ALTER TABLE ONLY "public"."appointments"
 
 
 ALTER TABLE ONLY "public"."appointments"
-    ADD CONSTRAINT "appointments_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id");
+    ADD CONSTRAINT "appointments_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE SET NULL;
 
 
 
