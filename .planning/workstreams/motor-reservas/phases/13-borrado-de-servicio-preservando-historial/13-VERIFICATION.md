@@ -1,22 +1,23 @@
 ---
 phase: 13-borrado-de-servicio-preservando-historial
 verified: 2026-08-03T15:40:00Z
-status: human_needed
-score: 15/16 must-haves verified
-behavior_unverified: 1
+human_verified: 2026-08-03T16:05:00Z
+status: passed
+score: 16/16 must-haves verified
+behavior_unverified: 0
 overrides_applied: 0
-behavior_unverified_items:
+behavior_unverified_items: []
+human_verification_results:
   - truth: "Backstop TOCTOU (D-10/D-11): si el gate de la DB rechaza el DELETE porque alguien reservó entre el pre-check y el confirm, el modal NO se cierra en silencio — vuelve a abrir en estado bloqueado con el motivo real."
-    test: "Abrir el modal de borrado de un servicio en estado confirmable (0 turnos futuros). En otra pestaña/sesión, reservar un turno futuro para ese servicio. Tocar 'Eliminar' en el modal ya abierto."
-    expected: "El DELETE es rechazado por `services_block_delete_trg`; el modal permanece abierto, `onConfirmError` muestra el toast correspondiente ('quedaron turnos futuros reservados…'), y un segundo click sobre el tacho vuelve a mostrar el estado bloqueado con el conteo actualizado."
-    why_human: "El código (`onConfirm` hace `await openDeleteService(...)` y `throw` antes de que `ConfirmDialog` decida cerrar) está presente y wired, y el gate que lo respalda (`services_block_delete_trg`) está probado a nivel DB (test/service-delete-gate.test.ts caso 1). Pero el re-render del `Dialog` en sí no tiene cobertura: el repo corre Vitest en `environment: 'node'` (verificado — no hay un solo test con `@testing-library/react` ni `render()` en todo el árbol) y la UAT de 13-05, aunque recorrió los tres estados del modal y dos rondas de gaps reales, no ejerció explícitamente esta ventana de carrera (pre-check ok → reserva ajena → confirm). Es la única rama de este tipo (transición de estado UI, no de datos) que queda sin evidencia de ejecución.
+    result: passed
+    evidence: "Ejercido en vivo el 2026-08-03 contra el Supabase local, con la ventana de carrera real: el dueño abrió el modal del servicio 'Color' en estado CONFIRMABLE (1 turno pasado, 0 futuros), y con el modal ya abierto se insertó por service-role un turno futuro (10/8 16:00, `confirmed`) para ese mismo servicio, dejando el pre-check desactualizado. Al tocar 'Eliminar', el trigger rechazó con P0001/service_has_future_appointments y el modal NO se cerró: pasó a estado BLOQUEADO mostrando «\"Color\" tiene 1 turno reservado a partir del 10/8. Desactivalo para dejar de ofrecerlo y conservar el historial.» — la fecha 10/8 prueba que releyó la base y no reusó el pre-check viejo. El botón 'Eliminar' desapareció y quedó 'Desactivar'; el toast fue el explicativo («No se puede eliminar: quedaron turnos futuros reservados. Desactivalo para…»), no el genérico; y 'Color' siguió presente en la lista de Servicios. Confirmado por captura de pantalla."
 ---
 
 # Phase 13: Borrado de servicio preservando historial — Verification Report
 
 **Phase Goal:** El dueño puede **borrar** un servicio cuyos turnos son todos **pasados/cancelados**, y ese borrado **no destruye la historia**: los turnos pasados siguen visibles en Finanzas y en la ficha del cliente con su nombre y precio, vía **desacople del FK** (snapshot). Si el servicio tiene turnos **futuros**, un **modal** bloquea el borrado, lo explica y ofrece **desactivar**.
 **Verified:** 2026-08-03
-**Status:** human_needed (one narrow, non-blocking UI race-condition item not covered by the recorded UAT — see below; all three roadmap Success Criteria are VERIFIED)
+**Status:** passed — 16/16. Los tres Success Criteria del roadmap VERIFICADOS. El único ítem que había quedado sin evidencia de ejecución (backstop TOCTOU) se ejerció en vivo el 2026-08-03 y PASÓ; ver `human_verification_results` en el frontmatter y `13-UAT.md`.
 **Re-verification:** No — initial verification
 
 ## Summary Up Front

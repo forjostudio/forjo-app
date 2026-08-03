@@ -1,9 +1,9 @@
 ---
-status: testing
+status: resolved
 phase: 13-borrado-de-servicio-preservando-historial
 source: [13-VERIFICATION.md]
 started: 2026-08-03T00:00:00.000Z
-updated: 2026-08-03T00:00:00.000Z
+updated: 2026-08-03T16:05:00.000Z
 ---
 
 ## Current Test
@@ -15,14 +15,28 @@ expected: |
   y el click en "Eliminar", el DELETE es rechazado por `services_block_delete_trg`. El modal NO debe
   cerrarse: tiene que volver a abrir en estado BLOQUEADO con el motivo real (el conteo de turnos y la
   fecha del próximo), y el servicio debe seguir existiendo en la lista.
-awaiting: user response
+awaiting: none — PASSED 2026-08-03
 
 ## Tests
 
 ### 1. Backstop TOCTOU — modal reabre en estado bloqueado tras un rechazo tardío
 
 expected: el modal no se cierra en silencio; reabre en estado bloqueado con el motivo real (D-10/D-11)
-result: [pending]
+result: PASSED (2026-08-03)
+
+**Resultado observado.** Con el modal de "Color" abierto en estado CONFIRMABLE, se insertó por
+service-role un turno futuro (10/8 16:00, `confirmed`) para ese mismo servicio, dejando el pre-check
+desactualizado. Al tocar "Eliminar":
+
+- El modal **no se cerró**. Pasó al estado BLOQUEADO: *"'Color' tiene 1 turno reservado a partir del
+  10/8. Desactivalo para dejar de ofrecerlo y conservar el historial."* La fecha **10/8** es la del
+  turno recién insertado, o sea que el modal releyó la base y no reusó el pre-check viejo.
+- El botón "Eliminar" desapareció; quedó "Desactivar" junto a "Cancelar".
+- El toast fue el **explicativo** — *"No se puede eliminar: quedaron turnos futuros reservados.
+  Desactivalo para dejar de ofrecerlo y conservar el historial."* — no el genérico.
+- "Color" siguió presente en la lista de Servicios.
+
+Confirmado por captura de pantalla del dueño.
 
 **Por qué quedó sin verificar:** el código está presente y bien cableado (`onConfirm` hace
 `await openDeleteService(...)` y después `throw`, para que `ConfirmDialog` no decida cerrar), y la
@@ -57,9 +71,9 @@ el borrado accidental ya lo impide el trigger, y eso está probado.
 ## Summary
 
 total: 1
-passed: 0
+passed: 1
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
