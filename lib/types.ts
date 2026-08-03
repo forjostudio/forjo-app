@@ -275,6 +275,13 @@ export interface Appointment {
   // FK a la serie del abono (migración 054, D-03); marca el turno como 'fijo' en la agenda (D-09).
   // null = turno suelto. Se setea con un UPDATE acotado tras el insert atómico (Plan 02).
   abono_id?: string | null
+  // Snapshot INMUTABLE del servicio (migración 065, D-01/D-03), lo escribe el trigger
+  // `appointments_service_snapshot_trg` en el INSERT — la app nunca los manda. Opcionales con `?`
+  // porque no todo `select` los trae, y nullables porque `service_id` también lo es (y porque un
+  // insert con un servicio de otro tenant deja el snapshot vacío, fail-safe). Es lo que sostiene el
+  // historial cuando el servicio se borra: leerlos SIEMPRE vía lib/appointment-service (D-05).
+  service_name?: string | null
+  service_price?: number | null
   created_at: string
   professionals?: Professional
   services?: Service
@@ -300,6 +307,10 @@ export interface Abono {
   // se buscan N turnos REALES. Al juntar N, el abono pasa a status 'completed' y el cron lo deja de extender.
   total_occurrences: number | null
   status: 'active' | 'cancelled' | 'completed' // 'completed' = finito que ya juntó sus N sesiones
+  // Snapshot INMUTABLE del nombre del servicio (migración 065, D-09), lo escribe el trigger
+  // `abonos_service_snapshot_trg` en el INSERT. Opcional porque no todo `select` lo trae; sostiene
+  // el nombre de una serie archivada cuyo servicio ya se borró (`service_id` quedó en NULL).
+  service_name?: string | null
   cancel_token: string // token a NIVEL SERIE (link de cancelación, Phase 7)
   generated_until: string | null // frontera de la ventana rolling (ISO yyyy-mm-dd); idempotencia forward.
   skipped_occurrences: { date: string; reason: string }[] // D-06: ocurrencias salteadas por conflicto.
