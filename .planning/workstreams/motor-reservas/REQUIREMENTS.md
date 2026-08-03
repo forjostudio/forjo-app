@@ -54,9 +54,9 @@ Además se cierra el backlog chico acumulado (polish + un borrado de servicio qu
 
 ### Borrado de servicio preservando historial
 
-- [ ] **HIST-01**: El dueño puede **borrar** un servicio cuyos turnos son todos **pasados/cancelados** (sin turnos futuros).
-- [ ] **HIST-02**: Al intentar borrar un servicio con turnos **futuros**, un **modal** lo bloquea, lo explica y ofrece la vía de **desactivar** (conservar y dejar de ofrecer).
-- [ ] **HIST-03**: Los turnos **pasados** de un servicio borrado **siguen visibles en el historial** (Finanzas / ficha del cliente) con su nombre y precio, sin romper los reportes — vía **desacople del FK** (el turno guarda un snapshot del servicio al crearse; se descarta hard-delete de la historia).
+- [x] **HIST-01**: El dueño puede **borrar** un servicio cuyos turnos son todos **pasados/cancelados** (sin turnos futuros).
+- [x] **HIST-02**: Al intentar borrar un servicio con turnos **futuros**, un **modal** lo bloquea, lo explica y ofrece la vía de **desactivar** (conservar y dejar de ofrecer).
+- [x] **HIST-03**: Los turnos **pasados** de un servicio borrado **siguen visibles en el historial** (Finanzas / ficha del cliente) con su nombre y precio, sin romper los reportes — vía **desacople del FK** (el turno guarda un snapshot del servicio al crearse; se descarta hard-delete de la historia).
 
 ### Cierre de backlog (polish)
 
@@ -102,9 +102,9 @@ Además se cierra el backlog chico acumulado (polish + un borrado de servicio qu
 | CUPO-03 | Phase 12 | Complete |
 | CUPO-04 | Phase 12 | Complete |
 | CUPO-05 | Phase 12 | Complete |
-| HIST-01 | Phase 13 | Pending |
-| HIST-02 | Phase 13 | Pending |
-| HIST-03 | Phase 13 | Pending |
+| HIST-01 | Phase 13 | Complete |
+| HIST-02 | Phase 13 | Complete |
+| HIST-03 | Phase 13 | Complete |
 | POLISH-04 | Phase 14 | Pending |
 | POLISH-05 | Phase 14 | Pending |
 | POLISH-06 | Phase 14 | Pending |

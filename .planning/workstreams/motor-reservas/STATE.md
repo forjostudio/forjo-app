@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Phase 13 context gathered
-last_updated: "2026-07-31T21:04:56.952Z"
-last_activity: 2026-07-31 -- Phase 13 planning complete
+stopped_at: Completado 13-01-PLAN.md — migracion 065 escrita y validada en LOCAL; NO aplicada a prod (eso es 13-05)
+last_updated: "2026-08-03T14:54:57.348Z"
+last_activity: 2026-08-03 -- Phase 13 execution started
 progress:
   total_phases: 14
   completed_phases: 12
-  total_plans: 57
-  completed_plans: 57
+  total_plans: 62
+  completed_plans: 58
   percent: 86
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 12 — cupo-por-solape-recurso-simult-neo
+**Current focus:** Phase 13 — borrado-de-servicio-preservando-historial
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
+Phase: 13 (borrado-de-servicio-preservando-historial) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-31 -- Phase 13 planning complete
+Last activity: 2026-08-03 -- Phase 13 execution started
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Last activity: 2026-07-31 -- Phase 13 planning complete
 | Phase 12 P02 | 12min | 3 tasks | 3 files |
 | Phase 12 P03 | 12min | 3 tasks | 3 files |
 | Phase 12 P04 | 30min | 2 tasks | 2 files |
+| Phase 13 P01 | 35min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 12]: 12-03: labels y microcopy del modo de cupo FIJOS para todos los verticales (D-10); el badge dice 'N/N lleno', no 'N/N camillas' — a ratificar en la UAT visual
 - [Phase 12]: 12-03: el checkpoint bloqueante de UAT visual se AUTO-APROBO por workflow.auto_advance; los 5 pasos manuales siguen PENDIENTES (ver 12-03-SUMMARY, seccion 'Pendiente de UAT visual')
 - [Phase 12]: El warm-up del pool HTTP es parte del test de carrera CUPO-04: sin el, el test pasaba incluso con el lock viejo (falso verde) — createAppointmentCore hace 5 round-trips antes del .rpc; con el pool frio los carriles llegan escalonados y la carrera nunca ocurre
+- [Phase 13]: 13-01: columnas de snapshot NULLABLE sin DEFAULT — Un DEFAULT '' ganaria el COALESCE(snapshot, services.…) del fallback de D-05 y lo romperia; service_id es nullable en appointments y abonos
+- [Phase 13]: 13-01: el trigger de snapshot sobrescribe SIEMPRE el valor entrante — Si respetara el valor del cliente, un dueño podria insertar por PostgREST con service_price inventado e inflar su facturacion historica (T-13-02)
+- [Phase 13]: 13-01: el gate usa IS DISTINCT FROM 'cancelled', no <> — appointments.status es NULLABLE: con <> esas filas evaluan NULL, quedan fuera del EXISTS y ABREN el gate. Verificado en vivo contra PG17 local
 
 ### Pending Todos
 
@@ -189,8 +193,8 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-07-31T19:14:41.924Z
-Stopped at: Phase 13 context gathered
+Last session: 2026-08-03T14:54:57.329Z
+Stopped at: Completado 13-01-PLAN.md — migracion 065 escrita y validada en LOCAL; NO aplicada a prod (eso es 13-05)
 Resume file: .planning/workstreams/motor-reservas/phases/13-borrado-de-servicio-preservando-historial/13-CONTEXT.md
 
 ## Operator Next Steps

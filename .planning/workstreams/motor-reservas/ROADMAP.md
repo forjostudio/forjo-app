@@ -491,12 +491,12 @@ Plans:
   2. Al intentar borrar un servicio con turnos **futuros**, un modal bloquea el borrado, lo explica y ofrece **desactivar** (conservar y dejar de ofrecer) en vez de borrar (HIST-02).
   3. Un turno **pasado** de un servicio ya borrado sigue visible en el historial (Finanzas / ficha del cliente) con su nombre y precio, y los reportes no se rompen — vía desacople del FK / snapshot (HIST-03).
 
-**Plans**: 5 plans
+**Plans**: 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 13-01-PLAN.md — Migración 065: columnas de snapshot + backfill + FKs a `ON DELETE SET NULL` + triggers de snapshot y de gate de borrado; validación `supabase db reset` local + `schema.sql`
+- [x] 13-01-PLAN.md — Migración 065: columnas de snapshot + backfill + FKs a `ON DELETE SET NULL` + triggers de snapshot y de gate de borrado; validación `supabase db reset` local + `schema.sql`
 
 **Wave 2** *(bloqueada por Wave 1)*
 
@@ -554,5 +554,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
-| 13. Borrado de servicio preservando historial | 0/TBD | Not started | - |
+| 13. Borrado de servicio preservando historial | 1/5 | In Progress|  |
 | 14. Cierre de backlog | 0/TBD | Not started | - |
