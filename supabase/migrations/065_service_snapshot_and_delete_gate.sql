@@ -230,14 +230,19 @@ BEGIN
     RETURN OLD;
   END IF;
 
-  -- 6.2 Turnos futuros no cancelados (D-08). "Futuro" = `date >= hoy` en hora AR. Un turno futuro ya
-  -- CANCELADO no bloquea nada: contarlo reproduciría exactamente la confusión que esta fase viene a
-  -- arreglar (el dueño cancela todo, ve la lista vacía, y el borrado sigue trabado).
+  -- 6.2 Turnos futuros TODAVÍA PENDIENTES (D-08). "Futuro" = `date >= hoy` en hora AR. Dos estados
+  -- quedan FUERA del conteo porque ya no son una reserva pendiente:
+  --   - `cancelled`: contarlo reproduciría exactamente la confusión que esta fase viene a arreglar
+  --     (el dueño cancela todo, ve la lista vacía, y el borrado sigue trabado).
+  --   - `completed`: el turno YA SE PRESTÓ. Es historia, no una reserva a futuro. Un turno de hoy
+  --     marcado como completado trabando el borrado es el mismo bug con otra cara (gap UAT #2).
+  -- Los demás estados (`pending`, `pending_payment`, `confirmed`) SÍ bloquean: son compromisos vivos.
   --
-  -- `IS DISTINCT FROM 'cancelled'` y NO `<> 'cancelled'`: `appointments.status` es NULLABLE, y con
-  -- `<>` esas filas evalúan a NULL (ni true ni false), quedan fuera del EXISTS y ABREN el gate.
-  -- `IS DISTINCT FROM` trata NULL como "distinto de cancelled", que es lo correcto: un turno sin
-  -- estado sigue siendo un turno reservado.
+  -- La rama `a."status" IS NULL` es OBLIGATORIA y NO es defensiva de más: `appointments.status` es
+  -- NULLABLE, y `NOT IN (...)` sobre NULL evalúa a NULL (ni true ni false), así que esas filas
+  -- quedarían fuera del EXISTS y ABRIRÍAN el gate. Un turno sin estado sigue siendo un turno
+  -- reservado, así que se cuenta explícitamente. Por el mismo motivo el pre-check del modal (13-03)
+  -- no puede usar un `.in('status', [...])` de PostgREST: `.in(...)` también descarta los NULL.
   --
   -- El predicado se ancla en `a.service_id = OLD.id` (UUID PK global, no adivinable) y suma el filtro
   -- explícito por tenant. `OLD.business_id IS NULL` cubre las filas legacy de `services` sin negocio,
@@ -248,7 +253,7 @@ BEGIN
      WHERE a."service_id" = OLD."id"
        AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
        AND a."date" >= v_today
-       AND a."status" IS DISTINCT FROM 'cancelled'
+       AND (a."status" IS NULL OR a."status" NOT IN ('cancelled', 'completed'))
   ) THEN
     -- Message = código de dominio FIJO, sin nombres, fechas ni conteos: el texto del RAISE llega al
     -- cliente y no debe filtrar datos del negocio (T-13-09). El modal (13-03) lo mapea a su copy.

@@ -465,10 +465,12 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM businesses b WHERE b."id" = OLD."business_id") THEN
     RETURN OLD;
   END IF;
-  -- IS DISTINCT FROM y no <>: status es NULLABLE y con <> esas filas evalúan NULL y ABREN el gate.
+  -- cancelled y completed NO bloquean (uno se anuló, el otro ya se prestó: es historia). La rama
+  -- IS NULL es obligatoria: status es NULLABLE y NOT IN sobre NULL evalúa NULL y ABRIRÍA el gate.
   IF EXISTS (SELECT 1 FROM appointments a WHERE a."service_id" = OLD."id"
        AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
-       AND a."date" >= v_today AND a."status" IS DISTINCT FROM 'cancelled') THEN
+       AND a."date" >= v_today
+       AND (a."status" IS NULL OR a."status" NOT IN ('cancelled', 'completed'))) THEN
     RAISE EXCEPTION 'service_has_future_appointments' USING ERRCODE = 'P0001';
   END IF;
   IF EXISTS (SELECT 1 FROM abonos ab WHERE ab."service_id" = OLD."id"

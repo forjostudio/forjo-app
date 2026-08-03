@@ -19,6 +19,10 @@ import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from
 // del runner ni de la frontera "hoy AR" que evalúa el trigger.
 const FUTURE = '2031-03-03'
 const PAST = '2020-03-02'
+// "Hoy" en hora AR, calculado igual que el trigger y que el pre-check del modal. Es la frontera
+// exacta del gate (`date >= hoy`), y el caso que motivó el gap #2 vive justo ahí: un turno de HOY
+// ya prestado (`completed`) no es una reserva pendiente y no puede trabar el borrado.
+const TODAY_AR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 
 describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DELETE)', () => {
   let t: SeededTenant
@@ -111,10 +115,10 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
     expect(await serviceExists(svc)).toBe(false)
   }, 20000)
 
-  // (3) Pitfall 2: `appointments.status` es NULLABLE. Con `<> 'cancelled'` esas filas evalúan a
-  // NULL, quedan fuera del EXISTS y ABREN el gate. Si este test falla, el trigger perdió el
-  // `IS DISTINCT FROM` y un turno sin estado dejó de contar como reservado.
-  it('3 — un turno futuro con status NULL bloquea igual (IS DISTINCT FROM, no <>)', async () => {
+  // (3) Pitfall 2: `appointments.status` es NULLABLE. Con `NOT IN ('cancelled','completed')` a secas
+  // esas filas evalúan a NULL, quedan fuera del EXISTS y ABREN el gate. Si este test falla, el
+  // trigger perdió la rama `status IS NULL` y un turno sin estado dejó de contar como reservado.
+  it('3 — un turno futuro con status NULL bloquea igual (rama IS NULL explícita)', async () => {
     const svc = await seedService(t, { name: '__test_svc_gate_null' })
     await seedAppointment({ serviceId: svc, date: FUTURE, time: '10:00', status: null })
 
@@ -186,14 +190,70 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
     expect(data?.service_name).toBe('__test_svc_gate_abono_archivado')
   }, 20000)
 
-  // (7) T-13-07: guard de cascada. En un `DELETE FROM businesses` el padre se borra ANTES de que
+  // (7) GAP UAT #2 — el caso exacto que reportó el dueño: marcó el turno de HOY como `completed` y
+  // el modal seguía diciendo "tiene 1 turno reservado a partir del 3/8". Un turno completado YA SE
+  // PRESTÓ: es historial, no una reserva pendiente, y no puede trabar el borrado. Que la fecha sea
+  // HOY (no el pasado) es parte del test: `date >= hoy` lo mete de lleno en la ventana del gate.
+  it('7 — un turno de HOY marcado completed NO bloquea el borrado (gap UAT #2)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_completed_hoy' })
+    const turno = await seedAppointment({ serviceId: svc, date: TODAY_AR, time: '15:00', status: 'completed' })
+
+    const del = await deleteService(svc)
+    expect(del.error).toBeNull()
+    expect(await serviceExists(svc)).toBe(false)
+
+    // Y el turno completado sobrevive con su snapshot: se desacopla, no se pierde (HIST-03).
+    const { data } = await t.admin
+      .from('appointments')
+      .select('id, service_id, service_name, service_price')
+      .eq('id', turno)
+      .single()
+    expect(data?.service_id).toBeNull()
+    expect(data?.service_name).toBe('__test_svc_gate_completed_hoy')
+    expect(Number(data?.service_price)).toBe(100)
+  }, 20000)
+
+  // (8) Misma regla, sin frontera de fecha de por medio: `completed` no bloquea NUNCA, tampoco en el
+  // futuro. El filtro es por ESTADO, no por fecha — un turno marcado como prestado es historia
+  // aunque su fecha todavía no llegó (reprogramaciones, cierres anticipados de la agenda).
+  it('8 — un turno FUTURO completed tampoco bloquea (la regla es por estado, no por fecha)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_completed_futuro' })
+    await seedAppointment({ serviceId: svc, date: FUTURE, time: '15:30', status: 'completed' })
+
+    const del = await deleteService(svc)
+    expect(del.error).toBeNull()
+    expect(await serviceExists(svc)).toBe(false)
+  }, 20000)
+
+  // (9) El contrapeso de (7)/(8): abrir el gate para `completed` NO puede haber abierto nada más. Los
+  // tres estados vivos del dominio (`lib/types.ts`) siguen bloqueando en una fecha futura. Si este
+  // test se cae, el predicado se pasó de laxo y el dueño puede vaciarse la agenda sin enterarse.
+  it.each(['pending', 'pending_payment', 'confirmed'])(
+    '9 — un turno futuro %s sigue bloqueando el borrado',
+    async (status) => {
+      const svc = await seedService(t, { name: `__test_svc_gate_vivo_${status}` })
+      // Una hora distinta por estado: el índice único 011 y la exclusion constraint 013 miran la
+      // agenda del profesional, que es la misma para los tres casos.
+      const time = { pending: '16:00', pending_payment: '16:30', confirmed: '17:00' }[status] as string
+      await seedAppointment({ serviceId: svc, date: FUTURE, time, status })
+
+      const del = await deleteService(svc)
+      expect(del.error).not.toBeNull()
+      expect(del.error?.code).toBe('P0001')
+      expect(del.error?.message).toContain('service_has_future_appointments')
+      expect(await serviceExists(svc)).toBe(true)
+    },
+    20000,
+  )
+
+  // (10) T-13-07: guard de cascada. En un `DELETE FROM businesses` el padre se borra ANTES de que
   // corran las acciones referenciales hacia `services`, y esa ausencia identifica la cascada. Sin
   // el guard, cerrar la cuenta de un negocio con turnos futuros sería imposible — y `teardownOneTenant`
   // rompería la suite entera, porque su cleanup borra `businesses` y cascadea a `services`.
   //
   // Este caso usa su propio tenant desechable: el business ya se borra dentro del test, así que solo
   // queda limpiar el usuario de auth (que no cae por el CASCADE).
-  it('7 — borrar el negocio entero funciona aunque haya turnos futuros vivos (guard de cascada)', async () => {
+  it('10 — borrar el negocio entero funciona aunque haya turnos futuros vivos (guard de cascada)', async () => {
     const tmp = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
     try {
       const ins = await tmp.admin.from('appointments').insert({

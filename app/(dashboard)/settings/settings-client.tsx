@@ -537,13 +537,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // turno de mañana temprano dejaría de contarse como futuro.
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
     const [fut, abo, hist] = await Promise.all([
-      // El `.or(...)` de abajo es el equivalente EXACTO en PostgREST del `status IS DISTINCT FROM
-      // 'cancelled'` del trigger. NO usar `.neq('status','cancelled')` a secas: PostgREST descarta
-      // también las filas con status NULL, y entonces el pre-check diría "podés borrar" justo donde
-      // el trigger rechaza.
+      // El `.or(...)` de abajo es el equivalente EXACTO en PostgREST del
+      // `status IS NULL OR status NOT IN ('cancelled','completed')` del trigger. Un turno CANCELADO
+      // no bloquea (se anuló) y uno COMPLETED tampoco (ya se prestó: es historia, no una reserva
+      // pendiente). NO usar `.neq('status', ...)` suelto ni `.in('status', [...])`: las dos formas
+      // descartan las filas con status NULL, y entonces el pre-check diría "podés borrar" justo
+      // donde el trigger rechaza — por eso la rama `status.is.null` es explícita.
       supabase.from('appointments').select('date', { count: 'exact' })
         .eq('business_id', business.id).eq('service_id', s.id)
-        .gte('date', today).or('status.is.null,status.neq.cancelled')
+        .gte('date', today).or('status.is.null,and(status.neq.cancelled,status.neq.completed)')
         .order('date').limit(1),
       supabase.from('abonos').select('id', { count: 'exact', head: true })
         .eq('business_id', business.id).eq('service_id', s.id).eq('status', 'active'),
