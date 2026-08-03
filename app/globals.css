@@ -99,6 +99,12 @@
   --danger: var(--destructive);
   --danger-foreground: #fbf3e3;   /* crema (= --card de :root) sobre #b23a26 → 5.40:1 (AA). NO se
                                      referencia --primary-foreground: la paleta yellow/ink lo pisa a ink. */
+  /* OJO (WR-05): --danger re-resuelve por theme (los [data-theme=…] de app/themes.css pisan
+     --destructive sobre el MISMO <html>), pero --danger-foreground NO puede seguirlo solo. Los
+     valores de acá son el PAR del rojo Forjo; cada theme alternativo declara su propio
+     --danger-foreground junto a su --destructive (app/themes.css). Deliberadamente NO se apunta a
+     var(--destructive-foreground): ese token no está mapeado en @theme, no lo consume nadie, y sus
+     valores (blanco en modern, casi blanco en spa) dan 3.9:1 y 2.9:1 — por debajo de AA. */
 
   --sidebar: #efe3cd;
   --sidebar-foreground: #1a1714;

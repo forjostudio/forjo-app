@@ -33,6 +33,12 @@
   --input:color-mix(in oklab,#dbe2ee 89%,var(--tint));
   --destructive:#e5484d;
   --destructive-foreground:#ffffff;
+  /* Par de la superficie de peligro compartida (--danger de globals.css). Como este bloque pisa
+     --destructive sobre el mismo <html>, sin esto el botón destructivo del ConfirmDialog y el punto
+     "Alto" del RiskBadge se quedaban con el crema del theme Forjo: 3.55:1, debajo de AA. #0f1623 es
+     el mismo negro-navy del fondo dark de modern → 4.63:1. Este rojo NO cambia entre claro y oscuro
+     (.dark[data-theme="modern"] no lo redeclara), así que un solo valor cubre los dos modos. */
+  --danger-foreground:#0f1623;
 
   /* sidebar navy aún en modo claro — firma del look admin */
   --sidebar:color-mix(in oklab,#1b2334 90%,var(--tint));
@@ -97,6 +103,9 @@
   --input:color-mix(in oklab,#e2d6c8 87%,var(--tint));
   --destructive:#c0876b;
   --destructive-foreground:#fbf7f2;
+  /* Ídem modern: el terracota de spa es claro, así que el par tiene que ser oscuro. #221f25 es el
+     fondo dark del propio theme → 5.36:1 (el crema de Forjo daba 2.75:1). Vale para claro y oscuro. */
+  --danger-foreground:#221f25;
 
   --sidebar:color-mix(in oklab,#e9e0d5 89%,var(--tint));
   --sidebar-foreground:#4c443d;
@@ -161,6 +170,9 @@
   --input:color-mix(in srgb,var(--tint) 16%,transparent);
   --destructive:#ff2e7e;
   --destructive-foreground:#0a0410;
+  /* El magenta neón es el más claro de todos: el par correcto es el casi-negro del theme → 5.73:1
+     (con el crema de Forjo quedaba en 3.20:1). Vale para claro y oscuro. */
+  --danger-foreground:#0a0410;
 
   --sidebar:color-mix(in oklab,#0a0714 92%,var(--tint));
   --sidebar-foreground:#bfe9f5;
