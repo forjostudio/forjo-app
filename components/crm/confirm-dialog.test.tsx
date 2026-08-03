@@ -149,13 +149,17 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     expect(computeFooterLayout({ hideConfirm: true })).toEqual({ showConfirm: false, showSecondary: false, secondaryVariant: 'outline' })
   })
 
-  // Test 6 (destructive): el helper de clase del botón confirmar referencia --crm-danger, no --destructive.
-  it('destructive: la clase del botón confirmar usa --crm-danger (no --destructive)', () => {
+  // Test 6 (destructive): el helper de clase del botón confirmar referencia la superficie de peligro
+  // del shell (--danger), NUNCA el token de un shell puntual. Regresión del gap 13-05 #1: con
+  // --crm-danger directo el botón se quedaba sin fondo fuera de .crm-shell (o sea, en el dashboard).
+  it('destructive: la clase del botón confirmar usa --danger (no el token de un shell puntual)', () => {
     const dangerCls = confirmButtonClass(true)
-    expect(dangerCls).toMatch(/crm-danger/)
+    expect(dangerCls).toMatch(/var\(--danger\)/)
+    expect(dangerCls).toMatch(/var\(--danger-foreground\)/)
+    expect(dangerCls).not.toMatch(/crm-danger/)
     expect(dangerCls).not.toMatch(/destructive/)
 
     const normalCls = confirmButtonClass(false)
-    expect(normalCls).not.toMatch(/crm-danger/)
+    expect(normalCls).toBe('')
   })
 })

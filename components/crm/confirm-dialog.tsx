@@ -56,7 +56,7 @@ export interface ConfirmDialogProps {
   minReasonLength?: number
   risk: Risk
   confirmLabel: string
-  /** destructive ⇒ botón confirmar con fondo --crm-danger (no --destructive). */
+  /** destructive ⇒ botón confirmar con fondo --danger (la superficie de peligro del shell activo). */
   destructive?: boolean
   /**
    * Botón extra entre "Cancelar" y confirmar. Opcional y aditivo (sin él, footer de siempre).
@@ -173,12 +173,16 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
 }
 
 /**
- * Clase del botón confirmar. destructive ⇒ --crm-danger + foreground cream (NUNCA --destructive,
- * UI-SPEC §"Riesgo badges"); si no ⇒ amarillo primario (foreground ink) que ya trae <Button>.
+ * Clase del botón confirmar. destructive ⇒ la superficie de peligro del shell (--danger), que en el
+ * CRM resuelve a --crm-danger y en el dashboard a --destructive; si no ⇒ el primario que trae <Button>.
+ *
+ * POR QUÉ --danger y no --crm-danger (gap 13-05 #1): este dialog se reusa en el DASHBOARD desde 13-03,
+ * y --crm-danger sólo existe dentro de .crm-shell — afuera la var no resolvía y el botón quedaba sin
+ * fondo. La indirección vive en globals.css; acá NUNCA se referencia el token de un shell puntual.
  */
 export function confirmButtonClass(destructive?: boolean): string {
   return destructive
-    ? 'bg-[var(--crm-danger)] text-[var(--crm-danger-foreground)] hover:bg-[color-mix(in_oklch,var(--crm-danger),black_10%)]'
+    ? 'bg-[var(--danger)] text-[var(--danger-foreground)] hover:bg-[color-mix(in_oklch,var(--danger),black_10%)]'
     : ''
 }
 
@@ -281,11 +285,11 @@ export function ConfirmDialog({
               onChange={(e) => setTyped(e.target.value)}
               aria-invalid={state.wordMismatch || undefined}
               aria-describedby={state.wordHelper ? wordHelpId : undefined}
-              className={cn('font-mono', state.wordMismatch && 'border-[var(--crm-danger)]')}
+              className={cn('font-mono', state.wordMismatch && 'border-[var(--danger)]')}
               placeholder={confirmWord}
             />
             {state.wordHelper && (
-              <p id={wordHelpId} className="font-mono text-xs text-[var(--crm-danger)]">
+              <p id={wordHelpId} className="font-mono text-xs text-[var(--danger)]">
                 {state.wordHelper}
               </p>
             )}
@@ -303,7 +307,7 @@ export function ConfirmDialog({
               placeholder="Motivo del acceso (ej. soporte: revisar config)"
             />
             {state.reasonHelper && (
-              <p id={reasonHelpId} className="text-xs text-[var(--crm-danger)]">
+              <p id={reasonHelpId} className="text-xs text-[var(--danger)]">
                 {state.reasonHelper}
               </p>
             )}

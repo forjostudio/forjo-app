@@ -5,11 +5,14 @@ import { cn } from '@/lib/utils'
  * RiskBadge — badge de nivel de riesgo del CRM (UI-SPEC §"Badge — Riesgo").
  *
  * NO edita el `components/ui/badge.tsx` compartido: define sus propias variantes con un cva
- * local (`riskBadgeVariants`). Las variantes de dominio peligro referencian `--crm-danger`
- * (el ÚNICO rojo del CRM), NUNCA el token `--destructive` (brief §12, prohibición del plan).
+ * local (`riskBadgeVariants`). El dot de peligro referencia `--danger`, la superficie de peligro
+ * del shell activo: dentro de `.crm-shell` resuelve a `--crm-danger` (el ÚNICO rojo del CRM, brief
+ * §12) y en el dashboard a `--destructive`. NUNCA se nombra el token de un shell puntual: este badge
+ * se renderiza en los dos (lo monta el ConfirmDialog, reusado en Ajustes desde 13-03) y con
+ * `--crm-danger` directo el dot se perdía fuera del CRM (gap 13-05 #1).
  *
  * Variantes:
- *   - alto  → pill oscuro (bg-secondary), text-foreground, dot rojo (--crm-danger) a la izquierda.
+ *   - alto  → pill oscuro (bg-secondary), text-foreground, dot rojo (--danger) a la izquierda.
  *   - medio → pill amarillo relleno (bg-primary, text-primary-foreground ink), sin dot.
  *   - bajo  → pill oscuro, text-muted-foreground, dot neutro/muted a la izquierda.
  */
@@ -46,13 +49,13 @@ export function RiskBadge({
   VariantProps<typeof riskBadgeVariants>) {
   return (
     <span className={cn(riskBadgeVariants({ risk }), className)} {...props}>
-      {/* Dot indicador: rojo --crm-danger en alto, neutro en bajo, ninguno en medio (el
+      {/* Dot indicador: rojo --danger en alto, neutro en bajo, ninguno en medio (el
           relleno amarillo ya marca el nivel). */}
       {risk === 'alto' && (
         <span
           aria-hidden="true"
           className="size-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: 'var(--crm-danger)' }}
+          style={{ backgroundColor: 'var(--danger)' }}
         />
       )}
       {risk === 'bajo' && (

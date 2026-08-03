@@ -89,6 +89,17 @@
   --destructive: #b23a26;
   --warning: #8a5a12;   /* ámbar oscuro sobre crema #f3ead8 → 4.97:1 (AA texto normal). Palette-independiente */
 
+  /* SUPERFICIE DE PELIGRO — indirección de shell (gap 13-05 #1).
+     Los componentes de peligro compartidos (ConfirmDialog destructivo, RiskBadge) viven tanto en el
+     dashboard como en el CRM. Referenciaban --crm-danger DIRECTO, que solo existe dentro de
+     .crm-shell: fuera de ahí la var no resolvía y el botón "Eliminar" quedaba sin fondo.
+     Este token es el punto único de resolución: acá apunta al --destructive del dashboard, y
+     .crm-shell lo re-apunta a --crm-danger (que NO se mueve ni se ensancha: el CRM se ve igual).
+     --danger hereda ya resuelto, así que sigue a .dark porque ambas reglas caen sobre el mismo <html>. */
+  --danger: var(--destructive);
+  --danger-foreground: #fbf3e3;   /* crema (= --card de :root) sobre #b23a26 → 5.40:1 (AA). NO se
+                                     referencia --primary-foreground: la paleta yellow/ink lo pisa a ink. */
+
   --sidebar: #efe3cd;
   --sidebar-foreground: #1a1714;
   --sidebar-border: #ddd1b7;
@@ -129,6 +140,11 @@
   --input: oklch(0.94 0.03 80 / 14%);
   --destructive: #e05c43;
   --warning: #e6b53f;   /* ámbar Bauhaus sobre #1a1714 → 8.75:1 (AAA) */
+
+  /* El rojo dark (#e05c43) es CLARO: el crema encima da 3.29:1 (falla AA). El foreground se invierte
+     a ink → 4.91:1 (AA). Mismo criterio que usan las paletas blue/green para --primary-foreground.
+     --danger NO se redeclara: var(--destructive) ya resuelve al valor dark en este mismo elemento. */
+  --danger-foreground: #1a1714;
 
   --sidebar: #141110;
   --sidebar-foreground: #f3ead8;
@@ -215,6 +231,11 @@
      Expuesto como token para que las variantes de peligro lo referencien explicito. */
   --crm-danger: #e85c3f;
   --crm-danger-foreground: #fbf3e3;
+
+  /* Re-apunta la superficie de peligro compartida al rojo del CRM. Los componentes referencian
+     --danger; acá adentro sigue resolviendo EXACTAMENTE a --crm-danger (render byte-idéntico). */
+  --danger: var(--crm-danger);
+  --danger-foreground: var(--crm-danger-foreground);
 
   /* info / success referencian las constantes Bauhaus (ya dark-aware) */
   --crm-info: var(--chart-2);     /* azul  */
