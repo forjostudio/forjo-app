@@ -491,7 +491,7 @@ Plans:
   2. Al intentar borrar un servicio con turnos **futuros**, un modal bloquea el borrado, lo explica y ofrece **desactivar** (conservar y dejar de ofrecer) en vez de borrar (HIST-02).
   3. Un turno **pasado** de un servicio ya borrado sigue visible en el historial (Finanzas / ficha del cliente) con su nombre y precio, y los reportes no se rompen — vía desacople del FK / snapshot (HIST-03).
 
-**Plans**: 1/5 plans executed
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
@@ -500,7 +500,7 @@ Plans:
 
 **Wave 2** *(bloqueada por Wave 1)*
 
-- [ ] 13-02-PLAN.md — Helper puro `lib/appointment-service.ts` (fallback snapshot→join) + los 8 read-paths de historial (Finanzas, CSV, Dashboard `monthRevenue`, ficha del cliente, Turnos desktop+mobile, Abonos)
+- [x] 13-02-PLAN.md — Helper puro `lib/appointment-service.ts` (fallback snapshot→join) + los 8 read-paths de historial (Finanzas, CSV, Dashboard `monthRevenue`, ficha del cliente, Turnos desktop+mobile, Abonos)
 - [ ] 13-03-PLAN.md — UX del borrado: `ConfirmDialog` extendido, pre-check + modal de dos estados con "Desactivar", `deleteService` discriminado, `toggleService` endurecido, tabs Activos/Desactivados y mapeo `P0001` en canchas
 
 **Wave 3** *(bloqueada por Wave 2)*
@@ -554,5 +554,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
-| 13. Borrado de servicio preservando historial | 1/5 | In Progress|  |
+| 13. Borrado de servicio preservando historial | 2/5 | In Progress|  |
 | 14. Cierre de backlog | 0/TBD | Not started | - |
