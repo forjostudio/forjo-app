@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Appointment, Professional, Service, TimeBlock, Client, Location } from '@/lib/types'
 import { apptServiceName, apptServicePriceOrNull } from '@/lib/appointment-service'
+import { nowInAR, isPastAppointment } from '@/lib/appointment-time'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -34,7 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 // Rango de fechas (strings 'yyyy-MM-dd') para los presets del filtro, relativos a `ref`.
 // La comparación luego es lexicográfica sobre strings ISO (= comparación cronológica),
-// igual patrón que ya usa el filtro con `a.date < today`. Semana = lunes a domingo.
+// mismo patrón que usa el corte de tabs en @/lib/appointment-time. Semana = lunes a domingo.
 function dateRangeFor(mode: 'today' | 'week' | 'month', ref: Date): { from: string; to: string } {
   if (mode === 'today') {
     const d = format(ref, 'yyyy-MM-dd')
@@ -123,7 +124,10 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   const [cancelling, setCancelling] = useState(false)
   const dateRef = useRef<HTMLDivElement>(null)
 
-  const today = format(new Date(), 'yyyy-MM-dd')
+  // "Ahora" en hora AR (fecha + hora). El corte de los tabs necesita la HORA: comparando solo la
+  // fecha, un turno de HOY a una hora ya pasada se quedaba en "Próximos" para siempre y no aparecía
+  // nunca en "Pasados". El helper puro vive en @/lib/appointment-time.
+  const now = nowInAR()
 
   // Cierre del dropdown de fecha al hacer click fuera del control.
   useEffect(() => {
@@ -139,8 +143,11 @@ export function AppointmentsClient({ initialAppointments, professionals, service
   }, [dateOpen])
 
   const filtered = appointments.filter(a => {
-    if (tab === 'proximos' && (a.date < today || a.status === 'cancelled')) return false
-    if (tab === 'pasados' && a.date >= today) return false
+    // El corte lo decide isPastAppointment (fecha Y hora). Cancelados fuera de "Próximos", como
+    // siempre: un turno futuro cancelado no está ni en Próximos ni en Pasados, solo en "Todos".
+    const past = isPastAppointment(a, now)
+    if (tab === 'proximos' && (past || a.status === 'cancelled')) return false
+    if (tab === 'pasados' && !past) return false
     if (dateMode === 'custom') {
       if (filterDate && a.date !== filterDate) return false
     } else if (dateMode !== 'none') {
