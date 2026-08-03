@@ -14,7 +14,7 @@
 // `npx tsc --noEmit` + `npm run lint` + revisión visual en Phases 2-3 que consumen el dialog.
 
 import { describe, it, expect, vi } from 'vitest'
-import { computeConfirmState, buildSubmitGuard, confirmButtonClass } from './confirm-dialog'
+import { computeConfirmState, buildSubmitGuard, confirmButtonClass, computeFooterLayout } from './confirm-dialog'
 
 describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
   // Test 1 (simple, confirmWord undefined): botón habilitado de entrada.
@@ -128,6 +128,25 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     })
     await expect(guard()).rejects.toThrow('boom')
     expect(loading).toBe(false)
+  })
+
+  // Test 7 (13-03, footer aditivo): computeFooterLayout decide qué botones muestra el footer.
+  // Sin props nuevas el footer es exactamente el de hoy ([Cancelar] [confirmLabel]) → cero
+  // regresión para los ~10 call-sites existentes.
+  it('footer: sin props nuevas muestra confirmar y NO muestra secundario', () => {
+    expect(computeFooterLayout({})).toEqual({ showConfirm: true, showSecondary: false, secondaryVariant: 'outline' })
+  })
+
+  it('footer: con secundario y confirmar visible, el secundario es outline (confirmar manda)', () => {
+    expect(computeFooterLayout({ hasSecondary: true })).toEqual({ showConfirm: true, showSecondary: true, secondaryVariant: 'outline' })
+  })
+
+  it('footer: sin confirmar, el secundario pasa a ser el primario visual (default)', () => {
+    expect(computeFooterLayout({ hideConfirm: true, hasSecondary: true })).toEqual({ showConfirm: false, showSecondary: true, secondaryVariant: 'default' })
+  })
+
+  it('footer: sin confirmar y sin secundario, queda solo "Cancelar" (estado verificando…)', () => {
+    expect(computeFooterLayout({ hideConfirm: true })).toEqual({ showConfirm: false, showSecondary: false, secondaryVariant: 'outline' })
   })
 
   // Test 6 (destructive): el helper de clase del botón confirmar referencia --crm-danger, no --destructive.
