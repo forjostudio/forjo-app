@@ -61,9 +61,14 @@ export interface ConfirmDialogProps {
   /**
    * Botón extra entre "Cancelar" y confirmar. Opcional y aditivo (sin él, footer de siempre).
    * Ofrece una SALIDA ejecutable cuando la acción principal no se puede hacer (13-03/D-12:
-   * "Desactivar" ahí mismo, no mandar al dueño a buscar el switch). Disabled mientras loading.
+   * "Desactivar" ahí mismo, no mandar al dueño a buscar el switch).
+   *
+   * Tiene su PROPIO loading (WR-08): antes solo miraba `loading`, que es del confirmar, así que el
+   * botón nunca se deshabilitaba mientras corría su propio trabajo (doble click ⇒ dos escrituras y
+   * dos toasts) y el dialog se podía cerrar en el medio. El caller puede devolver `false` para
+   * decir "falló, no cierres" — el dialog no cierra solo: cerrar es decisión del caller.
    */
-  secondaryAction?: { label: string; onClick: () => void | Promise<void> }
+  secondaryAction?: { label: string; onClick: () => boolean | void | Promise<boolean | void> }
   /**
    * Oculta el confirmar. Opcional y aditivo (default: se muestra, como hoy). Es el estado
    * *bloqueado* de 13-03/D-11: ofrecer un "Eliminar" que la DB ya se sabe que rechaza es mal UX.
@@ -218,6 +223,10 @@ export function ConfirmDialog({
   const [reason, setReason] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const loadingRef = React.useRef(false)
+  // Loading PROPIO de la acción secundaria (WR-08). Separado del confirmar porque son dos trabajos
+  // distintos, pero bloquea lo mismo: doble click, cierre del dialog y el confirmar.
+  const [secLoading, setSecLoading] = React.useState(false)
+  const secLoadingRef = React.useRef(false)
 
   // ids para aria-describedby (helpers).
   const wordHelpId = React.useId()
@@ -229,7 +238,7 @@ export function ConfirmDialog({
   // Reset al cerrar (vía onOpenChange) — pero bloquear el cierre durante loading.
   const handleOpenChange = React.useCallback(
     (next: boolean) => {
-      if (loadingRef.current) return // dialog no cerrable mientras corre la acción
+      if (loadingRef.current || secLoadingRef.current) return // no cerrable mientras corre CUALQUIERA de las dos acciones
       if (!next) {
         setTyped('')
         setReason('')
@@ -274,7 +283,7 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent showCloseButton={!loading}>
+      <DialogContent showCloseButton={!loading && !secLoading}>
         <DialogHeader>
           <div className="flex items-center gap-2 pr-8">
             <DialogTitle>{title}</DialogTitle>
@@ -323,17 +332,37 @@ export function ConfirmDialog({
 
         <DialogFooter>
           <DialogClose
-            render={<Button variant="outline" disabled={loading} />}
+            render={<Button variant="outline" disabled={loading || secLoading} />}
           >
             Cancelar
           </DialogClose>
           {footer.showSecondary && secondaryAction && (
-            <Button type="button" variant={footer.secondaryVariant} disabled={loading} onClick={() => { void secondaryAction.onClick() }}>
+            <Button
+              type="button"
+              variant={footer.secondaryVariant}
+              disabled={loading || secLoading}
+              onClick={async () => {
+                if (secLoadingRef.current) return // anti doble-submit, igual que buildSubmitGuard
+                secLoadingRef.current = true
+                setSecLoading(true)
+                try {
+                  await secondaryAction.onClick()
+                } catch (err) {
+                  // NO se traga el rechazo: el dialog queda abierto y el motivo se avisa.
+                  console.error('[confirm-dialog] acción secundaria falló:', err instanceof Error ? err.message : err)
+                  toast.error('No se pudo completar la acción. Probá de nuevo o revisá tu conexión.')
+                } finally {
+                  secLoadingRef.current = false
+                  setSecLoading(false)
+                }
+              }}
+            >
+              {secLoading && <Loader2Icon className="animate-spin" />}
               {secondaryAction.label}
             </Button>
           )}
           {footer.showConfirm && (
-            <Button type="button" onClick={handleConfirm} disabled={!state.canConfirm} aria-disabled={!state.canConfirm} className={confirmButtonClass(destructive)}>
+            <Button type="button" onClick={handleConfirm} disabled={!state.canConfirm || secLoading} aria-disabled={!state.canConfirm || secLoading} className={confirmButtonClass(destructive)}>
               {loading ? (<><Loader2Icon className="animate-spin" />Confirmando…</>) : confirmLabel}
             </Button>
           )}

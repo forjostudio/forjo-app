@@ -645,11 +645,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // mentiría. Alineado al patrón de deleteService/deleteProfessional: filtro por business_id (sin él,
   // un UUID conocido de otro negocio se desactivaría si la policy lo permitiera) + error real
   // capturado ANTES de tocar el estado local.
-  async function toggleService(id: string, active: boolean) {
+  // Devuelve si salió bien (WR-08): el modal de borrado la usa como acción secundaria y NO puede
+  // cerrarse "por las dudas" — antes cerraba siempre, así que un fallo dejaba el toast de error al
+  // lado de un diálogo ya desaparecido.
+  async function toggleService(id: string, active: boolean): Promise<boolean> {
     const { error } = await supabase.from('services').update({ active }).eq('id', id).eq('business_id', business.id)
-    if (error) { toast.error('No se pudo actualizar el servicio'); return }
+    if (error) { toast.error('No se pudo actualizar el servicio'); return false }
     setServices(prev => prev.map(s => s.id === id ? { ...s, active } : s))
     toast.success(active ? 'Servicio activado' : 'Servicio desactivado')
+    return true
   }
   // Consultorios donde se ofrece un servicio (con compatibilidad legacy location_id).
   const serviceLocSet = (s: Service) => s.location_ids?.length ? s.location_ids : (s.location_id ? [s.location_id] : [])
@@ -2492,7 +2496,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         // servicios ya están inactivos, y ahí "Desactivar" escribía active:false sobre active:false,
         // cantaba éxito y cerraba el diálogo sin que cambiara nada.
         secondaryAction={delBlocked && delService && delService.active
-          ? { label: 'Desactivar', onClick: async () => { await toggleService(delService.id, false); setDelService(null); setDelInfo(null) } }
+          // Solo cierra si REALMENTE se desactivó (WR-08).
+          ? { label: 'Desactivar', onClick: async () => { if (!await toggleService(delService.id, false)) return false; delReqRef.current++; setDelService(null); setDelInfo(null); return true } }
           : undefined}
         onConfirmError={(err) => {
           const motivo = err instanceof Error ? err.message : ''
