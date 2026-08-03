@@ -4,14 +4,14 @@ milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
 stopped_at: Completado 13-04-PLAN.md (wave 3)
-last_updated: "2026-08-03T15:42:24.481Z"
-last_activity: 2026-08-03 -- Phase 13 execution started
+last_updated: "2026-08-03T18:40:59.935Z"
+last_activity: 2026-08-03
 progress:
   total_phases: 14
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 62
-  completed_plans: 60
-  percent: 86
+  completed_plans: 62
+  percent: 93
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 13 (borrado-de-servicio-preservando-historial) — EXECUTING
-Plan: 5 of 5
+Phase: 14
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-08-03 -- Phase 13 execution started
+Last activity: 2026-08-03
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Last activity: 2026-08-03 -- Phase 13 execution started
 | 10 | 5 | - | - |
 | 11 | 4 | - | - |
 | 12 | 4 | - | - |
+| 13 | 5 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
