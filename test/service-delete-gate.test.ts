@@ -287,4 +287,51 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
       await tmp.admin.auth.admin.deleteUser(tmp.userId)
     }
   }, 20000)
+
+  // (11) IN-01 — el conteo del historial que promete el modal NO es el que Finanzas muestra.
+  //
+  // El pre-check `hist` (settings-client.tsx:565-566) cuenta TODOS los turnos del servicio, sin filtro
+  // de estado, y el copy del modal (`:605`) dice "Se conservan sus N turnos en el historial (Finanzas y
+  // ficha del cliente)". Pero Finanzas (finances-client.tsx:221/250/274), el export CSV
+  // (api/export/finances/route.ts:53) y la ficha del cliente aplican todos `.neq('status','cancelled')`.
+  // O sea: el N prometido incluye turnos cancelados que el dueño NUNCA va a ver en Finanzas.
+  //
+  // LIMITACIÓN CONOCIDA DE ESTE CASO: `settings-client.tsx` es un componente client y esta suite no
+  // renderiza React (D-01), así que acá se REPLICAN las dos formas de query tal cual las emite la app,
+  // no se invoca la app. Consecuencia: arreglar IN-01 en el componente NO rompe este test solo. Cuando
+  // se arregle (agregando `.neq('status','cancelled')` al `hist` del modal, o sacando el número del
+  // copy), hay que darle el mismo filtro a la réplica `hist` de abajo y devolver el `it.fails` a `it`.
+  it.fails('11 — IN-01: el count del modal y el que ve Finanzas deberían coincidir', async () => {
+    const svc = await seedService(t, { name: '__test_svc_in01_historial' })
+    // Historial mixto, todo PASADO (el gate no entra en juego acá): 2 turnos que Finanzas SÍ muestra
+    // y 2 cancelados que Finanzas descarta.
+    await seedAppointment({ serviceId: svc, date: PAST, time: '18:00', status: 'confirmed' })
+    await seedAppointment({ serviceId: svc, date: PAST, time: '18:30', status: 'completed' })
+    await seedAppointment({ serviceId: svc, date: PAST, time: '19:00', status: 'cancelled' })
+    await seedAppointment({ serviceId: svc, date: PAST, time: '19:30', status: 'cancelled' })
+
+    // (a) La query del modal, TAL CUAL (sin filtro de estado).
+    const hist = await t.admin
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', t.businessId)
+      .eq('service_id', svc)
+
+    // (b) La query de Finanzas / export CSV / ficha del cliente, TAL CUAL.
+    const finanzas = await t.admin
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', t.businessId)
+      .eq('service_id', svc)
+      .neq('status', 'cancelled')
+
+    expect(hist.error).toBeNull()
+    expect(finanzas.error).toBeNull()
+    // Sanity que vale con y sin el arreglo: se sembraron 4 filas y Finanzas muestra 2 de ellas.
+    expect(finanzas.count).toBe(2)
+
+    // La expectativa CORRECTA: el modal no puede prometer un historial que Finanzas no va a mostrar.
+    // Hoy da 4 vs 2 → el copy sobredimensiona lo que se conserva.
+    expect(hist.count).toBe(finanzas.count)
+  }, 20000)
 })

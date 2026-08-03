@@ -76,3 +76,55 @@ describe('isPastAppointment', () => {
     expect(pasados.filter(t => proximos.includes(t))).toEqual([])
   })
 })
+
+// ── IN-02: `hhmmss` con fracciones de segundo y con basura ────────────────────────────────────
+// `hhmmss` (lib/appointment-time.ts:32) NO se exporta, así que se ejercita a través de
+// `isPastAppointment`, que es su único consumidor.
+//
+// La normalización es `pad2(Number(s) || 0)`. Eso rompe en dos formas, las dos VERIFICADAS llamando
+// a la función antes de escribir estos casos:
+//
+//   1. Fracción de segundo con la parte entera de UN dígito: `'00.5'` → `Number` = 0.5 → `String` =
+//      `'0.5'`, que ya tiene 3 caracteres, así que `padStart(2,'0')` es un no-op. Sale `'13:00:0.5'`,
+//      un string que YA NO es comparable lexicográficamente con `'13:00:00'` (el `.` vale menos que
+//      cualquier dígito, y el `9` de `'9.5'` vale más que el `1` de `'10'`). La comparación se rompe
+//      en las DOS direcciones, no solo en una.
+//   2. Cualquier componente no numérico colapsa a `0` en silencio: `'ab:cd'` → `'00:00:00'`, o sea
+//      medianoche. Un dato ilegible se convierte en "ya pasó" sin que nadie se entere.
+//
+// Con los datos de HOY no es alcanzable (los slots son minutos enteros y `time` viene de Postgres),
+// pero el helper se presenta como la fuente ÚNICA de verdad del corte pasado/próximo.
+//
+// Los casos rotos van con `it.fails()`: documentan la expectativa CORRECTA, pasan mientras el bug
+// exista y se rompen ruidosamente el día que alguien arregle el código sin actualizar el test.
+describe('isPastAppointment: fracciones de segundo y basura (IN-02)', () => {
+  it('una fracción de segundo con parte entera de 2 dígitos SÍ normaliza bien (acota el daño)', () => {
+    // '59.999' ya tiene 2 dígitos antes del punto, así que el padStart no cambia nada y el orden
+    // lexicográfico se mantiene. El bug es específico de los segundos 0-9 con fracción.
+    expect(isPastAppointment({ date: '2026-08-03', time: '13:00:59.999' }, { date: '2026-08-03', time: '13:01:00' })).toBe(true)
+    // Y una fracción NULA (`.0`) tampoco rompe: Number('00.0') = 0 → pad2 → '00'.
+    expect(isPastAppointment({ date: '2026-08-03', time: '13:00:00.0' }, { date: '2026-08-03', time: '13:00:00' })).toBe(false)
+  })
+
+  // IN-02 (a). '13:00:00.5' es medio segundo DESPUÉS de las 13:00:00 → todavía no pasó. La
+  // normalización produce '13:00:0.5', que ordena ANTES de '13:00:00' (el '.' vale menos que el '0'),
+  // así que el turno se marca como pasado. CORRECTO: false.
+  it.fails('IN-02: un turno 0.5s DESPUÉS de ahora NO debería contar como pasado', () => {
+    expect(isPastAppointment({ date: '2026-08-03', time: '13:00:00.5' }, { date: '2026-08-03', time: '13:00:00' })).toBe(false)
+  })
+
+  // IN-02 (b). El mismo defecto en la dirección contraria: '13:00:09.5' → '13:00:9.5', y '9' > '1',
+  // así que ordena DESPUÉS de '13:00:10' aunque 09.5 < 10. El turno ya pasó y queda en "Próximos".
+  // CORRECTO: true.
+  it.fails('IN-02: un turno 0.5s ANTES de ahora SÍ debería contar como pasado', () => {
+    expect(isPastAppointment({ date: '2026-08-03', time: '13:00:09.5' }, { date: '2026-08-03', time: '13:00:10' })).toBe(true)
+  })
+
+  // IN-02 (c). Una hora ilegible se coerce a '00:00:00' (medianoche) y el turno cae en "Pasados" para
+  // cualquier `now` del día. CORRECTO: tratarla como el helper ya trata a una hora AUSENTE — fin del
+  // día, o sea NO pasada. Esa asimetría es la que el propio módulo documenta ("el turno tiene que caer
+  // siempre de UN lado del corte"), y hundir un dato roto en "Pasados" lo esconde en vez de mostrarlo.
+  it.fails('IN-02: una hora no numérica no debería colapsar a medianoche en silencio', () => {
+    expect(isPastAppointment({ date: '2026-08-03', time: 'ab:cd' }, { date: '2026-08-03', time: '13:00:00' })).toBe(false)
+  })
+})
