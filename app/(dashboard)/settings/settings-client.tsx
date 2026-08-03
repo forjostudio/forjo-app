@@ -597,7 +597,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         : delBlocked
           ? `${delInfo.future > 0
               ? `"${delService.name}" tiene ${delInfo.future} ${delInfo.future === 1 ? 'turno reservado' : 'turnos reservados'}${delInfo.nextDate ? ` a partir del ${format(parseISO(delInfo.nextDate), 'd/M')}` : ''}${delInfo.activeAbono ? ' y un abono activo' : ''}`
-              : `"${delService.name}" tiene un abono activo`}. Desactivalo para dejar de ofrecerlo y conservar el historial.`
+              : `"${delService.name}" tiene un abono activo`}. ${delService.active
+                ? 'Desactivalo para dejar de ofrecerlo y conservar el historial.'
+                // Ya está desactivado (viene del tab "Desactivados"): ofrecerle desactivar de nuevo
+                // sería un callejón sin salida disfrazado de acción recomendada (WR-04).
+                : 'Ya está desactivado y no se ofrece más: vas a poder eliminarlo cuando no le queden turnos futuros ni abonos activos.'}`
           : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio. Esta acción no se puede deshacer.`
 
   async function addService() {
@@ -2484,7 +2488,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         confirmLabel="Eliminar"
         destructive
         hideConfirm={delInfo === null || delInfo === 'error' || delBlocked}
-        secondaryAction={delBlocked && delService
+        // La salida solo se ofrece cuando ES una salida (WR-04): en el tab "Desactivados" todos los
+        // servicios ya están inactivos, y ahí "Desactivar" escribía active:false sobre active:false,
+        // cantaba éxito y cerraba el diálogo sin que cambiara nada.
+        secondaryAction={delBlocked && delService && delService.active
           ? { label: 'Desactivar', onClick: async () => { await toggleService(delService.id, false); setDelService(null); setDelInfo(null) } }
           : undefined}
         onConfirmError={(err) => {
