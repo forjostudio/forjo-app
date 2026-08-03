@@ -28,8 +28,10 @@ type Op = { op: 'insert' | 'update' | 'delete'; table: string; payload?: unknown
 interface MockConfig {
   // Tabla en cuyo insert debe fallar (para probar rollback). undefined = todo OK.
   failInsertOn?: string
-  // Código de error a devolver en el delete de una tabla (ej. '23503' en professionals).
-  failDeleteCode?: { table: string; code: string }
+  // Código de error a devolver en el delete de una tabla (ej. '23503' en professionals). `message`
+  // permite simular el RAISE del gate de la migr. 065, que distingue los dos motivos sobre el MISMO
+  // ERRCODE P0001 (service_has_future_appointments vs service_has_active_abono).
+  failDeleteCode?: { table: string; code: string; message?: string }
   // Ids devueltos por cada insert (para linkear service→professional→space).
   ids?: Record<string, string>
 }
@@ -83,7 +85,7 @@ function makeMockClient(cfg: MockConfig = {}) {
           },
           then(resolve: (r: { data: unknown; error: unknown }) => void) {
             const fd = cfg.failDeleteCode
-            if (fd && fd.table === table) resolve({ data: null, error: { message: 'fk', code: fd.code } })
+            if (fd && fd.table === table) resolve({ data: null, error: { message: fd.message ?? 'fk', code: fd.code } })
             else resolve({ data: null, error: null })
           },
         }
@@ -274,18 +276,20 @@ describe('canchas: deleteCancha', () => {
     expect(log.some(o => o.op === 'delete')).toBe(false)
   })
 
-  it('hard-delete sin reservas: borra agenda_spaces, professional, service y el space DEDICADO', async () => {
+  it('hard-delete sin reservas: borra professional, service y el space DEDICADO (el mapeo se va por CASCADE)', async () => {
     const { client, log } = makeMockClient()
     const agendaSpaces: AgendaSpace[] = [{ business_id: BID, professional_id: 'p1', space_id: 'spA' }]
     const res = await deleteCancha(client as never, BID, cancha, { hard: true, agendaSpaces })
     expect(res.ok).toBe(true)
-    expect(opsOn(log, 'agenda_spaces', 'delete')).toHaveLength(1)
+    // CR-01: `agenda_spaces` NO se borra a mano. Su FK a professionals es ON DELETE CASCADE, así que
+    // el mapeo se va con la agenda; borrarlo antes lo perdía también cuando el DELETE se rechazaba.
+    expect(opsOn(log, 'agenda_spaces', 'delete')).toHaveLength(0)
     expect(opsOn(log, 'professionals', 'delete')).toHaveLength(1)
     expect(opsOn(log, 'services', 'delete')).toHaveLength(1)
     expect(opsOn(log, 'spaces', 'delete')).toHaveLength(1) // el dedicado → no queda huérfano
     expect(opsOn(log, 'spaces', 'delete')[0].filters.id).toBe('spA')
     // Cada delete filtra por business_id.
-    for (const table of ['agenda_spaces', 'professionals', 'services', 'spaces']) {
+    for (const table of ['professionals', 'services', 'spaces']) {
       expect(opsOn(log, table, 'delete')[0].filters.business_id).toBe(BID)
     }
   })
@@ -306,6 +310,71 @@ describe('canchas: deleteCancha', () => {
     const res = await deleteCancha(client as never, BID, cancha, { hard: true })
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.error).toBe('has_appointments')
+  })
+
+  // ── CR-01: el borrado no puede dejar la tupla a medias ────────────────────────────────────
+  // La cancha solo existe mientras service + professional (con su puntero) estén los dos. Estos tests
+  // fijan las dos mitades del arreglo: (a) si el primer DELETE se rechaza NO se tocó nada, (b) si el
+  // segundo se rechaza la agenda se re-crea apuntando al mismo service.
+  describe('CR-01 · integridad de la tupla', () => {
+    const agendaSpaces: AgendaSpace[] = [{ business_id: BID, professional_id: 'p1', space_id: 'spA' }]
+
+    it('rechazo del professional (23503): no borra el mapeo, ni el service, ni el espacio', async () => {
+      const { client, log } = makeMockClient({ failDeleteCode: { table: 'professionals', code: '23503' } })
+      const res = await deleteCancha(client as never, BID, cancha, { hard: true, agendaSpaces })
+
+      expect(res.ok).toBe(false)
+      // Nada destruido: el CASCADE no llegó a correr y el resto de la tupla está intacto.
+      expect(opsOn(log, 'agenda_spaces', 'delete')).toHaveLength(0)
+      expect(opsOn(log, 'services', 'delete')).toHaveLength(0)
+      expect(opsOn(log, 'spaces', 'delete')).toHaveLength(0)
+    })
+
+    it('abono activo (P0001): devuelve has_active_abono y RE-CREA la agenda + su mapeo', async () => {
+      const { client, log } = makeMockClient({
+        failDeleteCode: { table: 'services', code: 'P0001', message: 'service_has_active_abono' },
+        ids: { services: 'svc-1', professionals: 'pro-NEW', spaces: 'sp-1' },
+      })
+      const res = await deleteCancha(client as never, BID, cancha, { hard: true, agendaSpaces })
+
+      expect(res.ok).toBe(false)
+      if (!res.ok) expect(res.error).toBe('has_active_abono') // NO 'has_appointments': no hay turnos que borrar
+      // Rollback: la agenda vuelve apuntando al MISMO service (es lo que canchasFromData empareja).
+      const reIns = opsOn(log, 'professionals', 'insert')
+      expect(reIns).toHaveLength(1)
+      const payload = reIns[0].payload as Record<string, unknown>
+      expect(payload.service_id).toBe('s1')
+      expect(payload.business_id).toBe(BID)
+      // …y el mapeo agenda↔espacio se re-apunta al id NUEVO.
+      const reMap = opsOn(log, 'agenda_spaces', 'insert')
+      expect(reMap).toHaveLength(1)
+      expect((reMap[0].payload as Record<string, unknown>).professional_id).toBe('pro-NEW')
+      expect((reMap[0].payload as Record<string, unknown>).space_id).toBe('spA')
+      // El espacio dedicado NO se borra: la cancha sigue viva.
+      expect(opsOn(log, 'spaces', 'delete')).toHaveLength(0)
+    })
+
+    it('turnos futuros (P0001) se distingue del abono y también revierte', async () => {
+      const { client, log } = makeMockClient({
+        failDeleteCode: { table: 'services', code: 'P0001', message: 'service_has_future_appointments' },
+      })
+      const res = await deleteCancha(client as never, BID, cancha, { hard: true, agendaSpaces })
+
+      expect(res.ok).toBe(false)
+      if (!res.ok) expect(res.error).toBe('has_appointments')
+      expect(opsOn(log, 'professionals', 'insert')).toHaveLength(1)
+    })
+
+    it('si el propio rollback falla, lo dice (rollback_failed) en vez de callarse', async () => {
+      const { client } = makeMockClient({
+        failDeleteCode: { table: 'services', code: 'P0001', message: 'service_has_active_abono' },
+        failInsertOn: 'professionals',
+      })
+      const res = await deleteCancha(client as never, BID, cancha, { hard: true, agendaSpaces })
+
+      expect(res.ok).toBe(false)
+      if (!res.ok) expect(res.error).toBe('rollback_failed')
+    })
   })
 })
 

@@ -11,10 +11,11 @@
 // testeable con un mock sin tocar la DB. Cada insert/update/delete SIEMPRE setea/filtra por
 // business_id (aislamiento por tenant — la RLS lo valida a nivel DB; acá es defensa en profundidad).
 //
-// CAVEAT DE ATOMICIDAD: no hay RPC/transacción (no se migra más allá de 043). provisionCancha hace
-// ROLLBACK MANUAL: si un paso falla, borra lo creado antes (filtrando por business_id). Mitiga pero no
-// garantiza atomicidad — mismo nivel que el resto del dashboard (Pitfall 1 del research). Riesgo
-// residual: consistencia intra-tenant (nunca cross-tenant).
+// CAVEAT DE ATOMICIDAD: no hay RPC/transacción (no se migra más allá de 043). provisionCancha y
+// deleteCancha hacen ROLLBACK MANUAL: si un paso falla, deshacen lo que hicieron antes (filtrando por
+// business_id). Mitiga pero no garantiza atomicidad — mismo nivel que el resto del dashboard (Pitfall 1
+// del research). Riesgo residual: consistencia intra-tenant (nunca cross-tenant). En el borrado, además,
+// el ORDEN está elegido para que el paso rechazable sea el primero (ver deleteCancha).
 //
 // LINKEO POR service_id, NUNCA POR NOMBRE (Pitfall 2): canchasFromData empareja
 // professional.service_id === service.id. Renombrar el service NO rompe el match.
@@ -174,10 +175,24 @@ export function dedicatedSpaceIds(cancha: Cancha, agendaSpaces: AgendaSpace[]): 
 
 // ── deleteCancha ────────────────────────────────────────────────────────────────────────────
 // Soft-delete por defecto (active=false en service Y professional → la agenda sale del booking, D-05).
-// Hard-delete solo si { hard:true }: borra agenda_spaces → professional → service → space(s) DEDICADO(s),
-// filtrando por business_id. Los espacios DEDICADOS se borran para que no queden huérfanos en el picker
-// de "compartir espacio"; los COMPARTIDOS se conservan (otras canchas los usan) — por eso se necesita
-// `agendaSpaces`. Un FK 23503 (turnos asociados) → error de dominio 'has_appointments'.
+// Hard-delete solo si { hard:true }: borra professional → service → space(s) DEDICADO(s), filtrando por
+// business_id. Los espacios DEDICADOS se borran para que no queden huérfanos en el picker de "compartir
+// espacio"; los COMPARTIDOS se conservan (otras canchas los usan) — por eso se necesita `agendaSpaces`.
+//
+// ORDEN Y ATOMICIDAD (fix CR-01). La cancha solo es reconstruible mientras el service Y el professional
+// que lo apunta existan (canchasFromData empareja por professional.service_id): cualquier borrado a
+// medias la vuelve INVISIBLE e inadministrable. Sin transacción, el orden se elige para que el paso que
+// puede fallar sea el PRIMERO y no haya nada que revertir:
+//   1. `agenda_spaces` NO se borra a mano. Su FK a professionals es ON DELETE CASCADE (schema.sql), así
+//      que se va solo con la agenda; y si la agenda NO se puede borrar, el mapeo queda INTACTO. Borrarlo
+//      primero —como se hacía antes— dejaba la cancha sin sus espacios (y por lo tanto sin el acople de
+//      disponibilidad del motor v0.12) justo en el caso MÁS común: `appointments.professional_id` es un
+//      FK NO ACTION, así que CUALQUIER turno de la agenda —pasado, cancelado, lo que sea— rechaza el
+//      DELETE con 23503.
+//   2. Si el DELETE del professional falla, no se tocó NADA: se devuelve el error de dominio y listo.
+//   3. Si el DELETE del service falla (gate `services_block_delete_trg` de la migr. 065: turnos futuros
+//      o abono activo), la agenda ya no está → ROLLBACK MANUAL, ver abajo.
+// Riesgo residual: que falle el propio rollback (se reporta como 'rollback_failed', nunca en silencio).
 export async function deleteCancha(
   client: Client,
   businessId: string,
@@ -191,15 +206,15 @@ export async function deleteCancha(
     return { ok: true }
   }
 
-  // Calcular los espacios DEDICADOS ANTES de borrar el mapeo (después ya no se puede derivar).
+  // Calcular ANTES de borrar la agenda: los espacios DEDICADOS y el mapeo agenda↔espacio. Después del
+  // DELETE el mapeo ya no existe (CASCADE) y ninguno de los dos se puede derivar de la DB.
   const dedicated = dedicatedSpaceIds(cancha, opts.agendaSpaces ?? [])
-
-  // Hard: borrar el mapeo primero, luego el resto en orden.
-  await client.from('agenda_spaces').delete().eq('professional_id', cancha.professional.id).eq('business_id', businessId)
+  const mappings = (opts.agendaSpaces ?? []).filter(a => a.professional_id === cancha.professional.id)
 
   const { error: proErr } = await client
     .from('professionals').delete().eq('id', cancha.professional.id).eq('business_id', businessId)
   if (proErr) {
+    // Todavía no se destruyó nada: el CASCADE de agenda_spaces ni corrió.
     // FK 23503: la agenda tiene turnos → no se puede hard-deletear; sugerir desactivar.
     if ((proErr as { code?: string }).code === '23503') return { ok: false, error: 'has_appointments' }
     return { ok: false, error: 'professional_delete_failed' }
@@ -208,17 +223,34 @@ export async function deleteCancha(
   const { error: svcErr } = await client
     .from('services').delete().eq('id', cancha.service.id).eq('business_id', businessId)
   if (svcErr) {
-    const e = svcErr as { code?: string; message?: string }
     // 23503 (FK) queda como fallback defensivo: desde la migración 065 el FK de appointments (y el
     // de abonos) pasó a SET NULL, así que el rechazo ya no llega como FK sino como el RAISE del
-    // trigger `services_block_delete_trg` (ERRCODE P0001, message = código de dominio). Se mapea al
-    // MISMO 'has_appointments' que ya consume canchas-manager para que el operador vea el copy real
-    // ("tiene turnos, desactivala") en vez del genérico "No se pudo eliminar la cancha".
-    if (e.code === '23503') return { ok: false, error: 'has_appointments' }
-    if (e.code === 'P0001' && (e.message?.includes('service_has_future_appointments') || e.message?.includes('service_has_active_abono'))) {
-      return { ok: false, error: 'has_appointments' }
+    // trigger `services_block_delete_trg` (ERRCODE P0001, message = código de dominio). Los DOS
+    // messages se mapean a códigos DISTINTOS: un abono activo no se arregla borrando turnos, y
+    // mandar al dueño a buscar turnos que no existen es peor que no decirle nada.
+    const e = svcErr as { code?: string; message?: string }
+    const reason =
+      e.code === 'P0001' && e.message?.includes('service_has_active_abono') ? 'has_active_abono'
+        : e.code === 'P0001' && e.message?.includes('service_has_future_appointments') ? 'has_appointments'
+          : e.code === '23503' ? 'has_appointments'
+            : 'service_delete_failed'
+
+    // ROLLBACK MANUAL (molde de provisionCancha): la agenda y su mapeo ya no están pero el service
+    // sobrevivió, así que la tupla quedaría rota. Se re-crea la agenda apuntando al MISMO service y se
+    // re-apunta el mapeo — es lo que canchasFromData necesita para volver a mostrar la cancha.
+    // El id del professional CAMBIA. Es aceptable acá y solo acá: el DELETE anterior salió bien, y eso
+    // solo puede pasar si ninguna fila de `appointments` lo referenciaba (FK NO ACTION). Lo que sí se
+    // pierde es el puntero de un abono ya archivado (`abonos.professional_id` es SET NULL) — el abono
+    // sobrevive con su snapshot; recuperar la cancha vale más que ese puntero.
+    const { data: rePro } = await client.from('professionals')
+      .insert({ name: cancha.professional.name, service_id: cancha.service.id, business_id: businessId, active: cancha.professional.active })
+      .select().single()
+    const reProId = (rePro as { id?: string } | null)?.id
+    if (!reProId) return { ok: false, error: 'rollback_failed' }
+    for (const m of mappings) {
+      await client.from('agenda_spaces').insert({ business_id: businessId, professional_id: reProId, space_id: m.space_id })
     }
-    return { ok: false, error: 'service_delete_failed' }
+    return { ok: false, error: reason }
   }
 
   // Borrar los espacios DEDICADOS (ya sin agenda_spaces que los referencien) para que no queden
