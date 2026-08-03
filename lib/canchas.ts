@@ -143,6 +143,23 @@ export function canchasFromData(
   return canchas
 }
 
+// ── nonCanchaServices ─────────────────────────────────────────────────────────────────────────
+// Servicios que el CRUD GENÉRICO de Ajustes → Servicios puede administrar: todos menos la mitad
+// `service` de una cancha.
+//
+// POR QUÉ (gap 13-05 #2): una cancha es una TUPLA, y su fila en `services` es un detalle de
+// implementación. La lista genérica las mostraba igual (solo se conmuta QUÉ UI se renderiza por
+// vertical, no QUÉ datos), así que en un negocio que no es de canchas se podía borrar "Cancha de 6"
+// desde Servicios: el FK dejaba `professionals.service_id` en NULL y la agenda quedaba huérfana
+// (canchasFromData ya no la reconstruye → cancha invisible e inadministrable).
+//
+// Recibe las canchas YA reconstruidas por canchasFromData — el emparejamiento es por `service_id`,
+// NUNCA por nombre (Pitfall 2). Puro: se testea sin DB.
+export function nonCanchaServices(services: Service[], canchas: Cancha[]): Service[] {
+  const canchaServiceIds = new Set(canchas.map(c => c.service.id))
+  return services.filter(s => !canchaServiceIds.has(s.id))
+}
+
 // ── dedicatedSpaceIds ─────────────────────────────────────────────────────────────────────────
 // Espacios DEDICADOS de una cancha: los mapeados EXCLUSIVAMENTE a su agenda (una sola fila en
 // agenda_spaces y para este professional). Los COMPARTIDOS (mapeados a >1 agenda, ej. F11→{A,B,C})

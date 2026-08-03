@@ -3,6 +3,7 @@ import {
   provisionCancha,
   deleteCancha,
   canchasFromData,
+  nonCanchaServices,
   editCancha,
   setCanchaActive,
 } from '@/lib/canchas'
@@ -209,6 +210,39 @@ describe('canchas: canchasFromData', () => {
     const canchas = canchasFromData(services, professionals, [as('p1', 'spA')])
     expect(canchas).toHaveLength(1)
     expect(canchas[0].professional.id).toBe('p1')
+  })
+
+  // ── nonCanchaServices (gap 13-05 #2) ──────────────────────────────────────────────────
+  // Lo que se protege: que el CRUD genérico de Ajustes → Servicios NO liste (y por lo tanto no
+  // deje borrar) la fila `services` que es la mitad de una cancha. Borrarla desde ahí dejaba
+  // `professionals.service_id` en NULL y la agenda huérfana.
+  describe('nonCanchaServices', () => {
+    it('saca de la lista los services que respaldan una cancha y deja el resto', () => {
+      const services = [svc('s1', 'Cancha de 6'), svc('s2', 'Corte'), svc('s3', 'Color')]
+      const canchas = canchasFromData(services, [pro('p1', 's1')], [as('p1', 'spA')])
+
+      const manageable = nonCanchaServices(services, canchas)
+      expect(manageable.map(s => s.id)).toEqual(['s2', 's3'])
+    })
+
+    it('sin canchas devuelve la lista intacta (mismo orden)', () => {
+      const services = [svc('s1', 'Corte'), svc('s2', 'Color')]
+      expect(nonCanchaServices(services, [])).toEqual(services)
+    })
+
+    it('excluye por service_id aunque el nombre no se parezca en nada (NUNCA por nombre)', () => {
+      const services = [svc('s1', 'NOMBRE TOTALMENTE DISTINTO'), svc('s2', 'Cancha de 6')]
+      const canchas = canchasFromData(services, [pro('p1', 's1')], [])
+
+      // s1 sale (es la cancha real) y s2 se queda, aunque se llame "Cancha de 6".
+      expect(nonCanchaServices(services, canchas).map(s => s.id)).toEqual(['s2'])
+    })
+
+    it('si TODOS los services son canchas devuelve vacío (empty state del tab)', () => {
+      const services = [svc('s1', 'Cancha A'), svc('s2', 'Cancha B')]
+      const canchas = canchasFromData(services, [pro('p1', 's1'), pro('p2', 's2')], [])
+      expect(nonCanchaServices(services, canchas)).toEqual([])
+    })
   })
 })
 

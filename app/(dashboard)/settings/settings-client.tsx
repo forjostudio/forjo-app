@@ -14,6 +14,7 @@ import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
+import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -517,13 +518,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // modo histórico (cero regresión) y el dueño opta explícitamente por el recurso simultáneo.
   const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
   const [serviceTab, setServiceTab] = useState<ServiceTab>('activos')
-  // El filtro y el contador llaman al MISMO predicado a propósito (molde de /abonos): si cada uno
-  // decidiera por su cuenta, el tab podría decir "Activos (1)" sobre una lista vacía.
-  const visibleServices = useMemo(() => services.filter(s => !!s.active === (serviceTab === 'activos')), [services, serviceTab])
-  const serviceTabCounts = useMemo(() => {
-    const activos = services.filter(s => !!s.active).length
-    return { activos, desactivados: services.length - activos }
-  }, [services])
+  // La lista visible y sus contadores se derivan más abajo (buscar `manageableServices`): dependen de
+  // `professionals` y `agendaSpaces`, que se declaran después — leerlos acá sería un TDZ en runtime.
 
   const [delService, setDelService] = useState<Service | null>(null)
   // Pre-check del borrado (D-11/D-13): lo que el modal necesita para anticipar el resultado ANTES de
@@ -822,6 +818,26 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [professionalServices, setProfessionalServices] = useState<ProfessionalService[]>(initialProfessionalServices)
   const [newSpaceName, setNewSpaceName] = useState('')
   const [savingSpace, setSavingSpace] = useState(false)
+
+  // ── Base del CRUD genérico de Servicios (vive acá por el orden de declaración) ──────────────
+  // `services` MENOS la mitad `service` de cada cancha (gap 13-05 #2). Una cancha es una TUPLA
+  // (service + professional-agenda + space) y se administra SOLO desde su manager: listarla en el
+  // CRUD genérico dejaba borrarla desde ahí, y el FK dejaba `professionals.service_id` en NULL →
+  // agenda huérfana que canchasFromData ya no reconstruye. Se aplica aunque el vertical NO sea
+  // canchas: la tupla existe igual si el negocio cambió de rubro. El emparejamiento sale de
+  // canchasFromData (por service_id, NUNCA por nombre — Pitfall 2). Al CanchasManager se le sigue
+  // pasando `services` COMPLETO: el filtro es del CRUD genérico, no de la fuente de datos.
+  const manageableServices = useMemo(
+    () => nonCanchaServices(services, canchasFromData(services, professionals, agendaSpaces)),
+    [services, professionals, agendaSpaces],
+  )
+  // El filtro y el contador llaman al MISMO predicado a propósito (molde de /abonos): si cada uno
+  // decidiera por su cuenta, el tab podría decir "Activos (1)" sobre una lista vacía.
+  const visibleServices = useMemo(() => manageableServices.filter(s => !!s.active === (serviceTab === 'activos')), [manageableServices, serviceTab])
+  const serviceTabCounts = useMemo(() => {
+    const activos = manageableServices.filter(s => !!s.active).length
+    return { activos, desactivados: manageableServices.length - activos }
+  }, [manageableServices])
   // Término del eje según el rubro: 'Cancha'/'Canchas' para canchas, 'Profesional'/'Equipo' resto.
   const resourceWord = term.resource
   const resourcesWord = term.resources
