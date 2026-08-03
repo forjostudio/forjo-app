@@ -25,7 +25,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Trash2, Clock, DollarSign, Pencil, MapPin, Check, Eye, EyeOff } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Pencil, MapPin, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -224,8 +224,14 @@ export function CanchasManager({
                     {c.service.duration_minutes}min · ${Number(c.service.price).toLocaleString('es-AR')}
                   </p>
                 </div>
-                <Button variant="ghost" size="icon" disabled={togglingId === c.service.id} className={cn('h-8 w-8', c.service.active ? 'text-muted-foreground hover:text-foreground' : 'text-primary hover:text-primary')} onClick={() => toggleActive(c)} aria-label={c.service.active ? `Desactivar ${c.service.name}` : `Activar ${c.service.name}`}>
-                  {c.service.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {/* Mismo botón de texto que la lista de Servicios (gap 13-05 #3): es LA MISMA acción,
+                    así que no puede tener una affordance distinta según el rubro del negocio. Molde
+                    literal de settings-client (variant ghost, size sm, text-xs text-muted-foreground).
+                    El aria-label se conserva: el texto visible no dice de QUÉ cancha es, y con varias
+                    filas el nombre accesible quedaría repetido. Empieza por el texto visible, así que
+                    no lo contradice (WCAG 2.5.3 Label in Name). */}
+                <Button variant="ghost" size="sm" disabled={togglingId === c.service.id} className="text-xs text-muted-foreground" onClick={() => toggleActive(c)} aria-label={c.service.active ? `Desactivar ${c.service.name}` : `Activar ${c.service.name}`}>
+                  {c.service.active ? 'Desactivar' : 'Activar'}
                 </Button>
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEdit(c)} aria-label={`Editar ${c.service.name}`}>
                   <Pencil className="w-4 h-4" />
