@@ -532,11 +532,18 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // servicio que puede tener cientos. FAIL-CLOSED: sin dato no se ofrece la acción.
   const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number } | 'error' | null>(null)
 
+  // Token de generación del pre-check (WR-03). `openDeleteService` setea el servicio de una y recién
+  // después espera tres round-trips: sin esto, cerrar el modal de A y abrir el de B mientras la
+  // consulta de A sigue en vuelo hacía que A pisara `delInfo` y el diálogo de B mostrara los números
+  // de A — con un "Eliminar" vivo para un servicio que la DB va a rechazar. Solo commitea el último.
+  const delReqRef = useRef(0)
+
   // Abre el modal de borrado y cuenta lo que el trigger va a mirar. Es UX/refuerzo: NO autoriza nada
   // — el gate real vive en `services_block_delete_trg` (migr. 065), que no se puede saltear desde el
   // cliente. Las tres queries filtran por business_id ADEMÁS de service_id (aislamiento por tenant;
   // la RLS es la segunda capa, no la única).
   async function openDeleteService(s: Service) {
+    const req = ++delReqRef.current
     setDelService(s)
     setDelInfo(null)
     // "Hoy" en hora AR, igual que el trigger: con el date de UTC, a las 22:00 de Buenos Aires un
@@ -558,6 +565,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       supabase.from('appointments').select('id', { count: 'exact', head: true })
         .eq('business_id', business.id).eq('service_id', s.id),
     ])
+    // Llegó tarde: mientras esperábamos, el dueño abrió el modal de otro servicio. Descartar.
+    if (delReqRef.current !== req) return
     // Sin los tres counts no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
     // 'error', NUNCA un 0 silencioso.
     if (fut.error || abo.error || hist.error) {
@@ -2466,7 +2475,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           el item: el dialog se cierra pero la fila sigue en la lista. */}
       <ConfirmDialog
         open={!!delService}
-        onOpenChange={(o) => { if (!o) { setDelService(null); setDelInfo(null) } }}
+        // Al cerrar también se invalida el pre-check en vuelo (WR-03): si no, una respuesta tardía
+        // escribiría `delInfo` sobre un diálogo ya cerrado.
+        onOpenChange={(o) => { if (!o) { delReqRef.current++; setDelService(null); setDelInfo(null) } }}
         title="¿Eliminar servicio?"
         description={delDescription}
         risk="alto"
