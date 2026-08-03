@@ -1,0 +1,230 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { hasSupabaseCreds } from './env'
+import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
+
+// ── Tests del gate de borrado de servicio (migr. 065, trigger BEFORE DELETE) ──────────────────
+// Cubren HIST-01 (se puede borrar un servicio cuando no hay nada futuro vivo), HIST-02 (no se
+// puede si lo hay) y HIST-03 (el historial sobrevive al borrado).
+//
+// El gate vive en la BASE a propósito (D-10): corre dentro de la MISMA transacción del DELETE, así
+// que no hay ventana TOCTOU entre el pre-check del modal (13-03) y el borrado. Eso también quiere
+// decir que la única forma de probarlo es borrando de verdad y mirando el error que devuelve
+// PostgREST — ningún test unitario lo alcanza.
+//
+// Sin las creds de Supabase el bloque entero se skipea (mismo molde que booking-core.test.ts).
+// Cada caso siembra SU PROPIO servicio con `seedService` para que no se pisen entre sí, y usa un
+// horario distinto para no chocar con el índice único 011 ni con la exclusion constraint 013.
+//
+// Fechas fijas: 2031 está siempre en el futuro y 2020 siempre en el pasado, sin depender del reloj
+// del runner ni de la frontera "hoy AR" que evalúa el trigger.
+const FUTURE = '2031-03-03'
+const PAST = '2020-03-02'
+
+describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DELETE)', () => {
+  let t: SeededTenant
+
+  beforeAll(async () => {
+    t = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
+  })
+
+  afterAll(async () => {
+    if (t) await teardownOneTenant(t)
+  })
+
+  // El DELETE se hace como lo haría el panel: por id + business_id (aislamiento explícito).
+  async function deleteService(serviceId: string) {
+    return t.admin.from('services').delete().eq('id', serviceId).eq('business_id', t.businessId)
+  }
+
+  async function serviceExists(serviceId: string): Promise<boolean> {
+    const { data, error } = await t.admin.from('services').select('id').eq('id', serviceId)
+    if (error) throw new Error(`select service: ${error.message}`)
+    return (data || []).length > 0
+  }
+
+  async function seedAppointment(args: {
+    serviceId: string
+    date: string
+    time: string
+    status: string | null
+  }): Promise<string> {
+    const ins = await t.admin
+      .from('appointments')
+      .insert({
+        business_id: t.businessId,
+        service_id: args.serviceId,
+        professional_id: t.professionalId,
+        location_id: t.locationId,
+        date: args.date,
+        time: args.time,
+        duration_minutes: 30,
+        client_name: 'Cliente Gate',
+        status: args.status,
+      })
+      .select('id')
+      .single()
+    if (ins.error || !ins.data) throw new Error(`seed appointment: ${ins.error?.message}`)
+    return ins.data.id as string
+  }
+
+  async function seedAbono(args: { serviceId: string; startTime: string; status: string }): Promise<string> {
+    const ins = await t.admin
+      .from('abonos')
+      .insert({
+        business_id: t.businessId,
+        service_id: args.serviceId,
+        professional_id: t.professionalId,
+        location_id: t.locationId,
+        day_of_week: 1,
+        start_time: args.startTime,
+        status: args.status,
+      })
+      .select('id')
+      .single()
+    if (ins.error || !ins.data) throw new Error(`seed abono: ${ins.error?.message}`)
+    return ins.data.id as string
+  }
+
+  // (1) D-08 / HIST-02: un turno futuro NO cancelado bloquea el borrado. Es el caso que protege al
+  // dueño de vaciarse la agenda sin darse cuenta.
+  it('1 — un turno futuro confirmado bloquea el borrado (P0001 / service_has_future_appointments)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_futuro' })
+    await seedAppointment({ serviceId: svc, date: FUTURE, time: '09:00', status: 'confirmed' })
+
+    const del = await deleteService(svc)
+    expect(del.error).not.toBeNull()
+    expect(del.error?.code).toBe('P0001')
+    expect(del.error?.message).toContain('service_has_future_appointments')
+
+    // Y el servicio SIGUE existiendo: la transacción abortó entera, nada quedó a medias.
+    expect(await serviceExists(svc)).toBe(true)
+  }, 20000)
+
+  // (2) D-08: el mismo turno futuro, pero CANCELADO, no bloquea nada. Contarlo reproduciría
+  // exactamente la confusión que esta fase viene a arreglar (cancelar todo y seguir trabado).
+  it('2 — un turno futuro CANCELADO no bloquea el borrado (D-08)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_cancelado' })
+    await seedAppointment({ serviceId: svc, date: FUTURE, time: '09:30', status: 'cancelled' })
+
+    const del = await deleteService(svc)
+    expect(del.error).toBeNull()
+    expect(await serviceExists(svc)).toBe(false)
+  }, 20000)
+
+  // (3) Pitfall 2: `appointments.status` es NULLABLE. Con `<> 'cancelled'` esas filas evalúan a
+  // NULL, quedan fuera del EXISTS y ABREN el gate. Si este test falla, el trigger perdió el
+  // `IS DISTINCT FROM` y un turno sin estado dejó de contar como reservado.
+  it('3 — un turno futuro con status NULL bloquea igual (IS DISTINCT FROM, no <>)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_null' })
+    await seedAppointment({ serviceId: svc, date: FUTURE, time: '10:00', status: null })
+
+    const del = await deleteService(svc)
+    expect(del.error).not.toBeNull()
+    expect(del.error?.code).toBe('P0001')
+    expect(del.error?.message).toContain('service_has_future_appointments')
+    expect(await serviceExists(svc)).toBe(true)
+  }, 20000)
+
+  // (4) HIST-01 + HIST-03 + T-13-06: con solo turnos pasados y cancelados el borrado PASA, el
+  // servicio DESAPARECE de verdad (si el trigger devolviera NULL en vez de OLD, el DELETE se
+  // cancelaría en silencio y la UI diría "eliminado" sin haber borrado nada) y los dos turnos
+  // sobreviven con `service_id` en NULL pero con su snapshot intacto.
+  it('4 — con solo turnos pasados/cancelados borra, y el historial sobrevive (HIST-01 + HIST-03)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_historial' })
+    const pasado = await seedAppointment({ serviceId: svc, date: PAST, time: '11:00', status: 'confirmed' })
+    const futuroCancelado = await seedAppointment({
+      serviceId: svc,
+      date: FUTURE,
+      time: '11:00',
+      status: 'cancelled',
+    })
+
+    const del = await deleteService(svc)
+    expect(del.error).toBeNull()
+
+    // (a) El servicio ya no está.
+    expect(await serviceExists(svc)).toBe(false)
+
+    // (b) Los dos turnos siguen ahí, desacoplados del servicio pero con la historia completa.
+    const { data } = await t.admin
+      .from('appointments')
+      .select('id, service_id, service_name, service_price')
+      .in('id', [pasado, futuroCancelado])
+    expect((data || []).length).toBe(2)
+    for (const row of data || []) {
+      expect(row.service_id).toBeNull()
+      expect(row.service_name).toBe('__test_svc_gate_historial')
+      expect(Number(row.service_price)).toBe(100)
+    }
+  }, 20000)
+
+  // (5) D-09: un abono ACTIVO genera turnos hacia adelante, así que cuenta como futuro. Message
+  // DISTINTO sobre el mismo P0001, para que el modal (13-03) pueda decir "y un abono activo".
+  it('5 — un abono active bloquea el borrado (P0001 / service_has_active_abono)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_abono_activo' })
+    await seedAbono({ serviceId: svc, startTime: '12:00', status: 'active' })
+
+    const del = await deleteService(svc)
+    expect(del.error).not.toBeNull()
+    expect(del.error?.code).toBe('P0001')
+    expect(del.error?.message).toContain('service_has_active_abono')
+    expect(await serviceExists(svc)).toBe(true)
+  }, 20000)
+
+  // (6) D-09: el abono archivado ya NO bloquea (su FK pasó a SET NULL) y su nombre sobrevive por el
+  // snapshot de la sección 5 de la 065.
+  it('6 — un abono cancelled no bloquea y conserva el service_name (D-09)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_abono_archivado' })
+    const abono = await seedAbono({ serviceId: svc, startTime: '13:00', status: 'cancelled' })
+
+    const del = await deleteService(svc)
+    expect(del.error).toBeNull()
+    expect(await serviceExists(svc)).toBe(false)
+
+    const { data } = await t.admin.from('abonos').select('id, service_id, service_name').eq('id', abono).single()
+    expect(data?.service_id).toBeNull()
+    expect(data?.service_name).toBe('__test_svc_gate_abono_archivado')
+  }, 20000)
+
+  // (7) T-13-07: guard de cascada. En un `DELETE FROM businesses` el padre se borra ANTES de que
+  // corran las acciones referenciales hacia `services`, y esa ausencia identifica la cascada. Sin
+  // el guard, cerrar la cuenta de un negocio con turnos futuros sería imposible — y `teardownOneTenant`
+  // rompería la suite entera, porque su cleanup borra `businesses` y cascadea a `services`.
+  //
+  // Este caso usa su propio tenant desechable: el business ya se borra dentro del test, así que solo
+  // queda limpiar el usuario de auth (que no cae por el CASCADE).
+  it('7 — borrar el negocio entero funciona aunque haya turnos futuros vivos (guard de cascada)', async () => {
+    const tmp = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
+    try {
+      const ins = await tmp.admin.from('appointments').insert({
+        business_id: tmp.businessId,
+        service_id: tmp.serviceId,
+        professional_id: tmp.professionalId,
+        location_id: tmp.locationId,
+        date: FUTURE,
+        time: '14:00',
+        duration_minutes: 30,
+        client_name: 'Cliente Cascada',
+        status: 'confirmed',
+      })
+      expect(ins.error).toBeNull()
+
+      // Sanity: ese mismo servicio NO se puede borrar solo (el gate está activo para este tenant).
+      const delSvc = await tmp.admin
+        .from('services')
+        .delete()
+        .eq('id', tmp.serviceId)
+        .eq('business_id', tmp.businessId)
+      expect(delSvc.error?.code).toBe('P0001')
+
+      // Pero el negocio entero sí: la cascada pasa por el guard.
+      const delBiz = await tmp.admin.from('businesses').delete().eq('id', tmp.businessId)
+      expect(delBiz.error).toBeNull()
+
+      const { data } = await tmp.admin.from('services').select('id').eq('id', tmp.serviceId)
+      expect((data || []).length).toBe(0)
+    } finally {
+      await tmp.admin.auth.admin.deleteUser(tmp.userId)
+    }
+  }, 20000)
+})
