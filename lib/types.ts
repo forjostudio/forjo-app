@@ -296,7 +296,10 @@ export interface Abono {
   id: string
   business_id: string
   client_id: string | null // ON DELETE SET NULL
-  service_id: string | null // ON DELETE RESTRICT (evita orfandad de generación)
+  // ON DELETE SET NULL desde la migr. 065: borrar el servicio ya NO está prohibido, se desacopla.
+  // La orfandad de generación la evita el gate `services_block_delete_trg` (un abono `active` bloquea
+  // el DELETE); los archivados se desacoplan y conservan el nombre en `service_name` (snapshot).
+  service_id: string | null
   professional_id: string | null // NULLABLE: bucket "sin profesional" según vertical
   location_id: string | null // NULLABLE
   // convención EXTRACT(dow): 0=domingo..6=sábado, idéntica a time_blocks.day_of_week y book_slot_atomic.
