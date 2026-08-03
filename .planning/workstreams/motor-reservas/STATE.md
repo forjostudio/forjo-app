@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 13-03-PLAN.md (wave 2)
-last_updated: "2026-08-03T15:29:54.787Z"
+stopped_at: Completado 13-04-PLAN.md (wave 3)
+last_updated: "2026-08-03T15:42:24.481Z"
 last_activity: 2026-08-03 -- Phase 13 execution started
 progress:
   total_phases: 14
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 13 (borrado-de-servicio-preservando-historial) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-08-03 -- Phase 13 execution started
 
@@ -74,6 +74,7 @@ Last activity: 2026-08-03 -- Phase 13 execution started
 | Phase 13 P01 | 35min | 3 tasks | 2 files |
 | Phase 13 P02 | 20 min | 3 tasks | 10 files |
 | Phase 13 P03 | 20min | 3 tasks | 4 files |
+| Phase 13 P04 | 15min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 13-02: el fallback snapshot -> join vive SOLO en lib/appointment-service.ts; ningun read-path re-escribe el ternario
 - [Phase ?]: 13-02: el embed services() se acepta como objeto O array (supabase-js lo infiere array en selects acotados), para no reintroducir casts por call-site
 - [Phase 13]: 13-03: el pre-check del modal de borrado es UX/refuerzo; el gate autoritativo es el trigger de la 065, y onConfirm lanza para que el modal no cierre ante el rechazo tardio
+- [Phase 13]: 13-04: los dos triggers de la 065 se prueban por integracion contra el Supabase LOCAL (.env.test.local -> 127.0.0.1:54321): el mecanismo vive en la base, no hay funcion de TS que testear
 
 ### Pending Todos
 
@@ -198,9 +200,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-03T15:29:54.771Z
-Stopped at: Completado 13-03-PLAN.md (wave 2)
-Resume file: .planning/workstreams/motor-reservas/phases/13-borrado-de-servicio-preservando-historial/13-CONTEXT.md
+Last session: 2026-08-03T15:42:24.465Z
+Stopped at: Completado 13-04-PLAN.md (wave 3)
+Resume file: None
 
 ## Operator Next Steps
 

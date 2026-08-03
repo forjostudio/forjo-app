@@ -491,7 +491,7 @@ Plans:
   2. Al intentar borrar un servicio con turnos **futuros**, un modal bloquea el borrado, lo explica y ofrece **desactivar** (conservar y dejar de ofrecer) en vez de borrar (HIST-02).
   3. Un turno **pasado** de un servicio ya borrado sigue visible en el historial (Finanzas / ficha del cliente) con su nombre y precio, y los reportes no se rompen — vía desacople del FK / snapshot (HIST-03).
 
-**Plans**: 3/5 plans executed
+**Plans**: 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -505,7 +505,7 @@ Plans:
 
 **Wave 3** *(bloqueada por Wave 2)*
 
-- [ ] 13-04-PLAN.md — Tests de integración de los dos triggers (snapshot + gate) y verificación de cero regresión del write-path
+- [x] 13-04-PLAN.md — Tests de integración de los dos triggers (snapshot + gate) y verificación de cero regresión del write-path
 
 **Wave 4** *(bloqueada por Wave 3)*
 
@@ -554,5 +554,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 10. Reservar con "cualquiera" desde la página pública | 5/5 | Complete    | 2026-07-27 |
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
-| 13. Borrado de servicio preservando historial | 3/5 | In Progress|  |
+| 13. Borrado de servicio preservando historial | 4/5 | In Progress|  |
 | 14. Cierre de backlog | 0/TBD | Not started | - |
