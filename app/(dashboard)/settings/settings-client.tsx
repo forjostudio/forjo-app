@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { format, parseISO } from 'date-fns'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -31,6 +32,11 @@ import { normalizeArWhatsApp } from '@/lib/whatsapp'
 
 // Paletas de marca (swatch = primary en claro). El detalle de tokens vive en globals.css.
 // Paletas + themes + tipografías viven en lib/theme-config (fuente única).
+
+// Resultado del borrado de un servicio. Discriminado (patrón del repo) en vez de void + toast: el
+// motivo del rechazo lo decide la DB (trigger de la migr. 065) y el copy lo decide el modal, que es
+// el único que tiene el contexto de qué le estaba mostrando al dueño.
+type DeleteServiceResult = { ok: true } | { ok: false; error: 'has_future_appointments' | 'has_active_abono' | 'unknown' }
 
 // ── Profesionales: form ampliado + labels por rubro ─────────────────────────
 type ProForm = { name: string; last_name: string; specialty: string; license_number: string; phone: string; email: string }
@@ -503,6 +509,56 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // modo histórico (cero regresión) y el dueño opta explícitamente por el recurso simultáneo.
   const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
   const [delService, setDelService] = useState<Service | null>(null)
+  // Pre-check del borrado (D-11/D-13): lo que el modal necesita para anticipar el resultado ANTES de
+  // que el dueño apriete. `null` = todavía contando. Molde: openDelete de canchas-manager.
+  const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number } | null>(null)
+
+  // Abre el modal de borrado y cuenta lo que el trigger va a mirar. Es UX/refuerzo: NO autoriza nada
+  // — el gate real vive en `services_block_delete_trg` (migr. 065), que no se puede saltear desde el
+  // cliente. Las tres queries filtran por business_id ADEMÁS de service_id (aislamiento por tenant;
+  // la RLS es la segunda capa, no la única).
+  async function openDeleteService(s: Service) {
+    setDelService(s)
+    setDelInfo(null)
+    // "Hoy" en hora AR, igual que el trigger: con el date de UTC, a las 22:00 de Buenos Aires un
+    // turno de mañana temprano dejaría de contarse como futuro.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+    const [fut, abo, hist] = await Promise.all([
+      // El `.or(...)` de abajo es el equivalente EXACTO en PostgREST del `status IS DISTINCT FROM
+      // 'cancelled'` del trigger. NO usar `.neq('status','cancelled')` a secas: PostgREST descarta
+      // también las filas con status NULL, y entonces el pre-check diría "podés borrar" justo donde
+      // el trigger rechaza.
+      supabase.from('appointments').select('date', { count: 'exact' })
+        .eq('business_id', business.id).eq('service_id', s.id)
+        .gte('date', today).or('status.is.null,status.neq.cancelled')
+        .order('date').limit(1),
+      supabase.from('abonos').select('id', { count: 'exact', head: true })
+        .eq('business_id', business.id).eq('service_id', s.id).eq('status', 'active'),
+      supabase.from('appointments').select('id', { count: 'exact', head: true })
+        .eq('business_id', business.id).eq('service_id', s.id),
+    ])
+    setDelInfo({
+      future: fut.count ?? 0,
+      nextDate: (fut.data?.[0] as { date?: string } | undefined)?.date ?? null,
+      activeAbono: (abo.count ?? 0) > 0,
+      history: hist.count ?? 0,
+    })
+  }
+
+  // Bloqueado = el trigger va a rechazar el DELETE. Mientras `delInfo` es null todavía no se sabe.
+  const delBlocked = !!delInfo && (delInfo.future > 0 || delInfo.activeAbono)
+
+  // Descripción de los TRES estados del diálogo (contando / bloqueado / confirmable), derivada fuera
+  // del JSX (molde delDescription de canchas-manager).
+  const delDescription = !delService
+    ? undefined
+    : delInfo === null
+      ? `Vas a eliminar "${delService.name}". Verificando turnos…`
+      : delBlocked
+        ? `${delInfo.future > 0
+            ? `"${delService.name}" tiene ${delInfo.future} ${delInfo.future === 1 ? 'turno reservado' : 'turnos reservados'}${delInfo.nextDate ? ` a partir del ${format(parseISO(delInfo.nextDate), 'd/M')}` : ''}${delInfo.activeAbono ? ' y un abono activo' : ''}`
+            : `"${delService.name}" tiene un abono activo`}. Desactivalo para dejar de ofrecerlo y conservar el historial.`
+        : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio. Esta acción no se puede deshacer.`
 
   async function addService() {
     if (!newService.name) return
@@ -518,22 +574,38 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
     toast.success('Servicio agregado')
   }
-  async function deleteService(id: string) {
-    // NO optimista: capturamos el error real. Defensa en profundidad con business_id (igual que
-    // deleteProfessional). Si hay turnos asociados, el FK (23503) bloquea el borrado → sugerimos
-    // desactivar en vez de tocar el estado (el item sigue en la lista porque no filtramos).
-    const { error } = await supabase.from('services').delete().eq('id', id).eq('business_id', business.id)
+  // NO optimista: capturamos el error real. Defensa en profundidad con business_id (igual que
+  // deleteProfessional). NO emite toast de error: el motivo se devuelve y lo traduce el modal, que
+  // sabe qué estado le estaba mostrando al dueño. `.select('id')` tampoco es cosmético: si la RLS
+  // filtra la fila, el DELETE vuelve sin error y con 0 filas — sin eso diríamos "Servicio eliminado"
+  // sin haber borrado nada.
+  async function deleteService(id: string): Promise<DeleteServiceResult> {
+    const { data, error } = await supabase.from('services').delete().eq('id', id).eq('business_id', business.id).select('id')
     if (error) {
-      if (error.code === '23503') toast.error('No se puede eliminar: el servicio tiene turnos asociados, incluidos pasados y cancelados (cancelar no los borra). Desactivalo para dejar de ofrecerlo y conservar el historial, o borrá esos turnos primero.')
-      else toast.error('No se pudo eliminar el servicio')
-      return
+      // Mapeo del rechazo del gate de la migr. 065 (molde: lib/booking-core.ts — message primero,
+      // code después). Dos messages distintos sobre el mismo ERRCODE P0001 para poder distinguir
+      // "hay turnos" de "hay un abono vivo".
+      if (error.code === 'P0001' && error.message?.includes('service_has_future_appointments')) return { ok: false, error: 'has_future_appointments' }
+      if (error.code === 'P0001' && error.message?.includes('service_has_active_abono')) return { ok: false, error: 'has_active_abono' }
+      // Fallback defensivo: si algún FK a services quedara en NO ACTION, Postgres rechaza con 23503
+      // antes de que corra cualquier gate — para el dueño es el mismo caso "tiene turnos".
+      if (error.code === '23503') return { ok: false, error: 'has_future_appointments' }
+      return { ok: false, error: 'unknown' }
     }
+    if (!data || data.length === 0) return { ok: false, error: 'unknown' }
     setServices(prev => prev.filter(s => s.id !== id))
     toast.success('Servicio eliminado')
+    return { ok: true }
   }
+  // D-12 asciende toggleService a acción primaria del modal de borrado, así que un fallo silencioso
+  // mentiría. Alineado al patrón de deleteService/deleteProfessional: filtro por business_id (sin él,
+  // un UUID conocido de otro negocio se desactivaría si la policy lo permitiera) + error real
+  // capturado ANTES de tocar el estado local.
   async function toggleService(id: string, active: boolean) {
-    await supabase.from('services').update({ active }).eq('id', id)
+    const { error } = await supabase.from('services').update({ active }).eq('id', id).eq('business_id', business.id)
+    if (error) { toast.error('No se pudo actualizar el servicio'); return }
     setServices(prev => prev.map(s => s.id === id ? { ...s, active } : s))
+    toast.success(active ? 'Servicio activado' : 'Servicio desactivado')
   }
   // Consultorios donde se ofrece un servicio (con compatibilidad legacy location_id).
   const serviceLocSet = (s: Service) => s.location_ids?.length ? s.location_ids : (s.location_id ? [s.location_id] : [])
@@ -1485,7 +1557,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                       <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => setDelService(s)}>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => openDeleteService(s)} aria-label={`Eliminar ${s.name}`}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -2303,17 +2375,43 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
       {/* Confirmación de borrado (servicio / consultorio). El ConfirmDialog usa el cliente browser
           de Supabase directo (NO server actions, NO redirect) → sin toast espurio de NEXT_REDIRECT.
-          Ante FK (turnos asociados) deleteService/deleteLocation muestran su toast y NO filtran el
-          item: el dialog se cierra pero la fila sigue en la lista. */}
+          El de servicio tiene DOS estados (D-11): bloqueado (sin "Eliminar", con salida a desactivar)
+          y confirmable. Ante un rechazo del gate, deleteLocation muestra su propio toast y NO filtra
+          el item: el dialog se cierra pero la fila sigue en la lista. */}
       <ConfirmDialog
         open={!!delService}
-        onOpenChange={(o) => { if (!o) setDelService(null) }}
+        onOpenChange={(o) => { if (!o) { setDelService(null); setDelInfo(null) } }}
         title="¿Eliminar servicio?"
-        description={delService ? `Vas a eliminar "${delService.name}". Esta acción no se puede deshacer.` : undefined}
+        description={delDescription}
         risk="alto"
         confirmLabel="Eliminar"
         destructive
-        onConfirm={async () => { if (delService) { await deleteService(delService.id); setDelService(null) } }}
+        hideConfirm={delInfo === null || delBlocked}
+        secondaryAction={delBlocked && delService
+          ? { label: 'Desactivar', onClick: async () => { await toggleService(delService.id, false); setDelService(null); setDelInfo(null) } }
+          : undefined}
+        onConfirmError={(err) => {
+          const motivo = err instanceof Error ? err.message : ''
+          toast.error(
+            motivo === 'has_future_appointments' ? 'No se puede eliminar: quedaron turnos futuros reservados. Desactivalo para dejar de ofrecerlo y conservar el historial.'
+              : motivo === 'has_active_abono' ? 'No se puede eliminar: el servicio tiene un abono activo. Desactivalo para dejar de ofrecerlo y conservar el historial.'
+                : 'No se pudo eliminar el servicio'
+          )
+        }}
+        onConfirm={async () => {
+          if (!delService) return
+          const res = await deleteService(delService.id)
+          if (!res.ok) {
+            // Backstop del gate de la DB (D-10/D-11): alguien reservó entre el pre-check y el
+            // confirm. Hay que LANZAR — el ConfirmDialog cierra el diálogo cuando onConfirm no
+            // lanza, y el rechazo se tragaría en silencio. Con el throw el modal queda abierto y,
+            // con el pre-check refrescado, se re-renderiza en estado bloqueado.
+            await openDeleteService(delService)
+            throw new Error(res.error)
+          }
+          setDelService(null)
+          setDelInfo(null)
+        }}
       />
       <ConfirmDialog
         open={!!delLoc}
