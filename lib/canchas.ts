@@ -191,7 +191,16 @@ export async function deleteCancha(
   const { error: svcErr } = await client
     .from('services').delete().eq('id', cancha.service.id).eq('business_id', businessId)
   if (svcErr) {
-    if ((svcErr as { code?: string }).code === '23503') return { ok: false, error: 'has_appointments' }
+    const e = svcErr as { code?: string; message?: string }
+    // 23503 (FK) queda como fallback defensivo: desde la migración 065 el FK de appointments (y el
+    // de abonos) pasó a SET NULL, así que el rechazo ya no llega como FK sino como el RAISE del
+    // trigger `services_block_delete_trg` (ERRCODE P0001, message = código de dominio). Se mapea al
+    // MISMO 'has_appointments' que ya consume canchas-manager para que el operador vea el copy real
+    // ("tiene turnos, desactivala") en vez del genérico "No se pudo eliminar la cancha".
+    if (e.code === '23503') return { ok: false, error: 'has_appointments' }
+    if (e.code === 'P0001' && (e.message?.includes('service_has_future_appointments') || e.message?.includes('service_has_active_abono'))) {
+      return { ok: false, error: 'has_appointments' }
+    }
     return { ok: false, error: 'service_delete_failed' }
   }
 
