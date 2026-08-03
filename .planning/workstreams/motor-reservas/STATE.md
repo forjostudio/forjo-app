@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 13-01-PLAN.md — migracion 065 escrita y validada en LOCAL; NO aplicada a prod (eso es 13-05)
-last_updated: "2026-08-03T15:14:07.360Z"
+stopped_at: Completado 13-03-PLAN.md (wave 2)
+last_updated: "2026-08-03T15:29:54.787Z"
 last_activity: 2026-08-03 -- Phase 13 execution started
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 62
-  completed_plans: 59
+  completed_plans: 60
   percent: 86
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 13 (borrado-de-servicio-preservando-historial) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-08-03 -- Phase 13 execution started
 
@@ -73,6 +73,7 @@ Last activity: 2026-08-03 -- Phase 13 execution started
 | Phase 12 P04 | 30min | 2 tasks | 2 files |
 | Phase 13 P01 | 35min | 3 tasks | 2 files |
 | Phase 13 P02 | 20 min | 3 tasks | 10 files |
+| Phase 13 P03 | 20min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 13]: 13-01: el gate usa IS DISTINCT FROM 'cancelled', no <> — appointments.status es NULLABLE: con <> esas filas evaluan NULL, quedan fuera del EXISTS y ABREN el gate. Verificado en vivo contra PG17 local
 - [Phase ?]: 13-02: el fallback snapshot -> join vive SOLO en lib/appointment-service.ts; ningun read-path re-escribe el ternario
 - [Phase ?]: 13-02: el embed services() se acepta como objeto O array (supabase-js lo infiere array en selects acotados), para no reintroducir casts por call-site
+- [Phase 13]: 13-03: el pre-check del modal de borrado es UX/refuerzo; el gate autoritativo es el trigger de la 065, y onConfirm lanza para que el modal no cierre ante el rechazo tardio
 
 ### Pending Todos
 
@@ -196,8 +198,8 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-03T15:13:48.933Z
-Stopped at: Completado 13-01-PLAN.md — migracion 065 escrita y validada en LOCAL; NO aplicada a prod (eso es 13-05)
+Last session: 2026-08-03T15:29:54.771Z
+Stopped at: Completado 13-03-PLAN.md (wave 2)
 Resume file: .planning/workstreams/motor-reservas/phases/13-borrado-de-servicio-preservando-historial/13-CONTEXT.md
 
 ## Operator Next Steps
