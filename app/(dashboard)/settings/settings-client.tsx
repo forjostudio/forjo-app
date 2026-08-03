@@ -523,8 +523,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   const [delService, setDelService] = useState<Service | null>(null)
   // Pre-check del borrado (D-11/D-13): lo que el modal necesita para anticipar el resultado ANTES de
-  // que el dueño apriete. `null` = todavía contando. Molde: openDelete de canchas-manager.
-  const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number } | null>(null)
+  // que el dueño apriete. `null` = todavía contando; `'error'` = el pre-check NO se pudo hacer.
+  // Molde: openDelete de canchas-manager.
+  //
+  // POR QUÉ 'error' es un estado propio y no un cero (WR-02): si una de las tres queries falla,
+  // `count` vuelve null y el `?? 0` lo volvía indistinguible de "este servicio no tiene nada que
+  // perder" — o sea, aparecía el Eliminar destructivo y el modal prometía conservar "0 turnos" de un
+  // servicio que puede tener cientos. FAIL-CLOSED: sin dato no se ofrece la acción.
+  const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number } | 'error' | null>(null)
 
   // Abre el modal de borrado y cuenta lo que el trigger va a mirar. Es UX/refuerzo: NO autoriza nada
   // — el gate real vive en `services_block_delete_trg` (migr. 065), que no se puede saltear desde el
@@ -552,6 +558,13 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       supabase.from('appointments').select('id', { count: 'exact', head: true })
         .eq('business_id', business.id).eq('service_id', s.id),
     ])
+    // Sin los tres counts no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
+    // 'error', NUNCA un 0 silencioso.
+    if (fut.error || abo.error || hist.error) {
+      console.error('[settings/delete-service] pre-check falló:', fut.error ?? abo.error ?? hist.error)
+      setDelInfo('error')
+      return
+    }
     setDelInfo({
       future: fut.count ?? 0,
       nextDate: (fut.data?.[0] as { date?: string } | undefined)?.date ?? null,
@@ -560,20 +573,23 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     })
   }
 
-  // Bloqueado = el trigger va a rechazar el DELETE. Mientras `delInfo` es null todavía no se sabe.
-  const delBlocked = !!delInfo && (delInfo.future > 0 || delInfo.activeAbono)
+  // Bloqueado = el trigger va a rechazar el DELETE. Mientras `delInfo` es null todavía no se sabe, y
+  // con 'error' tampoco: ahí no está bloqueado, está SIN VERIFICAR (se maneja aparte, sin confirmar).
+  const delBlocked = !!delInfo && delInfo !== 'error' && (delInfo.future > 0 || delInfo.activeAbono)
 
-  // Descripción de los TRES estados del diálogo (contando / bloqueado / confirmable), derivada fuera
-  // del JSX (molde delDescription de canchas-manager).
+  // Descripción de los CUATRO estados del diálogo (contando / sin verificar / bloqueado /
+  // confirmable), derivada fuera del JSX (molde delDescription de canchas-manager).
   const delDescription = !delService
     ? undefined
     : delInfo === null
       ? `Vas a eliminar "${delService.name}". Verificando turnos…`
-      : delBlocked
-        ? `${delInfo.future > 0
-            ? `"${delService.name}" tiene ${delInfo.future} ${delInfo.future === 1 ? 'turno reservado' : 'turnos reservados'}${delInfo.nextDate ? ` a partir del ${format(parseISO(delInfo.nextDate), 'd/M')}` : ''}${delInfo.activeAbono ? ' y un abono activo' : ''}`
-            : `"${delService.name}" tiene un abono activo`}. Desactivalo para dejar de ofrecerlo y conservar el historial.`
-        : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio. Esta acción no se puede deshacer.`
+      : delInfo === 'error'
+        ? `No pudimos verificar los turnos de "${delService.name}", así que no se puede eliminar sin saber qué se pierde. Cerrá y probá de nuevo.`
+        : delBlocked
+          ? `${delInfo.future > 0
+              ? `"${delService.name}" tiene ${delInfo.future} ${delInfo.future === 1 ? 'turno reservado' : 'turnos reservados'}${delInfo.nextDate ? ` a partir del ${format(parseISO(delInfo.nextDate), 'd/M')}` : ''}${delInfo.activeAbono ? ' y un abono activo' : ''}`
+              : `"${delService.name}" tiene un abono activo`}. Desactivalo para dejar de ofrecerlo y conservar el historial.`
+          : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio. Esta acción no se puede deshacer.`
 
   async function addService() {
     if (!newService.name) return
@@ -2456,7 +2472,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         risk="alto"
         confirmLabel="Eliminar"
         destructive
-        hideConfirm={delInfo === null || delBlocked}
+        hideConfirm={delInfo === null || delInfo === 'error' || delBlocked}
         secondaryAction={delBlocked && delService
           ? { label: 'Desactivar', onClick: async () => { await toggleService(delService.id, false); setDelService(null); setDelInfo(null) } }
           : undefined}
