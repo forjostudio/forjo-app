@@ -4,14 +4,14 @@ milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
 stopped_at: Completado 14-01-PLAN.md (3/3 tasks)
-last_updated: "2026-08-04T22:55:22.649Z"
+last_updated: "2026-08-04T23:07:22.652Z"
 last_activity: 2026-08-04 -- Phase 14 execution started
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 69
-  completed_plans: 63
-  percent: 91
+  completed_plans: 64
+  percent: 93
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-08-04 -- Phase 14 execution started
 
@@ -77,6 +77,7 @@ Last activity: 2026-08-04 -- Phase 14 execution started
 | Phase 13 P03 | 20min | 3 tasks | 4 files |
 | Phase 13 P04 | 15min | 3 tasks | 2 files |
 | Phase 14 P01 | 35min | 3 tasks | 5 files |
+| Phase 14 P02 | 25 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 13]: 13-04: los dos triggers de la 065 se prueban por integracion contra el Supabase LOCAL (.env.test.local -> 127.0.0.1:54321): el mecanismo vive en la base, no hay funcion de TS que testear
 - [Phase 14]: 14-01 (D-03): los botones desestirados van a la izquierda con self-start, sin justify-end — Replica el precedente ya validado en produccion (settings-client.tsx:1568) en vez de abrir un eje visual nuevo por card en una pantalla con 10+ cards apiladas
 - [Phase 14]: 14-01 (D-01): el criterio w-full sm:w-auto se aplico sin excepcion tambien en el panel angosto de Dias especiales — D-01 es LOCKED y explicito sobre no exceptuar por contenedor; el trade-off (ancho-por-contenido dentro de un panel angosto a partir de 640px) queda anotado para la UAT visual del plan 14-07
+- [Phase 14]: 14-02: la clasificación de clientes vive en lib/client-status.ts (classifyClient + PAUSED_AFTER_DAYS=60); clientStats y getSuggestion la comparten y ningún umbral literal sobrevive en el componente
+- [Phase 14]: 14-02: un <a> estilizado con buttonVariants entra en el criterio D-01 igual que un <Button> — es un botón de acción a todos los efectos y era hermano del de Importar en el mismo grid
 
 ### Pending Todos
 
@@ -204,7 +207,7 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-04T22:55:22.631Z
+Last session: 2026-08-04T23:07:12.289Z
 Stopped at: Completado 14-01-PLAN.md (3/3 tasks)
 Resume file: .planning/workstreams/motor-reservas/phases/14-cierre-de-backlog/14-CONTEXT.md
 
