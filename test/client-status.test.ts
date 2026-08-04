@@ -3,8 +3,8 @@ import { PAUSED_AFTER_DAYS, classifyClient } from '@/lib/client-status'
 
 // ── Phase 14 (POLISH-07) — tests puros de lib/client-status.ts ────────────────────
 // Espejan test/staff-services.test.ts: describe/it/expect, import por el alias @/lib/...,
-// SIN Supabase, SIN creds y SIN describe.skipIf → esta suite corre en cualquier entorno,
-// aunque no haya un Supabase local levantado.
+// sin Supabase, sin credenciales y sin ningún gate de entorno que saltee casos → esta suite
+// corre siempre, aunque no haya un Supabase local levantado.
 //
 // Congelan las dos reglas que el panel de Clientes reimplementaba en dos lugares distintos:
 //   - D-10: `visits === 0` ⇒ 'new', SIEMPRE. El sentinela de `daysSinceLast` (999 cuando la
