@@ -14,6 +14,7 @@ import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
+import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -41,11 +42,9 @@ type DeleteServiceResult = { ok: true } | { ok: false; error: 'has_future_appoin
 
 // Filtro del listado de servicios (D-14). Los desactivados salen de la lista principal y viven en su
 // propio tab: mezclados con el nombre tachado volvían pobre la salida que ofrece el modal de borrado.
-type ServiceTab = 'activos' | 'desactivados'
-const SERVICE_TABS: { key: ServiceTab; label: string }[] = [
-  { key: 'activos', label: 'Activos' },
-  { key: 'desactivados', label: 'Desactivados' },
-]
+// El tipo, las píldoras, el filtro y los contadores viven ahora en @/components/dashboard/active-tabs
+// (D-13): el mismo molde lo consume también el manager de canchas, así que dejó de ser local.
+const isServiceActive = (s: Service) => !!s.active
 
 // ── Profesionales: form ampliado + labels por rubro ─────────────────────────
 type ProForm = { name: string; last_name: string; specialty: string; license_number: string; phone: string; email: string }
@@ -517,9 +516,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // capacity_mode/capacity (migr. 062): el default espeja el de la DB → un servicio nuevo nace en el
   // modo histórico (cero regresión) y el dueño opta explícitamente por el recurso simultáneo.
   const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
-  const [serviceTab, setServiceTab] = useState<ServiceTab>('activos')
-  // La lista visible y sus contadores se derivan más abajo (buscar `manageableServices`): dependen de
-  // `professionals` y `agendaSpaces`, que se declaran después — leerlos acá sería un TDZ en runtime.
+  // El tab, la lista visible y sus contadores salen de useActiveTabs, invocado más abajo (buscar
+  // `manageableServices`): el hook necesita la lista ya filtrada, que depende de `professionals` y
+  // `agendaSpaces` — declarados después, así que leerlos acá sería un TDZ en runtime.
 
   const [delService, setDelService] = useState<Service | null>(null)
   // Pre-check del borrado (D-11/D-13): lo que el modal necesita para anticipar el resultado ANTES de
@@ -866,13 +865,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     () => nonCanchaServices(services, canchasFromData(services, professionals, agendaSpaces)),
     [services, professionals, agendaSpaces],
   )
-  // El filtro y el contador llaman al MISMO predicado a propósito (molde de /abonos): si cada uno
-  // decidiera por su cuenta, el tab podría decir "Activos (1)" sobre una lista vacía.
-  const visibleServices = useMemo(() => manageableServices.filter(s => !!s.active === (serviceTab === 'activos')), [manageableServices, serviceTab])
-  const serviceTabCounts = useMemo(() => {
-    const activos = manageableServices.filter(s => !!s.active).length
-    return { activos, desactivados: manageableServices.length - activos }
-  }, [manageableServices])
+  // Tab + filtro + contadores (D-13). El hook compartido garantiza el invariante que antes vivía acá:
+  // el filtro y el contador llaman al MISMO predicado (`isServiceActive`), porque si cada uno
+  // decidiera por su cuenta el tab podría decir "Activos (1)" sobre una lista vacía.
+  const { tab: serviceTab, setTab: setServiceTab, visible: visibleServices, counts: serviceTabCounts } =
+    useActiveTabs(manageableServices, isServiceActive)
   // Término del eje según el rubro: 'Cancha'/'Canchas' para canchas, 'Profesional'/'Equipo' resto.
   const resourceWord = term.resource
   const resourcesWord = term.resources
@@ -1590,38 +1587,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           ) : (
           <>
           <Card className="p-6 space-y-4">
-            {/* Píldoras de filtro (D-14), mismo molde visual que el filtro Archivados de /abonos. */}
-            <div className="flex gap-1 flex-wrap">
-              {SERVICE_TABS.map(t => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setServiceTab(t.key)}
-                  aria-pressed={serviceTab === t.key}
-                  className={cn(
-                    'px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
-                    serviceTab === t.key ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t.label} ({serviceTabCounts[t.key]})
-                </button>
-              ))}
-            </div>
+            {/* Píldoras de filtro (D-14), desde el módulo compartido (D-13): el mismo componente lo
+                usa el manager de canchas, así que las dos pantallas no pueden divergir. */}
+            <ActiveTabs tab={serviceTab} onChange={setServiceTab} counts={serviceTabCounts} />
             {visibleServices.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-2">
-                <Clock className="mx-auto h-6 w-6 text-muted-foreground" />
-                {serviceTab === 'desactivados' ? (
-                  <>
-                    <p className="text-sm font-medium">No hay servicios desactivados</p>
-                    <p className="text-xs text-muted-foreground">Acá van a aparecer los que dejes de ofrecer: se conservan con todo su historial y los podés volver a activar cuando quieras.</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium">Todavía no tenés servicios activos</p>
-                    <p className="text-xs text-muted-foreground">Agregá el primero acá abajo para empezar a recibir reservas.</p>
-                  </>
-                )}
-              </div>
+              <ActiveTabsEmptyState
+                tab={serviceTab}
+                icon={Clock}
+                activos={{
+                  title: 'Todavía no tenés servicios activos',
+                  help: 'Agregá el primero acá abajo para empezar a recibir reservas.',
+                }}
+                desactivados={{
+                  title: 'No hay servicios desactivados',
+                  help: 'Acá van a aparecer los que dejes de ofrecer: se conservan con todo su historial y los podés volver a activar cuando quieras.',
+                }}
+              />
             ) : (
             <div className="space-y-2">
               {visibleServices.map(s => {
