@@ -59,6 +59,32 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 
+CREATE OR REPLACE FUNCTION "public"."abonos_block_delete"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+  -- Guard de cascada: al cerrar la cuenta de un negocio el padre ya no existe cuando cascadea a
+  -- abonos. Sin esto, borrar un negocio con una serie activa sería imposible (T-14-15).
+  IF OLD."business_id" IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM businesses b WHERE b."id" = OLD."business_id") THEN
+    RETURN OLD;
+  END IF;
+  -- D-18: solo se borra lo archivado ('cancelled' / 'completed'). status es NOT NULL con CHECK, así
+  -- que no hace falta rama IS NULL. Message = código de dominio fijo: viaja al navegador (T-14-14).
+  IF OLD."status" = 'active' THEN
+    RAISE EXCEPTION 'abono_is_active' USING ERRCODE = 'P0001';
+  END IF;
+  -- Devolver la fila vieja es obligatorio: devolver NULL cancelaría el borrado SIN error y la UI
+  -- diría "eliminado" sin haber borrado nada (T-14-16).
+  RETURN OLD;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."abonos_block_delete"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."abonos_service_snapshot"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1447,6 +1473,10 @@ CREATE INDEX "tasks_business_id_idx" ON "public"."tasks" USING "btree" ("busines
 
 
 CREATE INDEX "time_blocks_location" ON "public"."time_blocks" USING "btree" ("location_id");
+
+
+
+CREATE OR REPLACE TRIGGER "abonos_block_delete_trg" BEFORE DELETE ON "public"."abonos" FOR EACH ROW EXECUTE FUNCTION "public"."abonos_block_delete"();
 
 
 
