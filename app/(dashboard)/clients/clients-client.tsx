@@ -10,6 +10,11 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { Client, Appointment } from '@/lib/types'
 import { isValidPhone } from '@/lib/clients-create'
+// Clasificación del cliente (POLISH-07). La regla vive en lib/ y NO se reimplementa acá: hasta ahora
+// el status del filtro y la rama de getSuggestion la calculaban por su cuenta y habían derivado en el
+// umbral de pausa (45 vs 60 días), así que el mismo cliente podía estar en el tab "Pausa" y recibir el
+// consejo de uno activo (D-11). Molde de extracción: lib/staff-services.ts.
+import { classifyClient } from '@/lib/client-status'
 // Historial de la ficha del cliente: nombre y precio del servicio con fallback snapshot → join
 // (D-05). Antes vivían acá como getApptService/getApptPrice; se promovieron al helper compartido
 // para que Finanzas, el CSV y Turnos no tengan cada uno su propia copia del ternario.
@@ -44,17 +49,20 @@ const STATUS_DOT: Record<StatusKey, string> = {
   frequent: 'bg-yellow-400',
   paused: 'bg-gray-400',
 }
+// Labels de la clasificación en masculino (D-12): el sustantivo que nombran es "Cliente"/"Paciente"
+// y TODOS los verticales lo usan en masculino (lib/verticals.ts), así que la concordancia es esa.
+// STATUS_DOT queda intacto arriba: son clases de color, no copy.
 const STATUS_LABEL: Record<StatusKey, string> = {
-  new: 'NUEVA',
-  active: 'ACTIVA',
+  new: 'NUEVO',
+  active: 'ACTIVO',
   frequent: 'FRECUENTE',
   paused: 'PAUSA',
 }
 const FILTER_TABS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'Todas' },
+  { key: 'all', label: 'Todos' },
   { key: 'frequent', label: 'Frecuentes' },
-  { key: 'active', label: 'Activas' },
-  { key: 'new', label: 'Nuevas' },
+  { key: 'active', label: 'Activos' },
+  { key: 'new', label: 'Nuevos' },
   { key: 'paused', label: 'Pausa' },
 ]
 const ALL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('')
@@ -146,39 +154,48 @@ function fmtLastVisit(dateStr: string): string {
   return `${m} ${m === 1 ? 'MES' : 'MESES'} · ${d}`
 }
 
-function getSuggestion(visits: number, daysSinceLast: number) {
-  if (daysSinceLast > 60) return {
+// Copy y colores de la sugerencia, uno por clasificación. Los 4 objetos quedan como estaban: lo
+// único que cambia es QUIÉN elige cuál. Antes esta función decidía la rama por su cuenta con un
+// umbral de 60 días propio mientras el filtro usaba 45 (D-11), y su primer corte por días le
+// ganaba al de visitas, así que un cliente con 0 turnos y el sentinela de 999 días recibía el consejo
+// de "hace más de 2 meses que no viene" (D-10). Delegando en classifyClient los dos desaparecen.
+const SUGGESTION = {
+  paused: {
     label: 'CLIENTE PAUSADO',
     text: 'Hace más de 2 meses que no viene, ideal para recontactar',
     status: 'paused' as StatusKey,
     color: 'text-foreground',
     border: 'border-border',
     bg: 'bg-secondary',
-  }
-  if (visits <= 1) return {
+  },
+  new: {
     label: 'CLIENTE RECIENTE',
     text: 'Pocas visitas, pedile feedback y ofrecele su segundo servicio con descuento',
     status: 'new' as StatusKey,
     color: 'text-red-400',
     border: 'border-red-500/30',
     bg: 'bg-red-500/10',
-  }
-  if (visits <= 4) return {
+  },
+  active: {
     label: 'CLIENTE EN DESARROLLO',
     text: 'Va tomando ritmo, ideal para sugerirle servicios complementarios',
     status: 'active' as StatusKey,
     color: 'text-green-400',
     border: 'border-green-500/30',
     bg: 'bg-green-500/10',
-  }
-  return {
+  },
+  frequent: {
     label: 'CLIENTE FRECUENTE',
     text: 'Alta fidelidad, considerá un beneficio de cliente VIP',
     status: 'frequent' as StatusKey,
     color: 'text-yellow-400',
     border: 'border-yellow-500/30',
     bg: 'bg-yellow-500/10',
-  }
+  },
+}
+
+function getSuggestion(visits: number, daysSinceLast: number) {
+  return SUGGESTION[classifyClient({ visits, daysSinceLast })]
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -402,11 +419,11 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       const daysSinceLast = lastDate ? differenceInDays(now, parseISO(lastDate)) : 999
       const totalSpend = confirmed.reduce((s, a) => s + apptServicePrice(a), 0)
 
-      let status: StatusKey
-      if (daysSinceLast > 45) status = 'paused'
-      else if (visits >= 5) status = 'frequent'
-      else if (visits >= 2) status = 'active'
-      else status = 'new'
+      // El sentinela de 999 de arriba se conserva a propósito: otros lugares del archivo consumen
+      // `daysSinceLast` como number, y ahora es el helper quien lo neutraliza (0 visitas ⇒ 'new',
+      // D-10). El umbral de pausa también vive allá, compartido con getSuggestion (D-11): los
+      // clientes de 46 a 60 días sin venir salen del tab "Pausa" y pasan a activos / en desarrollo.
+      const status: StatusKey = classifyClient({ visits, daysSinceLast })
 
       return [c.id, { status, visits, lastDate, daysSinceLast, totalSpend }]
     }))
