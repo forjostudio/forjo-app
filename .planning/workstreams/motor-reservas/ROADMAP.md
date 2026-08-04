@@ -540,12 +540,20 @@ Plans:
 **Plans**: 7 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 14-01-PLAN.md — POLISH-04 en Ajustes/Agenda/formularios de alta (17 botones) + POLISH-05 RiskBadge "Alto" con relleno semántico de peligro
 - [ ] 14-02-PLAN.md — POLISH-07: helper puro `lib/client-status.ts` (visits 0 ⇒ nuevo, umbral único 60 días) + 8 labels en masculino + POLISH-04 en Clientes
 - [ ] 14-03-PLAN.md — POLISH-06: gate server-side en `GET /api/abonos/cancel-link/[id]` con 404 genérico + bloque de UI oculto en serie cancelada + POLISH-04 en Abonos
 - [ ] 14-04-PLAN.md — EXTRA-B (base): migración **066** con trigger `BEFORE DELETE` sobre `abonos` + validación local + suite de integración
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 14-05-PLAN.md — EXTRA-A: módulo compartido `components/dashboard/active-tabs.tsx`, Servicios migrado sin regresión y Canchas con paridad
 - [ ] 14-06-PLAN.md — EXTRA-B (UI): borrado de serie archivada con RLS + `ConfirmDialog` de dos pasos + mapeo del rechazo del gate
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 14-07-PLAN.md — UAT visual de los 6 ítems en los dos shells + runbook y apply manual de la 066 en producción
 
 **Waves**: Wave 1 = 14-01 + 14-02 + 14-03 + 14-04 en paralelo (cero solape de archivos). Wave 2 = 14-05 (necesita `settings-client.tsx` liberado por 14-01) + 14-06 (necesita `abonos-client.tsx` liberado por 14-03 y el gate de 14-04). Wave 3 = 14-07 (checkpoints humanos bloqueantes).
