@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 14-01-PLAN.md (3/3 tasks)
-last_updated: "2026-08-04T23:07:22.652Z"
+stopped_at: Completado 14-03-PLAN.md (3/3 tasks)
+last_updated: "2026-08-04T23:19:20.505Z"
 last_activity: 2026-08-04 -- Phase 14 execution started
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 69
-  completed_plans: 64
+  completed_plans: 65
   percent: 93
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-08-04 -- Phase 14 execution started
 
@@ -78,6 +78,7 @@ Last activity: 2026-08-04 -- Phase 14 execution started
 | Phase 13 P04 | 15min | 3 tasks | 2 files |
 | Phase 14 P01 | 35min | 3 tasks | 5 files |
 | Phase 14 P02 | 25 min | 3 tasks | 3 files |
+| Phase 14 P03 | ~35 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: 14-01 (D-01): el criterio w-full sm:w-auto se aplico sin excepcion tambien en el panel angosto de Dias especiales — D-01 es LOCKED y explicito sobre no exceptuar por contenedor; el trade-off (ancho-por-contenido dentro de un panel angosto a partir de 640px) queda anotado para la UAT visual del plan 14-07
 - [Phase 14]: 14-02: la clasificación de clientes vive en lib/client-status.ts (classifyClient + PAUSED_AFTER_DAYS=60); clientStats y getSuggestion la comparten y ningún umbral literal sobrevive en el componente
 - [Phase 14]: 14-02: un <a> estilizado con buttonVariants entra en el criterio D-01 igual que un <Button> — es un botón de acción a todos los efectos y era hermano del de Importar en el mismo grid
+- [Phase 14]: 14-03: el rechazo de la serie cancelada en el link de baja reusa el 404 generico existente — un codigo propio convertiria al endpoint en oraculo de existencia (D-09/T-14-08)
+- [Phase 14]: 14-03: el gate corta SOLO sobre 'cancelled'; una serie 'completed' sigue entregando su link porque puede tener turnos por delante (T-14-11)
 
 ### Pending Todos
 
@@ -207,8 +210,8 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-04T23:07:12.289Z
-Stopped at: Completado 14-01-PLAN.md (3/3 tasks)
+Last session: 2026-08-04T23:19:14.673Z
+Stopped at: Completado 14-03-PLAN.md (3/3 tasks)
 Resume file: .planning/workstreams/motor-reservas/phases/14-cierre-de-backlog/14-CONTEXT.md
 
 ## Operator Next Steps

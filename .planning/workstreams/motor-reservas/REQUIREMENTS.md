@@ -62,7 +62,7 @@ Además se cierra el backlog chico acumulado (polish + un borrado de servicio qu
 
 - [x] **POLISH-04**: Los botones de acción del dashboard tienen ancho **consistente** app-wide: se elimina el `w-full` poco intencional en desktop según un criterio único definido en discuss-phase.
 - [x] **POLISH-05**: El `RiskBadge` "Alto" se muestra **con color** (relleno semántico de peligro) también **fuera del CRM** (hoy `--crm-danger` no está definido fuera del scope y el badge parece un pill gris).
-- [ ] **POLISH-06**: Una serie de abono con estado **cancelado** **no** muestra el botón "Copiar link de baja".
+- [x] **POLISH-06**: Una serie de abono con estado **cancelado** **no** muestra el botón "Copiar link de baja".
 - [x] **POLISH-07**: Un cliente **recién creado sin turnos** aparece en el filtro **"Nuevas"**, no en **"Pausa"** (">2 meses sin venir").
 
 ## Future Requirements (diferidos)
@@ -107,5 +107,5 @@ Además se cierra el backlog chico acumulado (polish + un borrado de servicio qu
 | HIST-03 | Phase 13 | Complete |
 | POLISH-04 | Phase 14 | Complete |
 | POLISH-05 | Phase 14 | Complete |
-| POLISH-06 | Phase 14 | Pending |
+| POLISH-06 | Phase 14 | Complete |
 | POLISH-07 | Phase 14 | Complete |
