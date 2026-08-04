@@ -604,24 +604,28 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
           </div>
           {/* Fila 2 (secundaria, grid 2-col): las dos acciones de round-trip CSV emparejadas —
               Exportar + Importar, ambas peso secundario (outline). El panel es angosto (lg:w-80),
-              así los botones no compiten con el título ni se clipean por el overflow-hidden. */}
+              así los botones no compiten con el título ni se clipean por el overflow-hidden.
+              D-01 (POLISH-04): las tres acciones de este header pasan a `w-full sm:w-auto`. El <a> de
+              Exportar entra en el lote aunque no sea un <Button>: usa buttonVariants y es hermano
+              directo del de Importar en el mismo grid, así que dejarlo estirado partiría el par en
+              dos anchos distintos — un bug visual peor que el que POLISH-04 viene a cerrar. */}
           <div className="grid grid-cols-2 gap-2">
             <a
               href="/api/export/clients"
               download
-              className={cn(buttonVariants({ variant: 'outline' }), 'w-full gap-1.5')}
+              className={cn(buttonVariants({ variant: 'outline' }), 'w-full gap-1.5 sm:w-auto')}
               title="Exportar CSV"
             >
               <Download className="w-4 h-4" /> Exportar CSV
             </a>
             {/* Importar CSV: variant outline, icono Upload, SIN gap manual (el Button trae su gap). */}
-            <Button variant="outline" onClick={() => setImportOpen(true)} className="w-full">
+            <Button variant="outline" onClick={() => setImportOpen(true)} className="w-full sm:w-auto">
               <Upload className="w-4 h-4" /> Importar CSV
             </Button>
           </div>
           {/* Fila 3 (primaria, full-width): el CTA primario "Nuevo cliente" en su propia fila para que
               quede dominante y no se apriete en el grid 2-col junto a los dos secundarios (CLIENT-01). */}
-          <Button onClick={() => setNewClientOpen(true)} className="w-full gap-1.5">
+          <Button onClick={() => setNewClientOpen(true)} className="w-full gap-1.5 sm:w-auto">
             <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
           </Button>
 
