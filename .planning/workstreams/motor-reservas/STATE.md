@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 14-03-PLAN.md (3/3 tasks)
-last_updated: "2026-08-04T23:19:20.505Z"
+stopped_at: Completado 14-04-PLAN.md
+last_updated: "2026-08-04T23:40:23.210Z"
 last_activity: 2026-08-04 -- Phase 14 execution started
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 69
-  completed_plans: 65
+  completed_plans: 66
   percent: 93
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-08-04 -- Phase 14 execution started
 
@@ -79,6 +79,7 @@ Last activity: 2026-08-04 -- Phase 14 execution started
 | Phase 14 P01 | 35min | 3 tasks | 5 files |
 | Phase 14 P02 | 25 min | 3 tasks | 3 files |
 | Phase 14 P03 | ~35 min | 3 tasks | 3 files |
+| Phase 14 P04 | 62min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -159,6 +160,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: 14-02: un <a> estilizado con buttonVariants entra en el criterio D-01 igual que un <Button> — es un botón de acción a todos los efectos y era hermano del de Importar en el mismo grid
 - [Phase 14]: 14-03: el rechazo de la serie cancelada en el link de baja reusa el 404 generico existente — un codigo propio convertiria al endpoint en oraculo de existencia (D-09/T-14-08)
 - [Phase 14]: 14-03: el gate corta SOLO sobre 'cancelled'; una serie 'completed' sigue entregando su link porque puede tener turnos por delante (T-14-11)
+- [Phase 14]: 14-04: el gate de borrado de abonos (migr. 066) rechaza solo status='active' con message 'abono_is_active' sobre ERRCODE P0001 — contrato que mapea la UI del plan 14-06
+- [Phase 14]: 14-04: los cleanups de tests que borraban series activas pasan por purgeAbonos() (archivar + borrar); el gate no se relaja para los tests
 
 ### Pending Todos
 
@@ -210,9 +213,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-04T23:19:14.673Z
-Stopped at: Completado 14-03-PLAN.md (3/3 tasks)
-Resume file: .planning/workstreams/motor-reservas/phases/14-cierre-de-backlog/14-CONTEXT.md
+Last session: 2026-08-04T23:40:23.180Z
+Stopped at: Completado 14-04-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
