@@ -537,12 +537,12 @@ Plans:
 
 ⚠ **D-06 del CONTEXT supersede** la nota de Security de esta fase sobre "sin alterar cómo se ve el badge dentro del CRM": el usuario aceptó explícitamente que el CRM cambie de aspecto con tal de mantener un solo componente compartido.
 
-**Plans**: 7 plans
+**Plans**: 1/7 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 14-01-PLAN.md — POLISH-04 en Ajustes/Agenda/formularios de alta (17 botones) + POLISH-05 RiskBadge "Alto" con relleno semántico de peligro
+- [x] 14-01-PLAN.md — POLISH-04 en Ajustes/Agenda/formularios de alta (17 botones) + POLISH-05 RiskBadge "Alto" con relleno semántico de peligro
 - [ ] 14-02-PLAN.md — POLISH-07: helper puro `lib/client-status.ts` (visits 0 ⇒ nuevo, umbral único 60 días) + 8 labels en masculino + POLISH-04 en Clientes
 - [ ] 14-03-PLAN.md — POLISH-06: gate server-side en `GET /api/abonos/cancel-link/[id]` con 404 genérico + bloque de UI oculto en serie cancelada + POLISH-04 en Abonos
 - [ ] 14-04-PLAN.md — EXTRA-B (base): migración **066** con trigger `BEFORE DELETE` sobre `abonos` + validación local + suite de integración
@@ -581,4 +581,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
-| 14. Cierre de backlog | 0/7 | Planned | - |
+| 14. Cierre de backlog | 1/7 | In Progress|  |

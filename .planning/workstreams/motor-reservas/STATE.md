@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Phase 14 context gathered
-last_updated: "2026-08-04T20:05:08.081Z"
-last_activity: 2026-08-04 -- Phase 14 planning complete
+stopped_at: Completado 14-01-PLAN.md (3/3 tasks)
+last_updated: "2026-08-04T22:55:22.649Z"
+last_activity: 2026-08-04 -- Phase 14 execution started
 progress:
   total_phases: 14
   completed_phases: 13
-  total_plans: 62
-  completed_plans: 62
-  percent: 93
+  total_plans: 69
+  completed_plans: 63
+  percent: 91
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 13 — borrado-de-servicio-preservando-historial
+**Current focus:** Phase 14 — cierre-de-backlog
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
+Phase: 14 (cierre-de-backlog) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-08-04 -- Phase 14 planning complete
+Last activity: 2026-08-04 -- Phase 14 execution started
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Last activity: 2026-08-04 -- Phase 14 planning complete
 | Phase 13 P02 | 20 min | 3 tasks | 10 files |
 | Phase 13 P03 | 20min | 3 tasks | 4 files |
 | Phase 13 P04 | 15min | 3 tasks | 2 files |
+| Phase 14 P01 | 35min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -150,6 +151,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 13-02: el embed services() se acepta como objeto O array (supabase-js lo infiere array en selects acotados), para no reintroducir casts por call-site
 - [Phase 13]: 13-03: el pre-check del modal de borrado es UX/refuerzo; el gate autoritativo es el trigger de la 065, y onConfirm lanza para que el modal no cierre ante el rechazo tardio
 - [Phase 13]: 13-04: los dos triggers de la 065 se prueban por integracion contra el Supabase LOCAL (.env.test.local -> 127.0.0.1:54321): el mecanismo vive en la base, no hay funcion de TS que testear
+- [Phase 14]: 14-01 (D-03): los botones desestirados van a la izquierda con self-start, sin justify-end — Replica el precedente ya validado en produccion (settings-client.tsx:1568) en vez de abrir un eje visual nuevo por card en una pantalla con 10+ cards apiladas
+- [Phase 14]: 14-01 (D-01): el criterio w-full sm:w-auto se aplico sin excepcion tambien en el panel angosto de Dias especiales — D-01 es LOCKED y explicito sobre no exceptuar por contenedor; el trade-off (ancho-por-contenido dentro de un panel angosto a partir de 640px) queda anotado para la UAT visual del plan 14-07
 
 ### Pending Todos
 
@@ -201,8 +204,8 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-04T17:15:31.900Z
-Stopped at: Phase 14 context gathered
+Last session: 2026-08-04T22:55:22.631Z
+Stopped at: Completado 14-01-PLAN.md (3/3 tasks)
 Resume file: .planning/workstreams/motor-reservas/phases/14-cierre-de-backlog/14-CONTEXT.md
 
 ## Operator Next Steps
