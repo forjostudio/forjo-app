@@ -2,6 +2,7 @@
 phase: 13-borrado-de-servicio-preservando-historial
 workstream: motor-reservas
 audited: 2026-08-03
+updated: 2026-08-04
 asvs_level: L1
 block_on: high
 threats_total: 31
@@ -11,7 +12,8 @@ threats_open: 0
 status: secured
 findings:
   blocker: 0
-  warning: 3
+  warning: 1
+  warning_resolved: 2
   info: 2
 ---
 
@@ -93,7 +95,7 @@ never targeted. No implementation file was modified.
 | T-13-27 | Denial of Service | mitigate | **CLOSED** (see **W-2**) | Runbook with explicit ordering transcribed at `13-05-SUMMARY.md:178-199` (step 6 = deploy, *after* the migration); `NOTIFY pgrst, 'reload schema';` present both as step 5 and at the tail of the migration itself (`065:295`). **Current state assessed explicitly: schema is AHEAD of code** (065 applied 2026-08-03, phase code not yet deployed). That is the **safe direction** the runbook prescribes — the widened `select`s cannot raise `PGRST204`, because the columns exist before any code that names them. The inverse ordering, which is what T-13-27 describes, did not occur and can no longer occur for this migration. Residual consequence of the window is **W-2**, which is a display-degradation risk, not the DoS this threat describes. |
 | T-13-28 | Tampering | mitigate | **CLOSED** | Prohibition in the plan (`13-05-PLAN.md:150-152`, `:186-188`) and in the runbook; explicitly recorded as not-used at `13-05-SUMMARY.md:88` and `:180`. Verified independently: `grep -rn "db push"` across `package.json`, CI/YAML and all TS/MJS (excluding `node_modules`, `.planning`) → **no match**; `package.json` scripts contain no Supabase push/deploy target. No automated path to prod exists. |
 | T-13-29 | Repudiation | mitigate | **CLOSED** (see **W-3**) | Both checkpoints are `gate="blocking"` — `13-05-PLAN.md:50` (human-verify) and `:136` (human-action). Evidence transcribed: literal on-screen modal copy for all three states at `13-05-SUMMARY.md:90-102`; the 7-step runbook with literal SQL at `:178-199`; applied/date/`db push` status at `:88`. `13-05-SUMMARY.md:57` records that the checkpoint did **not** auto-approve despite `workflow.auto_advance=true`. All four acceptance criteria of Task 2 (`13-05-PLAN.md:176-181`) are satisfied. Evidence-quality gap noted in **W-3**. |
-| T-13-30 | Info Disclosure | mitigate | **CLOSED** (obligation **pending**, see **W-3**) | Runbook step 7 requires the test appointment to be deleted — present verbatim at `13-05-SUMMARY.md:198` and `13-05-PLAN.md:169-170`. Steps 6-7 have **not run yet** (code undeployed, `13-05-SUMMARY.md:246`), so no test appointment currently exists in prod and the risk window has not opened. The instruction must still be honored at deploy time. |
+| T-13-30 | Info Disclosure | mitigate | **CLOSED** (obligación **cumplida** 2026-08-04) | Runbook step 7 requires the test appointment to be deleted — present verbatim at `13-05-SUMMARY.md:198` and `13-05-PLAN.md:169-170`. **Ejecutado el 2026-08-04**: el dueño corrió el smoke test en producción (snapshot poblado) y **borró el turno de prueba**, confirmado explícitamente. La ventana de riesgo se abrió y se cerró; no queda ningún turno de prueba visible para un cliente real. Ver **W-3**. |
 
 ### Cross-cutting
 
@@ -182,15 +184,36 @@ consequence that no plan-time threat covers:
 moment the phase code ships. Recommended handling: deploy the phase code promptly, or tell the owner not
 to delete services in prod until it lands.
 
-### W-3 (WARNING) — production evidence is partial; runbook steps 6-7 still owe execution
+> **RESUELTO 2026-08-04.** El código de la fase se deployó (`git push origin main`, `86f5bb9..fe7ef4c`).
+> La ventana schema-adelante-de-código se cerró: los read-paths en producción ya leen el snapshot vía
+> `lib/appointment-service.ts`, y `deleteService` ya mapea `P0001`. Nunca se borró un servicio en prod
+> durante la ventana, así que la consecuencia descripta no llegó a materializarse.
 
-- `13-05-SUMMARY.md` transcribes the *commands* for steps 3 and 4 but not their **outputs** from prod
-  (`count = 0`; `confdeltype = n, n`). The `UPDATE 0 / UPDATE 0` evidence cited is from the **local**
-  reset. T-13-29's mitigation text calls for "salida de las queries de verificación"; the plan's formal
-  acceptance criteria (`13-05-PLAN.md:176-181`) only demand the literal SQL, which is why this is a
-  warning and not an OPEN threat. Recommend pasting the two prod query results into the SUMMARY.
-- Step 6 (deploy) and step 7 (smoke test) are pending. **T-13-30's obligation — delete the test
-  appointment — is therefore still owed** and must not be skipped when step 7 runs on real tenant data.
+### W-3 (WARNING) — ~~production evidence is partial; runbook steps 6-7 still owe execution~~ → **RESUELTO 2026-08-04**
+
+**Estado: CERRADO.** Las tres condiciones que lo mantenían abierto se cumplieron.
+
+**1. Salida real de producción, pasos 3 y 4 del runbook** (ejecutada por el dueño en el SQL editor de
+prod el 2026-08-04, una sola query con `UNION ALL`, resultado por captura):
+
+| chequeo | resultado |
+|---|---|
+| `FK abonos_service_id_fkey` (debe ser `n`) | **`n`** |
+| `FK appointments_service_id_fkey` (debe ser `n`) | **`n`** |
+| backfill: turnos con servicio y sin snapshot (debe ser `0`) | **`0`** |
+
+Los dos FKs quedaron en `SET NULL` (`confdeltype = 'n'`) en producción, que es la acción referencial de
+la que depende HIST-01/HIST-03: borrar el servicio nulifica el puntero sin tocar la fila del turno. El
+backfill en `0` confirma que ningún turno histórico quedó sin snapshot. Esto reemplaza la evidencia
+`UPDATE 0 / UPDATE 0` del reset **local** que se citaba antes.
+
+**2. Paso 6 (deploy): EJECUTADO 2026-08-04.** `git push origin main` (`86f5bb9..fe7ef4c`, 83 commits)
+→ deploy de Vercel. El orden del runbook se respetó: la 065 ya estaba aplicada, así que el schema fue
+siempre por delante del código. Cierra también **W-2** (los read-paths deployados ya leen el snapshot).
+
+**3. Paso 7 (smoke test): EJECUTADO y confirmado por el dueño.** El turno de prueba se creó con su
+snapshot poblado y **fue borrado de producción** — la obligación de **T-13-30 queda cumplida**, no
+pendiente. No hay turno de prueba visible para ningún cliente real.
 
 ### I-1 (INFO / unregistered flag) — `setServiceLocations` mutates `services` without an explicit tenant filter
 

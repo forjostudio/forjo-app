@@ -177,7 +177,24 @@ El tab "Pasados" ahora mira la hora, pero el gate de la 065 sigue definiendo "fu
 
 ## Runbook de producción (ejecutado)
 
-**Estado: APLICADA en producción el 2026-08-03.** `supabase db push` NO se usó en ningún momento; el apply fue manual en el SQL editor de producción, coordinado con el deploy.
+**Estado: APLICADA en producción el 2026-08-03. Runbook COMPLETO (7/7) al 2026-08-04.** `supabase db push` NO se usó en ningún momento; el apply fue manual en el SQL editor de producción, coordinado con el deploy.
+
+### Salida real de producción — pasos 3 y 4 (2026-08-04)
+
+Ejecutados por el dueño en el SQL editor de prod (una sola query con `UNION ALL`):
+
+| chequeo | resultado |
+|---|---|
+| `FK abonos_service_id_fkey` (debe ser `n`) | **`n`** |
+| `FK appointments_service_id_fkey` (debe ser `n`) | **`n`** |
+| backfill: turnos con servicio y sin snapshot (debe ser `0`) | **`0`** |
+
+Los dos FKs quedaron en `SET NULL` en producción — la acción referencial de la que depende HIST-01/HIST-03 — y ningún turno histórico quedó sin snapshot.
+
+### Pasos 6 y 7 (2026-08-04)
+
+- **Paso 6 — deploy: HECHO.** `git push origin main` (`86f5bb9..fe7ef4c`, 83 commits) → deploy de Vercel. El orden del runbook se respetó: la 065 estaba aplicada desde el día anterior, así que el schema fue siempre por delante del código.
+- **Paso 7 — smoke test: HECHO.** Turno de prueba creado en prod con `service_name`/`service_price` poblados, y **borrado** después (obligación de T-13-30, confirmada por el dueño).
 
 1. Confirmar que la última migración aplicada en prod es la **064**.
 2. Pegar el contenido íntegro de `supabase/migrations/065_service_snapshot_and_delete_gate.sql` en el SQL editor de PRODUCCIÓN. Es idempotente: re-correrla es no-op.
@@ -243,7 +260,7 @@ Ninguno adicional. La migración 065 ya está aplicada en producción (2026-08-0
 - Los tres requisitos (HIST-01, HIST-02, HIST-03) están verificados por humano sobre datos reales y respaldados por tests de integración.
 - La 065 está en prod; la próxima migración del proyecto es la **066**.
 - Queda la Phase 14 (polish) del milestone v0.26.
-- **Pendiente de deploy:** el código de esta fase todavía tiene que desplegarse. La migración ya está aplicada, así que el orden del runbook se respeta.
+- **Deploy HECHO el 2026-08-04** (`86f5bb9..fe7ef4c`, 83 commits — incluye también la Phase 12, que estaba cerrada y sin pushear). Runbook 7/7. `13-SECURITY.md`: SECURED 31/31, W-2 y W-3 resueltos, queda W-1 (residual IN-05, decisión para la 066).
 
 ---
 *Phase: 13-borrado-de-servicio-preservando-historial*
