@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 13-04-PLAN.md (wave 3)
-last_updated: "2026-08-03T18:40:59.935Z"
+stopped_at: Phase 14 context gathered
+last_updated: "2026-08-04T17:15:32.402Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 14
@@ -201,9 +201,9 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-03T15:42:24.465Z
-Stopped at: Completado 13-04-PLAN.md (wave 3)
-Resume file: None
+Last session: 2026-08-04T17:15:31.900Z
+Stopped at: Phase 14 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/14-cierre-de-backlog/14-CONTEXT.md
 
 ## Operator Next Steps
 
