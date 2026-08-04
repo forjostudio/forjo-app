@@ -530,7 +530,25 @@ Plans:
   3. Una serie de abono con estado **cancelado** **no** muestra el botón "Copiar link de baja" (POLISH-06).
   4. Un cliente **recién creado sin turnos** aparece en el filtro **"Nuevas"**, no en **"Pausa"** (">2 meses sin venir") (POLISH-07).
 
-**Plans**: TBD
+**Alcance ampliado en discuss-phase (2 todos foldeados, sin REQ-ID en REQUIREMENTS.md):**
+
+  5. **EXTRA-A** — Canchas tiene los tabs Activos/Desactivados con paridad de Servicios (D-14 de Phase 13), vía un componente compartido. Origen: `todos/pending/2026-08-03-canchas-sin-tabs-activos-desactivados.md`.
+  6. **EXTRA-B** — el dueño puede **eliminar definitivamente** una serie de abono archivada, con el gate en la base (migración **066**) y conservando los turnos en el historial. **No es polish: es capacidad nueva.** Origen: `todos/pending/2026-08-03-borrar-definitivamente-abonos-archivados.md`.
+
+⚠ **D-06 del CONTEXT supersede** la nota de Security de esta fase sobre "sin alterar cómo se ve el badge dentro del CRM": el usuario aceptó explícitamente que el CRM cambie de aspecto con tal de mantener un solo componente compartido.
+
+**Plans**: 7 plans
+
+Plans:
+- [ ] 14-01-PLAN.md — POLISH-04 en Ajustes/Agenda/formularios de alta (17 botones) + POLISH-05 RiskBadge "Alto" con relleno semántico de peligro
+- [ ] 14-02-PLAN.md — POLISH-07: helper puro `lib/client-status.ts` (visits 0 ⇒ nuevo, umbral único 60 días) + 8 labels en masculino + POLISH-04 en Clientes
+- [ ] 14-03-PLAN.md — POLISH-06: gate server-side en `GET /api/abonos/cancel-link/[id]` con 404 genérico + bloque de UI oculto en serie cancelada + POLISH-04 en Abonos
+- [ ] 14-04-PLAN.md — EXTRA-B (base): migración **066** con trigger `BEFORE DELETE` sobre `abonos` + validación local + suite de integración
+- [ ] 14-05-PLAN.md — EXTRA-A: módulo compartido `components/dashboard/active-tabs.tsx`, Servicios migrado sin regresión y Canchas con paridad
+- [ ] 14-06-PLAN.md — EXTRA-B (UI): borrado de serie archivada con RLS + `ConfirmDialog` de dos pasos + mapeo del rechazo del gate
+- [ ] 14-07-PLAN.md — UAT visual de los 6 ítems en los dos shells + runbook y apply manual de la 066 en producción
+
+**Waves**: Wave 1 = 14-01 + 14-02 + 14-03 + 14-04 en paralelo (cero solape de archivos). Wave 2 = 14-05 (necesita `settings-client.tsx` liberado por 14-01) + 14-06 (necesita `abonos-client.tsx` liberado por 14-03 y el gate de 14-04). Wave 3 = 14-07 (checkpoints humanos bloqueantes).
 
 **UI hint**: yes
 **Security/Integrity relevance**: Bajo riesgo. Los cuatro ítems son de presentación o de lógica de filtro en el cliente; no tocan el motor de reservas, los constraints, el aislamiento por tenant ni el flujo de cancelación. **Cuidado transversal (POLISH-05):** `--crm-danger` es un **design token** — definirlo fuera del scope del CRM afecta también al CRM; el cambio debe respetar el token existente sin duplicar hex y sin alterar cómo se ve el badge dentro del CRM. La pantalla pública de baja del abono ya está endurecida (404 genérico, token no adivinable, `noindex`): POLISH-06 solo oculta un botón del **panel autenticado**, no toca esa superficie.
@@ -555,4 +573,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
-| 14. Cierre de backlog | 0/TBD | Not started | - |
+| 14. Cierre de backlog | 0/7 | Planned | - |
