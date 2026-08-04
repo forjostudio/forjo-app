@@ -1443,7 +1443,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 </label>
               ))}
             </div>
-            <Button size="sm" onClick={saveWidgets} disabled={savingWidgets}>{savingWidgets ? 'Guardando...' : 'Guardar panel'}</Button>
+            <Button size="sm" className="self-start" onClick={saveWidgets} disabled={savingWidgets}>{savingWidgets ? 'Guardando...' : 'Guardar panel'}</Button>
           </Card>
         </TabsContent>
 
@@ -2162,7 +2162,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 </div>
               </div>
             )}
-            <Button onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
+            {/* self-start (D-02): el botón no declara ancho, pero <Card> es flex-column y `align-items: stretch` lo estiraba a todo lo ancho; el fix vive en el call-site porque tocar components/ui/card.tsx cambiaría el layout de toda la app. */}
+            <Button className="self-start" onClick={saveDeposit} disabled={savingDeposit}>{savingDeposit ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
 
           {/* Limpieza de reservas con seña vencida */}
@@ -2171,7 +2172,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               <p className="font-semibold text-sm">Reservas con seña vencida</p>
               <p className="text-xs text-muted-foreground mt-0.5">Cancela las reservas cuya seña no se pagó a tiempo y libera esos horarios. Se hace solo una vez por día; podés forzarlo acá.</p>
             </div>
-            <Button variant="outline" onClick={cleanupExpired} disabled={cleaningUp}>
+            <Button variant="outline" className="self-start" onClick={cleanupExpired} disabled={cleaningUp}>
               {cleaningUp ? 'Limpiando...' : 'Liberar horarios vencidos'}
             </Button>
           </Card>
@@ -2219,7 +2220,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   </div>
                 </div>
               ) : (
-                <Button onClick={() => { window.location.href = '/api/mercadopago/connect' }}>
+                <Button className="self-start" onClick={() => { window.location.href = '/api/mercadopago/connect' }}>
                   <span className="inline-flex items-center justify-center rounded bg-white p-0.5">
                     <MpLogo className="h-3.5 w-auto" />
                   </span>
@@ -2279,7 +2280,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   </div>
                 </div>
               ) : (
-                <Button onClick={() => { window.location.href = '/api/google/connect?from=negocio' }}>
+                <Button className="self-start" onClick={() => { window.location.href = '/api/google/connect?from=negocio' }}>
                   <CalendarClock className="w-4 h-4 mr-1.5" /> Conectar Google Calendar
                 </Button>
               )}
@@ -2322,7 +2323,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 </div>
               </div>
             )}
-            <Button onClick={saveNotif} disabled={savingNotif}>{savingNotif ? 'Guardando...' : 'Guardar'}</Button>
+            <Button className="self-start" onClick={saveNotif} disabled={savingNotif}>{savingNotif ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
         </TabsContent>
 
@@ -2356,7 +2357,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 </div>
               </div>
             )}
-            <Button onClick={saveRecaptcha} disabled={savingRecaptcha}>{savingRecaptcha ? 'Guardando...' : 'Guardar'}</Button>
+            <Button className="self-start" onClick={saveRecaptcha} disabled={savingRecaptcha}>{savingRecaptcha ? 'Guardando...' : 'Guardar'}</Button>
           </Card>
         </TabsContent>
 
@@ -2389,7 +2390,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             <Card className="p-6 space-y-3">
               <p className="font-semibold text-sm">Tu suscripción</p>
               <p className="text-sm text-muted-foreground">Plan actual: <span className="font-medium text-foreground">{planConfig.name}</span></p>
-              <Button variant="outline" size="sm" onClick={() => setPlanModalOpen(true)}>Ver planes</Button>
+              <Button variant="outline" size="sm" className="self-start" onClick={() => setPlanModalOpen(true)}>Ver planes</Button>
             </Card>
           )}
         </TabsContent>
