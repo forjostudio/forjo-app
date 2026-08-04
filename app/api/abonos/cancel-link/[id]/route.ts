@@ -29,6 +29,18 @@ import type { NextRequest } from 'next/server'
 //
 // ES UN ENDPOINT DE UN SOLO DATO. Devuelve la `url` y nada más: ni nombre de cliente, ni estado, ni
 // fechas, ni datos de otras series (T-07-46). Y es de LECTURA: no tiene ninguna escritura (T-07-47).
+//
+// UNA SERIE DADA DE BAJA NO ENTREGA SU LINK (D-09, T-14-07). El token no rota ni vence: cada entrega es
+// permanente. Una serie con status 'cancelled' es terminal (D-04) y no tiene ningún uso legítimo para su
+// credencial — repartirla es dejar suelta para siempre una llave que ya no sirve para nada. El filtro
+// viaja DENTRO de la query (paso 4) y no en un `if` sobre la fila leída, a propósito: así el estado ni
+// siquiera se selecciona, el endpoint sigue siendo de una sola columna (T-07-46) y no queda ninguna
+// rama de respuesta donde una versión futura pueda filtrar el MOTIVO del rechazo. El rechazo comparte
+// cuerpo y status con el caso ajeno/inexistente también a propósito (T-14-08): distinguir "existe pero
+// está muerta" de "no existe / no es tuya" convertiría al endpoint en un ORÁCULO DE EXISTENCIA, que es
+// exactamente lo que D-09 y D-22/D-23 prohíben. El corte es SOLO sobre 'cancelled': una serie
+// 'completed' (ya asignó sus N sesiones) puede tener turnos por delante y su cliente sigue necesitando
+// la vía de baja (T-14-11).
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // (1) Next 16: `params` es una Promise y hay que await-earla. Sin id (o vacío) se responde el MISMO
@@ -52,11 +64,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
   // (4) Doble scoping: la serie se lee acotada por su id Y por el negocio del actor. Una columna sola.
+  // El `.neq` es el gate de D-09: la serie dada de baja simplemente no matchea y cae en el mismo
+  // `if (!abono)` que un id inexistente o ajeno. `status` es NOT NULL con CHECK sobre tres valores
+  // (migr. 054), así que el filtro de desigualdad no puede dejar filas afuera por un NULL — la trampa
+  // que sí existía en `appointments.status` (13-01).
   const { data: abono } = await supabase
     .from('abonos')
     .select('cancel_token')
     .eq('id', id.trim())
     .eq('business_id', business.id)
+    .neq('status', 'cancelled')
     .maybeSingle()
   if (!abono) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
