@@ -411,7 +411,8 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
           </div>
           <p className="text-xs text-muted-foreground">Entre {WINDOW_MIN_WEEKS} y {WINDOW_MAX_WEEKS} semanas (hasta 1 año de anticipación).</p>
         </div>
-        <Button onClick={saveWindow} disabled={savingWindow}>{savingWindow ? 'Guardando...' : 'Guardar'}</Button>
+        {/* self-start (D-02): el botón no declara ancho, pero <Card> es flex-column y `align-items: stretch` lo estiraba a todo lo ancho; el fix vive en el call-site porque tocar components/ui/card.tsx cambiaría el layout de toda la app. Gemelo exacto del de agenda-client (misma ventana de reserva). */}
+        <Button className="self-start" onClick={saveWindow} disabled={savingWindow}>{savingWindow ? 'Guardando...' : 'Guardar'}</Button>
       </Card>
 
       {/* Detalle del abono — serie + ocurrencias salteadas (D-06). Dialog desktop / Drawer mobile. */}
@@ -475,12 +476,22 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                 dueño ya tiene el contexto (día/hora, último turno, sesiones X de N). Tampoco hay
                 ninguna acción que devuelva la serie a activa: 'cancelled' es terminal (D-04).
                 "Copiar link de baja" sigue siendo el ÚNICO lugar donde el dueño obtiene el link, pero
-                ahora la credencial la entrega el servidor recién al tocar el botón (WR-07). */}
+                ahora la credencial la entrega el servidor recién al tocar el botón (WR-07).
+                En una serie DADA DE BAJA el bloque de copiar desaparece ENTERO —botón y párrafo de
+                ayuda juntos (D-08)—: el link no rota ni vence y una serie terminal no tiene ningún uso
+                legítimo para él. Esto es sólo CORTESÍA de no ofrecer una acción que va a fallar; la
+                AUTORIDAD es el endpoint, que rechaza esa serie con el mismo 404 que un id ajeno (D-09,
+                app/api/abonos/cancel-link/[id]/route.ts). Sin estado vacío sustituto: el detalle ya
+                avisa arriba que la serie está dada de baja y que no genera turnos nuevos. */}
             <div className="space-y-2 border-t border-border pt-4">
-              <Button variant="outline" size="sm" className="w-full gap-1.5 sm:w-auto" onClick={() => copyCancelLink(a)} disabled={copyingLink}>
-                <Copy className="w-3.5 h-3.5" /> {copyingLink ? 'Copiando...' : 'Copiar link de baja'}
-              </Button>
-              <p className="text-xs text-muted-foreground">Mandáselo por WhatsApp si tu cliente no tiene mail cargado: desde ese link puede darse de baja solo.</p>
+              {a.status !== 'cancelled' && (
+                <>
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 sm:w-auto" onClick={() => copyCancelLink(a)} disabled={copyingLink}>
+                    <Copy className="w-3.5 h-3.5" /> {copyingLink ? 'Copiando...' : 'Copiar link de baja'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">Mandáselo por WhatsApp si tu cliente no tiene mail cargado: desde ese link puede darse de baja solo.</p>
+                </>
+              )}
 
               {a.status !== 'cancelled' ? (
                 <div className="space-y-2 pt-2">
@@ -501,7 +512,10 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                   </Button>
                 </div>
               ) : (
-                <p className="pt-2 text-xs text-muted-foreground">
+                // Sin `pt-2`: con el bloque de copiar oculto (D-08) este párrafo es el ÚNICO hijo del
+                // contenedor, que ya trae su propio `pt-4` bajo el borde. El pt-2 separaba del párrafo
+                // de ayuda que ahora no está y quedaba como aire muerto.
+                <p className="text-xs text-muted-foreground">
                   Serie dada de baja
                   {a.cancelled_at ? <> el <span className="capitalize">{format(parseISO(a.cancelled_at), "d 'de' MMMM 'de' yyyy", { locale: es })}</span></> : null}. No genera turnos nuevos.
                 </p>
