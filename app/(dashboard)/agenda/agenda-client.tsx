@@ -943,7 +943,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           </div>
         </fieldset>
 
-        <Button onClick={saveWindow} disabled={savingWindow}>{savingWindow ? 'Guardando...' : 'Guardar'}</Button>
+        <Button className="self-start" onClick={saveWindow} disabled={savingWindow}>{savingWindow ? 'Guardando...' : 'Guardar'}</Button>
       </Card>
 
       {/* Excepciones por fecha — anular/cambiar un día puntual sobre la grilla semanal */}
@@ -1032,9 +1032,10 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
               </div>
             )}
             <div className="space-y-2">
-              <Button size="sm" variant="destructive" className="w-full" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
+              {/* w-full sm:w-auto (D-01, criterio único sin excepciones por contenedor): estos 3 botones viven en el panel lateral angosto, así que a partir de 640px pasan a ancho-por-contenido dentro de una columna que sigue siendo estrecha — a mirar en la UAT visual, no a exceptuar acá. */}
+              <Button size="sm" variant="destructive" className="w-full sm:w-auto" onClick={() => bulkCloseDays([...excSel])}>Marcar como cerrado</Button>
               {selectionHasException && (
-                <Button size="sm" variant="outline" className="w-full" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
+                <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => bulkClearDays([...excSel])}>Quitar excepción</Button>
               )}
             </div>
             <div className="border-t border-border pt-3 space-y-2">
@@ -1044,7 +1045,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 <span className="text-muted-foreground text-sm">→</span>
                 <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-full text-sm h-8" />
               </div>
-              <Button size="sm" className="w-full" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar horario especial</Button>
+              <Button size="sm" className="w-full sm:w-auto" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar horario especial</Button>
             </div>
           </div>
         </div>
@@ -1153,7 +1154,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                 )
               })}
             </div>
-            <Button size="sm" className="w-full" disabled={copyTargets.size === 0} onClick={applyCopyDay}>
+            <Button size="sm" className="w-full sm:w-auto" disabled={copyTargets.size === 0} onClick={applyCopyDay}>
               Copiar a {copyTargets.size} día{copyTargets.size === 1 ? '' : 's'}
             </Button>
           </div>

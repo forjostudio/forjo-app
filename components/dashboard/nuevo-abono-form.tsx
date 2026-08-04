@@ -414,12 +414,12 @@ function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, ser
                 <p className="text-xs text-amber-700 dark:text-amber-400">
                   Ya tenés un cliente con ese contacto: <span className="font-medium">{dedupeMatch.name}</span>. ¿Usar el existente?
                 </p>
-                <Button type="button" size="sm" variant="outline" className="w-full" onClick={useExistingFromDedupe}>
+                <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={useExistingFromDedupe}>
                   Usar existente
                 </Button>
               </div>
             ) : (
-              <Button type="button" size="sm" className="w-full gap-1.5" onClick={confirmNewClient}>
+              <Button type="button" size="sm" className="w-full gap-1.5 sm:w-auto" onClick={confirmNewClient}>
                 <UserPlus className="w-3.5 h-3.5" /> Crear nuevo cliente
               </Button>
             )}
