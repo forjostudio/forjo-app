@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, seedService, teardownOneTenant, purgeAbonos, type SeededTenant } from './helpers/booking-fixtures'
 import { provisionCancha, deleteCancha, canchasFromData, dedicatedSpaceIds, type Cancha } from '@/lib/canchas'
 import type { Service, Professional, AgendaSpace } from '@/lib/types'
 
@@ -249,8 +249,9 @@ describe.skipIf(!hasSupabaseCreds)('canchas: deleteCancha contra la DB real (CR-
     expect(abo?.professional_id).toBeNull()
     expect(abo?.service_id).toBe(cancha.service.id)
 
-    // Limpieza para no dejarle un abono activo al tenant compartido.
-    await t.admin.from('abonos').delete().eq('id', abono.data!.id)
+    // Limpieza para no dejarle un abono activo al tenant compartido. Desde la migr. 066 la base
+    // rechaza el borrado de una serie 'active': `purgeAbonos` la archiva primero.
+    await purgeAbonos(t, { id: abono.data!.id })
   }, 30000)
 
   // (4) Camino feliz: sin turnos y sin abono, la tupla ENTERA desaparece (incluido el espacio dedicado,

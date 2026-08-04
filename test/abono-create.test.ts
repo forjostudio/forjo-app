@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, type Mock } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, teardownOneTenant, seedTimeBlock, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, teardownOneTenant, seedTimeBlock, purgeAbonos, type SeededTenant } from './helpers/booking-fixtures'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
 import { sendAbonoConfirmation } from '@/lib/email'
 
@@ -196,14 +196,16 @@ describe.skipIf(!hasSupabaseCreds)('alta manual del abono (auth + anti-tampering
   })
 
   // Limpieza entre tests: abonos + appointments de AMBOS tenants (config persistente se deja).
+  // Las series van por `purgeAbonos` (archivar + borrar): desde la migr. 066 la base RECHAZA el
+  // borrado directo de una serie 'active', y la fila sobreviviente contaminaba el caso siguiente.
   afterEach(async () => {
     if (t) {
       await t.admin.from('appointments').delete().eq('business_id', t.businessId)
-      await t.admin.from('abonos').delete().eq('business_id', t.businessId)
+      await purgeAbonos(t)
     }
     if (other) {
       await other.admin.from('appointments').delete().eq('business_id', other.businessId)
-      await other.admin.from('abonos').delete().eq('business_id', other.businessId)
+      await purgeAbonos(other)
     }
   })
 
@@ -436,7 +438,8 @@ describe.skipIf(!hasSupabaseCreds)('alta manual del abono (auth + anti-tampering
       // Sólo el primer valor genera turnos (los siguientes chocan con la serie ya materializada): lo que
       // se prueba acá es el narrowing → indefinido, así que limpiamos entre iteraciones.
       await t.admin.from('appointments').delete().eq('business_id', t.businessId)
-      await t.admin.from('abonos').delete().eq('id', res.abonoId)
+      // La serie nace 'active' y la 066 no deja borrarla así: se archiva primero (ver purgeAbonos).
+      await purgeAbonos(t, { id: res.abonoId })
     }
   })
 })

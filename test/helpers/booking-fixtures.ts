@@ -257,6 +257,33 @@ export async function seedSimultaneousService(seeded: SeededTenant, opts: { capa
   if (upd.error) throw new Error(`seed: update service simultáneo falló: ${upd.error.message}`)
 }
 
+// purgeAbonos: borra series de abono RESPETANDO el gate de la migr. 066 (D-18: la base rechaza el
+// borrado de una serie con status 'active'). Los cleanups entre casos NO pueden borrar directo desde
+// la 066: el DELETE vuelve con P0001 y la fila queda viva contaminando el caso siguiente — que es
+// exactamente cómo se manifestó la regresión (abono-create 2b/3 y abono-cron 5, deterministas).
+//
+// El helper hace el mismo recorrido que el dueño en el panel: primero ARCHIVA la serie (status
+// 'cancelled' = baja explícita) y recién ahí la borra. Se mantiene el filtro por `business_id` en las
+// dos operaciones (aislamiento explícito, aunque el cliente sea service-role).
+//
+// Sin `opts.id` purga TODAS las series del tenant (molde del `afterEach` que ya usaban los tests);
+// con `opts.id`, solo esa. NO reemplaza a `teardownOneTenant`: el cierre del negocio sigue pasando
+// por el guard de cascada del trigger, que lo deja borrar todo de una.
+export async function purgeAbonos(seeded: SeededTenant, opts?: { id?: string }): Promise<void> {
+  const col = opts?.id ? 'id' : 'business_id'
+  const val = opts?.id ?? seeded.businessId
+
+  const upd = await seeded.admin
+    .from('abonos')
+    .update({ status: 'cancelled' })
+    .eq(col, val)
+    .eq('business_id', seeded.businessId)
+  if (upd.error) throw new Error(`purgeAbonos: archivar falló: ${upd.error.message}`)
+
+  const del = await seeded.admin.from('abonos').delete().eq(col, val).eq('business_id', seeded.businessId)
+  if (del.error) throw new Error(`purgeAbonos: borrar falló: ${del.error.message}`)
+}
+
 // teardownOneTenant: borra TODO lo creado, incluso si un test falló (try/finally como
 // supabase-fixtures.ts). Borrar el business CASCADEA a sus hijos (service/professional/location/
 // appointments vía ON DELETE CASCADE en business_id). El usuario auth NO cae por ese CASCADE →

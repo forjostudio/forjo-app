@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, teardownOneTenant, purgeAbonos, type SeededTenant } from './helpers/booking-fixtures'
 import { createAppointmentCore } from '@/lib/booking-core'
 
 // ── Tests del snapshot de servicio (migr. 065, triggers BEFORE INSERT) ────────────────────────
@@ -216,6 +216,7 @@ describe.skipIf(!hasSupabaseCreds)('065: snapshot de servicio en appointments y 
       .single()
     expect(data?.service_name).toBe(svcName)
 
-    await t.admin.from('abonos').delete().eq('id', ins.data!.id)
+    // Desde la migr. 066 la base rechaza el borrado de una serie 'active': se archiva primero.
+    await purgeAbonos(t, { id: ins.data!.id })
   }, 20000)
 })
