@@ -50,6 +50,12 @@ export type AbonoRow = {
   professionals: { name: string } | null
 }
 
+// Resultado del borrado definitivo de una serie (EXTRA-B). Unión discriminada —molde literal de
+// DeleteServiceResult (settings-client.tsx:41)— en vez de void + toast: el motivo del rechazo lo decide
+// la BASE (el gate de la migr. 066) y el copy lo decide el modal, que es el único que sabe qué le
+// estaba mostrando al dueño cuando confirmó.
+type DeleteAbonoResult = { ok: true } | { ok: false; error: 'is_active' | 'unknown' }
+
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 // Filtro del listado (D-20). La vista principal es de series VIVAS; a Archivados va lo que ya no
@@ -142,6 +148,9 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
   // Serie sobre la que se está por confirmar la baja. Manda el ConfirmDialog: se setea al tocar "Dar
   // de baja" en el detalle, DESPUÉS de cerrar el detalle (no se anidan modales).
   const [cancelTarget, setCancelTarget] = useState<AbonoRow | null>(null)
+  // Serie sobre la que se está por confirmar el BORRADO DEFINITIVO (EXTRA-B/D-19). Misma mecánica que
+  // cancelTarget: se setea al tocar "Eliminar" en el detalle, después de cerrarlo.
+  const [deleteTarget, setDeleteTarget] = useState<AbonoRow | null>(null)
   const [tab, setTab] = useState<AbonoTab>('activos')
 
   // Listado por tab (D-20). La vista principal es de series con TRABAJO POR DELANTE: las `active` se
@@ -218,6 +227,43 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
     setCancelTarget(null)
     router.refresh() // la serie pasa a 'cancelled' → se mueve sola al tab Archivados
   }, [cancelTarget, router])
+
+  // ── Borrado definitivo de una serie archivada (EXTRA-B / D-16, D-18) ───────────────────────────
+  // Molde literal del borrado de servicio de 13-03 (settings-client.tsx:625-642). NO optimista: se
+  // captura el error real. La forma de la query tiene tres razones, ninguna cosmética:
+  //  - el DELETE va por el CLIENTE DEL NAVEGADOR (anon + RLS), como el resto del CRUD del panel:
+  //    service-role está PROHIBIDO acá porque esto es una acción autenticada del dueño sobre SU serie;
+  //  - el `.eq('business_id', …)` es defensa en profundidad SOBRE la RLS, no su reemplazo: si mañana
+  //    una policy se afloja, el filtro explícito sigue acotando el borrado al negocio del componente;
+  //  - pedir de vuelta las filas afectadas (`.select('id')`) es lo ÚNICO que distingue "la RLS me filtró
+  //    la fila" (0 filas, sin error) de un borrado real — sin eso la pantalla diría "Abono eliminado"
+  //    sin haber borrado nada.
+  //
+  // D-18: la AUTORIDAD es el trigger de la migr. 066, que corre dentro de la MISMA transacción del
+  // DELETE (no hay ventana TOCTOU). Esto es el camino feliz + la traducción del rechazo.
+  // D-16: los turnos ya generados SOBREVIVEN. `appointments.abono_id` está en `ON DELETE SET NULL`
+  // desde la migr. 054, así que borrar la serie sólo suelta el puntero: los turnos siguen en Finanzas y
+  // en la ficha del cliente con su snapshot de nombre y precio. Borrar no destruye historia.
+  // D-17 DESCARTADO: no se cancela ni se borra ningún turno futuro. Por construcción una serie archivada
+  // no tiene turnos vivos por delante, pero esta función no depende de eso — simplemente no toca
+  // `appointments` en ninguna rama.
+  //
+  // NO emite toast de error a propósito (igual que el molde): el motivo se DEVUELVE y lo traduce el
+  // modal. El toast de éxito y el refresh sí viven acá.
+  async function deleteAbono(id: string): Promise<DeleteAbonoResult> {
+    const { data, error } = await supabase.from('abonos').delete().eq('id', id).eq('business_id', business.id).select('id')
+    if (error) {
+      // Contrato del gate de la 066 fijado por 14-04: código de dominio del RAISE sobre ERRCODE P0001.
+      // Mismo orden que el molde de 13-03: código primero, contenido del mensaje después.
+      if (error.code === 'P0001' && error.message?.includes('abono_is_active')) return { ok: false, error: 'is_active' }
+      return { ok: false, error: 'unknown' }
+    }
+    // 0 filas SIN error = la RLS filtró la fila. Es un FALLO, no un éxito silencioso (T-14-23).
+    if (!data || data.length === 0) return { ok: false, error: 'unknown' }
+    toast.success('Abono eliminado')
+    router.refresh() // la serie sale de la lista y los contadores se recalculan en el servidor
+    return { ok: true }
+  }
 
   // ── Control de ventana de generación (abono_window_weeks, D-07) ────────────────────────────────
   // Rango permitido 1..52 (GAP-01): la ventana dimensiona el loop del motor, que corre dentro del cron
