@@ -24,9 +24,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
+import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Plus, Trash2, Clock, DollarSign, Pencil, MapPin, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+// Predicado único de "cancha activa" (D-13). El booleano cuelga del servicio de la cancha, no del
+// elemento. Vive a nivel de módulo para que su identidad sea estable entre renders y los useMemo del
+// hook compartido no se invaliden en cada uno.
+const isCanchaActive = (c: Cancha) => !!c.service.active
 
 interface Props {
   business: Business
@@ -52,6 +58,12 @@ export function CanchasManager({
 }: Props) {
   // Lista de canchas reconstruida por service_id (puntero estable, D-06). Deriva del estado en cada render.
   const canchas = canchasFromData(services, professionals, agendaSpaces)
+
+  // Tab + filtro + contadores (D-13), mismo hook compartido que el listado de servicios: las dos
+  // pantallas se leen como un solo sistema (D-14). Las desactivadas dejan de estar mezcladas con las
+  // vivas y pasan a tener su propio tab. toggleActive ya actualiza el booleano en el estado local,
+  // así que el filtro se recalcula solo al activar/desactivar.
+  const { tab, setTab, visible: visibleCanchas, counts: tabCounts } = useActiveTabs(canchas, isCanchaActive)
 
   // ── Alta de cancha ──────────────────────────────────────────────────────────
   const [newName, setNewName] = useState('')
@@ -219,18 +231,33 @@ export function CanchasManager({
   return (
     <>
       <Card className="p-6 space-y-4">
-        {/* Lista de canchas */}
+        {/* Píldoras de filtro (D-13), desde el módulo compartido: mismo componente que el listado de
+            servicios, así que las dos pantallas no pueden divergir. */}
+        <ActiveTabs tab={tab} onChange={setTab} counts={tabCounts} />
+        {/* Lista de canchas del tab abierto */}
+        {visibleCanchas.length === 0 ? (
+          <ActiveTabsEmptyState
+            tab={tab}
+            icon={MapPin}
+            activos={{
+              title: 'Todavía no tenés canchas activas',
+              help: 'Cargá la primera acá abajo para empezar a recibir reservas.',
+            }}
+            desactivados={{
+              title: 'No hay canchas desactivadas',
+              help: 'Acá van a aparecer las que dejes de ofrecer: se conservan con todo su historial y las podés volver a activar cuando quieras.',
+            }}
+          />
+        ) : (
         <div className="space-y-2">
-          {canchas.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Todavía no creaste ninguna cancha. Cargá la primera abajo.
-            </p>
-          )}
-          {canchas.map(c => (
+          {visibleCanchas.map(c => (
             <div key={c.service.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
               <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className={cn('text-sm font-medium', !c.service.active && 'line-through text-muted-foreground')}>{c.service.name}</p>
+                  {/* Sin tachado (D-15): dentro del tab "Desactivados" todas lo están, así que el
+                      tachado deja de informar y solo baja la legibilidad. Mismo razonamiento que ya
+                      dejó escrito la lista de servicios (settings-client, D-14). */}
+                  <p className="text-sm font-medium">{c.service.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {c.service.duration_minutes}min · ${Number(c.service.price).toLocaleString('es-AR')}
                   </p>
@@ -262,6 +289,7 @@ export function CanchasManager({
             </div>
           ))}
         </div>
+        )}
 
         {/* Alta de cancha */}
         <div className="border-t border-border pt-4 space-y-3">
