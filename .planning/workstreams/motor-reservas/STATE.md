@@ -4,13 +4,13 @@ milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
 stopped_at: Completado 14-04-PLAN.md
-last_updated: "2026-08-04T23:40:23.210Z"
+last_updated: "2026-08-05T00:03:09.182Z"
 last_activity: 2026-08-04 -- Phase 14 execution started
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 69
-  completed_plans: 66
+  completed_plans: 67
   percent: 93
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-08-04 -- Phase 14 execution started
 
@@ -80,6 +80,7 @@ Last activity: 2026-08-04 -- Phase 14 execution started
 | Phase 14 P02 | 25 min | 3 tasks | 3 files |
 | Phase 14 P03 | ~35 min | 3 tasks | 3 files |
 | Phase 14 P04 | 62min | 3 tasks | 8 files |
+| Phase 14 P05 | ~30 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -162,6 +163,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: 14-03: el gate corta SOLO sobre 'cancelled'; una serie 'completed' sigue entregando su link porque puede tener turnos por delante (T-14-11)
 - [Phase 14]: 14-04: el gate de borrado de abonos (migr. 066) rechaza solo status='active' con message 'abono_is_active' sobre ERRCODE P0001 — contrato que mapea la UI del plan 14-06
 - [Phase 14]: 14-04: los cleanups de tests que borraban series activas pasan por purgeAbonos() (archivar + borrar); el gate no se relaja para los tests
+- [Phase 14]: EXTRA-A: las pildoras Activos/Desactivados salen a components/dashboard/active-tabs.tsx (hook + 2 componentes); el predicado de 'activo' se queda en el call-site y el hook lo usa para el filtro Y los contadores — Tercera aparicion del patron (Servicios, Abonos, Canchas). Compartir el predicado vuelve el invariante estructural en vez de disciplina: el tab ya no puede decir 'Activos (1)' sobre una lista vacia.
+- [Phase 14]: Abonos NO se migra al modulo de tabs compartido — Sus tabs son activos/archivados (semantica distinta: 'archivado' incluye series completed sin turnos futuros) y su predicado depende de un conteo, no de un booleano de fila. Forzarlo volveria el tipo generico de mas.
+- [Phase 14]: D-15 resuelto: se quita el line-through de la cancha desactivada — Dentro del tab Desactivados todas lo estan, asi que el tachado deja de informar y solo baja la legibilidad. Mismo razonamiento que ya dejo escrito la lista de servicios.
 
 ### Pending Todos
 
@@ -213,7 +217,7 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-04T23:40:23.180Z
+Last session: 2026-08-05T00:02:33.820Z
 Stopped at: Completado 14-04-PLAN.md
 Resume file: None
 

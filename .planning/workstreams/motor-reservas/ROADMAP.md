@@ -537,7 +537,7 @@ Plans:
 
 ⚠ **D-06 del CONTEXT supersede** la nota de Security de esta fase sobre "sin alterar cómo se ve el badge dentro del CRM": el usuario aceptó explícitamente que el CRM cambie de aspecto con tal de mantener un solo componente compartido.
 
-**Plans**: 4/7 plans executed
+**Plans**: 5/7 plans executed
 
 Plans:
 **Wave 1**
@@ -549,7 +549,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 14-05-PLAN.md — EXTRA-A: módulo compartido `components/dashboard/active-tabs.tsx`, Servicios migrado sin regresión y Canchas con paridad
+- [x] 14-05-PLAN.md — EXTRA-A: módulo compartido `components/dashboard/active-tabs.tsx`, Servicios migrado sin regresión y Canchas con paridad
 - [ ] 14-06-PLAN.md — EXTRA-B (UI): borrado de serie archivada con RLS + `ConfirmDialog` de dos pasos + mapeo del rechazo del gate
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -581,4 +581,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
-| 14. Cierre de backlog | 4/7 | In Progress|  |
+| 14. Cierre de backlog | 5/7 | In Progress|  |
