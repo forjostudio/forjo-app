@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle, Ban, Copy } from 'lucide-react'
+import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle, Ban, Copy, Trash2 } from 'lucide-react'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { NuevoAbonoForm } from '@/components/dashboard/nuevo-abono-form'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
@@ -472,6 +472,22 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
         const serviceName = apptServiceName(a, '')
         const bookable = serviceName || a.professionals?.name || '—'
         const skipped = [...(a.skipped_occurrences ?? [])].sort((x, y) => x.date.localeCompare(y.date))
+        // Visibilidad del botón "Eliminar" (EXTRA-B/D-19), derivada UNA sola vez acá y combinando DOS
+        // condiciones a propósito:
+        //  (1) el MISMO predicado que alimenta el tab y los contadores — "archivada" es exactamente "no
+        //      activa" según isAbonoActivo, así que no nace una tercera definición de archivado que
+        //      pueda desincronizarse del tab donde el dueño está parado;
+        //  (2) un guard REDUNDANTE sobre el estado de la fila que espeja literalmente el predicado del
+        //      gate de la migr. 066, que rechaza exactamente este estado.
+        // Hoy (1) ya implica (2): la primera rama de isAbonoActivo devuelve "activa" para toda serie con
+        // este estado SIN mirar el conteo de turnos futuros, así que el conjunto que la pantalla ofrece
+        // borrar es un SUBCONJUNTO ESTRICTO del que la base acepta — la dirección segura. La redundancia
+        // es para el futuro: si alguien afloja el predicado (por ejemplo, para archivar también una
+        // serie activa sin turnos por delante), el guard evita que aparezca un botón sobre una fila que
+        // la base va a rechazar. D-18: esto es pre-check de comodidad, la autoridad sigue siendo el
+        // trigger; el onConfirm que lanza es el backstop del rechazo tardío.
+        const gateRechaza = a.status === 'active'
+        const esArchivado = !isAbonoActivo(a, futureTurnoCounts) && !gateRechaza
         const close = () => setDetailAbono(null)
         const title = `${a.clients?.name ?? 'Cliente'} · ${DAY_LABELS[a.day_of_week]} ${hhmm(a.start_time)}`
         const body = (
@@ -566,6 +582,28 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                   {a.cancelled_at ? <> el <span className="capitalize">{format(parseISO(a.cancelled_at), "d 'de' MMMM 'de' yyyy", { locale: es })}</span></> : null}. No genera turnos nuevos.
                 </p>
               )}
+
+              {/* Eliminar definitivamente (EXTRA-B/D-19). La acción NO existe sobre una serie viva: el
+                  botón vive sólo donde el tab la muestra archivada (ver esArchivado arriba), que es el
+                  hueco que dejaba la UAT de Phase 13 — un abono archivado sin ninguna acción, y la
+                  lista creciendo sin forma de limpiarla. */}
+              {esArchivado && (
+                <div className="space-y-2 pt-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full gap-1.5 sm:w-auto"
+                    onClick={() => {
+                      // Igual que "Dar de baja": primero se cierra el detalle y recién después se abre
+                      // la confirmación. No se anidan modales.
+                      setDetailAbono(null)
+                      setDeleteTarget(a)
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )
@@ -612,6 +650,51 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
             confirmLabel="Dar de baja"
             destructive
             onConfirm={confirmCancel}
+          />
+        )
+      })()}
+
+      {/* Confirmación del borrado definitivo (EXTRA-B/D-19). Nivel SIMPLE del ConfirmDialog, igual que
+          la baja y por el mismo motivo: escribir una palabra es fricción de última instancia, y ésta es
+          una acción de limpieza sobre una serie YA MUERTA (no genera turnos y no le queda trabajo por
+          delante). La descripción se deriva FUERA del JSX y dice las dos cosas concretas que hacen que
+          esto sea seguro: que el borrado es permanente, y que los turnos que la serie ya generó
+          sobreviven (D-16 — el vínculo turno→serie está en ON DELETE SET NULL desde la migr. 054). */}
+      {deleteTarget && (() => {
+        const t = deleteTarget
+        const n = turnoCounts[t.id] ?? 0
+        const description = `Se elimina la serie de forma permanente y no se puede deshacer. ${n > 0 ? `Los ${n} turno${n === 1 ? '' : 's'} que ya generó` : 'Los turnos que ya generó'} se conservan en el historial (Finanzas y ficha del cliente).`
+        return (
+          <ConfirmDialog
+            open
+            onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}
+            title={`¿Eliminar el turno fijo de ${t.clients?.name ?? 'este cliente'}?`}
+            description={description}
+            risk="alto"
+            confirmLabel="Eliminar"
+            destructive
+            onConfirmError={(err) => {
+              // El motivo se traduce a copy PROPIO, de un conjunto cerrado: el texto crudo del error de
+              // la base nunca se interpola en la pantalla (T-14-25).
+              const motivo = err instanceof Error ? err.message : ''
+              toast.error(
+                motivo === 'is_active'
+                  ? 'No se puede eliminar: la serie sigue activa. Dala de baja primero y después eliminala.'
+                  : 'No se pudo eliminar el abono. Probá de nuevo.',
+              )
+            }}
+            onConfirm={async () => {
+              const res = await deleteAbono(t.id)
+              if (!res.ok) {
+                // Backstop del gate de la 066 (lección de 13-03): si la base rechaza el borrado —o la
+                // RLS filtró la fila— hay que LANZAR. El ConfirmDialog CIERRA el diálogo cuando
+                // onConfirm no lanza, y el rechazo se tragaría en silencio: el dueño vería el modal
+                // desaparecer y la serie seguir en la lista. Con el throw el modal queda abierto y el
+                // handler de error de arriba traduce el motivo.
+                throw new Error(res.error)
+              }
+              setDeleteTarget(null)
+            }}
           />
         )
       })()}
