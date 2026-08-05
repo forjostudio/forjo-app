@@ -4,13 +4,13 @@ milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
 stopped_at: Completado 14-04-PLAN.md
-last_updated: "2026-08-05T00:03:09.182Z"
+last_updated: "2026-08-05T00:15:05.542Z"
 last_activity: 2026-08-04 -- Phase 14 execution started
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 69
-  completed_plans: 67
+  completed_plans: 68
   percent: 93
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-08-04 -- Phase 14 execution started
 
@@ -81,6 +81,7 @@ Last activity: 2026-08-04 -- Phase 14 execution started
 | Phase 14 P03 | ~35 min | 3 tasks | 3 files |
 | Phase 14 P04 | 62min | 3 tasks | 8 files |
 | Phase 14 P05 | ~30 min | 3 tasks | 3 files |
+| Phase 14 P06 | 38min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: EXTRA-A: las pildoras Activos/Desactivados salen a components/dashboard/active-tabs.tsx (hook + 2 componentes); el predicado de 'activo' se queda en el call-site y el hook lo usa para el filtro Y los contadores — Tercera aparicion del patron (Servicios, Abonos, Canchas). Compartir el predicado vuelve el invariante estructural en vez de disciplina: el tab ya no puede decir 'Activos (1)' sobre una lista vacia.
 - [Phase 14]: Abonos NO se migra al modulo de tabs compartido — Sus tabs son activos/archivados (semantica distinta: 'archivado' incluye series completed sin turnos futuros) y su predicado depende de un conteo, no de un booleano de fila. Forzarlo volveria el tipo generico de mas.
 - [Phase 14]: D-15 resuelto: se quita el line-through de la cancha desactivada — Dentro del tab Desactivados todas lo estan, asi que el tachado deja de informar y solo baja la legibilidad. Mismo razonamiento que ya dejo escrito la lista de servicios.
+- [Phase 14]: 14-06: la visibilidad del boton de eliminar se deriva UNA vez combinando el predicado del tab con un guard redundante que espeja el gate de la 066 — El predicado de la UI ya era un subconjunto estricto del que la base acepta (isAbonoActivo devuelve activa para todo status='active' sin mirar conteos): no habia que alinear nada, habia que FIJAR el invariante para que un cambio futuro del predicado no haga aparecer el boton sobre una fila que la base rechaza
+- [Phase 14]: 14-06: el borrado del abono va por el cliente del navegador (anon+RLS) con filtro por negocio y .select('id'); onConfirm LANZA ante el rechazo tardio — Segunda aplicacion del molde de 13-03: 0 filas sin error = la RLS filtro la fila y es un FALLO, no un exito silencioso; y si el ConfirmDialog no recibe un throw cierra el modal y el rechazo del gate se traga en silencio
 
 ### Pending Todos
 
@@ -217,7 +220,7 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-05T00:02:33.820Z
+Last session: 2026-08-05T00:14:43.979Z
 Stopped at: Completado 14-04-PLAN.md
 Resume file: None
 
