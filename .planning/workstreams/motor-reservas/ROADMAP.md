@@ -537,7 +537,7 @@ Plans:
 
 ⚠ **D-06 del CONTEXT supersede** la nota de Security de esta fase sobre "sin alterar cómo se ve el badge dentro del CRM": el usuario aceptó explícitamente que el CRM cambie de aspecto con tal de mantener un solo componente compartido.
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans executed — ⚠ la UAT del 14-07 cerró **con 1 falla** (regresión de 14-01: dentro de los modales del CRM "Alto" y "Medio" se ven del mismo color, el `DialogPortal` monta fuera de `.crm-shell`) → **se abre el plan 14-08** con ese ítem + 2 gaps de cobertura de POLISH-04 en `Equipo`. La fase NO está cerrada.
 
 Plans:
 **Wave 1**
@@ -554,7 +554,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 14-07-PLAN.md — UAT visual de los 6 ítems en los dos shells + runbook y apply manual de la 066 en producción
+- [x] 14-07-PLAN.md — UAT visual de los 6 ítems en los dos shells + runbook y apply manual de la 066 en producción — **23 observaciones humanas reales** (visual 9/10 con 1 falla · funcional 13/13) + **migración 066 APLICADA en prod el 2026-08-06** con el rechazo del gate verificado en vivo (`P0001 / abono_is_active`)
 
 **Waves**: Wave 1 = 14-01 + 14-02 + 14-03 + 14-04 en paralelo (cero solape de archivos). Wave 2 = 14-05 (necesita `settings-client.tsx` liberado por 14-01) + 14-06 (necesita `abonos-client.tsx` liberado por 14-03 y el gate de 14-04). Wave 3 = 14-07 (checkpoints humanos bloqueantes).
 
@@ -581,4 +581,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
-| 14. Cierre de backlog | 6/7 | In Progress|  |
+| 14. Cierre de backlog | 7/7 | In Progress (UAT con 1 falla → plan 14-08) |  |

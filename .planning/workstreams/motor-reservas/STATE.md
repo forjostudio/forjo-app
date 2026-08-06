@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 14-04-PLAN.md
-last_updated: "2026-08-05T00:15:05.542Z"
-last_activity: 2026-08-04 -- Phase 14 execution started
+stopped_at: Completado 14-07-PLAN.md (UAT cerrada con 1 falla -- se abre el plan 14-08)
+last_updated: "2026-08-06T00:00:00.000Z"
+last_activity: 2026-08-06 -- 14-07 UAT humana + apply de la migracion 066 en produccion
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 69
-  completed_plans: 68
-  percent: 93
+  completed_plans: 69
+  percent: 94
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-08-04 -- Phase 14 execution started
+Plan: 7 of 7 ejecutados — la fase NO está cerrada
+Status: la UAT del 14-07 cerró **con 1 falla** (regresión de 14-01) → **falta el plan 14-08** con 3 ítems
+Last activity: 2026-08-06 -- 14-07: 23 observaciones humanas de UAT + migración 066 aplicada en producción
 
 ## Performance Metrics
 
@@ -82,6 +82,7 @@ Last activity: 2026-08-04 -- Phase 14 execution started
 | Phase 14 P04 | 62min | 3 tasks | 8 files |
 | Phase 14 P05 | ~30 min | 3 tasks | 3 files |
 | Phase 14 P06 | 38min | 2 tasks | 1 files |
+| Phase 14 P07 | sesión interactiva | 4 tasks (3 checkpoints humanos) | 0 files de código |
 
 ## Accumulated Context
 
@@ -168,6 +169,13 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: Abonos NO se migra al modulo de tabs compartido — Sus tabs son activos/archivados (semantica distinta: 'archivado' incluye series completed sin turnos futuros) y su predicado depende de un conteo, no de un booleano de fila. Forzarlo volveria el tipo generico de mas.
 - [Phase 14]: D-15 resuelto: se quita el line-through de la cancha desactivada — Dentro del tab Desactivados todas lo estan, asi que el tachado deja de informar y solo baja la legibilidad. Mismo razonamiento que ya dejo escrito la lista de servicios.
 - [Phase 14]: 14-06: la visibilidad del boton de eliminar se deriva UNA vez combinando el predicado del tab con un guard redundante que espeja el gate de la 066 — El predicado de la UI ya era un subconjunto estricto del que la base acepta (isAbonoActivo devuelve activa para todo status='active' sin mirar conteos): no habia que alinear nada, habia que FIJAR el invariante para que un cambio futuro del predicado no haga aparecer el boton sobre una fila que la base rechaza
+- [Phase 14]: 14-07 (UAT): dentro de los modales del CRM el chip "Alto" y el "Medio" se ven DEL MISMO COLOR — el `DialogContent` monta en `<DialogPortal>` (raiz del documento) y queda FUERA del `<div class="crm-shell">` de `app/(crm)/layout.tsx:47`, asi que `--danger` cae a `--destructive` y `bg-primary` al primary de la app. Rompe el criterio de D-05. REGRESION de 14-01 (antes `alto` era `bg-secondary` y se distinguia). Efecto colateral: el comentario de `components/crm/confirm-dialog.tsx:200-202` dice que Medio se ve amarillo — nunca se vio amarillo dentro de un modal. Destino: plan 14-08 prioridad 1
+- [Phase 14]: 14-07 (UAT): el boton "Eliminar" y el badge "Alto" comparten la familia de `--danger` — DECISION DEL DUEÑO: se deja como esta (D-05 se cumple; el badge es chico y el boton es la accion)
+- [Phase 14]: 14-07 (UAT): D-01 NO se reabre — los dos paneles laterales angostos que 14-01 y 14-02 marcaron como riesgo (Agenda → Dias especiales, panel de /clients) se ven deliberados en pantalla
+- [Phase 14]: 14-07: **migracion 066 APLICADA EN PRODUCCION el 2026-08-06** (a mano, cero `db push`). Trigger `abonos_block_delete_trg` con `tgenabled='O'`; el rechazo se verifico EN VIVO dentro de una transaccion abortada (`P0001: abono_is_active`, `abonos_block_delete() line 38`). La base quedo ADELANTE del codigo de 14-06, que es el orden correcto. **Ultima migracion en prod = 066**
+- [Phase 14]: 14-07: PRODUCCION NO TIENE LIBRO DE MIGRACIONES — `supabase_migrations.schema_migrations` no existe (`42P01`), porque las migraciones se aplican a mano y esa tabla la crea el CLI. El pre-check (a) del runbook de 14-04 NO es ejecutable tal cual; el baseline se lleva por documentacion (STATE/SUMMARY), no por la base
+- [Phase 14]: 14-07: verificar un gate de borrado exige FORZAR la fila dentro de una transaccion abortada — un DELETE que no matchea filas sale "Success" sin que el trigger corra, indistinguible de un gate roto (la 1ra corrida en prod se declaro INCONCLUSA por esto)
+- [Phase 14]: 14-07: T-14-16 CERRADO end-to-end en navegador (el paso que 14-06 no pudo correr): con el modal abierto se paso la serie a `active` por SQL, el modal NO cerro y salio el toast "No se puede eliminar: la serie sigue activa…"
 - [Phase 14]: 14-06: el borrado del abono va por el cliente del navegador (anon+RLS) con filtro por negocio y .select('id'); onConfirm LANZA ante el rechazo tardio — Segunda aplicacion del molde de 13-03: 0 filas sin error = la RLS filtro la fila y es un FALLO, no un exito silencioso; y si el ConfirmDialog no recibe un throw cierra el modal y el rechazo del gate se traga en silencio
 
 ### Pending Todos
@@ -178,6 +186,8 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
+- **[Phase 14 — gap abierto, BLOQUEA el cierre de la fase]** La UAT del 14-07 encontró **1 falla**: dentro de los modales del CRM los chips "Alto" y "Medio" se ven del mismo color (el `DialogPortal` monta fuera de `.crm-shell`), rompiendo el criterio de aceptación de D-05. Es **regresión de 14-01**. Se abre el **plan 14-08** dentro de esta misma fase con 3 ítems: (1) el color de los chips en los modales del CRM — prioridad 1 · (2) el toggle "Al reservar, ¿preseleccionar «Cualquiera»?" de `Equipo` a ancho completo (gap de cobertura de POLISH-04, `app/(dashboard)/equipo/` nunca estuvo en los 5 archivos del plan) · (3) centrado vertical de los botones "+ Agregar" de `Equipo`. Pista: el patrón ya existente para esta clase de bug es `confirmButtonClass()` en `components/crm/confirm-dialog.tsx` (gap 13-05 #1); el arreglo probablemente sea que el portal herede los tokens del shell, **no** tocar el RiskBadge. Ver `14-07-SUMMARY.md` §Gaps abiertos.
+- **[Phase 14 — deploy] RESUELTO (2026-08-06):** la migración **066 ya está APLICADA en producción**, con el rechazo del gate verificado en vivo. La base va adelante del código de 14-06 (todavía sin deployar), que es el orden correcto. **La próxima migración del repo es la 067.**
 - **[Phase 8 — migración]** La tabla puente staff↔servicios es la migración **057** — **CREADA y VALIDADA en 08-01** (idempotente, RLS + 4 policies por op WITH CHECK, índice inverso; commit 77b3508) + `schema.sql` regenerado quirúrgicamente. Validada con `npx supabase db reset` local (replay 001→057 limpio, 057 aparece aplicada en `migration list --local`; 4 policies + índice + ENABLE RLS confirmados en schema.sql; anon sin policies). Baseline: la última aplicada en prod es la **056** → la próxima es la **057**. **PENDIENTE OPERATIVO:** aplicarla **A MANO** al Supabase de prod en el próximo deploy (+ `NOTIFY pgrst, 'reload schema'`) — **NO** por el flujo GSD.
 - **[Phase 9 — integridad]** La asignación de "cualquiera" tiene que ocurrir DENTRO de `book_slot_atomic`, bajo el mismo advisory lock / transacción `SECURITY DEFINER` que ya serializa el anti-sobrecupo y la exclusión por espacio. Cambiar la granularidad del lock no puede degradar `slot_full` ni `slot_taken`. Los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) entran por `createAppointmentCore`: un cambio de firma/semántica los afecta a los cuatro. **secure-phase obligatorio.** El RPC se modifica en una migración numerada nueva (`CREATE OR REPLACE FUNCTION`), aplicada a mano.
 - **[Phase 9 — tenant]** `book_slot_atomic` es `SECURITY DEFINER`: RLS NO la protege. Toda query nueva adentro debe filtrar por `business_id` explícito; el conjunto de candidatos se deriva server-side, nunca de IDs que mande el cliente.
@@ -217,13 +227,17 @@ Heredadas del workstream (siguen vigentes):
 | Ventana | Ventana **por servicio** (se eligió global por negocio) | v2 | 2026-07-18 |
 | Alta manual | Seña en el alta manual (MANUAL-04) | v2 | 2026-06-25 |
 | Plan | Enforcement server-side de límites de plan ([[plan-model-agendas]]) | backlog | 2026-07-18 |
+| Abonos | El selector de **Profesional** del modal "Nuevo abono" lista canchas ("Cancha A") en un negocio de vertical *general* — es el modelo de v0.13 (cancha = `professional` con `service_id`), no pulido. El dueño: "en la práctica no pasa, solo aviso". | backlog | 2026-08-06 |
+| Servicios | Aviso amarillo "«Recurso simultáneo» no está disponible…" al existir una cancha, + la cancha se agrega sola como espacio compartido en `Equipo`. Introducido por `052d875 fix(12)` en **Phase 12**; es el cruce v0.12 (espacios) × v0.13 (cancha = professional). | backlog | 2026-08-06 |
 
 ## Session Continuity
 
-Last session: 2026-08-05T00:14:43.979Z
-Stopped at: Completado 14-04-PLAN.md
+Last session: 2026-08-06
+Stopped at: Completado 14-07-PLAN.md — UAT cerrada con 1 falla, migración 066 aplicada en producción
 Resume file: None
 
 ## Operator Next Steps
 
-- Phase 12 planificada (4 planes, 3 waves). Próximo: `/gsd:execute-phase 12 --ws motor-reservas`. Phase 12 es security-sensitive → **secure-phase obligatorio** después de ejecutar. Recordá: la migración **062** se aplica **A MANO** a prod coordinada con el deploy (última en prod = 061) + `NOTIFY pgrst, 'reload schema'`; local se valida con `supabase db reset`.
+- **Phase 14 NO está cerrada.** Los 7 planes están ejecutados, pero la UAT del 14-07 dejó **1 regresión** (chips "Alto"/"Medio" indistinguibles dentro de los modales del CRM) + 2 gaps de cobertura de POLISH-04 en `Equipo`. Próximo: planificar y ejecutar el **plan 14-08** dentro de esta misma fase (`/gsd:plan-phase 14 --ws motor-reservas` o el flujo de cierre de gaps). Detalle completo en `14-07-SUMMARY.md` §Gaps abiertos.
+- **Migraciones:** la **066 ya está en producción** (2026-08-06). La próxima del repo es la **067**. Recordá: apply **A MANO** en el SQL Editor + `NOTIFY pgrst, 'reload schema'`, nunca `db push`; y que **prod no tiene `supabase_migrations.schema_migrations`**, así que el pre-check de "última aplicada" se lee de este STATE, no de la base.
+- **Deploy:** el código de 14-06 (botón Eliminar) todavía no está en prod. La base ya tiene el gate, así que el orden está bien; se puede deployar cuando se quiera.
