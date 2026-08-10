@@ -70,11 +70,18 @@ function proToPayload(f: ProForm) {
 }
 
 // Campos del profesional, reutilizados en alta (inline) y edición (dialog).
-function ProFields({ value, onChange, labels, showExtra }: {
+//
+// Teléfono y Email se muestran SIEMPRE (UAT 14-09, punto 6). Antes el alta los escondía detrás de un
+// enlace "+ Datos de contacto (opcional)": ese enlace es contenido en línea suelto dentro de un
+// contenedor de bloque, así que arrastraba el hueco de su caja de línea y dejaba el botón de agregar
+// descentrado y pegado al texto. El dueño arbitró la solución: mostrar los dos campos y sacar el
+// enlace —"son solo dos y no cambia mucho"—, con lo cual el botón queda solo en su línea. Los dos
+// campos ya viajaban al submit (`proToPayload` los normaliza): el toggle solo controlaba visibilidad,
+// no el payload, así que hacerlos visibles no cambia lo que se guarda.
+function ProFields({ value, onChange, labels }: {
   value: ProForm
   onChange: (v: ProForm) => void
   labels: { specialty: string; specialtyPh: string; license: string; licensePh: string }
-  showExtra: boolean
 }) {
   const set = (k: keyof ProForm, v: string) => onChange({ ...value, [k]: v })
   return (
@@ -97,18 +104,16 @@ function ProFields({ value, onChange, labels, showExtra }: {
           <Input value={value.license_number} onChange={e => set('license_number', e.target.value)} placeholder={labels.licensePh} />
         </div>
       </div>
-      {showExtra && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label>Teléfono <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-            <Input value={value.phone} onChange={e => set('phone', e.target.value)} placeholder="+54 9 …" />
-          </div>
-          <div className="space-y-1">
-            <Label>Email <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-            <Input type="email" value={value.email} onChange={e => set('email', e.target.value)} placeholder="profesional@email.com" />
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label>Teléfono <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+          <Input value={value.phone} onChange={e => set('phone', e.target.value)} placeholder="+54 9 …" />
         </div>
-      )}
+        <div className="space-y-1">
+          <Label>Email <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+          <Input type="email" value={value.email} onChange={e => set('email', e.target.value)} placeholder="profesional@email.com" />
+        </div>
+      </div>
     </div>
   )
 }
@@ -706,7 +711,6 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // ── Tab 3 — Professionals ─────────────────────────────────────────────────
   const [professionals, setProfessionals] = useState<Professional[]>(initialProfessionals)
   const [newPro, setNewPro] = useState<ProForm>(EMPTY_PRO)
-  const [proExtraOpen, setProExtraOpen] = useState(false)
   const [savingPro, setSavingPro] = useState(false)
   const [editingPro, setEditingPro] = useState<Professional | null>(null)
   const [editPro, setEditPro] = useState<ProForm>(EMPTY_PRO)
@@ -791,7 +795,6 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setProfessionals(prev => [...prev, created])
     setNewPro(EMPTY_PRO)
     clearNewProPhoto()
-    setProExtraOpen(false)
     toast.success('Profesional agregado')
   }
 
@@ -1826,12 +1829,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={clearNewProPhoto}>Quitar</Button>
                   )}
                 </div>
-                <ProFields value={newPro} onChange={setNewPro} labels={proLabels} showExtra={proExtraOpen} />
-                {!proExtraOpen && (
-                  <button type="button" onClick={() => setProExtraOpen(true)} className="text-xs text-primary hover:underline">
-                    + Datos de contacto (opcional)
-                  </button>
-                )}
+                <ProFields value={newPro} onChange={setNewPro} labels={proLabels} />
                 <Button onClick={addProfessional} disabled={savingPro || !newPro.name.trim()} className="gap-1">
                   <Plus className="w-4 h-4" /> {savingPro ? 'Agregando...' : 'Agregar'}
                 </Button>
@@ -2455,7 +2453,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               </div>
             </div>
           </div>
-          <ProFields value={editPro} onChange={setEditPro} labels={proLabels} showExtra />
+          <ProFields value={editPro} onChange={setEditPro} labels={proLabels} />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setEditingPro(null)}>Cancelar</Button>
             <Button onClick={saveEditPro} disabled={savingEditPro || !editPro.name.trim()}>
