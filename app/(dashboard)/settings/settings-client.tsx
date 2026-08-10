@@ -1911,7 +1911,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               <p className="font-semibold text-sm">Al reservar, ¿preseleccionar “Cualquiera”?</p>
               <p className="text-xs text-muted-foreground mt-0.5">Cuando un servicio tiene 2 o más profesionales, elegí cómo se muestra el paso de profesional en tu página de reservas.</p>
             </div>
-            <div role="radiogroup" aria-label="Preselección del profesional" className="inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
+            {/* self-start (D-02): el recuadro de las dos opciones es hijo directo de <Card>, que es
+                flex-column, así que su `align-items: stretch` blockifica el ítem y lo estira a todo el
+                ancho de la tarjeta aunque el recuadro se declare en línea. El fix vive en el call-site
+                porque tocar components/ui/card.tsx cambiaría el layout de toda la app. Este control
+                quedó fuera del inventario que auditó 14-01 (gap 2 de 14-VERIFICATION.md). El grupo
+                gemelo de CapacityModeFields NO lleva la clase: su padre es un contenedor de bloque y
+                nada lo estira. */}
+            <div role="radiogroup" aria-label="Preselección del profesional" className="self-start inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
               <button
                 type="button"
                 role="radio"
