@@ -1909,14 +1909,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               <p className="font-semibold text-sm">Al reservar, ¿preseleccionar “Cualquiera”?</p>
               <p className="text-xs text-muted-foreground mt-0.5">Cuando un servicio tiene 2 o más profesionales, elegí cómo se muestra el paso de profesional en tu página de reservas.</p>
             </div>
-            {/* self-start (D-02): el recuadro de las dos opciones es hijo directo de <Card>, que es
-                flex-column, así que su `align-items: stretch` blockifica el ítem y lo estira a todo el
-                ancho de la tarjeta aunque el recuadro se declare en línea. El fix vive en el call-site
-                porque tocar components/ui/card.tsx cambiaría el layout de toda la app. Este control
-                quedó fuera del inventario que auditó 14-01 (gap 2 de 14-VERIFICATION.md). El grupo
-                gemelo de CapacityModeFields NO lleva la clase: su padre es un contenedor de bloque y
+            {/* D-02 + UAT 14-09 punto 5. El recuadro es hijo directo de <Card>, que es flex-column:
+                su `align-items: stretch` blockifica el ítem y lo estira a todo el ancho de la tarjeta
+                aunque el recuadro se declare en línea. El fix vive en el call-site porque tocar
+                components/ui/card.tsx cambiaría el layout de toda la app. Este control quedó fuera del
+                inventario que auditó 14-01 (gap 2 de 14-VERIFICATION.md).
+
+                Mobile-first, que es la decisión del dueño tras verlo ("Desktop, ancho de contenido.
+                Movil no se ve muy lindo, queda ancho completo" → "ancho completo, pero prolijo"):
+                debajo de sm el recuadro ocupa la tarjeta y las dos opciones se apilan estirándose a
+                todo su ancho, o sea un segmentado deliberado en vez de un recuadro estirado por
+                accidente; desde sm se desestira (self-start) y vuelve exactamente al estado de
+                desktop que el dueño ya aprobó: en línea y al ancho de su contenido.
+
+                El grupo gemelo de CapacityModeFields NO cambia: su padre es un contenedor de bloque y
                 nada lo estira. */}
-            <div role="radiogroup" aria-label="Preselección del profesional" className="self-start inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
+            <div role="radiogroup" aria-label="Preselección del profesional" className="flex w-full flex-col gap-1 rounded-md border border-border p-1 sm:inline-flex sm:w-auto sm:flex-row sm:flex-wrap sm:self-start">
               <button
                 type="button"
                 role="radio"
