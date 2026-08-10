@@ -1,5 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { cn } from '@/lib/utils'
+import { CRM_SHELL_CLASS } from '@/lib/shell-scope'
+import { ShellScopeProvider } from '@/components/ui/shell-scope'
 import { CrmSidebar } from '@/components/crm/crm-sidebar'
 import { CrmTopbar } from '@/components/crm/crm-topbar'
 import { CrmToaster } from '@/components/crm/crm-toaster'
@@ -39,18 +42,30 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   // Subtree del CRM forzado a dark + accent remap, SCOPEADO (D6 / Pitfall 5):
   // `dark` activa los tokens dark locales (vía la variante &:is(.dark *)) sin
   // tocar next-themes global ni PaletteScript; `crm-shell` aplica el accent
-  // amarillo. El shell visual (CrmSidebar agrupado + topbar + Toaster dark) se monta
-  // DENTRO de este wrapper. El offset de contenido por el sidebar es `lg:pl-60`
-  // (calca el dashboard). NO se setea data-theme/data-font (heredan el default Forjo)
-  // ni PaletteScript (es per-business). El guard de arriba queda intacto.
+  // amarillo. Las dos clases ya NO se escriben acá a mano: salen de CRM_SHELL_CLASS
+  // (@/lib/shell-scope), que es la fuente única. El shell visual (CrmSidebar agrupado
+  // + topbar + Toaster dark) se monta DENTRO de este wrapper. El offset de contenido
+  // por el sidebar es `lg:pl-60` (calca el dashboard). NO se setea data-theme/data-font
+  // (heredan el default Forjo) ni PaletteScript (es per-business). El guard de arriba
+  // queda intacto.
+  //
+  // ShellScopeProvider (gap 1 de 14-VERIFICATION.md): las custom properties del shell
+  // viajan por herencia del DOM, así que todo lo PORTALEADO (el Popup del Dialog monta
+  // en la raíz del documento) quedaba fuera de este <div> y perdía los tokens — dentro
+  // de los ConfirmDialog del CRM "Alto" y "Medio" se veían del mismo color. El proveedor
+  // publica EXACTAMENTE la misma constante que el wrapper, así que el shell y lo
+  // portaleado no pueden divergir. Envuelve el <div> entero para que cualquier pantalla
+  // del CRM que abra un diálogo quede adentro.
   return (
-    <div className="dark crm-shell min-h-screen bg-background text-foreground">
-      <CrmSidebar operatorName={operatorName} />
-      <div className="lg:pl-60">
-        <CrmTopbar />
-        <main className="min-h-[calc(100vh-3.5rem)] px-4 py-6 lg:px-6">{children}</main>
+    <ShellScopeProvider scope={CRM_SHELL_CLASS}>
+      <div className={cn(CRM_SHELL_CLASS, 'min-h-screen bg-background text-foreground')}>
+        <CrmSidebar operatorName={operatorName} />
+        <div className="lg:pl-60">
+          <CrmTopbar />
+          <main className="min-h-[calc(100vh-3.5rem)] px-4 py-6 lg:px-6">{children}</main>
+        </div>
+        <CrmToaster />
       </div>
-      <CrmToaster />
-    </div>
+    </ShellScopeProvider>
   )
 }

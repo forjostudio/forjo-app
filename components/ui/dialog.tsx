@@ -5,6 +5,8 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useShellScope } from "@/components/ui/shell-scope"
+import { portalScopeClass } from "@/lib/shell-scope"
 import { XIcon } from "lucide-react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -47,12 +49,23 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  // Scope del shell activo (gap 1 de 14-VERIFICATION.md). El Popup se monta dentro de DialogPortal,
+  // o sea en la RAÍZ del documento: sale del <div> que declara los tokens del shell y, como las
+  // custom properties viajan por herencia del DOM, deja de resolverlos (dentro de los ConfirmDialog
+  // del CRM la superficie de peligro caía al rojo de la app y "Alto"/"Medio" quedaban iguales).
+  // Declarando acá las MISMAS clases que el shell, el popup y sus descendientes vuelven a resolver
+  // los tokens correctos SIN reubicar el nodo — focus trap, scroll lock y stacking quedan intactos.
+  // Va PRIMERO en el cn() para que el className del caller siga ganando los conflictos de utilidades
+  // que resuelve tailwind-merge. Fuera de un proveedor de scope devuelve undefined y cn() lo
+  // descarta: el className queda byte-idéntico al de antes de este plan.
+  const shellScope = useShellScope()
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
+          portalScopeClass(shellScope),
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
