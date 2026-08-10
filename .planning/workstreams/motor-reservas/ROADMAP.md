@@ -537,7 +537,7 @@ Plans:
 
 ⚠ **D-06 del CONTEXT supersede** la nota de Security de esta fase sobre "sin alterar cómo se ve el badge dentro del CRM": el usuario aceptó explícitamente que el CRM cambie de aspecto con tal de mantener un solo componente compartido.
 
-**Plans**: 7/7 plans executed — ⚠ la UAT del 14-07 cerró **con 1 falla** (regresión de 14-01: dentro de los modales del CRM "Alto" y "Medio" se ven del mismo color, el `DialogPortal` monta fuera de `.crm-shell`) → **se abre el plan 14-08** con ese ítem + 2 gaps de cobertura de POLISH-04 en `Equipo`. La fase NO está cerrada.
+**Plans**: 9 plans (7 ejecutados + 2 de cierre de gaps) — ⚠ la UAT del 14-07 cerró **con 1 falla** (regresión de 14-01: dentro de los modales del CRM "Alto" y "Medio" se ven del mismo color, el `DialogPortal` monta fuera del scope del shell del CRM) → se abrieron los planes **14-08** (causa raíz del portal) y **14-09** (los 2 gaps de cobertura de POLISH-04 en `Equipo` + la UAT bloqueante + la trazabilidad). La fase NO está cerrada hasta que 14-09 apruebe su checkpoint humano.
 
 Plans:
 **Wave 1**
@@ -556,7 +556,15 @@ Plans:
 
 - [x] 14-07-PLAN.md — UAT visual de los 6 ítems en los dos shells + runbook y apply manual de la 066 en producción — **23 observaciones humanas reales** (visual 9/10 con 1 falla · funcional 13/13) + **migración 066 APLICADA en prod el 2026-08-06** con el rechazo del gate verificado en vivo (`P0001 / abono_is_active`)
 
-**Waves**: Wave 1 = 14-01 + 14-02 + 14-03 + 14-04 en paralelo (cero solape de archivos). Wave 2 = 14-05 (necesita `settings-client.tsx` liberado por 14-01) + 14-06 (necesita `abonos-client.tsx` liberado por 14-03 y el gate de 14-04). Wave 3 = 14-07 (checkpoints humanos bloqueantes).
+**Wave 4** *(cierre de gaps — blocked on Wave 3 completion)*
+
+- [ ] 14-08-PLAN.md — gap 1 (BLOCKER, POLISH-05): causa raíz del scope de tokens en las superficies portaleadas — `lib/shell-scope.ts` + contexto `ShellScopeProvider` consumido por el `Dialog`, sin tocar `risk-badge.tsx` ni los tokens
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 14-09-PLAN.md — gaps 2 y 3 (POLISH-04 en la vista `Equipo`: radiogroup de preselección + auditoría de los controles de alta) + **UAT visual bloqueante de los 3 gaps** + cierre de la trazabilidad de POLISH-04/05
+
+**Waves**: Wave 1 = 14-01 + 14-02 + 14-03 + 14-04 en paralelo (cero solape de archivos). Wave 2 = 14-05 (necesita `settings-client.tsx` liberado por 14-01) + 14-06 (necesita `abonos-client.tsx` liberado por 14-03 y el gate de 14-04). Wave 3 = 14-07 (checkpoints humanos bloqueantes). Wave 4 = 14-08 (cero solape con todo lo anterior: crea 2 módulos nuevos y toca `dialog.tsx` + el layout del CRM). Wave 5 = 14-09 (necesita el fix del portal en el árbol para poder observarlo, y serializa `settings-client.tsx`; su checkpoint humano es bloqueante).
 
 **UI hint**: yes
 **Security/Integrity relevance**: Bajo riesgo. Los cuatro ítems son de presentación o de lógica de filtro en el cliente; no tocan el motor de reservas, los constraints, el aislamiento por tenant ni el flujo de cancelación. **Cuidado transversal (POLISH-05):** `--crm-danger` es un **design token** — definirlo fuera del scope del CRM afecta también al CRM; el cambio debe respetar el token existente sin duplicar hex y sin alterar cómo se ve el badge dentro del CRM. La pantalla pública de baja del abono ya está endurecida (404 genérico, token no adivinable, `noindex`): POLISH-06 solo oculta un botón del **panel autenticado**, no toca esa superficie.
