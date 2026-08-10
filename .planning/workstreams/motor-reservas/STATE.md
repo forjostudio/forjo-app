@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 14-07-PLAN.md (UAT cerrada con 1 falla -- se abre el plan 14-08)
-last_updated: "2026-08-06T00:00:00.000Z"
-last_activity: 2026-08-06 -- 14-07 UAT humana + apply de la migracion 066 en produccion
+stopped_at: Completado 14-08-PLAN.md (fix del scope portaleado; queda el checkpoint humano 14-09)
+last_updated: "2026-08-10T20:37:16.442Z"
+last_activity: 2026-08-10 -- Phase 14 execution started
 progress:
   total_phases: 14
   completed_phases: 13
-  total_plans: 69
-  completed_plans: 69
-  percent: 94
+  total_plans: 71
+  completed_plans: 70
+  percent: 93
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 7 of 7 ejecutados — la fase NO está cerrada
-Status: la UAT del 14-07 cerró **con 1 falla** (regresión de 14-01) → **falta el plan 14-08** con 3 ítems
-Last activity: 2026-08-06 -- 14-07: 23 observaciones humanas de UAT + migración 066 aplicada en producción
+Plan: 9 of 9 (14-01..14-08 ejecutados; queda 14-09, el checkpoint humano bloqueante)
+Status: Ready to execute
+Last activity: 2026-08-10 -- 14-08 completado (scope del shell en superficies portaleadas)
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Last activity: 2026-08-06 -- 14-07: 23 observaciones humanas de UAT + migración
 | Phase 14 P05 | ~30 min | 3 tasks | 3 files |
 | Phase 14 P06 | 38min | 2 tasks | 1 files |
 | Phase 14 P07 | sesión interactiva | 4 tasks (3 checkpoints humanos) | 0 files de código |
+| Phase 14 P08 | 60min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: 14-07: verificar un gate de borrado exige FORZAR la fila dentro de una transaccion abortada — un DELETE que no matchea filas sale "Success" sin que el trigger corra, indistinguible de un gate roto (la 1ra corrida en prod se declaro INCONCLUSA por esto)
 - [Phase 14]: 14-07: T-14-16 CERRADO end-to-end en navegador (el paso que 14-06 no pudo correr): con el modal abierto se paso la serie a `active` por SQL, el modal NO cerro y salio el toast "No se puede eliminar: la serie sigue activa…"
 - [Phase 14]: 14-06: el borrado del abono va por el cliente del navegador (anon+RLS) con filtro por negocio y .select('id'); onConfirm LANZA ante el rechazo tardio — Segunda aplicacion del molde de 13-03: 0 filas sin error = la RLS filtro la fila y es un FALLO, no un exito silencioso; y si el ConfirmDialog no recibe un throw cierra el modal y el rechazo del gate se traga en silencio
+- [Phase 14]: 14-08: el scope del shell viaja al portal como CLASE (ShellScopeProvider + portalScopeClass), no reubicando el nodo con container ni moviendo .crm-shell a un ancestro — el popup queda donde estaba (focus trap/scroll lock/stacking intactos) y el default '' deja el className byte-identico fuera del CRM
+- [Phase 14]: 14-08: CRM_SHELL_CLASS vive en lib/ SIN 'use client' porque app/(crm)/layout.tsx es Server Component y necesita el VALOR de la constante; los exports de un modulo de cliente llegan al servidor como referencias
+- [Phase 14]: 14-08: el scope llega por CONTEXTO y no por prop, para que los 33 call-sites de <DialogContent> no se toquen; alcance acotado al Dialog (el popup del Select NO adhiere) porque es la unica superficie con defecto registrado
 
 ### Pending Todos
 
@@ -186,7 +190,9 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
-- **[Phase 14 — gap abierto, BLOQUEA el cierre de la fase]** La UAT del 14-07 encontró **1 falla**: dentro de los modales del CRM los chips "Alto" y "Medio" se ven del mismo color (el `DialogPortal` monta fuera de `.crm-shell`), rompiendo el criterio de aceptación de D-05. Es **regresión de 14-01**. Se abre el **plan 14-08** dentro de esta misma fase con 3 ítems: (1) el color de los chips en los modales del CRM — prioridad 1 · (2) el toggle "Al reservar, ¿preseleccionar «Cualquiera»?" de `Equipo` a ancho completo (gap de cobertura de POLISH-04, `app/(dashboard)/equipo/` nunca estuvo en los 5 archivos del plan) · (3) centrado vertical de los botones "+ Agregar" de `Equipo`. Pista: el patrón ya existente para esta clase de bug es `confirmButtonClass()` en `components/crm/confirm-dialog.tsx` (gap 13-05 #1); el arreglo probablemente sea que el portal herede los tokens del shell, **no** tocar el RiskBadge. Ver `14-07-SUMMARY.md` §Gaps abiertos.
+- **[Phase 14 — gap 1 CODEADO, falta el ojo humano]** 14-08 cerró el ítem 1 en código: el popup del `Dialog` hereda el scope del shell activo (`ShellScopeProvider` + `portalScopeClass`, `lib/shell-scope.ts` + `components/ui/shell-scope.tsx`), sin tocar `risk-badge.tsx`, `globals.css` ni `themes.css`. 12 tests con prueba de mutación; `tsc` 0 y `build` 0. **POLISH-05 NO se puede dar por cerrado desde acá**: la verificación de que "Alto" y "Medio" se distinguen en pantalla es el checkpoint humano bloqueante del **plan 14-09** (ver `14-08-SUMMARY.md` §"A mirar en el checkpoint humano"). Ojo: los modales del CRM ahora se ven con fondo oscuro (el popup lleva `dark`) — es intencional pero es un cambio visible. Los ítems 2 y 3 (toggle de `Equipo` + centrado de los "+ Agregar") siguen abiertos.
+- **[Phase 14 — infraestructura de tests local DEGRADADA]** Dos corridas completas de `npx vitest run` durante 14-08 dieron conjuntos de fallas **disjuntos** (11 fallas en 4 suites · 2 fallas en otras 2 suites + 24 suites caídas enteras), **todas** por `Test timed out in 5000ms` / `Hook timed out in 10000ms`. El Supabase local responde 200 pero tarda ~1.26 s en el root de `/rest/v1/`. La corrida completa **no es un gate útil en esta máquina hoy**; el baseline documentado de "hasta 7 fallas en las 3 suites de abonos" quedó excedido por entorno, no por código. Detalle y evidencia causal en `14-08-SUMMARY.md` §"Suite completa".
+- **[Phase 14 — gap abierto original, histórico]** La UAT del 14-07 encontró **1 falla**: dentro de los modales del CRM los chips "Alto" y "Medio" se ven del mismo color (el `DialogPortal` monta fuera de `.crm-shell`), rompiendo el criterio de aceptación de D-05. Es **regresión de 14-01**. Se abre el **plan 14-08** dentro de esta misma fase con 3 ítems: (1) el color de los chips en los modales del CRM — prioridad 1 · (2) el toggle "Al reservar, ¿preseleccionar «Cualquiera»?" de `Equipo` a ancho completo (gap de cobertura de POLISH-04, `app/(dashboard)/equipo/` nunca estuvo en los 5 archivos del plan) · (3) centrado vertical de los botones "+ Agregar" de `Equipo`. Pista: el patrón ya existente para esta clase de bug es `confirmButtonClass()` en `components/crm/confirm-dialog.tsx` (gap 13-05 #1); el arreglo probablemente sea que el portal herede los tokens del shell, **no** tocar el RiskBadge. Ver `14-07-SUMMARY.md` §Gaps abiertos.
 - **[Phase 14 — deploy] RESUELTO (2026-08-06):** la migración **066 ya está APLICADA en producción**, con el rechazo del gate verificado en vivo. La base va adelante del código de 14-06 (todavía sin deployar), que es el orden correcto. **La próxima migración del repo es la 067.**
 - **[Phase 8 — migración]** La tabla puente staff↔servicios es la migración **057** — **CREADA y VALIDADA en 08-01** (idempotente, RLS + 4 policies por op WITH CHECK, índice inverso; commit 77b3508) + `schema.sql` regenerado quirúrgicamente. Validada con `npx supabase db reset` local (replay 001→057 limpio, 057 aparece aplicada en `migration list --local`; 4 policies + índice + ENABLE RLS confirmados en schema.sql; anon sin policies). Baseline: la última aplicada en prod es la **056** → la próxima es la **057**. **PENDIENTE OPERATIVO:** aplicarla **A MANO** al Supabase de prod en el próximo deploy (+ `NOTIFY pgrst, 'reload schema'`) — **NO** por el flujo GSD.
 - **[Phase 9 — integridad]** La asignación de "cualquiera" tiene que ocurrir DENTRO de `book_slot_atomic`, bajo el mismo advisory lock / transacción `SECURITY DEFINER` que ya serializa el anti-sobrecupo y la exclusión por espacio. Cambiar la granularidad del lock no puede degradar `slot_full` ni `slot_taken`. Los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) entran por `createAppointmentCore`: un cambio de firma/semántica los afecta a los cuatro. **secure-phase obligatorio.** El RPC se modifica en una migración numerada nueva (`CREATE OR REPLACE FUNCTION`), aplicada a mano.
@@ -232,8 +238,8 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-06
-Stopped at: Completado 14-07-PLAN.md — UAT cerrada con 1 falla, migración 066 aplicada en producción
+Last session: 2026-08-10T20:37:16.430Z
+Stopped at: Completado 14-08-PLAN.md (fix del scope portaleado; queda el checkpoint humano 14-09)
 Resume file: None
 
 ## Operator Next Steps

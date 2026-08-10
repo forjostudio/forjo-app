@@ -537,7 +537,7 @@ Plans:
 
 ⚠ **D-06 del CONTEXT supersede** la nota de Security de esta fase sobre "sin alterar cómo se ve el badge dentro del CRM": el usuario aceptó explícitamente que el CRM cambie de aspecto con tal de mantener un solo componente compartido.
 
-**Plans**: 9 plans (7 ejecutados + 2 de cierre de gaps) — ⚠ la UAT del 14-07 cerró **con 1 falla** (regresión de 14-01: dentro de los modales del CRM "Alto" y "Medio" se ven del mismo color, el `DialogPortal` monta fuera del scope del shell del CRM) → se abrieron los planes **14-08** (causa raíz del portal) y **14-09** (los 2 gaps de cobertura de POLISH-04 en `Equipo` + la UAT bloqueante + la trazabilidad). La fase NO está cerrada hasta que 14-09 apruebe su checkpoint humano.
+**Plans**: 8/9 plans executed
 
 Plans:
 **Wave 1**
@@ -558,7 +558,7 @@ Plans:
 
 **Wave 4** *(cierre de gaps — blocked on Wave 3 completion)*
 
-- [ ] 14-08-PLAN.md — gap 1 (BLOCKER, POLISH-05): causa raíz del scope de tokens en las superficies portaleadas — `lib/shell-scope.ts` + contexto `ShellScopeProvider` consumido por el `Dialog`, sin tocar `risk-badge.tsx` ni los tokens
+- [x] 14-08-PLAN.md — gap 1 (BLOCKER, POLISH-05): causa raíz del scope de tokens en las superficies portaleadas — `lib/shell-scope.ts` + contexto `ShellScopeProvider` consumido por el `Dialog`, sin tocar `risk-badge.tsx` ni los tokens
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -589,4 +589,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
-| 14. Cierre de backlog | 7/7 | In Progress (UAT con 1 falla → plan 14-08) |  |
+| 14. Cierre de backlog | 8/9 | In Progress|  |
