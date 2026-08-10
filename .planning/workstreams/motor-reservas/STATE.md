@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
 status: executing
-stopped_at: Completado 14-08-PLAN.md (fix del scope portaleado; queda el checkpoint humano 14-09)
+stopped_at: 14-09 Task 1 completada (commit 2e11c40) — PAUSADO en la Task 2, checkpoint human-verify BLOQUEANTE (7 observaciones a transcribir)
 last_updated: "2026-08-10T20:37:16.442Z"
 last_activity: 2026-08-10 -- Phase 14 execution started
 progress:
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 9 of 9 (14-01..14-08 ejecutados; queda 14-09, el checkpoint humano bloqueante)
-Status: Ready to execute
-Last activity: 2026-08-10 -- 14-08 completado (scope del shell en superficies portaleadas)
+Plan: 9 of 9 (14-01..14-08 ejecutados; 14-09 en curso)
+Status: BLOQUEADO en checkpoint humano — 14-09 Task 2 (`human-verify`, gate="blocking")
+Last activity: 2026-08-10 -- 14-09 Task 1 completada (radiogroup de preselección desestirado + auditoría de los 3 controles de alta de Equipo, commit 2e11c40). La Task 3 (REQUIREMENTS.md + ROADMAP.md) NO se ejecuta hasta que el dueño transcriba las 7 observaciones del checkpoint.
 
 ## Performance Metrics
 
