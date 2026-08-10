@@ -21,6 +21,8 @@ import { toast } from 'sonner'
 import { Loader2Icon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { portalScopeClass } from '@/lib/shell-scope'
+import { useShellScope } from '@/components/ui/shell-scope'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -178,12 +180,25 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
 }
 
 /**
- * Clase del botón confirmar. destructive ⇒ la superficie de peligro del shell (--danger), que en el
- * CRM resuelve a --crm-danger y en el dashboard a --destructive; si no ⇒ el primario que trae <Button>.
+ * Clase del botón confirmar.
  *
- * POR QUÉ --danger y no --crm-danger (gap 13-05 #1): este dialog se reusa en el DASHBOARD desde 13-03,
- * y --crm-danger sólo existe dentro de .crm-shell — afuera la var no resolvía y el botón quedaba sin
- * fondo. La indirección vive en globals.css; acá NUNCA se referencia el token de un shell puntual.
+ * `destructive` **dentro de un shell** ⇒ la superficie de peligro de ese shell (`--danger`); en
+ * cualquier otro caso ⇒ el primario que trae `<Button>`, o sea el del tema activo.
+ *
+ * POR QUÉ el scope y no la pantalla (UAT 14-09, punto 3): el dueño observó que en los modales de
+ * abonos el confirmar tomaba el mismo rojo que el badge de riesgo, y arbitró que en **su panel** el
+ * confirmar destructivo use el primario del tema; en el CRM el rojo se **conserva** (aprobó esos
+ * modales en el punto 1 de la misma UAT, y ahí el rojo es el lenguaje del super-admin). El diagnóstico
+ * completo está en `deferred-items.md`: la diferencia que vio entre abonos y servicios era de ESTADO
+ * (el de servicios llega con `hideConfirm` cuando el pre-check bloquea, y ahí el destructivo ni se
+ * dibuja), no de pantalla — los dos call-sites pasan los mismos props.
+ *
+ * POR QUÉ NO se pregunta "¿estoy en el CRM?" (D-07 / gap 13-05 #1): este componente es COMPARTIDO por
+ * los dos shells y no puede nombrar el token ni el shell de ninguno — con `--crm-danger` directo el
+ * botón se quedaba sin fondo fuera de `.crm-shell`. Lo que se recibe acá es el scope del shell activo
+ * (`useShellScope()`, genérico: dice si hay shell, no cuál), y la regla de "hay scope" no se
+ * reimplementa: la resuelve `portalScopeClass()`, la misma que usa el popup portaleado del Dialog.
+ * `--danger` sigue siendo la indirección compartida que declara `globals.css`.
  *
  * El hover TAMPOCO se calcula acá (WR-06). Estaba cableado como un mix con negro, que oscurece la
  * superficie mientras el texto queda fijo: sirve cuando el par es crema sobre rojo oscuro (claro),
@@ -192,8 +207,8 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
  * información que solo tienen los tokens: por eso se referencia --danger-hover, que cada bloque
  * declara junto a su --danger-foreground.
  */
-export function confirmButtonClass(destructive?: boolean): string {
-  return destructive
+export function confirmButtonClass(destructive?: boolean, shellScope?: string): string {
+  return destructive && portalScopeClass(shellScope)
     ? 'bg-[var(--danger)] text-[var(--danger-foreground)] hover:bg-[var(--danger-hover)]'
     : ''
 }
@@ -227,6 +242,9 @@ export function ConfirmDialog({
   // distintos, pero bloquea lo mismo: doble click, cierre del dialog y el confirmar.
   const [secLoading, setSecLoading] = React.useState(false)
   const secLoadingRef = React.useRef(false)
+  // Scope del shell activo (vacío fuera de uno). Decide si el confirmar destructivo se pinta con la
+  // superficie de peligro del shell o con el primario del tema — ver confirmButtonClass().
+  const shellScope = useShellScope()
 
   // ids para aria-describedby (helpers).
   const wordHelpId = React.useId()
@@ -362,7 +380,7 @@ export function ConfirmDialog({
             </Button>
           )}
           {footer.showConfirm && (
-            <Button type="button" onClick={handleConfirm} disabled={!state.canConfirm || secLoading} aria-disabled={!state.canConfirm || secLoading} className={confirmButtonClass(destructive)}>
+            <Button type="button" onClick={handleConfirm} disabled={!state.canConfirm || secLoading} aria-disabled={!state.canConfirm || secLoading} className={confirmButtonClass(destructive, shellScope)}>
               {loading ? (<><Loader2Icon className="animate-spin" />Confirmando…</>) : confirmLabel}
             </Button>
           )}

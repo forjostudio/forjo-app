@@ -15,6 +15,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { computeConfirmState, buildSubmitGuard, confirmButtonClass, computeFooterLayout } from './confirm-dialog'
+import { CRM_SHELL_CLASS } from '@/lib/shell-scope'
 
 describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
   // Test 1 (simple, confirmWord undefined): botón habilitado de entrada.
@@ -149,25 +150,38 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     expect(computeFooterLayout({ hideConfirm: true })).toEqual({ showConfirm: false, showSecondary: false, secondaryVariant: 'outline' })
   })
 
-  // Test 6 (destructive): el helper de clase del botón confirmar referencia la superficie de peligro
-  // del shell (--danger), NUNCA el token de un shell puntual. Regresión del gap 13-05 #1: con
-  // --crm-danger directo el botón se quedaba sin fondo fuera de .crm-shell (o sea, en el dashboard).
-  it('destructive: la clase del botón confirmar usa --danger (no el token de un shell puntual)', () => {
-    const dangerCls = confirmButtonClass(true)
+  // Test 6 (destructive, DENTRO de un shell): el helper referencia la superficie de peligro compartida
+  // (--danger), NUNCA el token de un shell puntual. Regresión del gap 13-05 #1: con --crm-danger
+  // directo el botón se quedaba sin fondo fuera de .crm-shell (o sea, en el dashboard).
+  it('destructive dentro de un shell: la clase usa --danger (no el token de un shell puntual)', () => {
+    const dangerCls = confirmButtonClass(true, CRM_SHELL_CLASS)
     expect(dangerCls).toMatch(/var\(--danger\)/)
     expect(dangerCls).toMatch(/var\(--danger-foreground\)/)
+    // Invariante D-07: un componente compartido no nombra el token propio de ningún shell.
     expect(dangerCls).not.toMatch(/crm-danger/)
     expect(dangerCls).not.toMatch(/destructive/)
 
-    const normalCls = confirmButtonClass(false)
-    expect(normalCls).toBe('')
+    // No destructivo dentro del shell ⇒ el primario del shell, que ya trae <Button>.
+    expect(confirmButtonClass(false, CRM_SHELL_CLASS)).toBe('')
+  })
+
+  // Test 6b (destructive FUERA de un shell = el panel del dueño, UAT 14-09 punto 3): el confirmar
+  // destructivo cae al primario del tema. El dueño arbitró que el rojo de peligro es el lenguaje del
+  // super-admin y que en su panel el botón no debe compartir color con el badge de riesgo. El CRM lo
+  // conserva (test 6): si esta distinción se pierde, uno de los dos shells regresiona.
+  it('destructive fuera de un shell: cae al primario del tema (panel del dueño)', () => {
+    expect(confirmButtonClass(true)).toBe('')
+    expect(confirmButtonClass(true, '')).toBe('')
+    expect(confirmButtonClass(true, '   ')).toBe('')
+    expect(confirmButtonClass(false)).toBe('')
   })
 
   // WR-06: el hover también sale del token. Cablearlo como un mix con negro asumía que la superficie
   // de peligro siempre es oscura y el texto claro; en dark es al revés y oscurecerla tiraba el
-  // contraste a 3.82:1. La dirección la sabe el theme, no el componente.
-  it('destructive: el hover referencia --danger-hover y NO calcula el color en la clase', () => {
-    const dangerCls = confirmButtonClass(true)
+  // contraste a 3.82:1. La dirección la sabe el theme, no el componente. Sigue valiendo para el caso
+  // del shell, que es el único que pinta la superficie de peligro.
+  it('destructive dentro de un shell: el hover referencia --danger-hover y NO calcula el color', () => {
+    const dangerCls = confirmButtonClass(true, CRM_SHELL_CLASS)
     expect(dangerCls).toMatch(/hover:bg-\[var\(--danger-hover\)\]/)
     expect(dangerCls).not.toMatch(/color-mix/)
     expect(dangerCls).not.toMatch(/black_10%/)

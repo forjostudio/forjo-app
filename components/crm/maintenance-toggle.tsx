@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog, confirmButtonClass } from '@/components/crm/confirm-dialog'
+import { useShellScope } from '@/components/ui/shell-scope'
 import { setMaintenance } from '@/app/(crm)/admin/_maintenance-actions'
 
 /** Toggle del modo mantenimiento global (kill switch). Prende/apaga la app para
@@ -14,6 +15,10 @@ export function MaintenanceToggle({ initial }: { initial: boolean }) {
   const [on, setOn] = React.useState(initial)
   const [open, setOpen] = React.useState(false)
   const next = !on // el estado al que se va a cambiar
+  // Este toggle vive SOLO en /admin (app/(crm)/admin/page.tsx), o sea dentro del shell del
+  // super-admin: pasarle el scope es lo que mantiene su rojo de peligro ahora que confirmButtonClass
+  // lo condiciona al shell activo (UAT 14-09 punto 3 — el primario del tema es solo para el panel).
+  const shellScope = useShellScope()
 
   // onConfirm: si lanza, el ConfirmDialog queda abierto y muestra el toast de error.
   async function onConfirm() {
@@ -45,7 +50,7 @@ export function MaintenanceToggle({ initial }: { initial: boolean }) {
       </div>
 
       <div className="mt-4">
-        <Button type="button" onClick={() => setOpen(true)} className={confirmButtonClass(next)}>
+        <Button type="button" onClick={() => setOpen(true)} className={confirmButtonClass(next, shellScope)}>
           {on ? 'Reactivar app' : 'Poner en mantenimiento'}
         </Button>
       </div>
