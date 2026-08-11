@@ -227,6 +227,13 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
  * está declarado tema por tema justamente para pasar AA (5.40 Forjo claro, 4.91 oscuro, 4.63 modern,
  * 5.36 spa, 5.73 cyber — los ratios están comentados en globals.css y themes.css).
  *
+ * POR QUÉ `shellScope` ES REQUERIDO Y NO OPCIONAL (T-14-41, hallazgo 2). Con los dos parámetros
+ * opcionales la firma era **fail-silent**: omitir el scope compilaba sin diagnóstico, y la omisión
+ * produce el estado *correcto* en el panel y el *incorrecto* en el CRM — o sea, el mismo olvido es
+ * inocuo en una superficie y una regresión en la otra, que es la condición exacta bajo la cual un
+ * defecto sobrevive un code review. Requerido, el compilador delata al call-site que no decide.
+ * Pasar `''` es una decisión explícita y legítima ("sé que acá no hay shell"); no pasarlo, no.
+ *
  * El hover TAMPOCO se calcula acá (WR-06). Estaba cableado como un mix con negro, que oscurece la
  * superficie mientras el texto queda fijo: sirve cuando el par es crema sobre rojo oscuro (claro),
  * pero en dark el rojo es claro y el par es ink, así que oscurecer bajaba el contraste a 3.82:1 —
@@ -235,7 +242,7 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
  * declara junto a su --danger-foreground. El outline no lo necesita: parte de transparente, así que
  * su hover ES la superficie `--danger` plena, no un oscurecimiento de ella.
  */
-export function confirmButtonClass(destructive?: boolean, shellScope?: string): string {
+export function confirmButtonClass(destructive: boolean | undefined, shellScope: string): string {
   if (!destructive) return ''
   // Dentro de un shell: byte-idéntico a lo que el dueño ya aprobó en los 10 modales del CRM.
   if (portalScopeClass(shellScope)) {

@@ -184,9 +184,9 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     // Invariante D-07: sigue sin nombrar el token de ningún shell puntual.
     expect(panelCls).not.toMatch(/crm-danger/)
     expect(panelCls).not.toMatch(/destructive/)
-    // Las tres formas de "no hay shell" dan el MISMO resultado (el default del contexto es '').
-    expect(confirmButtonClass(true, undefined)).toBe(panelCls)
+    // Las dos formas de "no hay shell" dan el MISMO resultado (el default del contexto es '').
     expect(confirmButtonClass(true, '   ')).toBe(panelCls)
+    expect(confirmButtonClass(undefined, '')).toBe('')
     // No destructivo ⇒ el primario del tema, como siempre (dentro y fuera del shell).
     expect(confirmButtonClass(false, '')).toBe('')
   })

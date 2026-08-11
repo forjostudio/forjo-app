@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog'
 import { RiskBadge } from '@/components/crm/risk-badge'
 import { computeConfirmState, buildSubmitGuard, confirmButtonClass } from '@/components/crm/confirm-dialog'
+import { useShellScope } from '@/components/ui/shell-scope'
 import { updatePlanPrice } from '@/app/(crm)/admin/_actions'
 
 export type PlanKey = 'basic' | 'studio' | 'pro'
@@ -58,6 +59,11 @@ export function PlanPriceCard({ planKey, name, priceArs, activeCount, features }
   const [typed, setTyped] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const loadingRef = React.useRef(false)
+  // Esta card vive SOLO en /admin/planes (app/(crm)/admin/planes), o sea dentro del shell del
+  // super-admin. Se lee el scope real en vez de omitirlo (T-14-41, hallazgo 2): el editar-precio de
+  // hoy NO es destructivo, pero el día que lo sea, cambiar el literal a `true` —la edición natural—
+  // tiene que producir el peligro del CRM, no un botón sin superficie de peligro y sin test rojo.
+  const shellScope = useShellScope()
 
   const isPro = planKey === 'pro'
 
@@ -208,7 +214,7 @@ export function PlanPriceCard({ planKey, name, priceArs, activeCount, features }
               onClick={handleConfirm}
               disabled={!canConfirm}
               aria-disabled={!canConfirm}
-              className={confirmButtonClass(false)}
+              className={confirmButtonClass(false, shellScope)}
             >
               {loading ? (
                 <>
