@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/admin-guard'
 import { logAudit } from '@/lib/audit'
 import { loadImpersonationData } from '@/lib/impersonation'
 import { PaletteScript } from '@/components/palette-script'
+import { ShellScopeProvider } from '@/components/ui/shell-scope'
 import { ImpersonationBanner } from '@/components/crm/impersonation-banner'
 import { ImpersonationView } from './impersonation-view'
 
@@ -58,8 +59,18 @@ export default async function VerPage({ params }: { params: Promise<{ id: string
   // LIGHT para neutralizar los neutrales dark heredados de `.dark` — el acento sale del data-palette del
   // negocio. Los offsets negativos (-mx/-my) sacan el contenido del padding del <main> del CRM para que
   // la vista del cliente sea full-bleed.
+  //
+  // EL ESCAPE TAMBIÉN VALE PARA LO PORTALEADO (WR-A5). El layout (crm) monta
+  // `<ShellScopeProvider scope={CRM_SHELL_CLASS}>` sobre TODO el route group, así que cualquier
+  // superficie portaleada de esta página (el Popup del Dialog monta en la raíz del documento) se
+  // declararía `dark crm-shell` encima de una vista deliberadamente light y con la paleta del negocio
+  // impersonado — el chrome del super-admin justo donde D-12 pide ver lo que ve el CLIENTE. Hoy es
+  // LATENTE (esta página no monta ningún Dialog/Drawer/Select), pero el escape del shell tiene que
+  // ser completo o no es un escape: se re-publica el scope VACÍO, que es lo mismo que el default del
+  // contexto. Sin diálogos acá no cambia un solo byte del render; el día que se agregue uno, hereda
+  // el tema del <html> (el del negocio, vía PaletteScript) y no el del CRM.
   return (
-    <>
+    <ShellScopeProvider scope="">
       <PaletteScript palette={business.palette} theme={business.theme} font={business.font} />
       <div className="impersonation-view -mx-4 -my-6 min-h-screen bg-background text-foreground lg:-mx-6">
         {/* Banner fijo "Estás viendo como X · solo lectura" + Salir (D-12). Es FEEDBACK, no la
@@ -70,6 +81,6 @@ export default async function VerPage({ params }: { params: Promise<{ id: string
           <ImpersonationView data={data} />
         </div>
       </div>
-    </>
+    </ShellScopeProvider>
   )
 }
