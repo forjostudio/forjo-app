@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
-status: executing
-stopped_at: 14-09 Task 1 completada (commit 2e11c40) — PAUSADO en la Task 2, checkpoint human-verify BLOQUEANTE (7 observaciones a transcribir)
-last_updated: "2026-08-10T20:37:16.442Z"
-last_activity: 2026-08-10 -- Phase 14 execution started
+status: phase-complete
+stopped_at: 14-09 COMPLETO (commit abb7ce8) — Phase 14 CERRADA (9/9 planes, 3 gaps cerrados, POLISH-04/05 Complete)
+last_updated: "2026-08-10T22:55:00.000Z"
+last_activity: 2026-08-10 -- Phase 14 cerrada tras la UAT humana de 14-09 (2 rondas)
 progress:
   total_phases: 14
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 71
-  completed_plans: 70
-  percent: 93
+  completed_plans: 71
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 14 (cierre-de-backlog) — EXECUTING
-Plan: 9 of 9 (14-01..14-08 ejecutados; 14-09 en curso)
-Status: BLOQUEADO en checkpoint humano — 14-09 Task 2 (`human-verify`, gate="blocking")
-Last activity: 2026-08-10 -- 14-09 Task 1 completada (radiogroup de preselección desestirado + auditoría de los 3 controles de alta de Equipo, commit 2e11c40). La Task 3 (REQUIREMENTS.md + ROADMAP.md) NO se ejecuta hasta que el dueño transcriba las 7 observaciones del checkpoint.
+Phase: 14 (cierre-de-backlog) — **COMPLETA**
+Plan: 9 of 9 (14-01..14-09 ejecutados)
+Status: fase cerrada — los 3 gaps de `14-VERIFICATION.md` cerrados con evidencia; POLISH-04/05 en `Complete`
+Last activity: 2026-08-10 -- 14-09 completo. El checkpoint humano quedó **aprobado en 2 rondas** con las 7 observaciones transcritas; 3 de ellas (puntos 3, 5 y 6) reportaron defectos reales que se corrigieron en el plan (`2e3a155` datos de contacto siempre visibles · `515ab6d` segmentado a ancho completo en mobile · `0f44da8` confirmar destructivo del panel al primario del tema) + ajuste final `min-h-11` (`566a7b3`). Trazabilidad cerrada en `abb7ce8`. Ver `14-09-SUMMARY.md`.
 
 ## Performance Metrics
 
@@ -84,6 +84,7 @@ Last activity: 2026-08-10 -- 14-09 Task 1 completada (radiogroup de preselecció
 | Phase 14 P06 | 38min | 2 tasks | 1 files |
 | Phase 14 P07 | sesión interactiva | 4 tasks (3 checkpoints humanos) | 0 files de código |
 | Phase 14 P08 | 60min | 3 tasks | 5 files |
+| Phase 14 P09 | ~70min efectivos (~5h de reloj, partido por el checkpoint humano de 2 rondas) | 3 tasks (1 checkpoint bloqueante) | 7 files |
 
 ## Accumulated Context
 
@@ -181,6 +182,15 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: 14-08: el scope del shell viaja al portal como CLASE (ShellScopeProvider + portalScopeClass), no reubicando el nodo con container ni moviendo .crm-shell a un ancestro — el popup queda donde estaba (focus trap/scroll lock/stacking intactos) y el default '' deja el className byte-identico fuera del CRM
 - [Phase 14]: 14-08: CRM_SHELL_CLASS vive en lib/ SIN 'use client' porque app/(crm)/layout.tsx es Server Component y necesita el VALOR de la constante; los exports de un modulo de cliente llegan al servidor como referencias
 - [Phase 14]: 14-08: el scope llega por CONTEXTO y no por prop, para que los 33 call-sites de <DialogContent> no se toquen; alcance acotado al Dialog (el popup del Select NO adhiere) porque es la unica superficie con defecto registrado
+- [Phase 14]: 14-09 (UAT punto 1): POLISH-05 CERRADO por el ojo del dueno — dentro de un modal del CRM el chip "Alto" se ve rojo y el "Medio" amarillo, distinguibles a simple vista (con captura). Es la unica evidencia admisible: ninguna asercion de codigo prueba que dos chips se vean de colores distintos
+- [Phase 14]: 14-09 (UAT punto 2): el fondo oscuro que los modales del CRM heredaron del scope en 14-08 queda ACEPTADO ("Creo que queda bien") — es un cambio visible pero intencional
+- [Phase 14]: 14-09 (UAT punto 3, decision del dueno): el rojo de peligro del confirmar destructivo se acota al CRM. confirmButtonClass(destructive, shellScope) pregunta "hay algun shell activo?" via portalScopeClass() —la MISMA funcion del popup portaleado de 14-08, asi que las dos superficies no pueden divergir—, no "estoy en el CRM?". Reparto real: 5 ConfirmDialog del panel pasan al primario del tema (abonos x2, settings x2, canchas x1) y 10 del CRM conservan --danger (ficha x7, pipeline x1, maintenance-toggle x1, plan-price-card x1). globals.css y themes.css NO se tocaron
+- [Phase 14]: 14-09 (UAT punto 3): la diferencia de color que el dueno vio entre abonos y servicios era de ESTADO, no de pantalla — /servicios recibe hideConfirm cuando el pre-check bloquea, y en ese estado computeFooterLayout() no dibuja el boton destructivo y promueve el secundario al primario del tema. Con un servicio no bloqueado mostraba el mismo rojo. Registrado en deferred-items.md para no re-diagnosticarlo
+- [Phase 14]: 14-09 (UAT punto 5, decision del dueno): en mobile el segmentado de preseleccion va a ANCHO COMPLETO pero prolijo (opciones apiladas y estiradas = segmentado deliberado), no ancho-de-contenido en todos los anchos; desde sm vuelve exactamente al desktop aprobado via sm:self-start
+- [Phase 14]: 14-09 (UAT punto 6, solucion propuesta por el dueno): Telefono/Email SIEMPRE visibles en el alta de profesional en vez de darle mas aire al enlace desplegable — se eliminan el enlace, el estado proExtraOpen y la prop showExtra. "Con los campos visible me gusta como queda el boton"
+- [Phase 14]: 14-09: las opciones apiladas del segmentado llevan min-h-11 sm:min-h-0 — apiladas quedaban en 32px y el minimo tactil es 44x44 (regla dura del CLAUDE.md global); se copia la forma del control gemelo de CapacityModeFields en vez de inventar otra
+- [Phase 14]: 14-09: 3 de las 7 observaciones humanas (puntos 3, 5 y 6) reportaron DEFECTOS que el pipeline verde no veia (tsc 0, build 0, 26/26, todos los conteos exactos). El checkpoint humano es el que encuentra lo que las aserciones no
+- [Phase 14]: 14-09: un criterio de aceptacion escrito sobre una string literal de clases no sobrevive a un cambio de estrategia responsive — 'className="self-start inline-flex' paso de 1 a 0 al volver el control mobile-first. NO se forzo la clase para satisfacer el grep: el invariante se verifica con 'sm:self-start' => 1
 
 ### Pending Todos
 
@@ -190,7 +200,9 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
-- **[Phase 14 — gap 1 CODEADO, falta el ojo humano]** 14-08 cerró el ítem 1 en código: el popup del `Dialog` hereda el scope del shell activo (`ShellScopeProvider` + `portalScopeClass`, `lib/shell-scope.ts` + `components/ui/shell-scope.tsx`), sin tocar `risk-badge.tsx`, `globals.css` ni `themes.css`. 12 tests con prueba de mutación; `tsc` 0 y `build` 0. **POLISH-05 NO se puede dar por cerrado desde acá**: la verificación de que "Alto" y "Medio" se distinguen en pantalla es el checkpoint humano bloqueante del **plan 14-09** (ver `14-08-SUMMARY.md` §"A mirar en el checkpoint humano"). Ojo: los modales del CRM ahora se ven con fondo oscuro (el popup lleva `dark`) — es intencional pero es un cambio visible. Los ítems 2 y 3 (toggle de `Equipo` + centrado de los "+ Agregar") siguen abiertos.
+- **[Phase 14 — LOS 3 GAPS CERRADOS (2026-08-10)]** El plan **14-09** cerró la fase: gap 1 (POLISH-05) verificado por el **ojo del dueño** con captura (chip "Alto" rojo + "Medio" amarillo dentro de un modal del CRM), gaps 2 y 3 (POLISH-04 en `Equipo`) cerrados por código + auditoría del inventario completo. El checkpoint humano se aprobó en **2 rondas**: la primera reportó 3 defectos reales (puntos 3, 5 y 6) que se corrigieron dentro del plan. `REQUIREMENTS.md`, `ROADMAP.md` y `14-VERIFICATION.md` dicen ahora lo mismo. Ver `14-09-SUMMARY.md`. **Los 3 blockers de abajo quedan como histórico.**
+- **[Phase 14 — infra de tests, VIGENTE]** La corrida completa de `npx vitest run` sigue sin ser un gate útil en esta máquina: **725 passed / 9 failed / 23 suites caídas**, todas por `Test timed out in 5000ms`, con **3 stacks de Supabase local levantados** y `127.0.0.1:54321/rest/v1/` tardando **2,16 s** en el root. Es entorno, no código. Los gates útiles hoy son `tsc --noEmit` (usar `./node_modules/.bin/tsc`, **nunca** `npx tsc`), `npm run build` y las suites unitarias que no van contra la DB.
+- **[Phase 14 — gap 1 CODEADO, falta el ojo humano — HISTÓRICO, ya cerrado por 14-09]** 14-08 cerró el ítem 1 en código: el popup del `Dialog` hereda el scope del shell activo (`ShellScopeProvider` + `portalScopeClass`, `lib/shell-scope.ts` + `components/ui/shell-scope.tsx`), sin tocar `risk-badge.tsx`, `globals.css` ni `themes.css`. 12 tests con prueba de mutación; `tsc` 0 y `build` 0. **POLISH-05 NO se puede dar por cerrado desde acá**: la verificación de que "Alto" y "Medio" se distinguen en pantalla es el checkpoint humano bloqueante del **plan 14-09** (ver `14-08-SUMMARY.md` §"A mirar en el checkpoint humano"). Ojo: los modales del CRM ahora se ven con fondo oscuro (el popup lleva `dark`) — es intencional pero es un cambio visible. Los ítems 2 y 3 (toggle de `Equipo` + centrado de los "+ Agregar") siguen abiertos.
 - **[Phase 14 — infraestructura de tests local DEGRADADA]** Dos corridas completas de `npx vitest run` durante 14-08 dieron conjuntos de fallas **disjuntos** (11 fallas en 4 suites · 2 fallas en otras 2 suites + 24 suites caídas enteras), **todas** por `Test timed out in 5000ms` / `Hook timed out in 10000ms`. El Supabase local responde 200 pero tarda ~1.26 s en el root de `/rest/v1/`. La corrida completa **no es un gate útil en esta máquina hoy**; el baseline documentado de "hasta 7 fallas en las 3 suites de abonos" quedó excedido por entorno, no por código. Detalle y evidencia causal en `14-08-SUMMARY.md` §"Suite completa".
 - **[Phase 14 — gap abierto original, histórico]** La UAT del 14-07 encontró **1 falla**: dentro de los modales del CRM los chips "Alto" y "Medio" se ven del mismo color (el `DialogPortal` monta fuera de `.crm-shell`), rompiendo el criterio de aceptación de D-05. Es **regresión de 14-01**. Se abre el **plan 14-08** dentro de esta misma fase con 3 ítems: (1) el color de los chips en los modales del CRM — prioridad 1 · (2) el toggle "Al reservar, ¿preseleccionar «Cualquiera»?" de `Equipo` a ancho completo (gap de cobertura de POLISH-04, `app/(dashboard)/equipo/` nunca estuvo en los 5 archivos del plan) · (3) centrado vertical de los botones "+ Agregar" de `Equipo`. Pista: el patrón ya existente para esta clase de bug es `confirmButtonClass()` en `components/crm/confirm-dialog.tsx` (gap 13-05 #1); el arreglo probablemente sea que el portal herede los tokens del shell, **no** tocar el RiskBadge. Ver `14-07-SUMMARY.md` §Gaps abiertos.
 - **[Phase 14 — deploy] RESUELTO (2026-08-06):** la migración **066 ya está APLICADA en producción**, con el rechazo del gate verificado en vivo. La base va adelante del código de 14-06 (todavía sin deployar), que es el orden correcto. **La próxima migración del repo es la 067.**
@@ -238,12 +250,14 @@ Heredadas del workstream (siguen vigentes):
 
 ## Session Continuity
 
-Last session: 2026-08-10T20:37:16.430Z
-Stopped at: Completado 14-08-PLAN.md (fix del scope portaleado; queda el checkpoint humano 14-09)
+Last session: 2026-08-10T22:55:00.000Z
+Stopped at: Completado 14-09-PLAN.md — **Phase 14 CERRADA** (9/9 planes, 3 gaps cerrados, POLISH-04/05 en Complete)
 Resume file: None
 
 ## Operator Next Steps
 
-- **Phase 14 NO está cerrada.** Los 7 planes están ejecutados, pero la UAT del 14-07 dejó **1 regresión** (chips "Alto"/"Medio" indistinguibles dentro de los modales del CRM) + 2 gaps de cobertura de POLISH-04 en `Equipo`. Próximo: planificar y ejecutar el **plan 14-08** dentro de esta misma fase (`/gsd:plan-phase 14 --ws motor-reservas` o el flujo de cierre de gaps). Detalle completo en `14-07-SUMMARY.md` §Gaps abiertos.
+- **Phase 14 CERRADA (2026-08-10).** Los 9 planes ejecutados, los 3 gaps de `14-VERIFICATION.md` cerrados con evidencia y POLISH-04/05 en `Complete`. Próximo: cierre del milestone **v0.26** (`/gsd:verify-work` o `/gsd:complete-milestone --ws motor-reservas`).
+- **Deploy pendiente — 3 cambios visibles al shippear:** (a) el botón Eliminar de 14-06, (b) el scope portaleado de 14-08 → **los modales del CRM se ven con fondo oscuro** (aprobado por el dueño), (c) 14-09 → **en el panel el confirmar destructivo pasó del rojo al primario del tema** (5 diálogos: abonos ×2, settings ×2, canchas ×1) mientras el CRM conserva el rojo (10 diálogos). Los tres están aprobados a ojo, pero conviene anticiparlos.
+- **Backlog abierto de la UAT de 14-09:** el día de la agenda no tiene afordancia táctil en mobile (necesita **diseño**, el dueño pidió una propuesta). Ver `deferred-items.md` §14-09.
 - **Migraciones:** la **066 ya está en producción** (2026-08-06). La próxima del repo es la **067**. Recordá: apply **A MANO** en el SQL Editor + `NOTIFY pgrst, 'reload schema'`, nunca `db push`; y que **prod no tiene `supabase_migrations.schema_migrations`**, así que el pre-check de "última aplicada" se lee de este STATE, no de la base.
 - **Deploy:** el código de 14-06 (botón Eliminar) todavía no está en prod. La base ya tiene el gate, así que el orden está bien; se puede deployar cuando se quiera.
