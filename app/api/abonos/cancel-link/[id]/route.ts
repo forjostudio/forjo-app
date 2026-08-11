@@ -79,14 +79,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // MISMO `if (!abono)` de abajo, con el mismo cuerpo, el mismo status y la misma forma de query. Un
   // 500 no depende de qué serie se pidió —no lo puede provocar el actor eligiendo un id— así que no
   // discrimina entre esos tres casos ni por respuesta ni por timing.
-  const { data: business, error: bizErr } = await supabase
+  //
+  // POR QUÉ NO HAY `maybeSingle()` ACÁ (WR-B2). `maybeSingle()` devuelve `{ data: null, error }` cuando
+  // la query matchea MÁS DE UNA fila, y no hay ningún UNIQUE sobre `businesses.owner_id` en el esquema:
+  // un dueño con dos negocios quedaba con un 404 PERMANENTE en esta función y sin una sola línea que
+  // explicara por qué. Se pide explícitamente el orden de alta y un `limit(2)`: el `[0]` es
+  // determinístico (misma fila en cada request, nunca "a veces uno y a veces el otro") y la segunda
+  // fila existe sólo para poder DETECTAR el caso ambiguo y dejarlo en los logs.
+  const { data: businesses, error: bizErr } = await supabase
     .from('businesses')
     .select('id')
     .eq('owner_id', user.id)
-    .maybeSingle()
+    .order('created_at', { ascending: true })
+    .limit(2)
   if (bizErr) {
+    console.error('[abonos/cancel-link] business lookup:', bizErr.message)
     return Response.json({ ok: false, error: 'server_error' }, { status: 500, headers: NO_STORE })
   }
+  if ((businesses?.length ?? 0) > 1) {
+    // No se rechaza la request: el dueño sigue operando sobre su negocio más viejo, que es el que ve el
+    // resto del panel. Pero el estado es anómalo y tiene que ser visible para quien mire los logs.
+    console.error('[abonos/cancel-link] owner con más de un negocio:', user.id)
+  }
+  const business = businesses?.[0]
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
 
   // (4) Doble scoping: la serie se lee acotada por su id Y por el negocio del actor. Una columna sola.
@@ -105,6 +120,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // sistema: es una serie que no puede existir, así que sigue siendo un 404 y comparte cuerpo con los
   // otros dos rechazos. Cualquier OTRO error sí es infraestructura y sale por 500.
   if (abonoErr && abonoErr.code !== '22P02') {
+    console.error('[abonos/cancel-link] abono lookup:', abonoErr.message)
     return Response.json({ ok: false, error: 'server_error' }, { status: 500, headers: NO_STORE })
   }
   if (!abono) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
@@ -116,6 +132,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const token = typeof abono.cancel_token === 'string' ? abono.cancel_token : ''
   if (!token) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
   const appBase = (process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio').replace(/\/+$/, '')
+
+  // (6) RASTRO DE LA EMISIÓN (WR-B2). Éste es el único endpoint del panel que reparte una credencial de
+  // larga vida, y hasta acá no dejaba ni una línea: ante un incidente ("¿este link salió del panel o de
+  // la fuga vieja del payload RSC?") no había forma de responder. Se registra QUIÉN, PARA QUÉ SERIE y
+  // EN QUÉ NEGOCIO — nunca el token ni la URL, que es exactamente lo que no puede quedar escrito en
+  // ningún lado. Va por `console.error` y no por `console.log` porque es el único canal de logging que
+  // el repo usa en `app/api` (convención de AGENTS.md §Logging), con el prefijo `[modulo/accion]`.
+  console.error('[abonos/cancel-link] link de baja emitido:', {
+    abonoId: id.trim(),
+    businessId: business.id,
+    userId: user.id,
+  })
 
   return Response.json({ ok: true, url: `${appBase}/abono/cancelar/${token}` }, { headers: NO_STORE })
 }
