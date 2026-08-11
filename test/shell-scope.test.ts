@@ -69,18 +69,29 @@ describe('cableado del scope portaleado (regresión del gap 1 de 14-VERIFICATION
     expect(dialog).toMatch(/const\s+\w+\s*=\s*useShellScope\(\)/)
   })
 
-  it('el scope se aplica sobre el POPUP, no sobre el backdrop', () => {
+  it('el scope se aplica sobre el POPUP mismo, no sobre el backdrop ni sobre un descendiente', () => {
     // Previene la regresión exacta: el `className` del Popup portaleado vuelve a quedar sin el
     // scope y, dentro de los ConfirmDialog del CRM, "Alto" y "Medio" se ven del mismo color otra
     // vez. También fija la superficie correcta: el backdrop no consume ninguna custom property del
     // shell, así que aplicárselo sería peso muerto.
+    //
+    // La aserción se acota al BLOQUE del Popup (WR-A4). Antes era
+    // `dialog.lastIndexOf('portalScopeClass(') > popupAt`, que se conforma con "en algún lugar
+    // después del marcador": mover el scope al DialogHeader, al DialogFooter o al DialogTitle
+    // —regresiones plausibles, porque "se sigue viendo distinto"— dejaba la suite VERDE mientras el
+    // popup perdía los tokens. Y `lastIndexOf` sobre el archivo entero se satisface con un COMENTARIO
+    // que mencione el helper. Acá el scope tiene que estar dentro del `cn()` del propio Popup.
     const overlayAt = dialog.indexOf('data-slot="dialog-overlay"')
     const popupAt = dialog.indexOf('data-slot="dialog-content"')
     expect(overlayAt).toBeGreaterThan(-1)
     expect(popupAt).toBeGreaterThan(overlayAt)
 
-    const applied = dialog.lastIndexOf('portalScopeClass(')
-    expect(applied).toBeGreaterThan(popupAt) // está dentro del bloque del Popup
+    // El bloque del Popup: desde su data-slot hasta el spread de props que lo cierra.
+    const propsAt = dialog.indexOf('{...props}', popupAt)
+    expect(propsAt).toBeGreaterThan(popupAt)
+    const popupBlock = dialog.slice(popupAt, propsAt)
+    expect(popupBlock).toMatch(/className=\{cn\(\s*portalScopeClass\(\w+\)/)
+
     // El bloque del backdrop (entre su data-slot y el del popup) queda limpio.
     expect(dialog.slice(overlayAt, popupAt)).not.toContain('portalScopeClass(')
   })
