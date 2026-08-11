@@ -216,6 +216,75 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
   })
 })
 
+// ── Cableado (lectura de fuentes) — T-14-41, hallazgo 3 ──────────────────────────────────────────
+// El contrato de arriba puede estar VERDE con el helper desconectado: el audit lo midió
+// (`grep -c readFileSync components/crm/confirm-dialog.test.tsx` → 0) y comprobó que borrar
+// `shellScope` de confirm-dialog.tsx:383 dejaba los 26 tests en verde mientras los 10 ConfirmDialog
+// del CRM perdían su superficie de peligro. Con la firma requerida (sub-fix 2) el borrado ahora
+// además rompe `tsc`, pero eso solo cubre el ARGUMENTO FALTANTE: pasar `''` a mano, o cablear el
+// helper en un botón que no es el de confirmar, sigue compilando. Estas aserciones cubren eso.
+//
+// El entorno de Vitest de este repo es `node` (vitest.config.mts): sin DOM, sin Testing Library y
+// con el milestone prohibiendo paquetes nuevos, el cableado no se puede probar renderizando. Se
+// afirma leyendo el código fuente — MISMO mecanismo y mismo molde que el describe de cableado de
+// test/shell-scope.test.ts:61-118, que es el precedente del repo para este mismo tipo de defecto.
+// Va en ESTE archivo y no en shell-scope.test.ts porque el sujeto es confirmButtonClass y sus
+// call-sites (shell-scope.test.ts cubre el otro mecanismo: el scope del popup portaleado).
+const read = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
+
+describe('cableado de confirmButtonClass (regresión de T-14-41, §6.2 de 14-SECURITY.md)', () => {
+  const dialogSrc = read(join('components', 'crm', 'confirm-dialog.tsx'))
+  const toggleSrc = read(join('components', 'crm', 'maintenance-toggle.tsx'))
+  const priceCardSrc = read(join('components', 'crm', 'plan-price-card.tsx'))
+
+  it('ConfirmDialog lee el scope del shell activo y se lo pasa al className del confirmar', () => {
+    // Previene la regresión EXACTA que midió el audit: que alguien borre `shellScope` del call-site
+    // de :383 y los 10 ConfirmDialog del CRM se queden sin --danger sin un solo test rojo.
+    expect(dialogSrc).toMatch(/const\s+shellScope\s*=\s*useShellScope\(\)/)
+    expect(dialogSrc).toMatch(/className=\{confirmButtonClass\([^)]*\bshellScope\b[^)]*\)\}/)
+  })
+
+  it('MaintenanceToggle lee el scope del shell activo y se lo pasa al className de su botón', () => {
+    // Previene lo mismo en el otro call-site vivo: este toggle vive dentro del shell del super-admin
+    // y su botón es el kill switch de toda la app — perder la superficie de peligro ahí importa.
+    expect(toggleSrc).toMatch(/const\s+shellScope\s*=\s*useShellScope\(\)/)
+    expect(toggleSrc).toMatch(/className=\{confirmButtonClass\([^)]*\bshellScope\b[^)]*\)\}/)
+  })
+
+  it('PlanPriceCard también pasa el scope (era el call-site latente del audit)', () => {
+    // Previene volver a `confirmButtonClass(false)` sin scope: hoy es inocuo porque no es destructivo,
+    // pero deja armado el defecto para el día que esa acción cambie de signo.
+    expect(priceCardSrc).toMatch(/const\s+shellScope\s*=\s*useShellScope\(\)/)
+    expect(priceCardSrc).toMatch(/className=\{confirmButtonClass\([^)]*\bshellScope\b[^)]*\)\}/)
+  })
+
+  it('la firma declara shellScope REQUERIDO (no `shellScope?`)', () => {
+    // Previene volver al fail-silent: con el parámetro opcional, un call-site nuevo que lo olvide
+    // compila sin diagnóstico y degrada distinto según el shell (correcto en el panel, roto en el CRM).
+    expect(dialogSrc).toMatch(/export function confirmButtonClass\([^)]*shellScope:\s*string\s*\)/)
+    expect(dialogSrc).not.toMatch(/export function confirmButtonClass\([^)]*shellScope\?/)
+  })
+
+  it('la rama SIN shell del helper no nombra --primary ni ninguna clase de paleta', () => {
+    // ESTA es la aserción anti-regresión directa de T-14-41: se lee el cuerpo del helper (no solo su
+    // salida) para que reintroducir un `bg-primary` en la rama del panel no pueda pasar el review.
+    // Con --primary, en un negocio con paleta green/emerald/sage un borrado irreversible se pintaba
+    // VERDE — el color semántico de éxito sobre la acción más destructiva del panel.
+    const bodyStart = dialogSrc.indexOf('export function confirmButtonClass')
+    expect(bodyStart).toBeGreaterThan(-1)
+    // Se sacan los comentarios: la aserción es sobre las clases que el helper DEVUELVE, no sobre la
+    // prosa que las explica (el propio comentario nombra `bg-primary` para decir por qué NO se usa).
+    const body = dialogSrc
+      .slice(bodyStart, dialogSrc.indexOf('\n}', bodyStart))
+      .replace(/\/\/.*$/gm, '')
+    expect(body).not.toMatch(/bg-primary/)
+    expect(body).not.toMatch(/text-primary/)
+    expect(body).not.toMatch(/\bbg-(red|green|blue|yellow|emerald|sage|cyan|indigo|amber)\b/)
+    // Y el neutralizador del bg-primary del variant default tiene que seguir ahí.
+    expect(body).toMatch(/bg-transparent/)
+  })
+})
+
 // ── Contraste WCAG del outline del panel (T-14-41) ───────────────────────────────────────────────
 // El outline no puede quedar "documentado en un comentario": los dos pares que decide (el texto en
 // reposo y el par relleno del hover) se MIDEN acá con el helper que ya existe en lib/contrast.ts, y
