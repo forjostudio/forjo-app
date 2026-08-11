@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { CRM_SHELL_CLASS, portalScopeClass } from '@/lib/shell-scope'
 
 // ── Phase 14 (POLISH-05, gap 1 de 14-VERIFICATION.md) — contrato del scope portaleado ────────────
@@ -58,6 +58,29 @@ describe('portalScopeClass — sin scope no cambia un solo byte', () => {
 // afirma leyendo el código fuente, mismo mecanismo que test/auth-email-templates.test.ts.
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
 
+/**
+ * Marca de MONTAJE del proveedor, armada por concatenación para que ESTE archivo no se matchee a sí
+ * mismo en el barrido de unicidad de más abajo. Por eso las aserciones que la usan construyen su
+ * regex con `new RegExp(...)` en vez de escribirla literal.
+ */
+const MARCA = '<' + 'ShellScopeProvider'
+
+/**
+ * Todos los .ts/.tsx del repo (excluidas dependencias, artefactos de build y directorios ocultos).
+ * Es el `grep -rln` del audit llevado a test: sin él, "se monta en un solo lugar" es una afirmación
+ * sobre el archivo que a alguien se le ocurrió mirar, no un invariante.
+ */
+function fuentesDelRepo(dir = process.cwd(), acc: string[] = []): string[] {
+  const IGNORAR = new Set(['node_modules', 'coverage', 'supabase', 'public'])
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith('.') || IGNORAR.has(e.name)) continue
+    const full = join(dir, e.name)
+    if (e.isDirectory()) fuentesDelRepo(full, acc)
+    else if (/\.tsx?$/.test(e.name)) acc.push(full)
+  }
+  return acc
+}
+
 describe('cableado del scope portaleado (regresión del gap 1 de 14-VERIFICATION.md)', () => {
   const dialog = read(join('components', 'ui', 'dialog.tsx'))
   const crmLayout = read(join('app', '(crm)', 'layout.tsx'))
@@ -100,7 +123,7 @@ describe('cableado del scope portaleado (regresión del gap 1 de 14-VERIFICATION
     // Previene: que el proveedor se caiga del layout y el portal se quede sin scope aunque el
     // Dialog siga consumiendo el hook (el fix necesita las dos mitades).
     expect(crmLayout).toMatch(/import\s*\{[^}]*CRM_SHELL_CLASS[^}]*\}\s*from\s*['"]@\/lib\/shell-scope['"]/)
-    expect(crmLayout).toMatch(/<ShellScopeProvider\s+scope=\{CRM_SHELL_CLASS\}/)
+    expect(crmLayout).toMatch(new RegExp(`${MARCA}\\s+scope=\\{CRM_SHELL_CLASS\\}`))
   })
 
   it('el wrapper del shell del CRM usa la constante y NO reescribe las clases como literal', () => {
@@ -125,5 +148,35 @@ describe('cableado del scope portaleado (regresión del gap 1 de 14-VERIFICATION
     // su panel se vería con el chrome del CRM y podría creer que está en otra superficie.
     expect(dashboardLayout).not.toContain('ShellScopeProvider')
     expect(dashboardLayout).not.toContain('crm-shell')
+  })
+
+  it('anti-fuga EXHAUSTIVA: el proveedor se monta SOLO donde está registrado (WR-A3)', () => {
+    // El test de arriba mira UN archivo, pero el invariante es "un solo lugar de montaje". Montarlo
+    // en app/[slug]/layout.tsx, en app/layout.tsx, en un componente compartido de components/dashboard
+    // o en cualquier *-client.tsx pasaba sin un solo test rojo — y con eso alcanza para que TODOS los
+    // diálogos de esa superficie tomen el chrome del super-admin (T-14-32 exacto). Acá se afirma la
+    // UNICIDAD recorriendo el repo, que es el criterio (`grep -rln`) que el audit usó a mano.
+    //
+    // Los dos montajes legítimos, y por qué son dos:
+    //   - app/(crm)/layout.tsx                      → PUBLICA el shell del super-admin.
+    //   - app/(crm)/admin/negocios/[id]/ver/page.tsx → lo APAGA (scope vacío) porque esa sub-página
+    //     escapa del shell a propósito (D-12): lo portaleado tiene que escapar con ella (WR-A5).
+    // Cualquier tercero es una fuga hasta que se demuestre lo contrario.
+    const MONTAJES_ESPERADOS = [
+      'app/(crm)/admin/negocios/[id]/ver/page.tsx',
+      'app/(crm)/layout.tsx',
+    ]
+    const montajes = fuentesDelRepo()
+      .filter((f) => readFileSync(f, 'utf8').includes(MARCA))
+      .map((f) => relative(process.cwd(), f).replace(/\\/g, '/'))
+      .sort()
+    expect(montajes).toEqual(MONTAJES_ESPERADOS)
+
+    // Y el único que publica un scope NO vacío es el layout del CRM: el de la impersonación tiene que
+    // seguir apagándolo, no heredarlo.
+    // La regex también se arma con MARCA, por lo mismo: escribirla literal haría que este archivo
+    // apareciera en la lista de montajes de arriba.
+    const ver = read(join('app', '(crm)', 'admin', 'negocios', '[id]', 'ver', 'page.tsx'))
+    expect(ver).toMatch(new RegExp(`${MARCA}\\s+scope=""\\s*>`))
   })
 })
