@@ -56,7 +56,7 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 
 - [x] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock de negocio-día + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking — 4/4 planes · code-review 2 rondas, 5 blockers cerrados (migr. 063 + 064) · SECURED 18/18 (`threats_open: 0`) · UAT 5/5 · migr. 062/063/064 en prod (completed 2026-07-30)
 - [x] **Phase 13: Borrado de servicio preservando historial** - Borrar un servicio con solo turnos pasados; modal que bloquea si hay futuros y ofrece desactivar; los turnos pasados sobreviven en el historial (Finanzas / ficha del cliente) vía desacople del FK (snapshot de nombre/precio en el turno) (completed 2026-08-03)
-- [ ] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa")
+- [x] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa") (completed 2026-08-11)
 
 ## Phase Details
 
@@ -589,4 +589,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 11. Cierre de backlog | 4/4 | Complete    | 2026-07-27 |
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
-| 14. Cierre de backlog | 8/9 | In Progress|  |
+| 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
