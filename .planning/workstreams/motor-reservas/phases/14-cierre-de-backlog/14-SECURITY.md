@@ -450,8 +450,16 @@ queda en **4.45:1**. Se shipeó el label en `--foreground` y la señal de peligr
 | Estado | Par | Claro | Oscuro | Veredicto |
 |---|---|---|---|---|
 | Reposo — texto | `--foreground` / `--popover` | 15.16:1 | 12.14:1 | AA |
-| Reposo — borde (no-texto, ≥3:1) | `--danger` / `--popover` | 5.40:1 | 4.45:1 | 1.4.11 |
+| Reposo — borde (no-texto, ≥3:1) | `--danger` / `--popover` | 5.40:1 | ~~4.45:1~~ **4.22:1** | 1.4.11 |
 | Hover — relleno | `--danger-foreground` / `--danger` | 5.40:1 | 4.91:1 | AA |
+
+> **Corrección de medición (code review, WR-A2).** Los ratios de arriba se midieron contra `--popover`,
+> pero el botón se renderiza sobre el `DialogFooter`, que es `bg-muted/50` **compuesto** sobre
+> `--popover` (`dialog.tsx:118`). Contra la superficie real, el borde en Forjo oscuro da **4.22:1**, no
+> 4.45:1 — sigue por encima del 3:1 que le corresponde a un elemento de no-texto, así que el veredicto
+> no cambia. La guarda del test se extendió a **32 contextos** (4 themes × sus paletas × claro/oscuro,
+> con `color-mix(in oklab, …)` resuelto en el test porque los neutrales de `themes.css` dependen de
+> `--tint`) y ahora mide la superficie compuesta. Commit `6bc21d4`.
 
 Los tres ratios quedan asentados en test leyendo los hex reales de `app/globals.css`, vía el export
 aditivo `contrastRatioHex` de `lib/contrast.ts` (misma matemática que ya usaba `onAccentText`; no se
@@ -466,7 +474,7 @@ sujeto a confirmación visual del dueño sobre los 5 modales del panel.
 
 | # | Hallazgo | Disposición |
 |---|---|---|
-| R-1 | En `spa` claro el borde queda en **2.72:1**, debajo del 3:1 de WCAG 1.4.11 (`--destructive:#c0876b` es un terracota claro). No se puede corregir sin tocar `app/themes.css`, fuera de alcance. Atenuante: el label sí pasa AA, y el sistema ya shipea el borde del `variant outline` de "Cancelar" en ≈1.3:1. | accept — anotado |
+| R-1 | En `spa` claro el borde queda en ~~2.72:1~~ **2.47–2.48:1** (según la paleta), debajo del 3:1 de WCAG 1.4.11 (`--destructive:#c0876b` es un terracota claro). **Número corregido por el code review (WR-A2):** el 2.72 salía de medir contra `--popover` puro; contra la superficie real del `DialogFooter` es 2.47–2.48:1. No se puede corregir sin tocar `app/themes.css`, fuera de alcance. Atenuante: el label sí pasa AA, y el sistema ya shipea el borde del `variant outline` de "Cancelar" en ≈1.3:1. Desde el commit `6bc21d4` el residual está **afirmado por igualdad** en test: un residual nuevo pone la suite roja, y arreglar `spa` también — así el número no puede volver a quedar desactualizado en silencio. | accept — anotado |
 | R-2 | **Deuda pre-existente, ajena a este fix:** el par relleno del CRM `--crm-danger-foreground #fbf3e3` sobre `--crm-danger #e85c3f` da **3.15:1**, debajo de AA. Afecta a los 10 modales del CRM **y al chip "Alto" dentro del shell**. Requiere tocar `app/globals.css`. | escalado — candidato a todo propio |
 | R-3 | La remediación **no tuvo UAT visual**. Los 5 modales afectados: baja y borrado de serie (`abonos-client.tsx:644,668`), borrado de servicio y de espacio (`settings-client.tsx:2484,2525`), borrado de cancha (`canchas-manager.tsx:390`). | pendiente de confirmación del dueño |
 

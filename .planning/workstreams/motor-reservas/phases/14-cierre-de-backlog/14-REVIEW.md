@@ -3,7 +3,11 @@ phase: 14-cierre-de-backlog
 workstream: motor-reservas
 reviewed: 2026-08-11T00:00:00Z
 depth: standard
-status: issues_found
+status: fixed
+fixed: 2026-08-11T00:00:00Z
+fix_commits: f077ed2..11e72e9
+findings_fixed: 15
+findings_deferred: 12
 files_reviewed: 25
 files_excluded:
   - supabase/schema.sql  # artefacto regenerado, no código escrito a mano
@@ -154,4 +158,63 @@ No todo el review es hallazgo. Estas afirmaciones se comprobaron contra el códi
 
 ---
 
-*Phase: 14-cierre-de-backlog · Workstream: motor-reservas · Review: 2026-08-11 · Detalle: `14-REVIEW-A.md`, `14-REVIEW-B.md`*
+## Ronda de fixes — 2026-08-11 (`--fix`, alcance críticos + warnings)
+
+14 commits (`f077ed2`..`11e72e9`), 10 archivos. Dos fixers en paralelo sobre archivos disjuntos.
+**Gates verificados de forma independiente sobre el árbol combinado:** `./node_modules/.bin/tsc --noEmit`
+exit **0** · `npm run build` exit **0** · **62/62** en las 4 suites tocadas. Ningún archivo prohibido en
+el diff (`globals.css`, `themes.css`, `risk-badge.tsx`, `066_*.sql`, `package*.json`).
+
+| ID | Estado | Commit | Nota |
+|---|---|---|---|
+| CR-01 | **fixed** | `ef596d3` | La rama outline pisa el foco. Prueba de mutación con `twMerge` real: sin el fix, `focus-visible:border-ring` sobrevivía al merge. |
+| CR-02 | **fixed** | `f077ed2` | `no-store` en las **6** respuestas del handler, incluidos el 401 y los cuatro 404 — si no, la cabecera sería un oráculo. |
+| WR-A1 + WR-A2 | **fixed** | `6bc21d4` | Cobertura extendida a 32 contextos y a la superficie real (`bg-muted/50` compuesto sobre `--popover`). Corrige dos números de `14-SECURITY.md` §7. |
+| WR-A3 | **fixed** | `481aec0` | La anti-fuga afirma **unicidad de montaje** en todo el repo, no ausencia en un archivo. |
+| WR-A4 | **fixed** | `c4d39d7` | La aserción ata el scope al Popup. Mutación verificada: mover el scope al `DialogTitle` ahora pone la suite roja. |
+| WR-A5 | **fixed** | `160af57` | `<ShellScopeProvider scope="">` en la vista de impersonación. Se eligió el fix sobre el test que solo avisa después. |
+| WR-A6 | **fixed** | `02905b1` | El guard devuelve `boolean`; el cierre pasa por `handleOpenChange`. |
+| WR-A7 | **fixed** | `06ac972` | `callArgs()` balancea paréntesis. Limitación documentada: un `)` dentro de un string literal descuadraría el conteo (ningún call-site pasa strings). |
+| WR-B1 | **fixed** | `c348d8a` | `500 server_error` para fallo de infra; `22P02` sigue siendo 404 a propósito. |
+| WR-B2 | **fixed** | `25b99a9`, `11e72e9` | Logging de la emisión **sin token ni URL**. `maybeSingle()` → `order + limit(2)`; desempate por `id` porque `created_at` es nullable. |
+| WR-B3 | **fixed (migración escrita, NO aplicada a prod)** | `4004be9` | Ver abajo. |
+| WR-B4 | **fixed** | `42c29c9` | Fail-closed espejando `d6c8ef8`: sentinela `'error'`, no un `0`. |
+| WR-B5 | **fixed** | `af46856` | La credencial sale del toast. |
+
+### El enfoque propuesto por el review para WR-B3 era incorrecto
+
+El review proponía un trigger `BEFORE UPDATE` que rechazara `active → cancelled` con turnos futuros
+vivos. **Habría roto todas las bajas legítimas en producción:** el motor (`lib/abono-cancel.ts`) escribe
+el estado **primero** (`:210-216` — ahí vive el gate atómico anti-doble-mail de D-05/T-07-03) y recién
+después cancela los turnos en masa (`:277-284`). El instante que el trigger habría bloqueado es
+exactamente el de una baja normal.
+
+La 067 pone la regla del lado del **DELETE** y la hace mirar *qué le cuelga* a la serie, no *cómo llegó*
+a su estado: si tiene turnos con `abono_id = OLD.id`, del tenant, `date >= hoy AR` y
+`status IS NULL OR status NOT IN ('cancelled','completed')` ⇒ `RAISE 'abono_has_future_turns'`
+(`P0001`). Independiente del camino, así que el bypass no se rearma con `PATCH status='completed'`.
+La rama `status IS NULL` es obligatoria: sin ella, `NOT IN` sobre NULL abre el gate (la trampa que ya
+pagó la 065).
+
+**Consumidor del bypass dentro del repo:** `purgeAbonos` (`test/helpers/booking-fixtures.ts`) hacía
+`UPDATE status='cancelled'` + `DELETE` sin tocar los turnos. Corregido en el mismo commit; sin eso la
+067 habría roto los cleanups de las suites de abonos.
+
+**Cambio de comportamiento aprobado por el dueño (2026-08-11):** D-17 decía que una serie `completed`
+se borra aunque tenga turnos futuros vivos. Con la 067 ese borrado se **rechaza** hasta que no queden.
+No deja sin salida — `completed → cancelled` está permitido (D-21), esa baja cancela los turnos, y
+después la serie se borra. El dueño eligió esto sobre acotar la regla a `cancelled`, que habría dejado
+el mismo agujero con otra palabra.
+
+### Abierto a propósito
+
+| Ítem | Motivo |
+|---|---|
+| **067 sin aplicar a producción** ni espejada en `supabase/schema.sql` | Las migraciones de este repo se aplican a mano y en orden. Aplicada solo al Postgres **local** (`docker exec … psql`, sin `db reset`). Pasos en la respuesta de la ronda. |
+| **UAT visual del estado de foco** (R-3 de `14-SECURITY.md` §7) | CR-01 cambia el foco de los 5 modales destructivos del panel; el halo pasa de `--ring`/50 a `--danger`/40. Nadie lo miró en un navegador. |
+| WR-05, WR-07, WR-08 y IN-01..IN-07 | Fuera del alcance de `--fix` sin `--all` (críticos + warnings del índice). WR-05 es un one-liner en un archivo ya tocado: `hideConfirm={delPending === null \|\| delPending === 'error'}`. |
+| Flakiness de `abono-generation` bajo ejecución paralela | Pre-existente y ajena: esa suite no importa `purgeAbonos` ni borra abonos, y pasa 11/11 corrida sola. |
+
+---
+
+*Phase: 14-cierre-de-backlog · Workstream: motor-reservas · Review: 2026-08-11 · Fixes: 2026-08-11 · Detalle: `14-REVIEW-A.md`, `14-REVIEW-B.md`*
