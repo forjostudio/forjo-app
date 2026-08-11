@@ -144,6 +144,13 @@ export function computeConfirmState({
  * Construye el handler de submit con guard anti doble-submit. Si ya está `loading`, el segundo
  * disparo se ignora (no vuelve a llamar onConfirm). Resetea `loading` siempre (éxito o error),
  * y propaga el error para que el caller muestre el toast SIN cerrar el dialog.
+ *
+ * DEVUELVE SI CORRIÓ (WR-A6). Antes devolvía `void`, así que el caller no podía distinguir "la
+ * acción terminó bien" de "el guard la descartó porque ya había una en vuelo": los dos casos eran
+ * una promesa resuelta. `handleConfirm` trataba el descarte como éxito y cerraba el dialog con la
+ * PRIMERA escritura todavía corriendo — el caller desmonta el modal y un fallo posterior no tiene
+ * dónde mostrarse, que es justo lo que el guard existe para evitar. `true` = se llamó a onConfirm y
+ * resolvió; `false` = descartado. El error sigue propagándose (no se traga en un booleano).
  */
 export function buildSubmitGuard({
   getLoading,
@@ -153,12 +160,13 @@ export function buildSubmitGuard({
   getLoading: () => boolean
   setLoading: (v: boolean) => void
   onConfirm: (reason?: string) => Promise<void>
-}): (reason?: string) => Promise<void> {
+}): (reason?: string) => Promise<boolean> {
   return async (reason?: string) => {
-    if (getLoading()) return // anti doble-submit
+    if (getLoading()) return false // anti doble-submit: descartado, NO es éxito
     setLoading(true)
     try {
       await onConfirm(reason)
+      return true
     } finally {
       setLoading(false)
     }
@@ -334,11 +342,14 @@ export function ConfirmDialog({
   async function handleConfirm() {
     if (!state.canConfirm) return
     try {
-      await submit(requireReason ? reason : undefined)
-      // éxito: cerrar y limpiar.
-      setTyped('')
-      setReason('')
-      onOpenChange(false)
+      const ran = await submit(requireReason ? reason : undefined)
+      // El guard descartó el disparo (ya había una acción en vuelo): NO es éxito, así que el dialog
+      // se queda abierto esperando a la primera. Antes se caía derecho al cierre (WR-A6).
+      if (!ran) return
+      // éxito: cerrar y limpiar. Se cierra por handleOpenChange y NO por onOpenChange directo: es el
+      // único camino que respeta el guard de "no cerrable mientras corre" (la acción secundaria puede
+      // seguir en vuelo) y el que ya limpia typed/reason — saltearlo era la otra mitad de WR-A6.
+      handleOpenChange(false)
     } catch (err) {
       // error: dialog QUEDA abierto en estado ready; toast (UI-SPEC §"error").
       console.error('[confirm-dialog] acción falló:', err instanceof Error ? err.message : err)

@@ -114,9 +114,13 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     // dos clicks "simultáneos": el segundo entra mientras loading=true
     const first = guard('motivo')
     const second = guard('motivo')
-    await Promise.all([first, second])
+    const [ranFirst, ranSecond] = await Promise.all([first, second])
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expect(onConfirm).toHaveBeenCalledWith('motivo')
+    // WR-A6: el descarte tiene que ser DISTINGUIBLE del éxito. Con `void` los dos eran una promesa
+    // resuelta, así que handleConfirm cerraba el dialog con la primera escritura todavía en vuelo.
+    expect(ranFirst).toBe(true)
+    expect(ranSecond).toBe(false)
     // tras resolver, loading vuelve a false (dialog queda usable / cerrable por el caller)
     expect(loading).toBe(false)
   })
@@ -279,6 +283,20 @@ describe('cableado de confirmButtonClass (regresión de T-14-41, §6.2 de 14-SEC
     // compila sin diagnóstico y degrada distinto según el shell (correcto en el panel, roto en el CRM).
     expect(dialogSrc).toMatch(/export function confirmButtonClass\([^)]*shellScope:\s*string\s*\)/)
     expect(dialogSrc).not.toMatch(/export function confirmButtonClass\([^)]*shellScope\?/)
+  })
+
+  it('handleConfirm usa el retorno del guard y cierra por handleOpenChange (WR-A6)', () => {
+    // El componente no se puede renderizar (environment node), pero el defecto es de FLUJO y se lee:
+    // (1) si el retorno de submit() se descarta, el descarte del guard se trata como éxito;
+    // (2) si el cierre va por onOpenChange directo, se saltea el guard de "no cerrable mientras
+    //     corre" y el dialog se puede cerrar con una acción en vuelo.
+    const start = dialogSrc.indexOf('async function handleConfirm')
+    expect(start).toBeGreaterThan(-1)
+    const body = dialogSrc.slice(start, dialogSrc.indexOf('\n  }', start))
+    expect(body).toMatch(/(const|let)\s+\w+\s*=\s*await\s+submit\(/)
+    expect(body).toMatch(/if\s*\(\s*!\w+\s*\)\s*return/)
+    expect(body).toMatch(/handleOpenChange\(false\)/)
+    expect(body).not.toMatch(/\bonOpenChange\(/)
   })
 
   it('mergeado con la BASE de <Button>, el outline no conserva una sola clase de --ring (CR-01)', () => {
