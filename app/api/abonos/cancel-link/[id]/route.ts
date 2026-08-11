@@ -41,19 +41,30 @@ import type { NextRequest } from 'next/server'
 // exactamente lo que D-09 y D-22/D-23 prohíben. El corte es SOLO sobre 'cancelled': una serie
 // 'completed' (ya asignó sus N sesiones) puede tener turnos por delante y su cliente sigue necesitando
 // la vía de baja (T-14-11).
+//
+// NINGUNA RESPUESTA DE ESTA RUTA SE PUEDE ALMACENAR (CR-02). Next no cachea los Route Handlers GET del
+// lado del SERVIDOR, pero eso no dice nada sobre el store HTTP del navegador ni sobre una caché
+// compartida intermedia: una respuesta sin directivas queda a merced del default de la plataforma, y un
+// `public, max-age=0, must-revalidate` autoriza a una caché compartida a GUARDAR el cuerpo — que acá es
+// justamente la credencial permanente. Sacarla del payload RSC para dejarla en una respuesta HTTP
+// almacenable no cerraría nada. La cabecera va también en los 401/404: son baratos, y evitan que un
+// rechazo cacheado enmascare un cambio de estado posterior de la serie. Es el MISMO molde que el repo ya
+// usa en endpoints menos sensibles (`booking/availability`, `onboarding/slug-available`, `agent/context`,
+// `agent/inbox/state`): `{ headers: { 'Cache-Control': 'no-store' } }`, sin inventar uno nuevo.
+const NO_STORE = { 'Cache-Control': 'no-store' } as const
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // (1) Next 16: `params` es una Promise y hay que await-earla. Sin id (o vacío) se responde el MISMO
   // cuerpo que el caso ajeno — los tres caminos de abajo son indistinguibles desde afuera.
   const { id } = await params
-  if (!id || !id.trim()) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  if (!id || !id.trim()) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
 
   // (2) Sesión obligatoria. Cliente anon+RLS con las cookies del dueño.
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  if (!user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401, headers: NO_STORE })
 
   // (3) Tenant = ACTOR: el negocio sale de owner_id de la sesión. Sólo se pide el id.
   const { data: business } = await supabase
@@ -61,7 +72,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .select('id')
     .eq('owner_id', user.id)
     .maybeSingle()
-  if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
 
   // (4) Doble scoping: la serie se lee acotada por su id Y por el negocio del actor. Una columna sola.
   // El `.neq` es el gate de D-09: la serie dada de baja simplemente no matchea y cae en el mismo
@@ -75,15 +86,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .eq('business_id', business.id)
     .neq('status', 'cancelled')
     .maybeSingle()
-  if (!abono) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  if (!abono) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
 
   // (5) Se devuelve la URL YA ARMADA y no la credencial cruda, a propósito: el cliente no tiene por
   // qué reconstruir la ruta pública (misma base y mismo fallback que usa app/api/abonos/create al
   // armar el link del mail de alta), y así la credencial no queda suelta como valor independiente en
   // el estado del browser.
   const token = typeof abono.cancel_token === 'string' ? abono.cancel_token : ''
-  if (!token) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  if (!token) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
   const appBase = (process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio').replace(/\/+$/, '')
 
-  return Response.json({ ok: true, url: `${appBase}/abono/cancelar/${token}` })
+  return Response.json({ ok: true, url: `${appBase}/abono/cancelar/${token}` }, { headers: NO_STORE })
 }
