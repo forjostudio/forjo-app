@@ -19,6 +19,7 @@ import { join } from 'node:path'
 import { computeConfirmState, buildSubmitGuard, confirmButtonClass, computeFooterLayout } from './confirm-dialog'
 import { CRM_SHELL_CLASS } from '@/lib/shell-scope'
 import { contrastRatioHex } from '@/lib/contrast'
+import { cn } from '@/lib/utils'
 
 describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
   // Test 1 (simple, confirmWord undefined): botón habilitado de entrada.
@@ -204,6 +205,21 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
     expect(panelCls).toMatch(/var\(--danger\)/)
   })
 
+  // CR-01 (code review de la fase, cluster A). El test de arriba mira el REPOSO y por eso no vio el
+  // agujero: la base de buttonVariants trae `focus-visible:border-ring focus-visible:ring-ring/50`,
+  // que tailwind-merge NO elimina (mismo grupo, otro modificador) y que en CSS gana por
+  // especificidad (0,2,0 vs 0,1,0). Como en la rama outline el BORDE es la única señal de peligro en
+  // reposo, al tabular el botón volvía a pintarse con --ring = la paleta del negocio. La rama tiene
+  // que declarar su PROPIO estado de foco, no solo el de reposo.
+  it('outline del panel: el foco NO devuelve el borde a la paleta (--ring) — CR-01', () => {
+    const panelCls = confirmButtonClass(true, '')
+    expect(panelCls).toMatch(/focus-visible:border-\[var\(--danger\)\]/)
+    expect(panelCls).toMatch(/focus-visible:ring-\[var\(--danger\)\]/)
+    // Sigue sin nombrar el token de ningún shell ni la paleta (D-07 + T-14-41).
+    expect(panelCls).not.toMatch(/focus-visible:[a-z-]*-ring\b/)
+    expect(panelCls).not.toMatch(/crm-danger/)
+  })
+
   // WR-06: el hover también sale del token. Cablearlo como un mix con negro asumía que la superficie
   // de peligro siempre es oscura y el texto claro; en dark es al revés y oscurecerla tiraba el
   // contraste a 3.82:1. La dirección la sabe el theme, no el componente. Sigue valiendo para el caso
@@ -263,6 +279,31 @@ describe('cableado de confirmButtonClass (regresión de T-14-41, §6.2 de 14-SEC
     // compila sin diagnóstico y degrada distinto según el shell (correcto en el panel, roto en el CRM).
     expect(dialogSrc).toMatch(/export function confirmButtonClass\([^)]*shellScope:\s*string\s*\)/)
     expect(dialogSrc).not.toMatch(/export function confirmButtonClass\([^)]*shellScope\?/)
+  })
+
+  it('mergeado con la BASE de <Button>, el outline no conserva una sola clase de --ring (CR-01)', () => {
+    // Esta es la aserción de ESTADO FINAL, no de intención: reproduce lo que hace <Button>
+    // (`cn(buttonVariants({ variant, size, className }))`) y comprueba el string que termina en el
+    // DOM. La aserción del helper mira lo que el componente pide; esta mira lo que tailwind-merge
+    // efectivamente deja. Sin los `focus-visible:*` de la rama outline, `focus-visible:border-ring`
+    // y `focus-visible:ring-ring/50` SOBREVIVEN al merge (medido) y repintan el botón con la paleta
+    // del negocio al recibir foco de teclado.
+    const buttonSrc = read(join('components', 'ui', 'button.tsx'))
+    const base = buttonSrc.match(/cva\(\s*"([^"]*)"/)?.[1]
+    expect(base, 'no se pudo leer la base de buttonVariants en components/ui/button.tsx').toBeTruthy()
+    // El variant `default` es el que aplica: el confirmar no pasa `variant`, así que trae bg-primary.
+    const variantDefault = buttonSrc.match(/default:\s*"([^"]*bg-primary[^"]*)"/)?.[1]
+    expect(variantDefault, 'no se pudo leer el variant default de buttonVariants').toBeTruthy()
+
+    const merged = cn(base!, variantDefault!, confirmButtonClass(true, ''))
+    expect(merged).not.toMatch(/focus-visible:border-ring\b/)
+    expect(merged).not.toMatch(/focus-visible:ring-ring\b/)
+    expect(merged).toMatch(/focus-visible:border-\[var\(--danger\)\]/)
+    expect(merged).toMatch(/focus-visible:ring-\[var\(--danger\)\]/)
+    // El ANCHO del halo sí se conserva (otro grupo): sin ring-3 no habría halo que colorear.
+    expect(merged).toMatch(/focus-visible:ring-3\b/)
+    // Y el bg-primary del variant default sigue neutralizado (lo que ya cubría T-14-41).
+    expect(merged).not.toMatch(/\bbg-primary\b/)
   })
 
   it('la rama SIN shell del helper no nombra --primary ni ninguna clase de paleta', () => {

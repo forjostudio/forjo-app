@@ -250,7 +250,17 @@ export function confirmButtonClass(destructive: boolean | undefined, shellScope:
   }
   // Panel del dueño: outline de peligro. `bg-transparent` es lo que NEUTRALIZA el `bg-primary` del
   // variant default (tailwind-merge se queda con el último de cada grupo) — sin él volvería el verde.
-  return 'border-2 border-[var(--danger)] bg-transparent text-foreground hover:bg-[var(--danger)] hover:text-[var(--danger-foreground)]'
+  // Los dos `focus-visible:*` NO son decorativos: neutralizan el `focus-visible:border-ring` /
+  // `focus-visible:ring-ring/50` de la BASE de buttonVariants (components/ui/button.tsx). Sin ellos
+  // tailwind-merge los deja pasar (mismo grupo, otro modificador ⇒ no colisionan) y en CSS el
+  // selector con `:focus-visible` (0,2,0) le gana al plano (0,1,0): al tabular, el borde —que en
+  // esta rama es la ÚNICA señal de peligro en reposo— se repintaba con `--ring`, o sea la PALETA DEL
+  // NEGOCIO (green #2f8a5b, emerald #10b981…). Era T-14-41 otra vez, ahora en el estado de foco.
+  return (
+    'border-2 border-[var(--danger)] bg-transparent text-foreground ' +
+    'focus-visible:border-[var(--danger)] focus-visible:ring-[var(--danger)]/40 ' +
+    'hover:bg-[var(--danger)] hover:text-[var(--danger-foreground)]'
+  )
 }
 
 // Nota: la insignia de riesgo usa el RiskBadge compartido (@/components/crm/risk-badge) — antes
