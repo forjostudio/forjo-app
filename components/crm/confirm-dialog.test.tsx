@@ -252,37 +252,75 @@ describe('ConfirmDialog — gating de confirmación (FND-03)', () => {
 // call-sites (shell-scope.test.ts cubre el otro mecanismo: el scope del popup portaleado).
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
 
+/**
+ * Texto de los argumentos (o de los parámetros) de la primera `marker` de `src`, BALANCEANDO
+ * paréntesis. `marker` tiene que terminar en `(`.
+ *
+ * Por qué existe (WR-A7): antes esto se hacía con `[^)]*`, que corta en el primer `)` — o sea que un
+ * reformateo legítimo como `confirmButtonClass(Boolean(x), shellScope)` ponía la suite en ROJO sin
+ * que el invariante se hubiera violado, y una firma multilínea con trailing comma (la salida por
+ * defecto de Prettier 3) hacía lo mismo. El balanceo tolera el formato sin perder poder de detección:
+ * lo que se afirma sigue siendo que el argumento/parámetro está DENTRO de esa llamada puntual.
+ *
+ * Limitación conocida y aceptada: un `)` dentro de un string literal en los argumentos descuadraría
+ * el conteo. Ninguno de los tres call-sites pasa strings, y el molde es de test, no de producción.
+ */
+function callArgs(src: string, marker: string): string | null {
+  const at = src.indexOf(marker)
+  if (at === -1) return null
+  const open = at + marker.length - 1 // índice del '(' del marker
+  let depth = 0
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === '(') depth++
+    else if (src[i] === ')') {
+      depth--
+      if (depth === 0) return src.slice(open + 1, i)
+    }
+  }
+  return null
+}
+
 describe('cableado de confirmButtonClass (regresión de T-14-41, §6.2 de 14-SECURITY.md)', () => {
   const dialogSrc = read(join('components', 'crm', 'confirm-dialog.tsx'))
   const toggleSrc = read(join('components', 'crm', 'maintenance-toggle.tsx'))
   const priceCardSrc = read(join('components', 'crm', 'plan-price-card.tsx'))
 
+  /** El scope tiene que llegar al className del confirmar, sea cual sea el formato de la llamada. */
+  const scopeLlegaAlClassName = (src: string, archivo: string) => {
+    expect(src).toMatch(/const\s+shellScope\s*=\s*useShellScope\(\)/)
+    const args = callArgs(src, 'className={confirmButtonClass(')
+    expect(args, `${archivo}: el className del confirmar no llama a confirmButtonClass(...)`).not.toBeNull()
+    expect(args!).toMatch(/\bshellScope\b/)
+  }
+
   it('ConfirmDialog lee el scope del shell activo y se lo pasa al className del confirmar', () => {
     // Previene la regresión EXACTA que midió el audit: que alguien borre `shellScope` del call-site
-    // de :383 y los 10 ConfirmDialog del CRM se queden sin --danger sin un solo test rojo.
-    expect(dialogSrc).toMatch(/const\s+shellScope\s*=\s*useShellScope\(\)/)
-    expect(dialogSrc).toMatch(/className=\{confirmButtonClass\([^)]*\bshellScope\b[^)]*\)\}/)
+    // del <Button> de confirmar del footer y los 10 ConfirmDialog del CRM se queden sin --danger sin
+    // un solo test rojo.
+    scopeLlegaAlClassName(dialogSrc, 'confirm-dialog.tsx')
   })
 
   it('MaintenanceToggle lee el scope del shell activo y se lo pasa al className de su botón', () => {
     // Previene lo mismo en el otro call-site vivo: este toggle vive dentro del shell del super-admin
     // y su botón es el kill switch de toda la app — perder la superficie de peligro ahí importa.
-    expect(toggleSrc).toMatch(/const\s+shellScope\s*=\s*useShellScope\(\)/)
-    expect(toggleSrc).toMatch(/className=\{confirmButtonClass\([^)]*\bshellScope\b[^)]*\)\}/)
+    scopeLlegaAlClassName(toggleSrc, 'maintenance-toggle.tsx')
   })
 
   it('PlanPriceCard también pasa el scope (era el call-site latente del audit)', () => {
     // Previene volver a `confirmButtonClass(false)` sin scope: hoy es inocuo porque no es destructivo,
     // pero deja armado el defecto para el día que esa acción cambie de signo.
-    expect(priceCardSrc).toMatch(/const\s+shellScope\s*=\s*useShellScope\(\)/)
-    expect(priceCardSrc).toMatch(/className=\{confirmButtonClass\([^)]*\bshellScope\b[^)]*\)\}/)
+    scopeLlegaAlClassName(priceCardSrc, 'plan-price-card.tsx')
   })
 
   it('la firma declara shellScope REQUERIDO (no `shellScope?`)', () => {
     // Previene volver al fail-silent: con el parámetro opcional, un call-site nuevo que lo olvide
     // compila sin diagnóstico y degrada distinto según el shell (correcto en el panel, roto en el CRM).
-    expect(dialogSrc).toMatch(/export function confirmButtonClass\([^)]*shellScope:\s*string\s*\)/)
-    expect(dialogSrc).not.toMatch(/export function confirmButtonClass\([^)]*shellScope\?/)
+    // Se afirma sobre el BLOQUE de parámetros, no sobre su forma exacta (WR-A7): un tercer parámetro
+    // o una firma multilínea con trailing comma son ediciones legítimas que no violan el invariante.
+    const params = callArgs(dialogSrc, 'export function confirmButtonClass(')
+    expect(params, 'no se encontró la firma de confirmButtonClass').not.toBeNull()
+    expect(params!).toMatch(/shellScope\s*:\s*string/)
+    expect(params!).not.toMatch(/shellScope\s*\?/)
   })
 
   it('handleConfirm usa el retorno del guard y cierra por handleOpenChange (WR-A6)', () => {
@@ -333,8 +371,11 @@ describe('cableado de confirmButtonClass (regresión de T-14-41, §6.2 de 14-SEC
     expect(bodyStart).toBeGreaterThan(-1)
     // Se sacan los comentarios: la aserción es sobre las clases que el helper DEVUELVE, no sobre la
     // prosa que las explica (el propio comentario nombra `bg-primary` para decir por qué NO se usa).
+    // Se sacan los DOS estilos (WR-A7): con solo `//`, convertir una nota interna a bloque `/* */`
+    // reintroducía la palabra en el texto inspeccionado y ponía en rojo un helper correcto.
     const body = dialogSrc
       .slice(bodyStart, dialogSrc.indexOf('\n}', bodyStart))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '')
     expect(body).not.toMatch(/bg-primary/)
     expect(body).not.toMatch(/text-primary/)
