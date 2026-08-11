@@ -192,9 +192,14 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
         await navigator.clipboard.writeText(url)
         toast.success('Link copiado')
       } catch {
-        // Contexto no seguro (http) o permiso denegado: no se rompe la vista, se muestra el link para
-        // que el dueño lo copie a mano.
-        toast.error('No se pudo copiar automáticamente. Copiá este link:', { description: url })
+        // Contexto no seguro (http), permiso denegado o WebView sin Clipboard API. El link NO se pinta
+        // (WR-B5): mostrarlo lo renderiza como texto visible en el DOM durante los 4-6s del toast, que es
+        // EXACTAMENTE el vector que este endpoint on-demand existe para cerrar — session replay, reporte
+        // de errores, screenshot de soporte, sesión de impersonación (ver la cabecera de
+        // app/api/abonos/cancel-link/[id]/route.ts). Y como la credencial NO rota ni vence (D-09),
+        // cualquier captura es permanente. Se da la salida accionable en su lugar: el fallback real es
+        // abrir el panel por https, donde la Clipboard API sí está disponible.
+        toast.error('No se pudo copiar el link. Abrí el panel desde una conexión segura (https) y probá de nuevo.')
       }
     } catch {
       // Fallo de RED (offline, datos móviles cortados, DNS caído): el `fetch` rechaza ANTES de que
