@@ -67,11 +67,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401, headers: NO_STORE })
 
   // (3) Tenant = ACTOR: el negocio sale de owner_id de la sesión. Sólo se pide el id.
-  const { data: business } = await supabase
+  //
+  // UN FALLO DE INFRAESTRUCTURA NO ES UN 404 (WR-B1). Antes las dos queries desestructuraban sólo
+  // `data` y tiraban el `error` al piso: Postgres caído, PostgREST sin schema cache tras un DDL o un
+  // JWT vencido (PGRST301) se disfrazaban de "esa serie no es tuya", el dueño leía "no se pudo obtener
+  // el link" y nadie se enteraba de que el sistema estaba roto. Se separa el eje: 500 = el sistema no
+  // pudo responder, 404 = la respuesta es "no hay nada para vos".
+  //
+  // ESTO NO ABRE UN ORÁCULO DE EXISTENCIA (D-22/D-23, T-14-08). Lo que hay que mantener indistinguible
+  // es "no existe" vs "es de otro negocio" vs "está dada de baja", y los TRES siguen cayendo en el
+  // MISMO `if (!abono)` de abajo, con el mismo cuerpo, el mismo status y la misma forma de query. Un
+  // 500 no depende de qué serie se pidió —no lo puede provocar el actor eligiendo un id— así que no
+  // discrimina entre esos tres casos ni por respuesta ni por timing.
+  const { data: business, error: bizErr } = await supabase
     .from('businesses')
     .select('id')
     .eq('owner_id', user.id)
     .maybeSingle()
+  if (bizErr) {
+    return Response.json({ ok: false, error: 'server_error' }, { status: 500, headers: NO_STORE })
+  }
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
 
   // (4) Doble scoping: la serie se lee acotada por su id Y por el negocio del actor. Una columna sola.
@@ -79,13 +94,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // `if (!abono)` que un id inexistente o ajeno. `status` es NOT NULL con CHECK sobre tres valores
   // (migr. 054), así que el filtro de desigualdad no puede dejar filas afuera por un NULL — la trampa
   // que sí existía en `appointments.status` (13-01).
-  const { data: abono } = await supabase
+  const { data: abono, error: abonoErr } = await supabase
     .from('abonos')
     .select('cancel_token')
     .eq('id', id.trim())
     .eq('business_id', business.id)
     .neq('status', 'cancelled')
     .maybeSingle()
+  // `22P02` (invalid_text_representation) = el id de la URL no es un UUID. Ése NO es un fallo del
+  // sistema: es una serie que no puede existir, así que sigue siendo un 404 y comparte cuerpo con los
+  // otros dos rechazos. Cualquier OTRO error sí es infraestructura y sale por 500.
+  if (abonoErr && abonoErr.code !== '22P02') {
+    return Response.json({ ok: false, error: 'server_error' }, { status: 500, headers: NO_STORE })
+  }
   if (!abono) return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: NO_STORE })
 
   // (5) Se devuelve la URL YA ARMADA y no la credencial cruda, a propósito: el cliente no tiene por
