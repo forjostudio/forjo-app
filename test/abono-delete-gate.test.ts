@@ -19,6 +19,7 @@ import { seedOneTenant, teardownOneTenant, type SeededTenant } from './helpers/b
 // del runner.
 const FUTURE = '2031-03-03'
 const PAST = '2020-03-02'
+const PAST2 = '2020-03-09'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -161,12 +162,18 @@ describe.skipIf(!hasSupabaseCreds)('066: gate de borrado de serie de abono (BEFO
   // puesto) y con su snapshot de nombre y precio de servicio intacto (migr. 065), así que Finanzas y
   // la ficha del cliente los siguen mostrando.
   //
-  // El turno FUTURO no cancelado es, además, la prueba de que D-17 está descartado: sobrevive vivo y
-  // con su estado ORIGINAL. Borrar la serie no cancela ni borra nada de la agenda.
+  // El turno `confirmed` es, además, la prueba de que D-17 sigue descartado: sobrevive VIVO y con su
+  // estado ORIGINAL. Borrar la serie no cancela ni borra nada de la agenda.
+  //
+  // POR QUÉ LOS DOS TURNOS SON DEL PASADO (migr. 067). Hasta la 066 este caso usaba un turno FUTURO
+  // 'confirmed'. Desde la 067 esa combinación ya no se borra: una serie archivada con turnos futuros
+  // VIVOS es justamente la que dejaría huérfanos, y ahora se rechaza (casos 8 y 9). Lo que este caso
+  // prueba —que el DELETE no toca ningún turno y que el vínculo se suelta en NULL— no depende de que el
+  // turno sea futuro, así que se mueve al pasado y el escenario futuro pasa a los casos nuevos.
   it('4 — los turnos de la serie borrada sobreviven desvinculados y con su snapshot (D-16 / D-17)', async () => {
     const abono = await seedAbono(t, { status: 'completed', startTime: '11:00', totalOccurrences: 2 })
     const pasado = await seedAppointment(t, { abonoId: abono, date: PAST, time: '11:00', status: 'completed' })
-    const futuro = await seedAppointment(t, { abonoId: abono, date: FUTURE, time: '11:00', status: 'confirmed' })
+    const pasadoVivo = await seedAppointment(t, { abonoId: abono, date: PAST2, time: '11:00', status: 'confirmed' })
 
     const del = await deleteAbono(t.admin, abono, t.businessId)
     expect(del.error).toBeNull()
@@ -175,7 +182,7 @@ describe.skipIf(!hasSupabaseCreds)('066: gate de borrado de serie de abono (BEFO
     const { data } = await t.admin
       .from('appointments')
       .select('id, abono_id, status, service_name, service_price')
-      .in('id', [pasado, futuro])
+      .in('id', [pasado, pasadoVivo])
     expect((data || []).length).toBe(2)
     for (const row of data || []) {
       expect(row.abono_id).toBeNull()
@@ -183,9 +190,9 @@ describe.skipIf(!hasSupabaseCreds)('066: gate de borrado de serie de abono (BEFO
       expect(Number(row.service_price)).toBe(100)
     }
 
-    // El futuro conserva su estado original: no quedó cancelado ni tocado (D-17 descartado).
-    const futuroRow = (data || []).find(r => r.id === futuro)
-    expect(futuroRow?.status).toBe('confirmed')
+    // Ninguno de los dos cambió de estado: el borrado no cancela ni completa nada (D-17 descartado).
+    const vivoRow = (data || []).find(r => r.id === pasadoVivo)
+    expect(vivoRow?.status).toBe('confirmed')
     const pasadoRow = (data || []).find(r => r.id === pasado)
     expect(pasadoRow?.status).toBe('completed')
   }, 20000)
@@ -243,5 +250,81 @@ describe.skipIf(!hasSupabaseCreds)('066: gate de borrado de serie de abono (BEFO
     expect(del.error).toBeNull()
     expect((del.data || []).length).toBe(1)
     expect(await abonoExists(other, propio)).toBe(false)
+  }, 20000)
+
+  // ── Migr. 067 — no dejar turnos futuros VIVOS huérfanos (WR-B3) ────────────────────────────────
+
+  // (8) Una serie 'cancelled' con un turno futuro VIVO es el estado que produce el bypass de dos
+  // llamadas (PATCH status='cancelled' → DELETE): el motor de baja real habría cancelado ese turno, así
+  // que si sigue vivo es porque la baja NO pasó por él. Borrar acá dejaría una reserva con
+  // `abono_id = NULL` que ninguna serie explica. El gate nuevo lo rechaza con su propio código.
+  it('8 — una serie cancelled con un turno futuro vivo NO se borra (P0001 / abono_has_future_turns)', async () => {
+    const abono = await seedAbono(t, { status: 'cancelled', startTime: '14:00' })
+    const futuro = await seedAppointment(t, { abonoId: abono, date: FUTURE, time: '14:00', status: 'confirmed' })
+
+    const del = await deleteAbono(t.admin, abono, t.businessId)
+    expect(del.error).not.toBeNull()
+    expect(del.error?.code).toBe('P0001')
+    expect(del.error?.message).toContain('abono_has_future_turns')
+
+    // Nada quedó a medias: la serie sigue, y el turno sigue vivo Y vinculado (el RAISE abortó la
+    // transacción ANTES de que la acción referencial pusiera el abono_id en NULL).
+    expect(await abonoExists(t, abono)).toBe(true)
+    const { data } = await t.admin.from('appointments').select('abono_id, status').eq('id', futuro).single()
+    expect(data?.abono_id).toBe(abono)
+    expect(data?.status).toBe('confirmed')
+  }, 20000)
+
+  // (9) La MISMA regla sobre una serie 'completed'. El gate mira lo que cuelga de la serie, no cómo
+  // llegó a su estado: si sólo mirara 'cancelled', el bypass se rearmaría con
+  // `PATCH {"status":"completed"}` → `DELETE`. Este caso documenta el cambio frente a la 066, que
+  // dejaba borrar una 'completed' con turnos vivos por delante.
+  //
+  // Y prueba la SALIDA: cancelado el turno futuro, la misma serie se borra sin trabas — que es
+  // exactamente lo que deja la baja por el motor real (`lib/abono-cancel.ts`).
+  it('9 — una serie completed con turno futuro vivo tampoco se borra, y sí se borra al cancelarlo', async () => {
+    const abono = await seedAbono(t, { status: 'completed', startTime: '14:30', totalOccurrences: 3 })
+    const futuro = await seedAppointment(t, { abonoId: abono, date: FUTURE, time: '14:30', status: 'pending' })
+
+    const bloqueado = await deleteAbono(t.admin, abono, t.businessId)
+    expect(bloqueado.error?.code).toBe('P0001')
+    expect(bloqueado.error?.message).toContain('abono_has_future_turns')
+    expect(await abonoExists(t, abono)).toBe(true)
+
+    // Igual que hace la baja real: se cancela el turno futuro y recién ahí el borrado pasa.
+    const upd = await t.admin.from('appointments').update({ status: 'cancelled' }).eq('id', futuro)
+    expect(upd.error).toBeNull()
+
+    const del = await deleteAbono(t.admin, abono, t.businessId)
+    expect(del.error).toBeNull()
+    expect(await abonoExists(t, abono)).toBe(false)
+    // El turno sobrevive desvinculado (D-16): borrar no destruye historia.
+    const { data } = await t.admin.from('appointments').select('abono_id').eq('id', futuro).single()
+    expect(data?.abono_id).toBeNull()
+  }, 20000)
+
+  // (10) EL BYPASS COMPLETO, por el camino de PRODUCCIÓN: sesión anon del dueño (no service-role), sobre
+  // SU propia serie ACTIVA, encadenando las dos escrituras que sus policies permiten. Es el escenario
+  // literal de WR-B3 y el que cierra el contrato entre el trigger y el mapeo del cliente (IN-05: hasta
+  // acá ningún caso combinaba sesión anon + serie activa).
+  it('10 — el bypass PATCH cancelled → DELETE con la sesión anon del dueño queda cerrado', async () => {
+    const abono = await seedAbono(other, { status: 'active', startTime: '15:00' })
+    await seedAppointment(other, { abonoId: abono, date: FUTURE, time: '15:00', status: 'confirmed' })
+
+    // Paso 1 del bypass: la policy `abonos tenant update` SÍ lo permite. No se toca ningún turno.
+    const patch = await otherOwnerSession
+      .from('abonos')
+      .update({ status: 'cancelled' })
+      .eq('id', abono)
+      .eq('business_id', other.businessId)
+      .select('id')
+    expect(patch.error).toBeNull()
+    expect((patch.data || []).length).toBe(1)
+
+    // Paso 2: antes de la 067 esto borraba y dejaba el turno futuro huérfano. Ahora rebota.
+    const del = await deleteAbono(otherOwnerSession, abono, other.businessId)
+    expect(del.error?.code).toBe('P0001')
+    expect(del.error?.message).toContain('abono_has_future_turns')
+    expect(await abonoExists(other, abono)).toBe(true)
   }, 20000)
 })

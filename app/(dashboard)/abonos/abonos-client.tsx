@@ -54,7 +54,7 @@ export type AbonoRow = {
 // DeleteServiceResult (settings-client.tsx:41)— en vez de void + toast: el motivo del rechazo lo decide
 // la BASE (el gate de la migr. 066) y el copy lo decide el modal, que es el único que sabe qué le
 // estaba mostrando al dueño cuando confirmó.
-type DeleteAbonoResult = { ok: true } | { ok: false; error: 'is_active' | 'unknown' }
+type DeleteAbonoResult = { ok: true } | { ok: false; error: 'is_active' | 'has_future_turns' | 'unknown' }
 
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -261,6 +261,10 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
       // Contrato del gate de la 066 fijado por 14-04: código de dominio del RAISE sobre ERRCODE P0001.
       // Mismo orden que el molde de 13-03: código primero, contenido del mensaje después.
       if (error.code === 'P0001' && error.message?.includes('abono_is_active')) return { ok: false, error: 'is_active' }
+      // Gate de la migr. 067: la serie está archivada pero todavía tiene turnos futuros VIVOS, así que
+      // borrarla los dejaría sin serie que los explique. Código propio para poder decir en pantalla qué
+      // hacer, que NO es lo mismo que "dala de baja primero".
+      if (error.code === 'P0001' && error.message?.includes('abono_has_future_turns')) return { ok: false, error: 'has_future_turns' }
       return { ok: false, error: 'unknown' }
     }
     // 0 filas SIN error = la RLS filtró la fila. Es un FALLO, no un éxito silencioso (T-14-23).
@@ -685,7 +689,9 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
               toast.error(
                 motivo === 'is_active'
                   ? 'No se puede eliminar: la serie sigue activa. Dala de baja primero y después eliminala.'
-                  : 'No se pudo eliminar el abono. Probá de nuevo.',
+                  : motivo === 'has_future_turns'
+                    ? 'No se puede eliminar: la serie todavía tiene turnos reservados por delante. Dala de baja para cancelarlos y después eliminala.'
+                    : 'No se pudo eliminar el abono. Probá de nuevo.',
               )
             }}
             onConfirm={async () => {

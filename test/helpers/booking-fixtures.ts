@@ -263,8 +263,20 @@ export async function seedSimultaneousService(seeded: SeededTenant, opts: { capa
 // exactamente cómo se manifestó la regresión (abono-create 2b/3 y abono-cron 5, deterministas).
 //
 // El helper hace el mismo recorrido que el dueño en el panel: primero ARCHIVA la serie (status
-// 'cancelled' = baja explícita) y recién ahí la borra. Se mantiene el filtro por `business_id` en las
-// dos operaciones (aislamiento explícito, aunque el cliente sea service-role).
+// 'cancelled' = baja explícita), después CANCELA los turnos que la serie generó, y recién ahí la borra.
+// Se mantiene el filtro por `business_id` en las tres operaciones (aislamiento explícito, aunque el
+// cliente sea service-role).
+//
+// EL PASO DE LOS TURNOS NO ES OPCIONAL (migr. 067). Archivar + borrar era EXACTAMENTE el bypass de dos
+// llamadas que la 067 vino a cerrar: la baja de verdad (`lib/abono-cancel.ts`) cancela los turnos
+// futuros de la serie, y este helper no lo hacía, así que dejaba turnos vivos con `abono_id = NULL`.
+// Desde la 067 el DELETE de una serie con turnos futuros vivos se rechaza con `abono_has_future_turns`,
+// y sin este paso los cleanups volverían a fallar con la fila viva contaminando el caso siguiente —
+// la misma forma en que se manifestó la regresión de la 066 (abono-create 2b/3 y abono-cron 5).
+//
+// Se cancelan TODOS los turnos de la serie y no sólo los futuros: al helper no le interesa la frontera
+// D-02 (eso es semántica de producto, y de eso se ocupa el motor de baja), le interesa no dejar NADA
+// vivo colgando de una serie que está por desaparecer de un tenant de test.
 //
 // Sin `opts.id` purga TODAS las series del tenant (molde del `afterEach` que ya usaban los tests);
 // con `opts.id`, solo esa. NO reemplaza a `teardownOneTenant`: el cierre del negocio sigue pasando
@@ -279,6 +291,19 @@ export async function purgeAbonos(seeded: SeededTenant, opts?: { id?: string }):
     .eq(col, val)
     .eq('business_id', seeded.businessId)
   if (upd.error) throw new Error(`purgeAbonos: archivar falló: ${upd.error.message}`)
+
+  // Los turnos se acotan por SERIE cuando hay `opts.id` (para no tocar los de otra serie del mismo
+  // tenant) y por tenant cuando se purga todo. `.not('abono_id', 'is', null)` en el caso amplio evita
+  // barrer turnos sueltos que no salieron de ninguna serie.
+  const apptQuery = seeded.admin
+    .from('appointments')
+    .update({ status: 'cancelled' })
+    .eq('business_id', seeded.businessId)
+    .neq('status', 'cancelled')
+  const appt = opts?.id
+    ? await apptQuery.eq('abono_id', opts.id)
+    : await apptQuery.not('abono_id', 'is', null)
+  if (appt.error) throw new Error(`purgeAbonos: cancelar turnos falló: ${appt.error.message}`)
 
   const del = await seeded.admin.from('abonos').delete().eq(col, val).eq('business_id', seeded.businessId)
   if (del.error) throw new Error(`purgeAbonos: borrar falló: ${del.error.message}`)
