@@ -165,20 +165,40 @@ export function CanchasManager({
 
   // ── Eliminar permanentemente (hard-delete, D-05) con gate por tipeo "ELIMINAR" ────────────────
   const [delCancha, setDelCancha] = useState<Cancha | null>(null)
-  const [delPending, setDelPending] = useState<number | null>(null) // reservas próximas; null = contando
+  // Reservas próximas para el aviso del modal. `null` = todavía contando; `'error'` = el pre-check NO se
+  // pudo hacer.
+  //
+  // POR QUÉ 'error' es un estado propio y no un cero (WR-B4). Si la query falla, `count` vuelve `null` y
+  // el viejo `?? 0` volvía ese fallo indistinguible de "esta cancha no tiene nada que perder": el modal
+  // ocultaba el `⚠ N reserva(s) próxima(s)` y mostraba la copy tranquilizadora, así que el dueño
+  // confirmaba un hard-delete creyendo que no perdía nada. Es EXACTAMENTE la lección que la Phase 13 ya
+  // pagó para el borrado de servicio (commit d6c8ef8, "no tratar un pre-check fallido como 'nada que
+  // perder'") y acá se espeja el mismo molde: FAIL-CLOSED, sin dato no se ofrece la acción.
+  //
+  // El borrado en sí NO era fail-open —`deleteCancha({ hard: true })` se apoya en el FK 23503 de
+  // appointments.professional_id, así que la base igual rechaza— pero el consentimiento sí lo era, y es
+  // el consentimiento lo que este modal existe para pedir.
+  const [delPending, setDelPending] = useState<number | 'error' | null>(null)
 
   async function openDelete(c: Cancha) {
     setDelCancha(c)
     setDelPending(null)
     // Contar reservas PRÓXIMAS (pending/pending_payment/confirmed, fecha >= hoy AR) de la agenda de la cancha.
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-    const { count } = await supabase.from('appointments')
+    const { count, error } = await supabase.from('appointments')
       .select('id', { count: 'exact', head: true })
       .eq('business_id', business.id)
       .eq('professional_id', c.professional.id)
       .in('status', ['pending', 'pending_payment', 'confirmed'])
       .gte('date', today)
-    setDelPending(count ?? 0)
+    // Cualquier fallo (red, RLS, PostgREST sin poder resolver el count) es 'error', NUNCA un 0 silencioso.
+    // `count === null` sin error entra por la misma rama por el mismo motivo: sin número no hay pre-check.
+    if (error || count === null) {
+      console.error('[canchas/delete] pre-check de reservas falló:', error?.message ?? 'count nulo')
+      setDelPending('error')
+      return
+    }
+    setDelPending(count)
   }
 
   async function confirmDelete() {
@@ -216,13 +236,16 @@ export function CanchasManager({
     toast.success('Cancha eliminada')
   }
 
-  // Descripción del dialog de eliminar: avisa de reservas próximas y exige tipear ELIMINAR.
+  // Descripción del dialog de eliminar: CUATRO estados (contando / sin verificar / con reservas /
+  // confirmable). Avisa de reservas próximas y exige tipear ELIMINAR.
   const delDescription = delCancha
     ? (delPending === null
         ? `Vas a eliminar "${delCancha.service.name}" de forma permanente. Verificando reservas…`
-        : delPending > 0
-          ? `⚠ "${delCancha.service.name}" tiene ${delPending} reserva(s) próxima(s). Eliminarla es permanente y no se puede deshacer. Si querés conservar el historial, desactivala en su lugar. Para eliminar igual, escribí ELIMINAR.`
-          : `Vas a eliminar "${delCancha.service.name}" de forma permanente. No se puede deshacer. Escribí ELIMINAR para confirmar.`)
+        : delPending === 'error'
+          ? `No pudimos verificar si "${delCancha.service.name}" tiene reservas próximas, así que no se puede eliminar sin saber qué se pierde. Cerrá y probá de nuevo. Si querés dejar de ofrecerla ya mismo, desactivala.`
+          : delPending > 0
+            ? `⚠ "${delCancha.service.name}" tiene ${delPending} reserva(s) próxima(s). Eliminarla es permanente y no se puede deshacer. Si querés conservar el historial, desactivala en su lugar. Para eliminar igual, escribí ELIMINAR.`
+            : `Vas a eliminar "${delCancha.service.name}" de forma permanente. No se puede deshacer. Escribí ELIMINAR para confirmar.`)
     : undefined
 
   // Nombre del/los espacio(s) que ocupa cada cancha, para la línea de detalle de la lista.
@@ -396,6 +419,9 @@ export function CanchasManager({
         risk="alto"
         confirmLabel="Eliminar"
         destructive
+        // Fail-closed (WR-B4, molde de d6c8ef8): con el pre-check fallido NO se ofrece confirmar. El
+        // dueño puede cerrar o desactivar, que es la salida reversible.
+        hideConfirm={delPending === 'error'}
         onConfirm={confirmDelete}
       />
     </>
