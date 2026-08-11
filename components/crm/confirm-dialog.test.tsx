@@ -385,65 +385,229 @@ describe('cableado de confirmButtonClass (regresión de T-14-41, §6.2 de 14-SEC
   })
 })
 
-// ── Contraste WCAG del outline del panel (T-14-41) ───────────────────────────────────────────────
-// El outline no puede quedar "documentado en un comentario": los dos pares que decide (el texto en
-// reposo y el par relleno del hover) se MIDEN acá con el helper que ya existe en lib/contrast.ts, y
-// los valores se leen de app/globals.css en vez de copiarse — si alguien cambia --destructive o
-// --danger-foreground por un color que baja de 4.5:1, esta suite se pone roja antes del deploy.
+// ── Contraste WCAG del outline del panel (T-14-41 · WR-A1 · WR-A2) ───────────────────────────────
+// El outline no puede quedar "documentado en un comentario": los tres pares que decide (texto en
+// reposo, borde en reposo, relleno del hover) se MIDEN acá con el helper que ya existe en
+// lib/contrast.ts, y los valores se leen del CSS en vez de copiarse.
 //
-// POR QUÉ el texto en reposo NO es var(--danger): ese par NO llega a AA sobre el --popover del
-// diálogo (Forjo oscuro 4.45:1, modern 3.72/3.79, spa 2.72/4.17). El label es texto normal ⇒ 4.5:1
-// obligatorio, así que el color del texto sale de --foreground y la señal de peligro viaja por el
-// borde (contraste de no-texto). Ver el comentario de confirmButtonClass().
+// QUÉ CAMBIÓ Y POR QUÉ (code review de la fase, cluster A):
+//
+// WR-A1 — antes se leía SOLO app/globals.css, o sea el theme Forjo. Pero app/themes.css declara su
+//   propio --destructive (modern #e5484d, spa #c0876b, cyber #ff2e7e) y su propio
+//   --danger-foreground, y sus neutrales son `color-mix(in oklab, #hex NN%, var(--tint))` — o sea que
+//   la superficie contra la que se lee el borde DEPENDE DE LA PALETA DEL NEGOCIO. El comentario
+//   prometía una cobertura que no existía. Ahora se recorren los 32 contextos reales
+//   (4 themes × sus paletas × claro/oscuro).
+//
+// WR-A2 — antes se medía contra --popover, pero el botón NO se pinta sobre --popover: vive dentro del
+//   <DialogFooter>, que lleva `bg-muted/50` (components/ui/dialog.tsx). Tailwind v4 compila ese `/50`
+//   a `color-mix(in oklab, var(--muted) 50%, transparent)`, o sea --muted con alpha .5, que el
+//   navegador compone sobre el popup. El par medido no era el par pintado. Ahora la superficie es la
+//   composición real.
+//
+// POR QUÉ el texto en reposo NO es var(--danger): ese par no llega a AA en la mayoría de los themes
+// (ver la tabla de §6.2 de 14-SECURITY.md). El label es texto normal ⇒ 4.5:1 obligatorio, así que
+// sale de --foreground y la señal de peligro viaja por el BORDE (contraste de no-texto, 1.4.11).
 const AA_NORMAL = 4.5
-const cssSource = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8')
+const NO_TEXTO = 3 // WCAG 1.4.11: componentes de UI y sus bordes
+const cssGlobals = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8')
+const cssThemes = readFileSync(join(process.cwd(), 'app', 'themes.css'), 'utf8')
 
-/** Cabecera de cada bloque de neutrales. `:root` NO va solo: globals.css lo declara en lista con
- *  `[data-theme='forjo']` (el theme por defecto es la AUSENCIA de atributo). */
-const BLOCK_HEAD: Record<string, RegExp> = {
-  ':root': /^:root\s*,/m,
-  '.dark': /^\.dark\s*\{/m,
+// ── Resolución de color: lo MÍNIMO de CSS que hace falta para no mentir ──────────────────────────
+// NO se duplica la matemática de WCAG (esa vive en lib/contrast.ts y se consume vía contrastRatioHex).
+// Lo que se implementa acá es la resolución de dos construcciones de CSS que el navegador hace y Node
+// no: el `color-mix(in oklab, …)` de los neutrales de themes.css y la composición de un fondo con
+// alpha. Sin esto la alternativa sería medir un color que el usuario nunca ve.
+const srgbALineal = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+const linealASrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)
+
+function hexARgb(hex: string): [number, number, number] {
+  const s = hex.trim().replace(/^#/, '')
+  const f = s.length === 3 ? s.split('').map((c) => c + c).join('') : s
+  return [parseInt(f.slice(0, 2), 16), parseInt(f.slice(2, 4), 16), parseInt(f.slice(4, 6), 16)]
+}
+const rgbAHex = (rgb: number[]) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('')
+
+/** sRGB → Oklab (matrices de Björn Ottosson, las mismas que implementa el navegador). */
+function rgbAOklab([R, G, B]: [number, number, number]): [number, number, number] {
+  const r = srgbALineal(R / 255), g = srgbALineal(G / 255), b = srgbALineal(B / 255)
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ]
+}
+function oklabARgb([L, A, B]: [number, number, number]): number[] {
+  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3
+  const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3
+  const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3
+  const canal = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(linealASrgb(Math.max(0, Math.min(1, v))) * 255)))
+  return [
+    canal(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    canal(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    canal(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
+  ]
 }
 
-/** Extrae `--token: #hex;` de un bloque puntual (`:root`, `.dark`) de globals.css. Bloque acotado
- *  a propósito: `--popover: #fbf3e3` aparece también en .impersonation-view, y mezclarlos mentiría. */
-function tokenIn(selector: string, token: string): string {
-  const head = BLOCK_HEAD[selector].exec(cssSource)
-  if (!head) throw new Error(`No se encontró el bloque ${selector} en app/globals.css`)
-  const end = cssSource.indexOf('\n}', head.index)
-  const block = cssSource.slice(head.index, end)
-  const m = block.match(new RegExp(`--${token}:\\s*(#[0-9a-fA-F]{3,8})`))
-  if (!m) throw new Error(`No se encontró --${token} dentro de ${selector}`)
-  return m[1]
+/** `color-mix(in oklab, a pct%, b)` con dos colores opacos = interpolación lineal en Oklab. */
+function mezclaOklab(a: string, pct: number, b: string): string {
+  const A = rgbAOklab(hexARgb(a))
+  const Bc = rgbAOklab(hexARgb(b))
+  const p = pct / 100
+  return rgbAHex(oklabARgb([0, 1, 2].map((i) => A[i] * p + Bc[i] * (1 - p)) as [number, number, number]))
 }
 
-describe('outline del confirmar destructivo del panel — contraste WCAG AA (T-14-41)', () => {
-  it('reposo: el texto (--foreground) sobre el popup (--popover) pasa AA en claro y en oscuro', () => {
-    // Previene: que el label del botón quede ilegible. Es el par que el design system ya garantiza
-    // (en el tema Forjo --popover-foreground === --foreground), por eso el outline se apoya en él.
-    const claro = contrastRatioHex(tokenIn(':root', 'foreground'), tokenIn(':root', 'popover'))
-    const oscuro = contrastRatioHex(tokenIn('.dark', 'foreground'), tokenIn('.dark', 'popover'))
-    expect(claro).not.toBeNull()
-    expect(oscuro).not.toBeNull()
-    expect(claro!).toBeGreaterThanOrEqual(AA_NORMAL) // #1a1714 sobre #fbf3e3 → 15.16:1
-    expect(oscuro!).toBeGreaterThanOrEqual(AA_NORMAL) // #f3ead8 sobre #252019 → 12.14:1
+/**
+ * Composición de `bg-muted/50` sobre el popup: --muted con alpha .5 encima de --popover.
+ * El navegador compone en el espacio de destino (sRGB con gamma), así que es el promedio de los
+ * bytes — NO una mezcla en Oklab. Es exacto, no una aproximación.
+ */
+const componer50 = (encima: string, debajo: string) =>
+  rgbAHex(hexARgb(encima).map((v, i) => Math.round((v + hexARgb(debajo)[i]) / 2)))
+
+// ── Lectura de los bloques de CSS ────────────────────────────────────────────────────────────────
+function bloque(src: string, head: RegExp, etiqueta: string): string {
+  const m = head.exec(src)
+  if (!m) throw new Error(`No se encontró el bloque ${etiqueta}`)
+  return src.slice(m.index, src.indexOf('\n}', m.index))
+}
+function declaracion(bloqueTexto: string, token: string): string | null {
+  const m = bloqueTexto.match(new RegExp(`--${token}:\\s*([^;]+);`))
+  return m ? m[1].trim() : null
+}
+
+const BLOQUES: Record<string, string> = {
+  // `:root` NO va solo: globals.css lo declara en lista con [data-theme='forjo'] (el theme por
+  // defecto es la AUSENCIA de atributo). Acotar el bloque es a propósito: --popover: #fbf3e3 aparece
+  // también en .impersonation-view, y mezclarlos mentiría.
+  forjo: bloque(cssGlobals, /^:root\s*,/m, ':root'),
+  'forjo.dark': bloque(cssGlobals, /^\.dark\s*\{/m, '.dark'),
+}
+for (const t of ['modern', 'spa', 'cyber']) {
+  BLOQUES[t] = bloque(cssThemes, new RegExp(`^\\[data-theme="${t}"\\]\\{`, 'm'), t)
+  BLOQUES[`${t}.dark`] = bloque(cssThemes, new RegExp(`^\\.dark\\[data-theme="${t}"\\]\\{`, 'm'), `${t} dark`)
+}
+/** Bloques de paleta, separados por modo: el `.dark[...]` NO puede pisar al claro (declara --tint). */
+function paletasDe(prefijo: string): Record<string, Record<string, string>> {
+  const acc: Record<string, Record<string, string>> = {}
+  const re = new RegExp(`^${prefijo}\\[data-theme="(\\w+)"\\]\\[data-palette="(\\w+)"\\]\\s*\\{([^}]*)\\}`, 'gm')
+  for (const m of cssThemes.matchAll(re)) (acc[m[1]] ??= {})[m[2]] = m[3]
+  return acc
+}
+const PALETAS = paletasDe('')
+const PALETAS_DARK = paletasDe('\\.dark')
+
+/** Resuelve un token siguiendo la cascada (el último bloque de la cadena gana). */
+function resolver(cadena: string[], token: string): string {
+  let crudo: string | null = null
+  for (const b of cadena) {
+    const v = declaracion(b, token)
+    if (v) crudo = v
+  }
+  if (!crudo) throw new Error(`No se encontró --${token} en la cadena`)
+  if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(crudo)) return crudo
+  const cm = crudo.match(/^color-mix\(in oklab,\s*(#[0-9a-fA-F]{3,6})\s*(\d+)%\s*,\s*var\(--tint\)\)$/)
+  if (cm) return mezclaOklab(cm[1], Number(cm[2]), resolver(cadena, 'tint'))
+  // Fail-loud a propósito: si aparece una forma nueva (oklch(), rgba(), otro var()), es mejor que la
+  // suite explote a que mida un color inventado.
+  throw new Error(`Valor no resoluble para --${token}: ${crudo}`)
+}
+
+/** Los 32 contextos reales: theme × paleta × claro/oscuro. */
+const CONTEXTOS: { nombre: string; cadena: string[] }[] = [
+  { nombre: 'forjo/-/claro', cadena: [BLOQUES.forjo] },
+  { nombre: 'forjo/-/oscuro', cadena: [BLOQUES.forjo, BLOQUES['forjo.dark']] },
+]
+for (const t of ['modern', 'spa', 'cyber']) {
+  for (const p of Object.keys(PALETAS[t])) {
+    CONTEXTOS.push({ nombre: `${t}/${p}/claro`, cadena: [BLOQUES[t], PALETAS[t][p]] })
+    CONTEXTOS.push({
+      nombre: `${t}/${p}/oscuro`,
+      cadena: [BLOQUES[t], BLOQUES[`${t}.dark`], PALETAS[t][p], PALETAS_DARK[t]?.[p] ?? ''],
+    })
+  }
+}
+
+/** Los tres pares del outline, medidos en un contexto. */
+function medir(ctx: { nombre: string; cadena: string[] }) {
+  const popup = resolver(ctx.cadena, 'popover')
+  const superficie = componer50(resolver(ctx.cadena, 'muted'), popup) // el fondo REAL del footer
+  const ratio = (a: string, b: string) => {
+    const r = contrastRatioHex(a, b)
+    if (r === null) throw new Error(`${ctx.nombre}: hex no parseable (${a} / ${b})`)
+    return r
+  }
+  return {
+    nombre: ctx.nombre,
+    texto: ratio(resolver(ctx.cadena, 'foreground'), superficie),
+    borde: ratio(resolver(ctx.cadena, 'destructive'), superficie),
+    hover: ratio(resolver(ctx.cadena, 'danger-foreground'), resolver(ctx.cadena, 'destructive')),
+  }
+}
+
+/**
+ * Residuales REGISTRADOS: contextos donde el borde no llega a 3:1. Es el R-1 de §7 de
+ * 14-SECURITY.md (el terracota claro de spa, `--destructive:#c0876b`), medido ahora contra la
+ * superficie real del footer: 2.47–2.48:1 en vez de los 2.72:1 que se anotaron contra --popover puro.
+ * No se puede corregir sin tocar app/themes.css, que está fuera de alcance.
+ *
+ * Se afirma por IGUALDAD, no por "≥ estos": si aparece un residual nuevo la suite se pone roja, y si
+ * alguien ARREGLA spa también — y ahí lo correcto es sacarlo de esta lista, no volver a esconderlo.
+ */
+const RESIDUALES_BORDE = [
+  'spa/clay/claro',
+  'spa/lavender/claro',
+  'spa/mauve/claro',
+  'spa/ocean/claro',
+  'spa/sage/claro',
+]
+
+describe('outline del confirmar destructivo del panel — contraste WCAG (T-14-41 · WR-A1 · WR-A2)', () => {
+  const medidos = CONTEXTOS.map(medir)
+
+  it('cubre los 4 themes con sus paletas, en claro y en oscuro (WR-A1)', () => {
+    // Si alguien agrega un theme o una paleta y no aparece acá, la cobertura que el comentario
+    // promete deja de ser cierta en silencio. Este test es el que no la deja mentir.
+    expect(medidos.length).toBe(32)
+    expect(medidos.filter((m) => m.nombre.startsWith('forjo/')).length).toBe(2)
+    for (const t of ['modern', 'spa', 'cyber']) {
+      expect(medidos.filter((m) => m.nombre.startsWith(`${t}/`)).length).toBe(10)
+    }
   })
 
-  it('hover: el relleno (--danger-foreground sobre --danger) pasa AA en claro y en oscuro', () => {
+  it('reposo: el texto (--foreground) sobre el fondo REAL del footer pasa AA en todos', () => {
+    // Previene: que el label del botón quede ilegible. Es el par que el design system ya garantiza
+    // (--popover-foreground === --foreground), por eso el outline se apoya en él.
+    // Medido: mínimo 7.75:1 (spa claro), máximo 15.51:1 (cyber magenta).
+    const bajos = medidos.filter((m) => m.texto < AA_NORMAL)
+    expect(bajos.map((m) => `${m.nombre} ${m.texto.toFixed(2)}:1`)).toEqual([])
+  })
+
+  it('hover: el relleno (--danger-foreground sobre --danger) pasa AA en todos', () => {
     // Previene: que al pasar el mouse el botón se rellene con un par ilegible. --danger resuelve a
     // --destructive fuera del shell, y cada bloque declara su propio --danger-foreground para esto.
-    const claro = contrastRatioHex(tokenIn(':root', 'danger-foreground'), tokenIn(':root', 'destructive'))
-    const oscuro = contrastRatioHex(tokenIn('.dark', 'danger-foreground'), tokenIn('.dark', 'destructive'))
-    expect(claro!).toBeGreaterThanOrEqual(AA_NORMAL) // #fbf3e3 sobre #b23a26 → 5.40:1
-    expect(oscuro!).toBeGreaterThanOrEqual(AA_NORMAL) // #1a1714 sobre #e05c43 → 4.91:1
+    // Medido: 5.40 forjo claro, 4.91 forjo oscuro, 4.63 modern, 5.36 spa, 5.73 cyber.
+    const bajos = medidos.filter((m) => m.hover < AA_NORMAL)
+    expect(bajos.map((m) => `${m.nombre} ${m.hover.toFixed(2)}:1`)).toEqual([])
   })
 
-  it('el borde de peligro tiene contraste de no-texto (≥3:1) contra el popup en el tema base', () => {
-    // WCAG 1.4.11 (componentes de UI): el borde es LA señal de peligro en reposo, así que se mide.
-    // Documentado: 5.40:1 en claro y 4.45:1 en oscuro — el mismo valor que NO alcanza para texto.
-    const claro = contrastRatioHex(tokenIn(':root', 'destructive'), tokenIn(':root', 'popover'))
-    const oscuro = contrastRatioHex(tokenIn('.dark', 'destructive'), tokenIn('.dark', 'popover'))
-    expect(claro!).toBeGreaterThanOrEqual(3)
-    expect(oscuro!).toBeGreaterThanOrEqual(3)
+  it('borde: ≥3:1 (WCAG 1.4.11) salvo los residuales registrados, que son EXACTAMENTE los conocidos', () => {
+    // El borde es LA señal de peligro en reposo, así que es el par más importante y el más ajustado.
+    // Medido: forjo 4.99 claro / 4.22 oscuro, modern 3.36–3.59, cyber 4.57–4.91, spa 3.90–3.93 oscuro.
+    const bajos = medidos.filter((m) => m.borde < NO_TEXTO).map((m) => m.nombre).sort()
+    expect(bajos).toEqual(RESIDUALES_BORDE)
+  })
+
+  it('la superficie medida sigue siendo la que pinta el DialogFooter (bg-muted/50)', () => {
+    // Ata el modelo de color de esta suite a su fuente: si el footer dejara de ser `bg-muted/50`, los
+    // tres tests de arriba seguirían verdes midiendo una superficie que ya no existe (WR-A2 otra vez).
+    const dialogUi = read(join('components', 'ui', 'dialog.tsx'))
+    const footerAt = dialogUi.indexOf('data-slot="dialog-footer"')
+    expect(footerAt).toBeGreaterThan(-1)
+    expect(dialogUi.slice(footerAt, dialogUi.indexOf('{...props}', footerAt))).toMatch(/bg-muted\/50/)
   })
 })
