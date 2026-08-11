@@ -85,12 +85,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // un dueño con dos negocios quedaba con un 404 PERMANENTE en esta función y sin una sola línea que
   // explicara por qué. Se pide explícitamente el orden de alta y un `limit(2)`: el `[0]` es
   // determinístico (misma fila en cada request, nunca "a veces uno y a veces el otro") y la segunda
-  // fila existe sólo para poder DETECTAR el caso ambiguo y dejarlo en los logs.
+  // fila existe sólo para poder DETECTAR el caso ambiguo y dejarlo en los logs. El desempate por `id`
+  // no es decorativo: `businesses.created_at` es NULLABLE (tiene DEFAULT now() pero no NOT NULL), y con
+  // dos filas sin fecha el orden quedaría librado al plan de ejecución.
   const { data: businesses, error: bizErr } = await supabase
     .from('businesses')
     .select('id')
     .eq('owner_id', user.id)
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(2)
   if (bizErr) {
     console.error('[abonos/cancel-link] business lookup:', bizErr.message)
