@@ -57,6 +57,25 @@ function contrastRatio(a: number, b: number): number {
 }
 
 /**
+ * Ratio de contraste WCAG 2.x entre dos colores hex (3 o 6 dígitos, con o sin `#`).
+ *
+ * Es la MISMA matemática que ya usaba `onAccentText()` internamente; se expone para que las
+ * verificaciones de contraste de la UI se asienten en test en vez de quedar en un comentario. Lo
+ * consume `components/crm/confirm-dialog.test.tsx`, que congela los pares del confirmar destructivo
+ * del panel (T-14-41): si alguien cambia `--destructive` o `--danger-foreground` en `globals.css`
+ * por un valor que baja de 4.5:1, la suite se pone roja en vez de shipear un botón ilegible.
+ *
+ * Devuelve `null` si alguno de los dos no parsea — el caller decide qué hacer, en vez de comerse un
+ * NaN silencioso. Rango válido: 1 (idénticos) a 21 (negro/blanco).
+ */
+export function contrastRatioHex(a: string, b: string): number | null {
+  const rgbA = parseHex(a)
+  const rgbB = parseHex(b)
+  if (!rgbA || !rgbB) return null
+  return contrastRatio(relativeLuminance(rgbA), relativeLuminance(rgbB))
+}
+
+/**
  * Devuelve el color de texto con MÁS contraste sobre `hex`: blanco o el near-black del proyecto.
  *
  * Entrada que no parsea (vacía, un nombre de color, basura) → blanco: es el comportamiento que estas

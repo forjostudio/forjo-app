@@ -182,16 +182,32 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
 /**
  * Clase del botón confirmar.
  *
- * `destructive` **dentro de un shell** ⇒ la superficie de peligro de ese shell (`--danger`); en
- * cualquier otro caso ⇒ el primario que trae `<Button>`, o sea el del tema activo.
+ * `destructive` **dentro de un shell** ⇒ la superficie de peligro RELLENA de ese shell (`--danger`),
+ * exactamente como estaba; `destructive` **fuera de un shell** (el panel del dueño) ⇒ la misma
+ * superficie de peligro pero en OUTLINE. No destructivo ⇒ el primario que trae `<Button>`.
  *
  * POR QUÉ el scope y no la pantalla (UAT 14-09, punto 3): el dueño observó que en los modales de
  * abonos el confirmar tomaba el mismo rojo que el badge de riesgo, y arbitró que en **su panel** el
- * confirmar destructivo use el primario del tema; en el CRM el rojo se **conserva** (aprobó esos
- * modales en el punto 1 de la misma UAT, y ahí el rojo es el lenguaje del super-admin). El diagnóstico
- * completo está en `deferred-items.md`: la diferencia que vio entre abonos y servicios era de ESTADO
- * (el de servicios llega con `hideConfirm` cuando el pre-check bloquea, y ahí el destructivo ni se
- * dibuja), no de pantalla — los dos call-sites pasan los mismos props.
+ * confirmar destructivo NO comparta el relleno rojo con el chip "Alto"; en el CRM el relleno se
+ * **conserva** (aprobó esos modales en el punto 1 de la misma UAT, y ahí el rojo es el lenguaje del
+ * super-admin). El diagnóstico completo está en `deferred-items.md`: la diferencia que vio entre
+ * abonos y servicios era de ESTADO (el de servicios llega con `hideConfirm` cuando el pre-check
+ * bloquea, y ahí el destructivo ni se dibuja), no de pantalla — los dos call-sites pasan los mismos
+ * props.
+ *
+ * POR QUÉ OUTLINE DE PELIGRO Y NO EL PRIMARIO DEL TEMA (T-14-41, §6.2 de 14-SECURITY.md). La primera
+ * versión de esta rama devolvía `''`, o sea el `variant` default de `<Button>`: `bg-primary`. Pero
+ * **`--primary` es la paleta del NEGOCIO**, no un color de la app — `[data-palette="green"]` lo
+ * declara `#2f8a5b` (`app/globals.css`), `emerald` `#10b981` y `sage` `#7e9b82` (`app/themes.css`),
+ * `cyber` `#00e5ff`. O sea: en un negocio con paleta verde, el botón que confirma un borrado
+ * IRREVERSIBLE (bajar una serie de abono, eliminar una serie, un servicio, un espacio, una cancha)
+ * se pintaba **verde**, el color semántico de éxito/adelante. Eso no es perder una redundancia: la
+ * señal quedaba INVERTIDA. La decisión del dueño se tomó mirando una sola paleta (la default, donde
+ * `--primary` es el rojo teja `#d94a2b`, así que el botón "se veía peligroso" por casualidad).
+ * El outline conserva lo que el dueño pidió —el botón deja de ser un segundo bloque rojo relleno,
+ * distinto del pill relleno del RiskBadge— y a la vez ata la señal a `--danger`, que NINGÚN
+ * `[data-palette=…]` pisa (las paletas solo mueven --primary/--accent/--ring/--chart-1; --destructive
+ * únicamente lo redeclaran los `[data-theme=…]`).
  *
  * POR QUÉ NO se pregunta "¿estoy en el CRM?" (D-07 / gap 13-05 #1): este componente es COMPARTIDO por
  * los dos shells y no puede nombrar el token ni el shell de ninguno — con `--crm-danger` directo el
@@ -200,17 +216,34 @@ export function computeFooterLayout(input: { hideConfirm?: boolean; hasSecondary
  * reimplementa: la resuelve `portalScopeClass()`, la misma que usa el popup portaleado del Dialog.
  * `--danger` sigue siendo la indirección compartida que declara `globals.css`.
  *
+ * POR QUÉ EL TEXTO EN REPOSO ES `--foreground` Y NO `--danger` (WCAG AA, medido). El outline "de
+ * libro" pintaría también el label con `--danger`, pero ese par NO llega a 4.5:1 sobre el `--popover`
+ * del diálogo: tema Forjo oscuro `#e05c43` sobre `#252019` = **4.45:1** (falla por 0,05), `modern`
+ * 3.72:1 (claro) / 3.79:1 (oscuro), `spa` 2.72:1 (claro) / 4.17:1 (oscuro). Solo pasan Forjo claro
+ * (5.40:1) y cyber (4.94:1). El label es texto normal, así que 4.5:1 es obligatorio: se usa
+ * `--foreground`, que es el par que el design system YA garantiza contra `--popover` (en los cuatro
+ * themes `--popover-foreground` === `--foreground`). La señal de peligro viaja por el BORDE, que es
+ * contraste de no-texto. En hover se rellena con el par `--danger` / `--danger-foreground`: ese SÍ
+ * está declarado tema por tema justamente para pasar AA (5.40 Forjo claro, 4.91 oscuro, 4.63 modern,
+ * 5.36 spa, 5.73 cyber — los ratios están comentados en globals.css y themes.css).
+ *
  * El hover TAMPOCO se calcula acá (WR-06). Estaba cableado como un mix con negro, que oscurece la
  * superficie mientras el texto queda fijo: sirve cuando el par es crema sobre rojo oscuro (claro),
  * pero en dark el rojo es claro y el par es ink, así que oscurecer bajaba el contraste a 3.82:1 —
  * debajo de AA, y WCAG también aplica al hover. La dirección correcta depende del theme, o sea de
  * información que solo tienen los tokens: por eso se referencia --danger-hover, que cada bloque
- * declara junto a su --danger-foreground.
+ * declara junto a su --danger-foreground. El outline no lo necesita: parte de transparente, así que
+ * su hover ES la superficie `--danger` plena, no un oscurecimiento de ella.
  */
 export function confirmButtonClass(destructive?: boolean, shellScope?: string): string {
-  return destructive && portalScopeClass(shellScope)
-    ? 'bg-[var(--danger)] text-[var(--danger-foreground)] hover:bg-[var(--danger-hover)]'
-    : ''
+  if (!destructive) return ''
+  // Dentro de un shell: byte-idéntico a lo que el dueño ya aprobó en los 10 modales del CRM.
+  if (portalScopeClass(shellScope)) {
+    return 'bg-[var(--danger)] text-[var(--danger-foreground)] hover:bg-[var(--danger-hover)]'
+  }
+  // Panel del dueño: outline de peligro. `bg-transparent` es lo que NEUTRALIZA el `bg-primary` del
+  // variant default (tailwind-merge se queda con el último de cada grupo) — sin él volvería el verde.
+  return 'border-2 border-[var(--danger)] bg-transparent text-foreground hover:bg-[var(--danger)] hover:text-[var(--danger-foreground)]'
 }
 
 // Nota: la insignia de riesgo usa el RiskBadge compartido (@/components/crm/risk-badge) — antes

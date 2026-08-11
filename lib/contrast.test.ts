@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { onAccentText } from '@/lib/contrast'
+import { onAccentText, contrastRatioHex } from '@/lib/contrast'
 
 // ── Tests PUROS del color de texto sobre el acento del negocio (IN-05) ───────────────────────────
 // `businesses.primary_color` lo edita el dueño: el helper tiene que devolver el candidato de MAYOR
@@ -40,5 +40,36 @@ describe('onAccentText', () => {
     expect(onAccentText('#zzz')).toBe('#ffffff')
     expect(onAccentText('#12345')).toBe('#ffffff')
     expect(onAccentText(undefined as unknown as string)).toBe('#ffffff')
+  })
+})
+
+// ── contrastRatioHex (T-14-41) ───────────────────────────────────────────────────────────────────
+// Se expone la matemática que onAccentText ya usaba adentro, para que las verificaciones de
+// contraste de la UI vivan en test y no en un comentario. La consume
+// components/crm/confirm-dialog.test.tsx para congelar los pares del outline destructivo del panel.
+describe('contrastRatioHex', () => {
+  it('los extremos del rango WCAG: idénticos = 1, negro/blanco = 21', () => {
+    expect(contrastRatioHex('#ffffff', '#ffffff')).toBeCloseTo(1, 5)
+    expect(contrastRatioHex('#000000', '#ffffff')).toBeCloseTo(21, 5)
+  })
+
+  it('es simétrico (el orden de los argumentos no cambia el ratio)', () => {
+    expect(contrastRatioHex('#b23a26', '#fbf3e3')).toBe(contrastRatioHex('#fbf3e3', '#b23a26'))
+  })
+
+  it('reproduce los ratios ya documentados en app/globals.css', () => {
+    // Los dos pares RELLENOS de la superficie de peligro del tema Forjo, con el valor que el propio
+    // CSS declara en su comentario: si alguno se moviera, el comentario del CSS quedaría mintiendo.
+    expect(contrastRatioHex('#fbf3e3', '#b23a26')!).toBeCloseTo(5.4, 1) // claro: crema sobre rojo
+    expect(contrastRatioHex('#1a1714', '#e05c43')!).toBeCloseTo(4.91, 1) // oscuro: ink sobre rojo claro
+  })
+
+  it('devuelve null si alguno de los dos no parsea (en vez de un NaN silencioso)', () => {
+    expect(contrastRatioHex('rojo', '#ffffff')).toBeNull()
+    expect(contrastRatioHex('#ffffff', '')).toBeNull()
+  })
+
+  it('acepta la forma corta y el hex sin numeral, igual que onAccentText', () => {
+    expect(contrastRatioHex('#fff', '#000')).toBe(contrastRatioHex('ffffff', '000000'))
   })
 })
