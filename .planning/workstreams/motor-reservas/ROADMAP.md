@@ -537,7 +537,7 @@ Plans:
 
 ⚠ **D-06 del CONTEXT supersede** la nota de Security de esta fase sobre "sin alterar cómo se ve el badge dentro del CRM": el usuario aceptó explícitamente que el CRM cambie de aspecto con tal de mantener un solo componente compartido.
 
-**Plans**: 8/9 plans executed
+**Plans**: 9/9 plans executed — 7 de alcance (14-01…14-07) + 2 de cierre de gaps: **14-08** cerró la causa raíz del gap 1 (BLOCKER, POLISH-05: los tokens del shell no llegaban a las superficies portaleadas) y **14-09** cerró los gaps 2 y 3 (POLISH-04 en la vista `Equipo`) más la **UAT visual bloqueante** de los 3 gaps. Fase **cerrada**: el checkpoint humano de 14-09 quedó aprobado con las 7 observaciones transcritas (`14-09-SUMMARY.md`), que es la única evidencia admisible para POLISH-05.
 
 Plans:
 **Wave 1**
@@ -562,7 +562,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 14-09-PLAN.md — gaps 2 y 3 (POLISH-04 en la vista `Equipo`: radiogroup de preselección + auditoría de los controles de alta) + **UAT visual bloqueante de los 3 gaps** + cierre de la trazabilidad de POLISH-04/05
+- [x] 14-09-PLAN.md — gaps 2 y 3 (POLISH-04 en la vista `Equipo`: radiogroup de preselección + auditoría de los controles de alta) + **UAT visual bloqueante de los 3 gaps** — 7 observaciones humanas transcritas, 3 defectos reportados y corregidos (datos de contacto siempre visibles, segmentado a ancho completo en mobile, confirmar destructivo del panel al primario del tema) + cierre de la trazabilidad de POLISH-04/05
 
 **Waves**: Wave 1 = 14-01 + 14-02 + 14-03 + 14-04 en paralelo (cero solape de archivos). Wave 2 = 14-05 (necesita `settings-client.tsx` liberado por 14-01) + 14-06 (necesita `abonos-client.tsx` liberado por 14-03 y el gate de 14-04). Wave 3 = 14-07 (checkpoints humanos bloqueantes). Wave 4 = 14-08 (cero solape con todo lo anterior: crea 2 módulos nuevos y toca `dialog.tsx` + el layout del CRM). Wave 5 = 14-09 (necesita el fix del portal en el árbol para poder observarlo, y serializa `settings-client.tsx`; su checkpoint humano es bloqueante).
 
