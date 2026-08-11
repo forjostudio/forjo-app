@@ -265,4 +265,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-28 — v0.25 Multi-staff shipped y archivado (ws `motor-reservas`, Phases 8-11, tag v0.25). Nuevo milestone activo **v0.26 Cupo por solape + cierre de backlog** (ws `motor-reservas`, continúa en Phase 12). v0.9–v0.25 shipped y archivados. Pendiente del ws `web-builder`: Phase 18 — auto-armado de la web con el pago del add-on (`web-builder-automation-northstar`).*
+*Last updated: 2026-08-11 — **v0.26 Cupo por solape + cierre de backlog** (ws `motor-reservas`) con sus 3 fases completas: Phase 12 (cupo por solape), Phase 13 (borrado de servicio con historial) y Phase 14 (cierre de backlog, verificada 8/8 el 2026-08-11). El milestone queda listo para `/gsd:complete-milestone` — pendiente antes de archivar: re-correr `/gsd:secure-phase 14`, cuyo audit no cubre las amenazas de los planes 14-08/14-09. v0.9–v0.25 shipped y archivados. Pendiente del ws `web-builder`: Phase 18 — auto-armado de la web con el pago del add-on (`web-builder-automation-northstar`).*
