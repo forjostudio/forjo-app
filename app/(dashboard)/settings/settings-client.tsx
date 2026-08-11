@@ -1922,6 +1922,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 accidente; desde sm se desestira (self-start) y vuelve exactamente al estado de
                 desktop que el dueño ya aprobó: en línea y al ancho de su contenido.
 
+                Debajo de sm cada opción declara además la altura mínima táctil (44px), porque apiladas
+                quedaban en 32px y el mínimo de touch target es 44×44. Se copia la forma del grupo
+                gemelo de CapacityModeFields, que ya la usa; desde sm se libera para no mover el
+                desktop, que el dueño ya aprobó.
+
                 El grupo gemelo de CapacityModeFields NO cambia: su padre es un contenedor de bloque y
                 nada lo estira. */}
             <div role="radiogroup" aria-label="Preselección del profesional" className="flex w-full flex-col gap-1 rounded-md border border-border p-1 sm:inline-flex sm:w-auto sm:flex-row sm:flex-wrap sm:self-start">
@@ -1932,7 +1937,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 disabled={savingSelector}
                 onClick={() => saveSelectorDefault('any')}
                 className={cn(
-                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
+                  'min-h-11 sm:min-h-0 px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
                   selectorDefault === 'any' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -1945,7 +1950,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 disabled={savingSelector}
                 onClick={() => saveSelectorDefault('choose')}
                 className={cn(
-                  'px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
+                  'min-h-11 sm:min-h-0 px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60',
                   selectorDefault === 'choose' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
