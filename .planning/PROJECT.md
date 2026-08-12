@@ -204,7 +204,8 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 - Web Builder v0.10 (shipped) — ver `.planning/milestones/v0.10-REQUIREMENTS.md`.
 - **Web Builder — Ampliación + CMS v0.16 (activo)** — ver `.planning/workstreams/web-builder/REQUIREMENTS.md` (modo edición + fuentes de la skill, premium motion, CMS self-serve owner-only, fotos alrededor de la reserva).
 - Consola CRM v0.11 (shipped) — ver `.planning/milestones/v0.11-REQUIREMENTS.md`.
-- Motor de Reservas — historial del workstream (v0.12 · v0.22 · v0.24 · v0.25 · **v0.26** shipped) archivado en `.planning/milestones/v0.*-REQUIREMENTS.md`. **El próximo milestone del workstream arranca en Phase 15.**
+- Motor de Reservas — historial del workstream (v0.12 · v0.22 · v0.24 · v0.25 · v0.26 shipped) archivado en `.planning/milestones/v0.*-REQUIREMENTS.md`.
+- **Motor de Reservas — v0.27 Cupo unificado por servicio (activo)** — ver `.planning/workstreams/motor-reservas/REQUIREMENTS.md` (Phases 15-16: enum de tres modos con `individual` declarable, `services.capacity` como única fuente del número, gate del cambio de modo que cierra el riesgo residual R-1, y el editor + polish pendiente).
 
 ### Out of Scope
 

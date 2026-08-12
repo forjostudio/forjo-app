@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.26
-milestone_name: — Cupo por solape + cierre de backlog
-status: Awaiting next milestone
-stopped_at: Completado 14-09-PLAN.md — **Phase 14 CERRADA** (9/9 planes, 3 gaps cerrados, POLISH-04/05 en Complete)
-last_updated: "2026-08-12T01:59:19.062Z"
-last_activity: 2026-08-12 — Milestone v0.26 completed and archived
+milestone: v0.27
+milestone_name: Cupo unificado por servicio
+status: Roadmap ready — awaiting plan-phase 15
+stopped_at: Milestone v0.27 creado (REQUIREMENTS + ROADMAP escritos, Phases 15-16)
+last_updated: "2026-08-12T02:30:00.000Z"
+last_activity: 2026-08-12 — Milestone v0.27 iniciado tras archivar v0.26
 progress:
-  total_phases: 14
+  total_phases: 16
   completed_phases: 14
   total_plans: 71
   completed_plans: 71
-  percent: 100
+  percent: 88
 ---
 
 # Project State
@@ -21,14 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 14 — cierre-de-backlog
+**Current focus:** v0.27 — Phase 15, modelo de cupo unificado
 
 ## Current Position
 
-Phase: Milestone v0.26 complete
+Phase: 15 — Modelo de cupo unificado (no arrancada)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-12 — Milestone v0.26 completed and archived
+Status: Roadmap listo — el próximo paso es `/gsd:plan-phase 15 --ws motor-reservas`
+Last activity: 2026-08-12 — Milestone v0.27 iniciado tras archivar v0.26
+
+## Milestone v0.27 — decisiones tomadas antes de planificar
+
+- **D-01 Cutover, sin fallback transicional.** `services.capacity` es la única fuente del número desde el día 1; `time_blocks.capacity` deja de decidir (la columna se conserva, no se dropea). No se escribe regla de precedencia en el RPC y no queda deprecación pendiente.
+- **D-02 El cutover no afecta a nadie — medido contra PRODUCCIÓN el 2026-08-11:** `select count(*), count(*) filter (where capacity is null), max(capacity) from time_blocks` → **19 bloques · 0 sin capacity · cupo_max 1**. Por eso **no se construye aviso de re-declaración** y el backfill deja de ser un problema. ⚠ El control se corrió a propósito además del `where capacity > 1` (que dio "Success, no rows"): una query que devuelve 0 filas es indistinguible de una que no midió lo que creías — lección de la Phase 14.
+- **D-03 R-1 se cierra bloqueando, no reparando.** Cambiar `capacity_mode` con turnos futuros vivos se rechaza en la base con código de dominio propio (molde fail-closed de los gates de las migr. 065/066). Reparar las filas se descartó: puede descubrir turnos que ya se solapan de forma ahora ilegal, y ahí el EXCLUDE aborta la transacción igual, dejando al dueño con un error peor y sin salida.
+- **Próxima migración del proyecto: la 068.**
 
 ## Performance Metrics
 

@@ -1,6 +1,6 @@
 # Roadmap: Forjo App — Motor de Reservas (workstream `motor-reservas`)
 
-> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19), **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22) **v0.25 Reserva con varios profesionales / multi-staff** (Phases 8-11, shipped 2026-07-28) y **v0.26 Cupo por solape + cierre de backlog** (Phases 12-14, shipped 2026-08-11). Numeración de fases **continua** por workstream. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
+> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19), **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22) **v0.25 Reserva con varios profesionales / multi-staff** (Phases 8-11, shipped 2026-07-28) **v0.26 Cupo por solape + cierre de backlog** (Phases 12-14, shipped 2026-08-11) y **v0.27 Cupo unificado por servicio** (Phases 15-16, activo). Numeración de fases **continua** por workstream. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
 
 ## Overview
 
@@ -13,6 +13,8 @@
 **v0.25 — Reserva con varios profesionales / multi-staff (Phases 8-11, shipped 2026-07-28):** capacidad NUEVA sobre el motor ya entregado, **sin reconstruirlo**. El negocio declara **qué servicios hace cada persona** del equipo (mapeo **muchos a muchos** propio, migración **057** — `professionals.service_id` es *single* y es el mecanismo de **canchas** (migr. 043): NO se toca ni se recicla), y el cliente reserva **eligiendo profesional o dejando "cualquiera"**; en ese caso el sistema le asigna uno **libre y capaz** eligiendo el que menos turnos tiene ese día. La asignación automática corre **DENTRO del RPC atómico `book_slot_atomic`** — leer profesionales libres y después insertar sería una carrera —, por lo que la fase de asignación es el punto de mayor riesgo del milestone (**secure-phase obligatorio**). El faseo va por dependencia y riesgo creciente: primero el **modelo + config del equipo** (no toca el motor), después la **asignación atómica** en el RPC (el núcleo anti-doble-booking), después la **disponibilidad across staff** en las superficies públicas (que necesita saber quién puede hacer qué), y al cierre un **backlog chico** independiente del motor. **Cero regresión obligatoria** en: canchas, abonos (generación forward por el mismo motor), cupos grupales (`time_blocks.capacity`) y exclusión por espacio compartido. **Fuera de alcance:** el **cupo por solape** (`capacity > 1` contado por hora de inicio exacta) — bug real y capturado, pero independiente de multi-staff y sobre el mismo RPC → **v0.26**, para no meter dos cambios grandes al núcleo en el mismo ciclo.
 
 **v0.26 — Cupo por solape + cierre de backlog (Phases 12-14, shipped 2026-08-11):** cierra un bug de integridad capturado desde v0.12 y drena el backlog chico acumulado. El plato principal: hoy `time_blocks.capacity > 1` cuenta el sobrecupo **por hora de inicio exacta** — correcto para una *clase grupal* (yoga 16:00, cupo 10) pero **roto** para un *recurso simultáneo* (kinesiólogo con 2 camillas), donde turnos **escalonados** que se pisan superan el cupo. v0.26 separa las dos semánticas eligiéndolas **por servicio**: la de clase grupal queda intacta y se agrega un modo nuevo que **coexiste**, donde el cupo se cuenta por **solape de intervalos** (usando `duration_minutes`). El control corre **DENTRO del RPC atómico `book_slot_atomic`**, re-granularizando el advisory lock (hoy por slot+bucket — dos reservas escalonadas toman locks distintos y se cuelan; pasa a bucket+día/ventana) y separando la asignación de `seat` del criterio de cupo, con **cero regresión** de cupo 1, canchas, abonos, multi-staff y espacio compartido — es el punto de mayor riesgo (**secure-phase obligatorio** + tests de carrera contra la DB). Después, un **borrado de servicio que preserva el historial**: el dueño borra un servicio con solo turnos pasados/cancelados, un modal bloquea el borrado si hay futuros (ofrece desactivar), y los turnos pasados sobreviven en Finanzas / la ficha del cliente vía **desacople del FK** (snapshot de nombre/precio en el turno) — nunca hard-delete de la historia. Y al cierre, el **backlog chico de polish** (ancho de botones app-wide, `RiskBadge` con color fuera del CRM, un abono cancelado sin "Copiar link de baja", un cliente nuevo en "Nuevas" y no en "Pausa"), independiente del motor. El faseo va por riesgo: primero el cambio del motor (12, aislado como una única unidad revisable), después el borrado con historial (13, toca el write-path del alta pero es independiente del cupo), y por último el polish (14).
+
+**v0.27 — Cupo unificado por servicio (Phases 15-16, activo):** v0.26 arregló **cómo** se cuenta el cupo; este milestone arregla **dónde vive el número** y **qué modos se pueden declarar** — el mismo defecto de modelo, detectado en la UAT de la Phase 12. Hoy "Individual" no se puede declarar (se deduce de `time_blocks.capacity = 1`, que vive en otra tabla y no sabe a qué servicio corresponde) y el cupo tiene **dos fuentes de verdad**: `time_blocks.capacity` para la clase grupal, `services.capacity` para el recurso simultáneo. v0.27 unifica a un enum de **tres** modos con `services.capacity` como fuente única del número: el **modo** decide cómo se cuenta, `services.capacity` decide cuánto, y `time_blocks.capacity` deja de decidir. En el mismo territorio se cierra el **riesgo residual R-1** de `12-SECURITY.md` — cambiar `capacity_mode` en un servicio con turnos ya creados deja filas `is_group = true` huérfanas, fuera del EXCLUDE gist y del gate espejo, o sea solapes permanentes que ningún gate detecta. **El cutover no afecta a nadie**: medido contra producción el 2026-08-11, los 19 bloques existentes tienen cupo máximo **1**, así que no se construye aviso de re-declaración y el backfill —la parte que se estimaba cara— deja de ser un problema. El faseo va por riesgo, como en v0.26: primero el modelo y el motor (15, `secure-phase` obligatorio, toca `book_slot_atomic` y sus cuatro consumidores), después la superficie del panel y el polish pendiente (16).
 
 ## Phases
 
@@ -57,6 +59,13 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 - [x] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock de negocio-día + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking — 4/4 planes · code-review 2 rondas, 5 blockers cerrados (migr. 063 + 064) · SECURED 18/18 (`threats_open: 0`) · UAT 5/5 · migr. 062/063/064 en prod (completed 2026-07-30)
 - [x] **Phase 13: Borrado de servicio preservando historial** - Borrar un servicio con solo turnos pasados; modal que bloquea si hay futuros y ofrece desactivar; los turnos pasados sobreviven en el historial (Finanzas / ficha del cliente) vía desacople del FK (snapshot de nombre/precio en el turno) (completed 2026-08-03)
 - [x] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa") (completed 2026-08-11)
+
+### Milestone v0.27 — Cupo unificado por servicio (Phases 15-16, activo)
+
+Faseo por riesgo, igual que en v0.26: el cambio del modelo y del motor va primero y aislado (`secure-phase` obligatorio, toca `book_slot_atomic`); la superficie del panel y el polish van después, sin tocar el motor.
+
+- [ ] **Phase 15: Modelo de cupo unificado** - `services.capacity_mode` a enum de tres (`individual` default | `group_class` | `simultaneous_resource`) con `services.capacity` como única fuente del número; `time_blocks.capacity` deja de decidir; y el cambio de modo se rechaza en la base si el servicio tiene turnos futuros vivos (cierra R-1). **secure-phase obligatorio**
+- [ ] **Phase 16: Superficie y polish** - Editor de servicio con los tres modos y el cupo en un solo lugar, badge de modo en la lista de `/servicios`, ocupación grupal visible en la grilla de la agenda, y Finanzas mobile mostrando el servicio
 
 ## Phase Details
 
@@ -569,10 +578,44 @@ Plans:
 **UI hint**: yes
 **Security/Integrity relevance**: Bajo riesgo. Los cuatro ítems son de presentación o de lógica de filtro en el cliente; no tocan el motor de reservas, los constraints, el aislamiento por tenant ni el flujo de cancelación. **Cuidado transversal (POLISH-05):** `--crm-danger` es un **design token** — definirlo fuera del scope del CRM afecta también al CRM; el cambio debe respetar el token existente sin duplicar hex y sin alterar cómo se ve el badge dentro del CRM. La pantalla pública de baja del abono ya está endurecida (404 genérico, token no adivinable, `noindex`): POLISH-06 solo oculta un botón del **panel autenticado**, no toca esa superficie.
 
+---
+
+### Phase 15: Modelo de cupo unificado
+
+**Goal**: Que el cupo tenga **una sola fuente de verdad** y que los tres modos se puedan **declarar** en vez de deducirse. `services.capacity_mode` pasa a un enum de tres (`individual` **default** | `group_class` | `simultaneous_resource`) y `services.capacity` pasa a ser el único lugar donde vive el número, para los tres modos; `time_blocks.capacity` deja de decidir (se conserva la columna, no se dropea). El **modo** decide *cómo* se cuenta —por hora de inicio exacta el grupal, por solape de intervalos el simultáneo, ambos ejes ya correctos y verificados en v0.26— y `services.capacity` decide *cuánto*. En el mismo territorio se cierra el riesgo residual **R-1**: cambiar `capacity_mode` en un servicio con turnos futuros vivos se rechaza en la base con un código de dominio propio, porque hoy ese cambio deja filas `is_group = true` huérfanas que quedan fuera del EXCLUDE gist **y** del gate espejo — solapes permanentes que ningún gate detecta. Es el punto de mayor riesgo del milestone: toca `book_slot_atomic` y sus **cuatro** consumidores (booking público, alta manual, generación forward de abonos, canchas).
+**Depends on**: Phase 14 (secuencial dentro del workstream; funcionalmente depende de v0.26 — el conteo por solape de la migr. 062/064 y el lock de negocio-día son la base sobre la que se mueve la fuente del número)
+**Requirements**: CUPO-06, CUPO-07, CUPO-08
+**Success Criteria** (what must be TRUE):
+
+  1. Un servicio se puede declarar **`individual`** desde el modelo, es el **default**, fuerza cupo 1 y se comporta **byte-idéntico** a como se comporta hoy un servicio de cupo 1 (CUPO-06).
+  2. `book_slot_atomic` decide el cupo leyendo **`services.capacity`** en los tres modos y **ya no** consulta `time_blocks.capacity` para eso, con **cero regresión** de los cuatro consumidores del RPC, de canchas, de abonos, de multi-staff y del espacio compartido (CUPO-07).
+  3. Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza **en la base**, con un código de dominio fijo que no filtra datos del negocio, y el panel lo mapea a copy propio — el texto crudo del error nunca llega a la pantalla (CUPO-08, cierra R-1).
+  4. Las garantías de concurrencia se prueban con **tests de carrera contra Postgres de verdad y con control negativo** (el molde de `test/concurrency.test.ts` y de la Phase 12), no con aserciones de lectura de código.
+
+**Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Toca el núcleo anti-doble-booking que endurecieron v0.9, v0.12 y v0.26. La Phase 12 encontró **5 blockers en dos rondas de code review** sobre este mismo RPC, incluido un doble-booking real; asumir que un cambio "solo mueve de dónde se lee el número" es exactamente el error que la 063 y la 064 tuvieron que reparar. Ojo particular con la relación entre `is_group` y el EXCLUDE gist 013: esa columna hace **doble trabajo** ("cupo > 1" y "exenta del EXCLUDE") y es la causa raíz que la 064 tuvo que resolver con el lock de negocio-día.
+**UI hint**: no (el modelo y el motor; la superficie va en la Phase 16)
+
+---
+
+### Phase 16: Superficie y polish
+
+**Goal**: Que el dueño pueda **declarar** lo que la Phase 15 hizo declarable, y cerrar los tres pendientes de presentación que quedaron del ciclo anterior. El editor de servicio ofrece los **tres** modos y el cupo en un solo lugar, con copy que explique la diferencia real entre grupal (se cuenta por hora de inicio: todos arrancan juntos) y simultáneo (se cuenta por solape: entran escalonados); el cupo se deshabilita en `individual`. Además: badge de modo en la lista de `/servicios` —hoy el modo solo se ve al abrir el servicio—, la ocupación **grupal** visible en la grilla de la agenda —hoy solo se ve al abrir el turno, mientras la simultánea sí se muestra, que es una inconsistencia y no una regresión— y Finanzas en mobile mostrando el servicio, que hoy se oculta con `hidden sm:block`.
+**Depends on**: Phase 15 (el editor no puede ofrecer un modo que el modelo todavía no acepta, y el badge lee el mismo campo)
+**Requirements**: CUPO-09, POLISH-08, POLISH-09, POLISH-10
+**Success Criteria** (what must be TRUE):
+
+  1. El editor de servicio ofrece los **tres** modos y el cupo en un **solo** lugar; el cupo queda deshabilitado cuando el modo es `individual` (CUPO-09).
+  2. La lista de `/servicios` muestra el modo de cada servicio sin necesidad de abrirlo (POLISH-08).
+  3. La ocupación de un turno **grupal** se ve en la grilla de la agenda, con la misma consistencia con que hoy se ve la simultánea (POLISH-09).
+  4. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
+
+**Security/Integrity relevance**: Baja. No toca el motor de reservas, los constraints ni el aislamiento por tenant. La única precaución real: el editor escribe `capacity_mode` y `capacity`, así que tiene que **mapear el rechazo de CUPO-08 a copy propio** en vez de interpolar el error de la base — lección T-14-25 / T-13-09.
+**UI hint**: yes
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, shipped 2026-08-11). Los cinco milestones cerrados quedan en el historial; **el próximo del workstream arranca en Phase 15**.
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, shipped 2026-08-11) → **15 → 16 (v0.27, activo)**. Los cinco milestones cerrados quedan en el historial.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -590,3 +633,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
+| 15. Modelo de cupo unificado | 0/? | Not started | — |
+| 16. Superficie y polish | 0/? | Not started | — |
