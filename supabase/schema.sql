@@ -63,20 +63,70 @@ CREATE OR REPLACE FUNCTION "public"."abonos_block_delete"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
+DECLARE
+  -- "Hoy" en hora de Argentina (UTC-3 sin DST), no en UTC: a las 22:00 de Buenos Aires el `now()` en
+  -- UTC ya es el día siguiente y un turno de mañana temprano dejaría de contarse como futuro. Mismo
+  -- criterio que `services_block_delete` (migr. 065) y que la frontera D-02 del motor de baja.
+  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
 BEGIN
-  -- Guard de cascada: al cerrar la cuenta de un negocio el padre ya no existe cuando cascadea a
-  -- abonos. Sin esto, borrar un negocio con una serie activa sería imposible (T-14-15).
+  -- 1.1 GUARD DE CASCADA (crítico, sin cambios respecto de la 066). Cuando se cierra la cuenta de un
+  -- negocio, la fila padre de `businesses` se elimina ANTES de que corran las acciones referenciales
+  -- hacia `abonos`, así que la AUSENCIA del negocio identifica de forma confiable un borrado en
+  -- cascada. Sin este guard, cerrar la cuenta de un negocio con una serie activa sería imposible y
+  -- `teardownOneTenant` (test/helpers/booking-fixtures.ts) rompería toda la suite de integración.
+  -- VA PRIMERO a propósito: la cascada tiene que pasar aunque queden turnos futuros vivos, porque esos
+  -- turnos también se están borrando en la misma cascada (T-14-15).
   IF OLD."business_id" IS NOT NULL
      AND NOT EXISTS (SELECT 1 FROM businesses b WHERE b."id" = OLD."business_id") THEN
     RETURN OLD;
   END IF;
-  -- D-18: solo se borra lo archivado ('cancelled' / 'completed'). status es NOT NULL con CHECK, así
-  -- que no hace falta rama IS NULL. Message = código de dominio fijo: viaja al navegador (T-14-14).
+
+  -- 1.2 La regla de la 066 (D-18): una serie ACTIVA no se borra. Se mantiene TAL CUAL y va antes que la
+  -- regla nueva a propósito: para una serie activa el motivo real es "está viva", y ése es el mensaje
+  -- accionable ("dala de baja primero"). Si la regla nueva corriera antes, una serie activa con turnos
+  -- por delante devolvería el código equivocado.
   IF OLD."status" = 'active' THEN
     RAISE EXCEPTION 'abono_is_active' USING ERRCODE = 'P0001';
   END IF;
-  -- Devolver la fila vieja es obligatorio: devolver NULL cancelaría el borrado SIN error y la UI
-  -- diría "eliminado" sin haber borrado nada (T-14-16).
+
+  -- 1.3 REGLA NUEVA (WR-B3): archivada pero con turnos futuros VIVOS ⇒ el borrado dejaría huérfanos.
+  --
+  -- El predicado se ancla en `a.abono_id = OLD.id` (UUID PK global, no adivinable) y suma el filtro
+  -- explícito por tenant. `abonos.business_id` es `uuid NOT NULL` (054), así que acá NO hace falta la
+  -- rama `OLD.business_id IS NULL OR …` que la 065 sí necesita para las filas legacy de `services`.
+  -- Hay índice sobre `appointments.abono_id` (`appointments_abono_id_idx`, 054): el EXISTS es barato.
+  --
+  -- "Futuro" = `date >= hoy AR`, INCLUSIVE — la misma frontera que usa el motor de baja (D-02), así que
+  -- el conjunto que este gate mira es EXACTAMENTE el que la baja legítima cancela. Consecuencia
+  -- directa y buscada: después de una baja real no queda ninguna fila que matchee, y el borrado pasa.
+  --
+  -- "Vivo" = cualquier estado que no sea `cancelled` ni `completed`:
+  --   - `cancelled`: ya no es una reserva pendiente; contarla trabaría el borrado para siempre.
+  --   - `completed`: el turno YA SE PRESTÓ. Es historia, no un compromiso por delante.
+  --   - `pending` / `pending_payment` / `confirmed`: compromisos vivos. Bloquean.
+  -- La rama `a.status IS NULL` es OBLIGATORIA y no es defensiva de más: `appointments.status` es
+  -- NULLABLE y `NOT IN (...)` sobre NULL evalúa a NULL (ni true ni false), así que esas filas quedarían
+  -- fuera del EXISTS y ABRIRÍAN el gate. Un turno sin estado sigue siendo un turno reservado. Es la
+  -- misma trampa que la 065 ya pagó (y la que 13-01 encontró en el read-path).
+  --
+  -- Message = código de dominio FIJO y NUEVO, sin nombres de cliente, sin fechas y sin conteos: el
+  -- texto viaja hasta el navegador y no puede filtrar datos del negocio (T-14-14 / lección T-13-09). El
+  -- panel lo mapea a copy propio leyendo `code = 'P0001'` + `message.includes('abono_has_future_turns')`,
+  -- igual que ya hace con `abono_is_active`. El texto crudo del error NUNCA se interpola en pantalla.
+  IF EXISTS (
+    SELECT 1
+      FROM appointments a
+     WHERE a."abono_id" = OLD."id"
+       AND a."business_id" = OLD."business_id"
+       AND a."date" >= v_today
+       AND (a."status" IS NULL OR a."status" NOT IN ('cancelled', 'completed'))
+  ) THEN
+    RAISE EXCEPTION 'abono_has_future_turns' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 1.4 Devolver la fila vieja es OBLIGATORIO. Devolver NULL desde un trigger BEFORE DELETE cancela el
+  -- borrado SIN error: PostgREST respondería 204, el cliente filtraría la lista y la UI diría
+  -- "eliminado" sin haber borrado nada (T-14-16). El único camino de rechazo válido es el RAISE.
   RETURN OLD;
 END;
 $$;
