@@ -47,11 +47,15 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
       await t.admin.from('agenda_spaces').delete().eq('business_id', t.businessId)
       await t.admin.from('spaces').delete().eq('business_id', t.businessId)
       // (Phase 12) Los casos CUPO-04/CUPO-02 ponen el service en modo RECURSO SIMULTÁNEO. El tenant y
-      // el service son COMPARTIDOS por todo el archivo, así que hay que devolverlos a los DEFAULT de la
-      // 062 ('group_class'/1) o los casos grupales (CONC-01/02, CUPOS-02/03) medirían el otro modo.
+      // el service son COMPARTIDOS por todo el archivo, así que hay que devolverlos al DEFAULT o los
+      // casos siguientes (CONC-01/02, CUPOS-02/03) medirían el otro modo.
+      //
+      // (Phase 15 / migr. 068) El DEFAULT pasó a ser 'individual'/1. La combinación vieja
+      // ('group_class'/1) ya NO se puede escribir: el CHECK de coherencia la rechaza con 23514 porque
+      // un grupal de cupo 1 era indistinguible de un individual.
       await t.admin
         .from('services')
-        .update({ capacity_mode: 'group_class', capacity: 1 })
+        .update({ capacity_mode: 'individual', capacity: 1 })
         .eq('id', t.serviceId)
         .eq('business_id', t.businessId)
     }
@@ -451,29 +455,41 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     expect(await occupantsCovering('16:20')).toBe(2)
   })
 
-  // Simultáneo cupo 1 — no-regresión del caso degenerado. Un recurso simultáneo con capacity=1 debe
-  // comportarse como un servicio individual: la 2ª reserva SOLAPADA (aunque arranque en otro instante)
-  // se rechaza con 409 y sin sobre-reserva. El gate por solape la agarra primero (overlap 1 >= 1 →
-  // slot_full); el EXCLUDE gist 013 queda de respaldo atómico redundante porque con cupo 1 la fila
-  // nace is_group=false (062:336-340, decisión A4 del Plan 12-01). Se asierta el error EXACTO
-  // observado (slot_full) para que una degradación a slot_taken —o al revés— salte como regresión.
-  it('simultáneo cupo 1 — la 2ª reserva solapada se rechaza (409) sin sobre-reserva', async () => {
-    await seedTimeBlock(t, { capacity: 1 })
-    await seedSimultaneousService(t, { capacity: 1 })
+  // (Phase 15 / migr. 068) Este caso PROBABA que un recurso simultáneo de cupo 1 se comportara como un
+  // servicio individual: la 2ª reserva solapada moría con slot_full/409. Ese escenario dejó de existir
+  // POR CONSTRUCCIÓN DEL MODELO, no por regresión — el CHECK de coherencia `services_capacity_matches_mode_chk`
+  // prohíbe `simultaneous_resource` con cupo 1, porque un "recurso simultáneo" de un solo lugar era
+  // exactamente la ambigüedad que la fase vino a eliminar (mismo is_group=false, mismo EXCLUDE gist 013
+  // que un individual: dos representaciones del MISMO estado).
+  //
+  // El caso NO se borra: se convierte en el GUARD de que sigue sin existir. Lo que probaba antes ya está
+  // cubierto por CONC-02 (la 2ª reserva del cupo 1 se rechaza) y por el caso del 23P01.
+  //
+  // ⚠ El intento va con un UPDATE DIRECTO por t.admin, NO por seedSimultaneousService: el helper hace
+  // `throw` ante error, y acá el error ES el sujeto del test.
+  it('simultáneo cupo 1 — la base RECHAZA la configuración (23514) y el servicio no cambia de modo', async () => {
+    // Estado de partida LEÍDO de la DB, no asumido (el afterEach devuelve el service al DEFAULT).
+    const { data: antes } = await t.admin
+      .from('services').select('capacity_mode, capacity')
+      .eq('id', t.serviceId).eq('business_id', t.businessId).single()
+    expect(antes?.capacity_mode).toBe('individual')
 
-    const first = await createAppointmentCore({ ...baseInput(), time: '16:00' })
-    expect(first.ok).toBe(true)
+    const { error } = await t.admin
+      .from('services')
+      .update({ capacity_mode: 'simultaneous_resource', capacity: 1 })
+      .eq('id', t.serviceId)
+      .eq('business_id', t.businessId)
 
-    // Arranca 10' después → `time` distinto (no lo agarraría un gate por hora exacta) pero solapa.
-    const second = await createAppointmentCore({ ...baseInput(), time: '16:10' })
-    expect(second.ok).toBe(false)
-    if (!second.ok) {
-      expect(second.error).toBe('slot_full')
-      expect(second.status).toBe(409)
-    }
+    expect(error).not.toBeNull()
+    expect(error?.code).toBe('23514') // check_violation
+    expect(`${error?.message ?? ''} ${error?.details ?? ''}`).toContain('services_capacity_matches_mode_chk')
 
-    // Assert duro: 1 sola fila ocupa el intervalo (la 2ª no entró).
-    expect(await occupantsCovering('16:10')).toBe(1)
+    // NO se confía en el error: se relee la fila. El servicio quedó en su modo anterior.
+    const { data: despues } = await t.admin
+      .from('services').select('capacity_mode, capacity')
+      .eq('id', t.serviceId).eq('business_id', t.businessId).single()
+    expect(despues?.capacity_mode).toBe(antes?.capacity_mode)
+    expect(despues?.capacity).toBe(antes?.capacity)
   })
 
   // ── Phase 12 / code-review — regresiones de los dos defectos REALES de reserva (CR-01, CR-02) ────
@@ -550,22 +566,42 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   //
   // A/B verificado contra la DB local: con la 062 este test devuelve slot_full/409; con la 063 (que
   // agrega la misma guarda `expires_at` que ya usaba la función 80 líneas más arriba) devuelve ok.
+  //
+  // (Phase 15 / migr. 068) El escenario subió de cupo 1 a cupo 2 —el mínimo legal de un recurso
+  // simultáneo desde el CHECK de coherencia— y los conteos corrieron UN LUGAR. El invariante que se
+  // prueba es idéntico y el fixture seedExpiredHold no cambia: con el hold vencido sembrado, las DOS
+  // reservas vivas entran (si el hold contara, la 2ª moriría con slot_full) y una TERCERA solapada
+  // muere con slot_full.
   it('CR-01 — un hold VENCIDO no consume cupo del carril del recurso simultáneo', async () => {
     await seedTimeBlock(t, { capacity: 1 })
-    await seedSimultaneousService(t, { capacity: 1 })
+    await seedSimultaneousService(t, { capacity: 2 })
 
     // Hold vencido del MISMO servicio en OTRA agenda: el core solo libera los holds vencidos de SU
     // bucket antes del RPC, así que este llega VIVO al gate SQL (que cuenta cross-bucket).
     const agendaB = await seedProfessional(t, { name: '__test_agenda_B_hold' })
     await seedExpiredHold(t, { professionalId: agendaB, serviceId: t.serviceId, date: DATE, time: '16:00' })
 
-    // Cupo 1 y el único "ocupante" del intervalo es un hold ya vencido ⇒ el horario está LIBRE.
-    const res = await createAppointmentCore({ ...baseInput(), time: '16:10' })
-    expect(res.ok).toBe(true)
+    // 1ª reserva viva 16:10-16:40: el carril está en 0 de 2 (el hold vencido no cuenta).
+    const primera = await createAppointmentCore({ ...baseInput(), time: '16:10' })
+    expect(primera.ok).toBe(true)
 
-    // Y el turno nuevo entró de verdad (1 fila viva del servicio cubriendo el instante; el hold
-    // vencido sigue en la tabla pero no cuenta).
-    expect(await occupantsOfBucketCovering('16:10')).toBe(1)
+    // 2ª reserva viva 16:20-16:50: solapa a la 1ª y AL HOLD VENCIDO. Éste es el assert discriminante —
+    // si el hold contara, el instante [16:20,16:30) tendría 2 ocupantes y esta reserva moriría con
+    // slot_full sobre un cupo de 2.
+    const segunda = await createAppointmentCore({ ...baseInput(), time: '16:20' })
+    expect(segunda.ok).toBe(true)
+
+    // 3ª reserva 16:30-17:00: solapa a las DOS vivas ⇒ el carril sí está lleno.
+    const tercera = await createAppointmentCore({ ...baseInput(), time: '16:30' })
+    expect(tercera.ok).toBe(false)
+    if (!tercera.ok) {
+      expect(tercera.error).toBe('slot_full')
+      expect(tercera.status).toBe(409)
+    }
+
+    // Y las dos entraron de verdad: 2 filas vivas en la agenda del fixture cubren el instante
+    // compartido (el hold vencido vive en agendaB, así que este conteo por bucket no lo mira).
+    expect(await occupantsOfBucketCovering('16:20')).toBe(2)
   })
 
   // ── Phase 12 / code-review 2 — CR2-01 y los gaps que la 064 cierra ───────────────────────────
@@ -834,14 +870,23 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     expect(body.busy).toEqual([])
   })
 
-  // CR-04 (b) — el read-path del modo simultáneo respeta el bloqueo por ESPACIO compartido. Se usa
-  // cupo 1 a propósito: con cupo > 1 la combinación simultáneo + espacio es una configuración
-  // IMPOSIBLE que la 064 rechaza de entrada (ver el caso de gap 3). Con cupo 1 la fila nace
-  // is_group = false, el espacio funciona como siempre (camino v0.12) y el bloqueo por hermana tiene
-  // que aparecer en `full` — y solo en los horarios que realmente pisa.
-  it('CR-04 (b) — availability simultánea: el espacio tomado por una agenda hermana va a full', async () => {
+  // CR-04 (b) — el read-path del modo simultáneo sobre una agenda con ESPACIO compartido.
+  //
+  // ⚠ QUÉ ESCENARIO SE PERDIÓ Y POR QUÉ (Phase 15 / migr. 068). Este caso usaba cupo 1 A PROPÓSITO:
+  // con cupo 1 la fila nace is_group = false, el espacio funcionaba como en v0.12 y el bloqueo por
+  // agenda hermana aparecía en `full` SOLO en los horarios que realmente pisaba (11:00 sí, 12:00 no),
+  // y la reserva del horario libre entraba. Desde el CHECK de coherencia, un `simultaneous_resource`
+  // de cupo 1 es ILEGAL, así que ese sub-caso desaparece POR CONSTRUCCIÓN DEL MODELO, no por
+  // regresión: TODO servicio simultáneo tiene cupo >= 2, y cupo >= 2 sobre una agenda con espacio
+  // mapeado es la configuración imposible que la 064 rechaza de entrada (gap 3,
+  // `simultaneous_space_conflict`).
+  //
+  // Lo que el caso asierta ahora, y que el de gap 3 NO cubre (ahí no hay agenda hermana): con el
+  // espacio compartido por dos agendas y una de ellas ocupándolo, el read-path deja de distinguir
+  // horarios pisados de horarios libres — van TODOS a full, porque el write-path rechaza siempre.
+  it('CR-04 (b) — availability simultánea: cupo 2 + espacio compartido con una hermana deja TODO en full', async () => {
     await seedTimeBlock(t, { capacity: 1 })
-    await seedSimultaneousService(t, { capacity: 1 })
+    await seedSimultaneousService(t, { capacity: 2 })
     const otroServicio = await seedService(t, { durationMinutes: 30, name: '__test_svc_disp_hermana' })
 
     const spaceA = await seedSpace(t, { name: 'A' })
@@ -855,13 +900,20 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     expect(sib.ok).toBe(true)
 
     const body = await availabilityFor(t.serviceId, t.professionalId)
-    expect(body.full).toContain('11:00')      // espacio tomado por la hermana
-    expect(body.full).not.toContain('12:00')  // fuera del solape: sigue libre
+    expect(body.ok).toBe(true)
+    expect(body.full).toContain('11:00')  // el horario que la hermana pisa…
+    expect(body.full).toContain('12:00')  // …y también los que NO: la config entera es irreservable
+    expect(body.full).toContain('09:00')
+    expect(body.full).toContain('16:00')
 
-    // Y el write-path coincide: cupo 1 + espacio mapeado NO es la config imposible (cero regresión del
-    // camino v0.12) — la reserva del horario libre entra.
-    const ok = await createAppointmentCore({ ...baseInput(), time: '12:00' })
-    expect(ok.ok).toBe(true)
+    // Y el write-path coincide: el horario "libre" tampoco entra, y no por choque de espacio sino por
+    // el código PROPIO de configuración imposible.
+    const res = await createAppointmentCore({ ...baseInput(), time: '12:00' })
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.error).toBe('simultaneous_space_conflict')
+      expect(res.status).toBe(409)
+    }
   })
 
   // GAP 3 — recurso simultáneo de cupo > 1 sobre una agenda con ESPACIO físico mapeado: configuración

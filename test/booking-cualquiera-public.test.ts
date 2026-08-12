@@ -120,11 +120,14 @@ describe.skipIf(!hasSupabaseCreds)('reserva "Cualquiera" pública (DISP-01/02/03
     await t.admin.from('professionals').delete().eq('business_id', t.businessId).neq('id', t.professionalId)
     await t.admin.from('professionals').update({ active: true, location_id: null, service_id: null }).eq('id', t.professionalId)
     // (Phase 12 / T-12-11) Los casos de recurso simultáneo mutan el service del fixture; el tenant y el
-    // service son COMPARTIDOS por todo el archivo, así que hay que devolverlos a los DEFAULT de la 062
-    // ('group_class'/1) o los casos DISP-01/02/03 y ASIGN-05 medirían el otro modo (molde concurrency.test.ts).
+    // service son COMPARTIDOS por todo el archivo, así que hay que devolverlos al DEFAULT o los casos
+    // DISP-01/02/03 y ASIGN-05 medirían el otro modo (molde concurrency.test.ts).
+    //
+    // (Phase 15 / migr. 068) El DEFAULT pasó a ser 'individual'/1. La combinación vieja
+    // ('group_class'/1) ya NO se puede escribir: el CHECK de coherencia la rechaza con 23514.
     await t.admin
       .from('services')
-      .update({ capacity_mode: 'group_class', capacity: 1 })
+      .update({ capacity_mode: 'individual', capacity: 1 })
       .eq('id', t.serviceId)
       .eq('business_id', t.businessId)
   })
@@ -327,11 +330,13 @@ describe.skipIf(!hasSupabaseCreds)('reserva "Cualquiera" pública (DISP-01/02/03
       .eq('date', DATE)
     expect((rows || []).length).toBe(0)
 
-    // Cero regresión de "Cualquiera" (Phase 10): el MISMO POST sobre un servicio `group_class` sigue
-    // entrando ⇒ lo que gatea es el MODO del servicio, no el flag.
+    // Cero regresión de "Cualquiera" (Phase 10): el MISMO POST sobre un servicio en un modo que NO sea
+    // el simultáneo sigue entrando ⇒ lo que gatea es el MODO del servicio, no el flag. Desde la migr.
+    // 068 el modo de vuelta es 'individual' (el DEFAULT); el assert se sostiene igual, porque
+    // individual tampoco es simultáneo.
     await t.admin
       .from('services')
-      .update({ capacity_mode: 'group_class', capacity: 1 })
+      .update({ capacity_mode: 'individual', capacity: 1 })
       .eq('id', t.serviceId)
       .eq('business_id', t.businessId)
     const grupal = await postCreate(forged)
@@ -348,7 +353,8 @@ describe.skipIf(!hasSupabaseCreds)('reserva "Cualquiera" pública (DISP-01/02/03
   it('T-12-11 (read) — availability con any=1 sobre un servicio SIMULTÁNEO devuelve el error, no la grilla', async () => {
     await seedProfessional(t, { name: '__test_proB' })
 
-    // (A) group_class (default de toda fila existente): grilla agregada de hoy.
+    // (A) modo NO simultáneo (el DEFAULT de toda fila existente; 'individual' desde la migr. 068):
+    // grilla agregada de hoy.
     const antes = await getAvailability(slug, { any: true, serviceId: t.serviceId })
     expect(antes.ok).toBe(true)
     expect(antes.busy).toEqual([])
@@ -359,10 +365,11 @@ describe.skipIf(!hasSupabaseCreds)('reserva "Cualquiera" pública (DISP-01/02/03
     expect(rechazo.status).toBe(400)
     expect(rechazo.body).toEqual({ ok: false, error: 'any_professional_unsupported' })
 
-    // (C) de vuelta a group_class: la grilla `any` es BYTE-IDÉNTICA a (A).
+    // (C) de vuelta a un modo NO simultáneo ('individual', el DEFAULT desde la 068): la grilla `any`
+    // es BYTE-IDÉNTICA a (A).
     await t.admin
       .from('services')
-      .update({ capacity_mode: 'group_class', capacity: 1 })
+      .update({ capacity_mode: 'individual', capacity: 1 })
       .eq('id', t.serviceId)
       .eq('business_id', t.businessId)
     const despues = await getAvailability(slug, { any: true, serviceId: t.serviceId })
