@@ -299,5 +299,472 @@ CREATE TRIGGER "services_block_mode_change_trg"
   BEFORE UPDATE OF "capacity_mode" ON "public"."services"
   FOR EACH ROW EXECUTE FUNCTION "public"."services_block_mode_change"();
 
+-- ── 7. Redefinición de book_slot_atomic: el cupo sale de services.capacity en los TRES modos ─────
+--
+-- (CUPO-07) Es el corazón de la fase y su punto de mayor riesgo. El cuerpo arranca del de la migr.
+-- 064 —la ÚLTIMA redefinición de esta función, o sea el estado VIGENTE— y aplica CUATRO cambios
+-- encima. Igual que la 064 hizo con la 063: la 064 ya está APLICADA A MANO EN PRODUCCIÓN ⇒ es
+-- historia inmutable y NO se edita. Es `CREATE OR REPLACE` PURO, SIN dropear la función: cambiar los
+-- params o el RETURNS obliga a recrear la función y rompería los CUATRO callers que entran por
+-- `createAppointmentCore` (booking público, alta manual del panel, generación forward de abonos y
+-- canchas).
+--
+-- ── INVENTARIO DE LO QUE QUEDA BYTE-IDÉNTICO (declarado a propósito, es el patrón de cada
+--    redefinición de esta función: cambio quirúrgico + inventario de lo que NO se tocó) ───────────
+--   · la FIRMA: los 14 params + `RETURNS TABLE (id, cancel_token)`, y
+--     `LANGUAGE plpgsql SECURITY DEFINER SET search_path = public`;
+--   · el ÚNICO advisory lock de NEGOCIO-DÍA (064, CR2-01) y el orden global respecto de los locks
+--     por espacio (ascendentes) ⇒ EL EJE DE SERIALIZACIÓN NO SE TOCA en esta migración;
+--   · la selección del profesional "cualquiera" (058) y el recomputo del bucket;
+--   · el bloque de espacio (042): resolución del set de espacios, locks ascendentes y el EXISTS
+--     cross-agenda;
+--   · el rechazo `simultaneous_space_conflict` (064, gap 3);
+--   · TODA la rama simultánea: gate de exclusión por agenda, count por solape, asignación de asiento
+--     y la derivación de `is_group` desde el cupo del servicio (que ya era el modelo nuevo);
+--   · el ALCANCE del gate espejo de la rama grupal (D-07: se reescribe su JUSTIFICACIÓN, nunca su
+--     predicado) y el `INSERT ... RETURNING`.
+--
+-- ── LOS CUATRO CAMBIOS ─────────────────────────────────────────────────────────────────────────
+--   (1) El fail-safe del modo pasa de 'group_class' a 'individual' — estrictamente MÁS fail-closed
+--       (ver el paso 0).
+--   (2) La rama no simultánea deja de consultar el BLOQUE de agenda: el cupo lo pone el servicio.
+--   (3) Se reencuadra el encabezado de esa rama (cubre `individual` + `group_class`) con el CAMBIO
+--       DE RÉGIMEN frente al EXCLUDE gist 013 ESCRITO, no inferido.
+--   (4) Se reescribe el comentario del gate espejo, cuya premisa muere en esta fase (D-07).
+--
+-- ── EL CAMBIO DE RÉGIMEN: LO ÚNICO QUE HAY QUE ENTENDER ANTES DE TOCAR ESTO ────────────────────
+--   `is_group` hace DOBLE TRABAJO: significa a la vez "cupo > 1, varias filas comparten el slot" Y
+--   "exenta del EXCLUDE gist 013" (041: `... AND NOT is_group`). Esa ambigüedad es la causa raíz que
+--   la 064 tuvo que resolver con el lock de negocio-día DESPUÉS de que la 063 no alcanzara, así que
+--   este cambio se razona CONTRA EL EXCLUDE, no solo contra el conteo:
+--     · un servicio de cupo >= 2 DEBE nacer `is_group = true`, o el 2º turno SOLAPADO del mismo
+--       bucket chocaría con el gist (23P01) y el cupo NUNCA se llenaría;
+--     · y al revés: con el cupo en el servicio, un `individual` deriva cupo 1 ⇒ `is_group = false`
+--       ⇒ la fila VUELVE A ENTRAR al EXCLUDE 013. HOY, en un negocio con un bloque de cupo 3, TODAS
+--       las filas nacen `is_group = true` y quedan fuera del gist; después de esta migración solo
+--       quedan fuera las de un servicio que DECLARÓ cupo >= 2.
+--   POR ESO el pre-flight de este archivo ABORTA si algún bloque de producción tiene cupo > 1: en
+--   ese negocio el cutover NO sería neutro. Medido el 2026-08-11: 19 bloques, cupo máximo 1 ⇒ el
+--   cambio es byte-idéntico para el 100 % de los datos reales (D-02).
+
+CREATE OR REPLACE FUNCTION "public"."book_slot_atomic"(
+  "p_business_id" uuid,
+  "p_professional_id" uuid,
+  "p_service_id" uuid,
+  "p_location_id" uuid,
+  "p_date" date,
+  "p_time" time without time zone,
+  "p_duration" integer,
+  "p_client_id" uuid,
+  "p_client_name" text,
+  "p_client_phone" text,
+  "p_client_email" text,
+  "p_notes" text,
+  "p_status" text,
+  "p_expires_at" timestamp with time zone
+) RETURNS TABLE ("id" uuid, "cancel_token" uuid)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  -- (068) modo de cupo del SERVICIO, ahora de TRES valores:
+  --   'individual' (DEFAULT desde esta migración) | 'group_class' | 'simultaneous_resource'.
+  v_mode text;
+  -- (068) cupo N del servicio (services.capacity). Lo leen LOS TRES MODOS: es la fuente ÚNICA del
+  -- número desde esta migración (antes lo leía solo la rama simultánea).
+  v_svc_cap int;
+  -- (062) turnos del MISMO servicio que SOLAPAN el intervalo pedido (gate del modo simultáneo).
+  v_overlap int;
+  -- (062) is_group de la fila a insertar; cada modo lo deriva de SU fuente de cupo (LANDMINE 013).
+  v_is_group boolean;
+  -- (058) profesional EFECTIVO que se inserta: arranca en p_professional_id y, si el caller mandó el
+  -- UUID mágico "cualquiera", se sobrescribe con el elegido bajo el lock. NUNCA se inserta el mágico.
+  v_effective_pro uuid := p_professional_id;
+  -- (058) ¿el caller pidió "cualquiera"? UUID mágico DISTINTO del sentinel cero ("sin profesional").
+  v_is_any boolean := (p_professional_id = '00000000-0000-0000-0000-000000000001'::uuid);
+  -- v_bucket se RECOMPUTA tras la selección con v_effective_pro (Pitfall 1: byte-idéntico al índice 011).
+  v_bucket uuid;
+  v_capacity int;
+  v_occupied int;
+  v_seat smallint;
+  v_space_ids uuid[];   -- (042) espacios físicos que ocupa la agenda reservada (vía agenda_spaces)
+  v_sid uuid;           -- (042) iterador del FOREACH del lock por espacio
+BEGIN
+  -- 0. (062, D-07) Modo y CUPO del servicio. Se leen ANTES del lock a propósito: son CONFIGURACIÓN del
+  --    negocio (no compiten en la carrera de reservas), así que no necesitan serializarse. Filtro por
+  --    business_id EXPLÍCITO: adentro de un SECURITY DEFINER la RLS no aplica, así que un p_service_id
+  --    de otro tenant NO debe resolver a nada.
+  --
+  --    (068, CAMBIO 1) El fail-safe del COALESCE pasa de 'group_class' a 'individual', y es
+  --    estrictamente MÁS fail-closed que antes: hasta la 067, un p_service_id que no resolviera —por
+  --    ejemplo el de otro tenant— caía a la rama grupal, donde el cupo lo ponía el BLOQUE de agenda y
+  --    podía por lo tanto heredar un cupo > 1 que ese servicio nunca declaró. Ahora cae a
+  --    `individual`, que con el CHECK de coherencia del paso 4 implica cupo 1: el camino MÁS
+  --    restrictivo (seat fijo en 0, is_group false, la fila adentro del EXCLUDE 013).
+  --    El COALESCE de v_svc_cap a 1 NO cambia.
+  SELECT s.capacity_mode, COALESCE(s.capacity, 1)
+    INTO v_mode, v_svc_cap
+  FROM services s
+  WHERE s.id = p_service_id
+    AND s.business_id = p_business_id;
+  v_mode := COALESCE(v_mode, 'individual');
+  v_svc_cap := COALESCE(v_svc_cap, 1);
+
+  -- 1. (064, CR2-01) UN ÚNICO advisory lock de NEGOCIO-DÍA — en los DOS modos, sin condicionales.
+  --
+  --    Reemplaza a los DOS locks de la 063 (servicio-día + instante) y los subsume. El EJE del
+  --    invariante que hay que serializar es AGENDA-DÍA: los gates cross-servicio (el de la rama
+  --    simultánea y su espejo en la grupal) deciden sobre TODA la agenda del día, porque los
+  --    intervalos ESCALONADOS se pisan sin compartir `time` y porque las filas is_group=true están
+  --    FUERA del EXCLUDE gist 013 (041) ⇒ sin este lock esos gates son un count suelto (TOCTOU) y el
+  --    doble-booking cross-servicio entra bajo concurrencia (CR2-01).
+  --
+  --    ¿Por qué NEGOCIO-día y no AGENDA-día? Porque el bucket todavía NO existe acá: si el caller
+  --    pidió "cualquiera" (058), el profesional se elige recién en el paso 2 — y keyear por el UUID
+  --    mágico no serializaría contra nadie. business_id + date, en cambio, se conocen de entrada.
+  --    Es exactamente el motivo por el que 058 no podía usar agenda-día.
+  --
+  --    ¿Por qué NO es una regresión? Es ESTRICTAMENTE MÁS GRUESO que el lock de instante de 058
+  --    (§GA1): business+date es un prefijo de business+date+time, así que toda transacción que antes
+  --    compartía lock lo sigue compartiendo. Un lock más grueso serializa MÁS, nunca menos ⇒ se
+  --    preservan por construcción las dos garantías de §GA1 (vista consistente del instante para
+  --    `v_seat`, y para la selección del candidato de "cualquiera") y no se degrada slot_full ni
+  --    slot_taken. Y al ser UN SOLO lock en su clase, el orden de adquisición y el deadlock
+  --    desaparecen sobre este eje.
+  --
+  --    COSTO ACEPTADO Y APROBADO (leer el header de la 064 antes de "optimizar"): todas las reservas
+  --    de UN negocio en UNA fecha se serializan. Transacción medida en 15-18 ms; la key lleva
+  --    business_id ⇒ per-tenant, sin impacto cross-tenant. Cualquier lock más fino REABRE CR2-01.
+  --
+  --    ORDEN GLOBAL: negocio-día (acá) → espacios (042, ascendente, paso 1b). Idéntico en TODA
+  --    transacción del sistema ⇒ sin adquisición cruzada ⇒ deadlock-free (40P01 imposible por acá).
+  --    hashtextextended → bigint (forma de un argumento, seed 0).
+  --    (068) SIN CAMBIO: esta migración NO toca el eje de serialización.
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    p_business_id::text || p_date::text, 0));
+
+  -- 2. (058, §GA2 / D-01/D-02/D-03/D-07/D-08/D-10) Selección del profesional "cualquiera" BAJO el lock.
+  --    Solo si el caller pidió "cualquiera". La selección corre DESPUÉS del lock (Pitfall 2: correrla
+  --    antes reintroduce la carrera) y ANTES del bloque de espacio (que necesita el pro elegido).
+  --    (068) SIN CAMBIO respecto de 058/062/063/064.
+  IF v_is_any THEN
+    SELECT p.id
+    INTO   v_effective_pro
+    FROM   professionals p
+    WHERE  p.business_id = p_business_id                            -- D-08 tenant explícito
+      AND  p.active = true                                          -- D-07 activos
+      AND  p.service_id IS NULL                                     -- excluir CANCHAS (Pitfall 6): una cancha
+                                                                    --   (professional con service_id NOT NULL)
+                                                                    --   con 0 filas en professional_services
+                                                                    --   sería "comodín" y se colaría.
+      AND  (p.location_id = p_location_id OR p.location_id IS NULL) -- D-07/D-13 sede (sin-sede vale para todas)
+      AND  (  -- D-07 capaz: paridad-comodín EXACTA con staff-services.ts:48-52 (0 filas = capaz de todo).
+              NOT EXISTS (SELECT 1 FROM professional_services ps
+                          WHERE ps.business_id = p_business_id AND ps.professional_id = p.id)
+              OR EXISTS  (SELECT 1 FROM professional_services ps
+                          WHERE ps.business_id = p_business_id AND ps.professional_id = p.id
+                            AND ps.service_id = p_service_id)
+           )
+      AND  NOT EXISTS (  -- LIBRE: sin turno OCUPANTE solapado en su agenda ese día (espeja EXCLUDE 013 +
+                         --   la guarda expires_at del core booking-core.ts, Pitfall 4).
+              SELECT 1 FROM appointments a
+              WHERE a.business_id = p_business_id
+                AND a.professional_id = p.id
+                AND a.date = p_date
+                AND a.status IN ('confirmed','pending_payment')
+                AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())  -- holds vigentes
+                AND tsrange(a.date + a.time,
+                            a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+                    && tsrange(p_date + p_time,
+                               p_date + p_time + make_interval(mins => p_duration))
+           )
+    ORDER BY (  -- D-02/D-03 carga = turnos NO cancelados del pro ese DÍA COMPLETO, TODAS las sedes/servicios,
+                --   incluyendo abonos (appointments normales) y holds VIGENTES (misma guarda expires_at).
+             SELECT count(*) FROM appointments a2
+             WHERE a2.business_id = p_business_id
+               AND a2.professional_id = p.id
+               AND a2.date = p_date
+               AND a2.status IN ('confirmed','pending_payment')
+               AND (a2.status = 'confirmed' OR a2.expires_at IS NULL OR a2.expires_at > now())
+           ) ASC,
+           p.created_at ASC,   -- D-01 desempate: alta más vieja (determinístico + self-balancing)
+           p.id ASC            -- D-01 tie-break secundario → tests reproducibles
+    LIMIT 1;
+
+    IF v_effective_pro IS NULL THEN
+      -- D-10: ningún capaz libre → el error de disponibilidad de siempre (cae en la rama slot_taken→409
+      --       ya existente del core). NO se asigna a alguien ocupado ni se cae.
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  -- (058) Recomputar el bucket con el pro EFECTIVO ya resuelto. Literal byte-idéntico al índice 011 /
+  --   EXCLUDE 013 / count (Pitfall 1). Para los 4 callers actuales v_effective_pro = p_professional_id.
+  v_bucket := COALESCE(v_effective_pro, '00000000-0000-0000-0000-000000000000'::uuid);
+
+  -- 1b. (042) Exclusión acoplada por espacio físico — lock por conjunto de espacios + EXISTS.
+  --     Resolver el set de espacios de la agenda reservada vía la puente. NOTA: se keya por
+  --     v_effective_pro (el pro REAL elegido): la puente referencia professionals.id real; las
+  --     agendas sin profesional/sentinela no tienen espacios (Pitfall 1 / A2). Si la agenda no tiene
+  --     espacios mapeados, v_space_ids queda NULL → sin lock de espacio, sin chequeo, cero overhead.
+  --     (068) SIN CAMBIO: los locks de espacio siguen tomándose DESPUÉS del lock de negocio-día.
+  SELECT array_agg(asp.space_id ORDER BY asp.space_id) INTO v_space_ids   -- ORDEN ASCENDENTE (anti-deadlock)
+  FROM agenda_spaces asp
+  WHERE asp.business_id = p_business_id
+    AND asp.professional_id = v_effective_pro;
+
+  -- (064, gap 3) RECURSO SIMULTÁNEO cupo > 1 + agenda con ESPACIO mapeado ⇒ RECHAZO EXPLÍCITO.
+  --   Un espacio es una sala/cancha FÍSICA compartida entre agendas, y appointment_spaces_no_overlap
+  --   (042) impone un turno por espacio a la vez: capacidad 1. Un recurso de cupo >= 2 sobre ese mismo
+  --   espacio es una contradicción semántica, no un bug a parchear relajando el EXCLUDE (relajarlo
+  --   borraría el invariante de espacio compartido de v0.12). Antes de este rechazo la combinación
+  --   fallaba sola y MAL: el 1er turno entraba y el 2º moría con 23P01 → `slot_taken`, mientras
+  --   `availability` seguía publicando el horario como libre. Código de error PROPIO para no
+  --   confundirlo con slot_taken/slot_full (booking-core lo mapea a `simultaneous_space_conflict`).
+  --   Con cupo 1 NO aplica: la fila nace is_group=false, entra al EXCLUDE 013 y el espacio funciona
+  --   como siempre (canchas / F11) ⇒ cero regresión del camino v0.12.
+  --   No necesita lock (es configuración, igual que la lectura del paso 0), y va ANTES de tomar los
+  --   locks de espacio para no serializar de gratis a una transacción que va a abortar.
+  --   (068) SIN CAMBIO: el CHECK de coherencia del paso 4 ya vuelve imposible el `simultaneous_resource`
+  --   de cupo 1, así que el `v_svc_cap > 1` de acá pasa a ser redundante-pero-consistente; se deja
+  --   igual a propósito (el gate no depende de un constraint para ser correcto).
+  IF v_mode = 'simultaneous_resource' AND v_svc_cap > 1 AND v_space_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'simultaneous_space_conflict' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_space_ids IS NOT NULL THEN
+    -- Lock por CADA espacio en el orden ascendente del array_agg → ambas reservas que pelean un
+    -- espacio compartido lo toman en la misma posición global (sin cruce → sin deadlock 40P01).
+    FOREACH v_sid IN ARRAY v_space_ids LOOP
+      PERFORM pg_advisory_xact_lock(hashtextextended(p_business_id::text || v_sid::text, 0));
+    END LOOP;
+
+    -- Tras tomar los locks (el EXISTS es ahora autoritativo): ¿hay algún turno SOLAPADO en tiempo en
+    -- CUALQUIER agenda HERMANA (que comparta >=1 espacio del set) excluyendo la propia agenda? El
+    -- join appointments → agenda_spaces (por COALESCE(professional_id, sentinel) del turno) expande
+    -- cada turno a sus espacios; other.space_id = ANY(v_space_ids) exige intersección; el && de
+    -- tsrange exige solape de tiempo (duración variable). El <> de self excluye la F11 contra sí misma.
+    IF EXISTS (
+      SELECT 1
+      FROM appointments a
+      JOIN agenda_spaces other ON other.business_id = p_business_id
+                              AND other.professional_id = COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid)
+      WHERE a.business_id = p_business_id
+        AND a.status IN ('confirmed', 'pending_payment')
+        AND a.date = p_date
+        AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid)
+            <> v_bucket   -- excluye self (Pitfall 3); v_bucket = COALESCE(v_effective_pro, sentinel)
+        AND other.space_id = ANY (v_space_ids)                                              -- comparte >=1 espacio
+        AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+            && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))  -- solape de tiempo
+    ) THEN
+      -- Reusar slot_taken (NO space_taken). El caller lo capta por `message` (P0001) en booking-core.
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  -- 2/3/4. (062) Gate de cupo + asiento + is_group, BIFURCADOS por modo. Todo lo de acá abajo corre
+  --        DESPUÉS del advisory lock de negocio-día: nunca se decide disponibilidad con un count
+  --        suelto (TOCTOU). (064) Eso vale también para los gates cross-servicio: el lock cubre el eje
+  --        agenda-día sobre el que deciden.
+  --        (068, CAMBIO 3) La bifurcación se mantiene en DOS ramas y NO se parte en tres. `individual`
+  --        y `group_class` comparten el MISMO eje de conteo (hora de inicio EXACTA) y el mismo
+  --        tratamiento del asiento; lo único que los distinguía era el NÚMERO, y desde esta migración
+  --        los dos lo sacan del mismo lugar. Un CASE de tres ramas duplicaría código idéntico y
+  --        agrandaría el diff sobre la función que la Phase 12 necesitó DOS rondas de review y CINCO
+  --        blockers para dejar bien.
+  IF v_mode = 'simultaneous_resource' THEN
+    -- ── (063, CR-02) Gate de EXCLUSIÓN POR AGENDA — va PRIMERO, fail-closed ────────────────────
+    -- El cupo N del recurso NO reemplaza la exclusión por agenda. Con capacity > 1 la fila nace
+    -- is_group = true y sale del EXCLUDE gist 013 (041: `... AND NOT is_group`), así que si el cruce
+    -- con OTROS servicios no se chequea acá NO lo chequea NADIE: ni el gist, ni el gate de abajo (que
+    -- filtra por el MISMO service_id), ni el re-check JS con autoAssign (que se saltea entero). Ese
+    -- era el doble-booking real: "camilla" (simultáneo, cupo 2) montándose sobre una "consulta"
+    -- confirmada de la misma agenda.
+    --
+    -- Semántica: los solapes del PROPIO servicio son legales hasta el cupo (los gatea el count de
+    -- abajo); cualquier solape con OTRO servicio del MISMO bucket es doble-booking → slot_taken.
+    -- Permitir el cruce es una decisión que le corresponde al dueño (flag por servicio = FOLLOW-UP
+    -- planificado, fuera de alcance acá): el default DEBE bloquear.
+    --
+    -- Mismos criterios que el resto del motor: bucket por COALESCE(professional_id, sentinel)
+    -- byte-idéntico al índice 011, holds VIGENTES únicamente, predicado tsrange && canónico,
+    -- business_id EXPLÍCITO (SECURITY DEFINER ⇒ la RLS no protege adentro).
+    -- (064, CR2-01) Este EXISTS es AUTORITATIVO porque corre bajo el lock de negocio-día, que es el
+    -- único que cubre su eje (agenda-día). (068) SIN CAMBIO.
+    IF EXISTS (
+      SELECT 1 FROM appointments a
+      WHERE a.business_id = p_business_id
+        AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+        AND a.service_id IS DISTINCT FROM p_service_id
+        AND a.date = p_date
+        AND a.status IN ('confirmed', 'pending_payment')
+        AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
+        AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+            && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))
+    ) THEN
+      -- slot_taken (NO slot_full): no es "cupo lleno" del recurso, es la agenda ocupada por otra cosa.
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+
+    -- ── Recurso simultáneo (D-02/D-03): el cupo es de services.capacity y se cuenta por SOLAPE ──
+    -- Compite SOLO contra turnos del MISMO service_id (carriles independientes, D-04): una consulta
+    -- normal de la misma persona a la misma hora NO resta contra el cupo de "camilla" (y si pisa la
+    -- agenda ya la rechazó el gate de arriba). El predicado tsrange && tsrange es el canónico del
+    -- motor (idéntico al EXCLUDE 013 de 041 y al bloque de espacio de 042). business_id EXPLÍCITO.
+    --
+    -- (063, CR-01) Guarda de holds VIGENTES: los `pending_payment` con la seña ya vencida NO ocupan.
+    -- Es la MISMA guarda que usa la selección "cualquiera" de arriba y que usa el read-path de
+    -- availability. No se puede delegar al core como hace la rama grupal: el core solo libera los
+    -- holds vencidos de SU bucket y este carril cuenta a través de TODAS las agendas.
+    -- (068) SIN CAMBIO: esta rama YA leía el cupo del servicio — es el modelo que la fase generaliza.
+    SELECT count(*) INTO v_overlap
+    FROM appointments a
+    WHERE a.business_id = p_business_id
+      AND a.service_id = p_service_id
+      AND a.date = p_date
+      AND a.status IN ('confirmed', 'pending_payment')
+      AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
+      AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+          && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration));
+
+    IF v_overlap >= v_svc_cap THEN
+      -- El recurso ya está ocupado por `capacity` turnos que pisan este intervalo → mismo error de
+      -- cupo lleno que el grupal (el core lo mapea a slot_full/409).
+      RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
+    END IF;
+
+    -- El ASIENTO sigue atado al slot EXACTO (D-05): el índice único 011 es (business, bucket, date,
+    -- time, seat), así que el seat solo tiene que ser único DENTRO del mismo date+time. Dos turnos
+    -- escalonados tienen `time` distinto → claves distintas → ambos seat 0 sin colisión. El solape es
+    -- el GATE del cupo, nunca el criterio del asiento. (064) Este count corre bajo el lock de
+    -- negocio-día, más grueso que el de instante de 058 ⇒ sigue imposible que dos modos distintos
+    -- deriven el MISMO seat.
+    SELECT count(*) INTO v_occupied
+    FROM appointments a
+    WHERE a.business_id = p_business_id
+      AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+      AND a.date = p_date AND a.time = p_time
+      AND a.status IN ('confirmed', 'pending_payment');
+    v_seat := v_occupied;
+
+    -- LANDMINE: el EXCLUDE gist 013 (041:76) solo aplica a filas con is_group = false. Si un recurso
+    -- de cupo > 1 naciera con is_group = false, el 2º turno SOLAPADO del mismo bucket chocaría con el
+    -- gist (23P01) y el recurso NUNCA se llenaría. Con cupo 1 se deja is_group = false a propósito:
+    -- el EXCLUDE actúa de respaldo atómico redundante con el gate por solape de arriba.
+    v_is_group := (v_svc_cap > 1);
+  ELSE
+    -- ── individual + group_class: cupo por HORA DE INICIO EXACTA ───────────────────────────────
+    --
+    -- (068, CAMBIO 3) Esta rama cubre AHORA DOS modos declarables, no "el default": `individual`
+    -- (cupo 1) y `group_class` (cupo >= 2). Comparten eje de conteo y tratamiento de asiento; el
+    -- número sale del mismo lugar para los dos.
+    --
+    -- ⚠ CAMBIO DE RÉGIMEN FRENTE AL EXCLUDE GIST 013 — es el corazón de esta migración y va escrito,
+    -- no inferido (ver también el header de la sección 7):
+    --   · `individual` ⇒ cupo 1 ⇒ `v_seat` fijo en 0 ⇒ la 2ª reserva del slot EXACTO choca con el
+    --     índice único 011 (23505 → slot_taken), y la fila nace is_group = false ⇒ VUELVE A ENTRAR
+    --     al EXCLUDE 013, que es el que rechaza el solape de DURACIÓN VARIABLE (un turno de 60' que
+    --     pisa parcialmente a uno de 30' — eso el índice 011 no lo ve).
+    --   · cupo >= 2 ⇒ la fila nace is_group = true y SALE del gist A PROPÓSITO, porque un EXCLUDE no
+    --     puede expresar "hasta N": el invariante anti-solape de esas filas lo impone ESTA función,
+    --     bajo el lock de negocio-día.
+    -- Antes de esta migración, en un negocio con un bloque de agenda de cupo 3 TODAS las filas —de
+    -- cualquier servicio— nacían is_group = true y quedaban fuera del gist. Desde acá solo quedan
+    -- fuera las de un servicio que DECLARÓ cupo >= 2.
+    --
+    -- (064, CR2-01 — eje INVERSO) Gate ESPEJO del gate cross-servicio de la rama simultánea. Sin él
+    -- este eje no tenía NINGÚN chequeo: una fila `is_group = true` de un RECURSO SIMULTÁNEO está
+    -- FUERA del EXCLUDE gist 013, así que un turno de esta rama se le podía montar encima — y con un
+    -- cupo > 1 entraba incluso SIN concurrencia (el re-check JS tampoco frena:
+    -- `rejectEarly = taken && slotCapacity <= 1` → false). Bajo concurrencia entraba también con
+    -- cupo 1.
+    --
+    -- ⚠ ALCANCE ACOTADO A PROPÓSITO, Y SU JUSTIFICACIÓN SE REESCRIBE ACÁ (D-07). El predicado NO se
+    -- toca: además de `is_group = true` + servicio DISTINTO + solape, se sigue exigiendo que el
+    -- servicio de la fila preexistente esté HOY en modo `simultaneous_resource`. Lo que cambia es el
+    -- POR QUÉ. La razón vieja —`time_blocks.capacity` es del BLOQUE, así que con un bloque de cupo 3
+    -- TODAS las filas nacen is_group = true y bloquearlas sería drift— MUERE con esta migración: el
+    -- cupo ya no sale del bloque. La razón que SOBREVIVE es el mismo caso legal, ahora DECLARADO: dos
+    -- servicios GRUPALES DISTINTOS, cada uno con `capacity >= 2`, siguen pudiendo coexistir solapados
+    -- en la misma agenda —es lo que "cupo N" significa— y es exactamente lo que este recorte protege.
+    -- Ampliar el gate NO sería restaurar integridad perdida: sería CAMBIAR COMPORTAMIENTO, y hacerlo
+    -- en la misma migración que mueve la fuente del cupo, sobre este RPC, es apilar riesgo. Queda
+    -- anotado como candidato a REVISIÓN PROPIA. Un comentario que miente es peor que ninguno.
+    --
+    -- Mismos criterios que su espejo: bucket byte-idéntico al 011, holds VIGENTES, tsrange &&
+    -- canónico, business_id EXPLÍCITO en las DOS tablas (SECURITY DEFINER ⇒ sin RLS adentro).
+    IF EXISTS (
+      SELECT 1 FROM appointments a
+      WHERE a.business_id = p_business_id
+        AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+        AND a.service_id IS DISTINCT FROM p_service_id
+        AND a.date = p_date
+        AND a.is_group = true            -- solo las filas que se fueron del EXCLUDE 013
+        AND a.status IN ('confirmed', 'pending_payment')
+        AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
+        AND EXISTS (                     -- ...y se fueron por el modo simultáneo, no por cupo grupal
+              SELECT 1 FROM services s2
+              WHERE s2.id = a.service_id
+                AND s2.business_id = p_business_id
+                AND s2.capacity_mode = 'simultaneous_resource'
+            )
+        AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
+            && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))
+    ) THEN
+      -- Mismo error que el espejo: la agenda está ocupada por otra cosa, no es cupo lleno.
+      RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. (068, CAMBIO 2 — CUPO-07) El cupo sale del SERVICIO. Acá vivía la consulta que resolvía la
+    --    capacidad con un MAX sobre el BLOQUE de agenda (plantilla semanal: day_of_week + ventana);
+    --    se borró entera. El número ya se leyó en el paso 0, ANTES del lock, porque es CONFIGURACIÓN
+    --    del negocio y no compite en la carrera de reservas: no hace falta ninguna consulta más.
+    --
+    --    Se conserva `v_capacity` como variable en vez de usar `v_svc_cap` en línea a propósito: deja
+    --    BYTE-IDÉNTICAS las dos líneas que la consumen (el gate de asiento del paso 4 y la derivación
+    --    de is_group), y un diff mínimo sobre esta función es una decisión de RIESGO, no de estilo.
+    v_capacity := v_svc_cap;
+
+    -- 3. Ocupantes actuales del slot exacto (mismo bucket, mismo date+time, estados que ocupan).
+    --    Los holds vencidos ya los liberó el core ANTES del RPC, así que el count está limpio.
+    SELECT count(*) INTO v_occupied
+    FROM appointments a
+    WHERE a.business_id = p_business_id
+      AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
+      AND a.date = p_date AND a.time = p_time
+      AND a.status IN ('confirmed', 'pending_payment');
+
+    -- 4. Asignación de asiento + cero regresión cupo 1 (CONC-02). Sin cambio respecto de 041/042/058/064.
+    IF v_capacity > 1 THEN
+      IF v_occupied >= v_capacity THEN
+        RAISE EXCEPTION 'slot_full' USING ERRCODE = 'P0001';
+      END IF;
+      v_seat := v_occupied;
+    ELSE
+      -- Cupo 1: seat fijo en 0 → la 2ª reserva colisiona con el índice 011 (23505 → slot_taken).
+      v_seat := 0;
+    END IF;
+    v_is_group := (v_capacity > 1);
+  END IF;
+  RETURN QUERY
+  INSERT INTO appointments (
+    business_id, client_id, client_name, client_phone, client_email,
+    service_id, professional_id, location_id, date, time, duration_minutes,
+    seat, is_group, notes, status, expires_at
+  ) VALUES (
+    p_business_id, p_client_id, p_client_name, p_client_phone, p_client_email,
+    p_service_id, v_effective_pro, p_location_id, p_date, p_time, p_duration,   -- (058) el pro REAL, nunca el mágico
+    v_seat, v_is_group, p_notes, p_status, p_expires_at                          -- (062) is_group según el modo
+  )
+  RETURNING appointments.id, appointments.cancel_token;
+END;
+$$;
+
+ALTER FUNCTION "public"."book_slot_atomic"(uuid, uuid, uuid, uuid, date, time without time zone, integer, uuid, text, text, text, text, text, timestamp with time zone) OWNER TO "postgres";
+
+-- Re-emitir el GRANT (el CREATE OR REPLACE preserva grants, pero se re-emite por claridad/idempotencia,
+-- igual que 041/042/058/062/063/064): anon (caso anon-key), authenticated (alta manual anon+RLS),
+-- service_role (booking público).
+GRANT EXECUTE ON FUNCTION "public"."book_slot_atomic"(uuid, uuid, uuid, uuid, date, time without time zone, integer, uuid, text, text, text, text, text, timestamp with time zone) TO "anon", "authenticated", "service_role";
+
 -- ── Recargar el schema cache de PostgREST (obligatorio tras DDL) ─────────────────────────────────
 NOTIFY pgrst, 'reload schema';
