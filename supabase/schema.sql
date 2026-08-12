@@ -562,6 +562,38 @@ $$;
 
 ALTER FUNCTION "public"."services_block_delete"() OWNER TO "postgres";
 
+
+CREATE OR REPLACE FUNCTION "public"."services_block_mode_change"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
+BEGIN
+  -- Guard de no-cambio (migr. 068, CUPO-08): es el guard REAL del gate. El `UPDATE OF` del trigger
+  -- solo evita disparar cuando la columna no viene en el SET; `saveEditService` la manda SIEMPRE.
+  IF NEW."capacity_mode" IS NOT DISTINCT FROM OLD."capacity_mode" THEN
+    RETURN NEW;
+  END IF;
+  -- SIN guard de cascada a propósito: services_business_id_fkey es ON DELETE CASCADE, así que cerrar
+  -- una cuenta BORRA la fila y nunca llega a un BEFORE UPDATE (no agregar "por simetría" con la 065).
+  -- Cambiar de modo con turnos futuros vivos dejaría `is_group` desalineado y fuera del EXCLUDE 013
+  -- y del gate espejo (R-1 de la Phase 12). La rama IS NULL de status es obligatoria: NOT IN sobre
+  -- NULL evalúa NULL y ABRIRÍA el gate. Filtro por tenant explícito: en SECURITY DEFINER no hay RLS.
+  IF EXISTS (SELECT 1 FROM appointments a WHERE a."service_id" = OLD."id"
+       AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
+       AND a."date" >= v_today
+       AND (a."status" IS NULL OR a."status" NOT IN ('cancelled', 'completed'))) THEN
+    RAISE EXCEPTION 'service_mode_has_future_appointments' USING ERRCODE = 'P0001';
+  END IF;
+  -- RETURN NEW obligatorio: devolver NULL cancelaría la escritura SIN error y la UI diría "guardado".
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."services_block_mode_change"() OWNER TO "postgres";
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -1110,9 +1142,10 @@ CREATE TABLE IF NOT EXISTS "public"."services" (
     "created_at" timestamp with time zone DEFAULT "now"(),
     "location_id" "uuid",
     "location_ids" "uuid"[],
-    "capacity_mode" "text" DEFAULT 'group_class'::"text" NOT NULL,
+    "capacity_mode" "text" DEFAULT 'individual'::"text" NOT NULL,
     "capacity" smallint DEFAULT 1 NOT NULL,
-    CONSTRAINT "services_capacity_mode_chk" CHECK (("capacity_mode" = ANY (ARRAY['group_class'::"text", 'simultaneous_resource'::"text"]))),
+    CONSTRAINT "services_capacity_matches_mode_chk" CHECK (((("capacity_mode" = 'individual'::"text") AND ("capacity" = 1)) OR (("capacity_mode" = ANY (ARRAY['group_class'::"text", 'simultaneous_resource'::"text"])) AND ("capacity" >= 2)))),
+    CONSTRAINT "services_capacity_mode_chk" CHECK (("capacity_mode" = ANY (ARRAY['individual'::"text", 'group_class'::"text", 'simultaneous_resource'::"text"]))),
     CONSTRAINT "services_capacity_positive" CHECK (("capacity" >= 1))
 );
 
@@ -1551,6 +1584,10 @@ CREATE OR REPLACE TRIGGER "businesses_protect_admin_columns" BEFORE UPDATE ON "p
 
 
 CREATE OR REPLACE TRIGGER "services_block_delete_trg" BEFORE DELETE ON "public"."services" FOR EACH ROW EXECUTE FUNCTION "public"."services_block_delete"();
+
+
+
+CREATE OR REPLACE TRIGGER "services_block_mode_change_trg" BEFORE UPDATE OF "capacity_mode" ON "public"."services" FOR EACH ROW EXECUTE FUNCTION "public"."services_block_mode_change"();
 
 
 

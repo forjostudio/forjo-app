@@ -190,14 +190,19 @@ export interface Service {
   location_id?: string | null
   // Consultorios donde se ofrece el servicio. null/vacío = en todos. Reemplaza a location_id.
   location_ids?: string[] | null
-  // Qué significa el "cupo N" de este servicio (migr. 062, Phase 12):
-  //   'group_class'           = clase grupal: el cupo lo pone time_blocks.capacity y se cuenta por
-  //                             HORA DE INICIO EXACTA (comportamiento histórico). Es el DEFAULT.
-  //   'simultaneous_resource' = recurso simultáneo (ej. 2 camillas): el cupo es `capacity` (abajo) y
-  //                             se cuenta por SOLAPE de intervalos entre turnos del mismo servicio.
-  capacity_mode: 'group_class' | 'simultaneous_resource'
-  // Cupo N del recurso simultáneo. Lo lee SOLO el modo 'simultaneous_resource'; la clase grupal
-  // sigue leyendo time_blocks.capacity. DEFAULT 1 en la DB.
+  // El MODO decide CÓMO se cuenta el cupo; `capacity` (abajo) decide CUÁNTO, para los tres
+  // (migr. 062 + 068, Phase 12 y 15):
+  //   'individual'            = un turno por slot. Es el DEFAULT en la DB y el CHECK de coherencia
+  //                             `services_capacity_matches_mode_chk` le FUERZA cupo 1.
+  //   'group_class'           = clase grupal: se cuenta por HORA DE INICIO EXACTA (todos arrancan
+  //                             juntos). Exige cupo >= 2 por CHECK.
+  //   'simultaneous_resource' = recurso simultáneo (ej. 2 camillas): se cuenta por SOLAPE de
+  //                             intervalos entre turnos del mismo servicio. Exige cupo >= 2 por CHECK.
+  // Cambiar el modo con turnos futuros vivos lo RECHAZA la base (trigger services_block_mode_change,
+  // migr. 068): P0001 + 'service_mode_has_future_appointments'.
+  capacity_mode: 'individual' | 'group_class' | 'simultaneous_resource'
+  // Cupo N del servicio. Es la ÚNICA fuente del número para los TRES modos (migr. 068):
+  // time_blocks.capacity ya no decide nada. DEFAULT 1 en la DB.
   capacity: number
   created_at: string
 }
@@ -269,7 +274,10 @@ export interface Appointment {
   google_event_id?: string | null
   // Cupos grupales (migración 041, lo escribe book_slot_atomic). Opcionales con `?` porque no todo
   // `select` los trae. `seat` = posición 0..capacity-1 que vuelve único el índice 011 por slot (cupo 1
-  // siempre seat 0). `is_group` = desnormalización (capacity > 1) que condiciona el EXCLUDE 013.
+  // siempre seat 0). `is_group` = desnormalización de `services.capacity > 1` (migr. 068: el cupo es
+  // del SERVICIO, no del bloque de agenda). LANDMINE: condiciona el EXCLUDE 013 (`AND NOT is_group`),
+  // así que vale `is_group ⟺ capacity_mode <> 'individual'` — por eso gatear el cambio de MODO
+  // (migr. 068) gatea todo el drift posible de `is_group`.
   seat?: number
   is_group?: boolean
   // FK a la serie del abono (migración 054, D-03); marca el turno como 'fijo' en la agenda (D-09).
