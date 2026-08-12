@@ -193,5 +193,111 @@ $$;
 ALTER TABLE "public"."services"
   ALTER COLUMN "capacity_mode" SET DEFAULT 'individual';
 
+-- ── 6. Gate de cambio de modo (CUPO-08 — cierra el riesgo residual R-1 de la Phase 12) ───────────
+--
+-- QUÉ INVARIANTE CIERRA. Hoy cambiar `capacity_mode` con turnos ya creados deja las filas viejas con
+-- el `is_group` del momento del INSERT. En el sentido `simultaneous_resource → group_class` esas filas
+-- quedan `is_group = true`, o sea FUERA del EXCLUDE gist 013 (`041:76`, `AND NOT is_group`) Y ADEMÁS
+-- fuera del gate espejo de la 064, que exige que el servicio esté HOY en `simultaneous_resource`
+-- (`064:420-425`). Resultado: solapes PERMANENTES que ningún gate vuelve a detectar. Es el residual de
+-- integridad más serio que dejó abierto la Phase 12 (R-1 de 12-SECURITY.md), reconocido como fuera de
+-- alcance en `064:72-74`.
+--
+-- El gate bloquea CUALQUIER transición de modo, no solo las que voltean `is_group`: pasar de
+-- `group_class` a `simultaneous_resource` también cambia QUÉ GATE cubre a las filas ya insertadas
+-- (eje de conteo por hora exacta ⇄ por solape), así que el criterio no puede ser "solo si cambia
+-- is_group".
+--
+-- POR QUÉ BLOQUEA EN VEZ DE REPARAR (D-03). Reparar las filas existentes (recalcular `is_group` y
+-- reescribirlas) puede toparse con turnos que YA se solapan de una forma que pasa a ser ilegal, y ahí
+-- el EXCLUDE aborta la transacción igual: el dueño se queda con un error peor y sin salida clara. La
+-- salida legítima y documentada es cancelar o esperar los turnos futuros — cuando no queda ninguno, el
+-- cambio de modo pasa solo, sin intervención.
+--
+-- POR QUÉ UN TRIGGER `BEFORE UPDATE` ACÁ SÍ (y en la 067 NO). El review de la 067 propuso un
+-- BEFORE UPDATE que habría roto TODAS las bajas de abono en producción, así que la forma se eligió
+-- recién DESPUÉS de trazar el write-path real de `services`:
+--   - `saveEditService` (settings-client.tsx:690-709) manda SIEMPRE `capacity_mode` en el payload,
+--     incluso cuando el dueño no lo tocó ⇒ el trigger dispara, y el guard interno de no-cambio lo
+--     deja pasar sin mirar turnos.
+--   - `toggleService` (:656, activar/desactivar), `setServiceLocations` (:665, sedes) y
+--     `updateCancha` / `setCanchaActive` (lib/canchas.ts:283, :308) NO mandan `capacity_mode` ⇒ el
+--     trigger ni siquiera dispara.
+--   - `addService` (:617) es un INSERT ⇒ fuera del alcance de un trigger de UPDATE.
+--   - Los `afterEach` de la suite y `seedSimultaneousService` sí cambian el modo, pero borran los
+--     `appointments` del tenant antes (o los siembran después) ⇒ no hay turnos futuros vivos en el
+--     momento del cambio.
+-- O sea: ninguna escritura legítima conocida queda bloqueada.
+CREATE OR REPLACE FUNCTION "public"."services_block_mode_change"() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  -- "Hoy" en hora de Argentina (UTC-3 sin DST), no en UTC: a las 22:00 de Buenos Aires el `now()` en
+  -- UTC ya es el día siguiente y un turno de mañana temprano dejaría de contarse como futuro. Mismo
+  -- criterio que `services_block_delete` (migr. 065) y `abonos_block_delete` (migr. 067).
+  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
+BEGIN
+  -- 6.1 GUARD DE NO-CAMBIO, PRIMERO. Éste es el guard REAL del gate: el `UPDATE OF` declarado en el
+  -- trigger es solo una optimización que evita disparar cuando la columna ni siquiera viene en el SET.
+  -- Postgres dispara igual cuando la columna VIENE en el SET con el mismo valor que ya tenía, que es
+  -- exactamente lo que hace `saveEditService` en cada guardado. Sin este guard, renombrar un servicio
+  -- con turnos futuros rebotaría.
+  IF NEW."capacity_mode" IS NOT DISTINCT FROM OLD."capacity_mode" THEN
+    RETURN NEW;
+  END IF;
+
+  -- 6.2 ACÁ NO VA EL GUARD DE CASCADA que sí llevan la 065 y la 067, y no es un olvido:
+  -- `services_business_id_fkey` es `ON DELETE CASCADE`, así que cerrar la cuenta de un negocio BORRA
+  -- la fila de `services` — nunca la actualiza. Una cascada jamás llega a un BEFORE UPDATE. Queda
+  -- escrito para que nadie agregue código muerto "por simetría" con los otros dos gates.
+
+  -- 6.3 Turnos futuros VIVOS del servicio, con los mismos criterios que `services_block_delete` (065).
+  --
+  -- Anclado en `a.service_id = OLD.id` (UUID PK, no adivinable). El filtro por tenant es EXPLÍCITO y
+  -- obligatorio: dentro de una función SECURITY DEFINER la RLS NO aplica, así que sin él la query
+  -- cruzaría negocios. La rama `OLD.business_id IS NULL` es necesaria porque `services.business_id` es
+  -- NULLABLE (filas legacy) — es la misma forma que usa el gate hermano de la 065.
+  --
+  -- "Futuro" = `date >= hoy AR`, INCLUSIVE. "Vivo" = cualquier estado que no sea `cancelled` (ya se
+  -- anuló) ni `completed` (ya se prestó: es historia, no un compromiso por delante).
+  --
+  -- La rama de estado NULO es OBLIGATORIA y no es defensiva de más: `appointments.status` es NULLABLE
+  -- y `NOT IN (...)` sobre NULL evalúa a NULL — ni true ni false —, así que esas filas quedarían fuera
+  -- del EXISTS y ABRIRÍAN el gate. Un turno sin estado sigue siendo un turno reservado. El repo ya
+  -- pagó esta trampa dos veces (migr. 065 y el read-path de 13-01).
+  IF EXISTS (
+    SELECT 1
+      FROM appointments a
+     WHERE a."service_id" = OLD."id"
+       AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
+       AND a."date" >= v_today
+       AND (a."status" IS NULL OR a."status" NOT IN ('cancelled', 'completed'))
+  ) THEN
+    -- Message = código de dominio FIJO y NUEVO, sin nombres de cliente, sin fechas y sin conteos: el
+    -- texto viaja hasta el navegador y no puede filtrar datos del negocio (T-14-14 / lección T-13-09).
+    -- El panel lo mapea a copy propia leyendo `code = 'P0001'` + `message.includes(...)`, igual que ya
+    -- hace con los dos códigos de la 065. Convivencia verificada: ninguno de esos dos
+    -- (`service_has_future_appointments`, `service_has_active_abono`) es substring de éste ni al revés,
+    -- así que el `includes` del panel no los puede confundir.
+    RAISE EXCEPTION 'service_mode_has_future_appointments' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 6.4 Devolver la fila nueva es OBLIGATORIO, y es el espejo exacto del RETURN OLD de la 067:
+  -- devolver NULL desde un trigger BEFORE UPDATE cancela la escritura SIN error — PostgREST
+  -- respondería 204, el panel diría "Servicio actualizado" y no se habría actualizado nada (T-14-16).
+  -- El único camino de rechazo válido es el RAISE de arriba.
+  RETURN NEW;
+END;
+$$;
+
+ALTER FUNCTION "public"."services_block_mode_change"() OWNER TO "postgres";
+
+-- Idempotencia: el DROP previo es lo que hace re-corrible el archivo entero (sin él, una segunda
+-- pasada fallaría con 42710). Mismo molde que la 065, la 066 y la 067.
+DROP TRIGGER IF EXISTS "services_block_mode_change_trg" ON "public"."services";
+
+CREATE TRIGGER "services_block_mode_change_trg"
+  BEFORE UPDATE OF "capacity_mode" ON "public"."services"
+  FOR EACH ROW EXECUTE FUNCTION "public"."services_block_mode_change"();
+
 -- ── Recargar el schema cache de PostgREST (obligatorio tras DDL) ─────────────────────────────────
 NOTIFY pgrst, 'reload schema';
