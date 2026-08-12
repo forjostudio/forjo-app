@@ -592,7 +592,7 @@ Plans:
   3. Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza **en la base**, con un código de dominio fijo que no filtra datos del negocio, y el panel lo mapea a copy propio — el texto crudo del error nunca llega a la pantalla (CUPO-08, cierra R-1).
   4. Las garantías de concurrencia se prueban con **tests de carrera contra Postgres de verdad y con control negativo** (el molde de `test/concurrency.test.ts` y de la Phase 12), no con aserciones de lectura de código.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed — los cinco planes ejecutados y commiteados. ⚠ La migración **068 NO está aplicada en producción** (última en prod = 067): el procedimiento quedó en `15-RUNBOOK-068.md` y aplicarla es decisión del dueño. Falta el `secure-phase` (obligatorio) y la UAT de cierre de fase.
 
 Plans:
 **Wave 1**
@@ -613,7 +613,7 @@ Plans:
 
 **Wave 5** *(blocked on 15-04)*
 
-- [ ] 15-05-PLAN.md — Verificación: suite de integración del gate de cambio de modo contra Postgres real (molde `abono-delete-gate`), dos casos de carrera con **control negativo** A/B, y el runbook de aplicación manual de la 068 (pre-flight con criterio de aborto + verificación por instalación, D-09)
+- [x] 15-05-PLAN.md — Verificación: suite de integración del gate de cambio de modo contra Postgres real (molde `abono-delete-gate`), dos casos de carrera con **control negativo** A/B, y el runbook de aplicación manual de la 068 (pre-flight con criterio de aborto + verificación por instalación, D-09)
 
 **Waves**: cadena **secuencial** por dependencia real, sin paralelismo — todo pasa por el mismo motor y la misma suite. 15-01 instala el modelo del que dependen todos; 15-02 deja el editor y los fixtures legales **antes** de que el motor cambie (D-10: nada roto en ningún commit); 15-03 mueve la fuente del cupo y migra sus tests en la misma unidad revisable; 15-04 alinea las lecturas JS (no antes, o la grilla y el RPC discreparían dentro de la propia fase); 15-05 prueba y documenta.
 

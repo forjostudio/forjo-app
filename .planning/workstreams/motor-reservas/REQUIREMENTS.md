@@ -98,13 +98,22 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       el booking público manda el `serviceId` que el endpoint necesita. 22/22 en `concurrency.test.ts`
       y **65/65** en las 8 suites de los cuatro consumidores, con A/B contra las versiones viejas de
       los dos archivos. La **cuarta** lectura, `agenda-client.tsx`, es del panel autenticado y queda en
-      la **Phase 16** por D-08: drift de visualización, no de reserva.)*
+      la **Phase 16** por D-08: drift de visualización, no de reserva. **15-05** agregó los dos casos
+      de carrera que lo cierran: el control negativo del cupo por bloque en la hora exacta y N+1
+      reservas concurrentes sobre un grupal de cupo N, los dos vistos **FALLAR** contra un mutante que
+      restaura la lectura de `time_blocks`.)*
 
 - [x] **CUPO-08** — Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza en
       la base con un código de dominio fijo, sin filtrar datos del negocio en el mensaje. Cierra el
       riesgo residual **R-1** de `12-SECURITY.md`: hoy ese cambio deja filas `is_group = true`
       huérfanas, fuera del EXCLUDE gist y fuera del gate espejo ⇒ solapes permanentes que ningún gate
       detecta.
+      *(Cerrado en **15-01** (gate en la base) + **15-02** (copy propia del panel) + **15-05** (la
+      suite de integración: 7 casos contra Postgres real que asiertan `code` Y `message` Y el estado
+      real de la base, con **control negativo** — dropeado el trigger, los 3 casos de rechazo FALLAN).
+      En producción se verifica **por instalación, no por comportamiento** (D-09): cero servicios
+      simultáneos ⇒ el rechazo no se puede provocar desde la UI. ⚠ El gate vive hoy solo en la base
+      **local**: llega a prod cuando se aplique la 068 con `15-RUNBOOK-068.md`.)*
 
 ### Superficie y polish (Phase 16)
 
@@ -137,8 +146,8 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | Req | Phase | Status |
 |-----|-------|--------|
 | CUPO-06 | Phase 15 | Complete (15-01 modelo + 15-02 editor: 'Individual' es elegible y es el default de alta) |
-| CUPO-07 | Phase 15 | Complete (15-03 motor + 15-04 las tres lecturas JS; la 4ª —grilla del panel— es Phase 16 por D-08) |
-| CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel: P0001 + service_mode_has_future_appointments mapeado a copy propia, sin interpolar el error) — la suite de integración del gate sigue siendo 15-05 |
+| CUPO-07 | Phase 15 | Complete (15-03 motor + 15-04 las tres lecturas JS + 15-05 los dos casos de carrera con A/B contra un mutante que restaura la lectura del bloque; la 4ª —grilla del panel— es Phase 16 por D-08) |
+| CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel + 15-05 la suite de integración: 7 casos contra Postgres real, vistos FALLAR con el trigger dropeado). ⚠ El gate está en la base **LOCAL**; llega a prod al aplicar la 068 (`15-RUNBOOK-068.md`) |
 | CUPO-09 | Phase 16 | Pending |
 | POLISH-08 | Phase 16 | Pending |
 | POLISH-09 | Phase 16 | Pending |

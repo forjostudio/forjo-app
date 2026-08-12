@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: Cupo unificado por servicio
-status: Phase 15 en ejecución — 15-01, 15-02, 15-03 y 15-04 completos (4/5 planes)
-stopped_at: Completado 15-04-PLAN.md — las TRES lecturas JS del cupo alineadas con el motor (D-08); el desacuerdo write-path/read-path quedó CERRADO
-last_updated: "2026-08-12T21:10:00.000Z"
-last_activity: 2026-08-12 — 15-04 ejecutado (booking-core + availability con sus tres consumidores + el serviceId del booking público; concurrency 22/22 y 65/65 en las 8 suites del verification)
+status: Phase 15 — los 5 planes EJECUTADOS (5/5); pendientes el secure-phase (obligatorio) y la UAT de cierre
+stopped_at: Completado 15-05-PLAN.md — suite de integración del gate (7/7, con control negativo), los dos casos de carrera de CUPO-07 (concurrency 24/24, con A/B contra un mutante) y el runbook de la 068. La 068 sigue SIN aplicar en producción
+last_updated: "2026-08-12T22:40:00.000Z"
+last_activity: 2026-08-12 — 15-05 ejecutado (capacity-mode-change-gate 7/7 con el trigger dropeado viéndolo fallar; concurrency 22/22 → 24/24 con A/B contra el mutante que restaura la lectura del bloque; 12/12 suites del verification, tsc y build exit 0; 15-RUNBOOK-068.md escrito)
 progress:
   total_phases: 16
   completed_phases: 14
   total_plans: 76
-  completed_plans: 75
+  completed_plans: 76
   percent: 89
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 15 — Modelo de cupo unificado (en ejecución, 4/5 planes)
-Plan: 15-01, 15-02, 15-03 y 15-04 COMPLETOS (Waves 1 a 4) — el próximo es 15-05 (suite de integración del gate de CUPO-08 + runbook de la 068)
-Status: la migración **068** está completa (modelo + gate + RPC) y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**. El guard del editor (D-10) ya está en código. ✅ **El desacuerdo write-path/read-path quedó CERRADO por 15-04**: `lib/booking-core.ts` y `app/api/booking/availability/route.ts` (con sus tres consumidores) deciden el cupo con `services.capacity`, igual que el RPC, y el booking público manda el `serviceId` que el endpoint necesita. La ÚNICA lectura que sigue decidiendo por `time_blocks.capacity` es `app/(dashboard)/agenda/agenda-client.tsx` — panel autenticado, drift de visualización, **Phase 16** por D-08
+Phase: 15 — Modelo de cupo unificado (5/5 planes ejecutados; falta secure-phase + UAT de cierre)
+Plan: 15-01 a 15-05 COMPLETOS (Waves 1 a 5). El próximo paso del workstream es el **`secure-phase` de la Phase 15** (obligatorio: toca `book_slot_atomic`), la **UAT de cierre de fase** (el `<human-check>` del 15-05 Task 3, sin correr) y —cuando el dueño lo decida— aplicar la **068** a producción con `15-RUNBOOK-068.md`
+Status: la migración **068** está completa (modelo + gate + RPC) y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**. El guard del editor (D-10) ya está en código. ✅ **El desacuerdo write-path/read-path quedó CERRADO por 15-04**: `lib/booking-core.ts` y `app/api/booking/availability/route.ts` (con sus tres consumidores) deciden el cupo con `services.capacity`, igual que el RPC, y el booking público manda el `serviceId` que el endpoint necesita. La ÚNICA lectura que sigue decidiendo por `time_blocks.capacity` es `app/(dashboard)/agenda/agenda-client.tsx` — panel autenticado, drift de visualización, **Phase 16** por D-08. ✅ **15-05 cerró la verificación**: `test/capacity-mode-change-gate.test.ts` (7 casos, `code` + `message` + estado real de la base, **visto FALLAR** con el trigger dropeado) y los dos casos de carrera de CUPO-07 en `concurrency.test.ts` (24/24, **vistos FALLAR** contra un mutante que restaura `MAX(tb.capacity)`). El runbook de aplicación manual vive en `15-RUNBOOK-068.md`: pre-flight con **criterio de aborto** (`max(capacity) from time_blocks > 1` ⇒ NO aplicar), **código primero** y migración inmediatamente después, verificación **por instalación** (D-09) y rollback por objeto
 Last activity: 2026-08-12 — 15-04 ejecutado (las tres lecturas JS alineadas; `capacityFor()` borrada entera; los cinco `seedTimeBlock` de 15-03 bajados y convertidos en el A/B de este plan; 22/22 y 65/65)
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
@@ -97,6 +97,7 @@ Last activity: 2026-08-12 — 15-04 ejecutado (las tres lecturas JS alineadas; `
 | Phase 15 P02 | ~35min | 3 tasks | 4 files |
 | Phase 15 P03 | ~20min | 3 tasks | 3 files |
 | Phase 15 P04 | ~25min | 3 tasks | 4 files |
+| Phase 15 P05 | ~40min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
