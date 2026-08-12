@@ -592,6 +592,31 @@ Plans:
   3. Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza **en la base**, con un código de dominio fijo que no filtra datos del negocio, y el panel lo mapea a copy propio — el texto crudo del error nunca llega a la pantalla (CUPO-08, cierra R-1).
   4. Las garantías de concurrencia se prueban con **tests de carrera contra Postgres de verdad y con control negativo** (el molde de `test/concurrency.test.ts` y de la Phase 12), no con aserciones de lectura de código.
 
+**Plans**: 0/5 plans complete
+
+Plans:
+**Wave 1**
+
+- [ ] 15-01-PLAN.md — Migración **068**: enum de tres modos + backfill por predicado + CHECK de coherencia modo↔cupo + DEFAULT `individual` + gate `services_block_mode_change` (CUPO-08 / R-1) + espejo quirúrgico en `schema.sql` + el tipo del modo en `lib/types.ts`
+
+**Wave 2** *(blocked on 15-01)*
+
+- [ ] 15-02-PLAN.md — Guard **mínimo** del editor (3ª opción, defaults en `individual`, piso de cupo por modo, mapeo del rechazo de CUPO-08 a copy propia) + `seedGroupClassService` + los cuatro `afterEach` legales (D-10). NO es la UX completa: eso es CUPO-09 / Phase 16
+
+**Wave 3** *(blocked on 15-02)*
+
+- [ ] 15-03-PLAN.md — El motor: `book_slot_atomic` lee `services.capacity` en los tres modos y deja de consultar `time_blocks` (CUPO-07) + espejo en `schema.sql` + reescritura del comentario del gate espejo (D-07) + migración de los casos de carrera al cupo por servicio
+
+**Wave 4** *(blocked on 15-03)*
+
+- [ ] 15-04-PLAN.md — Las lecturas JS alineadas (D-08): `booking-core` + `availability` (definición y sus **tres** consumidores) + el booking público mandando `serviceId` + reencuadre del caso de no-fuga de la grilla
+
+**Wave 5** *(blocked on 15-04)*
+
+- [ ] 15-05-PLAN.md — Verificación: suite de integración del gate de cambio de modo contra Postgres real (molde `abono-delete-gate`), dos casos de carrera con **control negativo** A/B, y el runbook de aplicación manual de la 068 (pre-flight con criterio de aborto + verificación por instalación, D-09)
+
+**Waves**: cadena **secuencial** por dependencia real, sin paralelismo — todo pasa por el mismo motor y la misma suite. 15-01 instala el modelo del que dependen todos; 15-02 deja el editor y los fixtures legales **antes** de que el motor cambie (D-10: nada roto en ningún commit); 15-03 mueve la fuente del cupo y migra sus tests en la misma unidad revisable; 15-04 alinea las lecturas JS (no antes, o la grilla y el RPC discreparían dentro de la propia fase); 15-05 prueba y documenta.
+
 **Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Toca el núcleo anti-doble-booking que endurecieron v0.9, v0.12 y v0.26. La Phase 12 encontró **5 blockers en dos rondas de code review** sobre este mismo RPC, incluido un doble-booking real; asumir que un cambio "solo mueve de dónde se lee el número" es exactamente el error que la 063 y la 064 tuvieron que reparar. Ojo particular con la relación entre `is_group` y el EXCLUDE gist 013: esa columna hace **doble trabajo** ("cupo > 1" y "exenta del EXCLUDE") y es la causa raíz que la 064 tuvo que resolver con el lock de negocio-día.
 **UI hint**: no (el modelo y el motor; la superficie va en la Phase 16)
 
@@ -633,5 +658,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
-| 15. Modelo de cupo unificado | 0/? | Not started | — |
+| 15. Modelo de cupo unificado | 0/5 | Planned | — |
 | 16. Superficie y polish | 0/? | Not started | — |
