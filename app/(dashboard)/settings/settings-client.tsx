@@ -118,23 +118,33 @@ function ProFields({ value, onChange, labels }: {
   )
 }
 
-// ── Modo de cupo del servicio (CUPO-01, migr. 062) ──────────────────────────
-// 'group_class' = comportamiento histórico: el cupo lo pone el BLOQUE de agenda (time_blocks.capacity)
-// y todos arrancan a la misma hora (clase de yoga). 'simultaneous_resource' = N turnos en paralelo
-// sobre el mismo recurso, contados por SOLAPE de intervalos contra services.capacity (2 camillas).
+// ── Modo de cupo del servicio (CUPO-01, migr. 062; ampliado a TRES modos por la migr. 068) ──
+// 'individual' = un turno por vez; es el DEFAULT de la columna desde la 068 y el caso real del 100 %
+// de los servicios. 'group_class' = todos arrancan a la MISMA hora y comparten el cupo (clase de
+// yoga). 'simultaneous_resource' = N turnos en paralelo sobre el mismo recurso, contados por SOLAPE
+// de intervalos (2 camillas). Desde la 068 los TRES leen el número de `services.capacity`:
+// `time_blocks.capacity` dejó de decidirlo.
 // Los labels son FIJOS para todos los rubros (D-10): NO se rutean por lib/use-terminology.
 type CapacityMode = Service['capacity_mode']
 
-// El cupo N es un entero >= 1 (mismo CHECK que la DB). Un input vacío o basura cae a 1.
-function normalizeCapacity(n: number): number {
-  return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1
+// Piso de cupo por modo. ESPEJA el CHECK `services_capacity_matches_mode_chk` de la migr. 068
+// (individual ⇒ capacity = 1; group_class / simultaneous_resource ⇒ capacity >= 2). La AUTORIDAD es
+// la base — este helper es su espejo de UX, para que el editor NO pueda producir una combinación que
+// el constraint rechace, nunca un reemplazo del constraint.
+function minCapacityFor(mode: CapacityMode): number {
+  return mode === 'individual' ? 1 : 2
+}
+
+// El cupo N es un entero >= `min` (mismo CHECK que la DB). Un input vacío o basura cae al piso del modo.
+function normalizeCapacity(n: number, min = 1): number {
+  return Number.isFinite(n) ? Math.max(min, Math.floor(n)) : min
 }
 
 // Segmented control de modo + campo de cupo, reutilizado en alta (inline) y edición (dialog).
 // Molde del control: el radiogroup de "Preselección del profesional" (tab Equipo) — misma píldora
-// activa (bg-primary) y mismo contenedor bordeado. El campo N solo existe en modo simultáneo:
-// en clase grupal el cupo NO vive en el servicio (lo define el bloque de agenda), así que mostrarlo
-// mentiría sobre de dónde sale el número.
+// activa (bg-primary) y mismo contenedor bordeado. El campo N existe en los dos modos NO individuales:
+// desde la migr. 068 `services.capacity` es la única fuente del número para los tres modos, así que
+// esconderlo en la clase grupal dejaría al dueño sin dónde declarar su cupo.
 // spacesBlockSimultaneous: ¿alguna de las agendas que puede recibir turnos de este servicio tiene un
 // ESPACIO físico mapeado (agenda_spaces)? Si sí, el modo "Recurso simultáneo" queda inhabilitado.
 //
@@ -171,8 +181,11 @@ function CapacityModeFields({ value, capacity, onChange, disabled, simultaneousB
   // simultáneo" no se puede elegir (el espacio es 1-a-la-vez; ver spacesBlockSimultaneous).
   simultaneousBlocked?: boolean
 }) {
-  const isSimultaneous = value === 'simultaneous_resource'
+  const isIndividual = value === 'individual'
+  // El individual va PRIMERO: es el DEFAULT de la base desde la 068 y el caso real del 100 % de los
+  // servicios de producción.
   const opts: { key: CapacityMode; label: string }[] = [
+    { key: 'individual', label: 'Individual' },
     { key: 'group_class', label: 'Clase grupal' },
     { key: 'simultaneous_resource', label: 'Recurso simultáneo' },
   ]
@@ -192,7 +205,10 @@ function CapacityModeFields({ value, capacity, onChange, disabled, simultaneousB
             role="radio"
             aria-checked={value === o.key}
             disabled={disabled || blocked}
-            onClick={() => onChange({ capacity_mode: o.key })}
+            // El patch lleva SIEMPRE el cupo junto con el modo (D-06): pasar de individual a grupal
+            // o simultáneo con el cupo en 1 rebota contra services_capacity_matches_mode_chk, así que
+            // el cambio de modo sube el cupo a su piso legal en el mismo estado.
+            onClick={() => onChange({ capacity_mode: o.key, capacity: o.key === 'individual' ? 1 : normalizeCapacity(capacity, 2) })}
             className={cn(
               'min-h-11 px-3 py-2 rounded text-sm font-medium transition-colors disabled:opacity-60',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
@@ -215,19 +231,21 @@ function CapacityModeFields({ value, capacity, onChange, disabled, simultaneousB
           </span>
         </p>
       )}
+      {/* Línea mínima: nombra los tres modos y de dónde sale el número. La redacción que explique el
+          EJE de conteo de cada uno (grupal = por hora de inicio, simultáneo = por solape) es CUPO-09. */}
       <p className="text-xs text-muted-foreground">
-        <span className="text-foreground">Clase grupal:</span> todos empiezan a la misma hora y comparten el cupo del horario (el número lo ponés en la grilla de la agenda).
-        {' '}<span className="text-foreground">Recurso simultáneo:</span> los turnos arrancan escalonados y se superponen, porque atendés varios a la vez (ej. 2 camillas).
+        <span className="text-foreground">Individual:</span> un turno por vez.
+        {' '}<span className="text-foreground">Clase grupal</span> y <span className="text-foreground">Recurso simultáneo</span>: varios lugares por turno, y el número lo ponés acá abajo.
       </p>
-      {isSimultaneous && (
+      {!isIndividual && (
         <div className="space-y-1 pt-1 max-w-[11rem]">
-          <Label className="text-xs text-muted-foreground">Cuántos a la vez</Label>
+          <Label className="text-xs text-muted-foreground">Cuántos lugares</Label>
           <Input
             type="number"
             value={capacity}
             onFocus={e => e.target.select()}
-            onChange={e => onChange({ capacity: normalizeCapacity(parseInt(e.target.value)) })}
-            min={1}
+            onChange={e => onChange({ capacity: normalizeCapacity(parseInt(e.target.value), minCapacityFor(value)) })}
+            min={2}
             step={1}
             disabled={disabled}
           />
@@ -518,9 +536,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // ── Tab 2 — Services ──────────────────────────────────────────────────────
   const [services, setServices] = useState<Service[]>(initialServices)
-  // capacity_mode/capacity (migr. 062): el default espeja el de la DB → un servicio nuevo nace en el
-  // modo histórico (cero regresión) y el dueño opta explícitamente por el recurso simultáneo.
-  const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
+  // capacity_mode/capacity (migr. 062, ampliado por la 068): el default espeja el de la DB → un
+  // servicio nuevo nace INDIVIDUAL con cupo 1, y el dueño opta explícitamente por los otros dos modos.
+  const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
   // El tab, la lista visible y sus contadores salen de useActiveTabs, invocado más abajo (buscar
   // `manageableServices`): el hook necesita la lista ya filtrada, que depende de `professionals` y
   // `agendaSpaces` — declarados después, así que leerlos acá sería un TDZ en runtime.
@@ -611,15 +629,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   async function addService() {
     if (!newService.name) return
     const { name, duration_minutes, price, location_ids, capacity_mode } = newService
-    // El cupo N solo aplica al recurso simultáneo; en clase grupal se guarda 1 para que la columna
-    // no quede con un número que nadie lee (el cupo del grupal vive en time_blocks.capacity).
-    const capacity = capacity_mode === 'simultaneous_resource' ? normalizeCapacity(newService.capacity) : 1
+    // Desde la migr. 068 el cupo vale para los TRES modos y está atado al modo por CHECK: individual
+    // ⇒ exactamente 1; grupal y simultáneo ⇒ >= 2. Se normaliza con el piso del modo para que el
+    // INSERT no pueda rebotar contra services_capacity_matches_mode_chk.
+    const capacity = capacity_mode === 'individual' ? 1 : normalizeCapacity(newService.capacity, 2)
     const { data, error } = await supabase.from('services')
       .insert({ name, duration_minutes, price, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id })
       .select().single()
     if (error) { toast.error('Error'); return }
     setServices(prev => [...prev, data as Service])
-    setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
+    setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
     toast.success('Servicio agregado')
   }
   // NO optimista: capturamos el error real. Defensa en profundidad con business_id (igual que
@@ -672,19 +691,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // Edición de servicio (reusa el form de alta: nombre, duración, precio, consultorios).
   const [editSvc, setEditSvc] = useState<Service | null>(null)
-  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'group_class', capacity: 1 })
+  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
   const [savingEditSvc, setSavingEditSvc] = useState(false)
   function openEditService(s: Service) {
     setEditSvc(s)
-    // El fallback cubre filas viejas en memoria (el DEFAULT de la 062 ya las cubre en la DB):
-    // al reabrir, el modo y el cupo guardados vuelven seleccionados (CUPO-01).
+    // El fallback cubre filas viejas en memoria (el DEFAULT de la 068 ya las cubre en la DB): al
+    // reabrir, el modo y el cupo guardados vuelven seleccionados (CUPO-01). El cupo se normaliza con
+    // el piso del modo que se acaba de resolver, para no abrir el diálogo en un estado que la base
+    // rechazaría.
+    const mode: CapacityMode = s.capacity_mode ?? 'individual'
     setEditSvcForm({
       name: s.name,
       duration_minutes: s.duration_minutes,
       price: Number(s.price),
       location_ids: serviceLocSet(s),
-      capacity_mode: s.capacity_mode ?? 'group_class',
-      capacity: normalizeCapacity(Number(s.capacity)),
+      capacity_mode: mode,
+      capacity: normalizeCapacity(Number(s.capacity), minCapacityFor(mode)),
     })
   }
   async function saveEditService() {
@@ -698,11 +720,24 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       location_ids: editSvcForm.location_ids.length ? editSvcForm.location_ids : null,
       location_id: null,
       capacity_mode: editSvcForm.capacity_mode,
-      capacity: editSvcForm.capacity_mode === 'simultaneous_resource' ? normalizeCapacity(editSvcForm.capacity) : 1,
+      // Mismo criterio que addService: el cupo se ata al modo con el piso de la migr. 068 (individual
+      // ⇒ 1; los otros dos ⇒ >= 2) para que el UPDATE no rebote contra el CHECK de coherencia.
+      capacity: editSvcForm.capacity_mode === 'individual' ? 1 : normalizeCapacity(editSvcForm.capacity, 2),
     }
+    // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
     const { error } = await supabase.from('services').update(payload).eq('id', editSvc.id).eq('business_id', business.id)
     setSavingEditSvc(false)
-    if (error) { toast.error('Error al guardar'); return }
+    if (error) {
+      // Mapeo del rechazo del gate de cambio de modo (CUPO-08, migr. 068) — mismo molde que
+      // deleteService: `code` primero, `message.includes(<código de dominio>)` después. La copy es
+      // PROPIA y fija: NUNCA se interpola `error.message` ni el nombre del servicio (T-14-14 / T-13-09).
+      if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
+        toast.error('No se puede cambiar cómo se ocupa el cupo: el servicio tiene turnos futuros reservados. Cancelalos o esperá a que pasen, y volvé a intentar.')
+        return
+      }
+      toast.error('Error al guardar')
+      return
+    }
     setServices(prev => prev.map(s => s.id === editSvc.id ? { ...s, ...payload } : s))
     setEditSvc(null)
     toast.success('Servicio actualizado')
