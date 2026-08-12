@@ -592,7 +592,7 @@ Plans:
   3. Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza **en la base**, con un código de dominio fijo que no filtra datos del negocio, y el panel lo mapea a copy propio — el texto crudo del error nunca llega a la pantalla (CUPO-08, cierra R-1).
   4. Las garantías de concurrencia se prueban con **tests de carrera contra Postgres de verdad y con control negativo** (el molde de `test/concurrency.test.ts` y de la Phase 12), no con aserciones de lectura de código.
 
-**Plans**: 2/5 plans complete
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -605,7 +605,7 @@ Plans:
 
 **Wave 3** *(blocked on 15-02)*
 
-- [ ] 15-03-PLAN.md — El motor: `book_slot_atomic` lee `services.capacity` en los tres modos y deja de consultar `time_blocks` (CUPO-07) + espejo en `schema.sql` + reescritura del comentario del gate espejo (D-07) + migración de los casos de carrera al cupo por servicio
+- [x] 15-03-PLAN.md — El motor: `book_slot_atomic` lee `services.capacity` en los tres modos y deja de consultar `time_blocks` (CUPO-07) + espejo en `schema.sql` + reescritura del comentario del gate espejo (D-07) + migración de los casos de carrera al cupo por servicio
 
 **Wave 4** *(blocked on 15-03)*
 
@@ -658,5 +658,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
-| 15. Modelo de cupo unificado | 0/5 | Planned | — |
+| 15. Modelo de cupo unificado | 3/5 | In Progress|  |
 | 16. Superficie y polish | 0/? | Not started | — |

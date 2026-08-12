@@ -88,9 +88,16 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 - [x] **CUPO-06** — `services.capacity_mode` pasa a un enum de **tres** valores
       (`individual` | `group_class` | `simultaneous_resource`), con `individual` como **default**.
       Un servicio individual fuerza cupo 1 y se comporta byte-idéntico a hoy.
-- [ ] **CUPO-07** — `services.capacity` es la **única** fuente del número para los tres modos.
+
+- [x] **CUPO-07** — `services.capacity` es la **única** fuente del número para los tres modos.
       `book_slot_atomic` deja de leer `time_blocks.capacity` para decidir cupo. Cero regresión de los
       cuatro consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas).
+      *(El motor quedó cerrado en **15-03**: RPC + espejo en `schema.sql` + control negativo A/B contra
+      la función de la 064, 22/22 en `concurrency.test.ts` y 54/54 en los consumidores. Los **otros**
+      lectores del cupo —`lib/booking-core.ts` y `availability` con sus tres call-sites— se alinean en
+      **15-04**; hasta entonces el read-path sigue leyendo el bloque, sin impacto real porque en prod
+      los dos valores son 1.)*
+
 - [x] **CUPO-08** — Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza en
       la base con un código de dominio fijo, sin filtrar datos del negocio en el mensaje. Cierra el
       riesgo residual **R-1** de `12-SECURITY.md`: hoy ese cambio deja filas `is_group = true`
@@ -102,10 +109,13 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 - [ ] **CUPO-09** — El editor de servicio ofrece los **tres** modos y el cupo en un solo lugar, con
       copy que explique la diferencia entre grupal (por hora de inicio) y simultáneo (por solape). El
       cupo se deshabilita en `individual`.
+
 - [ ] **POLISH-08** — La lista de `/servicios` muestra un **badge de modo**: hoy el modo solo se ve al
       abrir el servicio.
+
 - [ ] **POLISH-09** — La ocupación **grupal** se ve en la grilla de la agenda. Hoy solo se ve al abrir
       el turno, mientras que la simultánea sí se muestra — es una inconsistencia, no una regresión.
+
 - [ ] **POLISH-10** — Finanzas en mobile **muestra el servicio**. Hoy lo oculta con `hidden sm:block`;
       es layout, no read-path.
 
@@ -114,6 +124,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 - **Aviso de re-declaración de cupo en el panel** — descartado por D-02: cero negocios afectados.
 - **Dropear `time_blocks.capacity`** — deja de decidir, pero la columna se conserva. Borrarla es una
   migración destructiva sin beneficio en este ciclo.
+
 - **Cupo por profesional** o por sede — el cupo sigue siendo del servicio.
 - **Cambiar el eje de conteo de ninguno de los dos modos** — v0.26 los dejó correctos y verificados
   con tests de carrera contra la DB; este milestone solo mueve *dónde vive el número* y *qué se puede
@@ -124,7 +135,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | Req | Phase | Status |
 |-----|-------|--------|
 | CUPO-06 | Phase 15 | Complete (15-01 modelo + 15-02 editor: 'Individual' es elegible y es el default de alta) |
-| CUPO-07 | Phase 15 | Pending |
+| CUPO-07 | Phase 15 | Complete |
 | CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel: P0001 + service_mode_has_future_appointments mapeado a copy propia, sin interpolar el error) — la suite de integración del gate sigue siendo 15-05 |
 | CUPO-09 | Phase 16 | Pending |
 | POLISH-08 | Phase 16 | Pending |
