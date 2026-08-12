@@ -1,5 +1,22 @@
 # Milestones
 
+## v0.26 Cupo por solape + cierre de backlog (Shipped: 2026-08-11)
+
+**Phases completed:** 3 phases (12-14), 18 plans
+
+**Key accomplishments:**
+
+- **Cupo por solape / recurso simultáneo (Phase 12):** el dueño marca cada servicio como **clase grupal** (cupo por hora de inicio exacta, comportamiento viejo intacto) o **recurso simultáneo** (cupo por **solape de intervalos**), con el control DENTRO de `book_slot_atomic`. Migr. **062** (flag + conteo por solape), **063** (4 blockers del code review, incluido un doble-booking real: con `capacity>1` la fila salía del EXCLUDE gist y un simultáneo entraba encima de un turno de otro servicio) y **064**, la que cerró el bug de verdad: la causa raíz era que `is_group` hacía doble trabajo —"cupo > 1" Y "exenta del EXCLUDE"— y el lock no cubría el eje del invariante. Se unificó a **un solo lock `hash(business_id + date)`**, estrictamente más grueso, al costo aceptado y documentado de serializar las reservas de un negocio por fecha (~15-18ms/txn). SECURED 18/18 · UAT visual 5/5 · verify 5/5.
+- **Borrado de servicio preservando historial (Phase 13):** un servicio con solo turnos pasados/cancelados se puede borrar sin destruir la historia — el turno guarda un **snapshot** de nombre y precio, el FK pasa a `SET NULL` y un trigger `BEFORE DELETE` (migr. **065**) bloquea si quedan turnos futuros, ofreciendo desactivar. Verify 16/16. La UAT tomó **3 rondas y encontró 5 defectos que ningún test agarró**, uno de ellos con el dueño sobreescribiendo D-08 en el momento ("futuro" pasó a excluir también los `completed`).
+- **Cierre de backlog (Phase 14):** POLISH-04..07 + EXTRA-A/B en 9 planes. La causa raíz de POLISH-05 no estaba donde el síntoma: el popup del `Dialog` monta en la raíz del documento, **fuera** del div que declara los tokens del shell, así que las custom properties no le llegaban por herencia — se resolvió con un contexto de scope opt-in (`lib/shell-scope.ts`) sin reubicar un solo nodo del DOM. Migr. **066** (gate de borrado de series de abono) y **067** (cierra un bypass del anterior: `PATCH status` → `DELETE` salteaba el motor de baja y dejaba turnos huérfanos). Verify 8/8 · SECURED 42/42 · code review con 15 hallazgos aplicados.
+- **La UAT humana volvió a pagar el ciclo.** El checkpoint de 14-09 **no se auto-aprobó** pese a `auto_advance: true`, y encontró 3 defectos con el pipeline en verde. Uno derivó en **T-14-41**, el hallazgo del milestone: la señal de peligro del botón destructivo del panel había quedado atada a `--primary`, que es **la paleta del negocio** — con `green`/`emerald`/`sage` un borrado irreversible se pintaba **verde**. El dueño lo había aprobado mirando la única paleta donde el primario ya es rojizo. El code review encontró después que el fix perdía la señal en `:focus-visible`, porque `buttonVariants` trae `focus-visible:border-ring` y tailwind-merge la conserva.
+- **Lección transversal (se repitió 3 veces):** un guard que afirma sobre el *string que devuelve un helper* no prueba el *resultado renderizado* — la clase que rompe puede vivir en otro archivo. Los guards de la fase ahora corren sobre el string final mergeado con `twMerge` real y sobre el código fuente con `readFileSync`, con prueba de mutación transcrita.
+- **Deploy y seguridad:** migraciones **062 → 067** aplicadas a mano en producción, en orden y con el código deployado antes que la migración. Las 3 fases SECURED con `threats_open: 0`. 157 commits, 136 archivos, +25.762/−355. Cero regresión del núcleo anti-doble-booking que sostiene canchas, abonos, cupos grupales, multi-staff y espacio compartido.
+
+**Known deferred items at close:** 4 en `.planning/workstreams/motor-reservas/todos/pending/` y en STATE.md § Deferred Items — el cupo vive en dos lugares y falta el modo "Individual" (**fase propia**, y conviene meter ahí el riesgo residual R-1 de `12-SECURITY.md`: cambiar `capacity_mode` con turnos ya creados deja filas `is_group=true` huérfanas) · badge de modo en `/servicios` · ocupación grupal invisible en la grilla · Finanzas mobile oculta el servicio. Otros **6** todos ya resueltos por este milestone se movieron a `todos/completed/` en el cierre.
+
+---
+
 ## v0.25 Multi-staff (Shipped: 2026-07-28)
 
 **Phases completed:** 4 phases (8-11), 13 plans
@@ -13,7 +30,6 @@
 - **Deploy y seguridad:** migraciones **057, 058, 059, 060, 061** aplicadas a mano en producción. Las 3 fases sensibles SECURED (11/11 · 6/6 · 14/14, `threats_open: 0`). Suite completa 776+ tests verdes — cero regresión del núcleo anti-doble-booking que sostiene canchas, abonos, cupos grupales y espacio compartido.
 
 **Known deferred items at close:** backlog en `.planning/workstreams/motor-reservas/todos/pending/` — cupo por solape (capacity>1 → v0.26), mensaje de borrado modal + borrar-si-solo-pasados, botones full-width app-wide, y hallazgos de UAT (RiskBadge/`--crm-*` sin color fuera del CRM, abono cancelado muestra "Copiar link de baja", cliente nuevo cae en "Pausa").
-</content>
 
 ---
 

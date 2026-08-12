@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.26
 milestone_name: — Cupo por solape + cierre de backlog
-status: verifying
+status: Awaiting next milestone
 stopped_at: Completado 14-09-PLAN.md — **Phase 14 CERRADA** (9/9 planes, 3 gaps cerrados, POLISH-04/05 en Complete)
-last_updated: "2026-08-11T03:03:34.678Z"
-last_activity: 2026-08-11
+last_updated: "2026-08-12T01:59:19.062Z"
+last_activity: 2026-08-12 — Milestone v0.26 completed and archived
 progress:
   total_phases: 14
   completed_phases: 14
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
-Status: fase cerrada — los 3 gaps de `14-VERIFICATION.md` cerrados con evidencia; POLISH-04/05 en `Complete`
-Last activity: 2026-08-11
+Phase: Milestone v0.26 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-12 — Milestone v0.26 completed and archived
 
 ## Performance Metrics
 
@@ -248,6 +248,17 @@ Heredadas del workstream (siguen vigentes):
 | Plan | Enforcement server-side de límites de plan ([[plan-model-agendas]]) | backlog | 2026-07-18 |
 | Abonos | El selector de **Profesional** del modal "Nuevo abono" lista canchas ("Cancha A") en un negocio de vertical *general* — es el modelo de v0.13 (cancha = `professional` con `service_id`), no pulido. El dueño: "en la práctica no pasa, solo aviso". | backlog | 2026-08-06 |
 | Servicios | Aviso amarillo "«Recurso simultáneo» no está disponible…" al existir una cancha, + la cancha se agrega sola como espacio compartido en `Equipo`. Introducido por `052d875 fix(12)` en **Phase 12**; es el cruce v0.12 (espacios) × v0.13 (cancha = professional). | backlog | 2026-08-06 |
+| Motor | **El cupo vive en dos lugares y falta el modo "Individual".** `time_blocks.capacity` (por bloque: negocio+día+ventana) vs `services.capacity` (por servicio). Hoy "individual" no se declara, se deduce, y por eso un corte de pelo se etiqueta "Clase grupal". Propuesta: enum de 3 (`individual\|group_class\|simultaneous_resource`) con `services.capacity` como fuente única. ⚠ El backfill **no es mecánico**: el bloque no sabe a qué servicio corresponde. **Conviene meter acá el riesgo residual R-1 de `12-SECURITY.md`** (cambiar `capacity_mode` con turnos ya creados deja filas `is_group=true` huérfanas, fuera del EXCLUDE y del gate espejo ⇒ solapes que ningún gate detecta). | **fase propia** | 2026-08-11 |
+| Servicios | Badge de modo (grupal / simultáneo) en la lista de `/servicios` — hoy el modo solo se ve al abrir el servicio. Polish. | backlog | 2026-08-11 |
+| Agenda | La ocupación **grupal** no se ve en la grilla, solo al abrir el turno (la simultánea sí). Inconsistencia, no regresión. | backlog | 2026-08-11 |
+| Finanzas | En mobile se oculta el servicio (`hidden sm:block`). Es layout, no read-path. | backlog | 2026-08-11 |
+
+**Nota de proceso (2026-08-11):** los 4 de arriba son los que quedaron abiertos al cerrar v0.26. Otros
+**6** todos del workstream ya estaban resueltos por este milestone y se movieron a `todos/completed/` en
+el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-phase` busca en
+`.planning/todos/pending/` (raíz) y los del workstream viven en
+`.planning/workstreams/motor-reservas/todos/pending/` — nunca los ve. Dos de ellos incluso traían
+`resolves_phase: 12` y `resolves_phase: 14`.
 
 ## Session Continuity
 
@@ -257,8 +268,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- **Phase 14 CERRADA (2026-08-10).** Los 9 planes ejecutados, los 3 gaps de `14-VERIFICATION.md` cerrados con evidencia y POLISH-04/05 en `Complete`. Próximo: cierre del milestone **v0.26** (`/gsd:verify-work` o `/gsd:complete-milestone --ws motor-reservas`).
-- **Deploy pendiente — 3 cambios visibles al shippear:** (a) el botón Eliminar de 14-06, (b) el scope portaleado de 14-08 → **los modales del CRM se ven con fondo oscuro** (aprobado por el dueño), (c) 14-09 → **en el panel el confirmar destructivo pasó del rojo al primario del tema** (5 diálogos: abonos ×2, settings ×2, canchas ×1) mientras el CRM conserva el rojo (10 diálogos). Los tres están aprobados a ojo, pero conviene anticiparlos.
-- **Backlog abierto de la UAT de 14-09:** el día de la agenda no tiene afordancia táctil en mobile (necesita **diseño**, el dueño pidió una propuesta). Ver `deferred-items.md` §14-09.
-- **Migraciones:** la **066 ya está en producción** (2026-08-06). La próxima del repo es la **067**. Recordá: apply **A MANO** en el SQL Editor + `NOTIFY pgrst, 'reload schema'`, nunca `db push`; y que **prod no tiene `supabase_migrations.schema_migrations`**, así que el pre-check de "última aplicada" se lee de este STATE, no de la base.
-- **Deploy:** el código de 14-06 (botón Eliminar) todavía no está en prod. La base ya tiene el gate, así que el orden está bien; se puede deployar cuando se quiera.
+- Start the next milestone with /gsd-new-milestone
