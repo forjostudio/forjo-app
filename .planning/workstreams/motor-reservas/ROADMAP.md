@@ -592,12 +592,12 @@ Plans:
   3. Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza **en la base**, con un código de dominio fijo que no filtra datos del negocio, y el panel lo mapea a copy propio — el texto crudo del error nunca llega a la pantalla (CUPO-08, cierra R-1).
   4. Las garantías de concurrencia se prueban con **tests de carrera contra Postgres de verdad y con control negativo** (el molde de `test/concurrency.test.ts` y de la Phase 12), no con aserciones de lectura de código.
 
-**Plans**: 0/5 plans complete
+**Plans**: 1/5 plans complete
 
 Plans:
 **Wave 1**
 
-- [ ] 15-01-PLAN.md — Migración **068**: enum de tres modos + backfill por predicado + CHECK de coherencia modo↔cupo + DEFAULT `individual` + gate `services_block_mode_change` (CUPO-08 / R-1) + espejo quirúrgico en `schema.sql` + el tipo del modo en `lib/types.ts`
+- [x] 15-01-PLAN.md — Migración **068**: enum de tres modos + backfill por predicado + CHECK de coherencia modo↔cupo + DEFAULT `individual` + gate `services_block_mode_change` (CUPO-08 / R-1) + espejo quirúrgico en `schema.sql` + el tipo del modo en `lib/types.ts`
 
 **Wave 2** *(blocked on 15-01)*
 

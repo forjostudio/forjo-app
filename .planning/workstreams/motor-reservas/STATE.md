@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: Cupo unificado por servicio
-status: Roadmap ready — awaiting plan-phase 15
-stopped_at: Milestone v0.27 creado (REQUIREMENTS + ROADMAP escritos, Phases 15-16)
-last_updated: "2026-08-12T02:30:00.000Z"
-last_activity: 2026-08-12 — Milestone v0.27 iniciado tras archivar v0.26
+status: Phase 15 en ejecución — 15-01 completo (1/5 planes)
+stopped_at: Completado 15-01-PLAN.md — migración 068 escrita y validada en local, NO aplicada a prod
+last_updated: "2026-08-12T03:30:00.000Z"
+last_activity: 2026-08-12 — 15-01 ejecutado (068: enum de tres modos + CHECK de coherencia + gate de cambio de modo)
 progress:
   total_phases: 16
   completed_phases: 14
-  total_plans: 71
-  completed_plans: 71
-  percent: 88
+  total_plans: 76
+  completed_plans: 72
+  percent: 89
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 15 — Modelo de cupo unificado (no arrancada)
-Plan: —
-Status: Roadmap listo — el próximo paso es `/gsd:plan-phase 15 --ws motor-reservas`
-Last activity: 2026-08-12 — Milestone v0.27 iniciado tras archivar v0.26
+Phase: 15 — Modelo de cupo unificado (en ejecución, 1/5 planes)
+Plan: 15-01 COMPLETO (Wave 1) — el próximo es 15-02 (Wave 2, guard mínimo del editor + fixtures, D-10)
+Status: la migración **068** está escrita y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**
+Last activity: 2026-08-12 — 15-01 ejecutado (enum de tres modos, CHECK de coherencia modo↔cupo, gate `services_block_mode_change`)
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
 
@@ -93,6 +93,7 @@ Last activity: 2026-08-12 — Milestone v0.27 iniciado tras archivar v0.26
 | Phase 14 P07 | sesión interactiva | 4 tasks (3 checkpoints humanos) | 0 files de código |
 | Phase 14 P08 | 60min | 3 tasks | 5 files |
 | Phase 14 P09 | ~70min efectivos (~5h de reloj, partido por el checkpoint humano de 2 rondas) | 3 tasks (1 checkpoint bloqueante) | 7 files |
+| Phase 15 P01 | ~47min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,14 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 14]: 14-09: 3 de las 7 observaciones humanas (puntos 3, 5 y 6) reportaron DEFECTOS que el pipeline verde no veia (tsc 0, build 0, 26/26, todos los conteos exactos). El checkpoint humano es el que encuentra lo que las aserciones no
 - [Phase 14]: 14-09: un criterio de aceptacion escrito sobre una string literal de clases no sobrevive a un cambio de estrategia responsive — 'className="self-start inline-flex' paso de 1 a 0 al volver el control mobile-first. NO se forzo la clase para satisfacer el grep: el invariante se verifica con 'sm:self-start' => 1
 
+- [Phase 15]: 15-01: la 068 corre en el orden DROP → backfill → CHECKs → DEFAULT (D-05) y el backfill va por PREDICADO (`group_class AND capacity <= 1`), no por lista de ids — con el orden invertido la migración aborta entera, porque las 9 filas de prod violan el CHECK nuevo; el predicado además la vuelve re-corrible (2ª pasada = `UPDATE 0`, verificado) y protege a un grupal >= 2 declarado entre la escritura y la aplicación
+- [Phase 15]: 15-01: el CHECK de coherencia modo↔cupo produce el invariante **`is_group ⟺ capacity_mode <> 'individual'`**, y ESO es lo que vuelve suficiente al gate de CUPO-08: si lo único que puede voltear `is_group` es el cambio de MODO, gatear el modo gatea todo el drift posible; un cambio de solo `capacity` (2 → 5) nunca lo voltea
+- [Phase 15]: 15-01: el gate de CUPO-08 va como trigger `BEFORE UPDATE OF "capacity_mode"` con guard de no-cambio `IS NOT DISTINCT FROM` PRIMERO — la forma se eligió después de trazar las 6 escrituras reales sobre `services` (`saveEditService` manda siempre el modo y el guard la deja pasar; `toggleService`/`setServiceLocations`/`updateCancha`/`setCanchaActive` ni disparan el trigger). Es exactamente el error que el review propuso en la 067 y que habría roto todas las bajas de abono en producción
+- [Phase 15]: 15-01: el gate NO lleva guard de cascada, a propósito: `services_business_id_fkey` es `ON DELETE CASCADE`, así que cerrar una cuenta BORRA la fila y una cascada jamás llega a un `BEFORE UPDATE`. Queda escrito en el SQL para que nadie agregue código muerto "por simetría" con la 065/067
+- [Phase 15]: 15-01: código de dominio nuevo `service_mode_has_future_appointments` (P0001), fijo y sin datos del negocio; convivencia verificada con los dos de la 065 (ninguno es substring del otro, así que el `message.includes` del panel no los confunde)
+- [Phase 15]: 15-01: la 068 se validó aplicándola al Postgres LOCAL con `psql --single-transaction` en vez de `supabase db reset` (que borra los datos de prueba). Esa validación prueba MÁS en comportamiento (backfill real de 10 filas, re-corribilidad, los 4 rechazos del CHECK y los 6 casos del gate con filas forzadas) y MENOS en replay-desde-cero — el `db reset` queda PENDIENTE y requiere OK del dueño
+- [Phase 15]: 15-01: primer `ALTER COLUMN ... SET DEFAULT` del repo en una migración numerada fuera del baseline (divergencia consciente, documentada en el header); y se rechazó introducir el agregado de constraint en dos pasos por no tener un solo precedente en el repo
+
 ### Pending Todos
 
 1 pendiente:
@@ -208,6 +217,9 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
+- **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Y **no debería llegar a prod antes que el guard del editor (D-10, plan 15-02)**: con la 068 aplicada y el editor de hoy, elegir "Clase grupal" rebota contra el CHECK (fuerza `capacity = 1`). Runbook completo en `15-01-SUMMARY.md` §User Setup Required.
+- **[Phase 15 — tests, ESPERADO]** Desde que la 068 está aplicada al Postgres **local**, cuatro `afterEach` que escriben `capacity_mode: 'group_class', capacity: 1` van a fallar contra la base: `test/concurrency.test.ts:54` y `test/booking-cualquiera-public.test.ts:127, :334, :365`. Es la consecuencia anticipada por **D-10** y la cierra el plan **15-02**; no es una regresión de 15-01. Por eso 15-01 no corrió ninguna suite.
+- **[Phase 15 — validación, PENDIENTE]** `supabase db reset` **no se corrió** (destruye los datos de prueba locales): falta confirmar que el replay del baseline + 040..068 desde cero termina limpio. Riesgo bajo (el archivo se aplicó dos veces seguidas con exit 0 sobre una base con datos), pero el gate formal del plan queda sin ejecutar. **Requiere el OK del dueño.**
 - **[Phase 14 — LOS 3 GAPS CERRADOS (2026-08-10)]** El plan **14-09** cerró la fase: gap 1 (POLISH-05) verificado por el **ojo del dueño** con captura (chip "Alto" rojo + "Medio" amarillo dentro de un modal del CRM), gaps 2 y 3 (POLISH-04 en `Equipo`) cerrados por código + auditoría del inventario completo. El checkpoint humano se aprobó en **2 rondas**: la primera reportó 3 defectos reales (puntos 3, 5 y 6) que se corrigieron dentro del plan. `REQUIREMENTS.md`, `ROADMAP.md` y `14-VERIFICATION.md` dicen ahora lo mismo. Ver `14-09-SUMMARY.md`. **Los 3 blockers de abajo quedan como histórico.**
 - **[Phase 14 — infra de tests, VIGENTE]** La corrida completa de `npx vitest run` sigue sin ser un gate útil en esta máquina: **725 passed / 9 failed / 23 suites caídas**, todas por `Test timed out in 5000ms`, con **3 stacks de Supabase local levantados** y `127.0.0.1:54321/rest/v1/` tardando **2,16 s** en el root. Es entorno, no código. Los gates útiles hoy son `tsc --noEmit` (usar `./node_modules/.bin/tsc`, **nunca** `npx tsc`), `npm run build` y las suites unitarias que no van contra la DB.
 - **[Phase 14 — gap 1 CODEADO, falta el ojo humano — HISTÓRICO, ya cerrado por 14-09]** 14-08 cerró el ítem 1 en código: el popup del `Dialog` hereda el scope del shell activo (`ShellScopeProvider` + `portalScopeClass`, `lib/shell-scope.ts` + `components/ui/shell-scope.tsx`), sin tocar `risk-badge.tsx`, `globals.css` ni `themes.css`. 12 tests con prueba de mutación; `tsc` 0 y `build` 0. **POLISH-05 NO se puede dar por cerrado desde acá**: la verificación de que "Alto" y "Medio" se distinguen en pantalla es el checkpoint humano bloqueante del **plan 14-09** (ver `14-08-SUMMARY.md` §"A mirar en el checkpoint humano"). Ojo: los modales del CRM ahora se ven con fondo oscuro (el popup lleva `dark`) — es intencional pero es un cambio visible. Los ítems 2 y 3 (toggle de `Equipo` + centrado de los "+ Agregar") siguen abiertos.
@@ -269,10 +281,11 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-10T22:55:00.000Z
-Stopped at: Completado 14-09-PLAN.md — **Phase 14 CERRADA** (9/9 planes, 3 gaps cerrados, POLISH-04/05 en Complete)
+Last session: 2026-08-12T03:30:00.000Z
+Stopped at: Completado 15-01-PLAN.md — migración **068** escrita y validada en local (no aplicada a prod)
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Continuar la Phase 15 con el plan **15-02** (guard mínimo del editor + fixtures legales, D-10) — es lo que destraba la suite de integración local
+- Antes de deployar: correr el pre-flight de la 068 contra producción y aplicarla **a mano**, coordinado con el deploy del guard del editor
