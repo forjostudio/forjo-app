@@ -93,10 +93,12 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       `book_slot_atomic` deja de leer `time_blocks.capacity` para decidir cupo. Cero regresión de los
       cuatro consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas).
       *(El motor quedó cerrado en **15-03**: RPC + espejo en `schema.sql` + control negativo A/B contra
-      la función de la 064, 22/22 en `concurrency.test.ts` y 54/54 en los consumidores. Los **otros**
-      lectores del cupo —`lib/booking-core.ts` y `availability` con sus tres call-sites— se alinean en
-      **15-04**; hasta entonces el read-path sigue leyendo el bloque, sin impacto real porque en prod
-      los dos valores son 1.)*
+      la función de la 064. **15-04 cerró el resto**: `lib/booking-core.ts` y `availability` —definición
+      y sus **tres** consumidores— deciden con `services.capacity`, `capacityFor()` se borró entera, y
+      el booking público manda el `serviceId` que el endpoint necesita. 22/22 en `concurrency.test.ts`
+      y **65/65** en las 8 suites de los cuatro consumidores, con A/B contra las versiones viejas de
+      los dos archivos. La **cuarta** lectura, `agenda-client.tsx`, es del panel autenticado y queda en
+      la **Phase 16** por D-08: drift de visualización, no de reserva.)*
 
 - [x] **CUPO-08** — Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza en
       la base con un código de dominio fijo, sin filtrar datos del negocio en el mensaje. Cierra el
@@ -135,7 +137,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | Req | Phase | Status |
 |-----|-------|--------|
 | CUPO-06 | Phase 15 | Complete (15-01 modelo + 15-02 editor: 'Individual' es elegible y es el default de alta) |
-| CUPO-07 | Phase 15 | Complete |
+| CUPO-07 | Phase 15 | Complete (15-03 motor + 15-04 las tres lecturas JS; la 4ª —grilla del panel— es Phase 16 por D-08) |
 | CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel: P0001 + service_mode_has_future_appointments mapeado a copy propia, sin interpolar el error) — la suite de integración del gate sigue siendo 15-05 |
 | CUPO-09 | Phase 16 | Pending |
 | POLISH-08 | Phase 16 | Pending |

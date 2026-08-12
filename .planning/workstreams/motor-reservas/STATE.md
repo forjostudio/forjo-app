@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: Cupo unificado por servicio
-status: Phase 15 en ejecución — 15-01, 15-02 y 15-03 completos (3/5 planes)
-stopped_at: Completado 15-03-PLAN.md — book_slot_atomic decide el cupo con services.capacity en los tres modos (CUPO-07), con el control negativo A/B visto FALLAR contra la función de la 064
-last_updated: "2026-08-12T20:50:00.000Z"
-last_activity: 2026-08-12 — 15-03 ejecutado (el RPC ya no consulta time_blocks; firma byte-idéntica sin DROP; concurrency 22/22 y 54/54 en las suites de los consumidores)
+status: Phase 15 en ejecución — 15-01, 15-02, 15-03 y 15-04 completos (4/5 planes)
+stopped_at: Completado 15-04-PLAN.md — las TRES lecturas JS del cupo alineadas con el motor (D-08); el desacuerdo write-path/read-path quedó CERRADO
+last_updated: "2026-08-12T21:10:00.000Z"
+last_activity: 2026-08-12 — 15-04 ejecutado (booking-core + availability con sus tres consumidores + el serviceId del booking público; concurrency 22/22 y 65/65 en las 8 suites del verification)
 progress:
   total_phases: 16
   completed_phases: 14
   total_plans: 76
-  completed_plans: 74
-  percent: 88
+  completed_plans: 75
+  percent: 89
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 15 — Modelo de cupo unificado (en ejecución, 2/5 planes)
-Plan: 15-01, 15-02 y 15-03 COMPLETOS (Waves 1, 2 y 3) — el próximo es 15-04 (las otras TRES lecturas del cupo, D-08: `lib/booking-core.ts:186-199` y `availability` con sus tres call-sites)
-Status: la migración **068** está completa (modelo + gate + RPC) y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**. El guard del editor (D-10) ya está en código. ⚠ El árbol queda con un **desacuerdo temporal declarado**: el write-path (`book_slot_atomic`) decide con `services.capacity` y el read-path (`booking-core` + `availability`) todavía lee `time_blocks.capacity` — en prod los dos dan 1 (D-02), pero **no debería quedar así más allá de 15-04**
-Last activity: 2026-08-12 — 15-03 ejecutado (el RPC ya no consulta el bloque de agenda; `concurrency.test.ts` 22/22 con dos casos nuevos de control negativo; 54/54 en los consumidores)
+Phase: 15 — Modelo de cupo unificado (en ejecución, 4/5 planes)
+Plan: 15-01, 15-02, 15-03 y 15-04 COMPLETOS (Waves 1 a 4) — el próximo es 15-05 (suite de integración del gate de CUPO-08 + runbook de la 068)
+Status: la migración **068** está completa (modelo + gate + RPC) y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**. El guard del editor (D-10) ya está en código. ✅ **El desacuerdo write-path/read-path quedó CERRADO por 15-04**: `lib/booking-core.ts` y `app/api/booking/availability/route.ts` (con sus tres consumidores) deciden el cupo con `services.capacity`, igual que el RPC, y el booking público manda el `serviceId` que el endpoint necesita. La ÚNICA lectura que sigue decidiendo por `time_blocks.capacity` es `app/(dashboard)/agenda/agenda-client.tsx` — panel autenticado, drift de visualización, **Phase 16** por D-08
+Last activity: 2026-08-12 — 15-04 ejecutado (las tres lecturas JS alineadas; `capacityFor()` borrada entera; los cinco `seedTimeBlock` de 15-03 bajados y convertidos en el A/B de este plan; 22/22 y 65/65)
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
 
@@ -95,6 +95,8 @@ Last activity: 2026-08-12 — 15-03 ejecutado (el RPC ya no consulta el bloque d
 | Phase 14 P09 | ~70min efectivos (~5h de reloj, partido por el checkpoint humano de 2 rondas) | 3 tasks (1 checkpoint bloqueante) | 7 files |
 | Phase 15 P01 | ~47min | 3 tasks | 3 files |
 | Phase 15 P02 | ~35min | 3 tasks | 4 files |
+| Phase 15 P03 | ~20min | 3 tasks | 3 files |
+| Phase 15 P04 | ~25min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -221,6 +223,12 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 15]: 15-03: `v_capacity` se conservó como variable en vez de usar `v_svc_cap` en línea — deja byte-idénticas las dos líneas que la consumen. Sobre esta función un diff mínimo es una decisión de **riesgo**, no de estilo (la Phase 12 necesitó dos rondas de review y cinco blockers para dejarla bien)
 - [Phase 15]: 15-03: el fail-safe del modo pasó a `'individual'` y es **más** fail-closed: antes un `p_service_id` que no resolviera (p. ej. de otro tenant) caía a la rama grupal y podía heredar un cupo > 1 del bloque que ese servicio nunca declaró
 - [Phase 15]: 15-03: para asertar que una fila volvió a estar DENTRO del EXCLUDE 013, el 2º intento tiene que **solapar sin compartir hora exacta** — en la hora exacta se violan a la vez el índice único 011 y el gist, y cuál reporta primero no está garantizado
+- [Phase 15]: 15-04: **el desacuerdo se CIERRA, no se mueve.** El criterio real no era "cambiar tres archivos" sino que ninguna lectura JS del camino de reserva decida el cupo por `time_blocks`. Por eso `capacityFor()` se **borró entera** (en vez de reapuntarla) y `capacity` salió del `select` de bloques: las dos cosas garantizan que nadie la vuelva a usar por costumbre
+- [Phase 15]: 15-04: en `availability` el cupo cambió de **forma**, no solo de fuente — pasó de ser **función de `time`** a **constante por request**. Eso es lo que vuelve imposible que la grilla y el motor diverjan por horario, y por eso los TRES consumidores (`bucle de start-times`, `busy`, `full`) se tocan aunque su semántica no cambie
+- [Phase 15]: 15-04: el **fallback a cupo 1** cuando no llega `serviceId` es deliberado y es el camino MÁS restrictivo — sobre-ofrecer un horario produce un rechazo en el `create`, sub-ofrecerlo solo esconde un slot. Canchas (servicio de cupo fijo 1) queda byte-idéntico y por eso `canchas-booking-client.tsx` NO se toca, con la razón anotada en el código para que no parezca un olvido
+- [Phase 15]: 15-04: bajar los cinco `seedTimeBlock` que 15-03 dejó en N **los convirtió en el control negativo de ESTE plan**: contra el `booking-core` viejo, `CONC-01` y `CUPOS-03` FALLAN (`expected +0 to be 1` / `expected true to be false`), y contra el `availability` viejo `CUPOS-02` FALLA (el slot parcial 2/3 salía como lleno). Un fixture que era parche se vuelve el A/B del plan que lo liberó
+- [Phase 15]: 15-04: **`CUPO-07 (b)` conserva su bloque en 3 y el grep de aceptación queda en 1, no en 0.** Ahí el número no declara: MIENTE a propósito, y es la mentira lo que el caso prueba. Con el bloque en 1 la función vieja de la 064 también daría `is_group = false` y el test pasaría contra las dos versiones. Se descartó esconder el literal detrás de una constante para satisfacer el grep — mismo criterio que 14-09 ("NO se forzó la clase para satisfacer el grep")
+- [Phase 15]: 15-04: `CUPOS-02` se reencuadró a **dos servicios y dos consultas**, no a dos ventanas horarias: un servicio tiene UN cupo, así que el truco de dos bloques con cupos distintos muere con el cupo por servicio. Las aserciones se repartieron sin ablandarse y el contrato + las claves prohibidas ahora se asiertan en LAS DOS respuestas (antes, en una sola)
 - [Phase 15]: 15-01: primer `ALTER COLUMN ... SET DEFAULT` del repo en una migración numerada fuera del baseline (divergencia consciente, documentada en el header); y se rechazó introducir el agregado de constraint en dos pasos por no tener un solo precedente en el repo
 
 ### Pending Todos
@@ -233,7 +241,7 @@ Heredadas del workstream (siguen vigentes):
 
 - **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Runbook completo en `15-01-SUMMARY.md` §User Setup Required. ⚠ El sub-bloqueo de ORDEN ("no debería llegar a prod antes que el guard del editor, D-10") quedó **CERRADO por el plan 15-02**: el editor ya ofrece los tres modos y sube el cupo a 2 al salir de individual, así que no puede producir la combinación que el CHECK rechaza. La 068 sigue teniendo que aplicarse a mano y coordinada con el deploy de ese código.
 - **[Phase 15 — tests, RESUELTO por 15-02 (2026-08-12)]** Las escrituras que el CHECK de coherencia volvió ilegales están todas cerradas, en los **dos** sentidos: los cuatro `capacity_mode: 'group_class', capacity: 1` pasaron a `'individual'/1`, y los **tres** `seedSimultaneousService(t, { capacity: 1 })` de `concurrency.test.ts` (que morían con `23514` porque el helper hace `throw`) migraron o se convirtieron en guard. Suites verdes contra el local con la 068: **20/20** en `test/concurrency.test.ts` y **7/7** en `test/booking-cualquiera-public.test.ts` — el conteo **no bajó**.
-- **[Phase 15 — DESACUERDO TEMPORAL DECLARADO, se cierra en 15-04]** Desde 15-03 el **write-path** (`book_slot_atomic`) decide el cupo con `services.capacity` y el **read-path** (`lib/booking-core.ts:186-199` + `app/api/booking/availability/route.ts:72-83`) todavía lo lee de `time_blocks.capacity`. En producción los dos dan 1 (D-02) ⇒ **cero impacto real**, y esa invisibilidad es justo lo que lo vuelve peligroso (D-08). Consecuencia práctica ya medida: con el bloque en 1 y el servicio en N, la 2ª alta secuencial de un grupal muere con un `slot_taken` del re-check JS **sin llegar al RPC** — por eso los seis `seedTimeBlock(t, { capacity: N })` de `concurrency.test.ts` **siguen en N** y bajan recién en 15-04. **El árbol no debería quedar en este estado más allá de 15-04.**
+- **[Phase 15 — DESACUERDO TEMPORAL, RESUELTO por 15-04 (2026-08-12)]** El write-path (`book_slot_atomic`) y el read-path (`lib/booking-core.ts` + `app/api/booking/availability/route.ts` con sus tres consumidores) deciden ahora el cupo con **`services.capacity`**, y el booking público manda el `serviceId` que el endpoint necesita para resolverlo. `capacityFor()` se borró entera y `capacity` salió del `select` de bloques. Los seis `seedTimeBlock(t, { capacity: N })` bajaron **salvo uno**: el de `CUPO-07 (b)`, donde el número MIENTE a propósito y es la mentira lo que el caso prueba (bajarlo lo dejaría sin poder discriminante — ver `15-04-SUMMARY.md` §Deviations). Queda **una sola** lectura decidiendo por el bloque: `app/(dashboard)/agenda/agenda-client.tsx:465-474` (+ el `isGroup` de presentación de `:638`), panel **autenticado** ⇒ drift de visualización, no de reserva, asignado a la **Phase 16** por D-08.
 - **[Phase 15 — validación, PENDIENTE]** `supabase db reset` **no se corrió** (destruye los datos de prueba locales): falta confirmar que el replay del baseline + 040..068 desde cero termina limpio. Riesgo bajo (el archivo se aplicó dos veces seguidas con exit 0 sobre una base con datos), pero el gate formal del plan queda sin ejecutar. **Requiere el OK del dueño.**
 - **[Phase 14 — LOS 3 GAPS CERRADOS (2026-08-10)]** El plan **14-09** cerró la fase: gap 1 (POLISH-05) verificado por el **ojo del dueño** con captura (chip "Alto" rojo + "Medio" amarillo dentro de un modal del CRM), gaps 2 y 3 (POLISH-04 en `Equipo`) cerrados por código + auditoría del inventario completo. El checkpoint humano se aprobó en **2 rondas**: la primera reportó 3 defectos reales (puntos 3, 5 y 6) que se corrigieron dentro del plan. `REQUIREMENTS.md`, `ROADMAP.md` y `14-VERIFICATION.md` dicen ahora lo mismo. Ver `14-09-SUMMARY.md`. **Los 3 blockers de abajo quedan como histórico.**
 - **[Phase 14 — infra de tests, VIGENTE]** La corrida completa de `npx vitest run` sigue sin ser un gate útil en esta máquina: **725 passed / 9 failed / 23 suites caídas**, todas por `Test timed out in 5000ms`, con **3 stacks de Supabase local levantados** y `127.0.0.1:54321/rest/v1/` tardando **2,16 s** en el root. Es entorno, no código. Los gates útiles hoy son `tsc --noEmit` (usar `./node_modules/.bin/tsc`, **nunca** `npx tsc`), `npm run build` y las suites unitarias que no van contra la DB.
@@ -296,13 +304,13 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-12T20:50:00.000Z
-Stopped at: Completado 15-03-PLAN.md — `book_slot_atomic` lee `services.capacity` en los tres modos (CUPO-07), firma byte-idéntica, A/B contra la 064 documentado
+Last session: 2026-08-12T21:10:00.000Z
+Stopped at: Completado 15-04-PLAN.md — las tres lecturas JS del cupo alineadas con el motor (CUPO-07 / D-08); A/B contra `booking-core` y `availability` viejos documentado
 Resume file: None
 
 ## Operator Next Steps
 
-- Continuar la Phase 15 con el plan **15-04** (las otras TRES lecturas del cupo, D-08: `lib/booking-core.ts:186-199` y `app/api/booking/availability/route.ts:72-83` con sus tres call-sites `:218`, `:415`, `:432`)
-- **15-04 hereda una tarea concreta de 15-03:** bajar a 1 los **seis** `seedTimeBlock(t, { capacity: N })` que quedaron en `test/concurrency.test.ts` (`:162`, `:289`, `:327`, `:779`, `:874`, `:906`), en la MISMA unidad en que `booking-core` deje de leer el bloque. Cada uno tiene el comentario que dice por qué sigue ahí
+- Continuar la Phase 15 con el plan **15-05** (suite de integración del gate de CUPO-08 + runbook de la 068)
+- **La tarea heredada de 15-03 quedó CERRADA en 15-04:** los `seedTimeBlock(t, { capacity: N })` de `test/concurrency.test.ts` bajaron a 1, salvo el de `CUPO-07 (b)` que es control negativo y tiene la razón escrita en el propio test
 - **UAT visual pendiente de 15-02** (declarada `end-of-phase`): en `/servicios` del dev local, crear un servicio (queda Individual), pasarlo a Clase grupal (aparece el campo en 2), subirlo a 10, y volverlo a Individual — ninguno de los cuatro pasos puede terminar en "Error al guardar"
 - Antes de deployar: correr el pre-flight de la 068 contra producción y aplicarla **a mano**, coordinado con el deploy del código de 15-02
