@@ -22,9 +22,12 @@ export async function GET(request: NextRequest) {
   const slug = searchParams.get('slug') || ''
   const date = searchParams.get('date') || ''
   const professionalId = searchParams.get('professionalId') // ausente/'none' = sin preferencia
-  // Phase 10 ("Cualquiera"): la agregación across-staff se gatea con `any=1` + `serviceId`. El camino
-  // específico/omitido (sin `any`) NO lee estos params y queda byte-idéntico (DISP-02/D-08). Canchas
+  // Phase 10 ("Cualquiera"): la agregación across-staff se gatea con `any=1` + `serviceId`. Canchas
   // nunca manda `any=1` (D-09).
+  // (Phase 15 / migr. 068) `serviceId` ya NO es exclusivo de la agregación ni del recurso simultáneo:
+  // el camino ESPECÍFICO también lo manda, porque el cupo pasó a ser del servicio y sin saber cuál es
+  // el endpoint no puede decidir lleno/libre. Sin `serviceId` se cae al fallback de cupo 1 (el camino
+  // más restrictivo), que es lo que corresponde a canchas y a los clientes viejos.
   const any = searchParams.get('any') === '1'
   const serviceIdParam = searchParams.get('serviceId') || ''
   if (!slug || !date) {
@@ -42,6 +45,35 @@ export async function GET(request: NextRequest) {
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
+  // ── Servicio consultado: UNA sola resolución, izada (Phase 15 / migr. 068) ────────────────────
+  // Antes había DOS consultas casi idénticas a `services` (una en la rama "Cualquiera", otra en la
+  // del recurso simultáneo). Se unifican acá porque desde la 068 el cupo es del SERVICIO en los tres
+  // modos, así que TODO el endpoint —no solo esas dos ramas— necesita la fila.
+  // Se conserva EXACTO lo que las dos hacían: anti-tampering aunque sea un read (`business_id`, un
+  // serviceId de otro negocio simplemente no resuelve) y `invalid_service` con 400.
+  let svc: { duration_minutes: number | null; capacity_mode: string | null; capacity: number | null } | null = null
+  if (serviceIdParam) {
+    const { data: svcRow } = await supabase
+      .from('services')
+      .select('duration_minutes, capacity_mode, capacity')
+      .eq('id', serviceIdParam)
+      .eq('business_id', business.id)
+      .single()
+    if (!svcRow) return Response.json({ ok: false, error: 'invalid_service' }, { status: 400 })
+    svc = svcRow
+  }
+
+  // Cupo del slot: CONSTANTE por request, no función del horario. Desde la migr. 068 el número lo
+  // declara el SERVICIO en los tres modos (individual / group_class / simultaneous_resource) y
+  // `book_slot_atomic` dejó de consultar `time_blocks.capacity` — este valor es el espejo de lectura
+  // del mismo número que decide el motor.
+  // FALLBACK 1 cuando no llegó `serviceId`: es el camino MÁS RESTRICTIVO (todo solape bloquea) y es
+  // exactamente lo que corresponde a los dos callers que no lo mandan — canchas (cuyo servicio es de
+  // cupo fijo 1, así que el resultado es byte-idéntico) y cualquier cliente viejo. Fallar hacia el
+  // lado restrictivo es DELIBERADO: sobre-ofrecer un horario produce un rechazo en el `create`
+  // (el público reserva y recibe un error), sub-ofrecerlo solo esconde un slot.
+  const slotCapacity = Number(svc?.capacity) || 1
+
   // Turnos que ocupan slots: confirmed + pending_payment (consistente con el índice 011).
   // `service_id` se suma para la rama de RECURSO SIMULTÁNEO (Phase 12): ahí el cupo se cuenta por
   // solape entre turnos del MISMO servicio. Es aditivo — NUNCA se serializa en la respuesta (el
@@ -58,32 +90,22 @@ export async function GET(request: NextRequest) {
     return Response.json({ ok: false, error: 'query_failed' }, { status: 500 })
   }
 
-  // Capacity por slot: vive en la plantilla semanal (time_blocks), no en el turno. Se resuelve
-  // por slot vía day_of_week (de la `date` consultada) + ventana [start_time, end_time). MISMA
-  // convención de dow que EXTRACT(dow) de la DB y que book_slot_atomic: new Date('yyyy-MM-dd')
-  // parsea a medianoche UTC → getUTCDay() (0=domingo..6=sábado) coincide con la DB.
+  // Bloques del día (plantilla semanal): definen la VENTANA en que la agenda recibe turnos y de ahí
+  // se enumera la grilla de start-times. Se resuelven por day_of_week de la `date` consultada, con la
+  // MISMA convención de dow que EXTRACT(dow) de la DB: new Date('yyyy-MM-dd') parsea a medianoche UTC
+  // → getUTCDay() (0=domingo..6=sábado) coincide con la DB.
+  // ⚠ `capacity` YA NO SE TRAE (migr. 068): el cupo es del servicio y se resolvió arriba. Quitar la
+  // columna del select es lo que garantiza que nadie la vuelva a leer por costumbre.
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
   const { data: capBlocks } = await supabase
     .from('time_blocks')
-    .select('start_time, end_time, capacity')
+    .select('start_time, end_time')
     .eq('business_id', business.id)
     .eq('day_of_week', dow)
 
-  // capacityFor(time): MAX de la capacity de los bloques cuya ventana cubre el slot (consistente
-  // con el COALESCE(MAX(tb.capacity), 1) del RPC). Sin bloque que lo cubra → 1 (individual).
   const toMin = (t: string) => {
     const [h, m] = t.split(':')
     return Number(h) * 60 + Number(m)
-  }
-  const capacityFor = (time: string) => {
-    const tMin = toMin(time)
-    let cap = 0
-    for (const b of capBlocks || []) {
-      if (toMin(b.start_time) <= tMin && tMin < toMin(b.end_time)) {
-        cap = Math.max(cap, Number(b.capacity) || 1)
-      }
-    }
-    return cap || 1
   }
 
   // ── RAMA "Cualquiera" (Phase 10, DISP-01/03, D-06): agregación de disponibilidad across-staff ──────
@@ -101,16 +123,10 @@ export async function GET(request: NextRequest) {
   // computa server-side a nivel de start-time: un start-time va a `full` (oculto) sólo si NINGÚN capaz
   // lo tiene libre. `full` ya es booleano-por-slot → no filtra nada nuevo (D-06): jamás counts, jamás
   // per-pro, jamás qué agenda bloqueó.
-  if (any && serviceIdParam) {
-    // 1. Duración del servicio, re-validada por business_id (anti-tampering aunque sea read: nunca
-    //    confiar en un serviceId ajeno). Sin service de este negocio → invalid_service (400).
-    const { data: svc } = await supabase
-      .from('services')
-      .select('duration_minutes, capacity_mode')
-      .eq('id', serviceIdParam)
-      .eq('business_id', business.id)
-      .single()
-    if (!svc) return Response.json({ ok: false, error: 'invalid_service' }, { status: 400 })
+  if (any && svc) {
+    // 1. Duración del servicio, de la fila ya re-validada por business_id arriba (anti-tampering
+    //    aunque sea read: nunca confiar en un serviceId ajeno). Sin service de este negocio la
+    //    resolución izada YA cortó con invalid_service (400), ANTES de cualquier agregación.
     // T-12-11: el combo "Cualquiera" + RECURSO SIMULTÁNEO no está soportado (D-13) y el write-path lo
     // rechaza con este mismo código (lib/booking-core.ts). El read-path TIENE que coincidir: servir acá
     // la grilla agregada sería ofrecerle al público horarios que después mueren en el create. El gate de
@@ -215,7 +231,9 @@ export async function GET(request: NextRequest) {
     const fullAny: string[] = []
     for (const hhmm of startSet) {
       const t = toMin(hhmm)
-      const cap = capacityFor(hhmm)
+      // (migr. 068) El cupo es del SERVICIO consultado, así que es el MISMO para todos los
+      // start-times: la bifurcación de abajo se conserva tal cual, solo dejó de ser por horario.
+      const cap = slotCapacity
       const someoneFree = capaces.some(pro => {
         const proAppts = liveByPro.get(pro.id) || []
         if (cap <= 1) {
@@ -251,23 +269,15 @@ export async function GET(request: NextRequest) {
   // aceptada y ya conocida: acá el solape usa el buffer del negocio (UX) y el RPC usa `tsrange` sin
   // buffer — la AUTORIDAD es el RPC (un slot límite raro cae en slot_full al reservar).
   // Gateada por `serviceId`: si no llega (canchas — que nunca lo manda — o clientes viejos) o el
-  // servicio es `group_class` (default de toda fila existente), se cae al camino de siempre.
+  // servicio NO es simultáneo (`individual` / `group_class`), se cae al camino de siempre.
   // Nota: si `any=1` venía con serviceId, la rama "Cualquiera" ya retornó arriba (D-13: el selector
   // no ofrece "Cualquiera" en simultáneo).
-  if (serviceIdParam) {
-    // Anti-tampering aunque sea un read: el service se re-valida por business_id (mismo patrón que
-    // la rama `any`). Un serviceId de otro negocio no resuelve → invalid_service (400).
-    const { data: svcMode } = await supabase
-      .from('services')
-      .select('duration_minutes, capacity_mode, capacity')
-      .eq('id', serviceIdParam)
-      .eq('business_id', business.id)
-      .single()
-    if (!svcMode) return Response.json({ ok: false, error: 'invalid_service' }, { status: 400 })
-
-    if (svcMode.capacity_mode === 'simultaneous_resource') {
-      const dur = Number(svcMode.duration_minutes) || 30
-      const cap = Number(svcMode.capacity) || 1
+  // El anti-tampering ya corrió en la resolución IZADA (un serviceId de otro negocio no resuelve →
+  // invalid_service 400): acá se consume esa fila, no se vuelve a consultar.
+  if (svc) {
+    if (svc.capacity_mode === 'simultaneous_resource') {
+      const dur = Number(svc.duration_minutes) || 30
+      const cap = slotCapacity
       const buffer = Number(business.buffer_minutes) || 0
       const nowMsSim = Date.now()
       // Agenda consultada. El `professionalId` que el client SÍ manda no se puede descartar: el motor
@@ -354,7 +364,7 @@ export async function GET(request: NextRequest) {
       // ahí borraría el 2º lugar del recurso. El contrato `{ ok, busy, full }` no cambia.
       return Response.json({ ok: true, busy: [], full: fullSim }, { headers: { 'Cache-Control': 'no-store' } })
     }
-    // `group_class`: sigue de largo al camino de siempre (byte-idéntico).
+    // `individual` / `group_class`: siguen de largo al camino de siempre (byte-idéntico).
   }
 
   // Filtramos por bucket de profesional (coalesce sentinel) y descartamos pending_payment
@@ -404,15 +414,16 @@ export async function GET(request: NextRequest) {
   // Una agenda SIN espacios mapeados → siblingBusy = [] (skip total): disponibilidad byte-idéntica
   // a la de antes (cupos/individual intactos).
 
-  // `busy` SOLO refleja ocupación de slots INDIVIDUALES (capacity 1): ahí un turno que solapa
+  // `busy` SOLO refleja ocupación de servicios INDIVIDUALES (capacity 1): ahí un turno que solapa
   // (incluso de duración variable) bloquea el horario — es el anti-doble-booking de v0.9 que el
-  // client aplica como `conflict`. En slots GRUPALES (capacity > 1) la ocupación NO va a `busy`:
+  // client aplica como `conflict`. Con un servicio GRUPAL (capacity > 1) la ocupación NO va a `busy`:
   // varios turnos en el MISMO horario son ESPERADOS (D-03, duración fija) y NO son conflicto; la
   // ÚNICA condición de bloqueo del grupo es `full` (count >= capacity). Sin este filtro, el
   // `conflict` por solapamiento del client borraría un slot grupal con 1/N ocupado ANTES de que
   // `full` aplique → el público no podría reservar el 2º+ lugar de una clase (bug de cupos).
-  const busy = live
-    .filter(a => capacityFor(a.time) <= 1)
+  // (migr. 068) Es la MISMA regla, evaluada UNA vez: el cupo lo declara el servicio consultado, así
+  // que ya no se decide turno por turno según su horario.
+  const busy = (slotCapacity <= 1 ? live : [])
     .map(a => ({ time: a.time, status: a.status, expires_at: a.expires_at, duration_minutes: a.duration_minutes }))
     // Mergear el bloqueo por espacio compartido (solape 1-a-la-vez). Va en `busy` y NUNCA en `full`:
     // el client lo trata como `conflict` (horario no disponible), igual que un slot individual ocupado.
@@ -426,10 +437,12 @@ export async function GET(request: NextRequest) {
   // NUNCA el conteo de ocupantes, ni los lugares restantes, ni una entrada por inscripto que
   // permita inferirlos. Por eso el conteo por horario colapsa a un booleano por slot
   // (count >= capacity) y jamás se serializa. Para capacity=1, `full` y `busy` coinciden.
+  // (migr. 068) El umbral es el cupo del SERVICIO consultado — el mismo número que usa el RPC —,
+  // no el del bloque de agenda que cubre ese horario.
   const countByTime = new Map<string, number>()
   for (const a of live) countByTime.set(a.time, (countByTime.get(a.time) ?? 0) + 1)
   const full = [...countByTime.entries()]
-    .filter(([time, n]) => n >= capacityFor(time))
+    .filter(([, n]) => n >= slotCapacity)
     // `a.time` viene de Postgres como 'HH:MM:SS'; el client arma los slots con minutesToTime → 'HH:MM'
     // y compara con `full.includes(time)` (igualdad de string). Sin normalizar, '09:00' nunca matchea
     // '09:00:00' y el slot LLENO seguiría ofreciéndose. `busy` no sufría esto porque se compara por
