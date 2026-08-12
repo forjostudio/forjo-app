@@ -87,16 +87,19 @@ export async function seedOneTenant(opts?: { bufferMinutes?: number; serviceDura
   return { admin, userId, email, password, businessId, bufferMinutes, serviceId, serviceDurationMinutes, professionalId, locationId }
 }
 
-// seedTimeBlock: siembra UN time_block (plantilla semanal recurrente) con `capacity` configurable
-// usando el service-role del seed. El RPC book_slot_atomic y el endpoint availability resuelven la
-// capacity de un slot leyendo time_blocks por (business_id, day_of_week, ventana start_time/end_time):
-// sin un time_block sembrado, el RPC cae al default capacity=1. Por eso los tests de cupo (CONC-01,
-// CUPOS-03) DEBEN sembrar el bloque con la capacity que quieren probar.
+// seedTimeBlock: siembra UN time_block (plantilla semanal recurrente) usando el service-role del seed.
+// El bloque es lo que define el DÍA y la VENTANA horaria en que la agenda recibe turnos: sin un
+// time_block sembrado no hay horarios disponibles y el RPC/availability no tienen dónde ubicar el slot.
 //
 // `day_of_week` default = 1 (lunes, convención Postgres EXTRACT(dow): 0=domingo..6=sábado) porque la
 // fecha de test fija de la suite es '2031-03-03', que es un LUNES. La ventana default '08:00'..'20:00'
 // envuelve los horarios de test (09:00, 10:00, etc.). Mantener firma de seedOneTenant intacta: este es
 // un helper aparte. El teardown por CASCADE de business ya borra los time_blocks (sin cambio).
+//
+// ⚠ `capacity` DEJA DE DECIDIR EL CUPO (migr. 068). El número del cupo pasa a vivir SIEMPRE en
+// `services.capacity`, para los tres modos. A partir de acá el parámetro sirve como CONTROL NEGATIVO:
+// un bloque de cupo 3 con un servicio individual tiene que seguir dando cupo 1, y ese es exactamente
+// el test que detecta una lectura que quedó apuntando a la columna vieja.
 export async function seedTimeBlock(
   seeded: SeededTenant,
   opts?: { capacity?: number; dayOfWeek?: number; startTime?: string; endTime?: string }
@@ -139,7 +142,8 @@ export async function seedProfessional(seeded: SeededTenant, opts?: { name?: str
 
 // seedService: siembra UN service activo ADICIONAL sobre un tenant ya sembrado y devuelve su id.
 // Molde directo del insert de service de seedOneTenant (líneas 71-77). Nace con los DEFAULT de la
-// 062 ('group_class' / capacity 1), es decir el camino histórico.
+// base, que desde la migr. 068 son modo 'individual' con capacity 1 (antes eran 'group_class'/1: el
+// comportamiento es el mismo — cupo 1 ⇒ is_group false —, lo que cambió es que ahora se DECLARA).
 //
 // Lo necesita el caso CR-02 (code-review de Phase 12): probar que un servicio SIMULTÁNEO no se puede
 // montar encima de un turno de OTRO servicio en la MISMA agenda. Hace falta un 2º service_id real del
@@ -239,15 +243,20 @@ export async function seedProfessionalService(seeded: SeededTenant, args: { prof
 // (migr. 062): `capacity_mode = 'simultaneous_resource'` + `capacity = N`. Molde de seedProfessionalService
 // (service-role, sin retorno, throw en error), pero con UPDATE en vez de INSERT porque el service ya
 // existe y NO se toca la firma de seedOneTenant (la usan CONC-01/02/CUPOS, que deben seguir en el modo
-// grupal por DEFAULT).
+// DEFAULT).
 //
-// Por qué hace falta: el cupo del recurso simultáneo NO vive en `time_blocks.capacity` (esa es la fuente
-// de la clase grupal) sino en `services.capacity`, y el RPC book_slot_atomic bifurca por `capacity_mode`
-// leyendo el service ANTES del advisory lock (062:173-198). Sin este seteo, el service nace 'group_class'
-// (DEFAULT de la 062) y el test mediría el camino histórico, no el nuevo.
+// Por qué hace falta: el RPC book_slot_atomic bifurca por `capacity_mode` leyendo el service ANTES del
+// advisory lock (062:173-198), y lo que distingue al recurso simultáneo es su EJE DE CONTEO — cuenta por
+// SOLAPE de intervalos, no por hora de inicio. Ya NO lo distingue "de dónde sale el número": desde la
+// migr. 068 los TRES modos leen `services.capacity`. Sin este seteo el service queda en el DEFAULT
+// ('individual' desde la 068) y el test mediría el camino individual, no el simultáneo.
+//
+// ⚠ El CHECK de coherencia de la 068 exige `capacity >= 2` para este modo: llamarlo con 1 rebota con
+// 23514, y como este helper hace `throw`, el caso entero muere. Es correcto — un "recurso simultáneo"
+// de un solo lugar es la ambigüedad que la Phase 15 eliminó.
 //
 // ⚠ El tenant/service se comparte entre los tests del archivo: el que llame a este helper DEBE devolver
-// el service a los defaults ('group_class'/1) en el afterEach para no contaminar a los casos grupales.
+// el service al DEFAULT ('individual'/1) en el afterEach para no contaminar a los casos siguientes.
 export async function seedSimultaneousService(seeded: SeededTenant, opts: { capacity: number }): Promise<void> {
   const upd = await seeded.admin
     .from('services')
@@ -255,6 +264,31 @@ export async function seedSimultaneousService(seeded: SeededTenant, opts: { capa
     .eq('id', seeded.serviceId)
     .eq('business_id', seeded.businessId)
   if (upd.error) throw new Error(`seed: update service simultáneo falló: ${upd.error.message}`)
+}
+
+// seedGroupClassService: pone un service en modo CLASE GRUPAL con cupo N. Molde literal de
+// seedSimultaneousService (service-role, UPDATE filtrado por id Y business_id, sin retorno, throw en
+// error).
+//
+// (a) POR QUÉ EXISTE: desde la migr. 068 el cupo del grupal vive en `services.capacity`, NO en
+//     `time_blocks.capacity`. Sembrar un bloque de agenda de cupo 3 ya no arma un escenario grupal —
+//     arma un control negativo. Este helper es el ÚNICO modo de declarar una clase grupal.
+// (b) EL CHECK DE COHERENCIA EXIGE `capacity >= 2`: llamarlo con 1 rebota con 23514 y el helper tira.
+//     Es correcto: un grupal de cupo 1 es indistinguible de un individual, y esa ambigüedad es
+//     exactamente lo que la Phase 15 eliminó.
+// (c) ⚠ El tenant y el service se comparten entre los tests del archivo: quien lo llame DEBE devolver
+//     el service al DEFAULT (modo 'individual', cupo 1) en el afterEach o contamina a los siguientes.
+//
+// `serviceId` es OPCIONAL (default: el service del tenant) y NO es adorno: hace falta para poner en
+// modo grupal un SEGUNDO servicio del mismo tenant —el que devuelve seedService— y poder armar el caso
+// de dos servicios grupales distintos coexistiendo en el mismo slot.
+export async function seedGroupClassService(seeded: SeededTenant, opts: { capacity: number; serviceId?: string }): Promise<void> {
+  const upd = await seeded.admin
+    .from('services')
+    .update({ capacity_mode: 'group_class', capacity: opts.capacity })
+    .eq('id', opts.serviceId ?? seeded.serviceId)
+    .eq('business_id', seeded.businessId)
+  if (upd.error) throw new Error(`seed: update service grupal falló: ${upd.error.message}`)
 }
 
 // purgeAbonos: borra series de abono RESPETANDO el gate de la migr. 066 (D-18: la base rechaza el
