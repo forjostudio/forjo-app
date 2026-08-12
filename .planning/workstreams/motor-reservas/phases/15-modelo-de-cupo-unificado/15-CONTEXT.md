@@ -119,20 +119,28 @@ Phase 12 necesitó **dos rondas de review y cinco blockers** para dejar bien, es
 **Lo que sí hay que hacer: reescribir el comentario.** Su premisa deja de ser cierta en esta fase y
 un comentario que miente es peor que ninguno. Queda anotado como candidato a revisión propia.
 
-### D-08 — Las TRES lecturas del cupo cambian juntas
+### D-08 — Las lecturas del cupo cambian juntas *(corregida por el pattern-mapper: son CUATRO, no tres)*
 
-`time_blocks.capacity` lo leen tres lugares, y los propios comentarios del código los declaran
-acoplados por diseño:
+`time_blocks.capacity` lo leen **cuatro** lugares, y los propios comentarios del código declaran a los
+tres primeros acoplados por diseño:
 
-| Lugar | Rol | Qué dice su comentario |
-|---|---|---|
-| `book_slot_atomic` (`schema.sql`) | **autoridad atómica** | — |
-| `lib/booking-core.ts:186-199` | re-check JS, solo UX | *"MISMO join que book_slot_atomic"* |
-| `app/api/booking/availability/route.ts:72-83` | grilla pública | *"consistente con el `COALESCE(MAX(tb.capacity), 1)` del RPC"* |
+| Lugar | Rol | Fase | Qué dice su comentario |
+|---|---|---|---|
+| `book_slot_atomic` (`schema.sql`) | **autoridad atómica** | 15 | — |
+| `lib/booking-core.ts:186-199` | re-check JS, solo UX | 15 | *"MISMO join que book_slot_atomic"* |
+| `app/api/booking/availability/route.ts:72-83` | grilla pública | 15 | *"consistente con el `COALESCE(MAX(tb.capacity), 1)` del RPC"* |
+| `app/(dashboard)/agenda/agenda-client.tsx:465-474` | grilla del panel; deriva un `isGroup` de presentación en `:638` | **16** | — |
 
 Separarlos es literalmente cómo se produce el drift: la grilla diría "lleno" por cupo de bloque
 mientras el RPC decide por cupo de servicio. **Hoy ese drift sería invisible** porque todo está en 1 —
 y esa invisibilidad es lo que lo vuelve peligroso.
+
+⚠ **`capacityFor()` de `availability/route.ts` tiene TRES consumidores más** (`:218`, `:415`, `:432`).
+Cambiar solo su definición en `:72-83` **no alcanza** — hay que revisar los tres call-sites.
+
+El cuarto lugar (`agenda-client.tsx`) queda en la **Phase 16** por alcance, pero anotado acá: después
+de la 068 esa pantalla lee una columna que ya no decide. No es un bug de datos, es una lectura que
+quedó mintiendo.
 
 ### D-09 — CUPO-08 se verifica por instalación, no por comportamiento
 
@@ -146,6 +154,27 @@ situación que el gate de la 067.
   camino de rechazo.
 
 No perder tiempo intentando provocarlo en producción.
+
+### D-10 — Guard mínimo del editor y de los tests ENTRA en la Phase 15
+
+*(decisión nueva, disparada por el pattern-mapper — corrige el límite que D-08 daba por bueno)*
+
+**El problema.** `app/(dashboard)/settings/settings-client.tsx:616` y `:701` fuerzan `capacity = 1`
+para todo lo que no sea `simultaneous_resource`. Con el CHECK de coherencia de D-06
+(`group_class ⇒ capacity >= 2`), elegir "Clase grupal" en el editor de hoy **rebota contra el
+constraint**. Y **cuatro tests** escriben `update({ capacity_mode: 'group_class', capacity: 1 })` en su
+`afterEach` — `test/concurrency.test.ts:54`, `test/booking-cualquiera-public.test.ts:127`, `:334`,
+`:365` — así que **la suite de la propia Phase 15 se cae** si no se tocan.
+
+**La decisión.** La Phase 15 suma **lo mínimo para que nada quede roto en ningún commit**:
+
+1. El editor no puede producir una combinación ilegal: al elegir grupal o simultáneo desde
+   `individual`, el cupo sube a 2.
+2. Los cuatro `afterEach` pasan a escribir una combinación legal.
+
+**Lo que NO entra:** la UX completa del editor —los tres modos ofrecidos, el copy que explique
+por-hora-de-inicio vs por-solape— sigue siendo **CUPO-09, Phase 16**. Este guard no es la feature: es
+el mínimo para que la migración no rompa una pantalla que hoy funciona.
 
 ### Claude's Discretion
 
