@@ -306,6 +306,23 @@ de solo-lectura sobre `appointments` con filtro explícito por tenant dentro de 
 - Las cuatro lecturas del cupo (D-08) siguen leyendo `time_blocks.capacity`: `book_slot_atomic`, `lib/booking-core.ts:186-199`, `app/api/booking/availability/route.ts:72-83` (+ sus tres consumidores `:218`, `:415`, `:432`) y `agenda-client.tsx:465-474` (Phase 16).
 - El comentario del gate espejo de la 064 en `supabase/schema.sql:436-447` **sigue mintiendo** (su premisa es que el cupo es del bloque). D-07: el gate no se re-escopea, pero el comentario hay que reescribirlo — no entraba en el alcance de este plan.
 
+## Self-Check: PASSED
+
+Archivos declarados, verificados en disco:
+
+```
+FOUND: supabase/migrations/068_service_capacity_unified_and_mode_gate.sql
+FOUND: supabase/schema.sql
+FOUND: lib/types.ts
+FOUND: .planning/workstreams/motor-reservas/phases/15-modelo-de-cupo-unificado/15-01-SUMMARY.md
+```
+
+Commits declarados, verificados en `git log`:
+
+```
+FOUND: d37d45b   FOUND: 5743be2   FOUND: df66f08   FOUND: 35b5911
+```
+
 ---
 *Phase: 15-modelo-de-cupo-unificado*
 *Completed: 2026-08-12*

@@ -85,13 +85,13 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 
 ### Modelo y motor (Phase 15)
 
-- [ ] **CUPO-06** — `services.capacity_mode` pasa a un enum de **tres** valores
+- [x] **CUPO-06** — `services.capacity_mode` pasa a un enum de **tres** valores
       (`individual` | `group_class` | `simultaneous_resource`), con `individual` como **default**.
       Un servicio individual fuerza cupo 1 y se comporta byte-idéntico a hoy.
 - [ ] **CUPO-07** — `services.capacity` es la **única** fuente del número para los tres modos.
       `book_slot_atomic` deja de leer `time_blocks.capacity` para decidir cupo. Cero regresión de los
       cuatro consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas).
-- [ ] **CUPO-08** — Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza en
+- [x] **CUPO-08** — Cambiar `capacity_mode` en un servicio con **turnos futuros vivos** se rechaza en
       la base con un código de dominio fijo, sin filtrar datos del negocio en el mensaje. Cierra el
       riesgo residual **R-1** de `12-SECURITY.md`: hoy ese cambio deja filas `is_group = true`
       huérfanas, fuera del EXCLUDE gist y fuera del gate espejo ⇒ solapes permanentes que ningún gate
@@ -123,9 +123,9 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 
 | Req | Phase | Status |
 |-----|-------|--------|
-| CUPO-06 | Phase 15 | Pending |
+| CUPO-06 | Phase 15 | Complete (15-01) |
 | CUPO-07 | Phase 15 | Pending |
-| CUPO-08 | Phase 15 | Pending |
+| CUPO-08 | Phase 15 | Complete (15-01) — instalado y verificado por comportamiento en local; la copy del panel es 15-02 y la suite de integración 15-05 |
 | CUPO-09 | Phase 16 | Pending |
 | POLISH-08 | Phase 16 | Pending |
 | POLISH-09 | Phase 16 | Pending |
