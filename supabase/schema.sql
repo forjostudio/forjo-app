@@ -215,9 +215,11 @@ CREATE OR REPLACE FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "
     SET "search_path" TO 'public'
     AS $$
 DECLARE
-  -- (062) modo de cupo del SERVICIO: 'group_class' (default histórico) | 'simultaneous_resource'.
+  -- (068) modo de cupo del SERVICIO, de TRES valores:
+  -- 'individual' (DEFAULT) | 'group_class' | 'simultaneous_resource'.
   v_mode text;
-  -- (062) cupo N del recurso simultáneo (services.capacity). Lo lee SOLO la rama simultánea.
+  -- (068) cupo N del servicio (services.capacity). Lo leen LOS TRES MODOS: es la fuente ÚNICA del
+  -- número (antes lo leía solo la rama simultánea).
   v_svc_cap int;
   -- (062) turnos del MISMO servicio que SOLAPAN el intervalo pedido (gate del modo simultáneo).
   v_overlap int;
@@ -236,15 +238,17 @@ DECLARE
   v_space_ids uuid[];   -- (042) espacios físicos que ocupa la agenda reservada (vía agenda_spaces)
   v_sid uuid;           -- (042) iterador del FOREACH del lock por espacio
 BEGIN
-  -- 0. (062, D-07) Modo de cupo del servicio, leído ANTES del lock (es configuración, no compite en la
+  -- 0. (062, D-07) Modo y CUPO del servicio, leídos ANTES del lock (es configuración, no compite en la
   --    carrera — y define QUÉ lock tomar). business_id EXPLÍCITO: adentro de un SECURITY DEFINER la RLS
-  --    no aplica. COALESCE = fail-safe al modo histórico.
+  --    no aplica. (068) El fail-safe del COALESCE pasa a 'individual' y es MÁS fail-closed que el
+  --    histórico: un p_service_id que no resuelva (p. ej. de otro tenant) cae a cupo 1 en vez de caer
+  --    a la rama grupal, donde podía heredar un cupo > 1 del BLOQUE de agenda que nunca declaró.
   SELECT s.capacity_mode, COALESCE(s.capacity, 1)
     INTO v_mode, v_svc_cap
   FROM services s
   WHERE s.id = p_service_id
     AND s.business_id = p_business_id;
-  v_mode := COALESCE(v_mode, 'group_class');
+  v_mode := COALESCE(v_mode, 'individual');
   v_svc_cap := COALESCE(v_svc_cap, 1);
 
   -- 1. (064, CR2-01) UN ÚNICO advisory lock de NEGOCIO-DÍA, en los DOS modos. Reemplaza y SUBSUME a
@@ -427,17 +431,26 @@ BEGIN
     -- 1 queda false a propósito: el EXCLUDE actúa de respaldo redundante con el gate por solape.
     v_is_group := (v_svc_cap > 1);
   ELSE
-    -- Clase grupal (default): cupo por HORA DE INICIO EXACTA.
+    -- (068) individual + group_class: cupo por HORA DE INICIO EXACTA. La rama cubre DOS modos
+    -- declarables (no "el default"): comparten eje de conteo y tratamiento del asiento, y desde la 068
+    -- los dos sacan el número del MISMO lugar (services.capacity).
+    -- ⚠ CAMBIO DE RÉGIMEN frente al EXCLUDE gist 013: `individual` ⇒ cupo 1 ⇒ seat fijo en 0 (23505
+    -- en la 2ª del slot exacto) e is_group = false ⇒ la fila VUELVE A ENTRAR al EXCLUDE 013, que es el
+    -- que rechaza el solape de duración variable. Con cupo >= 2 nace is_group = true y sale del gist a
+    -- propósito (un EXCLUDE no puede expresar "hasta N"): ahí el anti-solape lo impone esta función,
+    -- bajo el lock de negocio-día.
     --
     -- (064, CR2-01 — eje INVERSO) Gate ESPEJO del gate cross-servicio de la rama simultánea. Sin él
     -- este eje no tenía NINGÚN chequeo: una fila is_group=true de un recurso simultáneo está FUERA del
-    -- EXCLUDE gist 013, así que un turno grupal/individual se le montaba encima (con
-    -- time_blocks.capacity > 1 incluso SIN concurrencia; con capacity = 1 bajo concurrencia).
-    -- ALCANCE ACOTADO A PROPÓSITO: además de is_group=true + servicio distinto + solape, se exige que
-    -- el servicio de la fila preexistente esté en modo 'simultaneous_resource'. Sin esa condición se
-    -- rompe un caso legal HOY: time_blocks.capacity es del BLOQUE (no del servicio), así que con un
-    -- bloque de cupo 3 TODAS las filas nacen is_group=true y dos servicios distintos en el mismo slot
-    -- (Corte 10:00 + Color 10:00, mismo pro) son legales — bloquearlos sería drift de group_class.
+    -- EXCLUDE gist 013, así que un turno de esta rama se le montaba encima (con cupo > 1 incluso SIN
+    -- concurrencia; con cupo 1 bajo concurrencia).
+    -- ⚠ ALCANCE ACOTADO A PROPÓSITO, con la justificación REESCRITA por la 068 (D-07): el predicado NO
+    -- cambia —is_group=true + servicio distinto + solape + que el servicio de la fila preexistente esté
+    -- HOY en modo 'simultaneous_resource'—, cambia el POR QUÉ. La razón vieja (time_blocks.capacity es
+    -- del BLOQUE, así que con un bloque de cupo 3 TODAS las filas nacían is_group=true) MURIÓ con la
+    -- 068. La que sobrevive es el mismo caso legal, ahora DECLARADO: dos servicios GRUPALES distintos,
+    -- cada uno con capacity >= 2, siguen pudiendo coexistir solapados en la misma agenda. Ampliar el
+    -- gate sería CAMBIAR comportamiento, no restaurar integridad: queda como revisión propia.
     IF EXISTS (
       SELECT 1 FROM appointments a
       WHERE a.business_id = p_business_id
@@ -459,14 +472,11 @@ BEGIN
       RAISE EXCEPTION 'slot_taken' USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. Capacity del bloque que cubre este slot (plantilla semanal: day_of_week + ventana).
-    --    Si no hay bloque que lo cubra, default 1 (comportamiento individual). EXTRACT(dow) usa la
-    --    misma convención que time_blocks.day_of_week (0=domingo..6=sábado).
-    SELECT COALESCE(MAX(tb.capacity), 1) INTO v_capacity
-    FROM time_blocks tb
-    WHERE tb.business_id = p_business_id
-      AND tb.day_of_week = EXTRACT(dow FROM p_date)
-      AND p_time >= tb.start_time AND p_time < tb.end_time;
+    -- 2. (068, CUPO-07) El cupo sale del SERVICIO. Acá vivía la consulta que lo resolvía con un MAX
+    --    sobre el BLOQUE de agenda; se borró entera. El número ya se leyó en el paso 0, ANTES del lock,
+    --    porque es configuración y no compite en la carrera. Se conserva `v_capacity` como variable
+    --    (en vez de usar v_svc_cap en línea) para dejar byte-idénticas las dos líneas que la consumen.
+    v_capacity := v_svc_cap;
 
     -- 3. Ocupantes actuales del slot exacto (mismo bucket, mismo date+time, estados que ocupan).
     --    Los holds vencidos ya los liberó el core ANTES del RPC, así que el count está limpio.
