@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, seedSimultaneousService, seedService, seedExpiredHold, type SeededTenant } from './helpers/booking-fixtures'
+import { seedOneTenant, teardownOneTenant, seedTimeBlock, seedSpace, seedAgendaSpace, seedProfessional, seedSimultaneousService, seedGroupClassService, seedService, seedExpiredHold, type SeededTenant } from './helpers/booking-fixtures'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { GET as availabilityGET } from '@/app/api/booking/availability/route'
 import type { NextRequest } from 'next/server'
@@ -152,7 +152,15 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   // estado de la DB: exactamente 2 filas ocupando el slot (no 3) — la prueba real de que no hubo
   // sobrecupo (T-02-16).
   it('CONC-01 — anti-sobrecupo: dos reservas concurrentes sobre el último lugar, solo una confirma', async () => {
+    // (Phase 15 / migr. 068) El cupo se DECLARA en el SERVICIO: es de ahí que lo lee el RPC.
+    // ⚠ EL BLOQUE SE QUEDA EN 2 EN ESTA OLA, y no es que falte migrarlo: `book_slot_atomic` ya NO lo
+    // mira, pero el re-check JS de `booking-core` (`taken && slotCapacity <= 1`) SÍ lo sigue leyendo, y
+    // este caso entra por el core. Con el bloque en 1 la 2ª alta moriría con un `slot_taken` del JS sin
+    // llegar nunca al RPC. Esa lectura la migra el plan 15-04; recién ahí el bloque puede bajar a 1.
+    // El control negativo de que el número sale del servicio se prueba YA en los casos CUPO-07 (a)/(b),
+    // que entran por RPC directo justamente para saltear ese re-check.
     await seedTimeBlock(t, { capacity: 2 })
+    await seedGroupClassService(t, { capacity: 2 })
 
     // Ocupa el seat 0 (deja exactamente 1 lugar libre).
     const seed = await createAppointmentCore({ ...baseInput(), time: '09:00' })
@@ -200,7 +208,10 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   // filas ocupando el slot.
   it('CUPOS-03 — admite hasta capacity y rechaza el excedente con slot_full', async () => {
     const N = 3
+    // (migr. 068) El cupo lo declara el SERVICIO. El bloque sigue en N solo para el re-check JS del
+    // core, que hasta 15-04 lo sigue leyendo (ver la nota larga de CONC-01).
     await seedTimeBlock(t, { capacity: N })
+    await seedGroupClassService(t, { capacity: N })
 
     // N altas secuenciales: todas ok.
     for (let i = 0; i < N; i++) {
@@ -220,6 +231,80 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     expect(await occupantsAt('11:00')).toBe(N)
   })
 
+  // ── CUPO-07 (migr. 068) — LA FUENTE DEL CUPO ES EL SERVICIO ────────────────────────────────────
+  // Estos dos casos son el CONTROL NEGATIVO de la fase, en los DOS sentidos: prueban que el número sale
+  // de `services.capacity` y que `time_blocks.capacity` ya NO decide. Son los únicos que pueden hacerlo
+  // con el bloque y el servicio DISCREPANDO, y para eso entran (a) por RPC DIRECTO y (b) con un solape
+  // que no comparte hora exacta: el re-check JS de `booking-core` sigue leyendo el BLOQUE hasta el plan
+  // 15-04, así que en esta ola es el único camino que llega al RPC sin que el JS decida antes.
+  //
+  // A/B contra la función de la 064 (la que leía el bloque) — es lo que los vuelve discriminantes:
+  //   (a) bloque 1 + servicio grupal cupo 3 → con la 064 la 2ª muere con 23505 (seat 0 repetido);
+  //       con la 068 entran las 3 y la 4ª da slot_full.
+  //   (b) bloque 3 + servicio individual    → con la 064 la 2ª ENTRA (nace is_group = true y el EXCLUDE
+  //       gist 013 no la ve); con la 068 muere con 23P01, porque is_group = false la devuelve al gist.
+  async function bookByRpc(args: { serviceId: string; time: string; name: string; duration?: number }) {
+    return t.admin.rpc('book_slot_atomic', {
+      p_business_id: t.businessId,
+      p_professional_id: t.professionalId,
+      p_service_id: args.serviceId,
+      p_location_id: t.locationId,
+      p_date: DATE,
+      p_time: args.time,
+      p_duration: args.duration ?? 30,
+      p_client_id: null,
+      p_client_name: args.name,
+      p_client_phone: null,
+      p_client_email: null,
+      p_notes: null,
+      p_status: 'confirmed',
+      p_expires_at: null,
+    })
+  }
+
+  it('CUPO-07 (a) — el cupo lo pone el SERVICIO aunque el bloque de agenda diga 1', async () => {
+    await seedTimeBlock(t) // cupo por DEFECTO = 1: el bloque dice "individual" y ya no le importa a nadie
+    await seedGroupClassService(t, { capacity: 3 })
+
+    for (let i = 0; i < 3; i++) {
+      const { error } = await bookByRpc({ serviceId: t.serviceId, time: '14:00', name: `__test_cupo07a_${i}` })
+      expect(error).toBeNull() // con la 064 (cupo del BLOQUE = 1) la 2ª moriría acá con 23505
+    }
+
+    // La 4ª excede el cupo DECLARADO → slot_full, no 23505: el cupo lo gatea la función, no el índice.
+    const cuarta = await bookByRpc({ serviceId: t.serviceId, time: '14:00', name: '__test_cupo07a_extra' })
+    expect(cuarta.error?.message ?? '').toContain('slot_full')
+
+    expect(await occupantsAt('14:00')).toBe(3)
+    const { data: rows } = await t.admin
+      .from('appointments').select('seat, is_group').eq('business_id', t.businessId).eq('date', DATE).eq('time', '14:00')
+    expect(new Set((rows || []).map(r => r.seat)).size).toBe(3) // seats 0..2, serializados por el lock
+    // Cupo >= 2 ⇒ is_group true ⇒ FUERA del EXCLUDE gist 013 A PROPÓSITO: si naciera false, la 2ª fila
+    // solapada moriría con 23P01 y el cupo nunca se llenaría (LANDMINE 013).
+    expect((rows || []).every(r => r.is_group === true)).toBe(true)
+  })
+
+  it('CUPO-07 (b) — control negativo: un bloque de cupo 3 ya NO vuelve grupal a un servicio individual', async () => {
+    // El servicio queda en el DEFAULT de la 068 (individual / cupo 1) y el BLOQUE miente con cupo 3.
+    await seedTimeBlock(t, { capacity: 3 })
+
+    const primera = await createAppointmentCore({ ...baseInput(), time: '14:30' })
+    expect(primera.ok).toBe(true)
+    const { data: row } = await t.admin
+      .from('appointments').select('seat, is_group').eq('business_id', t.businessId).eq('date', DATE).eq('time', '14:30').single()
+    expect(row?.seat).toBe(0)         // cupo 1 ⇒ seat FIJO en 0
+    expect(row?.is_group).toBe(false) // ⇒ CAMBIO DE RÉGIMEN: la fila vuelve a entrar al EXCLUDE gist 013
+
+    // El 2º intento SOLAPA sin compartir hora exacta (14:40 pisa a 14:30-15:00). Es a propósito: en la
+    // hora EXACTA se violarían a la vez el índice único 011 y el EXCLUDE 013, y cuál de los dos reporta
+    // primero no está garantizado. Acá el 011 no aplica (`time` distinto), así que el 23P01 prueba
+    // inequívocamente que la fila está DENTRO del gist. Con la 064 la 2ª entraba: cupo 3 del bloque ⇒
+    // is_group = true ⇒ invisible para el gist.
+    const segunda = await bookByRpc({ serviceId: t.serviceId, time: '14:40', name: '__test_cupo07b_2' })
+    expect(segunda.error?.code).toBe('23P01')
+    expect(await occupantsAt('14:30')).toBe(1)
+  })
+
   // CUPOS-02 — availability no filtra lugares restantes (D-06). El público SOLO recibe disponible/
   // lleno: la respuesta es `{ ok, busy, full }` y NUNCA contiene el conteo de ocupantes por slot, ni
   // `remaining`, ni una entrada por inscripto que permita inferir cuántos lugares quedan (T-02-18).
@@ -231,8 +316,14 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   //       removerse por el camino de solapamiento) NI en `full` (sigue reservable).
   //   (c) para capacity=1, el slot ocupado SÍ está en busy y en full (coinciden).
   it('CUPOS-02 — availability no filtra lugares restantes (busy/full sin conteo)', async () => {
-    // Bloque grupal capacity=3 en la ventana default; un slot individual lo modelamos con su propio
-    // bloque capacity=1 que se solapa en otra franja horaria (12:00..13:00) sin chocar con el grupal.
+    // (migr. 068) El cupo del WRITE-PATH lo declara el servicio: sin esto las 2+3 altas de 09:00 y
+    // 10:00 no entrarían (el RPC leería el cupo 1 del servicio).
+    await seedGroupClassService(t, { capacity: 3 })
+    // ⚠ LOS DOS seedTimeBlock SE CONSERVAN TAL CUAL, y NO es deuda olvidada: en esta ola el READ-PATH
+    // (`availability`) todavía lee `time_blocks.capacity`, así que las aserciones de busy/full de abajo
+    // siguen dependiendo de estas dos ventanas y de sus cupos. Su reencuadre —bajar el bloque grupal a
+    // 1 y modelar el slot individual con un servicio propio— es del plan 15-04, junto con el cambio de
+    // `availability`. No dar este caso por migrado hasta entonces.
     await seedTimeBlock(t, { capacity: 3, startTime: '08:00', endTime: '12:00' })
     await seedTimeBlock(t, { capacity: 1, startTime: '12:00', endTime: '20:00' })
 
@@ -679,10 +770,16 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   // A/B medido: con la 063 la 2ª reserva ENTRA (ok) y la agenda queda con 2 turnos solapados; con la
   // 064 devuelve slot_taken en los dos caminos y queda 1 turno.
   it('CR2-01 (eje inverso) — un turno grupal no se puede montar sobre un recurso simultáneo', async () => {
-    // Bloque GRUPAL (cupo 3): es lo que desactivaba el early-return JS y dejaba pasar el solape.
+    // ⚠ Bloque en 3 Y `otroServicio` declarado GRUPAL cupo 3: hacen falta LAS DOS COSAS, y por la MISMA
+    // razón. Lo que este caso viene a probar es el gate ESPEJO del SQL; si el paso 2 lo cortara antes el
+    // re-check JS del core (`taken && slotCapacity <= 1`), el test seguiría pasando —el error es
+    // slot_taken en los dos casos— pero ya no probaría nada del gate. El JS lee el BLOQUE hasta 15-04 y
+    // el RPC lee el SERVICIO desde la 068, así que en esta ola hay que desactivar el early-return en los
+    // dos lados. Cuando 15-04 unifique la lectura, el bloque baja a 1 y lo sostiene el servicio solo.
     await seedTimeBlock(t, { capacity: 3 })
     await seedSimultaneousService(t, { capacity: 2 })
     const otroServicio = await seedService(t, { durationMinutes: 30, name: '__test_svc_grupal_inverso' })
+    await seedGroupClassService(t, { capacity: 3, serviceId: otroServicio })
 
     // 1) "camilla" (simultáneo cupo 2) 16:00-16:30 → entra y nace is_group = true (fuera del gist 013).
     const camilla = await createAppointmentCore({ ...baseInput(), time: '16:00' })
@@ -727,7 +824,7 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   // seguir dando el gist con 23P01 (traducido a slot_taken por el core) — exactamente como antes de la
   // 064. Se asierta el SQLSTATE crudo por RPC directo: si el espejo se "comiera" este caso, el código
   // pasaría a P0001 y el assert lo detecta.
-  it('no-drift — group_class cupo 1: el solape cross-servicio lo sigue rechazando el EXCLUDE 013 (23P01)', async () => {
+  it('no-drift — servicio individual: el solape cross-servicio lo sigue rechazando el EXCLUDE 013 (23P01)', async () => {
     await seedTimeBlock(t, { capacity: 1 })
     const otroServicio = await seedService(t, { durationMinutes: 30, name: '__test_svc_nodrift_cap1' })
 
@@ -763,16 +860,21 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     expect(await occupantsOfBucketCovering('16:10')).toBe(1)
   })
 
-  // NO-DRIFT (b) — el caso que obligó a ACOTAR el gate espejo. `time_blocks.capacity` es del BLOQUE
-  // (business + day_of_week + ventana), NO del servicio: en un negocio con un bloque de cupo N TODAS
-  // las filas nacen is_group = true, y dos SERVICIOS DISTINTOS en el mismo slot de ese bloque (Corte
-  // 10:00 + Color 10:00, mismo profesional) son LEGALES hoy — es lo que "cupo N" significa. Por eso el
-  // espejo exige además que el servicio de la fila preexistente esté en modo simultaneous_resource.
-  // Con el predicado literal del review (solo is_group = true) este test FALLA: la 2ª reserva sería
-  // rechazada y sería drift de group_class.
-  it('no-drift — dos servicios grupales distintos siguen entrando en el mismo slot de un bloque de cupo N', async () => {
+  // NO-DRIFT (b) — el caso que obligó a ACOTAR el gate espejo, REENCUADRADO por la migr. 068 (D-07).
+  // Antes el escenario era "un bloque de agenda de cupo N hace nacer is_group = true a TODAS las filas
+  // del negocio"; esa premisa murió con el cupo por servicio. El caso legal que el recorte protege
+  // SOBREVIVE y ahora es explícito: dos servicios que DECLARAN cupo >= 2 pueden coexistir solapados en
+  // la misma agenda — es lo que "cupo N" significa —, y con el predicado literal del review (solo
+  // is_group = true) este test FALLA: la 2ª reserva sería rechazada y eso sería drift de group_class.
+  //
+  // ⚠ LOS DOS servicios tienen que ser GRUPALES. Dejar uno individual rompería el caso de VERDAD y no
+  // por drift: un individual deriva v_seat := 0 fijo y chocaría con el índice único 011 contra el
+  // asiento 0 del grupal.
+  it('no-drift — dos servicios que DECLARAN cupo >= 2 siguen entrando en el mismo slot', async () => {
     await seedTimeBlock(t, { capacity: 3 })
     const otroServicio = await seedService(t, { durationMinutes: 30, name: '__test_svc_nodrift_grupal' })
+    await seedGroupClassService(t, { capacity: 3 })
+    await seedGroupClassService(t, { capacity: 3, serviceId: otroServicio })
 
     const a = await createAppointmentCore({ ...baseInput(), time: '10:00' })
     expect(a.ok).toBe(true)
@@ -796,8 +898,13 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
   // A/B medido contra un MUTANTE de la 064 sin el PERFORM del lock: 3 corridas → aparecen slot_taken
   // espurios y seats repetidos (FALLA). Con la 064 → 3 ok, seats {0,1,2} (PASA). Contra la 063 también
   // pasa: CR-03 ya estaba cerrado ahí; esto es un guard, no un repro.
-  it('CR-03 (a) — el lock de negocio-día serializa v_seat: 3 reservas concurrentes en un bloque de cupo 3', async () => {
+  it('CR-03 (a) — el lock de negocio-día serializa v_seat: 3 reservas concurrentes sobre un cupo de 3', async () => {
+    // (migr. 068) El cupo lo declara el SERVICIO. El bloque sigue en 3 solo para el re-check JS del
+    // core (ver la nota larga de CONC-01): acá además evita que una carrera perdida por milisegundos
+    // vea la fila de otra ya commiteada y se coma un slot_taken espurio del JS, que volvería flaky al
+    // guard de serialización de v_seat.
     await seedTimeBlock(t, { capacity: 3 })
+    await seedGroupClassService(t, { capacity: 3 })
     await warmUpPool()
 
     const results = await Promise.all([
