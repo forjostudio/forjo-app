@@ -263,11 +263,17 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
       // de los profesionales capaces y devuelve la unión en `full` con `busy:[]` (D-06, Plan 01). NUNCA
       // se manda un professionalId como asignación. Camino específico (proId) o sentinel = como hoy.
       else if (isAny) { params.set('any', '1'); params.set('serviceId', selectedService.id) }
-      // Phase 12 (D-12): en un servicio de RECURSO SIMULTÁNEO el server necesita saber QUÉ servicio
-      // es para contar el solape (el cupo se cuenta entre turnos del mismo service_id) y devolver
-      // "lleno" antes de que el cliente elija un horario que después falla. Solo el camino específico:
-      // el "Cualquiera" no se ofrece en simultáneo (D-13) y ya manda su propio serviceId.
-      if (!isAny && isSimultaneousResource) params.set('serviceId', selectedService.id)
+      // (Phase 15 / migr. 068) El camino ESPECÍFICO manda SIEMPRE el servicio. Antes esto estaba
+      // gateado por el modo simultáneo (Phase 12, D-12), donde el cupo se cuenta entre turnos del
+      // mismo service_id; desde la 068 el cupo es del SERVICIO en los TRES modos, así que el server
+      // necesita saber CUÁL para decidir lleno/libre. Sin esto caería siempre al fallback de cupo 1
+      // y una clase grupal recién declarada nunca ofrecería su 2º lugar en la grilla.
+      // NO afloja ningún control: el endpoint re-valida el serviceId por business_id y devuelve
+      // invalid_service (400) si es de otro negocio.
+      // La rama "Cualquiera" ya mandaba el suyo (arriba) y no se toca. `canchas-booking-client.tsx`
+      // sigue SIN mandarlo a propósito: su servicio es de cupo fijo 1 y el fallback del endpoint es
+      // 1 ⇒ comportamiento byte-idéntico, no es un olvido.
+      if (!isAny) params.set('serviceId', selectedService.id)
       const res = await fetch(`/api/booking/availability?${params.toString()}`, { cache: 'no-store' })
       const data = await res.json().catch(() => null)
       if (res.ok && data?.ok) {
