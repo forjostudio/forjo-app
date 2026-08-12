@@ -193,6 +193,9 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 - ✓ **PUB-03..PUB-08** Borrador vs publicado (`landing_draft` / `landing_config`): guardar no publica, publicar/descartar son copia server-side (nunca se acepta el config del body), estado de 3 vías, go-live implícito, cero regresión en las landings ya al aire — v0.18 (migración 050)
 - ✓ **SKILL-07, SKILL-08** La skill del operador escribe el BORRADOR (`--publish` opt-in) y `--inspect` separa lo-al-aire de lo-pendiente-de-aprobación — v0.18
 - ✓ **PUB-01** CMS expuesto a clientes reales con `has_web_custom` como ÚNICO gate (sin `CMS_ENABLED`), chequeado en las 4 superficies incl. el upload directo a Storage vía RLS — v0.18 (migración 051)
+- ✓ **CUPO-01..05** El cupo se cuenta según la semántica del servicio: *clase grupal* por hora de inicio exacta (intacto) o *recurso simultáneo* por **solape de intervalos**, controlado dentro de `book_slot_atomic` bajo un único advisory lock de negocio-día — v0.26 (migraciones 062/063/064)
+- ✓ **HIST-01..03** Borrar un servicio no destruye la historia: snapshot de nombre/precio en el turno + FK a `SET NULL` + gate `BEFORE DELETE` que bloquea si quedan turnos futuros y ofrece desactivar — v0.26 (migración 065)
+- ✓ **POLISH-04..07** Ancho de botones consistente app-wide · `RiskBadge` "Alto" con color fuera del CRM (vía scope de shell para superficies portaleadas) · un abono cancelado deja de entregar su link de baja · un cliente nuevo sin turnos cae en "Nuevas" — v0.26 (migraciones 066/067)
 
 ### Active
 
@@ -201,8 +204,7 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 - Web Builder v0.10 (shipped) — ver `.planning/milestones/v0.10-REQUIREMENTS.md`.
 - **Web Builder — Ampliación + CMS v0.16 (activo)** — ver `.planning/workstreams/web-builder/REQUIREMENTS.md` (modo edición + fuentes de la skill, premium motion, CMS self-serve owner-only, fotos alrededor de la reserva).
 - Consola CRM v0.11 (shipped) — ver `.planning/milestones/v0.11-REQUIREMENTS.md`.
-- Motor de Reservas — historial del workstream (v0.12 · v0.22 · v0.24 · v0.25 shipped) archivado en `.planning/milestones/v0.*-REQUIREMENTS.md`.
-- **Motor de Reservas — v0.26 Cupo por solape + cierre de backlog (activo)** — ver `.planning/workstreams/motor-reservas/REQUIREMENTS.md` (cupo por solape por servicio en el RPC atómico, borrado de servicio preservando historial, backlog chico de polish).
+- Motor de Reservas — historial del workstream (v0.12 · v0.22 · v0.24 · v0.25 · **v0.26** shipped) archivado en `.planning/milestones/v0.*-REQUIREMENTS.md`. **El próximo milestone del workstream arranca en Phase 15.**
 
 ### Out of Scope
 
@@ -265,4 +267,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-11 — **v0.26 Cupo por solape + cierre de backlog** (ws `motor-reservas`) con sus 3 fases completas: Phase 12 (cupo por solape), Phase 13 (borrado de servicio con historial) y Phase 14 (cierre de backlog, verificada 8/8 el 2026-08-11). El milestone queda listo para `/gsd:complete-milestone` — pendiente antes de archivar: re-correr `/gsd:secure-phase 14`, cuyo audit no cubre las amenazas de los planes 14-08/14-09. v0.9–v0.25 shipped y archivados. Pendiente del ws `web-builder`: Phase 18 — auto-armado de la web con el pago del add-on (`web-builder-automation-northstar`).*
+*Last updated: 2026-08-11 after v0.26 milestone — **v0.26 Cupo por solape + cierre de backlog SHIPPED** (ws `motor-reservas`, Phases 12-14, 18 planes, migraciones 062→067 en prod, tag `v0.26`). Las 3 fases cerradas con `threats_open: 0`. v0.9–v0.26 shipped y archivados; el próximo milestone del ws `motor-reservas` arranca en **Phase 15**. Pendiente del ws `web-builder`: Phase 18 — auto-armado de la web con el pago del add-on (`web-builder-automation-northstar`).*

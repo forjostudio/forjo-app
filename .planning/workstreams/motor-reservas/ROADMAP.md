@@ -572,7 +572,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, activo). Los tres milestones cerrados quedan en el historial; v0.26 arranca en Phase 12.
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, shipped 2026-08-11). Los cinco milestones cerrados quedan en el historial; **el próximo del workstream arranca en Phase 15**.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
