@@ -123,9 +123,9 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 
 | Req | Phase | Status |
 |-----|-------|--------|
-| CUPO-06 | Phase 15 | Complete (15-01) |
+| CUPO-06 | Phase 15 | Complete (15-01 modelo + 15-02 editor: 'Individual' es elegible y es el default de alta) |
 | CUPO-07 | Phase 15 | Pending |
-| CUPO-08 | Phase 15 | Complete (15-01) — instalado y verificado por comportamiento en local; la copy del panel es 15-02 y la suite de integración 15-05 |
+| CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel: P0001 + service_mode_has_future_appointments mapeado a copy propia, sin interpolar el error) — la suite de integración del gate sigue siendo 15-05 |
 | CUPO-09 | Phase 16 | Pending |
 | POLISH-08 | Phase 16 | Pending |
 | POLISH-09 | Phase 16 | Pending |

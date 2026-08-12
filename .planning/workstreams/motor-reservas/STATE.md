@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: Cupo unificado por servicio
-status: Phase 15 en ejecución — 15-01 completo (1/5 planes)
-stopped_at: Completado 15-01-PLAN.md — migración 068 escrita y validada en local, NO aplicada a prod
-last_updated: "2026-08-12T03:30:00.000Z"
-last_activity: 2026-08-12 — 15-01 ejecutado (068: enum de tres modos + CHECK de coherencia + gate de cambio de modo)
+status: Phase 15 en ejecución — 15-01 y 15-02 completos (2/5 planes)
+stopped_at: Completado 15-02-PLAN.md — guard mínimo del editor + fixtures legales; las dos suites de integración VERDES contra el local con la 068
+last_updated: "2026-08-12T20:30:00.000Z"
+last_activity: 2026-08-12 — 15-02 ejecutado (editor coherente con el CHECK, seedGroupClassService, 27/27 en las dos suites)
 progress:
   total_phases: 16
   completed_phases: 14
   total_plans: 76
-  completed_plans: 72
-  percent: 89
+  completed_plans: 73
+  percent: 90
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 15 — Modelo de cupo unificado (en ejecución, 1/5 planes)
-Plan: 15-01 COMPLETO (Wave 1) — el próximo es 15-02 (Wave 2, guard mínimo del editor + fixtures, D-10)
-Status: la migración **068** está escrita y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**
-Last activity: 2026-08-12 — 15-01 ejecutado (enum de tres modos, CHECK de coherencia modo↔cupo, gate `services_block_mode_change`)
+Phase: 15 — Modelo de cupo unificado (en ejecución, 2/5 planes)
+Plan: 15-01 y 15-02 COMPLETOS (Waves 1 y 2) — el próximo es 15-03 (las lecturas del cupo, D-08)
+Status: la migración **068** está escrita y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**. El guard del editor (D-10) ya está en código, así que el bloqueo de orden de deploy quedó cerrado
+Last activity: 2026-08-12 — 15-02 ejecutado (editor con los tres modos y piso de cupo por modo, mapeo de CUPO-08 a copy propia, `seedGroupClassService`, suites 20/20 + 7/7)
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
 
@@ -94,6 +94,7 @@ Last activity: 2026-08-12 — 15-01 ejecutado (enum de tres modos, CHECK de cohe
 | Phase 14 P08 | 60min | 3 tasks | 5 files |
 | Phase 14 P09 | ~70min efectivos (~5h de reloj, partido por el checkpoint humano de 2 rondas) | 3 tasks (1 checkpoint bloqueante) | 7 files |
 | Phase 15 P01 | ~47min | 3 tasks | 3 files |
+| Phase 15 P02 | ~35min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -207,6 +208,13 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 15]: 15-01: el gate NO lleva guard de cascada, a propósito: `services_business_id_fkey` es `ON DELETE CASCADE`, así que cerrar una cuenta BORRA la fila y una cascada jamás llega a un `BEFORE UPDATE`. Queda escrito en el SQL para que nadie agregue código muerto "por simetría" con la 065/067
 - [Phase 15]: 15-01: código de dominio nuevo `service_mode_has_future_appointments` (P0001), fijo y sin datos del negocio; convivencia verificada con los dos de la 065 (ninguno es substring del otro, así que el `message.includes` del panel no los confunde)
 - [Phase 15]: 15-01: la 068 se validó aplicándola al Postgres LOCAL con `psql --single-transaction` en vez de `supabase db reset` (que borra los datos de prueba). Esa validación prueba MÁS en comportamiento (backfill real de 10 filas, re-corribilidad, los 4 rechazos del CHECK y los 6 casos del gate con filas forzadas) y MENOS en replay-desde-cero — el `db reset` queda PENDIENTE y requiere OK del dueño
+- [Phase 15]: 15-02: el piso de cupo por modo del editor (`minCapacityFor`) es **espejo de UX** del CHECK `services_capacity_matches_mode_chk`, nunca su reemplazo — la autoridad sigue siendo la base y el `.eq('business_id', ...)` del update se conserva como defensa en profundidad (T-15-10)
+- [Phase 15]: 15-02: el `onClick` del segmented control patchea **modo y cupo juntos** — mandar solo el modo es exactamente lo que hacía rebotar el UPDATE contra el CHECK (individual → grupal con el cupo todavía en 1)
+- [Phase 15]: 15-02: los defaults del editor eran **CUATRO**, no tres: el `?? 'group_class'` de `openEditService` **no lo matchea** el grep del literal de asignación, así que sin un criterio propio los otros tres se cumplen con ese sitio sin tocar
+- [Phase 15]: 15-02: un caso que el modelo vuelve imposible se convierte en **guard de esa imposibilidad**, nunca se borra — el simultáneo de cupo 1 ahora asierta `23514` + el nombre del constraint y **relee la fila** para probar que el servicio no cambió de modo (no se confía en el error)
+- [Phase 15]: 15-02: para probar un rechazo de constraint desde un test, el intento va con `UPDATE` DIRECTO por `t.admin` — `seedSimultaneousService` hace `throw` y se lleva el caso puesto antes de la primera aserción
+- [Phase 15]: 15-02: CR-04 (b) se **reencuadró** en vez de fusionarse con `gap 3` — `gap 3` no tiene agenda hermana ni espacio compartido entre dos agendas, así que no era redundante, y fusionarlos habría bajado el conteo de casos de 20 a 19
+- [Phase 15]: 15-02: los 10 errores de ESLint de `settings-client.tsx` son **PREEXISTENTES** (probado linteando la versión de `HEAD` en un archivo temporal: mismos 10, mismo exit 1) y quedan fuera de alcance; los gates reales del plan son `tsc --noEmit` 0 y `npm run build` 0
 - [Phase 15]: 15-01: primer `ALTER COLUMN ... SET DEFAULT` del repo en una migración numerada fuera del baseline (divergencia consciente, documentada en el header); y se rechazó introducir el agregado de constraint en dos pasos por no tener un solo precedente en el repo
 
 ### Pending Todos
@@ -217,8 +225,8 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
-- **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Y **no debería llegar a prod antes que el guard del editor (D-10, plan 15-02)**: con la 068 aplicada y el editor de hoy, elegir "Clase grupal" rebota contra el CHECK (fuerza `capacity = 1`). Runbook completo en `15-01-SUMMARY.md` §User Setup Required.
-- **[Phase 15 — tests, ESPERADO]** Desde que la 068 está aplicada al Postgres **local**, cuatro `afterEach` que escriben `capacity_mode: 'group_class', capacity: 1` van a fallar contra la base: `test/concurrency.test.ts:54` y `test/booking-cualquiera-public.test.ts:127, :334, :365`. Es la consecuencia anticipada por **D-10** y la cierra el plan **15-02**; no es una regresión de 15-01. Por eso 15-01 no corrió ninguna suite.
+- **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Runbook completo en `15-01-SUMMARY.md` §User Setup Required. ⚠ El sub-bloqueo de ORDEN ("no debería llegar a prod antes que el guard del editor, D-10") quedó **CERRADO por el plan 15-02**: el editor ya ofrece los tres modos y sube el cupo a 2 al salir de individual, así que no puede producir la combinación que el CHECK rechaza. La 068 sigue teniendo que aplicarse a mano y coordinada con el deploy de ese código.
+- **[Phase 15 — tests, RESUELTO por 15-02 (2026-08-12)]** Las escrituras que el CHECK de coherencia volvió ilegales están todas cerradas, en los **dos** sentidos: los cuatro `capacity_mode: 'group_class', capacity: 1` pasaron a `'individual'/1`, y los **tres** `seedSimultaneousService(t, { capacity: 1 })` de `concurrency.test.ts` (que morían con `23514` porque el helper hace `throw`) migraron o se convirtieron en guard. Suites verdes contra el local con la 068: **20/20** en `test/concurrency.test.ts` y **7/7** en `test/booking-cualquiera-public.test.ts` — el conteo **no bajó**.
 - **[Phase 15 — validación, PENDIENTE]** `supabase db reset` **no se corrió** (destruye los datos de prueba locales): falta confirmar que el replay del baseline + 040..068 desde cero termina limpio. Riesgo bajo (el archivo se aplicó dos veces seguidas con exit 0 sobre una base con datos), pero el gate formal del plan queda sin ejecutar. **Requiere el OK del dueño.**
 - **[Phase 14 — LOS 3 GAPS CERRADOS (2026-08-10)]** El plan **14-09** cerró la fase: gap 1 (POLISH-05) verificado por el **ojo del dueño** con captura (chip "Alto" rojo + "Medio" amarillo dentro de un modal del CRM), gaps 2 y 3 (POLISH-04 en `Equipo`) cerrados por código + auditoría del inventario completo. El checkpoint humano se aprobó en **2 rondas**: la primera reportó 3 defectos reales (puntos 3, 5 y 6) que se corrigieron dentro del plan. `REQUIREMENTS.md`, `ROADMAP.md` y `14-VERIFICATION.md` dicen ahora lo mismo. Ver `14-09-SUMMARY.md`. **Los 3 blockers de abajo quedan como histórico.**
 - **[Phase 14 — infra de tests, VIGENTE]** La corrida completa de `npx vitest run` sigue sin ser un gate útil en esta máquina: **725 passed / 9 failed / 23 suites caídas**, todas por `Test timed out in 5000ms`, con **3 stacks de Supabase local levantados** y `127.0.0.1:54321/rest/v1/` tardando **2,16 s** en el root. Es entorno, no código. Los gates útiles hoy son `tsc --noEmit` (usar `./node_modules/.bin/tsc`, **nunca** `npx tsc`), `npm run build` y las suites unitarias que no van contra la DB.
@@ -281,11 +289,12 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-12T03:30:00.000Z
-Stopped at: Completado 15-01-PLAN.md — migración **068** escrita y validada en local (no aplicada a prod)
+Last session: 2026-08-12T20:30:00.000Z
+Stopped at: Completado 15-02-PLAN.md — guard mínimo del editor (D-10) + fixtures legales; suites de integración verdes contra el local con la 068
 Resume file: None
 
 ## Operator Next Steps
 
-- Continuar la Phase 15 con el plan **15-02** (guard mínimo del editor + fixtures legales, D-10) — es lo que destraba la suite de integración local
-- Antes de deployar: correr el pre-flight de la 068 contra producción y aplicarla **a mano**, coordinado con el deploy del guard del editor
+- Continuar la Phase 15 con el plan **15-03** (las lecturas del cupo, D-08: `book_slot_atomic`, `lib/booking-core.ts` y `availability` con sus tres call-sites)
+- **UAT visual pendiente de 15-02** (declarada `end-of-phase`): en `/servicios` del dev local, crear un servicio (queda Individual), pasarlo a Clase grupal (aparece el campo en 2), subirlo a 10, y volverlo a Individual — ninguno de los cuatro pasos puede terminar en "Error al guardar"
+- Antes de deployar: correr el pre-flight de la 068 contra producción y aplicarla **a mano**, coordinado con el deploy del código de 15-02
