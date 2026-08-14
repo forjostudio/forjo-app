@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: Cupo unificado por servicio
 status: Phase 15 — los 5 planes EJECUTADOS (5/5); pendientes el secure-phase (obligatorio) y la UAT de cierre
-stopped_at: Completado 15-05-PLAN.md — suite de integración del gate (7/7, con control negativo), los dos casos de carrera de CUPO-07 (concurrency 24/24, con A/B contra un mutante) y el runbook de la 068. La 068 sigue SIN aplicar en producción
+stopped_at: Phase 15 ejecutada 5/5, verificada 4/4 (human_needed — falta la UAT del booking público) y SECURED 32/32. **Deployada a prod (`e95e11f..72c7194`) y migración 068 YA APLICADA en producción — la próxima es la 069**
 last_updated: "2026-08-12T22:40:00.000Z"
 last_activity: 2026-08-12 — 15-05 ejecutado (capacity-mode-change-gate 7/7 con el trigger dropeado viéndolo fallar; concurrency 22/22 → 24/24 con A/B contra el mutante que restaura la lectura del bloque; 12/12 suites del verification, tsc y build exit 0; 15-RUNBOOK-068.md escrito)
 progress:
@@ -35,7 +35,18 @@ Last activity: 2026-08-12 — 15-04 ejecutado (las tres lecturas JS alineadas; `
 - **D-01 Cutover, sin fallback transicional.** `services.capacity` es la única fuente del número desde el día 1; `time_blocks.capacity` deja de decidir (la columna se conserva, no se dropea). No se escribe regla de precedencia en el RPC y no queda deprecación pendiente.
 - **D-02 El cutover no afecta a nadie — medido contra PRODUCCIÓN el 2026-08-11:** `select count(*), count(*) filter (where capacity is null), max(capacity) from time_blocks` → **19 bloques · 0 sin capacity · cupo_max 1**. Por eso **no se construye aviso de re-declaración** y el backfill deja de ser un problema. ⚠ El control se corrió a propósito además del `where capacity > 1` (que dio "Success, no rows"): una query que devuelve 0 filas es indistinguible de una que no midió lo que creías — lección de la Phase 14.
 - **D-03 R-1 se cierra bloqueando, no reparando.** Cambiar `capacity_mode` con turnos futuros vivos se rechaza en la base con código de dominio propio (molde fail-closed de los gates de las migr. 065/066). Reparar las filas se descartó: puede descubrir turnos que ya se solapan de forma ahora ilegal, y ahí el EXCLUDE aborta la transacción igual, dejando al dueño con un error peor y sin salida.
-- **Próxima migración del proyecto: la 068.**
+- ⚠ **La 068 YA ESTÁ APLICADA EN PRODUCCIÓN (2026-08-14). La próxima migración del proyecto es la 069.**
+  Se aplicó **fuera del orden que fijaba el runbook** (código primero, migración después). Consecuencia
+  medida y auditada (`15-SECURITY.md`, T-15-32): el motor **no** se rompió —el backfill dejó todo en
+  `individual` cupo 1, `time_blocks.capacity` en prod ya era todo 1, y la firma del RPC es
+  byte-idéntica— pero **crear un servicio nuevo quedó roto** mientras corrió el código viejo, que
+  insertaba `group_class` + `capacity 1`, combinación que el CHECK de coherencia rechaza.
+  **Se corrigió deployando** (`e95e11f..72c7194`), no con una migración correctiva: una correctiva
+  habría tenido que aflojar el CHECK, o sea deshacer D-06.
+  **Lección estructural (del auditor):** el runbook declaraba el orden pero no lo hacía *imposible de
+  invertir*. La forma correcta era **partir el archivo** — el CHECK de coherencia es la única sentencia
+  sensible al orden, así que dejándolo en una migración posterior al deploy, aplicar la primera mitad
+  temprano deja de importar.
 
 ## Performance Metrics
 
