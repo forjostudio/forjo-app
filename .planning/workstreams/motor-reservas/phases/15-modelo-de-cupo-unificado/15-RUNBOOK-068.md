@@ -54,6 +54,33 @@ select capacity_mode, capacity, count(*)
 | Aparece un `group_class` con **cupo >= 2** | **SEGUIR, pero REGISTRARLO** (anotar id y nombre del servicio). El backfill **no lo toca** — así está escrito el predicado, a propósito —, pero a partir de la 068 ese servicio pasa a contar su cupo desde `services.capacity` en vez de desde el bloque. |
 | Aparece algún `simultaneous_resource` | **SEGUIR, pero REGISTRARLO.** Cambia la premisa de **D-09**: con un simultáneo vivo, el gate de CUPO-08 **sí** se podría provocar desde la UI. |
 
+### (iii) ¿Hay alguna fila que el CHECK nuevo NO admitiría? *(agregado por el code-review — WR-02)*
+
+El control que **realmente prueba que la migración no va a abortar**. El backfill del paso 2 normaliza
+sólo `group_class` con cupo <= 1; un **`simultaneous_resource` con cupo 1** era una configuración legal
+y explícitamente testeada antes de esta fase (`test/concurrency.test.ts` la documenta), y el
+`ADD CONSTRAINT` del paso 4 **valida las filas existentes**: si existiera una sola, la migración
+**aborta entera**. Es el mismo modo de falla al que el header del archivo le dedica seis líneas para el
+caso grupal, y el que rompe de verdad no estaba nombrado en ningún lado.
+
+```sql
+select capacity_mode, capacity, count(*) as filas
+  from services
+ where capacity_mode <> 'individual'
+   and capacity <= 1
+ group by 1,2;
+```
+
+| Resultado | Acción |
+|---|---|
+| **0 filas** *(y la query (ii) devolvió números)* | **SEGUIR.** No hay ninguna fila que el CHECK de coherencia rechace. ⚠ Este es el único control del runbook que prueba algo devolviendo cero filas, y **sólo vale si (ii) ya devolvió números**: es (ii) el que demuestra que la tabla y las columnas son las que creés. |
+| Aparece `group_class · 1` | **SEGUIR.** Esas son las que el backfill del paso 2 normaliza a `individual`. |
+| Aparece **`simultaneous_resource · 1`** | 🛑 **ABORTAR.** El backfill **no** la toca y el `ADD CONSTRAINT` del paso 4 va a rechazarla ⇒ la migración aborta entera (falla cerrado, no corrompe nada, pero no sirve de nada correrla). Normalizar primero a mano: `update services set capacity_mode='individual' where capacity_mode='simultaneous_resource' and capacity <= 1;` — un simultáneo de un solo lugar es indistinguible de un individual, que es justo la ambigüedad que esta fase elimina. Después, volver a este runbook. |
+
+**Medición del 2026-08-11 (producción):** cero servicios en modo simultáneo (D-04) ⇒ el caso no se dio.
+El hueco queda escrito igual porque **reaparece en cualquier replay** sobre una base que no sea la de
+prod (staging, un dump viejo, un tenant importado).
+
 ### Por qué los controles se escriben así y NO con `where capacity > 1`
 
 Una query que devuelve **0 filas** es **indistinguible** de una que no midió lo que creías: tabla
@@ -88,6 +115,15 @@ ninguna clase grupal nueva hasta que esté aplicada.
    en **una sola** sesión/transacción. **NO partirlo en pedazos**: el orden interno es obligatorio
    (**D-05** — el backfill del paso 2 va **antes** del CHECK del paso 4, o el `ADD CONSTRAINT` valida
    las 9 filas viejas y **aborta la migración entera**).
+
+   > ⚠ **La atomicidad depende del CLIENTE, no del archivo** *(corregido por el code-review — WR-01)*.
+   > El archivo **no tiene `BEGIN;`/`COMMIT;`**. El SQL Editor de Supabase manda el script como un
+   > batch y lo envuelve en una transacción implícita ⇒ por ahí la garantía se cumple. **`psql -f
+   > archivo.sql` sin `-1` NO**: manda statement por statement en autocommit, y un fallo en el paso 3
+   > o 4 dejaría la tabla **sin ningún CHECK de enum** (el paso 1 ya lo dropeó), aceptando cualquier
+   > string en `capacity_mode` **en silencio**. Por eso el camino es **SQL Editor**, o —si se aplica
+   > por consola— **`psql -1 --set=ON_ERROR_STOP=1 -f archivo.sql`**, nunca `psql -f` pelado.
+   > La **069** ya no tiene esta ambigüedad: abre su propia transacción explícita.
 3. ⛔ **NUNCA por `supabase db push`.** Producción **no tiene** `supabase_migrations.schema_migrations`:
    un `db push` no sabe qué está aplicado y puede intentar replayar el historial completo. Las
    migraciones de este proyecto se aplican **a mano y en orden**, sin excepción.
@@ -212,8 +248,16 @@ dueño quiera hacerlo. Eso es D-09.
 
 ## 4. Si algo sale mal
 
-La migración corre en una sola transacción: si **aborta**, no queda nada aplicado y no hay que revertir
-nada — se corrige la causa y se vuelve a correr entera.
+**Si se aplicó por el camino de §2** (SQL Editor, o `psql -1`), la migración corre en una sola
+transacción: si **aborta**, no queda nada aplicado y no hay que revertir nada — se corrige la causa y se
+vuelve a correr entera.
+
+> ⚠ *(corregido por el code-review — WR-01)* Esa garantía **no la da el archivo**: la 068 no abre
+> transacción explícita. Si se hubiera aplicado con `psql -f` pelado (autocommit) y hubiera abortado en
+> el paso 3 o 4, la tabla habría quedado **sin ningún CHECK de enum** —el paso 1 lo dropea primero— y
+> aceptaría cualquier string en `capacity_mode` sin avisar. **Control para saber en qué estado quedó:**
+> `select conname from pg_constraint where conrelid='public.services'::regclass and conname like 'services_capacity%';`
+> — tiene que devolver **2 filas**; con 0 o 1, re-correr el archivo entero por el camino transaccional.
 
 Si **corrió** y hay que dar marcha atrás, cada objeto se revierte por separado:
 
