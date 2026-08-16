@@ -135,9 +135,18 @@ function minCapacityFor(mode: CapacityMode): number {
   return mode === 'individual' ? 1 : 2
 }
 
-// El cupo N es un entero >= `min` (mismo CHECK que la DB). Un input vacío o basura cae al piso del modo.
+// Techo del cupo declarable desde el panel (code-review de Phase 15, WR-03). NO es un invariante de
+// dominio: `services.capacity` es `smallint` (máx 32767) y la base no tiene tope propio. Es el guard
+// que evita que un número pegado o tipeado de más (40000) viaje al UPDATE y vuelva como
+// `22003 smallint out of range`, que el panel colapsa en un `toast.error('Error al guardar')` sin
+// decir qué pasó. 99 lugares ya está muy por encima de cualquier clase real y mantiene usable la
+// grilla del roster.
+const MAX_CAPACITY = 99
+
+// El cupo N es un entero entre `min` (mismo CHECK que la DB) y MAX_CAPACITY. Un input vacío o basura
+// cae al piso del modo.
 function normalizeCapacity(n: number, min = 1): number {
-  return Number.isFinite(n) ? Math.max(min, Math.floor(n)) : min
+  return Number.isFinite(n) ? Math.min(MAX_CAPACITY, Math.max(min, Math.floor(n))) : min
 }
 
 // Segmented control de modo + campo de cupo, reutilizado en alta (inline) y edición (dialog).
@@ -256,6 +265,7 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
             onFocus={e => e.target.select()}
             onChange={e => onChange({ capacity: normalizeCapacity(parseInt(e.target.value), minCapacityFor(value)) })}
             min={2}
+            max={MAX_CAPACITY}
             step={1}
             disabled={disabled}
           />
