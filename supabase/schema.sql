@@ -329,14 +329,18 @@ BEGIN
   WHERE asp.business_id = p_business_id
     AND asp.professional_id = v_effective_pro;
 
-  -- (064, gap 3) RECURSO SIMULTÁNEO cupo > 1 + agenda con ESPACIO mapeado ⇒ RECHAZO EXPLÍCITO. Un
-  --   espacio es una sala/cancha FÍSICA y appointment_spaces_no_overlap (042) impone un turno por
-  --   espacio a la vez (capacidad 1): un recurso de cupo ≥ 2 sobre el mismo espacio es una
-  --   contradicción semántica, NO un bug a parchear relajando ese EXCLUDE (relajarlo borraría el
-  --   invariante de espacio compartido de v0.12). Antes fallaba solo y mal (el 2º turno moría con
-  --   23P01 → slot_taken mientras availability lo publicaba libre). Código PROPIO para no confundirlo
-  --   con slot_taken/slot_full. Con cupo 1 NO aplica (is_group=false ⇒ el EXCLUDE 013 lo cubre).
-  IF v_mode = 'simultaneous_resource' AND v_svc_cap > 1 AND v_space_ids IS NOT NULL THEN
+  -- (064, gap 3 — AMPLIADO por la 069, CR-03) CUPO > 1 + agenda con ESPACIO mapeado ⇒ RECHAZO
+  --   EXPLÍCITO, en los DOS modos de cupo compartido. Un espacio es una sala/cancha FÍSICA y
+  --   appointment_spaces_no_overlap (042) impone un turno por espacio a la vez (capacidad 1): un
+  --   servicio de cupo ≥ 2 sobre el mismo espacio es una contradicción semántica, NO un bug a
+  --   parchear relajando ese EXCLUDE (relajarlo borraría el invariante de espacio compartido de
+  --   v0.12). (069) La condición de MODO se cayó: hasta la 068 exigía 'simultaneous_resource' y por
+  --   ahí se colaba un `group_class` de cupo ≥ 2 (declarable recién desde la 068) — la 1ª inscripción
+  --   entraba y la 2ª moría con 23P01 → slot_taken mientras availability publicaba los N lugares.
+  --   Lo que hace imposible la configuración es el CUPO, no el modo. Código PROPIO para no
+  --   confundirlo con slot_taken/slot_full. Con cupo 1 NO aplica (is_group=false ⇒ el EXCLUDE 013 lo
+  --   cubre) ⇒ cero regresión del camino canchas/F11.
+  IF v_svc_cap > 1 AND v_space_ids IS NOT NULL THEN
     RAISE EXCEPTION 'simultaneous_space_conflict' USING ERRCODE = 'P0001';
   END IF;
 
@@ -440,31 +444,39 @@ BEGIN
     -- propósito (un EXCLUDE no puede expresar "hasta N"): ahí el anti-solape lo impone esta función,
     -- bajo el lock de negocio-día.
     --
-    -- (064, CR2-01 — eje INVERSO) Gate ESPEJO del gate cross-servicio de la rama simultánea. Sin él
-    -- este eje no tenía NINGÚN chequeo: una fila is_group=true de un recurso simultáneo está FUERA del
-    -- EXCLUDE gist 013, así que un turno de esta rama se le montaba encima (con cupo > 1 incluso SIN
-    -- concurrencia; con cupo 1 bajo concurrencia).
-    -- ⚠ ALCANCE ACOTADO A PROPÓSITO, con la justificación REESCRITA por la 068 (D-07): el predicado NO
-    -- cambia —is_group=true + servicio distinto + solape + que el servicio de la fila preexistente esté
-    -- HOY en modo 'simultaneous_resource'—, cambia el POR QUÉ. La razón vieja (time_blocks.capacity es
-    -- del BLOQUE, así que con un bloque de cupo 3 TODAS las filas nacían is_group=true) MURIÓ con la
-    -- 068. La que sobrevive es el mismo caso legal, ahora DECLARADO: dos servicios GRUPALES distintos,
-    -- cada uno con capacity >= 2, siguen pudiendo coexistir solapados en la misma agenda. Ampliar el
-    -- gate sería CAMBIAR comportamiento, no restaurar integridad: queda como revisión propia.
+    -- (064, CR2-01 — eje INVERSO / 069, CR-01) Gate ESPEJO del gate cross-servicio de la rama
+    -- simultánea: es lo ÚNICO que puede frenar un solape cross-servicio cuando al menos una de las dos
+    -- filas está FUERA del EXCLUDE gist 013.
+    -- ⚠ (069) EL PREDICADO PASÓ DE MIRAR EL MODO A MIRAR EL CUPO. Hasta la 068 exigía que la fila
+    -- PREEXISTENTE fuera de un servicio 'simultaneous_resource', y eso dejaba entrar una clase grupal
+    -- ENCIMA de un turno individual confirmado de la misma agenda (declarable recién desde la 068;
+    -- reproducido contra el Postgres local). Ahora:
+    --   (a) `a.is_group = true OR v_svc_cap > 1` — alguno de los dos lados salió del gist. Si ninguno
+    --       salió (individual ↔ individual) este gate NO dispara A PROPÓSITO: el rechazo lo sigue
+    --       dando el EXCLUDE 013 con 23P01 (invariante asertado por SQLSTATE en `no-drift (a)`).
+    --   (b) EXCEPCIÓN de D-07, escrita por lo que es: dos servicios GRUPALES DISTINTOS con cupo >= 2
+    --       pueden coexistir solapados (es lo que "cupo N" significa). Se exigen los DOS
+    --       (`capacity_mode = 'group_class' AND capacity >= 2`): un allow-list por cupo a secas
+    --       también exceptuaría a los RECURSOS SIMULTÁNEOS —cupo >= 2 por CHECK— y reabriría lo que
+    --       cerró la 064. La excepción sólo vale si la fila NUEVA también es un grupal declarado.
     IF EXISTS (
       SELECT 1 FROM appointments a
       WHERE a.business_id = p_business_id
         AND COALESCE(a.professional_id, '00000000-0000-0000-0000-000000000000'::uuid) = v_bucket
         AND a.service_id IS DISTINCT FROM p_service_id
         AND a.date = p_date
-        AND a.is_group = true            -- solo las filas que se fueron del EXCLUDE 013
         AND a.status IN ('confirmed', 'pending_payment')
         AND (a.status = 'confirmed' OR a.expires_at IS NULL OR a.expires_at > now())
-        AND EXISTS (                     -- ...y se fueron por la feature nueva, no por cupo grupal
-              SELECT 1 FROM services s2
-              WHERE s2.id = a.service_id
-                AND s2.business_id = p_business_id
-                AND s2.capacity_mode = 'simultaneous_resource'
+        AND (a.is_group = true OR v_svc_cap > 1)   -- (a) alguno de los dos lados está fuera del gist
+        AND NOT (                                  -- (b) excepción D-07: grupal declarado ↔ grupal declarado
+              v_svc_cap > 1
+              AND EXISTS (
+                    SELECT 1 FROM services s2
+                    WHERE s2.id = a.service_id
+                      AND s2.business_id = p_business_id
+                      AND s2.capacity_mode = 'group_class'
+                      AND s2.capacity >= 2
+                  )
             )
         AND tsrange(a.date + a.time, a.date + a.time + make_interval(mins => COALESCE(a.duration_minutes, 30)))
             && tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))
