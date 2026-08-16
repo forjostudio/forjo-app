@@ -449,5 +449,70 @@ export async function GET(request: NextRequest) {
     // minutos (timeToMinutes tolera los segundos); `full` es comparación literal, así que va en 'HH:MM'.
     .map(([time]) => time.slice(0, 5))
 
+  // ── (migr. 069, CR-01 + CR-03) Coherencia read/write para los servicios de CUPO > 1 ────────────
+  // Con cupo > 1 la ocupación NO va a `busy` (varios turnos en el mismo horario son ESPERADOS), así
+  // que este camino no tenía CÓMO reflejar dos rechazos del write-path que la migr. 069 hizo
+  // alcanzables para una CLASE GRUPAL — y un read-path que ofrece lo que el create rechaza es
+  // exactamente la mentira que la 064 vino a eliminar en el modo simultáneo:
+  //   (i)  (CR-01) la agenda ya tiene un turno vivo de OTRO servicio que NO comparte cupo (individual,
+  //        recurso simultáneo, o una fila sin servicio) que PISA el intervalo ⇒ el RPC responde
+  //        slot_taken. Dos servicios GRUPALES declarados (cupo >= 2) NO bloquean: es el caso legal de
+  //        D-07 y el que hace reservable el 2º/3er lugar de una clase.
+  //   (ii) (CR-03) la agenda tiene un ESPACIO físico mapeado ⇒ cupo >= 2 sobre un espacio 1-a-la-vez
+  //        es una configuración IMPOSIBLE y el RPC la rechaza SIEMPRE (simultaneous_space_conflict):
+  //        se ocultan TODOS los horarios, no algunos.
+  // Va a `full` (booleano por slot) y NO a `busy`: mandarlo a `busy` haría que el client lo trate como
+  // conflicto por solapamiento y borraría también los lugares libres de la propia clase. D-06 (no-leak)
+  // intacto: `full` no dice POR QUÉ el slot está bloqueado ni cuántos lugares quedan, y el contrato
+  // sigue siendo `{ ok, busy, full }`. Es el mismo molde que la rama simultánea (`liveBucketOther` +
+  // `simSpaceBlocked`), acá aplicado al eje de conteo por hora de inicio.
+  if (slotCapacity > 1) {
+    const durShared = Number(svc?.duration_minutes) || 30
+    const bufferShared = Number(business.buffer_minutes) || 0
+    const spaceBlocked = !!mySpaces && mySpaces.length > 0
+    const otherLive = live.filter(a => a.service_id !== serviceIdParam)
+    let blockingOther = otherLive
+    if (!spaceBlocked && otherLive.length > 0) {
+      // Modos de los OTROS servicios presentes en la agenda: sólo un `group_class` de cupo >= 2 tiene
+      // permiso de coexistir (mismo recorte D-07 que el RPC y que el re-check del core). business_id
+      // EXPLÍCITO aunque los ids vengan de turnos ya acotados al tenant.
+      const otherIds = [...new Set(otherLive.map(a => a.service_id).filter(Boolean))] as string[]
+      const { data: otherSvcs } = await supabase
+        .from('services')
+        .select('id, capacity_mode, capacity')
+        .in('id', otherIds)
+        .eq('business_id', business.id)
+      const sharedOk = new Set(
+        (otherSvcs || [])
+          .filter(s => s.capacity_mode === 'group_class' && Number(s.capacity) >= 2)
+          .map(s => s.id as string),
+      )
+      blockingOther = otherLive.filter(a => !a.service_id || !sharedOk.has(a.service_id as string))
+    }
+    if (spaceBlocked || blockingOther.length > 0) {
+      // Grilla del día a paso = duración (misma fórmula que el client y que las otras dos ramas).
+      const minToHHMM = (t: number) =>
+        `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+      const overlapsShared = (a: { time: string; duration_minutes: number | null }, t: number) => {
+        const aStart = toMin(a.time)
+        const aEnd = aStart + Number(a.duration_minutes || 30)
+        return t < aEnd + bufferShared && t + durShared > aStart - bufferShared
+      }
+      const alreadyFull = new Set(full)
+      for (const b of capBlocks || []) {
+        const open = toMin(b.start_time)
+        const close = toMin(b.end_time)
+        for (let t = open; t + durShared <= close; t += durShared) {
+          const hhmm = minToHHMM(t)
+          if (alreadyFull.has(hhmm)) continue
+          if (spaceBlocked || blockingOther.some(a => overlapsShared(a, t))) {
+            alreadyFull.add(hhmm)
+            full.push(hhmm)
+          }
+        }
+      }
+    }
+  }
+
   return Response.json({ ok: true, busy, full }, { headers: { 'Cache-Control': 'no-store' } })
 }

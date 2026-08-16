@@ -260,6 +260,39 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     // un bloque de cupo 3 volvía grupales a TODAS las filas del negocio, de cualquier servicio), sino
     // que lo DECLARA el propio servicio. Un servicio individual vuelve a estar DENTRO del gist.
     const takenByOtherService = sameBucket.some(a => isAlive(a) && a.service_id !== service.id)
+
+    // ── (migr. 069, CR-01) Espejo de UX del gate cross-servicio de la rama NO simultánea ─────────
+    // Un servicio de cupo > 1 nace `is_group = true` ⇒ FUERA del EXCLUDE gist 013, así que la base
+    // sola no frena que una CLASE GRUPAL se monte encima de un turno de otro servicio de la misma
+    // agenda: eso lo decide el gate espejo del RPC (autoridad), y esto es su reflejo temprano.
+    // Sin esta rama el early-return de abajo no aplicaba nunca para un grupal (`taken && cap <= 1` es
+    // false con cupo >= 2) y el rechazo llegaba recién del RPC.
+    //
+    // EL RECORTE ES EL MISMO QUE EL DEL RPC (D-07), y por eso NO alcanza con `takenByOtherService`:
+    // dos servicios GRUPALES DISTINTOS de cupo >= 2 PUEDEN coexistir solapados en la misma agenda —es
+    // lo que "cupo N" significa—, así que rechazar por "hay otro servicio" cortaría un caso LEGAL (el
+    // que asierta `no-drift — dos servicios que DECLARAN cupo >= 2`). Lo que bloquea es un turno de un
+    // servicio que NO es un grupal declarado: individual (cupo 1), recurso simultáneo, o una fila sin
+    // servicio. Se resuelve con UNA query extra y SOLO cuando hace falta (servicio de cupo > 1 con
+    // turnos de otro servicio pisando el intervalo); el camino individual queda byte-idéntico.
+    const otherLive = sameBucket.filter(a => isAlive(a) && a.service_id !== service.id)
+    let takenByNonSharedService = false
+    if (slotCapacity > 1 && otherLive.length > 0) {
+      const otherIds = [...new Set(otherLive.map(a => a.service_id).filter(Boolean))] as string[]
+      // Filtro por business_id EXPLÍCITO aunque los ids salgan de turnos ya acotados al tenant: es la
+      // misma regla que el resto del core (nunca una query de servicios sin su tenant).
+      const { data: otherSvcs } = await supabase
+        .from('services')
+        .select('id, capacity_mode, capacity')
+        .in('id', otherIds)
+        .eq('business_id', business.id)
+      const sharedOk = new Set(
+        (otherSvcs || [])
+          .filter(s => s.capacity_mode === 'group_class' && Number(s.capacity) >= 2)
+          .map(s => s.id as string),
+      )
+      takenByNonSharedService = otherLive.some(a => !a.service_id || !sharedOk.has(a.service_id as string))
+    }
     // Re-check JS capacity-aware (Pitfall 5 / A5): el rechazo temprano `slot_taken` por SOLAPAMIENTO
     // solo aplica a servicios de cupo 1, donde es el anti-doble-booking de duración variable de v0.9 (un
     // turno de 60' que pisa parcialmente a otro de 30' — el RPC NO lo cubre, solo cuenta el slot exacto).
@@ -272,7 +305,11 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     // conserva en los dos bordes: un servicio INDIVIDUAL da cupo 1 ⇒ esto es literalmente el
     // `taken && 1 <= 1` de siempre (byte-idéntico); un GRUPAL de cupo >= 2 no corta temprano, igual
     // que hoy no cortaba con un bloque de cupo > 1.
-    const rejectEarly = isSimultaneousResource ? takenByOtherService : (taken && slotCapacity <= 1)
+    // (migr. 069) La rama de cupo > 1 deja de ser "nunca rechaza": rechaza cuando la agenda ya está
+    // ocupada por un servicio que NO comparte cupo (ver arriba). Cupo 1 queda BYTE-IDÉNTICO.
+    const rejectEarly = isSimultaneousResource
+      ? takenByOtherService
+      : (slotCapacity <= 1 ? taken : takenByNonSharedService)
     if (rejectEarly) {
       return { ok: false, error: 'slot_taken', status: 409 }
     }
