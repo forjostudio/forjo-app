@@ -121,16 +121,29 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const capaces = selectedService
     ? professionalsForService(selectedService.id, professionals, professionalServices)
     : professionals
-  // Phase 12 (D-13): un servicio de RECURSO SIMULTÁNEO (2 camillas) exige elegir profesional. La
-  // asignación automática del RPC marca "ocupado" a quien tenga CUALQUIER turno solapado, así que
-  // no sabe usar la 2ª camilla → el combo "Cualquiera" + simultáneo no está soportado en v1 y la
-  // tarjeta se oculta (aunque haya 2+ capaces). Con la tarjeta oculta el cliente elige profesional,
-  // o cae al fallback de hoy si hay ≤1 capaz.
-  const isSimultaneousResource = selectedService?.capacity_mode === 'simultaneous_resource'
+  // Phase 12 (D-13): un servicio de CUPO COMPARTIDO exige elegir profesional. La asignación automática
+  // del RPC marca "ocupado" a quien tenga CUALQUIER turno solapado, así que no sabe usar el 2º lugar →
+  // el combo "Cualquiera" + cupo > 1 no está soportado en v1 y la tarjeta se oculta (aunque haya 2+
+  // capaces). Con la tarjeta oculta el cliente elige profesional, o cae al fallback de hoy si hay ≤1
+  // capaz.
+  //
+  // (code-review de Phase 15, CR-02) Se amplía a los DOS modos de cupo compartido: desde la migr. 068
+  // una CLASE GRUPAL de cupo >= 2 es declarable y rompe igual (la clase se parte entre profesionales y
+  // los últimos lugares quedan inalcanzables). Esto es UX; el control real vive en el server
+  // (`lib/booking-core.ts` y el endpoint de disponibilidad), que rechazan la request forjada.
+  //
+  // ⚠ ACÁ EL CRITERIO SE ESCRIBE POR MODO Y NO POR CUPO, A DIFERENCIA DE LAS DOS CAPAS DEL SERVER, y
+  // no es una inconsistencia: la vista pública `public_services` (migr. 027/062) expone
+  // `capacity_mode` pero NO `capacity` — el NÚMERO de lugares es server-side por D-06 (el público
+  // nunca recibe cupos ni ocupación). Leer `selectedService.capacity` acá daría `undefined` SIEMPRE y
+  // el gate no filtraría nada. Con el CHECK de coherencia de la 068
+  // (`services_capacity_matches_mode_chk`) las dos formas son EQUIVALENTES:
+  // `capacity_mode <> 'individual'` ⟺ `capacity >= 2`.
+  const isSharedCapacity = (selectedService?.capacity_mode ?? 'individual') !== 'individual'
   // La tarjeta "Cualquiera" ("El primero disponible") solo con 2+ capaces (D-02). Con ≤1 capaz el
   // flujo se comporta como hoy: si hay 1 capaz se elige a esa persona; si hay 0 (sentinel o servicio
   // sin cobertura) se mantiene el fallback "Sin preferencia" para no dejar el paso 2 sin salida.
-  const showAny = capaces.length >= 2 && !isSimultaneousResource
+  const showAny = capaces.length >= 2 && !isSharedCapacity
   // "Cualquiera" activo ⇒ `selectedPro === 'none'` re-significa "asignación across-staff", pero SOLO
   // cuando la tarjeta es visible (2+ capaces). Con ≤1 capaz, 'none' NO es "Cualquiera" (es el
   // sentinel de hoy): availability y create se comportan igual que antes (D-05/D-08).

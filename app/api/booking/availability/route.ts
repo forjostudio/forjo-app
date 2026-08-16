@@ -127,13 +127,20 @@ export async function GET(request: NextRequest) {
     // 1. Duración del servicio, de la fila ya re-validada por business_id arriba (anti-tampering
     //    aunque sea read: nunca confiar en un serviceId ajeno). Sin service de este negocio la
     //    resolución izada YA cortó con invalid_service (400), ANTES de cualquier agregación.
-    // T-12-11: el combo "Cualquiera" + RECURSO SIMULTÁNEO no está soportado (D-13) y el write-path lo
-    // rechaza con este mismo código (lib/booking-core.ts). El read-path TIENE que coincidir: servir acá
-    // la grilla agregada sería ofrecerle al público horarios que después mueren en el create. El gate de
-    // UI del selector es UX, no un control — este endpoint es anónimo y alcanzable directo, así que el
-    // rechazo vive acá. Se corta ANTES de la agregación across-staff; el camino específico / canchas /
-    // sin `any` no pasa por este bloque y queda byte-idéntico.
-    if (svc.capacity_mode === 'simultaneous_resource') {
+    // T-12-11: el combo "Cualquiera" + CUPO > 1 no está soportado (D-13) y el write-path lo rechaza con
+    // este mismo código (lib/booking-core.ts). El read-path TIENE que coincidir: servir acá la grilla
+    // agregada sería ofrecerle al público horarios que después mueren en el create. El gate de UI del
+    // selector es UX, no un control — este endpoint es anónimo y alcanzable directo, así que el rechazo
+    // vive acá. Se corta ANTES de la agregación across-staff; el camino específico / canchas / sin
+    // `any` no pasa por este bloque y queda byte-idéntico.
+    //
+    // (code-review de Phase 15, CR-02) El criterio pasa a ser el CUPO y no el MODO: desde la migr. 068
+    // una CLASE GRUPAL de cupo >= 2 es declarable y tiene el MISMO problema que el recurso simultáneo
+    // (la selección de candidatos del RPC no es capacity-aware). Peor todavía en este endpoint: la rama
+    // `any` de abajo, para cap > 1, sólo cuenta ocupación en la hora de inicio EXACTA por profesional e
+    // IGNORA los solapes, mientras el RPC excluye al pro por CUALQUIER solape ⇒ el read-path ofrecía lo
+    // que el write-path no puede dar.
+    if (Number(svc.capacity) > 1) {
       return Response.json({ ok: false, error: 'any_professional_unsupported' }, { status: 400 })
     }
     const dur = Number(svc.duration_minutes) || 30
@@ -240,6 +247,12 @@ export async function GET(request: NextRequest) {
           // Individual: cualquier solape (duración variable) con buffer bloquea al pro.
           if (proAppts.some(a => overlaps(a, t))) return false
         } else {
+          // ⚠ (code-review de Phase 15, CR-02) RAMA HOY INALCANZABLE: el gate de arriba corta con 400
+          // TODO servicio de cupo > 1, así que `cap` acá siempre es 1. Se conserva —sin "arreglarla"—
+          // porque su lógica es justamente la que NO sirve: cuenta la hora de inicio EXACTA e ignora
+          // los solapes, mientras el RPC excluye al profesional por CUALQUIER solape. Si alguna vez se
+          // SOPORTA "Cualquiera" con cupo compartido, esto no se reactiva: hay que hacer capacity-aware
+          // la selección de candidatos del RPC y recién ahí espejarla acá.
           // Grupal (cupo): sólo bloquea si el pro ya llenó el slot EXACTO (count >= capacity), igual
           // que `full` del camino de hoy. Un solape parcial NO cuenta (D-03, varios comparten el slot).
           const countExact = proAppts.filter(a => (a.time as string).slice(0, 5) === hhmm).length

@@ -79,10 +79,11 @@ export type CreateAppointmentResult =
       // era indistinguible de un horario realmente ocupado. El panel ya no ofrece el modo para esos
       // servicios (settings-client.tsx), así que en la práctica solo lo puede ver una configuración
       // vieja o una request forzada por API.
-      // 'any_professional_unsupported' (T-12-11, secure-phase de Phase 12): se pidió "Cualquiera"
-      // (autoAssign) sobre un servicio en modo RECURSO SIMULTÁNEO. D-13 declara la combinación NO
-      // soportada: la asignación automática del RPC (058) marca "ocupado" a cualquier agenda con un
-      // solape, así que no sabe usar el 2º lugar del recurso. Código PROPIO a propósito: NO se colapsa
+      // 'any_professional_unsupported' (T-12-11, secure-phase de Phase 12; ampliado a TODO cupo > 1
+      // por el code-review de Phase 15, CR-02): se pidió "Cualquiera" (autoAssign) sobre un servicio
+      // de CUPO COMPARTIDO (clase grupal o recurso simultáneo, los dos con `capacity >= 2`). D-13
+      // declara la combinación NO soportada: la asignación automática del RPC (058) marca "ocupado" a
+      // cualquier agenda con un solape, así que no sabe usar el 2º lugar. Código PROPIO: NO se colapsa
       // en slot_taken (haría indistinguible un combo no soportado de un horario realmente ocupado) ni
       // en invalid_service (el servicio es válido; lo que no se soporta es la VÍA de asignación).
       error: 'invalid_service' | 'invalid_professional' | 'any_professional_unsupported' | 'slot_taken' | 'slot_full' | 'simultaneous_space_conflict' | 'insert_failed'
@@ -121,10 +122,21 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     return { ok: false, error: 'invalid_service', status: 400 }
   }
 
-  // ── T-12-11: "Cualquiera" + RECURSO SIMULTÁNEO = combo NO soportado, rechazado ACÁ (server) ──────
+  // ── T-12-11: "Cualquiera" + CUPO > 1 = combo NO soportado, rechazado ACÁ (server) ────────────────
   // D-13 difiere la combinación: la asignación automática del RPC (058) considera "ocupada" a toda
-  // agenda con cualquier turno solapado, así que nunca ofrecería el 2º lugar del recurso simultáneo —
-  // el pedido termina en un slot_taken espurio (falla cerrado, pero degrada la disponibilidad).
+  // agenda con cualquier turno solapado, así que nunca ofrecería el 2º lugar de un servicio de cupo
+  // compartido — el pedido termina en un slot_taken espurio (falla cerrado, pero degrada la
+  // disponibilidad).
+  //
+  // (code-review de Phase 15, CR-02) EL CRITERIO ES EL CUPO, NO EL MODO. El gate se escribió mirando
+  // `capacity_mode === 'simultaneous_resource'` porque hasta la migr. 068 un `group_class` REAL era
+  // inalcanzable (el número salía de `time_blocks.capacity`, que valía 1 en el 100 % de producción).
+  // Desde la 068 el dueño declara una clase grupal de cupo N con dos clicks, y el problema es
+  // IDÉNTICO: reproducido contra el Postgres local con 2 profesionales comodín y un grupal de cupo 3,
+  // tres inscripciones "Cualquiera" dieron OK (proA) + OK (proB) + slot_taken — o sea la clase se
+  // llenó a los 2 de 3 lugares Y las dos inscripciones quedaron en agendas DISTINTAS (no es una
+  // clase: son dos clases de una persona). Soportar el combo exige hacer capacity-aware la selección
+  // de candidatos del RPC; hasta entonces el rechazo explícito es estrictamente mejor.
   //
   // OJO al que venga después: el selector público YA oculta la tarjeta "Cualquiera" para estos
   // servicios (`app/[slug]/booking-client.tsx`, D-13). Eso es UX, NO un control de seguridad — los
@@ -133,7 +145,7 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
   //
   // Va ANTES de la rama autoAssign (y del resto del trabajo) para no gastar queries en una request
   // que ya está rechazada. 400 (request no soportada), no 409: no hay conflicto de horario.
-  if (autoAssign && service.capacity_mode === 'simultaneous_resource') {
+  if (autoAssign && Number(service.capacity) > 1) {
     return { ok: false, error: 'any_professional_unsupported', status: 400 }
   }
 
