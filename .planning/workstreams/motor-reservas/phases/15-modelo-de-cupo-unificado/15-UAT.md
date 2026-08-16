@@ -1,5 +1,5 @@
 ---
-status: testing
+status: passed
 phase: 15-modelo-de-cupo-unificado
 source: [15-VERIFICATION.md]
 started: 2026-08-12T22:10:00Z
@@ -8,13 +8,13 @@ updated: 2026-08-12T22:10:00Z
 
 ## Current Test
 
-number: 2
+number: —
 name: UAT de cierre de fase — booking público + gate de CUPO-08
 expected: |
   Los cinco pasos se comportan como se describe. El 3 prueba CUPO-07 de punta a punta
   (grilla pública + book_slot_atomic) y el 4 prueba que el gate está vivo y que su
   mensaje no se filtra a la pantalla.
-awaiting: user response
+awaiting: —  (UAT completa, 2/2 pass)
 
 ## Prerrequisitos
 
@@ -64,14 +64,36 @@ Observaciones levantadas, las tres derivadas a todos (ninguna bloquea el test):
 expected: los cinco pasos se comportan como se describe. El 3 y el 4 son los que importan: el 3
 prueba CUPO-07 de punta a punta (grilla pública + `book_slot_atomic`) y el 4 prueba que el gate de
 CUPO-08 está vivo **y** que su mensaje no se filtra a la pantalla.
-result: [pending]
+result: **pass** (2026-08-16) — *"Todo ok"*. CUPO-07 verificado de punta a punta desde la página
+pública y el gate de CUPO-08 mostrando copy propia, no el error crudo.
+
+**1 bug encontrado, derivado a todo (no bloquea la fase):** no se pudo borrar un servicio cuyo único
+turno era de **ese mismo día a hora ya pasada**. Causa verificada: los gates de las migr. **065**
+(`:255`) y **068** (`:42`) comparan `a."date" >= v_today` — **solo la fecha, ignorando la hora**. Es el
+mismo bug que la Phase 13 arregló en la UI (gap **G4**, resuelto con
+`lib/appointment-time.ts::isPastAppointment`) y que **nunca cruzó al SQL**: por eso la UI muestra el
+turno en "Pasados" mientras la base lo cuenta como futuro. → `2026-08-16-el-gate-de-cambio-de-modo-bloquea-de-mas.md`
+
+**2 observaciones más:**
+- *"con UN solo turno futuro no debería haber problema de pasarlo a individual"* — **evaluado y
+  descartado.** El número no importa: un turno creado en modo grupal nace `is_group = true` y queda
+  fuera del EXCLUDE **para siempre**; el EXCLUDE solo compara pares donde ambos son `false`, así que
+  una reserva nueva a hora solapada pero distinta no la cruza ni la caza el conteo por hora de inicio
+  exacta. Un solo turno alcanza para abrir el agujero — eso *es* R-1, y ese sentido del gate tiene que
+  seguir bloqueando. Registrado en el todo del gate.
+- *"pude sacar todos los cupos del mismo turno con el mismo nombre, celular y mail"* — capacidad que
+  nunca existió (no hay noción de "un lugar por persona"), no una regresión.
+  → `2026-08-16-una-persona-puede-ocupar-todos-los-cupos-de-una-clase.md`
+
+**Fuera del alcance de la fase:** flash de la paleta por defecto al loguearse (a confirmar en prod).
+→ `.planning/todos/pending/2026-08-16-flash-de-paleta-por-defecto-al-loguearse.md`
 
 ## Summary
 
 total: 2
-passed: 1
+passed: 2
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 

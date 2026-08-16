@@ -38,6 +38,38 @@ justamente la que el gate está bloqueando sin necesidad. Y es el cambio más fr
 Sumar al predicado: **rechazar solo cuando `OLD.capacity_mode <> 'individual'`**. El resto del gate
 —filtro de tenant explícito, la rama `status IS NULL`, el código de dominio fijo— **no se toca**.
 
+## Y hay un TERCER problema en el mismo predicado: compara solo la FECHA, no la hora
+
+**Encontrado por el dueño en la UAT (2026-08-16):** intentó borrar un servicio cuyo único turno era de
+**ese mismo día a las 14:00**, ya pasado, y el gate lo rechazó. Su intuición fue correcta: *"tal vez
+hay que esperar un tiempo más"* — hay que esperar a **mañana**.
+
+Los **dos** gates usan el mismo predicado, y ninguno mira la hora:
+
+```sql
+v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
+...  AND a."date" >= v_today
+```
+
+- `services_block_delete` (migr. **065**, `:255`)
+- `services_block_mode_change` (migr. **068**, `:42`)
+
+**Ya arreglamos este mismo bug una vez, en la UI.** Es el gap **G4 de la Phase 13**: el tab "Pasados"
+de Turnos comparaba solo `date` y un turno de hoy a hora pasada nunca caía ahí. Se resolvió con
+`lib/appointment-time.ts::isPastAppointment`, que **sí** considera la hora. **El fix nunca cruzó al
+SQL**, así que hoy la UI muestra el turno en "Pasados" mientras la base lo sigue contando como futuro.
+
+**Fix:** comparar `(a.date + a.time)` —o el fin del turno, `+ duration_minutes`— contra el `now()` de
+Argentina, en vez de `a.date` contra la fecha sola. Ojo: `appointments.time` y `duration_minutes`
+pueden ser NULL en filas viejas; la rama defensiva tiene que **cerrar** el gate ante NULL, no abrirlo
+(misma lógica que la rama `status IS NULL` que ya existe).
+
+⚠ **Es un cambio permisivo:** después del fix, un turno de hoy ya pasado deja de bloquear. Para el
+borrado de servicio es exactamente lo que HIST-01..03 quiso (los turnos pasados sobreviven por el
+snapshot). Para el cambio de modo también es seguro: una fila pasada no puede recibir un solape
+futuro. Pero **el alta manual está exenta de la ventana de reserva**, así que en teoría se puede
+crear un turno en el pasado — evaluarlo en el threat model, no asumirlo.
+
 ## Juntarlo con R-15-A, que vive en el MISMO predicado
 
 `15-SECURITY.md` registró un segundo residual sobre esta misma función: **marcar `completed` un turno
