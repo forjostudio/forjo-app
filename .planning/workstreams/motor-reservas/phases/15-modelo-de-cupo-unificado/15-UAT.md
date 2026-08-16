@@ -8,12 +8,12 @@ updated: 2026-08-12T22:10:00Z
 
 ## Current Test
 
-number: 1
-name: El editor de servicios guarda los tres modos sin rebotar contra el CHECK
+number: 2
+name: UAT de cierre de fase — booking público + gate de CUPO-08
 expected: |
-  Los cuatro pasos guardan sin error — nunca el toast genérico "Error al guardar".
-  Paso 1 queda en Individual · paso 2 muestra el campo de cupo en 2 · paso 3 persiste 10 ·
-  paso 4 vuelve a persistir cupo 1.
+  Los cinco pasos se comportan como se describe. El 3 prueba CUPO-07 de punta a punta
+  (grilla pública + book_slot_atomic) y el 4 prueba que el gate está vivo y que su
+  mensaje no se filtra a la pantalla.
 awaiting: user response
 
 ## Prerrequisitos
@@ -35,7 +35,20 @@ En `/servicios` del dev local:
 
 expected: los cuatro pasos guardan sin error. Si alguno tira "Error al guardar", el guard del editor
 no está haciendo su trabajo y el CHECK lo está rebotando.
-result: [pending]
+result: **pass con 3 observaciones** (2026-08-16). Los cuatro pasos guardan. El dueño verificó además
+el gate de CUPO-08 en vivo sin que estuviera en el guion: al pasar un servicio con turnos futuros a
+`Recurso simultáneo`, el panel mostró **copy propia** — *"No se puede cambiar cómo se ocupa el cupo:
+el servicio tiene turnos futuros reservados. Cancelalos o esperá a que pasen, y volvé a intentar."* —
+y **no** el error crudo de la base. Eso cierra por observación humana la mitad de UI de CUPO-08.
+
+Observaciones levantadas, las tres derivadas a todos (ninguna bloquea el test):
+1. **El campo "Cuántos lugares" no se puede editar con el teclado** — normalización ansiosa en
+   `onChange` reescribe el valor en la misma tecla. → `2026-08-16-editor-de-servicios-input-de-cupo-y-boton-guardar.md`
+2. **El gate bloquea de más** — rechaza el cambio de modo en cualquier dirección, pero `individual` →
+   grupal/simultáneo es provablemente seguro (los turnos existentes son `is_group = false` y siguen
+   bajo el EXCLUDE). → `2026-08-16-el-gate-de-cambio-de-modo-bloquea-de-mas.md`
+3. **El `+` del alta debería ser un "Guardar" al final del formulario** — hoy la acción de confirmar
+   está antes que la mitad de los campos. → mismo todo que (1).
 
 ### 2. UAT de cierre de fase — booking público + gate de CUPO-08 (plan 15-05, Task 3)
 
@@ -56,9 +69,9 @@ result: [pending]
 ## Summary
 
 total: 2
-passed: 0
+passed: 1
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 
