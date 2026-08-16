@@ -64,7 +64,7 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 
 Faseo por riesgo, igual que en v0.26: el cambio del modelo y del motor va primero y aislado (`secure-phase` obligatorio, toca `book_slot_atomic`); la superficie del panel y el polish van después, sin tocar el motor.
 
-- [ ] **Phase 15: Modelo de cupo unificado** - `services.capacity_mode` a enum de tres (`individual` default | `group_class` | `simultaneous_resource`) con `services.capacity` como única fuente del número; `time_blocks.capacity` deja de decidir; y el cambio de modo se rechaza en la base si el servicio tiene turnos futuros vivos (cierra R-1). **secure-phase obligatorio**
+- [x] **Phase 15: Modelo de cupo unificado** - `services.capacity_mode` a enum de tres (`individual` default | `group_class` | `simultaneous_resource`) con `services.capacity` como única fuente del número; `time_blocks.capacity` deja de decidir; y el cambio de modo se rechaza en la base si el servicio tiene turnos futuros vivos (cierra R-1). **secure-phase obligatorio** (completed 2026-08-16)
 - [ ] **Phase 16: Superficie y polish** - Editor de servicio con los tres modos y el cupo en un solo lugar, badge de modo en la lista de `/servicios`, ocupación grupal visible en la grilla de la agenda, y Finanzas mobile mostrando el servicio
 
 ## Phase Details
@@ -658,5 +658,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 12. Cupo por solape (recurso simultáneo) | 4/4 | Complete    | 2026-07-29 |
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
-| 15. Modelo de cupo unificado | 4/5 | In Progress|  |
+| 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Superficie y polish | 0/? | Not started | — |
