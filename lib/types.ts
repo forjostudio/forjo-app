@@ -105,8 +105,13 @@ export interface TimeBlock {
   label: string | null
   // Consultorio/sucursal del bloque (Capa 2a). null = sede única / sin consultorio.
   location_id: string | null
-  // Cupo del bloque (migración 041). NOT NULL DEFAULT 1 en la DB → siempre presente. 1 = comportamiento
-  // individual de siempre (1 reserva por slot); > 1 = clase grupal con `capacity` lugares en el mismo slot.
+  // Cupo del bloque (migración 041). NOT NULL DEFAULT 1 en la DB → siempre presente.
+  // ⚠ DESDE LA MIGR. 068 NO DECIDE NADA. El cupo es del SERVICIO (`Service.capacity`, fuente única
+  // para los tres modos) y `book_slot_atomic` dejó de consultar esta columna — igual que el re-check
+  // de `lib/booking-core.ts` y el read-path de `availability`. La columna se conserva por
+  // compatibilidad y porque `agenda-client` todavía la lee (lectura pendiente, Phase 16). Un bloque
+  // con `capacity: 3` y un servicio individual da cupo 1: eso NO es un bug, es el control negativo
+  // que usan los fixtures (`test/helpers/booking-fixtures.ts`).
   capacity: number
   created_at: string
 }
