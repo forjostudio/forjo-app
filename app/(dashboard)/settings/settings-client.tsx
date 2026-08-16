@@ -145,21 +145,29 @@ function normalizeCapacity(n: number, min = 1): number {
 // activa (bg-primary) y mismo contenedor bordeado. El campo N existe en los dos modos NO individuales:
 // desde la migr. 068 `services.capacity` es la única fuente del número para los tres modos, así que
 // esconderlo en la clase grupal dejaría al dueño sin dónde declarar su cupo.
-// spacesBlockSimultaneous: ¿alguna de las agendas que puede recibir turnos de este servicio tiene un
-// ESPACIO físico mapeado (agenda_spaces)? Si sí, el modo "Recurso simultáneo" queda inhabilitado.
+// spacesBlockSharedCapacity: ¿alguna de las agendas que puede recibir turnos de este servicio tiene un
+// ESPACIO físico mapeado (agenda_spaces)? Si sí, quedan inhabilitados LOS DOS modos de cupo compartido
+// ("Clase grupal" y "Recurso simultáneo").
 //
-// Por qué (migr. 064, gap 3 del code-review 2): un espacio es una sala/cancha FÍSICA compartida entre
-// agendas y la base impone UN turno por espacio a la vez (appointment_spaces_no_overlap, migr. 042),
-// o sea capacidad 1. Un recurso de cupo ≥ 2 sobre ese mismo espacio es una contradicción semántica:
-// el RPC lo rechaza de entrada con `simultaneous_space_conflict`. Antes de la 064 la combinación se
-// podía guardar y fallaba sola y mal (el 2º turno moría con slot_taken mientras la página pública
-// seguía ofreciendo el horario). Gatearlo acá es lo que evita que el dueño llegue a ese estado.
+// Por qué (migr. 064, gap 3 del code-review 2; AMPLIADO por la migr. 069, CR-03): un espacio es una
+// sala/cancha FÍSICA compartida entre agendas y la base impone UN turno por espacio a la vez
+// (appointment_spaces_no_overlap, migr. 042), o sea capacidad 1. Un servicio de cupo ≥ 2 sobre ese
+// mismo espacio es una contradicción semántica: el RPC lo rechaza de entrada con
+// `simultaneous_space_conflict`. Antes de la 064 la combinación se podía guardar y fallaba sola y mal
+// (el 2º turno moría con slot_taken mientras la página pública seguía ofreciendo el horario).
+// Gatearlo acá es lo que evita que el dueño llegue a ese estado.
+//
+// ⚠ POR QUÉ AHORA SON LOS DOS MODOS: el guard nombraba sólo al simultáneo porque hasta la migr. 068
+// una CLASE GRUPAL de cupo ≥ 2 no se podía declarar (el número salía de `time_blocks.capacity`). Desde
+// la 068 sí, y el editor dejaba guardar exactamente la configuración imposible: la 1ª inscripción
+// entraba y la 2ª moría con 23P01 → `slot_taken`. Lo que hace imposible la combinación es el CUPO, no
+// el modo. `individual` (cupo 1) sigue siendo elegible SIEMPRE: es el caso de canchas/F11.
 //
 // Quiénes son "las agendas del servicio": las mismas que calcula el bloque de cobertura de arriba —
 // professionalsForService (fuente ÚNICA de la regla del comodín, @/lib/staff-services). PROHIBIDO
 // reimplementar la regla acá. Para un servicio NUEVO (todavía sin id) valen los comodines: un
 // servicio recién creado no tiene filas en la puente, así que lo puede hacer cualquier pro sin mapeo.
-function spacesBlockSimultaneous(
+function spacesBlockSharedCapacity(
   serviceId: string | null,
   activeProfessionals: Professional[],
   professionalServices: ProfessionalService[],
@@ -172,14 +180,14 @@ function spacesBlockSimultaneous(
   return agendas.some(p => mapped.has(p.id))
 }
 
-function CapacityModeFields({ value, capacity, onChange, disabled, simultaneousBlocked = false }: {
+function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacityBlocked = false }: {
   value: CapacityMode
   capacity: number
   onChange: (patch: { capacity_mode?: CapacityMode; capacity?: number }) => void
   disabled?: boolean
-  // (064, gap 3) El servicio se atiende en una agenda con espacio físico mapeado ⇒ "Recurso
-  // simultáneo" no se puede elegir (el espacio es 1-a-la-vez; ver spacesBlockSimultaneous).
-  simultaneousBlocked?: boolean
+  // (064, gap 3 / 069, CR-03) El servicio se atiende en una agenda con espacio físico mapeado ⇒ NINGÚN
+  // modo de cupo compartido se puede elegir (el espacio es 1-a-la-vez; ver spacesBlockSharedCapacity).
+  sharedCapacityBlocked?: boolean
 }) {
   const isIndividual = value === 'individual'
   // El individual va PRIMERO: es el DEFAULT de la base desde la 068 y el caso real del 100 % de los
@@ -197,7 +205,9 @@ function CapacityModeFields({ value, capacity, onChange, disabled, simultaneousB
           // El modo bloqueado sigue siendo visible (no se esconde la opción: el dueño tiene que
           // entender POR QUÉ no está disponible), pero no se puede activar. Si el servicio YA estaba
           // en ese modo, el botón del otro modo queda habilitado para poder salir.
-          const blocked = simultaneousBlocked && o.key === 'simultaneous_resource' && value !== o.key
+          // (069, CR-03) Se bloquean los DOS modos de cupo compartido, no sólo el simultáneo:
+          // `individual` nunca se bloquea (es la salida legítima y el caso de canchas/F11).
+          const blocked = sharedCapacityBlocked && o.key !== 'individual' && value !== o.key
           return (
           <button
             key={o.key}
@@ -221,13 +231,13 @@ function CapacityModeFields({ value, capacity, onChange, disabled, simultaneousB
           )
         })}
       </div>
-      {simultaneousBlocked && (
+      {sharedCapacityBlocked && (
         <p role="status" className="flex items-start gap-2 text-xs font-medium text-warning">
           <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
           <span>
-            “Recurso simultáneo” no está disponible: este servicio se atiende en una agenda con un
-            espacio asignado, y un espacio se usa de a un turno por vez. Si querés varios en paralelo,
-            sacale el espacio a esa agenda en <Link href="/equipo" className="underline underline-offset-2">Equipo</Link>.
+            “Clase grupal” y “Recurso simultáneo” no están disponibles: este servicio se atiende en una
+            agenda con un espacio asignado, y un espacio se usa de a un turno por vez. Si querés varios
+            lugares en paralelo, sacale el espacio a esa agenda en <Link href="/equipo" className="underline underline-offset-2">Equipo</Link>.
           </span>
         </p>
       )}
@@ -1732,7 +1742,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 value={newService.capacity_mode}
                 capacity={newService.capacity}
                 onChange={patch => setNewService(f => ({ ...f, ...patch }))}
-                simultaneousBlocked={spacesBlockSimultaneous(null, activeProfessionals, professionalServices, agendaSpaces)}
+                sharedCapacityBlocked={spacesBlockSharedCapacity(null, activeProfessionals, professionalServices, agendaSpaces)}
               />
               {activeLocations.length > 0 && (
                 <div className="space-y-1.5">
@@ -1778,7 +1788,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   capacity={editSvcForm.capacity}
                   onChange={patch => setEditSvcForm(f => ({ ...f, ...patch }))}
                   disabled={savingEditSvc}
-                  simultaneousBlocked={spacesBlockSimultaneous(editSvc?.id ?? null, activeProfessionals, professionalServices, agendaSpaces)}
+                  sharedCapacityBlocked={spacesBlockSharedCapacity(editSvc?.id ?? null, activeProfessionals, professionalServices, agendaSpaces)}
                 />
                 {activeLocations.length > 0 && (
                   <div className="space-y-1.5">

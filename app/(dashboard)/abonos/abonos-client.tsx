@@ -75,8 +75,12 @@ const SKIP_REASON_ES: Record<string, string> = {
   slot_full: 'Cupo lleno',
   day_closed: 'Día cerrado',
   space_conflict: 'Espacio ocupado',
-  // (064, gap 3) Config imposible: recurso simultáneo de cupo > 1 sobre una agenda con espacio físico.
-  simultaneous_space_conflict: 'El recurso simultáneo no puede usar un espacio compartido',
+  // (064, gap 3 / 069, CR-03) Config imposible: un servicio de cupo > 1 —clase grupal O recurso
+  // simultáneo— sobre una agenda con espacio físico mapeado (el espacio es 1-a-la-vez). El CÓDIGO
+  // conserva el nombre histórico (`simultaneous_space_conflict`) porque renombrarlo obliga a tocar el
+  // union de booking-core, este mapa y cuatro tests para un string que el dueño nunca ve; la COPY sí
+  // deja de nombrar sólo al simultáneo, que era la parte que mentía.
+  simultaneous_space_conflict: 'Un servicio con varios lugares no puede usar un espacio compartido',
   invalid_service: 'Servicio no disponible',
   invalid_professional: 'Recurso no disponible',
   insert_failed: 'No se pudo reservar',
