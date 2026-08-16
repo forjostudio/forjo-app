@@ -434,17 +434,31 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     }
 
     const fullGrupal = bodyGrupal.full as string[]
-    const busyGrupal = (bodyGrupal.busy as { time: string }[]).map(b => b.time.slice(0, 5))
 
     // (a) contra el servicio GRUPAL: el slot LLENO '10:00' está en full como 'HH:MM' (no 'HH:MM:SS').
     expect(fullGrupal).toContain('10:00')
     expect(fullGrupal).not.toContain('10:00:00')
 
-    // (b) contra el servicio GRUPAL: el slot PARCIAL '09:00' (2/3) NO está en full (sigue reservable)
-    //     NI en busy (la ocupación grupal no se remueve por solapamiento — sino el público no podría
-    //     reservar el 3º lugar).
+    // (b) contra el servicio GRUPAL: el slot PARCIAL '09:00' (2/3) NO está en full (sigue reservable).
+    //
+    // ⚠ (code-review de Phase 15, WR-05) ACÁ HABÍA UN CONTROL QUE NO PODÍA FALLAR:
+    // `expect(busyGrupal).not.toContain('09:00')` sobre un array que para TODO servicio de cupo > 1 es
+    // `[]` POR CONSTRUCCIÓN (`availability`: `busy = (slotCapacity <= 1 ? live : []).concat(siblingBusy)`,
+    // y este escenario no tiene espacios mapeados). Era verde pasara lo que pasara con la lógica de
+    // cupo grupal, mientras el comentario lo vendía como el guard de "la ocupación grupal no se remueve
+    // por solapamiento". Se reemplaza por el INVARIANTE FUERTE —el contrato de la rama de cupo
+    // compartido es que `busy` quede VACÍO— más el síntoma que de verdad protege al 3er lugar.
+    expect(bodyGrupal.busy).toEqual([])
     expect(fullGrupal).not.toContain('09:00')
-    expect(busyGrupal).not.toContain('09:00')
+
+    // (b2) (code-review de Phase 15, CR-01 — read-path) El horario donde la MISMA agenda tiene un turno
+    //      vivo del servicio INDIVIDUAL sí va a `full` cuando se pregunta por el GRUPAL: el write-path
+    //      lo rechaza (una clase no se monta sobre un turno individual), así que el read-path no lo
+    //      puede seguir ofreciendo. ANTES del fix este assert fallaba: '12:30' no estaba en `full` para
+    //      el grupal (la ocupación de otro servicio no llegaba ni a `busy` —vacío por cupo > 1— ni a
+    //      `full` —que sólo contaba count >= capacity del propio carril—) y el público reservaba una
+    //      clase encima de un turno confirmado.
+    expect(fullGrupal).toContain('12:30')
 
     // (c) contra el servicio INDIVIDUAL: su horario ocupado '12:30' está en busy Y en full (cupo 1 →
     //     coinciden). Es el mismo assert de antes; lo que cambió es que el cupo 1 ahora lo declara el
@@ -1148,6 +1162,169 @@ describe.skipIf(!hasSupabaseCreds)('concurrencia: cupos grupales', () => {
     const body = await availabilityFor(t.serviceId, t.professionalId)
     expect(body.full).toContain('16:00')
     expect(body.full).toContain('09:00')
+  })
+
+  // ── Code-review de Phase 15 (WR-06): la casilla que la fase volvió alcanzable y nadie cubría ─────
+  // La suite cubría simultáneo↔otro-servicio (CR-02/CR2-01), simultáneo↔espacio (gap 3) y
+  // grupal↔grupal (no-drift b), pero NO `group_class` conviviendo con OTRO servicio en la misma
+  // agenda ni `group_class` sobre una agenda con espacio. Esos dos huecos son EXACTAMENTE CR-01 y
+  // CR-03, y son la razón por la que la fase pasó verde con los dos abiertos: antes de la migr. 068
+  // un grupal REAL era indeclarable, así que el cuadrante no existía.
+
+  // CR-01 — un GRUPAL no se monta sobre un turno de otro servicio de cupo 1 en la MISMA agenda.
+  //
+  // A/B medido contra la 068 (el estado que este test detecta): la reserva grupal ENTRABA —tanto a la
+  // misma hora como escalonada— y quedaban 2 y hasta 3 turnos pisándose en una sola agenda, sin un
+  // solo error. `is_group = true` saca la fila del EXCLUDE gist 013 y el gate espejo exigía que la
+  // PREEXISTENTE fuera de un servicio simultáneo, cosa que un individual no es.
+  it('CR-01 — grupal vs individual: un grupal NO se monta sobre un turno individual de la misma agenda', async () => {
+    await seedTimeBlock(t)
+    const individual = await seedService(t, { durationMinutes: 30, name: '__test_svc_ind_vs_grupal' })
+
+    // Turno real del cliente, con el servicio INDIVIDUAL (nace is_group = false, dentro del gist).
+    const ind = await createAppointmentCore({ ...baseInput(), serviceId: individual, time: '16:00' })
+    expect(ind.ok).toBe(true)
+
+    // Ahora el servicio del fixture se declara CLASE GRUPAL de cupo 3 y se intenta la misma agenda.
+    await seedGroupClassService(t, { capacity: 3 })
+    const mismaHora = await createAppointmentCore({ ...baseInput(), time: '16:00' })
+    expect(mismaHora.ok).toBe(false)
+    if (!mismaHora.ok) {
+      // slot_taken (agenda ocupada por otra cosa), NUNCA slot_full: no es cupo lleno.
+      expect(mismaHora.error).toBe('slot_taken')
+      expect(mismaHora.status).toBe(409)
+    }
+    // Y ESCALONADO (el caso del repro: 10:15 sobre un 10:00-10:30), que es el que ni el índice único
+    // 011 ni el re-check por hora exacta podrían ver.
+    const escalonado = await createAppointmentCore({ ...baseInput(), time: '16:15' })
+    expect(escalonado.ok).toBe(false)
+
+    // El RPC es la AUTORIDAD (con autoAssign el core se saltea entero): mismo rechazo por RPC directo,
+    // y por P0001 —el gate— no por el gist.
+    const { error: rpcErr } = await t.admin.rpc('book_slot_atomic', {
+      p_business_id: t.businessId,
+      p_professional_id: t.professionalId,
+      p_service_id: t.serviceId,
+      p_location_id: t.locationId,
+      p_date: DATE,
+      p_time: '16:15',
+      p_duration: 30,
+      p_client_id: null,
+      p_client_name: '__test_rpc_cr01',
+      p_client_phone: null,
+      p_client_email: null,
+      p_notes: null,
+      p_status: 'confirmed',
+      p_expires_at: null,
+    })
+    expect(rpcErr?.message ?? '').toContain('slot_taken')
+    expect(rpcErr?.code).toBe('P0001')
+
+    // Assert DURO contra el estado real de la base: UNA sola fila ocupa la agenda en ese instante.
+    expect(await occupantsOfBucketCovering('16:10')).toBe(1)
+  })
+
+  // CR-01 (eje INVERSO) — y tampoco al revés: un turno individual no se monta sobre una CLASE GRUPAL
+  // ya reservada en la misma agenda. Es el mismo mecanismo (la fila grupal está fuera del gist) y las
+  // otras dos capas ya lo bloqueaban (el re-check JS con `taken`, el read-path mandándolo a `busy`):
+  // la base era la única que decía que sí, o sea que write-path y read-path estaban en desacuerdo.
+  it('CR-01 (inverso) — un individual NO se monta sobre una clase grupal de la misma agenda', async () => {
+    await seedTimeBlock(t)
+    const individual = await seedService(t, { durationMinutes: 30, name: '__test_svc_ind_sobre_grupal' })
+    await seedGroupClassService(t, { capacity: 3 })
+
+    const clase = await createAppointmentCore({ ...baseInput(), time: '16:00' })
+    expect(clase.ok).toBe(true)
+
+    // Por RPC directo: escalonado, que es el único camino que el índice único 011 no ve (a la misma
+    // hora exacta chocaría por seat 0 repetido).
+    const { error: rpcErr } = await t.admin.rpc('book_slot_atomic', {
+      p_business_id: t.businessId,
+      p_professional_id: t.professionalId,
+      p_service_id: individual,
+      p_location_id: t.locationId,
+      p_date: DATE,
+      p_time: '16:15',
+      p_duration: 30,
+      p_client_id: null,
+      p_client_name: '__test_rpc_cr01_inv',
+      p_client_phone: null,
+      p_client_email: null,
+      p_notes: null,
+      p_status: 'confirmed',
+      p_expires_at: null,
+    })
+    expect(rpcErr?.message ?? '').toContain('slot_taken')
+    expect(await occupantsOfBucketCovering('16:20')).toBe(1)
+  })
+
+  // CR-03 — clase grupal de cupo > 1 sobre una agenda con ESPACIO físico mapeado: configuración
+  // IMPOSIBLE, rechazada de entrada, igual que el simultáneo desde la 064 (gap 3).
+  //
+  // A/B medido contra la 068: la 1ª inscripción ENTRABA y la 2ª moría con 23P01
+  // (`appointment_spaces_no_overlap`) → el core lo traducía a `slot_taken` mientras `availability`
+  // seguía ofreciendo los N lugares. O sea la mentira exacta que la 064 vino a eliminar.
+  it('CR-03 — grupal cupo > 1 + espacio mapeado se rechaza con simultaneous_space_conflict', async () => {
+    await seedTimeBlock(t)
+    await seedGroupClassService(t, { capacity: 3 })
+    const spaceA = await seedSpace(t, { name: 'A' })
+    await seedAgendaSpace(t, { professionalId: t.professionalId, spaceId: spaceA })
+
+    const res = await createAppointmentCore({ ...baseInput(), time: '16:00' })
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      // Código PROPIO: NO slot_taken (no es un horario ocupado) ni slot_full (no es cupo lleno).
+      expect(res.error).toBe('simultaneous_space_conflict')
+      expect(res.status).toBe(409)
+    }
+    // Fail-closed de verdad: NO entró ni la 1ª inscripción (antes entraba y moría la 2ª).
+    expect(await occupantsOfBucketCovering('16:00')).toBe(0)
+
+    // El read-path deja de mentir: si el write-path rechaza SIEMPRE, no se ofrece ningún horario.
+    const body = await availabilityFor(t.serviceId, t.professionalId)
+    expect(body.full).toContain('16:00')
+    expect(body.full).toContain('09:00')
+
+    // Cero regresión del camino canchas/F11: con cupo 1 la MISMA agenda con el MISMO espacio reserva.
+    await t.admin
+      .from('services')
+      .update({ capacity_mode: 'individual', capacity: 1 })
+      .eq('id', t.serviceId)
+      .eq('business_id', t.businessId)
+    const cancha = await createAppointmentCore({ ...baseInput(), time: '16:00' })
+    expect(cancha.ok).toBe(true)
+  })
+
+  // CR-02 — "Cualquiera" + CLASE GRUPAL: combo no soportado, rechazado en el SERVER (write y read).
+  //
+  // A/B medido contra la 068: con 2 profesionales comodín y un grupal de cupo 3, tres inscripciones
+  // "Cualquiera" daban OK (proA) + OK (proB) + slot_taken. O sea: la clase de 3 lugares se llenaba a
+  // los 2 Y las dos inscripciones quedaban en agendas DISTINTAS (no es una clase, son dos clases de
+  // una persona). El gate existía desde la Phase 12 pero filtraba por `capacity_mode` simultáneo.
+  it('CR-02 — "Cualquiera" + clase grupal se rechaza server-side, en el write y en el read', async () => {
+    await seedTimeBlock(t)
+    await seedProfessional(t, { name: '__test_pro_any_grupal' }) // 2 capaces: el rechazo no es "no hay a quién asignar"
+    await seedGroupClassService(t, { capacity: 3 })
+
+    // (write) El core rechaza ANTES de tocar el RPC: 400 y código PROPIO.
+    const res = await createAppointmentCore({ ...baseInput(), professionalId: null, autoAssign: true, time: '09:00' })
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.error).toBe('any_professional_unsupported')
+      expect(res.status).toBe(400)
+    }
+    // Fail-closed: no quedó ninguna fila.
+    const { data: rows } = await t.admin
+      .from('appointments').select('id').eq('business_id', t.businessId).eq('date', DATE)
+    expect((rows || []).length).toBe(0)
+
+    // (read) El endpoint anónimo TIENE que coincidir: servir la grilla agregada sería ofrecer horarios
+    // que después mueren en el create.
+    const { data: bizRow } = await t.admin.from('businesses').select('slug').eq('id', t.businessId).single()
+    const url = `https://test.local/api/booking/availability?slug=${bizRow?.slug as string}&date=${DATE}&any=1&serviceId=${t.serviceId}`
+    const anyRes = await availabilityGET(new Request(url) as unknown as NextRequest)
+    expect(anyRes.status).toBe(400)
+    expect(await anyRes.json()).toEqual({ ok: false, error: 'any_professional_unsupported' })
   })
 
   // CUPO-07 (d) — CARRERA GRUPAL con el cupo DECLARADO EN EL SERVICIO. N+1 reservas CONCURRENTES sobre
