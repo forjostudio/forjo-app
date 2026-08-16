@@ -19,7 +19,7 @@ findings:
   warning: 6
   info: 2
   total: 11
-status: issues_found
+status: fixed
 ---
 
 # Phase 15: Code Review Report
@@ -460,3 +460,86 @@ filtro incondicional `a."business_id" = OLD."business_id"`.
 _Reviewed: 2026-08-16_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+---
+
+## Ronda de fixes — 2026-08-16 (`--fix`, alcance críticos + warnings)
+
+8 commits (`3106b82`..`7ad17c2`). **Los 3 blockers y los 6 warnings, aplicados.** Gates verificados de
+forma independiente por el orquestador: `./node_modules/.bin/tsc --noEmit` exit **0** · `npm run build`
+exit **0** · **105/105** en 13 suites de booking · `concurrency` pasó de 24/24 a **28/28**.
+
+### ⚠ La dirección que este review proponía para CR-01 era INCORRECTA, y se midió antes de aplicarla
+
+El review pedía reemplazar `capacity_mode = 'simultaneous_resource'` por `s2.capacity >= 2` en el gate
+espejo. **Eso reabre lo que cerró la 064.** Con el CHECK de coherencia de la 068,
+`capacity >= 2` ⟺ `capacity_mode <> 'individual'`, así que un **recurso simultáneo también lo cumple**:
+un allow-list por cupo lo dejaría exento del gate y una clase grupal se montaría encima de la camilla.
+
+Control ejecutado **antes** de escribir el fix, contra el Postgres local:
+
+```
+CONTROL 1 (pre-fix, 068 vigente):
+  CTRL1-a simultaneo 11:00 -> OK
+  CTRL1-b grupal     11:10 -> ERROR [P0001] slot_taken   ← HOY está protegido
+```
+
+El recorte de D-07 es **nominal, no numérico**: lo legal es *grupal ↔ grupal*. El predicado que se
+shippeó exige **las dos cosas** — `capacity_mode = 'group_class' AND capacity >= 2` — más
+`(a.is_group = true OR v_svc_cap > 1)` para no robarle el rechazo `23P01` al EXCLUDE 013 en
+individual ↔ individual.
+
+En **CR-02 y CR-03** la dirección del review sí era correcta y fue tal cual (`capacity > 1`, sin modo).
+
+### Hallazgo adicional del mismo mecanismo, no listado acá
+
+**El eje inverso también estaba abierto:** un turno **individual** se montaba sobre una clase grupal ya
+reservada (`CTRL4-b individual 14:10 -> OK` pre-fix). El re-check JS y el read-path ya lo bloqueaban —
+**la base era la única capa que decía que sí**. Cerrado en el mismo predicado.
+
+### Repro por blocker (Postgres LOCAL, transacción + `ROLLBACK`)
+
+| | ANTES | DESPUÉS |
+|---|---|---|
+| **CR-01** | 3 filas pisándose (10:00 individual seat 0 · 10:00 grupal seat 1 · 10:15 grupal), sin un solo error | `CR01-b` y `CR01-c` → `P0001 slot_taken`; queda **1 fila** |
+| **CR-02** | 2 inscripciones en **agendas distintas** + la 3ª con `slot_taken`, con 3 lugares declarados | rechazo de aplicación: `any_professional_unsupported` / 400; verificado que **falla** contra el read-path viejo (`expected 200 to be 400`) |
+| **CR-03** | `CR03-1 OK` · `CR03-2` → `23P01` (un `slot_taken` mentiroso) | las dos → `P0001 simultaneous_space_conflict` (fail-closed) |
+
+**5 controles negativos, idénticos antes y después:** simultáneo↔grupal rechaza · grupal↔grupal entra
+(incluido escalonado) · individual↔individual sigue muriendo con `23P01` del gist · individual +
+espacio mapeado **entra** (cero regresión canchas/F11).
+
+**A/B de los tests nuevos:** con la 068 re-aplicada al local, los 3 casos que dependen de la base
+**fallan** (`3 failed | 25 passed`). Un test que nunca se vio fallar no prueba nada.
+
+### Warnings
+
+| ID | Estado |
+|---|---|
+| WR-01 | **Aplicado** — no en la 068 (está en prod): la **069 abre `BEGIN;`/`COMMIT;` explícito** y el runbook dice la verdad sobre la atomicidad de la 068, que dependía del cliente |
+| WR-02 | **Aplicado como pre-flight del runbook, NO como `UPDATE` en la 069** — un backfill correctivo sería **código muerto**: la 068 ya está aplicada y su `ADD CONSTRAINT` habría abortado si existiera un `simultaneous_resource` de cupo 1 |
+| WR-03 | Aplicado — `MAX_CAPACITY = 99` + `max` en el input |
+| WR-04 | Aplicado |
+| WR-05 | Aplicado — el assert tautológico pasó a un invariante que **puede** fallar |
+| WR-06 | Aplicado — 4 casos nuevos en `concurrency.test.ts`, con assert duro contra el estado real de la base |
+
+### Dos snippets más de este review que resultaron incorrectos
+
+1. **`rejectEarly = takenByOtherService` para el camino grupal rompe el caso legal grupal↔grupal**
+   (haría fallar `no-drift (b)`). El core resuelve los modos de los otros servicios presentes con una
+   query extra y solo bloquea contra servicios que **no** comparten cupo.
+2. **El gate del selector público no puede leer `capacity`:** la vista `public_services` expone
+   `capacity_mode` pero **no** el número (D-06 — el público nunca recibe cupos). Leerlo daría
+   `undefined` siempre y el gate no filtraría nada. Ahí el criterio va por modo, que con el CHECK de la
+   068 es equivalente.
+
+### Abierto a propósito
+
+- **La 069 NO está aplicada en producción.** Solo en el Postgres local. Prod sigue en la 068.
+- **CR-02 se cierra rechazando, no soportando.** Una clase grupal con 2+ profesionales capaces ya no
+  ofrece "Cualquiera". Soportarlo exige hacer capacity-aware la selección de candidatos del RPC — es un
+  cambio de comportamiento, no una corrección.
+- **Un grupal sigue aceptando inscripciones del mismo servicio a horas de inicio distintas** (10:00 y
+  10:15), lo que contradice "todos arrancan a la misma hora". No es alcanzable desde la grilla pública
+  (los start-times van a paso = duración). Anotado en el header de la 069.
+- **IN-01 e IN-02** quedaron fuera del alcance de `--fix` sin `--all`.

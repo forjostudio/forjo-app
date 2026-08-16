@@ -2,9 +2,21 @@
 
 **Migración:** `supabase/migrations/068_service_capacity_unified_and_mode_gate.sql`
 **Fase:** 15 — Modelo de cupo unificado (motor-reservas, v0.27) · CUPO-06 / CUPO-07 / CUPO-08
-**Última migración aplicada en prod hoy:** **067** (2026-08-11)
-**Estado:** ⛔ **la 068 NO está aplicada en producción.** Este documento es el procedimiento; ejecutarlo
-es decisión del dueño.
+**Última migración aplicada en prod:** **068** (2026-08-14). La próxima del proyecto es la **069**.
+**Estado:** ✅ **la 068 YA ESTÁ APLICADA en producción.** Este documento pasa de ser un procedimiento a
+ejecutar a ser el **registro** de cómo se aplicó — y de qué salió mal.
+
+> ⚠ **Se aplicó FUERA DEL ORDEN que este runbook fija** (código primero, migración después). Consecuencia
+> medida y auditada (`15-SECURITY.md`, T-15-32): el motor **no** se rompió —el backfill dejó todo en
+> `individual` cupo 1, `time_blocks.capacity` en prod ya era todo 1, y la firma del RPC es
+> byte-idéntica— pero **crear un servicio nuevo quedó roto** mientras corrió el código viejo, que
+> insertaba `group_class` + `capacity 1`, combinación que el CHECK de coherencia rechaza. Se corrigió
+> **deployando** (`e95e11f..72c7194`), no con una migración correctiva.
+>
+> **La lección estructural:** este runbook *declaraba* el orden pero no lo hacía **imposible de
+> invertir**. La forma correcta era **partir el archivo** — el CHECK de coherencia es la única sentencia
+> sensible al orden, así que dejándolo en una migración posterior al deploy, aplicar la primera mitad
+> temprano deja de importar. La **069** ya nace con transacción explícita por la misma razón (WR-01).
 
 > **Cómo leer este runbook.** Cada paso trae la query **literal**, el **resultado esperado** al lado y
 > **qué hacer si no coincide**. No hay pasos "de confianza": si un control no devuelve lo esperado, hay
