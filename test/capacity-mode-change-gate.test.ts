@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { nowInAR } from '@/lib/appointment-time'
 import { hasSupabaseCreds } from './env'
-import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
+import {
+  seedOneTenant,
+  seedService,
+  seedGroupClassService,
+  seedSimultaneousService,
+  teardownOneTenant,
+  type SeededTenant,
+} from './helpers/booking-fixtures'
 
 // ── Tests del gate de CAMBIO DE MODO de cupo (migr. 068, trigger BEFORE UPDATE OF capacity_mode) ──
 // Cubren CUPO-08, que cierra el riesgo residual R-1 de la Phase 12: cambiar `capacity_mode` con
@@ -30,13 +38,50 @@ import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from
 // Cada caso siembra SU PROPIO servicio para que no se pisen entre sí, y usa un horario distinto para
 // no chocar con el índice único 011 ni con el EXCLUDE 013.
 //
+// ── LA MATRIZ DE DIRECCIONES (migr. 070 — GATE-01) ────────────────────────────────────────────────
+// Hasta la 068 este gate rechazaba CUALQUIER cambio de modo con turnos futuros vivos. La 070 lo
+// recorta por DIRECCIÓN DE ORIGEN, y la matriz de abajo es la razón por la que esta suite dejó de
+// tener "el caso del rechazo" y pasó a tener un caso POR DIRECCIÓN:
+//
+//   individual → grupal / simultáneo : PASA.    Las filas que ya existen nacieron `is_group = false`
+//                                               (un turno nace `is_group = true` sólo si el servicio
+//                                               NO era individual al crearse), así que siguen DENTRO
+//                                               del EXCLUDE gist 013 y ADEMÁS se cuentan contra el
+//                                               cupo nuevo. Nada queda huérfano de guards.
+//   grupal / simultáneo → individual : RECHAZA. Esas filas son `is_group = true`: fuera del EXCLUDE y
+//                                               fuera del gate espejo de la 064. ACÁ VIVE R-1.
+//   grupal ⇄ simultáneo              : RECHAZA. Cambia el EJE DE CONTEO (hora de inicio exacta ⇄
+//                                               solape de intervalos): un conjunto hoy legal puede
+//                                               volverse ilegal.
+//
+// ⚠ VARIOS CASOS DE ESTE ARCHIVO CAMBIARON DE ESCENARIO, NO SE ROMPIERON. Los casos 1, 2 y 3 asertaban
+// el rechazo desde `individual` → `group_class`, que es EXACTAMENTE la dirección que GATE-01 abre a
+// propósito. Se re-anclaron a una dirección PELIGROSA, donde el rechazo sigue siendo la conducta
+// correcta: la aserción no se aflojó, se movió a donde vive el riesgo. Cada uno lo dice en su comentario.
+//
+// ⚠ TRAMPA DE ORDEN AL SEMBRAR. `seedGroupClassService` / `seedSimultaneousService` hacen un UPDATE
+// sobre `services`, así que PASAN POR ESTE MISMO GATE. Primero se declara el modo de ORIGEN del
+// service, DESPUÉS se siembra el turno futuro. Al revés, el propio fixture rebota contra el gate que
+// el caso quiere medir.
+//
 // Fechas FIJAS: 2031-03-03 (lunes) está siempre en el futuro y 2020-03-02 siempre en el pasado, sin
 // depender del reloj del runner.
 const FUTURE = '2031-03-03'
 const PAST = '2020-03-02'
-// "Hoy" en hora AR, calculado igual que el trigger (`(now() AT TIME ZONE 'America/Argentina/...')::date`)
-// y que los gates hermanos de la 065/067. Es la frontera INCLUSIVE del gate (`date >= hoy`).
-const TODAY_AR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+// "Ahora" en hora AR, tomado de `lib/appointment-time.ts::nowInAR` — LA MISMA FUENTE QUE USA LA UI.
+// Que la base y la UI coincidan en dónde está el corte "pasado / próximo" es literalmente lo que
+// GATE-03 vino a arreglar (gap G4 de la Phase 13, que se arregló en la UI y nunca cruzó al SQL), así
+// que calcular acá la frontera con otra fórmula sería medir con una regla distinta de la que se está
+// probando.
+const AR_NOW = nowInAR()
+const TODAY_AR = AR_NOW.date
+// Las dos horas de HOY que fijan cada lado del corte de GATE-03: una de madrugada que a esta altura
+// del día YA PASÓ, y una de fin de día que TODAVÍA NO LLEGÓ. Son fijas a propósito (un repro no
+// determinista es peor que ninguno); el guard del `beforeAll` es el que garantiza que digan la verdad.
+const PAST_TIME_TODAY = '00:00:00'
+const FUTURE_TIME_TODAY = '23:59:00'
+// Ventana horaria AR fuera de la cual esas dos constantes dejan de ser deterministas.
+const GUARD_WINDOW = { from: '01:00:00', to: '23:30:00' }
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -70,6 +115,19 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
     // Config rota ⇒ abortar.
     if (anonKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('GUARD: NEXT_PUBLIC_SUPABASE_ANON_KEY == SUPABASE_SERVICE_ROLE_KEY — config rota, abortar')
+    }
+    // GUARD DE LA VENTANA DE MEDIANOCHE (GATE-03). Los dos casos de la frontera de hoy usan horas
+    // FIJAS: `PAST_TIME_TODAY = 00:00:00` como "hoy a hora ya pasada" y `FUTURE_TIME_TODAY = 23:59:00`
+    // como "hoy a hora que todavía no llegó". Fuera de [01:00:00, 23:30:00] en hora AR esas dos
+    // etiquetas dejan de ser ciertas y los casos medirían LO CONTRARIO de lo que dicen medir.
+    // TIRA, no skipea, y a propósito: un skip silencioso escondería el agujero de cobertura justo en
+    // la franja horaria donde el bug de zona horaria es más probable. Un throw con motivo, no.
+    if (AR_NOW.time < GUARD_WINDOW.from || AR_NOW.time > GUARD_WINDOW.to) {
+      throw new Error(
+        `GUARD DE MEDIANOCHE: son las ${AR_NOW.time} en hora AR. Los casos de GATE-03 sólo son ` +
+          `deterministas entre ${GUARD_WINDOW.from} y ${GUARD_WINDOW.to} (23:30): fuera de esa ventana ` +
+          `'${PAST_TIME_TODAY}' ya no es una hora pasada o '${FUTURE_TIME_TODAY}' ya no es una hora futura.`,
+      )
     }
   })
 
@@ -129,22 +187,43 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
     return ins.data.id as string
   }
 
+  // `is_group` es LA razón por la que una dirección es segura y la otra no: una fila con
+  // `is_group = false` sigue DENTRO del EXCLUDE gist 013 (041: `AND NOT is_group`), y una con
+  // `is_group = true` queda fuera de él Y fuera del gate espejo de la 064. Se lee con service-role,
+  // igual que `modeOf`, para que la lectura de control nunca quede filtrada por una policy.
+  async function isGroupOf(tenant: SeededTenant, appointmentId: string): Promise<boolean> {
+    const { data, error } = await tenant.admin
+      .from('appointments')
+      .select('is_group')
+      .eq('id', appointmentId)
+      .single()
+    if (error || !data) throw new Error(`select appointment: ${error?.message}`)
+    return data.is_group as boolean
+  }
+
   // (1) EL RECHAZO. Un servicio con un turno FUTURO VIVO no puede cambiar de modo, ni siquiera desde
   // una request que saltea la UI (acá el PATCH sale por PostgREST, sin React de por medio).
   // Si falla: el gate no está instalado, o su predicado dejó de ver los turnos futuros vivos.
   // Se asiertan los TRES, no dos: `code` + `message` (el código de dominio es el CONTRATO que el panel
   // mapea; un assert que solo mirara "hubo error" pasaría con cualquier otro rechazo) + el estado real.
+  //
+  // ⚠ QUÉ CAMBIÓ EN LA 070 Y POR QUÉ NO ES UNA REGRESIÓN: este caso hacía `individual` → `group_class`,
+  // que es justo la dirección que GATE-01 abre a propósito (esa dirección tiene ahora su propio caso,
+  // el de "dirección segura A"). La ASERCIÓN es la misma —rechazo con el mismo código de dominio y la
+  // fila intacta—, lo que se movió es la DIRECCIÓN: ahora sale de `group_class`, que es donde vive R-1.
   it('1 — con un turno futuro vivo el cambio de modo se RECHAZA (P0001 / service_mode_has_future_appointments)', async () => {
     const svc = await seedService(t, { name: '__test_svc_mode_gate_1' })
+    // Orden obligatorio: primero el modo de ORIGEN (este UPDATE también pasa por el gate), después el turno.
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
     await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '09:00', status: 'confirmed' })
 
-    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'individual', capacity: 1 })
     expect(upd.error).not.toBeNull()
     expect(upd.error?.code).toBe('P0001')
     expect(upd.error?.message).toContain('service_mode_has_future_appointments')
 
     // Y el servicio SIGUE en el modo anterior: el RAISE abortó la transacción entera, nada a medias.
-    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'individual', capacity: 1 })
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
   }, 20000)
 
   // (2) EL CAMINO QUE SÍ PASA — detector de `RETURN NULL` (T-14-16). Mismo escenario pero con el turno
@@ -152,46 +231,54 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
   // VERDAD. Si falla con `error === null` pero la fila sin cambiar, el trigger está devolviendo NULL y
   // cancelando la escritura en silencio: PostgREST respondería 204 y el panel diría "Servicio
   // actualizado" sin haber actualizado nada.
+  //
+  // ⚠ QUÉ CAMBIÓ EN LA 070: este caso también salía de `individual`, y desde GATE-01 esa dirección
+  // pasa por el GUARD DE DIRECCIÓN, que devuelve ANTES de llegar al `EXISTS`. O sea: seguiría verde
+  // sin que el `EXISTS` se evaluara nunca, y dejaría de detectar lo que dice detectar. Por eso ahora
+  // sale de `group_class` (dirección peligrosa): la única forma de que el cambio pase es que el
+  // `EXISTS` corra de verdad y no encuentre ningún turno futuro VIVO.
   it('2 — sin turnos futuros vivos el cambio de modo pasa y QUEDA ESCRITO (detector de RETURN NULL)', async () => {
     const svc = await seedService(t, { name: '__test_svc_mode_gate_2' })
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
     await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '09:30', status: 'cancelled' })
     await seedAppointment(t, { serviceId: svc, date: PAST, time: '09:30', status: 'confirmed' })
 
-    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'individual', capacity: 1 })
     expect(upd.error).toBeNull()
     expect((upd.data || []).length).toBe(1)
 
     // La aserción REAL: la fila cambió en la base, no solo "no hubo error".
-    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'individual', capacity: 1 })
   }, 20000)
 
   // (3) TURNO CON ESTADO NULO. `appointments.status` es NULLABLE y `NOT IN (...)` sobre NULL evalúa a
   // NULL — ni true ni false —, así que sin la rama explícita `status IS NULL` esas filas quedarían
   // FUERA del EXISTS y ABRIRÍAN el gate. Es la trampa que el repo ya pagó dos veces (migr. 065 y el
   // read-path de 13-01). Si falla: alguien "simplificó" el predicado del gate a `status NOT IN (...)`.
+  //
+  // ⚠ QUÉ CAMBIÓ EN LA 070: misma aserción, dirección peligrosa (por el mismo motivo que el caso 2 —
+  // desde `individual` el guard de dirección devuelve antes del `EXISTS` y la rama `status IS NULL`
+  // no llegaría a evaluarse nunca).
   it('3 — un turno futuro con status NULL también bloquea el cambio de modo', async () => {
     const svc = await seedService(t, { name: '__test_svc_mode_gate_3' })
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
     await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '10:00', status: null })
 
-    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'individual', capacity: 1 })
     expect(upd.error?.code).toBe('P0001')
     expect(upd.error?.message).toContain('service_mode_has_future_appointments')
-    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'individual', capacity: 1 })
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
   }, 20000)
 
-  // (4) FRONTERA "HOY" EN HORA DE ARGENTINA. El gate usa `date >= hoy AR`, INCLUSIVE: un turno de HOY
-  // sigue siendo un compromiso por delante. La hora AR no es un detalle: a las 22:00 de Buenos Aires
-  // el `now()` en UTC ya es el día siguiente, y con la frontera calculada en UTC un turno de hoy
-  // dejaría de contarse como futuro. Si falla cerca de la medianoche, es exactamente ese bug.
-  it('4 — un turno de HOY (hora AR) cuenta como futuro y bloquea el cambio de modo', async () => {
-    const svc = await seedService(t, { name: '__test_svc_mode_gate_4' })
-    await seedAppointment(t, { serviceId: svc, date: TODAY_AR, time: '10:30', status: 'pending_payment' })
-
-    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
-    expect(upd.error?.code).toBe('P0001')
-    expect(upd.error?.message).toContain('service_mode_has_future_appointments')
-    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'individual', capacity: 1 })
-  }, 20000)
+  // (4) — ABSORBIDO POR LOS DOS CASOS DE GATE-03, no borrado por conveniencia.
+  // Hasta la 070 este archivo tenía un caso "un turno de HOY cuenta como futuro" con una hora fija de
+  // media mañana (10:30), y era una moneda al aire: a las 10:00 AR medía una cosa y a las 11:00 la
+  // contraria. Desde GATE-03 la frontera de hoy la fija LA HORA, y los dos lados del corte tienen cada
+  // uno su caso propio y determinista más abajo: "GATE-03 — el fix" (hoy a hora ya pasada ⇒ pasa) y
+  // "GATE-03 — la frontera" (hoy a hora que no llegó ⇒ rechaza).
+  // Duplicarlo además sería IMPOSIBLE DE EJECUTAR: un tercer turno del mismo tenant en `TODAY_AR` a la
+  // misma hora choca con el índice único 011 (`23505`) y, separado de minutos, con el EXCLUDE gist 013
+  // (`23P01`) — los tres turnos comparten `t.professionalId`.
 
   // (5) EL GATE NO TOCA LAS ESCRITURAS LEGÍTIMAS. Con un turno futuro VIVO presente, un UPDATE que NO
   // cambia el modo tiene que pasar, y persistir. Éste es el caso que habría detectado el error que el
@@ -234,6 +321,12 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
   //
   // El contrapeso va en el mismo `it` y no es opcional: sin él, una RLS rota que bloqueara a TODOS
   // dejaría la primera mitad verde. El mismo cliente anon, sobre SU propio servicio, sí escribe.
+  //
+  // ⚠ NOTA DESDE LA 070: los dos servicios de este caso son `individual` y no tienen turnos, así que
+  // la dirección `individual` → `group_class` YA NO rebota por el gate (GATE-01 la abre). Eso MEJORA
+  // el caso: antes un rechazo del gate podía enmascarar un fallo de RLS, y ahora lo único que puede
+  // dejar el UPDATE cross-tenant en 0 filas es la policy por tenant — que es exactamente lo que este
+  // caso tiene que probar.
   it('6 — el dueño de otro negocio NO puede cambiar el modo de un servicio ajeno (0 filas, sin error)', async () => {
     const ajeno = await seedService(t, { name: '__test_svc_mode_gate_6_ajeno' })
 
@@ -288,5 +381,146 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
       'services_capacity_matches_mode_chk',
     )
     expect(await modeOf(t, svc)).toEqual(antes)
+  }, 20000)
+
+  // ── LOS CASOS DE LA 070 ─────────────────────────────────────────────────────────────────────────
+  // De acá para abajo va la matriz completa por dirección (GATE-01), el cierre de R-15-A (GATE-02) y
+  // los dos lados del corte de hoy (GATE-03). Cada caso siembra SU PROPIO servicio, lo lleva al modo
+  // de ORIGEN ANTES de sembrar el turno (trampa de orden: los helpers de modo también pasan por el
+  // gate) y RELEE el estado real de la base — nunca se conforma con el error que volvió.
+
+  // (8) GATE-01 — DIRECCIÓN SEGURA A: `individual` → `group_class`. Es el caso que la UAT de la
+  // Phase 15 pidió con las palabras del dueño: pasar un servicio a grupal con un turno futuro vivo
+  // rebotaba, y no tenía por qué.
+  //
+  // Y ACÁ VA LA EVIDENCIA DE POR QUÉ ESTRECHAR EL GATE NO REABRE R-1: el turno preexistente sigue con
+  // `is_group = false` después del cambio. Eso significa que sigue DENTRO del EXCLUDE gist 013
+  // (041: `AND NOT is_group`) — no queda huérfano de guards — y además pasa a contarse contra el cupo
+  // nuevo. Sin esta aserción, "la dirección es segura" sería un argumento; con ella es una medición.
+  it('8 — GATE-01 dirección segura A: individual → group_class con un turno futuro vivo PASA', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_8_seguraA' })
+    const turno = await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '10:30', status: 'confirmed' })
+    expect(await isGroupOf(t, turno)).toBe(false)
+
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
+    expect(upd.error).toBeNull()
+    expect((upd.data || []).length).toBe(1)
+
+    // La fila QUEDÓ ESCRITA (no un RETURN NULL silencioso).
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
+    // Y el turno que ya existía NO se movió: `is_group = false` ⇒ sigue cubierto por el EXCLUDE 013.
+    expect(await isGroupOf(t, turno)).toBe(false)
+  }, 20000)
+
+  // (9) GATE-01 — DIRECCIÓN SEGURA B: `individual` → `simultaneous_resource`. El mismo razonamiento
+  // que (8) pero hacia el otro modo de cupo > 1: el criterio de la 070 es NOMINAL sobre el modo de
+  // ORIGEN (`OLD.capacity_mode = 'individual'`), así que el destino no cambia la decisión. Si este
+  // caso se cayera y el (8) no, alguien escribió el guard mirando el modo de DESTINO.
+  it('9 — GATE-01 dirección segura B: individual → simultaneous_resource con un turno futuro vivo PASA', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_9_seguraB' })
+    await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '11:30', status: 'confirmed' })
+
+    const upd = await patchService(t.admin, svc, t.businessId, {
+      capacity_mode: 'simultaneous_resource',
+      capacity: 2,
+    })
+    expect(upd.error).toBeNull()
+    expect((upd.data || []).length).toBe(1)
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'simultaneous_resource', capacity: 2 })
+  }, 20000)
+
+  // (10) GATE-01 — DIRECCIÓN PELIGROSA C: `group_class` → `simultaneous_resource`. No baja el cupo ni
+  // vuelve a individual: cambia el EJE DE CONTEO (hora de inicio exacta ⇄ solape de intervalos), y un
+  // conjunto de turnos hoy legal puede volverse ilegal de un update para el otro. Por eso el recorte
+  // de GATE-01 se escribió por NEGACIÓN de una sola dirección de origen y no como "cualquier cambio
+  // que no baje el cupo".
+  it('10 — GATE-01 dirección peligrosa C: group_class → simultaneous_resource con turno futuro vivo RECHAZA', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_10_peligrosaC' })
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
+    await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '12:00', status: 'confirmed' })
+
+    const upd = await patchService(t.admin, svc, t.businessId, {
+      capacity_mode: 'simultaneous_resource',
+      capacity: 2,
+    })
+    expect(upd.error?.code).toBe('P0001')
+    expect(upd.error?.message).toContain('service_mode_has_future_appointments')
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
+  }, 20000)
+
+  // (11) GATE-01 — DIRECCIÓN PELIGROSA D: `simultaneous_resource` → `group_class`. El sentido inverso
+  // del (10), y hace falta como caso propio: un guard escrito con una sola de las dos comparaciones
+  // dejaría pasar exactamente uno de los dos y el otro caso no se enteraría.
+  it('11 — GATE-01 dirección peligrosa D: simultaneous_resource → group_class con turno futuro vivo RECHAZA', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_11_peligrosaD' })
+    await seedSimultaneousService(t, { capacity: 2, serviceId: svc })
+    await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '12:30', status: 'confirmed' })
+
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
+    expect(upd.error?.code).toBe('P0001')
+    expect(upd.error?.message).toContain('service_mode_has_future_appointments')
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'simultaneous_resource', capacity: 2 })
+  }, 20000)
+
+  // (12) GATE-02 — el residual R-15-A de `15-SECURITY.md`. Hasta la 070 este gate excluía del conteo
+  // los turnos `completed`, así que marcar completado un turno FUTURO desde el panel
+  // (`appointments-client.tsx`, un solo click) lo sacaba del EXISTS y ABRÍA el gate. No es una salida
+  // legítima: el turno sigue estando por delante y su `is_group` quedaría igual de desalineado.
+  //
+  // ⚠⚠ TESTIGO DE LA DIVERGENCIA DELIBERADA (D-03) — LEER ANTES DE "UNIFICAR" NADA.
+  // Este caso es el par del caso (8) de `test/service-delete-gate.test.ts`, donde ESE MISMO ESTADO
+  // (`completed` en un turno futuro) sigue SIN bloquear el borrado del servicio. Los dos predicados se
+  // parecen a propósito y DIVERGEN a propósito desde la migración 070, porque preguntan cosas
+  // distintas:
+  //   · gate de BORRADO → "¿queda algo por prestar?"     ⇒ `completed` es historia (gap UAT #2 de la
+  //     Phase 13, HIST-01..03: el snapshot conserva el nombre). NO bloquea.
+  //   · gate de MODO    → "¿queda alguna fila cuyo `is_group` quedaría desalineado?" ⇒ `completed` es
+  //     un bypass de un click. SÍ bloquea.
+  // Si algún día alguien iguala los dos conjuntos de estados "por simetría", reabre R-15-A o re-rompe
+  // el gap UAT #2 — uno de los dos, seguro. Este comentario y el de su par existen para que ese cambio
+  // falle ruidosamente en vez de pasar por prolijidad.
+  it('12 — GATE-02: un turno FUTURO marcado completed ya NO abre el gate de modo (cierra R-15-A)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_12_completed' })
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
+    // ÚNICO turno del servicio, y está en el futuro: el bypass consistía en marcarlo `completed`.
+    await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '13:00', status: 'completed' })
+
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'individual', capacity: 1 })
+    expect(upd.error?.code).toBe('P0001')
+    expect(upd.error?.message).toContain('service_mode_has_future_appointments')
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
+  }, 20000)
+
+  // (13) GATE-03 — EL FIX. Un turno de HOY a una hora que YA PASÓ no es un compromiso por delante.
+  // Hasta la 070 el gate comparaba sólo `date >= hoy AR`, así que ese turno trababa el cambio de modo
+  // hasta la medianoche mientras la UI ya lo mostraba en "Pasados" — el gap G4 de la Phase 13, que se
+  // arregló en `lib/appointment-time.ts` y nunca había cruzado al SQL.
+  // La hora de corte se calcula acá con `nowInAR`, la MISMA función que usa la UI: si las dos se
+  // separaran, este caso lo detecta.
+  it('13 — GATE-03: un turno de HOY a hora YA PASADA no bloquea el cambio de modo (y queda escrito)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_13_hoy_pasado' })
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
+    // ÚNICO turno del servicio: de hoy, vivo, y a una hora que el guard del beforeAll garantiza pasada.
+    await seedAppointment(t, { serviceId: svc, date: TODAY_AR, time: PAST_TIME_TODAY, status: 'confirmed' })
+
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'individual', capacity: 1 })
+    expect(upd.error).toBeNull()
+    expect((upd.data || []).length).toBe(1)
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'individual', capacity: 1 })
+  }, 20000)
+
+  // (14) GATE-03 — LA FRONTERA. El contrapeso obligatorio del (13): un turno de HOY a una hora que
+  // TODAVÍA NO LLEGÓ sigue bloqueando. Sin este caso, "el turno de hoy dejó de bloquear" sería
+  // indistinguible de "el día de hoy dejó de contar", que no es una corrección sino una regresión —
+  // GATE-03 podría haberse pasado de laxo y nadie se enteraría.
+  it('14 — GATE-03 frontera: un turno de HOY a hora que NO llegó sigue bloqueando el cambio de modo', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_14_hoy_futuro' })
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
+    await seedAppointment(t, { serviceId: svc, date: TODAY_AR, time: FUTURE_TIME_TODAY, status: 'confirmed' })
+
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'individual', capacity: 1 })
+    expect(upd.error?.code).toBe('P0001')
+    expect(upd.error?.message).toContain('service_mode_has_future_appointments')
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
   }, 20000)
 })

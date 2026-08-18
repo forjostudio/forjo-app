@@ -257,11 +257,24 @@ export async function seedProfessionalService(seeded: SeededTenant, args: { prof
 //
 // ⚠ El tenant/service se comparte entre los tests del archivo: el que llame a este helper DEBE devolver
 // el service al DEFAULT ('individual'/1) en el afterEach para no contaminar a los casos siguientes.
-export async function seedSimultaneousService(seeded: SeededTenant, opts: { capacity: number }): Promise<void> {
+//
+// `serviceId` es OPCIONAL (default: el service del tenant) y NO es adorno — es el MISMO motivo que ya
+// tiene su helper hermano `seedGroupClassService`, y desde acá los dos tienen la MISMA firma a
+// propósito: son hermanos y ahora lo parecen. Hace falta para declarar simultáneo un SEGUNDO servicio
+// del mismo negocio (el que devuelve `seedService`), que es lo que necesita la matriz de direcciones
+// del gate de modo (`test/capacity-mode-change-gate.test.ts`): cada caso siembra su propio service y
+// lo lleva al modo de ORIGEN que el caso quiere medir, sin tocar el service del tenant que comparten
+// los demás archivos. Es un cambio COMPATIBLE HACIA ATRÁS: los llamadores actuales pasan sólo
+// `{ capacity }` y siguen apuntando a `seeded.serviceId`.
+//
+// ⚠ TRAMPA DE ORDEN (vale para los dos helpers): este UPDATE sobre `services` PASA POR EL GATE DE MODO
+// (`services_block_mode_change`). Primero se declara el modo del service, DESPUÉS se siembra el turno.
+// Al revés, el propio fixture rebota contra el gate que el caso quiere medir.
+export async function seedSimultaneousService(seeded: SeededTenant, opts: { capacity: number; serviceId?: string }): Promise<void> {
   const upd = await seeded.admin
     .from('services')
     .update({ capacity_mode: 'simultaneous_resource', capacity: opts.capacity })
-    .eq('id', seeded.serviceId)
+    .eq('id', opts.serviceId ?? seeded.serviceId)
     .eq('business_id', seeded.businessId)
   if (upd.error) throw new Error(`seed: update service simultáneo falló: ${upd.error.message}`)
 }
