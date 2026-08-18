@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { nowInAR } from '@/lib/appointment-time'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
 
@@ -19,15 +20,39 @@ import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from
 // del runner ni de la frontera "hoy AR" que evalúa el trigger.
 const FUTURE = '2031-03-03'
 const PAST = '2020-03-02'
-// "Hoy" en hora AR, calculado igual que el trigger y que el pre-check del modal. Es la frontera
-// exacta del gate (`date >= hoy`), y el caso que motivó el gap #2 vive justo ahí: un turno de HOY
-// ya prestado (`completed`) no es una reserva pendiente y no puede trabar el borrado.
-const TODAY_AR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+// "Ahora" en hora AR, tomado de `lib/appointment-time.ts::nowInAR` — LA MISMA FUENTE QUE USA LA UI.
+// Desde la migración 070 (GATE-03) el gate ya no compara sólo el día: compara fecha Y HORA contra el
+// INICIO del turno, replicando en SQL exactamente lo que hace `isPastAppointment`. Calcular acá la
+// frontera con otra fórmula sería medir con una regla distinta de la que se está probando.
+// El caso que motivó el gap UAT #2 vive justo en esa frontera: un turno de HOY ya prestado
+// (`completed`) no es una reserva pendiente y no puede trabar el borrado.
+const AR_NOW = nowInAR()
+const TODAY_AR = AR_NOW.date
+// Los dos lados del corte de GATE-03, con horas FIJAS (un repro no determinista es peor que ninguno):
+// una de madrugada que a esta altura del día YA PASÓ, y una de fin de día que TODAVÍA NO LLEGÓ.
+// Mismo criterio y mismo motivo que en el archivo hermano `test/capacity-mode-change-gate.test.ts`.
+const PAST_TIME_TODAY = '00:00:00'
+const FUTURE_TIME_TODAY = '23:59:00'
+// Ventana horaria AR fuera de la cual esas dos constantes dejan de ser deterministas.
+const GUARD_WINDOW = { from: '01:00:00', to: '23:30:00' }
 
 describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DELETE)', () => {
   let t: SeededTenant
 
   beforeAll(async () => {
+    // GUARD DE LA VENTANA DE MEDIANOCHE (GATE-03), copiado del archivo hermano y por el mismo motivo:
+    // los dos casos de la frontera de hoy usan horas FIJAS (`PAST_TIME_TODAY` = "ya pasó",
+    // `FUTURE_TIME_TODAY` = "todavía no llegó"). Fuera de [01:00:00, 23:30:00] en hora AR esas dos
+    // etiquetas dejan de ser ciertas y los casos medirían LO CONTRARIO de lo que dicen medir.
+    // TIRA en vez de skipear a propósito: un skip silencioso escondería el agujero de cobertura justo
+    // en la franja horaria donde el bug de zona horaria es más probable.
+    if (AR_NOW.time < GUARD_WINDOW.from || AR_NOW.time > GUARD_WINDOW.to) {
+      throw new Error(
+        `GUARD DE MEDIANOCHE: son las ${AR_NOW.time} en hora AR. Los casos de GATE-03 sólo son ` +
+          `deterministas entre ${GUARD_WINDOW.from} y ${GUARD_WINDOW.to} (23:30): fuera de esa ventana ` +
+          `'${PAST_TIME_TODAY}' ya no es una hora pasada o '${FUTURE_TIME_TODAY}' ya no es una hora futura.`,
+      )
+    }
     t = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
   })
 
@@ -216,6 +241,20 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
   // (8) Misma regla, sin frontera de fecha de por medio: `completed` no bloquea NUNCA, tampoco en el
   // futuro. El filtro es por ESTADO, no por fecha — un turno marcado como prestado es historia
   // aunque su fecha todavía no llegó (reprogramaciones, cierres anticipados de la agenda).
+  //
+  // ⚠⚠ TESTIGO DE LA DIVERGENCIA DELIBERADA (D-03) — LEER ANTES DE "UNIFICAR" NADA.
+  // Desde la migración 070 este predicado y el de `services_block_mode_change` YA NO SON
+  // INTERCAMBIABLES, y este caso es el testigo de ese lado. Su par es el caso (12) de
+  // `test/capacity-mode-change-gate.test.ts`, donde ESTE MISMO ESTADO (`completed` en un turno futuro)
+  // SÍ bloquea el cambio de modo. No es una inconsistencia: los dos gates preguntan cosas distintas.
+  //   · gate de BORRADO (éste) → "¿queda algo por prestar?" ⇒ un turno completado ya se prestó, es
+  //     historia, su nombre sobrevive por el snapshot de la 065 (HIST-01..03, gap UAT #2 de la
+  //     Phase 13). NO bloquea.
+  //   · gate de MODO           → "¿queda alguna fila cuyo `is_group` quedaría desalineado?" ⇒ marcar
+  //     `completed` un turno FUTURO es un botón de un click del panel, o sea un bypass accesible del
+  //     gate. Es el residual R-15-A de `15-SECURITY.md`. SÍ bloquea.
+  // Igualar los dos conjuntos de estados "por simetría" reabre R-15-A o re-rompe el gap UAT #2 — uno
+  // de los dos, seguro. Los dos comentarios existen para que ese cambio falle ruidosamente.
   it('8 — un turno FUTURO completed tampoco bloquea (la regla es por estado, no por fecha)', async () => {
     const svc = await seedService(t, { name: '__test_svc_gate_completed_futuro' })
     await seedAppointment({ serviceId: svc, date: FUTURE, time: '15:30', status: 'completed' })
@@ -333,5 +372,44 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
     // La expectativa CORRECTA: el modal no puede prometer un historial que Finanzas no va a mostrar.
     // Hoy da 4 vs 2 → el copy sobredimensiona lo que se conserva.
     expect(hist.count).toBe(finanzas.count)
+  }, 20000)
+
+  // (12) GATE-03 — EL FIX (migr. 070). Un turno de HOY a una hora que YA PASÓ no es un compromiso por
+  // delante, y no puede trabar el borrado del servicio hasta la medianoche.
+  //
+  // Es EXACTAMENTE el mismo bug que la Phase 13 arregló en la UI (gap G4, resuelto con
+  // `lib/appointment-time.ts::isPastAppointment`) y que NUNCA había cruzado al SQL: la pantalla de
+  // turnos mostraba ese turno en "Pasados" mientras la base lo seguía contando como futuro, así que el
+  // dueño veía una lista vacía de pendientes y el borrado seguía rebotando. Hasta la 070 el predicado
+  // era `a."date" >= v_today` — sólo el día.
+  //
+  // `serviceExists` no es cosmético acá: es lo ÚNICO que distingue "se borró de verdad" de "el trigger
+  // canceló el borrado en silencio" (un `RETURN NULL` desde un BEFORE DELETE responde 204 sin error).
+  it('12 — GATE-03: un turno de HOY a hora YA PASADA no bloquea el borrado (gap G4 cruzando al SQL)', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_hoy_pasado' })
+    // ÚNICO turno del servicio: de hoy, VIVO (`confirmed`, no `completed`: acá no interviene el estado)
+    // y a una hora que el guard del beforeAll garantiza pasada.
+    await seedAppointment({ serviceId: svc, date: TODAY_AR, time: PAST_TIME_TODAY, status: 'confirmed' })
+
+    const del = await deleteService(svc)
+    expect(del.error).toBeNull()
+    expect(await serviceExists(svc)).toBe(false)
+  }, 20000)
+
+  // (13) GATE-03 — LA FRONTERA. El contrapeso obligatorio del (12): un turno de HOY que TODAVÍA NO
+  // LLEGÓ sigue siendo un compromiso por delante y sigue bloqueando. Sin este caso, "el turno de hoy
+  // dejó de bloquear" sería indistinguible de "el día de hoy dejó de contar" — eso no sería una
+  // corrección sino la regresión que vaciaría la agenda del dueño sin que se entere.
+  // El `>=` del predicado es INCLUSIVE y se compara contra el INICIO del turno, espejo del `<`
+  // estricto de `isPastAppointment`.
+  it('13 — GATE-03 frontera: un turno de HOY a hora que NO llegó sigue bloqueando el borrado', async () => {
+    const svc = await seedService(t, { name: '__test_svc_gate_hoy_futuro' })
+    await seedAppointment({ serviceId: svc, date: TODAY_AR, time: FUTURE_TIME_TODAY, status: 'confirmed' })
+
+    const del = await deleteService(svc)
+    expect(del.error).not.toBeNull()
+    expect(del.error?.code).toBe('P0001')
+    expect(del.error?.message).toContain('service_has_future_appointments')
+    expect(await serviceExists(svc)).toBe(true)
   }, 20000)
 })
