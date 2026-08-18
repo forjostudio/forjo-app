@@ -115,17 +115,56 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       simultáneos ⇒ el rechazo no se puede provocar desde la UI. ⚠ El gate vive hoy solo en la base
       **local**: llega a prod cuando se aplique la 068 con `15-RUNBOOK-068.md`.)*
 
-### Superficie y polish (Phase 16)
+### Correcciones del gate (Phase 16) — migración **070**, `secure-phase` obligatorio
 
-- [ ] **CUPO-09** — El editor de servicio ofrece los **tres** modos y el cupo en un solo lugar, con
-      copy que explique la diferencia entre grupal (por hora de inicio) y simultáneo (por solape). El
-      cupo se deshabilita en `individual`.
+> Las tres viven en el **mismo predicado** y se tocan **una sola vez**. Salieron de la UAT de la
+> Phase 15 y del audit de seguridad, después de que el gate estuviera en producción.
+
+- [ ] **GATE-01** — El gate de cambio de modo se **estrecha por dirección**. Hoy rechaza cualquier
+      cambio con turnos futuros vivos, pero solo algunas direcciones son peligrosas: un turno nace
+      `is_group = true` **solo si el servicio no era `individual`**, así que `individual` → grupal /
+      simultáneo es seguro (los turnos existentes siguen bajo el EXCLUDE gist y además se cuentan
+      contra el cupo nuevo). Bloquear ese sentido obliga al dueño a cancelar turnos sin motivo, y es
+      el cambio **más frecuente** porque `individual` es el default. Las direcciones peligrosas
+      (hacia `individual`, y grupal ⇄ simultáneo, donde cambia el eje de conteo) **siguen bloqueando**.
+
+- [ ] **GATE-02** — Marcar `completed` un turno **futuro** deja de abrir el gate. El
+      `NOT IN ('cancelled','completed')` lo saca del `EXISTS`, así que un turno futuro marcado
+      completado deja de proteger. Residual **R-15-A** de `15-SECURITY.md`; el cierre es excluir solo
+      `'cancelled'`.
+
+- [ ] **GATE-03** — Los gates comparan **fecha + hora**, no solo la fecha. Hoy los **dos**
+      (`services_block_delete` de la migr. 065 y `services_block_mode_change` de la 068) usan
+      `a."date" >= v_today`, así que un turno de **hoy a hora ya pasada** sigue bloqueando hasta
+      mañana. Es el **mismo bug** que la Phase 13 arregló en la UI (gap **G4**, resuelto con
+      `lib/appointment-time.ts::isPastAppointment`) y que **nunca cruzó al SQL**: por eso la UI muestra
+      el turno en "Pasados" mientras la base lo cuenta como futuro. Encontrado por el dueño en la UAT
+      de la Phase 15 intentando borrar un servicio.
+
+### Superficie y polish (Phase 17)
+
+- [ ] **CUPO-09** *(reescrito 2026-08-16 al alcance que queda)* — El editor de servicio **explica la
+      diferencia entre los dos modos de cupo compartido**: grupal se cuenta **por hora de inicio**
+      (todos arrancan juntos), simultáneo **por solape** (entran escalonados). El copy actual mete los
+      dos en la misma bolsa —*"Clase grupal y Recurso simultáneo: varios lugares por turno"*— y un
+      dueño no tiene con qué elegir; elegir mal significa que alguien se sume a mitad de clase, o que
+      se le llene la agenda antes de tiempo. Incluye además los **tres defectos** que la UAT levantó:
+      el campo de cupo no se puede editar con el teclado, los toggles del modal quedan desacomodados, y
+      el `+` del alta debería ser un **"Guardar"** al final del formulario.
+      *(La parte funcional del requisito original —ofrecer los tres modos, el cupo en un solo lugar, el
+      piso por modo, el bloqueo por espacio compartido y la copy propia del rechazo del gate— **ya está
+      en producción**: la entregaron el guard de 15-02 y el fix de CR-03 en la 069.)*
 
 - [ ] **POLISH-08** — La lista de `/servicios` muestra un **badge de modo**: hoy el modo solo se ve al
       abrir el servicio.
 
-- [ ] **POLISH-09** — La ocupación **grupal** se ve en la grilla de la agenda. Hoy solo se ve al abrir
-      el turno, mientras que la simultánea sí se muestra — es una inconsistencia, no una regresión.
+- [ ] **POLISH-09** *(ampliado 2026-08-16)* — La grilla de la agenda **calcula la ocupación desde
+      `services.capacity`**, la misma fuente que el motor, y muestra la ocupación **grupal** con el
+      mismo tratamiento que ya tiene la simultánea. Hoy `agenda-client.tsx:467` tiene su propio
+      `capacityFor()` sobre `time_blocks.capacity` — la **cuarta** lectura, que la Phase 15 dejó a
+      propósito para esta fase (D-08). Desde la migr. 068 **esa columna ya no decide nada**, así que la
+      grilla del panel está calculando "lleno" con un número que el motor ignora: no se nota hoy porque
+      todo vale 1, pero **miente en cuanto se declare una clase de cupo > 1**. No es cosmético.
 
 - [ ] **POLISH-10** — Finanzas en mobile **muestra el servicio**. Hoy lo oculta con `hidden sm:block`;
       es layout, no read-path.
@@ -148,10 +187,13 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | CUPO-06 | Phase 15 | Complete (15-01 modelo + 15-02 editor: 'Individual' es elegible y es el default de alta) |
 | CUPO-07 | Phase 15 | Complete (15-03 motor + 15-04 las tres lecturas JS + 15-05 los dos casos de carrera con A/B contra un mutante que restaura la lectura del bloque; la 4ª —grilla del panel— es Phase 16 por D-08) |
 | CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel + 15-05 la suite de integración: 7 casos contra Postgres real, vistos FALLAR con el trigger dropeado). ⚠ El gate está en la base **LOCAL**; llega a prod al aplicar la 068 (`15-RUNBOOK-068.md`) |
-| CUPO-09 | Phase 16 | Pending |
-| POLISH-08 | Phase 16 | Pending |
-| POLISH-09 | Phase 16 | Pending |
-| POLISH-10 | Phase 16 | Pending |
+| GATE-01 | Phase 16 | Pending — migr. 070 |
+| GATE-02 | Phase 16 | Pending — migr. 070 (residual R-15-A de `15-SECURITY.md`) |
+| GATE-03 | Phase 16 | Pending — migr. 070, toca los gates de la **065** y la **068** |
+| CUPO-09 | Phase 17 | Pending — reescrito al alcance que queda (la parte funcional ya está en prod) |
+| POLISH-08 | Phase 17 | Pending |
+| POLISH-09 | Phase 17 | Pending — ampliado: la grilla lee la fuente equivocada, no es solo visual |
+| POLISH-10 | Phase 17 | Pending |
 
 ## Riesgo
 

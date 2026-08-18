@@ -64,8 +64,10 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 
 Faseo por riesgo, igual que en v0.26: el cambio del modelo y del motor va primero y aislado (`secure-phase` obligatorio, toca `book_slot_atomic`); la superficie del panel y el polish van después, sin tocar el motor.
 
-- [x] **Phase 15: Modelo de cupo unificado** - `services.capacity_mode` a enum de tres (`individual` default | `group_class` | `simultaneous_resource`) con `services.capacity` como única fuente del número; `time_blocks.capacity` deja de decidir; y el cambio de modo se rechaza en la base si el servicio tiene turnos futuros vivos (cierra R-1). **secure-phase obligatorio** (completed 2026-08-16)
-- [ ] **Phase 16: Superficie y polish** - Editor de servicio con los tres modos y el cupo en un solo lugar, badge de modo en la lista de `/servicios`, ocupación grupal visible en la grilla de la agenda, y Finanzas mobile mostrando el servicio
+- [x] **Phase 15: Modelo de cupo unificado** - `services.capacity_mode` a enum de tres (`individual` default | `group_class` | `simultaneous_resource`) con `services.capacity` como única fuente del número; `time_blocks.capacity` deja de decidir; y el cambio de modo se rechaza en la base si el servicio tiene turnos futuros vivos (cierra R-1). **secure-phase obligatorio**
+ (completed 2026-08-16)
+- [ ] **Phase 16: Correcciones del gate** - Migración **070** sobre el predicado de los gates: estrecharlo por dirección (`individual` → grupal/simultáneo es seguro y hoy se bloquea sin motivo), que marcar `completed` un turno futuro deje de abrirlo, y que compare **fecha + hora** en vez de solo la fecha en los gates de la 065 y la 068. **secure-phase obligatorio**
+- [ ] **Phase 17: Superficie y polish** - Copy que distinga grupal de simultáneo + los tres defectos del editor que levantó la UAT, badge de modo en `/servicios`, la grilla de la agenda leyendo `services.capacity` y mostrando la ocupación grupal, y Finanzas mobile mostrando el servicio
 
 ## Phase Details
 
@@ -622,25 +624,44 @@ Plans:
 
 ---
 
-### Phase 16: Superficie y polish
+### Phase 16: Correcciones del gate
 
-**Goal**: Que el dueño pueda **declarar** lo que la Phase 15 hizo declarable, y cerrar los tres pendientes de presentación que quedaron del ciclo anterior. El editor de servicio ofrece los **tres** modos y el cupo en un solo lugar, con copy que explique la diferencia real entre grupal (se cuenta por hora de inicio: todos arrancan juntos) y simultáneo (se cuenta por solape: entran escalonados); el cupo se deshabilita en `individual`. Además: badge de modo en la lista de `/servicios` —hoy el modo solo se ve al abrir el servicio—, la ocupación **grupal** visible en la grilla de la agenda —hoy solo se ve al abrir el turno, mientras la simultánea sí se muestra, que es una inconsistencia y no una regresión— y Finanzas en mobile mostrando el servicio, que hoy se oculta con `hidden sm:block`.
-**Depends on**: Phase 15 (el editor no puede ofrecer un modo que el modelo todavía no acepta, y el badge lee el mismo campo)
+**Goal**: Corregir el **predicado de los gates** en una sola pasada. Las tres cosas salieron de la UAT de la Phase 15 y del audit de seguridad, **después** de que el gate ya estuviera en producción, y las tres viven en el mismo `IF EXISTS`: (a) **se estrecha por dirección** — hoy rechaza cualquier cambio de modo con turnos futuros vivos, pero `individual` → grupal/simultáneo es **seguro** (esos turnos nacieron `is_group = false`, siguen bajo el EXCLUDE gist y además se cuentan contra el cupo nuevo) y bloquearlo obliga al dueño a cancelar turnos sin motivo, justo en el cambio más frecuente porque `individual` es el default; (b) marcar **`completed`** un turno futuro deja de abrir el gate (residual **R-15-A**); (c) los gates comparan **fecha + hora** en vez de solo la fecha, así que un turno de **hoy ya pasado** deja de bloquear hasta mañana — el mismo bug que la Phase 13 arregló en la UI (gap **G4**) y que nunca cruzó al SQL. Las direcciones peligrosas (hacia `individual`, y grupal ⇄ simultáneo, donde cambia el eje de conteo) **siguen bloqueando**: ahí es donde vive R-1.
+**Depends on**: Phase 15 (la 070 corrige el gate que la 068 instaló; el código que mapea sus rechazos a copy propia ya está en producción)
+**Requirements**: GATE-01, GATE-02, GATE-03
+**Success Criteria** (what must be TRUE):
+
+  1. Pasar un servicio de `individual` a grupal o simultáneo **con turnos futuros vivos** ya no se rechaza; las direcciones peligrosas siguen rechazando con su código de dominio (GATE-01).
+  2. Marcar `completed` un turno futuro **no** abre el gate (GATE-02).
+  3. Un turno de **hoy a hora ya pasada** deja de bloquear el borrado de un servicio y el cambio de modo — en los **dos** gates, el de la 065 y el de la 068 (GATE-03).
+  4. Cero regresión de R-1: existe un test por **dirección** que demuestra que las peligrosas siguen cerradas, con **control negativo** contra el predicado viejo.
+
+**Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Se estrecha un gate que cierra el riesgo residual R-1 de v0.26 y que acaba de pasar auditoría (`SECURED 32/32`). El register nuevo tiene que **demostrar** que estrechar no reabre R-1 en las direcciones peligrosas — no alcanza con argumentarlo. GATE-03 es además un cambio **permisivo**: hay que evaluar el alta manual, que está **exenta** de la ventana de reserva y en teoría puede crear turnos en el pasado.
+**UI hint**: no (es SQL; el mapeo de los rechazos a copy ya existe desde 15-02)
+
+---
+
+### Phase 17: Superficie y polish
+
+**Goal**: Que el dueño **entienda** lo que la Phase 15 hizo declarable, y cerrar los pendientes de presentación. Lo central es el **copy**: hoy el editor mete los dos modos de cupo compartido en la misma bolsa —*"Clase grupal y Recurso simultáneo: varios lugares por turno"*— y un dueño no tiene con qué elegir, cuando la diferencia es exactamente lo que v0.26 tardó tres migraciones en modelar (grupal cuenta por **hora de inicio**, simultáneo por **solape**); elegir mal significa que alguien se sume a mitad de clase, o que se le llene la agenda antes de tiempo. Más los **tres defectos** que levantó la UAT (el campo de cupo no se puede editar con el teclado, los toggles del modal quedan desacomodados, el `+` del alta debería ser un "Guardar" al final), el **badge de modo** en la lista, la **grilla de la agenda** leyendo `services.capacity` y mostrando la ocupación grupal, y **Finanzas mobile** con el servicio.
+**Depends on**: Phase 16 (la grilla y el editor conviven con el gate corregido; conviene que el comportamiento nuevo ya esté en la base antes de explicarlo en pantalla)
 **Requirements**: CUPO-09, POLISH-08, POLISH-09, POLISH-10
 **Success Criteria** (what must be TRUE):
 
-  1. El editor de servicio ofrece los **tres** modos y el cupo en un **solo** lugar; el cupo queda deshabilitado cuando el modo es `individual` (CUPO-09).
-  2. La lista de `/servicios` muestra el modo de cada servicio sin necesidad de abrirlo (POLISH-08).
-  3. La ocupación de un turno **grupal** se ve en la grilla de la agenda, con la misma consistencia con que hoy se ve la simultánea (POLISH-09).
-  4. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
+  1. El editor **explica la diferencia** entre grupal y simultáneo con el eje de conteo, no como dos etiquetas intercambiables (CUPO-09).
+  2. Los tres defectos del editor están cerrados: el campo de cupo se puede editar con el teclado, los toggles quedan alineados, y el alta confirma con un "Guardar" al final del formulario (CUPO-09).
+  3. La lista de `/servicios` muestra el modo de cada servicio sin abrirlo (POLISH-08).
+  4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
+  5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Security/Integrity relevance**: Baja. No toca el motor de reservas, los constraints ni el aislamiento por tenant. La única precaución real: el editor escribe `capacity_mode` y `capacity`, así que tiene que **mapear el rechazo de CUPO-08 a copy propio** en vez de interpolar el error de la base — lección T-14-25 / T-13-09.
+**Security/Integrity relevance**: Baja. No toca el motor, los constraints ni el aislamiento por tenant. Dos precauciones: el editor escribe `capacity_mode` y `capacity`, así que sigue teniendo que **mapear el rechazo del gate a copy propia** en vez de interpolar el error de la base (T-14-25 / T-13-09); y POLISH-09 **no es cosmético** — `agenda-client.tsx:467` lee `time_blocks.capacity`, que desde la 068 **ya no decide nada**, así que hoy la grilla calcula "lleno" con un número que el motor ignora. No se nota porque todo vale 1, pero miente en cuanto se declare una clase de cupo > 1. Es la **cuarta** lectura que D-08 dejó para esta fase.
 **UI hint**: yes
+
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, shipped 2026-08-11) → **15 → 16 (v0.27, activo)**. Los cinco milestones cerrados quedan en el historial.
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, shipped 2026-08-11) → **15 → 16 → 17 (v0.27, activo)**. Los cinco milestones cerrados quedan en el historial.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -659,4 +680,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
-| 16. Superficie y polish | 0/? | Not started | — |
+| 16. Correcciones del gate | 0/? | Not started | — |
+| 17. Superficie y polish | 0/? | Not started | — |
