@@ -14,7 +14,7 @@
 | **Base** | Postgres **local** (`supabase_db_forjo-app`, PG17), migraciones **001–069** aplicadas |
 | **Commit del repo al medir** | `06229f1` |
 | **Fecha de la corrida ANTES** | 2026-08-18, **17:25:04 hora AR** (`America/Argentina/Buenos_Aires`) |
-| **Fecha de la corrida DESPUÉS** | _(pendiente: la escribe la Task 2)_ |
+| **Fecha de la corrida DESPUÉS** | 2026-08-18, **17:31:24 hora AR** |
 
 **Cómo se corre** (idéntico en las dos pasadas):
 
@@ -297,3 +297,107 @@ ROLLBACK
 
 Y las dos lecturas que **no** son el objetivo del cambio pero que importan tanto como él: el caso 2 y
 el 3 —las dos direcciones peligrosas, donde vive **R-1**— rechazan hoy, y el punto de la sección
+
+---
+
+## DESPUES (070 aplicada al local)
+
+Corrida del **2026-08-18 17:31:24 AR**, con el **mismo script**, sobre la misma base local después de
+aplicar `supabase/migrations/070_service_gates_direction_and_time_precision.sql`. El archivo se aplicó
+**dos veces seguidas** con exit 0: al ser `CREATE OR REPLACE` puro, la segunda pasada es un no-op, y
+esa es la prueba de re-corribilidad.
+
+Verificación **por instalación** (sobre `pg_proc.prosrc`, no sobre el archivo):
+
+```
+$ docker exec supabase_db_forjo-app psql -U postgres -d postgres -tAc \
+    "select proname, position('v_now_time' in prosrc) > 0, position('a.\"date\" >= v_today' in prosrc) = 0 \
+       from pg_proc where proname in ('services_block_delete','services_block_mode_change');"
+services_block_mode_change|t|t
+services_block_delete|t|t
+```
+
+Las dos funciones tienen `v_now_time` y **ninguna** conserva el predicado viejo — ni en código ni en
+sus comentarios internos, que también viven en `prosrc`. (La primera pasada dio `t|f` para
+`services_block_delete` justamente por eso: un comentario del cuerpo citaba el predicado viejo
+textualmente. Se reformuló; el criterio hizo su trabajo.)
+
+### Salida literal
+
+```
+BEGIN
+NOTICE:  Guard de medianoche OK. Hora AR de la corrida: 17:31:24.064698
+DO
+CREATE TABLE
+INSERT 0 1
+INSERT 0 8
+INSERT 0 8
+INSERT 0 1
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+Output format is aligned.
+                               caso                                |      esperado_hoy      |                        medido
+-------------------------------------------------------------------+------------------------+------------------------------------------------------
+ 0 - control del fixture                                           | 8 servicios / 8 turnos | 8 servicios / 8 turnos
+ 1 - GATE-01 direccion segura (individual -> group_class)          | RECHAZO                | PASA (1 fila/s)
+ 2 - GATE-01 direccion peligrosa (group_class -> individual)       | RECHAZO                | RECHAZO P0001 / service_mode_has_future_appointments
+ 3 - GATE-01 cambio de eje (group_class -> simultaneous_resource)  | RECHAZO                | RECHAZO P0001 / service_mode_has_future_appointments
+ 4 - GATE-02 completed futuro y el gate de modo (R-15-A)           | PASA                   | RECHAZO P0001 / service_mode_has_future_appointments
+ 5 - GATE-03 en el gate de modo (turno de HOY 00:00, ya pasado)    | RECHAZO                | PASA (1 fila/s)
+ 6 - GATE-03 en el gate de borrado (turno de HOY 00:30, ya pasado) | RECHAZO                | PASA (1 fila/s)
+ 7 - frontera conservada (turno de HOY 23:59, todavia no llego)    | RECHAZO                | RECHAZO P0001 / service_has_future_appointments
+ 8 - divergencia D-03 (completed futuro NO bloquea el borrado)     | PASA                   | PASA (1 fila/s)
+(9 rows)
+
+ROLLBACK
+ negocios_desechables_que_quedaron
+-----------------------------------
+                                 0
+(1 row)
+```
+
+> La columna `esperado_hoy` del script sigue diciendo lo que se esperaba **antes**: el script no se
+> tocó entre las dos corridas, justamente para que la comparación sea legítima. Los "desacuerdos" de
+> esa columna en esta segunda pasada **son** los flips buscados.
+
+### Tabla A/B final
+
+| Caso | ANTES | DESPUÉS | ¿Flip? | Corrección que lo explica |
+|---|---|---|---|---|
+| **1** — `individual` → `group_class`, turno futuro vivo | RECHAZO `service_mode_has_future_appointments` | **PASA** | ✅ **flip** | **GATE-01**. El guard nuevo `IF OLD."capacity_mode" = 'individual' THEN RETURN NEW` devuelve **antes** de llegar al `EXISTS`. Esas filas nacieron `is_group = false`: siguen dentro del EXCLUDE gist 013 **y** además se cuentan contra el cupo nuevo |
+| **2** — `group_class` → `individual`, turno futuro vivo | RECHAZO | RECHAZO | — inmóvil (**buscado**) | Es **R-1**. El recorte se escribió por **negación de una sola dirección de origen**, así que ésta no lo toca. Evidencia de **T-16-02** |
+| **3** — `group_class` → `simultaneous_resource` | RECHAZO | RECHAZO | — inmóvil (**buscado**) | Cambia el **eje de conteo**; un conjunto hoy legal puede volverse ilegal. Evidencia de **T-16-02** y de **T-16-10**: no hay encadenamiento posible, porque para llegar a una dirección peligrosa hay que **estar** en grupal o simultáneo, y ese paso vuelve a entrar al `EXISTS` con el estado final de la tabla |
+| **4** — único turno FUTURO `completed`, cambio de modo | PASA | **RECHAZO** `service_mode_has_future_appointments` | ✅ **flip** | **GATE-02**. La rama de estado del gate de **modo** pasa a `<> 'cancelled'`: marcar `completed` un turno futuro era un bypass de **un click** del panel. Cierra el residual **R-15-A** |
+| **5** — turno de HOY `00:00` (ya pasado), cambio de modo | RECHAZO | **PASA** | ✅ **flip** | **GATE-03** en el gate de modo: `a."date" > v_today OR (a."date" = v_today AND a."time" >= v_now_time)` |
+| **6** — turno de HOY `00:30` (ya pasado), borrado | RECHAZO `service_has_future_appointments` | **PASA** | ✅ **flip** | **GATE-03** en el gate de borrado: el **mismo** bug, el mismo predicado nuevo, el otro gate |
+| **7** — turno de HOY `23:59` (todavía no llegó), borrado | RECHAZO | RECHAZO | — inmóvil (**buscado**) | El `>=` es **inclusive** y se compara contra el **INICIO** del turno: un turno de hoy que todavía no llegó sigue bloqueando |
+| **8** — único turno FUTURO `completed`, borrado | PASA | PASA | — inmóvil (**buscado**) | La **divergencia deliberada** de D-03: el gate de **borrado** conserva `NOT IN ('cancelled', 'completed')` porque un turno completado ya se prestó (HIST-01..03, gap UAT #2 de la Phase 13) |
+
+**Flips: exactamente los casos 1, 4, 5 y 6.** Inmóviles: **2, 3, 7 y 8.** Coincide caso por caso con
+la predicción del plan; no hubo un solo movimiento no previsto.
+
+### Lo que esta tabla demuestra (no argumenta)
+
+- **Las dos direcciones peligrosas siguen cerradas** — casos 2 y 3, medidos en la **misma corrida** en
+  la que el caso 1 se abrió. No es una lectura del código: es la base rechazando.
+- **El bypass de un click está cerrado** — caso 4, que pasó de `PASA` a `RECHAZO`.
+- **El recorte de GATE-03 es por hora, no por día** — casos 5 y 6 (se abren) contra el 7 (sigue
+  cerrado). Sin el 7, "el turno de hoy ya no bloquea" sería indistinguible de "el día de hoy dejó de
+  contar", que sería una regresión y no una corrección.
+- **Los dos predicados divergen a propósito** — caso 4 (modo: ahora bloquea) contra caso 8 (borrado:
+  sigue sin bloquear). Un **testigo por lado** (T-16-04), para que nadie los unifique después por
+  simetría.
+
+### Rojo esperado y declarado en las suites
+
+Con la 070 aplicada al local, `test/capacity-mode-change-gate.test.ts` queda en **4 pasan / 3 fallan**,
+y los tres que fallan son los que asertan un rechazo desde `individual` → `group_class` — la dirección
+que GATE-01 abre **a propósito**. Caen por el guard de dirección, que devuelve antes del `EXISTS`.
+`test/service-delete-gate.test.ts` **no se mueve**. Los tests se corrigen en el plan **16-02**; el
+detalle exacto está en `16-01-SUMMARY.md`.
