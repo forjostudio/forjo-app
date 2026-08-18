@@ -120,7 +120,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 > Las tres viven en el **mismo predicado** y se tocan **una sola vez**. Salieron de la UAT de la
 > Phase 15 y del audit de seguridad, después de que el gate estuviera en producción.
 
-- [ ] **GATE-01** — El gate de cambio de modo se **estrecha por dirección**. Hoy rechaza cualquier
+- [x] **GATE-01** — El gate de cambio de modo se **estrecha por dirección**. Hoy rechaza cualquier
       cambio con turnos futuros vivos, pero solo algunas direcciones son peligrosas: un turno nace
       `is_group = true` **solo si el servicio no era `individual`**, así que `individual` → grupal /
       simultáneo es seguro (los turnos existentes siguen bajo el EXCLUDE gist y además se cuentan
@@ -128,12 +128,12 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       el cambio **más frecuente** porque `individual` es el default. Las direcciones peligrosas
       (hacia `individual`, y grupal ⇄ simultáneo, donde cambia el eje de conteo) **siguen bloqueando**.
 
-- [ ] **GATE-02** — Marcar `completed` un turno **futuro** deja de abrir el gate. El
+- [x] **GATE-02** — Marcar `completed` un turno **futuro** deja de abrir el gate. El
       `NOT IN ('cancelled','completed')` lo saca del `EXISTS`, así que un turno futuro marcado
       completado deja de proteger. Residual **R-15-A** de `15-SECURITY.md`; el cierre es excluir solo
       `'cancelled'`.
 
-- [ ] **GATE-03** — Los gates comparan **fecha + hora**, no solo la fecha. Hoy los **dos**
+- [x] **GATE-03** — Los gates comparan **fecha + hora**, no solo la fecha. Hoy los **dos**
       (`services_block_delete` de la migr. 065 y `services_block_mode_change` de la 068) usan
       `a."date" >= v_today`, así que un turno de **hoy a hora ya pasada** sigue bloqueando hasta
       mañana. Es el **mismo bug** que la Phase 13 arregló en la UI (gap **G4**, resuelto con

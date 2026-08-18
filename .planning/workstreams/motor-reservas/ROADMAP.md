@@ -66,6 +66,7 @@ Faseo por riesgo, igual que en v0.26: el cambio del modelo y del motor va primer
 
 - [x] **Phase 15: Modelo de cupo unificado** - `services.capacity_mode` a enum de tres (`individual` default | `group_class` | `simultaneous_resource`) con `services.capacity` como única fuente del número; `time_blocks.capacity` deja de decidir; y el cambio de modo se rechaza en la base si el servicio tiene turnos futuros vivos (cierra R-1). **secure-phase obligatorio**
  (completed 2026-08-16)
+
 - [ ] **Phase 16: Correcciones del gate** - Migración **070** sobre el predicado de los gates: estrecharlo por dirección (`individual` → grupal/simultáneo es seguro y hoy se bloquea sin motivo), que marcar `completed` un turno futuro deje de abrirlo, y que compare **fecha + hora** en vez de solo la fecha en los gates de la 065 y la 068. **secure-phase obligatorio**
 - [ ] **Phase 17: Superficie y polish** - Copy que distinga grupal de simultáneo + los tres defectos del editor que levantó la UAT, badge de modo en `/servicios`, la grilla de la agenda leyendo `services.capacity` y mostrando la ocupación grupal, y Finanzas mobile mostrando el servicio
 
@@ -636,12 +637,12 @@ Plans:
   3. Un turno de **hoy a hora ya pasada** deja de bloquear el borrado de un servicio y el cambio de modo — en los **dos** gates, el de la 065 y el de la 068 (GATE-03).
   4. Cero regresión de R-1: existe un test por **dirección** que demuestra que las peligrosas siguen cerradas, con **control negativo** contra el predicado viejo.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 16-01-PLAN.md — Medir los dos gates **antes** de tocarlos (control negativo, ocho casos contra el Postgres local) + la migración **070** con las tres correcciones en una sola redefinición y transacción explícita (D-01/D-05) + espejo quirúrgico en `schema.sql`
+- [x] 16-01-PLAN.md — Medir los dos gates **antes** de tocarlos (control negativo, ocho casos contra el Postgres local) + la migración **070** con las tres correcciones en una sola redefinición y transacción explícita (D-01/D-05) + espejo quirúrgico en `schema.sql`
 
 **Wave 2** *(blocked on 16-01)*
 
@@ -670,7 +671,6 @@ Plans:
 **Security/Integrity relevance**: Baja. No toca el motor, los constraints ni el aislamiento por tenant. Dos precauciones: el editor escribe `capacity_mode` y `capacity`, así que sigue teniendo que **mapear el rechazo del gate a copy propia** en vez de interpolar el error de la base (T-14-25 / T-13-09); y POLISH-09 **no es cosmético** — `agenda-client.tsx:467` lee `time_blocks.capacity`, que desde la 068 **ya no decide nada**, así que hoy la grilla calcula "lleno" con un número que el motor ignora. No se nota porque todo vale 1, pero miente en cuanto se declare una clase de cupo > 1. Es la **cuarta** lectura que D-08 dejó para esta fase.
 **UI hint**: yes
 
-
 ## Progress
 
 **Execution Order:**
@@ -693,5 +693,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
-| 16. Correcciones del gate | 0/? | Not started | — |
+| 16. Correcciones del gate | 1/2 | In Progress|  |
 | 17. Superficie y polish | 0/? | Not started | — |

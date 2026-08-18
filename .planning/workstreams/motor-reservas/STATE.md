@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: verifying
-stopped_at: Completado 15-04-PLAN.md — las tres lecturas JS del cupo alineadas con el motor (CUPO-07 / D-08); A/B contra `booking-core` y `availability` viejos documentado
-last_updated: "2026-08-16T17:23:20.067Z"
-last_activity: 2026-08-16
+status: executing
+stopped_at: Completado 16-01-PLAN.md (migracion 070 escrita y aplicada al LOCAL; NO a prod)
+last_updated: "2026-08-18T20:36:41.568Z"
+last_activity: 2026-08-18 -- Phase 16 execution started
 progress:
-  total_phases: 16
+  total_phases: 17
   completed_phases: 15
-  total_plans: 76
-  completed_plans: 76
-  percent: 94
+  total_plans: 78
+  completed_plans: 77
+  percent: 88
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** v0.27 — Phase 15, modelo de cupo unificado
+**Current focus:** Phase 16 — correcciones-del-gate
 
 ## Current Position
 
-Phase: 16
-Plan: Not started
-Status: la migración **068** está completa (modelo + gate + RPC) y validada contra el Postgres LOCAL; **NO** se aplicó a producción (runbook en `15-01-SUMMARY.md` §User Setup Required y en el plan 15-05). Última migración en prod = **067**. El guard del editor (D-10) ya está en código. ✅ **El desacuerdo write-path/read-path quedó CERRADO por 15-04**: `lib/booking-core.ts` y `app/api/booking/availability/route.ts` (con sus tres consumidores) deciden el cupo con `services.capacity`, igual que el RPC, y el booking público manda el `serviceId` que el endpoint necesita. La ÚNICA lectura que sigue decidiendo por `time_blocks.capacity` es `app/(dashboard)/agenda/agenda-client.tsx` — panel autenticado, drift de visualización, **Phase 16** por D-08. ✅ **15-05 cerró la verificación**: `test/capacity-mode-change-gate.test.ts` (7 casos, `code` + `message` + estado real de la base, **visto FALLAR** con el trigger dropeado) y los dos casos de carrera de CUPO-07 en `concurrency.test.ts` (24/24, **vistos FALLAR** contra un mutante que restaura `MAX(tb.capacity)`). El runbook de aplicación manual vive en `15-RUNBOOK-068.md`: pre-flight con **criterio de aborto** (`max(capacity) from time_blocks > 1` ⇒ NO aplicar), **código primero** y migración inmediatamente después, verificación **por instalación** (D-09) y rollback por objeto
-Last activity: 2026-08-16
+Phase: 16 (correcciones-del-gate) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-08-18 -- Phase 16 execution started
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
 
@@ -116,6 +116,7 @@ Last activity: 2026-08-16
 | Phase 15 P03 | ~20min | 3 tasks | 3 files |
 | Phase 15 P04 | ~25min | 3 tasks | 4 files |
 | Phase 15 P05 | ~40min | 3 tasks | 3 files |
+| Phase 16 P01 | 15min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -249,6 +250,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 15]: 15-04: **`CUPO-07 (b)` conserva su bloque en 3 y el grep de aceptación queda en 1, no en 0.** Ahí el número no declara: MIENTE a propósito, y es la mentira lo que el caso prueba. Con el bloque en 1 la función vieja de la 064 también daría `is_group = false` y el test pasaría contra las dos versiones. Se descartó esconder el literal detrás de una constante para satisfacer el grep — mismo criterio que 14-09 ("NO se forzó la clase para satisfacer el grep")
 - [Phase 15]: 15-04: `CUPOS-02` se reencuadró a **dos servicios y dos consultas**, no a dos ventanas horarias: un servicio tiene UN cupo, así que el truco de dos bloques con cupos distintos muere con el cupo por servicio. Las aserciones se repartieron sin ablandarse y el contrato + las claves prohibidas ahora se asiertan en LAS DOS respuestas (antes, en una sola)
 - [Phase 15]: 15-01: primer `ALTER COLUMN ... SET DEFAULT` del repo en una migración numerada fuera del baseline (divergencia consciente, documentada en el header); y se rechazó introducir el agregado de constraint en dos pasos por no tener un solo precedente en el repo
+- [Phase 16]: GATE-01: el criterio de direccion del gate de modo es NOMINAL (OLD.capacity_mode = 'individual'), no numerico -- un gate no debe depender del CHECK de coherencia de la 068 para ser correcto
+- [Phase 16]: Los dos gates de servicio NO comparten funcion auxiliar: la 070 es justamente la migracion que los hace divergir en el conjunto de estados (borrado excluye completed, modo no)
 
 ### Pending Todos
 
@@ -323,8 +326,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-12T21:10:00.000Z
-Stopped at: Completado 15-04-PLAN.md — las tres lecturas JS del cupo alineadas con el motor (CUPO-07 / D-08); A/B contra `booking-core` y `availability` viejos documentado
+Last session: 2026-08-18T20:36:41.545Z
+Stopped at: Completado 16-01-PLAN.md (migracion 070 escrita y aplicada al LOCAL; NO a prod)
 Resume file: None
 
 ## Operator Next Steps
