@@ -599,7 +599,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [x] 15-01-PLAN.md — Migración **068**: enum de tres modos + backfill por predicado + CHECK de coherencia modo↔cupo + DEFAULT `individual` + gate `services_block_mode_change` (CUPO-08 / R-1) + espejo quirúrgico en `schema.sql` + el tipo del modo en `lib/types.ts`
+- [x] 15-01-PLAN.md — Migración **068**: enum de tres modos + backfill por predicado + CHECK de coherencia modo↔cupo + DEFAULT `individual` + gate `services_block_mode_change` (CUPO-08 / R-1) + espejo quirúrgico en `schema.sql` + los dos comentarios de `lib/` que la 070 vuelve falsos + el tipo del modo en `lib/types.ts`
 
 **Wave 2** *(blocked on 15-01)*
 
@@ -635,6 +635,19 @@ Plans:
   2. Marcar `completed` un turno futuro **no** abre el gate (GATE-02).
   3. Un turno de **hoy a hora ya pasada** deja de bloquear el borrado de un servicio y el cambio de modo — en los **dos** gates, el de la 065 y el de la 068 (GATE-03).
   4. Cero regresión de R-1: existe un test por **dirección** que demuestra que las peligrosas siguen cerradas, con **control negativo** contra el predicado viejo.
+
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 16-01-PLAN.md — Medir los dos gates **antes** de tocarlos (control negativo, ocho casos contra el Postgres local) + la migración **070** con las tres correcciones en una sola redefinición y transacción explícita (D-01/D-05) + espejo quirúrgico en `schema.sql`
+
+**Wave 2** *(blocked on 16-01)*
+
+- [ ] 16-02-PLAN.md — La matriz **por dirección** del gate de modo (dos seguras que pasan, dos peligrosas que rechazan) + GATE-02 y GATE-03 en los **dos** gates, cada caso nuevo visto FALLAR contra el predicado viejo (D-07) + `16-RUNBOOK-070.md`
+
+**Waves**: cadena **secuencial**, sin paralelismo. 16-01 mide, corrige y aplica al local; 16-02 no puede escribir un solo caso contra un predicado que todavía no existe, y su control negativo A/B necesita poder instalar y desinstalar los cuerpos viejos. `files_modified` disjuntos (`supabase/` vs `test/`) para que el rojo esperado de 16-01 —la suite de modo queda con 3 casos en rojo, previstos y declarados— lo cierre 16-02 sin pisarse.
 
 **Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Se estrecha un gate que cierra el riesgo residual R-1 de v0.26 y que acaba de pasar auditoría (`SECURED 32/32`). El register nuevo tiene que **demostrar** que estrechar no reabre R-1 en las direcciones peligrosas — no alcanza con argumentarlo. GATE-03 es además un cambio **permisivo**: hay que evaluar el alta manual, que está **exenta** de la ventana de reserva y en teoría puede crear turnos en el pasado.
 **UI hint**: no (es SQL; el mapeo de los rechazos a copy ya existe desde 15-02)

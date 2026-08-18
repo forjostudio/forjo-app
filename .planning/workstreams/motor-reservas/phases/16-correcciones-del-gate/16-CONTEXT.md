@@ -66,11 +66,19 @@ Un turno de **hoy a hora ya pasada** sigue bloqueando hasta mañana. Es el **mis
 arregló en la UI —gap **G4**, resuelto con `lib/appointment-time.ts::isPastAppointment`— y que **nunca
 cruzó al SQL**: por eso la UI muestra el turno en "Pasados" mientras la base lo cuenta como futuro.
 
-Comparar `(a.date + a.time)` —o el fin del turno, `+ duration_minutes`— contra el `now()` de Argentina.
+**Comparar contra el INICIO del turno, no contra su fin** — y eso NO es una elección de estilo:
+`lib/appointment-time.ts::isPastAppointment`, que es el fix de G4 en la UI, hace
+`hhmmss(appt.time) < hhmmss(now.time)`. **Compara el inicio.** Si el SQL comparara contra el fin
+(`+ duration_minutes`), tendríamos la misma inconsistencia UI↔base que GATE-03 viene a cerrar, solo que
+al revés: un turno de 30 min a las 14:00 sería "pasado" en la UI a las 14:01 y "futuro" en la base
+hasta las 14:30.
 
-⚠ **`appointments.time` y `duration_minutes` pueden ser NULL** en filas viejas. La rama defensiva tiene
-que **CERRAR** el gate ante NULL, nunca abrirlo — misma lógica que la rama `status IS NULL` que ya
-existe, y misma trampa que la 065 ya pagó una vez.
+> ⚠ **Corrección al primer borrador de este CONTEXT (2026-08-16), verificada contra el esquema:**
+> `appointments.date` y `appointments.time` son **`NOT NULL`** (`schema.sql:694-695`). El único
+> nullable es `duration_minutes` (`:708`) — y al comparar contra el inicio **no se usa**. O sea que
+> **la rama defensiva ante NULL que este documento pedía no hace falta**: no hay NULL que manejar en
+> las dos columnas que entran al predicado. La rama `status IS NULL` que ya existe **sí** se conserva:
+> `status` sigue siendo nullable.
 
 ⚠ **Es un cambio permisivo.** Para el borrado de servicio es lo que HIST-01..03 quiso (los turnos
 pasados sobreviven por el snapshot). Para el cambio de modo también parece seguro —una fila pasada no
@@ -187,6 +195,30 @@ Y arriba, el guard de no-cambio que GATE-01 tiene que complementar:
 ```sql
 IF NEW."capacity_mode" IS NOT DISTINCT FROM OLD."capacity_mode" THEN RETURN NEW; END IF;
 ```
+
+### Los dos predicados son IDÉNTICOS hoy (verificado)
+
+`services_block_delete` (065 `:250-261`) y `services_block_mode_change` (068) usan el **mismo**
+`IF EXISTS` carácter por carácter: mismo filtro de tenant con la rama `OLD.business_id IS NULL`, mismo
+`a."date" >= v_today`, mismo `status IS NULL OR NOT IN ('cancelled','completed')`. Lo único que difiere
+es el código de dominio del `RAISE`:
+
+- 065 → `service_has_future_appointments`
+- 068 → `service_mode_has_future_appointments`
+
+Que sean idénticos hace **tentador** extraer una función auxiliar compartida — y por eso D-03 avisa:
+GATE-02 quiere que **divergan** en el conjunto de estados (`completed` debe seguir excluido en el gate
+de borrado y dejar de estarlo en el de modo). Compartir el predicado justo cuando se decide separarlos
+es el peor momento. Decidilo explícito.
+
+### Códigos de dominio ya usados (para no colisionar ni ser substring)
+
+`abono_has_future_turns` · `abono_is_active` · `service_has_active_abono` ·
+`service_has_future_appointments` · `service_mode_has_future_appointments` ·
+`simultaneous_space_conflict` · `slot_full` · `slot_taken`
+
+El panel mapea con `code === 'P0001' && message.includes(...)`, así que un código nuevo no puede ser
+substring de ninguno de estos **ni al revés**.
 
 ### La landmine, otra vez
 
