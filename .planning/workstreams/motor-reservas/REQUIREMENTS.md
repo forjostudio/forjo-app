@@ -187,9 +187,9 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | CUPO-06 | Phase 15 | Complete (15-01 modelo + 15-02 editor: 'Individual' es elegible y es el default de alta) |
 | CUPO-07 | Phase 15 | Complete (15-03 motor + 15-04 las tres lecturas JS + 15-05 los dos casos de carrera con A/B contra un mutante que restaura la lectura del bloque; la 4ª —grilla del panel— es Phase 16 por D-08) |
 | CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel + 15-05 la suite de integración: 7 casos contra Postgres real, vistos FALLAR con el trigger dropeado). ⚠ El gate está en la base **LOCAL**; llega a prod al aplicar la 068 (`15-RUNBOOK-068.md`) |
-| GATE-01 | Phase 16 | Pending — migr. 070 |
-| GATE-02 | Phase 16 | Pending — migr. 070 (residual R-15-A de `15-SECURITY.md`) |
-| GATE-03 | Phase 16 | Pending — migr. 070, toca los gates de la **065** y la **068** |
+| GATE-01 | Phase 16 | Complete (16-01 migr. 070 estrecha el gate por dirección + 16-02 la matriz de 13 casos con control negativo: las direcciones peligrosas siguen rechazando). ⚠ La 070 está en la base **LOCAL**; llega a prod por `16-RUNBOOK-070.md` |
+| GATE-02 | Phase 16 | Complete (16-01 el predicado deja de excluir `completed` + 16-02 el caso 12, visto FALLAR contra el predicado viejo). Cierra el residual R-15-A de `15-SECURITY.md`. ⚠ Local; llega a prod por `16-RUNBOOK-070.md` |
+| GATE-03 | Phase 16 | Complete (16-01 fecha + hora en los gates de la **065** y la **068** + 16-02 los casos 13 y delete-12, con las dos fronteras como testigo). ⚠ Local; llega a prod por `16-RUNBOOK-070.md` |
 | CUPO-09 | Phase 17 | Pending — reescrito al alcance que queda (la parte funcional ya está en prod) |
 | POLISH-08 | Phase 17 | Pending |
 | POLISH-09 | Phase 17 | Pending — ampliado: la grilla lee la fuente equivocada, no es solo visual |
