@@ -693,5 +693,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
-| 16. Correcciones del gate | 2/2 | Complete   | 2026-08-18 |
+| 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
 | 17. Superficie y polish | 0/? | Not started | — |

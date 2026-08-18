@@ -4,8 +4,8 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
 stopped_at: Completed 16-02-PLAN.md
-last_updated: "2026-08-18T20:53:08.302Z"
-last_activity: 2026-08-18 -- Phase 16 execution started
+last_updated: "2026-08-18T21:04:12.017Z"
+last_activity: 2026-08-18
 progress:
   total_phases: 17
   completed_phases: 16
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 16 (correcciones-del-gate) — EXECUTING
-Plan: 2 of 2
+Phase: 17
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-08-18 -- Phase 16 execution started
+Last activity: 2026-08-18
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
 
@@ -77,6 +77,7 @@ Last activity: 2026-08-18 -- Phase 16 execution started
 | 13 | 5 | - | - |
 | 14 | 9 | - | - |
 | 15 | 5 | - | - |
+| 16 | 2 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
