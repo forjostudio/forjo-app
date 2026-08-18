@@ -12,10 +12,16 @@
 //
 // Funciones PURAS: sin React ni Supabase → testeables sin DB (test/appointment-time.test.ts).
 //
-// DIVERGENCIA CONOCIDA con el gate de borrado (migración 065, `services_block_delete`, D-08): ese
-// trigger define "futuro" como `date >= today` en hora AR SIN la hora. O sea: un turno de hoy a una
-// hora ya pasada se ve en "Pasados" pero sigue bloqueando el borrado de su servicio. Es a propósito
-// — el gate es conservador y cambiarlo pide una migración nueva.
+// ESTA FUNCIÓN ES LA FUENTE DE VERDAD DEL CRITERIO, también para la base. Hasta la migración 070 los
+// dos gates de servicio (`services_block_delete` de la 065 y `services_block_mode_change` de la 068)
+// definían "futuro" como `date >= today` en hora AR SIN la hora, así que un turno de hoy a una hora
+// ya pasada se veía en "Pasados" y seguía bloqueando el borrado o el cambio de modo de su servicio.
+// La 070 cerró esa divergencia: los dos gates ahora comparan fecha Y hora, contra el INICIO del turno
+// y con `>=` inclusive, replicando en SQL exactamente lo que hace `isPastAppointment` (el fix del gap
+// G4 que la originó). Si algún día cambia el criterio de acá, hay que mover la 070 en el mismo
+// movimiento — y NO sumarle la duración del turno de un lado solo: eso reintroduce la divergencia al
+// revés (un turno de 30 min a las 14:00 sería "pasado" en la UI a las 14:01 y "futuro" en la base
+// hasta las 14:30).
 
 /** Par de strings comparables lexicográficamente con las columnas `date` y `time` de appointments. */
 export interface ARNow {
