@@ -67,7 +67,7 @@ Faseo por riesgo, igual que en v0.26: el cambio del modelo y del motor va primer
 - [x] **Phase 15: Modelo de cupo unificado** - `services.capacity_mode` a enum de tres (`individual` default | `group_class` | `simultaneous_resource`) con `services.capacity` como única fuente del número; `time_blocks.capacity` deja de decidir; y el cambio de modo se rechaza en la base si el servicio tiene turnos futuros vivos (cierra R-1). **secure-phase obligatorio**
  (completed 2026-08-16)
 
-- [ ] **Phase 16: Correcciones del gate** - Migración **070** sobre el predicado de los gates: estrecharlo por dirección (`individual` → grupal/simultáneo es seguro y hoy se bloquea sin motivo), que marcar `completed` un turno futuro deje de abrirlo, y que compare **fecha + hora** en vez de solo la fecha en los gates de la 065 y la 068. **secure-phase obligatorio**
+- [x] **Phase 16: Correcciones del gate** - Migración **070** sobre el predicado de los gates: estrecharlo por dirección (`individual` → grupal/simultáneo es seguro y hoy se bloquea sin motivo), que marcar `completed` un turno futuro deje de abrirlo, y que compare **fecha + hora** en vez de solo la fecha en los gates de la 065 y la 068. **secure-phase obligatorio** (completed 2026-08-18)
 - [ ] **Phase 17: Superficie y polish** - Copy que distinga grupal de simultáneo + los tres defectos del editor que levantó la UAT, badge de modo en `/servicios`, la grilla de la agenda leyendo `services.capacity` y mostrando la ocupación grupal, y Finanzas mobile mostrando el servicio
 
 ## Phase Details
@@ -637,7 +637,7 @@ Plans:
   3. Un turno de **hoy a hora ya pasada** deja de bloquear el borrado de un servicio y el cambio de modo — en los **dos** gates, el de la 065 y el de la 068 (GATE-03).
   4. Cero regresión de R-1: existe un test por **dirección** que demuestra que las peligrosas siguen cerradas, con **control negativo** contra el predicado viejo.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -646,7 +646,7 @@ Plans:
 
 **Wave 2** *(blocked on 16-01)*
 
-- [ ] 16-02-PLAN.md — La matriz **por dirección** del gate de modo (dos seguras que pasan, dos peligrosas que rechazan) + GATE-02 y GATE-03 en los **dos** gates, cada caso nuevo visto FALLAR contra el predicado viejo (D-07) + `16-RUNBOOK-070.md`
+- [x] 16-02-PLAN.md — La matriz **por dirección** del gate de modo (dos seguras que pasan, dos peligrosas que rechazan) + GATE-02 y GATE-03 en los **dos** gates, cada caso nuevo visto FALLAR contra el predicado viejo (D-07) + `16-RUNBOOK-070.md`
 
 **Waves**: cadena **secuencial**, sin paralelismo. 16-01 mide, corrige y aplica al local; 16-02 no puede escribir un solo caso contra un predicado que todavía no existe, y su control negativo A/B necesita poder instalar y desinstalar los cuerpos viejos. `files_modified` disjuntos (`supabase/` vs `test/`) para que el rojo esperado de 16-01 —la suite de modo queda con 3 casos en rojo, previstos y declarados— lo cierre 16-02 sin pisarse.
 
@@ -693,5 +693,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 13. Borrado de servicio preservando historial | 5/5 | Complete    | 2026-08-03 |
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
-| 16. Correcciones del gate | 1/2 | In Progress|  |
+| 16. Correcciones del gate | 2/2 | Complete   | 2026-08-18 |
 | 17. Superficie y polish | 0/? | Not started | — |

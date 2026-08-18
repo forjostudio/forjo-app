@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: executing
-stopped_at: Completado 16-01-PLAN.md (migracion 070 escrita y aplicada al LOCAL; NO a prod)
-last_updated: "2026-08-18T20:36:41.568Z"
+status: verifying
+stopped_at: Completed 16-02-PLAN.md
+last_updated: "2026-08-18T20:53:08.302Z"
 last_activity: 2026-08-18 -- Phase 16 execution started
 progress:
   total_phases: 17
-  completed_phases: 15
+  completed_phases: 16
   total_plans: 78
-  completed_plans: 77
-  percent: 88
+  completed_plans: 78
+  percent: 94
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 16 (correcciones-del-gate) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-18 -- Phase 16 execution started
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
@@ -117,6 +117,7 @@ Last activity: 2026-08-18 -- Phase 16 execution started
 | Phase 15 P04 | ~25min | 3 tasks | 4 files |
 | Phase 15 P05 | ~40min | 3 tasks | 3 files |
 | Phase 16 P01 | 15min | 3 tasks | 5 files |
+| Phase 16 P02 | 26 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -252,6 +253,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 15]: 15-01: primer `ALTER COLUMN ... SET DEFAULT` del repo en una migración numerada fuera del baseline (divergencia consciente, documentada en el header); y se rechazó introducir el agregado de constraint en dos pasos por no tener un solo precedente en el repo
 - [Phase 16]: GATE-01: el criterio de direccion del gate de modo es NOMINAL (OLD.capacity_mode = 'individual'), no numerico -- un gate no debe depender del CHECK de coherencia de la 068 para ser correcto
 - [Phase 16]: Los dos gates de servicio NO comparten funcion auxiliar: la 070 es justamente la migracion que los hace divergir en el conjunto de estados (borrado excluye completed, modo no)
+- [Phase 16]: La matriz del gate se prueba POR DIRECCION con control negativo A/B a nivel suite: 5 casos discriminantes vistos fallar contra los cuerpos viejos de 065+068 instalados a mano — Un test de garantia que pasa con y sin la garantia no cuenta como verificacion; separar discriminantes de invariantes evita venderlos como control
 
 ### Pending Todos
 
@@ -326,8 +328,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-18T20:36:41.545Z
-Stopped at: Completado 16-01-PLAN.md (migracion 070 escrita y aplicada al LOCAL; NO a prod)
+Last session: 2026-08-18T20:52:56.192Z
+Stopped at: Completed 16-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
