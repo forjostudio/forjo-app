@@ -108,12 +108,23 @@
 --   `now()` es estable dentro de la transacción, así que las dos lecturas son del MISMO instante y no
 --   hay skew posible entre el día y la hora.
 --
---   ⚠ ES UN CAMBIO PERMISIVO, y se evaluó como tal en el threat model (T-16-05, disposición
---   `accept`): el alta manual del panel está EXENTA de la ventana de reserva, así que el dueño puede
---   crear turnos con fecha/hora pasada. El vector completo es autolesión del propio dueño, en su
---   propio tenant, sobre un horario que YA PASÓ — no afecta la disponibilidad futura, no toca otro
---   negocio, y ninguna superficie anónima puede crear turnos en el pasado (el booking público sí
---   respeta la ventana). Reabrir si alguna de esas dos condiciones cambia.
+--   ⚠ ES UN CAMBIO PERMISIVO, y se evaluó como tal en el threat model (T-16-05). El alta manual del
+--   panel está EXENTA de la ventana de reserva, así que el dueño puede crear turnos con fecha/hora
+--   pasada: eso es autolesión del propio dueño, en su propio tenant, sobre un horario que YA PASÓ —
+--   no afecta la disponibilidad futura y no toca otro negocio.
+--
+--   ⚠⚠ CORRECCIÓN (secure-phase de la Phase 16): la versión original de este bloque agregaba que
+--   "ninguna superficie anónima puede crear turnos en el pasado". ESO ES FALSO y está MEDIDO: con
+--   `SET LOCAL ROLE anon`, `book_slot_atomic` creó un turno a `current_date - 30`. El `INSERT`
+--   directo sí lo bloquea la RLS (42501), pero la función es SECURITY DEFINER y tiene
+--   `GRANT EXECUTE ... TO anon` desde la migración 041, así que la RLS no corre adentro. El backstop
+--   de ventana (`isDateOutOfWindow`) vive SOLO en `app/api/booking/create/route.ts`, o sea en el
+--   route handler, no en la base — y los dos parámetros que hacen falta (`business_id`, `service_id`)
+--   son públicos.
+--
+--   Ese agujero es PRE-EXISTENTE (desde la 041) y NO lo abre esta migración: no depende de GATE-03 ni
+--   de ningún cambio de este archivo. Se registró aparte para arreglarlo en su propia unidad de
+--   trabajo. Lo que esta corrección invalida es la PREMISA del riesgo aceptado, no el cambio.
 --
 -- ── QUÉ NO CAMBIA (inventario explícito, molde de cada redefinición de este repo) ───────────────
 --   · La FIRMA de las dos funciones y su `LANGUAGE plpgsql` + definer + `search_path` fijo ⇒
