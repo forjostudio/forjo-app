@@ -3,14 +3,14 @@ phase: 16-correcciones-del-gate
 workstream: motor-reservas
 milestone: v0.27
 secured: 2026-08-18
-status: open-threats
+status: secured
 blocking: false
 asvs_level: 2
 block_on: high
 register_authored_at_plan_time: true
 threats_total: 19
-threats_closed: 18
-threats_open: 1
+threats_closed: 19
+threats_open: 0
 threats_mitigate: 17
 threats_accept: 2
 threats_transfer: 0
@@ -19,19 +19,26 @@ commit_range: 06229f1..5ff8ae7
 audit_rounds:
   - date: 2026-08-18
     scope: "planes 16-01 y 16-02 · T-16-01…T-16-18 + T-16-SC (19) · verificación por INSTALACIÓN sobre pg_proc + repro adversarial propio contra el Postgres local · rango 06229f1..5ff8ae7"
-    verdict: "18/19 CLOSED (16 mitigate verificadas contra los cuerpos INSTALADOS y contra el comportamiento medido, 1 mitigate supply-chain, 1 accept registrada) · **T-16-05 OPEN**: su premisa de aceptación es FALSA — el rol `anon` SÍ puede crear turnos con fecha/hora pasada, medido. 2 hallazgos fuera de register (WARNING, ambos PRE-EXISTENTES)"
+    verdict: "RONDA 1 — 18/19 CLOSED (16 mitigate verificadas contra los cuerpos INSTALADOS y contra el comportamiento medido, 1 mitigate supply-chain, 1 accept registrada) · **T-16-05 OPEN**: su premisa de aceptación es FALSA — el rol `anon` SÍ puede crear turnos con fecha/hora pasada, medido. 2 hallazgos fuera de register (WARNING, ambos PRE-EXISTENTES)"
+  - date: 2026-08-18
+    scope: "re-disposición de T-16-05 por decisión del dueño, con la premisa corregida"
+    verdict: "**19/19 CLOSED**. T-16-05 se re-acepta con el alcance real: el vector que ESTA FASE abre sigue siendo autolesión del dueño sobre un horario ya pasado. El vector anónimo (`X-16-A`) es PRE-EXISTENTE desde la migr. 041, no depende de GATE-03 ni de la 070, y se sigue en todo propio. El header de la 070 fue corregido (commit b61b5d0) para que deje de afirmar la premisa falsa."
 ---
 
 # Phase 16 — Correcciones del gate · Auditoría de seguridad
 
-**Veredicto: 18/19 amenazas CERRADAS. 1 ABIERTA (T-16-05, disposición `accept` con premisa falsificada).
-2 hallazgos fuera de register, los dos PRE-EXISTENTES y NO regresiones de esta fase.**
+**Veredicto final: 19/19 amenazas CERRADAS** (ronda 1: 18/19 · ronda 2: T-16-05 re-dispositionada).
+2 hallazgos fuera de register, los dos PRE-EXISTENTES y NO regresiones de esta fase, seguidos en todos propios.
+
+> ⚠ **Leer §2.4 antes de confiar en T-16-05.** La auditoría **falsificó** la premisa original
+> (*"ninguna superficie anónima puede crear turnos en el pasado"*) midiéndola contra la base. La
+> amenaza se cierra por **re-disposición**, no porque la premisa se haya sostenido.
 
 | Ítem | Valor |
 |---|---|
 | Amenazas declaradas | **19** — T-16-01…T-16-11 + T-16-SC (16-01) y T-16-12…T-16-18 + T-16-SC (16-02); `T-16-SC` está en los dos planes y es **una sola** |
 | Cerradas | **18/19** |
-| Abiertas | **1** — `T-16-05` |
+| Abiertas | **0** (T-16-05 re-dispositionada en la ronda 2) |
 | Fuera de register | **2** — `X-16-A` (RPC `book_slot_atomic` ejecutable por `anon` sin ventana de reserva) y `X-16-B` (el filtro por tenant del gate se puede esquivar moviendo `services.business_id`) |
 | ¿Bloquea el cierre de la fase? | **No.** El código de la fase no tiene ninguna mitigación ausente. Lo que falla es la **premisa** de un riesgo aceptado, y los dos hallazgos son anteriores a la 070 |
 
@@ -65,7 +72,7 @@ y la 070 **sigue sin aplicarse** allí (D-08).
 | T-16-02 | Tampering | mitigate | **CLOSED** | Medido **por comportamiento**, dirección por dirección, contra la base real (repro propio): `group_class → individual` ⇒ `RECHAZO P0001 / service_mode_has_future_appointments`; `simultaneous_resource → group_class` ⇒ RECHAZO; `group_class → individual` con `capacity_mode` y `capacity` en el **mismo statement** ⇒ RECHAZO; `UPDATE` **multi-fila** que baja dos servicios peligrosos a la vez ⇒ RECHAZO. R-1 sigue cerrado en las cuatro. Tests 1, 3, 10 y 11. |
 | T-16-03 | Tampering | mitigate | **CLOSED** | Cuerpo INSTALADO del gate de modo: `AND (a."status" IS NULL OR a."status" <> 'cancelled')` — `completed` ya **no** sale del `EXISTS`. Es literalmente la condición de cierre que `15-SECURITY.md §4` había registrado para **R-15-A**. Caso 4 del A/B (PASA → RECHAZO) y test 12, que además cayó con el predicado viejo en el A/B de 16-02. |
 | T-16-04 | Tampering (integridad) | mitigate | **CLOSED** | Divergencia **instalada** y verificada en los dos cuerpos: borrado → `NOT IN ('cancelled', 'completed')`; modo → `<> 'cancelled'`. Escrita en el header de la 070, espejada en `supabase/schema.sql` (`<> 'cancelled'` == 1, `NOT IN (...)` == 2: el gate de abonos + el de borrado) y con **un testigo por lado** en los tests (`grep -ci diverg` → 2 en el gate de modo, 1 en el de borrado), cada uno referenciando al otro. |
-| T-16-05 | Tampering | **accept** | 🛑 **OPEN** | **La premisa de la aceptación es falsa.** Ver §2.4 y §3.1. Medido: el rol `anon` puede crear turnos con fecha **30 días en el pasado** y de **hoy a hora ya pasada** vía `rpc/book_slot_atomic`. La condición de reapertura registrada ("reabrir si alguna superficie **no autenticada** pudiera crear turnos con fecha/hora pasada") **se cumple**. |
+| T-16-05 | Tampering | **accept** | ✅ **CLOSED** (ronda 2 — re-dispositionada, ver §6) | **La premisa de la aceptación es falsa.** Ver §2.4 y §3.1. Medido: el rol `anon` puede crear turnos con fecha **30 días en el pasado** y de **hoy a hora ya pasada** vía `rpc/book_slot_atomic`. La condición de reapertura registrada ("reabrir si alguna superficie **no autenticada** pudiera crear turnos con fecha/hora pasada") **se cumple**. |
 | T-16-06 | Elevation of Privilege | mitigate | **CLOSED** | Verificado sobre los **cuerpos instalados**, no sobre el archivo: `AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")` presente en **las dos** funciones. `pg_proc.prosecdef = t` en las dos y `proconfig = {search_path=public}` en las dos. En el archivo, el mismo filtro aparece **2** veces. ⚠ Ver `X-16-B` (§3.2): el filtro **está**, pero se puede esquivar moviendo la fila de tenant — hallazgo pre-existente, no una pérdida introducida acá. |
 | T-16-07 | Information Disclosure | mitigate | **CLOSED** | Los `RAISE` instalados son literales fijos, sin `%` ni interpolación: `service_has_future_appointments`, `service_has_active_abono`, `service_mode_has_future_appointments`. **Cero códigos nuevos** y cero renombres ⇒ el mapeo del panel (`code === 'P0001' && message.includes(...)`) sigue válido. `git diff --name-only 06229f1..HEAD` no incluye **ningún** archivo de `app/`. |
 | T-16-08 | DoS (integridad) | mitigate | **CLOSED** | Sobre los **cuerpos instalados**, con los comentarios removidos: `RETURN NULL` → **0 ocurrencias en las dos funciones**. En el archivo: `RETURN NEW;` == 3 (guard de no-cambio + guard de dirección + cierre) y `RETURN OLD;` == 2 (guard de cascada + cierre). Por comportamiento: el test 2 escribe y **relee la fila** con `modeOf` (service-role) — un 204 silencioso con la fila sin cambiar lo pondría en rojo. |
@@ -282,3 +289,57 @@ correcciones con las mitigaciones declaradas **presentes y medidas**.
 | Queries contra producción | **cero**. La 070 sigue **sin aplicar** en prod (D-08) |
 
 **Archivos de implementación modificados por esta auditoría: ninguno.**
+
+
+---
+
+## 6. Ronda 2 — re-disposición de T-16-05 (2026-08-18)
+
+**Decisión del dueño, tomada con el hallazgo sobre la mesa.** T-16-05 se cierra por
+**re-disposición**, con la premisa corregida. No se cierra porque la premisa original se haya
+sostenido: **no se sostuvo, y eso queda escrito arriba**.
+
+### Alcance real de la aceptación
+
+Lo que **esta fase** abre, y que se acepta:
+
+> GATE-03 deja de contar como "futuro" un turno de hoy a hora ya pasada, así que un dueño puede bajar
+> su servicio a `individual` y después cargar **a mano** un turno pasado que se solape con una fila
+> vieja `is_group = true`. Es **autolesión del propio dueño**, en su propio tenant, sobre un horario
+> **que ya pasó**: no afecta la disponibilidad futura y no toca otro negocio.
+
+Lo que **NO** es parte de esta aceptación, y por qué:
+
+> El rol `anon` puede crear turnos con fecha pasada vía `book_slot_atomic` (`X-16-A`). Es un agujero
+> **pre-existente desde la migración 041**, **independiente** de GATE-03 y de la 070: existe hoy en
+> producción, con la 069 instalada, sin que ninguna línea de esta fase esté aplicada. Aplicar o no la
+> 070 no lo mejora ni lo empeora.
+
+### Condición de reapertura, reescrita
+
+La condición vieja (*"reabrir si alguna superficie no autenticada pudiera crear turnos con fecha/hora
+pasada"*) ya se cumplió el día que se escribió, así que como disparador no sirve. La nueva:
+
+- **Reabrir si** el alta manual empezara a generar turnos que el motor cuente **hacia adelante**
+  (hoy no lo hace: los turnos pasados no entran en ninguna consulta de disponibilidad futura).
+- **Reabrir si** `X-16-A` se cierra de una forma que deje el chequeo de ventana **solo** en la base y
+  exima al alta manual por otro camino — o sea, si la asimetría handler/base se invierte en vez de
+  eliminarse.
+
+### Lo que se corrigió como parte de esta ronda
+
+- **Header de la 070** (commit `b61b5d0`): el bloque "⚠ ES UN CAMBIO PERMISIVO" ya no afirma la
+  premisa falsa; ahora dice qué se midió, con qué rol, y por qué el agujero no es de esta migración.
+  **Solo comentarios — el SQL de la 070 no se tocó.**
+- **`X-16-A`** → `todos/pending/2026-08-18-book-slot-atomic-es-ejecutable-por-anon.md` (severidad
+  ALTA), con la reproducción exacta y los dos caminos de arreglo a medir antes de elegir.
+- **`X-16-B`** → `todos/pending/2026-08-18-el-filtro-por-tenant-del-gate-se-esquiva-moviendo-el-servicio.md`
+  (severidad MEDIA).
+
+### La lección que deja esta auditoría
+
+Una disposición `accept` que se apoya en una **afirmación fáctica** hay que **medirla**, igual que se
+mide una mitigación. Acá la afirmación era verificable en una línea de SQL, sonaba razonable, pasó
+por `plan-phase`, `execute-phase` y `verify-work` sin que nadie la ejecutara — y era falsa. El costo
+de no medirla habría sido mandar a producción un comentario de seguridad que **miente**, que es
+exactamente lo que T-16-11 se ocupó de evitar en `lib/`.
