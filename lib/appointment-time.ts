@@ -12,16 +12,31 @@
 //
 // Funciones PURAS: sin React ni Supabase → testeables sin DB (test/appointment-time.test.ts).
 //
-// ESTA FUNCIÓN ES LA FUENTE DE VERDAD DEL CRITERIO, también para la base. Hasta la migración 070 los
-// dos gates de servicio (`services_block_delete` de la 065 y `services_block_mode_change` de la 068)
-// definían "futuro" como `date >= today` en hora AR SIN la hora, así que un turno de hoy a una hora
-// ya pasada se veía en "Pasados" y seguía bloqueando el borrado o el cambio de modo de su servicio.
-// La 070 cerró esa divergencia: los dos gates ahora comparan fecha Y hora, contra el INICIO del turno
-// y con `>=` inclusive, replicando en SQL exactamente lo que hace `isPastAppointment` (el fix del gap
-// G4 que la originó). Si algún día cambia el criterio de acá, hay que mover la 070 en el mismo
-// movimiento — y NO sumarle la duración del turno de un lado solo: eso reintroduce la divergencia al
-// revés (un turno de 30 min a las 14:00 sería "pasado" en la UI a las 14:01 y "futuro" en la base
-// hasta las 14:30).
+// ── ESTA FUNCIÓN Y LOS GATES DE LA BASE MIDEN COSAS DISTINTAS, A PROPÓSITO ──────────────────
+// Hasta la migración 070 los dos gates de servicio (`services_block_delete` de la 065 y
+// `services_block_mode_change` de la 068) definían "futuro" como `date >= today` en hora AR SIN la
+// hora, así que un turno de HOY a una hora ya pasada se veía en "Pasados" y seguía bloqueando el
+// borrado o el cambio de modo de su servicio hasta la medianoche. Eso es el gap G4, y la 070 lo
+// cerró: los dos gates pasaron a mirar la hora además del día.
+//
+// PERO NO CON ESTE MISMO CORTE, y la diferencia es deliberada:
+//   · ACÁ el corte es el INICIO del turno (`hhmmss(time) < hhmmss(now)`), porque la pregunta que
+//     contesta esta función es "¿ESTO SE LO MUESTRO AL DUEÑO COMO PASADO?": a las 14:01 el turno de
+//     las 14:00 ya arrancó y su lugar es la pestaña "Pasados".
+//   · EN LOS GATES el corte es el FIN del turno
+//     (`date + time + COALESCE(duration_minutes, 30) > ahora_AR`, la misma expresión con la que el
+//     EXCLUDE gist 013/041 define el intervalo que un turno ocupa), porque la pregunta que contestan
+//     ellos es "¿ESTA FILA TODAVÍA OCUPA LA AGENDA?": un turno EN CURSO sí la ocupa, y el tramo que
+//     le queda por delante sigue siendo reservable.
+// Medir el INICIO del lado de la base tiene consecuencias MEDIDAS (code review de la Phase 16,
+// CR-01/IN-02): deja cambiar `group_class → individual` con una clase en curso —lo que suelta una
+// fila viva con `is_group = true`, fuera del EXCLUDE 013 y del gate espejo de la 064, o sea R-1— y
+// deja borrar un servicio mientras se está prestando.
+//
+// La ventana entre los dos criterios es, como máximo, la duración de un turno, y es el precio
+// correcto: cada lado usa el corte que responde SU pregunta. Si algún día cambia el criterio de acá,
+// NO hay que "sincronizar" la 070 con él por simetría — hay que preguntarse primero cuál de las dos
+// preguntas cambió.
 
 /** Par de strings comparables lexicográficamente con las columnas `date` y `time` de appointments. */
 export interface ARNow {

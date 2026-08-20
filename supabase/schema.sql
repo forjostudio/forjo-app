@@ -556,18 +556,20 @@ CREATE OR REPLACE FUNCTION "public"."services_block_delete"() RETURNS "trigger"
     SET "search_path" TO 'public'
     AS $$
 DECLARE
-  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
-  -- Hora AR del MISMO instante que v_today (now() es estable en la transacción): migr. 070, GATE-03.
-  v_now_time time := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::time;
+  -- Instante AR (migr. 070, GATE-03). Una sola lectura: now() es estable en la transacción.
+  v_now timestamp := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires');
 BEGIN
   -- Guard de cascada: en DELETE FROM businesses el padre ya no existe cuando cascadea a services.
   IF OLD."business_id" IS NOT NULL
      AND NOT EXISTS (SELECT 1 FROM businesses b WHERE b."id" = OLD."business_id") THEN
     RETURN OLD;
   END IF;
-  -- "Futuro" = fecha Y HORA (migr. 070), comparado contra el INICIO del turno y con >= inclusive,
-  -- espejando lib/appointment-time.ts::isPastAppointment (gap G4). NO se le suma la duración: eso
-  -- desalinearía la base respecto de la UI al revés. date y time son NOT NULL, no hay NULL que cubrir.
+  -- "Futuro" = el turno TODAVÍA NO TERMINÓ (migr. 070, GATE-03), con la MISMA expresión con la que
+  -- el EXCLUDE 013/041 define el intervalo que ocupa: date + time + COALESCE(duration_minutes, 30).
+  -- ⚠ El corte es el FIN, no el inicio: diverge A PROPÓSITO de lib/appointment-time.ts::
+  -- isPastAppointment, que contesta "¿lo muestro como pasado?" mientras este gate contesta "¿todavía
+  -- ocupa la agenda?" — un turno EN CURSO sí la ocupa. date y time son NOT NULL; duration_minutes es
+  -- nullable y el COALESCE a 30 es el mismo que la constraint 013 le aplica a esa misma fila.
   -- cancelled y completed NO bloquean (uno se anuló, el otro ya se prestó: es historia). La rama
   -- IS NULL es obligatoria: status es NULLABLE y NOT IN sobre NULL evalúa NULL y ABRIRÍA el gate.
   -- ⚠ DIVERGENCIA DELIBERADA con services_block_mode_change, que desde la 070 excluye SOLO cancelled:
@@ -575,7 +577,7 @@ BEGIN
   -- intercambiables; unificarlos re-rompe el gap UAT #2 de la Phase 13 o reabre R-15-A.
   IF EXISTS (SELECT 1 FROM appointments a WHERE a."service_id" = OLD."id"
        AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
-       AND (a."date" > v_today OR (a."date" = v_today AND a."time" >= v_now_time))
+       AND (a."date" + a."time" + make_interval(mins => COALESCE(a."duration_minutes", 30))) > v_now
        AND (a."status" IS NULL OR a."status" NOT IN ('cancelled', 'completed'))) THEN
     RAISE EXCEPTION 'service_has_future_appointments' USING ERRCODE = 'P0001';
   END IF;
@@ -598,9 +600,8 @@ CREATE OR REPLACE FUNCTION "public"."services_block_mode_change"() RETURNS "trig
     SET "search_path" TO 'public'
     AS $$
 DECLARE
-  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
-  -- Hora AR del MISMO instante que v_today (now() es estable en la transacción): migr. 070, GATE-03.
-  v_now_time time := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::time;
+  -- Instante AR (migr. 070, GATE-03). Una sola lectura: now() es estable en la transacción.
+  v_now timestamp := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires');
 BEGIN
   -- Guard de no-cambio (migr. 068, CUPO-08): es el guard REAL del gate. El `UPDATE OF` del trigger
   -- solo evita disparar cuando la columna no viene en el SET; `saveEditService` la manda SIEMPRE.
@@ -621,13 +622,15 @@ BEGIN
   -- Cambiar de modo con turnos futuros vivos dejaría `is_group` desalineado y fuera del EXCLUDE 013
   -- y del gate espejo (R-1 de la Phase 12). La rama IS NULL de status es obligatoria: <> sobre NULL
   -- evalúa NULL y ABRIRÍA el gate. Filtro por tenant explícito: en SECURITY DEFINER no hay RLS.
-  -- "Futuro" = fecha Y HORA (migr. 070), contra el INICIO del turno y con >= inclusive, igual que
-  -- lib/appointment-time.ts::isPastAppointment. ⚠ Y acá se excluye SOLO 'cancelled', a diferencia del
+  -- "Futuro" = el turno TODAVÍA NO TERMINÓ (migr. 070, GATE-03): mismo criterio de FIN de turno que
+  -- el gate de borrado, y acá es donde más importa — con el inicio, una clase EN CURSO cuenta como
+  -- pasada y group_class → individual pasaría, soltando una fila viva is_group=true (R-1).
+  -- ⚠ Y acá se excluye SOLO 'cancelled', a diferencia del
   -- gate de borrado: marcar `completed` un turno FUTURO es un botón de un click del panel, o sea un
   -- bypass del gate (residual R-15-A). Los dos predicados divergen a propósito: no unificarlos.
   IF EXISTS (SELECT 1 FROM appointments a WHERE a."service_id" = OLD."id"
        AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
-       AND (a."date" > v_today OR (a."date" = v_today AND a."time" >= v_now_time))
+       AND (a."date" + a."time" + make_interval(mins => COALESCE(a."duration_minutes", 30))) > v_now
        AND (a."status" IS NULL OR a."status" <> 'cancelled')) THEN
     RAISE EXCEPTION 'service_mode_has_future_appointments' USING ERRCODE = 'P0001';
   END IF;

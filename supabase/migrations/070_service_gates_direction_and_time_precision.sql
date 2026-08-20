@@ -82,36 +82,66 @@
 --   justo en la migración que decide separarlo es el peor momento posible. Si alguien los "unifica"
 --   más adelante por simetría, reabre R-15-A o re-rompe el gap UAT #2 — uno de los dos, seguro.
 --
--- ── (3) GATE-03: FECHA + HORA, EN LOS DOS GATES ────────────────────────────────────────────────
---   El predicado de fecha pasa de `a."date" >= v_today` (solo el día) a:
+-- ── (3) GATE-03: FECHA + HORA, EN LOS DOS GATES, CONTRA EL **FIN** DEL TURNO ───────────────────
+--   El predicado de fecha pasa de `a."date" >= v_today` (sólo el día) a:
 --
---     a."date" > v_today OR (a."date" = v_today AND a."time" >= v_now_time)
+--     (a."date" + a."time" + make_interval(mins => COALESCE(a."duration_minutes", 30))) > v_now
 --
---   Tres cosas que hay que dejar por escrito para que nadie las "mejore" después:
+--   que es LITERALMENTE la misma expresión con la que el EXCLUDE gist 013/041 define el intervalo que
+--   un turno OCUPA, y la misma que usan `book_slot_atomic` y los cuatro gates espejo (042, 058, 062,
+--   063, 064). El corte NO es el inicio del turno: es su FIN. Un turno que YA EMPEZÓ y TODAVÍA NO
+--   TERMINÓ sigue contando en los dos gates.
 --
---     · SE COMPARA CONTRA EL INICIO DEL TURNO, NUNCA CONTRA SU FIN, y no es estilo:
---       `lib/appointment-time.ts::isPastAppointment` —el fix del gap G4 en la UI— hace
---       `hhmmss(appt.time) < hhmmss(now.time)`, o sea compara el inicio. Sumarle la duración
---       reintroduciría la MISMA inconsistencia UI↔base que GATE-03 viene a cerrar, sólo que al revés:
---       un turno de 30 min a las 14:00 sería "pasado" en la UI a las 14:01 y "futuro" en la base
---       hasta las 14:30. Por eso el predicado no menciona la duración del turno.
---     · EL `>=` ES INCLUSIVE en la hora exacta, espejo del `<` estricto de `isPastAppointment`: el
---       turno de la hora exacta todavía no pasó y sigue bloqueando.
---     · NO HAY RAMA DEFENSIVA ANTE NULL para estas dos columnas, y eso está VERIFICADO, no asumido:
---       `appointments.date` y `appointments.time` son NOT NULL. La rama `status IS NULL` SÍ se
---       conserva en los dos gates: `status` sigue siendo nullable y `NOT IN`/`<>` sobre NULL evalúa
---       NULL —ni true ni false—, así que esas filas quedarían fuera del EXISTS y ABRIRÍAN el gate.
---       El repo ya pagó esa trampa dos veces (migr. 065 y el read-path de 13-01).
+--   ⚠⚠ CORRECCIÓN (code review de la Phase 16, CR-01 + IN-02). La versión original de este bloque
+--   decía lo CONTRARIO —"SE COMPARA CONTRA EL INICIO DEL TURNO, NUNCA CONTRA SU FIN"— con el argumento
+--   de la paridad con `isPastAppointment`. Ese criterio está MEDIDO como incorrecto para estos dos
+--   gates: con una clase EN CURSO (`is_group = true`, `confirmed`, arrancó hace 1 h y dura 4 h) el
+--   predicado por INICIO deja pasar `group_class → individual`, y el servicio queda con una fila VIVA
+--   `is_group = true` — FUERA del EXCLUDE gist 013 (`AND NOT is_group`) y fuera del gate espejo de la
+--   064. Con esa fila huérfana, `book_slot_atomic` inserta un turno superpuesto SIN UN SOLO ERROR
+--   (reproducido punta a punta contra el local, en transacción). Eso es exactamente R-1, el agujero que
+--   este gate existe para tapar.
 --
---   `v_now_time` se declara al lado del `v_today` que ya existía y se toma en hora AR (UTC-3 sin DST)
---   por el mismo motivo: a las 22:00 de Buenos Aires el `now()` en UTC ya es el día siguiente.
---   `now()` es estable dentro de la transacción, así que las dos lecturas son del MISMO instante y no
---   hay skew posible entre el día y la hora.
+--   POR QUÉ LA DIVERGENCIA CON LA UI ES CORRECTA (y no es la que GATE-03 vino a cerrar). Los dos lados
+--   contestan PREGUNTAS DISTINTAS:
 --
---   ⚠ ES UN CAMBIO PERMISIVO, y se evaluó como tal en el threat model (T-16-05). El alta manual del
---   panel está EXENTA de la ventana de reserva, así que el dueño puede crear turnos con fecha/hora
---   pasada: eso es autolesión del propio dueño, en su propio tenant, sobre un horario que YA PASÓ —
---   no afecta la disponibilidad futura y no toca otro negocio.
+--     · `isPastAppointment` (UI, /turnos) contesta "¿ESTO SE LO MUESTRO AL DUEÑO COMO PASADO?".
+--       Para eso el INICIO es el criterio correcto: a las 14:01, el turno de las 14:00 ya arrancó y su
+--       lugar es la pestaña "Pasados", no la de "Próximos".
+--     · ESTOS DOS GATES contestan "¿ESTA FILA TODAVÍA OCUPA LA AGENDA?". Para eso el criterio correcto
+--       es el FIN: un turno en curso SÍ la ocupa, y el tramo que le queda por delante SÍ es reservable
+--       —y es justo lo que el EXCLUDE 013 protege, con esta misma expresión—.
+--
+--   O sea: la divergencia es DELIBERADA y del mismo tipo que la de GATE-02 (el `completed`, ver punto
+--   2). Lo que GATE-03 vino a cerrar NO era "que la base y la UI usen la misma fórmula" sino que la
+--   base contara como futuro un turno de HOY que ya terminó: eso queda cerrado igual —el turno de las
+--   14:00 de 30 min deja de trabar a las 14:30, no a la medianoche—, sólo que el corte cae en el FIN
+--   y no en el inicio. La ventana de diferencia entre los dos criterios es, como máximo, la duración
+--   de un turno.
+--
+--   · `COALESCE(a."duration_minutes", 30)` NO ES UN NÚMERO INVENTADO ACÁ, y por eso se elige antes que
+--     un fail-closed ("duración nula ⇒ sigue ocupando"): `appointments.duration_minutes` es NULLABLE, y
+--     para una fila con duración nula el EXCLUDE gist 013 —el invariante que estos gates protegen— YA
+--     decide que ocupa 30 minutos, con esta misma expresión, carácter por carácter. Un gate que usara
+--     otro valor estaría en desacuerdo con la constraint sobre LA MISMA FILA: bloquearía (o dejaría
+--     pasar) por un intervalo que la base no reconoce. Un fail-closed, además, devolvería el gap G4 por
+--     la ventana para esas filas (bloquearían todo el día). Si algún día cambia el default de la
+--     constraint, este COALESCE se mueve con ella. Hoy en prod y en local hay CERO filas con duración
+--     nula: el COALESCE es un seguro, no el caso normal.
+--   · NO HAY RAMA DEFENSIVA ANTE NULL para `date` y `time`, y eso está VERIFICADO, no asumido: las dos
+--     columnas son NOT NULL (`date + time` es un timestamp sin ambigüedad). La rama `status IS NULL` SÍ
+--     se conserva en los dos gates: `status` sigue siendo nullable y `NOT IN`/`<>` sobre NULL evalúa
+--     NULL —ni true ni false—, así que esas filas quedarían fuera del EXISTS y ABRIRÍAN el gate. El
+--     repo ya pagó esa trampa dos veces (migr. 065 y el read-path de 13-01).
+--
+--   `v_now` se toma en hora AR (UTC-3 sin DST) por el mismo motivo de siempre: a las 22:00 de Buenos
+--   Aires el `now()` en UTC ya es el día siguiente. Es UNA sola lectura por función y `now()` es estable
+--   dentro de la transacción, así que no hay skew posible entre el día y la hora.
+--
+--   ⚠ SIGUE SIENDO UN CAMBIO PERMISIVO respecto de la 065/068, y se evaluó como tal en el threat model
+--   (T-16-05). El alta manual del panel está EXENTA de la ventana de reserva, así que el dueño puede
+--   crear turnos con fecha/hora pasada: eso es autolesión del propio dueño, en su propio tenant, sobre
+--   un horario que YA TERMINÓ — no afecta la disponibilidad futura y no toca otro negocio.
 --
 --   ⚠⚠ CORRECCIÓN (secure-phase de la Phase 16): la versión original de este bloque agregaba que
 --   "ninguna superficie anónima puede crear turnos en el pasado". ESO ES FALSO y está MEDIDO: con
@@ -178,12 +208,11 @@ BEGIN;
 CREATE OR REPLACE FUNCTION "public"."services_block_delete"() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-  -- "Hoy" en hora de Argentina (UTC-3 sin DST), no en UTC: a las 22:00 de Buenos Aires el `now()`
+  -- "Ahora" en hora de Argentina (UTC-3 sin DST), no en UTC: a las 22:00 de Buenos Aires el `now()`
   -- en UTC ya es el día siguiente y un turno de mañana temprano dejaría de contarse como futuro.
-  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
-  -- La HORA de ahora, en la misma zona (GATE-03). `now()` es estable dentro de la transacción, así
-  -- que ésta y `v_today` son del MISMO instante: no hay skew posible entre el día y la hora.
-  v_now_time time := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::time;
+  -- Es UNA sola lectura y `now()` es estable dentro de la transacción, así que todo el gate mide
+  -- contra el MISMO instante (GATE-03).
+  v_now timestamp := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires');
 BEGIN
   -- 1.1 GUARD DE CASCADA (crítico). En un `DELETE FROM businesses` la fila padre se borra ANTES de
   -- que corran las acciones referenciales hacia `services`, así que la AUSENCIA del negocio
@@ -198,14 +227,21 @@ BEGIN
 
   -- 1.2 Turnos futuros TODAVÍA PENDIENTES.
   --
-  -- "FUTURO" (GATE-03, lo único que cambia acá): fecha Y HORA en zona AR, comparado contra el INICIO
-  -- del turno. Antes miraba SÓLO el día (fecha mayor o igual a hoy), así que un turno de HOY a hora ya
-  -- pasada seguía trabando el borrado hasta la medianoche, mientras la UI ya lo mostraba en
-  -- "Pasados". Es el gap G4 de la Phase 13 cruzando por fin al SQL: el criterio de
-  -- `lib/appointment-time.ts::isPastAppointment` es la fuente de verdad y esto lo replica. El `>=` es
-  -- INCLUSIVE (el turno de la hora exacta todavía no pasó) y no se le suma la duración, porque
-  -- `isPastAppointment` tampoco lo hace: sumarla desalinearía la base respecto de la UI al revés.
-  -- `a."date"` y `a."time"` son NOT NULL: no hay NULL que manejar en esta rama.
+  -- "FUTURO" (GATE-03, lo único que cambia acá): el turno TODAVÍA NO TERMINÓ, medido en hora AR y
+  -- con la MISMA expresión con la que el EXCLUDE gist 013/041 define el intervalo que ese turno
+  -- ocupa (`date + time + COALESCE(duration_minutes, 30)`). Antes miraba SÓLO el día (fecha mayor o
+  -- igual a hoy), así que un turno de HOY ya terminado seguía trabando el borrado hasta la
+  -- medianoche mientras la UI ya lo mostraba en "Pasados" (gap G4 de la Phase 13).
+  -- ⚠ EL CORTE ES EL FIN DEL TURNO, NO SU INICIO, y diverge A PROPÓSITO de
+  -- `lib/appointment-time.ts::isPastAppointment` (que sí compara el inicio). No es un descuido ni
+  -- una asimetría de estilo: las dos preguntas son distintas. La UI pregunta "¿se lo muestro al
+  -- dueño como pasado?" —y a las 14:01 el turno de las 14:00 va a "Pasados"—; este gate pregunta
+  -- "¿esta fila todavía ocupa la agenda?" —y un turno EN CURSO sí la ocupa—. Medir el inicio acá
+  -- deja borrar un servicio que se está prestando en este momento (IN-02 del code review de la
+  -- Phase 16) y, en el gate hermano, suelta una fila `is_group` desalineada (CR-01, reproducido).
+  -- `a."date"` y `a."time"` son NOT NULL: no hay NULL que manejar en esa parte. `duration_minutes`
+  -- SÍ es nullable, y el COALESCE a 30 no es un número inventado acá: es el que la constraint 013 ya
+  -- le aplica a ESA MISMA FILA.
   --
   -- "VIVO": dos estados quedan FUERA del conteo porque ya no son una reserva pendiente.
   --   - `cancelled`: contarlo reproduciría la confusión que la Phase 13 vino a arreglar (el dueño
@@ -230,7 +266,7 @@ BEGIN
       FROM appointments a
      WHERE a."service_id" = OLD."id"
        AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
-       AND (a."date" > v_today OR (a."date" = v_today AND a."time" >= v_now_time))
+       AND (a."date" + a."time" + make_interval(mins => COALESCE(a."duration_minutes", 30))) > v_now
        AND (a."status" IS NULL OR a."status" NOT IN ('cancelled', 'completed'))
   ) THEN
     -- Message = código de dominio FIJO, sin nombres, fechas ni conteos: el texto del RAISE llega al
@@ -274,10 +310,9 @@ ALTER FUNCTION "public"."services_block_delete"() OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."services_block_mode_change"() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-  -- Mismo criterio de zona que `services_block_delete` (065) y `abonos_block_delete` (067).
-  v_today date := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date;
-  -- La HORA de ahora, en la misma zona y del MISMO instante que `v_today` (GATE-03).
-  v_now_time time := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::time;
+  -- Mismo criterio de zona que `services_block_delete` (065) y `abonos_block_delete` (067): hora AR
+  -- (UTC-3 sin DST), una sola lectura, estable dentro de la transacción (GATE-03).
+  v_now timestamp := (now() AT TIME ZONE 'America/Argentina/Buenos_Aires');
 BEGIN
   -- 2.1 GUARD DE NO-CAMBIO, PRIMERO. Éste es el guard REAL del gate: el `UPDATE OF` declarado en el
   -- trigger es sólo una optimización que evita disparar cuando la columna ni siquiera viene en el
@@ -315,9 +350,17 @@ BEGIN
 
   -- 2.4 Turnos futuros VIVOS del servicio.
   --
-  -- "FUTURO" (GATE-03): igual que en el gate de borrado — fecha Y HORA en zona AR, contra el INICIO
-  -- del turno, con `>=` inclusive y sin sumar la duración. Antes era sólo el día, así que un turno de
-  -- HOY a hora ya pasada trababa el cambio de modo hasta la medianoche.
+  -- "FUTURO" (GATE-03): igual que en el gate de borrado — el turno TODAVÍA NO TERMINÓ, con la misma
+  -- expresión del EXCLUDE gist 013/041 (`date + time + COALESCE(duration_minutes, 30)`) en hora AR.
+  -- Antes era sólo el día, así que un turno de HOY ya terminado trababa el cambio de modo hasta la
+  -- medianoche.
+  -- ⚠ EL CORTE ES EL FIN, NO EL INICIO, y acá es donde MÁS importa: con el inicio, una clase EN
+  -- CURSO cuenta como pasada y `group_class → individual` PASA, dejando una fila VIVA con
+  -- `is_group = true` fuera del EXCLUDE 013 y fuera del gate espejo de la 064 — o sea R-1 reabierto.
+  -- Está REPRODUCIDO (CR-01 del code review de la Phase 16): con esa fila huérfana,
+  -- `book_slot_atomic` insertó un turno superpuesto sin un solo error. La divergencia con
+  -- `isPastAppointment` es deliberada y del mismo tipo que la de GATE-02: la UI contesta "¿lo muestro
+  -- como pasado?" y este gate contesta "¿todavía ocupa la agenda?".
   --
   -- "VIVO" (GATE-02, LA DIVERGENCIA): acá se excluye SÓLO `cancelled`, no `completed`. Este gate no
   -- pregunta "¿queda algo por prestar?" sino "¿queda alguna fila cuyo `is_group` quedaría
@@ -341,7 +384,7 @@ BEGIN
       FROM appointments a
      WHERE a."service_id" = OLD."id"
        AND (OLD."business_id" IS NULL OR a."business_id" = OLD."business_id")
-       AND (a."date" > v_today OR (a."date" = v_today AND a."time" >= v_now_time))
+       AND (a."date" + a."time" + make_interval(mins => COALESCE(a."duration_minutes", 30))) > v_now
        AND (a."status" IS NULL OR a."status" <> 'cancelled')
   ) THEN
     -- Código de dominio FIJO, sin nombres de cliente, sin fechas y sin conteos: el texto viaja hasta
