@@ -883,10 +883,23 @@ export function FinancesClient({ businessId }: Props) {
           {appointments.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-sm">Sin turnos en este período</p>
           ) : appointments.map(appt => {
+            // POLISH-10: el nombre del servicio, una sola vez y desde el helper compartido (el
+            // fallback snapshot → join vive en lib/appointment-service.ts, no en el call-site).
+            // Cadena vacía = turno sin servicio resoluble ⇒ la línea de mobile no se renderiza.
+            const svc = apptServiceName(appt, '')
             return (
               <div key={appt.id} className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border text-sm">
                 <span className="text-muted-foreground w-20 flex-shrink-0">{format(parseISO(appt.date), 'd MMM', { locale: es })} {appt.time.slice(0, 5)}</span>
-                <span className="flex-1 truncate font-medium">{appt.client_name}</span>
+                {/* POLISH-10: a 375px la fila era [fecha][cliente][precio][acción] y el servicio
+                    directamente no estaba. Baja como SEGUNDA LÍNEA bajo el nombre del cliente, solo
+                    en mobile: ningún otro dato se desplaza. La línea de acá y la columna de abajo
+                    son COMPLEMENTARIAS — esta se esconde desde 640px, justo donde aparece aquella,
+                    así que nunca se ven las dos a la vez y en desktop la fila de una sola línea
+                    queda exactamente como estaba. */}
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{appt.client_name}</span>
+                  {svc && <span className="block truncate text-xs text-muted-foreground sm:hidden">{svc}</span>}
+                </div>
                 <span className="text-muted-foreground hidden sm:block truncate max-w-32">{apptServiceName(appt, '')}</span>
                 <span className="font-semibold">{fmtARS(apptServicePrice(appt))}</span>
                 {appt.payment_status === 'paid' ? (
