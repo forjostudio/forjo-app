@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin, TriangleAlert, CalendarClock, RefreshCw, Users } from 'lucide-react'
+import { Plus, Minus, Trash2, Clock, DollarSign, Eye, EyeOff, ImageIcon, Check, Sun, Moon, Pencil, MapPin, TriangleAlert, CalendarClock, RefreshCw, Users } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { getVerticalKeyByType, VERTICALS, RUBRO_PLACEHOLDERS, resolveVertical, type VerticalKey } from '@/lib/verticals'
@@ -430,6 +430,183 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
         </div>
       )}
     </div>
+  )
+}
+
+// ── CapacityInlineControl — el modo de cupo se VE en la tarjeta y el número se EDITA ahí mismo ──
+// (POLISH-08 · D-07 + D-08). Es UN solo elemento, no dos: `Clase grupal · [−] 6 [+] lugares`. La misma
+// lección que la Phase 15 aplicó en la base —el número del cupo vive en un solo lugar— aplicada a la
+// pantalla: si el badge mostrara el cupo y el modal fuera el único que lo edita, el dueño tendría que
+// abrir un diálogo entero para subir un lugar, que es exactamente el pedido que salió de la UAT.
+//
+// POR QUÉ EL LABEL DE MODO ES TEXTO Y NO UN CONTROL (D-09). Desde la tarjeta se cambia el NÚMERO,
+// nunca el MODO. Cambiar de modo es la operación peligrosa: es la que el gate de la migr. 070 bloquea
+// cuando hay turnos futuros o un abono activo, y la que necesita las tres explicaciones del explicador
+// (eje de conteo + ejemplo + qué sale mal con el otro modo). Eso no entra en una línea de 12px, así que
+// vive en el modal. Si alguien viene a ponerle un onClick a este span, la respuesta es no.
+//
+// Este componente NO habla con Supabase: recibe `onSave` y devuelve el control del resultado al padre,
+// que es el que tiene el negocio, el cliente y el estado por tarjeta. Acá sólo vive la interacción.
+function CapacityInlineControl({ service, saving, onSave }: {
+  service: Service
+  // Lo calcula el PADRE por tarjeta (savingCapacityId === s.id): guardar un servicio no puede congelar
+  // los steppers de los demás servicios de la lista.
+  saving: boolean
+  // `true` = la base aceptó; `false` = rechazó y hay que volver al valor guardado.
+  onSave: (capacity: number) => Promise<boolean>
+}) {
+  // El fallback cubre filas viejas que quedaron en memoria sin el modo resuelto — mismo criterio que
+  // openEditService (el DEFAULT de la migr. 068 ya las cubre en la DB).
+  const mode: CapacityMode = service.capacity_mode ?? 'individual'
+  const min = minCapacityFor(mode)
+  // El valor GUARDADO sale del prop, normalizado con el piso del modo: es la única fuente de verdad de
+  // "qué hay en la base", y de él sale `dirty`.
+  const saved = normalizeCapacity(Number(service.capacity), min)
+  const label = CAPACITY_MODE_HELP.find(h => h.key === mode)?.label ?? ''
+
+  const [value, setValue] = useState(saved)
+  // Texto crudo del input: misma disciplina que CapacityModeFields (D-06). Mientras el foco está adentro
+  // el texto es la verdad, se acepta el vacío y NO se clampea en cada tecla; se normaliza al salir.
+  const [text, setText] = useState(String(saved))
+  // Marca transitoria del rechazo. Vive ~4s (el mismo lifetime que el toast) y se apaga sola.
+  const [rejected, setRejected] = useState(false)
+  const rejectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Resincronización desde el padre. NO hace falta el ref de foco que sí necesita CapacityModeFields:
+  // allá el prop cambiaba en cada tecla; acá `saved` sólo cambia cuando un guardado se confirmó. Gracias
+  // a esto el componente no tiene que saber que guardó: la fila se limpia sola y el botón desaparece.
+  useEffect(() => {
+    setValue(saved)
+    setText(String(saved))
+  }, [saved])
+
+  // El timer del rechazo no puede sobrevivir al unmount (borrar el servicio desmonta la tarjeta).
+  useEffect(() => () => { if (rejectTimer.current) clearTimeout(rejectTimer.current) }, [])
+
+  const dirty = value !== saved
+  const atMin = value <= min
+  const atMax = value >= MAX_CAPACITY
+
+  function apply(n: number) {
+    const c = normalizeCapacity(n, min)
+    setValue(c)
+    setText(String(c))
+  }
+
+  // Revertir = volver al número guardado. No hay botón "Cancelar": si el dueño vuelve el número a donde
+  // estaba, la fila se limpia sola. Escape es el atajo de teclado del mismo gesto.
+  function revert() {
+    setValue(saved)
+    setText(String(saved))
+  }
+
+  async function handleSave() {
+    const ok = await onSave(value)
+    if (ok) return
+    // Rechazo: el número vuelve al valor guardado ANTES de marcar el error, así no queda ningún número
+    // en pantalla que la base no tenga (el estado zombi "sucio pero fallado"). Como queda limpio, el
+    // botón desaparece solo; el mensaje viaja por toast (cero desplazamiento de layout) y acá sólo
+    // queda la marca en el elemento que falló.
+    revert()
+    setRejected(true)
+    if (rejectTimer.current) clearTimeout(rejectTimer.current)
+    rejectTimer.current = setTimeout(() => setRejected(false), 4000)
+  }
+
+  // Hover/foco de los dos botones del stepper. Va `enabled:` en vez del `disabled:pointer-events-none`
+  // del molde de agenda-client porque acá el botón deshabilitado TIENE que poder mostrar su `title`:
+  // con los eventos de puntero apagados el navegador no hace hit-test y el tooltip nunca aparece, o sea
+  // el callejón sin explicación que el UI-SPEC pide evitar. El resultado visual es el mismo: un botón
+  // deshabilitado no reacciona al hover.
+  const stepBtn = 'flex items-center justify-center text-muted-foreground transition-colors enabled:hover:bg-secondary enabled:hover:text-foreground focus-visible:outline-none focus-visible:bg-secondary focus-visible:text-foreground disabled:opacity-30'
+
+  return (
+    // Un solo item flex de la línea de datos: a 375px el control baja ENTERO a su propia línea en vez de
+    // partirse entre el label y el stepper. El onKeyDown está acá arriba para que Escape funcione con el
+    // foco en cualquier parte del control, incluido el botón Guardar.
+    <span
+      className="inline-flex items-center flex-wrap gap-x-2 gap-y-1"
+      onKeyDown={e => { if (e.key === 'Escape') revert() }}
+    >
+      {/* El label del modo sale de CAPACITY_MODE_HELP (D-03: los labels viven en un solo lugar). Es un
+          span sin onClick, sin role y sin tabIndex: TEXTO, no un control (D-09). */}
+      <span className="font-medium text-foreground">{label}</span>
+      {/* El anillo de foco va en el CONTENEDOR y no en cada hijo: el `overflow-hidden` que redondea las
+          puntas del stepper recorta cualquier box-shadow de los hijos, así que un ring por botón sería
+          invisible. Adentro, cada control marca cuál está enfocado con el fondo, que no se recorta. */}
+      <span
+        role="group"
+        aria-label={`Lugares de ${service.name}`}
+        aria-invalid={rejected ? 'true' : undefined}
+        className={cn(
+          'inline-flex items-center overflow-hidden rounded-md border bg-background transition-colors',
+          'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background',
+          rejected ? 'border-destructive' : dirty ? 'border-primary/50' : 'border-border',
+        )}
+      >
+        <button
+          type="button"
+          aria-label="Un lugar menos"
+          // El title SÓLO en el piso: en un botón usable diría una regla que todavía no aplica.
+          title={atMin ? 'El mínimo de este modo es 2 lugares' : undefined}
+          disabled={saving || atMin}
+          onClick={() => apply(value - 1)}
+          className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <input
+          type="number"
+          // inputMode numérico = teclado de números en mobile. tabular-nums para que pasar de 9 a 10 no
+          // mueva el sufijo. Los spinners nativos se ocultan: el stepper ya es el control.
+          inputMode="numeric"
+          aria-label="Cantidad de lugares"
+          value={text}
+          disabled={saving}
+          onFocus={e => e.target.select()}
+          // Mientras se tipea NO se clampea ni se corrige nada: el string crudo va al estado local.
+          onChange={e => setText(e.target.value)}
+          // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
+          // piso del modo y al techo. Este NO es el último clamp: saveCapacityInline vuelve a normalizar
+          // antes de mandar, y la AUTORIDAD sigue siendo el CHECK de la migr. 068.
+          onBlur={() => {
+            const n = Number(text)
+            apply(text.trim() !== '' && Number.isFinite(n) ? n : value)
+          }}
+          // min/max/step son PISTA del navegador, no la validación.
+          min={min}
+          max={MAX_CAPACITY}
+          step={1}
+          className="h-11 w-14 sm:h-8 sm:w-10 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus-visible:bg-secondary/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <button
+          type="button"
+          aria-label="Un lugar más"
+          title={atMax ? 'El máximo es 99 lugares' : undefined}
+          disabled={saving || atMax}
+          onClick={() => apply(value + 1)}
+          className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </span>
+      {/* Invariable: el piso de los dos modos de cupo compartido es 2, así que nunca es "lugar". */}
+      <span>lugares</span>
+      {/* Sólo cuando hay algo pendiente. Entra con fade + 4px de deslizamiento; SALE sin animar (unmount
+          directo): animar la salida exige mantenerlo montado con un estado más y no paga. Es decisión
+          escrita, no olvido. El ancho mínimo del botón evita que la fila se reacomode al pasar a "Guardando…". */}
+      {dirty && (
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={saving}
+          aria-busy={saving ? 'true' : undefined}
+          className="min-h-11 sm:min-h-0 min-w-24 animate-in fade-in-0 slide-in-from-left-1 duration-150 motion-reduce:animate-none"
+        >
+          {saving ? 'Guardando…' : 'Guardar'}
+        </Button>
+      )}
+    </span>
   )
 }
 
