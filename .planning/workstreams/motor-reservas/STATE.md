@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
-stopped_at: Completed 17-04-PLAN.md
-last_updated: "2026-08-20T21:19:06.597Z"
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-08-20T21:31:44.077Z"
 last_activity: 2026-08-20 -- Phase 17 execution started
 progress:
   total_phases: 17
   completed_phases: 16
   total_plans: 83
-  completed_plans: 80
+  completed_plans: 81
   percent: 94
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 17 (superficie-y-polish) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-08-20 -- Phase 17 execution started
 
@@ -121,6 +121,7 @@ Last activity: 2026-08-20 -- Phase 17 execution started
 | Phase 16 P02 | 26 min | 3 tasks | 4 files |
 | Phase 17 P01 | 34min | 3 tasks | 1 files |
 | Phase 17 P04 | 22min | 3 tasks | 3 files |
+| Phase 17 P02 | 28min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -260,6 +261,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 17-01: los labels de los tres modos de cupo viven en CAPACITY_MODE_HELP (un solo lugar); el explicador es descriptivo, no interactivo (leer no escribe); el clamp del cupo se movio de onChange a onBlur
 - [Phase 17]: La ocupacion y el agrupamiento por slot viven en lib/agenda-occupancy.ts, modulo puro sin imports — El cupo sale de services.capacity (fuente del motor desde la 068) y el modo se lee de capacity_mode; asi la grilla decide con la misma fuente que book_slot_atomic y la logica se puede testear sin DB ni navegador
 - [Phase 17]: El service_id es parte de la clave del grupo y occupiesSeat descarta el hold vencido, ambos probados por mutacion — Un test que pasa con y sin la garantia no cuenta: sacar el service_id pone en rojo el caso 4 y sacar el guard pone en rojo el caso 2
+- [Phase 17]: El patrón de diálogo alto (scroll interno + pie anclado) se aplica POR CALLER — components/ui/dialog.tsx queda byte-idéntico
+- [Phase 17]: savingNewSvc se apaga en un finally, no antes de cada return — el early return por error también tiene que devolver el botón
 
 ### Pending Todos
 
@@ -334,8 +337,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-20T21:18:57.091Z
-Stopped at: Completed 17-04-PLAN.md
+Last session: 2026-08-20T21:31:20.805Z
+Stopped at: Completed 17-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
