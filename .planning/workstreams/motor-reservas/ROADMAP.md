@@ -668,6 +668,25 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
+**Plans**: 0/5 plans complete
+
+Plans:
+**Wave 1**
+
+- [ ] 17-01-PLAN.md — El editor **explica** los tres modos: `CAPACITY_MODE_HELP` como fuente única de label + eje + ejemplo + advertencia (D-01/D-02/D-03/D-04), el radiogroup en grid determinista (D-13) y el campo de cupo con commit en `onBlur` (D-06) — CUPO-09
+- [ ] 17-04-PLAN.md — `lib/agenda-occupancy.ts`: la ocupación y el agrupamiento por slot como funciones **puras** (`buildDayEntries`, `computeOverlapFull`, `capacityOf`, `occupiesSeat`) + su suite con **2 casos discriminantes probados por mutación**, y Finanzas mobile con el servicio — POLISH-09 / POLISH-10
+
+**Wave 2** *(17-02 blocked on 17-01 · 17-05 blocked on 17-04)*
+
+- [ ] 17-02-PLAN.md — El diálogo "Editar servicio" scrollea por dentro con el `DialogFooter` anclado (D-05, sin tocar el componente base) + el alta confirma con "Agregar servicio" al final y sin doble submit — CUPO-09
+- [ ] 17-05-PLAN.md — La columna del día consume el módulo puro: se borra la lectura del cupo por bloque y la deducción del modo (D-11), `OccupancyBadge` compartido por los dos modos, la clase grupal colapsa en **una** línea con contador `3/6` y un solo clickeable (D-10/D-12) — POLISH-09
+
+**Wave 3** *(blocked on 17-02)*
+
+- [ ] 17-03-PLAN.md — `CapacityInlineControl`: el badge de modo **es** el control de cupo en la tarjeta de `/servicios` (D-07/D-08/D-09), con `saveCapacityInline` como **segundo write path** (filtro por tenant, payload `{ capacity }`, copy propia del rechazo) y estado de guardado **por tarjeta** — POLISH-08
+
+**Waves**: dos cadenas en paralelo que no comparten un solo archivo. La de `settings-client.tsx` es **secuencial** (17-01 → 17-02 → 17-03): los tres planes editan el mismo archivo, así que paralelizarlos sería una ficción que el orquestador serializaría igual. La de la agenda parte la lógica de la pintura (17-04 → 17-05) porque el runner corre en `environment: 'node'` y no renderiza JSX: lo testeable se extrae y se congela antes de tocar la grilla. **Rojo conocido y declarado:** al cerrar 17-04 el módulo queda sin consumidores y `agenda-client.tsx` sigue con su lógica vieja — lo cierra 17-05, y ningún criterio de 17-04 depende de eso.
+
 **Security/Integrity relevance**: Baja. No toca el motor, los constraints ni el aislamiento por tenant. Dos precauciones: el editor escribe `capacity_mode` y `capacity`, así que sigue teniendo que **mapear el rechazo del gate a copy propia** en vez de interpolar el error de la base (T-14-25 / T-13-09); y POLISH-09 **no es cosmético** — `agenda-client.tsx:467` lee `time_blocks.capacity`, que desde la 068 **ya no decide nada**, así que hoy la grilla calcula "lleno" con un número que el motor ignora. No se nota porque todo vale 1, pero miente en cuanto se declare una clase de cupo > 1. Es la **cuarta** lectura que D-08 dejó para esta fase.
 **UI hint**: yes
 
@@ -694,4 +713,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 0/? | Not started | — |
+| 17. Superficie y polish | 0/5 | Planned | — |
