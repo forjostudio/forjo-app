@@ -273,6 +273,23 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
   sharedCapacityBlocked?: boolean
 }) {
   const isIndividual = value === 'individual'
+
+  // ── El campo "Cuántos lugares" se deja VACIAR y se corrige al SALIR (D-06) ────────────────────────
+  // Mientras el foco está adentro la fuente de verdad del input es este texto crudo, no el número del
+  // formulario. Antes el onChange normalizaba en cada tecla: borrar el 2 daba parseInt('') = NaN, el
+  // helper lo llevaba al piso y REESCRIBÍA el campo bajo el cursor — el defecto que levantó la UAT.
+  // El molde es el NumberField de web/_sections/section-forms.tsx (mismo proyecto, misma lógica):
+  // validación inline al salir del campo, no al tipear.
+  const [capacityText, setCapacityText] = useState(String(capacity))
+  // ¿El cursor está adentro del campo? El toggle de modo sube el cupo a su piso, así que el texto tiene
+  // que seguir al prop cuando el cambio viene de OTRO control; pero si se resincroniza mientras se
+  // tipea, escribir "007" se reescribe a "7" abajo del cursor. Este ref es el que separa los dos casos.
+  const capacityFocusedRef = useRef(false)
+  useEffect(() => {
+    if (capacityFocusedRef.current) return
+    setCapacityText(String(capacity))
+  }, [capacity])
+
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Cómo se ocupa el cupo</Label>
@@ -376,9 +393,35 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
           <Label className="text-xs text-muted-foreground">Cuántos lugares</Label>
           <Input
             type="number"
-            value={capacity}
-            onFocus={e => e.target.select()}
-            onChange={e => onChange({ capacity: normalizeCapacity(parseInt(e.target.value), minCapacityFor(value)) })}
+            // inputMode numérico = teclado de números en mobile; tabular-nums para que pasar de 9 a 10 no
+            // mueva nada al lado; los spinners nativos se ocultan porque el alto del campo (44px en mobile)
+            // los deja diminutos y sin target usable.
+            inputMode="numeric"
+            className="tabular-nums h-11 sm:h-8 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            value={capacityText}
+            onFocus={e => { capacityFocusedRef.current = true; e.target.select() }}
+            // Mientras se tipea NO se clampea: el string crudo va al estado local y sólo se propaga al
+            // formulario si parsea, y TAL CUAL. Propagar el valor clampeado sería volver al bug: el padre
+            // cambiaría el prop y el input se resincronizaría encima de lo que se está escribiendo.
+            onChange={e => {
+              const raw = e.target.value
+              setCapacityText(raw)
+              if (raw.trim() === '') return
+              const n = Number(raw)
+              if (Number.isFinite(n)) onChange({ capacity: n })
+            }}
+            // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
+            // piso del modo y al techo. Este es el único clamp del camino de edición; la última línea sigue
+            // siendo el payload de saveEditService/addService, y la AUTORIDAD el CHECK de la migr. 068.
+            onBlur={() => {
+              capacityFocusedRef.current = false
+              const n = Number(capacityText)
+              const base = capacityText.trim() !== '' && Number.isFinite(n) ? n : capacity
+              const c = normalizeCapacity(base, minCapacityFor(value))
+              setCapacityText(String(c))
+              onChange({ capacity: c })
+            }}
+            // min/max/step son PISTA del navegador, no la validación: la validación es la línea de arriba.
             min={2}
             max={MAX_CAPACITY}
             step={1}
