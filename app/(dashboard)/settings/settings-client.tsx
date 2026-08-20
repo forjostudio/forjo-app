@@ -717,6 +717,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // capacity_mode/capacity (migr. 062, ampliado por la 068): el default espeja el de la DB → un
   // servicio nuevo nace INDIVIDUAL con cupo 1, y el dueño opta explícitamente por los otros dos modos.
   const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
+  // Guard de doble submit del alta (T-17-05): hasta ahora `addService` no deshabilitaba nada, así que
+  // dos clicks seguidos creaban DOS servicios idénticos y el segundo quedaba huérfano de intención.
+  // Espeja a `savingEditSvc` del diálogo de edición.
+  const [savingNewSvc, setSavingNewSvc] = useState(false)
   // El tab, la lista visible y sus contadores salen de useActiveTabs, invocado más abajo (buscar
   // `manageableServices`): el hook necesita la lista ya filtrada, que depende de `professionals` y
   // `agendaSpaces` — declarados después, así que leerlos acá sería un TDZ en runtime.
@@ -825,19 +829,30 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio. Esta acción no se puede deshacer.`
 
   async function addService() {
+    // El botón deshabilitado es la SEÑAL, no la defensa: el guard se conserva acá adentro porque la
+    // función es lo único que corre siempre (el estado del botón puede quedar viejo por un render en
+    // vuelo, y nada impide llamarla desde otro lado).
     if (!newService.name) return
-    const { name, duration_minutes, price, location_ids, capacity_mode } = newService
-    // Desde la migr. 068 el cupo vale para los TRES modos y está atado al modo por CHECK: individual
-    // ⇒ exactamente 1; grupal y simultáneo ⇒ >= 2. Se normaliza con el piso del modo para que el
-    // INSERT no pueda rebotar contra services_capacity_matches_mode_chk.
-    const capacity = capacity_mode === 'individual' ? 1 : normalizeCapacity(newService.capacity, 2)
-    const { data, error } = await supabase.from('services')
-      .insert({ name, duration_minutes, price, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id })
-      .select().single()
-    if (error) { toast.error('Error'); return }
-    setServices(prev => [...prev, data as Service])
-    setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
-    toast.success('Servicio agregado')
+    if (savingNewSvc) return
+    setSavingNewSvc(true)
+    try {
+      const { name, duration_minutes, price, location_ids, capacity_mode } = newService
+      // Desde la migr. 068 el cupo vale para los TRES modos y está atado al modo por CHECK: individual
+      // ⇒ exactamente 1; grupal y simultáneo ⇒ >= 2. Se normaliza con el piso del modo para que el
+      // INSERT no pueda rebotar contra services_capacity_matches_mode_chk.
+      const capacity = capacity_mode === 'individual' ? 1 : normalizeCapacity(newService.capacity, 2)
+      const { data, error } = await supabase.from('services')
+        .insert({ name, duration_minutes, price, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id })
+        .select().single()
+      if (error) { toast.error('Error'); return }
+      setServices(prev => [...prev, data as Service])
+      setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
+      toast.success('Servicio agregado')
+    } finally {
+      // `finally` y no una línea antes de cada `return`: el early return por error del INSERT y
+      // cualquier excepción de red tienen que devolver el botón, o el alta queda muerta hasta recargar.
+      setSavingNewSvc(false)
+    }
   }
   // NO optimista: capturamos el error real. Defensa en profundidad con business_id (igual que
   // deleteProfessional). NO emite toast de error: el motivo se devuelve y lo traduce el modal, que
@@ -1918,21 +1933,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             )}
             <div className="border-t border-border pt-4 space-y-3">
               <p className="text-sm font-medium">Agregar servicio</p>
+              {/* El `+` que confirmaba el alta se fue de acá (CUPO-09): estaba en col-span-1, o sea el
+                  submit vivía EN EL MEDIO del formulario, antes del modo de cupo y de las sedes. Ahora
+                  la fila es solo campos y las tres columnas se reparten los 12: en mobile cada campo
+                  ocupa su propia fila; en desktop la fila queda igual de compacta que antes. */}
               <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-5 space-y-1">
+                <div className="col-span-12 sm:col-span-6 space-y-1">
                   <Label className="text-xs text-muted-foreground">Nombre</Label>
                   <Input value={newService.name} onChange={e => setNewService(f => ({ ...f, name: e.target.value }))} placeholder="Nombre" />
                 </div>
-                <div className="col-span-3 space-y-1">
+                <div className="col-span-12 sm:col-span-3 space-y-1">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Min.</Label>
                   <Input type="number" value={newService.duration_minutes} onChange={e => setNewService(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))} min={5} step={5} />
                 </div>
-                <div className="col-span-3 space-y-1">
+                <div className="col-span-12 sm:col-span-3 space-y-1">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
                   <Input type="number" value={newService.price} onFocus={e => e.target.select()} onChange={e => setNewService(f => ({ ...f, price: parseFloat(e.target.value) }))} min={0} step={100} />
-                </div>
-                <div className="col-span-1">
-                  <Button size="icon" onClick={addService} className="h-9 w-9"><Plus className="w-4 h-4" /></Button>
                 </div>
               </div>
               <CapacityModeFields
@@ -1955,6 +1971,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   </div>
                 </div>
               )}
+              {/* La confirmación del alta, al FINAL del bloque: después del modo de cupo y de las sedes,
+                  o sea después de todo lo que el dueño tiene que decidir. La etiqueta es "Agregar
+                  servicio" (verbo + sustantivo, regla de microcopy del proyecto) y no un "Guardar"
+                  pelado: así no compite con el "Guardar" del diálogo de edición, que es OTRA operación.
+                  El bloque vive en la página y no en un diálogo, así que el botón está siempre visible.
+                  El `.trim()` del disabled es para que un nombre de solo espacios tampoco lo habilite. */}
+              <Button onClick={addService} disabled={!newService.name.trim() || savingNewSvc} className="w-full sm:w-auto min-h-11 sm:min-h-0">
+                <Plus className="w-4 h-4" /> {savingNewSvc ? 'Agregando…' : 'Agregar servicio'}
+              </Button>
             </div>
           </Card>
 
