@@ -668,13 +668,13 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 1/5 plans executed
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 17-01-PLAN.md — El editor **explica** los tres modos: `CAPACITY_MODE_HELP` como fuente única de label + eje + ejemplo + advertencia (D-01/D-02/D-03/D-04), el radiogroup en grid determinista (D-13) y el campo de cupo con commit en `onBlur` (D-06) — CUPO-09
-- [ ] 17-04-PLAN.md — `lib/agenda-occupancy.ts`: la ocupación y el agrupamiento por slot como funciones **puras** (`buildDayEntries`, `computeOverlapFull`, `capacityOf`, `occupiesSeat`) + su suite con **2 casos discriminantes probados por mutación**, y Finanzas mobile con el servicio — POLISH-09 / POLISH-10
+- [x] 17-04-PLAN.md — `lib/agenda-occupancy.ts`: la ocupación y el agrupamiento por slot como funciones **puras** (`buildDayEntries`, `computeOverlapFull`, `capacityOf`, `occupiesSeat`) + su suite con **2 casos discriminantes probados por mutación**, y Finanzas mobile con el servicio — POLISH-09 / POLISH-10
 
 **Wave 2** *(17-02 blocked on 17-01 · 17-05 blocked on 17-04)*
 
@@ -713,4 +713,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 1/5 | In Progress|  |
+| 17. Superficie y polish | 2/5 | In Progress|  |

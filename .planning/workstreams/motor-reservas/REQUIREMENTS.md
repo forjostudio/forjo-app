@@ -165,7 +165,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       incorporarlo con el costo a la vista, no de contrabando. Desde la tarjeta se cambia **el número,
       nunca el modo** (ver `17-CONTEXT.md` D-08 / D-09).
 
-- [ ] **POLISH-09** *(ampliado 2026-08-16)* — La grilla de la agenda **calcula la ocupación desde
+- [x] **POLISH-09** *(ampliado 2026-08-16)* — La grilla de la agenda **calcula la ocupación desde
       `services.capacity`**, la misma fuente que el motor, y muestra la ocupación **grupal** con el
       mismo tratamiento que ya tiene la simultánea. Hoy `agenda-client.tsx:467` tiene su propio
       `capacityFor()` sobre `time_blocks.capacity` — la **cuarta** lectura, que la Phase 15 dejó a
@@ -173,7 +173,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       grilla del panel está calculando "lleno" con un número que el motor ignora: no se nota hoy porque
       todo vale 1, pero **miente en cuanto se declare una clase de cupo > 1**. No es cosmético.
 
-- [ ] **POLISH-10** — Finanzas en mobile **muestra el servicio**. Hoy lo oculta con `hidden sm:block`;
+- [x] **POLISH-10** — Finanzas en mobile **muestra el servicio**. Hoy lo oculta con `hidden sm:block`;
       es layout, no read-path.
 
 ## Fuera de alcance
@@ -200,7 +200,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | CUPO-09 | Phase 17 | Pending — reescrito al alcance que queda (la parte funcional ya está en prod) |
 | POLISH-08 | Phase 17 | Pending — ampliado: el badge es también el control de cupo (edición inline, capacidad nueva) |
 | POLISH-09 | Phase 17 | Pending — ampliado: la grilla lee la fuente equivocada, no es solo visual |
-| POLISH-10 | Phase 17 | Pending |
+| POLISH-10 | Phase 17 | Complete |
 
 ## Riesgo
 
