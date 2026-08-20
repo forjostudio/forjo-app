@@ -671,15 +671,24 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                   // Alto fijo de una fila, haya 3 o 15 inscriptos: a 375px la grilla es de dos
                   // columnas de ~170px y seis chips apilados hacían impracticable la semana.
                   if (entry.kind === 'group') {
+                    // El `3/6` visual no puede ser el único portador del dato: el aria-label dice la
+                    // ocupación con palabras, y repite el aviso de seña que el badge muestra en
+                    // ámbar (en mobile no hay hover, así que el `title` no llega).
+                    const aria = `Ver inscriptos de ${entry.serviceName ?? 'la clase'} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — ${entry.occupied} de ${entry.capacity} lugares${entry.pendingDeposit >= 1 ? `, ${entry.pendingDeposit} sin seña` : ''}`
                     return (
                       <button
                         key={entry.key}
                         type="button"
                         onClick={() => setRosterSlot({ date: entry.date, time: entry.time, serviceId: entry.serviceId })}
-                        aria-label={`Ver inscriptos de ${entry.serviceName ?? 'la clase'} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — ${entry.occupied} de ${entry.capacity} lugares`}
+                        aria-label={aria}
                         className={cn(
                           'rounded px-1.5 py-1 text-[11px] leading-tight border',
-                          statusChip('confirmed'),
+                          // El grupo es UNA unidad: el estado por persona vive en el badge y en el
+                          // roster, no en la superficie de la fila. Un slot cuyos turnos son TODOS
+                          // no-ocupantes (cancelados, holds vencidos) igual se renderiza, con su
+                          // contador en 0/N sobre la superficie neutra: colapsar no puede hacer
+                          // desaparecer un día que hoy muestra algo.
+                          statusChip(entry.occupied > 0 ? 'confirmed' : 'cancelled'),
                           'flex w-full items-center gap-1.5 text-left cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
                         )}
                       >
