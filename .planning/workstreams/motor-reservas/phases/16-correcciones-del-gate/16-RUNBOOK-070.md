@@ -328,19 +328,33 @@ destructivo (el DELETE rebota con su toast), pero hay que saberlo.
 Esta sección nace vacía a propósito. El runbook de la 068 terminó siendo el **registro** de cómo se
 aplicó y de qué salió mal, y ése resultó ser su mayor valor. Que éste nazca preparado para eso.
 
+> **APLICADA. Verificación por instalación: PASA — 5/5 filas en `true`.**
+
 | | |
 |---|---|
-| **Fecha y hora de aplicación (AR)** | _(a completar)_ |
-| **Quién la aplicó** | _(a completar)_ |
-| **Camino usado** | _(SQL Editor / `psql -1` — a completar)_ |
-| **Pre-flight (i)** — estado instalado antes | _(pegar las 2 filas literales)_ |
-| **Pre-flight (ii)** — servicios por modo/cupo | _(pegar las filas; anotar id + nombre de todo lo que no sea `individual`)_ |
-| **Pre-flight (iii)** — turnos de hoy que ya terminaron | _(pegar las filas y la hora AR de la medición)_ |
-| **Verificación (a)** — cuerpos nuevos instalados | _(pegar las 2 filas)_ |
-| **Verificación (b)** — GATE-01 + GATE-02 escritos | _(pegar la fila)_ |
-| **Verificación (c)** — triggers enganchados | _(pegar las 2 filas)_ |
-| **Verificación (d)** — control funcional en el panel | _(hecho / no aplicable, y por qué)_ |
-| **Desvíos** | _(cualquier cosa que no haya coincidido con lo esperado, y qué se hizo)_ |
+| **Fecha de aplicación (AR)** | **2026-08-20** |
+| **Quién la aplicó** | El dueño |
+| **Camino usado** | SQL Editor de Supabase, el archivo entero de una sola vez |
+| **Pre-flight (i)/(ii)/(iii)** | No se pegaron al registro. La verificación **posterior** (a/b/c) cubre lo que el pre-flight iba a proteger: confirma qué cuerpo quedó instalado y descarta las dos versiones equivocadas. |
+| **Verificación (a)** — cuerpos nuevos | ✅ `services_block_delete` y `services_block_mode_change`: `ok_corte_por_fin = true` y `ok_sin_predicado_viejo = true` **en las dos** |
+| **Verificación (b)** — GATE-01 + GATE-02 + abono | ✅ `services_block_mode_change`: guard de dirección `true`, excluye sólo `cancelled` `true`, **bloque de abono `true`** |
+| **Verificación (c)** — triggers enganchados | ✅ `services_block_delete_trg → services_block_delete` y `services_block_mode_change_trg → services_block_mode_change`, los dos `tgenabled = 'O'` |
+| **Verificación (d)** — control funcional en el panel | No aplicable, por el motivo que §4 anticipa: el rechazo del gate de modo sólo se puede provocar sobre un servicio que **no** sea `individual` **con turnos futuros vivos**, y en prod no hay ninguno. El comportamiento está probado contra el Postgres local (A/B de 16-01 + las dos suites con control negativo). |
+| **Desvíos** | **Ninguno.** |
+
+### El centinela que decidió el caso
+
+Existían **tres** cuerpos posibles bajo los mismos nombres de función: la **068**, la **070 intermedia**
+(la que medía contra el INICIO del turno, con `v_now_time`) y la **070 final** (la corregida por CR-01,
+que mide contra el FIN). La verificación (a) sola no las distingue del todo.
+
+El discriminante es **`position('FROM abonos ab' in prosrc) > 0`** de la fila (b): ese bloque lo sumó
+**WR-05** en la ronda de fixes del code review y **no existe en ninguna de las otras dos versiones**.
+Dio `true` ⇒ lo que está en producción es la **final**.
+
+Vale registrarlo como método: cuando un archivo se edita **en su lugar** después de haberse aplicado en
+algún lado, la verificación necesita un centinela que distinga la versión final de la intermedia, no
+sólo de la anterior.
 
 Después de aplicar, actualizar además:
 
