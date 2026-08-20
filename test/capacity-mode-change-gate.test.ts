@@ -311,8 +311,18 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
   //       dueño no tocó el modo) ⇒ el trigger DISPARA y lo tiene que dejar pasar por el guard de
   //       no-cambio (`IS NOT DISTINCT FROM`). Sin ese guard, renombrar un servicio con turnos futuros
   //       rebotaría y la pantalla de servicios quedaría rota.
+  //
+  // ⚠ QUÉ CAMBIÓ EN LA 070 (WR-01 del code review): este caso sembraba el servicio con `seedService`,
+  // que nace `individual`. Desde GATE-01 eso lo volvía TAUTOLÓGICO — con el guard de no-cambio borrado,
+  // el guard de DIRECCIÓN devolvía igual y el caso seguía verde, o sea que dejó de medir lo único que
+  // dice medir. Está MUTATION-TESTED en las dos versiones: mutado el gate (sin `IS NOT DISTINCT FROM`)
+  // la versión vieja pasaba y ésta se pone en ROJO con `service_mode_has_future_appointments`.
+  // Por eso el servicio se lleva primero a `group_class`: es el mismo re-anclaje que ya tenían los
+  // casos 1, 2 y 3, y deja al guard de no-cambio como lo ÚNICO que puede salvar al rename.
   it('5 — el gate no bloquea escrituras legítimas: desactivar y renombrar con un turno futuro vivo', async () => {
     const svc = await seedService(t, { name: '__test_svc_mode_gate_5' })
+    // Orden obligatorio: primero el modo de ORIGEN (este UPDATE también pasa por el gate), después el turno.
+    await seedGroupClassService(t, { capacity: 2, serviceId: svc })
     await seedAppointment(t, { serviceId: svc, date: FUTURE, time: '11:00', status: 'confirmed' })
 
     // (a) sin capacity_mode en el SET → el trigger no dispara.
@@ -320,12 +330,14 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
     expect(off.error).toBeNull()
     expect((off.data || []).length).toBe(1)
 
-    // (b) CON capacity_mode en el SET, con el MISMO valor que ya tenía → el trigger dispara y pasa.
+    // (b) CON capacity_mode en el SET, con el MISMO valor que ya tenía → el trigger dispara y sólo el
+    // guard de no-cambio lo deja pasar (la dirección de origen NO es `individual`: si el guard
+    // desapareciera, el `EXISTS` encontraría el turno futuro vivo y esto rebotaría).
     const nuevoNombre = '__test_svc_mode_gate_5_renombrado'
     const rename = await patchService(t.admin, svc, t.businessId, {
       name: nuevoNombre,
-      capacity_mode: 'individual',
-      capacity: 1,
+      capacity_mode: 'group_class',
+      capacity: 2,
     })
     expect(rename.error).toBeNull()
     expect((rename.data || []).length).toBe(1)
@@ -334,7 +346,7 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
     const { data } = await t.admin.from('services').select('name, active, capacity_mode').eq('id', svc).single()
     expect(data?.name).toBe(nuevoNombre)
     expect(data?.active).toBe(false)
-    expect(data?.capacity_mode).toBe('individual')
+    expect(data?.capacity_mode).toBe('group_class')
   }, 20000)
 
   // (6) AISLAMIENTO POR TENANT + su CONTRAPESO, en el mismo caso. El dueño de OTRO negocio no puede
