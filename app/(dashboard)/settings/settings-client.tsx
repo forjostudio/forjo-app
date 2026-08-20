@@ -18,7 +18,7 @@ import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { Card } from '@/components/ui/card'
@@ -1961,11 +1961,34 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
           {/* Editar servicio (reusa el form de alta: nombre, min, precio, consultorios).
               Los chips espejan el alta; usa el cliente browser directo (sin server actions). */}
           <Dialog open={!!editSvc} onOpenChange={open => { if (!open) setEditSvc(null) }}>
-            <DialogContent className="sm:max-w-sm">
-              <DialogHeader>
+            {/* Scroll interno + pie anclado (D-05 / UI-SPEC §3.1). El patrón se aplica ACÁ, por caller,
+                y NO en components/ui/dialog.tsx: así los ~15 diálogos restantes del panel quedan
+                byte-idénticos. Las cuatro piezas son solidarias — cualquiera sola no alcanza:
+                · max-h con `svh` (no `vh`): en mobile la barra de URL no se come el borde del popup.
+                  El -2rem deja 16px de backdrop arriba y abajo (el popup está centrado con -translate-y-1/2).
+                · las tres filas del grid: el DialogContent YA es grid; el minmax(0,1fr) del medio es
+                  lo único que permite que la fila del medio encoja por debajo de su contenido.
+                · gap-0: el gap-4 del componente dejaba flotando al pie (que ya trae -mb-4) a 16px
+                  del fondo. El espaciado se recupera con el pb-3 del header y el mt-4 del footer.
+                · pr-8 en el header: el botón X es `absolute top-2 right-2` y el título no puede pasarle
+                  por abajo.
+                Sin sombra ni fade en los bordes: es decisión escrita (UI-SPEC §3.2), no omisión — abajo
+                la frontera ya la marcan el border-t + bg-muted/50 del pie, y un fade condicional
+                exigiría medir en JS o usar scroll-timeline, que este repo no usa en ningún lado.
+                Alcance de esta fase: SOLO este diálogo. "Copiar horario" (agenda-client.tsx:1130) y el
+                roster de desktop (agenda-client.tsx:1110) son los próximos candidatos al mismo patrón y
+                quedan anotados, no tocados (UI-SPEC §3.3). */}
+            <DialogContent className="grid max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 sm:max-w-sm">
+              <DialogHeader className="pb-3 pr-8">
                 <DialogTitle>Editar servicio</DialogTitle>
               </DialogHeader>
-              <div className="space-y-3">
+              {/* La fila del medio es la ÚNICA que scrollea: el título queda fijo (contexto de qué estás
+                  editando) y el pie queda fijo (la salida). min-h-0 es obligatorio — sin él un hijo de
+                  grid no encoge y el overflow-y-auto nunca se activa. El sangrado -mx-4 px-4 hace que el
+                  área scrolleable llegue al borde del diálogo, así el scrollbar y los anillos de foco no
+                  quedan recortados por el padding. El overscroll contenido evita que llegar al final arrastre
+                  el scroll de la página de atrás. */}
+              <div className="-mx-4 min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 py-1">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Nombre</Label>
                   <Input value={editSvcForm.name} onChange={e => setEditSvcForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre" />
@@ -2002,7 +2025,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   </div>
                 )}
               </div>
-              <Button onClick={saveEditService} disabled={savingEditSvc || !editSvcForm.name.trim()}>{savingEditSvc ? 'Guardando...' : 'Guardar'}</Button>
+              {/* El Guardar deja de ser el último hijo suelto del DialogContent (que crecía con el
+                  formulario y a 375×667 se iba fuera del viewport) y pasa a la tercera fila `auto` del
+                  grid: el pie ya trae -mx-4 -mb-4 + border-t + bg-muted/50, o sea sangra a los
+                  bordes y marca la frontera solo. Sigue siendo un hijo del popup, así que el focus trap
+                  y el orden de tabulación quedan intactos. min-h-11 sm:min-h-0 = target táctil de 44px
+                  en mobile sin engordar el desktop. */}
+              <DialogFooter className="mt-4">
+                <Button onClick={saveEditService} disabled={savingEditSvc || !editSvcForm.name.trim()} className="min-h-11 w-full sm:min-h-0 sm:w-auto">{savingEditSvc ? 'Guardando...' : 'Guardar'}</Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
           </>
