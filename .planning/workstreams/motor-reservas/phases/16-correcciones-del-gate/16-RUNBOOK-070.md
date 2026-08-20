@@ -13,6 +13,14 @@ los pasos de abajo contra prod.
 > `individual`), **GATE-02** hace que un turno futuro marcado `completed` deje de abrir el gate de modo
 > (cierra el residual **R-15-A**), y **GATE-03** hace que los dos gates comparen **fecha Y hora** en vez
 > de sólo el día.
+>
+> ⚠ **Actualizado tras el code review de la fase (2026-08-19/20), con el archivo editado EN SITIO — no
+> hay una 071.** Dos cambios que este runbook ya refleja: (1) **GATE-03 mide contra el FIN del turno**
+> (`date + time + COALESCE(duration_minutes, 30) > ahora AR`), no contra su inicio — con el inicio, un
+> turno EN CURSO contaba como pasado y `group_class → individual` soltaba una fila viva con
+> `is_group = true` (R-1 reabierto, reproducido); (2) el guard de dirección de **GATE-01 lleva adentro
+> el bloque de ABONO ACTIVO**: salir de `individual` es seguro para los turnos que ya existen, no para
+> una serie que va a seguir creando. Además la fase **sí toca `.tsx`** (ver §2).
 
 > **Cómo leer este runbook.** Cada paso trae la query **literal**, el **resultado esperado** al lado y
 > **qué hacer si no coincide**. No hay pasos "de confianza": si un control no devuelve lo esperado, hay
@@ -41,8 +49,8 @@ fuente de verdad.
 
 ```sql
 select p.proname,
-       position('v_now_time' in p.prosrc)          as tiene_v_now_time,
-       position('a."date" >= v_today' in p.prosrc) as tiene_predicado_viejo
+       position('COALESCE(a."duration_minutes", 30))) > v_now' in p.prosrc) as tiene_corte_por_fin,
+       position('a."date" >= v_today' in p.prosrc)                          as tiene_predicado_viejo
   from pg_proc p
  where p.proname in ('services_block_delete', 'services_block_mode_change')
  order by p.proname;
@@ -50,8 +58,8 @@ select p.proname,
 
 | Resultado | Qué significa | Acción |
 |---|---|---|
-| **2 filas**, las dos con `tiene_v_now_time = 0` y `tiene_predicado_viejo > 0` | Prod está en 065 + 068: exactamente el estado que la 070 asume. | **SEGUIR** |
-| Alguna fila con `tiene_v_now_time > 0` | **La 070 ya está aplicada** (o alguien instaló el cuerpo nuevo a mano). | **NO RE-APLICAR.** El archivo es idempotente (`CREATE OR REPLACE` puro), así que re-aplicarlo no rompería nada — pero re-aplicar **sin saber por qué ya estaba** es cómo se pierde el rastro de qué corrió y cuándo. Averiguar primero; después, si corresponde, seguir. |
+| **2 filas**, las dos con `tiene_corte_por_fin = 0` y `tiene_predicado_viejo > 0` | Prod está en 065 + 068: exactamente el estado que la 070 asume. | **SEGUIR** |
+| Alguna fila con `tiene_corte_por_fin > 0` | **La 070 ya está aplicada** (o alguien instaló el cuerpo nuevo a mano). | **NO RE-APLICAR.** El archivo es idempotente (`CREATE OR REPLACE` puro), así que re-aplicarlo no rompería nada — pero re-aplicar **sin saber por qué ya estaba** es cómo se pierde el rastro de qué corrió y cuándo. Averiguar primero; después, si corresponde, seguir. |
 | **Menos de 2 filas** | Falta al menos una de las dos funciones: prod **no** está en el estado que este runbook asume. | 🛑 **ABORTAR.** Verificar que estás en el proyecto de producción y que la 065 / la 068 están realmente aplicadas. |
 | **Más de 2 filas** | Hay funciones homónimas en otro schema. | 🛑 **ABORTAR.** Acotar por `pronamespace` y entender qué son antes de tocar nada. |
 
@@ -82,13 +90,17 @@ select capacity_mode, capacity, count(*)
 
 ```sql
 select a."status",
-       count(*) as turnos_de_hoy_a_hora_ya_pasada
+       count(*) as turnos_de_hoy_que_ya_terminaron
   from appointments a
  where a."date" = (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-   and a."time" <  (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::time
+   and (a."date" + a."time" + make_interval(mins => COALESCE(a."duration_minutes", 30)))
+       <= (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')
  group by 1
  order by 2 desc;
 ```
+
+⚠ El predicado de arriba es el corte REAL de la 070: **el turno terminó**, no "el turno empezó". Un
+turno EN CURSO **sigue contando** en los dos gates, así que no aparece acá.
 
 Cómo leerlo:
 
@@ -97,7 +109,7 @@ Cómo leerlo:
 - Las filas con `status` distinto de `cancelled` **y** distinto de `completed` son las que **el gate de
   BORRADO** deja de contar (los dos predicados divergen a propósito desde la 070 — el porqué está en el
   header del archivo de la migración).
-- **Si devuelve 0 filas**: hoy no hay ningún turno de la jornada a hora ya pasada. Es perfectamente
+- **Si devuelve 0 filas**: hoy no hay ningún turno de la jornada que ya haya terminado. Es perfectamente
   posible (madrugada, o un día sin agenda) y **no es motivo de aborto**, siempre que (ii) haya
   devuelto números — ver (iv). Registrarlo como "cero, medido a las HH:MM AR".
 
@@ -130,10 +142,25 @@ la 068 (`15-RUNBOOK-068.md`).
 3. El recorte es **permisivo** en dos de las tres correcciones (GATE-01 y GATE-03: dejan pasar
    escrituras que antes rebotaban) y la tercera —GATE-02— **cierra** un bypass, o sea agrega un rechazo
    que **ya tiene su copy** en el panel desde 15-02, con el mismo código de dominio de siempre.
-4. El copy actual del panel **sigue siendo cierto** después del recorte: por eso esta fase no toca un
-   solo `.tsx`.
+4. Los rechazos nuevos (GATE-02 y el bloque de abono de GATE-01) reusan **el mismo código de dominio
+   de siempre**, así que el panel los mapea aunque el deploy todavía no haya salido.
 
-⇒ **No hace falta coordinar la 070 con un deploy.** Se puede aplicar sola, en cualquier momento.
+⚠ **LO QUE SÍ CAMBIÓ RESPECTO DE LA VERSIÓN ORIGINAL DE ESTE RUNBOOK: la fase SÍ toca `.tsx`.** El
+code review (CR-02) mostró que el gate de BORRADO tiene un **espejo de lectura en el cliente** —el
+pre-check del modal de `settings-client.tsx`, que deshabilita el botón "Eliminar"— y que ese pre-check
+comparaba **sólo la fecha**. Sin él, **GATE-03 no llega a ninguna persona**: la base deja borrar y el
+modal sigue bloqueando exactamente el caso que la migración vino a arreglar. También cambió la copy
+del rechazo del gate de modo (WR-02 + WR-05).
+
+**Los dos órdenes son seguros, y conviene saber qué se ve en cada uno:**
+
+| Orden | Qué pasa en el medio |
+|---|---|
+| **Migración primero, deploy después** (lo más probable) | El pre-check viejo **bloquea de más**: el modal sigue diciendo "tiene 1 turno reservado" para un turno de hoy ya terminado, aunque la base ya lo dejaría borrar. Es exactamente el comportamiento de hoy en prod, o sea: no se rompe nada, **el arreglo simplemente no se ve todavía**. |
+| **Deploy primero, migración después** | El pre-check nuevo **habilita el botón** para un caso que la base (todavía en 069) rechaza: el dueño aprieta Eliminar y le vuelve el toast del gate ("tiene turnos futuros"). Feo pero contenido — el mapeo del error ya existe y no se pierde ni se borra nada. |
+
+⇒ **No hace falta coordinar la 070 con el deploy para que nada se rompa**, pero para que el arreglo se
+VEA hacen falta los dos. Recomendado: aplicar la migración y deployar el mismo día, en ese orden.
 
 ---
 
@@ -169,7 +196,8 @@ la 068 (`15-RUNBOOK-068.md`).
 > provocar desde la UI de producción** — no hay forma de "probarlo funcionando" ahí. El
 > **comportamiento** está probado contra el **Postgres local**: el A/B caso por caso de 16-01
 > (`16-BASELINE-070.md`) y las dos suites de gate de 16-02
-> (`test/capacity-mode-change-gate.test.ts`, 13 casos · `test/service-delete-gate.test.ts`, 15 casos),
+> (`test/capacity-mode-change-gate.test.ts`, 15 pruebas · `test/service-delete-gate.test.ts`, 17
+> pruebas — incluyen los casos y el canario que sumó la ronda de fixes del code review),
 > con **control negativo**: los cinco casos discriminantes se vieron **fallar** contra el predicado
 > viejo instalado a mano. Lo que se verifica acá es que **quedó instalado**.
 
@@ -179,29 +207,36 @@ Es la **misma query del pre-flight (i)**, y ahora tiene que dar lo contrario:
 
 ```sql
 select p.proname,
-       position('v_now_time' in p.prosrc)          as tiene_v_now_time,
-       position('a."date" >= v_today' in p.prosrc) as tiene_predicado_viejo
+       position('COALESCE(a."duration_minutes", 30))) > v_now' in p.prosrc) as tiene_corte_por_fin,
+       position('a."date" >= v_today' in p.prosrc)                          as tiene_predicado_viejo
   from pg_proc p
  where p.proname in ('services_block_delete', 'services_block_mode_change')
  order by p.proname;
 ```
 
-**Esperado: 2 filas**, las dos con `tiene_v_now_time > 0` y `tiene_predicado_viejo = 0`.
+**Esperado: 2 filas**, las dos con `tiene_corte_por_fin > 0` y `tiene_predicado_viejo = 0`.
 **Si alguna sigue con el predicado viejo:** el `CREATE OR REPLACE` de esa función no corrió → ir a §5.
+**Si `tiene_corte_por_fin` da 0 pero el predicado viejo también:** quedó instalada la versión
+INTERMEDIA de la 070 (la que comparaba contra el INICIO del turno, con `v_now_time`). Comprobalo con
+`select position('v_now_time' in prosrc) from pg_proc where proname = 'services_block_delete';` y
+volvé a pegar el archivo entero.
 
 ### (b) El guard de dirección de GATE-01 y la divergencia de GATE-02 quedaron escritos
 
 ```sql
 select p.proname,
        position('OLD."capacity_mode" = ''individual''' in p.prosrc) as tiene_guard_de_direccion,
-       position('a."status" <> ''cancelled''' in p.prosrc)          as excluye_solo_cancelled
+       position('a."status" <> ''cancelled''' in p.prosrc)          as excluye_solo_cancelled,
+       position('FROM abonos ab' in p.prosrc)                       as tiene_bloque_abono
   from pg_proc p
  where p.proname = 'services_block_mode_change';
 ```
 
-**Esperado: 1 fila con los dos valores > 0.** El primero es **GATE-01** (el guard de dirección), el
-segundo es **GATE-02** (el gate de modo pasa a excluir **sólo** `cancelled`).
-**Si alguno da 0:** quedó instalada una versión intermedia → ir a §5.
+**Esperado: 1 fila con los TRES valores > 0.** El primero es **GATE-01** (el guard de dirección), el
+segundo es **GATE-02** (el gate de modo pasa a excluir **sólo** `cancelled`) y el tercero es el bloque
+de **abono activo** que el code review sumó adentro del guard de dirección (WR-05) — en la 068 ese
+bloque **no existe**, así que un 0 ahí significa que quedó instalada una versión vieja o intermedia.
+**Si alguno da 0:** ir a §5.
 
 ### (c) Los dos triggers siguen enganchados a sus funciones
 
@@ -235,7 +270,16 @@ Sólo tiene sentido si querés confirmarlo por comportamiento. En el panel, con 
 3. Ahora intentar volverlo a **Individual** con ese mismo turno vivo.
    → **Tiene que REBOTAR.** Es la dirección peligrosa, donde vive **R-1**, que la 070 conserva
    **cerrada**. Si dejara pasar, el recorte se pasó de laxo → §5.
-4. Cancelar el turno y borrar el servicio de prueba.
+4. *(Opcional, control de WR-05.)* Con el servicio de prueba de vuelta en **Individual** y **sin**
+   turnos, crearle un **abono activo** y volver a intentar el paso 2.
+   → **Tiene que REBOTAR**, aunque no haya ningún turno materializado: es el bloque de abono adentro
+   del guard de dirección. Si pasa, la versión instalada es la anterior al code review.
+5. *(Opcional, control de GATE-03 por el FIN del turno.)* Crear un turno **de hoy, a una hora que ya
+   pasó del todo** (que su duración también haya terminado) y probar **eliminar el servicio**.
+   → **Tiene que dejar borrar, y el modal tiene que mostrar el botón "Eliminar" habilitado.** Si la
+   base deja pero el modal sigue bloqueado, la migración está aplicada y **el deploy del `.tsx` no**
+   (ver §2).
+6. Cancelar el turno, dar de baja el abono y borrar el servicio de prueba.
 
 ---
 
@@ -259,7 +303,7 @@ Pegar los dos `CREATE OR REPLACE FUNCTION` (con sus `ALTER FUNCTION ... OWNER TO
 FUNCTION`**: dropear obliga a recrear el trigger y los grants, y eso sí es riesgo gratis.
 
 Después de **cualquier** rollback, verificar con la query (a) de §4: tiene que volver a dar
-`tiene_v_now_time = 0` y `tiene_predicado_viejo > 0` en las dos.
+`tiene_corte_por_fin = 0` y `tiene_predicado_viejo > 0` en las dos.
 
 ### ⚠ Qué se PIERDE al revertir
 
@@ -269,7 +313,13 @@ Revertir no rompe nada, pero devuelve tres problemas conocidos. Que estén escri
 |---|---|
 | **GATE-01** | Vuelve a bloquearse el cambio de modo **más frecuente**: `individual` → grupal / simultáneo con un turno futuro vivo. Y `individual` es el **default** de la tabla, así que es el punto de partida de casi todos los servicios. Es el defecto que el dueño reportó con sus palabras en la UAT de la Phase 15. |
 | **GATE-02** | **Se reabre R-15-A** (`15-SECURITY.md`): marcar `completed` un turno **futuro** vuelve a sacarlo del conteo y **abre el gate de modo**. Es un bypass de **un solo click** desde el panel, y por ahí se vuelve a colar el riesgo residual **R-1** de v0.26 (una fila con `is_group` desalineado, fuera del EXCLUDE gist 013 y fuera del gate espejo de la 064). Es lo más caro de la lista. |
-| **GATE-03** | Un turno de **hoy a hora ya pasada** vuelve a trabar el borrado del servicio **y** el cambio de modo hasta la medianoche, mientras la UI lo sigue mostrando en "Pasados". Vuelve la divergencia UI ↔ base del gap **G4** de la Phase 13. |
+| **GATE-03** | Un turno de **hoy que ya terminó** vuelve a trabar el borrado del servicio **y** el cambio de modo hasta la medianoche, mientras la UI lo sigue mostrando en "Pasados". Vuelve la divergencia UI ↔ base del gap **G4** de la Phase 13. |
+| **El corte por FIN de turno** | Un turno **EN CURSO** vuelve a contar como pasado: se puede borrar un servicio mientras se está prestando y, peor, `group_class → individual` con una clase en curso vuelve a pasar y suelta una fila viva `is_group = true` — fuera del EXCLUDE gist 013 y del gate espejo de la 064, o sea **R-1 reabierto** (está reproducido: con esa fila, `book_slot_atomic` inserta un turno superpuesto sin un solo error). |
+| **El bloque de abono del gate de modo** | Un servicio con **abono activo** vuelve a poder pasar de `individual` a grupal/simultáneo, y las ocurrencias futuras de la serie que no entren en el cupo nuevo se **saltean en silencio** (`lib/abono-generation.ts`). |
+
+⚠ **Revertir a la 065/068 deja el pre-check del modal (ya deployado) diciendo lo contrario que la
+base**: habilitaría "Eliminar" para un turno de hoy ya terminado que la base vuelve a rechazar. No es
+destructivo (el DELETE rebota con su toast), pero hay que saberlo.
 
 ---
 
@@ -285,7 +335,7 @@ aplicó y de qué salió mal, y ése resultó ser su mayor valor. Que éste nazc
 | **Camino usado** | _(SQL Editor / `psql -1` — a completar)_ |
 | **Pre-flight (i)** — estado instalado antes | _(pegar las 2 filas literales)_ |
 | **Pre-flight (ii)** — servicios por modo/cupo | _(pegar las filas; anotar id + nombre de todo lo que no sea `individual`)_ |
-| **Pre-flight (iii)** — turnos de hoy a hora ya pasada | _(pegar las filas y la hora AR de la medición)_ |
+| **Pre-flight (iii)** — turnos de hoy que ya terminaron | _(pegar las filas y la hora AR de la medición)_ |
 | **Verificación (a)** — cuerpos nuevos instalados | _(pegar las 2 filas)_ |
 | **Verificación (b)** — GATE-01 + GATE-02 escritos | _(pegar la fila)_ |
 | **Verificación (c)** — triggers enganchados | _(pegar las 2 filas)_ |
