@@ -2,7 +2,7 @@
 phase: 16-correcciones-del-gate
 workstream: motor-reservas
 milestone: v0.27
-secured: 2026-08-18
+secured: 2026-08-20
 status: secured
 blocking: false
 asvs_level: 2
@@ -22,7 +22,10 @@ audit_rounds:
     verdict: "RONDA 1 — 18/19 CLOSED (16 mitigate verificadas contra los cuerpos INSTALADOS y contra el comportamiento medido, 1 mitigate supply-chain, 1 accept registrada) · **T-16-05 OPEN**: su premisa de aceptación es FALSA — el rol `anon` SÍ puede crear turnos con fecha/hora pasada, medido. 2 hallazgos fuera de register (WARNING, ambos PRE-EXISTENTES)"
   - date: 2026-08-18
     scope: "re-disposición de T-16-05 por decisión del dueño, con la premisa corregida"
-    verdict: "**19/19 CLOSED**. T-16-05 se re-acepta con el alcance real: el vector que ESTA FASE abre sigue siendo autolesión del dueño sobre un horario ya pasado. El vector anónimo (`X-16-A`) es PRE-EXISTENTE desde la migr. 041, no depende de GATE-03 ni de la 070, y se sigue en todo propio. El header de la 070 fue corregido (commit b61b5d0) para que deje de afirmar la premisa falsa."
+    verdict: "RONDA 2 — **19/19 CLOSED**. T-16-05 se re-acepta con el alcance real: el vector que ESTA FASE abre sigue siendo autolesión del dueño sobre un horario ya pasado. El vector anónimo (`X-16-A`) es PRE-EXISTENTE desde la migr. 041, no depende de GATE-03 ni de la 070, y se sigue en todo propio. El header de la 070 fue corregido (commit b61b5d0) para que deje de afirmar la premisa falsa."
+  - date: 2026-08-20
+    scope: "revisión de T-16-05 a la luz de CR-01 del code review"
+    verdict: "**19/19 SIGUE CERRADO, y la aceptación de T-16-05 quedó MÁS FUERTE que cuando se escribió.** El code review encontró que la SEGUNDA premisa de T-16-05 —*un horario que ya pasó no afecta la disponibilidad futura*— era falsa: el gate medía contra el INICIO del turno, así que una clase EN CURSO contaba como pasada. Se corrigió en la 070 (CR-01, commit 1e96b55): los dos gates miden contra el FIN. Verificado por el orquestador contra el Postgres local — clase en curso BLOQUEA, hoy 00:00 ya terminada PASA, hoy 23:59 BLOQUEA. Ahora *pasado* significa de verdad *terminado*, que es lo que la aceptación decía asumir."
 ---
 
 # Phase 16 — Correcciones del gate · Auditoría de seguridad
@@ -343,3 +346,37 @@ mide una mitigación. Acá la afirmación era verificable en una línea de SQL, 
 por `plan-phase`, `execute-phase` y `verify-work` sin que nadie la ejecutara — y era falsa. El costo
 de no medirla habría sido mandar a producción un comentario de seguridad que **miente**, que es
 exactamente lo que T-16-11 se ocupó de evitar en `lib/`.
+
+
+---
+
+## 7. Ronda 3 — la segunda premisa de T-16-05 también era falsa, y el fix la volvió cierta (2026-08-20)
+
+**Dos premisas de la misma amenaza se cayeron al medirlas, en dos gates distintos.** Vale registrar el
+patrón, no solo el resultado.
+
+| | Premisa | Quién la falsificó | Desenlace |
+|---|---|---|---|
+| 1 | *"ninguna superficie **anónima** puede crear turnos en el pasado"* | `secure-phase` (ronda 1) | Falsa y **sigue** falsa: es `X-16-A`, pre-existente desde la migr. 041. Se sacó del alcance de T-16-05 y se sigue en todo propio |
+| 2 | *"sobre un horario que YA PASÓ … no afecta la disponibilidad futura"* | `code-review` (CR-01) | Falsa **y arreglada**: el gate medía contra el INICIO, así que una clase en curso contaba como pasada. La 070 ahora mide contra el FIN |
+
+**Por qué la 2 era peor de lo que parecía.** No era una imprecisión de redacción: `group_class →
+individual` con una clase **en curso** pasaba, y dejaba viva una fila `is_group = true` fuera del
+EXCLUDE gist 013. Eso es **R-1 reabierto** — el mismo residual que la 068 vino a cerrar y que T-16-02
+declara protegido. La suite no lo veía porque ningún caso tenía un turno con duración lo bastante larga
+como para seguir corriendo.
+
+**De dónde salió el defecto:** la 070 espejaba `isPastAppointment` deliberadamente, y esa función
+compara contra el **inicio**. La decisión de espejarla se tomó en `16-CONTEXT.md` y era correcta *sobre
+la función*, pero equivocada como criterio del gate: **la UI y el gate contestan preguntas distintas**
+—*"¿lo muestro como pasado?"* vs *"¿esto todavía ocupa la agenda?"*— y un turno en curso responde
+distinto a cada una. La divergencia entre los dos lados ahora está escrita como deliberada, junto a la
+otra divergencia deliberada de esta fase (el manejo de `completed`, T-16-04).
+
+**Efecto sobre la disposición:** T-16-05 se mantiene `accept` y ahora se apoya en algo cierto — desde
+el commit `1e96b55`, *pasado* significa *terminado*. La condición de reapertura escrita en §6 no se
+toca.
+
+**La lección, que es la misma de la ronda 1 con una vuelta más:** una premisa fáctica hay que medirla
+**cada vez que cambia el código que la sostiene**, no solo cuando se escribe. Ésta pasó `plan-phase`,
+`execute-phase`, `verify-work` **y `secure-phase`** antes de que el code review la ejecutara.
