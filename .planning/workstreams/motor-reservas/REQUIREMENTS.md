@@ -197,10 +197,10 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | GATE-01 | Phase 16 | Complete (16-01 migr. 070 estrecha el gate por dirección + 16-02 la matriz de 13 casos con control negativo: las direcciones peligrosas siguen rechazando). ✅ **070 aplicada a PROD el 2026-08-20** |
 | GATE-02 | Phase 16 | Complete (16-01 el predicado deja de excluir `completed` + 16-02 el caso 12, visto FALLAR contra el predicado viejo). Cierra el residual R-15-A de `15-SECURITY.md`. ✅ **070 aplicada a PROD el 2026-08-20** |
 | GATE-03 | Phase 16 | Complete (16-01 fecha + hora en los gates de la **065** y la **068** + 16-02 los casos 13 y delete-12, con las dos fronteras como testigo). ✅ **070 aplicada a PROD el 2026-08-20** |
-| CUPO-09 | Phase 17 | Pending — reescrito al alcance que queda (la parte funcional ya está en prod) |
-| POLISH-08 | Phase 17 | Pending — ampliado: el badge es también el control de cupo (edición inline, capacidad nueva) |
-| POLISH-09 | Phase 17 | Complete — 17-04 (modulo puro) + 17-05 (cableado de la grilla, contador colapsado) |
-| POLISH-10 | Phase 17 | Complete |
+| CUPO-09 | Phase 17 | Complete — 17-01 (explicador de 3 capas + input `onBlur` + toggles en grid) + 17-02 (diálogo con scroll y "Agregar servicio" al final). ⚠ Pendiente UAT visual |
+| POLISH-08 | Phase 17 | Complete — 17-03: badge de modo en la línea de datos **y** control inline de cupo (2º write path, tenant-filtered, copy propia del gate). ⚠ Pendiente UAT visual |
+| POLISH-09 | Phase 17 | Complete — 17-04 (`lib/agenda-occupancy.ts`, 20/20 con 2 casos por mutación) + 17-05 (grilla cableada; `capacityFor` y el `isGroup` deducido eliminados). ⚠ Pendiente UAT visual |
+| POLISH-10 | Phase 17 | Complete — 17-04: el servicio como 2ª línea en mobile; la columna de desktop intacta. ⚠ Pendiente UAT visual |
 
 ## Riesgo
 
