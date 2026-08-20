@@ -276,7 +276,18 @@ export async function seedSimultaneousService(seeded: SeededTenant, opts: { capa
     .update({ capacity_mode: 'simultaneous_resource', capacity: opts.capacity })
     .eq('id', opts.serviceId ?? seeded.serviceId)
     .eq('business_id', seeded.businessId)
+    .select('id')
   if (upd.error) throw new Error(`seed: update service simultáneo falló: ${upd.error.message}`)
+  // EXIGIR LA FILA (WR-03 del code review de la Phase 16). Un UPDATE que no matchea NINGUNA fila
+  // (typo en el serviceId, id de OTRO tenant, service ya borrado por un cleanup) vuelve SIN error y
+  // con 0 filas — el caso 6 de `capacity-mode-change-gate` asierta esa semántica de PostgREST. Sin
+  // este chequeo el helper no tira, el service se queda en `individual` y el caso mide la dirección
+  // SEGURA en vez de la peligrosa: en los casos que asiertan RECHAZO eso falla ruidosamente, pero en
+  // los que asiertan que el cambio PASA queda VERDE por el motivo equivocado. Mismo criterio que
+  // `patchService` en la suite: el `.select('id')` no es cosmético.
+  if ((upd.data ?? []).length !== 1) {
+    throw new Error('seed: el service simultáneo no existe en este tenant (0 filas)')
+  }
 }
 
 // seedGroupClassService: pone un service en modo CLASE GRUPAL con cupo N. Molde literal de
@@ -301,7 +312,14 @@ export async function seedGroupClassService(seeded: SeededTenant, opts: { capaci
     .update({ capacity_mode: 'group_class', capacity: opts.capacity })
     .eq('id', opts.serviceId ?? seeded.serviceId)
     .eq('business_id', seeded.businessId)
+    .select('id')
   if (upd.error) throw new Error(`seed: update service grupal falló: ${upd.error.message}`)
+  // Mismo motivo y mismo molde que su hermano `seedSimultaneousService` (WR-03): 0 filas vuelve SIN
+  // error por PostgREST, y un fixture que no tira deja el service en `individual` y el caso midiendo
+  // la dirección segura en vez de la peligrosa — verde por el motivo equivocado.
+  if ((upd.data ?? []).length !== 1) {
+    throw new Error('seed: el service grupal no existe en este tenant (0 filas)')
+  }
 }
 
 // purgeAbonos: borra series de abono RESPETANDO el gate de la migr. 066 (D-18: la base rechaza el
