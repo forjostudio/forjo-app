@@ -795,7 +795,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // deleteService: `code` primero, `message.includes(<código de dominio>)` después. La copy es
       // PROPIA y fija: NUNCA se interpola `error.message` ni el nombre del servicio (T-14-14 / T-13-09).
       if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
-        toast.error('No se puede cambiar cómo se ocupa el cupo: el servicio tiene turnos futuros reservados. Cancelalos o esperá a que pasen, y volvé a intentar.')
+        // ⚠ LA COPY TIENE QUE DECIR LA VERDAD SOBRE LA SALIDA (WR-02 del code review de la Phase 16).
+        // La versión anterior decía "Cancelalos o esperá a que pasen" y ofrecía una salida que para dos
+        // de los tres motivos de rechazo NO EXISTE en la interfaz:
+        //   · desde la migr. 070 (GATE-02) un turno FUTURO marcado `completed` bloquea, y RowActions
+        //     (appointments-client.tsx) no le da al dueño ni cancelar, ni borrar, ni volver atrás sobre
+        //     esa fila — la única salida real es esperar. Registrado como todo del workstream para
+        //     darle la acción que falta;
+        //   · desde la 070 (WR-05) un ABONO ACTIVO también bloquea, y ahí la salida es dar de baja la
+        //     serie, no cancelar turnos sueltos.
+        toast.error('No se puede cambiar cómo se ocupa el cupo: quedan turnos por delante o un abono activo. Cancelá los turnos y dá de baja el abono. Ojo: un turno marcado como completado no se puede cancelar desde el panel — ahí hay que esperar a que pase su horario.')
         return
       }
       toast.error('Error al guardar')
