@@ -96,6 +96,34 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
     return ins.data.id as string
   }
 
+  // Réplica EXACTA del `future` del pre-check del modal de borrado (settings-client.tsx,
+  // `openDeleteService`): dos queries —los días posteriores a hoy, y los de HOY traídos enteros— y el
+  // corte de hoy resuelto en JS contra el FIN del turno, porque `date + time + duración` no se puede
+  // expresar como filtro de PostgREST. Cambiar una y no la otra es el drift que este caso detecta.
+  function horaEnSegundos(raw: string): number {
+    const [h = '0', m = '0', s = '0'] = raw.split(':')
+    return (Number(h) || 0) * 3600 + (Number(m) || 0) * 60 + (Number(s) || 0)
+  }
+  async function preCheckFuture(serviceId: string): Promise<number> {
+    const { date: today, time: nowTime } = nowInAR()
+    const [futDias, futHoy] = await Promise.all([
+      t.admin.from('appointments').select('date', { count: 'exact' })
+        .eq('business_id', t.businessId).eq('service_id', serviceId)
+        .gt('date', today).or('status.is.null,and(status.neq.cancelled,status.neq.completed)')
+        .order('date').limit(1),
+      t.admin.from('appointments').select('time, duration_minutes', { count: 'exact' })
+        .eq('business_id', t.businessId).eq('service_id', serviceId)
+        .eq('date', today).or('status.is.null,and(status.neq.cancelled,status.neq.completed)'),
+    ])
+    if (futDias.error || futHoy.error) throw new Error(`pre-check: ${futDias.error?.message ?? futHoy.error?.message}`)
+    const filasDeHoy = (futHoy.data ?? []) as { time: string | null; duration_minutes: number | null }[]
+    const countDeHoy = futHoy.count ?? 0
+    const vivosDeHoy = countDeHoy > filasDeHoy.length
+      ? countDeHoy
+      : filasDeHoy.filter(r => (r.time ? horaEnSegundos(r.time) + (r.duration_minutes ?? 30) * 60 : Number.POSITIVE_INFINITY) > horaEnSegundos(nowTime)).length
+    return (futDias.count ?? 0) + vivosDeHoy
+  }
+
   async function seedAbono(args: { serviceId: string; startTime: string; status: string }): Promise<string> {
     const ins = await t.admin
       .from('abonos')
@@ -411,5 +439,44 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
     expect(del.error?.code).toBe('P0001')
     expect(del.error?.message).toContain('service_has_future_appointments')
     expect(await serviceExists(svc)).toBe(true)
+  }, 20000)
+
+  // (14) CR-02 — EL PRE-CHECK DEL MODAL Y EL GATE TIENEN QUE DECIR LO MISMO.
+  //
+  // El gate vive en la base, pero la ÚNICA superficie por la que el dueño borra un servicio es el
+  // modal de `settings-client.tsx`, que deshabilita el botón "Eliminar" con un pre-check propio
+  // (`delBlocked = delInfo.future > 0 || delInfo.activeAbono`). Mientras ese pre-check comparó SÓLO la
+  // fecha, GATE-03 no llegaba a ninguna persona: la base dejaba borrar y el modal seguía bloqueando
+  // exactamente el caso que la 070 vino a arreglar (CR-02 del code review de la Phase 16, reproducido).
+  //
+  // LIMITACIÓN CONOCIDA, la misma del caso (11): esta suite no renderiza React (D-01), así que acá se
+  // REPLICAN las queries y la aritmética del componente, no se invoca el componente. Si alguien toca
+  // el pre-check de `settings-client.tsx`, tiene que tocar también `preCheckFuture` de abajo — y si no
+  // lo hace, este caso deja de estar midiendo el componente. Es el precio de no poder importarlo.
+  it('14 — CR-02: el pre-check del modal coincide con el gate en los dos lados del corte de hoy', async () => {
+    // (a) HOY a hora YA TERMINADA: el gate deja borrar (caso 12) y el pre-check tiene que decir 0.
+    // Horas PROPIAS, que no pisan las de los casos (12)/(13): los turnos de este archivo comparten
+    // `t.professionalId` y sobreviven al borrado de su servicio (la FK es ON DELETE SET NULL), así
+    // que repetir su horario rebota con 23505 (índice único 011) y solaparlo con 23P01 (EXCLUDE 013).
+    // Las dos siguen siendo deterministas dentro de la ventana del guard [01:00, 23:30]:
+    //   · 00:30 + 30' termina a las 01:00 ⇒ YA TERMINÓ para cualquier "ahora" de la ventana.
+    //   · 23:20 + 30' termina a las 23:50 ⇒ TODAVÍA OCUPA para cualquier "ahora" de la ventana.
+    const PRECHECK_PAST = '00:30:00'
+    const PRECHECK_FUTURE = '23:20:00'
+    const svcPasado = await seedService(t, { name: '__test_svc_precheck_hoy_pasado' })
+    await seedAppointment({ serviceId: svcPasado, date: TODAY_AR, time: PRECHECK_PAST, status: 'confirmed' })
+    expect(await preCheckFuture(svcPasado)).toBe(0)
+    const delPasado = await deleteService(svcPasado)
+    expect(delPasado.error).toBeNull()
+    expect(await serviceExists(svcPasado)).toBe(false)
+
+    // (b) CONTRAPESO obligatorio: HOY a hora que NO llegó. El gate bloquea (caso 13) y el pre-check
+    //     tiene que contar ese turno — si no, el pre-check quedaría "siempre 0" y (a) sería vacío.
+    const svcFuturo = await seedService(t, { name: '__test_svc_precheck_hoy_futuro' })
+    await seedAppointment({ serviceId: svcFuturo, date: TODAY_AR, time: PRECHECK_FUTURE, status: 'confirmed' })
+    expect(await preCheckFuture(svcFuturo)).toBe(1)
+    const delFuturo = await deleteService(svcFuturo)
+    expect(delFuturo.error?.code).toBe('P0001')
+    expect(await serviceExists(svcFuturo)).toBe(true)
   }, 20000)
 })

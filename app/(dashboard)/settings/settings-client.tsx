@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService } from '@/lib/types'
 import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
+import { nowInAR } from '@/lib/appointment-time'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
@@ -147,6 +148,28 @@ const MAX_CAPACITY = 99
 // cae al piso del modo.
 function normalizeCapacity(n: number, min = 1): number {
   return Number.isFinite(n) ? Math.min(MAX_CAPACITY, Math.max(min, Math.floor(n))) : min
+}
+
+// ── Espejo en JS del corte "todavía ocupa la agenda" de los gates de servicio (migr. 070) ──────
+// Los usa el pre-check del modal de borrado, y su única razón de existir es que ese corte NO se puede
+// escribir como filtro de PostgREST: el trigger compara, POR FILA,
+// `date + time + COALESCE(duration_minutes, 30)` contra el ahora AR. Acá se replica esa aritmética en
+// segundos desde la medianoche, sobre los turnos de HOY (para los demás días decide la fecha sola).
+//
+// ⚠ El corte es el FIN del turno, no su inicio: un turno EN CURSO todavía ocupa la agenda y el
+// trigger lo cuenta. Es DISTINTO del corte de `isPastAppointment` (que mira el inicio porque contesta
+// otra pregunta: qué se le muestra al dueño como pasado). El porqué de la asimetría está escrito en
+// `lib/appointment-time.ts`.
+function horaEnSegundos(raw: string): number {
+  const [h = '0', m = '0', s = '0'] = raw.split(':')
+  return (Number(h) || 0) * 3600 + (Number(m) || 0) * 60 + (Number(s) || 0)
+}
+// `duration_minutes` es NULLABLE en la base: el 30 de fallback NO es un número inventado acá, es el
+// mismo `COALESCE(duration_minutes, 30)` que usan el EXCLUDE gist 013 y el trigger sobre esa fila.
+// `time` es NOT NULL; si igual llegara nulo se cuenta como vivo (fail-closed: bloquea de más).
+function finEnSegundos(time: string | null, durationMinutes: number | null): number {
+  if (!time) return Number.POSITIVE_INFINITY
+  return horaEnSegundos(time) + (durationMinutes ?? 30) * 60
 }
 
 // Segmented control de modo + campo de cupo, reutilizado en alta (inline) y edición (dialog).
@@ -590,8 +613,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setDelInfo(null)
     // "Hoy" en hora AR, igual que el trigger: con el date de UTC, a las 22:00 de Buenos Aires un
     // turno de mañana temprano dejaría de contarse como futuro.
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-    const [fut, abo, hist] = await Promise.all([
+    const { date: today, time: nowTime } = nowInAR()
+    const [futDias, futHoy, abo, hist] = await Promise.all([
+      // (a) DÍAS POSTERIORES A HOY. Para estos la hora no decide nada: cuentan enteros.
+      //
       // El `.or(...)` de abajo es el equivalente EXACTO en PostgREST del
       // `status IS NULL OR status NOT IN ('cancelled','completed')` del trigger. Un turno CANCELADO
       // no bloquea (se anuló) y uno COMPLETED tampoco (ya se prestó: es historia, no una reserva
@@ -600,8 +625,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // donde el trigger rechaza — por eso la rama `status.is.null` es explícita.
       supabase.from('appointments').select('date', { count: 'exact' })
         .eq('business_id', business.id).eq('service_id', s.id)
-        .gte('date', today).or('status.is.null,and(status.neq.cancelled,status.neq.completed)')
+        .gt('date', today).or('status.is.null,and(status.neq.cancelled,status.neq.completed)')
         .order('date').limit(1),
+      // (b) LOS DE HOY, que se traen enteros para decidirlos ACÁ. Desde la migr. 070 el trigger
+      // cuenta un turno mientras TODAVÍA NO TERMINÓ
+      // (`date + time + COALESCE(duration_minutes, 30) > ahora AR`), y eso NO se puede expresar como
+      // filtro de PostgREST: la comparación es por fila, contra una expresión calculada. Por eso el
+      // corte de hoy se hace en JS, con la misma aritmética. Sin esto el pre-check bloqueaba el
+      // modal por turnos que la base ya deja borrar, y el arreglo de GATE-03 no llegaba al panel.
+      supabase.from('appointments').select('time, duration_minutes', { count: 'exact' })
+        .eq('business_id', business.id).eq('service_id', s.id)
+        .eq('date', today).or('status.is.null,and(status.neq.cancelled,status.neq.completed)'),
       supabase.from('abonos').select('id', { count: 'exact', head: true })
         .eq('business_id', business.id).eq('service_id', s.id).eq('status', 'active'),
       supabase.from('appointments').select('id', { count: 'exact', head: true })
@@ -609,16 +643,25 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     ])
     // Llegó tarde: mientras esperábamos, el dueño abrió el modal de otro servicio. Descartar.
     if (delReqRef.current !== req) return
-    // Sin los tres counts no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
+    // Sin los cuatro counts no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
     // 'error', NUNCA un 0 silencioso.
-    if (fut.error || abo.error || hist.error) {
-      console.error('[settings/delete-service] pre-check falló:', fut.error ?? abo.error ?? hist.error)
+    if (futDias.error || futHoy.error || abo.error || hist.error) {
+      console.error('[settings/delete-service] pre-check falló:', futDias.error ?? futHoy.error ?? abo.error ?? hist.error)
       setDelInfo('error')
       return
     }
+    const filasDeHoy = (futHoy.data ?? []) as { time: string | null; duration_minutes: number | null }[]
+    const countDeHoy = futHoy.count ?? 0
+    // FAIL-CLOSED si PostgREST paginó la respuesta (`max-rows`): con menos filas que el count no se
+    // puede decidir cuáles siguen vivas, así que se cuentan TODAS — el modal bloquea de más, nunca
+    // de menos. Es el mismo criterio del estado 'error': sin dato no se ofrece la acción.
+    const vivosDeHoy = countDeHoy > filasDeHoy.length
+      ? countDeHoy
+      : filasDeHoy.filter(r => finEnSegundos(r.time, r.duration_minutes) > horaEnSegundos(nowTime)).length
+    const future = (futDias.count ?? 0) + vivosDeHoy
     setDelInfo({
-      future: fut.count ?? 0,
-      nextDate: (fut.data?.[0] as { date?: string } | undefined)?.date ?? null,
+      future,
+      nextDate: vivosDeHoy > 0 ? today : ((futDias.data?.[0] as { date?: string } | undefined)?.date ?? null),
       activeAbono: (abo.count ?? 0) > 0,
       history: hist.count ?? 0,
     })

@@ -181,8 +181,17 @@
 --   · El bloque de abono activo de la 065, con su `service_has_active_abono`.
 --   · LOS DOS CÓDIGOS DE DOMINIO (`service_has_future_appointments` y
 --     `service_mode_has_future_appointments`): no se renombran y no se agrega ninguno nuevo. El panel
---     los mapea con `code === 'P0001' && message.includes(...)`, y el copy actual sigue siendo CIERTO
---     después del recorte ⇒ esta fase no toca una sola línea de `.tsx`.
+--     los mapea con `code === 'P0001' && message.includes(...)`, así que el mapeo que ya está en prod
+--     desde 15-02 sigue funcionando sin tocar nada.
+--     ⚠ CORRECCIÓN (code review, CR-02 y WR-02): la versión original de este bullet concluía "⇒ esta
+--     fase no toca una sola línea de `.tsx`". Eso era cierto para GATE-01 y GATE-02, y FALSO para
+--     GATE-03: el gate de BORRADO tiene un ESPEJO DE LECTURA en el cliente —el pre-check del modal de
+--     `settings-client.tsx`, que deshabilita el botón "Eliminar"— y ese pre-check comparaba sólo la
+--     fecha. Sin actualizarlo, GATE-03 no llega a ninguna persona: la base deja borrar y el modal
+--     sigue bloqueando exactamente el caso que esta migración vino a arreglar. El pre-check quedó
+--     alineado con el predicado nuevo (dos queries + el corte de hoy resuelto en JS, porque
+--     `date + time + duración` no se puede expresar como filtro de PostgREST), y la copy del rechazo
+--     del gate de MODO también, porque desde WR-05 el abono activo también rechaza.
 --   · Los `RETURN OLD` / `RETURN NEW` de salida, que son OBLIGATORIOS: una salida nula desde un
 --     trigger BEFORE cancela la escritura SIN error — PostgREST respondería 204 y el panel diría
 --     "guardado" sin haber guardado (T-14-16). El único camino de rechazo válido es el RAISE.
