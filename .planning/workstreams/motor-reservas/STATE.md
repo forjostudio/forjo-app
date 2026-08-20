@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: verifying
+status: executing
 stopped_at: Completed 16-02-PLAN.md
-last_updated: "2026-08-18T21:04:12.017Z"
-last_activity: 2026-08-18
+last_updated: "2026-08-20T21:06:28.298Z"
+last_activity: 2026-08-20 -- Phase 17 execution started
 progress:
   total_phases: 17
   completed_phases: 16
-  total_plans: 78
-  completed_plans: 78
+  total_plans: 83
+  completed_plans: 79
   percent: 94
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 16 — correcciones-del-gate
+**Current focus:** Phase 17 — superficie-y-polish
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-08-18
+Phase: 17 (superficie-y-polish) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-08-20 -- Phase 17 execution started
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
 
@@ -119,6 +119,7 @@ Last activity: 2026-08-18
 | Phase 15 P05 | ~40min | 3 tasks | 3 files |
 | Phase 16 P01 | 15min | 3 tasks | 5 files |
 | Phase 16 P02 | 26 min | 3 tasks | 4 files |
+| Phase 17 P01 | 34min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 16]: GATE-01: el criterio de direccion del gate de modo es NOMINAL (OLD.capacity_mode = 'individual'), no numerico -- un gate no debe depender del CHECK de coherencia de la 068 para ser correcto
 - [Phase 16]: Los dos gates de servicio NO comparten funcion auxiliar: la 070 es justamente la migracion que los hace divergir en el conjunto de estados (borrado excluye completed, modo no)
 - [Phase 16]: La matriz del gate se prueba POR DIRECCION con control negativo A/B a nivel suite: 5 casos discriminantes vistos fallar contra los cuerpos viejos de 065+068 instalados a mano — Un test de garantia que pasa con y sin la garantia no cuenta como verificacion; separar discriminantes de invariantes evita venderlos como control
+- [Phase ?]: 17-01: los labels de los tres modos de cupo viven en CAPACITY_MODE_HELP (un solo lugar); el explicador es descriptivo, no interactivo (leer no escribe); el clamp del cupo se movio de onChange a onBlur
 
 ### Pending Todos
 
@@ -329,7 +331,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-18T20:52:56.192Z
+Last session: 2026-08-20T21:06:12.263Z
 Stopped at: Completed 16-02-PLAN.md
 Resume file: None
 

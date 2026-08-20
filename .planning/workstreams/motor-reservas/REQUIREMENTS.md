@@ -143,7 +143,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 
 ### Superficie y polish (Phase 17)
 
-- [ ] **CUPO-09** *(reescrito 2026-08-16 al alcance que queda)* — El editor de servicio **explica la
+- [x] **CUPO-09** *(reescrito 2026-08-16 al alcance que queda)* — El editor de servicio **explica la
       diferencia entre los dos modos de cupo compartido**: grupal se cuenta **por hora de inicio**
       (todos arrancan juntos), simultáneo **por solape** (entran escalonados). El copy actual mete los
       dos en la misma bolsa —*"Clase grupal y Recurso simultáneo: varios lugares por turno"*— y un
