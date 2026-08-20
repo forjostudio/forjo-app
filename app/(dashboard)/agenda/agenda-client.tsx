@@ -63,6 +63,59 @@ function statusLabel(status: string): string {
   return status
 }
 
+// ── OccupancyBadge: el contador de ocupación de LOS DOS modos (POLISH-09, D-10) ────────────────
+//
+// La asimetría que POLISH-09 vino a cerrar no era que al grupal le faltara un badge: era que el
+// simultáneo tenía tratamiento de ocupación y el grupal no tenía NINGUNO, aunque el grupal es el
+// modo donde el dueño más necesita saber cuántos lugares quedan. Este componente es la extracción
+// literal del badge que ya existía, y ahora lo consumen los dos: mismos tokens, misma maqueta, una
+// sola verdad visual.
+//
+// Un único badge, hasta DOS segmentos, UN solo color — así el aviso no se duplica ni se abarata.
+// Orden fijo: primero el cupo (la pregunta de todos los días), después la plata (la excepción).
+//
+// El segundo segmento no es un extra. Colapsar la clase en una fila esconde el ámbar por-persona que
+// hoy se ve en cada chip `pending_payment`: sin él, la fase PERDERÍA información que ya está en
+// pantalla (T-17-25). Por eso el umbral es >= 1 y por eso la misma frase se repite en el aria-label
+// del botón del grupo — en mobile no hay hover, así que el `title` nunca puede ser el único canal.
+//
+// El color NUNCA es el único portador: siempre está el icono y, cuando corresponde, la palabra. El
+// texto va en --warning PURO, jamás a opacidad: 9px en negrita es texto chico y necesita el
+// contraste completo. Las cifras van tabular para que pasar de 9 a 10 no mueva nada al lado.
+function OccupancyBadge({ occupied, capacity, pendingDeposit, scope, className }: {
+  occupied: number
+  capacity: number
+  pendingDeposit: number
+  /** 'slot' = el cupo de este horario (grupal) · 'overlap' = turnos que se PISAN (simultáneo). */
+  scope: 'slot' | 'overlap'
+  className?: string
+}) {
+  const isFull = occupied >= capacity
+  const hasPending = pendingDeposit >= 1
+  const atTheSameTime = scope === 'overlap' ? ' a la vez' : ''
+  const title = [
+    isFull
+      ? `El cupo de este horario está completo (${occupied} de ${capacity}${atTheSameTime})`
+      : `${occupied} de ${capacity} lugares ocupados${atTheSameTime}`,
+    hasPending ? `${pendingDeposit} inscripto${pendingDeposit === 1 ? '' : 's'} sin la seña pagada` : '',
+  ].filter(Boolean).join(' · ')
+  return (
+    <Badge
+      variant="outline"
+      title={title}
+      className={cn(
+        'h-4 gap-0.5 px-1 py-0 text-[9px] font-medium',
+        isFull || hasPending ? 'border-warning/30 bg-warning/10 text-warning' : 'border-border bg-secondary text-muted-foreground',
+        className,
+      )}
+    >
+      <Users className="size-2.5!" /><span className="tabular-nums">{occupied}/{capacity}</span>
+      {isFull && <span>lleno</span>}
+      {hasPending && <span>· <span className="tabular-nums">{pendingDeposit}</span> sin seña</span>}
+    </Badge>
+  )
+}
+
 // Los estados que ocupan lugar y el parseo de 'HH:MM' vivían acá duplicados. Ahora salen de
 // `lib/agenda-occupancy.ts`, que es el módulo puro con la suite: una sola definición, un solo lugar
 // donde corregirla. No dejar una segunda copia local aunque parezca inofensiva — la divergencia
@@ -632,7 +685,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                       >
                         <span className="font-semibold">{entry.time}</span>
                         <span className="min-w-0 flex-1 truncate">{entry.serviceName ?? 'Clase'}</span>
-                        <span className="flex-shrink-0 tabular-nums">{entry.occupied}/{entry.capacity}</span>
+                        <OccupancyBadge
+                          occupied={entry.occupied}
+                          capacity={entry.capacity}
+                          pendingDeposit={entry.pendingDeposit}
+                          scope="slot"
+                          className="flex-shrink-0"
+                        />
                       </button>
                     )
                   }
@@ -649,15 +708,21 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                       <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
                       {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
                       {/* Aviso "lleno" (D-11): el intervalo de ESTE turno ya alcanzó el cupo del
-                          recurso. Dato exclusivo del admin (el público nunca ve la ocupación, D-06). */}
+                          recurso. Dato exclusivo del admin (el público nunca ve la ocupación, D-06).
+                          Conserva su comportamiento —aparece SOLO al llenarse, porque el solape no se
+                          lee de un vistazo— pero ahora sale del mismo componente y con los mismos
+                          tokens que la línea de grupo: eso es la armonización que pide POLISH-09.
+                          `pendingDeposit={0}`: el aviso de seña es propio del slot grupal, donde el
+                          ámbar por-persona quedó escondido al colapsar; acá los chips siguen a la
+                          vista uno por uno. */}
                       {overlapFull && (
-                        <Badge
-                          variant="outline"
-                          title={`El cupo de este horario está completo (${overlapFull.count} de ${overlapFull.capacity} a la vez)`}
-                          className="mt-0.5 h-4 gap-0.5 border-warning/30 bg-warning/10 px-1 py-0 text-[9px] font-medium text-warning"
-                        >
-                          <Users className="size-2.5!" /><span className="tabular-nums">{overlapFull.count}/{overlapFull.capacity}</span> lleno
-                        </Badge>
+                        <OccupancyBadge
+                          occupied={overlapFull.count}
+                          capacity={overlapFull.capacity}
+                          pendingDeposit={0}
+                          scope="overlap"
+                          className="mt-0.5"
+                        />
                       )}
                       {/* Badge "Fijo" (D-09): el turno viene de un abono. Reusa el Badge del design system,
                           sizeado para no romper la tarjeta compacta del turno. */}
