@@ -155,7 +155,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       piso por modo, el bloqueo por espacio compartido y la copy propia del rechazo del gate— **ya está
       en producción**: la entregaron el guard de 15-02 y el fix de CR-03 en la 069.)*
 
-- [ ] **POLISH-08** *(ampliado 2026-08-20 — decisión del dueño en `discuss-phase 17`)* — La lista de
+- [x] **POLISH-08** *(ampliado 2026-08-20 — decisión del dueño en `discuss-phase 17`)* — La lista de
       `/servicios` muestra un **badge de modo** (hoy el modo solo se ve al abrir el servicio), y ese
       badge **es también el control**: `Clase grupal · [−] 6 [+] lugares`, editable sin abrir el modal.
       ⚠ **La edición inline es capacidad NUEVA, no presentación** — cambia el patrón de la pantalla

@@ -68,7 +68,7 @@ Faseo por riesgo, igual que en v0.26: el cambio del modelo y del motor va primer
  (completed 2026-08-16)
 
 - [x] **Phase 16: Correcciones del gate** - Migración **070** sobre el predicado de los gates: estrecharlo por dirección (`individual` → grupal/simultáneo es seguro y hoy se bloquea sin motivo), que marcar `completed` un turno futuro deje de abrirlo, y que compare **fecha + hora** en vez de solo la fecha en los gates de la 065 y la 068. **secure-phase obligatorio** (completed 2026-08-18)
-- [ ] **Phase 17: Superficie y polish** - Copy que distinga grupal de simultáneo + los tres defectos del editor que levantó la UAT, badge de modo en `/servicios`, la grilla de la agenda leyendo `services.capacity` y mostrando la ocupación grupal, y Finanzas mobile mostrando el servicio
+- [x] **Phase 17: Superficie y polish** - Copy que distinga grupal de simultáneo + los tres defectos del editor que levantó la UAT, badge de modo en `/servicios`, la grilla de la agenda leyendo `services.capacity` y mostrando la ocupación grupal, y Finanzas mobile mostrando el servicio (completed 2026-08-20)
 
 ## Phase Details
 
@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -683,7 +683,7 @@ Plans:
 
 **Wave 3** *(blocked on 17-02)*
 
-- [ ] 17-03-PLAN.md — `CapacityInlineControl`: el badge de modo **es** el control de cupo en la tarjeta de `/servicios` (D-07/D-08/D-09), con `saveCapacityInline` como **segundo write path** (filtro por tenant, payload `{ capacity }`, copy propia del rechazo) y estado de guardado **por tarjeta** — POLISH-08
+- [x] 17-03-PLAN.md — `CapacityInlineControl`: el badge de modo **es** el control de cupo en la tarjeta de `/servicios` (D-07/D-08/D-09), con `saveCapacityInline` como **segundo write path** (filtro por tenant, payload `{ capacity }`, copy propia del rechazo) y estado de guardado **por tarjeta** — POLISH-08
 
 **Waves**: dos cadenas en paralelo que no comparten un solo archivo. La de `settings-client.tsx` es **secuencial** (17-01 → 17-02 → 17-03): los tres planes editan el mismo archivo, así que paralelizarlos sería una ficción que el orquestador serializaría igual. La de la agenda parte la lógica de la pintura (17-04 → 17-05) porque el runner corre en `environment: 'node'` y no renderiza JSX: lo testeable se extrae y se congela antes de tocar la grilla. **Rojo conocido y declarado:** al cerrar 17-04 el módulo queda sin consumidores y `agenda-client.tsx` sigue con su lógica vieja — lo cierra 17-05, y ningún criterio de 17-04 depende de eso.
 
@@ -713,4 +713,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 4/5 | In Progress|  |
+| 17. Superficie y polish | 5/5 | Complete   | 2026-08-20 |

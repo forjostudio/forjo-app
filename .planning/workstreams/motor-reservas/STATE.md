@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: executing
+status: verifying
 stopped_at: Completed 17-02-PLAN.md
-last_updated: "2026-08-20T21:57:52.585Z"
+last_updated: "2026-08-20T22:15:14.587Z"
 last_activity: 2026-08-20 -- Phase 17 execution started
 progress:
   total_phases: 17
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 83
-  completed_plans: 82
-  percent: 94
+  completed_plans: 83
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 17 (superficie-y-polish) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-20 -- Phase 17 execution started
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
@@ -123,6 +123,7 @@ Last activity: 2026-08-20 -- Phase 17 execution started
 | Phase 17 P04 | 22min | 3 tasks | 3 files |
 | Phase 17 P02 | 28min | 2 tasks | 1 files |
 | Phase 17 P05 | 48min | 3 tasks | 1 files |
+| Phase 17 P03 | 32min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -266,6 +267,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 17]: savingNewSvc se apaga en un finally, no antes de cada return — el early return por error también tiene que devolver el botón
 - [Phase ?]: 17-05: la columna del dia consume lib/agenda-occupancy; el cupo sale de services.capacity y el modo se lee, no se deduce (POLISH-09)
 - [Phase ?]: 17-05: el roster recupera la MISMA entrada de grupo que se renderizo (date+time+serviceId) en vez de recalcular: divergencia de numeros imposible por construccion
+- [Phase ?]: 17-03: el badge de modo de la tarjeta ES el control de cupo (D-07+D-08 son un solo elemento); el label de modo es texto, no un control (D-09)
+- [Phase ?]: 17-03: guardado inline con estado POR TARJETA (savingCapacityId); el booleano singleton de los dialogos congelaria el resto de la lista
 
 ### Pending Todos
 
@@ -340,7 +343,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-20T21:57:36.823Z
+Last session: 2026-08-20T22:14:54.950Z
 Stopped at: Completed 17-02-PLAN.md
 Resume file: None
 
