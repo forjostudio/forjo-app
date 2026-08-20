@@ -150,6 +150,57 @@ function normalizeCapacity(n: number, min = 1): number {
   return Number.isFinite(n) ? Math.min(MAX_CAPACITY, Math.max(min, Math.floor(n))) : min
 }
 
+// ── Los tres modos de cupo, en UN solo lugar (CUPO-09 · D-01/D-03/D-04) ─────────────────────────
+// Por qué existe: es la misma lección que la Phase 15 aplicó en la base —el número del cupo vive en una
+// sola columna— aplicada ahora a la pantalla. Hasta acá el label estaba duplicado de hecho (el array de
+// opciones del radiogroup y la línea de copy que iba debajo), y D-03 prohíbe renombrar los labels
+// justamente porque el mismo texto lo arrastran la copy del rechazo del gate, el aviso de espacio
+// compartido y los comentarios del código: un label que vive en dos lados se renombra a medias.
+//
+// El orden es el de la pantalla: 'individual' va PRIMERO porque es el DEFAULT de la base desde la 068 y
+// el caso real del 100 % de los servicios de producción.
+//
+// 'individual' no lleva 'warning' (D-01): no tiene contra qué equivocarse. Sí lleva 'example', porque lo
+// que sostiene la simetría del bloque explicativo es que los tres tengan la misma forma.
+//
+// Los ejemplos son FIJOS para todos los rubros (D-04): yoga y camillas se entienden desde cualquier
+// vertical, y rutearlos por lib/verticals.ts obligaría a inventar el caso de canchas, donde el cupo
+// compartido casi no aplica.
+type CapacityModeHelp = {
+  key: CapacityMode
+  label: string
+  // El EJE de conteo: qué cuenta este modo. Es la definición, la capa que hoy falta en pantalla.
+  axis: string
+  // Caso concreto, SIN el prefijo "Ej:" — lo pone el markup, que necesita resaltarlo aparte.
+  example: string
+  // Qué sale mal si se elige el OTRO modo de cupo compartido. Es la capa que convierte dos definiciones
+  // correctas en una decisión: sin ella el dueño entiende los dos modos y sigue sin saber cuál le sirve.
+  warning?: string
+}
+
+const CAPACITY_MODE_HELP: readonly CapacityModeHelp[] = [
+  {
+    key: 'individual',
+    label: 'Individual',
+    axis: 'Un turno por vez.',
+    example: 'un corte de pelo — una persona por horario.',
+  },
+  {
+    key: 'group_class',
+    label: 'Clase grupal',
+    axis: 'Todos arrancan a la misma hora y comparten los lugares.',
+    example: 'yoga de 9:00 — 6 personas, todas a las 9:00.',
+    warning: 'Si elegís Recurso simultáneo por error, alguien puede reservar 9:30 y sumarse a mitad de clase.',
+  },
+  {
+    key: 'simultaneous_resource',
+    label: 'Recurso simultáneo',
+    axis: 'Entran escalonados y se cuentan los turnos que se pisan.',
+    example: '3 camillas — una a las 9:00 y otra a las 9:30.',
+    warning: 'Si elegís Clase grupal por error, se te llena la agenda antes de tiempo: solo entran a la hora en punto.',
+  },
+]
+
 // ── Espejo en JS del corte "todavía ocupa la agenda" de los gates de servicio (migr. 070) ──────
 // Los usa el pre-check del modal de borrado, y su única razón de existir es que ese corte NO se puede
 // escribir como filtro de PostgREST: el trigger compara, POR FILA,
@@ -222,18 +273,15 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
   sharedCapacityBlocked?: boolean
 }) {
   const isIndividual = value === 'individual'
-  // El individual va PRIMERO: es el DEFAULT de la base desde la 068 y el caso real del 100 % de los
-  // servicios de producción.
-  const opts: { key: CapacityMode; label: string }[] = [
-    { key: 'individual', label: 'Individual' },
-    { key: 'group_class', label: 'Clase grupal' },
-    { key: 'simultaneous_resource', label: 'Recurso simultáneo' },
-  ]
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Cómo se ocupa el cupo</Label>
-      <div role="radiogroup" aria-label="Cómo se ocupa el cupo" className="inline-flex flex-wrap gap-1 rounded-md border border-border p-1">
-        {opts.map(o => {
+      {/* Grid determinista (D-13). Con el inline-flex + wrap de antes las tres opciones no entraban a
+          375px y el envoltorio dejaba la caja dentada, con la tercera pill colgando sola. En grid son
+          tres filas de 44px en mobile —lectura vertical que RIMA con los tres grupos del explicador de
+          abajo— y tres columnas iguales en desktop, donde "Recurso simultáneo" entra en una línea. */}
+      <div role="radiogroup" aria-label="Cómo se ocupa el cupo" className="grid grid-cols-1 gap-1 rounded-md border border-border p-1 sm:grid-cols-3">
+        {CAPACITY_MODE_HELP.map(o => {
           // El modo bloqueado sigue siendo visible (no se esconde la opción: el dueño tiene que
           // entender POR QUÉ no está disponible), pero no se puede activar. Si el servicio YA estaba
           // en ese modo, el botón del otro modo queda habilitado para poder salir.
@@ -246,13 +294,17 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
             type="button"
             role="radio"
             aria-checked={value === o.key}
+            // El destino de este id es el bloque explicativo que va DEBAJO del radiogroup: el lector de
+            // pantalla lee el eje + el ejemplo + la advertencia del modo al enfocar la opción, sin que
+            // haga falta activarla (que es justamente lo que D-02 evita: activar escribe).
+            aria-describedby={`cap-mode-help-${o.key}`}
             disabled={disabled || blocked}
             // El patch lleva SIEMPRE el cupo junto con el modo (D-06): pasar de individual a grupal
             // o simultáneo con el cupo en 1 rebota contra services_capacity_matches_mode_chk, así que
             // el cambio de modo sube el cupo a su piso legal en el mismo estado.
             onClick={() => onChange({ capacity_mode: o.key, capacity: o.key === 'individual' ? 1 : normalizeCapacity(capacity, 2) })}
             className={cn(
-              'min-h-11 px-3 py-2 rounded text-sm font-medium transition-colors disabled:opacity-60',
+              'w-full min-h-11 sm:min-h-0 sm:h-9 px-3 rounded text-sm font-medium transition-colors disabled:opacity-60',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
               value === o.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
               blocked && 'cursor-not-allowed',
