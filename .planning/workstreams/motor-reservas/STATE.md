@@ -4,13 +4,13 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
 stopped_at: Completed 17-02-PLAN.md
-last_updated: "2026-08-20T21:31:44.077Z"
+last_updated: "2026-08-20T21:57:52.585Z"
 last_activity: 2026-08-20 -- Phase 17 execution started
 progress:
   total_phases: 17
   completed_phases: 16
   total_plans: 83
-  completed_plans: 81
+  completed_plans: 82
   percent: 94
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 17 (superficie-y-polish) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-08-20 -- Phase 17 execution started
 
@@ -122,6 +122,7 @@ Last activity: 2026-08-20 -- Phase 17 execution started
 | Phase 17 P01 | 34min | 3 tasks | 1 files |
 | Phase 17 P04 | 22min | 3 tasks | 3 files |
 | Phase 17 P02 | 28min | 2 tasks | 1 files |
+| Phase 17 P05 | 48min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -263,6 +264,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 17]: El service_id es parte de la clave del grupo y occupiesSeat descarta el hold vencido, ambos probados por mutacion — Un test que pasa con y sin la garantia no cuenta: sacar el service_id pone en rojo el caso 4 y sacar el guard pone en rojo el caso 2
 - [Phase 17]: El patrón de diálogo alto (scroll interno + pie anclado) se aplica POR CALLER — components/ui/dialog.tsx queda byte-idéntico
 - [Phase 17]: savingNewSvc se apaga en un finally, no antes de cada return — el early return por error también tiene que devolver el botón
+- [Phase ?]: 17-05: la columna del dia consume lib/agenda-occupancy; el cupo sale de services.capacity y el modo se lee, no se deduce (POLISH-09)
+- [Phase ?]: 17-05: el roster recupera la MISMA entrada de grupo que se renderizo (date+time+serviceId) en vez de recalcular: divergencia de numeros imposible por construccion
 
 ### Pending Todos
 
@@ -337,7 +340,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-20T21:31:20.805Z
+Last session: 2026-08-20T21:57:36.823Z
 Stopped at: Completed 17-02-PLAN.md
 Resume file: None
 

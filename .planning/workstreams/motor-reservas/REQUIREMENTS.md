@@ -199,7 +199,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | GATE-03 | Phase 16 | Complete (16-01 fecha + hora en los gates de la **065** y la **068** + 16-02 los casos 13 y delete-12, con las dos fronteras como testigo). ✅ **070 aplicada a PROD el 2026-08-20** |
 | CUPO-09 | Phase 17 | Pending — reescrito al alcance que queda (la parte funcional ya está en prod) |
 | POLISH-08 | Phase 17 | Pending — ampliado: el badge es también el control de cupo (edición inline, capacidad nueva) |
-| POLISH-09 | Phase 17 | Pending — ampliado: la grilla lee la fuente equivocada, no es solo visual |
+| POLISH-09 | Phase 17 | Complete — 17-04 (modulo puro) + 17-05 (cableado de la grilla, contador colapsado) |
 | POLISH-10 | Phase 17 | Complete |
 
 ## Riesgo

@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 3/5 plans executed
+**Plans**: 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -679,7 +679,7 @@ Plans:
 **Wave 2** *(17-02 blocked on 17-01 · 17-05 blocked on 17-04)*
 
 - [x] 17-02-PLAN.md — El diálogo "Editar servicio" scrollea por dentro con el `DialogFooter` anclado (D-05, sin tocar el componente base) + el alta confirma con "Agregar servicio" al final y sin doble submit — CUPO-09
-- [ ] 17-05-PLAN.md — La columna del día consume el módulo puro: se borra la lectura del cupo por bloque y la deducción del modo (D-11), `OccupancyBadge` compartido por los dos modos, la clase grupal colapsa en **una** línea con contador `3/6` y un solo clickeable (D-10/D-12) — POLISH-09
+- [x] 17-05-PLAN.md — La columna del día consume el módulo puro: se borra la lectura del cupo por bloque y la deducción del modo (D-11), `OccupancyBadge` compartido por los dos modos, la clase grupal colapsa en **una** línea con contador `3/6` y un solo clickeable (D-10/D-12) — POLISH-09
 
 **Wave 3** *(blocked on 17-02)*
 
@@ -713,4 +713,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 3/5 | In Progress|  |
+| 17. Superficie y polish | 4/5 | In Progress|  |
