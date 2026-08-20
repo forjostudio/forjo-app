@@ -150,6 +150,22 @@ function normalizeCapacity(n: number, min = 1): number {
   return Number.isFinite(n) ? Math.min(MAX_CAPACITY, Math.max(min, Math.floor(n))) : min
 }
 
+// Copy del rechazo del gate de cambio de modo (CUPO-08, migr. 068/070) en UN SOLO LUGAR: la leen los
+// DOS caminos de escritura sobre `services` —el diálogo de edición y el guardado inline de la tarjeta
+// (D-08)—. Escrita dos veces se renombra a medias, que es la misma trampa que D-03 evita con los
+// labels de los modos. La copy es PROPIA y fija: NUNCA se interpola `error.message`, el código de la
+// base ni el nombre del servicio (T-14-25 / T-13-09).
+// ⚠ LA COPY TIENE QUE DECIR LA VERDAD SOBRE LA SALIDA (WR-02 del code review de la Phase 16).
+// La versión anterior decía "Cancelalos o esperá a que pasen" y ofrecía una salida que para dos
+// de los tres motivos de rechazo NO EXISTE en la interfaz:
+//   · desde la migr. 070 (GATE-02) un turno FUTURO marcado `completed` bloquea, y RowActions
+//     (appointments-client.tsx) no le da al dueño ni cancelar, ni borrar, ni volver atrás sobre
+//     esa fila — la única salida real es esperar. Registrado como todo del workstream para
+//     darle la acción que falta;
+//   · desde la 070 (WR-05) un ABONO ACTIVO también bloquea, y ahí la salida es dar de baja la
+//     serie, no cancelar turnos sueltos.
+const GATE_MODE_CHANGE_MESSAGE = 'No se puede cambiar cómo se ocupa el cupo: quedan turnos por delante o un abono activo. Cancelá los turnos y dá de baja el abono. Ojo: un turno marcado como completado no se puede cancelar desde el panel — ahí hay que esperar a que pase su horario.'
+
 // ── Los tres modos de cupo, en UN solo lugar (CUPO-09 · D-01/D-03/D-04) ─────────────────────────
 // Por qué existe: es la misma lección que la Phase 15 aplicó en la base —el número del cupo vive en una
 // sola columna— aplicada ahora a la pantalla. Hasta acá el label estaba duplicado de hecho (el array de
@@ -449,8 +465,8 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
 // que es el que tiene el negocio, el cliente y el estado por tarjeta. Acá sólo vive la interacción.
 function CapacityInlineControl({ service, saving, onSave }: {
   service: Service
-  // Lo calcula el PADRE por tarjeta (savingCapacityId === s.id): guardar un servicio no puede congelar
-  // los steppers de los demás servicios de la lista.
+  // Lo calcula el PADRE comparando el id de esta tarjeta con el que tiene un guardado en vuelo:
+  // guardar un servicio no puede congelar los steppers de los demás servicios de la lista.
   saving: boolean
   // `true` = la base aceptó; `false` = rechazó y hay que volver al valor guardado.
   onSave: (capacity: number) => Promise<boolean>
@@ -1083,6 +1099,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [editSvc, setEditSvc] = useState<Service | null>(null)
   const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
   const [savingEditSvc, setSavingEditSvc] = useState(false)
+  // Guardado del cupo inline, POR TARJETA (D-08). NO se puede copiar el shape booleano de
+  // `savingEditSvc`: el diálogo es uno solo, pero las tarjetas son muchas y están todas en pantalla a
+  // la vez — con un booleano global, guardar un servicio congelaría los steppers de todos los demás.
+  // Es el único punto donde el molde de saveEditService no alcanza tal cual.
+  const [savingCapacityId, setSavingCapacityId] = useState<string | null>(null)
   function openEditService(s: Service) {
     setEditSvc(s)
     // El fallback cubre filas viejas en memoria (el DEFAULT de la 068 ya las cubre en la DB): al
@@ -1122,16 +1143,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // deleteService: `code` primero, `message.includes(<código de dominio>)` después. La copy es
       // PROPIA y fija: NUNCA se interpola `error.message` ni el nombre del servicio (T-14-14 / T-13-09).
       if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
-        // ⚠ LA COPY TIENE QUE DECIR LA VERDAD SOBRE LA SALIDA (WR-02 del code review de la Phase 16).
-        // La versión anterior decía "Cancelalos o esperá a que pasen" y ofrecía una salida que para dos
-        // de los tres motivos de rechazo NO EXISTE en la interfaz:
-        //   · desde la migr. 070 (GATE-02) un turno FUTURO marcado `completed` bloquea, y RowActions
-        //     (appointments-client.tsx) no le da al dueño ni cancelar, ni borrar, ni volver atrás sobre
-        //     esa fila — la única salida real es esperar. Registrado como todo del workstream para
-        //     darle la acción que falta;
-        //   · desde la 070 (WR-05) un ABONO ACTIVO también bloquea, y ahí la salida es dar de baja la
-        //     serie, no cancelar turnos sueltos.
-        toast.error('No se puede cambiar cómo se ocupa el cupo: quedan turnos por delante o un abono activo. Cancelá los turnos y dá de baja el abono. Ojo: un turno marcado como completado no se puede cancelar desde el panel — ahí hay que esperar a que pase su horario.')
+        toast.error(GATE_MODE_CHANGE_MESSAGE)
         return
       }
       toast.error('Error al guardar')
@@ -1140,6 +1152,46 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setServices(prev => prev.map(s => s.id === editSvc.id ? { ...s, ...payload } : s))
     setEditSvc(null)
     toast.success('Servicio actualizado')
+  }
+
+  // ── Guardado del cupo desde la tarjeta (D-08) ─────────────────────────────────────
+  // SEGUNDO camino de escritura sobre `services`, en paralelo al del diálogo. Devuelve true/false
+  // porque el control inline necesita saber si tiene que revertir el número que muestra.
+  async function saveCapacityInline(svc: Service, cap: number): Promise<boolean> {
+    // `savingCapacityId` se prende con el id de ESTE servicio y se apaga en TODAS las salidas: una
+    // tarjeta = un request en vuelo, y las demás tarjetas siguen usables mientras tanto.
+    setSavingCapacityId(svc.id)
+    // Se normaliza otra vez acá aunque el control ya clampee: el piso por modo espeja el CHECK de la
+    // migr. 068 y MAX_CAPACITY es lo que evita que un número pegado viaje al UPDATE y vuelva como
+    // `22003 smallint out of range`, que el panel no sabría explicar. Defensa en profundidad, nunca
+    // reemplazo del constraint.
+    const capacity = normalizeCapacity(cap, minCapacityFor(svc.capacity_mode ?? 'individual'))
+    // El payload lleva UNA sola clave. Es HIGIENE, no un arreglo de un bug: el guard de no-cambio del
+    // trigger de la migr. 070 (`IS NOT DISTINCT FROM` → RETURN NEW) hace que mandar también el modo pase
+    // igual —saveEditService lo manda hoy en producción y no rebota—, pero mandarlo desde acá despacharía
+    // un trigger SECURITY DEFINER por cada + y cada − que sólo puede terminar en RETURN NEW. Cuesta cero
+    // evitarlo, y de paso el cambio de modo queda donde D-09 lo dejó: en el diálogo.
+    // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
+    const { error } = await supabase.from('services').update({ capacity }).eq('id', svc.id).eq('business_id', business.id)
+    setSavingCapacityId(null)
+    if (error) {
+      // FAIL-SAFE, no camino feliz: por D-09 este camino NO manda el modo, así que este rechazo no
+      // debería llegar nunca desde la tarjeta. Si llega, significa que alguien empezó a mandar un
+      // `capacity_mode` DISTINTO — es un bug del cliente. Mismo molde de mapeo que el diálogo (`code`
+      // primero, `message.includes(<código de dominio>)` después) y LA MISMA cadena, no una variante.
+      if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
+        toast.error(GATE_MODE_CHANGE_MESSAGE)
+        return false
+      }
+      // Cadena FIJA: ni el mensaje de la base, ni el código, ni el nombre del servicio (T-17-10).
+      toast.error('No pudimos guardar el cupo. Volvimos al valor anterior. Intentá de nuevo.')
+      return false
+    }
+    // Actualización local DESPUÉS de la confirmación, igual que saveEditService: en la tarjeta se ve lo
+    // que la base aceptó. Al cambiar el prop, el control se resincroniza solo y la fila queda limpia.
+    setServices(prev => prev.map(s => s.id === svc.id ? { ...s, capacity } : s))
+    toast.success('Cupo actualizado')
+    return true
   }
 
   // ── Tab 3 — Professionals ─────────────────────────────────────────────────
