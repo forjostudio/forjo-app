@@ -48,7 +48,7 @@ created: 2026-08-20
 
 ## Spacing Scale
 
-Escala del panel (múltiplos de 4, utilidades Tailwind). Se adopta tal cual; no se agregan valores.
+Escala del panel (utilidades Tailwind). Se adopta tal cual; no se agrega ningún valor nuevo.
 
 | Token | Value | Uso en esta fase |
 |-------|-------|------|
@@ -60,6 +60,32 @@ Escala del panel (múltiplos de 4, utilidades Tailwind). Se adopta tal cual; no 
 | md | 16px (`p-4`, `gap-4`) | padding del `DialogContent` (ya es el default del componente) |
 | lg | 24px (`p-6`) | padding de las `Card` del panel (ya es el default) |
 
+**Excepción declarada — los pasos de 2px y 10px (`*-0.5`, `*-2.5`).**
+
+`CLAUDE.md` pide espaciados en múltiplos de 4/8. Esta fase usa además **2px** (entre las capas de un
+mismo grupo del explicador) y **10px** (entre grupos). Es una **desviación consciente y acotada**, no
+un descuido, y va escrita acá para que se audite como decisión.
+
+*Medido sobre `app/` + `components/` el 2026-08-20* (`grep -roE "(p|px|py|…|gap|space-y)-<paso>"
+--include=*.tsx`):
+
+| Paso | Usos en el repo | En los dos archivos que esta fase edita |
+|---|---|---|
+| `*-0.5` (2px) | **79** | 13 en `settings-client.tsx` · 10 en `agenda-client.tsx` |
+| `*-2.5` (10px) | **57** | 4 en `settings-client.tsx` · 4 en `agenda-client.tsx` |
+| `*-1.5` (6px) | **215** | — |
+
+**El argumento:** la escala real de este proyecto es la de Tailwind, cuyo paso base es 2px (`0.5` =
+`0.125rem`). 2px y 10px **no son valores arbitrarios**: son pasos de la misma escala que el repo ya
+corre 136 veces (79 + 57), **31 de ellas en los dos archivos que esta fase toca**. Los 215 usos de
+6px terminan de mostrar que la regla de 4/8 de `CLAUDE.md` es aspiracional, no descriptiva.
+
+Forzar 4px acá tendría un costo concreto: el explicador quedaría con un ritmo vertical **distinto al
+de sus vecinos inmediatos** dentro del mismo formulario —el aviso de espacio compartido
+(`settings-client.tsx:270-277`, que ya usa `gap-2` + `mt-px`) y el `space-y-1.5` del propio
+`CapacityModeFields`—, o sea consistencia con un documento a cambio de inconsistencia con la pantalla.
+El executor puede verlo con sus propios ojos abriendo `settings-client.tsx` y buscando `-0.5`.
+
 **Excepciones (targets táctiles):** `min-h-11` / `min-w-11` (44px) en todo control interactivo nuevo
 **en mobile**, liberado desde `sm:` cuando el control convive con densidad de datos. Es el idioma que
 el repo ya usa: `settings-client.tsx:255` (toggles de modo, `min-h-11` siempre) y
@@ -69,17 +95,25 @@ el repo ya usa: `settings-client.tsx:255` (toggles de modo, `min-h-11` siempre) 
 
 ## Typography
 
-Escala del panel. **No se agregan tamaños nuevos.** La jerarquía del explicador (§2) se construye con
-peso + color + riel, no con un cuarto tamaño.
+Escala del panel. **Esta fase no introduce ni un tamaño ni un peso nuevos: los seis roles ya existen
+en las pantallas que toca.** La jerarquía del explicador (§2) se construye con peso + color + riel, no
+con un cuarto tamaño.
 
-| Rol | Size | Weight | Color token | Uso en esta fase |
-|------|------|--------|-------------|-----|
-| Título de diálogo | 16px (`text-base`) | 500 | `--popover-foreground` | "Editar servicio" (`DialogTitle`, `font-heading`) |
-| Body / control | 14px (`text-sm`) | 400 / 500 | `--foreground` | labels de los toggles, label de modo en la tarjeta, nombre del servicio |
-| Label de campo | 12px (`text-xs`) | 400 | `--muted-foreground` | "Cómo se ocupa el cupo", "Cuántos lugares" |
-| Data line | 12px (`text-xs`) | 400 | `--muted-foreground` | `30min · $5.000 · …` en la tarjeta |
-| Meta / chip | 11px (`text-[11px]`) | 400/600 | según superficie | pills de sede, chips de turno, línea de grupo en la agenda |
-| Micro-badge | 9px (`text-[9px]`) | 500 | `--warning` / `--muted-foreground` | contador de ocupación (molde de `agenda-client.tsx:648-655`) |
+La columna **Origen** existe para que la tabla no se lea como "seis tamaños nuevos por pantalla":
+
+| Rol | Size | Weight | Color token | Origen | Uso en esta fase |
+|------|------|--------|-------------|--------|-----|
+| Título de diálogo | 16px (`text-base`) | 500 | `--popover-foreground` | **heredado** — `components/ui/dialog.tsx` (`DialogTitle`) | "Editar servicio" |
+| Body / control | 14px (`text-sm`) | 400 / 500 | `--foreground` | **heredado** — `settings-client.tsx:255` (toggles) y `:1737` (nombre del servicio) | labels de los toggles, label de modo en la tarjeta, nombre del servicio |
+| Label de campo | 12px (`text-xs`) | 400 | `--muted-foreground` | **heredado** — `settings-client.tsx:234,284` | "Cómo se ocupa el cupo", "Cuántos lugares" |
+| Data line | 12px (`text-xs`) | 400 | `--muted-foreground` | **heredado** — `settings-client.tsx:1745` (la línea `30min · $5.000` de hoy) | la misma línea, ahora con el control de cupo |
+| Meta / chip | 11px (`text-[11px]`) | 400/600 | según superficie | **heredado** — pills de sede (`settings-client.tsx:1759`) y chips de turno (`agenda-client.tsx:640`) | pills de sede, chips, línea de grupo de la agenda |
+| Micro-badge | 9px (`text-[9px]`) | 500 | `--warning` / `--muted-foreground` | **heredado** — badge `N/M lleno`, `agenda-client.tsx:648-655` | contador de ocupación de los dos modos |
+
+**Nuevo de esta fase: cero tamaños, cero pesos.** Lo único nuevo es *dónde* se aplican roles que ya
+existían — el 9px/500 del contador, que hoy solo tiene el recurso simultáneo, pasa a cubrir también la
+clase grupal (que es literalmente lo que pide POLISH-09), y el 14px/500 del label de modo aparece en
+la línea de datos de la tarjeta.
 
 **Números:** todo contador o cupo lleva `tabular-nums` (el cambio de 9 a 10 no debe mover nada al
 lado). El cupo es entero 2…99, **sin separador de miles** (el techo `MAX_CAPACITY = 99` lo hace
@@ -119,6 +153,25 @@ texto normal) y `#e6b53f` sobre `#1a1714` → **8.75:1** (AAA). El micro-badge d
 en negrita sobre `bg-warning/10`: **el color del texto va en `--warning` puro, nunca a opacidad**, y
 el badge SIEMPRE lleva además un icono (`Users`) y la palabra ("lleno" / "sin seña") — el color no es
 el único portador del significado.
+
+---
+
+## Foco visual — qué gana el ojo en cada superficie
+
+Una línea por superficie. Un elemento dominante por pantalla; si dos compiten, gana el de la columna
+"Domina" y el otro **cede peso**, no tamaño.
+
+| Superficie | Domina | Cede | Cómo se sostiene |
+|---|---|---|---|
+| **Tarjeta de servicio** | **El nombre del servicio** | El control de cupo | El nombre es 14px/500 en `--foreground`; el control vive en la línea de datos de 12px `--muted-foreground`, y su única parte en `--foreground` es el label de modo. El stepper aporta un borde `--border` de 1px, no una superficie llena. **Sin `bg-primary` en reposo.** Una lista de servicios tiene que seguir leyéndose como lista, no como un panel de configuración |
+| **Editor (modal)** | **El radiogroup de modo** | El explicador | El radiogroup es el único elemento con `bg-primary` de la pantalla; el explicador es texto sobre `bg-secondary/30` sin ningún relleno de acento. La decisión se toma arriba y se justifica abajo |
+| **Explicador (dentro de sí)** | **Los tres labels de modo** | Ejes, ejemplos y advertencias | Único tamaño de 14px del bloque, equiespaciados, alineados por el riel. Las advertencias tienen color pero son 12px y arrancan con un icono de 14px: llaman sin ganar |
+| **Columna del día (agenda)** | **La hora** | El servicio y el contador | La hora va `font-semibold`; el servicio `truncate` en peso normal; el contador es un micro-badge de 9px al final de la línea. El ojo baja la columna leyendo horas |
+| **Fila de Finanzas (mobile)** | **El nombre del cliente** | El servicio | El servicio entra como segunda línea de 12px `--muted-foreground` bajo el nombre: se suma un dato sin mover el punto de entrada de la fila |
+
+Excepción deliberada: **cuando la fila de un servicio está sucia**, el botón "Guardar" pasa a dominar
+esa tarjeta (es `bg-primary` sobre una tarjeta sin acento). Es correcto y temporal — hay una acción
+pendiente y tiene que verse; al guardar, el foco vuelve al nombre.
 
 ---
 
