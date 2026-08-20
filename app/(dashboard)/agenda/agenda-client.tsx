@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Minus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail, Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { buildDayEntries, computeOverlapFull, type DayEntry } from '@/lib/agenda-occupancy'
 import { resolveVertical } from '@/lib/verticals'
 import { todayInAR } from '@/lib/booking-window'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -62,14 +63,10 @@ function statusLabel(status: string): string {
   return status
 }
 
-// Estados que OCUPAN un lugar del cupo (mismo WHERE de los constraints 011/013).
-const OCCUPYING_STATUSES = ['confirmed', 'pending_payment']
-
-// Minutos desde 'HH:MM[:SS]' para resolver la ventana del time_block que cubre un slot.
-function timeToMin(t: string): number {
-  const [h, m] = t.split(':')
-  return Number(h) * 60 + Number(m)
-}
+// Los estados que ocupan lugar y el parseo de 'HH:MM' vivían acá duplicados. Ahora salen de
+// `lib/agenda-occupancy.ts`, que es el módulo puro con la suite: una sola definición, un solo lugar
+// donde corregirla. No dejar una segunda copia local aunque parezca inofensiva — la divergencia
+// entre dos copias del mismo criterio es exactamente lo que esta fase vino a cerrar.
 
 // Dialog (desktop ≥768px) / Drawer vaul (mobile) son portales con estado propio: el breakpoint
 // se decide en JS, no con clases CSS. useSyncExternalStore se suscribe a matchMedia (store externo)
@@ -445,96 +442,77 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   const [weekStart, setWeekStart] = useState(todayWeekStart)
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
   const openDays = useMemo(() => new Set(initialTimeBlocks.map(b => b.day_of_week)), [initialTimeBlocks])
-  const apptsByDate = useMemo(() => {
-    const m = new Map<string, AgendaAppt[]>()
-    for (const a of initialAppointments) {
-      const arr = m.get(a.date) || []
-      arr.push(a)
-      m.set(a.date, arr)
-    }
-    return m
-  }, [initialAppointments])
 
-  // ── Roster del admin (CUPOS-04, D-04) ────────────────────────────────────────
-  // Click en un slot grupal → overlay con contador "ocupados/cupo" + lista (nombre, contacto, estado).
-  // Solo se computa en memoria sobre initialAppointments (ya filtrados por business_id en el server,
-  // T-02-13): NUNCA toca datos de otro tenant.
-  const isDesktop = useMediaQuery('(min-width: 768px)')
-  const [rosterSlot, setRosterSlot] = useState<{ date: string; time: string } | null>(null)
-
-  // capacityFor(date, time): MAX capacity de los time_blocks cuyo día (getUTCDay, igual que la DB y
-  // availability) + ventana [start,end) cubren el slot. Sin bloque que lo cubra → 1 (individual).
-  const capacityFor = useCallback((date: string, time: string): number => {
-    const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
-    const tMin = timeToMin(time)
-    let cap = 0
-    for (const b of initialTimeBlocks) {
-      if (b.day_of_week !== dow) continue
-      if (timeToMin(b.start_time) <= tMin && tMin < timeToMin(b.end_time)) {
-        cap = Math.max(cap, Number(b.capacity) || 1)
-      }
-    }
-    return cap || 1
-  }, [initialTimeBlocks])
-
-  // ── Ocupación por SOLAPE del recurso simultáneo (CUPO-01, D-11) ─────────────
-  // Index de servicios por id: los `services` llegan del server ya filtrados por business_id.
+  // ── Ocupación y agrupamiento de la columna del día (POLISH-09, D-10/D-11/D-12) ──────────────
+  // Index de servicios por id: los `services` llegan del server ya filtrados por business_id
+  // (T-02-13), así que nada de lo que se calcula acá puede alcanzar datos de otro tenant.
   const serviceById = useMemo(() => new Map(services.map(s => [s.id, s])), [services])
 
-  // Para un servicio 'simultaneous_resource' el cupo NO se cuenta por hora de inicio exacta (eso es
-  // el modelo grupal, contador "8/15" del roster) sino por INTERSECCIÓN de intervalos contra los
-  // turnos del MISMO service_id — el mismo conjunto que gatea el RPC (062): business_id + service_id
-  // + date + estados que ocupan. Devuelve turno → {ocupados, cupo} SOLO para los turnos cuyo
-  // intervalo ya alcanzó el cupo; para group_class y cupo 1 el mapa queda vacío (cero regresión).
-  // Se computa en memoria sobre initialAppointments (ya filtrados por business_id en el server).
-  const overlapFullById = useMemo(() => {
-    const full = new Map<string, { count: number; capacity: number }>()
-    // Un hold VENCIDO (pending_payment con la seña expirada) NO ocupa lugar: el motor lo descarta en
-    // el gate del RPC (migr. 063) y availability tampoco lo cuenta. Sin esta guarda el panel avisaba
-    // "lleno" sobre horarios que en realidad seguían reservables (code-review CR-01).
+  // Toda la ocupación vive en `lib/agenda-occupancy.ts` (módulo puro, con su suite de 20 casos y dos
+  // garantías probadas por mutación). Acá NO se recalcula nada: la grilla solo PINTA lo que ese
+  // módulo decide.
+  //
+  // ⚠ El cupo sale de `services.capacity`, la fuente del MOTOR desde la migración 068. Hasta esta
+  // fase la columna del día sacaba el cupo recorriendo los bloques de horario: esa columna dejó de
+  // decidir, así que el panel podía avisar "lleno" con un número que `book_slot_atomic` ignora. La
+  // lectura vieja se borró entera y el módulo puro ni siquiera recibe los bloques — no hay parámetro
+  // por donde volver a enchufarlos.
+  //
+  // Los DOS cálculos salen del MISMO memo porque comparten el reloj: `nowMs` se lee UNA sola vez y
+  // se pasa a los dos. Si cada uno leyera la hora por su cuenta, dos partes de la misma pantalla
+  // podrían discrepar sobre si un hold ya venció (la fila diría 3/6 y el aviso de solape contaría 4).
+  const { entriesByDate, overlapFullById } = useMemo(() => {
     const nowMs = Date.now()
-    const isAlive = (a: AgendaAppt) =>
-      a.status === 'confirmed' || a.expires_at == null || new Date(a.expires_at).getTime() > nowMs
-    // Carriles independientes por servicio y día (D-03/D-04): un servicio simultáneo solo compite
-    // contra sí mismo.
-    const lanes = new Map<string, AgendaAppt[]>()
+    const byDate = new Map<string, AgendaAppt[]>()
     for (const a of initialAppointments) {
-      if (!a.service_id || !OCCUPYING_STATUSES.includes(a.status) || !isAlive(a)) continue
-      if (serviceById.get(a.service_id)?.capacity_mode !== 'simultaneous_resource') continue
-      const key = `${a.service_id}|${a.date}`
-      const arr = lanes.get(key) || []
+      const arr = byDate.get(a.date) || []
       arr.push(a)
-      lanes.set(key, arr)
+      byDate.set(a.date, arr)
     }
-    for (const [key, list] of lanes) {
-      const svc = serviceById.get(key.slice(0, key.indexOf('|')))
-      const capacity = Math.max(1, Number(svc?.capacity) || 1)
-      for (const a of list) {
-        const aStart = timeToMin(a.time)
-        // Duración faltante → 30, igual que el COALESCE del RPC. Sin buffer: el gate del motor
-        // compara los intervalos crudos.
-        const aEnd = aStart + (a.duration_minutes ?? 30)
-        const count = list.filter(b => {
-          const bStart = timeToMin(b.time)
-          return bStart < aEnd && aStart < bStart + (b.duration_minutes ?? 30)
-        }).length
-        if (count >= capacity) full.set(a.id, { count, capacity })
-      }
+    const entries = new Map<string, DayEntry<AgendaAppt>[]>()
+    for (const [date, dayAppts] of byDate) {
+      entries.set(date, buildDayEntries(dayAppts, serviceById, nowMs))
     }
-    return full
+    return {
+      entriesByDate: entries,
+      overlapFullById: computeOverlapFull(initialAppointments, serviceById, nowMs),
+    }
   }, [initialAppointments, serviceById])
 
-  // Roster del slot seleccionado: turnos del MISMO (date, time) que ocupan lugar (confirmed/pending),
-  // + el cupo del bloque que cubre el slot. Contador "N/capacity".
+  // ── Roster del admin (CUPOS-04, D-04) ────────────────────────────────────────
+  // Click en la fila de una clase grupal → overlay con el contador y la lista (nombre, contacto,
+  // estado). El slot se identifica por fecha + hora + SERVICIO: el cupo es del servicio.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+  const [rosterSlot, setRosterSlot] = useState<{ date: string; time: string; serviceId: string } | null>(null)
+
+  // El roster NO recalcula nada: recupera de `entriesByDate` LA MISMA entrada de grupo que se
+  // renderizó en la columna. Al leer el mismo objeto es estructuralmente imposible que la fila y el
+  // diálogo muestren números distintos (T-17-23).
+  //
+  // Dos consecuencias buscadas de haber pasado el servicio:
+  // - El roster filtra por SERVICIO, no solo por fecha y hora. Antes, dos clases distintas a la
+  //   misma hora se mezclaban en una sola lista (T-17-24); con el cupo por servicio eso ya no puede
+  //   pasar.
+  // - La lista puede tener MÁS filas que el contador: un hold vencido o un turno que no ocupa lugar
+  //   sigue apareciendo con su chip de estado, pero el contador dice cuántos lugares están
+  //   realmente tomados. No es una discrepancia, es la distinción entre "quiénes figuran" y
+  //   "cuántos lugares hay tomados".
   const roster = useMemo(() => {
     if (!rosterSlot) return null
-    const { date, time } = rosterSlot
-    const slotKey = time.slice(0, 5)
-    const enrollees = initialAppointments
-      .filter(a => a.date === date && a.time.slice(0, 5) === slotKey && OCCUPYING_STATUSES.includes(a.status))
-      .sort((a, b) => a.client_name.localeCompare(b.client_name))
-    return { date, time: slotKey, enrollees, capacity: capacityFor(date, time) }
-  }, [rosterSlot, initialAppointments, capacityFor])
+    const { date, time, serviceId } = rosterSlot
+    const entry = (entriesByDate.get(date) || []).find(
+      e => e.kind === 'group' && e.time === time && e.serviceId === serviceId,
+    )
+    if (!entry || entry.kind !== 'group') return null
+    return {
+      date,
+      time: entry.time,
+      serviceName: entry.serviceName,
+      capacity: entry.capacity,
+      occupied: entry.occupied,
+      enrollees: [...entry.appts].sort((a, b) => a.client_name.localeCompare(b.client_name)),
+    }
+  }, [rosterSlot, entriesByDate])
   // Estado del día para el badge: cerrado / horario especial / abierto (según excepción o grilla).
   function dayStatus(d: Date): 'closed' | 'special' | 'open' {
     const list = excByDate.get(format(d, 'yyyy-MM-dd')) || []
@@ -599,12 +577,17 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           {weekDays.map(d => {
             const ds = format(d, 'yyyy-MM-dd')
             const st = dayStatus(d)
-            const dayAppts = apptsByDate.get(ds) || []
+            // Entradas del día, ya agrupadas por el módulo puro: una clase grupal es UNA entrada
+            // (no N chips), y todo lo demás es un turno suelto EN SU LUGAR. El orden cronológico
+            // mezclado lo resuelve el módulo (el grupo va en la posición de su primer miembro), así
+            // que acá se renderiza en el orden en que vienen: la columna se sigue leyendo como una
+            // línea de tiempo.
+            const dayEntries = entriesByDate.get(ds) || []
             const isToday = isSameDay(d, new Date())
             // D-08 acotado: el header de la celda pre-llena la FECHA del form (no la hora).
-            // Los chips de un slot GRUPAL (capacity > 1) abren el roster (D-04); los individuales
-            // se muestran como hoy (no interactivos). La celda es un <div> para que los chips-botón
-            // del roster no queden anidados en un <button> (HTML inválido / a11y rota).
+            // La fila de una clase grupal abre el roster (D-04); los turnos sueltos se muestran como
+            // hoy (no interactivos). La celda es un <div> para que la fila-botón del grupo no quede
+            // anidada en un <button> (HTML inválido / a11y rota).
             return (
               <div
                 key={ds}
@@ -628,18 +611,41 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                   {st === 'closed' && <CalendarOff className="w-3 h-3 text-muted-foreground" />}
                   {st === 'special' && <CalendarClock className="w-3 h-3 text-primary" />}
                 </button>
-                {dayAppts.length === 0 ? (
+                {dayEntries.length === 0 ? (
                   <span className="text-[10px] text-muted-foreground">{st === 'closed' ? 'Cerrado' : 'Sin turnos'}</span>
-                ) : dayAppts.map(a => {
-                  // Recurso simultáneo (D-11): los turnos se ven como filas individuales con su
-                  // propio horario (el solape se lee en la grilla) — NO abren el roster del slot,
-                  // porque su contador "8/15" por franja no aplica a horarios escalonados.
-                  const isSimultaneous = !!a.service_id && serviceById.get(a.service_id)?.capacity_mode === 'simultaneous_resource'
-                  const isGroup = !isSimultaneous && capacityFor(ds, a.time) > 1
+                ) : dayEntries.map(entry => {
+                  // ── Clase grupal (D-10): UNA fila por horario ────────────────────────────────
+                  // Alto fijo de una fila, haya 3 o 15 inscriptos: a 375px la grilla es de dos
+                  // columnas de ~170px y seis chips apilados hacían impracticable la semana.
+                  if (entry.kind === 'group') {
+                    return (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        onClick={() => setRosterSlot({ date: entry.date, time: entry.time, serviceId: entry.serviceId })}
+                        aria-label={`Ver inscriptos de ${entry.serviceName ?? 'la clase'} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — ${entry.occupied} de ${entry.capacity} lugares`}
+                        className={cn(
+                          'rounded px-1.5 py-1 text-[11px] leading-tight border',
+                          statusChip('confirmed'),
+                          'flex w-full items-center gap-1.5 text-left cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+                        )}
+                      >
+                        <span className="font-semibold">{entry.time}</span>
+                        <span className="min-w-0 flex-1 truncate">{entry.serviceName ?? 'Clase'}</span>
+                        <span className="flex-shrink-0 tabular-nums">{entry.occupied}/{entry.capacity}</span>
+                      </button>
+                    )
+                  }
+                  // ── Turno suelto: individual, simultáneo, o sin servicio resoluble (D-12) ────
+                  // Recurso simultáneo (D-11): sigue SIN agrupar, un chip por turno con su propio
+                  // horario, porque su cupo se cuenta por solape y no por hora de inicio exacta.
+                  // Ya NO es un <button>: un turno que no pertenece a un grupo no tiene roster que
+                  // abrir.
+                  const a = entry.appt
                   const overlapFull = overlapFullById.get(a.id)
                   const chipClass = cn('rounded px-1.5 py-1 text-[11px] leading-tight border break-words', statusChip(a.status))
-                  const chipBody = (
-                    <>
+                  return (
+                    <div key={a.id} className={chipClass}>
                       <span className="font-semibold">{a.time.slice(0, 5)}</span> {a.client_name}
                       {a.services?.name && <span className="block text-[10px] opacity-80">{a.services.name}</span>}
                       {/* Aviso "lleno" (D-11): el intervalo de ESTE turno ya alcanzó el cupo del
@@ -660,21 +666,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                           <Repeat className="size-2.5!" /> Fijo
                         </Badge>
                       )}
-                    </>
-                  )
-                  // Slot grupal → chip clickeable que abre el roster del slot (mismo date/time).
-                  return isGroup ? (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => setRosterSlot({ date: ds, time: a.time })}
-                      aria-label={`Ver inscriptos de las ${a.time.slice(0, 5)} del ${format(d, "EEEE d 'de' MMMM", { locale: es })}`}
-                      className={cn(chipClass, 'text-left w-full cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background')}
-                    >
-                      {chipBody}
-                    </button>
-                  ) : (
-                    <div key={a.id} className={chipClass}>{chipBody}</div>
+                    </div>
                   )
                 })}
               </div>
@@ -1069,15 +1061,20 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       {/* Roster del slot grupal (CUPOS-04, D-04): contador "ocupados/cupo" + inscriptos.
           Dialog en desktop / Drawer vaul en mobile (mismo shell responsive que NuevoTurnoForm). */}
       {roster && (() => {
-        const title = `${format(parseISO(roster.date), "EEE d 'de' MMM", { locale: es })} · ${roster.time}`
-        const counter = `${roster.enrollees.length}/${roster.capacity}`
+        // El título suma el NOMBRE DEL SERVICIO: desde que el roster filtra por servicio, la fecha y
+        // la hora ya no alcanzan para saber qué clase se está mirando (dos clases distintas pueden
+        // compartir horario).
+        const title = `${roster.serviceName ? `${roster.serviceName} · ` : ''}${format(parseISO(roster.date), "EEE d 'de' MMM", { locale: es })} · ${roster.time}`
+        // El contador dice LUGARES OCUPADOS, no filas de la lista: un hold vencido figura abajo con
+        // su chip de estado pero no ocupa lugar (precedente CR-01).
+        const counter = `${roster.occupied}/${roster.capacity}`
         const body = (
           <div className="space-y-3">
             {/* Contador de ocupación — dato exclusivo del admin (el público nunca lo ve, D-06). */}
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm font-semibold tabular-nums">{counter}</span>
-              <span className="text-xs text-muted-foreground">{roster.enrollees.length === 1 ? 'inscripto' : 'inscriptos'}</span>
+              <span className="text-xs text-muted-foreground">{roster.occupied === 1 ? 'lugar ocupado' : 'lugares ocupados'}</span>
             </div>
             {roster.enrollees.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin inscriptos aún.</p>
