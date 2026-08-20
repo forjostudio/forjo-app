@@ -155,8 +155,15 @@ transacción igual — el owner queda con un error peor y sin salida clara.
       piso por modo, el bloqueo por espacio compartido y la copy propia del rechazo del gate— **ya está
       en producción**: la entregaron el guard de 15-02 y el fix de CR-03 en la 069.)*
 
-- [ ] **POLISH-08** — La lista de `/servicios` muestra un **badge de modo**: hoy el modo solo se ve al
-      abrir el servicio.
+- [ ] **POLISH-08** *(ampliado 2026-08-20 — decisión del dueño en `discuss-phase 17`)* — La lista de
+      `/servicios` muestra un **badge de modo** (hoy el modo solo se ve al abrir el servicio), y ese
+      badge **es también el control**: `Clase grupal · [−] 6 [+] lugares`, editable sin abrir el modal.
+      ⚠ **La edición inline es capacidad NUEVA, no presentación** — cambia el patrón de la pantalla
+      (*ver en la lista, editar en el modal*) y abre un **segundo camino de escritura** sobre
+      `services`, que tiene que mapear el rechazo del gate a copy propia y respetar el piso por modo.
+      Salió de la UAT de la Phase 15 y estaba registrado como todo aparte por ese motivo; se decide
+      incorporarlo con el costo a la vista, no de contrabando. Desde la tarjeta se cambia **el número,
+      nunca el modo** (ver `17-CONTEXT.md` D-08 / D-09).
 
 - [ ] **POLISH-09** *(ampliado 2026-08-16)* — La grilla de la agenda **calcula la ocupación desde
       `services.capacity`**, la misma fuente que el motor, y muestra la ocupación **grupal** con el
@@ -191,7 +198,7 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 | GATE-02 | Phase 16 | Complete (16-01 el predicado deja de excluir `completed` + 16-02 el caso 12, visto FALLAR contra el predicado viejo). Cierra el residual R-15-A de `15-SECURITY.md`. ✅ **070 aplicada a PROD el 2026-08-20** |
 | GATE-03 | Phase 16 | Complete (16-01 fecha + hora en los gates de la **065** y la **068** + 16-02 los casos 13 y delete-12, con las dos fronteras como testigo). ✅ **070 aplicada a PROD el 2026-08-20** |
 | CUPO-09 | Phase 17 | Pending — reescrito al alcance que queda (la parte funcional ya está en prod) |
-| POLISH-08 | Phase 17 | Pending |
+| POLISH-08 | Phase 17 | Pending — ampliado: el badge es también el control de cupo (edición inline, capacidad nueva) |
 | POLISH-09 | Phase 17 | Pending — ampliado: la grilla lee la fuente equivocada, no es solo visual |
 | POLISH-10 | Phase 17 | Pending |
 

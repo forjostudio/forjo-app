@@ -1,4 +1,6 @@
 ---
+status: completed
+completed: 2026-08-20
 created: 2026-08-16T00:00:00.000Z
 title: "El gate de cambio de modo bloquea de más: pasar de individual a grupal/simultáneo es seguro"
 area: database
@@ -94,3 +96,28 @@ residual R-1 de v0.26. No es un ajuste de taquito:
 
 Fase propia chica, o el primer plan de la Phase 16. Mejora concreta de UX —hoy el dueño tiene que
 cancelar turnos para hacer algo que es inocuo— sin aflojar la garantía.
+
+
+---
+
+## ✅ CERRADO por la Phase 16 (GATE-01) — 2026-08-20
+
+Se implementó **exactamente** la tabla de direcciones de arriba, como guard **nominal** al tope de
+`services_block_mode_change`:
+
+```sql
+IF OLD."capacity_mode" = 'individual' THEN ... RETURN NEW; END IF;
+```
+
+Migración **070**, aplicada a producción el **2026-08-20** y verificada por instalación (5/5).
+
+**Dos cosas que la implementación agregó y este todo no anticipaba:**
+
+1. **La dirección segura tiene una excepción: el abono activo** (WR-05 del code review). Hasta la 069,
+   una serie de abono viva casi siempre tenía turnos futuros materializados, así que el predicado la
+   frenaba **de rebote**. Abrir `individual → grupal` sacaba esa protección justo en la dirección más
+   usada: sobre el modo nuevo cada ocurrencia futura compite por cupo y `lib/abono-generation.ts` la
+   **saltea en silencio** ante `slot_full`. Por eso el guard de dirección lleva adentro el mismo bloque
+   de abono activo que el gate de borrado tenía desde la 065.
+2. **El criterio quedó NOMINAL, no numérico.** Escribirlo como `OLD."capacity" <= 1` habría atado el
+   gate a un CHECK: el review de la 069 propuso el error simétrico y se descartó midiéndolo.
