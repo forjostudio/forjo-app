@@ -325,12 +325,52 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
           </span>
         </p>
       )}
-      {/* Línea mínima: nombra los tres modos y de dónde sale el número. La redacción que explique el
-          EJE de conteo de cada uno (grupal = por hora de inicio, simultáneo = por solape) es CUPO-09. */}
-      <p className="text-xs text-muted-foreground">
-        <span className="text-foreground">Individual:</span> un turno por vez.
-        {' '}<span className="text-foreground">Clase grupal</span> y <span className="text-foreground">Recurso simultáneo</span>: varios lugares por turno, y el número lo ponés acá abajo.
-      </p>
+      {/* Explicador de los tres modos (CUPO-09 · D-01/D-02). Reemplaza a la línea que había acá, que
+          nombraba los modos sin explicarlos y metía los dos de cupo compartido en la misma bolsa.
+
+          Cada grupo trae las TRES capas de D-01: el eje de conteo (qué cuenta el modo), un ejemplo
+          concreto y qué sale mal al elegir el otro. La tercera es la que justifica el requisito: sin
+          ella el dueño lee dos definiciones correctas y sigue sin saber cuál le conviene.
+
+          ⚠ Los TRES están siempre en pantalla, y el bloque NO es interactivo a propósito: sin onClick,
+          sin role de botón y sin tabIndex (D-02). El atajo obvio —mostrar sólo la explicación del modo
+          activo, o abrirla al tocar cada opción— es el que hay que NO tomar: elegir bien exige comparar,
+          y acá cada toque de un toggle ESCRIBE en el formulario (el handler de arriba manda
+          capacity_mode + capacity juntos). Leer no puede tener efecto de escritura.
+
+          El estado activo se marca SÓLO con color (riel + label): no cambia peso ni tamaño, así que
+          cambiar de modo no produce reflow.
+
+          Los pasos de 2px (space-y-0.5, dentro del grupo) y 10px (space-y-2.5, entre grupos) son
+          deliberados y están declarados en el UI-SPEC: la distancia entre grupos es 5× la interna, y es
+          eso —proximidad, no color— lo que hace que nueve líneas se lean como tres grupos. */}
+      <div className="rounded-md border border-border bg-secondary/30 p-3 space-y-2.5">
+        {CAPACITY_MODE_HELP.map(h => {
+          const activo = value === h.key
+          return (
+            <div
+              key={h.key}
+              id={`cap-mode-help-${h.key}`}
+              className={cn('border-l-2 pl-3 space-y-0.5', activo ? 'border-l-primary' : 'border-l-border')}
+            >
+              <p className={cn('text-sm font-medium', activo ? 'text-foreground' : 'text-muted-foreground')}>{h.label}</p>
+              <p className="text-xs text-muted-foreground">{h.axis}</p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground/80">Ej:</span> {h.example}
+              </p>
+              {/* Mismo molde exacto que el aviso de espacio compartido de arriba (icono, tamaño y token):
+                  es la única línea con color e icono del grupo, así que cae siempre en la misma posición
+                  relativa y el ojo la usa como cierre. 'individual' no la tiene (D-01). */}
+              {h.warning && (
+                <p className="flex items-start gap-1.5 text-xs text-warning">
+                  <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                  <span>{h.warning}</span>
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
       {!isIndividual && (
         <div className="space-y-1 pt-1 max-w-[11rem]">
           <Label className="text-xs text-muted-foreground">Cuántos lugares</Label>
