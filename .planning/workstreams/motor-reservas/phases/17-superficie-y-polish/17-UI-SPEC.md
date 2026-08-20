@@ -232,16 +232,46 @@ usa en ningún lado. Preferimos el idioma que ya existe (`min-h-11 sm:min-h-0`, 
 - **La copy es propia y fija. NUNCA se interpola `error.message` ni el nombre del servicio**
   (T-14-25 / T-13-09). Ver §7.
 
-### 1.5 Contrato de escritura (regla dura, no cosmética)
+### 1.5 Contrato de escritura
 
-El payload del guardado inline es **exactamente `{ capacity }`**. Nada más.
+El payload del guardado inline es **exactamente `{ capacity }`**. Nada más. Es **higiene, no un
+requisito de corrección**: el motivo verdadero está abajo, medido.
 
-> ⚠ El gate de la migración 068 es `CREATE TRIGGER services_block_mode_change_trg BEFORE UPDATE **OF
-> capacity_mode**`. Postgres dispara `UPDATE OF col` cuando la columna aparece **mencionada** en el
-> `SET`, aunque el valor sea idéntico. Mandar `capacity_mode` "por prolijidad" desde la tarjeta hace
-> que un servicio con turnos futuros rebote con `service_mode_has_future_appointments` **sin que el
-> dueño haya cambiado el modo**. Es exactamente lo que D-08 anticipó: *"si se dispara, algo está
-> mandando `capacity_mode` de más"*.
+**Medido contra el Postgres local (2026-08-20), en transacción con ROLLBACK y con control:**
+
+| Prueba | Resultado |
+|---|---|
+| Trigger testigo `BEFORE UPDATE OF capacity_mode`, `SET capacity_mode='group_class'` (**mismo valor**) + `capacity` | **dispara** |
+| Mismo testigo, `SET capacity = 8` (payload mínimo) | **no dispara** |
+| Mismo testigo, `SET name = …` (renombrar) | **no dispara** |
+| Sobre `group_class` con turno futuro vivo: `SET capacity_mode='group_class', capacity=7` (payload amplio) | **PASA** |
+| Ídem, `SET capacity = 8` (payload mínimo) | **PASA** |
+| **Control:** ídem, `SET capacity_mode='individual', capacity=1` (cambio real) | **RECHAZA** `service_mode_has_future_appointments` |
+
+El control rechaza, así que el gate estaba activo y los dos "PASA" no son falsos negativos.
+
+**Qué significa, y qué NO:**
+
+- **Disparar ≠ rechazar.** El `UPDATE OF` del trigger es solo una optimización de despacho. El guard
+  real es la primera línea del cuerpo (migr. **070, líneas 338-342**):
+  `IF NEW."capacity_mode" IS NOT DISTINCT FROM OLD."capacity_mode" THEN RETURN NEW`.
+- **El payload amplio es seguro.** `saveEditService` manda `capacity_mode` en **cada** guardado hoy,
+  en producción, y no rebota — el guard lo deja salir temprano. Si el payload amplio rompiera, el
+  editor estaría roto desde la 068. El comentario de la 070 dice exactamente para qué está el guard:
+  *"renombrar un servicio con turnos futuros rebotaría"*.
+- **Por qué igual mandamos el mínimo:** con `capacity_mode` en el `SET`, cada guardado del stepper
+  despacha un trigger `SECURITY DEFINER` que solo puede terminar en `RETURN NEW`. Trabajo inútil por
+  cada `+`/`−`, y una superficie de ejecución que el guardado de cupo no necesita tocar. Cuesta cero
+  evitarlo.
+- **Dependencia real que el executor tiene que conocer:** ese guard de no-cambio es la **única** razón
+  por la que el payload amplio es seguro. Si alguna vez se lo saca de la función, **se rompen juntos
+  el diálogo de edición y el stepper inline** — no es un detalle del camino nuevo, es un supuesto
+  compartido por los dos caminos de escritura sobre `services`.
+- **Cómo leer D-08 a la luz de esto.** *"Si se dispara, algo está mandando `capacity_mode` de más"*
+  sigue siendo un buen olfato de diagnóstico: desde la tarjeta **no** se cambia el modo (D-09), así
+  que un rechazo real por `service_mode_has_future_appointments` en el camino inline significa que
+  alguien mandó un `capacity_mode` **distinto**, no meramente presente. Por eso ese error queda
+  mapeado en §7 como fail-safe: no debería llegar nunca, y si llega es un bug del cliente.
 
 - El `UPDATE` lleva `.eq('id', …).eq('business_id', business.id)` — defensa en profundidad, igual que
   `saveEditService` (`settings-client.tsx:790`).
