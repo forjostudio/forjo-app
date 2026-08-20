@@ -204,11 +204,16 @@ export interface Service {
   //   'simultaneous_resource' = recurso simultáneo (ej. 2 camillas): se cuenta por SOLAPE de
   //                             intervalos entre turnos del mismo servicio. Exige cupo >= 2 por CHECK.
   // Cambiar el modo con turnos futuros vivos lo RECHAZA la base (trigger services_block_mode_change,
-  // migr. 068): P0001 + 'service_mode_has_future_appointments'. SALVEDAD DE DIRECCIÓN (migr. 070): el
-  // rechazo aplica cuando el modo de ORIGEN no es 'individual'. Desde 'individual' hacia grupal o
-  // simultáneo el cambio PASA, porque esos turnos nacieron con is_group = false y siguen dentro del
-  // EXCLUDE gist 013 (y además se cuentan contra el cupo nuevo). Las direcciones que siguen
-  // rechazando son las que dejarían filas is_group = true huérfanas de todos los guards.
+  // migr. 068): P0001 + 'service_mode_has_future_appointments'. "Futuro" desde la 070 = el turno
+  // TODAVÍA NO TERMINÓ (date + time + COALESCE(duration_minutes, 30) > ahora AR), no "todavía no
+  // empezó": un turno EN CURSO sigue ocupando la agenda y sigue bloqueando. SALVEDAD DE DIRECCIÓN
+  // (migr. 070): el rechazo aplica cuando el modo de ORIGEN no es 'individual'. Desde 'individual'
+  // hacia grupal o simultáneo el cambio PASA, porque esos turnos nacieron con is_group = false y
+  // siguen dentro del EXCLUDE gist 013 (y además se cuentan contra el cupo nuevo). Las direcciones
+  // que siguen rechazando son las que dejarían filas is_group = true huérfanas de todos los guards.
+  // ⚠ La dirección segura tiene UNA excepción: un ABONO ACTIVO sobre el servicio también rechaza (la
+  // serie va a seguir generando turnos, y sobre el modo nuevo cada ocurrencia compite por cupo y se
+  // saltea en silencio si no entra).
   capacity_mode: 'individual' | 'group_class' | 'simultaneous_resource'
   // Cupo N del servicio. Es la ÚNICA fuente del número para los TRES modos (migr. 068):
   // time_blocks.capacity ya no decide nada. DEFAULT 1 en la DB.

@@ -615,6 +615,15 @@ BEGIN
   -- R-1) y grupal ⇄ simultáneo cambia el eje de conteo. Escribirlo como `capacity <= 1` haría que el
   -- gate dependa del CHECK de coherencia de la 068 para ser correcto.
   IF OLD."capacity_mode" = 'individual' THEN
+    -- ⚠ EXCEPCIÓN: abono ACTIVO (migr. 070, WR-05). La dirección es segura para los turnos que ya
+    -- existen, no para una serie que sigue creando: sobre el modo nuevo cada ocurrencia futura compite
+    -- por cupo y lib/abono-generation.ts la SALTEA en silencio ante slot_full/slot_taken. Es el mismo
+    -- bloque que el gate de borrado tiene desde la 065, con el mismo código de dominio del gate de modo.
+    IF EXISTS (SELECT 1 FROM abonos ab WHERE ab."service_id" = OLD."id"
+         AND (OLD."business_id" IS NULL OR ab."business_id" = OLD."business_id")
+         AND ab."status" = 'active') THEN
+      RAISE EXCEPTION 'service_mode_has_future_appointments' USING ERRCODE = 'P0001';
+    END IF;
     RETURN NEW;
   END IF;
   -- SIN guard de cascada a propósito: services_business_id_fkey es ON DELETE CASCADE, así que cerrar

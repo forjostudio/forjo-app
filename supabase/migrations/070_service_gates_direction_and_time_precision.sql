@@ -46,6 +46,15 @@
 --   cuestión de cantidad: es que esa fila queda huérfana de todos los guards. El dueño planteó lo
 --   contrario durante la UAT y se evaluó y descartó con este razonamiento (`15-UAT.md`).
 --
+--   ⚠ LA DIRECCIÓN SEGURA TIENE UNA EXCEPCIÓN: EL ABONO ACTIVO (WR-05 del code review). "Salir de
+--   individual es seguro" vale para los turnos que YA existen, no para una serie que va a seguir
+--   creando turnos: sobre el modo nuevo, cada ocurrencia futura pasa a competir por cupo con el resto
+--   y `lib/abono-generation.ts` ante `slot_full`/`slot_taken` la SALTEA en silencio. Hasta la 069 esa
+--   protección existía de rebote (una serie viva casi siempre tiene turnos futuros materializados y
+--   el predicado de turnos frenaba el cambio); GATE-01 la sacaba justo en la dirección más usada. Por
+--   eso el guard de dirección lleva adentro el mismo bloque de abono activo que el gate de BORRADO ya
+--   tenía desde la 065, con el MISMO código de dominio que el resto del gate de modo.
+--
 --   POR QUÉ NOMINAL Y NO `OLD."capacity" <= 1`. Post-068 vale `is_group ⟺ capacity_mode <> 'individual'`
 --   —el auditor de la Phase 15 lo PROBÓ, no lo dedujo: el CHECK de coherencia
 --   `services_capacity_matches_mode_chk` impide cualquier cambio de solo `capacity` que cruce la
@@ -340,6 +349,27 @@ BEGIN
   -- ⚠ Un SOLO turno futuro alcanza para abrir el agujero en las dos direcciones peligrosas: no es
   -- cuestión de cantidad (evaluado y descartado en `15-UAT.md`).
   IF OLD."capacity_mode" = 'individual' THEN
+    -- ⚠ CON UNA EXCEPCIÓN: EL ABONO ACTIVO (WR-05 del code review de la Phase 16). La dirección es
+    -- segura para los turnos que YA existen, pero no para una serie que va a SEGUIR creando turnos.
+    -- El gate de BORRADO ya trata al abono activo como "turnos futuros" con este mismo razonamiento
+    -- escrito en la 065 ("un abono activo genera turnos hacia adelante"), y hasta la 069 el gate de
+    -- MODO no lo necesitaba: una serie viva casi siempre tiene turnos futuros materializados, así que
+    -- el predicado de turnos la frenaba de rebote. GATE-01 saca esa protección incidental justo para
+    -- la dirección más probable, y lo que queda del otro lado es silencioso:
+    -- `lib/abono-generation.ts` ante `slot_full`/`slot_taken` SALTEA la ocurrencia y sigue, así que
+    -- el abonado perdería turnos sin que nadie se lo diga (al pasar a grupal/simultáneo su ocurrencia
+    -- deja de tener el slot para ella sola y compite por cupo con el resto).
+    -- MISMO código de dominio, no uno nuevo: el panel mapea por substring y la copy del rechazo
+    -- ("tiene turnos por delante o un abono activo") ya lo contempla.
+    IF EXISTS (
+      SELECT 1
+        FROM abonos ab
+       WHERE ab."service_id" = OLD."id"
+         AND (OLD."business_id" IS NULL OR ab."business_id" = OLD."business_id")
+         AND ab."status" = 'active'
+    ) THEN
+      RAISE EXCEPTION 'service_mode_has_future_appointments' USING ERRCODE = 'P0001';
+    END IF;
     RETURN NEW;
   END IF;
 

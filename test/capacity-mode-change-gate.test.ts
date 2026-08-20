@@ -187,6 +187,29 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
     return ins.data.id as string
   }
 
+  // Siembra una SERIE de abono (migr. 054) con estado a elección, directo por service-role. No genera
+  // turnos: el sujeto del caso 15 es el bloque de abono del gate, no el motor de generación.
+  async function seedAbono(
+    tenant: SeededTenant,
+    args: { serviceId: string; startTime: string; status: string },
+  ): Promise<string> {
+    const ins = await tenant.admin
+      .from('abonos')
+      .insert({
+        business_id: tenant.businessId,
+        service_id: args.serviceId,
+        professional_id: tenant.professionalId,
+        location_id: tenant.locationId,
+        day_of_week: 1,
+        start_time: args.startTime,
+        status: args.status,
+      })
+      .select('id')
+      .single()
+    if (ins.error || !ins.data) throw new Error(`seed abono: ${ins.error?.message}`)
+    return ins.data.id as string
+  }
+
   // `is_group` es LA razón por la que una dirección es segura y la otra no: una fila con
   // `is_group = false` sigue DENTRO del EXCLUDE gist 013 (041: `AND NOT is_group`), y una con
   // `is_group = true` queda fuera de él Y fuera del gate espejo de la 064. Se lee con service-role,
@@ -521,6 +544,44 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
     const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'individual', capacity: 1 })
     expect(upd.error?.code).toBe('P0001')
     expect(upd.error?.message).toContain('service_mode_has_future_appointments')
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
+  }, 20000)
+
+  // (15) WR-05 — LA EXCEPCIÓN DE LA DIRECCIÓN SEGURA: un ABONO ACTIVO.
+  // "Salir de individual es seguro" vale para los turnos que YA existen; NO para una serie que va a
+  // seguir creando turnos. Sobre el modo nuevo cada ocurrencia futura deja de tener el slot para ella
+  // sola y compite por cupo con el resto, y `lib/abono-generation.ts` ante `slot_full`/`slot_taken`
+  // SALTEA la ocurrencia y sigue: el abonado perdería turnos en silencio. Hasta la 069 esa protección
+  // existía de rebote (una serie viva casi siempre tiene turnos futuros materializados y el predicado
+  // de turnos frenaba el cambio); GATE-01 la sacaba justo en la dirección más usada, y por eso el
+  // guard de dirección lleva adentro el mismo bloque de abono activo que el gate de BORRADO tiene
+  // desde la 065.
+  //
+  // El CONTRAPESO no es opcional: sin él, un gate que rechazara SIEMPRE la dirección segura (o sea,
+  // GATE-01 revertido de hecho) dejaría la primera mitad verde. Con la serie archivada la MISMA
+  // dirección tiene que pasar.
+  it('15 — WR-05: un abono ACTIVO bloquea la dirección segura individual → group_class', async () => {
+    const svc = await seedService(t, { name: '__test_svc_mode_gate_15_abono' })
+    const abono = await seedAbono(t, { serviceId: svc, startTime: '18:00', status: 'active' })
+
+    const upd = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
+    expect(upd.error?.code).toBe('P0001')
+    expect(upd.error?.message).toContain('service_mode_has_future_appointments')
+    expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'individual', capacity: 1 })
+
+    // CONTRAPESO: archivar la serie es la salida documentada (la baja del panel), y con eso la misma
+    // dirección pasa y QUEDA ESCRITA.
+    const arch = await t.admin
+      .from('abonos')
+      .update({ status: 'cancelled' })
+      .eq('id', abono)
+      .eq('business_id', t.businessId)
+      .select('id')
+    expect(arch.error).toBeNull()
+    expect((arch.data || []).length).toBe(1)
+
+    const upd2 = await patchService(t.admin, svc, t.businessId, { capacity_mode: 'group_class', capacity: 2 })
+    expect(upd2.error).toBeNull()
     expect(await modeOf(t, svc)).toEqual({ capacity_mode: 'group_class', capacity: 2 })
   }, 20000)
 })
