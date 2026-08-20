@@ -35,25 +35,33 @@ const PAST_TIME_TODAY = '00:00:00'
 const FUTURE_TIME_TODAY = '23:59:00'
 // Ventana horaria AR fuera de la cual esas dos constantes dejan de ser deterministas.
 const GUARD_WINDOW = { from: '01:00:00', to: '23:30:00' }
+// ¿La corrida cae FUERA de esa ventana? (WR-04 del code review de la Phase 16, mismo criterio y mismo
+// molde que el archivo hermano.) El `throw` vivía en el `beforeAll` y se llevaba puesto el describe
+// ENTERO —las pruebas que no dependen del reloj se caían junto con las tres que sí, una hora y media
+// por día—. La decisión de NO skipear en silencio se conserva, pero acotada: los casos del reloj se
+// saltean y el CANARIO de más abajo se pone en rojo con el motivo.
+const FUERA_DE_VENTANA = AR_NOW.time < GUARD_WINDOW.from || AR_NOW.time > GUARD_WINDOW.to
 
 describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DELETE)', () => {
   let t: SeededTenant
 
   beforeAll(async () => {
-    // GUARD DE LA VENTANA DE MEDIANOCHE (GATE-03), copiado del archivo hermano y por el mismo motivo:
-    // los dos casos de la frontera de hoy usan horas FIJAS (`PAST_TIME_TODAY` = "ya pasó",
-    // `FUTURE_TIME_TODAY` = "todavía no llegó"). Fuera de [01:00:00, 23:30:00] en hora AR esas dos
-    // etiquetas dejan de ser ciertas y los casos medirían LO CONTRARIO de lo que dicen medir.
-    // TIRA en vez de skipear a propósito: un skip silencioso escondería el agujero de cobertura justo
-    // en la franja horaria donde el bug de zona horaria es más probable.
-    if (AR_NOW.time < GUARD_WINDOW.from || AR_NOW.time > GUARD_WINDOW.to) {
-      throw new Error(
-        `GUARD DE MEDIANOCHE: son las ${AR_NOW.time} en hora AR. Los casos de GATE-03 sólo son ` +
-          `deterministas entre ${GUARD_WINDOW.from} y ${GUARD_WINDOW.to} (23:30): fuera de esa ventana ` +
-          `'${PAST_TIME_TODAY}' ya no es una hora pasada o '${FUTURE_TIME_TODAY}' ya no es una hora futura.`,
-      )
-    }
+    // (El guard de la ventana de medianoche ya NO vive acá: tiraba desde el `beforeAll` y volteaba el
+    // describe entero. Ahora es el canario de abajo + `it.skipIf` en los casos del reloj — WR-04.)
     t = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
+  })
+
+  // (0) CANARIO DE LA VENTANA DE MEDIANOCHE (WR-04). SIEMPRE activo: es el que conserva la señal que
+  // motivaba el `throw` — si los casos de GATE-03 se saltearon, alguien tiene que enterarse, con el
+  // motivo escrito y no con un skip mudo.
+  it('0 — canario: esta corrida cubre los casos horarios de GATE-03', () => {
+    expect(
+      FUERA_DE_VENTANA,
+      `GUARD DE MEDIANOCHE: son las ${AR_NOW.time} en hora AR, fuera de [${GUARD_WINDOW.from}, ${GUARD_WINDOW.to}]. ` +
+        `Los casos 12, 13 y 14 (GATE-03 y su espejo en el pre-check) se SALTEARON: fuera de esa ventana las horas ` +
+        `fijas de hoy dejan de ser deterministas y medirían LO CONTRARIO de lo que dicen medir. El resto del ` +
+        `archivo SÍ corrió. Volver a correrlo dentro de la ventana antes de dar la fase por verde.`,
+    ).toBe(false)
   })
 
   afterAll(async () => {
@@ -413,7 +421,7 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
   //
   // `serviceExists` no es cosmético acá: es lo ÚNICO que distingue "se borró de verdad" de "el trigger
   // canceló el borrado en silencio" (un `RETURN NULL` desde un BEFORE DELETE responde 204 sin error).
-  it('12 — GATE-03: un turno de HOY a hora YA PASADA no bloquea el borrado (gap G4 cruzando al SQL)', async () => {
+  it.skipIf(FUERA_DE_VENTANA)('12 — GATE-03: un turno de HOY a hora YA PASADA no bloquea el borrado (gap G4 cruzando al SQL)', async () => {
     const svc = await seedService(t, { name: '__test_svc_gate_hoy_pasado' })
     // ÚNICO turno del servicio: de hoy, VIVO (`confirmed`, no `completed`: acá no interviene el estado)
     // y a una hora que el guard del beforeAll garantiza pasada.
@@ -430,7 +438,7 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
   // corrección sino la regresión que vaciaría la agenda del dueño sin que se entere.
   // El `>=` del predicado es INCLUSIVE y se compara contra el INICIO del turno, espejo del `<`
   // estricto de `isPastAppointment`.
-  it('13 — GATE-03 frontera: un turno de HOY a hora que NO llegó sigue bloqueando el borrado', async () => {
+  it.skipIf(FUERA_DE_VENTANA)('13 — GATE-03 frontera: un turno de HOY a hora que NO llegó sigue bloqueando el borrado', async () => {
     const svc = await seedService(t, { name: '__test_svc_gate_hoy_futuro' })
     await seedAppointment({ serviceId: svc, date: TODAY_AR, time: FUTURE_TIME_TODAY, status: 'confirmed' })
 
@@ -453,7 +461,7 @@ describe.skipIf(!hasSupabaseCreds)('065: gate de borrado de servicio (BEFORE DEL
   // REPLICAN las queries y la aritmética del componente, no se invoca el componente. Si alguien toca
   // el pre-check de `settings-client.tsx`, tiene que tocar también `preCheckFuture` de abajo — y si no
   // lo hace, este caso deja de estar midiendo el componente. Es el precio de no poder importarlo.
-  it('14 — CR-02: el pre-check del modal coincide con el gate en los dos lados del corte de hoy', async () => {
+  it.skipIf(FUERA_DE_VENTANA)('14 — CR-02: el pre-check del modal coincide con el gate en los dos lados del corte de hoy', async () => {
     // (a) HOY a hora YA TERMINADA: el gate deja borrar (caso 12) y el pre-check tiene que decir 0.
     // Horas PROPIAS, que no pisan las de los casos (12)/(13): los turnos de este archivo comparten
     // `t.professionalId` y sobreviven al borrado de su servicio (la FK es ON DELETE SET NULL), así

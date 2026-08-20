@@ -82,6 +82,16 @@ const PAST_TIME_TODAY = '00:00:00'
 const FUTURE_TIME_TODAY = '23:59:00'
 // Ventana horaria AR fuera de la cual esas dos constantes dejan de ser deterministas.
 const GUARD_WINDOW = { from: '01:00:00', to: '23:30:00' }
+// ¿La corrida cae FUERA de esa ventana? (WR-04 del code review de la Phase 16.)
+// La decisión de no skipear en silencio sigue en pie —un skip mudo escondería el agujero de cobertura
+// justo en la franja donde el bug de zona horaria es más probable—, pero el `throw` vivía en el
+// `beforeAll` y se llevaba puesto el describe ENTERO: las pruebas que NO dependen del reloj
+// (aislamiento por tenant, CHECK de coherencia, matriz de direcciones, GATE-01/02, abono) se caían
+// junto con las dos que sí, una hora y media por día en un repo que ya corre vitest en CI. El primero
+// que lo viera en rojo a las 23:40 iba a asumir que la 070 rompió algo.
+// Ahora: los DOS casos del reloj se saltean y el CANARIO de más abajo se pone en rojo con el motivo.
+// La señal se conserva (ruidosa, con mensaje), el daño baja de "todo el archivo" a "un caso".
+const FUERA_DE_VENTANA = AR_NOW.time < GUARD_WINDOW.from || AR_NOW.time > GUARD_WINDOW.to
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -116,19 +126,21 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
     if (anonKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('GUARD: NEXT_PUBLIC_SUPABASE_ANON_KEY == SUPABASE_SERVICE_ROLE_KEY — config rota, abortar')
     }
-    // GUARD DE LA VENTANA DE MEDIANOCHE (GATE-03). Los dos casos de la frontera de hoy usan horas
-    // FIJAS: `PAST_TIME_TODAY = 00:00:00` como "hoy a hora ya pasada" y `FUTURE_TIME_TODAY = 23:59:00`
-    // como "hoy a hora que todavía no llegó". Fuera de [01:00:00, 23:30:00] en hora AR esas dos
-    // etiquetas dejan de ser ciertas y los casos medirían LO CONTRARIO de lo que dicen medir.
-    // TIRA, no skipea, y a propósito: un skip silencioso escondería el agujero de cobertura justo en
-    // la franja horaria donde el bug de zona horaria es más probable. Un throw con motivo, no.
-    if (AR_NOW.time < GUARD_WINDOW.from || AR_NOW.time > GUARD_WINDOW.to) {
-      throw new Error(
-        `GUARD DE MEDIANOCHE: son las ${AR_NOW.time} en hora AR. Los casos de GATE-03 sólo son ` +
-          `deterministas entre ${GUARD_WINDOW.from} y ${GUARD_WINDOW.to} (23:30): fuera de esa ventana ` +
-          `'${PAST_TIME_TODAY}' ya no es una hora pasada o '${FUTURE_TIME_TODAY}' ya no es una hora futura.`,
-      )
-    }
+    // (El guard de la ventana de medianoche ya NO vive acá: tiraba desde el `beforeAll` y volteaba el
+    // describe entero. Ahora es el canario de abajo + `it.skipIf` en los dos casos del reloj — WR-04.)
+  })
+
+  // (0) CANARIO DE LA VENTANA DE MEDIANOCHE (WR-04). SIEMPRE activo, y es el que conserva la señal
+  // que motivaba el `throw`: si los dos casos de GATE-03 se saltearon, alguien tiene que enterarse —
+  // con el motivo escrito, no con un skip mudo. Es la única prueba de este archivo que no toca la DB.
+  it('0 — canario: esta corrida cubre los dos casos horarios de GATE-03', () => {
+    expect(
+      FUERA_DE_VENTANA,
+      `GUARD DE MEDIANOCHE: son las ${AR_NOW.time} en hora AR, fuera de [${GUARD_WINDOW.from}, ${GUARD_WINDOW.to}]. ` +
+        `Los casos 13 y 14 (GATE-03) se SALTEARON: fuera de esa ventana '${PAST_TIME_TODAY}' ya no es una hora ` +
+        `pasada o '${FUTURE_TIME_TODAY}' ya no es una hora futura, y medirían LO CONTRARIO de lo que dicen medir. ` +
+        `El resto del archivo SÍ corrió. Volver a correrlo dentro de la ventana antes de dar la fase por verde.`,
+    ).toBe(false)
   })
 
   afterAll(async () => {
@@ -532,7 +544,7 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
   // arregló en `lib/appointment-time.ts` y nunca había cruzado al SQL.
   // La hora de corte se calcula acá con `nowInAR`, la MISMA función que usa la UI: si las dos se
   // separaran, este caso lo detecta.
-  it('13 — GATE-03: un turno de HOY a hora YA PASADA no bloquea el cambio de modo (y queda escrito)', async () => {
+  it.skipIf(FUERA_DE_VENTANA)('13 — GATE-03: un turno de HOY a hora YA PASADA no bloquea el cambio de modo (y queda escrito)', async () => {
     const svc = await seedService(t, { name: '__test_svc_mode_gate_13_hoy_pasado' })
     await seedGroupClassService(t, { capacity: 2, serviceId: svc })
     // ÚNICO turno del servicio: de hoy, vivo, y a una hora que el guard del beforeAll garantiza pasada.
@@ -548,7 +560,7 @@ describe.skipIf(!hasSupabaseCreds)('068: gate de cambio de modo de cupo (service
   // TODAVÍA NO LLEGÓ sigue bloqueando. Sin este caso, "el turno de hoy dejó de bloquear" sería
   // indistinguible de "el día de hoy dejó de contar", que no es una corrección sino una regresión —
   // GATE-03 podría haberse pasado de laxo y nadie se enteraría.
-  it('14 — GATE-03 frontera: un turno de HOY a hora que NO llegó sigue bloqueando el cambio de modo', async () => {
+  it.skipIf(FUERA_DE_VENTANA)('14 — GATE-03 frontera: un turno de HOY a hora que NO llegó sigue bloqueando el cambio de modo', async () => {
     const svc = await seedService(t, { name: '__test_svc_mode_gate_14_hoy_futuro' })
     await seedGroupClassService(t, { capacity: 2, serviceId: svc })
     await seedAppointment(t, { serviceId: svc, date: TODAY_AR, time: FUTURE_TIME_TODAY, status: 'confirmed' })
