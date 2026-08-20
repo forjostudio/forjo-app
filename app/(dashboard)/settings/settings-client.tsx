@@ -2107,6 +2107,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   ? professionalsForService(s.id, activePros, professionalServices).map(p => [p.name, p.last_name].filter(Boolean).join(' '))
                   : []
                 const covered = showCoverage ? isServiceCovered(s.id, activePros, professionalServices) : true
+                // Mismo fallback que openEditService: cubre filas viejas que quedaron en memoria sin el
+                // modo resuelto (el DEFAULT de la migr. 068 ya las cubre en la DB).
+                const capMode: CapacityMode = s.capacity_mode ?? 'individual'
                 return (
                   <div key={s.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
                     <div className="flex items-center gap-3">
@@ -2121,7 +2124,32 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</p>
+                        {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER
+                            dato —mismo registro que duración y precio—, y no como pill junto al nombre:
+                            las pills de arriba están reservadas para advertencias (la de cobertura) y
+                            mezclar los dos registros le sube el volumen a un dato normal. Por eso la
+                            pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
+                            "mejora" que va a proponer el próximo que lea esto; la respuesta es no.
+
+                            El contenedor pasa de <p> a flex-wrap para poder alojar el control, pero la
+                            duración y el precio siguen siendo UN solo nodo de texto: así la línea de un
+                            servicio `individual` —que es el 100 % de producción hoy— se ve exactamente
+                            igual que antes. Sin badge, el badge se vuelve señal. */}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                          <span>{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</span>
+                          {capMode !== 'individual' && (
+                            <>
+                              {/* El separador no puede leerse en voz alta: ya hay uno en el nodo de
+                                  arriba y el lector de pantalla repetiría "punto medio" dos veces. */}
+                              <span aria-hidden="true">·</span>
+                              <CapacityInlineControl
+                                service={s}
+                                saving={savingCapacityId === s.id}
+                                onSave={c => saveCapacityInline(s, c)}
+                              />
+                            </>
+                          )}
+                        </div>
                       </div>
                       <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
                         {s.active ? 'Desactivar' : 'Activar'}
