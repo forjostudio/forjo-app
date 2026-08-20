@@ -1,7 +1,9 @@
 ---
 phase: 17
 slug: superficie-y-polish
-status: draft
+status: approved
+verified: 2026-08-20
+verdict: 6/6 PASS (gsd-ui-checker, 2 rondas)
 shadcn_initialized: true
 preset: base-nova (baseColor neutral, CSS variables)
 created: 2026-08-20
