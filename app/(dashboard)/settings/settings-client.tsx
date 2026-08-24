@@ -389,9 +389,13 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
   sharedCapacityBlocked?: boolean
 }) {
   const isIndividual = value === 'individual'
+  // El piso del cupo lo decide el MODO, siempre. Antes el campo llevaba un 2 escrito a mano que daba el
+  // mismo número por casualidad —en esta rama el modo nunca es individual—, pero eran dos fuentes para
+  // la misma regla, y de esas se corrige una sola cuando la regla cambia.
+  const capacityMin = minCapacityFor(value)
 
   // ── El campo "Cuántos lugares" se deja VACIAR y se corrige al SALIR (D-06) ────────────────────────
-  // Mientras el foco está adentro la fuente de verdad del input es este texto crudo, no el número del
+  // Mientras el foco está adentro la fuente de verdad del control es este texto crudo, no el número del
   // formulario. Antes el onChange normalizaba en cada tecla: borrar el 2 daba parseInt('') = NaN, el
   // helper lo llevaba al piso y REESCRIBÍA el campo bajo el cursor — el defecto que levantó la UAT.
   // El molde es el NumberField de web/_sections/section-forms.tsx (mismo proyecto, misma lógica):
@@ -541,31 +545,45 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
         })}
       </div>
       {!isIndividual && (
-        <div className="space-y-1 pt-1 max-w-[11rem]">
+        <div className="space-y-1 pt-1">
           <Label className="text-xs text-muted-foreground">Cuántos lugares</Label>
-          <Input
-            type="number"
-            // inputMode numérico = teclado de números en mobile; tabular-nums para que pasar de 9 a 10 no
-            // mueva nada al lado; los spinners nativos se ocultan porque el alto del campo (44px en mobile)
-            // los deja diminutos y sin target usable.
-            inputMode="numeric"
-            className="tabular-nums h-11 sm:h-8 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            value={capacityText}
-            onFocus={e => { capacityFocusedRef.current = true; e.target.select() }}
+          {/* El MISMO control que la tarjeta de servicio: un dato, un control. Antes acá había un campo
+              de texto pelado con los spinners nativos apagados, o sea un campo que en mobile sólo se
+              podía tipear. Lo que NO se comparte es el guardado: acá el número se propaga al estado del
+              formulario y lo persiste el botón del diálogo, así que el clamp es de este lado. */}
+          <CapacityStepper
+            value={capacity}
+            // Lo que se ve es el texto crudo local, NUNCA el prop. Ésa es la mitad de D-06.
+            text={capacityText}
+            // El piso lo pone el modo, no un número escrito a mano: una sola fuente para el piso.
+            min={capacityMin}
+            max={MAX_CAPACITY}
+            groupLabel="Cuántos lugares"
+            disabled={disabled}
+            // El vecino que propone el control se normaliza acá y se escribe en LOS DOS lados: el texto
+            // local es lo que se ve, y el formulario es lo que se guarda.
+            onStep={n => {
+              const c = normalizeCapacity(n, capacityMin)
+              setCapacityText(String(c))
+              onChange({ capacity: c })
+            }}
             // Mientras se tipea NO se clampea: el string crudo va al estado local y sólo se propaga al
             // formulario si parsea, y TAL CUAL. Propagar el valor clampeado sería volver al bug: el padre
-            // cambiaría el prop y el input se resincronizaría encima de lo que se está escribiendo.
-            onChange={e => {
-              const raw = e.target.value
+            // cambiaría el prop y el campo se resincronizaría encima de lo que se está escribiendo.
+            onTextChange={raw => {
               setCapacityText(raw)
               if (raw.trim() === '') return
               const n = Number(raw)
               if (Number.isFinite(n)) onChange({ capacity: n })
             }}
+            // Marca que el cursor entró ANTES de que corra ningún efecto. Sin esta línea el efecto de
+            // arriba resincroniza el texto mientras se tipea y vuelve el defecto exacto que levantó la
+            // UAT, sin que el typecheck ni el build digan una palabra.
+            onInputFocus={() => { capacityFocusedRef.current = true }}
             // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
             // piso del modo y al techo. Este es el único clamp del camino de edición; la última línea sigue
             // siendo el payload de saveEditService/addService, y la AUTORIDAD el CHECK de la migr. 068.
-            onBlur={() => {
+            onInputBlur={() => {
               capacityFocusedRef.current = false
               const n = Number(capacityText)
               const base = capacityText.trim() !== '' && Number.isFinite(n) ? n : capacity
@@ -573,11 +591,6 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
               setCapacityText(String(c))
               onChange({ capacity: c })
             }}
-            // min/max/step son PISTA del navegador, no la validación: la validación es la línea de arriba.
-            min={2}
-            max={MAX_CAPACITY}
-            step={1}
-            disabled={disabled}
           />
         </div>
       )}
