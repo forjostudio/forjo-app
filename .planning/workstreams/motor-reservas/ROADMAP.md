@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 8 plans (5/5 base completos · 3 de cierre de gaps de la UAT pendientes)
+**Plans**: 6/8 plans executed
 
 Plans:
 **Wave 1**
@@ -689,7 +689,7 @@ Plans:
 
 **Wave 1 (gaps)** *(archivos distintos: paralelismo real)*
 
-- [ ] 17-06-PLAN.md — **G-02 + G-02b**: las acciones de la tarjeta de `/servicios` salen de la fila del dato y la línea de datos recupera los 271px reales; el control se parte en dos (el modo como dato inline, el stepper con `basis-full` en su propia línea) para que `[−] N [+] [Guardar]` entre en un renglón — POLISH-08
+- [x] 17-06-PLAN.md — **G-02 + G-02b**: las acciones de la tarjeta de `/servicios` salen de la fila del dato y la línea de datos recupera los 271px reales; el control se parte en dos (el modo como dato inline, el stepper con `basis-full` en su propia línea) para que `[−] N [+] [Guardar]` entre en un renglón — POLISH-08
 - [ ] 17-07-PLAN.md — **G-03**: el chip del slot grupal de la agenda pasa a dos niveles (hora + nombre arriba, contador abajo) y el badge se acota con `max-w-full`, sin tocar `lib/agenda-occupancy.ts` ni un solo color — POLISH-09
 
 **Wave 2 (gaps)** *(17-08 blocked on 17-06: mismo archivo, otra región)*
@@ -726,4 +726,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 5/8 | Gap closure (UAT 7/10) | — |
+| 17. Superficie y polish | 6/8 | In Progress|  |

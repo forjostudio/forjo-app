@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
-stopped_at: Completed 17-02-PLAN.md
-last_updated: "2026-08-20T22:15:14.587Z"
+stopped_at: Completed 17-06-PLAN.md
+last_updated: "2026-08-24T18:39:17.215Z"
 last_activity: 2026-08-20 -- Phase 17 execution started
 progress:
   total_phases: 17
-  completed_phases: 17
-  total_plans: 83
-  completed_plans: 83
-  percent: 100
+  completed_phases: 16
+  total_plans: 86
+  completed_plans: 84
+  percent: 98
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 17 (superficie-y-polish) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
+Plan: 6 of 8 (cierre de gaps de la UAT)
+Status: 17-06 cerrado (G-02 + G-02b) — quedan 17-07 y 17-08
 Last activity: 2026-08-20 -- Phase 17 execution started
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
@@ -124,6 +124,7 @@ Last activity: 2026-08-20 -- Phase 17 execution started
 | Phase 17 P02 | 28min | 2 tasks | 1 files |
 | Phase 17 P05 | 48min | 3 tasks | 1 files |
 | Phase 17 P03 | 32min | 3 tasks | 1 files |
+| Phase 17 P06 | 21min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -343,8 +344,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-20T22:14:54.950Z
-Stopped at: Completed 17-02-PLAN.md
+Last session: 2026-08-24T18:39:09.035Z
+Stopped at: Completed 17-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
