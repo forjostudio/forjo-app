@@ -26,14 +26,110 @@ updated: 2026-08-20
 
 ## Current Test
 
-number: R3-3
-name: REGRESIÓN — la tarjeta guarda como ayer (R2-2)
+number: R4-1
+name: G-04 — tocar el texto de la tarjeta no mueve nada
 expected: |
-  Cerrá el modal sin guardar. En la tarjeta de ese servicio, tocá `+`: aparece `Guardar` a la derecha
-  del stepper, mismo renglón. Bajar al original lo hace desaparecer sin guardar. Subir y guardar:
-  `Guardando…`, toast `Cupo actualizado`, fila limpia con `lugares` de vuelta.
-  NEGATIVO: tocar el texto `Clase grupal` no abre ni cambia nada.
+  ⚠ 375px y **CON EL DEDO, no con el mouse** — el defecto es de corrección del punto de toque y con un
+  puntero NO se reproduce. En DevTools hay que estar en modo dispositivo con emulación táctil.
+  `/servicios`, tarjeta de cupo compartido. Anotá el número. Tocá uno por uno:
+  · el texto `60min · $7.000` (izquierda de la línea)
+  · el texto `Clase grupal` (derecha)
+  · el separador `·` del medio
+  El número NO se mueve en ninguno, no aparece `Guardar`, no se abre nada. Repetilo tocando el
+  principio, el medio y el final de cada palabra — ahí es donde antes cambiaba la dirección.
 awaiting: user response
+
+## Ronda 4 — cierre de G-04 (2026-08-24)
+
+Plan 17-10. Cierra G-04 y **re-verifica las tres cosas que ya estaban aprobadas** y que el fix toca.
+
+## Cuarta ronda de UAT — G-04 y las tres regresiones que ya estaban aprobadas
+
+Cuatro pasos, **todo a 375px y con el dedo, no con el mouse** (el defecto es de corrección del punto de
+toque: con un puntero no se reproduce). Sobre el dev server que ya está corriendo en el puerto 3000.
+
+Usá un servicio de **cupo compartido** (`Yoga grupal`, `Pilates reformer` o `Color`).
+
+### 1. G-04 — tocar el texto de la tarjeta no mueve nada
+En `/servicios`, mirá la tarjeta: arriba el nombre con sus acciones, debajo la línea
+`60min · $7.000 · Clase grupal`, y **más abajo, claramente separado**, el `[−] N [+] lugares`.
+
+Anotá el número que muestra. Ahora tocá, una por una, con el dedo:
+- el texto `60min · $7.000` (a la **izquierda** de la línea);
+- el texto `Clase grupal` (a la **derecha** de la línea);
+- el separador `·` del medio.
+
+**Esperado:** el número **no se mueve** en ninguno de los tres casos, no aparece ningún `Guardar`, no
+se abre nada. Repetilo dos o tres veces tocando distintas partes de cada texto —el principio, el medio
+y el final de la palabra—, que es donde antes cambiaba la dirección del efecto.
+⚠ **Éste es el paso que importa.** Antes, tocar a la izquierda **bajaba** el cupo y tocar a la derecha
+lo **subía**.
+
+### 2. R2-2 / R3-3 — la tarjeta guarda como ayer (la mitad que nunca se llegó a probar)
+En esa misma tarjeta, tocá `+`.
+**Esperado:** aparece `Guardar` **a la derecha del stepper, en el mismo renglón** (la palabra `lugares`
+le cede el lugar mientras haya algo pendiente). Bajá el número al valor original: el botón **desaparece
+solo, sin guardar nada**. Volvé a subirlo y guardá: dice `Guardando…`, sale el toast `Cupo actualizado`
+y la fila queda limpia con `lugares` de vuelta.
+Si tenés dos servicios de cupo compartido a la vista: mientras uno guarda, el stepper del otro sigue
+usable.
+⚠ En la ronda 3 esto **nunca se llegó a verificar** —el negativo falló antes—, así que acá se prueba
+por primera vez después del refactor de 17-09.
+
+### 3. R2-1 — la tarjeta sigue sin superponerse
+Misma pantalla, sin tocar nada.
+**Esperado:** las acciones (`Desactivar`, el lápiz y el tacho) siguen en el renglón del nombre y no se
+montan sobre ningún texto; el nombre se lee completo; **no queda ningún `·` colgando solo**.
+**NEGATIVO:** una tarjeta de servicio `individual` (`Corte`, `Testing`) se ve **exactamente como
+siempre**: sin el label del modo, sin stepper y **sin el espacio nuevo**. Si un individual creció de
+alto, el fix se pasó de rosca.
+
+### 4. La zona de abajo — el mismo mecanismo, del otro lado
+Elegí una tarjeta donde la pill **`Todos`** ya esté activa en "Se ofrece en" (así, si algo se toca de
+más, no perdés ninguna configuración).
+Tocá el texto **`Se ofrece en:`**, que está debajo del stepper.
+**Esperado:** el número del cupo **no se mueve**.
+*(Si lo que cambia es la selección de sedes, eso es una adyacencia distinta y pre-existente entre ese
+texto y la pill `Todos`, que este plan **no** toca: anotala y seguí. Lo que este paso mide es el cupo.)*
+
+### Modo oscuro
+Repetí sólo el paso 1 en oscuro con otra paleta. No se busca contraste —ya está medido— sino que el
+**espacio nuevo** se comporte igual.
+
+---
+
+⚠ **Si el paso 1 todavía reproduce el defecto**, no pidas más padding: significa que la corrección del
+toque de este navegador alcanza más de 32px y la salida deja de ser de espaciado. La decisión siguiente
+—que el stepper aparezca detrás de un control explícito— es del dueño, no del ejecutor.
+
+### R4-1. G-04 — tocar el texto no mueve nada
+expected: Ver "Current Test" arriba. CON EL DEDO a 375px.
+result: [pending]
+
+### R4-2. R2-2 / R3-3 — la tarjeta guarda como ayer
+expected: |
+  Tocá `+`: aparece `Guardar` a la derecha del stepper, mismo renglón. Bajar al original lo hace
+  desaparecer solo, sin guardar. Subir y guardar: `Guardando…`, toast `Cupo actualizado`, fila limpia.
+  Con dos servicios de cupo compartido a la vista: mientras uno guarda, el otro sigue usable.
+  ⚠ En la ronda 3 esto NUNCA se llegó a verificar (el negativo falló antes): es la primera prueba
+  después del refactor de 17-09.
+result: [pending]
+
+### R4-3. R2-1 — la tarjeta sigue sin superponerse
+expected: |
+  Las acciones siguen en el renglón del nombre sin montarse; el nombre se lee completo; ningún `·`
+  colgando solo.
+  NEGATIVO: una tarjeta `individual` (`Corte`, `Testing`) se ve EXACTAMENTE como siempre — sin label de
+  modo, sin stepper y SIN el espacio nuevo. Si un individual creció de alto, el fix se pasó de rosca.
+result: [pending]
+
+### R4-4. La zona de abajo — el mismo mecanismo, del otro lado
+expected: |
+  Tarjeta donde la pill `Todos` YA esté activa (así un toque de más es idempotente y no perdés
+  configuración). Tocar el texto `Se ofrece en:` no debe cambiar nada.
+  Es la adyacencia gemela: mismo mecanismo, otro dato, eje horizontal. Está FUERA del alcance de G-04 —
+  si falla, se anota, no se arregla acá.
+result: [pending]
 
 ## Ronda 3 — el selector del modal (2026-08-24)
 
@@ -274,11 +370,12 @@ notes: |
 
 ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
 ronda_2: 5 tests — **5 passed, 0 issues, 0 pending** ✓ los tres gaps CERRADOS
-ronda_3: 3 tests — 2 passed, **1 issue (G-04, alta)**, 0 pending (plan 17-09, no es un gap)
-total: 18
+ronda_3: 3 tests — 2 passed, **1 issue (G-04, alta)**, 0 pending
+ronda_4: 4 tests — 0 passed, 0 issues, 4 pending (cierre de G-04 + 3 re-verificaciones) (plan 17-09, no es un gap)
+total: 22
 passed: 14
 issues: 4
-pending: 0
+pending: 4
 skipped: 0
 
 ## Gaps
