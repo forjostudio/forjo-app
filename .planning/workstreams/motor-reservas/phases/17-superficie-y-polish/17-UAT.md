@@ -37,64 +37,7 @@ awaiting: nothing — listo para secure-phase y code-review
 
 Plan 17-10. Cierra G-04 y **re-verifica las tres cosas que ya estaban aprobadas** y que el fix toca.
 
-## Cuarta ronda de UAT — G-04 y las tres regresiones que ya estaban aprobadas
-
-Cuatro pasos, **todo a 375px y con el dedo, no con el mouse** (el defecto es de corrección del punto de
-toque: con un puntero no se reproduce). Sobre el dev server que ya está corriendo en el puerto 3000.
-
-Usá un servicio de **cupo compartido** (`Yoga grupal`, `Pilates reformer` o `Color`).
-
-### 1. G-04 — tocar el texto de la tarjeta no mueve nada
-En `/servicios`, mirá la tarjeta: arriba el nombre con sus acciones, debajo la línea
-`60min · $7.000 · Clase grupal`, y **más abajo, claramente separado**, el `[−] N [+] lugares`.
-
-Anotá el número que muestra. Ahora tocá, una por una, con el dedo:
-- el texto `60min · $7.000` (a la **izquierda** de la línea);
-- el texto `Clase grupal` (a la **derecha** de la línea);
-- el separador `·` del medio.
-
-**Esperado:** el número **no se mueve** en ninguno de los tres casos, no aparece ningún `Guardar`, no
-se abre nada. Repetilo dos o tres veces tocando distintas partes de cada texto —el principio, el medio
-y el final de la palabra—, que es donde antes cambiaba la dirección del efecto.
-⚠ **Éste es el paso que importa.** Antes, tocar a la izquierda **bajaba** el cupo y tocar a la derecha
-lo **subía**.
-
-### 2. R2-2 / R3-3 — la tarjeta guarda como ayer (la mitad que nunca se llegó a probar)
-En esa misma tarjeta, tocá `+`.
-**Esperado:** aparece `Guardar` **a la derecha del stepper, en el mismo renglón** (la palabra `lugares`
-le cede el lugar mientras haya algo pendiente). Bajá el número al valor original: el botón **desaparece
-solo, sin guardar nada**. Volvé a subirlo y guardá: dice `Guardando…`, sale el toast `Cupo actualizado`
-y la fila queda limpia con `lugares` de vuelta.
-Si tenés dos servicios de cupo compartido a la vista: mientras uno guarda, el stepper del otro sigue
-usable.
-⚠ En la ronda 3 esto **nunca se llegó a verificar** —el negativo falló antes—, así que acá se prueba
-por primera vez después del refactor de 17-09.
-
-### 3. R2-1 — la tarjeta sigue sin superponerse
-Misma pantalla, sin tocar nada.
-**Esperado:** las acciones (`Desactivar`, el lápiz y el tacho) siguen en el renglón del nombre y no se
-montan sobre ningún texto; el nombre se lee completo; **no queda ningún `·` colgando solo**.
-**NEGATIVO:** una tarjeta de servicio `individual` (`Corte`, `Testing`) se ve **exactamente como
-siempre**: sin el label del modo, sin stepper y **sin el espacio nuevo**. Si un individual creció de
-alto, el fix se pasó de rosca.
-
-### 4. La zona de abajo — el mismo mecanismo, del otro lado
-Elegí una tarjeta donde la pill **`Todos`** ya esté activa en "Se ofrece en" (así, si algo se toca de
-más, no perdés ninguna configuración).
-Tocá el texto **`Se ofrece en:`**, que está debajo del stepper.
-**Esperado:** el número del cupo **no se mueve**.
-*(Si lo que cambia es la selección de sedes, eso es una adyacencia distinta y pre-existente entre ese
-texto y la pill `Todos`, que este plan **no** toca: anotala y seguí. Lo que este paso mide es el cupo.)*
-
-### Modo oscuro
-Repetí sólo el paso 1 en oscuro con otra paleta. No se busca contraste —ya está medido— sino que el
-**espacio nuevo** se comporte igual.
-
----
-
-⚠ **Si el paso 1 todavía reproduce el defecto**, no pidas más padding: significa que la corrección del
-toque de este navegador alcanza más de 32px y la salida deja de ser de espaciado. La decisión siguiente
-—que el stepper aparezca detrás de un control explícito— es del dueño, no del ejecutor.
+> Guion completo en `17-10-PLAN.md` → `<uat_script>` (4 pasos, con el dedo a 375px).
 
 ### R4-1. G-04 — tocar el texto no mueve nada
 expected: CON EL DEDO a 375px, tocar `60min · $7.000`, `Clase grupal` y el separador `·` — el número no se mueve, no aparece `Guardar`, no se abre nada.
@@ -139,7 +82,12 @@ expected: |
   configuración). Tocar el texto `Se ofrece en:` no debe cambiar nada.
   Es la adyacencia gemela: mismo mecanismo, otro dato, eje horizontal. Está FUERA del alcance de G-04 —
   si falla, se anota, no se arregla acá.
-result: [pending]
+result: pass
+notes: |
+  NO reproduce, y el porqué confirma el mecanismo de G-04: ahí la cercanía es HORIZONTAL (~8px entre el
+  texto y la pill), y el fuzzing táctil corrige sobre todo en el eje donde el dedo tiene más
+  imprecisión — el vertical, contra un objetivo de 44px de alto. Además, tras el fix hay 32px entre el
+  `+` y ese texto donde antes había 8. Queda observada y sin tocar.
 
 ## Ronda 3 — el selector del modal (2026-08-24)
 
@@ -196,7 +144,10 @@ expected: |
   botón solo. Guardar dice `Guardando…`, sale el toast `Cupo actualizado`, la fila queda limpia con
   `lugares` de vuelta.
   NEGATIVO: tocar el texto `Clase grupal` no abre ni cambia nada.
-result: [pending]
+result: pass
+notes: |
+  Cierra literal el pedido de la ronda 1: \"hay lugar para que el botón Guardar aparezca en la misma
+  línea que el selector de cupo y no abajo\".
 
 ### R2-3. G-01 — el explicador ya no abruma
 expected: |
@@ -378,15 +329,20 @@ notes: |
 
 ## Summary
 
-ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
-ronda_2: 5 tests — **5 passed, 0 issues, 0 pending** ✓ los tres gaps CERRADOS
-ronda_3: 3 tests — 2 passed, **1 issue (G-04, alta)**, 0 pending
-ronda_4: 4 tests — **4 passed, 0 issues, 0 pending** ✓ G-04 CERRADO + 3 re-verificaciones (cierre de G-04 + 3 re-verificaciones) (plan 17-09, no es un gap)
+ronda_1: 10 tests — 7 pass · 3 issues (G-01, G-02+G-02b, G-03)
+ronda_2: 5 tests — 5 pass · los tres gaps de la ronda 1 CERRADOS
+ronda_3: 3 tests — 2 pass · 1 issue (G-04, alta)
+ronda_4: 4 tests — 4 pass · G-04 CERRADO + 3 re-verificaciones
+
 total: 22
-passed: 21
+passed: 18
 issues: 4
 pending: 0
 skipped: 0
+
+**Los 4 gaps encontrados están cerrados y re-verificados por el dueño.** Ninguno fue de lógica: los
+cuatro fueron de composición a 375px, y dos de ellos (G-03 y G-04) son invisibles para `tsc`, para la
+suite y para cualquier agente sin navegador. G-04 además **no se reproduce con mouse**.
 
 ## Gaps
 
