@@ -1,88 +1,225 @@
 ---
-status: testing
+status: complete
 phase: 17-superficie-y-polish
 workstream: motor-reservas
 milestone: v0.27
-source: [17-VERIFICATION.md, 17-05-PLAN.md]
+source: [17-01-SUMMARY.md, 17-02-SUMMARY.md, 17-03-SUMMARY.md, 17-04-SUMMARY.md, 17-05-SUMMARY.md, 17-VERIFICATION.md]
 started: 2026-08-20
 updated: 2026-08-20
 ---
 
-# Phase 17 — UAT visual
+> **Fixture YA SEMBRADO** en el Supabase local (por el ejecutor de 17-05, el 2026-08-20).
+> Negocio `Negocio de Prueba` · login `test@forjo.local` / `Forjo1234!` · abrí `/agenda` en la semana
+> del **viernes 21 de agosto de 2026**:
+>
+> - **Yoga grupal** — `group_class`, cupo **6**, 3 turnos a las **09:00** (Ana Gomez y Bruno Diaz
+>   confirmados; Carla Ruiz con **seña pendiente** y hold vivo)
+> - **Pilates reformer** — `group_class`, cupo **4**, 1 turno a las **09:00** — el MISMO horario que
+>   Yoga, a propósito: son la prueba de que dos clases distintas **no se fusionan**
+> - **Corte** — `individual`, 1 turno a las **11:00** (Elsa Mora)
+> - **Color** — `simultaneous_resource`, cupo 2 (venía del seed)
+>
+> ⚠ Si corriste `supabase db reset` después del 2026-08-20, la siembra se perdió (`seed.sql` recrea el
+> negocio pero no estos turnos) y hay que rehacerla a mano.
+>
+> **Todo se mira a 375px**, salvo el test 10.
 
-**La verificación de código dio 5/5 y quedó en `human_needed`.** Lo que falta no es código: son cuatro
-cosas que sólo se ven abriendo el navegador, y este workstream ya aprendió que ahí aparecen los defectos
-que el pipeline verde no ve — tres de las siete observaciones de la UAT de la Phase 14 fueron de esas.
+## Current Test
 
-## Lo que la verificación NO pudo medir (y por qué)
+number: —
+name: Sesión completa
+expected: |
+  Los 10 tests corridos. 7 pass, 3 issues (G-01, G-02, G-03) — los tres de layout/densidad, ninguno
+  de lógica.
+awaiting: nothing — listo para el cierre de gaps
 
-| # | Ítem | Por qué no se pudo |
-|---|---|---|
-| 1 | Abrir el roster con un click real en la fila de grupo | JS de cliente; no hay navegador headless y agregarlo violaba el fence de dependencias de la fase |
-| 2 | Teclado real en los campos de cupo (borrar / tipear / Tab / Escape) | idem — se sustituyó por una simulación 1:1 de la máquina de estados (18/18) |
-| 3 | Layout a 375px del explicador y del control inline | el wrap real no se confirma sin render |
-| 4 | Contraste en modo oscuro y en otra paleta | idem |
+## Tests
 
-Todo lo demás **sí** se midió: el ejecutor de 17-05 atravesó el login y verificó 6 de 7 pasos contra el
-HTML renderizado con datos reales, y el verifier reprodujo por su cuenta las dos pruebas de mutación y
-corroboró el fixture contra el Postgres local.
+### 1. El editor explica la diferencia entre los dos modos
+expected: 375px · /settings → editar servicio. Tres bloques paralelos legibles, no nueve líneas. Se entiende grupal vs simultáneo sin abrir nada más.
+result: issue — G-01
+notes: |
+  Se lee y se entiende (la parte explicativa FUNCIONA), pero mostrar los tres completos a la vez es
+  demasiado ruido a 375px. Palabras del dueño: "creo que fue decision que se vea todo pero es mucho
+  ruido, podemos hacer que aparezca la explicación segun lo seleccionado?"
+  Decisión tomada en la UAT: **el seleccionado completo, los otros dos en UNA línea con solo su eje de
+  conteo.** Baja el ruido a la mitad y conserva la comparación sin obligar a tocar botones — que era
+  el motivo de D-02, porque cada botón de modo escribe `capacity_mode` + `capacity` en el formulario.
+  Esto REVISA D-02 del CONTEXT, con la pantalla a la vista.
 
----
+### 2. El diálogo scrollea y el "Guardar" siempre se alcanza
+expected: 375px · mismo diálogo. El botón "Guardar" es alcanzable siempre; el título queda fijo arriba mientras el cuerpo scrollea.
+result: pass
 
-## Guion de la UAT visual de la fase (para `/gsd:verify-work`)
+### 3. El campo de cupo se puede editar con el teclado
+expected: 375px · mismo diálogo. Se puede BORRAR el número de lugares y escribir otro. (Este es el defecto exacto que reportaste en la UAT anterior.)
+result: pass
+notes: |
+  Confirmado además el piso por modo: escribir `1` en un servicio grupal lo devuelve a `2` al salir
+  del campo (`minCapacityFor`). Es correcto — el CHECK `services_capacity_matches_mode_chk` de la
+  migr. 068 exige `capacity >= 2` fuera de `individual`, así que el editor corrige antes de que la
+  base rechace.
 
-⚠ **Esto NO lo cierra el ejecutor.** Los checkpoints de este workstream se auto-aprueban con
-`auto_advance` sin que nadie abra el navegador, y tres de las siete observaciones humanas de la
-Phase 14 reportaron defectos que el pipeline verde no veía. El guion queda escrito acá para que la
-UAT tenga pasos concretos; hasta que un humano lo corra, la fase se declara **PENDIENTE DE UAT**.
+### 4. La tarjeta muestra el modo, y sólo cuando corresponde
+expected: 375px · lista de servicios. El servicio `individual` se ve IGUAL que antes (sin badge). El grupal muestra `Clase grupal · [−] 6 [+] lugares`.
+result: issue — G-02
+notes: |
+  Reportado por el dueño antes de llegar a este test: "en las tarjetas de servicios se superponen
+  botones, titulos, etc en 375px".
+  DIAGNÓSTICO (no es ambigüedad de diseño, es un defecto de layout): la fila de la tarjeta es
+  `flex items-center` con una columna `min-w-0 flex-1` (nombre + línea de datos) y, al lado,
+  `Desactivar` + los dos botones de icono. Al insertar `CapacityInlineControl` esa columna CRECIÓ EN
+  ALTO, y los botones —centrados verticalmente contra un bloque alto— quedan flotando a mitad de
+  camino, encima del texto del modo. A 375px no hay ancho para absorberlo.
+  El servicio `individual` (tarjeta "Testing" en la captura) se ve bien: confirma que D-07 está OK y
+  que el defecto lo introduce el control.
+  La parte funcional de este test SÍ pasa, medida sobre las capturas del dueño: `individual` sin badge,
+  `Color` y `Pilates reformer` con su modo y su stepper. Lo único que falla es el layout (G-02).
 
-**Preparación — YA HECHA en el Supabase local** (sembrada por el ejecutor de 17-05 el 2026-08-20, en
-`Negocio de Prueba` / `negocio-prueba`, login `test@forjo.local` / `Forjo1234!`). No hay que cargar
-nada a mano: abrí `/agenda` en la semana del **viernes 21 de agosto de 2026** y vas a encontrar
+### 5. El control inline guarda, revierte y no congela a los demás
+expected: |
+  375px · tarjeta de un servicio de cupo compartido.
+  · Subir el cupo con `+` → aparece el botón "Guardar".
+  · Bajarlo de vuelta al valor original → el botón DESAPARECE sin guardar nada.
+  · Subirlo y guardar → dice "Guardando…", sale el toast `Cupo actualizado`, la fila queda limpia.
+  · Mientras uno guarda, el stepper del OTRO servicio de cupo compartido sigue usable.
+  · El control entero (label + stepper + "lugares") baja a su propia línea sin partirse.
+  Y dos que tienen que NO pasar: tocar el label `Clase grupal` no abre ni cambia nada (D-09), y la
+  tarjeta nunca crece con un mensaje de error adentro (los errores salen por toast).
+result: pass
+notes: |
+  La mecánica completa funciona. El dueño agregó una observación de layout que se suma a G-02:
+  "hay lugar para que el botón Guardar aparezca en la misma línea que el selector de cupo y no abajo".
 
-- **`Yoga grupal`** — `group_class`, cupo **6**, con 3 turnos a las **09:00** (Ana Gomez y Bruno Diaz
-  confirmados, Carla Ruiz con la **seña pendiente** y el hold vivo).
-- **`Pilates reformer`** — `group_class`, cupo **4**, con 1 turno a las **09:00** — el MISMO horario
-  que Yoga, a propósito: son la prueba de que dos clases distintas **no se fusionan**.
-- **`Corte`** — `individual`, 1 turno a las **11:00** (Elsa Mora).
-- **`Color`** — `simultaneous_resource`, cupo 2, ya venía en el seed.
+### 6. El alta de servicio confirma al final
+expected: 375px · alta de servicio. El botón "Agregar servicio" está al FINAL del formulario y rotulado — ya no es un `+` en el medio de la grilla.
+result: pass
 
-⚠ Si corriste `supabase db reset` después de esa fecha, la siembra se perdió (`seed.sql` recrea el
-negocio pero no estos turnos) y hay que rehacerla a mano.
+### 7. Dos clases a la misma hora no se fusionan
+expected: |
+  375px · /agenda, semana del vie 21 de ago. En la celda del viernes tiene que haber DOS filas de
+  las 09:00, una por clase:
+  · `09:00 · Pilates reformer · 👥 1/4` (badge neutro)
+  · `09:00 · Yoga grupal · 👥 3/6 · 1 sin seña` (badge ámbar)
+  Cada una ocupa UNA sola fila. El contador se ve AUNQUE NO esté lleno. El nombre del servicio se
+  trunca sin recortar el contador. La semana sigue legible.
+  A las 11:00, el turno individual de Elsa Mora se ve como siempre y NO es clickeable.
+result: issue — G-03
+notes: |
+  **La lógica pasa entera:** dos filas separadas para las 09:00 (Pilates y Yoga no se fusionan), el
+  contador visible sin estar lleno, el badge ámbar sólo en Yoga por la seña pendiente, y el turno
+  individual de Elsa Mora intacto y no clickeable.
+  **Confirmación no prevista de POLISH-09:** el contador de Pilates mostró `1/6`, no `1/4` (el cupo sembrado), porque el
+  dueño le cambió el cupo desde la tarjeta en el test 5 y **la agenda lo siguió**. Es la prueba de que
+  la grilla lee `services.capacity` y no `time_blocks.capacity` — el requisito que no era cosmético.
+  **Lo que falla es visual**, palabras del dueño: "Está todo, pero visualmente quedó mal. No se ve el
+  título y el badge ámbar se desborda".
 
-⚠ **Los pasos 1 a 6 miran pantallas de `17-01`/`17-02`/`17-03`.** Cuando cerró `17-05`, `17-03` (el
-control inline de cupo en la tarjeta de servicio, wave 3) todavía no estaba ejecutado y esta nota
-decía que la ausencia del stepper no era un defecto. **Ya no: `17-03` se ejecutó el 2026-08-20**
-(commits `d7d1231`, `f8a8a59`, `044e820`), así que si la tarjeta de un servicio de cupo compartido
-**no** muestra el stepper, eso SÍ es un defecto y hay que reportarlo. Los diez pasos son verificables.
+### 8. El roster corresponde a la clase que tocaste
+expected: |
+  375px · /agenda. Tocar la fila de Yoga: el título dice `Yoga grupal · vie 21 de ago · 09:00` y lista
+  a Ana, Bruno y Carla — y NO a Dora Paz, que es de Pilates. El contador del diálogo dice `3/6` y
+  "lugares ocupados".
+  ⚠ Es el ÚNICO paso que ningún agente pudo medir: abrir el roster es JS de cliente y no había
+  navegador en el entorno.
+result: pass
+notes: |
+  Palabras del dueño: "Queda perfecto". Verificado en iPhone SE (375×667): título
+  `Yoga Grupal · Vie 21 De Ago · 09:00`, contador `3/6 lugares ocupados`, y Ana Gomez / Bruno Diaz
+  (Confirmado) + Carla Ruiz (Seña pendiente). **Dora Paz NO aparece** — es la confirmación del cambio
+  de comportamiento que 17-05 predijo: el roster filtra por SERVICIO además de fecha y hora. Con el
+  modelo viejo habría listado a Dora y contado 4.
+  Es también el único paso del guion que quedaba sin medir por nadie: ahora está cerrado por un humano.
 
-1. **375px · `/settings` → Servicios → editar un servicio.** ¿Se leen tres bloques paralelos (no nueve
-   líneas)? ¿Se entiende la diferencia entre grupal y simultáneo sin abrir nada más?
-2. **375px · mismo diálogo.** ¿El "Guardar" se alcanza siempre? ¿El título queda fijo arriba?
-3. **375px · mismo diálogo.** ¿Se puede borrar el número de lugares y escribir otro?
-4. **375px · lista de servicios.** ¿El servicio `individual` se ve igual que antes (sin badge)? ¿El
-   grupal muestra `Clase grupal · [−] 6 [+] lugares`?
-5. **375px · tarjeta.** Cambiar el cupo con el `+`: ¿aparece el botón "Guardar"? Bajarlo de vuelta al
-   valor original: ¿el botón desaparece **sin** guardar nada? Volver a subirlo y guardar: ¿dice
-   "Guardando…" y después sale el toast `Cupo actualizado`, con la fila limpia? Mientras uno guarda,
-   ¿el stepper del **otro** servicio de cupo compartido sigue usable? ¿El control entero (label +
-   stepper + "lugares") baja a su propia línea sin partirse? Y dos cosas que tienen que **no** pasar:
-   tocar el label `Clase grupal` no abre ni cambia nada (D-09: desde la tarjeta se cambia el número,
-   nunca el modo), y la tarjeta nunca crece con un mensaje de error adentro — los errores salen por
-   toast.
-6. **375px · alta de servicio.** ¿El botón "Agregar servicio" está al final y rotulado?
-7. **375px · `/agenda`, semana del vie 21 de ago.** En la celda del viernes tiene que haber **DOS
-   filas de las 09:00**, una por clase: `09:00 · Pilates reformer · 👥 1/4` (badge neutro) y
-   `09:00 · Yoga grupal · 👥 3/6 · 1 sin seña` (badge ámbar). ¿Cada una ocupa **una sola** fila?
-   ¿El contador se ve **aunque no esté lleno**? ¿El nombre del servicio se trunca sin recortar el
-   contador? ¿La semana sigue siendo legible? A las 11:00 el turno individual de Elsa Mora se ve como
-   siempre y **no** es clickeable.
-8. **375px · `/agenda`.** Tocar la fila de Yoga: ¿el título del roster dice
-   `Yoga grupal · vie 21 de ago · 09:00` y lista a **Ana, Bruno y Carla** (y NO a Dora Paz, que es de
-   Pilates)? ¿El contador del diálogo dice `3/6` y **lugares ocupados**? — **Este paso es el único de
-   17-05 que el ejecutor no pudo medir**: la apertura del roster es JS de cliente y no había navegador
-   en el entorno de ejecución. Todo lo demás de los pasos 7 y 8 se verificó contra el HTML renderizado
-   con datos reales.
-9. **375px · `/finances` → Turnos.** ¿Se ve el servicio bajo el nombre del cliente? ¿La fecha, el
-   precio y el botón quedaron donde estaban?
-10. **Modo oscuro y otra paleta.** Repetir 4, 7 y 9: ¿algún texto pierde contraste?
+### 9. Finanzas mobile muestra el servicio
+expected: 375px · /finances → Turnos. Se ve el servicio bajo el nombre del cliente. La fecha, el precio y el botón quedaron donde estaban.
+result: pass
+notes: |
+  Limpio a 375px: fecha+hora a la izquierda, cliente con el servicio debajo, precio y "Cobrar" a la
+  derecha. Nada apretado.
+  **Contraste útil para los fixes de G-02 y G-03:** ésta es la única de las tres superficies que NO se
+  rompió, y la diferencia es estructural — acá el dato nuevo entró en SU PROPIA LÍNEA bajo el nombre,
+  en vez de pelear por ancho horizontal dentro de una fila que ya estaba llena. Los dos gaps de layout
+  hicieron lo contrario.
+
+### 10. Modo oscuro y otra paleta
+expected: Repetir los tests 4, 7 y 9 en modo oscuro y con otra paleta. Ningún texto pierde contraste.
+result: pass
+notes: |
+  Verificado en tema `modern` claro (paleta coral) y `modern` oscuro (paleta cyan), a 375px.
+  **Contraste MEDIDO, no estimado.** El badge ámbar sobre su propio `bg-warning/10`:
+  · modern oscuro (card `#18202f`): **7.07:1**
+  · modern claro (card blanco): **5.12:1**
+  AA normal exige 4.5:1 ⇒ pasa en los dos. `--warning` no se redeclara por paleta y no hace falta: el
+  `#e6b53f` de `.dark` sirve sobre cualquier fondo oscuro y el `#8a5a12` de `:root` sobre los claros.
+  El explicador en oscuro se lee bien y la jerarquía se sostiene.
+  **Dato útil para el fix de G-03:** el defecto se reproduce IDÉNTICO en los dos temas — el nombre de
+  Yoga desaparece en claro y en oscuro. Confirma que es puramente de layout, no de tokens.
+  Observación menor (no defecto): el contador está en 9px, heredado del badge preexistente del recurso
+  simultáneo. Es consistente con el repo, pero es el tamaño más chico de la app y por eso "se ve flojo"
+  aunque el contraste dé bien.
+
+## Summary
+
+total: 10
+passed: 7
+issues: 3
+pending: 0
+skipped: 0
+
+## Gaps
+
+### G-01 — El explicador de modos es demasiado ruido a 375px
+severity: media
+surface: `app/(dashboard)/settings/settings-client.tsx` → `CapacityModeFields`
+symptom: Los tres bloques completos y simultáneos ocupan ~10 líneas dentro del modal. Se entiende, pero abruma.
+decision: El modo SELECCIONADO se muestra completo (eje + ejemplo + advertencia); los otros dos quedan en UNA línea con solo su eje de conteo. Al cambiar de modo, el que se selecciona se expande y el anterior se colapsa.
+why_not_only_selected: Ocultar los no seleccionados obligaría a tocar cada botón para compararlos, y cada toque escribe `capacity_mode` + `capacity` en el formulario. Leer no puede tener efecto de escritura — ése fue el motivo original de D-02.
+revises: D-02 del `17-CONTEXT.md`
+constraint: `individual` no tiene capa de advertencia; su versión colapsada es igual de corta que su versión expandida.
+
+### G-02 — Las tarjetas de servicio se superponen a 375px
+severity: alta
+surface: `app/(dashboard)/settings/settings-client.tsx` → la fila de la tarjeta (~2135-2160)
+symptom: `Desactivar` y los botones de icono se montan sobre el texto del modo (`Recurso simultáneo`, `Clase grupal`). El nombre del servicio se trunca (`Pilates refo...`) mientras los botones ocupan ancho al lado. También se ve un separador `·` colgando solo en una línea.
+root_cause: La fila es `flex items-center`: la columna `min-w-0 flex-1` creció en alto al recibir `CapacityInlineControl`, y los botones de acción se centran verticalmente contra ese bloque alto en vez de anclarse arriba. A 375px no hay ancho para que convivan en la misma fila.
+regression_of: 17-03 (introducido por el control inline; el servicio `individual` no está afectado)
+note: El UI-SPEC decía que el control baja a su propia línea — lo que no se resolvió es qué hacen los botones de acción cuando eso pasa.
+
+#### G-02b — el apilado vertical dentro del propio control (misma causa raíz)
+Observado por el dueño en el test 5: *"hay lugar para que el botón Guardar aparezca en la misma línea
+que el selector de cupo y no abajo"*.
+Hoy, a 375px, el control se apila en TRES niveles: el stepper `[−] 7 [+]`, la palabra `lugares`
+huérfana debajo, y `Guardar` como un bloque grande al final.
+Es consecuencia de lo mismo: `Desactivar` + los dos iconos se comen el ancho de la fila, así que la
+columna del control queda angosta y todo cae en vertical. **Al mover los botones de acción fuera de
+esa fila, el ancho alcanza para `[−] 7 [+] lugares  [Guardar]` en una sola línea** — que es además
+lo que el UI-SPEC §1 describe.
+El fix de G-02 tiene que resolver los dos niveles a la vez: la fila de la tarjeta Y la composición
+interna del control.
+
+### G-03 — En la agenda a 375px el badge se come el nombre del servicio
+severity: alta
+surface: `app/(dashboard)/settings/...` NO — es `app/(dashboard)/agenda/agenda-client.tsx` → el chip del slot agrupado y `OccupancyBadge`
+symptom: |
+  En la celda del viernes, `Pilates reformer` queda truncado a `Pila…` y **Yoga grupal desaparece por
+  completo**: la fila muestra sólo `09:00` y el badge ámbar, sin nombre. El badge ámbar además se
+  desborda del borde redondeado del chip.
+root_cause: |
+  La grilla semanal es de DOS columnas a 375px, así que la celda del día mide ~130-155px. El chip es
+  `flex` con el nombre en `min-w-0 flex-1 truncate` y el badge en `flex-shrink-0`. El badge ámbar
+  (`👥 3/6 · 1 sin seña`) necesita ~110px, así que al nombre le quedan ~20px y se trunca a nada.
+  El badge nunca cede ancho porque es `flex-shrink-0` — correcto para no recortar el contador, pero a
+  este ancho deja al nombre sin nada que mostrar.
+regression_of: 17-05
+note: |
+  Mismo patrón que G-01 y G-02: **piezas diseñadas para un ancho que a 375px no existe**. Es el tercer
+  caso de la fase, así que el fix conviene pensarlo como una decisión de composición a este ancho, no
+  como tres parches sueltos.
+options_to_weigh: |
+  (a) El badge baja a su propia línea dentro del chip cuando no entra.
+  (b) A este ancho el sufijo `· 1 sin seña` se reduce a un punto/ícono, y el texto queda en el
+      `title`/`aria-label` (que ya lo tiene).
+  (c) La grilla semanal pasa a UNA columna a 375px — más invasivo, toca una superficie que hoy
+      funciona.
+  Elegir midiendo, no a ojo.
