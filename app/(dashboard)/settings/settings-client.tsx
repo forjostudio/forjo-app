@@ -358,25 +358,37 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
           </span>
         </p>
       )}
-      {/* Explicador de los tres modos (CUPO-09 · D-01/D-02). Reemplaza a la línea que había acá, que
-          nombraba los modos sin explicarlos y metía los dos de cupo compartido en la misma bolsa.
+      {/* Explicador de los tres modos (CUPO-09 · D-01 · D-02 revisada en la UAT). Reemplaza a la línea
+          que había acá, que nombraba los modos sin explicarlos y metía los dos de cupo compartido en la
+          misma bolsa.
 
-          Cada grupo trae las TRES capas de D-01: el eje de conteo (qué cuenta el modo), un ejemplo
-          concreto y qué sale mal al elegir el otro. La tercera es la que justifica el requisito: sin
-          ella el dueño lee dos definiciones correctas y sigue sin saber cuál le conviene.
+          El modo SELECCIONADO trae las TRES capas de D-01: el eje de conteo (qué cuenta el modo), un
+          ejemplo concreto y qué sale mal al elegir el otro. La tercera es la que justifica el requisito:
+          sin ella el dueño lee dos definiciones correctas y sigue sin saber cuál le conviene.
 
-          ⚠ Los TRES están siempre en pantalla, y el bloque NO es interactivo a propósito: sin onClick,
-          sin role de botón y sin tabIndex (D-02). El atajo obvio —mostrar sólo la explicación del modo
-          activo, o abrirla al tocar cada opción— es el que hay que NO tomar: elegir bien exige comparar,
-          y acá cada toque de un toggle ESCRIBE en el formulario (el handler de arriba manda
-          capacity_mode + capacity juntos). Leer no puede tener efecto de escritura.
+          Los otros DOS quedan en UNA línea con sólo su eje (G-01). La decisión original —los tres
+          completos y siempre en pantalla— se tomó sin la pantalla delante: implementada ocupa ~10 líneas
+          dentro del modal a 375px y el dueño la rechazó por ruido en la UAT. La versión corta no es una
+          redacción nueva: ES el eje que ya vive en CAPACITY_MODE_HELP, fuente única de los cuatro textos.
+          El label colapsado pierde su tamaño de 14px a propósito: esa línea es el ancla de "acá hay una
+          decisión tomada", y el modo que no está elegido no la tiene.
 
-          El estado activo se marca SÓLO con color (riel + label): no cambia peso ni tamaño, así que
-          cambiar de modo no produce reflow.
+          ⚠ Lo que NO cambia, y es la razón de ser de todo esto: el bloque NO es interactivo. Sin
+          manejador de click, sin rol de botón y sin índice de tabulación (D-02). El atajo obvio —ocultar
+          del todo los no seleccionados, o abrirlos al tocarlos— es el que hay que NO tomar: elegir bien
+          exige comparar, y acá cada toque de un toggle ESCRIBE en el formulario (el handler de arriba
+          manda capacity_mode + capacity juntos). Leer no puede tener efecto de escritura. La línea
+          colapsada conserva la comparación gratis.
+
+          Cambiar de modo ahora cambia el ALTO del bloque. El UI-SPEC §2.2 prometía "cero reflow" porque
+          el activo sólo cambiaba de color; eso queda revisado por diseño, no olvidado. Está cubierto: el
+          diálogo scrollea por dentro con el Guardar anclado abajo (D-05, aprobado en la UAT), así que un
+          cambio de alto del cuerpo no puede volver a dejar el botón fuera del viewport. El cambio de
+          presentación es instantáneo: el alto NO se anima (sólo transform y opacity, regla del proyecto).
 
           Los pasos de 2px (space-y-0.5, dentro del grupo) y 10px (space-y-2.5, entre grupos) son
-          deliberados y están declarados en el UI-SPEC: la distancia entre grupos es 5× la interna, y es
-          eso —proximidad, no color— lo que hace que nueve líneas se lean como tres grupos. */}
+          deliberados y están declarados en el UI-SPEC: junto con el riel izquierdo son los que hacen que
+          los tres se lean como grupos paralelos, y colapsar dos de tres no puede llevárselos puestos. */}
       <div className="rounded-md border border-border bg-secondary/30 p-3 space-y-2.5">
         {CAPACITY_MODE_HELP.map(h => {
           const activo = value === h.key
@@ -386,18 +398,28 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
               id={`cap-mode-help-${h.key}`}
               className={cn('border-l-2 pl-3 space-y-0.5', activo ? 'border-l-primary' : 'border-l-border')}
             >
-              <p className={cn('text-sm font-medium', activo ? 'text-foreground' : 'text-muted-foreground')}>{h.label}</p>
-              <p className="text-xs text-muted-foreground">{h.axis}</p>
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground/80">Ej:</span> {h.example}
-              </p>
-              {/* Mismo molde exacto que el aviso de espacio compartido de arriba (icono, tamaño y token):
-                  es la única línea con color e icono del grupo, así que cae siempre en la misma posición
-                  relativa y el ojo la usa como cierre. 'individual' no la tiene (D-01). */}
-              {h.warning && (
-                <p className="flex items-start gap-1.5 text-xs text-warning">
-                  <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
-                  <span>{h.warning}</span>
+              {activo ? (
+                <>
+                  <p className="text-sm font-medium text-foreground">{h.label}</p>
+                  <p className="text-xs text-muted-foreground">{h.axis}</p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground/80">Ej:</span> {h.example}
+                  </p>
+                  {/* Mismo molde exacto que el aviso de espacio compartido de arriba (icono, tamaño y
+                      token): es la única línea con color e icono del grupo, así que cae siempre en la
+                      misma posición relativa y el ojo la usa como cierre. El modo individual no la
+                      tiene (D-01), y por eso su versión colapsada es casi igual de corta que la
+                      expandida — no hace falta compensarlo con nada. */}
+                  {h.warning && (
+                    <p className="flex items-start gap-1.5 text-xs text-warning">
+                      <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                      <span>{h.warning}</span>
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground/80">{h.label}:</span> {h.axis}
                 </p>
               )}
             </div>
