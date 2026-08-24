@@ -418,9 +418,23 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
                   )}
                 </>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground/80">{h.label}:</span> {h.axis}
-                </p>
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground/80">{h.label}:</span> {h.axis}
+                  </p>
+                  {/* Colapsar es VISUAL, no informativo. Cada opción del radiogroup apunta su descripción
+                      accesible a ESTE grupo, y ése es justamente el canal que permite
+                      comparar los tres modos sin activarlos. Si el grupo colapsado perdiera el ejemplo y
+                      la advertencia, quien usa lector de pantalla tendría que ACTIVAR cada modo para
+                      conocerlos — y activar escribe en el formulario: el problema exacto que D-02 existe
+                      para evitar, entrando por la puerta de la accesibilidad.
+
+                      El texto sale de la MISMA fuente, sin una segunda redacción. El prefijo del ejemplo
+                      viaja acá adentro porque el resaltado visual del prefijo no existe en este canal. Es
+                      contenido puro: sin manejadores, sin rol y sin índice de tabulación. Y como es hijo
+                      del div que lleva el id del grupo, la descripción accesible lo incluye sin cablear nada. */}
+                  <span className="sr-only">Ej: {h.example}{h.warning ? ` ${h.warning}` : ''}</span>
+                </>
               )}
             </div>
           )
