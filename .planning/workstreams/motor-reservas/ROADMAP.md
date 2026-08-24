@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 9/10 plans complete
+**Plans**: 10/10 plans complete
 
 Plans:
 **Wave 1**
@@ -702,7 +702,7 @@ Plans:
 
 **Cierre de gap de la ronda 3 de UAT** *(G-04, alta: en la tarjeta, tocar el texto del modo sube el cupo y tocar la duración lo baja. **No hay ningún manejador que sacar** — el label es texto plano: es geometría. Desde 17-06 el stepper vive a 4px debajo de la línea de datos y el navegador corrige el toque hacia el botón más cercano; la dirección del efecto depende de la posición horizontal, que es lo que un handler no puede saber y dos botones sí.)*
 
-- [ ] 17-10-PLAN.md — **G-04**: el control sale del contenedor de texto y pasa a ser una **fila propia** de la tarjeta con una **zona de exclusión táctil de 32px** arriba y abajo (24px de padding propio + 8px del ritmo de la tarjeta), sin achicar un solo botón y sin deshacer el renglón único de G-02b; el label del modo se queda como tercer dato de la línea, inerte y ahora también **no vecino** — POLISH-08
+- [x] 17-10-PLAN.md — **G-04**: el control sale del contenedor de texto y pasa a ser una **fila propia** de la tarjeta con una **zona de exclusión táctil de 32px** arriba y abajo (24px de padding propio + 8px del ritmo de la tarjeta), sin achicar un solo botón y sin deshacer el renglón único de G-02b; el label del modo se queda como tercer dato de la línea, inerte y ahora también **no vecino** — POLISH-08
 
 **El patrón de los tres gaps, en una línea**: son el mismo problema con tres disfraces — piezas diseñadas para un ancho que a 375px no existe. La fase trae su propio contraejemplo: **POLISH-10 (Finanzas mobile) pasó limpio** porque ahí el dato nuevo entró en **su propia línea** bajo el nombre del cliente en vez de pelear por ancho dentro de una fila llena. G-02 y G-03 hicieron lo contrario. Los fixes aplican esa misma regla.
 
@@ -734,4 +734,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 9/10 | In Progress | — |
+| 17. Superficie y polish | 10/10 | Complete   | 2026-08-24 |
