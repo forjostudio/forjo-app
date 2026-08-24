@@ -51,11 +51,23 @@ el planner puede ajustar la prosa, no las tres capas ni los ejemplos.
 **`individual` no lleva la capa de advertencia**: no tiene contra qué equivocarse. Una línea alcanza
 ("un turno por vez").
 
-### D-02 — Las tres explicaciones **visibles siempre**, no solo la del modo elegido
+### D-02 — ~~Las tres explicaciones visibles siempre~~ → **REVISADA EN LA UAT (2026-08-24)**
 
-Elegir bien exige **comparar**, y no se compara lo que no se ve. Mostrar solo la del modo activo
-obliga a ir tocando cada botón para leer — y cada toque **escribe en el formulario** (el handler manda
-`capacity_mode` + `capacity` juntos). Leer no puede tener efecto de escritura.
+⚠ **Esta decisión se tomó sin la pantalla delante y resultó mal.** Implementada tal cual, los tres
+bloques completos ocupan ~10 líneas dentro del modal a 375px. Palabras del dueño en la UAT:
+*"se lee todo, creo que fue decisión que se vea todo pero es mucho ruido"*.
+
+**Decisión vigente (gap G-01 de `17-UAT.md`):** el modo **seleccionado** se muestra completo (eje +
+ejemplo + advertencia); los otros dos quedan en **una línea** con **solo su eje de conteo**. Al cambiar
+de modo, el nuevo se expande y el anterior se colapsa.
+
+**Lo que se conserva del razonamiento original, y por qué NO se ocultan del todo los no
+seleccionados:** comparar seguiría exigiendo tocar cada botón, y **cada toque escribe en el
+formulario** (el handler manda `capacity_mode` + `capacity` juntos). **Leer no puede tener efecto de
+escritura.** La versión de una línea mantiene la comparación gratis y saca el 60% del ruido.
+
+`individual` no tiene capa de advertencia, así que su versión colapsada es casi igual a la expandida —
+que no rompa la simetría visual.
 
 ### D-03 — Los labels **no se tocan**: "Individual", "Clase grupal", "Recurso simultáneo"
 
