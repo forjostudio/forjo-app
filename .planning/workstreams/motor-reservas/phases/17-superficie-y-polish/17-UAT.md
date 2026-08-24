@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 17-superficie-y-polish
 workstream: motor-reservas
 milestone: v0.27
@@ -26,12 +26,12 @@ updated: 2026-08-20
 
 ## Current Test
 
-number: R2-5
-name: Modo oscuro y otra paleta
+number: —
+name: Ronda 2 completa
 expected: |
-  Repetir R2-1 (tarjeta de servicio) y R2-4 (agenda) en oscuro y con otra paleta. Ningún texto pierde
-  contraste y el layout se comporta igual. Acá se mira el LAYOUT, no el color.
-awaiting: user response
+  5/5 pasan. Los tres gaps de la ronda 1 (G-01, G-02+G-02b, G-03) están cerrados y verificados por un
+  humano en los dos temas.
+awaiting: nothing — falta el plan 17-09 (stepper en el modal), aprobado por el dueño
 
 ## Ronda 2 — cierre de gaps (2026-08-24)
 
@@ -96,7 +96,12 @@ notes: |
 expected: |
   Repetir R2-1 y R2-4 en oscuro y con otra paleta. Ningún texto pierde contraste y el layout se
   comporta igual. (El contraste ya está medido —7.07:1 oscuro / 5.12:1 claro—: acá se mira el LAYOUT.)
-result: [pending]
+result: pass
+notes: |
+  Verificado en oscuro con paleta cyan. `Corte` y `Testing` (individual) sin badge ni stepper; `Color`
+  con `Recurso simultáneo` en la línea de datos y su stepper debajo; **`Pilates reformer` con el nombre
+  COMPLETO** (antes `Pilates refo...`). `Desactivar` y los iconos en el renglón del nombre, sin
+  montarse sobre nada. El layout se comporta igual que en claro.
 
 ## Tests
 
@@ -227,11 +232,11 @@ notes: |
 ## Summary
 
 ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
-ronda_2: 5 tests — 4 passed, 0 issues, 1 pending
+ronda_2: 5 tests — **5 passed, 0 issues, 0 pending** ✓ los tres gaps CERRADOS
 total: 15
-passed: 11
+passed: 12
 issues: 3
-pending: 1
+pending: 0
 skipped: 0
 
 ## Gaps
