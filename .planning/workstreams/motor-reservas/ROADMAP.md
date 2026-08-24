@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 9/9 plans complete
+**Plans**: 9/10 plans complete
 
 Plans:
 **Wave 1**
@@ -700,6 +700,10 @@ Plans:
 
 - [x] 17-09-PLAN.md — El mismo selector `[−] N [+]` de la tarjeta pasa al campo "Cuántos lugares" del modal: `CapacityStepper` como pieza presentacional **única** para las dos superficies, con las dos semánticas de guardado separadas (la tarjeta persiste en la base, el modal propaga al formulario) y la maquinaria de foco de D-06 conservada entera y con gate propio — CUPO-09
 
+**Cierre de gap de la ronda 3 de UAT** *(G-04, alta: en la tarjeta, tocar el texto del modo sube el cupo y tocar la duración lo baja. **No hay ningún manejador que sacar** — el label es texto plano: es geometría. Desde 17-06 el stepper vive a 4px debajo de la línea de datos y el navegador corrige el toque hacia el botón más cercano; la dirección del efecto depende de la posición horizontal, que es lo que un handler no puede saber y dos botones sí.)*
+
+- [ ] 17-10-PLAN.md — **G-04**: el control sale del contenedor de texto y pasa a ser una **fila propia** de la tarjeta con una **zona de exclusión táctil de 32px** arriba y abajo (24px de padding propio + 8px del ritmo de la tarjeta), sin achicar un solo botón y sin deshacer el renglón único de G-02b; el label del modo se queda como tercer dato de la línea, inerte y ahora también **no vecino** — POLISH-08
+
 **El patrón de los tres gaps, en una línea**: son el mismo problema con tres disfraces — piezas diseñadas para un ancho que a 375px no existe. La fase trae su propio contraejemplo: **POLISH-10 (Finanzas mobile) pasó limpio** porque ahí el dato nuevo entró en **su propia línea** bajo el nombre del cliente en vez de pelear por ancho dentro de una fila llena. G-02 y G-03 hicieron lo contrario. Los fixes aplican esa misma regla.
 
 **Waves**: dos cadenas en paralelo que no comparten un solo archivo. La de `settings-client.tsx` es **secuencial** (17-01 → 17-02 → 17-03): los tres planes editan el mismo archivo, así que paralelizarlos sería una ficción que el orquestador serializaría igual. La de la agenda parte la lógica de la pintura (17-04 → 17-05) porque el runner corre en `environment: 'node'` y no renderiza JSX: lo testeable se extrae y se congela antes de tocar la grilla. **Rojo conocido y declarado:** al cerrar 17-04 el módulo queda sin consumidores y `agenda-client.tsx` sigue con su lógica vieja — lo cierra 17-05, y ningún criterio de 17-04 depende de eso.
@@ -730,4 +734,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 9/9 | Complete   | 2026-08-24 |
+| 17. Superficie y polish | 9/10 | In Progress | — |
