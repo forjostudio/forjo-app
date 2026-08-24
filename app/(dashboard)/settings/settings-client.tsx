@@ -1236,7 +1236,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // `savingEditSvc`: el diálogo es uno solo, pero las tarjetas son muchas y están todas en pantalla a
   // la vez — con un booleano global, guardar un servicio congelaría los steppers de todos los demás.
   // Es el único punto donde el molde de saveEditService no alcanza tal cual.
-  const [savingCapacityId, setSavingCapacityId] = useState<string | null>(null)
+  //
+  // Y es un CONJUNTO, no un id suelto (code-review WR-02). Con un solo id la afirmación "una tarjeta =
+  // un request en vuelo" no la garantizaba el estado: guardar en A y después en B dejaba el estado en
+  // 'B', y cuando volvía A el `setSavingCapacityId(null)` re-habilitaba el botón y el stepper de B con
+  // SU request todavía viajando ⇒ doble submit sobre B y, si el dueño tocaba `+` en el hueco, la
+  // resincronización del efecto le pisaba la edición nueva al confirmar. Un conjunto hace que cada
+  // tarjeta prenda y apague SU flag y ninguna toque el de otra.
+  const [savingCapacityIds, setSavingCapacityIds] = useState<ReadonlySet<string>>(() => new Set())
   function openEditService(s: Service) {
     setEditSvc(s)
     // El fallback cubre filas viejas en memoria (el DEFAULT de la 068 ya las cubre en la DB): al
@@ -1291,9 +1298,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // SEGUNDO camino de escritura sobre `services`, en paralelo al del diálogo. Devuelve true/false
   // porque el control inline necesita saber si tiene que revertir el número que muestra.
   async function saveCapacityInline(svc: Service, cap: number): Promise<boolean> {
-    // `savingCapacityId` se prende con el id de ESTE servicio y se apaga en TODAS las salidas: una
-    // tarjeta = un request en vuelo, y las demás tarjetas siguen usables mientras tanto.
-    setSavingCapacityId(svc.id)
+    // El id de ESTE servicio entra al conjunto y se saca en TODAS las salidas: una tarjeta = un
+    // request en vuelo, y las demás tarjetas siguen usables mientras tanto. Sacar SÓLO el propio id
+    // es lo que hace verdadera esa frase cuando hay dos guardados en vuelo a la vez.
+    setSavingCapacityIds(prev => { const next = new Set(prev); next.add(svc.id); return next })
     // Se normaliza otra vez acá aunque el control ya clampee: el piso por modo espeja el CHECK de la
     // migr. 068 y MAX_CAPACITY es lo que evita que un número pegado viaje al UPDATE y vuelva como
     // `22003 smallint out of range`, que el panel no sabría explicar. Defensa en profundidad, nunca
@@ -1306,7 +1314,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // evitarlo, y de paso el cambio de modo queda donde D-09 lo dejó: en el diálogo.
     // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
     const { error } = await supabase.from('services').update({ capacity }).eq('id', svc.id).eq('business_id', business.id)
-    setSavingCapacityId(null)
+    setSavingCapacityIds(prev => { const next = new Set(prev); next.delete(svc.id); return next })
     if (error) {
       // FAIL-SAFE, no camino feliz: por D-09 este camino NO manda el modo, así que este rechazo no
       // debería llegar nunca desde la tarjeta. Si llega, significa que alguien empezó a mandar un
@@ -2331,7 +2339,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     {capMode !== 'individual' && (
                       <CapacityInlineControl
                         service={s}
-                        saving={savingCapacityId === s.id}
+                        saving={savingCapacityIds.has(s.id)}
                         onSave={c => saveCapacityInline(s, c)}
                       />
                     )}
