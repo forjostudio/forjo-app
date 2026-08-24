@@ -54,17 +54,38 @@ export type AgendaAppt = {
 }
 
 // Color del chip de turno según su estado, para la vista semanal.
+//
+// `completed` tiene tratamiento PROPIO (code-review WR-04/WR-05): antes caía en el gris neutro, o
+// sea el mismo tratamiento visual que un cancelado. El azul es el que appointments-client ya usa
+// para ese estado, así que las dos superficies coinciden; la forma exacta de la clase espeja la
+// línea de al lado (ámbar), que es el molde de este archivo.
 function statusChip(status: string): string {
   if (status === 'confirmed') return 'bg-primary/10 text-foreground border-primary/30'
   if (status === 'pending_payment') return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
+  if (status === 'completed') return 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30'
   return 'bg-secondary text-muted-foreground border-border'
 }
 
 // Etiqueta del estado para el roster (mismo semantismo de color que statusChip).
+//
+// El mapa está COMPLETO desde el code-review WR-04. Hasta esta fase el roster filtraba por
+// OCCUPYING_STATUSES, así que acá sólo llegaban `confirmed` y `pending_payment` y la rama de
+// fallback era inalcanzable. Ahora la entrada de grupo lleva TODOS los miembros (decisión correcta:
+// colapsar no puede hacer desaparecer gente), y con eso un turno marcado desde Turnos aparecía con
+// un chip que decía literalmente `completed` — un valor de base de datos, en inglés, en una interfaz
+// que está toda en español.
+//
+// NO se importa el diccionario de appointments-client a propósito: ahí `pending_payment` se llama
+// "Pendiente de pago" y acá "Seña pendiente", que es la copy que la agenda viene mostrando y que la
+// UAT de esta fase miró cuatro veces. Unificar los dos textos es una decisión de producto, no una
+// limpieza que corresponda a un fix de code-review.
 function statusLabel(status: string): string {
   if (status === 'confirmed') return 'Confirmado'
   if (status === 'pending_payment') return 'Seña pendiente'
-  return status
+  if (status === 'completed') return 'Completado'
+  if (status === 'cancelled') return 'Cancelado'
+  if (status === 'pending') return 'Pendiente'
+  return 'Otro'   // nunca el valor crudo de la DB
 }
 
 // ── OccupancyBadge: el contador de ocupación de LOS DOS modos (POLISH-09, D-10) ────────────────
