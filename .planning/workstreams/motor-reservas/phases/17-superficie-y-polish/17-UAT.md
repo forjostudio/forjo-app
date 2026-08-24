@@ -26,15 +26,11 @@ updated: 2026-08-20
 
 ## Current Test
 
-number: R2-1
-name: G-02 — la tarjeta de servicio ya no se superpone
+number: R2-5
+name: Modo oscuro y otra paleta
 expected: |
-  375px · `/servicios` (menú Gestión → Servicios; `/settings` NO lista servicios).
-  Tarjeta de cupo compartido (Yoga grupal / Pilates reformer / Color):
-  `Desactivar` y los dos iconos viven en el mismo renglón que el NOMBRE y no se montan sobre ningún
-  texto. El nombre se lee completo (ya no `Pilates refo...`). Debajo, en su propia línea:
-  `30min · $5.000 · Clase grupal`. Y debajo el control: `[−] 6 [+] lugares`. Ningún `·` colgando solo.
-  NEGATIVO: la tarjeta `Corte` (individual) se ve igual que siempre — sin badge y sin stepper.
+  Repetir R2-1 (tarjeta de servicio) y R2-4 (agenda) en oscuro y con otra paleta. Ningún texto pierde
+  contraste y el layout se comporta igual. Acá se mira el LAYOUT, no el color.
 awaiting: user response
 
 ## Ronda 2 — cierre de gaps (2026-08-24)
@@ -43,8 +39,8 @@ Los tres gaps de la ronda 1 se cerraron con los planes 17-06, 17-07 y 17-08. Est
 eso. Fixture resembrado en el **viernes 28 de agosto** (la semana del 21 quedó en el pasado).
 
 ### R2-1. G-02 — la tarjeta ya no se superpone
-expected: Ver "Current Test" arriba.
-result: [pending]
+expected: 375px · /servicios. Acciones en el renglón del nombre sin montarse; nombre legible completo; línea de datos con el modo; control debajo; ningún `·` huérfano. Individual sin badge ni stepper.
+result: pass
 
 ### R2-2. G-02b — `Guardar` en la misma línea que el stepper
 expected: |
@@ -65,7 +61,12 @@ expected: |
   tiene por diseño (D-01). No es defecto.
   NEGATIVO: tocar el texto del explicador (no los botones) no hace nada.
   REGRESIÓN: el `Guardar` del diálogo sigue alcanzable.
-result: [pending]
+result: pass
+notes: |
+  El dueño propuso además llevar el MISMO stepper +/− de la tarjeta al campo "Cuántos lugares" del
+  modal, que hoy es un `Input` pelado. Verificado: el stepper de la tarjeta lleva un
+  `<input type="number" inputMode="numeric">` en el medio, así que el cambio conservaría lo que arregló
+  D-06 (poder tipear) y sumaría targets de 44px. NO es un gap — es capacidad nueva, registrada aparte.
 
 ### R2-4. G-03 — en la agenda se lee el nombre del servicio
 expected: |
@@ -75,7 +76,21 @@ expected: |
   Ningún badge se sale del borde redondeado.
   NEGATIVO: el turno individual de las 11:00 (Elsa Mora) se ve como siempre y no es clickeable.
   REGRESIÓN: tocar la fila de Yoga abre el roster con Ana, Bruno y Carla — y NO con Dora Paz.
-result: [pending]
+result: pass
+notes: |
+  `09:00 Yoga grupal` arriba y `3/6 · 1 sin seña` en ámbar debajo, DENTRO del chip y sin desbordar el
+  borde redondeado. Roster confirmado con Ana/Bruno/Carla y sin Dora Paz.
+  `Pilates refor…` sigue truncado con puntos suspensivos y eso es lo ESPERADO: el nombre es largo y el
+  chip mide ~115px. El defecto era que el nombre tenía CERO píxeles (Yoga aparecía sin nombre); ahora
+  tiene ~77px y trunca como corresponde.
+  ⚠ **Primer intento fallido por el FIXTURE, no por el código.** El badge mostró `2/6` neutro sin el
+  sufijo porque el hold de Carla había vencido (expiraba 18:05, se miró 19:25). Un hold vencido no
+  ocupa lugar, así que `2/6` era correcto y el badge neutro también. Se extendió el hold a 30 días y el
+  caso pasó. Lección de fixture: **sembrar holds con vigencia larga si el fixture sobrevive más de una
+  sesión.**
+  De ese falso positivo salió un hallazgo REAL, registrado aparte: el roster dice "Seña pendiente"
+  también cuando el hold venció, y eso se lee como "me debe la seña" en vez de "esa reserva caducó"
+  (todo `2026-08-24-el-roster-no-distingue-sena-pendiente-de-hold-vencido`).
 
 ### R2-5. Modo oscuro y otra paleta
 expected: |
@@ -212,11 +227,11 @@ notes: |
 ## Summary
 
 ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
-ronda_2: 5 tests — 0 passed, 0 issues, 5 pending
+ronda_2: 5 tests — 4 passed, 0 issues, 1 pending
 total: 15
-passed: 7
+passed: 11
 issues: 3
-pending: 5
+pending: 1
 skipped: 0
 
 ## Gaps
