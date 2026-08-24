@@ -1,5 +1,5 @@
 ---
-status: complete
+status: testing
 phase: 17-superficie-y-polish
 workstream: motor-reservas
 milestone: v0.27
@@ -26,12 +26,62 @@ updated: 2026-08-20
 
 ## Current Test
 
-number: —
-name: Sesión completa
+number: R2-1
+name: G-02 — la tarjeta de servicio ya no se superpone
 expected: |
-  Los 10 tests corridos. 7 pass, 3 issues (G-01, G-02, G-03) — los tres de layout/densidad, ninguno
-  de lógica.
-awaiting: nothing — listo para el cierre de gaps
+  375px · `/servicios` (menú Gestión → Servicios; `/settings` NO lista servicios).
+  Tarjeta de cupo compartido (Yoga grupal / Pilates reformer / Color):
+  `Desactivar` y los dos iconos viven en el mismo renglón que el NOMBRE y no se montan sobre ningún
+  texto. El nombre se lee completo (ya no `Pilates refo...`). Debajo, en su propia línea:
+  `30min · $5.000 · Clase grupal`. Y debajo el control: `[−] 6 [+] lugares`. Ningún `·` colgando solo.
+  NEGATIVO: la tarjeta `Corte` (individual) se ve igual que siempre — sin badge y sin stepper.
+awaiting: user response
+
+## Ronda 2 — cierre de gaps (2026-08-24)
+
+Los tres gaps de la ronda 1 se cerraron con los planes 17-06, 17-07 y 17-08. Esta ronda verifica sólo
+eso. Fixture resembrado en el **viernes 28 de agosto** (la semana del 21 quedó en el pasado).
+
+### R2-1. G-02 — la tarjeta ya no se superpone
+expected: Ver "Current Test" arriba.
+result: [pending]
+
+### R2-2. G-02b — `Guardar` en la misma línea que el stepper
+expected: |
+  En esa misma tarjeta, tocá `+`. Aparece `Guardar` A LA DERECHA del stepper, mismo renglón (la palabra
+  `lugares` le cede el lugar mientras haya algo pendiente). Bajar al valor original hace desaparecer el
+  botón solo. Guardar dice `Guardando…`, sale el toast `Cupo actualizado`, la fila queda limpia con
+  `lugares` de vuelta.
+  NEGATIVO: tocar el texto `Clase grupal` no abre ni cambia nada.
+result: [pending]
+
+### R2-3. G-01 — el explicador ya no abruma
+expected: |
+  `/servicios` → editar un servicio (el lápiz) → bloque `Cómo se ocupa el cupo`.
+  SÓLO el modo seleccionado muestra eje + ejemplo + advertencia ámbar. Los otros dos son UNA línea cada
+  uno: nombre en negrita, dos puntos, y su eje de conteo. Los tres conservan su barrita a la izquierda.
+  Tocar otro modo: el nuevo se expande y el anterior se colapsa, sin animación de alto.
+  ⚠ Si abrís un servicio `individual`, su versión expandida NO lleva advertencia ámbar — ese modo no la
+  tiene por diseño (D-01). No es defecto.
+  NEGATIVO: tocar el texto del explicador (no los botones) no hace nada.
+  REGRESIÓN: el `Guardar` del diálogo sigue alcanzable.
+result: [pending]
+
+### R2-4. G-03 — en la agenda se lee el nombre del servicio
+expected: |
+  `/agenda`, semana del vie 28 de ago, celda del viernes.
+  Dos filas de las 09:00, una por clase, y en cada una SE LEE el nombre: `09:00 Yoga grupal` con
+  `👥 3/6 · 1 sin seña` DEBAJO, dentro del chip; y `09:00 Pilates reformer` con su contador debajo.
+  Ningún badge se sale del borde redondeado.
+  NEGATIVO: el turno individual de las 11:00 (Elsa Mora) se ve como siempre y no es clickeable.
+  REGRESIÓN: tocar la fila de Yoga abre el roster con Ana, Bruno y Carla — y NO con Dora Paz.
+result: [pending]
+
+### R2-5. Modo oscuro y otra paleta
+expected: |
+  Repetir R2-1 y R2-4 en oscuro y con otra paleta. Ningún texto pierde contraste y el layout se
+  comporta igual. (El contraste ya está medido —7.07:1 oscuro / 5.12:1 claro—: acá se mira el LAYOUT.)
+result: [pending]
 
 ## Tests
 
@@ -161,10 +211,12 @@ notes: |
 
 ## Summary
 
-total: 10
+ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
+ronda_2: 5 tests — 0 passed, 0 issues, 5 pending
+total: 15
 passed: 7
 issues: 3
-pending: 0
+pending: 5
 skipped: 0
 
 ## Gaps
