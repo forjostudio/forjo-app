@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useId } from 'react'
 import { format, parseISO } from 'date-fns'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -389,6 +389,17 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
   sharedCapacityBlocked?: boolean
 }) {
   const isIndividual = value === 'individual'
+
+  // ── Los ids del explicador son POR INSTANCIA (code-review WR-03) ──────────────────────────────
+  // Este componente se monta DOS VECES a la vez: en la tarjeta "Agregar servicio" y adentro del
+  // diálogo de edición (Radix portalea el diálogo pero NO desmonta la página de atrás). Con ids
+  // literales había dos `#cap-mode-help-group_class` en el documento y el `aria-describedby` del
+  // diálogo resolvía al PRIMERO, o sea al bloque del formulario de alta: quien usa lector de
+  // pantalla escuchaba el estado del OTRO formulario. El `sr-only` seguía presente —por eso un gate
+  // de presencia no podía verlo— pero colgaba de la instancia equivocada.
+  const uid = useId()
+  const helpId = (key: string) => `${uid}-cap-mode-help-${key}`
+
   // El piso del cupo lo decide el MODO, siempre. Antes el campo llevaba un 2 escrito a mano que daba el
   // mismo número por casualidad —en esta rama el modo nunca es individual—, pero eran dos fuentes para
   // la misma regla, y de esas se corrige una sola cuando la regla cambia.
@@ -434,7 +445,7 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
             // El destino de este id es el bloque explicativo que va DEBAJO del radiogroup: el lector de
             // pantalla lee el eje + el ejemplo + la advertencia del modo al enfocar la opción, sin que
             // haga falta activarla (que es justamente lo que D-02 evita: activar escribe).
-            aria-describedby={`cap-mode-help-${o.key}`}
+            aria-describedby={helpId(o.key)}
             disabled={disabled || blocked}
             // El patch lleva SIEMPRE el cupo junto con el modo (D-06): pasar de individual a grupal
             // o simultáneo con el cupo en 1 rebota contra services_capacity_matches_mode_chk, así que
@@ -499,7 +510,7 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
           return (
             <div
               key={h.key}
-              id={`cap-mode-help-${h.key}`}
+              id={helpId(h.key)}
               className={cn('border-l-2 pl-3 space-y-0.5', activo ? 'border-l-primary' : 'border-l-border')}
             >
               {activo ? (
