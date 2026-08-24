@@ -94,9 +94,14 @@ con `overflow-y`, y el `Guardar` fuera del área que scrollea.
 Esto además cierra un desborde que **ya existe hoy**: un negocio con muchas sedes llena el bloque "Se
 ofrece en" y empuja el botón igual, sin que nadie lo haya reportado todavía.
 
-**Descartadas y por qué:** mostrar solo el modo activo en mobile mata la comparación de D-02 justo en
-la pantalla donde más falta hace; portear el editor a un Drawer convierte "arreglar el alto" en
-"cambiar de contenedor", y este repo ya pagó el bug de los `Select` adentro del `Drawer`.
+**Descartadas y por qué:** portear el editor a un `Drawer` convertía "arreglar el alto" en "cambiar de
+contenedor", y este repo ya pagó el bug de los `Select` adentro del `Drawer`.
+
+⚠ **Nota de coherencia (2026-08-24):** este bloque descartaba además "mostrar solo el modo activo en
+mobile", con el argumento de que mataba la comparación de D-02. **Ese argumento ya no aplica tal
+cual**: D-02 se revisó en la UAT y los modos no elegidos SÍ se colapsan — pero a una línea que
+conserva el eje de conteo, así que la comparación sobrevive. Los dos cambios son compatibles y el
+scroll interno del modal **ya pasó la UAT** (test 2): D-05 no se reabre.
 
 ### D-06 — El input de cupo: **se deja vaciar, se corrige al salir (`onBlur`)**
 
