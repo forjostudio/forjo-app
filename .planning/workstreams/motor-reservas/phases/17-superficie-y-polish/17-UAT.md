@@ -1,5 +1,5 @@
 ---
-status: complete
+status: testing
 phase: 17-superficie-y-polish
 workstream: motor-reservas
 milestone: v0.27
@@ -26,12 +26,45 @@ updated: 2026-08-20
 
 ## Current Test
 
-number: —
-name: Ronda 2 completa
+number: R3-1
+name: El modal usa el mismo selector que la tarjeta
 expected: |
-  5/5 pasan. Los tres gaps de la ronda 1 (G-01, G-02+G-02b, G-03) están cerrados y verificados por un
-  humano en los dos temas.
-awaiting: nothing — falta el plan 17-09 (stepper en el modal), aprobado por el dueño
+  375px · `/servicios` → el LÁPIZ de un servicio de cupo compartido → bloque `Cuántos lugares`.
+  Ya no hay campo de texto pelado: hay `[−] N [+]`, con el mismo aspecto que el de la tarjeta.
+  `+` y `−` suben y bajan. En el mínimo (2) el `−` queda apagado y al tocarlo aparece el cartelito que
+  explica el piso del modo.
+  Mirá este paso también en OSCURO con otra paleta (solo que el control se lea igual).
+  NEGATIVO: un servicio `individual` NO tiene bloque `Cuántos lugares` en absoluto.
+awaiting: user response
+
+## Ronda 3 — el selector del modal (2026-08-24)
+
+Plan 17-09. **No cierra un gap**: nada estaba roto. Es consistencia y target táctil, pedido por el
+dueño en la ronda 2. Tres pasos: uno del control nuevo, dos de regresión que ya pasaron y no pueden
+volver.
+
+### R3-1. El modal usa el mismo selector que la tarjeta
+expected: Ver "Current Test" arriba.
+result: [pending]
+
+### R3-2. REGRESIÓN — el campo se sigue pudiendo escribir con el teclado (D-06)
+expected: |
+  En el mismo modal, tocá el número del medio: se selecciona solo. BORRALO ENTERO — el campo queda
+  vacío y lo acepta sin corregir nada mientras el cursor esté adentro. Escribí `1` y salí del campo.
+  Al salir vuelve a `2` (el piso del modo). Probá también `007`: mientras tipeás no te lo reescribe
+  abajo del cursor; al salir queda `7`.
+  ⚠ ES EL PASO QUE IMPORTA: es el defecto exacto que reportaste en la UAT anterior y que la ronda 1
+  verificó cerrado. Si acá algo se comporta distinto, el plan volvió a romperlo.
+result: [pending]
+
+### R3-3. REGRESIÓN — la tarjeta guarda como ayer (R2-2)
+expected: |
+  Cerrá el modal sin guardar. En la tarjeta de ese mismo servicio, tocá `+`.
+  Aparece `Guardar` a la derecha del stepper, mismo renglón. Bajar al valor original lo hace
+  desaparecer sin guardar. Subir y guardar: `Guardando…`, toast `Cupo actualizado`, fila limpia con
+  `lugares` de vuelta.
+  NEGATIVO: tocar el texto `Clase grupal` no abre ni cambia nada.
+result: [pending]
 
 ## Ronda 2 — cierre de gaps (2026-08-24)
 
@@ -233,10 +266,11 @@ notes: |
 
 ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
 ronda_2: 5 tests — **5 passed, 0 issues, 0 pending** ✓ los tres gaps CERRADOS
-total: 15
+ronda_3: 3 tests — 0 passed, 0 issues, 3 pending (plan 17-09, no es un gap)
+total: 18
 passed: 12
 issues: 3
-pending: 0
+pending: 3
 skipped: 0
 
 ## Gaps
