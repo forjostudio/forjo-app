@@ -1313,7 +1313,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // un trigger SECURITY DEFINER por cada + y cada − que sólo puede terminar en RETURN NEW. Cuesta cero
     // evitarlo, y de paso el cambio de modo queda donde D-09 lo dejó: en el diálogo.
     // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
-    const { error } = await supabase.from('services').update({ capacity }).eq('id', svc.id).eq('business_id', business.id)
+    // Y el `.select('id')` no es cosmético — es el MISMO patrón que deleteService documenta 140 líneas
+    // más arriba (code-review WR-01): un UPDATE de PostgREST que no matchea ninguna fila (la RLS la
+    // filtra, el servicio se borró en otra pestaña, el id ya no existe) vuelve con `error: null` y cero
+    // filas. Sin esta comprobación cantábamos "Cupo actualizado" y resincronizábamos la tarjeta sobre
+    // un número que la base no tiene, hasta que el dueño recargara.
+    const { data, error } = await supabase.from('services').update({ capacity }).eq('id', svc.id).eq('business_id', business.id).select('id')
     setSavingCapacityIds(prev => { const next = new Set(prev); next.delete(svc.id); return next })
     if (error) {
       // FAIL-SAFE, no camino feliz: por D-09 este camino NO manda el modo, así que este rechazo no
@@ -1325,6 +1330,13 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         return false
       }
       // Cadena FIJA: ni el mensaje de la base, ni el código, ni el nombre del servicio (T-17-10).
+      toast.error('No pudimos guardar el cupo. Volvimos al valor anterior. Intentá de nuevo.')
+      return false
+    }
+    // Cero filas escritas SIN error: mismo desenlace que un rechazo — el número vuelve al valor
+    // anterior y no se toca el estado local. La misma cadena fija que el camino de error: para el
+    // dueño es el mismo hecho (no se guardó), y saber por qué no le cambia lo que puede hacer.
+    if (!data || data.length === 0) {
       toast.error('No pudimos guardar el cupo. Volvimos al valor anterior. Intentá de nuevo.')
       return false
     }
