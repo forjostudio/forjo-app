@@ -2112,7 +2112,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 const capMode: CapacityMode = s.capacity_mode ?? 'individual'
                 return (
                   <div key={s.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
-                    <div className="flex items-center gap-3">
+                    {/* Fila A — nombre y acciones. Hasta acá las acciones y el dato peleaban el mismo
+                        renglón: a 375px el interior de la tarjeta mide 271px, las tres acciones se
+                        comían ~186 y a la columna del texto le quedaban ~85 contra los 146 que mide el
+                        stepper. Eran 61px de desborde REAL, no una ilusión óptica (G-02). Al agrupar
+                        las acciones y sacarles la línea de datos de al lado, el dato se lleva los 271px
+                        enteros y el nombre pasa de ~85 a ~105px de ancho útil.
+
+                        El precedente es la fila mobile de Finanzas (POLISH-10): la única de las tres
+                        superficies de esta fase que pasó la UAT sin un solo issue, y la única donde el
+                        dato nuevo bajó a su propia línea en vez de pedirle ancho al que ya estaba.
+
+                        El centrado vertical se CONSERVA a propósito: sin la línea de datos adentro,
+                        esta fila vuelve a ser un renglón corto. Alinear arriba movería las tarjetas de
+                        los servicios individuales, que son el 100 % de producción hoy y no tienen
+                        ningún defecto. */}
+                    <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
                           {/* Sin tachado: en el tab "Desactivados" todos lo están, es ruido visual (D-14). */}
@@ -2124,42 +2139,47 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                             </span>
                           )}
                         </div>
-                        {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER
-                            dato —mismo registro que duración y precio—, y no como pill junto al nombre:
-                            las pills de arriba están reservadas para advertencias (la de cobertura) y
-                            mezclar los dos registros le sube el volumen a un dato normal. Por eso la
-                            pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
-                            "mejora" que va a proponer el próximo que lea esto; la respuesta es no.
-
-                            El contenedor pasa de <p> a flex-wrap para poder alojar el control, pero la
-                            duración y el precio siguen siendo UN solo nodo de texto: así la línea de un
-                            servicio `individual` —que es el 100 % de producción hoy— se ve exactamente
-                            igual que antes. Sin badge, el badge se vuelve señal. */}
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                          <span>{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</span>
-                          {capMode !== 'individual' && (
-                            <>
-                              {/* El separador no puede leerse en voz alta: ya hay uno en el nodo de
-                                  arriba y el lector de pantalla repetiría "punto medio" dos veces. */}
-                              <span aria-hidden="true">·</span>
-                              <CapacityInlineControl
-                                service={s}
-                                saving={savingCapacityId === s.id}
-                                onSave={c => saveCapacityInline(s, c)}
-                              />
-                            </>
-                          )}
-                        </div>
                       </div>
-                      <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
-                        {s.active ? 'Desactivar' : 'Activar'}
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => openDeleteService(s)} aria-label={`Eliminar ${s.name}`}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {/* Las tres acciones, agrupadas en un solo item: recuperan ancho achicando los
+                          huecos entre ellas en vez de robárselo al nombre. Por dentro no cambia una
+                          sola clase de los botones. */}
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
+                          {s.active ? 'Desactivar' : 'Activar'}
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => openDeleteService(s)} aria-label={`Eliminar ${s.name}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER
+                        dato —mismo registro que duración y precio—, y no como pill junto al nombre:
+                        las pills de arriba están reservadas para advertencias (la de cobertura) y
+                        mezclar los dos registros le sube el volumen a un dato normal. Por eso la
+                        pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
+                        "mejora" que va a proponer el próximo que lea esto; la respuesta es no.
+
+                        El contenedor pasa de <p> a flex-wrap para poder alojar el control, pero la
+                        duración y el precio siguen siendo UN solo nodo de texto: así la línea de un
+                        servicio `individual` —que es el 100 % de producción hoy— se ve exactamente
+                        igual que antes. Sin badge, el badge se vuelve señal. */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</span>
+                      {capMode !== 'individual' && (
+                        <>
+                          {/* El separador no puede leerse en voz alta: ya hay uno en el nodo de
+                              arriba y el lector de pantalla repetiría "punto medio" dos veces. */}
+                          <span aria-hidden="true">·</span>
+                          <CapacityInlineControl
+                            service={s}
+                            saving={savingCapacityId === s.id}
+                            onSave={c => saveCapacityInline(s, c)}
+                          />
+                        </>
+                      )}
                     </div>
                     {activeLocations.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5">
