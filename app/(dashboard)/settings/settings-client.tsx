@@ -300,7 +300,7 @@ function spacesBlockSharedCapacity(
 // componente ni sus callers: es el CHECK de la migr. 068.
 //
 // `text` es lo que se ve. `value` es sólo para dibujar el estado de los botones y calcular el vecino.
-function CapacityStepper({ value, text, min, max, groupLabel, onStep, onTextChange, onInputBlur, onInputFocus, disabled, dirty, invalid }: {
+function CapacityStepper({ value, text, min, max, groupLabel, onStep, onTextChange, onInputBlur, onInputFocus, disabled, dirty, invalid, invalidMessageId }: {
   value: number
   text: string
   min: number
@@ -313,6 +313,8 @@ function CapacityStepper({ value, text, min, max, groupLabel, onStep, onTextChan
   disabled?: boolean
   dirty?: boolean
   invalid?: boolean
+  /** Id del texto que EXPLICA el rechazo. Lo pone el caller, que es el dueño de ese mensaje. */
+  invalidMessageId?: string
 }) {
   const atMin = value <= min
   const atMax = value >= max
@@ -331,7 +333,6 @@ function CapacityStepper({ value, text, min, max, groupLabel, onStep, onTextChan
     <span
       role="group"
       aria-label={groupLabel}
-      aria-invalid={invalid ? 'true' : undefined}
       className={cn(
         'inline-flex items-center overflow-hidden rounded-md border bg-background transition-colors',
         'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background',
@@ -355,6 +356,13 @@ function CapacityStepper({ value, text, min, max, groupLabel, onStep, onTextChan
         // mueva el sufijo. Los spinners nativos se ocultan: el stepper ya es el control.
         inputMode="numeric"
         aria-label="Cantidad de lugares"
+        // (code-review WR-08) `aria-invalid` va ACÁ, no en el `<span role="group">` de afuera: ese
+        // rol no soporta el atributo y los lectores de pantalla lo ignoran, o sea que el rechazo se
+        // comunicaba SOLO por el borde rojo. La regla la escribe esta misma fase en OccupancyBadge:
+        // el color nunca es el único portador. El texto que lo explica lo pone el caller y llega por
+        // `invalidMessageId`.
+        aria-invalid={invalid ? 'true' : undefined}
+        aria-describedby={invalid ? invalidMessageId : undefined}
         value={text}
         disabled={disabled}
         // El caller avisa PRIMERO y la selección va después: el caller tiene que poder marcar que el
@@ -651,6 +659,8 @@ function CapacityInlineControl({ service, saving, onSave }: {
   // Marca transitoria del rechazo. Vive ~4s (el mismo lifetime que el toast) y se apaga sola.
   const [rejected, setRejected] = useState(false)
   const rejectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Id del texto del rechazo, por instancia: hay una tarjeta por servicio y todas están en pantalla.
+  const rejectMsgId = `${useId()}-cap-rejected`
 
   // Resincronización desde el padre. NO hace falta el ref de foco que sí necesita CapacityModeFields:
   // allá el prop cambiaba en cada tecla; acá `saved` sólo cambia cuando un guardado se confirmó. Gracias
@@ -739,6 +749,7 @@ function CapacityInlineControl({ service, saving, onSave }: {
         disabled={saving}
         dirty={dirty}
         invalid={rejected}
+        invalidMessageId={rejectMsgId}
         onStep={apply}
         onTextChange={setText}
         // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
@@ -754,7 +765,16 @@ function CapacityInlineControl({ service, saving, onSave }: {
           que TIENE que verse. No se pierde para nadie: viaja por la etiqueta accesible del input y
           por la del grupo, en reposo —el 99 % del tiempo— está siempre visible, y a los ≥640px vuelve
           porque ahí el stepper baja a 104px y entran los dos. */}
-      <span className={cn(dirty && 'hidden sm:inline')}>lugares</span>
+      <span className={cn((dirty || rejected) && 'hidden sm:inline')}>lugares</span>
+      {/* Tercer canal del rechazo (code-review WR-08): antes estaban el borde rojo —color puro— y un
+          toast que dura menos y no está asociado a nada. Acá el texto vive PEGADO al control que falló,
+          lo referencia el `aria-describedby` del input y el `role="status"` lo hace anunciar al
+          aparecer. Ocupa el lugar que deja la unidad en mobile —misma maniobra de ancho que ya hace el
+          botón Guardar, y son estados excluyentes: al rechazar, `revert()` corre ANTES de marcar, así
+          que la fila ya no está sucia y el botón no está montado. */}
+      {rejected && (
+        <span id={rejectMsgId} role="status" className="font-medium text-destructive">No se guardó</span>
+      )}
       {/* Sólo cuando hay algo pendiente. Entra con fade + 4px de deslizamiento; SALE sin animar (unmount
           directo): animar la salida exige mantenerlo montado con un estado más y no paga. Es decisión
           escrita, no olvido. El ancho mínimo del botón evita que la fila se reacomode al pasar a "Guardando…". */}
