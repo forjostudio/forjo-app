@@ -26,15 +26,13 @@ updated: 2026-08-20
 
 ## Current Test
 
-number: R3-1
-name: El modal usa el mismo selector que la tarjeta
+number: R3-3
+name: REGRESIÓN — la tarjeta guarda como ayer (R2-2)
 expected: |
-  375px · `/servicios` → el LÁPIZ de un servicio de cupo compartido → bloque `Cuántos lugares`.
-  Ya no hay campo de texto pelado: hay `[−] N [+]`, con el mismo aspecto que el de la tarjeta.
-  `+` y `−` suben y bajan. En el mínimo (2) el `−` queda apagado y al tocarlo aparece el cartelito que
-  explica el piso del modo.
-  Mirá este paso también en OSCURO con otra paleta (solo que el control se lea igual).
-  NEGATIVO: un servicio `individual` NO tiene bloque `Cuántos lugares` en absoluto.
+  Cerrá el modal sin guardar. En la tarjeta de ese servicio, tocá `+`: aparece `Guardar` a la derecha
+  del stepper, mismo renglón. Bajar al original lo hace desaparecer sin guardar. Subir y guardar:
+  `Guardando…`, toast `Cupo actualizado`, fila limpia con `lugares` de vuelta.
+  NEGATIVO: tocar el texto `Clase grupal` no abre ni cambia nada.
 awaiting: user response
 
 ## Ronda 3 — el selector del modal (2026-08-24)
@@ -44,8 +42,8 @@ dueño en la ronda 2. Tres pasos: uno del control nuevo, dos de regresión que y
 volver.
 
 ### R3-1. El modal usa el mismo selector que la tarjeta
-expected: Ver "Current Test" arriba.
-result: [pending]
+expected: 375px · /servicios → lápiz → bloque `Cuántos lugares`. Stepper `[−] N [+]` igual al de la tarjeta; `−` apagado en el piso con su cartelito. Verificado también en oscuro. Individual sin bloque de cupo.
+result: pass
 
 ### R3-2. REGRESIÓN — el campo se sigue pudiendo escribir con el teclado (D-06)
 expected: |
@@ -55,7 +53,12 @@ expected: |
   abajo del cursor; al salir queda `7`.
   ⚠ ES EL PASO QUE IMPORTA: es el defecto exacto que reportaste en la UAT anterior y que la ronda 1
   verificó cerrado. Si acá algo se comporta distinto, el plan volvió a romperlo.
-result: [pending]
+result: pass
+notes: |
+  D-06 sobrevivió la extracción del stepper. Era el único gate real: el gate de código
+  (`capacityFocusedRef.current` = 3 CON `onInputFocus={` = 1 cableado) prueba que la maquinaria de foco
+  quedó enchufada, pero el comportamiento sólo lo puede confirmar una persona — el runner corre en
+  `environment: 'node'` y el repo no tiene librería de render.
 
 ### R3-3. REGRESIÓN — la tarjeta guarda como ayer (R2-2)
 expected: |
@@ -64,7 +67,12 @@ expected: |
   desaparecer sin guardar. Subir y guardar: `Guardando…`, toast `Cupo actualizado`, fila limpia con
   `lugares` de vuelta.
   NEGATIVO: tocar el texto `Clase grupal` no abre ni cambia nada.
-result: [pending]
+result: issue — G-04 (la parte de guardado quedó SIN PROBAR)
+notes: |
+  El dueño reportó el NEGATIVO roto antes de llegar al resto: **"el texto clase grupal sube los
+  lugares del cupo"**, confirmado que fue en la TARJETA (no en el modal).
+  ⚠ La parte positiva del test (Guardar aparece / desaparece / guarda con toast) **no se llegó a
+  verificar** — hay que re-correrla después del fix.
 
 ## Ronda 2 — cierre de gaps (2026-08-24)
 
@@ -266,11 +274,11 @@ notes: |
 
 ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
 ronda_2: 5 tests — **5 passed, 0 issues, 0 pending** ✓ los tres gaps CERRADOS
-ronda_3: 3 tests — 0 passed, 0 issues, 3 pending (plan 17-09, no es un gap)
+ronda_3: 3 tests — 2 passed, **1 issue (G-04, alta)**, 0 pending (plan 17-09, no es un gap)
 total: 18
-passed: 12
-issues: 3
-pending: 3
+passed: 14
+issues: 4
+pending: 0
 skipped: 0
 
 ## Gaps
@@ -303,6 +311,35 @@ esa fila, el ancho alcanza para `[−] 7 [+] lugares  [Guardar]` en una sola lí
 lo que el UI-SPEC §1 describe.
 El fix de G-02 tiene que resolver los dos niveles a la vez: la fila de la tarjeta Y la composición
 interna del control.
+
+### G-04 — En la tarjeta, tocar el texto del modo sube el cupo (regresión de D-09)
+severity: alta
+reported: ronda 3, test R3-3 (2026-08-24)
+surface: `app/(dashboard)/settings/settings-client.tsx` → `CapacityInlineControl` + la línea de datos de la tarjeta
+symptom: Palabras del dueño — *"el texto clase grupal sube los lugares del cupo"*. Confirmado: en la TARJETA de la lista, no en el modal.
+why_it_matters: |
+  **D-09 es explícito:** desde la tarjeta se cambia el NÚMERO, nunca el modo, y el label es texto
+  inerte. Que además dispare un incremento es peor que romper D-09: el dueño toca una etiqueta y
+  modifica un dato.
+what_the_code_says: |
+  El label es `<span className="font-medium text-foreground">{label}</span>` — **sin `onClick`, sin
+  `role`, sin `tabIndex`** (verificado). El contenedor de la línea de datos
+  (`div.flex.flex-wrap.items-center.gap-x-2.gap-y-1`) **tampoco tiene handler**. O sea que el clic no
+  sale de un manejador sobre el label.
+leading_hypothesis: |
+  **Geometría, no lógica.** Desde G-02b el bloque del stepper vive en un `basis-full` inmediatamente
+  debajo de la línea de datos, separado por `gap-y-1` = **4px**. El botón `+` mide **44px** de alto
+  (`h-11 w-11`) y cae horizontalmente **debajo de donde se dibuja "Clase grupal"**. Tocando el borde
+  inferior del texto, el dedo aterriza en el `+`.
+  Encaja con que SUBA y no baje: el `−` está a la izquierda del número y el `+` a la derecha, que es
+  la zona donde termina la palabra.
+how_to_discriminate: |
+  Un solo toque lo decide: **tocar el texto `60min · $7.000` de la misma tarjeta.**
+  · Si también sube el cupo ⇒ el problema es de toda la línea de datos y hay un handler no encontrado.
+  · Si no pasa nada ⇒ es geometría y el fix es separar el bloque del stepper de la línea de datos.
+  ⛔ **No arreglar antes de reproducir** — es el estándar del workstream, y ya evitó tres fixes
+  equivocados en este milestone.
+regression_of: 17-06 (G-02b puso el stepper en `basis-full` bajo la línea de datos) o 17-09 (la mudanza del stepper). A determinar al reproducir.
 
 ### G-03 — En la agenda a 375px el badge se come el nombre del servicio
 severity: alta
