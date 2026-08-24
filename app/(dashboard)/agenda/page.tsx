@@ -38,7 +38,12 @@ export default async function AgendaPage() {
       // expires_at (code-review CR-01): un hold `pending_payment` con la seña VENCIDA ya no ocupa
       // lugar (el RPC y availability lo descartan), así que el aviso "lleno" por solape del panel
       // tampoco puede contarlo. Sin esta columna el badge mentía hasta que corriera el cron diario.
-      .select('id, date, time, status, client_name, client_phone, client_email, expires_at, duration_minutes, location_id, abono_id, service_id, services(name), professionals(name)')
+      // professional_id (code-review CR-01 de la Phase 17): el motor cuenta los lugares por AGENDA
+      // — COALESCE(professional_id, sentinel) + date + time, SIN service_id —, así que sin esta
+      // columna el panel no puede contar por el mismo eje. El join professionals(name) NO sirve para
+      // esto: trae el nombre para mostrar, no el id con el que se agrupa (y colapsa a null los
+      // turnos sin profesional, que en el motor son un bucket propio, el sentinel).
+      .select('id, date, time, status, client_name, client_phone, client_email, expires_at, duration_minutes, location_id, abono_id, service_id, professional_id, services(name), professionals(name)')
       .eq('business_id', business.id)
       .gte('date', weekStartStr)
       .neq('status', 'cancelled')

@@ -45,6 +45,10 @@ export type AgendaAppt = {
   // FK al servicio (migr. 062, D-11): resuelve capacity_mode/capacity para el aviso "lleno" por
   // solape de los recursos simultáneos. El join services(name) NO lo trae (solo el nombre).
   service_id?: string | null
+  // FK a la agenda (code-review CR-01): el motor cuenta los lugares por bucket
+  // COALESCE(professional_id, sentinel). El join professionals(name) trae el nombre para mostrar,
+  // no el id con el que se cuenta — y los dos hacen falta.
+  professional_id?: string | null
   services: { name?: string } | null
   professionals: { name?: string } | null
 }
@@ -534,33 +538,43 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
 
   // ── Roster del admin (CUPOS-04, D-04) ────────────────────────────────────────
   // Click en la fila de una clase grupal → overlay con el contador y la lista (nombre, contacto,
-  // estado). El slot se identifica por fecha + hora + SERVICIO: el cupo es del servicio.
+  // estado). El slot se identifica por la key de la fila: fecha + hora + AGENDA + servicio.
   const isDesktop = useMediaQuery('(min-width: 768px)')
-  const [rosterSlot, setRosterSlot] = useState<{ date: string; time: string; serviceId: string } | null>(null)
+  // El slot se identifica por la KEY de la entrada (`date|HH:MM|bucket|service_id`), no por sus
+  // partes sueltas: desde el code-review CR-01 la fecha, la hora y el servicio ya no alcanzan —
+  // la misma clase dictada por dos profesionales son dos filas distintas, y hay que abrir la que se
+  // tocó. La key es la identidad que arma el módulo puro, así que acá no se re-deriva.
+  const [rosterSlot, setRosterSlot] = useState<string | null>(null)
 
   // El roster NO recalcula nada: recupera de `entriesByDate` LA MISMA entrada de grupo que se
   // renderizó en la columna. Al leer el mismo objeto es estructuralmente imposible que la fila y el
   // diálogo muestren números distintos (T-17-23).
   //
-  // Dos consecuencias buscadas de haber pasado el servicio:
-  // - El roster filtra por SERVICIO, no solo por fecha y hora. Antes, dos clases distintas a la
-  //   misma hora se mezclaban en una sola lista (T-17-24); con el cupo por servicio eso ya no puede
-  //   pasar.
+  // Tres consecuencias buscadas:
+  // - El roster filtra por SERVICIO y por AGENDA. Antes, dos clases distintas a la misma hora se
+  //   mezclaban en una sola lista (T-17-24); y desde el code-review CR-01 la misma clase dictada por
+  //   dos profesionales tampoco mezcla sus dos listas.
   // - La lista puede tener MÁS filas que el contador: un hold vencido o un turno que no ocupa lugar
   //   sigue apareciendo con su chip de estado, pero el contador dice cuántos lugares están
   //   realmente tomados. No es una discrepancia, es la distinción entre "quiénes figuran" y
   //   "cuántos lugares hay tomados".
+  // - Y también puede tener MENOS: el contador es el de la AGENDA-HORA (el eje del motor), así que
+  //   si otro servicio comparte agenda y hora, sus lugares cuentan acá aunque su gente no figure en
+  //   esta lista. Es exactamente lo que hace `book_slot_atomic` al decidir si acepta una reserva.
   const roster = useMemo(() => {
     if (!rosterSlot) return null
-    const { date, time, serviceId } = rosterSlot
-    const entry = (entriesByDate.get(date) || []).find(
-      e => e.kind === 'group' && e.time === time && e.serviceId === serviceId,
-    )
+    // La key empieza por la fecha (`date|HH:MM|bucket|service_id`), así que la columna del día sale
+    // de ahí sin guardar un segundo estado que pueda desincronizarse.
+    const date = rosterSlot.slice(0, rosterSlot.indexOf('|'))
+    const entry = (entriesByDate.get(date) || []).find(e => e.kind === 'group' && e.key === rosterSlot)
     if (!entry || entry.kind !== 'group') return null
     return {
       date,
       time: entry.time,
       serviceName: entry.serviceName,
+      // Nombre de la agenda: solo cuando dos filas del mismo servicio y hora compiten (si no, el
+      // título repetiría un dato que no desambigua nada).
+      agendaName: entry.agendaAmbiguous ? (entry.appts[0]?.professionals?.name ?? null) : null,
       capacity: entry.capacity,
       occupied: entry.occupied,
       enrollees: [...entry.appts].sort((a, b) => a.client_name.localeCompare(b.client_name)),
@@ -674,12 +688,17 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     // El `3/6` visual no puede ser el único portador del dato: el aria-label dice la
                     // ocupación con palabras, y repite el aviso de seña que el badge muestra en
                     // ámbar (en mobile no hay hover, así que el `title` no llega).
-                    const aria = `Ver inscriptos de ${entry.serviceName ?? 'la clase'} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — ${entry.occupied} de ${entry.capacity} lugares${entry.pendingDeposit >= 1 ? `, ${entry.pendingDeposit} sin seña` : ''}`
+                    // Nombre de la agenda: SOLO cuando otra fila del mismo servicio y hora vive en
+                    // otra agenda (`agendaAmbiguous`). Sin esa marca, dos filas idénticas a la misma
+                    // hora serían indistinguibles; con ella, el caso de siempre —una sola agenda—
+                    // renderiza exactamente lo mismo que antes, sin gastar un renglón ni ancho.
+                    const agendaName = entry.agendaAmbiguous ? (entry.appts[0]?.professionals?.name ?? null) : null
+                    const aria = `Ver inscriptos de ${entry.serviceName ?? 'la clase'}${agendaName ? ` con ${agendaName}` : ''} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — ${entry.occupied} de ${entry.capacity} lugares${entry.pendingDeposit >= 1 ? `, ${entry.pendingDeposit} sin seña` : ''}`
                     return (
                       <button
                         key={entry.key}
                         type="button"
-                        onClick={() => setRosterSlot({ date: entry.date, time: entry.time, serviceId: entry.serviceId })}
+                        onClick={() => setRosterSlot(entry.key)}
                         aria-label={aria}
                         className={cn(
                           'rounded px-1.5 py-1 text-[11px] leading-tight border',
@@ -707,6 +726,10 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                           <span className="font-semibold">{entry.time}</span>
                           <span className="min-w-0 flex-1 truncate">{entry.serviceName ?? 'Clase'}</span>
                         </span>
+                        {/* Desambiguación de agenda: renglón propio y no un tercer elemento en la
+                            línea de arriba, que a 375px ya está al límite (G-03). Aparece solo en el
+                            caso ambiguo, así que la fila del negocio de una sola agenda no cambia. */}
+                        {agendaName && <span className="w-full truncate text-[10px] opacity-80">{agendaName}</span>}
                         {/* Tope duro de ancho. El caso peor del contador —cupo lleno Y además el aviso
                             de seña— mide ~119px contra los ~115px de contenido del chip. El Badge base
                             ya recorta lo que sobra, así que acotarlo al ancho del chip hace que ese
@@ -1161,7 +1184,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
         // El título suma el NOMBRE DEL SERVICIO: desde que el roster filtra por servicio, la fecha y
         // la hora ya no alcanzan para saber qué clase se está mirando (dos clases distintas pueden
         // compartir horario).
-        const title = `${roster.serviceName ? `${roster.serviceName} · ` : ''}${format(parseISO(roster.date), "EEE d 'de' MMM", { locale: es })} · ${roster.time}`
+        // Y suma la AGENDA cuando la misma clase se dicta en dos a la misma hora (code-review
+        // CR-01): sin eso, los dos rosters tendrían el mismo título.
+        const title = `${roster.serviceName ? `${roster.serviceName} · ` : ''}${roster.agendaName ? `${roster.agendaName} · ` : ''}${format(parseISO(roster.date), "EEE d 'de' MMM", { locale: es })} · ${roster.time}`
         // El contador dice LUGARES OCUPADOS, no filas de la lista: un hold vencido figura abajo con
         // su chip de estado pero no ocupa lugar (precedente CR-01).
         const counter = `${roster.occupied}/${roster.capacity}`
