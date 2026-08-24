@@ -166,6 +166,11 @@ function normalizeCapacity(n: number, min = 1): number {
 //     serie, no cancelar turnos sueltos.
 const GATE_MODE_CHANGE_MESSAGE = 'No se puede cambiar cómo se ocupa el cupo: quedan turnos por delante o un abono activo. Cancelá los turnos y dá de baja el abono. Ojo: un turno marcado como completado no se puede cancelar desde el panel — ahí hay que esperar a que pase su horario.'
 
+// Rechazo genérico del guardado del cupo inline. Cadena FIJA y una sola copia: la usan los TRES
+// desenlaces que para el dueño son el mismo hecho (error de la base, cero filas escritas, excepción
+// de red). Nunca se interpola `error.message`, el código ni el nombre del servicio (T-17-10).
+const CAPACITY_SAVE_FAILED_MESSAGE = 'No pudimos guardar el cupo. Volvimos al valor anterior. Intentá de nuevo.'
+
 // ── Los tres modos de cupo, en UN solo lugar (CUPO-09 · D-01/D-03/D-04) ─────────────────────────
 // Por qué existe: es la misma lección que la Phase 15 aplicó en la base —el número del cupo vive en una
 // sola columna— aplicada ahora a la pantalla. Hasta acá el label estaba duplicado de hecho (el array de
@@ -674,7 +679,16 @@ function CapacityInlineControl({ service, saving, onSave }: {
   }
 
   async function handleSave() {
-    const ok = await onSave(value)
+    // El `catch` no es redundante con el `try/finally` del padre (code-review WR-07): éste componente
+    // no puede depender de que su `onSave` esté bien escrito. Sin él, una promesa rechazada sube al
+    // handler de React sin revertir el número ni avisar nada, y la tarjeta queda mostrando un valor
+    // que la base no tiene. Cualquier excepción se trata como rechazo: mismo camino que `ok === false`.
+    let ok = false
+    try {
+      ok = await onSave(value)
+    } catch {
+      ok = false
+    }
     if (ok) return
     // Rechazo: el número vuelve al valor guardado ANTES de marcar el error, así no queda ningún número
     // en pantalla que la base no tenga (el estado zombi "sucio pero fallado"). Como queda limpio, el
@@ -1318,33 +1332,48 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // filtra, el servicio se borró en otra pestaña, el id ya no existe) vuelve con `error: null` y cero
     // filas. Sin esta comprobación cantábamos "Cupo actualizado" y resincronizábamos la tarjeta sobre
     // un número que la base no tiene, hasta que el dueño recargara.
-    const { data, error } = await supabase.from('services').update({ capacity }).eq('id', svc.id).eq('business_id', business.id).select('id')
-    setSavingCapacityIds(prev => { const next = new Set(prev); next.delete(svc.id); return next })
-    if (error) {
-      // FAIL-SAFE, no camino feliz: por D-09 este camino NO manda el modo, así que este rechazo no
-      // debería llegar nunca desde la tarjeta. Si llega, significa que alguien empezó a mandar un
-      // `capacity_mode` DISTINTO — es un bug del cliente. Mismo molde de mapeo que el diálogo (`code`
-      // primero, `message.includes(<código de dominio>)` después) y LA MISMA cadena, no una variante.
-      if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
-        toast.error(GATE_MODE_CHANGE_MESSAGE)
+    //
+    // El cuerpo va en try/finally por el MISMO criterio que addService dejó escrito en este archivo
+    // (code-review WR-07): `finally` y no una línea antes de cada `return`, porque los early return
+    // por error Y cualquier excepción de red tienen que devolver el botón. Sin esto, una promesa
+    // rechazada dejaba el stepper y el Guardar de esa tarjeta deshabilitados HASTA RECARGAR la página.
+    try {
+      const { data, error } = await supabase.from('services').update({ capacity }).eq('id', svc.id).eq('business_id', business.id).select('id')
+      if (error) {
+        // FAIL-SAFE, no camino feliz: por D-09 este camino NO manda el modo, así que este rechazo no
+        // debería llegar nunca desde la tarjeta. Si llega, significa que alguien empezó a mandar un
+        // `capacity_mode` DISTINTO — es un bug del cliente. Mismo molde de mapeo que el diálogo (`code`
+        // primero, `message.includes(<código de dominio>)` después) y LA MISMA cadena, no una variante.
+        if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
+          toast.error(GATE_MODE_CHANGE_MESSAGE)
+          return false
+        }
+        // Cadena FIJA: ni el mensaje de la base, ni el código, ni el nombre del servicio (T-17-10).
+        toast.error(CAPACITY_SAVE_FAILED_MESSAGE)
         return false
       }
-      // Cadena FIJA: ni el mensaje de la base, ni el código, ni el nombre del servicio (T-17-10).
-      toast.error('No pudimos guardar el cupo. Volvimos al valor anterior. Intentá de nuevo.')
+      // Cero filas escritas SIN error: mismo desenlace que un rechazo — el número vuelve al valor
+      // anterior y no se toca el estado local. La misma cadena fija que el camino de error: para el
+      // dueño es el mismo hecho (no se guardó), y saber por qué no le cambia lo que puede hacer.
+      if (!data || data.length === 0) {
+        toast.error(CAPACITY_SAVE_FAILED_MESSAGE)
+        return false
+      }
+      // Actualización local DESPUÉS de la confirmación, igual que saveEditService: en la tarjeta se ve lo
+      // que la base aceptó. Al cambiar el prop, el control se resincroniza solo y la fila queda limpia.
+      setServices(prev => prev.map(s => s.id === svc.id ? { ...s, capacity } : s))
+      toast.success('Cupo actualizado')
+      return true
+    } catch (e) {
+      // supabase-js normalmente devuelve el error en vez de tirarlo, pero una caída de red cruda sí
+      // rechaza la promesa. Se trata como cualquier otro rechazo: mismo toast, mismo `false` (el
+      // control revierte el número), y el prefijo de módulo del proyecto en la consola.
+      console.error('[settings/saveCapacityInline]', e instanceof Error ? e.message : e)
+      toast.error(CAPACITY_SAVE_FAILED_MESSAGE)
       return false
+    } finally {
+      setSavingCapacityIds(prev => { const next = new Set(prev); next.delete(svc.id); return next })
     }
-    // Cero filas escritas SIN error: mismo desenlace que un rechazo — el número vuelve al valor
-    // anterior y no se toca el estado local. La misma cadena fija que el camino de error: para el
-    // dueño es el mismo hecho (no se guardó), y saber por qué no le cambia lo que puede hacer.
-    if (!data || data.length === 0) {
-      toast.error('No pudimos guardar el cupo. Volvimos al valor anterior. Intentá de nuevo.')
-      return false
-    }
-    // Actualización local DESPUÉS de la confirmación, igual que saveEditService: en la tarjeta se ve lo
-    // que la base aceptó. Al cambiar el prop, el control se resincroniza solo y la fila queda limpia.
-    setServices(prev => prev.map(s => s.id === svc.id ? { ...s, capacity } : s))
-    toast.success('Cupo actualizado')
-    return true
   }
 
   // ── Tab 3 — Professionals ─────────────────────────────────────────────────
