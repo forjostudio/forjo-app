@@ -707,12 +707,22 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                           <span className="font-semibold">{entry.time}</span>
                           <span className="min-w-0 flex-1 truncate">{entry.serviceName ?? 'Clase'}</span>
                         </span>
+                        {/* Tope duro de ancho. El caso peor del contador —cupo lleno Y además el aviso
+                            de seña— mide ~119px contra los ~115px de contenido del chip. El Badge base
+                            ya recorta lo que sobra, así que acotarlo al ancho del chip hace que ese
+                            exceso se corte ADENTRO del badge en vez de desbordar el borde redondeado,
+                            que es el síntoma exacto que reportó la UAT. Y como el cupo va primero
+                            (UI-SPEC §4.4: primero el cupo, después la plata), lo único que puede ceder
+                            en ese extremo es la cola del aviso de seña, nunca la cifra. El texto entero
+                            sigue disponible en el title del badge y en el aria-label del botón. El
+                            call-site tampoco necesita declarar que el badge no encoge: eso ya viene en
+                            la base del componente. */}
                         <OccupancyBadge
                           occupied={entry.occupied}
                           capacity={entry.capacity}
                           pendingDeposit={entry.pendingDeposit}
                           scope="slot"
-                          className="flex-shrink-0"
+                          className="max-w-full"
                         />
                       </button>
                     )
