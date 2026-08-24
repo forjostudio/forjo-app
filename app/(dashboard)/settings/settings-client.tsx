@@ -627,7 +627,6 @@ function CapacityInlineControl({ service, saving, onSave }: {
   // El valor GUARDADO sale del prop, normalizado con el piso del modo: es la única fuente de verdad de
   // "qué hay en la base", y de él sale `dirty`.
   const saved = normalizeCapacity(Number(service.capacity), min)
-  const label = CAPACITY_MODE_HELP.find(h => h.key === mode)?.label ?? ''
 
   const [value, setValue] = useState(saved)
   // Texto crudo del input: misma disciplina que CapacityModeFields (D-06). Mientras el foco está adentro
@@ -677,69 +676,75 @@ function CapacityInlineControl({ service, saving, onSave }: {
   }
 
   return (
-    // DOS items para la línea de datos, no uno. Todo el control junto pedía ~372px de renglón (label
-    // 74 + stepper 146 + sufijo 40 + botón 96 + los huecos) contra los 271px reales que mide la
-    // tarjeta a 375px: por eso caía en tres niveles. El label se queda arriba como TERCER dato de la
-    // línea —que es literalmente lo que dice D-07— y sólo baja el bloque que necesita ancho:
-    // 146 + 8 + 96 = 250px, que sí entra en un solo renglón (G-02b).
-    <>
-      {/* El label del modo sale de CAPACITY_MODE_HELP (D-03: los labels viven en un solo lugar). Es un
-          span sin onClick, sin role y sin tabIndex: TEXTO, no un control (D-09). Cambia de posición,
-          no de naturaleza: el modo se sigue cambiando sólo desde el modal. */}
-      <span className="font-medium text-foreground">{label}</span>
-      {/* La base de flex a ancho completo es lo que le da su propia línea de forma DETERMINISTA. Con
-          el wrap solo, dónde arranca el bloque dependería de cuánto ocupen la duración y el precio de
-          cada servicio; así arranca siempre en un renglón nuevo, con los 271px de la tarjeta enteros.
-          El manejador de teclado se muda acá para que Escape restaure con el foco en cualquier parte
-          del bloque, incluido el botón Guardar. El label no es focusable, así que no pierde nada al
-          quedar afuera. */}
-      <span
-        className="flex basis-full items-center gap-x-2 gap-y-1"
-        onKeyDown={e => { if (e.key === 'Escape') revert() }}
-      >
-        {/* La tarjeta consume el control compartido y sigue siendo dueña de su guardado: el clamp de
-            abajo es SUYO, con el piso de su propio modo. */}
-        <CapacityStepper
-          value={value}
-          text={text}
-          min={min}
-          max={MAX_CAPACITY}
-          groupLabel={`Lugares de ${service.name}`}
+    // UNA fila propia de la tarjeta, HERMANA de la línea de datos y no hija suya. Hasta acá el bloque
+    // vivía adentro del contenedor de texto, a 4px del renglón, y eso solo alcanzaba para romperlo:
+    // tocar la duración BAJABA el cupo y tocar el label lo SUBÍA, porque los navegadores móviles
+    // corrigen el punto de toque hacia el elemento interactivo más cercano cuando el dedo no aterrizó
+    // en ninguno (G-04, reproducido y confirmado en la ronda 3 de UAT). La dirección dependía de la
+    // posición horizontal del dedo, que es justamente lo que ningún manejador suelto podría saber.
+    //
+    // LA INVARIANTE DE LOS 32px. Entre cualquier texto inerte de esta tarjeta y el primer píxel de un
+    // botón hay 32px: 24px de padding vertical propio de esta fila + los 8px que la tarjeta ya pone
+    // entre hermanos. De dónde sale el 32: el piso táctil de 44px que exige el proyecto implica un
+    // radio de contacto de 22px, y un dedo centrado en un renglón de 18px llega 31px más abajo; 32 es
+    // el primer paso de la escala que lo supera. Es una decisión DERIVADA, no una medición — el único
+    // instrumento capaz de confirmarla es la UAT. Va como padding y no como margen porque el padding
+    // SUMA al ritmo de la tarjeta de forma determinista, mientras que un margen pelearía con él.
+    //
+    // COROLARIO, que es lo que evita la recaída: si alguien vuelve a meter este bloque adentro de la
+    // línea de datos "para ahorrar una línea", el defecto vuelve entero.
+    //
+    // La composición interna NO cambia (G-02b): 146 del stepper + 8 de hueco + 96 del botón = 250px,
+    // que entran en los 271px que mide la tarjeta a 375px. El tamaño y el color del texto se declaran
+    // acá porque el bloque ya no los hereda de la línea de datos: sin ellos el sufijo saltaría de 12px
+    // a 14px y de gris a texto pleno. El manejador de teclado vive en este contenedor para que Escape
+    // restaure con el foco en cualquier parte del bloque, incluido el botón Guardar.
+    <div
+      className="flex items-center gap-x-2 gap-y-1 py-6 text-xs text-muted-foreground"
+      onKeyDown={e => { if (e.key === 'Escape') revert() }}
+    >
+      {/* La tarjeta consume el control compartido y sigue siendo dueña de su guardado: el clamp de
+          abajo es SUYO, con el piso de su propio modo. */}
+      <CapacityStepper
+        value={value}
+        text={text}
+        min={min}
+        max={MAX_CAPACITY}
+        groupLabel={`Lugares de ${service.name}`}
+        disabled={saving}
+        dirty={dirty}
+        invalid={rejected}
+        onStep={apply}
+        onTextChange={setText}
+        // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
+        // piso del modo y al techo. Este NO es el último clamp: saveCapacityInline vuelve a normalizar
+        // antes de mandar, y la AUTORIDAD sigue siendo el CHECK de la migr. 068.
+        onInputBlur={() => {
+          const n = Number(text)
+          apply(text.trim() !== '' && Number.isFinite(n) ? n : value)
+        }}
+      />
+      {/* Invariable: el piso de los dos modos de cupo compartido es 2, así que nunca es "lugar".
+          Con un guardado pendiente la unidad le cede sus 40px al botón en mobile, que es el elemento
+          que TIENE que verse. No se pierde para nadie: viaja por la etiqueta accesible del input y
+          por la del grupo, en reposo —el 99 % del tiempo— está siempre visible, y a los ≥640px vuelve
+          porque ahí el stepper baja a 104px y entran los dos. */}
+      <span className={cn(dirty && 'hidden sm:inline')}>lugares</span>
+      {/* Sólo cuando hay algo pendiente. Entra con fade + 4px de deslizamiento; SALE sin animar (unmount
+          directo): animar la salida exige mantenerlo montado con un estado más y no paga. Es decisión
+          escrita, no olvido. El ancho mínimo del botón evita que la fila se reacomode al pasar a "Guardando…". */}
+      {dirty && (
+        <Button
+          size="sm"
+          onClick={handleSave}
           disabled={saving}
-          dirty={dirty}
-          invalid={rejected}
-          onStep={apply}
-          onTextChange={setText}
-          // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
-          // piso del modo y al techo. Este NO es el último clamp: saveCapacityInline vuelve a normalizar
-          // antes de mandar, y la AUTORIDAD sigue siendo el CHECK de la migr. 068.
-          onInputBlur={() => {
-            const n = Number(text)
-            apply(text.trim() !== '' && Number.isFinite(n) ? n : value)
-          }}
-        />
-        {/* Invariable: el piso de los dos modos de cupo compartido es 2, así que nunca es "lugar".
-            Con un guardado pendiente la unidad le cede sus 40px al botón en mobile, que es el elemento
-            que TIENE que verse. No se pierde para nadie: viaja por la etiqueta accesible del input y
-            por la del grupo, en reposo —el 99 % del tiempo— está siempre visible, y a los ≥640px vuelve
-            porque ahí el stepper baja a 104px y entran los dos. */}
-        <span className={cn(dirty && 'hidden sm:inline')}>lugares</span>
-        {/* Sólo cuando hay algo pendiente. Entra con fade + 4px de deslizamiento; SALE sin animar (unmount
-            directo): animar la salida exige mantenerlo montado con un estado más y no paga. Es decisión
-            escrita, no olvido. El ancho mínimo del botón evita que la fila se reacomode al pasar a "Guardando…". */}
-        {dirty && (
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={saving}
-            aria-busy={saving ? 'true' : undefined}
-            className="min-h-11 sm:min-h-0 min-w-24 animate-in fade-in-0 slide-in-from-left-1 duration-150 motion-reduce:animate-none"
-          >
-            {saving ? 'Guardando…' : 'Guardar'}
-          </Button>
-        )}
-      </span>
-    </>
+          aria-busy={saving ? 'true' : undefined}
+          className="min-h-11 sm:min-h-0 min-w-24 animate-in fade-in-0 slide-in-from-left-1 duration-150 motion-reduce:animate-none"
+        >
+          {saving ? 'Guardando…' : 'Guardar'}
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -2227,6 +2232,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 // Mismo fallback que openEditService: cubre filas viejas que quedaron en memoria sin el
                 // modo resuelto (el DEFAULT de la migr. 068 ya las cubre en la DB).
                 const capMode: CapacityMode = s.capacity_mode ?? 'individual'
+                // El rótulo del modo lo resuelve la TARJETA y lo renderiza inline en su línea de datos.
+                // Antes lo resolvía el control; se mudó junto con el label, sin cambiar el cálculo:
+                // CAPACITY_MODE_HELP sigue siendo la única fuente de los rótulos (D-03).
+                const capacityModeLabel = CAPACITY_MODE_HELP.find(h => h.key === capMode)?.label ?? ''
                 return (
                   <div key={s.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
                     {/* Fila A — nombre y acciones. Hasta acá las acciones y el dato peleaban el mismo
@@ -2279,25 +2288,42 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
                         "mejora" que va a proponer el próximo que lea esto; la respuesta es no.
 
-                        El contenedor pasa de <p> a flex-wrap para poder alojar el control, pero la
-                        duración y el precio siguen siendo UN solo nodo de texto: así la línea de un
-                        servicio `individual` —que es el 100 % de producción hoy— se ve exactamente
-                        igual que antes. Sin badge, el badge se vuelve señal. */}
+                        El contenedor pasa de <p> a flex-wrap, pero la duración y el precio siguen
+                        siendo UN solo nodo de texto: así la línea de un servicio `individual` —que es
+                        el 100 % de producción hoy— se ve exactamente igual que antes. Sin badge, el
+                        badge se vuelve señal.
+
+                        POR QUÉ EL CONTROL DEL CUPO YA NO VIVE ACÁ ADENTRO (G-04). Esta línea es texto
+                        inerte y el control tiene botones de 44px. Los navegadores móviles corrigen el
+                        punto de toque hacia el elemento interactivo más cercano cuando el dedo no
+                        aterrizó en ninguno, así que texto inerte y botón no pueden ser vecinos: con el
+                        control adentro, a 4px de este renglón, tocar la duración bajaba el cupo y tocar
+                        el modo lo subía. Ahora el control es HERMANO de esta línea y se lleva 32px de
+                        zona de exclusión (24 de padding propio + 8 del ritmo de la tarjeta). Meterlo de
+                        vuelta acá adentro reabre el defecto entero. */}
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <span>{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</span>
                       {capMode !== 'individual' && (
                         <>
                           {/* El separador no puede leerse en voz alta: ya hay uno en el nodo de
-                              arriba y el lector de pantalla repetiría "punto medio" dos veces. */}
+                              arriba y el lector de pantalla repetiría "punto medio" dos veces. Viaja
+                              junto al label dentro del MISMO condicional: así nunca queda colgando
+                              solo en una tarjeta individual (R2-1). */}
                           <span aria-hidden="true">·</span>
-                          <CapacityInlineControl
-                            service={s}
-                            saving={savingCapacityId === s.id}
-                            onSave={c => saveCapacityInline(s, c)}
-                          />
+                          {/* TERCER dato de la línea (D-07): un span de texto, sin manejador de click,
+                              sin rol y sin índice de tabulación (D-09). Desde la tarjeta se cambia el
+                              NÚMERO, nunca el MODO. */}
+                          <span className="font-medium text-foreground">{capacityModeLabel}</span>
                         </>
                       )}
                     </div>
+                    {capMode !== 'individual' && (
+                      <CapacityInlineControl
+                        service={s}
+                        saving={savingCapacityId === s.id}
+                        onSave={c => saveCapacityInline(s, c)}
+                      />
+                    )}
                     {activeLocations.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[11px] text-muted-foreground mr-0.5">Se ofrece en:</span>
