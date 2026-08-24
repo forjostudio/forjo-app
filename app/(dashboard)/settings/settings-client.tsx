@@ -279,6 +279,106 @@ function spacesBlockSharedCapacity(
   return agendas.some(p => mapped.has(p.id))
 }
 
+// ── CapacityStepper — el control compartido del número de lugares ────────────────────────────────
+// Un dato, un control. `services.capacity` se edita desde DOS superficies —la tarjeta de servicio y el
+// modal de edición— y hasta acá cada una tenía su propio control: la tarjeta un selector con targets
+// cómodos para el dedo, el modal un campo de texto pelado que en mobile sólo se podía tipear. Es la
+// misma deuda que esta fase viene pagando en la base y en la pantalla, un nivel más abajo.
+//
+// QUÉ COMPARTE Y QUÉ NO. Comparte el DIBUJO y el COMPORTAMIENTO DE TIPEO. NO comparte el guardado, y
+// eso es deliberado: la tarjeta persiste directo en la base con su propio botón, y el modal propaga al
+// estado del formulario para que el botón del diálogo lo guarde después. Fusionar las dos semánticas
+// acá adentro sería el error. Por eso esta pieza recibe el valor y el texto, y devuelve INTENCIONES.
+//
+// Y por eso TAMPOCO clampea: propone el vecino (el valor ±1) y cada caller aplica su propio piso, que
+// no es el mismo en las dos superficies (sale del modo del servicio). La AUTORIDAD final nunca es este
+// componente ni sus callers: es el CHECK de la migr. 068.
+//
+// `text` es lo que se ve. `value` es sólo para dibujar el estado de los botones y calcular el vecino.
+function CapacityStepper({ value, text, min, max, groupLabel, onStep, onTextChange, onInputBlur, onInputFocus, disabled, dirty, invalid }: {
+  value: number
+  text: string
+  min: number
+  max: number
+  groupLabel: string
+  onStep: (next: number) => void
+  onTextChange: (raw: string) => void
+  onInputBlur: () => void
+  onInputFocus?: () => void
+  disabled?: boolean
+  dirty?: boolean
+  invalid?: boolean
+}) {
+  const atMin = value <= min
+  const atMax = value >= max
+
+  // Hover/foco de los dos botones del stepper. Va `enabled:` en vez del `disabled:pointer-events-none`
+  // del molde de agenda-client porque acá el botón deshabilitado TIENE que poder mostrar su `title`:
+  // con los eventos de puntero apagados el navegador no hace hit-test y el tooltip nunca aparece, o sea
+  // el callejón sin explicación que el UI-SPEC pide evitar. El resultado visual es el mismo: un botón
+  // deshabilitado no reacciona al hover.
+  const stepBtn = 'flex items-center justify-center text-muted-foreground transition-colors enabled:hover:bg-secondary enabled:hover:text-foreground focus-visible:outline-none focus-visible:bg-secondary focus-visible:text-foreground disabled:opacity-30'
+
+  return (
+    // El anillo de foco va en el CONTENEDOR y no en cada hijo: el `overflow-hidden` que redondea las
+    // puntas del stepper recorta cualquier box-shadow de los hijos, así que un ring por botón sería
+    // invisible. Adentro, cada control marca cuál está enfocado con el fondo, que no se recorta.
+    <span
+      role="group"
+      aria-label={groupLabel}
+      aria-invalid={invalid ? 'true' : undefined}
+      className={cn(
+        'inline-flex items-center overflow-hidden rounded-md border bg-background transition-colors',
+        'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background',
+        invalid ? 'border-destructive' : dirty ? 'border-primary/50' : 'border-border',
+      )}
+    >
+      <button
+        type="button"
+        aria-label="Un lugar menos"
+        // El title SÓLO en el piso: en un botón usable diría una regla que todavía no aplica.
+        title={atMin ? 'El mínimo de este modo es 2 lugares' : undefined}
+        disabled={disabled || atMin}
+        onClick={() => onStep(value - 1)}
+        className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <input
+        type="number"
+        // inputMode numérico = teclado de números en mobile. tabular-nums para que pasar de 9 a 10 no
+        // mueva el sufijo. Los spinners nativos se ocultan: el stepper ya es el control.
+        inputMode="numeric"
+        aria-label="Cantidad de lugares"
+        value={text}
+        disabled={disabled}
+        // El caller avisa PRIMERO y la selección va después: el caller tiene que poder marcar que el
+        // foco entró antes de que corra cualquier efecto suyo que dependa de eso.
+        onFocus={e => { onInputFocus?.(); e.target.select() }}
+        // Mientras se tipea NO se clampea ni se corrige nada: el string crudo se lo lleva el caller.
+        onChange={e => onTextChange(e.target.value)}
+        // Al SALIR normaliza el caller, que es el único que conoce su piso y su camino de guardado.
+        onBlur={onInputBlur}
+        // min/max/step son PISTA del navegador, no la validación.
+        min={min}
+        max={max}
+        step={1}
+        className="h-11 w-14 sm:h-8 sm:w-10 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus-visible:bg-secondary/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        aria-label="Un lugar más"
+        title={atMax ? 'El máximo es 99 lugares' : undefined}
+        disabled={disabled || atMax}
+        onClick={() => onStep(value + 1)}
+        className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </span>
+  )
+}
+
 function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacityBlocked = false }: {
   value: CapacityMode
   capacity: number
@@ -536,8 +636,6 @@ function CapacityInlineControl({ service, saving, onSave }: {
   useEffect(() => () => { if (rejectTimer.current) clearTimeout(rejectTimer.current) }, [])
 
   const dirty = value !== saved
-  const atMin = value <= min
-  const atMax = value >= MAX_CAPACITY
 
   function apply(n: number) {
     const c = normalizeCapacity(n, min)
@@ -565,13 +663,6 @@ function CapacityInlineControl({ service, saving, onSave }: {
     rejectTimer.current = setTimeout(() => setRejected(false), 4000)
   }
 
-  // Hover/foco de los dos botones del stepper. Va `enabled:` en vez del `disabled:pointer-events-none`
-  // del molde de agenda-client porque acá el botón deshabilitado TIENE que poder mostrar su `title`:
-  // con los eventos de puntero apagados el navegador no hace hit-test y el tooltip nunca aparece, o sea
-  // el callejón sin explicación que el UI-SPEC pide evitar. El resultado visual es el mismo: un botón
-  // deshabilitado no reacciona al hover.
-  const stepBtn = 'flex items-center justify-center text-muted-foreground transition-colors enabled:hover:bg-secondary enabled:hover:text-foreground focus-visible:outline-none focus-visible:bg-secondary focus-visible:text-foreground disabled:opacity-30'
-
   return (
     // DOS items para la línea de datos, no uno. Todo el control junto pedía ~372px de renglón (label
     // 74 + stepper 146 + sufijo 40 + botón 96 + los huecos) contra los 271px reales que mide la
@@ -593,65 +684,27 @@ function CapacityInlineControl({ service, saving, onSave }: {
         className="flex basis-full items-center gap-x-2 gap-y-1"
         onKeyDown={e => { if (e.key === 'Escape') revert() }}
       >
-        {/* El anillo de foco va en el CONTENEDOR y no en cada hijo: el `overflow-hidden` que redondea las
-            puntas del stepper recorta cualquier box-shadow de los hijos, así que un ring por botón sería
-            invisible. Adentro, cada control marca cuál está enfocado con el fondo, que no se recorta. */}
-        <span
-          role="group"
-          aria-label={`Lugares de ${service.name}`}
-          aria-invalid={rejected ? 'true' : undefined}
-          className={cn(
-            'inline-flex items-center overflow-hidden rounded-md border bg-background transition-colors',
-            'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background',
-            rejected ? 'border-destructive' : dirty ? 'border-primary/50' : 'border-border',
-          )}
-        >
-          <button
-            type="button"
-            aria-label="Un lugar menos"
-            // El title SÓLO en el piso: en un botón usable diría una regla que todavía no aplica.
-            title={atMin ? 'El mínimo de este modo es 2 lugares' : undefined}
-            disabled={saving || atMin}
-            onClick={() => apply(value - 1)}
-            className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
-          >
-            <Minus className="h-3 w-3" />
-          </button>
-          <input
-            type="number"
-            // inputMode numérico = teclado de números en mobile. tabular-nums para que pasar de 9 a 10 no
-            // mueva el sufijo. Los spinners nativos se ocultan: el stepper ya es el control.
-            inputMode="numeric"
-            aria-label="Cantidad de lugares"
-            value={text}
-            disabled={saving}
-            onFocus={e => e.target.select()}
-            // Mientras se tipea NO se clampea ni se corrige nada: el string crudo va al estado local.
-            onChange={e => setText(e.target.value)}
-            // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
-            // piso del modo y al techo. Este NO es el último clamp: saveCapacityInline vuelve a normalizar
-            // antes de mandar, y la AUTORIDAD sigue siendo el CHECK de la migr. 068.
-            onBlur={() => {
-              const n = Number(text)
-              apply(text.trim() !== '' && Number.isFinite(n) ? n : value)
-            }}
-            // min/max/step son PISTA del navegador, no la validación.
-            min={min}
-            max={MAX_CAPACITY}
-            step={1}
-            className="h-11 w-14 sm:h-8 sm:w-10 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus-visible:bg-secondary/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-          <button
-            type="button"
-            aria-label="Un lugar más"
-            title={atMax ? 'El máximo es 99 lugares' : undefined}
-            disabled={saving || atMax}
-            onClick={() => apply(value + 1)}
-            className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
-          >
-            <Plus className="h-3 w-3" />
-          </button>
-        </span>
+        {/* La tarjeta consume el control compartido y sigue siendo dueña de su guardado: el clamp de
+            abajo es SUYO, con el piso de su propio modo. */}
+        <CapacityStepper
+          value={value}
+          text={text}
+          min={min}
+          max={MAX_CAPACITY}
+          groupLabel={`Lugares de ${service.name}`}
+          disabled={saving}
+          dirty={dirty}
+          invalid={rejected}
+          onStep={apply}
+          onTextChange={setText}
+          // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
+          // piso del modo y al techo. Este NO es el último clamp: saveCapacityInline vuelve a normalizar
+          // antes de mandar, y la AUTORIDAD sigue siendo el CHECK de la migr. 068.
+          onInputBlur={() => {
+            const n = Number(text)
+            apply(text.trim() !== '' && Number.isFinite(n) ? n : value)
+          }}
+        />
         {/* Invariable: el piso de los dos modos de cupo compartido es 2, así que nunca es "lugar".
             Con un guardado pendiente la unidad le cede sus 40px al botón en mobile, que es el elemento
             que TIENE que verse. No se pierde para nadie: viaja por la etiqueta accesible del input y
