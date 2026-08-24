@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 9 plans — 8 completos + 1 pendiente (17-09, mejora aprobada en la ronda 2 de UAT)
+**Plans**: 9/9 plans complete
 
 Plans:
 **Wave 1**
@@ -698,7 +698,7 @@ Plans:
 
 **Mejora aprobada en la ronda 2 de UAT** *(**no** es un gap: nada estaba roto — el test 3 de la ronda 1 verificó que el campo del modal funciona. Es consistencia + target táctil, pedida por el dueño y aprobada en el momento. Entra ahora para que `secure-phase` y `code-review` la cubran en el mismo ciclo. Corre sola, sin dependencias.)*
 
-- [ ] 17-09-PLAN.md — El mismo selector `[−] N [+]` de la tarjeta pasa al campo "Cuántos lugares" del modal: `CapacityStepper` como pieza presentacional **única** para las dos superficies, con las dos semánticas de guardado separadas (la tarjeta persiste en la base, el modal propaga al formulario) y la maquinaria de foco de D-06 conservada entera y con gate propio — CUPO-09
+- [x] 17-09-PLAN.md — El mismo selector `[−] N [+]` de la tarjeta pasa al campo "Cuántos lugares" del modal: `CapacityStepper` como pieza presentacional **única** para las dos superficies, con las dos semánticas de guardado separadas (la tarjeta persiste en la base, el modal propaga al formulario) y la maquinaria de foco de D-06 conservada entera y con gate propio — CUPO-09
 
 **El patrón de los tres gaps, en una línea**: son el mismo problema con tres disfraces — piezas diseñadas para un ancho que a 375px no existe. La fase trae su propio contraejemplo: **POLISH-10 (Finanzas mobile) pasó limpio** porque ahí el dato nuevo entró en **su propia línea** bajo el nombre del cliente en vez de pelear por ancho dentro de una fila llena. G-02 y G-03 hicieron lo contrario. Los fixes aplican esa misma regla.
 
@@ -730,4 +730,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 8/8 | Complete   | 2026-08-24 |
+| 17. Superficie y polish | 9/9 | Complete   | 2026-08-24 |

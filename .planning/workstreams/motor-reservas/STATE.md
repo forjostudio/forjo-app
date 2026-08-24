@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
-stopped_at: Completado 17-07-PLAN.md (G-03 cerrado)
-last_updated: "2026-08-24T19:02:40.752Z"
-last_activity: 2026-08-20 -- Phase 17 execution started
+stopped_at: Completed 17-09-PLAN.md — Phase 17 lista para la tercera ronda de UAT
+last_updated: "2026-08-24T20:09:22.360Z"
+last_activity: 2026-08-24 -- 17-09 ejecutado (CapacityStepper compartido)
 progress:
   total_phases: 17
   completed_phases: 17
-  total_plans: 86
-  completed_plans: 86
+  total_plans: 87
+  completed_plans: 87
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 17 (superficie-y-polish) — EXECUTING
-Plan: 8 of 8 (cierre de gaps de la UAT)
-Status: 17-06 cerrado (G-02 + G-02b) — quedan 17-07 y 17-08
-Last activity: 2026-08-20 -- Phase 17 execution started
+Phase: 17 (superficie-y-polish) — READY FOR VERIFICATION
+Plan: 9 of 9 (los 9 ejecutados y cerrados)
+Status: 17-09 cerrado — el selector de cupo del modal es ahora el mismo de la tarjeta. Falta la TERCERA ronda de UAT (guion de 17-09-PLAN.md, 3 pasos a 375px sobre el dev server del 3000), y después `secure-phase 17` + `code-review 17`
+Last activity: 2026-08-24 -- 17-09 ejecutado (CapacityStepper compartido)
 
 ## Milestone v0.27 — decisiones tomadas antes de planificar
 
@@ -127,6 +127,7 @@ Last activity: 2026-08-20 -- Phase 17 execution started
 | Phase 17 P06 | 21min | 2 tasks | 1 files |
 | Phase 17 P07 | 12min | 2 tasks | 1 files |
 | Phase 17 P08 | 18min | 2 tasks | 1 files |
+| Phase 17 P09 | 22min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 17-03: guardado inline con estado POR TARJETA (savingCapacityId); el booleano singleton de los dialogos congelaria el resto de la lista
 - [Phase 17]: El chip del slot grupal de la agenda apila el contador en su propia linea (G-03) — Medido a 375px: la celda del dia tiene ~115px de contenido y en un solo renglon el nombre se quedaba sin ancho. Bajar el contador le devuelve ~77px; acortar el aviso de sena recuperaba menos y seguia truncando, y pasar la grilla a una columna tocaba una superficie que funciona.
 - [Phase 17]: El explicador de modos de cupo muestra completo sólo el modo activo; los otros dos quedan en una línea con su eje, y el texto completo sigue en el canal accesible — D-02 revisada en la UAT: los tres bloques completos eran ~10 líneas a 375px. Ocultarlos del todo obligaría a tocar botones que escriben capacity_mode + capacity, así que la versión corta conserva la comparación sin efecto de escritura
+- [Phase 17]: El control de cupo se comparte entre la tarjeta y el modal (CapacityStepper), pero el guardado NO: la tarjeta persiste en la base y el modal propaga al formulario, por eso el clamp vive en cada caller — Un dato, un control: cuando el mismo campo se edita desde dos superficies, se extrae el control; lo que no se unifica es el camino de escritura
 
 ### Pending Todos
 
@@ -348,8 +350,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-24T19:02:23.242Z
-Stopped at: Completado 17-07-PLAN.md (G-03 cerrado)
+Last session: 2026-08-24T20:09:16.501Z
+Stopped at: Completed 17-09-PLAN.md — Phase 17 lista para la tercera ronda de UAT
 Resume file: None
 
 ## Operator Next Steps
