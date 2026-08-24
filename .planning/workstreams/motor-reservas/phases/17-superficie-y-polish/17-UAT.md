@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 17-superficie-y-polish
 workstream: motor-reservas
 milestone: v0.27
@@ -26,18 +26,12 @@ updated: 2026-08-20
 
 ## Current Test
 
-number: R4-1
-name: G-04 — tocar el texto de la tarjeta no mueve nada
+number: —
+name: FASE COMPLETA — 4 rondas de UAT, 4 gaps encontrados y cerrados
 expected: |
-  ⚠ 375px y **CON EL DEDO, no con el mouse** — el defecto es de corrección del punto de toque y con un
-  puntero NO se reproduce. En DevTools hay que estar en modo dispositivo con emulación táctil.
-  `/servicios`, tarjeta de cupo compartido. Anotá el número. Tocá uno por uno:
-  · el texto `60min · $7.000` (izquierda de la línea)
-  · el texto `Clase grupal` (derecha)
-  · el separador `·` del medio
-  El número NO se mueve en ninguno, no aparece `Guardar`, no se abre nada. Repetilo tocando el
-  principio, el medio y el final de cada palabra — ahí es donde antes cambiaba la dirección.
-awaiting: user response
+  22 tests · 21 pass · 4 issues, los CUATRO cerrados y re-verificados por un humano.
+  10/10 planes ejecutados. Sin migración, sin cambios en el motor.
+awaiting: nothing — listo para secure-phase y code-review
 
 ## Ronda 4 — cierre de G-04 (2026-08-24)
 
@@ -103,8 +97,14 @@ toque de este navegador alcanza más de 32px y la salida deja de ser de espaciad
 —que el stepper aparezca detrás de un control explícito— es del dueño, no del ejecutor.
 
 ### R4-1. G-04 — tocar el texto no mueve nada
-expected: Ver "Current Test" arriba. CON EL DEDO a 375px.
-result: [pending]
+expected: CON EL DEDO a 375px, tocar `60min · $7.000`, `Clase grupal` y el separador `·` — el número no se mueve, no aparece `Guardar`, no se abre nada.
+result: pass
+notes: |
+  **G-04 CERRADO.** La zona de exclusión de 32px alcanzó: ninguno de los tres textos dispara el
+  stepper, ni tocando el principio, el medio o el final de la palabra.
+  Confirma además el diagnóstico: era corrección del punto de toque (tap-target fuzzing), y la
+  distancia vertical fue la variable correcta. No hizo falta el tercer aumento de padding que el plan
+  prohibía.
 
 ### R4-2. R2-2 / R3-3 — la tarjeta guarda como ayer
 expected: |
@@ -113,7 +113,12 @@ expected: |
   Con dos servicios de cupo compartido a la vista: mientras uno guarda, el otro sigue usable.
   ⚠ En la ronda 3 esto NUNCA se llegó a verificar (el negativo falló antes): es la primera prueba
   después del refactor de 17-09.
-result: [pending]
+result: pass
+notes: |
+  Primera verificación real del guardado **después de DOS refactors**: 17-09 (el stepper se extrajo a
+  una pieza compartida con el modal) y 17-10 (el control cambió de contenedor padre). La semántica de
+  guardado de la tarjeta sobrevivió a los dos, que era exactamente lo que el límite de diseño de 17-09
+  ("se comparte el dibujo, nunca el commit") buscaba garantizar.
 
 ### R4-3. R2-1 — la tarjeta sigue sin superponerse
 expected: |
@@ -121,7 +126,12 @@ expected: |
   colgando solo.
   NEGATIVO: una tarjeta `individual` (`Corte`, `Testing`) se ve EXACTAMENTE como siempre — sin label de
   modo, sin stepper y SIN el espacio nuevo. Si un individual creció de alto, el fix se pasó de rosca.
-result: [pending]
+result: pass
+notes: |
+  El negativo es el que importaba: los servicios `individual` —el 100 % de producción hoy— no crecieron
+  de alto. El separador, el label y la fila del control viven los tres dentro del mismo condicional, así
+  que en un individual no se renderiza ningún hermano nuevo y el `space-y-2` no suma un píxel. El fix
+  no se pasó de rosca.
 
 ### R4-4. La zona de abajo — el mismo mecanismo, del otro lado
 expected: |
@@ -371,11 +381,11 @@ notes: |
 ronda_1: 10 tests — 7 passed, 3 issues (G-01, G-02+G-02b, G-03), todos cerrados por 17-06/07/08
 ronda_2: 5 tests — **5 passed, 0 issues, 0 pending** ✓ los tres gaps CERRADOS
 ronda_3: 3 tests — 2 passed, **1 issue (G-04, alta)**, 0 pending
-ronda_4: 4 tests — 0 passed, 0 issues, 4 pending (cierre de G-04 + 3 re-verificaciones) (plan 17-09, no es un gap)
+ronda_4: 4 tests — **4 passed, 0 issues, 0 pending** ✓ G-04 CERRADO + 3 re-verificaciones (cierre de G-04 + 3 re-verificaciones) (plan 17-09, no es un gap)
 total: 22
-passed: 14
+passed: 21
 issues: 4
-pending: 4
+pending: 0
 skipped: 0
 
 ## Gaps
