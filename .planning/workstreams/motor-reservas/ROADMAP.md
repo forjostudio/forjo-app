@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 8/8 plans complete
+**Plans**: 9 plans — 8 completos + 1 pendiente (17-09, mejora aprobada en la ronda 2 de UAT)
 
 Plans:
 **Wave 1**
@@ -695,6 +695,10 @@ Plans:
 **Wave 2 (gaps)** *(17-08 blocked on 17-06: mismo archivo, otra región)*
 
 - [x] 17-08-PLAN.md — **G-01**: el explicador muestra completo sólo el modo seleccionado y deja los otros dos en una línea con su eje de conteo (D-02 revisada por la UAT), conservando el texto completo en el canal accesible para que comparar siga sin exigir tocar un control que escribe — CUPO-09
+
+**Mejora aprobada en la ronda 2 de UAT** *(**no** es un gap: nada estaba roto — el test 3 de la ronda 1 verificó que el campo del modal funciona. Es consistencia + target táctil, pedida por el dueño y aprobada en el momento. Entra ahora para que `secure-phase` y `code-review` la cubran en el mismo ciclo. Corre sola, sin dependencias.)*
+
+- [ ] 17-09-PLAN.md — El mismo selector `[−] N [+]` de la tarjeta pasa al campo "Cuántos lugares" del modal: `CapacityStepper` como pieza presentacional **única** para las dos superficies, con las dos semánticas de guardado separadas (la tarjeta persiste en la base, el modal propaga al formulario) y la maquinaria de foco de D-06 conservada entera y con gate propio — CUPO-09
 
 **El patrón de los tres gaps, en una línea**: son el mismo problema con tres disfraces — piezas diseñadas para un ancho que a 375px no existe. La fase trae su propio contraejemplo: **POLISH-10 (Finanzas mobile) pasó limpio** porque ahí el dato nuevo entró en **su propia línea** bajo el nombre del cliente en vez de pelear por ancho dentro de una fila llena. G-02 y G-03 hicieron lo contrario. Los fixes aplican esa misma regla.
 
