@@ -714,7 +714,20 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     // hora serían indistinguibles; con ella, el caso de siempre —una sola agenda—
                     // renderiza exactamente lo mismo que antes, sin gastar un renglón ni ancho.
                     const agendaName = entry.agendaAmbiguous ? (entry.appts[0]?.professionals?.name ?? null) : null
-                    const aria = `Ver inscriptos de ${entry.serviceName ?? 'la clase'}${agendaName ? ` con ${agendaName}` : ''} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — ${entry.occupied} de ${entry.capacity} lugares${entry.pendingDeposit >= 1 ? `, ${entry.pendingDeposit} sin seña` : ''}`
+                    // ── Clase CERRADA: pasó y todos sus turnos se marcaron completados (WR-05) ──
+                    // `completed` no ocupa lugar (correcto: espeja el motor), así que el estado de la
+                    // fila no puede salir de `occupied > 0`. Con esa regla, una clase de 6 personas
+                    // dictada el lunes y marcada como completada se veía el miércoles como una fila
+                    // GRIS con "0/6" — el mismo tratamiento visual que un slot cancelado, y sin los
+                    // seis chips con nombre que antes de esta fase seguían ahí. La lectura que se
+                    // llevaba el dueño ("no vino nadie") era la opuesta a lo que pasó. La vista
+                    // semanal arranca en startOfWeek, así que siempre hay días ya pasados en pantalla.
+                    const closed = entry.occupied === 0 && entry.appts.length > 0 && entry.appts.every(a => a.status === 'completed')
+                    const aria = closed
+                      // Sobre un horario cerrado, "cuántos lugares quedan" ya no es una pregunta: la
+                      // que queda es cuánta gente asistió.
+                      ? `Ver inscriptos de ${entry.serviceName ?? 'la clase'}${agendaName ? ` con ${agendaName}` : ''} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — clase terminada, ${entry.appts.length} ${entry.appts.length === 1 ? 'asistió' : 'asistieron'}`
+                      : `Ver inscriptos de ${entry.serviceName ?? 'la clase'}${agendaName ? ` con ${agendaName}` : ''} a las ${entry.time} del ${format(d, "EEEE d 'de' MMMM", { locale: es })} — ${entry.occupied} de ${entry.capacity} lugares${entry.pendingDeposit >= 1 ? `, ${entry.pendingDeposit} sin seña` : ''}`
                     return (
                       <button
                         key={entry.key}
@@ -728,7 +741,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                           // no-ocupantes (cancelados, holds vencidos) igual se renderiza, con su
                           // contador en 0/N sobre la superficie neutra: colapsar no puede hacer
                           // desaparecer un día que hoy muestra algo.
-                          statusChip(entry.occupied > 0 ? 'confirmed' : 'cancelled'),
+                          statusChip(entry.occupied > 0 ? 'confirmed' : closed ? 'completed' : 'cancelled'),
                           // A 375px la grilla de la semana es de dos columnas: a la celda del día le
                           // quedan ~143px y, descontando su relleno y el del chip, el contenido dispone de
                           // ~115px. En un solo renglón la hora (~32px) más el contador ámbar (~93px) más
@@ -761,13 +774,27 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             sigue disponible en el title del badge y en el aria-label del botón. El
                             call-site tampoco necesita declarar que el badge no encoge: eso ya viene en
                             la base del componente. */}
-                        <OccupancyBadge
-                          occupied={entry.occupied}
-                          capacity={entry.capacity}
-                          pendingDeposit={entry.pendingDeposit}
-                          scope="slot"
-                          className="max-w-full"
-                        />
+                        {closed ? (
+                          // Sobre un horario cerrado el contador `0/6` no responde ninguna pregunta
+                          // útil, y encima responde mal la que el dueño se hace. Mismo molde, mismos
+                          // tokens y misma altura que OccupancyBadge para no mover la fila: sólo
+                          // cambia el dato, que ahora es el único que queda vivo.
+                          <Badge
+                            variant="outline"
+                            title={`Clase terminada · ${entry.appts.length} ${entry.appts.length === 1 ? 'asistió' : 'asistieron'}`}
+                            className="h-4 max-w-full gap-0.5 border-border bg-secondary px-1 py-0 text-[9px] font-medium text-muted-foreground"
+                          >
+                            <Check className="size-2.5!" /><span className="tabular-nums">{entry.appts.length}</span><span>{entry.appts.length === 1 ? 'asistió' : 'asistieron'}</span>
+                          </Badge>
+                        ) : (
+                          <OccupancyBadge
+                            occupied={entry.occupied}
+                            capacity={entry.capacity}
+                            pendingDeposit={entry.pendingDeposit}
+                            scope="slot"
+                            className="max-w-full"
+                          />
+                        )}
                       </button>
                     )
                   }
