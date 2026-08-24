@@ -537,92 +537,107 @@ function CapacityInlineControl({ service, saving, onSave }: {
   const stepBtn = 'flex items-center justify-center text-muted-foreground transition-colors enabled:hover:bg-secondary enabled:hover:text-foreground focus-visible:outline-none focus-visible:bg-secondary focus-visible:text-foreground disabled:opacity-30'
 
   return (
-    // Un solo item flex de la línea de datos: a 375px el control baja ENTERO a su propia línea en vez de
-    // partirse entre el label y el stepper. El onKeyDown está acá arriba para que Escape funcione con el
-    // foco en cualquier parte del control, incluido el botón Guardar.
-    <span
-      className="inline-flex items-center flex-wrap gap-x-2 gap-y-1"
-      onKeyDown={e => { if (e.key === 'Escape') revert() }}
-    >
+    // DOS items para la línea de datos, no uno. Todo el control junto pedía ~372px de renglón (label
+    // 74 + stepper 146 + sufijo 40 + botón 96 + los huecos) contra los 271px reales que mide la
+    // tarjeta a 375px: por eso caía en tres niveles. El label se queda arriba como TERCER dato de la
+    // línea —que es literalmente lo que dice D-07— y sólo baja el bloque que necesita ancho:
+    // 146 + 8 + 96 = 250px, que sí entra en un solo renglón (G-02b).
+    <>
       {/* El label del modo sale de CAPACITY_MODE_HELP (D-03: los labels viven en un solo lugar). Es un
-          span sin onClick, sin role y sin tabIndex: TEXTO, no un control (D-09). */}
+          span sin onClick, sin role y sin tabIndex: TEXTO, no un control (D-09). Cambia de posición,
+          no de naturaleza: el modo se sigue cambiando sólo desde el modal. */}
       <span className="font-medium text-foreground">{label}</span>
-      {/* El anillo de foco va en el CONTENEDOR y no en cada hijo: el `overflow-hidden` que redondea las
-          puntas del stepper recorta cualquier box-shadow de los hijos, así que un ring por botón sería
-          invisible. Adentro, cada control marca cuál está enfocado con el fondo, que no se recorta. */}
+      {/* La base de flex a ancho completo es lo que le da su propia línea de forma DETERMINISTA. Con
+          el wrap solo, dónde arranca el bloque dependería de cuánto ocupen la duración y el precio de
+          cada servicio; así arranca siempre en un renglón nuevo, con los 271px de la tarjeta enteros.
+          El manejador de teclado se muda acá para que Escape restaure con el foco en cualquier parte
+          del bloque, incluido el botón Guardar. El label no es focusable, así que no pierde nada al
+          quedar afuera. */}
       <span
-        role="group"
-        aria-label={`Lugares de ${service.name}`}
-        aria-invalid={rejected ? 'true' : undefined}
-        className={cn(
-          'inline-flex items-center overflow-hidden rounded-md border bg-background transition-colors',
-          'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background',
-          rejected ? 'border-destructive' : dirty ? 'border-primary/50' : 'border-border',
-        )}
+        className="flex basis-full items-center gap-x-2 gap-y-1"
+        onKeyDown={e => { if (e.key === 'Escape') revert() }}
       >
-        <button
-          type="button"
-          aria-label="Un lugar menos"
-          // El title SÓLO en el piso: en un botón usable diría una regla que todavía no aplica.
-          title={atMin ? 'El mínimo de este modo es 2 lugares' : undefined}
-          disabled={saving || atMin}
-          onClick={() => apply(value - 1)}
-          className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
+        {/* El anillo de foco va en el CONTENEDOR y no en cada hijo: el `overflow-hidden` que redondea las
+            puntas del stepper recorta cualquier box-shadow de los hijos, así que un ring por botón sería
+            invisible. Adentro, cada control marca cuál está enfocado con el fondo, que no se recorta. */}
+        <span
+          role="group"
+          aria-label={`Lugares de ${service.name}`}
+          aria-invalid={rejected ? 'true' : undefined}
+          className={cn(
+            'inline-flex items-center overflow-hidden rounded-md border bg-background transition-colors',
+            'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background',
+            rejected ? 'border-destructive' : dirty ? 'border-primary/50' : 'border-border',
+          )}
         >
-          <Minus className="h-3 w-3" />
-        </button>
-        <input
-          type="number"
-          // inputMode numérico = teclado de números en mobile. tabular-nums para que pasar de 9 a 10 no
-          // mueva el sufijo. Los spinners nativos se ocultan: el stepper ya es el control.
-          inputMode="numeric"
-          aria-label="Cantidad de lugares"
-          value={text}
-          disabled={saving}
-          onFocus={e => e.target.select()}
-          // Mientras se tipea NO se clampea ni se corrige nada: el string crudo va al estado local.
-          onChange={e => setText(e.target.value)}
-          // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
-          // piso del modo y al techo. Este NO es el último clamp: saveCapacityInline vuelve a normalizar
-          // antes de mandar, y la AUTORIDAD sigue siendo el CHECK de la migr. 068.
-          onBlur={() => {
-            const n = Number(text)
-            apply(text.trim() !== '' && Number.isFinite(n) ? n : value)
-          }}
-          // min/max/step son PISTA del navegador, no la validación.
-          min={min}
-          max={MAX_CAPACITY}
-          step={1}
-          className="h-11 w-14 sm:h-8 sm:w-10 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus-visible:bg-secondary/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        />
-        <button
-          type="button"
-          aria-label="Un lugar más"
-          title={atMax ? 'El máximo es 99 lugares' : undefined}
-          disabled={saving || atMax}
-          onClick={() => apply(value + 1)}
-          className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
-        >
-          <Plus className="h-3 w-3" />
-        </button>
+          <button
+            type="button"
+            aria-label="Un lugar menos"
+            // El title SÓLO en el piso: en un botón usable diría una regla que todavía no aplica.
+            title={atMin ? 'El mínimo de este modo es 2 lugares' : undefined}
+            disabled={saving || atMin}
+            onClick={() => apply(value - 1)}
+            className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
+          >
+            <Minus className="h-3 w-3" />
+          </button>
+          <input
+            type="number"
+            // inputMode numérico = teclado de números en mobile. tabular-nums para que pasar de 9 a 10 no
+            // mueva el sufijo. Los spinners nativos se ocultan: el stepper ya es el control.
+            inputMode="numeric"
+            aria-label="Cantidad de lugares"
+            value={text}
+            disabled={saving}
+            onFocus={e => e.target.select()}
+            // Mientras se tipea NO se clampea ni se corrige nada: el string crudo va al estado local.
+            onChange={e => setText(e.target.value)}
+            // Al SALIR se normaliza: vacío o basura vuelven al valor vigente, y el resultado se clampea al
+            // piso del modo y al techo. Este NO es el último clamp: saveCapacityInline vuelve a normalizar
+            // antes de mandar, y la AUTORIDAD sigue siendo el CHECK de la migr. 068.
+            onBlur={() => {
+              const n = Number(text)
+              apply(text.trim() !== '' && Number.isFinite(n) ? n : value)
+            }}
+            // min/max/step son PISTA del navegador, no la validación.
+            min={min}
+            max={MAX_CAPACITY}
+            step={1}
+            className="h-11 w-14 sm:h-8 sm:w-10 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus-visible:bg-secondary/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+          <button
+            type="button"
+            aria-label="Un lugar más"
+            title={atMax ? 'El máximo es 99 lugares' : undefined}
+            disabled={saving || atMax}
+            onClick={() => apply(value + 1)}
+            className={cn('h-11 w-11 sm:h-8 sm:w-8', stepBtn)}
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        </span>
+        {/* Invariable: el piso de los dos modos de cupo compartido es 2, así que nunca es "lugar".
+            Con un guardado pendiente la unidad le cede sus 40px al botón en mobile, que es el elemento
+            que TIENE que verse. No se pierde para nadie: viaja por la etiqueta accesible del input y
+            por la del grupo, en reposo —el 99 % del tiempo— está siempre visible, y a los ≥640px vuelve
+            porque ahí el stepper baja a 104px y entran los dos. */}
+        <span className={cn(dirty && 'hidden sm:inline')}>lugares</span>
+        {/* Sólo cuando hay algo pendiente. Entra con fade + 4px de deslizamiento; SALE sin animar (unmount
+            directo): animar la salida exige mantenerlo montado con un estado más y no paga. Es decisión
+            escrita, no olvido. El ancho mínimo del botón evita que la fila se reacomode al pasar a "Guardando…". */}
+        {dirty && (
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+            aria-busy={saving ? 'true' : undefined}
+            className="min-h-11 sm:min-h-0 min-w-24 animate-in fade-in-0 slide-in-from-left-1 duration-150 motion-reduce:animate-none"
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
+          </Button>
+        )}
       </span>
-      {/* Invariable: el piso de los dos modos de cupo compartido es 2, así que nunca es "lugar". */}
-      <span>lugares</span>
-      {/* Sólo cuando hay algo pendiente. Entra con fade + 4px de deslizamiento; SALE sin animar (unmount
-          directo): animar la salida exige mantenerlo montado con un estado más y no paga. Es decisión
-          escrita, no olvido. El ancho mínimo del botón evita que la fila se reacomode al pasar a "Guardando…". */}
-      {dirty && (
-        <Button
-          size="sm"
-          onClick={handleSave}
-          disabled={saving}
-          aria-busy={saving ? 'true' : undefined}
-          className="min-h-11 sm:min-h-0 min-w-24 animate-in fade-in-0 slide-in-from-left-1 duration-150 motion-reduce:animate-none"
-        >
-          {saving ? 'Guardando…' : 'Guardar'}
-        </Button>
-      )}
-    </span>
+    </>
   )
 }
 
