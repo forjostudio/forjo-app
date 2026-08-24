@@ -689,11 +689,24 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                           // contador en 0/N sobre la superficie neutra: colapsar no puede hacer
                           // desaparecer un día que hoy muestra algo.
                           statusChip(entry.occupied > 0 ? 'confirmed' : 'cancelled'),
-                          'flex w-full items-center gap-1.5 text-left cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+                          // A 375px la grilla de la semana es de dos columnas: a la celda del día le
+                          // quedan ~143px y, descontando su relleno y el del chip, el contenido dispone de
+                          // ~115px. En un solo renglón la hora (~32px) más el contador ámbar (~93px) más
+                          // los espacios ya sumaban ~137px, así que al nombre no le quedaba ancho y
+                          // `Yoga grupal` directamente no se veía (G-03). Por eso el chip apila: hora y
+                          // nombre arriba, contador abajo, y el nombre recupera ~77px. Se descartó acortar
+                          // el aviso de seña (recupera menos, sigue truncando y encima esconde
+                          // información) y pasar la semana a una sola columna (duplica el alto de una
+                          // superficie que hoy funciona). El precedente es la fila mobile de Finanzas
+                          // (POLISH-10): el dato nuevo entró en su propia línea y fue la única superficie
+                          // de la fase que no se rompió.
+                          'flex w-full flex-col items-start gap-0.5 text-left cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
                         )}
                       >
-                        <span className="font-semibold">{entry.time}</span>
-                        <span className="min-w-0 flex-1 truncate">{entry.serviceName ?? 'Clase'}</span>
+                        <span className="flex w-full min-w-0 items-center gap-1.5">
+                          <span className="font-semibold">{entry.time}</span>
+                          <span className="min-w-0 flex-1 truncate">{entry.serviceName ?? 'Clase'}</span>
+                        </span>
                         <OccupancyBadge
                           occupied={entry.occupied}
                           capacity={entry.capacity}
