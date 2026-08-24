@@ -17,6 +17,7 @@ import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
+import { AGENDA_SENTINEL, OCCUPYING_STATUSES, occupiesSeat } from '@/lib/agenda-occupancy'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -170,6 +171,14 @@ const GATE_MODE_CHANGE_MESSAGE = 'No se puede cambiar cómo se ocupa el cupo: qu
 // desenlaces que para el dueño son el mismo hecho (error de la base, cero filas escritas, excepción
 // de red). Nunca se interpola `error.message`, el código ni el nombre del servicio (T-17-10).
 const CAPACITY_SAVE_FAILED_MESSAGE = 'No pudimos guardar el cupo. Volvimos al valor anterior. Intentá de nuevo.'
+
+/**
+ * Desenlace del guardado del cupo inline. Son TRES y no un booleano a propósito (code-review WR-06):
+ * `cancelled` —el dueño dijo que no en el aviso de bajada— NO es un rechazo de la base, así que no
+ * puede pintar el control de rojo ni disparar el toast de error. Los dos terminan devolviendo el
+ * número a su lugar; sólo uno de los dos es un problema.
+ */
+type CapacitySaveResult = 'saved' | 'rejected' | 'cancelled'
 
 // ── Los tres modos de cupo, en UN solo lugar (CUPO-09 · D-01/D-03/D-04) ─────────────────────────
 // Por qué existe: es la misma lección que la Phase 15 aplicó en la base —el número del cupo vive en una
@@ -622,6 +631,48 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
   )
 }
 
+/**
+ * Máximo de lugares tomados en un mismo horario FUTURO de un servicio, contado por el EJE DEL
+ * MOTOR: `COALESCE(professional_id, sentinel) | date | time`. `null` = no se pudo averiguar.
+ *
+ * Vive FUERA del componente a propósito: lee el reloj (`Date.now`, `nowInAR`) y adentro del cuerpo
+ * de un componente eso es una impureza de render — la misma que el linter marca en los dos usos
+ * pre-existentes de este archivo. Acá no depende de nada del render: recibe todo lo que necesita.
+ *
+ * ⚠ Es un PISO, no el número exacto: la consulta se acota al `service_id` para no traerse la agenda
+ * entera del negocio, y el motor cuenta el bucket COMPLETO (sin `service_id`). Si otro servicio
+ * comparte agenda y hora, los lugares tomados son MÁS que esto. Alcanza para el aviso: cuando este
+ * número ya supera el cupo nuevo, el problema es seguro.
+ */
+async function maxFutureSeatsOf(
+  supabase: ReturnType<typeof createClient>,
+  businessId: string,
+  serviceId: string,
+): Promise<number | null> {
+  const { date: today } = nowInAR()
+  const { data, error } = await supabase.from('appointments')
+    .select('id, date, time, status, expires_at, professional_id')
+    .eq('business_id', businessId)
+    .eq('service_id', serviceId)
+    .gte('date', today)
+    .in('status', OCCUPYING_STATUSES)
+  if (error || !data) {
+    console.error('[settings/capacity-downgrade] pre-check falló:', error)
+    return null
+  }
+  const nowMs = Date.now()
+  const bySlot = new Map<string, number>()
+  for (const a of data) {
+    // Misma guarda de hold vivo que la agenda: un `pending_payment` vencido no ocupa lugar.
+    if (!occupiesSeat(a, nowMs)) continue
+    const key = `${a.date}|${a.time.slice(0, 5)}|${a.professional_id ?? AGENDA_SENTINEL}`
+    bySlot.set(key, (bySlot.get(key) ?? 0) + 1)
+  }
+  let max = 0
+  for (const n of bySlot.values()) if (n > max) max = n
+  return max
+}
+
 // ── CapacityInlineControl — el modo de cupo se VE en la tarjeta y el número se EDITA ahí mismo ──
 // (POLISH-08 · D-07 + D-08). Es UN solo elemento, no dos: `Clase grupal · [−] 6 [+] lugares`. La misma
 // lección que la Phase 15 aplicó en la base —el número del cupo vive en un solo lugar— aplicada a la
@@ -641,8 +692,9 @@ function CapacityInlineControl({ service, saving, onSave }: {
   // Lo calcula el PADRE comparando el id de esta tarjeta con el que tiene un guardado en vuelo:
   // guardar un servicio no puede congelar los steppers de los demás servicios de la lista.
   saving: boolean
-  // `true` = la base aceptó; `false` = rechazó y hay que volver al valor guardado.
-  onSave: (capacity: number) => Promise<boolean>
+  // 'saved' = la base aceptó · 'rejected' = rechazó (hay que volver al valor guardado Y marcarlo) ·
+  // 'cancelled' = el dueño abortó en el aviso de bajada de cupo (volver, pero SIN marcar nada).
+  onSave: (capacity: number) => Promise<CapacitySaveResult>
 }) {
   // El fallback cubre filas viejas que quedaron en memoria sin el modo resuelto — mismo criterio que
   // openEditService (el DEFAULT de la migr. 068 ya las cubre en la DB).
@@ -692,14 +744,20 @@ function CapacityInlineControl({ service, saving, onSave }: {
     // El `catch` no es redundante con el `try/finally` del padre (code-review WR-07): éste componente
     // no puede depender de que su `onSave` esté bien escrito. Sin él, una promesa rechazada sube al
     // handler de React sin revertir el número ni avisar nada, y la tarjeta queda mostrando un valor
-    // que la base no tiene. Cualquier excepción se trata como rechazo: mismo camino que `ok === false`.
-    let ok = false
+    // que la base no tiene. Cualquier excepción se trata como rechazo.
+    let result: CapacitySaveResult = 'rejected'
     try {
-      ok = await onSave(value)
+      result = await onSave(value)
     } catch {
-      ok = false
+      result = 'rejected'
     }
-    if (ok) return
+    if (result === 'saved') return
+    if (result === 'cancelled') {
+      // El dueño abortó el aviso de bajada de cupo (WR-06). No pasó nada malo: el número vuelve a
+      // donde estaba y NO se marca el control — el rojo y el "No se guardó" son para un rechazo real.
+      revert()
+      return
+    }
     // Rechazo: el número vuelve al valor guardado ANTES de marcar el error, así no queda ningún número
     // en pantalla que la base no tenga (el estado zombi "sucio pero fallado"). Como queda limpio, el
     // botón desaparece solo; el mensaje viaja por toast (cero desplazamiento de layout) y acá sólo
@@ -1328,10 +1386,42 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     toast.success('Servicio actualizado')
   }
 
+  // ── Bajar el cupo por debajo de los inscriptos vivos AVISA (code-review WR-06) ─────────────────
+  //
+  // POLISH-08 volvió trivial —dos toques desde la tarjeta— una operación que antes exigía abrir el
+  // diálogo: bajar `services.capacity`. Nada valida el número nuevo contra las inscripciones que ya
+  // existen: ni el CHECK (que sólo mira el piso del modo) ni el trigger de la 070 (que es
+  // `BEFORE UPDATE OF capacity_mode` y hace RETURN NEW cuando el modo no cambia). Bajar una clase de
+  // 9 a 6 con 9 inscriptos deja la agenda mostrando `9/6 lleno` y al motor rechazando toda reserva
+  // nueva con `slot_full`, sin que nadie le haya dicho al dueño qué acaba de hacer.
+  //
+  // NO se acota el badge a Math.min(occupied, capacity): eso esconde el problema en vez de avisarlo.
+  // El aviso va en la ESCRITURA, que es donde el dueño todavía puede decidir.
+  const [capacityWarn, setCapacityWarn] = useState<{ svc: Service; capacity: number; occupied: number | null } | null>(null)
+  // El diálogo es asíncrono y el guardado necesita esperar su respuesta: acá vive el `resolve` de la
+  // promesa que `askCapacityDowngrade` devuelve. Se limpia en las DOS salidas (confirmar y cerrar),
+  // y por eso el que corre segundo encuentra `null` y no hace nada.
+  const capacityWarnResolve = useRef<((ok: boolean) => void) | null>(null)
+  function askCapacityDowngrade(svc: Service, capacity: number, occupied: number | null): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      capacityWarnResolve.current = resolve
+      setCapacityWarn({ svc, capacity, occupied })
+    })
+  }
+  function closeCapacityWarn(ok: boolean) {
+    const resolve = capacityWarnResolve.current
+    capacityWarnResolve.current = null
+    setCapacityWarn(null)
+    resolve?.(ok)
+  }
+
   // ── Guardado del cupo desde la tarjeta (D-08) ─────────────────────────────────────
-  // SEGUNDO camino de escritura sobre `services`, en paralelo al del diálogo. Devuelve true/false
-  // porque el control inline necesita saber si tiene que revertir el número que muestra.
-  async function saveCapacityInline(svc: Service, cap: number): Promise<boolean> {
+  // SEGUNDO camino de escritura sobre `services`, en paralelo al del diálogo.
+  //
+  // Devuelve TRES desenlaces, no un booleano (code-review WR-06): el control tiene que poder
+  // distinguir "la base lo rechazó" —que se marca en rojo y avisa— de "el dueño dijo que no" —que
+  // sólo devuelve el número a su lugar, sin pintar un error que no pasó.
+  async function saveCapacityInline(svc: Service, cap: number): Promise<CapacitySaveResult> {
     // El id de ESTE servicio entra al conjunto y se saca en TODAS las salidas: una tarjeta = un
     // request en vuelo, y las demás tarjetas siguen usables mientras tanto. Sacar SÓLO el propio id
     // es lo que hace verdadera esa frase cuando hay dos guardados en vuelo a la vez.
@@ -1341,6 +1431,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // `22003 smallint out of range`, que el panel no sabría explicar. Defensa en profundidad, nunca
     // reemplazo del constraint.
     const capacity = normalizeCapacity(cap, minCapacityFor(svc.capacity_mode ?? 'individual'))
+    // BAJADA DE CUPO: se pregunta ANTES de escribir (WR-06). El pre-check corre sólo cuando el número
+    // BAJA — subir el cupo no puede dejar a nadie afuera, así que ese camino no paga ni una consulta.
+    // FAIL-CLOSED: si el pre-check no pudo averiguar nada (`null`), igual se pregunta, con el texto
+    // que dice que no lo pudimos verificar. Un aviso de más es recuperable; escribir sin avisar no.
+    if (capacity < Number(svc.capacity ?? 0)) {
+      const seats = await maxFutureSeatsOf(supabase, business.id, svc.id)
+      if (seats === null || seats > capacity) {
+        const ok = await askCapacityDowngrade(svc, capacity, seats)
+        if (!ok) return 'cancelled'
+      }
+    }
     // El payload lleva UNA sola clave. Es HIGIENE, no un arreglo de un bug: el guard de no-cambio del
     // trigger de la migr. 070 (`IS NOT DISTINCT FROM` → RETURN NEW) hace que mandar también el modo pase
     // igual —saveEditService lo manda hoy en producción y no rebota—, pero mandarlo desde acá despacharía
@@ -1366,31 +1467,31 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         // primero, `message.includes(<código de dominio>)` después) y LA MISMA cadena, no una variante.
         if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
           toast.error(GATE_MODE_CHANGE_MESSAGE)
-          return false
+          return 'rejected'
         }
         // Cadena FIJA: ni el mensaje de la base, ni el código, ni el nombre del servicio (T-17-10).
         toast.error(CAPACITY_SAVE_FAILED_MESSAGE)
-        return false
+        return 'rejected'
       }
       // Cero filas escritas SIN error: mismo desenlace que un rechazo — el número vuelve al valor
       // anterior y no se toca el estado local. La misma cadena fija que el camino de error: para el
       // dueño es el mismo hecho (no se guardó), y saber por qué no le cambia lo que puede hacer.
       if (!data || data.length === 0) {
         toast.error(CAPACITY_SAVE_FAILED_MESSAGE)
-        return false
+        return 'rejected'
       }
       // Actualización local DESPUÉS de la confirmación, igual que saveEditService: en la tarjeta se ve lo
       // que la base aceptó. Al cambiar el prop, el control se resincroniza solo y la fila queda limpia.
       setServices(prev => prev.map(s => s.id === svc.id ? { ...s, capacity } : s))
       toast.success('Cupo actualizado')
-      return true
+      return 'saved'
     } catch (e) {
       // supabase-js normalmente devuelve el error en vez de tirarlo, pero una caída de red cruda sí
-      // rechaza la promesa. Se trata como cualquier otro rechazo: mismo toast, mismo `false` (el
+      // rechaza la promesa. Se trata como cualquier otro rechazo: mismo toast, mismo desenlace (el
       // control revierte el número), y el prefijo de módulo del proyecto en la consola.
       console.error('[settings/saveCapacityInline]', e instanceof Error ? e.message : e)
       toast.error(CAPACITY_SAVE_FAILED_MESSAGE)
-      return false
+      return 'rejected'
     } finally {
       setSavingCapacityIds(prev => { const next = new Set(prev); next.delete(svc.id); return next })
     }
@@ -3329,6 +3430,24 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         confirmLabel="Eliminar"
         destructive
         onConfirm={async () => { if (delLoc) { await deleteLocation(delLoc.id); setDelLoc(null) } }}
+      />
+      {/* Aviso de bajada de cupo (code-review WR-06). NO es destructivo —no cancela a nadie— pero sí
+          tiene una consecuencia que el dueño no puede deducir del número: la clase queda figurando
+          llena y el motor deja de aceptar reservas nuevas hasta que la ocupación baje sola. Riesgo
+          medio y sin type-to-confirm: la operación es reversible subiendo el cupo otra vez. */}
+      <ConfirmDialog
+        open={!!capacityWarn}
+        onOpenChange={o => { if (!o) closeCapacityWarn(false) }}
+        title="¿Bajar el cupo?"
+        description={capacityWarn
+          ? capacityWarn.occupied === null
+            // Fail-closed: no pudimos contar. Se avisa igual, diciendo exactamente lo que sabemos.
+            ? `No pudimos verificar cuántos inscriptos tiene “${capacityWarn.svc.name}” en sus horarios futuros. Si algún horario ya tiene más de ${capacityWarn.capacity}, la clase va a figurar llena y no vas a poder tomar reservas nuevas hasta que baje a ${capacityWarn.capacity}. Nadie queda cancelado.`
+            : `Hay un horario de “${capacityWarn.svc.name}” con ${capacityWarn.occupied} ${capacityWarn.occupied === 1 ? 'inscripto' : 'inscriptos'}. Bajar el cupo a ${capacityWarn.capacity} no cancela a nadie, pero esa clase va a figurar llena y no vas a poder tomar reservas nuevas hasta que baje a ${capacityWarn.capacity}.`
+          : undefined}
+        risk="medio"
+        confirmLabel="Bajar el cupo"
+        onConfirm={async () => { closeCapacityWarn(true) }}
       />
     </div>
   )
