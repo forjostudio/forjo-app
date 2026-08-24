@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
-stopped_at: Completed 17-06-PLAN.md
-last_updated: "2026-08-24T18:39:17.215Z"
+stopped_at: Completado 17-07-PLAN.md (G-03 cerrado)
+last_updated: "2026-08-24T18:48:34.565Z"
 last_activity: 2026-08-20 -- Phase 17 execution started
 progress:
   total_phases: 17
   completed_phases: 16
   total_plans: 86
-  completed_plans: 84
-  percent: 98
+  completed_plans: 85
+  percent: 94
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 17 (superficie-y-polish) — EXECUTING
-Plan: 6 of 8 (cierre de gaps de la UAT)
+Plan: 7 of 8 (cierre de gaps de la UAT)
 Status: 17-06 cerrado (G-02 + G-02b) — quedan 17-07 y 17-08
 Last activity: 2026-08-20 -- Phase 17 execution started
 
@@ -125,6 +125,7 @@ Last activity: 2026-08-20 -- Phase 17 execution started
 | Phase 17 P05 | 48min | 3 tasks | 1 files |
 | Phase 17 P03 | 32min | 3 tasks | 1 files |
 | Phase 17 P06 | 21min | 2 tasks | 1 files |
+| Phase 17 P07 | 12min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -270,6 +271,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 17-05: el roster recupera la MISMA entrada de grupo que se renderizo (date+time+serviceId) en vez de recalcular: divergencia de numeros imposible por construccion
 - [Phase ?]: 17-03: el badge de modo de la tarjeta ES el control de cupo (D-07+D-08 son un solo elemento); el label de modo es texto, no un control (D-09)
 - [Phase ?]: 17-03: guardado inline con estado POR TARJETA (savingCapacityId); el booleano singleton de los dialogos congelaria el resto de la lista
+- [Phase 17]: El chip del slot grupal de la agenda apila el contador en su propia linea (G-03) — Medido a 375px: la celda del dia tiene ~115px de contenido y en un solo renglon el nombre se quedaba sin ancho. Bajar el contador le devuelve ~77px; acortar el aviso de sena recuperaba menos y seguia truncando, y pasar la grilla a una columna tocaba una superficie que funciona.
 
 ### Pending Todos
 
@@ -344,8 +346,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-24T18:39:09.035Z
-Stopped at: Completed 17-06-PLAN.md
+Last session: 2026-08-24T18:48:34.338Z
+Stopped at: Completado 17-07-PLAN.md (G-03 cerrado)
 Resume file: None
 
 ## Operator Next Steps
