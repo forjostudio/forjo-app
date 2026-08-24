@@ -326,20 +326,40 @@ what_the_code_says: |
   `role`, sin `tabIndex`** (verificado). El contenedor de la línea de datos
   (`div.flex.flex-wrap.items-center.gap-x-2.gap-y-1`) **tampoco tiene handler**. O sea que el clic no
   sale de un manejador sobre el label.
-leading_hypothesis: |
+CONFIRMED_hypothesis: |
   **Geometría, no lógica.** Desde G-02b el bloque del stepper vive en un `basis-full` inmediatamente
   debajo de la línea de datos, separado por `gap-y-1` = **4px**. El botón `+` mide **44px** de alto
   (`h-11 w-11`) y cae horizontalmente **debajo de donde se dibuja "Clase grupal"**. Tocando el borde
   inferior del texto, el dedo aterriza en el `+`.
   Encaja con que SUBA y no baje: el `−` está a la izquierda del número y el `+` a la derecha, que es
   la zona donde termina la palabra.
-how_to_discriminate: |
-  Un solo toque lo decide: **tocar el texto `60min · $7.000` de la misma tarjeta.**
-  · Si también sube el cupo ⇒ el problema es de toda la línea de datos y hay un handler no encontrado.
-  · Si no pasa nada ⇒ es geometría y el fix es separar el bloque del stepper de la línea de datos.
-  ⛔ **No arreglar antes de reproducir** — es el estándar del workstream, y ya evitó tres fixes
-  equivocados en este milestone.
-regression_of: 17-06 (G-02b puso el stepper en `basis-full` bajo la línea de datos) o 17-09 (la mudanza del stepper). A determinar al reproducir.
+discriminated: |
+  **REPRODUCIDO Y CONFIRMADO** (2026-08-24). Se le pidió al dueño tocar el otro texto de la misma
+  línea y el resultado cierra el diagnóstico:
+
+  | Toca | Pasa |
+  |---|---|
+  | `60min · $7.000` (izquierda de la línea) | **BAJA** el cupo |
+  | `Clase grupal` (derecha de la línea) | **SUBE** el cupo |
+
+  **Un handler suelto no puede saber si tocaste a la izquierda o a la derecha.** Dos botones debajo,
+  sí — y ése es exactamente el mapeo del stepper: `−` a la izquierda del número, `+` a la derecha.
+  La dirección del efecto depende de la posición horizontal del toque ⇒ **es geometría, no lógica.**
+
+  Corolario: el fix NO es sacarle un handler al label (no tiene ninguno). Es **separar verticalmente
+  el bloque del stepper de la línea de datos**.
+regression_of: |
+  **17-06 (G-02b)** — es el plan que puso el stepper en `basis-full` inmediatamente debajo de la línea
+  de datos, a `gap-y-1` (4px). 17-09 sólo mudó el contenido del stepper a una pieza compartida y no
+  cambió esa relación.
+  ⚠ Vale notar que G-02b nació de un pedido del propio dueño en la ronda 1 ("hay lugar para que el
+  botón Guardar aparezca en la misma línea que el selector") — la solución resolvió el apilado y creó
+  esta adyacencia. No es un error de ejecución: es una consecuencia que ni el UI-SPEC ni el plan
+  previeron.
+fix_direction: |
+  Dar separación vertical real entre la línea de datos y el bloque del control, o sacar el control del
+  mismo contenedor flex. Lo que NO hay que hacer: achicar los botones (romperían el piso táctil de
+  44px que el proyecto exige) ni volver al apilado en tres niveles que G-02b arregló.
 
 ### G-03 — En la agenda a 375px el badge se come el nombre del servicio
 severity: alta
