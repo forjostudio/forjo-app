@@ -668,7 +668,7 @@ Plans:
   4. La grilla de la agenda calcula la ocupación desde **`services.capacity`** —la misma fuente que el motor— y muestra la ocupación **grupal** con el mismo tratamiento que la simultánea (POLISH-09).
   5. Finanzas en mobile muestra el servicio de cada movimiento (POLISH-10).
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans complete
 
 Plans:
 **Wave 1**
@@ -694,7 +694,7 @@ Plans:
 
 **Wave 2 (gaps)** *(17-08 blocked on 17-06: mismo archivo, otra región)*
 
-- [ ] 17-08-PLAN.md — **G-01**: el explicador muestra completo sólo el modo seleccionado y deja los otros dos en una línea con su eje de conteo (D-02 revisada por la UAT), conservando el texto completo en el canal accesible para que comparar siga sin exigir tocar un control que escribe — CUPO-09
+- [x] 17-08-PLAN.md — **G-01**: el explicador muestra completo sólo el modo seleccionado y deja los otros dos en una línea con su eje de conteo (D-02 revisada por la UAT), conservando el texto completo en el canal accesible para que comparar siga sin exigir tocar un control que escribe — CUPO-09
 
 **El patrón de los tres gaps, en una línea**: son el mismo problema con tres disfraces — piezas diseñadas para un ancho que a 375px no existe. La fase trae su propio contraejemplo: **POLISH-10 (Finanzas mobile) pasó limpio** porque ahí el dato nuevo entró en **su propia línea** bajo el nombre del cliente en vez de pelear por ancho dentro de una fila llena. G-02 y G-03 hicieron lo contrario. Los fixes aplican esa misma regla.
 
@@ -726,4 +726,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 14. Cierre de backlog | 9/9 | Complete    | 2026-08-11 |
 | 15. Modelo de cupo unificado | 5/5 | Complete    | 2026-08-16 |
 | 16. Correcciones del gate | 2/2 | Complete    | 2026-08-18 |
-| 17. Superficie y polish | 7/8 | In Progress|  |
+| 17. Superficie y polish | 8/8 | Complete   | 2026-08-24 |

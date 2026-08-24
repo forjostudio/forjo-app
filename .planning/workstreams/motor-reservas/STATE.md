@@ -4,14 +4,14 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
 stopped_at: Completado 17-07-PLAN.md (G-03 cerrado)
-last_updated: "2026-08-24T18:48:34.565Z"
+last_updated: "2026-08-24T19:02:40.752Z"
 last_activity: 2026-08-20 -- Phase 17 execution started
 progress:
   total_phases: 17
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 86
-  completed_plans: 85
-  percent: 94
+  completed_plans: 86
+  percent: 100
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 17 (superficie-y-polish) — EXECUTING
-Plan: 7 of 8 (cierre de gaps de la UAT)
+Plan: 8 of 8 (cierre de gaps de la UAT)
 Status: 17-06 cerrado (G-02 + G-02b) — quedan 17-07 y 17-08
 Last activity: 2026-08-20 -- Phase 17 execution started
 
@@ -126,6 +126,7 @@ Last activity: 2026-08-20 -- Phase 17 execution started
 | Phase 17 P03 | 32min | 3 tasks | 1 files |
 | Phase 17 P06 | 21min | 2 tasks | 1 files |
 | Phase 17 P07 | 12min | 2 tasks | 1 files |
+| Phase 17 P08 | 18min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -272,6 +273,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 17-03: el badge de modo de la tarjeta ES el control de cupo (D-07+D-08 son un solo elemento); el label de modo es texto, no un control (D-09)
 - [Phase ?]: 17-03: guardado inline con estado POR TARJETA (savingCapacityId); el booleano singleton de los dialogos congelaria el resto de la lista
 - [Phase 17]: El chip del slot grupal de la agenda apila el contador en su propia linea (G-03) — Medido a 375px: la celda del dia tiene ~115px de contenido y en un solo renglon el nombre se quedaba sin ancho. Bajar el contador le devuelve ~77px; acortar el aviso de sena recuperaba menos y seguia truncando, y pasar la grilla a una columna tocaba una superficie que funciona.
+- [Phase 17]: El explicador de modos de cupo muestra completo sólo el modo activo; los otros dos quedan en una línea con su eje, y el texto completo sigue en el canal accesible — D-02 revisada en la UAT: los tres bloques completos eran ~10 líneas a 375px. Ocultarlos del todo obligaría a tocar botones que escriben capacity_mode + capacity, así que la versión corta conserva la comparación sin efecto de escritura
 
 ### Pending Todos
 
@@ -346,7 +348,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-24T18:48:34.338Z
+Last session: 2026-08-24T19:02:23.242Z
 Stopped at: Completado 17-07-PLAN.md (G-03 cerrado)
 Resume file: None
 
