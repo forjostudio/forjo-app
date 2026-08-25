@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: verifying
+status: executing
 stopped_at: Completed 17-10-PLAN.md
-last_updated: "2026-08-24T20:59:35.156Z"
-last_activity: 2026-08-24 -- 17-09 ejecutado (CapacityStepper compartido)
+last_updated: "2026-08-25T12:18:12.448Z"
+last_activity: 2026-08-25 -- Phase 18 execution started
 progress:
-  total_phases: 17
+  total_phases: 20
   completed_phases: 17
-  total_plans: 88
-  completed_plans: 88
-  percent: 100
+  total_plans: 92
+  completed_plans: 89
+  percent: 85
 ---
 
 # Project State
@@ -21,24 +21,27 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** v0.28 La agenda por servicio — Phase 18 sin discutir
+**Current focus:** Phase 18 — el-modelo-y-la-disponibilidad
 
 ## Current Position
 
-Phase: 17 (superficie-y-polish) — READY FOR VERIFICATION
-Plan: 9 of 9 (los 9 ejecutados y cerrados)
-Status: 17-09 cerrado — el selector de cupo del modal es ahora el mismo de la tarjeta. Falta la TERCERA ronda de UAT (guion de 17-09-PLAN.md, 3 pasos a 375px sobre el dev server del 3000), y después `secure-phase 17` + `code-review 17`
-Last activity: 2026-08-24 -- 17-09 ejecutado (CapacityStepper compartido)
+Phase: 18 (el-modelo-y-la-disponibilidad) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-08-25 -- Phase 18 execution started
 
 ## Milestone v0.28 — decisiones LOCKED
 
 - **D-01 Tabla puente con comodín, no columna.** Molde `professional_services` (migr. 057, v0.25):
   **0 filas mapeadas = la franja sirve para cualquier servicio**. Cubre "martes 15-16 cerámica" y
   "mañanas: corte y color, no alisado" sin duplicar bloques superpuestos.
+
 - **D-02 Cero regresión POR CONSTRUCCIÓN.** El día de la migración todos los negocios tienen 0 filas ⇒
   todo comodín ⇒ nada cambia. Misma jugada que `individual` en v0.27.
+
 - **D-03 La franja declara QUÉ, no QUIÉN.** Multi-staff queda afuera; el quién ya lo resuelve
   `professional_services` desde v0.25. Se suma después sin re-migrar.
+
 - **D-04 El onboarding entra**, fusionado con el booking público en la Phase 20.
 
 ⚠ **Antes de escribir la migración de la Phase 18: leer la migr. 059** (`public_professional_services`).
@@ -149,6 +152,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 17 P08 | 18min | 2 tasks | 1 files |
 | Phase 17 P09 | 22min | 2 tasks | 1 files |
 | Phase 17 P10 | 28 min | 2 tasks | 1 files |
+| Phase 18 P01 | 22min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -297,6 +301,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 17]: El chip del slot grupal de la agenda apila el contador en su propia linea (G-03) — Medido a 375px: la celda del dia tiene ~115px de contenido y en un solo renglon el nombre se quedaba sin ancho. Bajar el contador le devuelve ~77px; acortar el aviso de sena recuperaba menos y seguia truncando, y pasar la grilla a una columna tocaba una superficie que funciona.
 - [Phase 17]: El explicador de modos de cupo muestra completo sólo el modo activo; los otros dos quedan en una línea con su eje, y el texto completo sigue en el canal accesible — D-02 revisada en la UAT: los tres bloques completos eran ~10 líneas a 375px. Ocultarlos del todo obligaría a tocar botones que escriben capacity_mode + capacity, así que la versión corta conserva la comparación sin efecto de escritura
 - [Phase 17]: El control de cupo se comparte entre la tarjeta y el modal (CapacityStepper), pero el guardado NO: la tarjeta persiste en la base y el modal propaga al formulario, por eso el clamp vive en cada caller — Un dato, un control: cuando el mismo campo se edita desde dos superficies, se extrae el control; lo que no se unifica es el camino de escritura
+- [Phase 18]: 18-01: la puente time_block_services exige business_id NOT NULL igual que el molde 057 — una franja huerfana nunca recibe mapeo y queda comodin para siempre (falla hacia el lado seguro; 0 huerfanas medidas en local)
+- [Phase 18]: 18-01: la vista public_time_block_services es DEFINER (owner postgres) sin security_invoker — verificado por reloptions NULL + control negativo real (anon lee 1 fila)
+- [Phase 18]: 18-01: cero backfill — el estado neutro (0 filas = comodin) ES el estado actual, asi que ningun negocio cambia de comportamiento (AGENDA-04)
 
 ### Pending Todos
 
@@ -371,7 +378,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-24T20:59:35.111Z
+Last session: 2026-08-25T12:17:35.210Z
 Stopped at: Completed 17-10-PLAN.md
 Resume file: None
 

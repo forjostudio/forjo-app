@@ -169,3 +169,8 @@ Ninguno. Este plan no crea código de aplicación; el helper puro, la disponibil
 ## Next Plan
 
 **18-02** — `lib/types.ts` (`TimeBlockService`) + `lib/time-block-services.ts` (helper puro con la regla del comodín, molde `lib/staff-services.ts`) + `test/time-block-services.test.ts`.
+
+## Self-Check: PASSED
+
+- Archivos verificados en disco: `supabase/migrations/071_time_block_services.sql`, `supabase/schema.sql`, `18-01-SUMMARY.md`.
+- Commits verificados en git: `8ab7ef1` (implementación), `b8970de` (summary).

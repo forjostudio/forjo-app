@@ -36,14 +36,17 @@ natural es que también declare **qué**.
   Cubre los dos casos reales sin inventar nada: *"martes 15-16 cerámica"* (una fila) y *"mañanas: corte
   y color, no alisado"* (dos filas). Una columna `service_id` obligaría a duplicar bloques superpuestos
   para el segundo caso.
+
 - **D-02 — El cutover es gratis y la cero regresión es POR CONSTRUCCIÓN.** El día que se aplique la
   migración, **todos** los negocios tienen 0 filas ⇒ todas las franjas son comodín ⇒ nada cambia. Es la
   misma jugada que `individual` en v0.27, y por el mismo motivo: el estado neutro es el estado actual.
+
 - **D-03 — La franja declara QUÉ, no QUIÉN.** El cruce con multi-staff (*"martes 15-16 cerámica con
   Ana"*) queda **fuera**. El *quién* ya lo resuelve `professional_services` desde v0.25: si Ana es la
   única que hace cerámica, el sistema ya la asigna. Agregar la dimensión profesional a la franja
   triplica el modelo y toca la asignación automática del RPC, que es el núcleo anti-doble-booking. Se
   puede sumar después **sin re-migrar**.
+
 - **D-04 — El onboarding entra**, fusionado con el booking público en la Phase 20. Es donde más se nota
   el defecto: hoy a un taller se le pide declarar un horario que no describe su negocio, así que la
   capacidad existiría pero el negocio nuevo arrancaría igual mal configurado.
@@ -52,21 +55,25 @@ natural es que también declare **qué**.
 
 ### El modelo y el motor (Phase 18) — `secure-phase` obligatorio
 
-- [ ] **AGENDA-01** — Una franja horaria puede declarar **qué servicios** se dan en ella, vía tabla
+- [x] **AGENDA-01** — Una franja horaria puede declarar **qué servicios** se dan en ella, vía tabla
       puente. **0 filas = cualquier servicio** (comodín), que es el comportamiento vigente y el estado
       de todos los negocios el día de la migración.
+
 - [ ] **AGENDA-02** — La regla del comodín vive en **un helper puro** con tests, nunca reimplementada
       en cada consumidor. Molde exacto: `lib/staff-services.ts`.
+
 - [ ] **AGENDA-03** — `/api/booking/availability` respeta la regla: pedir horarios para un servicio
       devuelve **solo** las franjas donde ese servicio se da (más todas las de comodín). El endpoint ya
       recibe `serviceId` desde v0.27 (15-04).
-- [ ] **AGENDA-04** — **Cero regresión** para los negocios con franjas genéricas —que hoy son todos— y
+
+- [x] **AGENDA-04** — **Cero regresión** para los negocios con franjas genéricas —que hoy son todos— y
       para canchas, abonos, cupos grupales, multi-staff y espacio compartido.
 
 ### El panel (Phase 19)
 
 - [ ] **AGENDA-05** — El dueño asigna servicios a cada franja desde Agenda, y la grilla **muestra** qué
       se da en cada una sin abrir nada.
+
 - [ ] **AGENDA-06** — Una franja sin servicios asignados se ve y se lee como **"cualquiera"**, no como
       un estado vacío o roto.
 
@@ -75,6 +82,7 @@ natural es que también declare **qué**.
 - [ ] **AGENDA-07** — El cliente que elige un servicio ve **solo** los horarios donde ese servicio se
       da. Si un servicio no tiene ninguna franja que lo cubra, el vacío se explica en vez de mostrar un
       calendario mudo.
+
 - [ ] **AGENDA-08** — El onboarding deja declarar la agenda real de un negocio de clases desde el día
       uno, en vez de pedirle un horario genérico que no describe su negocio.
 
@@ -82,8 +90,10 @@ natural es que también declare **qué**.
 
 - **El cruce con multi-staff** (franja por servicio **y** profesional) — D-03. Se suma después sin
   re-migrar.
+
 - **Dropear `time_blocks.capacity`** — sigue conservada desde v0.27; borrarla es una migración
   destructiva sin beneficio.
+
 - **Los 9 todos pendientes del workstream**, incluidos los dos de seguridad. El de severidad **alta**
   (`book_slot_atomic` ejecutable por `anon`) es candidato al milestone siguiente y **no** se mezcla acá:
   es otro eje y otro riesgo.
@@ -92,10 +102,10 @@ natural es que también declare **qué**.
 
 | Req | Fase | Estado |
 |-----|------|--------|
-| AGENDA-01 | Phase 18 | Pending |
+| AGENDA-01 | Phase 18 | Complete |
 | AGENDA-02 | Phase 18 | Pending |
 | AGENDA-03 | Phase 18 | Pending |
-| AGENDA-04 | Phase 18 | Pending |
+| AGENDA-04 | Phase 18 | Complete |
 | AGENDA-05 | Phase 19 | Pending |
 | AGENDA-06 | Phase 19 | Pending |
 | AGENDA-07 | Phase 20 | Pending |
