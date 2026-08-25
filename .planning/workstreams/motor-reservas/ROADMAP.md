@@ -702,6 +702,7 @@ Plans:
 
 **Goal**: Cerrar las dos caras de que un negocio de clases pueda operar de verdad. En el **booking público**, el cliente que elige un servicio ve **sólo** los horarios donde ese servicio se da — y si un servicio no tiene ninguna franja que lo cubra, el vacío se **explica** en vez de mostrar un calendario mudo. En el **onboarding**, un negocio de clases declara su agenda real desde el día uno, en vez de que se le pida un horario genérico que no describe su negocio: es donde más se nota el defecto, y sin esto la capacidad existiría pero el negocio nuevo arrancaría igual mal configurado.
 **Depends on**: Phase 18 (la disponibilidad ya filtra) y Phase 19 (hay con qué configurar antes de pedirlo en el alta)
+⚠ **Alcance ampliado en `discuss-phase 18`:** entra también la **landing** (`lib/landing/derive.ts`), que traduce `time_blocks` a "horarios de atención" en la web del negocio. El **bot de WhatsApp** queda AFUERA: vive en otro repo (VPS/Baileys) con su propio HANDOFF acordado. Son **tres superficies** en esta fase — si al planificarla se pasa de tamaño, se parte (el onboarding es la candidata natural: escribe agenda antes de que haya sesión establecida, y v0.20 ya tuvo que meter un endpoint service-role por eso).
 **Requirements**: AGENDA-07, AGENDA-08
 **Success Criteria** (what must be TRUE):
 
