@@ -64,7 +64,7 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 
 ### Milestone v0.28 — La agenda por servicio (Phases 18-20, activo)
 
-- [ ] **Phase 18: El modelo y la disponibilidad** - Tabla puente `time_block_services` con la regla del comodín (0 filas = cualquier servicio), la regla encapsulada en un helper puro con tests (molde `lib/staff-services.ts`), y `/api/booking/availability` respetándola — el endpoint ya recibe `serviceId` desde v0.27. **Cero regresión por construcción:** el día de la migración todos los negocios tienen 0 filas. **`secure-phase` obligatorio**
+- [x] **Phase 18: El modelo y la disponibilidad** - Tabla puente `time_block_services` con la regla del comodín (0 filas = cualquier servicio), la regla encapsulada en un helper puro con tests (molde `lib/staff-services.ts`), y `/api/booking/availability` respetándola — el endpoint ya recibe `serviceId` desde v0.27. **Cero regresión por construcción:** el día de la migración todos los negocios tienen 0 filas. **`secure-phase` obligatorio** (completed 2026-08-25)
 - [ ] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío
 - [ ] **Phase 20: Booking público y onboarding** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, con el vacío explicado en vez de un calendario mudo; y el onboarding deja que un negocio de clases declare su agenda real desde el día uno
 
@@ -680,14 +680,14 @@ Plans:
 **Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Toca la disponibilidad pública, que es la superficie que decide **qué se le ofrece a un cliente anónimo**. Precedente directo a leer ANTES de escribir la migración: en v0.25 la Phase 10 tuvo que crear una **vista acotada** (`public_professional_services`, migr. **059**) para exponerle un mapeo a `anon` sin abrir la tabla entera — este milestone necesita exactamente lo mismo.
 ⚠ **Pendiente de seguridad VIVO sobre la misma superficie:** `book_slot_atomic` es ejecutable por `anon` y saltea la ventana de reserva, el gate de plan y el reCAPTCHA, **que viven sólo en el route handler** (severidad alta, pre-existente desde la migr. 041, en `todos/pending/`). No es de este milestone, pero **cualquier control que esta fase ponga sólo en el handler hereda el mismo agujero** — pesa al decidir dónde vive la regla del comodín.
 **UI hint**: no (modelo y motor; la superficie va en las Phases 19 y 20)
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
 - [x] 18-01-PLAN.md — Migración 071: tabla puente `time_block_services` (RLS + 4 policies + índice inverso) y la vista acotada `public_time_block_services`, validadas por instalación en local (AGENDA-01)
 - [x] 18-02-PLAN.md — `lib/time-block-services.ts`: la regla del comodín en 4 funciones puras con tests de control negativo (AGENDA-02)
 - [x] 18-03-PLAN.md — `/api/booking/availability` deja de ofrecer los horarios de las franjas que no dan el servicio, en sus tres ramas (AGENDA-03)
-- [ ] 18-04-PLAN.md — Backstop en `createAppointmentCore` con flag de default apagado: el camino público también lo ACEPTA, alta manual y abonos intactos (D-04)
+- [x] 18-04-PLAN.md — Backstop en `createAppointmentCore` con flag de default apagado: el camino público también lo ACEPTA, alta manual y abonos intactos (D-04)
 
 ---
 
