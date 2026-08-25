@@ -193,14 +193,14 @@ transacción igual — el owner queda con un error peor y sin salida clara.
 |-----|-------|--------|
 | CUPO-06 | Phase 15 | Complete (15-01 modelo + 15-02 editor: 'Individual' es elegible y es el default de alta) |
 | CUPO-07 | Phase 15 | Complete (15-03 motor + 15-04 las tres lecturas JS + 15-05 los dos casos de carrera con A/B contra un mutante que restaura la lectura del bloque; la 4ª —grilla del panel— es Phase 16 por D-08) |
-| CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel + 15-05 la suite de integración: 7 casos contra Postgres real, vistos FALLAR con el trigger dropeado). ⚠ El gate está en la base **LOCAL**; llega a prod al aplicar la 068 (`15-RUNBOOK-068.md`) |
+| CUPO-08 | Phase 15 | Complete (15-01 gate + 15-02 copy del panel + 15-05 la suite de integración: 7 casos contra Postgres real, vistos FALLAR con el trigger dropeado). ✅ **068 aplicada a PROD el 2026-08-14** (`15-RUNBOOK-068.md`) |
 | GATE-01 | Phase 16 | Complete (16-01 migr. 070 estrecha el gate por dirección + 16-02 la matriz de 13 casos con control negativo: las direcciones peligrosas siguen rechazando). ✅ **070 aplicada a PROD el 2026-08-20** |
 | GATE-02 | Phase 16 | Complete (16-01 el predicado deja de excluir `completed` + 16-02 el caso 12, visto FALLAR contra el predicado viejo). Cierra el residual R-15-A de `15-SECURITY.md`. ✅ **070 aplicada a PROD el 2026-08-20** |
 | GATE-03 | Phase 16 | Complete (16-01 fecha + hora en los gates de la **065** y la **068** + 16-02 los casos 13 y delete-12, con las dos fronteras como testigo). ✅ **070 aplicada a PROD el 2026-08-20** |
-| CUPO-09 | Phase 17 | Complete — 17-01 (explicador de 3 capas + input `onBlur` + toggles en grid) + 17-02 (diálogo con scroll y "Agregar servicio" al final). ⚠ Pendiente UAT visual |
-| POLISH-08 | Phase 17 | Complete — 17-03: badge de modo en la línea de datos **y** control inline de cupo (2º write path, tenant-filtered, copy propia del gate). ⚠ Pendiente UAT visual |
-| POLISH-09 | Phase 17 | Complete — 17-04 (`lib/agenda-occupancy.ts`, 20/20 con 2 casos por mutación) + 17-05 (grilla cableada; `capacityFor` y el `isGroup` deducido eliminados). ⚠ Pendiente UAT visual |
-| POLISH-10 | Phase 17 | Complete — 17-04: el servicio como 2ª línea en mobile; la columna de desktop intacta. ⚠ Pendiente UAT visual |
+| CUPO-09 | Phase 17 | Complete — 17-01 (explicador de 3 capas + input `onBlur` + toggles en grid) + 17-02 (diálogo con scroll y "Agregar servicio" al final). ✅ **UAT PASS** (5 rondas, 2026-08-20→24) |
+| POLISH-08 | Phase 17 | Complete — 17-03: badge de modo en la línea de datos **y** control inline de cupo (2º write path, tenant-filtered, copy propia del gate). ✅ **UAT PASS** (5 rondas, 2026-08-20→24) |
+| POLISH-09 | Phase 17 | Complete — 17-04 (`lib/agenda-occupancy.ts`, 20/20 con 2 casos por mutación) + 17-05 (grilla cableada; `capacityFor` y el `isGroup` deducido eliminados). ✅ **UAT PASS** (5 rondas, 2026-08-20→24) |
+| POLISH-10 | Phase 17 | Complete — 17-04: el servicio como 2ª línea en mobile; la columna de desktop intacta. ✅ **UAT PASS** (5 rondas, 2026-08-20→24) |
 
 ## Riesgo
 
