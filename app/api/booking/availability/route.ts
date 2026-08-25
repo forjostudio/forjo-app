@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { professionalsForService } from '@/lib/staff-services'
-import type { Professional, ProfessionalService } from '@/lib/types'
+import { startTimesNotOffered, type BlockWindow } from '@/lib/time-block-services'
+import type { Professional, ProfessionalService, TimeBlockService } from '@/lib/types'
 import type { NextRequest } from 'next/server'
 
 // Disponibilidad SIEMPRE fresca: nunca cachear (ni framework ni CDN ni browser). Un turno
@@ -96,16 +97,71 @@ export async function GET(request: NextRequest) {
   // → getUTCDay() (0=domingo..6=sábado) coincide con la DB.
   // ⚠ `capacity` YA NO SE TRAE (migr. 068): el cupo es del servicio y se resolvió arriba. Quitar la
   // columna del select es lo que garantiza que nadie la vuelva a leer por costumbre.
+  // (migr. 071 / AGENDA-03) `id` SÍ se trae: es la clave con la que se cruza cada franja contra la
+  // puente `time_block_services` para saber qué servicios se dan en ella. Sin el id no hay con qué
+  // cruzar. Es aditivo — el id NUNCA se serializa en la respuesta (el público sigue recibiendo
+  // exactamente `{ ok, busy, full }`).
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
   const { data: capBlocks } = await supabase
     .from('time_blocks')
-    .select('start_time, end_time')
+    .select('id, start_time, end_time')
     .eq('business_id', business.id)
     .eq('day_of_week', dow)
 
   const toMin = (t: string) => {
     const [h, m] = t.split(':')
     return Number(h) * 60 + Number(m)
+  }
+
+  // ── LA AGENDA POR SERVICIO en el read-path (Phase 18, AGENDA-03 / migr. 071) ────────────────────
+  // Los horarios que hay que DEJAR DE OFRECER porque las franjas que los generan no dan el servicio
+  // pedido. El peluquero que corta de 9 a 13 y hace color de 14 a 18 ya podía declararlo en el
+  // modelo; acá es donde el público deja de ver color a las 10.
+  //
+  // ⚠ LA INTUICIÓN APUNTA AL LADO EQUIVOCADO. Este endpoint NO devuelve la grilla de horarios:
+  // devuelve `busy` (ocupados) y `full` (la lista de horarios a OCULTAR); la grilla la arma el
+  // cliente. Por eso *filtrar* los bloques —quedarse con los que dan el servicio— produciría MENOS
+  // horarios ocultos, o sea que se ofrecerían MÁS: la regla al revés, y en silencio. La operación
+  // correcta es SUMAR a `full`, y es una RESTA DE CONJUNTOS (un horario que también produce una
+  // franja que SÍ da el servicio no se oculta, aunque otra franja solapada no lo dé).
+  //
+  // La regla del comodín NO se reimplementa acá (AGENDA-02): vive en `lib/time-block-services.ts`,
+  // fuente ÚNICA que también consumen el backstop del `create` y el panel de la Phase 19 — tres
+  // capas que TIENEN que interpretarla idéntico o derivan. Mismo criterio (y mismo molde de uso) que
+  // `professionalsForService` unas líneas más abajo.
+  //
+  // Se calcula UNA VEZ acá arriba, antes de las ramas, porque las TRES lo necesitan igual y una de
+  // ellas ("Cualquiera") retorna temprano. Una sola lectura de la puente por request.
+  //
+  // Dos fail-safes, los dos deliberados:
+  //   - SIN `serviceId` no se lee la puente ni se oculta nada (AGENDA-04): canchas —que nunca lo
+  //     manda— y cualquier cliente viejo reciben una respuesta byte-idéntica a la de hoy.
+  //   - Con la puente VACÍA el helper devuelve `[]` por la regla del comodín, no por un atajo: el día
+  //     de la migración TODOS los negocios tienen 0 filas ⇒ toda franja es comodín ⇒ nada cambia
+  //     (D-02, la cero regresión es por construcción).
+  //
+  // Caveat CONOCIDO y aceptado (el mismo que ya carga este archivo para el eje del cupo): los
+  // horarios ESPECIALES que EXTIENDEN la jornada viven en `schedule_exceptions`, no en `time_blocks`,
+  // así que no generan candidatos acá y no se pueden ocultar por esta vía. Quién respalda ese caso es
+  // el backstop del `create` (Plan 18-04) — y ahí, a propósito, un horario que no cae en NINGUNA
+  // franja se ACEPTA (D-04): esta fase no introduce validación general de ventana.
+  let notOffered: string[] = []
+  if (svc && serviceIdParam) {
+    // Aislamiento por tenant EXPLÍCITO aunque el cliente sea service-role (bypassa RLS): mismo
+    // criterio que la lectura de `professional_services` de abajo. El `serviceIdParam` ya viene
+    // re-validado por la resolución izada (un servicio de otro negocio cortó con invalid_service 400
+    // antes de llegar acá), así que no se puede leer el mapeo de un tenant ajeno por ninguna de las
+    // dos puntas.
+    const { data: tbsRaw } = await supabase
+      .from('time_block_services')
+      .select('business_id, time_block_id, service_id')
+      .eq('business_id', business.id)
+    notOffered = startTimesNotOffered(
+      serviceIdParam,
+      (capBlocks || []) as BlockWindow[],
+      (tbsRaw || []) as TimeBlockService[],
+      Number(svc.duration_minutes) || 30,
+    )
   }
 
   // ── RAMA "Cualquiera" (Phase 10, DISP-01/03, D-06): agregación de disponibilidad across-staff ──────
@@ -270,7 +326,9 @@ export async function GET(request: NextRequest) {
     }
 
     // D-06 (LOCKED): `busy` SIEMPRE vacío en esta rama; la unión colapsa a booleano-por-slot en `full`.
-    return Response.json({ ok: true, busy: [], full: fullAny }, { headers: { 'Cache-Control': 'no-store' } })
+    // (AGENDA-03) `notOffered` se SUMA sin mutar `fullAny`: los horarios de las franjas que no dan el
+    // servicio quedan indistinguibles de los llenos — mismo booleano, sin decir POR QUÉ (T-18-11).
+    return Response.json({ ok: true, busy: [], full: fullAny.concat(notOffered) }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
   // ── RAMA "RECURSO SIMULTÁNEO" (Phase 12, CUPO-02/D-12): el grid se vuelve OVERLAP-AWARE ─────────
@@ -375,7 +433,10 @@ export async function GET(request: NextRequest) {
       // el mismo booleano. `busy` va SIEMPRE vacío: los solapes del propio servicio son LEGALES hasta
       // el cupo y el client trata cada entrada de `busy` como conflicto por solapamiento — mandarlos
       // ahí borraría el 2º lugar del recurso. El contrato `{ ok, busy, full }` no cambia.
-      return Response.json({ ok: true, busy: [], full: fullSim }, { headers: { 'Cache-Control': 'no-store' } })
+      // (AGENDA-03) Igual que en la rama "Cualquiera": `notOffered` se concatena sin mutar `fullSim`,
+      // y se unifica en el MISMO booleano por slot que ya mezcla cupo lleno / agenda ocupada / espacio
+      // tomado. Una condición de bloqueo más, cero motivo filtrado.
+      return Response.json({ ok: true, busy: [], full: fullSim.concat(notOffered) }, { headers: { 'Cache-Control': 'no-store' } })
     }
     // `individual` / `group_class`: siguen de largo al camino de siempre (byte-idéntico).
   }
@@ -527,5 +588,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return Response.json({ ok: true, busy, full }, { headers: { 'Cache-Control': 'no-store' } })
+  // (AGENDA-03) Última de las TRES salidas exitosas. Acá `full` YA viene mutado por el bloque de
+  // espacio compartido de arriba (hace `full.push`), así que se concatena igual que en las otras dos:
+  // `notOffered` se suma sin mutar, y el contrato `{ ok, busy, full }` no cambia de forma.
+  return Response.json({ ok: true, busy, full: full.concat(notOffered) }, { headers: { 'Cache-Control': 'no-store' } })
 }
