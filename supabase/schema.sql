@@ -706,6 +706,16 @@ CREATE TABLE IF NOT EXISTS "public"."professional_services" (
 ALTER TABLE "public"."professional_services" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."time_block_services" (
+    "business_id" "uuid" NOT NULL,
+    "time_block_id" "uuid" NOT NULL,
+    "service_id" "uuid" NOT NULL
+);
+
+
+ALTER TABLE "public"."time_block_services" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."appointment_spaces" (
     "appointment_id" "uuid" NOT NULL,
     "business_id" "uuid" NOT NULL,
@@ -1253,6 +1263,16 @@ CREATE OR REPLACE VIEW "public"."public_professional_services" AS
 ALTER VIEW "public"."public_professional_services" OWNER TO "postgres";
 
 
+CREATE OR REPLACE VIEW "public"."public_time_block_services" AS
+ SELECT "business_id",
+    "time_block_id",
+    "service_id"
+   FROM "public"."time_block_services";
+
+
+ALTER VIEW "public"."public_time_block_services" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."saved_products" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "business_id" "uuid",
@@ -1330,6 +1350,11 @@ ALTER TABLE ONLY "public"."agenda_spaces"
 
 ALTER TABLE ONLY "public"."professional_services"
     ADD CONSTRAINT "professional_services_pkey" PRIMARY KEY ("professional_id", "service_id");
+
+
+
+ALTER TABLE ONLY "public"."time_block_services"
+    ADD CONSTRAINT "time_block_services_pkey" PRIMARY KEY ("time_block_id", "service_id");
 
 
 
@@ -1497,6 +1522,10 @@ CREATE INDEX "abonos_business_id_status_idx" ON "public"."abonos" USING "btree" 
 
 
 CREATE INDEX "professional_services_by_service" ON "public"."professional_services" USING "btree" ("service_id", "professional_id");
+
+
+
+CREATE INDEX "time_block_services_by_service" ON "public"."time_block_services" USING "btree" ("service_id", "time_block_id");
 
 
 
@@ -1700,6 +1729,21 @@ ALTER TABLE ONLY "public"."professional_services"
 
 ALTER TABLE ONLY "public"."professional_services"
     ADD CONSTRAINT "professional_services_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."time_block_services"
+    ADD CONSTRAINT "time_block_services_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."time_block_services"
+    ADD CONSTRAINT "time_block_services_time_block_id_fkey" FOREIGN KEY ("time_block_id") REFERENCES "public"."time_blocks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."time_block_services"
+    ADD CONSTRAINT "time_block_services_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE CASCADE;
 
 
 
@@ -2057,6 +2101,35 @@ CREATE POLICY "professional_services tenant select" ON "public"."professional_se
 
 
 CREATE POLICY "professional_services tenant update" ON "public"."professional_services" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+ALTER TABLE "public"."time_block_services" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "time_block_services tenant delete" ON "public"."time_block_services" FOR DELETE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "time_block_services tenant insert" ON "public"."time_block_services" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "time_block_services tenant select" ON "public"."time_block_services" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "time_block_services tenant update" ON "public"."time_block_services" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
   WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
@@ -3881,6 +3954,12 @@ GRANT ALL ON TABLE "public"."professional_services" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."time_block_services" TO "anon";
+GRANT ALL ON TABLE "public"."time_block_services" TO "authenticated";
+GRANT ALL ON TABLE "public"."time_block_services" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."appointment_spaces" TO "anon";
 GRANT ALL ON TABLE "public"."appointment_spaces" TO "authenticated";
 GRANT ALL ON TABLE "public"."appointment_spaces" TO "service_role";
@@ -4052,6 +4131,12 @@ GRANT ALL ON TABLE "public"."public_canchas" TO "service_role";
 GRANT ALL ON TABLE "public"."public_professional_services" TO "anon";
 GRANT ALL ON TABLE "public"."public_professional_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_professional_services" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."public_time_block_services" TO "anon";
+GRANT ALL ON TABLE "public"."public_time_block_services" TO "authenticated";
+GRANT ALL ON TABLE "public"."public_time_block_services" TO "service_role";
 
 
 
