@@ -59,7 +59,7 @@ natural es que también declare **qué**.
       puente. **0 filas = cualquier servicio** (comodín), que es el comportamiento vigente y el estado
       de todos los negocios el día de la migración.
 
-- [ ] **AGENDA-02** — La regla del comodín vive en **un helper puro** con tests, nunca reimplementada
+- [x] **AGENDA-02** — La regla del comodín vive en **un helper puro** con tests, nunca reimplementada
       en cada consumidor. Molde exacto: `lib/staff-services.ts`.
 
 - [ ] **AGENDA-03** — `/api/booking/availability` respeta la regla: pedir horarios para un servicio
@@ -103,7 +103,7 @@ natural es que también declare **qué**.
 | Req | Fase | Estado |
 |-----|------|--------|
 | AGENDA-01 | Phase 18 | Complete |
-| AGENDA-02 | Phase 18 | Pending |
+| AGENDA-02 | Phase 18 | Complete |
 | AGENDA-03 | Phase 18 | Pending |
 | AGENDA-04 | Phase 18 | Complete |
 | AGENDA-05 | Phase 19 | Pending |

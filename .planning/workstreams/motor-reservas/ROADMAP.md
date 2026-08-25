@@ -680,12 +680,12 @@ Plans:
 **Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Toca la disponibilidad pública, que es la superficie que decide **qué se le ofrece a un cliente anónimo**. Precedente directo a leer ANTES de escribir la migración: en v0.25 la Phase 10 tuvo que crear una **vista acotada** (`public_professional_services`, migr. **059**) para exponerle un mapeo a `anon` sin abrir la tabla entera — este milestone necesita exactamente lo mismo.
 ⚠ **Pendiente de seguridad VIVO sobre la misma superficie:** `book_slot_atomic` es ejecutable por `anon` y saltea la ventana de reserva, el gate de plan y el reCAPTCHA, **que viven sólo en el route handler** (severidad alta, pre-existente desde la migr. 041, en `todos/pending/`). No es de este milestone, pero **cualquier control que esta fase ponga sólo en el handler hereda el mismo agujero** — pesa al decidir dónde vive la regla del comodín.
 **UI hint**: no (modelo y motor; la superficie va en las Phases 19 y 20)
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 
 - [x] 18-01-PLAN.md — Migración 071: tabla puente `time_block_services` (RLS + 4 policies + índice inverso) y la vista acotada `public_time_block_services`, validadas por instalación en local (AGENDA-01)
-- [ ] 18-02-PLAN.md — `lib/time-block-services.ts`: la regla del comodín en 4 funciones puras con tests de control negativo (AGENDA-02)
+- [x] 18-02-PLAN.md — `lib/time-block-services.ts`: la regla del comodín en 4 funciones puras con tests de control negativo (AGENDA-02)
 - [ ] 18-03-PLAN.md — `/api/booking/availability` deja de ofrecer los horarios de las franjas que no dan el servicio, en sus tres ramas (AGENDA-03)
 - [ ] 18-04-PLAN.md — Backstop en `createAppointmentCore` con flag de default apagado: el camino público también lo ACEPTA, alta manual y abonos intactos (D-04)
 

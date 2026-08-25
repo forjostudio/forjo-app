@@ -4,13 +4,13 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
 stopped_at: Completed 17-10-PLAN.md
-last_updated: "2026-08-25T12:18:12.448Z"
+last_updated: "2026-08-25T12:28:43.685Z"
 last_activity: 2026-08-25 -- Phase 18 execution started
 progress:
   total_phases: 20
   completed_phases: 17
   total_plans: 92
-  completed_plans: 89
+  completed_plans: 90
   percent: 85
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 18 (el-modelo-y-la-disponibilidad) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-08-25 -- Phase 18 execution started
 
@@ -153,6 +153,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 17 P09 | 22min | 2 tasks | 1 files |
 | Phase 17 P10 | 28 min | 2 tasks | 1 files |
 | Phase 18 P01 | 22min | 2 tasks | 2 files |
+| Phase 18 P02 | 18min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -304,6 +305,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 18]: 18-01: la puente time_block_services exige business_id NOT NULL igual que el molde 057 — una franja huerfana nunca recibe mapeo y queda comodin para siempre (falla hacia el lado seguro; 0 huerfanas medidas en local)
 - [Phase 18]: 18-01: la vista public_time_block_services es DEFINER (owner postgres) sin security_invoker — verificado por reloptions NULL + control negativo real (anon lee 1 fila)
 - [Phase 18]: 18-01: cero backfill — el estado neutro (0 filas = comodin) ES el estado actual, asi que ningun negocio cambia de comportamiento (AGENDA-04)
+- [Phase ?]: 18-02: blocksForService va generica sobre {id} y no atada a TimeBlock — evita el cast mentiroso que el molde staff-services paga en availability/route.ts
+- [Phase ?]: 18-02: startTimesNotOffered NO lleva atajo bridge.length===0 — el resultado vacio con la puente vacia emerge de la regla del comodin; el atajo habria vuelto tautologico un control negativo
+- [Phase ?]: 18-02: el helper NO filtra por business_id (contrato D-16, T-18-07); el aislamiento vive en la RLS de la 071 y en las queries de los consumidores
 
 ### Pending Todos
 
@@ -378,7 +382,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-25T12:17:35.210Z
+Last session: 2026-08-25T12:28:22.672Z
 Stopped at: Completed 17-10-PLAN.md
 Resume file: None
 
