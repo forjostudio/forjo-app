@@ -453,8 +453,31 @@ nunca por lectura del diff.
 **77 archivos / 1013 passed** (`--no-file-parallelism`; en paralelo hay flakiness PRE-EXISTENTE de
 infra contra la DB local, no regresión).
 
-⚠ **La migr. 073 NO está aplicada a producción.** Las 071 y 072 sí (a mano, 2026-08-25). Aplicar la
-073 junto con el deploy del código.
+✅ **Las migr. 071, 072 y 073 están aplicadas a PRODUCCIÓN** (a mano, 2026-08-25). Próxima
+migración del proyecto: la **074**.
+
+**Verificación contra producción tras aplicar la 073** (read-only + escrituras dirigidas a un UUID
+inexistente, así que ni siquiera pudiendo pasar habrían borrado algo):
+
+```
+LECTURA (anon key)  time_block_services · public_time_block_services · public_services ·
+                    public_businesses · public_professionals · public_professional_services ·
+                    public_canchas · services · time_blocks · businesses   → todas HTTP 200
+                    ⇒ la 073 no rompió ninguna superficie de lectura
+
+DELETE anon  public_time_block_services    → HTTP 401  42501 permission denied for view
+DELETE anon  public_services               → HTTP 401  42501 permission denied for view
+DELETE anon  public_businesses             → HTTP 401  42501 permission denied for view
+DELETE anon  public_professionals          → HTTP 401  42501 permission denied for view
+DELETE anon  public_professional_services  → HTTP 401  42501 permission denied for view
+INSERT anon  public_time_block_services    → HTTP 401  42501 permission denied for view
+```
+
+⚠ Un `DELETE` sin `WHERE` NO sirve como control: PostgREST lo rechaza por su cuenta con
+`21000 DELETE requires a WHERE clause` **antes** de llegar a los permisos de Postgres, así que da un
+400 que parece un rebote y no prueba nada. Hay que mandar un filtro para que el 42501 sea real.
+
+**CR-01 queda verificado cerrado en producción**, no sólo en local.
 
 ⚠ `supabase/schema.sql` se actualizó de forma **quirúrgica**, no regenerando: el dump local completo
 borraría `pg_net` (está en prod y no en las migraciones locales). Queda anotado el **drift
