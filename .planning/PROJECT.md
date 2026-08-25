@@ -101,7 +101,7 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones LOCKED (no re-litigar en discuss-phase):** CRM interno de 3 capas en una sola herramienta; acceso por rol `is_admin` + check server-side (NO allowlist/header); pipeline = full CRM (lead→trial→pago→ciclo de vida); add-ons = flags booleanas por negocio con cobro manual; precios de planes editables desde el panel; impersonación = solo lectura, auditada, acción crítica; auditoría desde v1; doble confirmación siempre en acciones peligrosas; email+WhatsApp obligatorios por ficha; diseño primero (aprobado), build incremental; CRM NO themeable (tema Forjo default, dark-primary). Brief completo: `c:\Users\franc\Desktop\Forjo Studio\forjo-crm-admin-brief.md` (diseño: `c:\Users\franc\Desktop\Forjo Studio\crm-design\`).
 
-## Current Milestone (workstream `motor-reservas`): v0.12 Motor de Reservas
+## Milestone (workstream `motor-reservas`): v0.12 Motor de Reservas — ✅ SHIPPED 2026-06-30 (tag v0.12)
 
 **Goal:** Convertir "agenda" de *1-turno-por-slot / 1-recurso = 1-profesional* en un **recurso reservable real con capacidad y relaciones de espacio físico**, para desbloquear rubros nuevos (gimnasios, clases grupales, canchas) — tocando con cuidado el core de integridad que endureció v0.9 (constraints 011/013), con foco en concurrencia y **cero regresión** para el caso 1-turno-por-slot. Numeración de fases reiniciada en Phase 1 (workstream nuevo).
 
@@ -159,7 +159,7 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones LOCKED:** el cliente puede elegir profesional **o** "cualquiera" (las dos vías); la asignación automática corre **dentro del RPC atómico** `book_slot_atomic` (nunca en el cliente ni en dos pasos); debe preservar sin regresión canchas (`professionals.service_id`), abonos (generación forward por el mismo motor), cupos grupales y exclusión por espacio compartido. Toca el núcleo anti-doble-booking → **secure-phase obligatorio**.
 
-## Current Milestone (workstream `motor-reservas`): v0.26 Cupo por solape + cierre de backlog
+## Milestone (workstream `motor-reservas`): v0.26 Cupo por solape + cierre de backlog — ✅ SHIPPED 2026-08-11 (tag v0.26)
 
 **Goal:** Que "cupo N" signifique lo correcto según el caso — *clase grupal* (contado por hora de inicio, ya anda) vs *recurso simultáneo* (contado por solape de intervalos, hoy roto) — elegido **por servicio**, controlado de forma **atómica** bajo concurrencia dentro del RPC `book_slot_atomic`, con **cero regresión** del núcleo anti-doble-booking (canchas, abonos, multi-staff, espacio compartido, cupo 1). Además cierra el backlog chico acumulado. Numeración del workstream desde **Phase 12** (continúa, no reinicia).
 
@@ -171,6 +171,23 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 **Out of scope este milestone (deferred):** cupo por solape derivado del vertical o global por negocio (se eligió **por servicio**); estrategia de asignación de seat configurable; waitlist al liberar cupo; anticipación mínima; ventana por servicio; cobro recurrente de abonos.
 
 **Decisiones LOCKED (no re-litigar en discuss-phase):** cupo por solape = **modo nuevo por servicio** que **coexiste** con clase grupal — NO reemplaza (reemplazar rompería las clases grupales, donde la clase de las 16:00 y la de las 17:00 no deben sumar entre sí); el control por solape corre **dentro del RPC atómico** con el advisory lock re-granularizado y el `seat` separado del criterio de cupo — nunca `count` sin lock; cambiar la granularidad del lock **no puede degradar** `slot_full`/`slot_taken` ni el caso cupo 1, y afecta a los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) → **secure-phase obligatorio**; borrado con solo-pasados **preserva el historial** (desacople/snapshot, NUNCA hard-delete de la historia); el copy de los 3 toasts de borrado ya está shipeado (no re-hacerlo). La columna exacta del flag por servicio y el mecanismo de desacople (snapshot vs otra vía) se cierran en discuss-phase. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
+
+## Current Milestone (workstream `motor-reservas`): v0.28 La agenda por servicio
+
+> v0.27 Cupo unificado por servicio — ✅ **SHIPPED 2026-08-24** (tag `v0.27`, Phases 15-17, migr. 068/069/070). Archivado en `.planning/milestones/v0.27-*`.
+
+**Goal:** Que una franja horaria pueda declarar **qué servicios** se dan en ella. Hoy `time_blocks` es `business_id + day_of_week + start_time + end_time` y **no tiene servicio**: la agenda sólo sabe expresar *"atiendo de tal hora a tal hora"*. Alcanza para una peluquería, donde cualquier servicio entra en cualquier franja; **no alcanza** para un taller, un estudio de danza o un gimnasio, **donde la franja ES la clase**. Numeración del workstream desde **Phase 18** (continúa, no reinicia).
+
+**Por qué ahora:** es **el mismo defecto que v0.27 atacó, un nivel más arriba**. v0.27 sacó el cupo de `time_blocks` *porque el bloque no sabía a qué servicio correspondía* — trató el síntoma (dónde vive el número) y dejó la causa. Y despejó el camino: desde la migr. **068** esa tabla ya no decide nada más que **cuándo**, así que el paso natural es que también declare **qué**.
+
+**Target features:**
+- **A. El modelo y la disponibilidad (Phase 18, plato principal):** tabla puente `time_block_services` con la **regla del comodín** — **0 filas = la franja sirve para cualquier servicio** —, molde exacto de `professional_services` (migr. 057, v0.25) con su helper puro. `/api/booking/availability` la respeta (ya recibe `serviceId` desde 15-04). **`secure-phase` obligatorio:** toca la superficie que decide qué se le ofrece a un cliente anónimo.
+- **B. El panel (Phase 19):** el dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como **"cualquiera"**, no como un estado vacío.
+- **C. Booking público y onboarding (Phase 20):** el cliente que elige un servicio ve **sólo** los horarios donde ese servicio se da, con el vacío **explicado** en vez de un calendario mudo; y el onboarding deja que un negocio de clases declare su agenda real desde el día uno.
+
+**Out of scope este milestone (deferred):** el cruce con **multi-staff** (*"martes 15-16 cerámica con Ana"*) — la franja declara **qué**, no **quién**; el quién ya lo resuelve `professional_services` desde v0.25, y esto se suma después **sin re-migrar** · dropear `time_blocks.capacity` (migración destructiva sin beneficio) · los **9 todos** pendientes del workstream, incluido el de severidad **alta** (`book_slot_atomic` ejecutable por `anon`), que es candidato al milestone siguiente y es **otro eje y otro riesgo**.
+
+**Decisiones LOCKED (no re-litigar en discuss-phase):** el modelo es **tabla puente con comodín**, NO una columna `service_id` — cubre *"martes 15-16 cerámica"* y *"mañanas: corte y color, no alisado"* sin duplicar bloques superpuestos, y el repo ya tiene el patrón probado · **la cero regresión es POR CONSTRUCCIÓN**: el día de la migración todos los negocios tienen 0 filas ⇒ todas las franjas son comodín ⇒ nada cambia (misma jugada que `individual` en v0.27) · la regla del comodín vive en **un helper puro con tests**, nunca reimplementada por consumidor (molde `lib/staff-services.ts`) · **multi-staff queda afuera** · el onboarding **entra**, fusionado con el booking público en la Phase 20. ⚠ Antes de escribir la migración, leer la **059** (`public_professional_services`): v0.25 ya tuvo que crear una vista acotada para exponerle un mapeo a `anon` sin abrir la tabla entera, y acá hace falta lo mismo. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
 
 ## Requirements
 

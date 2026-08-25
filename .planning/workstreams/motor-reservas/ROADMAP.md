@@ -1,6 +1,6 @@
 # Roadmap: Forjo App — Motor de Reservas (workstream `motor-reservas`)
 
-> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19), **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22) **v0.25 Reserva con varios profesionales / multi-staff** (Phases 8-11, shipped 2026-07-28) **v0.26 Cupo por solape + cierre de backlog** (Phases 12-14, shipped 2026-08-11) y **v0.27 Cupo unificado por servicio** (Phases 15-17, shipped 2026-08-24). Numeración de fases **continua** por workstream. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
+> Workstream `motor-reservas`. Cubre **v0.12 Motor de Reservas** (Phases 1-3, shipped 2026-06-30), **v0.22 Turnos: alta manual y ventana de reserva** (Phases 4-5, shipped 2026-07-19), **v0.24 Turnos fijos / Abonos recurrentes** (Phases 6-7, shipped 2026-07-22) **v0.25 Reserva con varios profesionales / multi-staff** (Phases 8-11, shipped 2026-07-28) **v0.26 Cupo por solape + cierre de backlog** (Phases 12-14, shipped 2026-08-11) **v0.27 Cupo unificado por servicio** (Phases 15-17, shipped 2026-08-24) y **v0.28 La agenda por servicio** (Phases 18-20, activo). Numeración de fases **continua** por workstream. PROJECT.md compartido en `.planning/PROJECT.md`; los requirements de cada milestone se archivan en `.planning/milestones/`.
 
 ## Overview
 
@@ -15,6 +15,8 @@
 **v0.26 — Cupo por solape + cierre de backlog (Phases 12-14, shipped 2026-08-11):** cierra un bug de integridad capturado desde v0.12 y drena el backlog chico acumulado. El plato principal: hoy `time_blocks.capacity > 1` cuenta el sobrecupo **por hora de inicio exacta** — correcto para una *clase grupal* (yoga 16:00, cupo 10) pero **roto** para un *recurso simultáneo* (kinesiólogo con 2 camillas), donde turnos **escalonados** que se pisan superan el cupo. v0.26 separa las dos semánticas eligiéndolas **por servicio**: la de clase grupal queda intacta y se agrega un modo nuevo que **coexiste**, donde el cupo se cuenta por **solape de intervalos** (usando `duration_minutes`). El control corre **DENTRO del RPC atómico `book_slot_atomic`**, re-granularizando el advisory lock (hoy por slot+bucket — dos reservas escalonadas toman locks distintos y se cuelan; pasa a bucket+día/ventana) y separando la asignación de `seat` del criterio de cupo, con **cero regresión** de cupo 1, canchas, abonos, multi-staff y espacio compartido — es el punto de mayor riesgo (**secure-phase obligatorio** + tests de carrera contra la DB). Después, un **borrado de servicio que preserva el historial**: el dueño borra un servicio con solo turnos pasados/cancelados, un modal bloquea el borrado si hay futuros (ofrece desactivar), y los turnos pasados sobreviven en Finanzas / la ficha del cliente vía **desacople del FK** (snapshot de nombre/precio en el turno) — nunca hard-delete de la historia. Y al cierre, el **backlog chico de polish** (ancho de botones app-wide, `RiskBadge` con color fuera del CRM, un abono cancelado sin "Copiar link de baja", un cliente nuevo en "Nuevas" y no en "Pausa"), independiente del motor. El faseo va por riesgo: primero el cambio del motor (12, aislado como una única unidad revisable), después el borrado con historial (13, toca el write-path del alta pero es independiente del cupo), y por último el polish (14).
 
 **v0.27 — Cupo unificado por servicio (Phases 15-17, shipped 2026-08-24):** v0.26 arregló **cómo** se cuenta el cupo; este milestone arregla **dónde vive el número** y **qué modos se pueden declarar** — el mismo defecto de modelo, detectado en la UAT de la Phase 12. Hoy "Individual" no se puede declarar (se deduce de `time_blocks.capacity = 1`, que vive en otra tabla y no sabe a qué servicio corresponde) y el cupo tiene **dos fuentes de verdad**: `time_blocks.capacity` para la clase grupal, `services.capacity` para el recurso simultáneo. v0.27 unifica a un enum de **tres** modos con `services.capacity` como fuente única del número: el **modo** decide cómo se cuenta, `services.capacity` decide cuánto, y `time_blocks.capacity` deja de decidir. En el mismo territorio se cierra el **riesgo residual R-1** de `12-SECURITY.md` — cambiar `capacity_mode` en un servicio con turnos ya creados deja filas `is_group = true` huérfanas, fuera del EXCLUDE gist y del gate espejo, o sea solapes permanentes que ningún gate detecta. **El cutover no afecta a nadie**: medido contra producción el 2026-08-11, los 19 bloques existentes tienen cupo máximo **1**, así que no se construye aviso de re-declaración y el backfill —la parte que se estimaba cara— deja de ser un problema. El faseo va por riesgo, como en v0.26: primero el modelo y el motor (15, `secure-phase` obligatorio, toca `book_slot_atomic` y sus cuatro consumidores), después la superficie del panel y el polish pendiente (16).
+
+**v0.28 — La agenda por servicio (Phases 18-20, activo):** `time_blocks` sabe decir *"atiendo de tal hora a tal hora"* y **no sabe decir** *"a esta hora doy cerámica"* — la tabla es `business_id + day_of_week + start_time + end_time` y no tiene servicio. Alcanza para una peluquería, donde cualquier servicio entra en cualquier franja; **no alcanza** para un taller, un estudio de danza o un gimnasio, **donde la franja ES la clase**. Es **el mismo defecto que v0.27 atacó, un nivel más arriba**: v0.27 sacó el cupo de `time_blocks` *porque el bloque no sabía a qué servicio correspondía*, o sea trató el síntoma —dónde vive el número— y dejó la causa intacta. Y despejó el camino: desde la migr. **068** esa tabla ya no decide nada más que **cuándo**, así que el paso natural es que también declare **qué**. El modelo es una **tabla puente con la regla del comodín**, copiando `professional_services` (migr. 057, v0.25, con su helper puro ya en producción): **0 filas = la franja sirve para cualquier servicio**, que es el comportamiento vigente ⇒ **cutover gratis y cero regresión POR CONSTRUCCIÓN**, la misma jugada que `individual` en v0.27. **Fuera de alcance:** el cruce con multi-staff (*"martes 15-16 cerámica con Ana"*) — la franja declara **qué**, no **quién**, y el quién ya lo resuelve `professional_services` desde v0.25; se suma después sin re-migrar. El faseo va por riesgo: primero el **modelo y la disponibilidad** (18, `secure-phase` obligatorio — toca la superficie que decide qué se le ofrece a un cliente anónimo), después el **panel** que deja configurarlo (19), y al cierre el **booking público y el onboarding** (20), que son las dos caras de que un negocio de clases pueda operar de verdad.
 
 ## Phases
 
@@ -59,6 +61,12 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 - [x] **Phase 12: Cupo por solape (recurso simultáneo)** - Flag por servicio clase-grupal / recurso-simultáneo; el cupo por solape se controla de forma atómica dentro de `book_slot_atomic` (advisory lock de negocio-día + `seat` separado del criterio de cupo), con cero regresión del núcleo anti-doble-booking — 4/4 planes · code-review 2 rondas, 5 blockers cerrados (migr. 063 + 064) · SECURED 18/18 (`threats_open: 0`) · UAT 5/5 · migr. 062/063/064 en prod (completed 2026-07-30)
 - [x] **Phase 13: Borrado de servicio preservando historial** - Borrar un servicio con solo turnos pasados; modal que bloquea si hay futuros y ofrece desactivar; los turnos pasados sobreviven en el historial (Finanzas / ficha del cliente) vía desacople del FK (snapshot de nombre/precio en el turno) (completed 2026-08-03)
 - [x] **Phase 14: Cierre de backlog** - Ancho consistente de botones app-wide, `RiskBadge` "Alto" con color fuera del CRM, un abono cancelado sin "Copiar link de baja", y un cliente nuevo sin turnos en "Nuevas" (no en "Pausa") (completed 2026-08-11)
+
+### Milestone v0.28 — La agenda por servicio (Phases 18-20, activo)
+
+- [ ] **Phase 18: El modelo y la disponibilidad** - Tabla puente `time_block_services` con la regla del comodín (0 filas = cualquier servicio), la regla encapsulada en un helper puro con tests (molde `lib/staff-services.ts`), y `/api/booking/availability` respetándola — el endpoint ya recibe `serviceId` desde v0.27. **Cero regresión por construcción:** el día de la migración todos los negocios tienen 0 filas. **`secure-phase` obligatorio**
+- [ ] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío
+- [ ] **Phase 20: Booking público y onboarding** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, con el vacío explicado en vez de un calendario mudo; y el onboarding deja que un negocio de clases declare su agenda real desde el día uno
 
 ### Milestone v0.27 — Cupo unificado por servicio (shipped 2026-08-24)
 
@@ -657,6 +665,55 @@ Plans:
 
 ---
 
+### Phase 18: El modelo y la disponibilidad
+
+**Goal**: Que una franja horaria pueda declarar **qué servicios** se dan en ella, y que la disponibilidad pública lo respete. El modelo es una **tabla puente** con la **regla del comodín** —**0 filas mapeadas = la franja sirve para cualquier servicio**—, copiando el molde de `professional_services` (migr. 057, v0.25), que ya está en producción con su helper puro. Esa elección es la que hace el **cutover gratis y la cero regresión POR CONSTRUCCIÓN**: el día de la migración todos los negocios tienen 0 filas, así que todas las franjas son comodín y nada cambia — la misma jugada que `individual` en v0.27. La regla vive en **un helper puro con tests**, nunca reimplementada en cada consumidor, y `/api/booking/availability` la consume para devolver sólo las franjas donde el servicio pedido se da (el endpoint ya recibe `serviceId` desde 15-04).
+**Depends on**: Phase 17 (v0.27 dejó `time_blocks.capacity` sin decidir nada, que es lo que libera a la tabla para declarar *qué* en vez de *cuánto*)
+**Requirements**: AGENDA-01, AGENDA-02, AGENDA-03, AGENDA-04
+**Success Criteria** (what must be TRUE):
+
+  1. Una franja puede declarar los servicios que se dan en ella, y **0 filas significa "cualquiera"** — el estado de todos los negocios el día de la migración (AGENDA-01).
+  2. La regla del comodín está en **un solo lugar**, puro y testeado; ningún consumidor la reimplementa (AGENDA-02).
+  3. Pedir disponibilidad para un servicio devuelve **sólo** las franjas donde ese servicio se da, más todas las de comodín (AGENDA-03).
+  4. **Cero regresión** para los negocios con franjas genéricas —hoy son todos— y para canchas, abonos, cupos grupales, multi-staff y espacio compartido (AGENDA-04).
+
+**Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Toca la disponibilidad pública, que es la superficie que decide **qué se le ofrece a un cliente anónimo**. Precedente directo a leer ANTES de escribir la migración: en v0.25 la Phase 10 tuvo que crear una **vista acotada** (`public_professional_services`, migr. **059**) para exponerle un mapeo a `anon` sin abrir la tabla entera — este milestone necesita exactamente lo mismo.
+⚠ **Pendiente de seguridad VIVO sobre la misma superficie:** `book_slot_atomic` es ejecutable por `anon` y saltea la ventana de reserva, el gate de plan y el reCAPTCHA, **que viven sólo en el route handler** (severidad alta, pre-existente desde la migr. 041, en `todos/pending/`). No es de este milestone, pero **cualquier control que esta fase ponga sólo en el handler hereda el mismo agujero** — pesa al decidir dónde vive la regla del comodín.
+**UI hint**: no (modelo y motor; la superficie va en las Phases 19 y 20)
+
+---
+
+### Phase 19: El panel
+
+**Goal**: Que el dueño pueda configurar lo que la Phase 18 volvió declarable. En Agenda asigna servicios a cada franja, y la grilla **muestra** qué se da en cada una sin abrir nada. El caso por defecto —una franja sin servicios asignados— tiene que leerse como **"cualquiera"**, que es lo que significa, y no como un estado vacío o a medio configurar: es el estado del 100 % de los negocios el día del deploy.
+**Depends on**: Phase 18 (sin el modelo no hay qué configurar)
+**Requirements**: AGENDA-05, AGENDA-06
+**Success Criteria** (what must be TRUE):
+
+  1. El dueño asigna servicios a una franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada (AGENDA-05).
+  2. Una franja sin servicios asignados se ve y se lee como **"cualquiera"** (AGENDA-06).
+
+**Security/Integrity relevance**: Media. No toca el motor ni los constraints, pero **escribe** sobre el mapeo que la disponibilidad pública consume: el write path tiene que llevar `.eq('business_id', business.id)` como todo el panel, y el rechazo de la base mapearse a copy propia — nunca interpolar el mensaje (T-14-25 / T-13-09).
+**UI hint**: yes
+
+---
+
+### Phase 20: Booking público y onboarding
+
+**Goal**: Cerrar las dos caras de que un negocio de clases pueda operar de verdad. En el **booking público**, el cliente que elige un servicio ve **sólo** los horarios donde ese servicio se da — y si un servicio no tiene ninguna franja que lo cubra, el vacío se **explica** en vez de mostrar un calendario mudo. En el **onboarding**, un negocio de clases declara su agenda real desde el día uno, en vez de que se le pida un horario genérico que no describe su negocio: es donde más se nota el defecto, y sin esto la capacidad existiría pero el negocio nuevo arrancaría igual mal configurado.
+**Depends on**: Phase 18 (la disponibilidad ya filtra) y Phase 19 (hay con qué configurar antes de pedirlo en el alta)
+**Requirements**: AGENDA-07, AGENDA-08
+**Success Criteria** (what must be TRUE):
+
+  1. El cliente que elige un servicio ve sólo los horarios donde ese servicio se da (AGENDA-07).
+  2. Un servicio sin franjas que lo cubran **explica el vacío**; no muestra un calendario mudo (AGENDA-07).
+  3. El onboarding deja declarar la agenda real de un negocio de clases desde el alta (AGENDA-08).
+
+**Security/Integrity relevance**: Media. La superficie pública ya la endureció la Phase 18; acá se consume. El onboarding escribe agenda antes de que exista sesión establecida — revisar cómo lo resolvió v0.20, que ya tuvo que meter un endpoint service-role por el bug de colisión de slug.
+**UI hint**: yes
+
+---
+
 ### Phase 17: Superficie y polish
 
 **Goal**: Que el dueño **entienda** lo que la Phase 15 hizo declarable, y cerrar los pendientes de presentación. Lo central es el **copy**: hoy el editor mete los dos modos de cupo compartido en la misma bolsa —*"Clase grupal y Recurso simultáneo: varios lugares por turno"*— y un dueño no tiene con qué elegir, cuando la diferencia es exactamente lo que v0.26 tardó tres migraciones en modelar (grupal cuenta por **hora de inicio**, simultáneo por **solape**); elegir mal significa que alguien se sume a mitad de clase, o que se le llene la agenda antes de tiempo. Más los **tres defectos** que levantó la UAT (el campo de cupo no se puede editar con el teclado, los toggles del modal quedan desacomodados, el `+` del alta debería ser un "Guardar" al final), el **badge de modo** en la lista, la **grilla de la agenda** leyendo `services.capacity` y mostrando la ocupación grupal, y **Finanzas mobile** con el servicio.
@@ -716,7 +773,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, shipped 2026-08-11) → 15 → 16 → 17 (v0.27, shipped 2026-08-24). Los **seis** milestones cerrados quedan en el historial.
+Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.22, shipped) → 6 → 7 (v0.24, shipped) → 8 → 9 → 10 → 11 (v0.25, shipped 2026-07-28) → 12 → 13 → 14 (v0.26, shipped 2026-08-11) → 15 → 16 → 17 (v0.27, shipped 2026-08-24) → **18 → 19 → 20 (v0.28, activo)**. Los **seis** milestones cerrados quedan en el historial.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|

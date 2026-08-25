@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 17 — superficie-y-polish
+**Current focus:** v0.28 La agenda por servicio — Phase 18 sin discutir
 
 ## Current Position
 
@@ -30,7 +30,27 @@ Plan: 9 of 9 (los 9 ejecutados y cerrados)
 Status: 17-09 cerrado — el selector de cupo del modal es ahora el mismo de la tarjeta. Falta la TERCERA ronda de UAT (guion de 17-09-PLAN.md, 3 pasos a 375px sobre el dev server del 3000), y después `secure-phase 17` + `code-review 17`
 Last activity: 2026-08-24 -- 17-09 ejecutado (CapacityStepper compartido)
 
-## Milestone v0.27 — decisiones tomadas antes de planificar
+## Milestone v0.28 — decisiones LOCKED
+
+- **D-01 Tabla puente con comodín, no columna.** Molde `professional_services` (migr. 057, v0.25):
+  **0 filas mapeadas = la franja sirve para cualquier servicio**. Cubre "martes 15-16 cerámica" y
+  "mañanas: corte y color, no alisado" sin duplicar bloques superpuestos.
+- **D-02 Cero regresión POR CONSTRUCCIÓN.** El día de la migración todos los negocios tienen 0 filas ⇒
+  todo comodín ⇒ nada cambia. Misma jugada que `individual` en v0.27.
+- **D-03 La franja declara QUÉ, no QUIÉN.** Multi-staff queda afuera; el quién ya lo resuelve
+  `professional_services` desde v0.25. Se suma después sin re-migrar.
+- **D-04 El onboarding entra**, fusionado con el booking público en la Phase 20.
+
+⚠ **Antes de escribir la migración de la Phase 18: leer la migr. 059** (`public_professional_services`).
+v0.25 ya tuvo que crear una **vista acotada** para exponerle un mapeo a `anon` sin abrir la tabla
+entera — acá hace falta exactamente lo mismo.
+
+⚠ **Pendiente de seguridad VIVO sobre la misma superficie:** `book_slot_atomic` es ejecutable por
+`anon` y saltea la ventana de reserva, el gate de plan y el reCAPTCHA, **que viven sólo en el route
+handler** (alta, pre-existente desde la migr. 041). No es de este milestone, pero **cualquier control
+que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
+
+## Milestone v0.27 (SHIPPED 2026-08-24) — decisiones tomadas antes de planificar
 
 - **D-01 Cutover, sin fallback transicional.** `services.capacity` es la única fuente del número desde el día 1; `time_blocks.capacity` deja de decidir (la columna se conserva, no se dropea). No se escribe regla de precedencia en el RPC y no queda deprecación pendiente.
 - **D-02 El cutover no afecta a nadie — medido contra PRODUCCIÓN el 2026-08-11:** `select count(*), count(*) filter (where capacity is null), max(capacity) from time_blocks` → **19 bloques · 0 sin capacity · cupo_max 1**. Por eso **no se construye aviso de re-declaración** y el backfill deja de ser un problema. ⚠ El control se corrió a propósito además del `where capacity > 1` (que dio "Success, no rows"): una query que devuelve 0 filas es indistinguible de una que no midió lo que creías — lección de la Phase 14.
