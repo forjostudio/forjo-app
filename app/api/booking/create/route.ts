@@ -171,6 +171,10 @@ export async function POST(request: Request) {
     requireDeposit,
     depositExpiryHours: Number(business.deposit_expiry_hours) || 1,
     autoAssign: anyProfessional,
+    // (Phase 18, D-04) Camino PÚBLICO = el único no confiable de los tres llamadores del core, y por
+    // eso el único que enciende la regla de la agenda por servicio: el alta manual del dueño y la
+    // generación de abonos la heredan APAGADA a propósito (ver el flag en lib/booking-core.ts).
+    enforceServiceWindow: true,
   })
   if (!result.ok) {
     return Response.json({ ok: false, error: result.error }, { status: result.status })

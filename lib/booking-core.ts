@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { TimeBlockService } from '@/lib/types'
+import { isServiceAllowedAt, type BlockWindow } from '@/lib/time-block-services'
 
 // ── Core rol-agnóstico de creación de turno ──────────────────────────────────────────
 // Única fuente de verdad de la cadena de validación + insert de un turno. Extraído de
@@ -55,6 +57,23 @@ export type CreateAppointmentInput = {
   // comportamiento byte-idéntico. Con autoAssign se saltea la resolución de professionalId y los
   // re-checks JS (solo UX, no computables sin bucket concreto) — la autoridad es el RPC.
   autoAssign?: boolean
+  // Phase 18 (D-04, migr. 071): aplica la regla de LA AGENDA POR SERVICIO en el camino del ACEPTA —
+  // rechaza el turno si el horario pedido cae en una franja (`time_blocks`) que declaró NO dar este
+  // servicio. Lo enciende UN SOLO caller: `app/api/booking/create/route.ts` (el booking PÚBLICO), la
+  // única superficie donde el pedido llega de alguien no confiable.
+  //
+  // Con el flag en su default NO se ejecuta ni una query nueva y el camino queda BYTE-IDÉNTICO al de
+  // hoy — que es exactamente lo que necesitan los otros DOS llamadores del core, cuyas exenciones son
+  // deliberadas y no olvidos: el alta manual del dueño (`app/api/appointments/create/route.ts`) no
+  // valida horario a propósito (cargar una excepción fuera de franja en la propia agenda es legítimo,
+  // y es justo lo que un dueño hace) y la generación de abonos (`lib/abono-generation.ts`) documenta
+  // en su cabecera por qué dejó de gatear por franjas (gatearla la volvía MÁS restrictiva que poner
+  // el mismo turno a mano).
+  //
+  // ⚠ POR QUÉ EL DEFAULT ES APAGADO, y no al revés: si mañana aparece un caller nuevo y nadie se
+  // acuerda de tocar este flag, hereda el comportamiento de HOY en vez de romperse. El fail-safe
+  // apunta al lado seguro — el mismo criterio de `requireDeposit`/`autoAssign`, sus dos hermanos.
+  enforceServiceWindow?: boolean
 }
 
 export type CreateAppointmentResult =
@@ -86,7 +105,17 @@ export type CreateAppointmentResult =
       // cualquier agenda con un solape, así que no sabe usar el 2º lugar. Código PROPIO: NO se colapsa
       // en slot_taken (haría indistinguible un combo no soportado de un horario realmente ocupado) ni
       // en invalid_service (el servicio es válido; lo que no se soporta es la VÍA de asignación).
-      error: 'invalid_service' | 'invalid_professional' | 'any_professional_unsupported' | 'slot_taken' | 'slot_full' | 'simultaneous_space_conflict' | 'insert_failed'
+      // 'service_not_scheduled' (Phase 18, D-04 / migr. 071 — sólo alcanzable con enforceServiceWindow,
+      // o sea sólo por el booking PÚBLICO): el horario pedido cae en una franja de la agenda que
+      // declaró NO dar este servicio (la peluquería que corta de 9 a 13 y hace color de 14 a 18, y
+      // llega un POST pidiendo color a las 10). Es 400 y NO 409: no hay conflicto de horario —el slot
+      // puede estar perfectamente libre—, es una request no soportada por la configuración de la
+      // agenda, mismo razonamiento que `any_professional_unsupported`. Y tiene código PROPIO en vez de
+      // colapsar en `invalid_service` porque el servicio ES válido y está activo: lo que no es válido
+      // es el par servicio↔franja. Colapsarlos haría indistinguible "este servicio no existe / no es
+      // de este negocio" de "este servicio no se da a esta hora", que son dos mensajes distintos para
+      // el público (la copy al cliente es AGENDA-07, Phase 20).
+      error: 'invalid_service' | 'invalid_professional' | 'any_professional_unsupported' | 'service_not_scheduled' | 'slot_taken' | 'slot_full' | 'simultaneous_space_conflict' | 'insert_failed'
       status: 400 | 409 | 500
     }
 
@@ -107,6 +136,7 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     requireDeposit = false,
     depositExpiryHours = 1,
     autoAssign = false,
+    enforceServiceWindow = false,
   } = input
 
   // Anti-tampering de tenant: el servicio debe ser de ESTE negocio y estar activo. De acá
@@ -147,6 +177,69 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
   // que ya está rechazada. 400 (request no soportada), no 409: no hay conflicto de horario.
   if (autoAssign && Number(service.capacity) > 1) {
     return { ok: false, error: 'any_professional_unsupported', status: 400 }
+  }
+
+  // ── LA AGENDA POR SERVICIO en el camino del ACEPTA (Phase 18, D-04 / migr. 071) ──────────────────
+  // La disponibilidad decide qué se OFRECE; ESTO decide qué se ACEPTA. Desde el Plan 18-03 el
+  // endpoint de disponibilidad ya no ofrece los horarios de una franja que declaró no dar el servicio
+  // pedido — pero eso es la grilla, y la grilla la arma el cliente.
+  //
+  // OJO al que venga después: el selector público es UX, NO un control. Los endpoints públicos son
+  // alcanzables directo y un POST con el `serviceId` y la hora forjados se saltea la UI entera; sin
+  // este chequeo se reserva cerámica en el horario de corte y el dueño se entera cuando llega el
+  // cliente. Un control que vive sólo donde el cliente coopera ya demostró en este repo que no
+  // alcanza (es la misma lección de `any_professional_unsupported`, unas líneas más arriba). NO lo
+  // borres por "redundante con el front".
+  //
+  // Vive en el CORE y no en el route handler por una razón concreta: acá el servicio ya está
+  // RE-VALIDADO por `business_id` unas líneas más arriba, así que la regla se evalúa sobre
+  // `service.id` —el id que la base confirmó de ESTE negocio— y nunca sobre el `serviceId` crudo que
+  // llegó del cliente. Es el anti-tampering de tenant que este repo exige para toda entidad
+  // referenciada.
+  //
+  // ⚠ LA REGLA ES ANGOSTA A PROPÓSITO (AGENDA-04). Sólo rechaza cuando ALGUNA franja contiene el
+  // horario pedido Y NINGUNA de esas da el servicio. Si el horario no cae en NINGUNA franja, se
+  // ACEPTA: hoy tampoco se valida la ventana, y validarla acá rompería los días con horario ESPECIAL
+  // que EXTIENDEN la jornada, que viven en `schedule_exceptions` y no en `time_blocks`. Esta fase
+  // agrega UN SOLO eje de rechazo —el del mapeo franja↔servicio—, no una validación general de
+  // horario.
+  //
+  // Gateado ENTERO por el flag (ver su documentación en el tipo): con el flag apagado no corre ni una
+  // query nueva y el camino del alta manual y del motor de abonos queda byte-idéntico. Va ACÁ —después
+  // del gate de "Cualquiera" y ANTES de resolver el profesional— para cubrir por igual el camino con
+  // profesional elegido y el de asignación automática (los dos son públicos) sin gastar queries en una
+  // request que ya está rechazada por otro motivo.
+  //
+  // La regla del comodín NO se reimplementa (AGENDA-02): sale de `isServiceAllowedAt`, la fuente
+  // ÚNICA que también consumen la disponibilidad y el panel de la Phase 19 — tres capas que TIENEN
+  // que interpretarla idéntico o derivan. Con la puente vacía el helper acepta todo por la regla del
+  // comodín, no por un atajo: el día de la migración todos los negocios tienen 0 filas ⇒ toda franja
+  // sirve para todo servicio ⇒ nada cambia (D-02, la cero regresión es por construcción).
+  if (enforceServiceWindow) {
+    // Mismo `dow` que `EXTRACT(dow)` de la DB y que el endpoint de disponibilidad: 'yyyy-MM-dd'
+    // parseado como medianoche UTC + getUTCDay() (0=domingo..6=sábado). Si las dos superficies
+    // derivaran el día distinto, una ofrecería lo que la otra rechaza.
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
+    const { data: dayBlocks } = await supabase
+      .from('time_blocks')
+      .select('id, start_time, end_time')
+      .eq('business_id', business.id)
+      .eq('day_of_week', dow)
+    // Aislamiento por tenant EXPLÍCITO aunque el cliente pueda ser service-role (bypassa RLS): el
+    // helper es puro y NO filtra por negocio (contrato D-16, el caller acota antes de llamar).
+    const { data: bridgeRows } = await supabase
+      .from('time_block_services')
+      .select('business_id, time_block_id, service_id')
+      .eq('business_id', business.id)
+    const allowed = isServiceAllowedAt(
+      service.id as string, // el id RE-VALIDADO por business_id, nunca el serviceId del cliente
+      timeToMinutes(time),
+      (dayBlocks || []) as BlockWindow[],
+      (bridgeRows || []) as TimeBlockService[],
+    )
+    if (!allowed) {
+      return { ok: false, error: 'service_not_scheduled', status: 400 }
+    }
   }
 
   // El profesional (si se eligió) también debe ser del negocio.
