@@ -225,4 +225,112 @@ describe.skipIf(!hasSupabaseCreds)('backstop del create: la franja que no da el 
     expect(res.body.ok).toBe(true)
     expect(await countAppointmentsAt('20:00')).toBe(1)
   })
+
+  // ── CR-02 (code review de la Phase 18): el backstop fallaba ABIERTO ─────────────────────────────
+  //
+  // Los casos 1-5 miden el backstop con un body BIEN FORMADO. El agujero estaba en el mal formado:
+  // Postgres parsea más cosas que JavaScript, y de esa asimetría salía el bypass. `'2031-3-3'` es
+  // una fecha válida para `::date` pero `new Date('2031-3-3T00:00:00Z')` es Invalid ⇒ el `dow`
+  // quedaba NaN ⇒ `.eq('day_of_week', NaN)` hacía que PostgREST devolviera `22P02` ⇒ ese error se
+  // descartaba (sólo se desestructuraba `data`) ⇒ `dayBlocks` vacío ⇒ ninguna franja contenía el
+  // horario ⇒ la regla angosta ACEPTABA. Idéntico con `'10:00 AM'`, válido para `::time` y NaN para
+  // `timeToMinutes`. O sea: el caso 1 pasaba de 400 a 200 cambiando dos caracteres del body, y el
+  // turno se materializaba igual con la fecha/hora correctas.
+  //
+  // Los casos 6-8 miden el guard de FORMA del route handler (400 `bad_request`, antes del insert de
+  // `clients` ⇒ sin filas huérfanas). El caso 9 mide el fail-closed del CORE por separado, sin pasar
+  // por el handler: los dos controles son redundantes a propósito y cada uno se prueba solo, porque
+  // si sólo se midiera el del handler, borrar el del core no rompería ningún test.
+
+  // Cuántos clientes dejó un nombre de test. El guard corre ANTES del insert de `clients`, así que
+  // un body forjado no puede dejar la fila huérfana (Pitfall 3, ya conocido en este repo).
+  async function countClientsNamed(name: string): Promise<number> {
+    const { data } = await t.admin.from('clients').select('id').eq('business_id', t.businessId).eq('name', name)
+    return (data || []).length
+  }
+
+  it('6. CR-02: la fecha sin zero-pad (que Postgres SÍ acepta) se rechaza con 400 bad_request y no deja fila ni cliente', async () => {
+    await mapBlockAToSvc1()
+
+    const res = await postCreate({
+      slug,
+      serviceId: svc2, // el mismo pedido del caso 1, que DEBE seguir rechazándose
+      date: '2031-3-3', // el mismo día que DATE, sin zero-pad: `'2031-3-3'::date` es válido en PG
+      time: '10:00',
+      clientName: '__test_cr02_fecha',
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.body.ok).toBe(false)
+    expect(res.body.error).toBe('bad_request')
+    expect(await countAppointmentsAt('10:00')).toBe(0)
+    expect(await countClientsNamed('__test_cr02_fecha')).toBe(0)
+  })
+
+  it('7. CR-02: la hora en formato 12h (que Postgres SÍ acepta) se rechaza con 400 bad_request y no deja fila ni cliente', async () => {
+    await mapBlockAToSvc1()
+
+    const res = await postCreate({
+      slug,
+      serviceId: svc2,
+      date: DATE,
+      time: '10:00 AM', // `'10:00 AM'::time` es válido en PG; `timeToMinutes` da NaN
+      clientName: '__test_cr02_hora',
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.body.ok).toBe(false)
+    expect(res.body.error).toBe('bad_request')
+    expect(await countAppointmentsAt('10:00')).toBe(0)
+    expect(await countClientsNamed('__test_cr02_hora')).toBe(0)
+  })
+
+  it('8. CR-02: la fecha bien formada pero INEXISTENTE se rechaza — JavaScript la rueda al mes siguiente en silencio', async () => {
+    await mapBlockAToSvc1()
+
+    // `2031-02-31` pasa el regex de forma: es la razón por la que el guard además hace round-trip
+    // contra `toISOString()`. `new Date('2031-02-31T00:00:00Z')` NO es Invalid: rueda a marzo, así
+    // que el `dow` derivado sería el de OTRO día — el backstop mediría la franja equivocada.
+    const res = await postCreate({
+      slug,
+      serviceId: svc2,
+      date: '2031-02-31',
+      time: '10:00',
+      clientName: '__test_cr02_inexistente',
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.body.ok).toBe(false)
+    expect(res.body.error).toBe('bad_request')
+    expect(await countClientsNamed('__test_cr02_inexistente')).toBe(0)
+  })
+
+  it('9. CR-02: el CORE falla cerrado por su cuenta — con el flag encendido y un date/time no parseable rechaza sin depender del handler', async () => {
+    await mapBlockAToSvc1()
+
+    // Se salta el route handler A PROPÓSITO: si el fail-closed viviera sólo en el borde, cualquier
+    // caller futuro que encienda el flag heredaría el bypass. Este caso es el que muere si alguien
+    // borra el guard de NaN del core creyéndolo redundante con el del handler.
+    const result = await createAppointmentCore({
+      supabase: t.admin,
+      business: { id: t.businessId, buffer_minutes: 0 },
+      serviceId: svc2,
+      professionalId: null,
+      locationId: null,
+      date: '2031-3-3',
+      time: '10:00',
+      clientId: null,
+      clientName: '__test_cr02_core',
+      clientPhone: null,
+      clientEmail: null,
+      notes: null,
+      enforceServiceWindow: true,
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toBe('service_not_scheduled')
+    expect(result.status).toBe(400)
+    expect(await countAppointmentsAt('10:00')).toBe(0)
+  })
 })

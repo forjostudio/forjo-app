@@ -220,20 +220,43 @@ export async function createAppointmentCore(input: CreateAppointmentInput): Prom
     // parseado como medianoche UTC + getUTCDay() (0=domingo..6=sábado). Si las dos superficies
     // derivaran el día distinto, una ofrecería lo que la otra rechaza.
     const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
-    const { data: dayBlocks } = await supabase
+    const startMin = timeToMinutes(time)
+    // ── FAIL-CLOSED del backstop (CR-02, code review de la Phase 18) ────────────────────────────
+    // Este bloque decide un RECHAZO, así que todo lo que le impida decidir tiene que rechazar, no
+    // aceptar. Antes hacía lo contrario y por eso era bypasseable: un `date`/`time` que JavaScript
+    // no parsea —pero Postgres sí, como `'2031-3-3'` o `'10:00 AM'`— dejaba `dow`/`startMin` en NaN;
+    // `.eq('day_of_week', NaN)` hacía que PostgREST devolviera `22P02`, ese error se descartaba
+    // (solo se desestructuraba `data`), `dayBlocks` quedaba vacío ⇒ ninguna franja contenía el
+    // horario ⇒ la regla angosta ACEPTABA. El rechazo se salteaba cambiando dos caracteres del body.
+    //
+    // Se cierran los dos agujeros: (a) NaN en el día o la hora derivados, (b) error en cualquiera de
+    // las dos queries. En los dos casos el estado del mapeo es DESCONOCIDO, y sobre desconocido este
+    // backstop no puede afirmar que el servicio se da a esa hora.
+    //
+    // Redundante a propósito con el guard de forma del route handler público: ese cubre al endpoint
+    // de hoy, este cubre a cualquier caller que encienda el flag mañana. El costo de la redundancia
+    // son dos comparaciones; el costo de no tenerla ya se midió.
+    if (Number.isNaN(dow) || Number.isNaN(startMin)) {
+      return { ok: false, error: 'service_not_scheduled', status: 400 }
+    }
+    const { data: dayBlocks, error: dayBlocksErr } = await supabase
       .from('time_blocks')
       .select('id, start_time, end_time')
       .eq('business_id', business.id)
       .eq('day_of_week', dow)
     // Aislamiento por tenant EXPLÍCITO aunque el cliente pueda ser service-role (bypassa RLS): el
     // helper es puro y NO filtra por negocio (contrato D-16, el caller acota antes de llamar).
-    const { data: bridgeRows } = await supabase
+    const { data: bridgeRows, error: bridgeErr } = await supabase
       .from('time_block_services')
       .select('business_id, time_block_id, service_id')
       .eq('business_id', business.id)
+    if (dayBlocksErr || bridgeErr) {
+      console.error('[booking-core/service-window] query error:', dayBlocksErr ?? bridgeErr)
+      return { ok: false, error: 'service_not_scheduled', status: 400 }
+    }
     const allowed = isServiceAllowedAt(
       service.id as string, // el id RE-VALIDADO por business_id, nunca el serviceId del cliente
-      timeToMinutes(time),
+      startMin,
       (dayBlocks || []) as BlockWindow[],
       (bridgeRows || []) as TimeBlockService[],
     )

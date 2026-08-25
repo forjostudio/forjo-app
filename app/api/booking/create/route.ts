@@ -55,6 +55,39 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'missing_fields' }, { status: 400 })
   }
 
+  // ── Guard de FORMA de date/time (CR-02, hallazgo del code review de la Phase 18) ──────────────
+  // Hasta acá `date` y `time` solo estaban chequeados por "no vacío". Postgres es MÁS permisivo que
+  // JavaScript parseando estos valores, y de esa asimetría salía un bypass concreto: `'2031-3-3'`
+  // (sin zero-pad) es una fecha VÁLIDA para `::date` pero `new Date('2031-3-3T00:00:00Z')` es
+  // Invalid ⇒ el `dow` derivado quedaba NaN; e igual con `'10:00 AM'`, válido para `::time` pero
+  // NaN para `timeToMinutes`. Con esos NaN el backstop de ventana de servicio no encontraba franja
+  // y ACEPTABA, así que el rechazo `service_not_scheduled` se salteaba cambiando dos caracteres del
+  // body — mientras el turno se materializaba con la fecha/hora correctas.
+  //
+  // El guard vive ACÁ, en el borde, por dos razones: es el layer donde este repo valida forma de
+  // input (misma convención que `missing_fields`), y corre ANTES del insert de `clients`, así que
+  // un body forjado no deja filas huérfanas (el mismo Pitfall 3 que documenta el backstop de
+  // ventana de reserva unas líneas más abajo). El core ADEMÁS falla cerrado por su cuenta: los dos
+  // controles son deliberadamente redundantes — este cubre a todo el endpoint, aquél cubre a
+  // cualquier caller futuro que encienda el flag.
+  //
+  // Los formatos son exactamente los que emiten los dos clientes públicos: `format(date,
+  // 'yyyy-MM-dd')` y `minutesToTime()` (`HH:MM` con zero-pad). Se acepta `:SS` opcional porque es la
+  // forma en que Postgres devuelve `time` y con la que llaman otros consumidores internos.
+  // El round-trip contra `toISOString()` descarta las fechas bien formadas pero inexistentes
+  // (`2026-02-31`, que JavaScript rueda a marzo en silencio y Postgres rechaza recién en el insert).
+  const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : null
+  // `Number.isNaN(getTime())` ANTES del round-trip: sobre un Invalid Date `toISOString()` TIRA
+  // RangeError, y un throw acá sería un 500 en vez del 400 que corresponde.
+  const dateOk =
+    parsedDate !== null &&
+    !Number.isNaN(parsedDate.getTime()) &&
+    parsedDate.toISOString().slice(0, 10) === date
+  const timeOk = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(time)
+  if (!dateOk || !timeOk) {
+    return Response.json({ ok: false, error: 'bad_request' }, { status: 400 })
+  }
+
   const supabase = createAdminClient()
 
   // Negocio por slug (tenant). Solo columnas NO secretas: los secretos (resend_api_key,
