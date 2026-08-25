@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
-stopped_at: Phase 19 context gathered
-last_updated: "2026-08-25T22:28:04.325Z"
+stopped_at: Phase 19 UI-SPEC approved
+last_updated: "2026-08-25T22:50:55.072Z"
 last_activity: 2026-08-25
 progress:
   total_phases: 20
@@ -388,9 +388,9 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-25T22:28:03.507Z
-Stopped at: Phase 19 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/19-el-panel/19-CONTEXT.md
+Last session: 2026-08-25T22:50:54.984Z
+Stopped at: Phase 19 UI-SPEC approved
+Resume file: .planning/workstreams/motor-reservas/phases/19-el-panel/19-UI-SPEC.md
 
 ## Operator Next Steps
 
