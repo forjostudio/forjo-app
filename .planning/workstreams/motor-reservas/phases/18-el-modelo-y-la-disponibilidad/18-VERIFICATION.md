@@ -1,10 +1,17 @@
 ---
 phase: 18-el-modelo-y-la-disponibilidad
 verified: 2026-08-25T00:00:00Z
-status: human_needed
+status: passed
 score: 10/10 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+human_verification_resolved: 2026-08-25 — 18-UAT.md, 2/2 passed
+# Los dos ítems de abajo eran la razón del `human_needed`. Se ejecutaron y pasaron:
+#   Test 1 (OFRECE): verificado en el navegador por Franco contra el Supabase local, con una fila
+#     sembrada a mano en `time_block_services` (no hay UI hasta la Phase 19).
+#   Test 2 (ACEPTA): medido contra el server real — POST forjado → 400 `service_not_scheduled` con
+#     0 turnos; el mismo POST en franja comodín → 200. Salió además un hallazgo no previsto (la fila
+#     huérfana en `clients`, WR-03), que se cerró en la remediación del secure-phase (`db4eb5e`).
 human_verification:
   - test: "Escenario OFRECE/ACEPTA completo en el navegador contra el Supabase LOCAL (npm run dev): sembrar a mano una fila en public.time_block_services (una franja de la mañana mapeada a UN solo servicio S1), abrir /[slug], elegir el servicio S2 (NO mapeado) y confirmar que los horarios de esa franja NO aparecen en el picker; volver, elegir S1, confirmar que SÍ aparecen todos; borrar la fila y recargar, confirmar que todo vuelve a aparecer para ambos servicios."
     expected: "El picker público oculta visualmente los horarios de la franja mapeada solo para el servicio no cubierto, los muestra para el cubierto, y todo vuelve al estado de hoy al borrar la fila (comodín)."
@@ -18,7 +25,7 @@ human_verification:
 
 **Phase Goal:** Que una franja horaria pueda declarar QUÉ servicios se dan en ella, y que la disponibilidad pública lo respete — vía tabla puente con la regla del comodín, un helper puro con tests, y `/api/booking/availability` + el backstop del `create` consumiéndolo.
 **Verified:** 2026-08-25
-**Status:** human_needed
+**Status:** passed (los 2 ítems de verificación humana se cerraron en la UAT — ver abajo)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
