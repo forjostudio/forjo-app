@@ -27,11 +27,38 @@ updated: 2026-08-20
 ## Current Test
 
 number: —
-name: FASE COMPLETA — 4 rondas de UAT, 4 gaps encontrados y cerrados
+name: FASE CERRADA — 5 rondas de UAT
 expected: |
-  22 tests · 21 pass · 4 issues, los CUATRO cerrados y re-verificados por un humano.
-  10/10 planes ejecutados. Sin migración, sin cambios en el motor.
-awaiting: nothing — listo para secure-phase y code-review
+  23 tests · 19 pass · 4 issues, los CUATRO cerrados y re-verificados. Más CR-01 del code review,
+  cerrado y verificado visualmente en la ronda 5.
+awaiting: nothing — la fase está lista para cerrar
+
+## Ronda 5 — CR-01 del code review (2026-08-24)
+
+El code review encontró que el panel contaba la ocupación por `service_id` y el motor por **agenda**
+(`COALESCE(professional_id, centinela)`), sin `service_id` — **ejes ortogonales**. Coincidían sólo con
+un profesional y un servicio grupal, que era exactamente lo que tenía el fixture de las rondas 1-4.
+
+Para probarlo hubo que **extender el fixture**: se creó una segunda profesional (`Lucia`) y se partió
+`Yoga grupal` en dos agendas.
+
+### R5-1. La misma clase en dos agendas se separa y se identifica
+expected: |
+  375px · `/agenda`, vie 28, 09:00. TRES filas, no dos:
+  · `09:00 Yoga grupal` / `Lucia` → `2/6` (neutro)
+  · `09:00 Yoga grupal` / `Ana` → `3/6 · 1 sin seña` (ámbar)
+  · `09:00 Pilates refor…` → `1/4`, SIN nombre de agenda (está sola en la suya)
+  Cada fila de Yoga lleva el nombre de su agenda para que no se lean como duplicadas.
+  NEGATIVO: el roster de la fila de Ana lista a Ana/Bruno/Carla y NO a Elena ni Fabio.
+result: pass
+notes: |
+  **CR-01 cerrado y verificado visualmente.** Antes del fix esto era UNA fila `5/6` — sumando las dos
+  agendas—, diciendo que quedaba un lugar cuando el motor tenía 3 libres en una agenda y 4 en la otra.
+  El nombre de la agenda aparece SOLO cuando `agendaAmbiguous` (misma clase en dos buckets): Pilates,
+  sola en la suya, no lo muestra. Con una sola agenda —todo lo que ejercitaron las rondas 1-4— la fila
+  renderiza idéntica a antes.
+  Efecto lateral esperado del mismo fix, visible sin sembrar nada: cuando dos servicios comparten
+  agenda y hora, ambos muestran el conteo COMBINADO del bucket, que es lo que el motor decide.
 
 ## Ronda 4 — cierre de G-04 (2026-08-24)
 
@@ -333,16 +360,20 @@ ronda_1: 10 tests — 7 pass · 3 issues (G-01, G-02+G-02b, G-03)
 ronda_2: 5 tests — 5 pass · los tres gaps de la ronda 1 CERRADOS
 ronda_3: 3 tests — 2 pass · 1 issue (G-04, alta)
 ronda_4: 4 tests — 4 pass · G-04 CERRADO + 3 re-verificaciones
+ronda_5: 1 test  — 1 pass · CR-01 del code review CERRADO
 
-total: 22
-passed: 18
+total: 23
+passed: 19
 issues: 4
 pending: 0
 skipped: 0
 
-**Los 4 gaps encontrados están cerrados y re-verificados por el dueño.** Ninguno fue de lógica: los
-cuatro fueron de composición a 375px, y dos de ellos (G-03 y G-04) son invisibles para `tsc`, para la
-suite y para cualquier agente sin navegador. G-04 además **no se reproduce con mouse**.
+**Los 4 gaps de UAT y el crítico del code review están cerrados y verificados por el dueño en el
+navegador.** Ninguno de los 4 gaps fue de lógica — los cuatro fueron composición a 375px, y dos (G-03,
+G-04) son invisibles para `tsc`, para la suite y para cualquier agente sin navegador. G-04 además **no
+se reproduce con mouse**. El crítico (CR-01) sí era de lógica, y lo encontró el code review, no la
+UAT — porque el fixture de las cuatro primeras rondas tenía **un solo profesional**, el único caso
+donde los dos ejes de conteo coinciden.
 
 ## Gaps
 
