@@ -239,6 +239,26 @@ export async function seedProfessionalService(seeded: SeededTenant, args: { prof
   if (ins.error) throw new Error(`seed: insert professional_service falló: ${ins.error?.message}`)
 }
 
+// seedTimeBlockService: mapea una franja horaria a un service en `time_block_services` (puente de la
+// migr. 071, todas las columnas NOT NULL, PK compuesta (time_block_id, service_id)). Molde EXACTO de
+// su hermana `seedProfessionalService`: service-role insert, sin retorno (la PK no es un id
+// sintético), throw con mensaje contextualizado si el insert falla. El teardown por CASCADE de
+// business ya borra estas filas (la FK business_id es ON DELETE CASCADE), así que no hace falta
+// limpiarlas a mano en el afterAll — sí en el afterEach si el caso siguiente necesita el estado
+// comodín.
+//
+// ⚠ Sembrar UNA SOLA fila cambia el MODO de esa franja: pasa de COMODÍN (0 filas ⇒ sirve para todos
+// los servicios, D-01) a MAPEO EXPLÍCITO (≥1 fila ⇒ sirve exactamente los servicios mapeados). Y ese
+// cambio de modo es justamente lo único que estos tests pueden medir: con la puente vacía el
+// comportamiento es el de HOY (D-02, la cero regresión es por construcción), así que un caso sin
+// filas no prueba que la regla esté implementada — sólo prueba que no rompió nada.
+export async function seedTimeBlockService(seeded: SeededTenant, args: { timeBlockId: string; serviceId: string }): Promise<void> {
+  const ins = await seeded.admin
+    .from('time_block_services')
+    .insert({ business_id: seeded.businessId, time_block_id: args.timeBlockId, service_id: args.serviceId })
+  if (ins.error) throw new Error(`seed: insert time_block_service falló: ${ins.error?.message}`)
+}
+
 // seedSimultaneousService: pone el service YA sembrado por seedOneTenant en modo RECURSO SIMULTÁNEO
 // (migr. 062): `capacity_mode = 'simultaneous_resource'` + `capacity = N`. Molde de seedProfessionalService
 // (service-role, sin retorno, throw en error), pero con UPDATE en vez de INSERT porque el service ya
