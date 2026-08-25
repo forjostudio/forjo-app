@@ -171,6 +171,18 @@ export interface ProfessionalService {
   service_id: string
 }
 
+// Puente franja↔servicio (migración 071). Declara QUÉ servicios se dan en cada franja horaria, el
+// dato que `time_blocks` no tenía (sólo declara el CUÁNDO). Las tres columnas son NOT NULL FK en la
+// DB, PK (time_block_id, service_id). Regla del comodín (D-01): una franja SIN filas en esta puente
+// sirve para TODOS los servicios — y como el día de la migración no hay ni una fila, ningún negocio
+// cambia de comportamiento (D-02). La regla vive en lib/time-block-services, nunca en la DB.
+// Campos snake_case espejo de la fila DB (convención del repo: la capa TS no renombra a camelCase).
+export interface TimeBlockService {
+  business_id: string
+  time_block_id: string
+  service_id: string
+}
+
 // Cancha pública (vista acotada `public_canchas`, migr. 044). Forma que ve el anon en el
 // booking público de canchas: `id` = professional_id de la agenda-cancha; `price`/`duration_minutes`
 // salen del service 1:1 de la cancha (D-03). NUNCA expone `service_id` (vive solo en JOIN+WHERE).
