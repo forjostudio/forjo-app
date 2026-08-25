@@ -1,43 +1,59 @@
 ---
-status: testing
+status: complete
 phase: 18-el-modelo-y-la-disponibilidad
 source: [18-VERIFICATION.md]
 started: 2026-08-25T00:00:00Z
-updated: 2026-08-25T00:00:00Z
+updated: 2026-08-25T14:50:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: Escenario OFRECE en el navegador — el picker público oculta los horarios de la franja que no da el servicio
-expected: |
-  Con `npm run dev` contra el Supabase LOCAL y una fila sembrada a mano en `public.time_block_services`
-  (una franja de la mañana mapeada a UN solo servicio S1):
-  - Abrir `/[slug]`, elegir el servicio **S2** (NO mapeado) → los horarios de esa franja NO aparecen en el picker.
-  - Volver, elegir **S1** → SÍ aparecen todos.
-  - Borrar la fila y recargar → todo vuelve a aparecer para ambos servicios (comodín = estado de hoy).
-awaiting: user response
+[testing complete]
 
 ## Tests
 
-### 1. Escenario OFRECE en el navegador — el picker público oculta los horarios de la franja que no da el servicio
-expected: El picker público oculta visualmente los horarios de la franja mapeada solo para el servicio no cubierto, los muestra para el cubierto, y todo vuelve al estado de hoy al borrar la fila (comodín).
-result: [pending]
+### 1. El picker público oculta los horarios de la franja que no da el servicio
+expected: En `/negocio-prueba`, lunes 31/08 — "Color" (no mapeado) NO muestra los horarios de 08:00 a 12:30 y SÍ los de 14:00 a 19:30; "Corte" (mapeado a la franja de la mañana) los muestra todos; y cualquier otro día muestra todo para los dos servicios (comodín).
+verificado_por_api: |
+  GET /api/booking/availability?slug=negocio-prueba&date=2026-08-31&serviceId=<Color> → full: ["08:00".."12:30"]
+  GET ... serviceId=<Corte>                                                          → full: []
+  GET ...date=2026-09-01 (martes, comodín), ambos servicios                          → full: []
+result: pass
 
-### 2. Escenario ACEPTA — POST forjado a /api/booking/create contra el server real
-expected: Un POST (curl o consola del navegador) pidiendo S2 en un horario de la franja mapeada a S1, con la fila de la puente puesta, responde **400 `service_not_scheduled`** y no crea ningún turno. El dueño, en cambio, puede seguir cargando a mano una excepción de S2 en esa misma franja desde su panel (el alta manual sigue sin validar horario — exención deliberada D-04).
-result: [pending]
+### 2. POST forjado a /api/booking/create contra el server real
+expected: Un POST pidiendo "Color" el lunes 31/08 a las 10:00 (dentro de la franja que solo da "Corte") responde **400 `service_not_scheduled`** y no crea ningún turno — aunque el picker nunca lo haya ofrecido. El mismo POST a las 15:00 (franja comodín) SÍ crea el turno. El dueño, en cambio, puede seguir cargando a mano una excepción de "Color" a las 10:00 desde su panel (el alta manual sigue sin validar horario — exención deliberada D-04).
+medido_contra_server_real: |
+  POST /api/booking/create  {"serviceId": Color, "date":"2026-08-31","time":"10:00"}
+    → HTTP 400  {"ok":false,"error":"service_not_scheduled"}   · turnos en ese horario: 0
+  POST /api/booking/create  {"serviceId": Color, "date":"2026-08-31","time":"15:00"}
+    → HTTP 200  {"ok":true,"appointmentId":"621c6944-…"}       · turno creado (control negativo)
+  Exención del alta manual: NO se clickeó en el panel. Evidencia automatizada —
+  caso 2 de `booking-service-window-backstop` (core sin el flag, mismo pedido, lo crea)
+  + `git diff` vacío sobre `appointments/create/route.ts` y `lib/abono-generation.ts`.
+result: pass
 
 ## Summary
 
 total: 2
-passed: 0
+passed: 2
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
+
+[ninguno — los 2 tests pasaron]
+
+## Hallazgos colaterales (no son gaps de esta UAT; van a secure-phase)
+
+- **WR-03 CONFIRMADO POR MEDICIÓN.** El POST rechazado del Test 2 caso 1 dejó una fila
+  huérfana en `clients` (`__uat_forjado`, 0 turnos). El insert de `clients` corre ANTES
+  del core en `app/api/booking/create/route.ts`, así que **toda** request rechazada por
+  el backstop `service_not_scheduled` ensucia la lista de clientes que el dueño ve en su
+  panel — y el endpoint es público y anónimo. El code review lo había marcado como
+  advertencia teórica; acá pasó a medido. Las filas de la prueba se borraron.
+  (El guard de forma de CR-02 sí corre antes del insert de `clients`; este camino, no.)
 
 ## Cómo sembrar la fila (no hay UI hasta la Phase 19)
 
