@@ -1,16 +1,18 @@
 ---
-status: open_threats
+status: verified
 phase: 18-el-modelo-y-la-disponibilidad
 workstream: motor-reservas
 milestone: v0.28
 asvs_level: 2
 block_on: high
 threats_total: 37
-threats_closed: 24
-threats_accepted: 5
-threats_open: 8
+threats_closed: 30
+threats_accepted: 7
+threats_open: 0
 audited: 2026-08-25
+remediated: 2026-08-25
 audit_base: 2474791..HEAD (d179206)
+remediation_base: db4eb5e
 ---
 
 # Phase 18 — Auditoría de seguridad
@@ -421,6 +423,7 @@ la fase). Los cinco últimos los **propone esta auditoría** y necesitan un OK e
 | Fecha | Total | Cerradas | Aceptadas | Abiertas | Ejecutado por |
 |---|---|---|---|---|---|
 | 2026-08-25 | 37 | 24 | 5 (+6 ya aceptadas por plan, contadas en cerradas) | 8 | Claude (gsd-security-auditor) |
+| 2026-08-25 (remediación) | 37 | 30 | 7 | **0** | Claude (orquestador), alcance decidido por Franco |
 
 Método: verificación **por instalación** contra el Postgres local (contenedor
 `supabase_db_forjo-app`, PG17, migr. 071/072 aplicadas) y **por HTTP real** contra `npm run dev`.
@@ -429,16 +432,57 @@ por la auditoría (`__audit_sec18*`) se borraron y los grants tocados se restaur
 `clients` = 2, `appointments` = 0, `service_role` con sus privilegios originales). **Ningún archivo
 de implementación fue modificado.**
 
+
+### Remediación 2026-08-25 — commit `db4eb5e` (migr. 073 + 3 archivos de código + 2 de tests)
+
+Alcance decidido por el dueño: **cerrar con código** R-01, RA-07, WR-01, WR-02, WR-03 y WR-05;
+**aceptar** WR-04 y WR-07. Cada cierre se verificó por instalación o con mordida (control negativo),
+nunca por lectura del diff.
+
+| ID | Cómo se cerró | Evidencia medida |
+|---|---|---|
+| **T-18-06** | **Cierre por la vía (a)**: verificación contra PRODUCCIÓN antes de deployar el código. Además WR-01 ahora deja log cuando la lectura falla, así que el síntoma deja de ser mudo | `GET https://tpvbjwqzskzkevepcwyb.supabase.co/rest/v1/time_block_services?select=business_id&limit=1` con la anon key → **HTTP 200 `[]`** (no `PGRST205`) ⇒ PostgREST en prod YA tiene la tabla en su cache. Ídem `public_time_block_services` → **200 `[]`**. Y el código **no estaba deployado** (18 commits sin pushear), o sea que la ventana de riesgo nunca se abrió: la migración entró primero, que es el orden correcto |
+| **R-01** | Migr. **073**: `ALTER DEFAULT PRIVILEGES FOR ROLE postgres … REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLES FROM anon`. Para `supabase_admin` se intenta dentro de un bloque que degrada a `NOTICE` (`postgres` no es miembro ⇒ 42501; el creador efectivo del proyecto es `postgres`: CLI + editor SQL) | `pg_default_acl` pasó de `anon=arwdDxtm` a `anon=rxtm`. Control REAL: `CREATE VIEW` en transacción → grants heredados por `anon` = **`REFERENCES,SELECT,TRIGGER`** (antes: `DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE`). La Phase 20 ya no puede reabrir CR-01 por olvido |
+| **RA-07 → cerrado** | Migr. 073: `REVOKE TRUNCATE … FROM anon, authenticated`, sobre lo existente y por default. Se decidió **cerrarlo en vez de aceptarlo**: costaba cero y es la única escritura que la RLS no frena | `SET LOCAL ROLE anon; TRUNCATE public.time_block_services` → **`ERROR: permission denied for table`** (antes funcionaba) |
+| **WR-02** | Migr. 073: `UNIQUE (id, business_id)` en `services` y `time_blocks` + FK **compuestas** `tbs_block_same_tenant` / `tbs_service_same_tenant`. Declarativo a propósito: rechaza la BASE, no el predicado de una policy que alguien tenga que recordar | Como `postgres`, o sea salteando la RLS por completo: variante bloque ajeno → `violates foreign key constraint "tbs_block_same_tenant"`; variante servicio ajeno → `"tbs_service_same_tenant"`. **Control positivo**: la fila del mismo tenant sigue entrando |
+| **WR-03** | Dos medidas en `app/api/booking/create/route.ts`: (1) el insert de `clients` se bajó hasta después de todos los rechazos que se pueden decidir sin él —forma de date/time, plan, ventana de reserva, reCAPTCHA y la derivación de canchas con su `invalid_service`—; (2) lo que rechaza el core se limpia, acotado a `client.id` + `business_id`. NO se barren "clientes sin turnos" en general: el alta manual del dueño los crea de forma legítima | Casos **10 y 11** de `booking-service-window-backstop`. El 10 hace **3** rechazos seguidos (el bug escalaba linealmente) y asierta **0** filas. El 11 es el control positivo: el turno que SÍ entra conserva su cliente — sin él, "borrar siempre" pasaría el 10. Mordida: desactivando la limpieza cae **sólo** el 10 |
+| **WR-01** | `availability/route.ts` desestructura `error` en sus dos queries y loguea antes del fallback. **La degradación se mantiene a propósito**: acá el fail-safe correcto es el opuesto al del `create` —ofrecer de más, con el backstop como autoridad— antes que apagarle la agenda a todos | Es justamente el síntoma de la 071 aplicada sin `NOTIFY pgrst`; sin log era indistinguible de "el negocio todavía no configuró nada" |
+| **WR-05** | **7 casos nuevos** en `test/isolation.test.ts` —el archivo que existía para esto y no tocaba la tabla nueva, razón por la cual CR-01 pasó con todo en verde—: escritura y borrado anónimo por la vista, escritura anónima en la tabla base, lectura pública que SÍ debe funcionar (D-05), cross-READ, cross-WRITE, WR-02 y el happy path | 21 passed. **Mordida**: re-abriendo el `GRANT ALL` en la vista y soltando las dos FK compuestas caen **exactamente** los 3 de regresión (CR-01 escritura, CR-01 borrado, WR-02) |
+
+**Gate tras la remediación:** `tsc --noEmit` 0 · `npm run build` 0 · suite completa
+**77 archivos / 1013 passed** (`--no-file-parallelism`; en paralelo hay flakiness PRE-EXISTENTE de
+infra contra la DB local, no regresión).
+
+⚠ **La migr. 073 NO está aplicada a producción.** Las 071 y 072 sí (a mano, 2026-08-25). Aplicar la
+073 junto con el deploy del código.
+
+⚠ `supabase/schema.sql` se actualizó de forma **quirúrgica**, no regenerando: el dump local completo
+borraría `pg_net` (está en prod y no en las migraciones locales). Queda anotado el **drift
+preexistente** — `app_settings`, `landing_content` y `landing_leads` nunca entraron al `schema.sql`
+commiteado. No es de esta fase; merece una pasada dedicada.
+
 ---
 
 ## 9. Sign-Off
 
 - [x] Todas las amenazas tienen disposición (mitigate / accept / transfer)
-- [x] Riesgos aceptados registrados en §5
-- [ ] `threats_open: 0` — **NO**: quedan 8 abiertas (T-18-06, WR-01, WR-02, WR-03, WR-04, WR-05, WR-07, R-01)
-- [ ] 5 riesgos aceptados propuestos por la auditoría esperan OK del dueño (RA-07…RA-11)
-- [ ] `status: verified` en el frontmatter
+- [x] Riesgos aceptados registrados en §5 y acá abajo
+- [x] `threats_open: 0` — las 8 que quedaban se resolvieron: **6 cerradas con código**
+  (T-18-06, R-01, WR-01, WR-02, WR-03, WR-05) y **2 aceptadas** (WR-04, WR-07)
+- [x] Riesgos aceptados propuestos por la auditoría, resueltos por el dueño: **RA-07 se cerró con
+  código** en vez de aceptarse (costaba cero); **RA-08, RA-09, RA-10 y RA-11 se aceptan**
+- [x] `status: verified` en el frontmatter
 
-**Aprobación:** pendiente. Bloqueante para shippear, en este orden: **T-18-06** (§4.1, caída total del
-booking en la ventana de deploy) y **WR-03** (§4.2, escritura anónima de datos personales sin
-límite). El resto puede cerrarse como riesgo aceptado con justificación escrita.
+### Aceptaciones explícitas de esta ronda
+
+| ID | Justificación | Aceptado por | Fecha |
+|---|---|---|---|
+| **WR-04** | La regla es ciega a `location_id`: en un negocio multi-sede, una franja de la sede A que da "corte" autoriza un corte en la sede B. **Medido: 0 negocios con más de una sede**, así que la regresión no está viva. Es el caveat que pisa el primer tenant multi-sede el día 1 de la Phase 19 — que es donde corresponde propagar `location_id` al helper, junto con la UI que lo vuelve configurable | Franco | 2026-08-25 |
+| **WR-07** | `service_not_scheduled` no tiene copy en el cliente (cae en "Error al confirmar. Intentá de nuevo."). Sólo se vuelve alcanzable cuando exista la primera fila de mapeo, y eso requiere la UI de la **Phase 19**. La copy ya está asignada a **AGENDA-07 (Phase 20)**. Se acepta con la condición de que la Phase 19 no se dé por cerrada sin ella, porque ahí sí queda alcanzable | Franco | 2026-08-25 |
+| **RA-08** | `toMinutes` y la fórmula de la grilla duplicadas (3 y 6 copias). Riesgo de divergencia futura, no divergencia actual (medido: server y cliente coinciden hoy) | Franco | 2026-08-25 |
+| **RA-09** | `isServiceScheduled` sin consumidor hasta la Phase 19 (dead code temporal, sin superficie) | Franco | 2026-08-25 |
+| **RA-10** | La contención mira sólo el minuto de INICIO: un servicio largo puede invadir la franja siguiente que no lo da. `startTimesOf` nunca ofrece ese inicio, así que OFRECE y ACEPTA divergen sólo en la cola | Franco | 2026-08-25 |
+| **RA-11** | `notOffered` se calcula antes del early-return de `any_professional_unsupported`: una lectura descartada. Costo, no riesgo | Franco | 2026-08-25 |
+
+**Aprobación:** ✅ **SECURED.** `threats_open: 0`. Pendiente operativo, no de código: aplicar la
+**migr. 073** a producción junto con el deploy (las 071 y 072 ya están).
