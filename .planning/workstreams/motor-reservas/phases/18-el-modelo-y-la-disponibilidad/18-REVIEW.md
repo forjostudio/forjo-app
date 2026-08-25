@@ -20,6 +20,10 @@ findings:
   warning: 7
   info: 3
   total: 12
+resolved:
+  critical: 2
+  warning: 0
+  info: 0
 status: issues_found
 ---
 
@@ -59,6 +63,25 @@ El resto son gaps de robustez y cobertura: errores de query silenciados también
 la RLS sin coherencia de tenant entre las tres FK, filas `clients` huérfanas por el nuevo rechazo,
 la regla ciega a `location_id`, y cero test de aislamiento cross-tenant para la tabla nueva — que es
 exactamente el test que habría detectado CR-01.
+
+## Resolución (aplicada 2026-08-25, post-review)
+
+Los **dos critical están cerrados y verificados**. Los 7 warnings y los 3 info siguen ABIERTOS y
+quedan para `/gsd:secure-phase 18`.
+
+| # | Estado | Commit | Verificación |
+|---|--------|--------|--------------|
+| CR-01 | ✅ cerrado | `b42cbc6` | Migr. **072**: `REVOKE ALL` + `GRANT SELECT` para `anon`/`authenticated` en las **seis** vistas `public_*` (no solo la nueva — el molde venía roto desde la migr. 059). Verificado por instalación tras `db reset`: los 12 grants quedan en `SELECT` y nada más, los tres ataques rebotan con `permission denied for view`, y la lectura anónima sigue devolviendo sus filas. |
+| CR-02 | ✅ cerrado | `04ad10b` | Dos capas: guard de FORMA de `date`/`time` en el route handler público (regex + round-trip contra `toISOString()`, antes del insert de `clients`) → 400 `bad_request`; y fail-closed propio del core (NaN en `dow`/`startMin`, o error en cualquiera de las dos queries) → `service_not_scheduled`. 4 casos nuevos (6-9) en `booking-service-window-backstop`. Control negativo: desactivando los tres guards caen **exactamente** esos 4 y ninguno de los 5 originales. |
+
+**Alcance de CR-01 más ancho que el reportado.** El review verificó dos vistas; midiendo
+`information_schema.views` resultaron **cinco de seis** auto-actualizables, y **cuatro de esas cinco
+ya están en producción**. El ataque, como rol `anon` y sin sesión, en transacción revertida:
+`DELETE FROM public_services` borró los 4 servicios de TODOS los tenants y `DELETE FROM
+public_businesses` los 6 negocios. No lo introdujo la Phase 18: la migr. 071 copió un molde roto.
+
+⚠ **Pendiente operativo:** aplicar la **072** a producción a mano cuanto antes, independientemente
+del deploy de la Phase 18. La **071** sigue sin aplicarse (prod está en la 070).
 
 ## Critical Issues
 
