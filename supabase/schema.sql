@@ -4098,14 +4098,14 @@ GRANT ALL ON TABLE "public"."professionals" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."public_businesses" TO "anon";
-GRANT ALL ON TABLE "public"."public_businesses" TO "authenticated";
+GRANT SELECT ON TABLE "public"."public_businesses" TO "anon";
+GRANT SELECT ON TABLE "public"."public_businesses" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_businesses" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."public_professionals" TO "anon";
-GRANT ALL ON TABLE "public"."public_professionals" TO "authenticated";
+GRANT SELECT ON TABLE "public"."public_professionals" TO "anon";
+GRANT SELECT ON TABLE "public"."public_professionals" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_professionals" TO "service_role";
 
 
@@ -4116,26 +4116,26 @@ GRANT ALL ON TABLE "public"."services" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."public_services" TO "anon";
-GRANT ALL ON TABLE "public"."public_services" TO "authenticated";
+GRANT SELECT ON TABLE "public"."public_services" TO "anon";
+GRANT SELECT ON TABLE "public"."public_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_services" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."public_canchas" TO "anon";
-GRANT ALL ON TABLE "public"."public_canchas" TO "authenticated";
+GRANT SELECT ON TABLE "public"."public_canchas" TO "anon";
+GRANT SELECT ON TABLE "public"."public_canchas" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_canchas" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."public_professional_services" TO "anon";
-GRANT ALL ON TABLE "public"."public_professional_services" TO "authenticated";
+GRANT SELECT ON TABLE "public"."public_professional_services" TO "anon";
+GRANT SELECT ON TABLE "public"."public_professional_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_professional_services" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."public_time_block_services" TO "anon";
-GRANT ALL ON TABLE "public"."public_time_block_services" TO "authenticated";
+GRANT SELECT ON TABLE "public"."public_time_block_services" TO "anon";
+GRANT SELECT ON TABLE "public"."public_time_block_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_time_block_services" TO "service_role";
 
 

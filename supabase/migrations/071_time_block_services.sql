@@ -153,6 +153,14 @@ ALTER VIEW "public"."public_time_block_services" OWNER TO "postgres";
 
 -- GRANT (mismo patrón que public_professional_services/public_canchas: GRANT ALL a los 3 roles, para
 -- no divergir del repo; el anon solo lee de hecho, la vista no tiene otra operación posible).
+--
+-- ⚠ CORRECCIÓN (migr. 072): la última afirmación de arriba es FALSA y quedó acá tal como se escribió
+-- para no reescribir la historia. Esta vista es SIMPLE sobre una sola tabla ⇒ Postgres la considera
+-- **auto-actualizable**, así que `GRANT ALL` a `anon` sí habilita INSERT/UPDATE/DELETE — y como la
+-- vista es DEFINER (owner postgres, sin `security_invoker`), esas escrituras saltean la RLS de la
+-- tabla base. El molde venía roto desde la migr. 059 y las seis vistas `public_*` lo heredaron.
+-- La migr. **072** deja a las seis en SELECT-only para anon/authenticated. NO copiar este bloque
+-- de GRANT como molde: usar `GRANT SELECT`.
 GRANT ALL ON TABLE "public"."public_time_block_services" TO "anon";
 GRANT ALL ON TABLE "public"."public_time_block_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_time_block_services" TO "service_role";
