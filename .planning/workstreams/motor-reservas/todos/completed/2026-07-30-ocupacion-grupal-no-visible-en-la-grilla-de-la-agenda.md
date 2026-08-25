@@ -1,4 +1,7 @@
 ---
+status: completed
+completed: 2026-08-24
+closed_by: v0.27 Phase 17
 created: 2026-07-30T00:00:00.000Z
 title: "La ocupación de una clase grupal no se ve en la grilla, solo al abrir el turno"
 area: frontend

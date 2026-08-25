@@ -1,4 +1,7 @@
 ---
+status: completed
+completed: 2026-08-24
+closed_by: v0.27 Phase 17
 created: 2026-08-16T00:00:00.000Z
 title: "Editor de servicios: el input de cupo no se puede borrar, y el alta necesita un botón Guardar"
 area: ux

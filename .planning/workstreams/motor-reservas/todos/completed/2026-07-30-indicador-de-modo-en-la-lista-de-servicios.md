@@ -1,4 +1,7 @@
 ---
+status: completed
+completed: 2026-08-24
+closed_by: v0.27 Phase 17
 created: 2026-07-30T00:00:00.000Z
 title: "Indicador de modo de cupo en la lista de servicios"
 area: frontend

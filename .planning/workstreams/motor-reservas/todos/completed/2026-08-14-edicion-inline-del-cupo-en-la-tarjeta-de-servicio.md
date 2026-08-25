@@ -1,4 +1,7 @@
 ---
+status: completed
+completed: 2026-08-24
+closed_by: v0.27 Phase 17
 created: 2026-08-14T00:00:00.000Z
 title: "Edición inline del cupo en la tarjeta de servicio (+/− y guardar, sin abrir el modal)"
 area: ux
