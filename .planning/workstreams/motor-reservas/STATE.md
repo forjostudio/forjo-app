@@ -4,8 +4,8 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
 stopped_at: Completed 17-10-PLAN.md
-last_updated: "2026-08-25T13:03:14.561Z"
-last_activity: 2026-08-25 -- Phase 18 execution started
+last_updated: "2026-08-25T18:01:25.987Z"
+last_activity: 2026-08-25
 progress:
   total_phases: 20
   completed_phases: 18
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 18 (el-modelo-y-la-disponibilidad) — EXECUTING
-Plan: 4 of 4
+Phase: 19
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-08-25 -- Phase 18 execution started
+Last activity: 2026-08-25
 
 ## Milestone v0.28 — decisiones LOCKED
 
@@ -101,6 +101,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | 14 | 9 | - | - |
 | 15 | 5 | - | - |
 | 16 | 2 | - | - |
+| 18 | 4 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
