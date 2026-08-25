@@ -67,8 +67,30 @@ llega el cliente. Es exactamente el patrón que el repo ya exige para el tenant 
 entidad que llega del cliente, nunca confiar en el ID*— y exactamente el agujero que este workstream
 tiene abierto con `book_slot_atomic` (ver "Noted for Later").
 
-**El lugar existe y está probado:** `booking-core.ts:201` ya valida que el turno caiga en la ventana de
-un bloque. La regla nueva se suma ahí, no en un lugar nuevo.
+⚠⚠ **CORRECCIÓN (pattern-mapper, 2026-08-24) — esta decisión se escribió sobre una premisa FALSA.**
+Yo afirmé que *"`booking-core.ts:201` ya valida que el turno caiga en la ventana de un bloque"*.
+**No la valida.** Esa línea es un **comentario histórico sobre el cupo**; en ese archivo **no hay hoy
+ninguna validación de `day_of_week` ni de ventana**. El backstop de D-04 es trabajo **nuevo, sin
+analog**, y hay que presupuestarlo como tal.
+
+⚠⚠ **Y hay algo peor, que cambia la forma del fix:** `createAppointmentCore` tiene **TRES** llamadores
+(verificado):
+
+| Llamador | ¿La regla aplica? |
+|---|---|
+| `app/api/booking/create/route.ts:158` — booking público | **SÍ** |
+| `app/api/appointments/create/route.ts:82` — alta manual del dueño | **NO** (no valida horario a propósito) |
+| `lib/abono-generation.ts:196` — generación de abonos | **NO** (su D-06′, razonado en el código) |
+
+Meter la regla adentro del core **sin gatearla** rompería **DOS exenciones deliberadas**, no una.
+
+**El mecanismo correcto ya existe en el mismo archivo:** `requireDeposit` y `autoAssign` son flags
+opcionales de `CreateAppointmentInput` (líneas 32-58, defaults 107-109) que hacen exactamente esto —
+un comportamiento que solo se activa para el caller que lo pide. **La regla nueva sigue ese molde: un
+flag más, default apagado**, y solo el booking público lo enciende.
+
+Eso además invierte el fail-safe hacia el lado seguro: si un caller nuevo aparece y nadie se acuerda de
+encender el flag, hereda el comportamiento de hoy en vez de romperse.
 
 **Descartado:** un trigger o constraint en la base. Sería la garantía más fuerte —valdría incluso
 contra el agujero de `anon`— pero es un gate nuevo sobre `appointments`, la tabla que sostiene canchas,
