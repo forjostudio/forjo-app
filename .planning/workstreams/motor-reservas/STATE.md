@@ -4,13 +4,13 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
 stopped_at: Completed 17-10-PLAN.md
-last_updated: "2026-08-25T12:28:43.685Z"
+last_updated: "2026-08-25T12:40:20.102Z"
 last_activity: 2026-08-25 -- Phase 18 execution started
 progress:
   total_phases: 20
   completed_phases: 17
   total_plans: 92
-  completed_plans: 90
+  completed_plans: 91
   percent: 85
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 18 (el-modelo-y-la-disponibilidad) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-08-25 -- Phase 18 execution started
 
@@ -154,6 +154,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 17 P10 | 28 min | 2 tasks | 1 files |
 | Phase 18 P01 | 22min | 2 tasks | 2 files |
 | Phase 18 P02 | 18min | 2 tasks | 3 files |
+| Phase 18 P03 | 22min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -308,6 +309,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 18-02: blocksForService va generica sobre {id} y no atada a TimeBlock — evita el cast mentiroso que el molde staff-services paga en availability/route.ts
 - [Phase ?]: 18-02: startTimesNotOffered NO lleva atajo bridge.length===0 — el resultado vacio con la puente vacia emerge de la regla del comodin; el atajo habria vuelto tautologico un control negativo
 - [Phase ?]: 18-02: el helper NO filtra por business_id (contrato D-16, T-18-07); el aislamiento vive en la RLS de la 071 y en las queries de los consumidores
+- [Phase 18]: 18-03: la regla de la agenda por servicio se SUMA a full (nunca filtra los bloques) y se calcula una sola vez antes de las tres ramas del endpoint de disponibilidad
+- [Phase 18]: 18-03: un caso de test que asierta ausencia no puede contar como RED esperado — su mordida se demuestra contra la implementacion ingenua, no contra el estado previo
 
 ### Pending Todos
 
@@ -382,7 +385,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-25T12:28:22.672Z
+Last session: 2026-08-25T12:39:44.824Z
 Stopped at: Completed 17-10-PLAN.md
 Resume file: None
 

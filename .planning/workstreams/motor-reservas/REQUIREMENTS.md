@@ -62,7 +62,7 @@ natural es que también declare **qué**.
 - [x] **AGENDA-02** — La regla del comodín vive en **un helper puro** con tests, nunca reimplementada
       en cada consumidor. Molde exacto: `lib/staff-services.ts`.
 
-- [ ] **AGENDA-03** — `/api/booking/availability` respeta la regla: pedir horarios para un servicio
+- [x] **AGENDA-03** — `/api/booking/availability` respeta la regla: pedir horarios para un servicio
       devuelve **solo** las franjas donde ese servicio se da (más todas las de comodín). El endpoint ya
       recibe `serviceId` desde v0.27 (15-04).
 
@@ -104,7 +104,7 @@ natural es que también declare **qué**.
 |-----|------|--------|
 | AGENDA-01 | Phase 18 | Complete |
 | AGENDA-02 | Phase 18 | Complete |
-| AGENDA-03 | Phase 18 | Pending |
+| AGENDA-03 | Phase 18 | Complete |
 | AGENDA-04 | Phase 18 | Complete |
 | AGENDA-05 | Phase 19 | Pending |
 | AGENDA-06 | Phase 19 | Pending |
