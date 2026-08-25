@@ -305,6 +305,59 @@ describe.skipIf(!hasSupabaseCreds)('backstop del create: la franja que no da el 
     expect(await countClientsNamed('__test_cr02_inexistente')).toBe(0)
   })
 
+  it('10. WR-03: el rechazo del backstop NO deja el cliente huérfano en la lista del dueño', async () => {
+    await mapBlockAToSvc1()
+
+    // Medido en la UAT y confirmado por la auditoría de seguridad: el insert de `clients` corría ANTES
+    // del core, así que CADA POST rechazado dejaba una fila con `name`/`phone`/`email` arbitrarios en
+    // la tabla que el dueño usa para operar — desde un endpoint público y anónimo, sin throttling, y
+    // en los negocios con seña sin siquiera reCAPTCHA delante (ahí el gate es el pago, a propósito).
+    //
+    // Se prueban TRES rechazos seguidos, no uno: el bug original escalaba linealmente (6 requests →
+    // 6 filas), así que un solo caso podría pasar por casualidad si algo dedupeara.
+    for (let i = 0; i < 3; i++) {
+      const res = await postCreate({
+        slug,
+        serviceId: svc2,
+        date: DATE,
+        time: '10:00',
+        clientName: '__test_wr03_huerfano',
+      })
+      expect(res.status).toBe(400)
+      expect(res.body.error).toBe('service_not_scheduled')
+    }
+
+    const { data: huerfanos } = await t.admin
+      .from('clients')
+      .select('id')
+      .eq('business_id', t.businessId)
+      .eq('name', '__test_wr03_huerfano')
+    expect((huerfanos || []).length).toBe(0)
+    expect(await countAppointmentsAt('10:00')).toBe(0)
+  })
+
+  it('11. WR-03 — CONTROL POSITIVO: el turno que SÍ entra conserva su cliente. ⚠ Sin este caso, "borrar siempre" pasaría el 10', async () => {
+    await mapBlockAToSvc1()
+
+    const res = await postCreate({
+      slug,
+      serviceId: svc1, // el servicio que la franja SÍ da
+      date: DATE,
+      time: '10:00',
+      clientName: '__test_wr03_ok',
+    })
+    expect(res.status).toBe(200)
+
+    const { data: vivos } = await t.admin
+      .from('clients')
+      .select('id')
+      .eq('business_id', t.businessId)
+      .eq('name', '__test_wr03_ok')
+    expect((vivos || []).length).toBe(1)
+
+    await t.admin.from('clients').delete().eq('business_id', t.businessId).eq('name', '__test_wr03_ok')
+  })
+
   it('9. CR-02: el CORE falla cerrado por su cuenta — con el flag encendido y un date/time no parseable rechaza sin depender del handler', async () => {
     await mapBlockAToSvc1()
 

@@ -102,11 +102,23 @@ export async function GET(request: NextRequest) {
   // cruzar. Es aditivo — el id NUNCA se serializa en la respuesta (el público sigue recibiendo
   // exactamente `{ ok, busy, full }`).
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
-  const { data: capBlocks } = await supabase
+  const { data: capBlocks, error: capBlocksErr } = await supabase
     .from('time_blocks')
     .select('id, start_time, end_time')
     .eq('business_id', business.id)
     .eq('day_of_week', dow)
+  // ── WR-01 (auditoría de la Phase 18): degradar está bien; degradar MUDO no ──────────────────────
+  // Acá el fail-safe correcto es el OPUESTO al del `create`: este endpoint sólo decide qué se OFRECE,
+  // así que ante un error de query conviene ofrecer de más (el backstop del `create` es la autoridad
+  // y rechaza lo que no corresponda) antes que apagarle la agenda a todo el mundo. Lo que NO es
+  // aceptable es que se apague la feature sin dejar rastro: un `date` malformado (este endpoint no
+  // tiene el guard de forma que sí tiene el `create`), un schema cache viejo o un permiso mal puesto
+  // dejaban al dueño viendo su configuración guardada mientras el público seguía viendo todo, y sin
+  // una sola línea de log con la que darse cuenta. Mismo patrón que la query de `appointments` de
+  // este archivo.
+  if (capBlocksErr) {
+    console.error('[booking/availability] error leyendo time_blocks:', capBlocksErr.message)
+  }
 
   const toMin = (t: string) => {
     const [h, m] = t.split(':')
@@ -152,10 +164,18 @@ export async function GET(request: NextRequest) {
     // re-validado por la resolución izada (un servicio de otro negocio cortó con invalid_service 400
     // antes de llegar acá), así que no se puede leer el mapeo de un tenant ajeno por ninguna de las
     // dos puntas.
-    const { data: tbsRaw } = await supabase
+    const { data: tbsRaw, error: tbsErr } = await supabase
       .from('time_block_services')
       .select('business_id, time_block_id, service_id')
       .eq('business_id', business.id)
+    // WR-01: si esta lectura falla, `tbsRaw` queda vacío y la regla del comodín devuelve `[]` — o sea
+    // la feature se apaga y el público vuelve a ver todos los horarios. Es la degradación deseada
+    // (ver el bloque de arriba), pero tiene que quedar registrada: es exactamente el síntoma de la
+    // 071 aplicada sin `NOTIFY pgrst, 'reload schema'`, y sin este log es indistinguible de "todavía
+    // no configuró nada".
+    if (tbsErr) {
+      console.error('[booking/availability] error leyendo time_block_services:', tbsErr.message)
+    }
     notOffered = startTimesNotOffered(
       serviceIdParam,
       (capBlocks || []) as BlockWindow[],

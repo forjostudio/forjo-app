@@ -1358,6 +1358,19 @@ ALTER TABLE ONLY "public"."time_block_services"
 
 
 
+-- (migr. 073, WR-02) UNIQUE compuesto en los padres: requisito de Postgres para poder referenciar el
+-- par (id, business_id) desde las FK compuestas de time_block_services. Redundante en cuanto a
+-- unicidad —id ya es PK—; su razón de existir es habilitar esas FK.
+ALTER TABLE ONLY "public"."services"
+    ADD CONSTRAINT "services_id_business_uq" UNIQUE ("id", "business_id");
+
+
+
+ALTER TABLE ONLY "public"."time_blocks"
+    ADD CONSTRAINT "time_blocks_id_business_uq" UNIQUE ("id", "business_id");
+
+
+
 ALTER TABLE ONLY "public"."appointment_spaces"
     ADD CONSTRAINT "appointment_spaces_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, "space_id" WITH =, "slot" WITH &&);
 
@@ -1744,6 +1757,21 @@ ALTER TABLE ONLY "public"."time_block_services"
 
 ALTER TABLE ONLY "public"."time_block_services"
     ADD CONSTRAINT "time_block_services_service_id_fkey" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE CASCADE;
+
+
+
+-- (migr. 073, WR-02) Pertenencia al tenant garantizada por la BASE, no por el predicado de las
+-- policies: las 4 policies validan sólo el business_id de la propia fila, y las FK simples de arriba
+-- garantizan EXISTENCIA, no PERTENENCIA. Sin estas dos, un dueño podía insertar su business_id con el
+-- time_block_id o el service_id de OTRO tenant (medido: las dos variantes entraban), y los ids ajenos
+-- son públicos por diseño.
+ALTER TABLE ONLY "public"."time_block_services"
+    ADD CONSTRAINT "tbs_block_same_tenant" FOREIGN KEY ("time_block_id", "business_id") REFERENCES "public"."time_blocks"("id", "business_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."time_block_services"
+    ADD CONSTRAINT "tbs_service_same_tenant" FOREIGN KEY ("service_id", "business_id") REFERENCES "public"."services"("id", "business_id") ON DELETE CASCADE;
 
 
 
@@ -4200,6 +4228,29 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
+
+
+-- ── (migr. 073) R-01 + RA-07: la escritura deja de ser el default, y TRUNCATE sale del alcance ──────
+-- Las cuatro líneas de arriba son el default de Supabase y son las que reabrían CR-01 sola: una VISTA
+-- nueva en `public` nacía con INSERT/UPDATE/DELETE para `anon`, y una vista DEFINER con permiso de
+-- escritura saltea la RLS de su tabla base (para una TABLA nueva el paracaídas es la RLS; para una
+-- vista no hay ninguno). Los REVOKE de abajo las corrigen — el orden importa: van DESPUÉS.
+--
+-- `authenticated` conserva la escritura (todo el dashboard escribe con la sesión del dueño) y pierde
+-- sólo TRUNCATE, que es la única operación del schema que la RLS no puede frenar.
+--
+-- ⚠ Consecuencia a conocer: una tabla futura que necesite INSERT anónimo legítimo (otro
+-- `landing_leads`) tiene que darse el GRANT explícito en su propia migración. Falla al lado correcto.
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLES FROM "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE TRUNCATE ON TABLES FROM "authenticated";
+
+-- Y sobre lo YA existente (los ALTER DEFAULT PRIVILEGES sólo aplican a objetos futuros):
+REVOKE TRUNCATE ON ALL TABLES IN SCHEMA "public" FROM "anon";
+REVOKE TRUNCATE ON ALL TABLES IN SCHEMA "public" FROM "authenticated";
+
+-- NOTA: la migr. 073 intenta lo mismo para el creador `supabase_admin` dentro de un bloque que degrada
+-- a NOTICE — `postgres` no es miembro de ese rol y el ALTER tira 42501. En este proyecto el creador
+-- efectivo es `postgres` (CLI de migraciones + editor SQL del dashboard), que es el cubierto acá.
 
 
 

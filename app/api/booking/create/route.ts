@@ -140,14 +140,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // El público SIEMPRE inserta un cliente nuevo (no dedupe — eso es del alta manual, D-04). Se crea
-  // ANTES del core y se le pasa el client_id; el core no toca la tabla clients (es rol/caller-agnóstico).
-  const { data: client } = await supabase
-    .from('clients')
-    .insert({ business_id: business.id, name: clientName, phone: clientPhone, email: clientEmail })
-    .select('id')
-    .single()
-
   // ── Derivación del service para el vertical CANCHAS (D-03) — la ÚNICA lógica server nueva de la fase ──
   // El cliente de canchas manda `professionalId` (la cancha, = el bucket reservable) pero NUNCA
   // `serviceId` ni precio: precio + duración fija son propios de la cancha y salen del server. En el
@@ -185,6 +177,31 @@ export async function POST(request: Request) {
     // deja resolvedServiceId = serviceId sin tocar. El core re-valida ambos por business_id.
   }
 
+  // El público SIEMPRE inserta un cliente nuevo (no dedupe — eso es del alta manual, D-04). El core
+  // no toca la tabla `clients` (es rol/caller-agnóstico), así que la fila se crea acá y se le pasa el id.
+  //
+  // ── WR-03 (auditoría de seguridad de la Phase 18): POR QUÉ ESTÁ TAN ABAJO Y SE LIMPIA AL RECHAZAR ──
+  // Este insert corre en un endpoint PÚBLICO y ANÓNIMO, y escribe datos personales (`name`, `phone`,
+  // `email`) en la tabla que el dueño usa para operar. Medido en la UAT y confirmado por la auditoría:
+  // 6 POST rechazados dejaban 6 filas huérfanas, sin throttling. Agravante: cuando el negocio pide
+  // seña, el reCAPTCHA se saltea A PROPÓSITO (el gate es el pago), así que en esos negocios no había
+  // ningún control delante.
+  //
+  // Dos medidas, porque una sola no alcanza:
+  //   1. El insert se BAJÓ hasta acá, después de todos los rechazos que se pueden decidir sin él
+  //      (forma de date/time, plan del negocio, ventana de reserva, reCAPTCHA, y la derivación de
+  //      canchas con su `invalid_service` cross-tenant). Antes estaba arriba de la derivación.
+  //   2. Lo que el core rechaza NO se puede prever desde acá —la regla vive adentro, sobre el
+  //      `service.id` ya re-validado por `business_id`—, así que la fila se BORRA en el camino de
+  //      rechazo, unas líneas más abajo.
+  // El repo ya eligió este criterio para el backstop de ventana de reserva ("Pitfall 3"); este
+  // endpoint lo había perdido.
+  const { data: client } = await supabase
+    .from('clients')
+    .insert({ business_id: business.id, name: clientName, phone: clientPhone, email: clientEmail })
+    .select('id')
+    .single()
+
   // Núcleo compartido: anti-tampering (service/professional/location por business_id) + re-check de
   // solapamiento con buffer + liberación de holds vencidos + insert + traducción 23505/23P01 →
   // slot_taken. Devuelve los ids de holds liberados; los mails de hold vencido se mandan acá abajo.
@@ -210,6 +227,27 @@ export async function POST(request: Request) {
     enforceServiceWindow: true,
   })
   if (!result.ok) {
+    // WR-03 (2ª medida): el core rechazó, así que el cliente que acabamos de crear no tiene turno y
+    // nunca lo va a tener. Se borra para que un POST forjado no ensucie la lista del dueño. El filtro
+    // por `business_id` es redundante con el id —lo acabamos de insertar en ESTE negocio— y va igual:
+    // es un DELETE con service role, o sea sin RLS que lo acote, y este repo no deja esas queries sin
+    // predicado de tenant.
+    //
+    // Acotado a `client.id` a propósito: NO se barren "clientes sin turnos" en general, porque el alta
+    // manual del dueño crea clientes sin turno de forma legítima (una ficha cargada antes de la primera
+    // reserva). Sólo se deshace lo que esta misma request escribió.
+    if (client?.id) {
+      const { error: cleanupErr } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', client.id)
+        .eq('business_id', business.id)
+      if (cleanupErr) {
+        // No se le cambia la respuesta al cliente por esto: el rechazo del turno es lo que importa y
+        // ya está decidido. Se loguea para que la fila huérfana sea rastreable en vez de invisible.
+        console.error('[booking/create] no se pudo limpiar el cliente huerfano:', cleanupErr.message, client.id)
+      }
+    }
     return Response.json({ ok: false, error: result.error }, { status: result.status })
   }
 

@@ -345,4 +345,185 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
       .single()
     expect(check?.landing_draft).toMatchObject(cfg)
   })
+
+  // ── time_block_services: la puente de LA AGENDA POR SERVICIO (Phase 18, migr. 071/072/073) ───────
+  //
+  // POR QUÉ ESTOS CASOS EXISTEN (WR-05, auditoría de seguridad de la Phase 18): la 071 salió con la
+  // vista `public_time_block_services` creada con `GRANT ALL ... TO anon`. Como es una vista SIMPLE
+  // sobre una tabla, Postgres la considera AUTO-ACTUALIZABLE, y como es DEFINER (owner postgres, sin
+  // `security_invoker`), esas escrituras corrían con privilegios del owner y **salteaban la RLS**.
+  // Medido en su momento como rol `anon` y sin sesión: `DELETE FROM public_services` borró los
+  // servicios de TODOS los tenants. La migr. 072 lo cerró; la 073 desarmó los default privileges que
+  // lo reabrían solos.
+  //
+  // La suite entera seguía VERDE con ese agujero abierto, porque este archivo —que existe justamente
+  // para esto— no tocaba la tabla nueva. Estos casos son el test de regresión que faltaba: si alguien
+  // vuelve a copiar el molde viejo del `GRANT`, o borra un `.eq('business_id', …)`, acá se pone rojo.
+  //
+  // Los ids ajenos son PÚBLICOS por diseño (`public_services` y la policy `public read` de
+  // `time_blocks`), así que el atacante no tiene nada que adivinar: eso es parte del modelo, no un
+  // supuesto optimista de estos tests.
+  describe('agenda por servicio: time_block_services + su vista pública', () => {
+    // Semillas con service-role (NO son aserciones): un servicio y una franja por tenant.
+    let svcA: string, svcB: string, blockA: string, blockB: string
+
+    beforeAll(async () => {
+      const mk = async (biz: string) => {
+        const { data: s } = await seeded.admin
+          .from('services')
+          .insert({ business_id: biz, name: '__iso_svc', duration_minutes: 30, price: 1000 })
+          .select('id')
+          .single()
+        const { data: b } = await seeded.admin
+          .from('time_blocks')
+          .insert({ business_id: biz, day_of_week: 1, start_time: '09:00', end_time: '12:00' })
+          .select('id')
+          .single()
+        return [s!.id as string, b!.id as string] as const
+      }
+      ;[svcA, blockA] = await mk(seeded.bizA)
+      ;[svcB, blockB] = await mk(seeded.bizB)
+    })
+
+    // Cliente anon SIN sesión: el rol `anon` puro, que es el que atiende la página pública de
+    // reservas. Distinto de anonA/anonB, que son anon-key CON sesión de dueño.
+    const anonPublic = () => createClient(url, anonKey, { auth: { persistSession: false } })
+
+    it('CR-01 (regresión): el público SIN sesión no puede ESCRIBIR por la vista acotada', async () => {
+      // Éste es el caso que habría cazado CR-01 el día que se escribió la 071. La vista es DEFINER a
+      // propósito (D-05: con `security_invoker` el público leería 0 filas siempre y en silencio), así
+      // que lo único que la vuelve segura es NO tener permiso de escritura — que es lo que se asierta.
+      const pub = anonPublic()
+      const { data, error } = await pub
+        .from('public_time_block_services')
+        .insert({ business_id: seeded.bizA, time_block_id: blockA, service_id: svcA })
+        .select('business_id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+      // Check INDEPENDIENTE del efecto con service-role (no es la aserción): no se escribió nada.
+      const { data: check } = await seeded.admin
+        .from('time_block_services')
+        .select('business_id')
+        .eq('business_id', seeded.bizA)
+      expect((check ?? []).length).toBe(0)
+    })
+
+    it('CR-01 (regresión): el público SIN sesión no puede BORRAR por la vista acotada', async () => {
+      // El DELETE es el que más duele: sin fila que insertar, un `DELETE FROM public_*` sin WHERE
+      // barría la tabla entera de TODOS los tenants. Se siembra una fila legítima para que el intento
+      // tenga algo que borrar — si el DELETE pasara, la aserción del final lo detecta.
+      await seeded.admin
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizA, time_block_id: blockA, service_id: svcA })
+
+      const pub = anonPublic()
+      await pub.from('public_time_block_services').delete().eq('business_id', seeded.bizA)
+
+      const { data: check } = await seeded.admin
+        .from('time_block_services')
+        .select('business_id')
+        .eq('business_id', seeded.bizA)
+      expect((check ?? []).length).toBe(1) // la fila sobrevivió
+
+      await seeded.admin.from('time_block_services').delete().eq('business_id', seeded.bizA)
+    })
+
+    it('el público SIN sesión no puede escribir la TABLA BASE (la RLS no tiene policy para anon)', async () => {
+      const pub = anonPublic()
+      const { data, error } = await pub
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizA, time_block_id: blockA, service_id: svcA })
+        .select('business_id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+    })
+
+    it('el público SÍ puede LEER por la vista acotada (D-05: es el mecanismo de lectura pública)', async () => {
+      // El aislamiento no puede ser "nadie lee nada": la Phase 20 sirve el mapeo al público por acá.
+      // Si esto se pusiera rojo, la vista habría quedado con `security_invoker` y el público vería
+      // 0 filas SIEMPRE — indistinguible del comodín, que es el bug silencioso que T-18-02 previene.
+      await seeded.admin
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizA, time_block_id: blockA, service_id: svcA })
+
+      const pub = anonPublic()
+      const { data, error } = await pub
+        .from('public_time_block_services')
+        .select('business_id, time_block_id, service_id')
+        .eq('business_id', seeded.bizA)
+      expect(error).toBeNull()
+      expect((data ?? []).length).toBe(1)
+
+      await seeded.admin.from('time_block_services').delete().eq('business_id', seeded.bizA)
+    })
+
+    it('cross-READ: A no ve el mapeo de B (RLS deniega, SIN filtro business_id)', async () => {
+      await seeded.admin
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizB, time_block_id: blockB, service_id: svcB })
+
+      // Igual que el resto de la suite: NADA de `.eq('business_id', …)` acá — eso testearía nuestro
+      // WHERE, no la policy (Pitfall 12).
+      const { data, error } = await anonA.from('time_block_services').select('time_block_id')
+      expect(error).toBeNull()
+      expect((data ?? []).some((r) => r.time_block_id === blockB)).toBe(false)
+
+      await seeded.admin.from('time_block_services').delete().eq('business_id', seeded.bizB)
+    })
+
+    it('cross-WRITE: A no puede mapear una franja declarando el business_id de B', async () => {
+      const { data, error } = await anonA
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizB, time_block_id: blockB, service_id: svcB })
+        .select('business_id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+      const { data: check } = await seeded.admin
+        .from('time_block_services')
+        .select('business_id')
+        .eq('business_id', seeded.bizB)
+      expect((check ?? []).length).toBe(0)
+    })
+
+    it('WR-02: la base rechaza la fila cross-tenant aunque el business_id declarado sea el propio', async () => {
+      // El agujero que cerró la migr. 073: las 4 policies validan SOLO el `business_id` de la propia
+      // fila, y las FK simples garantizan EXISTENCIA, no PERTENENCIA. Antes de la 073 las dos
+      // variantes de abajo ENTRABAN — medido. Ahora las rechazan las FK compuestas, o sea la BASE, sin
+      // que ningún consumidor tenga que acordarse.
+      const conBloqueAjeno = await anonA
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizA, time_block_id: blockB, service_id: svcA })
+        .select('business_id')
+      expect(conBloqueAjeno.error !== null || (conBloqueAjeno.data ?? []).length === 0).toBe(true)
+
+      const conServicioAjeno = await anonA
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizA, time_block_id: blockA, service_id: svcB })
+        .select('business_id')
+      expect(conServicioAjeno.error !== null || (conServicioAjeno.data ?? []).length === 0).toBe(true)
+
+      const { data: check } = await seeded.admin
+        .from('time_block_services')
+        .select('business_id')
+        .eq('business_id', seeded.bizA)
+      expect((check ?? []).length).toBe(0)
+    })
+
+    it('same-tenant WRITE: A SÍ mapea su propia franja a su propio servicio (happy path)', async () => {
+      // El aislamiento no puede ser "nadie escribe nada": sin este caso, una policy que deniegue TODO
+      // pasaría los seis anteriores. Es el control positivo de todo el bloque.
+      const { error } = await anonA
+        .from('time_block_services')
+        .insert({ business_id: seeded.bizA, time_block_id: blockA, service_id: svcA })
+        .select('business_id')
+      expect(error).toBeNull()
+
+      const { data: check } = await seeded.admin
+        .from('time_block_services')
+        .select('business_id')
+        .eq('business_id', seeded.bizA)
+      expect((check ?? []).length).toBe(1)
+
+      await seeded.admin.from('time_block_services').delete().eq('business_id', seeded.bizA)
+    })
+  })
 })
