@@ -701,7 +701,7 @@ Plans:
   1. El dueño asigna servicios a una franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada (AGENDA-05).
   2. Una franja sin servicios asignados se ve y se lee como **"cualquiera"** (AGENDA-06).
 
-**Plans**: 3/6 plans executed
+**Plans**: 4/6 plans executed
 
 **Wave 1**
 
@@ -711,7 +711,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 19-04-PLAN.md — Read path (`time_block_services` + catálogo de servicios server-rendered) + estado del editor con `service_ids`, 6 mutadores con estado sucio, y el stepper de cupo afuera (D-12)
+- [x] 19-04-PLAN.md — Read path (`time_block_services` + catálogo de servicios server-rendered) + estado del editor con `service_ids`, 6 mutadores con estado sucio, y el stepper de cupo afuera (D-12)
 
 **Wave 3** *(blocked on Wave 2)*
 
