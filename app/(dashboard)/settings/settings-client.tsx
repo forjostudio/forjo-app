@@ -1152,7 +1152,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // `count` vuelve null y el `?? 0` lo volvía indistinguible de "este servicio no tiene nada que
   // perder" — o sea, aparecía el Eliminar destructivo y el modal prometía conservar "0 turnos" de un
   // servicio que puede tener cientos. FAIL-CLOSED: sin dato no se ofrece la acción.
-  const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number } | 'error' | null>(null)
+  //
+  // `blocks` (Phase 19, D-07) = a cuántas franjas horarias está asignado el servicio en la puente
+  // franja↔servicio. Entra por el MISMO camino que los otros counts justamente para heredar el
+  // fail-closed: si ese dato falla, el diálogo queda "sin verificar" y no se ofrece eliminar.
+  const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number; blocks: number } | 'error' | null>(null)
 
   // Token de generación del pre-check (WR-03). `openDeleteService` setea el servicio de una y recién
   // después espera tres round-trips: sin esto, cerrar el modal de A y abrir el de B mientras la
@@ -1162,7 +1166,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // Abre el modal de borrado y cuenta lo que el trigger va a mirar. Es UX/refuerzo: NO autoriza nada
   // — el gate real vive en `services_block_delete_trg` (migr. 065), que no se puede saltear desde el
-  // cliente. Las tres queries filtran por business_id ADEMÁS de service_id (aislamiento por tenant;
+  // cliente. TODAS las queries filtran por business_id ADEMÁS de service_id (aislamiento por tenant;
   // la RLS es la segunda capa, no la única).
   async function openDeleteService(s: Service) {
     const req = ++delReqRef.current
@@ -1171,7 +1175,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // "Hoy" en hora AR, igual que el trigger: con el date de UTC, a las 22:00 de Buenos Aires un
     // turno de mañana temprano dejaría de contarse como futuro.
     const { date: today, time: nowTime } = nowInAR()
-    const [futDias, futHoy, abo, hist] = await Promise.all([
+    const [futDias, futHoy, abo, hist, blocks] = await Promise.all([
       // (a) DÍAS POSTERIORES A HOY. Para estos la hora no decide nada: cuentan enteros.
       //
       // El `.or(...)` de abajo es el equivalente EXACTO en PostgREST del
@@ -1197,13 +1201,26 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
         .eq('business_id', business.id).eq('service_id', s.id).eq('status', 'active'),
       supabase.from('appointments').select('id', { count: 'exact', head: true })
         .eq('business_id', business.id).eq('service_id', s.id),
+      // (e) LAS FRANJAS MAPEADAS (D-07). No bloquea nada —el gate de la migr. 065 no las mira— pero cambia lo que
+      // el dueño está por hacer: borrar el servicio deja esas franjas COMODÍN. `head: true` porque
+      // sólo importa el número. Filtra por business_id ADEMÁS de service_id: con la RLS como segunda
+      // capa, no como única.
+      supabase.from('time_block_services').select('time_block_id', { count: 'exact', head: true })
+        .eq('business_id', business.id).eq('service_id', s.id),
     ])
     // Llegó tarde: mientras esperábamos, el dueño abrió el modal de otro servicio. Descartar.
     if (delReqRef.current !== req) return
-    // Sin los cuatro counts no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
+    // Sin los cinco counts no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
     // 'error', NUNCA un 0 silencioso.
-    if (futDias.error || futHoy.error || abo.error || hist.error) {
-      console.error('[settings/delete-service] pre-check falló:', futDias.error ?? futHoy.error ?? abo.error ?? hist.error)
+    //
+    // `blocks.count === null` va en el MISMO guard (no es una rama nueva, es una condición más de la
+    // que ya existe): medido contra PostgREST, un `head: true` que no puede resolverse contra la
+    // tabla vuelve 204 con `error: null` y `count: null` — o sea que el `?? 0` de abajo lo leería
+    // como "no está en ninguna franja" y el aviso de D-07 no aparecería. Con head+count exact sobre
+    // una tabla que responde, el count SIEMPRE es un número: null acá sólo puede ser un fallo, y
+    // sobre un fallo este diálogo no ofrece la acción (P-08 / WR-02).
+    if (futDias.error || futHoy.error || abo.error || hist.error || blocks.error || blocks.count === null) {
+      console.error('[settings/delete-service] pre-check falló:', futDias.error ?? futHoy.error ?? abo.error ?? hist.error ?? blocks.error)
       setDelInfo('error')
       return
     }
@@ -1221,6 +1238,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       nextDate: vivosDeHoy > 0 ? today : ((futDias.data?.[0] as { date?: string } | undefined)?.date ?? null),
       activeAbono: (abo.count ?? 0) > 0,
       history: hist.count ?? 0,
+      blocks: blocks.count ?? 0,
     })
   }
 
@@ -1244,7 +1262,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 // Ya está desactivado (viene del tab "Desactivados"): ofrecerle desactivar de nuevo
                 // sería un callejón sin salida disfrazado de acción recomendada (WR-04).
                 : 'Ya está desactivado y no se ofrece más: vas a poder eliminarlo cuando no le queden turnos futuros ni abonos activos.'}`
-          : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio. Esta acción no se puede deshacer.`
+          // POR QUÉ se avisa de un borrado que AGRANDA lo que se ofrece (D-07): la franja mapeada no
+          // queda rota ni vacía — al perder su último servicio vuelve a ser COMODÍN, o sea que pasa a
+          // ofrecer CUALQUIER servicio. Es exactamente lo contrario de lo que el dueño espera de un
+          // borrado, y sin aviso pasa en silencio. La frase entra sólo acá, en la rama confirmable:
+          // en la bloqueada el DELETE no va a ocurrir y contar sus consecuencias es ruido.
+          : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio.${delInfo.blocks > 0 ? ` Está asignado a ${delInfo.blocks} ${delInfo.blocks === 1 ? 'franja horaria' : 'franjas horarias'} de tu agenda: al eliminarlo, ${delInfo.blocks === 1 ? 'esa franja vuelve' : 'esas franjas vuelven'} a ofrecer cualquier servicio.` : ''} Esta acción no se puede deshacer.`
 
   async function addService() {
     // El botón deshabilitado es la SEÑAL, no la defensa: el guard se conserva acá adentro porque la
