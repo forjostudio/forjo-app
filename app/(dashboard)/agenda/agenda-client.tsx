@@ -390,6 +390,44 @@ function defaultBlock(day: number): LocalBlock {
   return { start_time: '09:00', end_time: '18:00', label: '', location_id: '', service_ids: [] }
 }
 
+// ── El rechazo de la base → copy propia del cliente (T-19-24 / T-14-25 / T-13-09) ──────────────
+//
+// El mensaje que devuelve Postgres trae nombres de tabla, de constraint y detalles del schema. Acá
+// se INSPECCIONA para saber qué pasó —el código primero, y el texto sólo para distinguir dos casos
+// que comparten el mismo ERRCODE— pero NUNCA cruza a la pantalla: lo único que sale de esta función
+// es un código de dominio propio, y la copy la pone el call site. Molde exacto: el borrado de
+// servicios de `settings-client.tsx`.
+type SaveHoursReject = 'reload' | 'stale' | 'invalid' | 'not_deployed' | 'unknown'
+
+function classifySaveHoursError(error: { code?: string; message?: string }): SaveHoursReject {
+  const code = error.code ?? ''
+  const message = error.message ?? ''
+  // Autoría (el negocio del payload no es del dueño) y violación de las FK compuestas de la migr.
+  // 073 (un bloque o un servicio de otro negocio) comparten SÍNTOMA para el dueño: lo que tiene en
+  // pantalla dejó de corresponder con la base, y la salida es la misma — recargar.
+  if (code === 'P0001' && message.includes('not_your_business')) return 'reload'
+  if (code === '23503') return 'reload'
+  // El UPDATE no encontró una franja que el editor creía existente: los horarios cambiaron desde
+  // otra pestaña o sesión mientras el dueño editaba.
+  if (code === 'P0001' && message.includes('block_not_found')) return 'stale'
+  // Payload o bloque inválidos: es dato del propio editor, así que el camino es corregir y guardar.
+  if (code === 'P0001' && (message.includes('invalid_payload') || message.includes('invalid_block'))) return 'invalid'
+  // PostgREST no expone la función de guardado: la migr. 074 no está aplicada, o se aplicó sin
+  // recargar el cache del schema (P-05). Para el dueño el mensaje es el genérico, pero el
+  // diagnóstico real es MUY otro — de ahí que el call site además lo registre en consola.
+  if (code === 'PGRST202') return 'not_deployed'
+  return 'unknown'
+}
+
+// La copy es siempre del cliente. Ninguna de estas frases interpola nada de la base.
+const SAVE_HOURS_REJECT_COPY: Record<SaveHoursReject, string> = {
+  reload: 'No se pudieron guardar los horarios. Recargá la página y probá de nuevo.',
+  stale: 'Los horarios cambiaron desde otra pestaña o sesión. Recargá la página y volvé a guardar.',
+  invalid: 'Corregí los errores antes de guardar',
+  not_deployed: 'No se pudieron guardar los horarios. Revisá tu conexión y probá de nuevo.',
+  unknown: 'No se pudieron guardar los horarios. Revisá tu conexión y probá de nuevo.',
+}
+
 interface Props {
   business: Business
   initialTimeBlocks: TimeBlock[]
@@ -682,36 +720,82 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       : 'Horario copiado · acordate de guardar')
   }
 
-  // ⚠ Esta función se REEMPLAZA ENTERA en el Plan 19-05: el borrar-todo-e-insertar pasa a ser el
-  // RPC `save_agenda_blocks` de la migr. 074, alimentado por los dos constructores de
-  // `lib/agenda-hours-payload.ts`. No invertir en mejorarla acá: lo único que cambia en este plan
-  // es que el cupo del bloque deja de escribirse (D-12).
+  // ── El guardado de horarios: UNA llamada, todo-o-nada (D-04) ──────────────
+  //
+  // Antes esto borraba TODOS los bloques del negocio y reinsertaba. Dos agujeros que la migr. 074
+  // cierra de raíz: (1) las filas del mapeo franja↔servicio son hijas con borrado en cascada, así
+  // que cada guardado de horarios se llevaba puesto el mapeo que el dueño acababa de configurar, y
+  // el estado al que caía —comodín— es VISUALMENTE IDÉNTICO a no haber configurado nada; (2) entre
+  // el borrado y la inserción, la disponibilidad PÚBLICA leía un negocio sin horarios. Ahora el
+  // diff lo hace la base adentro de una transacción: no hay estado intermedio observable.
+  //
+  // Dos límites que esta fase acepta a conciencia:
+  //   · Los días con horario especial (`schedule_exceptions`) no son franjas, así que no tienen
+  //     mapeo posible y siguen ofreciendo todos los servicios (D-06, el caveat que la Phase 18
+  //     aceptó como RA-04).
+  //   · La lectura pública de disponibilidad todavía no discrimina por sede (D-19 / WR-04): el
+  //     bloque ya lleva su consultorio y un dueño multi-sede PUEDE mapear por sede; lo que no filtra
+  //     por sede es la lectura. Cerrarlo tocaría el módulo puro y sus dos consumidores —que la
+  //     Phase 18 dejó con cero amenazas abiertas— para un caso con cero negocios afectados hoy.
   async function saveHours() {
     if (!validateBlocks()) { toast.error('Corregí los errores antes de guardar'); return }
     setSavingHours(true)
-    // Delete all existing blocks for this business
-    await supabase.from('time_blocks').delete().eq('business_id', business.id)
-    // Collect blocks to insert
-    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null; location_id: string | null }[] = []
-    dayStates.forEach((ds, day) => {
-      if (!ds.enabled) return
-      ds.blocks.forEach(b => {
-        // Con consultorios cargados no existe "General": se descartan los bloques sin consultorio.
-        if (activeLocations.length > 0 && !b.location_id) return
-        // El cupo del bloque NO viaja (D-12): la columna es NOT NULL con default, así que el INSERT
-        // que no la menciona toma el default. Dejar de escribirla es el punto; resetearla a mano
-        // sería volver a decidir sobre ella (P-06).
-        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null, location_id: b.location_id || null })
+    try {
+      // ⚠ El set que viaja es COMPLETO: los 7 días con TODOS sus bloques, de todos los
+      // consultorios. La base borra del negocio lo que no venga en el payload, así que armarlo con
+      // la lista ya filtrada por consultorio activo sería "guardé la sede A y borré los horarios de
+      // la sede B" — una regresión que sólo aparece en un negocio multi-sede y que en local, con un
+      // solo consultorio, no la ve nadie (P-03). Por eso el constructor del payload no acepta
+      // ningún parámetro de consultorio: no hay por dónde meter el filtro sin cambiar su firma.
+      const blocks = buildSaveHoursPayload(dayStates, { hasLocations: activeLocations.length > 0 })
+      const { data, error } = await supabase.rpc('save_agenda_blocks', {
+        p_business_id: business.id,
+        p_blocks: blocks,
       })
-    })
-    if (toInsert.length > 0) {
-      const { error } = await supabase.from('time_blocks').insert(toInsert)
-      if (error) { toast.error('Error al guardar horarios'); setSavingHours(false); return }
+      if (error) {
+        const reason = classifySaveHoursError(error)
+        // Se registra el CÓDIGO, nunca el mensaje: alcanza para diagnosticar y no arrastra el
+        // schema a ningún lado.
+        console.error('[agenda/save-hours] rechazo:', reason, error.code)
+        if (reason === 'not_deployed') {
+          // Sin esta línea el síntoma es indistinguible de un problema de red, y el diagnóstico real
+          // es otro: la migr. 074 no está aplicada en esta base, o se aplicó sin recargar el cache
+          // del schema de PostgREST (P-05).
+          console.error('[agenda/save-hours] la función de guardado de la agenda no está expuesta por PostgREST — verificar que la migración 074 esté aplicada y que se haya recargado el cache del schema')
+        }
+        toast.error(SAVE_HOURS_REJECT_COPY[reason])
+        // El estado local NO se toca: lo que el dueño ve sigue siendo lo que quiso guardar.
+        return
+      }
+      // Re-derivar el estado con lo que devolvió la base NO es opcional (P-01). El editor deriva sus
+      // 7 días una sola vez, en el inicializador, y no vuelve a derivarlos de las props: no hay
+      // efecto que los re-sincronice, y recargar la ruta del servidor tampoco alcanza porque el
+      // inicializador ya corrió y no vuelve a correr. Sin esto, un bloque insertado en el guardado
+      // #1 seguiría sin id en memoria y el guardado #2 lo volvería a INSERTAR: cada franja nueva,
+      // duplicada. Se usa la MISMA función que el inicializador, así que no hay dos derivaciones
+      // del mismo estado que puedan divergir.
+      setDayStates(buildDayStatesFromRows((data ?? []) as SavedAgendaBlock[]))
+      setHoursDirty(false)
+      toast.success('Horarios guardados')
+      // La duración del turno y el descanso quedan FUERA de la transacción a propósito: no
+      // participan de ninguna invariante con el mapeo —nadie puede observar un estado inconsistente
+      // entre las dos cosas— y meterlos adentro agrandaría la firma de la función de la base sin
+      // cerrar ningún estado intermedio que el público pueda ver. Lo que sí se corrige: hasta hoy
+      // este UPDATE no chequeaba su error, así que podía fallar MUDO y el dueño se iba creyendo que
+      // había configurado (T-19-27).
+      const { error: bizError } = await supabase.from('businesses')
+        .update({ default_slot_duration: slotDuration, buffer_minutes: bufferMinutes })
+        .eq('id', business.id)
+      if (bizError) {
+        console.error('[agenda/save-hours] duración/descanso:', bizError.code)
+        // La copy dice la verdad completa: los horarios SÍ quedaron guardados.
+        toast.error('Los horarios se guardaron, pero no se pudo guardar la duración del turno ni el descanso entre turnos. Probá de nuevo.')
+      }
+    } finally {
+      // `finally` y no una línea antes de cada `return`: el botón tiene que volver pase lo que pase,
+      // incluida una excepción de red, o el guardado queda muerto hasta recargar.
+      setSavingHours(false)
     }
-    // Save slot duration + buffer entre turnos
-    await supabase.from('businesses').update({ default_slot_duration: slotDuration, buffer_minutes: bufferMinutes }).eq('id', business.id)
-    setSavingHours(false)
-    toast.success('Horarios guardados')
   }
 
   // Ventana de reserva pública (BOOK-WINDOW-01): con cuánta anticipación puede reservar un cliente
@@ -1334,10 +1418,19 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           })}
         </div>
 
-        <div className="pt-2 border-t border-border">
+        {/* El único CTA de la fase es el que ya estaba: no se agrega ninguno (D-03). Al lado, el
+            indicador de estado sucio — el ÚNICO lugar de toda la fase donde se usa el token de
+            advertencia. Con horarios, un input que quedó mal SE VE; con el mapeo no: el dueño toca
+            cuatro chips, se va, y la franja sigue en comodín, un estado visualmente idéntico a no
+            haber configurado nada. Sin bloqueo de navegación, sin aviso al cerrar la pestaña y sin
+            modal: eso está fuera de alcance. */}
+        <div className="pt-2 border-t border-border flex items-center gap-4">
           <Button onClick={saveHours} disabled={savingHours}>
             {savingHours ? 'Guardando...' : 'Guardar horarios'}
           </Button>
+          {hoursDirty && (
+            <span role="status" className="text-xs text-warning">Cambios sin guardar</span>
+          )}
         </div>
       </Card>
 
