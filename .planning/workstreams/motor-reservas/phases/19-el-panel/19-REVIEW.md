@@ -23,6 +23,25 @@ findings:
 status: issues_found
 ---
 
+## Resolución (2026-08-26, post-review)
+
+El usuario eligió arreglar los cuatro hallazgos que son bugs de comportamiento del código de esta
+fase, y diferir los dos que exceden su alcance.
+
+| Hallazgo | Estado | Commit / destino |
+|---|---|---|
+| CR-01 — el editor no se congela durante el guardado | **FIXED** | `90efd71` — `disabled={savingHours}` en todo el grid (chips, inputs de hora, ×, toggle de día, Agregar bloque, Copiar a otros días). Obligó a enmendar la fila `Guardando` de `19-UI-SPEC.md` (`d0c9c54`): su justificación *"el guardado toma un snapshot del estado"* era falsa. |
+| WR-01 — hora vacía pasa `validateBlocks` | **FIXED** | `a38f491` — `isValidBlockTime()` en `lib/agenda-hours-payload.ts` + 6 tests, con control negativo que congela `'18:00' <= '' === false`. Migración 074 intacta. |
+| WR-02 — la copy afirma una falla de red que no ocurrió | **FIXED** | `ed614a9` — rama `code.startsWith('22') → 'invalid'` en `classifySaveHoursError` + copies reescritas. |
+| WR-03 — el aviso de borrado cuenta franjas mapeadas, no franjas que quedan comodín | **FIXED** | `eff6260` — `blocksBecomingWildcard()` en `lib/time-block-services.ts` + 6 tests; 2ª query con `.eq('business_id')` explícito y guard **fail-closed** (`data === null \|\| count === null \|\| data.length < count`). |
+| WR-04 — `save_agenda_blocks` no valida que `location_id` sea del tenant | **DIFERIDO** | Requiere migración **075** (unique en `locations(id, business_id)` + FK compuesta) porque la 074 ya corrió en producción. Derivado a `secure-phase`. Sin lectura ni escritura cross-tenant; lo que falla es la afirmación de la cabecera de la 074 de que las FK compuestas cubren toda combinación. |
+| WR-05 — el gate de canchas puede ocultar mapeos que el motor sigue aplicando | **DIFERIDO** | Alcance nuevo (el vertical es editable desde ajustes). A backlog. |
+| INFO ×4 | **NO APLICADOS** | Documentados arriba. |
+
+Verificación tras los fixes: `tsc --noEmit` limpio (binario local, no `npx`), 46/46 en las dos suites
+puras, cero hallazgos NUEVOS de eslint en los 6 archivos tocados, `git diff` de la migración 074
+vacío.
+
 # Phase 19: Code Review Report
 
 **Reviewed:** 2026-08-26T13:40:00Z
