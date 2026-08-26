@@ -426,6 +426,11 @@ function classifySaveHoursError(error: { code?: string; message?: string }): Sav
   if (code === 'P0001' && message.includes('block_not_found')) return 'stale'
   // Payload o bloque inválidos: es dato del propio editor, así que el camino es corregir y guardar.
   if (code === 'P0001' && (message.includes('invalid_payload') || message.includes('invalid_block'))) return 'invalid'
+  // Clase 22 = error de DATO (`22007` una hora que no castea, `22P02` un uuid mal formado). Es el
+  // payload del editor, igual que `invalid_block`, sólo que lo rechazó el CAST antes de que el
+  // backstop de la función pudiera correr. Sin esta rama caía en 'unknown', cuya copy afirmaba un
+  // problema de red que no pasó y mandaba al dueño a reintentar para siempre (WR-02).
+  if (code.startsWith('22')) return 'invalid'
   // PostgREST no expone la función de guardado: la migr. 074 no está aplicada, o se aplicó sin
   // recargar el cache del schema (P-05). Para el dueño el mensaje es el genérico, pero el
   // diagnóstico real es MUY otro — de ahí que el call site además lo registre en consola.
@@ -434,12 +439,21 @@ function classifySaveHoursError(error: { code?: string; message?: string }): Sav
 }
 
 // La copy es siempre del cliente. Ninguna de estas frases interpola nada de la base.
+//
+// ⚠ Ninguna afirma una causa que no se pueda probar (WR-02). Dos casos que antes mentían:
+//   · `invalid` decía "corregí los errores", pero a esta rama sólo se llega cuando el SERVIDOR
+//     rechazó algo que el validador del cliente dejó pasar ⇒ no hay ningún error pintado en
+//     pantalla que el dueño pueda ir a corregir. Ahora la frase dice qué buscar.
+//   · `not_deployed` y `unknown` decían "revisá tu conexión": la conexión funcionó —la base
+//     contestó, y contestó que no— así que mandaba a diagnosticar donde no había nada roto. El
+//     diagnóstico REAL de `not_deployed` (migr. 074 sin aplicar o sin recargar el cache del schema)
+//     no es accionable para el dueño; va a consola, no a la pantalla.
 const SAVE_HOURS_REJECT_COPY: Record<SaveHoursReject, string> = {
   reload: 'No se pudieron guardar los horarios. Recargá la página y probá de nuevo.',
   stale: 'Los horarios cambiaron desde otra pestaña o sesión. Recargá la página y volvé a guardar.',
-  invalid: 'Corregí los errores antes de guardar',
-  not_deployed: 'No se pudieron guardar los horarios. Revisá tu conexión y probá de nuevo.',
-  unknown: 'No se pudieron guardar los horarios. Revisá tu conexión y probá de nuevo.',
+  invalid: 'Hay una franja con horarios incompletos o inválidos. Revisalos y volvé a guardar.',
+  not_deployed: 'No se pudieron guardar los horarios. Probá de nuevo en un momento.',
+  unknown: 'No se pudieron guardar los horarios. Probá de nuevo.',
 }
 
 interface Props {
