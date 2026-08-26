@@ -701,6 +701,26 @@ Plans:
   1. El dueño asigna servicios a una franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada (AGENDA-05).
   2. Una franja sin servicios asignados se ve y se lee como **"cualquiera"** (AGENDA-06).
 
+**Plans**: 6 plans
+
+**Wave 1**
+
+- [ ] 19-01-PLAN.md — Funciones puras: `servicesOfBlock`/`isBlockWildcard` (AGENDA-02) + el contrato del guardado por diff (`buildSaveHoursPayload`/`buildDayStatesFromRows`) con los tests que muerden P-01 y P-03
+- [ ] 19-02-PLAN.md — Migración **074**: `save_agenda_blocks` transaccional (D-04) con privilegios mínimos (P-02) + validación `supabase db reset` local + test de aislamiento cross-tenant y atomicidad
+- [ ] 19-03-PLAN.md — Deuda de la Phase 18: aviso de borrado con el número de franjas (D-07) + copy de `service_not_scheduled` (D-18 / WR-07)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 19-04-PLAN.md — Read path (`time_block_services` + catálogo de servicios server-rendered) + estado del editor con `service_ids`, 6 mutadores con estado sucio, y el stepper de cupo afuera (D-12)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 19-05-PLAN.md — La línea de servicios bajo cada franja (D-08/D-09/D-10/D-16/D-17) + `saveHours` sobre el RPC con re-derivación del estado y mapeo de rechazos a copy propia
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 19-06-PLAN.md — **[BLOCKING · requiere al usuario]** Medir el estado real de las migraciones en prod, aplicar la 074 a mano + `NOTIFY pgrst`, verificar privilegios y reflejar `supabase/schema.sql`
+
 **Security/Integrity relevance**: Media. No toca el motor ni los constraints, pero **escribe** sobre el mapeo que la disponibilidad pública consume: el write path tiene que llevar `.eq('business_id', business.id)` como todo el panel, y el rechazo de la base mapearse a copy propia — nunca interpolar el mensaje (T-14-25 / T-13-09).
 **UI hint**: yes
 
