@@ -65,7 +65,7 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 ### Milestone v0.28 — La agenda por servicio (Phases 18-20, activo)
 
 - [x] **Phase 18: El modelo y la disponibilidad** - Tabla puente `time_block_services` con la regla del comodín (0 filas = cualquier servicio), la regla encapsulada en un helper puro con tests (molde `lib/staff-services.ts`), y `/api/booking/availability` respetándola — el endpoint ya recibe `serviceId` desde v0.27. **Cero regresión por construcción:** el día de la migración todos los negocios tienen 0 filas. **`secure-phase` obligatorio** (completed 2026-08-25)
-- [ ] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío
+- [x] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío (completed 2026-08-26)
 - [ ] **Phase 20: Booking público y onboarding** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, con el vacío explicado en vez de un calendario mudo; y el onboarding deja que un negocio de clases declare su agenda real desde el día uno
 
 ### Milestone v0.27 — Cupo unificado por servicio (shipped 2026-08-24)
@@ -701,7 +701,7 @@ Plans:
   1. El dueño asigna servicios a una franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada (AGENDA-05).
   2. Una franja sin servicios asignados se ve y se lee como **"cualquiera"** (AGENDA-06).
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 
 **Wave 1**
 
@@ -719,7 +719,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 19-06-PLAN.md — **[BLOCKING · requiere al usuario]** Medir el estado real de las migraciones en prod, aplicar la 074 a mano + `NOTIFY pgrst`, verificar privilegios y reflejar `supabase/schema.sql`
+- [x] 19-06-PLAN.md — **[BLOCKING · requiere al usuario]** Medir el estado real de las migraciones en prod, aplicar la 074 a mano + `NOTIFY pgrst`, verificar privilegios y reflejar `supabase/schema.sql`
 
 **Security/Integrity relevance**: Media. No toca el motor ni los constraints, pero **escribe** sobre el mapeo que la disponibilidad pública consume: el write path tiene que llevar `.eq('business_id', business.id)` como todo el panel, y el rechazo de la base mapearse a copy propia — nunca interpolar el mensaje (T-14-25 / T-13-09).
 **UI hint**: yes

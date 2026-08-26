@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: executing
-stopped_at: Completado 19-05-PLAN.md
-last_updated: "2026-08-26T04:17:53.879Z"
+status: verifying
+stopped_at: Completado 19-06-PLAN.md — fase 19 lista para verificacion
+last_updated: "2026-08-26T13:21:53.828Z"
 last_activity: 2026-08-26 -- Phase 19 execution started
 progress:
   total_phases: 20
-  completed_phases: 18
+  completed_phases: 19
   total_plans: 98
-  completed_plans: 97
-  percent: 90
+  completed_plans: 98
+  percent: 95
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 19 (el-panel) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-26 -- Phase 19 execution started
 
 ## Milestone v0.28 — decisiones LOCKED
@@ -162,6 +162,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 19 P03 | 25min | 2 tasks | 2 files |
 | Phase 19 P04 | 20min | 3 tasks | 2 files |
 | Phase 19 P05 | 35min | 2 tasks | 1 files |
+| Phase 19 P06 | 20min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -330,6 +331,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 19-04: npm run lint no puede dar exit 0 en agenda-client.tsx por un error react-hooks/purity PREEXISTENTE en la vista semanal (D-13, fuera de alcance); el gate pasa a eslint acotado sin errores nuevos
 - [Phase ?]: 19-05: isBlockWildcard se consume por adaptador (isDraftBlockWildcard) en vez de reimplementar la regla del comodin en el componente
 - [Phase ?]: 19-05: el rechazo de la base se clasifica a codigo de dominio y la copy vive en un mapa aparte; a consola va el code, nunca el message
+- [Phase 19]: 19-06: la contradiccion de la Phase 18 sobre el estado de produccion se resolvio MIDIENDO — las 071/072/073 ya estaban aplicadas — 18-VERIFICATION.md:152 (prod en la 070) queda obsoleto frente a 18-SECURITY.md 9. La salida cruda del Paso 1 esta pegada en 19-06-SUMMARY.md
+- [Phase 19]: 19-06: no se emite una migracion 075 — la proxima migracion libre del proyecto es la 075 — La residualidad de supabase_admin en pg_default_acl es una limitacion de plataforma (42501) que ninguna migracion de este proyecto puede cerrar; los dos criterios de privilegios se cumplen en produccion
 
 ### Pending Todos
 
@@ -362,6 +365,7 @@ Heredadas del workstream (siguen vigentes):
 - **[Phase 7 — turnos ya generados]** Qué pasa con los turnos futuros ya generados al dar de baja (cancelarlos o dejarlos), consistente entre baja por mail y por panel — **cerrar en discuss-phase**.
 - [Phase 7 — deploy] RESUELTO (2026-07-22): las migraciones **055** y **056 ya estan APLICADAS en produccion** (confirmado por el operador). Pre-check previo: 0 cancel_token duplicados en prod, por eso el indice UNIQUE entro limpio. La proxima migracion del repo es la **057**.
 - [Phase 7 — mails sin verificar en prod] `RESEND_API_KEY` esta **vacia** en `.env.local`, asi que en local no sale ningun mail (verificado contra api.resend.com: HTTP 401). El test 10 de la UAT quedo BLOCKED: la entrega real de los dos mails de baja y el render del HTML escapado (WR-02) siguen **sin verificar en produccion**. El escapado si esta cubierto por los 21 casos de `test/abono-cancel-email.test.ts`.
+- 19-06: pendiente operativo — confirmar el NOTIFY pgrst reload schema en produccion. Verificacion natural: el primer guardado de horarios tras el deploy; si devuelve PGRST202, correr la linea en el editor SQL (sin migracion)
 
 ### Quick Tasks Completed
 
@@ -404,8 +408,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-26T04:17:48.450Z
-Stopped at: Completado 19-05-PLAN.md
+Last session: 2026-08-26T13:21:48.858Z
+Stopped at: Completado 19-06-PLAN.md — fase 19 lista para verificacion
 Resume file: None
 
 ## Operator Next Steps
