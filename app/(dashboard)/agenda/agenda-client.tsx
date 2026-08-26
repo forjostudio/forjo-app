@@ -209,22 +209,29 @@ function isDraftBlockWildcard(serviceIds: string[]): boolean {
 // de las cinco paletas, la default incluida (medido en el contrato visual de la fase). El cambio de
 // estado lo llevan TRES portadores a la vez (relleno + color de texto + tilde), nunca el color
 // solo, y ninguno de los tres depende de la paleta.
-function ServiceChip({ label, selected, inactive, ariaLabel, onToggle }: {
+function ServiceChip({ label, selected, inactive, ariaLabel, disabled, onToggle }: {
   label: string
   selected: boolean
   /** Servicio dado de baja que sigue mapeado (D-11): la señal es forma y palabra, jamás opacidad. */
   inactive?: boolean
   /** Sólo cuando el texto visible no alcanza para nombrarlo (el caso del inactivo). */
   ariaLabel?: string
+  /**
+   * Congelado mientras el guardado está en vuelo. La opacidad SÍ entra acá y no contradice a D-11:
+   * lo que apaga es la línea ENTERA (inputs de hora incluidos), no un chip contra otro, así que no
+   * es una señal que haya que distinguir de la del servicio inactivo.
+   */
+  disabled?: boolean
   onToggle: () => void
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
+      disabled={disabled}
       aria-pressed={selected}
       aria-label={ariaLabel}
-      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
     >
       <span
         className={cn(
@@ -249,13 +256,19 @@ function ServiceChip({ label, selected, inactive, ariaLabel, onToggle }: {
 // `gap-y-0` es deliberado: cada chip es un botón de 44px alrededor de un pill de 28px, así que las
 // filas ya quedan separadas por 16px de área táctil transparente. Sumarle un gap vertical daría
 // 24px de aire y rompería el peso secundario de D-14.
-function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, onToggleExpanded, onToggleService }: {
+function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, disabled, onToggleExpanded, onToggleService }: {
   /** Los servicios que DECLARA esta franja. Vacío = comodín (D-01). */
   serviceIds: string[]
   /** El catálogo completo del negocio, CON inactivos: es lo único que puede nombrar a uno de baja. */
   catalog: ServiceCatalogItem[]
   groupLabel: string
   expanded: boolean
+  /**
+   * Guardado en vuelo: los chips no se pueden togglear. El colapso ("Ver todos") SÍ sigue vivo —
+   * no toca la configuración, sólo muestra más de lo mismo, así que no hay nada que se pueda
+   * perder al pisarse el estado con lo que devuelve la base.
+   */
+  disabled?: boolean
   onToggleExpanded: () => void
   onToggleService: (serviceId: string) => void
 }) {
@@ -316,6 +329,7 @@ function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, onToggle
           label={s.active ? s.name : `${s.name} · inactivo`}
           selected={serviceIds.includes(s.id)}
           inactive={!s.active}
+          disabled={disabled}
           ariaLabel={s.active ? undefined : `${s.name} — servicio inactivo, todavía asignado a esta franja. Tocá para quitarlo.`}
           onToggle={() => {
             onToggleService(s.id)
@@ -739,6 +753,18 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   //     Phase 18 dejó con cero amenazas abiertas— para un caso con cero negocios afectados hoy.
   async function saveHours() {
     if (!validateBlocks()) { toast.error('Corregí los errores antes de guardar'); return }
+    // ⚠ `savingHours` CONGELA la grilla entera, no sólo el botón (CR-01): inputs de hora, ×,
+    // "Agregar bloque", el toggle de día, "Copiar a otros días" y cada chip de servicio. Sin eso,
+    // todo lo que el dueño toque mientras la llamada está en vuelo se PIERDE sin ruido: cuando el
+    // RPC vuelve, este handler re-deriva el estado de las filas que devolvió la base (P-01, abajo)
+    // —un reemplazo, no un merge— y encima apaga `hoursDirty`, o sea que borra también la única
+    // señal de que algo quedaba pendiente. El resultado es un mapeo que desaparece y cae en
+    // comodín, un estado visualmente idéntico a "nunca se configuró": exactamente el modo de falla
+    // que la migr. 074 cerró del lado de la base.
+    //
+    // Se eligió deshabilitar y no un `if (savingHours) return` adentro de cada mutador: el early
+    // return también evita la pérdida, pero el click no hace NADA y el dueño no tiene forma de
+    // saber por qué. El control apagado sí lo explica.
     setSavingHours(true)
     try {
       // ⚠ El set que viaja es COMPLETO: los 7 días con TODOS sus bloques, de todos los
@@ -1332,11 +1358,14 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             const dayOpen = dayBlocks.length > 0
             return (
               <div key={day} className="space-y-2 sm:max-w-md">
-                {/* Día: chip full-width y centrado (parecido al onboarding, mejor en mobile). */}
+                {/* Día: chip full-width y centrado (parecido al onboarding, mejor en mobile).
+                    `disabled` mientras se guarda, como TODOS los controles de la grilla: ver el
+                    bloque de `saveHours`. */}
                 <button
                   onClick={() => toggleDay(day)}
+                  disabled={savingHours}
                   className={cn(
-                    'w-full text-center text-sm font-semibold py-2 px-3 rounded transition-colors',
+                    'w-full text-center text-sm font-semibold py-2 px-3 rounded transition-colors disabled:pointer-events-none disabled:opacity-50',
                     dayOpen ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
                   )}
                 >
@@ -1357,6 +1386,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                           <Input
                             type="time"
                             value={block.start_time}
+                            disabled={savingHours}
                             onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
                             className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                           />
@@ -1364,6 +1394,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                           <Input
                             type="time"
                             value={block.end_time}
+                            disabled={savingHours}
                             onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
                             className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                           />
@@ -1372,8 +1403,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                               visible, que no tenía. Es el único retoque permitido a esta fila. */}
                           <button
                             onClick={() => removeBlock(day, idx)}
+                            disabled={savingHours}
                             aria-label="Eliminar bloque"
-                            className="shrink-0 rounded text-muted-foreground transition-colors hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                            className="shrink-0 rounded text-muted-foreground transition-colors hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50"
                             title="Eliminar bloque"
                           >
                             <X className="w-4 h-4" />
@@ -1391,6 +1423,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             catalog={serviceCatalog}
                             groupLabel={`Servicios de la franja de ${block.start_time} a ${block.end_time}`}
                             expanded={expandedChips.has(`${day}-${idx}`)}
+                            disabled={savingHours}
                             onToggleExpanded={() => toggleChipsExpanded(day, idx)}
                             onToggleService={serviceId => toggleBlockService(day, idx, serviceId)}
                           />
@@ -1400,13 +1433,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                     <div className="flex items-center gap-4 mt-1">
                       <button
                         onClick={() => addBlock(day)}
-                        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
+                        disabled={savingHours}
+                        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors font-medium disabled:pointer-events-none disabled:opacity-50"
                       >
                         <Plus className="w-3.5 h-3.5" /> Agregar bloque
                       </button>
                       <button
                         onClick={() => { setCopyDay(day); setCopyTargets(new Set()) }}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-medium"
+                        disabled={savingHours}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-medium disabled:pointer-events-none disabled:opacity-50"
                       >
                         <Copy className="w-3.5 h-3.5" /> Copiar a otros días
                       </button>
