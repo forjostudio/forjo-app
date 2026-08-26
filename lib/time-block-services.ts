@@ -191,3 +191,46 @@ export function startTimesNotOffered(
   }
   return hidden
 }
+
+/**
+ * Los `service_id` que DECLARA esta franja. Arreglo vacío = franja comodín (D-01).
+ *
+ * Es la pregunta INVERSA de `blocksForService`: aquélla responde *"¿en qué franjas se da el
+ * servicio X?"* (lo que necesita la disponibilidad pública), ésta responde *"¿qué declara la franja
+ * Y?"* — lo que necesita el panel de la Phase 19, que pinta la lista de servicios de cada franja.
+ * La cabecera de este módulo ya anticipaba a ese consumidor (`:9-10`), y AGENDA-02 prohíbe
+ * explícitamente reimplementar la lectura en el componente: un `.filter(r => r.time_block_id ===
+ * ...)` inline en el JSX es una SEGUNDA interpretación de la regla del comodín, y dos
+ * interpretaciones es exactamente cómo el panel y el motor terminan diciendo cosas distintas sobre
+ * la misma franja.
+ *
+ * ⚠ El `[]` es un estado DECLARADO, no un hueco: la AUSENCIA de filas ES la regla del comodín. No
+ * hay sentinel ni columna nullable donde leerlo —las tres columnas de la puente son NOT NULL—, así
+ * que "esta franja sirve para todo" se COMPUTA, no se lee. Quien reciba `[]` no está viendo un dato
+ * faltante: está viendo la respuesta.
+ *
+ * Contrato D-16 intacto: no filtra por negocio ni por vigencia. El orden de salida es el orden de
+ * `bridge`, estable y sin criterio propio (el panel ordena por su catálogo, no por acá).
+ */
+export function servicesOfBlock(blockId: string, bridge: TimeBlockService[]): string[] {
+  return bridge.filter((r) => r.time_block_id === blockId).map((r) => r.service_id)
+}
+
+/**
+ * ¿Esta franja es comodín? Sí ⟺ no tiene NINGUNA fila en la puente.
+ *
+ * Por construcción es `servicesOfBlock(...).length === 0` —y se implementa así, delegando, igual que
+ * `isServiceScheduled` se apoya en `blocksForService` (`:116`)— para que las dos respuestas no
+ * puedan divergir nunca.
+ *
+ * ⚠ El matiz que muerde (D-11): mira TODAS las filas, incluidas las de servicios que el negocio
+ * tiene DESACTIVADOS y que hoy nadie puede reservar. La columna `active` es de `services`, no de la
+ * puente: desactivar un servicio NO borra su mapeo, así que una franja cuyo único mapeo es a un
+ * servicio desactivado sigue restringida para el motor. Si esta función filtrara por vigencia, el
+ * panel pintaría "Cualquier servicio" sobre una franja que el público ve restringida — o sea, el
+ * panel mentiría sobre lo que ve el cliente. Ése es el modo de falla que esta función existe para
+ * prevenir, y por eso su firma NO tiene por dónde recibir una noción de vigencia: sólo filas.
+ */
+export function isBlockWildcard(blockId: string, bridge: TimeBlockService[]): boolean {
+  return servicesOfBlock(blockId, bridge).length === 0
+}
