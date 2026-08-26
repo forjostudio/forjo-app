@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSaveHoursPayload, buildDayStatesFromRows } from '@/lib/agenda-hours-payload'
+import { buildSaveHoursPayload, buildDayStatesFromRows, isValidBlockTime } from '@/lib/agenda-hours-payload'
 import type { AgendaBlockDraft, AgendaDayDraft, SavedAgendaBlock } from '@/lib/agenda-hours-payload'
 
 // ── Phase 19 (el panel de la agenda por servicio) — tests puros de lib/agenda-hours-payload.ts ──
@@ -180,5 +180,36 @@ describe('ida y vuelta estado → payload → base → estado', () => {
     // y el contenido sobrevive la vuelta completa (horarios normalizados y servicios intactos)
     expect(segundoPayload.map((p) => p.start_time)).toEqual(['09:00', '14:00'])
     expect(segundoPayload[0].service_ids).toEqual(['corte'])
+  })
+})
+
+// ── Suite 4: isValidBlockTime (el hueco que dejaba pasar una hora vacía) ──────────
+describe('isValidBlockTime — la forma de la hora, antes del orden', () => {
+  it('acepta las horas que el editor produce de verdad', () => {
+    for (const t of ['00:00', '09:00', '13:45', '23:59']) {
+      expect(isValidBlockTime(t)).toBe(true)
+    }
+  })
+
+  it('rechaza el input VACIADO, que es el caso que motivó la función', () => {
+    // un <input type="time"> se puede borrar: el valor queda '' y el ::time del RPC revienta con
+    // 22007 antes de llegar a su propio backstop de invalid_block
+    expect(isValidBlockTime('')).toBe(false)
+    expect(isValidBlockTime(undefined)).toBe(false)
+    expect(isValidBlockTime(null)).toBe(false)
+  })
+
+  it('rechaza las formas que rompen el mismo cast por el mismo motivo', () => {
+    for (const t of ['9:00', '09:0', '25:00', '12:60', '24:00', '09:00:00', 'ab:cd', ' 09:00']) {
+      expect(isValidBlockTime(t)).toBe(false)
+    }
+  })
+
+  it('CONTROL NEGATIVO: la comparación de orden sola NO alcanza sobre una hora vacía', () => {
+    // '18:00' <= '' es false (cualquier cadena no vacía ordena después de ''), así que un bloque con
+    // el inicio borrado pasaba la única validación que había. Si esta expectativa se cae, alguien
+    // volvió a confiar el chequeo al orden lexicográfico.
+    expect('18:00' <= '').toBe(false)
+    expect(isValidBlockTime('')).toBe(false)
   })
 })

@@ -22,7 +22,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { buildDayEntries, computeOverlapFull, type DayEntry } from '@/lib/agenda-occupancy'
 import { servicesOfBlock, isBlockWildcard } from '@/lib/time-block-services'
-import { buildDayStatesFromRows, buildSaveHoursPayload, type AgendaBlockDraft, type AgendaDayDraft, type SavedAgendaBlock } from '@/lib/agenda-hours-payload'
+import { buildDayStatesFromRows, buildSaveHoursPayload, isValidBlockTime, type AgendaBlockDraft, type AgendaDayDraft, type SavedAgendaBlock } from '@/lib/agenda-hours-payload'
 import { resolveVertical } from '@/lib/verticals'
 import { todayInAR } from '@/lib/booking-window'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -678,6 +678,14 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     const next = dayStates.map(ds => {
       if (!ds.enabled) return ds
       const blocks = ds.blocks.map(b => {
+        // PRIMERO la forma, después el orden. La comparación de orden es lexicográfica y sobre una
+        // hora VACÍA miente: `'18:00' <= ''` es `false`, así que un bloque al que le borraron la
+        // hora de inicio pasaba la validación entera y se lo comía el `::time` del RPC con un
+        // 22007. El chequeo de forma lo agarra acá, con el error pegado a los inputs que lo
+        // causaron (WR-01).
+        if (!isValidBlockTime(b.start_time) || !isValidBlockTime(b.end_time)) {
+          return { ...b, error: 'Completá la hora de inicio y la de fin' }
+        }
         if (b.end_time <= b.start_time) return { ...b, error: 'La hora fin debe ser mayor a la hora inicio' }
         return { ...b, error: undefined }
       })

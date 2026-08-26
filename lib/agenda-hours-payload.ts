@@ -118,6 +118,24 @@ function uniqueIds(ids: string[] | null | undefined): string[] {
   return out
 }
 
+/**
+ * ¿La hora que tiene el editor es una hora que la base pueda castear? (`'HH:MM'`, 00:00–23:59)
+ *
+ * Existe porque un `<input type="time">` se puede **vaciar**: el valor pasa a `''` y el editor
+ * seguía dejándolo viajar. La única validación del cliente era la comparación de orden
+ * `end_time <= start_time`, y con `start_time === ''` esa comparación devuelve `false` —cualquier
+ * cadena no vacía ordena DESPUÉS de `''`—, así que el bloque pasaba el filtro. Del otro lado, el
+ * `::time` del RPC (migr. 074) revienta con `22007 invalid input syntax for type time: ""` ANTES de
+ * poder llegar a su propio backstop de `invalid_block`, y el dueño se come un error de la base por
+ * un campo vacío que la pantalla podría haberle marcado.
+ *
+ * Se valida la forma COMPLETA y no sólo el "no vacío": `'9:0'`, `'25:00'` y `'ab:cd'` rompen el
+ * mismo cast por el mismo motivo, y una franja con una hora imposible no es una franja.
+ */
+export function isValidBlockTime(value: string | undefined | null): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value ?? '')
+}
+
 /** `'09:00:00'` → `'09:00'`. Los inputs `type="time"` del editor no toleran los segundos. */
 function toHHMM(time: string): string {
   return time.slice(0, 5)
