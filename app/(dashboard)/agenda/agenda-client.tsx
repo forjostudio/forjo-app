@@ -20,6 +20,8 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Minus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail, Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { buildDayEntries, computeOverlapFull, type DayEntry } from '@/lib/agenda-occupancy'
+import { servicesOfBlock } from '@/lib/time-block-services'
+import { buildDayStatesFromRows, type AgendaBlockDraft, type AgendaDayDraft } from '@/lib/agenda-hours-payload'
 import { resolveVertical } from '@/lib/verticals'
 import { todayInAR } from '@/lib/booking-window'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -185,15 +187,25 @@ const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
 const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30]
 
 // ── Time block state types ──────────────────────────────────────────────────
-// `capacity` = lugares del bloque (CUPOS-01). 1 = bloque individual de siempre (cero cambio de
-// comportamiento); > 1 = clase grupal con N cupos en el mismo slot.
-type LocalBlock = { id?: string; start_time: string; end_time: string; label: string; location_id: string; capacity: number; error?: string }
-type DayConfig = { enabled: boolean; blocks: LocalBlock[] }
+// La franja declara QUÉ se da en ella: `service_ids` son los servicios mapeados, y el arreglo
+// VACÍO es el comodín (D-01) — "sirve para todos" se computa desde la ausencia de mapeo, no se lee
+// de un sentinel. Un bloque nuevo nace comodín sin que haya que escribir nada.
+//
+// El cupo del bloque NO vive acá (D-12): la columna `time_blocks.capacity` dejó de decidir en la
+// migr. 068 —el motor lee el cupo del SERVICIO— y arrastrarla al código nuevo la volvería a
+// legitimar. (Las lecturas de `capacity` de la vista semanal, más abajo, salen de `services`, que
+// es otra cosa.)
+//
+// El tipo es el borrador que exporta `lib/agenda-hours-payload.ts` MÁS el error de validación del
+// editor, en vez de una segunda declaración del mismo objeto: `AgendaDayDraft` es genérico
+// justamente para poder recibirlo sin castear en el call site.
+type LocalBlock = AgendaBlockDraft & { error?: string }
+type DayConfig = AgendaDayDraft<LocalBlock>
 
 function defaultBlock(day: number): LocalBlock {
-  if (day >= 1 && day <= 5) return { start_time: '09:00', end_time: '18:00', label: '', location_id: '', capacity: 1 }
-  if (day === 6) return { start_time: '09:00', end_time: '13:00', label: '', location_id: '', capacity: 1 }
-  return { start_time: '09:00', end_time: '18:00', label: '', location_id: '', capacity: 1 }
+  if (day >= 1 && day <= 5) return { start_time: '09:00', end_time: '18:00', label: '', location_id: '', service_ids: [] }
+  if (day === 6) return { start_time: '09:00', end_time: '13:00', label: '', location_id: '', service_ids: [] }
+  return { start_time: '09:00', end_time: '18:00', label: '', location_id: '', service_ids: [] }
 }
 
 interface Props {
@@ -274,21 +286,45 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   const [activeLoc, setActiveLoc] = useState(() => activeLocations[0]?.id ?? '')
   const selLoc = activeLocations.find(l => l.id === activeLoc) || null
   const selMeta = selLoc ? [selLoc.address, selLoc.phone].filter(Boolean).join(' · ') : ''
+  // Los 7 días del editor, derivados UNA sola vez de las props con la MISMA función que va a
+  // re-derivarlos después de cada guardado (P-01). Tener dos derivaciones distintas del mismo
+  // estado es exactamente cómo se llega a que el segundo "Guardar horarios" duplique todo: la del
+  // inicializador se mantiene y la del guardado se olvida. Por eso la derivación vive en
+  // `lib/agenda-hours-payload.ts` y acá sólo se la alimenta.
+  //
+  // Los servicios de cada franja salen de `servicesOfBlock`, la función pura de la Phase 18, y NO
+  // de un filtro inline sobre las filas de la puente: ese filtro sería una SEGUNDA interpretación
+  // de la regla del comodín, y dos interpretaciones es como el panel y el motor terminan diciendo
+  // cosas distintas sobre la misma franja (AGENDA-02, P-07).
   const [dayStates, setDayStates] = useState<DayConfig[]>(() =>
-    Array.from({ length: 7 }, (_, day) => {
-      const blocks = initialTimeBlocks.filter(b => b.day_of_week === day)
-      return {
-        enabled: blocks.length > 0,
-        blocks: blocks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, label: b.label || '', location_id: b.location_id || '', capacity: b.capacity ?? 1 })),
-      }
-    })
+    buildDayStatesFromRows(
+      initialTimeBlocks.map(b => ({
+        id: b.id,
+        day_of_week: b.day_of_week,
+        start_time: b.start_time,
+        end_time: b.end_time,
+        label: b.label ?? null,
+        location_id: b.location_id ?? null,
+        service_ids: servicesOfBlock(b.id, initialTimeBlockServices),
+      }))
+    )
   )
   const [savingHours, setSavingHours] = useState(false)
+  // ── Cambios sin guardar (D-03) ────────────────────────────────────────────
+  // Con horarios, un input que quedó mal SE VE. Con el mapeo no: el dueño toca cuatro chips, se va
+  // sin guardar, y la franja sigue en comodín — un estado visualmente IDÉNTICO a no haber
+  // configurado nada. Por eso los seis gestos que expresan intención del dueño (abrir/cerrar día,
+  // agregar bloque, quitar bloque, editar bloque, copiar día, togglear servicio) prenden esta
+  // bandera. `validateBlocks` NO la prende: marcar errores no es un cambio de intención, y un
+  // indicador que se prende solo miente — y un indicador que miente es peor que no tenerlo.
+  // El indicador visual y el apagado tras un guardado exitoso son del Plan 19-05.
+  const [hoursDirty, setHoursDirty] = useState(false)
 
   // Abrir/cerrar un día PARA EL CONSULTORIO ACTIVO: cerrar = quitar sus bloques de ese día;
   // abrir = agregar un bloque por defecto de ese consultorio. Los bloques de otros consultorios
   // del mismo día no se tocan. enabled = hay algún bloque (de cualquier consultorio) ese día.
   function toggleDay(day: number) {
+    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const dayBlocks = next[day].blocks
@@ -302,6 +338,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }
 
   function addBlock(day: number) {
+    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const locBlocks = next[day].blocks.filter(b => (b.location_id || '') === activeLoc)
@@ -309,12 +346,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       const newStart = lastBlock?.end_time || '09:00'
       const [h, m] = newStart.split(':').map(Number)
       const newEnd = `${String(Math.min(h + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      next[day] = { ...next[day], enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '', location_id: activeLoc, capacity: 1 }] }
+      // Nace COMODÍN (`service_ids: []`): no hay que escribir nada para que una franja nueva sirva
+      // para todos los servicios, que es justo la regla D-01.
+      next[day] = { ...next[day], enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, label: '', location_id: activeLoc, service_ids: [] }] }
       return next
     })
   }
 
   function removeBlock(day: number, idx: number) {
+    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const blocks = next[day].blocks.filter((_, i) => i !== idx)
@@ -323,12 +363,34 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     })
   }
 
-  // value: string para los Inputs de texto/hora/label; number para `capacity` (cupo).
-  function updateBlock(day: number, idx: number, field: keyof LocalBlock, value: string | number) {
+  // Con el cupo afuera, TODOS los campos que se editan por acá son texto (hora, hora, etiqueta,
+  // consultorio): el tipo del valor se angosta a cadena para que no vuelva a entrar un número.
+  function updateBlock(day: number, idx: number, field: keyof LocalBlock, value: string) {
+    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const blocks = [...next[day].blocks]
       blocks[idx] = { ...blocks[idx], [field]: value, error: undefined }
+      next[day] = { ...next[day], blocks }
+      return next
+    })
+  }
+
+  // Toglea un servicio en UNA franja concreta (día + índice dentro del día). Inmutable: se
+  // reemplazan el arreglo de días, el de bloques y el de servicios, nunca se muta ninguno.
+  //
+  // NO persiste nada: D-03 fija "editá y después guardá" con un solo botón, y además sobre un
+  // bloque recién agregado no habría a qué mapear porque todavía no tiene id en la base.
+  function toggleBlockService(day: number, idx: number, serviceId: string) {
+    setHoursDirty(true)
+    setDayStates(prev => {
+      const next = [...prev]
+      const blocks = [...next[day].blocks]
+      const current = blocks[idx].service_ids
+      const service_ids = current.includes(serviceId)
+        ? current.filter(id => id !== serviceId)
+        : [...current, serviceId]
+      blocks[idx] = { ...blocks[idx], service_ids }
       next[day] = { ...next[day], blocks }
       return next
     })
@@ -372,34 +434,49 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     // Copia SOLO los bloques del consultorio activo del día origen; en los destinos reemplaza
     // los de ese consultorio y conserva los de los demás.
     const src = dayStates[copyDay].blocks.filter(b => (b.location_id || '') === activeLoc)
+    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       for (const d of copyTargets) {
         const others = next[d].blocks.filter(b => (b.location_id || '') !== activeLoc)
-        const copied = src.map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label, location_id: activeLoc, capacity: b.capacity }))
+        // El mapeo se arrastra con el horario (D-05), pero con el arreglo CLONADO: si dos días
+        // copiados compartieran la referencia, togglear un chip en uno cambiaría el otro en
+        // silencio (P-04). El `[...]` es la diferencia entre copiar y aliasear.
+        const copied = src.map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label, location_id: activeLoc, service_ids: [...b.service_ids] }))
         const blocks = [...others, ...copied]
         next[d] = { enabled: blocks.length > 0, blocks }
       }
       return next
     })
     setCopyDay(null)
-    toast.success('Horario copiado · acordate de guardar')
+    // Copy condicional: el mensaje sólo nombra los servicios si de verdad se copió alguno; decir
+    // que se copiaron cuando no había ninguno mapeado sería un aviso falso.
+    const copiedServices = src.some(b => b.service_ids.length > 0)
+    toast.success(copiedServices
+      ? `Horario y ${term.services.toLowerCase()} copiados · acordate de guardar`
+      : 'Horario copiado · acordate de guardar')
   }
 
+  // ⚠ Esta función se REEMPLAZA ENTERA en el Plan 19-05: el borrar-todo-e-insertar pasa a ser el
+  // RPC `save_agenda_blocks` de la migr. 074, alimentado por los dos constructores de
+  // `lib/agenda-hours-payload.ts`. No invertir en mejorarla acá: lo único que cambia en este plan
+  // es que el cupo del bloque deja de escribirse (D-12).
   async function saveHours() {
     if (!validateBlocks()) { toast.error('Corregí los errores antes de guardar'); return }
     setSavingHours(true)
     // Delete all existing blocks for this business
     await supabase.from('time_blocks').delete().eq('business_id', business.id)
     // Collect blocks to insert
-    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null; location_id: string | null; capacity: number }[] = []
+    const toInsert: { business_id: string; day_of_week: number; start_time: string; end_time: string; label: string | null; location_id: string | null }[] = []
     dayStates.forEach((ds, day) => {
       if (!ds.enabled) return
       ds.blocks.forEach(b => {
         // Con consultorios cargados no existe "General": se descartan los bloques sin consultorio.
         if (activeLocations.length > 0 && !b.location_id) return
-        // capacity viaja en el insert (delete-all + insert ya reinserta todos los bloques). Default 1 = individual.
-        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null, location_id: b.location_id || null, capacity: b.capacity || 1 })
+        // El cupo del bloque NO viaja (D-12): la columna es NOT NULL con default, así que el INSERT
+        // que no la menciona toma el default. Dejar de escribirla es el punto; resetearla a mano
+        // sería volver a decidir sobre ella (P-06).
+        toInsert.push({ business_id: business.id, day_of_week: day, start_time: b.start_time, end_time: b.end_time, label: b.label || null, location_id: b.location_id || null })
       })
     })
     if (toInsert.length > 0) {
@@ -944,8 +1021,11 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                   <div className="space-y-2">
                     {dayBlocks.map(({ block, idx }) => (
                       <div key={idx} className="space-y-1">
-                        {/* Hora + cupo en UNA sola línea: los inputs de hora (flex-1) se achican, el cupo
-                            y la × van fijos. La leyenda "Cupo" se omite en la línea por espacio (title/aria). */}
+                        {/* Hora inicio → hora fin → ×, en UNA sola línea. El stepper de cupo salió
+                            de acá (D-12: la columna dejó de decidir en la migr. 068) y los ~74px
+                            que liberó van ENTEROS a los dos inputs `flex-1`, no a un control nuevo:
+                            a 375px cada input pasa de ~78px a ~115px. La línea de servicios va
+                            DEBAJO del párrafo de error, no en esta fila. */}
                         <div className="flex items-center gap-1.5">
                           <Input
                             type="time"
@@ -960,38 +1040,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
                             className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                           />
-                          {/* Cupo (CUPOS-01): stepper −/+ con el número EDITABLE a mano. min 1 = individual. */}
-                          <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border" title="Cupo (lugares por bloque)">
-                            <button
-                              type="button"
-                              aria-label="Menos cupo"
-                              disabled={block.capacity <= 1}
-                              onClick={() => updateBlock(day, idx, 'capacity', Math.max(1, block.capacity - 1))}
-                              className="flex h-8 w-7 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-                            >
-                              <Minus className="h-3 w-3" />
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              value={block.capacity}
-                              onFocus={e => e.target.select()}
-                              onChange={e => updateBlock(day, idx, 'capacity', Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-                              className="h-8 w-9 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                              aria-label="Cupo (lugares por bloque)"
-                            />
-                            <button
-                              type="button"
-                              aria-label="Más cupo"
-                              onClick={() => updateBlock(day, idx, 'capacity', block.capacity + 1)}
-                              className="flex h-8 w-7 items-center justify-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                            >
-                              <Plus className="h-3 w-3" />
-                            </button>
-                          </div>
+                          {/* Único botón de la fila: se le suma nombre accesible (hasta ahora sólo
+                              tenía `title`, que un lector de pantalla puede no anunciar) y foco
+                              visible, que no tenía. Es el único retoque permitido a esta fila. */}
                           <button
                             onClick={() => removeBlock(day, idx)}
-                            className="shrink-0 text-muted-foreground hover:text-red-400 transition-colors"
+                            aria-label="Eliminar bloque"
+                            className="shrink-0 rounded text-muted-foreground transition-colors hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                             title="Eliminar bloque"
                           >
                             <X className="w-4 h-4" />
