@@ -4,13 +4,13 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
 stopped_at: Completado 19-02-PLAN.md (migr. 074 validada en LOCAL; aplicar a prod en 19-06)
-last_updated: "2026-08-26T03:31:42.764Z"
+last_updated: "2026-08-26T03:46:18.289Z"
 last_activity: 2026-08-26 -- Phase 19 execution started
 progress:
   total_phases: 20
   completed_phases: 18
   total_plans: 98
-  completed_plans: 94
+  completed_plans: 95
   percent: 90
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 19 (el-panel) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-08-26 -- Phase 19 execution started
 
@@ -159,6 +159,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 18 P04 | 38min | 2 tasks | 3 files |
 | Phase 19 P01 | 12min | 2 tasks | 4 files |
 | Phase 19 P02 | 15min | 3 tasks | 2 files |
+| Phase 19 P03 | 25min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -320,6 +321,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 19]: 19-01: buildSaveHoursPayload no acepta consultorio — P-03 (guardar una sede borra la otra) queda cerrado por la FIRMA: reintroducir el bug obliga a cambiarla, lo que se ve en review
 - [Phase 19]: 19-02: save_agenda_blocks corre en modo INVOKER (no DEFINER) y solo la ejecuta authenticated — no se repite RA-05 sobre la configuracion del negocio
 - [Phase 19]: 19-02: la pertenencia cross-tenant de la puente NO se revalida en plpgsql; la rechazan las FK compuestas de la migr. 073
+- [Phase ?]: 19-03: el guard del pre-check de borrado tambien mira count === null — un head count de PostgREST que no resuelve vuelve 204 sin error, y el ?? 0 lo leia como 'no hay nada'
 
 ### Pending Todos
 
@@ -394,7 +396,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-26T03:31:42.712Z
+Last session: 2026-08-26T03:46:05.489Z
 Stopped at: Completado 19-02-PLAN.md (migr. 074 validada en LOCAL; aplicar a prod en 19-06)
 Resume file: None
 
