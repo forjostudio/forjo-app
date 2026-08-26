@@ -4,6 +4,8 @@ import {
   isServiceScheduled,
   isServiceAllowedAt,
   startTimesNotOffered,
+  servicesOfBlock,
+  isBlockWildcard,
 } from '@/lib/time-block-services'
 import type { BlockWindow } from '@/lib/time-block-services'
 import type { TimeBlockService } from '@/lib/types'
@@ -173,5 +175,68 @@ describe('startTimesNotOffered — la resta de conjuntos', () => {
     expect(startTimesNotOffered('ceramica', blocks, bridge, 120)).toEqual(['09:00', '11:00'])
     // entrada degenerada: sin paso no hay grilla que enumerar
     expect(startTimesNotOffered('ceramica', blocks, bridge, 0)).toEqual([])
+  })
+})
+
+// ── Suite 5: servicesOfBlock (la pregunta INVERSA que necesita el panel) ──────────
+// Phase 19: el panel pinta, por franja, QUÉ se da ahí. Congelar estos casos es lo que impide que
+// esa lectura se reimplemente con un `.filter(r => r.time_block_id === ...)` inline en el JSX
+// (AGENDA-02): dos lecturas de la misma regla es como el panel y el motor terminan diciendo cosas
+// distintas sobre la misma franja.
+describe('servicesOfBlock — qué declara la franja (D-01)', () => {
+  it('franja sin filas ⇒ arreglo vacío (y vacío SIGNIFICA comodín, no "sin servicios")', () => {
+    expect(servicesOfBlock('manana', [])).toEqual([])
+  })
+
+  it('CONTROL NEGATIVO de 1: franja con dos filas ⇒ exactamente esos dos ids, en el orden de la puente', () => {
+    const bridge = [map('manana', 'corte'), map('manana', 'color')]
+    expect(servicesOfBlock('manana', bridge)).toEqual(['corte', 'color'])
+  })
+
+  it('CONTROL NEGATIVO: las filas de OTRA franja no contaminan el resultado', () => {
+    // detecta olvidarse de filtrar por time_block_id: ese bug pasa el caso anterior y falla éste,
+    // porque "tarde" no tiene filas propias y tiene que salir comodín
+    const bridge = [map('manana', 'corte'), map('tarde', 'color')]
+    expect(servicesOfBlock('manana', bridge)).toEqual(['corte'])
+    expect(servicesOfBlock('tarde', bridge)).toEqual(['color'])
+    expect(servicesOfBlock('noche', bridge)).toEqual([])
+  })
+
+  it('CONTRATO D-16: filas con otro business_id se interpretan igual — el helper NO filtra por negocio', () => {
+    // mismo motivo que en blocksForService (T-19-02): filtrar por tenant acá adentro daría una
+    // falsa sensación de aislamiento en un módulo que no puede validar el origen de las filas
+    const ajena = [map('manana', 'corte', 'otro-negocio')]
+    const propia = [map('manana', 'corte', 'biz')]
+    expect(servicesOfBlock('manana', ajena)).toEqual(servicesOfBlock('manana', propia))
+  })
+})
+
+// ── Suite 6: isBlockWildcard (¿esta franja sirve para todo?) ──────────────────────
+describe('isBlockWildcard — comodín ⟺ cero filas (D-01, D-11)', () => {
+  it('franja sin ninguna fila en la puente ⇒ true (comodín)', () => {
+    expect(isBlockWildcard('manana', [])).toBe(true)
+  })
+
+  it('CONTROL NEGATIVO de 5: franja con una fila ⇒ false', () => {
+    expect(isBlockWildcard('manana', [map('manana', 'corte')])).toBe(false)
+  })
+
+  it('EL CASO MORDEDOR (D-11): franja cuyo único mapeo es a un servicio DESACTIVADO ⇒ false, porque el motor tampoco la trata como comodín', () => {
+    // 'ceramica-vieja' es un servicio que el negocio tiene con active = false. La columna `active`
+    // vive en `services`, NO en la puente: la fila sobrevive a la desactivación y la franja SIGUE
+    // restringida para el motor. Si esta función aceptara cualquier noción de vigencia, el panel
+    // pintaría "Cualquier servicio" sobre una franja que el público ve restringida — el panel
+    // mentiría sobre lo que ve el cliente. Lo que congela este caso es que la firma NO tiene por
+    // dónde recibir esa noción: sólo filas de la puente.
+    const bridge = [map('manana', 'ceramica-vieja')]
+    expect(isBlockWildcard('manana', bridge)).toBe(false)
+    // y es consistente con servicesOfBlock (fuente única, cero chance de divergir)
+    expect(isBlockWildcard('manana', bridge)).toBe(servicesOfBlock('manana', bridge).length === 0)
+  })
+
+  it('una franja comodín rodeada de franjas mapeadas sigue siendo comodín', () => {
+    const bridge = [map('manana', 'corte'), map('noche', 'color')]
+    expect(isBlockWildcard('tarde', bridge)).toBe(true)
+    expect(isBlockWildcard('manana', bridge)).toBe(false)
   })
 })
