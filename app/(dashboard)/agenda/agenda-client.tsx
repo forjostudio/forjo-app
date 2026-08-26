@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback, useSyncExternalStore, type M
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, TimeBlock, Location, ScheduleException, Service, Professional, Client } from '@/lib/types'
+import { Business, TimeBlock, Location, ScheduleException, Service, Professional, Client, TimeBlockService } from '@/lib/types'
 import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, addDays, isSameMonth, isSameDay, isBefore, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -51,6 +51,23 @@ export type AgendaAppt = {
   professional_id?: string | null
   services: { name?: string } | null
   professionals: { name?: string } | null
+}
+
+// Un servicio del catálogo con el que el editor de horarios pinta los chips de cada franja.
+//
+// Tipo propio y NO `Service` entero a propósito (T-19-19): al editor le alcanzan tres columnas
+// —id para el mapeo, nombre para el chip, y si está activo para el matiz D-11— y mandar el catálogo
+// completo al browser arrastraría precio, duración, seña y cupo a un bundle que no los necesita.
+// Son datos del propio negocio, así que el riesgo es de superficie, no de tenant; pero superficie
+// que no hace falta no viaja.
+//
+// ⚠ Incluye los INACTIVOS: es lo único que puede NOMBRAR a un servicio desactivado que sigue
+// mapeado a una franja (D-11). Sin él, esa franja se vería como comodín cuando el motor la trata
+// como restringida.
+export type ServiceCatalogItem = {
+  id: string
+  name: string
+  active: boolean
 }
 
 // Color del chip de turno según su estado, para la vista semanal.
@@ -185,6 +202,12 @@ interface Props {
   initialLocations: Location[]
   initialExceptions: ScheduleException[]
   initialAppointments: AgendaAppt[]
+  // Las filas de la puente franja↔servicio (migr. 071): el mapeo que decide QUÉ se ofrece en cada
+  // franja. Llegan server-rendered para que la línea de servicios se pinte sin fetch en cliente.
+  initialTimeBlockServices: TimeBlockService[]
+  // El catálogo de los chips, CON inactivos (D-11). Distinto de `services`, que va filtrado a
+  // activos porque lo consume el alta manual.
+  serviceCatalog: ServiceCatalogItem[]
   services: Service[]
   professionals: Professional[]
   clients: Client[]
@@ -192,7 +215,7 @@ interface Props {
   googleConnected: boolean
 }
 
-export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions, initialAppointments, services, professionals, clients, googleEnabled, googleConnected }: Props) {
+export function AgendaClient({ business, initialTimeBlocks, initialLocations, initialExceptions, initialAppointments, initialTimeBlockServices, serviceCatalog, services, professionals, clients, googleEnabled, googleConnected }: Props) {
   const supabase = createClient()
   const router = useRouter()
 

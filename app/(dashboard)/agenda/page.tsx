@@ -25,7 +25,7 @@ export default async function AgendaPage() {
   // Turnos desde el inicio de la semana actual en adelante para la vista semanal (sin cancelados).
   const weekStartStr = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
 
-  const [{ data: timeBlocks }, { data: locations }, { data: exceptions }, { data: appointments }, { data: services }, { data: professionals }, { data: clients }] = await Promise.all([
+  const [{ data: timeBlocks }, { data: locations }, { data: exceptions }, { data: appointments }, { data: services }, { data: professionals }, { data: clients }, { data: timeBlockServices }, { data: serviceCatalog }] = await Promise.all([
     supabase.from('time_blocks').select('*').eq('business_id', business.id).order('day_of_week').order('start_time'),
     supabase.from('locations').select('*').eq('business_id', business.id).order('created_at'),
     supabase.from('schedule_exceptions').select('*').eq('business_id', business.id).order('date'),
@@ -53,6 +53,22 @@ export default async function AgendaPage() {
     supabase.from('services').select('*').eq('business_id', business.id).eq('active', true),
     supabase.from('professionals').select('*').eq('business_id', business.id).eq('active', true),
     supabase.from('clients').select('*').eq('business_id', business.id).order('name', { ascending: true }),
+    // El mapeo franja↔servicio (migr. 071): decide QUÉ se ofrece en cada franja. Mismas tres
+    // columnas con las que lo leen los dos consumidores públicos (availability y el backstop del
+    // create), para que el panel no interprete una forma distinta del mismo dato. Filtrado por
+    // business_id ADEMÁS de la RLS: defensa en profundidad, regla dura del proyecto (T-19-18).
+    supabase.from('time_block_services').select('business_id, time_block_id, service_id').eq('business_id', business.id),
+    // El catálogo de los chips del editor de horarios. Son DOS lecturas de `services` en la misma
+    // página y no una compartida a propósito: la de arriba va filtrada a activos porque la consume
+    // el form de alta manual, y sacarle ese filtro metería servicios dados de baja en el alta =
+    // regresión (T-19-20). Ésta, en cambio:
+    //   - NO filtra por activo: un servicio desactivado que sigue mapeado a una franja tiene que
+    //     poder NOMBRARSE en el editor (D-11); sin él, la franja se vería como comodín cuando el
+    //     motor la trata como restringida.
+    //   - ordena por created_at: es el orden que fija el UI-SPEC, y prohíbe reordenar por
+    //     seleccionados — los chips saltarían de lugar en el mismo click que los marca.
+    // Sólo tres columnas: el editor no necesita precio ni duración en el browser (T-19-19).
+    supabase.from('services').select('id, name, active').eq('business_id', business.id).order('created_at'),
   ])
 
   return (
@@ -62,6 +78,8 @@ export default async function AgendaPage() {
       initialLocations={locations || []}
       initialExceptions={exceptions || []}
       initialAppointments={(appointments || []) as unknown as AgendaAppt[]}
+      initialTimeBlockServices={timeBlockServices || []}
+      serviceCatalog={serviceCatalog || []}
       services={services || []}
       professionals={professionals || []}
       clients={clients || []}
