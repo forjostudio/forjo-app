@@ -344,9 +344,18 @@ Misma posición, cuando **sí** hay servicios. Es el único texto explicativo de
 | Marcado | `border-foreground/30 bg-secondary text-foreground` + icono `Check` |
 | Marcado + hover | sin cambio — el estado ya es el feedback |
 | Marcado + inactivo | igual que marcado + `border-dashed` + sufijo `· inactivo` |
-| Guardando (`savingHours`) | **ninguno**. Los chips no se deshabilitan: el guardado toma un snapshot del estado al hacer click en "Guardar horarios" y el feedback ya lo da el botón ("Guardando..."). Deshabilitar solo los chips y no los inputs de hora sería una inconsistencia nueva. |
-| Disabled | **no existe** en esta fase |
+| Guardando (`savingHours`) | `disabled` — `disabled:pointer-events-none disabled:opacity-50`, junto con **todo** el resto del grid (inputs de hora, ×, toggle de día, Agregar bloque, Copiar a otros días). |
+| Disabled | solo durante `savingHours` (ver fila anterior). No hay otro caso en esta fase. |
 | Error de guardado | lo maneja `saveHours` con su `toast.error`; los chips no cambian de aspecto |
+
+> **Enmienda 2026-08-26 (post code-review CR-01).** Esta tabla decía originalmente que durante `savingHours` los chips
+> **no** se deshabilitan, con dos razones: (a) *"el guardado toma un snapshot del estado"* y (b) *"deshabilitar solo los
+> chips y no los inputs de hora sería una inconsistencia nueva"*. La razón (a) resultó **falsa**: `saveHours` hace un
+> reemplazo no-funcional del estado con las filas que devuelve el RPC (`setDayStates(buildDayStatesFromRows(...))`) y
+> después `setHoursDirty(false)` — así que todo chip tocado mientras el RPC está en vuelo se pierde **en silencio**, en un
+> estado visualmente idéntico a "nunca se configuró". Es el modo de falla que este milestone existe para matar. La razón
+> (b) sigue en pie y por eso el fix congela el grid **entero**, no solo los chips. Contrato original: aprobado 6/6; esta
+> fila es la única que cambia.
 
 **Motion:** solo `transition-colors` (150ms default). **Prohibido** animar la aparición/desaparición del chip comodín (D-17: al instante), la expansión de "Ver todos", o cualquier propiedad de layout (`height`, `width`, `margin`).
 
