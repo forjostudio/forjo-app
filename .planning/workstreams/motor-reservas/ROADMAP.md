@@ -701,7 +701,7 @@ Plans:
   1. El dueño asigna servicios a una franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada (AGENDA-05).
   2. Una franja sin servicios asignados se ve y se lee como **"cualquiera"** (AGENDA-06).
 
-**Plans**: 4/6 plans executed
+**Plans**: 5/6 plans executed
 
 **Wave 1**
 
@@ -715,7 +715,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 19-05-PLAN.md — La línea de servicios bajo cada franja (D-08/D-09/D-10/D-16/D-17) + `saveHours` sobre el RPC con re-derivación del estado y mapeo de rechazos a copy propia
+- [x] 19-05-PLAN.md — La línea de servicios bajo cada franja (D-08/D-09/D-10/D-16/D-17) + `saveHours` sobre el RPC con re-derivación del estado y mapeo de rechazos a copy propia
 
 **Wave 4** *(blocked on Wave 3)*
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
-stopped_at: Completado 19-04-PLAN.md
-last_updated: "2026-08-26T03:58:56.601Z"
+stopped_at: Completado 19-05-PLAN.md
+last_updated: "2026-08-26T04:17:53.879Z"
 last_activity: 2026-08-26 -- Phase 19 execution started
 progress:
   total_phases: 20
   completed_phases: 18
   total_plans: 98
-  completed_plans: 96
+  completed_plans: 97
   percent: 90
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 19 (el-panel) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-08-26 -- Phase 19 execution started
 
@@ -161,6 +161,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 19 P02 | 15min | 3 tasks | 2 files |
 | Phase 19 P03 | 25min | 2 tasks | 2 files |
 | Phase 19 P04 | 20min | 3 tasks | 2 files |
+| Phase 19 P05 | 35min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -327,6 +328,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 19-04: el estado inicial de dayStates se deriva con buildDayStatesFromRows + servicesOfBlock — la MISMA derivacion que el post-guardado (P-01); cero filtros inline sobre la puente en el componente
 - [Phase ?]: 19-04: el cupo del bloque salio del editor entero (D-12: tipo, constructores, copiado, guardado y fila); el import de Minus se queda por su segundo uso en la ventana de reserva
 - [Phase ?]: 19-04: npm run lint no puede dar exit 0 en agenda-client.tsx por un error react-hooks/purity PREEXISTENTE en la vista semanal (D-13, fuera de alcance); el gate pasa a eslint acotado sin errores nuevos
+- [Phase ?]: 19-05: isBlockWildcard se consume por adaptador (isDraftBlockWildcard) en vez de reimplementar la regla del comodin en el componente
+- [Phase ?]: 19-05: el rechazo de la base se clasifica a codigo de dominio y la copy vive en un mapa aparte; a consola va el code, nunca el message
 
 ### Pending Todos
 
@@ -401,8 +404,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-26T03:58:56.582Z
-Stopped at: Completado 19-04-PLAN.md
+Last session: 2026-08-26T04:17:48.450Z
+Stopped at: Completado 19-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
