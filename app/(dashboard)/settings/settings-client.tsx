@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService } from '@/lib/types'
 import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
+import { blocksBecomingWildcard } from '@/lib/time-block-services'
 import { nowInAR } from '@/lib/appointment-time'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
@@ -1156,7 +1157,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // `blocks` (Phase 19, D-07) = a cuántas franjas horarias está asignado el servicio en la puente
   // franja↔servicio. Entra por el MISMO camino que los otros counts justamente para heredar el
   // fail-closed: si ese dato falla, el diálogo queda "sin verificar" y no se ofrece eliminar.
-  const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number; blocks: number } | 'error' | null>(null)
+  // `blocks` = a cuántas franjas está asignado el servicio. `blocksToWildcard` = cuántas de ésas
+  // vuelven a COMODÍN al borrarlo (las que no tienen ningún otro servicio). Son dos números
+  // distintos a propósito: el aviso de D-07 existe para advertir del subconjunto que se AGRANDA.
+  const [delInfo, setDelInfo] = useState<{ future: number; nextDate: string | null; activeAbono: boolean; history: number; blocks: number; blocksToWildcard: number } | 'error' | null>(null)
 
   // Token de generación del pre-check (WR-03). `openDeleteService` setea el servicio de una y recién
   // después espera tres round-trips: sin esto, cerrar el modal de A y abrir el de B mientras la
@@ -1175,7 +1179,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // "Hoy" en hora AR, igual que el trigger: con el date de UTC, a las 22:00 de Buenos Aires un
     // turno de mañana temprano dejaría de contarse como futuro.
     const { date: today, time: nowTime } = nowInAR()
-    const [futDias, futHoy, abo, hist, blocks] = await Promise.all([
+    const [futDias, futHoy, abo, hist, blocks, bridge] = await Promise.all([
       // (a) DÍAS POSTERIORES A HOY. Para estos la hora no decide nada: cuentan enteros.
       //
       // El `.or(...)` de abajo es el equivalente EXACTO en PostgREST del
@@ -1202,15 +1206,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       supabase.from('appointments').select('id', { count: 'exact', head: true })
         .eq('business_id', business.id).eq('service_id', s.id),
       // (e) LAS FRANJAS MAPEADAS (D-07). No bloquea nada —el gate de la migr. 065 no las mira— pero cambia lo que
-      // el dueño está por hacer: borrar el servicio deja esas franjas COMODÍN. `head: true` porque
-      // sólo importa el número. Filtra por business_id ADEMÁS de service_id: con la RLS como segunda
-      // capa, no como única.
+      // el dueño está por hacer. `head: true` porque sólo importa el número. Filtra por business_id
+      // ADEMÁS de service_id: con la RLS como segunda capa, no como única.
       supabase.from('time_block_services').select('time_block_id', { count: 'exact', head: true })
         .eq('business_id', business.id).eq('service_id', s.id),
+      // (f) TODAS las filas de la puente del negocio, para saber CUÁLES de esas franjas vuelven a
+      // comodín. (e) sola no alcanza: cuenta las franjas a las que el servicio está asignado, que no
+      // son las mismas que las que se AGRANDAN al borrarlo — una franja mapeada a {Corte, Color}
+      // pierde sólo la fila de Corte y queda restringida a Color, o sea que se angosta. Para saber
+      // si "le queda otro" hay que ver a los otros, y por eso esta query NO filtra por service_id.
+      // Sí por business_id: aislamiento explícito además de la RLS, igual que las otras cinco.
+      supabase.from('time_block_services').select('time_block_id, service_id', { count: 'exact' })
+        .eq('business_id', business.id),
     ])
     // Llegó tarde: mientras esperábamos, el dueño abrió el modal de otro servicio. Descartar.
     if (delReqRef.current !== req) return
-    // Sin los cinco counts no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
+    // Sin los seis resultados no hay pre-check: cualquier fallo (red, RLS, parse del `.or(...)`) es
     // 'error', NUNCA un 0 silencioso.
     //
     // `blocks.count === null` va en el MISMO guard (no es una rama nueva, es una condición más de la
@@ -1219,8 +1230,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // como "no está en ninguna franja" y el aviso de D-07 no aparecería. Con head+count exact sobre
     // una tabla que responde, el count SIEMPRE es un número: null acá sólo puede ser un fallo, y
     // sobre un fallo este diálogo no ofrece la acción (P-08 / WR-02).
-    if (futDias.error || futHoy.error || abo.error || hist.error || blocks.error || blocks.count === null) {
-      console.error('[settings/delete-service] pre-check falló:', futDias.error ?? futHoy.error ?? abo.error ?? hist.error ?? blocks.error)
+    //
+    // (f) entra al MISMO guard por la misma razón, y con una condición de más: devuelve FILAS, así
+    // que un `data` nulo o una respuesta PAGINADA por `max-rows` (menos filas que el count) leerían
+    // "a esta franja no le queda ningún otro servicio" justo donde no se puede saber — y el aviso
+    // afirmaría un ensanche que quizá no ocurre. Sin el dato completo no se ofrece la acción, igual
+    // que con cualquier otro fallo (P-08 / WR-02).
+    const bridgeRows = bridge.data ?? null
+    const bridgeIncompleto = bridgeRows === null || bridge.count === null || bridgeRows.length < bridge.count
+    if (futDias.error || futHoy.error || abo.error || hist.error || blocks.error || blocks.count === null
+        || bridge.error || bridgeIncompleto) {
+      console.error('[settings/delete-service] pre-check falló:', futDias.error ?? futHoy.error ?? abo.error ?? hist.error ?? blocks.error ?? bridge.error)
       setDelInfo('error')
       return
     }
@@ -1239,12 +1259,39 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       activeAbono: (abo.count ?? 0) > 0,
       history: hist.count ?? 0,
       blocks: blocks.count ?? 0,
+      // Las que de verdad se AGRANDAN. La regla del comodín la contesta el módulo puro, nunca un
+      // filtro escrito acá (AGENDA-02): dos interpretaciones de "esta franja sirve para todo" es
+      // exactamente cómo el panel y el motor terminan diciendo cosas distintas.
+      blocksToWildcard: blocksBecomingWildcard(s.id, bridgeRows).length,
     })
   }
 
   // Bloqueado = el trigger va a rechazar el DELETE. Mientras `delInfo` es null todavía no se sabe, y
   // con 'error' tampoco: ahí no está bloqueado, está SIN VERIFICAR (se maneja aparte, sin confirmar).
   const delBlocked = !!delInfo && delInfo !== 'error' && (delInfo.future > 0 || delInfo.activeAbono)
+
+  // La frase de las franjas mapeadas (D-07), derivada aparte porque tiene TRES formas y ninguna
+  // puede decir de más:
+  //   · ninguna vuelve a comodín ⇒ el borrado sólo ANGOSTA lo que ofrecen esas franjas. No hay
+  //     nada que advertir, pero sí que contar: el mapeo que el dueño configuró se pierde.
+  //   · todas ⇒ el caso que motivó la frase: las franjas pasan a ofrecer CUALQUIER servicio.
+  //   · mixto ⇒ las dos cosas, con el número de las que se agrandan, que es el que importa.
+  // La versión vieja usaba `blocks` para las tres y afirmaba el ensanche siempre: sobre una franja
+  // mapeada a {Corte, Color}, borrar Corte la deja restringida a Color — o sea que el aviso decía
+  // lo contrario de lo que pasa.
+  const delBlocksSentence = !delInfo || delInfo === 'error' || delInfo.blocks === 0
+    ? ''
+    : (() => {
+        const { blocks: n, blocksToWildcard: w } = delInfo
+        const franjas = `${n} ${n === 1 ? 'franja horaria' : 'franjas horarias'}`
+        if (w === 0) {
+          return ` Está asignado a ${franjas} de tu agenda: al eliminarlo se va a quitar de ${n === 1 ? 'esa franja, que queda' : 'esas franjas, que quedan'} restringida${n === 1 ? '' : 's'} a los servicios que le${n === 1 ? '' : 's'} queden.`
+        }
+        if (w === n) {
+          return ` Está asignado a ${franjas} de tu agenda: al eliminarlo, ${n === 1 ? 'esa franja vuelve' : 'esas franjas vuelven'} a ofrecer cualquier servicio.`
+        }
+        return ` Está asignado a ${franjas} de tu agenda: al eliminarlo se va a quitar de todas, y ${w === 1 ? 'una vuelve' : `${w} vuelven`} a ofrecer cualquier servicio.`
+      })()
 
   // Descripción de los CUATRO estados del diálogo (contando / sin verificar / bloqueado /
   // confirmable), derivada fuera del JSX (molde delDescription de canchas-manager).
@@ -1262,12 +1309,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 // Ya está desactivado (viene del tab "Desactivados"): ofrecerle desactivar de nuevo
                 // sería un callejón sin salida disfrazado de acción recomendada (WR-04).
                 : 'Ya está desactivado y no se ofrece más: vas a poder eliminarlo cuando no le queden turnos futuros ni abonos activos.'}`
-          // POR QUÉ se avisa de un borrado que AGRANDA lo que se ofrece (D-07): la franja mapeada no
-          // queda rota ni vacía — al perder su último servicio vuelve a ser COMODÍN, o sea que pasa a
+          // POR QUÉ se avisa de un borrado que AGRANDA lo que se ofrece (D-07): la franja que pierde
+          // su ÚLTIMO servicio no queda rota ni vacía — vuelve a ser COMODÍN, o sea que pasa a
           // ofrecer CUALQUIER servicio. Es exactamente lo contrario de lo que el dueño espera de un
           // borrado, y sin aviso pasa en silencio. La frase entra sólo acá, en la rama confirmable:
           // en la bloqueada el DELETE no va a ocurrir y contar sus consecuencias es ruido.
-          : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio.${delInfo.blocks > 0 ? ` Está asignado a ${delInfo.blocks} ${delInfo.blocks === 1 ? 'franja horaria' : 'franjas horarias'} de tu agenda: al eliminarlo, ${delInfo.blocks === 1 ? 'esa franja vuelve' : 'esas franjas vuelven'} a ofrecer cualquier servicio.` : ''} Esta acción no se puede deshacer.`
+          : `Vas a eliminar "${delService.name}". Se conservan sus ${delInfo.history} ${delInfo.history === 1 ? 'turno' : 'turnos'} en el historial (Finanzas y ficha del cliente) con su nombre y su precio.${delBlocksSentence} Esta acción no se puede deshacer.`
 
   async function addService() {
     // El botón deshabilitado es la SEÑAL, no la defensa: el guard se conserva acá adentro porque la

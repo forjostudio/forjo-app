@@ -234,3 +234,38 @@ export function servicesOfBlock(blockId: string, bridge: TimeBlockService[]): st
 export function isBlockWildcard(blockId: string, bridge: TimeBlockService[]): boolean {
   return servicesOfBlock(blockId, bridge).length === 0
 }
+
+/**
+ * Las franjas que VOLVERÍAN A COMODÍN si se borrara `serviceId`: las que hoy lo tienen mapeado y no
+ * tienen ningún OTRO servicio.
+ *
+ * El dato que necesita el aviso de borrado de un servicio (D-07). Contar las filas de `serviceId`
+ * en la puente responde otra pregunta —*"¿a cuántas franjas está asignado?"*— y usar ese número
+ * para avisar "esas franjas vuelven a ofrecer cualquier servicio" es FALSO en la dirección más
+ * cara: una franja mapeada a `{Corte, Color}` pierde en cascada sólo la fila de `Corte` y queda
+ * restringida a `Color`, o sea que se ANGOSTA, justo lo contrario de lo que decía el aviso. La
+ * razón entera por la que la frase existe es avisar de un borrado que AGRANDA lo que se ofrece, así
+ * que hay que separar el subconjunto que de verdad se agranda.
+ *
+ * ⚠ `bridge` son TODAS las filas del negocio, no las de este servicio: para saber si a una franja
+ * "le queda otro" hay que ver a los otros. Con las filas ya filtradas por `service_id` toda franja
+ * parecería quedar sin mapeo.
+ *
+ * Contrato D-16 intacto: el caller ya acotó por `business_id` antes de llamar. Y el comodín se
+ * decide por la MISMA regla de siempre (cero filas ⇒ comodín), sólo que proyectada al estado
+ * posterior al borrado en cascada.
+ */
+export function blocksBecomingWildcard(
+  serviceId: string,
+  bridge: Pick<TimeBlockService, 'time_block_id' | 'service_id'>[],
+): string[] {
+  const conOtro = new Set(bridge.filter((r) => r.service_id !== serviceId).map((r) => r.time_block_id))
+  const out: string[] = []
+  for (const r of bridge) {
+    if (r.service_id !== serviceId) continue
+    if (conOtro.has(r.time_block_id)) continue
+    if (out.includes(r.time_block_id)) continue // la PK ya lo garantiza; no depender de ella
+    out.push(r.time_block_id)
+  }
+  return out
+}

@@ -6,6 +6,7 @@ import {
   startTimesNotOffered,
   servicesOfBlock,
   isBlockWildcard,
+  blocksBecomingWildcard,
 } from '@/lib/time-block-services'
 import type { BlockWindow } from '@/lib/time-block-services'
 import type { TimeBlockService } from '@/lib/types'
@@ -238,5 +239,41 @@ describe('isBlockWildcard — comodín ⟺ cero filas (D-01, D-11)', () => {
     const bridge = [map('manana', 'corte'), map('noche', 'color')]
     expect(isBlockWildcard('tarde', bridge)).toBe(true)
     expect(isBlockWildcard('manana', bridge)).toBe(false)
+  })
+})
+
+describe('blocksBecomingWildcard — el subconjunto que se AGRANDA al borrar un servicio (D-07)', () => {
+  it('CONTROL NEGATIVO: una franja con OTRO servicio NO vuelve a comodín — se angosta', () => {
+    // el caso que hacía mentir al aviso: {Corte, Color} pierde Corte y queda restringida a Color,
+    // o sea que ofrece MENOS, no "cualquier servicio"
+    const bridge = [map('b1', 'corte'), map('b1', 'color')]
+    expect(blocksBecomingWildcard('corte', bridge)).toEqual([])
+  })
+
+  it('una franja cuyo ÚNICO servicio es el borrado sí vuelve a comodín', () => {
+    expect(blocksBecomingWildcard('corte', [map('b1', 'corte')])).toEqual(['b1'])
+  })
+
+  it('mixto: sólo devuelve las que se quedan sin ningún mapeo', () => {
+    const bridge = [
+      map('b1', 'corte'),
+      map('b2', 'corte'), map('b2', 'color'),
+      map('b3', 'corte'),
+      map('b4', 'color'),
+    ]
+    expect(blocksBecomingWildcard('corte', bridge)).toEqual(['b1', 'b3'])
+  })
+
+  it('un servicio sin ninguna franja mapeada no agranda nada', () => {
+    expect(blocksBecomingWildcard('barba', [map('b1', 'corte'), map('b1', 'color')])).toEqual([])
+  })
+
+  it('la puente vacía no agranda nada (esas franjas YA son comodín)', () => {
+    expect(blocksBecomingWildcard('corte', [])).toEqual([])
+  })
+
+  it('no depende de la PK para no repetir una franja', () => {
+    // la PK (time_block_id, service_id) ya lo garantiza, pero la función no se apoya en eso
+    expect(blocksBecomingWildcard('corte', [map('b1', 'corte'), map('b1', 'corte')])).toEqual(['b1'])
   })
 })
