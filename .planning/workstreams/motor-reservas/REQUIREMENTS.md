@@ -71,10 +71,10 @@ natural es que también declare **qué**.
 
 ### El panel (Phase 19)
 
-- [ ] **AGENDA-05** — El dueño asigna servicios a cada franja desde Agenda, y la grilla **muestra** qué
+- [x] **AGENDA-05** — El dueño asigna servicios a cada franja desde Agenda, y la grilla **muestra** qué
       se da en cada una sin abrir nada.
 
-- [ ] **AGENDA-06** — Una franja sin servicios asignados se ve y se lee como **"cualquiera"**, no como
+- [x] **AGENDA-06** — Una franja sin servicios asignados se ve y se lee como **"cualquiera"**, no como
       un estado vacío o roto.
 
 ### El booking público y el onboarding (Phase 20)
@@ -106,8 +106,8 @@ natural es que también declare **qué**.
 | AGENDA-02 | Phase 18 | Complete |
 | AGENDA-03 | Phase 18 | Complete |
 | AGENDA-04 | Phase 18 | Complete |
-| AGENDA-05 | Phase 19 | Pending |
-| AGENDA-06 | Phase 19 | Pending |
+| AGENDA-05 | Phase 19 | Complete |
+| AGENDA-06 | Phase 19 | Complete |
 | AGENDA-07 | Phase 20 | Pending |
 | AGENDA-08 | Phase 20 | Pending |
 

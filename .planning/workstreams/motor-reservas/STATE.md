@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
-stopped_at: Phase 19 UI-SPEC approved
-last_updated: "2026-08-26T01:08:32.560Z"
-last_activity: 2026-08-26 -- Phase 19 planning complete
+stopped_at: Completado 19-01-PLAN.md
+last_updated: "2026-08-26T03:13:35.056Z"
+last_activity: 2026-08-26 -- Phase 19 execution started
 progress:
   total_phases: 20
   completed_phases: 18
-  total_plans: 92
-  completed_plans: 92
+  total_plans: 98
+  completed_plans: 93
   percent: 90
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 18 — el-modelo-y-la-disponibilidad
+**Current focus:** Phase 19 — el-panel
 
 ## Current Position
 
-Phase: 19
-Plan: Not started
+Phase: 19 (el-panel) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-08-26 -- Phase 19 planning complete
+Last activity: 2026-08-26 -- Phase 19 execution started
 
 ## Milestone v0.28 — decisiones LOCKED
 
@@ -157,6 +157,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 18 P02 | 18min | 2 tasks | 3 files |
 | Phase 18 P03 | 22min | 2 tasks | 3 files |
 | Phase 18 P04 | 38min | 2 tasks | 3 files |
+| Phase 19 P01 | 12min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -314,6 +315,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 18]: 18-03: la regla de la agenda por servicio se SUMA a full (nunca filtra los bloques) y se calcula una sola vez antes de las tres ramas del endpoint de disponibilidad
 - [Phase 18]: 18-03: un caso de test que asierta ausencia no puede contar como RED esperado — su mordida se demuestra contra la implementacion ingenua, no contra el estado previo
 - [Phase 18]: El backstop de la agenda por servicio vive DENTRO de createAppointmentCore, gateado por el flag enforceServiceWindow con default apagado — El core tiene tres llamadores y la regla aplica a uno (el booking publico). Adentro del core el service.id ya esta re-validado por business_id; en el route handler la regla habria razonado sobre un id crudo del cliente. Default apagado = el caller que se olvide del flag hereda el comportamiento de hoy.
+- [Phase 19]: 19-01: se descarta tmp_key — el estado del editor se re-deriva completo desde las filas que devuelve el RPC — Sin correlacion payload-retorno no existe la clase de bug de correlacion (P-01): mas simple que administrarla
+- [Phase 19]: 19-01: buildSaveHoursPayload no acepta consultorio — P-03 (guardar una sede borra la otra) queda cerrado por la FIRMA: reintroducir el bug obliga a cambiarla, lo que se ve en review
 
 ### Pending Todos
 
@@ -388,9 +391,9 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-25T22:50:54.984Z
-Stopped at: Phase 19 UI-SPEC approved
-Resume file: .planning/workstreams/motor-reservas/phases/19-el-panel/19-UI-SPEC.md
+Last session: 2026-08-26T03:13:35.034Z
+Stopped at: Completado 19-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
