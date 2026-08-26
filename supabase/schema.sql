@@ -550,6 +550,166 @@ $$;
 
 ALTER FUNCTION "public"."businesses_protect_admin_columns"() OWNER TO "postgres";
 
+-- ── (migr. 074) El guardado de la agenda por DIFF, en UNA sola transacción ─────────────────────────
+-- Recibe el ESTADO DESEADO COMPLETO del negocio (7 días × todos los consultorios), no un delta.
+-- Reemplaza el borrar-todo-e-insertar de `saveHours()`, que destruía el mapeo `time_block_services`
+-- (hijo ON DELETE CASCADE de la migr. 071) en CADA guardado y dejaba una ventana en la que la
+-- disponibilidad pública leía un negocio sin horarios.
+-- ⚠ SECURITY INVOKER A PROPÓSITO, al revés de `book_slot_atomic`: la RLS del dueño aplica ADENTRO de
+-- la función y el `p_business_id` explícito es la SEGUNDA capa, no la única. Sus privilegios están más
+-- abajo, en el bloque de GRANT de funciones — el rol anónimo NO puede ejecutarla (P-02 / T-19-05).
+CREATE OR REPLACE FUNCTION "public"."save_agenda_blocks"("p_business_id" "uuid", "p_blocks" "jsonb") RETURNS TABLE("id" "uuid", "day_of_week" integer, "start_time" time without time zone, "end_time" time without time zone, "label" "text", "location_id" "uuid", "service_ids" "uuid"[])
+    LANGUAGE "plpgsql" SECURITY INVOKER
+    SET "search_path" TO 'public'
+    AS $_$
+DECLARE
+  v_blocks jsonb;          -- payload ya normalizado: nunca NULL, siempre un arreglo JSON (paso 2)
+  v_item jsonb;            -- elemento actual del recorrido (un bloque del editor)
+  v_keep uuid[];           -- ids de franja que SOBREVIVEN: lo que no esté acá se borra en el paso 3
+  v_block_id uuid;         -- id resultante del INSERT o del UPDATE del elemento actual
+  v_day integer;
+  v_start time without time zone;
+  v_end time without time zone;
+  v_label text;
+  v_location uuid;
+  -- Arreglo VACÍO = franja comodín (D-01): la AUSENCIA de filas ES el estado, no un dato faltante.
+  v_service_ids uuid[];
+BEGIN
+  -- 1. GUARD DE AUTORÍA (T-19-06). Va igual habiendo RLS: la RLS es la segunda capa, no la única. Sin
+  --    el guard, un `p_business_id` ajeno sería un guardado que "funcionó" y no hizo nada.
+  IF p_business_id IS NULL
+     OR NOT EXISTS (
+       SELECT 1 FROM "public"."businesses" AS b
+        WHERE b."id" = p_business_id
+          AND b."owner_id" = "auth"."uid"()
+     )
+  THEN
+    RAISE EXCEPTION 'not_your_business' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 2. NORMALIZACIÓN. El arreglo VACÍO es legítimo ("el dueño cerró todos los días"); que el parámetro
+  --    no sea un arreglo no lo es, y se rechaza antes de tocar una sola fila.
+  v_blocks := COALESCE(p_blocks, '[]'::jsonb);
+  IF jsonb_typeof(v_blocks) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_payload' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 3. EL BORRADO DEL DIFF. Con `v_keep` VACÍO, `id <> ALL('{}')` es TRUE para toda fila ⇒ borra todos
+  --    los bloques del negocio: es el comportamiento deseado, no un accidente. NO hace falta un DELETE
+  --    aparte sobre la puente: el ON DELETE CASCADE de la migr. 071 limpia su mapeo. El
+  --    `business_id` explícito acota el alcance ADEMÁS de la RLS (T-19-07).
+  SELECT COALESCE(array_agg((t.e->>'id')::uuid), ARRAY[]::uuid[])
+    INTO v_keep
+    FROM jsonb_array_elements(v_blocks) AS t(e)
+   WHERE t.e->>'id' IS NOT NULL;
+
+  DELETE FROM "public"."time_blocks" AS tb
+   WHERE tb."business_id" = p_business_id
+     AND tb."id" <> ALL (v_keep);
+
+  -- 4. EL RECORRIDO, UN ELEMENTO A LA VEZ.
+  FOR v_item IN SELECT t.e FROM jsonb_array_elements(v_blocks) AS t(e) LOOP
+    -- 4a. Extracción. Etiqueta y consultorio vacíos ⇒ NULL (misma regla que `textOrNull` en
+    --     `lib/agenda-hours-payload.ts`). Si `service_ids` falta o no es arreglo ⇒ franja comodín.
+    v_day      := (v_item->>'day_of_week')::integer;
+    v_start    := (v_item->>'start_time')::time without time zone;
+    v_end      := (v_item->>'end_time')::time without time zone;
+    v_label    := NULLIF(btrim(COALESCE(v_item->>'label', '')), '');
+    v_location := NULLIF(btrim(COALESCE(v_item->>'location_id', '')), '')::uuid;
+
+    SELECT COALESCE(array_agg(DISTINCT s.sid::uuid), ARRAY[]::uuid[])
+      INTO v_service_ids
+      FROM jsonb_array_elements_text(
+             CASE WHEN jsonb_typeof(v_item->'service_ids') = 'array'
+                  THEN v_item->'service_ids'
+                  ELSE '[]'::jsonb END
+           ) AS s(sid);
+
+    -- 4b. VALIDACIÓN DE ENTRADA (T-19-10). El editor ya valida esto en pantalla, pero el editor es el
+    --     browser: acá está el backstop.
+    IF v_day IS NULL OR v_day < 0 OR v_day > 6
+       OR v_start IS NULL OR v_end IS NULL OR v_start >= v_end
+    THEN
+      RAISE EXCEPTION 'invalid_block' USING ERRCODE = 'P0001';
+    END IF;
+
+    v_block_id := NULL;
+
+    IF (v_item->>'id') IS NULL THEN
+      -- 4c. FRANJA NUEVA ⇒ INSERT. El `business_id` sale del parámetro YA validado, nunca del
+      --     elemento. ⚠ La lista de columnas NO incluye la de cupo (D-12): es NOT NULL con DEFAULT 1.
+      INSERT INTO "public"."time_blocks" AS tb
+                  ("business_id", "day_of_week", "start_time", "end_time", "label", "location_id")
+           VALUES (p_business_id, v_day, v_start, v_end, v_label, v_location)
+        RETURNING tb."id" INTO v_block_id;
+    ELSE
+      -- 4d. FRANJA EXISTENTE ⇒ UPDATE sobre la MISMA fila: es la razón de ser de la migración
+      --     (D-01/D-02) — cambiarle el horario a una franja con servicios NO borra su mapeo. El filtro
+      --     lleva el `business_id` ADEMÁS del id: los ids de franja son públicos, así que un payload
+      --     forjado con un id ajeno es un ataque REALIZABLE (T-19-07). Sin la columna de cupo (D-12).
+      UPDATE "public"."time_blocks" AS tb
+         SET "day_of_week" = v_day,
+             "start_time"  = v_start,
+             "end_time"    = v_end,
+             "label"       = v_label,
+             "location_id" = v_location
+       WHERE tb."id" = (v_item->>'id')::uuid
+         AND tb."business_id" = p_business_id
+      RETURNING tb."id" INTO v_block_id;
+
+      -- Si el UPDATE no tocó ninguna fila, el id no existe, es de otro negocio, o lo borró otra
+      -- pestaña. Se rechaza en vez de degradar a INSERT: un fallo MUDO dejaría al dueño con una
+      -- configuración distinta a la que vio en pantalla.
+      IF v_block_id IS NULL THEN
+        RAISE EXCEPTION 'block_not_found' USING ERRCODE = 'P0001';
+      END IF;
+    END IF;
+
+    -- 4e. SINCRONIZACIÓN DEL MAPEO DE ESA FRANJA. ⚠ Volver a COMODÍN **es** borrar todas las filas
+    --     (D-16/D-17): la AUSENCIA es el estado. ⚠ La fila cross-tenant NO se valida acá a propósito:
+    --     las FK compuestas `tbs_block_same_tenant` / `tbs_service_same_tenant` (migr. 073) ya la
+    --     rechazan en la BASE, y reimplementarlo sería una segunda fuente de verdad (T-19-08).
+    DELETE FROM "public"."time_block_services" AS tbs
+     WHERE tbs."business_id" = p_business_id
+       AND tbs."time_block_id" = v_block_id
+       AND tbs."service_id" <> ALL (v_service_ids);
+
+    INSERT INTO "public"."time_block_services" ("business_id", "time_block_id", "service_id")
+    SELECT p_business_id, v_block_id, s.sid
+      FROM unnest(v_service_ids) AS s(sid)
+        ON CONFLICT ("time_block_id", "service_id") DO NOTHING;
+  END LOOP;
+
+  -- 5. EL RETORNO: el set FINAL del negocio con su mapeo agregado. NO es cosmético (P-01): el editor
+  --    inicializa sus 7 días con `useState(initializer)` y nunca los re-deriva de las props, así que
+  --    sin estas filas un bloque insertado en el guardado #1 se volvería a INSERTAR en el #2. El LEFT
+  --    JOIN va acotado por `business_id` en los DOS lados y el FILTER + COALESCE hacen que una franja
+  --    sin mapeo vuelva con arreglo VACÍO, no con `{NULL}`.
+  RETURN QUERY
+  SELECT tb."id",
+         tb."day_of_week",
+         tb."start_time",
+         tb."end_time",
+         tb."label",
+         tb."location_id",
+         COALESCE(
+           array_agg(tbs."service_id" ORDER BY tbs."service_id")
+             FILTER (WHERE tbs."service_id" IS NOT NULL),
+           ARRAY[]::uuid[]
+         )
+    FROM "public"."time_blocks" AS tb
+    LEFT JOIN "public"."time_block_services" AS tbs
+           ON tbs."time_block_id" = tb."id"
+          AND tbs."business_id" = p_business_id
+   WHERE tb."business_id" = p_business_id
+   GROUP BY tb."id", tb."day_of_week", tb."start_time", tb."end_time", tb."label", tb."location_id"
+   ORDER BY tb."day_of_week", tb."start_time";
+END;
+$_$;
+
+
+ALTER FUNCTION "public"."save_agenda_blocks"("p_business_id" "uuid", "p_blocks" "jsonb") OWNER TO "postgres";
+
 
 CREATE OR REPLACE FUNCTION "public"."services_block_delete"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
@@ -3927,6 +4087,16 @@ GRANT ALL ON FUNCTION "public"."oid_dist"("oid", "oid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."oid_dist"("oid", "oid") TO "service_role";
 
 
+-- ── (migr. 074) P-02 / T-19-05: la única función del schema que NO es ejecutable por el rol anónimo ──
+-- Nace ejecutable por él por DOS vías que se suman: el EXECUTE a PUBLIC que Postgres concede por
+-- defecto, y el default privilege del baseline sobre FUNCTIONS (cerrado más abajo, en su sección).
+-- La FORMA sale de la migr. 072 —revocar primero, conceder lo mínimo después—, trasladada de TABLE a
+-- FUNCTION. La firma va completa y comillada porque el nombre solo no identifica una función.
+REVOKE EXECUTE ON FUNCTION "public"."save_agenda_blocks"("uuid", "jsonb") FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION "public"."save_agenda_blocks"("uuid", "jsonb") FROM "anon";
+GRANT EXECUTE ON FUNCTION "public"."save_agenda_blocks"("uuid", "jsonb") TO "authenticated";
+
+
 
 GRANT ALL ON FUNCTION "public"."time_dist"(time without time zone, time without time zone) TO "postgres";
 GRANT ALL ON FUNCTION "public"."time_dist"(time without time zone, time without time zone) TO "anon";
@@ -4251,6 +4421,26 @@ REVOKE TRUNCATE ON ALL TABLES IN SCHEMA "public" FROM "authenticated";
 -- NOTA: la migr. 073 intenta lo mismo para el creador `supabase_admin` dentro de un bloque que degrada
 -- a NOTICE — `postgres` no es miembro de ese rol y el ALTER tira 42501. En este proyecto el creador
 -- efectivo es `postgres` (CLI de migraciones + editor SQL del dashboard), que es el cubierto acá.
+
+-- ── (migr. 074) P-02 en la raíz: el default de FUNCTIONS deja de conceder ejecución al rol anónimo ──
+-- Hermano exacto del bloque de la 073 de arriba, trasladado de TABLES a FUNCTIONS. La línea
+-- `GRANT ALL ON FUNCTIONS TO "anon"` de más arriba es el default de Supabase y hacía nacer a toda
+-- función nueva del schema ejecutable por el rol anónimo; el REVOKE de abajo la corrige, y el orden
+-- importa: va DESPUÉS. `authenticated` conserva su default (todo el dashboard llama funciones con la
+-- sesión del dueño).
+--
+-- ⚠ NO afecta a ninguna función existente: `ALTER DEFAULT PRIVILEGES` sólo aplica a objetos futuros.
+-- En particular `book_slot_atomic` conserva su grant explícito a `anon` (RA-05 sigue siendo un riesgo
+-- aceptado; no se cierra ni se reabre acá).
+--
+-- ⚠ Consecuencia buscada: de acá en más toda función nueva del schema `public` necesita un GRANT
+-- explícito para ser invocable desde el cliente. Falla al lado correcto.
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE EXECUTE ON FUNCTIONS FROM "anon";
+
+-- NOTA: la migr. 074 intenta lo mismo para el creador `supabase_admin` dentro del mismo bloque que
+-- degrada a NOTICE que usó la 073, y con el mismo resultado (42501). Medido en producción el
+-- 2026-08-26: la entrada de `supabase_admin` sigue con `anon=X`, la de `postgres` no. El creador
+-- efectivo de este proyecto es `postgres`, que es el cubierto acá.
 
 
 
