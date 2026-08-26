@@ -701,12 +701,12 @@ Plans:
   1. El dueño asigna servicios a una franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada (AGENDA-05).
   2. Una franja sin servicios asignados se ve y se lee como **"cualquiera"** (AGENDA-06).
 
-**Plans**: 1/6 plans executed
+**Plans**: 2/6 plans executed
 
 **Wave 1**
 
 - [x] 19-01-PLAN.md — Funciones puras: `servicesOfBlock`/`isBlockWildcard` (AGENDA-02) + el contrato del guardado por diff (`buildSaveHoursPayload`/`buildDayStatesFromRows`) con los tests que muerden P-01 y P-03
-- [ ] 19-02-PLAN.md — Migración **074**: `save_agenda_blocks` transaccional (D-04) con privilegios mínimos (P-02) + validación `supabase db reset` local + test de aislamiento cross-tenant y atomicidad
+- [x] 19-02-PLAN.md — Migración **074**: `save_agenda_blocks` transaccional (D-04) con privilegios mínimos (P-02) + validación `supabase db reset` local + test de aislamiento cross-tenant y atomicidad
 - [ ] 19-03-PLAN.md — Deuda de la Phase 18: aviso de borrado con el número de franjas (D-07) + copy de `service_not_scheduled` (D-18 / WR-07)
 
 **Wave 2** *(blocked on Wave 1)*

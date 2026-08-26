@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
-stopped_at: Completado 19-01-PLAN.md
-last_updated: "2026-08-26T03:13:35.056Z"
+stopped_at: Completado 19-02-PLAN.md (migr. 074 validada en LOCAL; aplicar a prod en 19-06)
+last_updated: "2026-08-26T03:31:42.764Z"
 last_activity: 2026-08-26 -- Phase 19 execution started
 progress:
   total_phases: 20
   completed_phases: 18
   total_plans: 98
-  completed_plans: 93
+  completed_plans: 94
   percent: 90
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 19 (el-panel) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-08-26 -- Phase 19 execution started
 
@@ -158,6 +158,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 18 P03 | 22min | 2 tasks | 3 files |
 | Phase 18 P04 | 38min | 2 tasks | 3 files |
 | Phase 19 P01 | 12min | 2 tasks | 4 files |
+| Phase 19 P02 | 15min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -317,6 +318,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 18]: El backstop de la agenda por servicio vive DENTRO de createAppointmentCore, gateado por el flag enforceServiceWindow con default apagado — El core tiene tres llamadores y la regla aplica a uno (el booking publico). Adentro del core el service.id ya esta re-validado por business_id; en el route handler la regla habria razonado sobre un id crudo del cliente. Default apagado = el caller que se olvide del flag hereda el comportamiento de hoy.
 - [Phase 19]: 19-01: se descarta tmp_key — el estado del editor se re-deriva completo desde las filas que devuelve el RPC — Sin correlacion payload-retorno no existe la clase de bug de correlacion (P-01): mas simple que administrarla
 - [Phase 19]: 19-01: buildSaveHoursPayload no acepta consultorio — P-03 (guardar una sede borra la otra) queda cerrado por la FIRMA: reintroducir el bug obliga a cambiarla, lo que se ve en review
+- [Phase 19]: 19-02: save_agenda_blocks corre en modo INVOKER (no DEFINER) y solo la ejecuta authenticated — no se repite RA-05 sobre la configuracion del negocio
+- [Phase 19]: 19-02: la pertenencia cross-tenant de la puente NO se revalida en plpgsql; la rechazan las FK compuestas de la migr. 073
 
 ### Pending Todos
 
@@ -391,8 +394,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-26T03:13:35.034Z
-Stopped at: Completado 19-01-PLAN.md
+Last session: 2026-08-26T03:31:42.712Z
+Stopped at: Completado 19-02-PLAN.md (migr. 074 validada en LOCAL; aplicar a prod en 19-06)
 Resume file: None
 
 ## Operator Next Steps
