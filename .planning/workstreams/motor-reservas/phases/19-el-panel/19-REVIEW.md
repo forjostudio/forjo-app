@@ -36,7 +36,14 @@ fase, y diferir los dos que exceden su alcance.
 | WR-03 — el aviso de borrado cuenta franjas mapeadas, no franjas que quedan comodín | **FIXED** | `eff6260` — `blocksBecomingWildcard()` en `lib/time-block-services.ts` + 6 tests; 2ª query con `.eq('business_id')` explícito y guard **fail-closed** (`data === null \|\| count === null \|\| data.length < count`). |
 | WR-04 — `save_agenda_blocks` no valida que `location_id` sea del tenant | **DIFERIDO** | Requiere migración **075** (unique en `locations(id, business_id)` + FK compuesta) porque la 074 ya corrió en producción. Derivado a `secure-phase`. Sin lectura ni escritura cross-tenant; lo que falla es la afirmación de la cabecera de la 074 de que las FK compuestas cubren toda combinación. |
 | WR-05 — el gate de canchas puede ocultar mapeos que el motor sigue aplicando | **DIFERIDO** | Alcance nuevo (el vertical es editable desde ajustes). A backlog. |
-| INFO ×4 | **NO APLICADOS** | Documentados arriba. |
+| WR-06 — `hasChipCatalog` reimplementa la regla del comodín inline | **ABIERTO** | No entró en el alcance elegido. Es el riesgo de deriva que la fase existe para evitar (`lib/time-block-services.ts` es fuente única en tres capas), aunque hoy no produce defecto observable. Decisión pendiente del usuario. |
+| WR-07 — el guard `count === null` se aplicó a 1 de 5 counts | **ABIERTO** | Mismo caso: el razonamiento fail-closed que se escribió para el count de franjas aplica igual a los otros cuatro del mismo `Promise.all`. Decisión pendiente del usuario. |
+| WR-08 — `isServiceScheduled` es un export muerto cuyo comentario promete esta fase | **ABIERTO** | Cero consumidores en producción; su docblock dice "el aviso en el panel es de la Phase 19". O se usa, o se borra, o se corrige el comentario. Decisión pendiente del usuario. |
+| INFO ×4 | **NO APLICADOS** | Documentados abajo. |
+
+> Los tres WR de arriba quedaron **sin disposición** en la primera versión de esta tabla — lo detectó
+> `19-VERIFICATION.md` y se agregaron acá. Ninguno causa un defecto observable hoy; los tres necesitan
+> una decisión explícita (arreglar / diferir / aceptar) antes de cerrar el milestone.
 
 Verificación tras los fixes: `tsc --noEmit` limpio (binario local, no `npx`), 46/46 en las dos suites
 puras, cero hallazgos NUEVOS de eslint en los 6 archivos tocados, `git diff` de la migración 074
