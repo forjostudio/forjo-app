@@ -400,6 +400,18 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           // servicio que cambió de modo mientras el cliente reservaba: se pide elegir profesional en vez
           // de un "Error al confirmar" genérico.
           toast.error('Para este servicio tenés que elegir un profesional. Recargá la página e intentá de nuevo.')
+        } else if (data?.error === 'service_not_scheduled') {
+          // D-18 / WR-07. El backstop de `lib/booking-core.ts` rechaza cuando el horario cae en alguna
+          // franja y NINGUNA de esas da este servicio. Era inalcanzable hasta hoy —la puente
+          // franja↔servicio estaba vacía y todo pasaba por la regla del comodín—: el panel de esta fase
+          // crea la primera fila. Cuando se ve es por una carrera legítima: pestaña vieja con la grilla
+          // de antes, o el dueño reconfigurando la agenda mientras el cliente reserva.
+          //
+          // POR QUÉ NO dice "intentá de nuevo": reintentar ESE horario con ESE servicio no puede
+          // funcionar nunca —cambió la configuración, no falló una request—, y mandar al cliente a
+          // repetir una acción imposible era la falla que describía WR-07. La salida real es recargar
+          // (trae la grilla nueva) y elegir otro. La copy es del cliente: del server viaja sólo el código.
+          toast.error('Ese horario ya no se ofrece para este servicio. Recargá la página y elegí otro.')
         } else if (data?.error === 'recaptcha_failed') {
           toast.error('No pudimos verificar que no seas un bot. Recargá la página e intentá de nuevo.')
         } else {
