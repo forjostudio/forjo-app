@@ -17,11 +17,12 @@ import { Calendar } from '@/components/ui/calendar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Minus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, RefreshCw, Users, Phone, Mail, Repeat } from 'lucide-react'
+import { Plus, Minus, X, Copy, ChevronLeft, ChevronRight, CalendarOff, CalendarClock, CalendarDays, Clock, Check, Asterisk, RefreshCw, Users, Phone, Mail, Repeat } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { buildDayEntries, computeOverlapFull, type DayEntry } from '@/lib/agenda-occupancy'
-import { servicesOfBlock } from '@/lib/time-block-services'
-import { buildDayStatesFromRows, type AgendaBlockDraft, type AgendaDayDraft } from '@/lib/agenda-hours-payload'
+import { servicesOfBlock, isBlockWildcard } from '@/lib/time-block-services'
+import { buildDayStatesFromRows, buildSaveHoursPayload, type AgendaBlockDraft, type AgendaDayDraft, type SavedAgendaBlock } from '@/lib/agenda-hours-payload'
 import { resolveVertical } from '@/lib/verticals'
 import { todayInAR } from '@/lib/booking-window'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -160,6 +161,187 @@ function OccupancyBadge({ occupied, capacity, pendingDeposit, scope, className }
   )
 }
 
+// ── La línea de servicios de cada franja (AGENDA-05 / AGENDA-06, D-08…D-17) ────────────────────
+//
+// Dos funciones de PRESENTACIÓN, hermanas de `OccupancyBadge` y declaradas acá, FUERA de
+// `AgendaClient`, por el mismo motivo que aquélla: se renderizan dentro de un `map` de 7 días × N
+// bloques, así que definirlas adentro del componente las recrearía en CADA render — o sea en cada
+// tecla que el dueño toca en un input de hora, y con 14 franjas eso son 14 identidades nuevas por
+// pulsación. Acá arriba se crean una sola vez para toda la vida del módulo.
+//
+// Sólo PINTAN y DISPARAN. La regla del comodín no se decide acá (sale del módulo puro) y el estado
+// no se muta acá (sube por callback). Mismo reparto que `lib/agenda-occupancy.ts` con la ocupación.
+//
+// Y no abren NADA: ni diálogo, ni cajón, ni popover. AGENDA-05 pide ver qué se da en cada franja
+// SIN abrir nada — por eso es una segunda línea bajo la fila y no un botón que despliega algo.
+
+// El umbral de "Ver todos", determinista y sin medir el DOM (D-10). A 375px el ancho útil de la
+// línea es ~295px (375 − el padding de la página − el `p-6` de la Card) y un chip promedio (`px-3`
+// más un nombre de ~8 caracteres a 12px) mide ~85px ⇒ entran 3 por fila. 6 chips son las ~2 filas
+// que pide D-10, expresadas en una unidad que no depende de medir texto en runtime.
+const CHIPS_COLLAPSED_MAX = 6
+
+// El estado del editor guarda los servicios DENTRO del bloque (`service_ids`), no como filas de la
+// puente. Para que "¿esta franja es comodín?" la siga contestando la MISMA función que se la
+// contesta al motor y a la disponibilidad pública, se adapta el borrador a la forma que esa función
+// espera y se DELEGA. Escribir un `length === 0` acá sería una segunda interpretación de la regla
+// del comodín, y dos interpretaciones es exactamente cómo el panel y el motor terminan diciendo
+// cosas distintas sobre la misma franja (AGENDA-02 / P-07).
+//
+// ⚠ Volver a comodín es BORRAR filas, no escribir un estado vacío: la AUSENCIA de mapeo ES el
+// estado. No hay sentinel ni columna nullable donde leerlo — se computa desde la nada.
+const DRAFT_BLOCK_ID = '__draft__'
+function isDraftBlockWildcard(serviceIds: string[]): boolean {
+  return isBlockWildcard(
+    DRAFT_BLOCK_ID,
+    serviceIds.map(id => ({ business_id: '', time_block_id: DRAFT_BLOCK_ID, service_id: id })),
+  )
+}
+
+// Un servicio de la franja: botón externo de 44×44 que envuelve un pill visual de 28px.
+//
+// Los dos elementos existen a propósito (molde `components/crm/tag-chip.tsx`): el área táctil llega
+// al mínimo de 44 puntos sin engordar el pill, que es la única forma de cumplir a la vez el mínimo
+// táctil del proyecto y el "peso visual secundario" que pide D-14 para esta línea.
+//
+// El tratamiento es TODO NEUTRO: el acento de la paleta no entra acá. No es sólo estética — pintar
+// el texto del chip con el color de acento a 12px sobre la superficie clara no llega a AA en tres
+// de las cinco paletas, la default incluida (medido en el contrato visual de la fase). El cambio de
+// estado lo llevan TRES portadores a la vez (relleno + color de texto + tilde), nunca el color
+// solo, y ninguno de los tres depende de la paleta.
+function ServiceChip({ label, selected, inactive, ariaLabel, onToggle }: {
+  label: string
+  selected: boolean
+  /** Servicio dado de baja que sigue mapeado (D-11): la señal es forma y palabra, jamás opacidad. */
+  inactive?: boolean
+  /** Sólo cuando el texto visible no alcanza para nombrarlo (el caso del inactivo). */
+  ariaLabel?: string
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={selected}
+      aria-label={ariaLabel}
+      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span
+        className={cn(
+          'inline-flex h-7 items-center gap-1 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors',
+          selected
+            ? 'border-foreground/30 bg-secondary text-foreground'
+            : 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+          inactive && 'border-dashed',
+        )}
+      >
+        {selected && <Check aria-hidden="true" className="size-3" />}
+        {label}
+      </span>
+    </button>
+  )
+}
+
+// La línea entera de una franja: el chip comodín, o los chips de servicio, más el disparador del
+// colapso. Va DEBAJO de la fila de horas y debajo del párrafo de error (el error tiene que quedar
+// pegado a los inputs que lo causaron).
+//
+// `gap-y-0` es deliberado: cada chip es un botón de 44px alrededor de un pill de 28px, así que las
+// filas ya quedan separadas por 16px de área táctil transparente. Sumarle un gap vertical daría
+// 24px de aire y rompería el peso secundario de D-14.
+function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, onToggleExpanded, onToggleService }: {
+  /** Los servicios que DECLARA esta franja. Vacío = comodín (D-01). */
+  serviceIds: string[]
+  /** El catálogo completo del negocio, CON inactivos: es lo único que puede nombrar a uno de baja. */
+  catalog: ServiceCatalogItem[]
+  groupLabel: string
+  expanded: boolean
+  onToggleExpanded: () => void
+  onToggleService: (serviceId: string) => void
+}) {
+  const wildcard = isDraftBlockWildcard(serviceIds)
+  // Se OFRECEN los activos (D-11); se MUESTRAN además los inactivos que siguen mapeados a ESTA
+  // franja. Un inactivo NO mapeado no aparece nunca. Ocultar el mapeado mentiría: la franja sigue
+  // restringida por esa fila —el motor la lee igual— y el dueño no tendría de dónde sacarla.
+  //
+  // El orden es el del catálogo (fecha de creación ascendente, ya ordenado por el servidor) y se
+  // conserva SIEMPRE: reordenar por seleccionados haría saltar los chips de lugar al togglear.
+  const shown = catalog.filter(s => s.active || serviceIds.includes(s.id))
+  const selectedCount = shown.filter(s => serviceIds.includes(s.id)).length
+  // El comodín cuenta dentro del umbral: cuando aparece (0 marcados) la línea muestra el comodín
+  // más 5 servicios, que es el peor caso de altura y siguen siendo 2 filas.
+  const total = shown.length + (wildcard ? 1 : 0)
+  const collapsible = total > CHIPS_COLLAPSED_MAX
+  let visible = shown
+  if (collapsible && !expanded) {
+    // Un servicio MARCADO nunca se recorta: colapsar un servicio declarado rompería AGENDA-05, que
+    // pide ver qué se da sin abrir nada. Lo único que se colapsa son las opciones NO elegidas.
+    let room = Math.max(0, CHIPS_COLLAPSED_MAX - selectedCount - (wildcard ? 1 : 0))
+    const kept: ServiceCatalogItem[] = []
+    for (const s of shown) {
+      if (serviceIds.includes(s.id)) { kept.push(s); continue }
+      if (room <= 0) continue
+      room -= 1
+      kept.push(s)
+    }
+    visible = kept
+  }
+  return (
+    <div role="group" aria-label={groupLabel} className="flex flex-wrap items-center gap-x-2 gap-y-0">
+      {/* El chip comodín (D-16 / AGENDA-06). Se renderiza si y sólo si la franja no declara ningún
+          servicio, y esa decisión sale del módulo puro, no de un filtro escrito acá.
+
+          Es INFORMATIVO, no clickeable: un control cuyo único estado posible es el no-op enseña mal
+          la regla, y si fuera clickeable se leería como una opción más entre los servicios — justo
+          la lectura que D-16 evita (el estado por defecto no es "una opción sin elegir", es un
+          estado DECLARADO). Para volver al comodín ya está el camino de D-17: apagar todos.
+
+          `min-h-11` aunque no sea clickeable: así la altura de la línea es idéntica con o sin él y
+          no hay salto de layout cuando aparece o desaparece (D-17 pide que reaparezca al instante).
+          `role="status"` para que un lector lo anuncie al reaparecer — información, nunca alerta.
+
+          NUNCA coexiste con un chip marcado, tampoco con el de un servicio dado de baja: si queda
+          uno mapeado la franja no es comodín, porque el motor tampoco la trata como tal. */}
+      {wildcard && (
+        <span role="status" className="inline-flex min-h-11 items-center">
+          <span className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-3 text-xs font-medium text-muted-foreground whitespace-nowrap">
+            <Asterisk aria-hidden="true" className="size-3" />
+            Cualquier servicio
+          </span>
+        </span>
+      )}
+      {visible.map(s => (
+        <ServiceChip
+          key={s.id}
+          label={s.active ? s.name : `${s.name} · inactivo`}
+          selected={serviceIds.includes(s.id)}
+          inactive={!s.active}
+          ariaLabel={s.active ? undefined : `${s.name} — servicio inactivo, todavía asignado a esta franja. Tocá para quitarlo.`}
+          onToggle={() => {
+            onToggleService(s.id)
+            // El ÚNICO toggle de la línea que avisa. Un servicio de baja sólo aparece acá mientras
+            // siga mapeado, así que quitarlo no se puede deshacer desde esta pantalla: hay que
+            // reactivarlo en Servicios. El resto no avisa nada — el chip que se pinta ES el
+            // feedback.
+            if (!s.active) toast.info(`Quitaste "${s.name}" de esta franja. Como está inactivo, para volver a asignarlo reactivalo en Servicios.`)
+          }}
+        />
+      ))}
+      {/* Expansión IN SITU, en la misma línea: nada de modal, cajón ni popover. Neutro y subrayado
+          a propósito — es navegación dentro de la línea, no una acción de configuración. */}
+      {collapsible && (
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="inline-flex min-h-11 items-center rounded-full px-1 text-xs font-medium text-muted-foreground underline underline-offset-2 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {expanded ? 'Ver menos' : `Ver todos (${total})`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // Los estados que ocupan lugar y el parseo de 'HH:MM' vivían acá duplicados. Ahora salen de
 // `lib/agenda-occupancy.ts`, que es el módulo puro con la suite: una sola definición, un solo lugar
 // donde corregirla. No dejar una segunda copia local aunque parezca inofensiva — la divergencia
@@ -288,7 +470,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   const selMeta = selLoc ? [selLoc.address, selLoc.phone].filter(Boolean).join(' · ') : ''
   // Los 7 días del editor, derivados UNA sola vez de las props con la MISMA función que va a
   // re-derivarlos después de cada guardado (P-01). Tener dos derivaciones distintas del mismo
-  // estado es exactamente cómo se llega a que el segundo "Guardar horarios" duplique todo: la del
+  // estado es exactamente cómo se llega a que el segundo guardado duplique todo: la del
   // inicializador se mantiene y la del guardado se olvida. Por eso la derivación vive en
   // `lib/agenda-hours-payload.ts` y acá sólo se la alimenta.
   //
@@ -310,15 +492,55 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     )
   )
   const [savingHours, setSavingHours] = useState(false)
-  // ── Cambios sin guardar (D-03) ────────────────────────────────────────────
+  // ── El estado sucio del editor (D-03) ─────────────────────────────────────
   // Con horarios, un input que quedó mal SE VE. Con el mapeo no: el dueño toca cuatro chips, se va
   // sin guardar, y la franja sigue en comodín — un estado visualmente IDÉNTICO a no haber
   // configurado nada. Por eso los seis gestos que expresan intención del dueño (abrir/cerrar día,
   // agregar bloque, quitar bloque, editar bloque, copiar día, togglear servicio) prenden esta
   // bandera. `validateBlocks` NO la prende: marcar errores no es un cambio de intención, y un
   // indicador que se prende solo miente — y un indicador que miente es peor que no tenerlo.
-  // El indicador visual y el apagado tras un guardado exitoso son del Plan 19-05.
+  // El indicador visual vive al lado del botón de guardar, y `saveHours` es el ÚNICO que la apaga.
   const [hoursDirty, setHoursDirty] = useState(false)
+
+  // ── El colapso de la línea de servicios (D-10) ────────────────────────────
+  // Estado POR FRANJA, con clave `día-índice`. Vive en un Set aparte y no dentro del bloque porque
+  // es estado de VISTA, no de configuración: no se guarda, no viaja a la base y no sobrevive a una
+  // recarga. Se resetea al eliminar un bloque (los índices se corren y la clave pasaría a apuntar a
+  // otra franja) y al cambiar de consultorio (la grilla que se está mirando es otra).
+  const [expandedChips, setExpandedChips] = useState<Set<string>>(new Set())
+  function toggleChipsExpanded(day: number, idx: number) {
+    setExpandedChips(prev => {
+      const next = new Set(prev)
+      const key = `${day}-${idx}`
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  // ── Los gates de visibilidad de la línea de servicios, en orden ───────────
+  // 1) Vertical canchas: la línea NO se renderiza en ninguna franja, y la línea guía tampoco. Acá
+  //    un "servicio" ES una cancha con su propia agenda (v0.13), así que ofrecer "qué canchas se
+  //    dan en esta franja" duplicaría ese eje con otro que no lo decide. Sin el gate esas franjas
+  //    quedan comodín igual (cero filas en la puente) ⇒ el gate no cambia comportamiento, sólo
+  //    saca ruido. Mismo precedente que ya usan /servicios y /equipo para gatear por rubro.
+  const isCanchas = resolveVertical(business).key === 'canchas'
+  // 2) Catálogo vacío (ningún activo y ninguno mapeado): no se renderiza una línea por franja. Un
+  //    negocio nuevo puede tener 7 días × 2 bloques = 14 franjas, y repetir catorce veces "todavía
+  //    no cargaste servicios" convierte una pantalla sana en un tablero de pendientes. En su lugar
+  //    va UNA sola línea en la card, en la misma posición que la línea guía (son mutuamente
+  //    excluyentes).
+  const hasChipCatalog = serviceCatalog.some(s => s.active)
+    || dayStates.some(d => d.blocks.some(b => b.service_ids.length > 0))
+  // 3) Resto: se renderiza en todas las franjas del consultorio activo.
+  const showServicesLine = !isCanchas && hasChipCatalog
+
+  // Cambiar de consultorio muestra otra grilla: el colapso, que se indexa por día e índice, dejaría
+  // de corresponder con lo que hay en pantalla.
+  function selectLocation(id: string) {
+    setActiveLoc(id)
+    setExpandedChips(new Set())
+  }
 
   // Abrir/cerrar un día PARA EL CONSULTORIO ACTIVO: cerrar = quitar sus bloques de ese día;
   // abrir = agregar un bloque por defecto de ese consultorio. Los bloques de otros consultorios
@@ -355,6 +577,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
 
   function removeBlock(day: number, idx: number) {
     setHoursDirty(true)
+    // Los índices de las franjas que siguen se corren, así que una clave de colapso guardada pasaría
+    // a apuntar a OTRA franja: se limpia el Set entero en vez de reindexarlo.
+    setExpandedChips(new Set())
     setDayStates(prev => {
       const next = [...prev]
       const blocks = next[day].blocks.filter((_, i) => i !== idx)
@@ -426,7 +651,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }
 
   // Copiar el horario de un día a otros (multi-día). Solo toca el estado local; se persiste
-  // al "Guardar horarios", igual que el resto de la grilla.
+  // al guardar, igual que el resto de la grilla.
   const [copyDay, setCopyDay] = useState<number | null>(null)
   const [copyTargets, setCopyTargets] = useState<Set<number>>(new Set())
   function applyCopyDay() {
@@ -984,7 +1209,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
         {/* Selector de consultorio (tabs estilo Configuración) + ficha — solo si hay consultorios */}
         {activeLocations.length > 0 && (
           <div className="space-y-3">
-            <Tabs value={activeLoc} onValueChange={setActiveLoc}>
+            <Tabs value={activeLoc} onValueChange={selectLocation}>
               <TabsList className="flex flex-wrap w-full sm:w-fit h-auto">
                 {activeLocations.map(l => <TabsTrigger key={l.id} value={l.id}>{l.name}</TabsTrigger>)}
               </TabsList>
@@ -1000,6 +1225,24 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
 
         {/* Days — del consultorio activo */}
         <div className="space-y-4">
+          {/* La línea guía: el ÚNICO texto explicativo de toda la fase. Enseña la regla del comodín
+              UNA vez, no una vez por franja. Y su empty state es mutuamente excluyente con ella:
+              o hay servicios y se explica la regla, o no los hay y se explica dónde cargarlos.
+
+              La terminología sale del rubro y nunca va hardcodeada; el artículo antes de la
+              interpolación se EVITA a propósito (regla de género heredada de la Phase 8: "elegí los
+              {'{'}prestaciones{'}'}" no concuerda en ningún rubro). En canchas no se muestra
+              ninguna de las dos: ahí un servicio ES una cancha con su propia agenda. */}
+          {!isCanchas && (hasChipCatalog ? (
+            <p className="text-xs text-muted-foreground">
+              Debajo de cada franja elegí qué {term.services.toLowerCase()} se dan. Si no elegís ninguno, esa franja sirve para todos.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Cuando cargues {term.services.toLowerCase()} vas a poder elegir qué se da en cada franja.{' '}
+              <Link href="/servicios" className="underline underline-offset-2">Ir a Servicios</Link>
+            </p>
+          ))}
           {DAY_DISPLAY_ORDER.map(day => {
             const dayBlocks = dayStates[day].blocks.map((block, idx) => ({ block, idx })).filter(({ block }) => (block.location_id || '') === activeLoc)
             const dayOpen = dayBlocks.length > 0
@@ -1054,6 +1297,19 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                         </div>
                         {block.error && (
                           <p className="text-xs text-red-400 pl-0.5">{block.error}</p>
+                        )}
+                        {/* La línea de servicios va TERCERA, después del párrafo de error: el error
+                            tiene que quedar pegado a los inputs que lo causaron y los chips van
+                            abajo de todo. La fila existente no se envuelve en nada nuevo. */}
+                        {showServicesLine && (
+                          <BlockServicesLine
+                            serviceIds={block.service_ids}
+                            catalog={serviceCatalog}
+                            groupLabel={`Servicios de la franja de ${block.start_time} a ${block.end_time}`}
+                            expanded={expandedChips.has(`${day}-${idx}`)}
+                            onToggleExpanded={() => toggleChipsExpanded(day, idx)}
+                            onToggleService={serviceId => toggleBlockService(day, idx, serviceId)}
+                          />
                         )}
                       </div>
                     ))}
