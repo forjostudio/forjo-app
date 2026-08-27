@@ -94,14 +94,21 @@ describe('cleanupAllOrThrow — varias limpiezas en un solo hook', () => {
       'appointments del otro tenant': fakeOp('c', pgError('boom C', '23503'), orden),
     })
 
-    const err = await promesa.catch((e: unknown) => e as Error)
+    let err: Error | undefined
+    try {
+      await promesa
+    } catch (e) {
+      err = e as Error
+    }
+
     expect(err).toBeInstanceOf(Error)
-    expect(err.message).toContain('appointments del tenant principal')
-    expect(err.message).toContain('appointments del otro tenant')
-    expect(err.message).toContain('boom A')
-    expect(err.message).toContain('boom C')
+    const mensaje = err?.message ?? ''
+    expect(mensaje).toContain('appointments del tenant principal')
+    expect(mensaje).toContain('appointments del otro tenant')
+    expect(mensaje).toContain('boom A')
+    expect(mensaje).toContain('boom C')
     // La que salió bien NO aparece: el mensaje reporta fallas, no ruido.
-    expect(err.message).not.toContain('schedule_exceptions')
+    expect(mensaje).not.toContain('schedule_exceptions')
     expect(orden).toEqual(['a', 'b', 'c'])
   })
 })

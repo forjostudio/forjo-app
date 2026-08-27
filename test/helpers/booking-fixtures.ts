@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { cleanupOrThrow } from './cleanup'
 
 // ── Fixtures de un solo tenant para los tests del core (booking-core) ─────────────────
 // Siembra UN negocio fixture completo (dueño auth + business + service activo + professional
@@ -401,8 +402,19 @@ export async function purgeAbonos(seeded: SeededTenant, opts?: { id?: string }):
 export async function teardownOneTenant(seeded: SeededTenant): Promise<void> {
   const { admin, businessId, userId } = seeded
   try {
-    if (businessId) await admin.from('businesses').delete().eq('id', businessId)
+    // cleanupOrThrow (ION-02): si este delete vuelve con error, el negocio fixture y TODOS sus hijos
+    // sobreviven y contaminan el archivo siguiente. Antes se descartaba el resultado y la falla era
+    // invisible; ahora tira nombrando la limpieza y el motivo.
+    if (businessId) {
+      await cleanupOrThrow(
+        `businesses (negocio fixture ${businessId}, CASCADE a sus hijos)`,
+        admin.from('businesses').delete().eq('id', businessId)
+      )
+    }
   } finally {
+    // El deleteUser NO se envuelve a propósito: un throw dentro de un `finally` REEMPLAZA la excepción
+    // del `try` y taparía el motivo real de la falla. Dejar un usuario fixture huérfano es mucho menos
+    // grave que perder el mensaje que explica por qué se cayó la limpieza del negocio.
     if (userId) await admin.auth.admin.deleteUser(userId)
   }
 }

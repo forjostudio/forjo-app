@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, teardownOneTenant, seedTimeBlock, type SeededTenant } from './helpers/booking-fixtures'
+import { cleanupAllOrThrow, type CleanupOp } from './helpers/cleanup'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
 
 // ── Tests del motor de generación forward del abono (lib/abono-generation.ts) ─────────────
@@ -97,12 +98,23 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
 
   // Limpieza entre tests: appointments + schedule_exceptions de AMBOS tenants (config persistente —
   // time_block/client/abono — se deja). Así cada test arranca con la agenda vacía y sin excepciones.
+  //
+  // cleanupAllOrThrow (ION-02): las 3 limpiezas van juntas y se ejecutan TODAS aunque una falle (D-04).
+  // Antes los tres delete() descartaban su resultado: si uno se caía, los turnos sobrevivían y el test
+  // siguiente contaba de más ("expected 5, got 10") sin ninguna pista de la causa.
   afterEach(async () => {
+    const limpiezas: Record<string, CleanupOp> = {}
     if (t) {
-      await t.admin.from('appointments').delete().eq('business_id', t.businessId)
-      await t.admin.from('schedule_exceptions').delete().eq('business_id', t.businessId)
+      limpiezas['appointments del tenant principal'] = t.admin.from('appointments').delete().eq('business_id', t.businessId)
+      limpiezas['schedule_exceptions del tenant principal'] = t.admin
+        .from('schedule_exceptions')
+        .delete()
+        .eq('business_id', t.businessId)
     }
-    if (other) await other.admin.from('appointments').delete().eq('business_id', other.businessId)
+    if (other) {
+      limpiezas['appointments del otro tenant'] = other.admin.from('appointments').delete().eq('business_id', other.businessId)
+    }
+    await cleanupAllOrThrow(limpiezas)
   })
 
   function abono() {

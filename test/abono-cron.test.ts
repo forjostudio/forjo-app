@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { type SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, teardownOneTenant, seedTimeBlock, purgeAbonos, type SeededTenant } from './helpers/booking-fixtures'
+import { cleanupOrThrow } from './helpers/cleanup'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { extendAbonoWindows, GET } from '@/app/api/cron/cancel-expired/route'
 import { todayInAR } from '@/lib/booking-window'
@@ -133,10 +134,19 @@ describe.skipIf(!hasSupabaseCreds)('cron: extensión de la ventana rolling de ab
   // Limpieza entre tests: appointments + abonos de AMBOS tenants (los time_blocks/clients persisten).
   // Las series van por `purgeAbonos` (archivar + borrar): desde la migr. 066 la base RECHAZA el
   // borrado directo de una serie 'active', y la fila sobreviviente contaminaba el caso siguiente.
+  //
+  // cleanupOrThrow (ION-02) y no cleanupAllOrThrow: el ORDEN delete → purgeAbonos es load-bearing
+  // (primero se van los turnos, después la serie), así que los delete() no se pueden juntar en un mapa.
+  // `purgeAbonos` ya tira con mensaje propio; lo que cambia es que el delete suelto deja de fallar en
+  // silencio y contaminar el caso siguiente.
   afterEach(async () => {
-    for (const tenant of [t, other]) {
+    for (const [i, tenant] of [t, other].entries()) {
       if (!tenant) continue
-      await tenant.admin.from('appointments').delete().eq('business_id', tenant.businessId)
+      const quien = i === 0 ? 'tenant principal' : 'otro tenant'
+      await cleanupOrThrow(
+        `appointments del ${quien}`,
+        tenant.admin.from('appointments').delete().eq('business_id', tenant.businessId)
+      )
       await purgeAbonos(tenant)
     }
   })

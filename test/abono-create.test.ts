@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi, type Mock } f
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, teardownOneTenant, seedTimeBlock, purgeAbonos, type SeededTenant } from './helpers/booking-fixtures'
+import { cleanupOrThrow } from './helpers/cleanup'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
 import { sendAbonoConfirmation } from '@/lib/email'
 
@@ -198,13 +199,25 @@ describe.skipIf(!hasSupabaseCreds)('alta manual del abono (auth + anti-tampering
   // Limpieza entre tests: abonos + appointments de AMBOS tenants (config persistente se deja).
   // Las series van por `purgeAbonos` (archivar + borrar): desde la migr. 066 la base RECHAZA el
   // borrado directo de una serie 'active', y la fila sobreviviente contaminaba el caso siguiente.
+  //
+  // cleanupOrThrow (ION-02) en vez de cleanupAllOrThrow: acá el ORDEN es load-bearing — hay que borrar
+  // los turnos ANTES de `purgeAbonos`, que archiva la serie y cancela lo que quede. Meter los delete()
+  // en un mapa los sacaría de esa secuencia. `purgeAbonos` ya tira con mensaje propio en sus 3
+  // operaciones, así que el hook ya podía abortar a mitad; lo que cambia es que ahora el delete suelto
+  // también avisa en vez de fallar en silencio.
   afterEach(async () => {
     if (t) {
-      await t.admin.from('appointments').delete().eq('business_id', t.businessId)
+      await cleanupOrThrow(
+        'appointments del tenant principal',
+        t.admin.from('appointments').delete().eq('business_id', t.businessId)
+      )
       await purgeAbonos(t)
     }
     if (other) {
-      await other.admin.from('appointments').delete().eq('business_id', other.businessId)
+      await cleanupOrThrow(
+        'appointments del otro tenant',
+        other.admin.from('appointments').delete().eq('business_id', other.businessId)
+      )
       await purgeAbonos(other)
     }
   })

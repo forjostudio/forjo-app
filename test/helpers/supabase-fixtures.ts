@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { cleanupAllOrThrow, type CleanupOp } from './cleanup'
 
 // ── Fixtures de aislamiento multi-tenant (D-05) ──────────────────────────────────────
 // Este helper siembra y limpia 2 negocios fixture (cada uno con su dueño en auth.users)
@@ -100,8 +101,13 @@ export async function seedTwoTenants(): Promise<SeededTenants> {
 export async function teardown(seeded: SeededTenants): Promise<void> {
   const { admin, bizA, bizB, userA, userB } = seeded
   try {
-    if (bizA) await admin.from('businesses').delete().eq('id', bizA) // CASCADE limpia hijos de A
-    if (bizB) await admin.from('businesses').delete().eq('id', bizB) // CASCADE limpia hijos de B (incl. apptB)
+    // cleanupAllOrThrow (ION-02, D-04): los dos deletes van en UNA sola llamada para que un fallo en A
+    // no se lleve puesta la limpieza de B — cortar en el primero dejaría el negocio B entero vivo, que
+    // es peor que el comportamiento anterior. Si alguno falla, el Error nombra cuál y por qué.
+    const limpiezas: Record<string, CleanupOp> = {}
+    if (bizA) limpiezas['businesses del tenant A (CASCADE limpia sus hijos)'] = admin.from('businesses').delete().eq('id', bizA)
+    if (bizB) limpiezas['businesses del tenant B (CASCADE limpia sus hijos, incl. apptB)'] = admin.from('businesses').delete().eq('id', bizB)
+    await cleanupAllOrThrow(limpiezas)
   } finally {
     // Los usuarios auth no caen por CASCADE de businesses → borrarlos siempre, aunque el delete de
     // arriba haya fallado, para no dejar usuarios fixture acumulándose en el proyecto dev.
