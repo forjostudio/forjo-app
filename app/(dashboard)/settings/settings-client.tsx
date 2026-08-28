@@ -2488,49 +2488,46 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 // CAPACITY_MODE_HELP sigue siendo la única fuente de los rótulos (D-03).
                 const capacityModeLabel = CAPACITY_MODE_HELP.find(h => h.key === capMode)?.label ?? ''
                 return (
-                  <div key={s.id} className="p-3 rounded-lg bg-secondary/50 space-y-2">
-                    {/* Fila A — nombre y acciones. Hasta acá las acciones y el dato peleaban el mismo
-                        renglón: a 375px el interior de la tarjeta mide 271px, las tres acciones se
-                        comían ~186 y a la columna del texto le quedaban ~85 contra los 146 que mide el
-                        stepper. Eran 61px de desborde REAL, no una ilusión óptica (G-02). Al agrupar
-                        las acciones y sacarles la línea de datos de al lado, el dato se lleva los 271px
-                        enteros y el nombre pasa de ~85 a ~105px de ancho útil.
+                  <div key={s.id} className="p-3 rounded-lg bg-secondary/50 flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    {/* ESTRUCTURA DE LA TARJETA — una sola pasada, sin markup duplicado.
 
-                        El precedente es la fila mobile de Finanzas (POLISH-10): la única de las tres
-                        superficies de esta fase que pasó la UAT sin un solo issue, y la única donde el
-                        dato nuevo bajó a su propia línea en vez de pedirle ancho al que ya estaba.
+                        De dónde viene. Hasta acá las acciones y el dato peleaban el mismo renglón: a
+                        375px el interior de la tarjeta mide 271px, las tres acciones se comían ~186 y
+                        a la columna del texto le quedaban ~85 contra los 146 que mide el stepper. Eran
+                        61px de desborde REAL, no una ilusión óptica (G-02). Bajar la línea de datos ya
+                        no alcanzó: con nombres largos el NOMBRE seguía truncando a 375px ("Mechas
+                        califo…", "Alisado perma…"), reportado desde un navegador real con captura.
 
-                        El centrado vertical se CONSERVA a propósito: sin la línea de datos adentro,
-                        esta fila vuelve a ser un renglón corto. Alinear arriba movería las tarjetas de
-                        los servicios individuales, que son el 100 % de producción hoy y no tienen
-                        ningún defecto. */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {/* Sin tachado: en el tab "Desactivados" todos lo están, es ruido visual (D-14). */}
-                          <p className="text-sm font-medium truncate">{s.name}</p>
-                          {showCoverage && !covered && (
-                            <span className="inline-flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full border border-warning/30 bg-warning/10 text-warning text-[11px] font-medium">
-                              <TriangleAlert aria-hidden="true" className="w-3 h-3" />
-                              Sin cobertura
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {/* Las tres acciones, agrupadas en un solo item: recuperan ancho achicando los
-                          huecos entre ellas en vez de robárselo al nombre. Por dentro no cambia una
-                          sola clase de los botones. */}
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
-                          {s.active ? 'Desactivar' : 'Activar'}
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => openDeleteService(s)} aria-label={`Eliminar ${s.name}`}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                        Ahora en MOBILE la tarjeta es una columna y las acciones son el ÚLTIMO hijo: el
+                        nombre se lleva el ancho interior entero y envuelve en varias líneas en vez de
+                        truncar. En DESKTOP la tarjeta es una grilla de dos columnas y las acciones
+                        quedan ancladas a la primera fila, así que se ve igual que siempre —inline a la
+                        derecha del título y centradas con él— y el título vuelve a truncar. El
+                        precedente de bajar un bloque a su propia línea en vez de pedirle ancho al que
+                        ya estaba es la fila mobile de Finanzas (POLISH-10): la única de las tres
+                        superficies de esa fase que pasó la UAT sin un solo issue.
+
+                        CORRECTITUD, no decoración: cada hijo de CONTENIDO fija a mano la primera
+                        columna. Con las acciones colocadas explícitamente en la segunda columna de la
+                        primera fila, la ubicación automática de la grilla mandaría uno de los bloques
+                        de abajo al hueco que queda a la derecha. Un hijo de contenido NUEVO tiene que
+                        declarar su columna igual que los cinco que ya están, o se va a la columna de
+                        las acciones en desktop.
+
+                        El centrado vertical se CONSERVA, y va con prefijo de desktop a propósito: en
+                        la columna de mobile centraría todo en horizontal. El ritmo de 8px también se
+                        conserva tal cual (ahora como separación de la caja en vez de margen entre
+                        hermanos): es el sumando que, junto al padding propio del control de cupo, forma
+                        la invariante de 32px de G-04. */}
+                    <div className="flex items-center gap-2 min-w-0 sm:col-start-1">
+                      {/* Sin tachado: en el tab "Desactivados" todos lo están, es ruido visual (D-14). */}
+                      <p className="text-sm font-medium break-words sm:truncate">{s.name}</p>
+                      {showCoverage && !covered && (
+                        <span className="inline-flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full border border-warning/30 bg-warning/10 text-warning text-[11px] font-medium">
+                          <TriangleAlert aria-hidden="true" className="w-3 h-3" />
+                          Sin cobertura
+                        </span>
+                      )}
                     </div>
                     {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER
                         dato —mismo registro que duración y precio—, y no como pill junto al nombre:
@@ -2552,7 +2549,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         el modo lo subía. Ahora el control es HERMANO de esta línea y se lleva 32px de
                         zona de exclusión (24 de padding propio + 8 del ritmo de la tarjeta). Meterlo de
                         vuelta acá adentro reabre el defecto entero. */}
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:col-start-1">
                       <span>{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</span>
                       {capMode !== 'individual' && (
                         <>
@@ -2569,14 +2566,19 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                       )}
                     </div>
                     {capMode !== 'individual' && (
-                      <CapacityInlineControl
-                        service={s}
-                        saving={savingCapacityIds.has(s.id)}
-                        onSave={c => saveCapacityInline(s, c)}
-                      />
+                      // El control no acepta className, así que su columna la declara este envoltorio.
+                      // El envoltorio NO lleva padding propio: los 32px de la invariante de G-04 los
+                      // siguen dando el padding interno del control más el ritmo de la tarjeta.
+                      <div className="sm:col-start-1">
+                        <CapacityInlineControl
+                          service={s}
+                          saving={savingCapacityIds.has(s.id)}
+                          onSave={c => saveCapacityInline(s, c)}
+                        />
+                      </div>
                     )}
                     {activeLocations.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:col-start-1">
                         <span className="text-[11px] text-muted-foreground mr-0.5">Se ofrece en:</span>
                         <button type="button" onClick={() => setServiceLocations(s.id, [])} className={cn('text-[11px] font-semibold py-1 px-2 rounded transition-colors', all ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground border border-border')}>Todos</button>
                         {activeLocations.map(l => (
@@ -2588,15 +2590,36 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         plano (solo lectura, sin pills). El copy NO afirma que sin cobertura "no se puede
                         reservar": en esta fase el mapeo todavía no afecta la reserva pública. */}
                     {showCoverage && (
-                      covered ? (
-                        <p className="text-[11px] text-muted-foreground">Lo hacen: <span className="text-foreground">{coverageNames.join(' · ')}</span></p>
-                      ) : (
-                        <p role="status" className="flex items-center gap-2 text-xs font-medium text-warning">
-                          <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" />
-                          <span>Nadie lo ofrece — asignalo en <Link href="/equipo" className="underline underline-offset-2">Equipo</Link></span>
-                        </p>
-                      )
+                      // La columna la declara el envoltorio y no cada rama: las dos son excluyentes y
+                      // el conteo de anclas de la tarjeta tiene que seguir siendo uno por bloque.
+                      <div className="sm:col-start-1">
+                        {covered ? (
+                          <p className="text-[11px] text-muted-foreground">Lo hacen: <span className="text-foreground">{coverageNames.join(' · ')}</span></p>
+                        ) : (
+                          <p role="status" className="flex items-center gap-2 text-xs font-medium text-warning">
+                            <TriangleAlert aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>Nadie lo ofrece — asignalo en <Link href="/equipo" className="underline underline-offset-2">Equipo</Link></span>
+                          </p>
+                        )}
+                      </div>
                     )}
+                    {/* Las tres acciones, agrupadas en un solo item: recuperan ancho achicando los
+                        huecos entre ellas en vez de robárselo al nombre. Son el ÚLTIMO hijo del DOM,
+                        así que en mobile caen al final de la tarjeta —"Desactivar" a la izquierda, el
+                        lápiz y el tacho juntos contra el borde derecho— y en desktop quedan ancladas a
+                        la segunda columna de la primera fila, o sea inline al lado del título como
+                        siempre. */}
+                    <div className="flex shrink-0 items-center gap-1 sm:col-start-2 sm:row-start-1">
+                      <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => toggleService(s.id, !s.active)}>
+                        {s.active ? 'Desactivar' : 'Activar'}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8" onClick={() => openDeleteService(s)} aria-label={`Eliminar ${s.name}`}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 )
               })}
