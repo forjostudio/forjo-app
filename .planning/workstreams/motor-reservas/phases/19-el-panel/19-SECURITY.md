@@ -7,8 +7,8 @@ auditor: gsd-security-auditor
 asvs_level: 1
 block_on: high
 threats_total: 40
-threats_closed: 37
-threats_open: 3
+threats_closed: 38
+threats_open: 2
 status: open_threats
 ---
 
@@ -33,10 +33,10 @@ que se leyó para confirmar que MUERDE (que se pondría rojo si la mitigación d
 |---|---|
 | Amenazas declaradas en los planes | 36 (T-19-01 … T-19-35 + T-19-SC) |
 | Filas nuevas agregadas por este audit | 4 (T-19-36 … T-19-39) |
-| **Cerradas** | **37 / 40** |
-| **Abiertas** | **3 / 40** — T-19-32, T-19-36, T-19-39 |
+| **Cerradas** | **38 / 40** |
+| **Abiertas** | **2 / 40** — T-19-32, T-19-36 |
 | Riesgos aceptados registrados | 7 (T-19-02, T-19-12, T-19-17, T-19-SC, RA-19-01, RA-19-02, RA-19-03) |
-| ¿Bloquea el ship con `block_on: high`? | **No.** Ninguna de las 3 abiertas es de severidad alta: ninguna permite leer ni escribir datos de otro negocio. Las 3 necesitan una decisión explícita, no un parche de emergencia. |
+| ¿Bloquea el ship con `block_on: high`? | **No.** Ninguna de las abiertas es de severidad alta: ninguna permite leer ni escribir datos de otro negocio. Necesitan una decisión explícita, no un parche de emergencia. |
 
 **Lo que sí se sostiene, verificado y no asumido:** el aislamiento por tenant del RPC nuevo. Modo
 `SECURITY INVOKER` (medido: `prosecdef = f`), guard de autoría contra `auth.uid()`, `business_id`
@@ -49,6 +49,13 @@ anon-key AUTENTICADOS, nunca con service-role.
 **Lo que no se sostiene:** el `location_id` es el único dato del payload que entra a la base sin
 ninguna validación de pertenencia — ni en la función, ni en una FK, ni en una policy, ni en un
 trigger (verificado exhaustivamente contra la base, §4.1).
+
+**Actualización 2026-08-28 (quick 260828-pir):** se cerraron **T-19-39** (§4.3) y la deuda de
+verificación **#1** de §6 (el contra-caso cross-tenant de T-19-14). **T-19-36** sigue abierta pero ya
+no por falta de fix: la migración **075** existe, está validada por replay en PG 17.6 local y espera
+aplicación a producción — ver el aviso al final de §4.1, que corrige el SQL propuesto en esa misma
+sección. **T-19-32** se cierra sola cuando se aplique la 075: su `NOTIFY pgrst` final es el Paso 4
+que faltaba confirmar.
 
 ---
 
@@ -80,7 +87,7 @@ trigger (verificado exhaustivamente contra la base, §4.1).
 | ID | Categoría | Disp. | Estado | Evidencia |
 |---|---|---|---|---|
 | T-19-13 | Info Disclosure | mitigate | **CLOSED** | El diff de `settings-client.tsx` agrega **cero** llamadas a `toast.*` (grep sobre las líneas `+` del diff = 0). El aviso de D-07 es texto del diálogo, todo del cliente (`:1282-1294`). El único `toast` del archivo con `error.message` (`:1592`, subida de foto) es **preexistente y está fuera del diff**. |
-| T-19-14 | Info Disclosure | mitigate | **CLOSED por código — SIN prueba de contra-caso** | `settings-client.tsx:1211-1212` (`.eq('business_id', business.id).eq('service_id', s.id)`) y la 6ª query `:1219-1220` (`.eq('business_id', …)`). Segunda capa verificada en la base: RLS ACTIVA sobre `time_block_services` con 4 policies tenant (`schema.sql:2299-2325`). ⚠ **Dicho claramente: la propiedad cross-tenant NO está probada por ningún test.** Y la razón registrada en 19-03-SUMMARY ("un solo negocio en la base local") está **desactualizada**: `test/helpers/supabase-fixtures.ts` expone `seedTwoTenants()` y `test/agenda-save-blocks-rpc.test.ts` ya lo usa con dos dueños autenticados. El contra-caso es escribible hoy (§6). |
+| T-19-14 | Info Disclosure | mitigate | **CLOSED por código — SIN prueba de contra-caso** | `settings-client.tsx:1211-1212` (`.eq('business_id', business.id).eq('service_id', s.id)`) y la 6ª query `:1219-1220` (`.eq('business_id', …)`). Segunda capa verificada en la base: RLS ACTIVA sobre `time_block_services` con 4 policies tenant (`schema.sql:2299-2325`). ⚠ **Dicho claramente: la propiedad cross-tenant NO está probada por ningún test.** Y la razón registrada en 19-03-SUMMARY ("un solo negocio en la base local") está **desactualizada**: `test/helpers/supabase-fixtures.ts` expone `seedTwoTenants()` y `test/agenda-save-blocks-rpc.test.ts` ya lo usa con dos dueños autenticados. El contra-caso es escribible hoy (§6). **Actualización 2026-08-28 (quick 260828-pir):** escrito y ejecutado — `test/settings-delete-precheck-tenant.test.ts` (4 casos, proyecto vitest `db`): control positivo (1), cross-tenant como A con el `service_id` de B (0), la MORDIDA con la RLS desactivada a propósito vía service-role (con filtro 0 / sin filtro 1) y la 6ª query sin filas de B. La mordida se **verificó ejecutándola**: quitándole el `.eq('business_id', …)` al helper el caso 3 se pone rojo (`expected 1 to be +0`); restaurado, verde. Límite honesto declarado en la cabecera del archivo: fija la propiedad a nivel de QUERY, no ata la línea inline de `settings-client.tsx`. |
 | T-19-15 | Repudiation | mitigate | **CLOSED (reforzada)** | Guard único en `settings-client.tsx:1241-1242`: los `.error` de las 6 queries + `blocks.count === null` + `bridge.error` + `bridgeIncompleto` (data nula, count nulo o respuesta paginada) ⇒ `delInfo = 'error'` ⇒ el diálogo NO ofrece la acción. Sin ramas nuevas de fail-open en el camino nuevo. |
 | T-19-16 | Tampering (intención) | mitigate | **CLOSED (corregida por WR-03)** | `settings-client.tsx:1282-1294`: tres formas según cuántas franjas se AGRANDAN de verdad, con el número exacto, derivado del módulo puro `blocksBecomingWildcard` (`lib/time-block-services.ts:258`) y no de un `filter` inline. La versión original afirmaba el ensanche siempre (falso para una franja multi-servicio). |
 | T-19-17 | DoS (auto) | accept (descartado por diseño) | **CLOSED (aceptado)** | Verificado por ausencia: en el diff de `app/` + `lib/` hay **0** líneas agregadas con `CREATE POLICY`, `CREATE TRIGGER` o `RAISE`, y la única migración del diff es la 074, que no crea ningún gate de borrado. Registrado en §5. |
@@ -200,6 +207,36 @@ Después: reflejo quirúrgico en `supabase/schema.sql` y corrección de la cabec
 diga qué cubre y qué no. Alternativa aceptable: **aceptar** el riesgo con esta ficha como registro.
 La decisión es del dueño del milestone; este audit no la toma por él.
 
+> ### ⚠ Actualización 2026-08-28 (quick 260828-pir): SIGUE OPEN, y **el SQL de arriba está MAL**
+>
+> **Estado:** el fix existe y está validado, pero la propiedad **no existe en producción** hasta que
+> alguien aplique la migración. Por eso la fila sigue 🔴 OPEN y no se marca cerrada por adelantado.
+>
+> **Artefacto:** `supabase/migrations/075_time_block_location_same_tenant.sql` — creada, replayada dos
+> veces con `supabase db reset` contra PG 17.6 local y verificada con un probe de cuatro casos.
+> **NO aplicada a producción.** El runbook completo (pre-flight, aplicación, verificación, reflejo en
+> `schema.sql`) vive en la cabecera del propio archivo.
+>
+> **Los dos errores del SQL propuesto arriba — no pegarlo en el editor SQL de producción:**
+>
+> 1. **`ON DELETE SET NULL` sin lista de columnas huerfaniza la franja.** Medido contra PG 17.6 con
+>    esa forma exacta: al borrar un consultorio, `business_id_quedo_null = t` **y**
+>    `location_quedo_null = t`. Como `time_blocks.business_id` es **NULLABLE** (medido:
+>    `is_nullable = YES`), **no hay error**: el borrado sigue "funcionando" y la franja queda fuera de
+>    la RLS de su dueño, invisible en el panel e irrecuperable desde la app, comodín para siempre
+>    (RA-02). La forma correcta —la que usa la 075— es `ON DELETE SET NULL ("location_id")`, con la
+>    lista de columnas: medido, tras el DELETE queda `location_id IS NULL` y `business_id` **intacto**.
+> 2. **El chequeo de backfill propuesto tiene dos agujeros.** `JOIN … WHERE l.business_id <> tb.business_id`
+>    no cuenta las filas donde alguno de los dos `business_id` es nulo (`<>` contra NULL devuelve NULL)
+>    y el `JOIN` descarta las franjas cuyo `location_id` no existe en `locations`. La forma que
+>    coincide EXACTAMENTE con lo que la FK valida es `NOT EXISTS` sobre el par, acotada a las filas
+>    con las dos columnas no-nulas — y en la 075 vive dentro de un `DO $$` que **aborta** con `P0001`,
+>    no como consulta previa que se puede saltear. Local mide **0**; producción se mide en el
+>    pre-flight del runbook.
+>
+> **Bonus:** la 075 termina con `NOTIFY pgrst, 'reload schema';` después del `COMMIT`, así que
+> aplicarla cierra de paso **T-19-32** (§4.2).
+
 ### 4.2 T-19-32 (declarada) — el `NOTIFY pgrst` sin confirmar · 🔴 OPEN
 
 | | |
@@ -251,6 +288,36 @@ if (futDias.error || futHoy.error || abo.error || hist.error || blocks.error
     || abo.count === null || hist.count === null || blocks.count === null
     || bridge.error || bridgeIncompleto) {
 ```
+
+> ### ✅ Actualización 2026-08-28 (quick 260828-pir): **CLOSED**
+>
+> Arreglada en `app/(dashboard)/settings/settings-client.tsx:1259-1265`, y **extendida a los CINCO
+> counts, no sólo a `abo`** (el fix propuesto arriba cubría 3 de 5: le faltaban `futDias` y `futHoy`):
+>
+> ```ts
+> if (futDias.error || futHoy.error || abo.error || hist.error || blocks.error
+>     || futDias.count === null
+>     || futHoy.count === null
+>     || abo.count === null
+>     || hist.count === null
+>     || blocks.count === null
+>     || bridge.error || bridgeIncompleto) {
+> ```
+>
+> Los dos que el fix propuesto no incluía pesan tanto como `abo`: **`futDias`** alimenta `future`, que
+> alimenta `delBlocked` (mismo fail-open de borrado bloqueado → confirmable), y **`futHoy`** es peor de
+> lo que parece — un count nulo no sólo subcuenta, además **desactiva el fail-closed de paginación**
+> (`countDeHoy > filasDeHoy.length` nunca se cumple con `countDeHoy = 0`).
+>
+> La regla que quedó escrita en el comentario del guard es **uniforme y sin excepciones** a propósito:
+> en una respuesta que resolvió contra la tabla, `count` SIEMPRE es un número, así que un nulo sólo
+> puede ser un fallo, y sobre un fallo este diálogo no ofrece la acción. El razonamiento
+> caso-por-caso ya falló una vez acá (se aplicó a 1 de 5); la uniformidad es lo que impide que vuelva
+> a fallar cuando alguien agregue un sexto count.
+>
+> Sin suite nueva, deliberadamente: la condición vive inline en un componente cliente de ~2000 líneas
+> y extraerla sería un refactor mayor y más riesgoso que el arreglo. Gate: `tsc --noEmit` limpio y
+> eslint sobre el archivo en **11 hallazgos, los mismos 11 preexistentes** que antes del cambio.
 
 ### 4.4 T-19-37 (WR-05) — el gate de canchas esconde mapeos que el motor sigue aplicando · ACEPTADA (RA-19-02)
 
@@ -320,7 +387,7 @@ Se acepta como deuda de deriva, con el fix de una línea documentado por si algu
 
 | # | Qué falta | Por qué importa |
 |---|---|---|
-| 1 | **Contra-caso cross-tenant de T-19-14.** El pre-check de borrado de servicios filtra por `business_id` por código y la RLS es la segunda capa, pero ningún test lo ejerce con dos dueños. | La razón registrada ("un solo negocio en la base local") está desactualizada: `seedTwoTenants()` existe y `agenda-save-blocks-rpc.test.ts` ya la usa. El test es: sembrar A y B, mapear una franja de B a un servicio de B, correr el pre-check como A con el `service_id` de B y asertar `blocks = 0`. |
+| 1 | **Contra-caso cross-tenant de T-19-14.** El pre-check de borrado de servicios filtra por `business_id` por código y la RLS es la segunda capa, pero ningún test lo ejerce con dos dueños. | La razón registrada ("un solo negocio en la base local") está desactualizada: `seedTwoTenants()` existe y `agenda-save-blocks-rpc.test.ts` ya la usa. El test es: sembrar A y B, mapear una franja de B a un servicio de B, correr el pre-check como A con el `service_id` de B y asertar `blocks = 0`. **Actualización 2026-08-28 (quick 260828-pir): SALDADA.** `test/settings-delete-precheck-tenant.test.ts` — 4 casos, ninguno skipeado, proyecto vitest `db`. Va más allá de lo pedido acá: además del caso descrito incluye un control positivo (sin él un 0 no prueba nada), la 6ª query del mismo `Promise.all`, y —lo que de verdad importa— un caso con la RLS **desactivada** vía service-role, porque el contra-caso tal como estaba descrito **no muerde**: con la RLS activa el count da 0 igual, así que borrarle el `.eq('business_id', …)` a la query dejaría el test en verde. La mordida se ejecutó de verdad (roja sin el filtro, verde con él). |
 | 2 | **Las 3 verificaciones humanas de `19-VERIFICATION.md`** siguen pendientes: UAT visual de la línea de chips, primer guardado en producción (que además cierra T-19-32) y el toast `service_not_scheduled` disparado de verdad. | Ninguna es verificable desde el repo. |
 | 3 | **La afirmación "ninguna superficie de seguridad nueva"** aparece en los seis SUMMARY. Es **más fuerte de lo que el código sostiene**: el code review encontró después WR-04 (§4.1), que es exactamente superficie de escritura nueva sin fila en el registro. La sección `## Threat Flags` de un SUMMARY no debe leerse como lista completa de la superficie nueva. | Proceso, no defecto. |
 
@@ -340,6 +407,23 @@ las tres abiertas necesitan una decisión explícita antes del cierre del milest
 2. **T-19-36** — migración **075** (UNIQUE + FK compuesta sobre `locations`), o aceptación formal con
    la ficha de §4.1 como registro. No editar la 074.
 3. **T-19-39** — una condición más en un `if` que ya existe.
+
+> ### Actualización 2026-08-28 (quick 260828-pir): **38/40 cerradas, 2 abiertas**
+>
+> El veredicto de arriba se conserva tal cual como registro de lo que el audit encontró. Estado real
+> tras el quick task `260828-pir`:
+>
+> 1. **T-19-32 — sigue 🔴 OPEN**, pero ya no necesita una acción propia: la migración 075 termina con
+>    el `NOTIFY pgrst, 'reload schema';` después del `COMMIT`, así que aplicarla la cierra de paso.
+> 2. **T-19-36 — sigue 🔴 OPEN**: la migración 075 está escrita, replayada dos veces en local y con
+>    runbook en su cabecera, pero **no aplicada a producción**, y la propiedad no existe allá hasta
+>    que se aplique. ⚠ El SQL propuesto en §4.1 **no sirve**: ver el aviso al final de esa sección.
+>    La 074 no se tocó (`git diff` vacío) y `supabase/schema.sql` tampoco (se espeja recién después
+>    de aplicar, precedente del plan 19-06).
+> 3. **T-19-39 — ✅ CLOSED**, extendida a los cinco counts. Ver §4.3.
+>
+> Y la **deuda de verificación #1** de §6 quedó saldada con un test permanente cuya mordida se
+> ejecutó. Las dos abiertas se cierran con **una sola acción del operador**: aplicar la 075.
 
 ---
 
