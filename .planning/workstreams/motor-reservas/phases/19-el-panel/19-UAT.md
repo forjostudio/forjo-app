@@ -3,25 +3,23 @@ status: testing
 phase: 19-el-panel
 source: [19-VERIFICATION.md]
 started: 2026-08-26T14:30:00Z
-updated: 2026-08-26T14:30:00Z
+updated: 2026-08-27T17:10:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: UAT visual de la línea de chips a 375px y en desktop
+number: 2
+name: Primer guardado de horarios en producción tras el deploy (cache de PostgREST)
 expected: |
-  El chip "Cualquier servicio" aparece/desaparece al instante, sin animación, y la línea NO cambia
-  de alto (`min-h-11` en ambos casos). El anillo de foco se ve sobre el botón de 44px, no sobre el
-  pill de 28px. Los 8 escenarios listados en `19-05-SUMMARY.md` §UAT visual — sobre todo el #2 (que
-  no salte el layout al marcar el primer chip) y el #8 (el anillo de foco).
+  El guardado se completa y persiste, sin `PGRST202` / "función no encontrada". Si falla, correr
+  `NOTIFY pgrst, 'reload schema';` en el editor SQL de producción — es una línea, sin migración.
 awaiting: user response
 
 ## Tests
 
 ### 1. UAT visual de la línea de chips a 375px y en desktop
 expected: Sin salto de layout al marcar el primer chip; el chip comodín se lee como informativo, no como campo vacío; estados de foco visibles y del tamaño correcto (44px). Sumar: que los controles deshabilitados durante el guardado (chips, inputs de hora, ×, toggle de día, Agregar bloque, Copiar a otros días) se **vean** apagados en las 5 paletas y en dark — es el fix de CR-01, y `opacity-50` sobre `bg-primary`/`bg-secondary` no lo miró nadie en pantalla.
-result: [pending]
+result: passed — probado en navegador 2026-08-27 sobre datos sembrados (8 servicios, lunes partido en 2 franjas, martes con inactivo mapeado, 5 franjas comodín). Sin salto de layout, foco correcto, controles apagados durante el guardado.
 
 ### 2. Primer guardado de horarios en producción tras el deploy (cache de PostgREST)
 expected: El guardado se completa y persiste, sin `PGRST202` / "función no encontrada". Si falla, correr `NOTIFY pgrst, 'reload schema';` en el editor SQL de producción — es una línea, sin migración.
@@ -34,9 +32,9 @@ result: [pending]
 ## Summary
 
 total: 3
-passed: 0
+passed: 1
 issues: 0
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
