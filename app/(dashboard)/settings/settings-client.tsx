@@ -1231,6 +1231,24 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // una tabla que responde, el count SIEMPRE es un número: null acá sólo puede ser un fallo, y
     // sobre un fallo este diálogo no ofrece la acción (P-08 / WR-02).
     //
+    // La MISMA regla vale para los CINCO counts, no sólo para `blocks` (T-19-39 / WR-07). El audit
+    // de la Phase 19 encontró que el razonamiento de arriba se había aplicado a 1 de 5, y los otros
+    // cuatro seguían leyéndose con `?? 0`:
+    //   · `abo` es el que más pesa: alimenta `activeAbono` (:1259), que alimenta `delBlocked`
+    //     (:1271). Un count nulo convierte un borrado BLOQUEADO en uno CONFIRMABLE — el fail-open
+    //     exacto que P-08 / WR-02 se escribió para evitar.
+    //   · `futDias` alimenta `future` (:1255), que también alimenta `delBlocked`: mismo fail-open.
+    //   · `futHoy` es peor de lo que parece: un count nulo no sólo subcuenta, además DESACTIVA el
+    //     fail-closed de paginación de :1252-1254 (`countDeHoy > filasDeHoy.length` nunca se cumple
+    //     con `countDeHoy = 0`).
+    //   · `hist` sólo alimenta copy, pero es la misma forma exacta (`count: 'exact'` + `head: true`)
+    //     y cuesta cero.
+    // La regla que queda escrita es UNIFORME y sin excepciones: en una respuesta que resolvió contra
+    // la tabla, `count` SIEMPRE es un número; un nulo sólo puede ser un fallo, y sobre un fallo este
+    // diálogo no ofrece la acción. Uniforme y no caso-por-caso a propósito: el razonamiento
+    // caso-por-caso YA FALLÓ UNA VEZ acá (se aplicó a 1 de 5), y la uniformidad es lo único que
+    // impide que vuelva a fallar cuando alguien agregue un sexto count.
+    //
     // (f) entra al MISMO guard por la misma razón, y con una condición de más: devuelve FILAS, así
     // que un `data` nulo o una respuesta PAGINADA por `max-rows` (menos filas que el count) leerían
     // "a esta franja no le queda ningún otro servicio" justo donde no se puede saber — y el aviso
@@ -1238,7 +1256,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // que con cualquier otro fallo (P-08 / WR-02).
     const bridgeRows = bridge.data ?? null
     const bridgeIncompleto = bridgeRows === null || bridge.count === null || bridgeRows.length < bridge.count
-    if (futDias.error || futHoy.error || abo.error || hist.error || blocks.error || blocks.count === null
+    if (futDias.error || futHoy.error || abo.error || hist.error || blocks.error
+        || futDias.count === null
+        || futHoy.count === null
+        || abo.count === null
+        || hist.count === null
+        || blocks.count === null
         || bridge.error || bridgeIncompleto) {
       console.error('[settings/delete-service] pre-check falló:', futDias.error ?? futHoy.error ?? abo.error ?? hist.error ?? blocks.error ?? bridge.error)
       setDelInfo('error')
