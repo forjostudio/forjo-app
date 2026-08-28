@@ -2609,17 +2609,26 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         lápiz y el tacho juntos contra el borde derecho— y en desktop quedan ancladas a
                         la segunda columna de la primera fila, o sea inline al lado del título como
                         siempre. */}
-                    {/* ZONA DE EXCLUSIÓN DE 32px EN MOBILE (G-04, segunda aplicación). Al bajar las
-                        acciones al final, el texto inerte que les queda encima —la línea de datos, "Se
-                        ofrece en:", "Lo hacen: …"— pasa a tener un botón a 8px. Es EXACTAMENTE la misma
+                    {/* ZONA DE EXCLUSIÓN DE 24px EN MOBILE + DIVISORIA (G-04, segunda aplicación). Al
+                        bajar las acciones al final, el texto inerte que les queda encima —la línea de
+                        datos, "Se ofrece en:", "Lo hacen: …"— pasa a tener un botón cerca. Es la misma
                         adyacencia que produjo el defecto del control de cupo, y ahora el interactivo más
-                        cercano no es un stepper sino "Desactivar" y el tacho de borrar. Misma derivación
-                        ya escrita en este archivo: piso táctil de 44px → radio de contacto de 22px → un
-                        dedo centrado en un renglón de 18px llega 31px más abajo → 32 es el primer paso
-                        de la escala que lo supera. 24px propios + 8px del ritmo de la tarjeta = 32. Va
-                        como padding y no como margen por el mismo motivo que allá: el padding suma al
-                        ritmo de forma determinista, un margen pelearía con él. En desktop se resetea a
-                        cero y la primera fila queda idéntica a como estaba.
+                        cercano no es un stepper sino "Desactivar" y el tacho de borrar.
+
+                        POR QUÉ 24 Y NO 32. La derivación de allá (piso táctil de 44px → radio de
+                        contacto de 22px → un dedo centrado en un renglón de 18px llega 31px más abajo)
+                        pedía 32. Se bajó a 24 (16px propios + 8px del ritmo) por pedido explícito: a 32
+                        el hueco se leía como un error de maquetado en una tarjeta que ya es alta. La
+                        `border-t` compensa parte de lo que se resigna: marca dónde termina el texto
+                        inerte y empieza la zona interactiva, así el dedo apunta con una referencia
+                        visual en vez de al vacío. Es un trade-off ACEPTADO, no un descuido — si en
+                        producción aparece un toque errado sobre la línea de datos, el primer sospechoso
+                        es este número y el arreglo es volver a `pt-6`.
+
+                        Va como padding y no como margen por el mismo motivo que allá: el padding suma al
+                        ritmo de forma determinista, un margen pelearía con él. En desktop se resetean a
+                        cero tanto el padding como el borde, y la primera fila queda idéntica a como
+                        estaba.
 
                         ORDEN DE FOCO: con las acciones al final del DOM, el recorrido de la tarjeta pasa
                         a ser contenido → acciones en las DOS vistas. En mobile eso alinea foco y orden
@@ -2630,20 +2639,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         no hay ambigüedad. Es DECISIÓN ESCRITA, no olvido: prohibido compensarla con un
                         índice de tabulación positivo, que es antipatrón y rompería el orden de la
                         página entera. */}
-                    <div className="flex shrink-0 items-center gap-1 pt-6 sm:pt-0 sm:col-start-2 sm:row-start-1">
+                    <div className="flex shrink-0 items-center gap-1 pt-4 border-t border-border/60 sm:pt-0 sm:border-t-0 sm:col-start-2 sm:row-start-1">
                       {/* El nombre accesible incluye el del servicio: hasta ahora este botón se apoyaba
                           en compartir renglón con el título, y ese renglón deja de existir en mobile. El
                           texto visible no cambia y sigue contenido en la etiqueta (WCAG 2.5.3). */}
                       <Button variant="ghost" size="sm" className="text-xs text-muted-foreground min-h-11 sm:min-h-0" onClick={() => toggleService(s.id, !s.active)} aria-label={`${s.active ? 'Desactivar' : 'Activar'} ${s.name}`}>
                         {s.active ? 'Desactivar' : 'Activar'}
                       </Button>
-                      {/* El margen automático empuja este par al borde derecho y deja "Desactivar" a la
-                          izquierda, que es el reparto aprobado. NO usar separación automática en el
-                          contenedor: también separaría el lápiz del tacho, que son un par. En desktop la
-                          columna se dimensiona al contenido, no hay espacio libre y el reset lo deja
-                          igual que hoy. Los dos botones de icono suben al piso táctil de 44px en mobile
-                          con el mismo molde que ya usan los del stepper de cupo. */}
-                      <Button variant="ghost" size="icon" className="ml-auto sm:ml-0 text-muted-foreground hover:text-foreground h-11 w-11 sm:h-8 sm:w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
+                      {/* Los tres botones van AGRUPADOS a la izquierda. Antes un `ml-auto` empujaba este
+                          par al borde derecho: con la fila entera para ellos solos eso abría ~130px de
+                          vacío contra "Desactivar" y los tres dejaban de leerse como un grupo. NO volver
+                          a poner separación automática acá ni en el contenedor: en el contenedor además
+                          separaría el lápiz del tacho, que son un par. En desktop la columna se
+                          dimensiona al contenido, así que nunca hubo espacio libre que repartir y esta
+                          fila se ve igual que siempre. Los dos botones de icono suben al piso táctil de
+                          44px en mobile con el mismo molde que ya usan los del stepper de cupo. */}
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-11 w-11 sm:h-8 sm:w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
                         <Pencil className="w-4 h-4" />
                       </Button>
                       <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-11 w-11 sm:h-8 sm:w-8" onClick={() => openDeleteService(s)} aria-label={`Eliminar ${s.name}`}>
