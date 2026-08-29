@@ -1531,6 +1531,14 @@ ALTER TABLE ONLY "public"."time_blocks"
 
 
 
+-- (migr. 075, T-19-36 / WR-04) Mismo requisito, ahora sobre locations: habilita la FK compuesta
+-- tb_location_same_tenant. Redundante en cuanto a unicidad —id ya es PK—; existe sólo para que
+-- time_blocks pueda referenciar el par (id, business_id).
+ALTER TABLE ONLY "public"."locations"
+    ADD CONSTRAINT "locations_id_business_uq" UNIQUE ("id", "business_id");
+
+
+
 ALTER TABLE ONLY "public"."appointment_spaces"
     ADD CONSTRAINT "appointment_spaces_no_overlap" EXCLUDE USING "gist" ("business_id" WITH =, "space_id" WITH =, "slot" WITH &&);
 
@@ -2160,8 +2168,16 @@ ALTER TABLE ONLY "public"."time_blocks"
 
 
 
+-- (migr. 075, T-19-36 / WR-04) Reemplaza a la FK simple time_blocks_location_id_fkey. save_agenda_blocks
+-- (074) escribe el location_id que manda el browser sin validar pertenencia: era el único dato del
+-- payload sin chequeo de tenant. La FK compuesta lo rechaza en la base, como ya hacen
+-- tbs_block_same_tenant / tbs_service_same_tenant de la 073 para franja y servicio.
+--
+-- La lista de columnas en ON DELETE es OBLIGATORIA (PG15+). Sin ella, borrar un consultorio pone en
+-- NULL las DOS columnas —business_id es NULLABLE— y la franja se huerfaniza: sale de la RLS del dueño
+-- y queda comodín para siempre, en silencio. Medido, no supuesto.
 ALTER TABLE ONLY "public"."time_blocks"
-    ADD CONSTRAINT "time_blocks_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE SET NULL;
+    ADD CONSTRAINT "tb_location_same_tenant" FOREIGN KEY ("location_id", "business_id") REFERENCES "public"."locations"("id", "business_id") ON DELETE SET NULL ("location_id");
 
 
 

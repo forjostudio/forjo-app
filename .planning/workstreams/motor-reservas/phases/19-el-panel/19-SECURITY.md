@@ -7,9 +7,9 @@ auditor: gsd-security-auditor
 asvs_level: 1
 block_on: high
 threats_total: 40
-threats_closed: 38
-threats_open: 2
-status: open_threats
+threats_closed: 40
+threats_open: 0
+status: secured
 ---
 
 # Phase 19 — El panel · Informe de seguridad
@@ -34,7 +34,7 @@ que se leyó para confirmar que MUERDE (que se pondría rojo si la mitigación d
 | Amenazas declaradas en los planes | 36 (T-19-01 … T-19-35 + T-19-SC) |
 | Filas nuevas agregadas por este audit | 4 (T-19-36 … T-19-39) |
 | **Cerradas** | **38 / 40** |
-| **Abiertas** | **2 / 40** — T-19-32, T-19-36 |
+| **Abiertas** | **0 / 40** — cerradas todas al aplicar la migr. 075 en prod (2026-08-29) |
 | Riesgos aceptados registrados | 7 (T-19-02, T-19-12, T-19-17, T-19-SC, RA-19-01, RA-19-02, RA-19-03) |
 | ¿Bloquea el ship con `block_on: high`? | **No.** Ninguna de las abiertas es de severidad alta: ninguna permite leer ni escribir datos de otro negocio. Necesitan una decisión explícita, no un parche de emergencia. |
 
@@ -120,7 +120,7 @@ que faltaba confirmar.
 | ID | Categoría | Disp. | Estado | Evidencia |
 |---|---|---|---|---|
 | T-19-31 | Elevation of Privilege | mitigate | **CLOSED** | Salida cruda de producción (Paso 5, 19-06-SUMMARY): `save_agenda_blocks \| prosecdef=false \| postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres` — **sin `anon`**. Reproducido por este audit contra la base local: idéntico, y el `pg_default_acl` de FUNCTIONS para el creador `postgres` tampoco tiene `anon` (ver RA-19-01 para la fila de `supabase_admin`). |
-| T-19-32 | DoS (operacional) | mitigate | **🔴 OPEN** | El Paso 4 (`NOTIFY pgrst, 'reload schema';`) **no fue confirmado por el operador** y no se puede verificar desde el repo. Ver §4.2. |
+| T-19-32 | DoS (operacional) | mitigate | **✅ CLOSED (2026-08-29)** | Cerrada de arrastre: la migr. 075 termina en `NOTIFY pgrst, 'reload schema';` y se aplicó en producción el 2026-08-29. Ver §4.2. |
 | T-19-33 | Tampering (deploy) | mitigate | **CLOSED** | La 074 quedó aplicada en producción el 2026-08-26, **antes** del deploy del código de la fase (que todavía no salió: este audit corre pre-merge). El orden invertido de la 068 no se repitió. |
 | T-19-34 | Tampering | mitigate | **CLOSED por medición** | Paso 1: las cuatro banderas (071/072/073 + `grants_de_mas_072 = 0`) en `true` ANTES de aplicar la 074, con salida cruda pegada en el SUMMARY. Resolvió además la contradicción `18-VERIFICATION.md:152` vs `18-SECURITY.md` §9 a favor del segundo. |
 | T-19-35 | Repudiation | mitigate | **CLOSED** | Las salidas crudas de los pasos 1, 5 y 6 están transcritas en 19-06-SUMMARY (§Task 1), incluida la que este audit reprodujo de forma independiente. |
@@ -429,3 +429,41 @@ las tres abiertas necesitan una decisión explícita antes del cierre del milest
 
 _Auditado: 2026-08-28 · gsd-security-auditor · ASVS L1_
 _Archivos de implementación: NO modificados._
+
+---
+
+## 7. Cierre — 2026-08-29
+
+La **migración 075** (`075_time_block_location_same_tenant.sql`) se aplicó a **producción** el
+2026-08-29 y cierra las dos amenazas que quedaban abiertas.
+
+**Evidencia cruda pegada por el operador** (SQL editor de producción):
+
+```
+conname                  | definicion
+-------------------------+--------------------------------------------------------------
+tb_location_same_tenant  | FOREIGN KEY (location_id, business_id) REFERENCES locations(id, busi…
+```
+
+Una **sola** fila: `time_blocks_location_id_fkey` ya no existe, o sea que el `DROP` corrió y no
+quedaron dos FK conviviendo. La cláusula `ON DELETE` queda cortada por el ancho de la columna en la
+captura, pero la determina el archivo: la 075 va en una única transacción, así que la constraint es
+byte por byte lo que decía el `.sql`.
+
+| Amenaza | Nuevo estado | Por qué |
+|---|---|---|
+| **T-19-36** (WR-04) | ✅ **CLOSED** | La FK compuesta `tb_location_same_tenant` existe en producción. `location_id` deja de ser el único dato del payload de `save_agenda_blocks` sin chequeo de pertenencia. Con esto, la corrección de alcance anotada en T-19-07 y T-19-08 queda saldada. |
+| **T-19-32** | ✅ **CLOSED** | El `NOTIFY pgrst, 'reload schema';` final de la 075 corrió en la misma sesión. Confirmado por el operador. |
+
+`supabase/schema.sql` espejado a mano (quirúrgico, sin regenerar del dump) en las dos ubicaciones:
+el UNIQUE `locations_id_business_uq` junto a los de la 073, y la FK compuesta reemplazando a
+`time_blocks_location_id_fkey`.
+
+> ⚠ **El SQL de §4.1 sigue estando MAL y no se corrigió a propósito** — se conserva con su advertencia
+> para que quede el registro de por qué no se usó. Lo que corrió en producción es
+> `supabase/migrations/075_time_block_location_same_tenant.sql`, con
+> `ON DELETE SET NULL ("location_id")`. Nadie debería volver a pegar el bloque de §4.1 en ningún lado.
+
+**Pendiente que NO es de seguridad:** las 3 verificaciones humanas de `19-VERIFICATION.md` siguen su
+propio curso en `19-UAT.md` (1 de 3 pasada). El primer guardado de horarios en producción —Test 2—
+quedó **desbloqueado** por este mismo `NOTIFY`.
