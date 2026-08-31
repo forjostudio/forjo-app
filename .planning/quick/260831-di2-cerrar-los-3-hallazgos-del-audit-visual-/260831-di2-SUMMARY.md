@@ -188,3 +188,8 @@ Ninguno.
 | 2 | `16f05c6` | Las dos live regions existen antes de tener contenido |
 | 3 | `d73c58b` | El contador sin el comodín + spec enmendado + Resolución del review |
 | — | (este) | SUMMARY + hash de la Task 3 en la tabla de Resolución |
+
+## Self-Check: PASSED
+
+Los 5 archivos declarados existen en disco y los 4 commits (`d28654f`, `16f05c6`, `d73c58b`, `f986576`)
+existen en `git log`. Sin ítems faltantes.
