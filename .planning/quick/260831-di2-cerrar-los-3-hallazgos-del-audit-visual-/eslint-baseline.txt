@@ -1,0 +1,4 @@
+  1003 |       const arr = byDate.get(a.date) || []  react-hooks/purity
+
+✖ 1 problem (1 error, 0 warnings)
+

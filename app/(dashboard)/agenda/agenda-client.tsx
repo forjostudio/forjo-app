@@ -527,8 +527,27 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   const activeLocations = initialLocations.filter(l => l.is_active !== false)
 
   // ── Grilla semanal (time_blocks) ────────────────────────────────────────────
-  const [slotDuration, setSlotDuration] = useState(business.default_slot_duration ?? 60)
-  const [bufferMinutes, setBufferMinutes] = useState(business.buffer_minutes ?? 0)
+  // Todo lo que el botón "Guardar horarios" persiste en `businesses` vive ACÁ, en un objeto único, y
+  // ese objeto es el MISMO que lee el UPDATE de `saveHours`. Antes eran dos `useState` sueltos y la
+  // invariante "lo que este botón guarda tiene que ensuciar y congelarse" estaba escrita como una
+  // ENUMERACIÓN de gestos — y una enumeración no cubre el control que se agrega después: así fue
+  // como la duración del turno y el descanso quedaron afuera del contrato (BLOCKER del audit visual
+  // 6-pilares). La regla, en dos mitades:
+  //   · automática: todo campo de este objeto ensucia el estado, porque el ÚNICO camino de escritura
+  //     es `updateHoursConfig`. Agregar un campo acá no obliga a acordarse de nada.
+  //   · manual: congelarse durante el guardado sigue siendo POR CONTROL — el prop de deshabilitado
+  //     atado a `savingHours` se pone en cada control, uno por uno. El control nuevo que lea de este
+  //     objeto también lo necesita, y eso es lo único que hay que recordar.
+  const [hoursConfig, setHoursConfig] = useState({
+    slotDuration: business.default_slot_duration ?? 60,
+    bufferMinutes: business.buffer_minutes ?? 0,
+  })
+  // Ensuciar PRIMERO y mergear después, con la misma forma que los seis mutadores de la grilla
+  // (`toggleDay`, `addBlock`, `removeBlock`, `updateBlock`, `toggleBlockService`, `applyCopyDay`).
+  function updateHoursConfig(patch: Partial<typeof hoursConfig>) {
+    setHoursDirty(true)
+    setHoursConfig(prev => ({ ...prev, ...patch }))
+  }
   // Consultorio activo en el editor de horarios. Con consultorios, arranca en el primero;
   // sin consultorios, '' = grilla única (sin concepto de "General").
   const [activeLoc, setActiveLoc] = useState(() => activeLocations[0]?.id ?? '')
@@ -787,6 +806,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     // Se eligió deshabilitar y no un `if (savingHours) return` adentro de cada mutador: el early
     // return también evita la pérdida, pero el click no hace NADA y el dueño no tiene forma de
     // saber por qué. El control apagado sí lo explica.
+    //
+    // La regla, por encima de esa enumeración: TODO lo que este botón persiste —los bloques de la
+    // grilla y el objeto de configuración declarado arriba— tiene que (a) ensuciar el estado y
+    // (b) congelarse mientras la llamada está en vuelo. La primera mitad la garantiza la estructura
+    // (un solo camino de escritura al objeto); la segunda es por control y hay que ponerla a mano.
+    // Enumerar en vez de derivar la regla es lo que dejó afuera a la duración del turno y al
+    // descanso entre turnos hasta el audit visual de la fase.
     setSavingHours(true)
     try {
       // ⚠ El set que viaja es COMPLETO: los 7 días con TODOS sus bloques, de todos los
@@ -832,10 +858,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       // este UPDATE no chequeaba su error, así que podía fallar MUDO y el dueño se iba creyendo que
       // había configurado (T-19-27).
       const { error: bizError } = await supabase.from('businesses')
-        .update({ default_slot_duration: slotDuration, buffer_minutes: bufferMinutes })
+        .update({ default_slot_duration: hoursConfig.slotDuration, buffer_minutes: hoursConfig.bufferMinutes })
         .eq('id', business.id)
       if (bizError) {
         console.error('[agenda/save-hours] duración/descanso:', bizError.code)
+        // Se vuelve a prender la señal: el `setHoursDirty(false)` de arriba es correcto para el RPC
+        // (los horarios SÍ se guardaron), pero si este UPDATE falla queda configuración sin
+        // persistir y el dueño se iría sin ningún indicador — justo el modo de falla que el
+        // indicador existe para cubrir. Así la pantalla no contradice al toast.
+        setHoursDirty(true)
         // La copy dice la verdad completa: los horarios SÍ quedaron guardados.
         toast.error('Los horarios se guardaron, pero no se pudo guardar la duración del turno ni el descanso entre turnos. Probá de nuevo.')
       }
@@ -1308,7 +1339,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <Label>Duración del turno por defecto</Label>
             <p className="text-xs text-muted-foreground">Se usa para calcular los slots disponibles. Puede sobreescribirse por servicio.</p>
           </div>
-          <Select value={String(slotDuration)} onValueChange={v => setSlotDuration(Number(v))}>
+          <Select value={String(hoursConfig.slotDuration)} onValueChange={v => updateHoursConfig({ slotDuration: Number(v) })} disabled={savingHours}>
             <SelectTrigger className="w-36">
               <SelectValue />
             </SelectTrigger>
@@ -1326,9 +1357,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <Label>Descanso entre turnos</Label>
             <p className="text-xs text-muted-foreground">Tiempo libre que se deja entre un turno y el siguiente.</p>
           </div>
-          <Select value={String(bufferMinutes)} onValueChange={v => setBufferMinutes(Number(v))}>
+          <Select value={String(hoursConfig.bufferMinutes)} onValueChange={v => updateHoursConfig({ bufferMinutes: Number(v) })} disabled={savingHours}>
             <SelectTrigger className="w-36">
-              <SelectValue>{bufferMinutes === 0 ? 'Sin descanso' : `${bufferMinutes} minutos`}</SelectValue>
+              <SelectValue>{hoursConfig.bufferMinutes === 0 ? 'Sin descanso' : `${hoursConfig.bufferMinutes} minutos`}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {BUFFER_OPTIONS.map(d => (
