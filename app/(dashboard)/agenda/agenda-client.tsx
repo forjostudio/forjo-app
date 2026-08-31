@@ -26,6 +26,7 @@ import { buildDayStatesFromRows, buildSaveHoursPayload, isValidBlockTime, type A
 import { resolveVertical } from '@/lib/verticals'
 import { todayInAR } from '@/lib/booking-window'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
+import { useNavigationGuard, useUnsavedChanges } from '@/components/dashboard/unsaved-changes-guard'
 import { NuevoTurnoForm } from '@/components/dashboard/nuevo-turno-form'
 
 // Turno para la vista semanal (subset con joins de nombre de servicio/profesional).
@@ -602,6 +603,35 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // indicador que se prende solo miente — y un indicador que miente es peor que no tenerlo.
   // El indicador visual vive al lado del botón de guardar, y `saveHours` es el ÚNICO que la apaga.
   const [hoursDirty, setHoursDirty] = useState(false)
+
+  // ── Avisar antes de perder los cambios de horarios ─────────────────────────
+  // El indicador pasivo de arriba NO alcanza, y el motivo es de layout: vive a ~160 líneas de JSX
+  // del control que lo enciende (los Select están arriba de la tarjeta, el aviso abajo pegado al
+  // botón Guardar, la grilla de 7 días en el medio) ⇒ en una pantalla real queda FUERA DE LA VISTA.
+  // Lo reportó el dueño perdiendo un cambio de "Duración del turno" en producción.
+  //
+  // Ojo con qué significa "sucio" acá: es estado sucio POR GESTO, no por diff contra el estado
+  // inicial. Prender un chip y volver a apagarlo deja la bandera encendida, así que el aviso puede
+  // aparecer aunque el estado final sea idéntico al que había. Es el comportamiento que el indicador
+  // ya tenía desde la fase 19 y este cambio NO lo toca: comparar contra un baseline es alcance nuevo.
+  //
+  // Las dos vías por las que se perdían los cambios se cubren distinto: la navegación INTERNA del
+  // panel la cubre el guard compartido (registrado con la línea de abajo), y recargar/cerrar la
+  // pestaña la cubre el beforeunload de acá. El botón ATRÁS del navegador NO queda cubierto — el
+  // porqué está en el docblock de components/dashboard/unsaved-changes-guard.tsx.
+  useUnsavedChanges(hoursDirty)
+  const requestNavigation = useNavigationGuard()
+
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (!hoursDirty) return
+      e.preventDefault()
+      // Los navegadores muestran su propio mensaje; setear returnValue activa el prompt.
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [hoursDirty])
 
   // ── El colapso de la línea de servicios (D-10) ────────────────────────────
   // Estado POR FRANJA, con clave `día-índice`. Vive en un Set aparte y no dentro del bloque porque
@@ -1419,7 +1449,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           ) : (
             <p className="text-xs text-muted-foreground">
               Cuando cargues {term.services.toLowerCase()} vas a poder elegir qué se da en cada franja.{' '}
-              <Link href="/servicios" className="underline underline-offset-2">Ir a Servicios</Link>
+              {/* Este link vive DENTRO de la misma tarjeta cuyos cambios se están protegiendo, así
+                  que pasa por el guard igual que los del sidebar. */}
+              <Link
+                href="/servicios"
+                onNavigate={(e) => { if (requestNavigation('/servicios')) e.preventDefault() }}
+                className="underline underline-offset-2"
+              >
+                Ir a Servicios
+              </Link>
             </p>
           ))}
           {DAY_DISPLAY_ORDER.map(day => {
