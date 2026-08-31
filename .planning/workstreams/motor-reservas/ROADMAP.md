@@ -65,7 +65,7 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 ### Milestone v0.28 — La agenda por servicio (Phases 18-20, activo)
 
 - [x] **Phase 18: El modelo y la disponibilidad** - Tabla puente `time_block_services` con la regla del comodín (0 filas = cualquier servicio), la regla encapsulada en un helper puro con tests (molde `lib/staff-services.ts`), y `/api/booking/availability` respetándola — el endpoint ya recibe `serviceId` desde v0.27. **Cero regresión por construcción:** el día de la migración todos los negocios tienen 0 filas. **`secure-phase` obligatorio** (completed 2026-08-25)
-- [x] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío (6/6 planes ejecutados 2026-08-26 — verificación `human_needed`: 3 items de UAT pendientes, ver `19-UAT.md`) (completed 2026-08-31)
+- [x] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío (6/6 planes — UAT 3/3 verificada en PRODUCCIÓN, `19-UAT.md`) (completed 2026-08-31)
 - [ ] **Phase 20: Booking público y onboarding** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, con el vacío explicado en vez de un calendario mudo; y el onboarding deja que un negocio de clases declare su agenda real desde el día uno
 
 ### Milestone v0.27 — Cupo unificado por servicio (shipped 2026-08-24)
