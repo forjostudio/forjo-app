@@ -301,6 +301,17 @@ function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, disabled
   }
   return (
     <div role="group" aria-label={groupLabel} className="flex flex-wrap items-center gap-x-2 gap-y-0">
+      {/* La región viva del comodín: SIEMPRE montada, invisible, y lo único que cambia es su texto.
+          Una región que se monta junto con su contenido no la locuta ningún lector (el nodo aparece
+          ya con el texto adentro y no hay "cambio" que anunciar), que es exactamente lo que pasaba
+          cuando el anuncio vivía en el chip visible.
+
+          Va fuera del flujo a propósito: `sr-only` es `position:absolute`, así que este nodo NO es
+          un item del flex `gap-x-2` de la línea. Si fuera item, vacío mediría 0 de ancho pero igual
+          consumiría su gap de 8px y la fila entera se correría de lado al aparecer y desaparecer el
+          comodín — un desplazamiento nuevo justo en la interacción que la UAT ya aprobó. Por eso el
+          anuncio se desacopla del dibujo en vez de montar siempre el contenedor visible. */}
+      <span role="status" className="sr-only">{wildcard ? 'Cualquier servicio' : ''}</span>
       {/* El chip comodín (D-16 / AGENDA-06). Se renderiza si y sólo si la franja no declara ningún
           servicio, y esa decisión sale del módulo puro, no de un filtro escrito acá.
 
@@ -311,12 +322,14 @@ function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, disabled
 
           `min-h-11` aunque no sea clickeable: así la altura de la línea es idéntica con o sin él y
           no hay salto de layout cuando aparece o desaparece (D-17 pide que reaparezca al instante).
-          `role="status"` para que un lector lo anuncie al reaparecer — información, nunca alerta.
+          El anuncio para lectores de pantalla NO lo hace este nodo: lo hace la región invisible de
+          acá arriba, siempre montada. Este chip va oculto para la accesibilidad, si no el mismo
+          texto se leería dos veces. Es información, nunca una alerta.
 
           NUNCA coexiste con un chip marcado, tampoco con el de un servicio dado de baja: si queda
           uno mapeado la franja no es comodín, porque el motor tampoco la trata como tal. */}
       {wildcard && (
-        <span role="status" className="inline-flex min-h-11 items-center">
+        <span aria-hidden="true" className="inline-flex min-h-11 items-center">
           <span className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-3 text-xs font-medium text-muted-foreground whitespace-nowrap">
             <Asterisk aria-hidden="true" className="size-3" />
             Cualquier servicio
@@ -1516,9 +1529,12 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
           <Button onClick={saveHours} disabled={savingHours}>
             {savingHours ? 'Guardando...' : 'Guardar horarios'}
           </Button>
-          {hoursDirty && (
-            <span role="status" className="text-xs text-warning">Cambios sin guardar</span>
-          )}
+          {/* Siempre montado, con el TEXTO condicionado: una región viva tiene que existir en el DOM
+              antes de que cambie su contenido para que un lector la locute. Acá no hace falta
+              desacoplarla como en la línea de chips — es el último hijo de un flex de ancho completo,
+              así que vacía no mueve nada visible. Sigue siendo polite (nunca alerta) y sigue siendo
+              el único lugar de la fase que usa el token de advertencia. */}
+          <span role="status" className="text-xs text-warning">{hoursDirty ? 'Cambios sin guardar' : ''}</span>
         </div>
       </Card>
 
