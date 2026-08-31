@@ -263,9 +263,11 @@ Trigger:
   onClick={() => toggleExpanded(day, idx)}
   className="inline-flex min-h-11 items-center rounded-full px-1 text-xs font-medium text-muted-foreground underline underline-offset-2 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 >
-  {expanded ? 'Ver menos' : `Ver todos (${total})`}
+  {expanded ? 'Ver menos' : `Ver todos (${shown.length})`}
 </button>
 ```
+
+> El número que se muestra es la cantidad de **servicios del negocio** en la línea, sin el comodín. El comodín **sí** cuenta para el **umbral** que decide si la línea colapsa (ocupa lugar), pero no es un servicio: un negocio con 7 servicios y ninguno marcado tiene que leer `Ver todos (7)`, no `(8)`. Umbral y número mostrado son dos cosas distintas (enmienda 2026-08-31).
 
 Neutro y subrayado a propósito: es navegación dentro de la línea, no una acción de configuración. El acento no entra acá (ver Color).
 
@@ -278,7 +280,10 @@ Neutro y subrayado a propósito: es navegación dentro de la línea, no una acci
 - Para volver al comodín ya hay un camino, y es el que D-17 fijó: apagar todos los chips.
 
 ```tsx
-<span role="status" className="inline-flex min-h-11 items-center">
+{/* Siempre montada, fuera del flujo. Primer hijo del grupo, antes del chip. */}
+<span role="status" className="sr-only">{wildcard ? 'Cualquier servicio' : ''}</span>
+
+<span aria-hidden="true" className="inline-flex min-h-11 items-center">
   <span className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-3 text-xs font-medium text-muted-foreground whitespace-nowrap">
     <Asterisk aria-hidden="true" className="size-3" />
     Cualquier servicio
@@ -288,7 +293,7 @@ Neutro y subrayado a propósito: es navegación dentro de la línea, no una acci
 
 - **Borde punteado + icono `Asterisk`**: lo separa de un chip "sin marcar" (borde sólido, sin icono) sin usar color. El asterisco es el glifo universal de comodín; refuerza la regla sin agregar un texto de ayuda.
 - **`min-h-11` también en el comodín** aunque no sea clickeable: la altura de la línea es idéntica con o sin él ⇒ **cero layout shift** cuando aparece o desaparece (D-17: reaparece al instante). Mismo criterio que el "Hace todo" inline de `settings-client.tsx:2769`.
-- **`role="status"`**: cuando reaparece, un lector de pantalla lo anuncia. Es información, no interrupción — nunca `role="alert"`.
+- **El anuncio vive en una región asociada, no en el chip** (enmienda 2026-08-31): la región es `sr-only`, está **siempre montada** y lo único que cambia es su texto. Una región que se monta junto con su contenido no la locuta ningún lector — no hay cambio que anunciar —, que es lo que pasaba con el `role="status"` puesto sobre el contenedor visible. Y tiene que ir **fuera del flujo** (`sr-only` es `position:absolute`): si fuera item del flex de la línea, vacía mediría 0 de ancho pero igual consumiría el `gap-x-2` de 8px y la fila se correría de lado al aparecer y desaparecer el comodín. El chip visible queda `aria-hidden` para que el texto no se lea dos veces. Sigue siendo información, no interrupción — nunca `role="alert"`.
 - **Nunca coexiste con un chip marcado.** Se renderiza si y solo si la franja tiene **0** servicios asignados (contando los inactivos mapeados: si queda uno inactivo mapeado, la franja **no** es comodín y el chip no se muestra — porque el motor tampoco la trata como comodín).
 
 ### El servicio desactivado que sigue mapeado — la decisión delegada por D-11
@@ -344,7 +349,7 @@ Misma posición, cuando **sí** hay servicios. Es el único texto explicativo de
 | Marcado | `border-foreground/30 bg-secondary text-foreground` + icono `Check` |
 | Marcado + hover | sin cambio — el estado ya es el feedback |
 | Marcado + inactivo | igual que marcado + `border-dashed` + sufijo `· inactivo` |
-| Guardando (`savingHours`) | `disabled` — `disabled:pointer-events-none disabled:opacity-50`, junto con **todo** el resto del grid (inputs de hora, ×, toggle de día, Agregar bloque, Copiar a otros días). |
+| Guardando (`savingHours`) | `disabled` — `disabled:pointer-events-none disabled:opacity-50`. **Regla:** se congela **todo control cuyo valor persista el botón "Guardar horarios"**. Hoy eso son los inputs de hora, la ×, el toggle de día, "Agregar bloque", "Copiar a otros días", los chips **y los dos `Select` de duración del turno y descanso entre turnos** — esa lista es un ejemplo, no la definición. **Excepción declarada:** el trigger "Ver todos" **no** se congela (el colapso no toca configuración; no hay nada que perder). |
 | Disabled | solo durante `savingHours` (ver fila anterior). No hay otro caso en esta fase. |
 | Error de guardado | lo maneja `saveHours` con su `toast.error`; los chips no cambian de aspecto |
 
@@ -356,6 +361,18 @@ Misma posición, cuando **sí** hay servicios. Es el único texto explicativo de
 > estado visualmente idéntico a "nunca se configuró". Es el modo de falla que este milestone existe para matar. La razón
 > (b) sigue en pie y por eso el fix congela el grid **entero**, no solo los chips. Contrato original: aprobado 6/6; esta
 > fila es la única que cambia.
+
+> **Enmienda 2026-08-31 (post UI-REVIEW).** La fila `Guardando` pasa de **enumeración** a **regla**. La versión del
+> 2026-08-26 listaba los controles que se congelan, y una enumeración no cubre el control que se agrega después: así es
+> como los dos `Select` de duración del turno y descanso entre turnos quedaron afuera del contrato de guardado —
+> el BLOCKER del audit visual 6-pilares (`19-UI-REVIEW.md`). Sus valores los persiste el mismo botón, pero no ensuciaban
+> el estado (nadie avisaba que había cambios sin guardar) y no se congelaban (un cambio hecho con la llamada en vuelo lo
+> pisaba el UPDATE con el valor viejo, y `setHoursDirty(false)` apagaba la única señal). La regla ahora se enuncia por
+> lo que el botón persiste, no por la lista de controles de hoy, y del lado del código la primera mitad quedó **como
+> estructura**: lo que se guarda vive en un objeto único (`hoursConfig`) que es el mismo que lee el UPDATE, con un solo
+> camino de escritura que ensucia el estado. Congelar sigue siendo por control. Esta enmienda toca además: el mecanismo
+> de las dos live regions (siempre montadas, contenido condicionado; la del comodín fuera del flujo) y el número del
+> trigger `Ver todos (N)`, que deja de contar el comodín.
 
 **Motion:** solo `transition-colors` (150ms default). **Prohibido** animar la aparición/desaparición del chip comodín (D-17: al instante), la expansión de "Ver todos", o cualquier propiedad de layout (`height`, `width`, `margin`).
 
@@ -371,10 +388,11 @@ Contrato mínimo, sin mecanismos nuevos:
 - Al lado del botón "Guardar horarios" (:1000-1004), dentro de un `flex items-center gap-4`:
 
 ```tsx
-{hoursDirty && (
-  <span role="status" className="text-xs text-warning">Cambios sin guardar</span>
-)}
+{/* Nodo siempre montado; lo que se condiciona es el TEXTO (enmienda 2026-08-31). */}
+<span role="status" className="text-xs text-warning">{hoursDirty ? 'Cambios sin guardar' : ''}</span>
 ```
+
+Acá no hace falta desacoplar la región como en la línea de chips: el `<span>` es el último hijo de un `flex items-center gap-4` de ancho completo, así que montado y vacío no mueve nada visible.
 
 - **Sin** `beforeunload`, **sin** bloqueo de navegación, **sin** modal. Fuera de alcance.
 
@@ -476,7 +494,7 @@ Idioma: **español rioplatense, voseo** ("elegí", "acordate", "reactivalo"). Si
 - [ ] Ningún estado se comunica **solo por color**: marcado lleva `Check` + relleno + color de texto; comodín lleva `Asterisk` + borde punteado + la palabra; inactivo lleva borde punteado + la palabra "inactivo".
 - [ ] **Prohibido `opacity` para atenuar** cualquier chip: baja el contraste por debajo de AA.
 - [ ] Iconos decorativos (`Check`, `Asterisk`) con `aria-hidden="true"`.
-- [ ] Chip comodín e indicador de estado sucio con `role="status"` (polite), nunca `role="alert"`.
+- [ ] Chip comodín con una **live region asociada** (invisible, siempre montada, fuera del flujo) e indicador de estado sucio siempre montado: los dos polite (`role="status"`), nunca `role="alert"`, y en los dos lo que cambia es el **contenido**, no el nodo.
 - [ ] Contraste verificado por token: chip sin marcar 4.99:1 (light) / 6.68:1 (dark); marcado 13.1:1 / 12.3:1; `--warning` 4.97:1 / 8.75:1. **Todos AA o mejor, en las 5 paletas** (ninguno depende de `--primary`).
 - [ ] Jerarquía de headings intacta: la línea guía es un `<p>`, no un heading. La fase **no agrega ningún heading**.
 - [ ] `hover` nunca es el único feedback: cada estado tiene equivalente visible por teclado y en touch.
@@ -543,7 +561,7 @@ Esta fase **no instala componentes** ni agrega dependencias. Iconos nuevos usado
 | D-13 la grilla es el editor | Alcance: la vista semanal está fuera, explícitamente |
 | D-14 peso visual secundario | Color: el acento no entra en la línea · `text-xs` · `gap-y-0` · sin color por servicio |
 | D-15 el día colapsado no resume | El encabezado del día no se toca (fuera de alcance) |
-| D-16 chip "Cualquier servicio" | Chip comodín informativo (no clickeable), dashed + `Asterisk`, `role="status"` |
+| D-16 chip "Cualquier servicio" | Chip comodín informativo (no clickeable), dashed + `Asterisk`, con una live region asociada polite (siempre montada, fuera del flujo; el chip va `aria-hidden`) |
 | D-17 volver a comodín apagando todo | Sin confirmación, sin toast, reaparición **sin animación** y sin layout shift |
 | D-18 copy de `service_not_scheduled` | Bloque D |
 | D-19 `location_id` no se toca | El grupo se etiqueta por franja, no por sede; el editor ya opera por consultorio activo |

@@ -7,6 +7,28 @@
 
 ---
 
+## Resolución (2026-08-31, quick 260831-di2)
+
+El usuario eligió cerrar los **3 hallazgos priorizados** (el BLOCKER y los dos WARNING del top 3). Las 6
+recomendaciones menores quedan explícitamente sin aplicar.
+
+| Hallazgo | Estado | Commit / destino |
+|---|---|---|
+| BLOCKER-01 — duración y descanso fuera del contrato de guardado | **FIXED** | `d28654f` — los dos `Select` pasan por `updateHoursConfig` (ensucian) y llevan `disabled={savingHours}` en la **raíz** `<Select>` (patrón in-repo `ficha-client.tsx:407`, no en el `SelectTrigger` como sugería el audit): 8 → 10 controles congelados. Además se cerró la **causa de raíz**: lo que el botón persiste vive en un objeto único (`hoursConfig`) que es el mismo que lee el UPDATE, con un solo camino de escritura ⇒ la invariante deja de ser una enumeración de gestos. Y un **segundo agujero que el audit no nombra**: `setHoursDirty(false)` corre antes del UPDATE, así que un fallo de esa mitad apagaba la señal aunque el toast dijera la verdad — la rama de `bizError` vuelve a prender `hoursDirty`. |
+| WARNING-03 — las live regions no locutan | **FIXED en código · VERIFICACIÓN HUMANA PENDIENTE** | `16f05c6` — la región del comodín va **`sr-only` siempre montada** (contenido condicionado) y el chip visible queda `aria-hidden`, byte-idéntico. **No** se aplicó el fix sugerido por el audit (montar siempre el contenedor visible): ese contenedor es item del flex `gap-x-2`, así que vacío consumiría igual sus 8px de gap y la fila de chips se correría de lado al aparecer/desaparecer el comodín — un desplazamiento nuevo justo en la interacción del **escenario #2 de la UAT, ya pasado el 2026-08-27**. `sr-only` es `position:absolute` ⇒ fuera del flujo ⇒ no es item del flex. "Cambios sin guardar" sí se resolvió montando siempre el mismo nodo. **Pendiente:** que una persona confirme con lector de pantalla real (NVDA/Narrador/VoiceOver), **después del deploy**, que el comodín se locuta al reaparecer, que "Cambios sin guardar" se locuta al ensuciar, que a **375px** la fila de chips no salta ni se corre al marcar el primer servicio, y que los dos `Select` se ven apagados durante el guardado. Registrado también en `260831-di2-SUMMARY.md`. |
+| WARNING-01 — `Ver todos (N)` incluye el comodín | **FIXED** | commit de docs de esta sección — el trigger pasa a `Ver todos (${shown.length})`. `total` **no se toca** y sigue siendo lo único que decide `collapsible`: que el comodín cuente para el **umbral** es correcto y lo pide el spec; lo que cambia es sólo el número que se le muestra al dueño. |
+| WARNING-07 — la excepción del trigger no estaba en el contrato | **FIXED (documental)** | Mismo commit — la fila `Guardando` de `19-UI-SPEC.md` pasa de enumeración a **regla** ("todo control cuyo valor persista el botón") y declara la excepción: el trigger "Ver todos" no se congela. |
+| WARNING-02, WARNING-04, WARNING-05, WARNING-06, WARNING-08 y el import muerto de `Minus` | **NO APLICADOS** | El usuario eligió sólo los 3 priorizados. Sin re-discusión: copies `not_deployed`/`reload`, `text-red-400` → `--destructive` (×2), `pl-0.5`, el toast del inactivo y el import muerto quedan como estaban. |
+| WR-05 (gate de canchas) · WR-06 (`hasChipCatalog` inline) | **FUERA DE ALCANCE** | Aceptados con riesgo documentado en `19-REVIEW.md`. No se re-litigan acá. |
+| D-13 — `react-hooks/purity` de la vista semanal | **DIFERIDO** | Ya registrado en `deferred-items.md`. Es el único hallazgo de eslint del archivo, antes y después de este quick. |
+| `NO VERIFICADO (necesita ojos)` de los pilares 2, 3, 5 y 6 | **ABIERTOS** | Dependen del deploy. Los cubre la UAT de la fase (`19-UAT.md`, 1 de 3 pasada), que **no se tocó**. |
+
+Verificación tras los fixes: `tsc --noEmit` limpio (binario local, no `npx`), eslint acotado a
+`agenda-client.tsx` en `1 problem (1 error, 0 warnings)` —el mismo D-13 del baseline, cero hallazgos
+nuevos—, suite `npm test` verde, `git status --porcelain` de `19-UAT.md` vacío.
+
+---
+
 ## Pillar Scores
 
 | Pillar | Score | Key Finding |

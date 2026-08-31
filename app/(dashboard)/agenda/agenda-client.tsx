@@ -283,6 +283,9 @@ function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, disabled
   const selectedCount = shown.filter(s => serviceIds.includes(s.id)).length
   // El comodín cuenta dentro del umbral: cuando aparece (0 marcados) la línea muestra el comodín
   // más 5 servicios, que es el peor caso de altura y siguen siendo 2 filas.
+  // UMBRAL y NÚMERO MOSTRADO son cosas distintas: el comodín ocupa lugar, así que entra en el que
+  // decide si la línea colapsa, pero no es un servicio del negocio y no puede entrar en el número
+  // que el disparador le muestra al dueño (ahí va la cantidad de servicios, sin el comodín).
   const total = shown.length + (wildcard ? 1 : 0)
   const collapsible = total > CHIPS_COLLAPSED_MAX
   let visible = shown
@@ -362,7 +365,7 @@ function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, disabled
           onClick={onToggleExpanded}
           className="inline-flex min-h-11 items-center rounded-full px-1 text-xs font-medium text-muted-foreground underline underline-offset-2 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {expanded ? 'Ver menos' : `Ver todos (${total})`}
+          {expanded ? 'Ver menos' : `Ver todos (${shown.length})`}
         </button>
       )}
     </div>
