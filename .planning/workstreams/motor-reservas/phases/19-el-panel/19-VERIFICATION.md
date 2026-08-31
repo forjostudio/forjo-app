@@ -1,7 +1,7 @@
 ---
 phase: 19-el-panel
 verified: 2026-08-26T14:26:33Z
-status: human_needed
+status: passed
 score: 9/9 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -21,7 +21,7 @@ human_verification:
 
 **Phase Goal:** Que el dueño pueda configurar lo que la Phase 18 volvió declarable. En Agenda asigna servicios a cada franja, y la grilla **muestra** qué se da en cada una sin abrir nada. El caso por defecto —una franja sin servicios asignados— tiene que leerse como **"cualquiera"**, que es lo que significa, y no como un estado vacío o a medio configurar: es el estado del 100 % de los negocios el día del deploy.
 **Verified:** 2026-08-26T14:26:33Z
-**Status:** human_needed
+**Status:** passed (las 3 verificaciones humanas se ejecutaron en producción el 2026-08-31 — ver `19-UAT.md`)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement

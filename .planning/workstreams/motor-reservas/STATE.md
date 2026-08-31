@@ -4,8 +4,8 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
 stopped_at: Completado 19-06-PLAN.md — fase 19 lista para verificacion
-last_updated: "2026-08-26T13:21:53.828Z"
-last_activity: 2026-08-26 -- Phase 19 execution started
+last_updated: "2026-08-31T18:01:54.520Z"
+last_activity: 2026-08-31
 progress:
   total_phases: 20
   completed_phases: 19
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 19 (el-panel) — EXECUTING
-Plan: 6 of 6
+Phase: 20
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-08-26 -- Phase 19 execution started
+Last activity: 2026-08-31
 
 ## Milestone v0.28 — decisiones LOCKED
 

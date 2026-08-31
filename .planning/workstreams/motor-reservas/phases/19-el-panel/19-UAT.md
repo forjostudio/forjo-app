@@ -1,19 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 19-el-panel
 source: [19-VERIFICATION.md]
 started: 2026-08-26T14:30:00Z
-updated: 2026-08-31T20:00:00Z
+updated: 2026-08-31T21:00:00Z
 ---
 
 ## Current Test
 
-number: 3
-name: Toast de `service_not_scheduled` desde el booking público real
-expected: |
-  El cliente ve "Ese horario ya no se ofrece para este servicio. Recargá la página y elegí otro."
-  — no un error de red genérico.
-awaiting: user response
+_Ninguno — los 3 tests pasaron._
 
 ## Tests
 
@@ -27,14 +22,14 @@ result: passed — probado en **PRODUCCIÓN** el 2026-08-31, tras el deploy (`99
 
 ### 3. Toast de `service_not_scheduled` desde el booking público real
 expected: El cliente ve "Ese horario ya no se ofrece para este servicio. Recargá la página y elegí otro." — no un error de red genérico. Se dispara mapeando un servicio a un subconjunto de franjas en el panel y después reservando, desde una pestaña vieja, un horario que ese servicio ya no cubre.
-result: [pending]
+result: passed — probado en **PRODUCCIÓN** el 2026-08-31 con la carrera real de dos pestañas. El backstop del servidor rechazó la reserva y el cliente vio la copy propia, no un error genérico. Era la ÚNICA rama nueva de las fases 18+19 que nunca se había disparado: hasta hoy estaba verificada por tipo y por lectura, jamás ejecutada.
 
 ## Summary
 
 total: 3
-passed: 2
+passed: 3
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
