@@ -205,3 +205,8 @@ Sin superficie de seguridad nueva: todo el cambio es navegación client-side det
 
 Task 1 corrió el ciclo completo: commit `test(...)` con la suite en rojo (módulo inexistente, 0 tests
 ejecutables) antes del commit `feat(...)` que la puso en verde (8/8). Sin fase REFACTOR: no hizo falta.
+
+## Self-Check: PASSED
+
+Los 3 archivos creados existen en disco, los 5 commits existen en `git log`, y
+`.planning/workstreams/motor-reservas/phases/19-el-panel/` está sin cambios en `git status`.
