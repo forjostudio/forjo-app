@@ -28,6 +28,7 @@ import {
   LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useNavigationGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { useState } from 'react'
 
 type NavItem = { href: string; label: string; icon: LucideIcon }
@@ -89,6 +90,10 @@ export function Sidebar({ business }: { business: Business }) {
   const router = useRouter()
   const supabase = createClient()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // Guard de salida del panel: si la pantalla actual tiene cambios sin guardar, cada link de acá
+  // pregunta antes de navegar en vez de descartarlos en silencio. Sin provider devuelve siempre
+  // false ⇒ nunca bloquea. Ver components/dashboard/unsaved-changes-guard.tsx.
+  const requestNavigation = useNavigationGuard()
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -139,6 +144,7 @@ export function Sidebar({ business }: { business: Business }) {
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
+                    onNavigate={(e) => { if (requestNavigation(item.href)) e.preventDefault() }}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
                       'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
@@ -174,13 +180,18 @@ export function Sidebar({ business }: { business: Business }) {
         <Link
           href="/ayuda"
           onClick={() => setMobileOpen(false)}
+          onNavigate={(e) => { if (requestNavigation('/ayuda')) e.preventDefault() }}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <HelpCircle className="w-4 h-4 flex-shrink-0" />
           Ayuda
         </Link>
+        {/* El logout pasa por el guard con su PROPIA continuación: acá "seguir" significa desloguear
+            y DESPUÉS navegar. Si el guard empujara /login sin haber llamado a signOut(), la sesión
+            quedaría viva y el proxy rebotaría al dashboard. Si el guard bloquea, el diálogo se
+            encarga; si no bloquea, se ejecuta el mismo handler de siempre. */}
         <button
-          onClick={handleLogout}
+          onClick={() => { if (!requestNavigation('/login', () => void handleLogout())) void handleLogout() }}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full"
         >
           <LogOut className="w-4 h-4" />

@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/dashboard/sidebar'
 import { PlanBanner } from '@/components/dashboard/plan-banner'
 import { TestModeBanner } from '@/components/dashboard/test-mode-banner'
 import { MpConnectionBanner } from '@/components/dashboard/mp-connection-banner'
+import { UnsavedChangesProvider } from '@/components/dashboard/unsaved-changes-guard'
 import { VerticalProvider } from '@/lib/use-terminology'
 import { resolveVertical } from '@/lib/verticals'
 import { PaletteScript } from '@/components/palette-script'
@@ -39,19 +40,25 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <VerticalProvider vertical={vertical}>
       <PaletteScript palette={business.palette} theme={business.theme} font={business.font} />
-      <div className="min-h-screen">
-        <Sidebar business={business} />
-        <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">
-          <TestModeBanner />
-          <MpConnectionBanner connectionError={business.mp_connection_status === 'error' && !!business.mp_user_id} />
-          <Suspense fallback={null}>
-            <PlanBanner planStatus={planStatus} daysLeft={daysLeft} />
-          </Suspense>
-          <div className="p-4 sm:p-6 lg:p-8">
-            {children}
-          </div>
-        </main>
-      </div>
+      {/* El guard de salida tiene que envolver al SIDEBAR y a la PÁGINA a la vez: la bandera de
+          cambios sin guardar nace en la página y se consulta en el sidebar, que son hermanos ⇒ el
+          único punto en común es acá. Un provider client envolviendo children renderizados en el
+          server es legal y ya es el patrón de este archivo (VerticalProvider). */}
+      <UnsavedChangesProvider>
+        <div className="min-h-screen">
+          <Sidebar business={business} />
+          <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">
+            <TestModeBanner />
+            <MpConnectionBanner connectionError={business.mp_connection_status === 'error' && !!business.mp_user_id} />
+            <Suspense fallback={null}>
+              <PlanBanner planStatus={planStatus} daysLeft={daysLeft} />
+            </Suspense>
+            <div className="p-4 sm:p-6 lg:p-8">
+              {children}
+            </div>
+          </main>
+        </div>
+      </UnsavedChangesProvider>
     </VerticalProvider>
   )
 }
