@@ -270,3 +270,13 @@ Sin flags de superficie nueva: esta migración no agrega endpoints, ni tablas, n
 
 Ninguno. No se agregó código de aplicación: el cambio es una migración de privilegios más una suite
 de regresión.
+
+---
+
+## Self-Check: PASSED
+
+Archivos verificados en disco: los 5 (migración 076, suite de regresión, todo en `completed/`,
+`deferred-items.md`, este summary). El todo ya **no** está en `todos/pending/`.
+Commits verificados en `git log`: `d1a5486`, `f5e978c`, `1fbf48a`, `90f0e6a`.
+Sin borrados de archivos trackeados en ningún commit del quick task (más allá del `git mv` del todo,
+que es intencional y preserva el historial).
