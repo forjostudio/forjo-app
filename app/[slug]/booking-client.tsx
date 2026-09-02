@@ -499,10 +499,13 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         </svg>
         <div className="max-w-lg mx-auto px-6 py-10 relative flex items-center justify-center gap-4">
           {business.logo_url ? (
+            // Dimensiones (de w-14 h-14) para que el hero no salte al cargar. SIN diferir la carga:
+            // está arriba del fold y es de lo primero que se pinta — hacerlo empeoraría el LCP.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={business.logo_url}
               alt={business.name}
+              width={56} height={56}
               className="w-14 h-14 rounded-xl object-cover border border-white/20 flex-shrink-0"
             />
           ) : (
@@ -622,8 +625,11 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
                 >
                   {pro.photo_url ? (
+                    // Sigue siendo <img> a propósito: photo_url es una URL externa arbitraria y
+                    // migrar a next/image exigiría declarar remotePatterns en next.config.ts, que es
+                    // config global. Las dos dimensiones (de w-10 h-10) resuelven el CLS sin eso.
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={pro.photo_url} alt={pro.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                    <img src={pro.photo_url} alt={pro.name} width={40} height={40} loading="lazy" decoding="async" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                   ) : (
                     <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary text-primary-foreground font-semibold text-sm flex-shrink-0">
                       {pro.name.charAt(0).toUpperCase()}
@@ -705,7 +711,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   type="button"
                   onClick={() => setCalMonth(m => addMonths(m, -1))}
                   disabled={isSameMonth(calMonth, thisMonth)}
-                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  className="h-11 w-11 sm:h-8 sm:w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
                   aria-label="Mes anterior"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -715,7 +721,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   type="button"
                   onClick={() => setCalMonth(m => addMonths(m, 1))}
                   disabled={cutoffMonth != null && !isBefore(startOfMonth(calMonth), cutoffMonth)}
-                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  className="h-11 w-11 sm:h-8 sm:w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
                   aria-label="Mes siguiente"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -726,6 +732,26 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   <div key={w} className="text-center text-[10px] font-semibold uppercase text-muted-foreground">{w}</div>
                 ))}
               </div>
+              {/* ⚠ POR QUÉ LOS DÍAS NO MIDEN 44px — CUENTA HECHA, NO OLVIDO.
+                  A 375px de viewport: el contenedor (max-w-lg centrado, con px-6) da 327px útiles;
+                  la tarjeta del calendario resta su padding p-3 (24px) más 1px de borde por lado ⇒
+                  ~301px reales. La grilla de 7 columnas con gap-1 gasta 6 huecos × 4px = 24px ⇒
+                  277 / 7 = ~39,6px por día (~40px, lo que hay hoy).
+                  7 × 44 = 308px > 301px: 44px NO ENTRA ni poniendo gap-0.
+                  Alternativas medidas y descartadas, con su número:
+                   · px-6 → px-4 sólo en mobile: llega a ~41,9px y sigue sin alcanzar, y además
+                     cambia el margen de TODA la página, no sólo del calendario.
+                   · p-3 → p-2 en la tarjeta + gap-0.5: llega a ~44,7px pero aprieta la grilla y
+                     desalinea la tarjeta respecto de sus hermanas.
+                   · ensanchar la tarjeta con margen negativo: ~41,9px, y rompe la alineación de la
+                     columna.
+                  LO QUE SE ACEPTA Y POR QUÉ: ~40px. Sigue muy por encima del mínimo exigible de
+                  WCAG 2.5.8 (24×24 px CSS, nivel AA); los 44px son la guía de HIG que el proyecto
+                  adopta, y forzarla en una grilla densa de 7 columnas costaría scroll horizontal o
+                  un calendario apretado — los dos peores que el problema. Las flechas de mes y los
+                  slots de horario, que sí entran, SÍ subieron a 44.
+                  PROHIBIDO tocar el px-6 del contenedor, el p-3 de la tarjeta, el gap-1 de la
+                  grilla o el aspect-square de la celda sin rehacer esta cuenta primero. */}
               <div className="grid grid-cols-7 gap-1">
                 {calendarDays.map(d => {
                   const inMonth = isSameMonth(d, calMonth)
@@ -778,7 +804,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                           key={`${slot.time}|${slot.locationId ?? ''}`}
                           onClick={() => { setSelectedTime(slot.time); setSelectedLocationId(slot.locationId) }}
                           className={cn(
-                            'py-2 px-3 rounded-lg text-sm font-medium transition-colors border flex flex-col items-center leading-tight',
+                            'min-h-11 py-2 px-3 rounded-lg text-sm font-medium transition-colors border flex flex-col items-center justify-center leading-tight',
                             sel ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card hover:border-primary'
                           )}
                         >
