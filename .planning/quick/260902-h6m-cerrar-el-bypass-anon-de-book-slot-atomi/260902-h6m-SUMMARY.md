@@ -280,3 +280,21 @@ Archivos verificados en disco: los 5 (migración 076, suite de regresión, todo 
 Commits verificados en `git log`: `d1a5486`, `f5e978c`, `1fbf48a`, `90f0e6a`.
 Sin borrados de archivos trackeados en ningún commit del quick task (más allá del `git mv` del todo,
 que es intencional y preserva el historial).
+
+---
+
+## Cierre — 2026-09-02
+
+La migración **076 se aplicó a producción** el 2026-09-02. El bypass queda cerrado también allá, no
+sólo en el repo.
+
+`supabase/schema.sql` espejado a mano (quirúrgico, sin regenerar del dump): se quitó el
+`GRANT ALL ON FUNCTION book_slot_atomic ... TO "anon"` y quedaron los de `authenticated` y
+`service_role`. Verificado con greps: 0 grants al rol anónimo, 2 a los otros dos, cero diff en
+`supabase/migrations/`.
+
+También se corrigió el comentario del bloque de la migr. 074 en `schema.sql`, que declaraba a
+`book_slot_atomic` como riesgo aceptado con su grant explícito al rol anónimo (RA-05). Esa
+afirmación quedó falsa al aplicar la 076 — y de paso el caso ilustra por qué el default de la 074
+importa: cerrar la puerta para las funciones FUTURAS no cierra las que ya la tenían abierta, hay que
+ir a buscarlas una por una.

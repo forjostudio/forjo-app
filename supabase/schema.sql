@@ -2881,7 +2881,12 @@ GRANT ALL ON FUNCTION "public"."appointment_spaces_populate"() TO "service_role"
 
 
 
-GRANT ALL ON FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) TO "anon";
+-- (migr. 076) El GRANT al rol anónimo que había acá se REVOCÓ. `book_slot_atomic` es SECURITY
+-- DEFINER, y adentro de una definer la RLS no corre: llamando al RPC directo con la anon key se
+-- salteaban los TRES controles que viven sólo en el route handler (ventana de reserva, gate de plan
+-- y reCAPTCHA), con los dos parámetros no adivinables publicados por `public_services`. Reproducido
+-- por dos vías antes de cerrarlo. Ninguna superficie lo llamaba como anónimo: el booking público
+-- entra con service_role. NO volver a conceder ejecución al rol anónimo.
 GRANT ALL ON FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."book_slot_atomic"("p_business_id" "uuid", "p_professional_id" "uuid", "p_service_id" "uuid", "p_location_id" "uuid", "p_date" "date", "p_time" time without time zone, "p_duration" integer, "p_client_id" "uuid", "p_client_name" "text", "p_client_phone" "text", "p_client_email" "text", "p_notes" "text", "p_status" "text", "p_expires_at" timestamp with time zone) TO "service_role";
 
@@ -4446,8 +4451,11 @@ REVOKE TRUNCATE ON ALL TABLES IN SCHEMA "public" FROM "authenticated";
 -- sesión del dueño).
 --
 -- ⚠ NO afecta a ninguna función existente: `ALTER DEFAULT PRIVILEGES` sólo aplica a objetos futuros.
--- En particular `book_slot_atomic` conserva su grant explícito a `anon` (RA-05 sigue siendo un riesgo
--- aceptado; no se cierra ni se reabre acá).
+-- Cuando se escribió la 074, `book_slot_atomic` conservaba su grant explícito al rol anónimo y eso
+-- quedó anotado acá como riesgo aceptado (RA-05). **Ya no es así:** la migr. 076 lo revocó, después
+-- de reproducir el bypass por dos vías. Es el ejemplo de por qué este default importa: cerrar la
+-- puerta para las funciones futuras no cierra las que ya la tenían abierta, y hay que ir a buscarlas
+-- una por una.
 --
 -- ⚠ Consecuencia buscada: de acá en más toda función nueva del schema `public` necesita un GRANT
 -- explícito para ser invocable desde el cliente. Falla al lado correcto.
