@@ -527,7 +527,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         {/* Progreso */}
         <div className="mb-7">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Paso {step} de 4</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Paso {step} de 4</span>
             <span className="text-xs text-muted-foreground">{stepsLabels[step - 1]}</span>
           </div>
           <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
@@ -545,7 +545,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   key={service.id}
                   onClick={() => { setSelectedService(service); setBookingLoc(null); setSelectedDate(undefined); setSelectedTime(''); setStep(2) }}
                   className={cn(
-                    'rounded-lg border p-4 text-left transition-colors',
+                    'rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
                     selectedService?.id === service.id
                       ? 'border-primary bg-primary/[0.06]'
                       : 'border-border bg-card hover:border-primary'
@@ -563,7 +563,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-lg font-bold leading-tight font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
-                      <p className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+                      <p className="mt-0.5 flex items-center justify-end gap-1 text-xs text-muted-foreground">
                         <Clock className="w-3 h-3" /> {service.duration_minutes} min
                       </p>
                     </div>
@@ -589,7 +589,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 <button
                   key="any"
                   onClick={() => { setSelectedPro('none'); setStep(3) }}
-                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
                     ?
@@ -607,7 +607,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 <button
                   key="sentinel"
                   onClick={() => { setSelectedPro('none'); setStep(3) }}
-                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground text-sm flex-shrink-0">
                     ?
@@ -622,7 +622,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 <button
                   key={pro.id}
                   onClick={() => { setSelectedPro(pro); setStep(3) }}
-                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-md border border-border bg-card hover:border-primary transition-colors text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {pro.photo_url ? (
                     // Sigue siendo <img> a propósito: photo_url es una URL externa arbitraria y
@@ -665,7 +665,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                     disabled={!enabled}
                     onClick={() => { setBookingLoc(l.id); setSelectedDate(undefined); setSelectedTime('') }}
                     className={cn(
-                      'rounded-lg border p-4 text-left transition-colors',
+                      'rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
                       enabled ? 'border-border bg-card hover:border-primary' : 'border-border/50 bg-secondary/30 opacity-60 cursor-not-allowed'
                     )}
                   >
@@ -694,7 +694,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   <div>
                     <p className="text-muted-foreground flex items-center gap-2">
                       <span>{locWord}: <span className="text-foreground">{loc?.name}</span></span>
-                      {needLocStep && <button type="button" onClick={() => { setBookingLoc(null); setSelectedDate(undefined); setSelectedTime('') }} className="text-xs text-primary hover:underline flex-shrink-0">Cambiar</button>}
+                      {needLocStep && <button type="button" onClick={() => { setBookingLoc(null); setSelectedDate(undefined); setSelectedTime('') }} className="text-xs text-primary hover:underline flex-shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Cambiar</button>}
                     </p>
                     {loc?.address && <p className="text-xs text-muted-foreground">{loc.address}</p>}
                     {loc?.phone && <p className="text-xs text-muted-foreground">{loc.phone}</p>}
@@ -711,7 +711,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   type="button"
                   onClick={() => setCalMonth(m => addMonths(m, -1))}
                   disabled={isSameMonth(calMonth, thisMonth)}
-                  className="h-11 w-11 sm:h-8 sm:w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  className="h-11 w-11 sm:h-8 sm:w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                   aria-label="Mes anterior"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -721,7 +721,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                   type="button"
                   onClick={() => setCalMonth(m => addMonths(m, 1))}
                   disabled={cutoffMonth != null && !isBefore(startOfMonth(calMonth), cutoffMonth)}
-                  className="h-11 w-11 sm:h-8 sm:w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  className="h-11 w-11 sm:h-8 sm:w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                   aria-label="Mes siguiente"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -729,7 +729,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
               </div>
               <div className="grid grid-cols-7 gap-1 mb-1">
                 {['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'].map(w => (
-                  <div key={w} className="text-center text-[10px] font-semibold uppercase text-muted-foreground">{w}</div>
+                  <div key={w} className="text-center text-xs font-semibold uppercase text-muted-foreground">{w}</div>
                 ))}
               </div>
               {/* ⚠ POR QUÉ LOS DÍAS NO MIDEN 44px — CUENTA HECHA, NO OLVIDO.
@@ -766,7 +766,9 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                       disabled={disabled}
                       onClick={() => handleDateSelect(d)}
                       className={cn(
-                        'aspect-square rounded-md text-sm font-medium flex items-center justify-center border transition-colors',
+                        // Anillo de 2px y no de 3 como el resto de la pantalla: la grilla deja 4px
+                        // entre celdas y un anillo de 3px se le monta encima al día vecino.
+                        'aspect-square rounded-md text-sm font-medium flex items-center justify-center border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                         sel
                           ? 'bg-primary text-primary-foreground border-primary'
                           : disabled
@@ -804,12 +806,12 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                           key={`${slot.time}|${slot.locationId ?? ''}`}
                           onClick={() => { setSelectedTime(slot.time); setSelectedLocationId(slot.locationId) }}
                           className={cn(
-                            'min-h-11 py-2 px-3 rounded-lg text-sm font-medium transition-colors border flex flex-col items-center justify-center leading-tight',
+                            'min-h-11 py-2 px-3 rounded-lg text-sm font-medium transition-colors border flex flex-col items-center justify-center leading-tight focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
                             sel ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card hover:border-primary'
                           )}
                         >
                           <span>{slot.time}</span>
-                          {locName && <span className={cn('text-[10px] font-normal truncate max-w-full', sel ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{locName}</span>}
+                          {locName && <span className={cn('text-xs font-normal truncate max-w-full', sel ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{locName}</span>}
                         </button>
                       )
                     })}
@@ -940,7 +942,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 viola el ToS de Google (y pueden cortar la key).
                 Si algún día se saca este texto, hay que volver a mostrar el badge. Van juntos. */}
             {siteKey && (
-              <p className="mt-3 text-center text-[11px] leading-relaxed text-muted-foreground">
+              <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
                 Protegido por reCAPTCHA. Aplican la{' '}
                 <a
                   href="https://policies.google.com/privacy"
@@ -975,7 +977,7 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         {step > 1 && (
           <button
             onClick={() => setStep(s => s - 1)}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mt-6 transition-colors"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mt-6 transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             <ChevronLeft className="w-4 h-4" /> Volver
           </button>
