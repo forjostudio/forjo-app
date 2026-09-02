@@ -29,6 +29,7 @@ import {
   deriveStateLabel,
 } from '@/lib/landing/editor-draft'
 import type { EditorState } from '@/lib/landing/editor-draft'
+import { useUnsavedChanges } from '@/components/dashboard/unsaved-changes-guard'
 import { saveLandingDraft, publishLanding, discardLandingDraft } from './_landing-actions'
 import { SectionListPanel } from './_sections/section-list'
 import { ThemeControls } from './_sections/theme-controls'
@@ -49,12 +50,13 @@ import { ThemeControls } from './_sections/theme-controls'
 //     BORRADOR — desde Phase 15 guardar NO publica: la web al aire no se mueve, PUB-03); mapea
 //     los 6 códigos de error a toasts (14-UI-SPEC §6). Deshabilitada sin cambios o con uploads en
 //     vuelo (L9). Éxito → baseline = draft (limpia el flag de cambios sin guardar, D-03c).
-//   - GUARD DE SALIDA: SOLO `beforeunload` (recargar / cerrar pestaña / salir del sitio) cuando hay
-//     cambios sin guardar. La navegación INTERNA del panel (los <Link> del sidebar, el botón atrás
-//     del router) NO está interceptada: beforeunload no dispara en las navegaciones client-side de
-//     Next, así que un click en "Turnos" con el borrador sucio lo descarta sin preguntar. Es un ítem
-//     DIFERIDO a propósito (15-CONTEXT §Deferred: interceptar la nav del App Router de Next 16 es
-//     no-trivial), no un olvido. El <Dialog> que este comentario prometía se recicló para Descartar.
+//   - GUARD DE SALIDA, las DOS vías (quick 260831-kxt): `beforeunload` cubre recargar / cerrar la
+//     pestaña / salir del sitio, y `useUnsavedChanges(dirty)` cubre la navegación INTERNA del panel
+//     (los <Link> del sidebar), que hasta ese quick descartaba el borrador sin preguntar. Esta
+//     segunda mitad estuvo DIFERIDA desde la Phase 15 (15-CONTEXT §Deferred: "interceptar la nav del
+//     App Router de Next 16 es no-trivial"); dejó de serlo cuando el guard compartido encontró
+//     `onNavigate` en el <Link> del App Router. El botón ATRÁS del navegador sigue SIN cubrir: el
+//     App Router no expone API de bloqueo (el porqué, en el docblock del guard).
 //   - EMPTY-STATE: config null → siembra DEFAULT_LANDING_CONFIG y muestra el notice (§7); el preview
 //     igual renderiza el default.
 
@@ -189,6 +191,16 @@ export function WebEditorClient({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
 
   const dirty = isDirty(draft, savedBaseline)
+  // Guard de salida, mitad INTERNA. El `beforeunload` de más abajo cubre recargar y cerrar la
+  // pestaña; esto cubre el click en el sidebar, que hasta hoy descartaba el borrador sin preguntar.
+  // Era un ítem diferido desde la Phase 15 por "interceptar la nav del App Router de Next 16 es
+  // no-trivial" — dejó de serlo cuando el guard compartido encontró `onNavigate` en el <Link> del
+  // App Router (ver el docblock de components/dashboard/unsaved-changes-guard.tsx).
+  //
+  // OJO al que compare con Agenda: acá `dirty` sale de un DIFF real contra el baseline, así que
+  // tocar algo y volver a dejarlo como estaba NO deja el editor sucio. En Agenda la bandera es por
+  // gesto y sí queda encendida. Son dos contratos distintos a propósito, no una inconsistencia.
+  useUnsavedChanges(dirty)
   // Estado del editor derivado del CONTENIDO (D-03/D-06), sin flag ni timestamp en la DB: manda
   // "sin guardar"; si no, "sin publicar" (incluye el caso nunca-publicó); si no, "publicado".
   const editorState = deriveEditorState({ draft, savedBaseline, published: publishedBaseline })
