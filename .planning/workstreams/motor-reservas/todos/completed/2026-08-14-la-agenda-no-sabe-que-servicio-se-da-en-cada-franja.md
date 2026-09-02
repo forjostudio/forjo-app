@@ -66,3 +66,20 @@ panel y el onboarding. Es capacidad nueva y abre un rubro que hoy el sistema no 
 
 Relacionado: `2026-07-30-el-cupo-vive-en-dos-lugares-y-falta-el-modo-individual.md` (cerrado por
 v0.27) — mismo defecto de modelo, visto desde el cupo en vez de desde la agenda.
+
+---
+
+## ✅ RESUELTO — 2026-09-02
+
+**Este todo se convirtió en el milestone.** Fue el origen de v0.28 "La agenda por servicio"
+(Phases 18-20 del workstream `motor-reservas`).
+
+- **Phase 18** dio el modelo: tabla puente `time_block_services` (migr. 071) + el helper puro
+  `lib/time-block-services.ts` + la disponibilidad pública respetándolo. CERRADA y en producción.
+- **Phase 19** dio el panel: el dueño asigna servicios a cada franja desde Agenda, y la grilla
+  muestra qué se da en cada una sin abrir nada. CERRADA, UAT 3/3 verificada EN PRODUCCIÓN.
+- **Phase 20** (booking público + landing + onboarding) queda como continuación, no como pendiente
+  de este todo.
+
+Verificado contra el código, no por memoria: `app/(dashboard)/agenda/page.tsx` lee
+`time_block_services` y la agenda ya sabe qué servicio se da en cada franja.

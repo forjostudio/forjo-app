@@ -50,3 +50,14 @@ la clase de resto que hizo que la grilla mintiera durante dos fases.
 No es de la Phase 17 y no lo introdujo: es deuda que quedó de la Phase 15, cuando la 068 movió la
 fuente del cupo y se conservó la columna. La 17 cerró la mitad que importaba —la lectura, que era la
 que mentía— y dejó la escritura a la vista.
+
+---
+
+## ✅ RESUELTO — 2026-09-02
+
+Lo cerró el **plan 19-04** (Phase 19, v0.28): sacó el stepper de cupo del editor de horarios, del
+tipo del bloque local, de los constructores, del copiado y del guardado.
+
+Verificado contra el código: las únicas menciones de `capacity` que quedan en
+`app/(dashboard)/agenda/agenda-client.tsx` están en `OccupancyBadge`, que **lee** la ocupación para
+mostrarla — no escribe `time_blocks.capacity`. El cupo vive en `services.capacity` desde v0.27.

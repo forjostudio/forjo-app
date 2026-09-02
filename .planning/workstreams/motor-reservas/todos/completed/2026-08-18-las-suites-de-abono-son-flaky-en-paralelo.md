@@ -65,3 +65,15 @@ no lo va a distinguir nadie.
   cuesta en tiempo.
 - Antes de elegir: **reproducir con el mismo seed** y confirmar la hipótesis de colisión. Es la trampa
   que este workstream ya registró tres veces — el fix propuesto se cae al medirlo.
+
+---
+
+## ✅ RESUELTO — 2026-09-02
+
+Lo cerró el quick **260827-ion**. La causa medida no era el código de abonos: eran ~11 workers de
+vitest contra un PostgREST con pool default de 10 conexiones, más `delete()` de teardown **sin
+chequear el error**, que fallaban en silencio y filtraban filas al test siguiente.
+
+Fix: `vitest.config.ts` pasa a dos proyectos — `db` (27 suites DB-backed, serializadas) y `pure`
+(paralelas), clasificados por el import de `'./env'` — más `cleanupOrThrow`/`cleanupAllOrThrow` en
+los teardowns. Evidencia: `npm test` sin flags, **6 corridas consecutivas en verde**.
