@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useId } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore, isAfter } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -45,6 +45,18 @@ function minutesToTime(m: number) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
+// Misma expresión que components/dashboard/plan-modal.tsx:21, a propósito. Sólo exige FORMA
+// (algo@algo.algo). NO escribir una más estricta: en esta pantalla una regex "mejor" que rechaza
+// una dirección válida no es un campo en rojo, es un turno que el negocio nunca recibe.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Piso de dígitos, NO formato: se saca todo lo que no sea número y se cuenta. Así pasan +54,
+// paréntesis, espacios y guiones — los cuatro formatos con los que se escribe un teléfono
+// argentino en la vida real. Un regex de formato acá bloquearía reservas legítimas.
+function phoneDigits(v: string) {
+  return v.replace(/\D/g, '')
+}
+
 export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations, professionalServices }: Props) {
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
@@ -61,6 +73,11 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const [clientPhone, setClientPhone] = useState('')
   const [clientEmail, setClientEmail] = useState('')
   const [clientNotes, setClientNotes] = useState('')
+  // Errores de formato del paso 4. Nacen SÓLO al salir del campo (onBlur) y sólo si el campo tiene
+  // algo escrito: un campo vacío no se pinta de rojo, la falta ya la comunica el botón deshabilitado.
+  // No hay error para el nombre: no tiene regla de formato que verificar.
+  const [phoneError, setPhoneError] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   // ── Auto-scroll de navegación (UX) ───────────────────────────────────────────────
@@ -462,6 +479,13 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     }
   }
 
+  // ── Ids del formulario POR INSTANCIA ─────────────────────────────────────────────────────────
+  // Molde: helpId de settings-client.tsx:424 (code-review WR-03). Esta página se puede embeber en un
+  // iframe (lib/embed-bridge) y dos instancias con ids literales dejarían dos `#booking-email` en un
+  // mismo documento: el htmlFor resolvería al control equivocado. useId genera ids opacos y únicos.
+  const uid = useId()
+  const fieldId = (k: string) => `${uid}-${k}`
+
   const stepsLabels = ['Servicio', 'Profesional', 'Fecha y hora', 'Tus datos']
 
   return (
@@ -799,36 +823,64 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
               )}
             </div>
 
+            {/* Los tres campos obligatorios NO llevan asterisco: la regla del proyecto es marcar los
+                OPCIONALES, y acá el único marcador visible es el "(opcional)" de Notas. La
+                obligatoriedad viaja por aria-required (describe, no cambia comportamiento). Se usa
+                aria-required y NO el `required` de HTML a propósito: no hay <form> en esta pantalla
+                —los botones son onClick—, así que `required` no validaría nada pero sí activaría el
+                pseudo-selector :invalid del navegador y podría pintar estilos que nadie pidió. */}
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label>Nombre *</Label>
+                <Label htmlFor={fieldId('name')}>Nombre</Label>
                 <Input
+                  id={fieldId('name')}
                   value={clientName}
                   onChange={e => setClientName(e.target.value)}
                   placeholder="Tu nombre completo"
+                  autoComplete="name"
+                  aria-required="true"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Teléfono *</Label>
+                <Label htmlFor={fieldId('phone')}>Teléfono</Label>
                 <Input
+                  id={fieldId('phone')}
                   type="tel"
+                  inputMode="tel"
                   value={clientPhone}
-                  onChange={e => setClientPhone(e.target.value)}
+                  onChange={e => { setClientPhone(e.target.value); if (phoneError) setPhoneError('') }}
+                  onBlur={() => { if (clientPhone && phoneDigits(clientPhone).length < 8) setPhoneError('Ese número parece incompleto. Escribilo con característica, por ejemplo 11 1234-5678.') }}
                   placeholder="+54 9 11 1234-5678"
+                  autoComplete="tel"
+                  aria-required="true"
+                  aria-invalid={!!phoneError}
+                  aria-describedby={phoneError ? `${fieldId('phone')}-err` : undefined}
                 />
+                {/* Los mensajes van como live region (alert) porque el error nace al SALIR del campo:
+                    el foco ya se fue, y sin eso el aria-describedby no se locuta hasta volver a entrar. */}
+                {phoneError && <p id={`${fieldId('phone')}-err`} role="alert" className="text-xs text-destructive">{phoneError}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label>Email *</Label>
+                <Label htmlFor={fieldId('email')}>Email</Label>
                 <Input
+                  id={fieldId('email')}
                   type="email"
+                  inputMode="email"
                   value={clientEmail}
-                  onChange={e => setClientEmail(e.target.value)}
+                  onChange={e => { setClientEmail(e.target.value); if (emailError) setEmailError('') }}
+                  onBlur={() => { if (clientEmail && !EMAIL_RE.test(clientEmail.trim())) setEmailError('Parece faltarle el arroba o lo que va después, por ejemplo nombre@gmail.com.') }}
                   placeholder="tu@email.com"
+                  autoComplete="email"
+                  aria-required="true"
+                  aria-invalid={!!emailError}
+                  aria-describedby={emailError ? `${fieldId('email')}-err` : undefined}
                 />
+                {emailError && <p id={`${fieldId('email')}-err`} role="alert" className="text-xs text-destructive">{emailError}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label>Notas para el negocio <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+                <Label htmlFor={fieldId('notes')}>Notas para el negocio <span className="text-muted-foreground text-xs">(opcional)</span></Label>
                 <Textarea
+                  id={fieldId('notes')}
                   value={clientNotes}
                   onChange={e => setClientNotes(e.target.value)}
                   placeholder="¿Algo que quieras avisar? (alergias, preferencias, etc.)"
@@ -838,9 +890,15 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
               </div>
             </div>
 
+            {/* El gate del submit suma los dos errores de formato a las tres condiciones de campo
+                vacío que ya existían. Por qué: hoy un email con typo pasa derecho, el turno se crea
+                y el cliente nunca recibe la confirmación — falla silenciosa e imposible de
+                diagnosticar desde el negocio. Los errores sólo pueden existir DESPUÉS de un blur,
+                así que quien tipea los tres campos y toca confirmar sin salir de ninguno ve
+                exactamente el comportamiento de siempre. handleConfirm no se abre. */}
             <Button
               className="w-full mt-2"
-              disabled={!clientName || !clientPhone || !clientEmail || submitting}
+              disabled={!clientName || !clientPhone || !clientEmail || !!phoneError || !!emailError || submitting}
               onClick={handleConfirm}
             >
               {submitting
