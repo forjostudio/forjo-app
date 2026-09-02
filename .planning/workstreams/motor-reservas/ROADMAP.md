@@ -66,7 +66,8 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 
 - [x] **Phase 18: El modelo y la disponibilidad** - Tabla puente `time_block_services` con la regla del comodín (0 filas = cualquier servicio), la regla encapsulada en un helper puro con tests (molde `lib/staff-services.ts`), y `/api/booking/availability` respetándola — el endpoint ya recibe `serviceId` desde v0.27. **Cero regresión por construcción:** el día de la migración todos los negocios tienen 0 filas. **`secure-phase` obligatorio** (completed 2026-08-25)
 - [x] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío (6/6 planes — UAT 3/3 verificada en PRODUCCIÓN, `19-UAT.md`) (completed 2026-08-31)
-- [ ] **Phase 20: Booking público y onboarding** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, con el vacío explicado en vez de un calendario mudo; y el onboarding deja que un negocio de clases declare su agenda real desde el día uno
+- [ ] **Phase 20: Lo que el público ve** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, y un servicio sin franjas que lo cubran queda deshabilitado con el motivo a la vista, en vez de un calendario mudo (AGENDA-07)
+- [ ] **Phase 21: Lo que el negocio declara** - El onboarding deja que un negocio de clases declare su agenda real desde el alta, sin tener que entrar al panel después (AGENDA-08)
 
 ### Milestone v0.27 — Cupo unificado por servicio (shipped 2026-08-24)
 
@@ -726,19 +727,34 @@ Plans:
 
 ---
 
-### Phase 20: Booking público y onboarding
+### Phase 20: Lo que el público ve
 
-**Goal**: Cerrar las dos caras de que un negocio de clases pueda operar de verdad. En el **booking público**, el cliente que elige un servicio ve **sólo** los horarios donde ese servicio se da — y si un servicio no tiene ninguna franja que lo cubra, el vacío se **explica** en vez de mostrar un calendario mudo. En el **onboarding**, un negocio de clases declara su agenda real desde el día uno, en vez de que se le pida un horario genérico que no describe su negocio: es donde más se nota el defecto, y sin esto la capacidad existiría pero el negocio nuevo arrancaría igual mal configurado.
-**Depends on**: Phase 18 (la disponibilidad ya filtra) y Phase 19 (hay con qué configurar antes de pedirlo en el alta)
-⚠ **Alcance ampliado en `discuss-phase 18`:** entra también la **landing** (`lib/landing/derive.ts`), que traduce `time_blocks` a "horarios de atención" en la web del negocio. El **bot de WhatsApp** queda AFUERA: vive en otro repo (VPS/Baileys) con su propio HANDOFF acordado. Son **tres superficies** en esta fase — si al planificarla se pasa de tamaño, se parte (el onboarding es la candidata natural: escribe agenda antes de que haya sesión establecida, y v0.20 ya tuvo que meter un endpoint service-role por eso).
-**Requirements**: AGENDA-07, AGENDA-08
+**Goal**: Que el mapeo franja↔servicio que la Phase 19 volvió configurable **llegue al cliente**. El que elige un servicio ve **solo** los horarios donde ese servicio se da; y un servicio que ninguna franja cubre queda **deshabilitado con el motivo a la vista**, en vez de dejarlo avanzar hasta un calendario mudo.
+**Depends on**: Phase 18 (la disponibilidad ya filtra) y Phase 19 (hay con qué configurar)
+**Requirements**: AGENDA-07
 **Success Criteria** (what must be TRUE):
 
   1. El cliente que elige un servicio ve sólo los horarios donde ese servicio se da (AGENDA-07).
-  2. Un servicio sin franjas que lo cubran **explica el vacío**; no muestra un calendario mudo (AGENDA-07).
-  3. El onboarding deja declarar la agenda real de un negocio de clases desde el alta (AGENDA-08).
+  2. Un servicio sin franjas que lo cubran **se lee como no disponible desde el selector**, con el motivo, y no se puede elegir (AGENDA-07).
 
-**Security/Integrity relevance**: Media. La superficie pública ya la endureció la Phase 18; acá se consume. El onboarding escribe agenda antes de que exista sesión establecida — revisar cómo lo resolvió v0.20, que ya tuvo que meter un endpoint service-role por el bug de colisión de slug.
+**Alcance**: `app/[slug]/booking-client.tsx` + la landing (`lib/landing/derive.ts`). Las dos superficies que **consumen** el mapeo y se lo muestran a un anónimo.
+**Security/Integrity relevance**: Media. La superficie pública ya la endurecieron la Phase 18 (backstop del `create`) y el quick 260902-h6m (revocación de `book_slot_atomic` al rol anónimo). Acá se consume, no se abre nada nuevo.
+**UI hint**: yes
+
+---
+
+### Phase 21: Lo que el negocio declara
+
+**Goal**: Que un negocio de clases pueda declarar su agenda real **desde el alta**, en vez de que se le pida un horario genérico que no describe su negocio y tenga que corregirlo después en el panel.
+**Depends on**: Phase 19 (el modelo y el panel existen) y Phase 20 (el público ya consume el mapeo, así que el alta tiene a dónde apuntar)
+**Requirements**: AGENDA-08
+**Success Criteria** (what must be TRUE):
+
+  1. El onboarding deja declarar la agenda real de un negocio de clases desde el alta (AGENDA-08).
+
+**Alcance**: `app/(onboarding)/onboarding/page.tsx`.
+⚠ **Corrección de una nota vieja del roadmap:** el onboarding **NO** usa un endpoint service-role para escribir la agenda — escribe `time_blocks` directo desde el cliente con la sesión del dueño y la RLS vigente (`page.tsx:388`). El único endpoint service-role es `slug-available`, y eso salió de la colisión de slug de v0.20, no de la agenda. Verificado 2026-09-02.
+**Security/Integrity relevance**: Media. Escribe agenda durante el alta; el aislamiento lo sostiene la RLS por `business_id` como en el resto del panel.
 **UI hint**: yes
 
 ---
