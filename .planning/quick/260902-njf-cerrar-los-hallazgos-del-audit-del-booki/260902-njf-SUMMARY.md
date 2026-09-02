@@ -162,3 +162,28 @@ Ninguno.
 - Commit `4c94177` — FOUND
 - Commit `d0e1a8b` — FOUND
 - Commit `c8e3116` — FOUND
+
+---
+
+## Human-check: PASADO — 2026-09-02
+
+El usuario probó el flujo en el navegador y confirmó que **funciona**. Con eso se levanta la única
+reserva real que tenía este quick task: ningún test automatizado cubre `booking-client.tsx` (la suite
+valida `lib/`), así que el verde de `npm test` nunca fue evidencia de que la reserva entrara — la
+garantía es esta prueba humana.
+
+En particular queda confirmado el punto crítico: **la validación de teléfono NO rechaza un número
+argentino real**. Era el riesgo más grande del plan, porque una regla demasiado estricta bloquea una
+reserva legítima y eso es peor que el hallazgo que cierra. El piso de 8 dígitos tras quitar los
+no-numéricos se sostiene; no hay que aflojarlo.
+
+## Decisión de marca resuelta (fuera del código)
+
+El `border-l-4 border-l-primary` de la tarjeta de resumen queda **como está**: es el patrón de marca
+del "esto es lo que estás por hacer", repetido en booking, canchas, confirmación y cancelación. Lo
+que estaba a medias era la excepción del detector, no el diseño: `.impeccable/config.json`
+whitelisteaba 2 de los 4 archivos donde el patrón vive, aunque su propio motivo ya nombraba al
+booking. Se agregaron `app/[slug]/booking-client.tsx` y `app/[slug]/canchas-booking-client.tsx`.
+
+⚠ `.impeccable/` está en `.gitignore`, así que esa excepción vive **sólo en esta máquina**: en otro
+clon el hook va a volver a marcar los cuatro archivos.
