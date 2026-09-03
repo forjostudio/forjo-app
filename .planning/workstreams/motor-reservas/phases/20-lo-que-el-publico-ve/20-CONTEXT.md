@@ -59,6 +59,38 @@ sería contraproducente.
 **Descartado y por qué:** listar por servicio (sección nueva en el renderer, y con muchos servicios
 se vuelve una tabla larga en una página que debería vender); ocultar la sección si hay mapeo (le saca
 información útil justo a los negocios que más la necesitan); cambiar el rótulo (cosmético).
+### D-04 — El filtro por servicio también aplica a los DÍAS, no solo a los horarios
+
+`openDaysSet` (`booking-client.tsx:184`) se arma hoy con **todas** las franjas del negocio. Un servicio
+que solo se da los martes muestra el lunes clickeable y devuelve una grilla vacía. Eso cumple el
+criterio 1 de AGENDA-07 a nivel horario pero **no a nivel día**, y deja en pie exactamente el modo de
+falla que la fase viene a matar: el cliente recorre pasos para chocarse con una pared.
+
+Entra en esta fase. Usa el **mismo** helper (`isServiceScheduled`) y la **misma** prop nueva que el
+D-02 — no agrega superficie, ni dato, ni query. El research lo midió como **no-op sobre los slots
+reservables**: `starts(todas) − full = starts(ofrecen)`, o sea que no cambia qué turnos se pueden
+reservar, solo deja de ofrecer días mudos.
+
+Origen: HALLAZGO-01 del `20-RESEARCH.md`. El `discuss-phase` no lo cubrió porque el D-02 discutió el
+caso "ninguna franja lo cubre", no el caso "algunas franjas lo cubren, en otros días".
+
+### D-05 — Se unifica el tratamiento del vacío: también el eje profesional deshabilita con motivo
+
+Hoy la pantalla trata dos estados análogos de forma opuesta: "servicio que ningún profesional hace"
+**se oculta** (`bookableServices`, `page.tsx:141`), y "servicio que ninguna franja cubre" iba a
+**deshabilitarse con motivo** (D-02). Se unifica: **los dos deshabilitan con el motivo a la vista**.
+
+El criterio es el mismo del D-02 y de AGENDA-06: un estado mal configurado no puede verse igual que
+uno correcto. Ocultar el servicio le esconde al dueño que quedó invisible; el motivo visible le dice
+qué le falta configurar, sea staff o franja.
+
+**Costo aceptado explícitamente:** modifica comportamiento que ya pasó UAT en producción y amplía el
+blast radius de la fase a un eje (staff) que no es el de AGENDA-07. El research recomendaba diferirlo;
+la decisión de producto fue unificar ahora para no dejar la pantalla incoherente. El plan debe tratar
+este cambio como **regresión candidata** y verificarlo aparte del eje franja.
+
+Origen: HALLAZGO-02 del `20-RESEARCH.md`.
+
 </decisions>
 
 <specifics>
