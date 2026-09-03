@@ -741,6 +741,17 @@ Plans:
 **Security/Integrity relevance**: Media. La superficie pública ya la endurecieron la Phase 18 (backstop del `create`) y el quick 260902-h6m (revocación de `book_slot_atomic` al rol anónimo). Acá se consume, no se abre nada nuevo.
 **UI hint**: yes
 
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 20-01-PLAN.md — RSC: suma `public_time_block_services` al `Promise.all` + prop `timeBlockServices`; deja de pre-filtrar el catálogo con `bookableServices` (D-05) y agrega `isServiceStaffed` + test de la vista por anon key
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 20-02-PLAN.md — Cliente: paso 1 deshabilita con motivo por franja (D-02) y por staff (D-05), calendario filtra días al servicio elegido (D-04), UAT humana con el negocio de prueba local
+
 ---
 
 ### Phase 21: Lo que el negocio declara
