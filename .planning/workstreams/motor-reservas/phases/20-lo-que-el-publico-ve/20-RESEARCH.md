@@ -832,36 +832,49 @@ Esta fase no introduce dependencias externas nuevas. Las que usa ya son las del 
 Todo lo demás en este documento está `[VERIFIED]` por lectura directa de los archivos citados, con
 número de línea.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **¿El filtro de días entra en esta fase? (HALLAZGO-01)**
+1. **(RESOLVED) ¿El filtro de días entra en esta fase? (HALLAZGO-01)**
    - Lo que sabemos: es criterio 1 de AGENDA-07, el fix usa el mismo helper y la misma prop, y es
      demostrablemente no-op sobre los slots visibles.
-   - Lo que no está claro: el CONTEXT solo habló del selector (D-02), así que no está locked.
-   - Recomendación: **incluirlo**, como tarea separada y con su propio criterio de verificación. Si se
-     decide no incluirlo, dejarlo escrito como diferido — no implícito.
+   - Lo que no estaba claro: el CONTEXT solo habló del selector (D-02), así que no estaba locked.
+   - Recomendación: **incluirlo**, como tarea separada y con su propio criterio de verificación.
+   - Resolución: el usuario decidió **incluirlo**. Registrado como **D-04** en `20-CONTEXT.md` e
+     implementado en el Plan `20-02` (Task 2, `serviceBlocks`).
 
-2. **¿Se unifica el tratamiento del eje staff? (HALLAZGO-02)**
+2. **(RESOLVED) ¿Se unifica el tratamiento del eje staff? (HALLAZGO-02)**
    - Lo que sabemos: hoy uno oculta y el otro deshabilitará; el argumento del D-02 aplica a los dos.
-   - Lo que no está claro: cambiar `bookableServices` toca un fix ya UAT-eado (gap Phase 10).
+   - Lo que no estaba claro: cambiar `bookableServices` toca un fix ya UAT-eado (gap Phase 10).
    - Recomendación: **NO** en esta fase. Registrar como idea diferida.
+   - Resolución: el usuario decidió **unificar ahora**, aceptando explícitamente el costo (modifica
+     comportamiento ya UAT-eado). Registrado como **D-05** en `20-CONTEXT.md` — la decisión de producto
+     sobreescribe la recomendación de este research — e implementado en los Plans `20-01` (Task 1/2) y
+     `20-02` (Task 1/3), con el cambio tratado como regresión candidata y verificado aparte del eje
+     franja.
 
-3. **Copy exacta del motivo.**
+3. **(RESOLVED) Copy exacta del motivo.**
    - El CONTEXT dice "Sin horarios disponibles" *o equivalente*, y ese es el literal del molde
      (`:675`). El 19-UI-SPEC exige voseo rioplatense y terminología por vertical
      (`resolveVertical(business).terminology`), evitando el artículo antes de la interpolación.
    - Recomendación: **usar el literal del molde** (`Sin horarios disponibles`) — no menciona
      "servicio", así que no necesita interpolar terminología y es idéntico al que el cliente ya ve un
      paso más adelante. Coherencia gratis.
-   - Sub-pregunta para el `ui-phase`: ¿el motivo necesita `role="status"` o basta el texto? El molde
-     del paso 3 no lo tiene; el aviso de cobertura del panel sí (`settings-client.tsx:2622`). Como acá
-     el texto está **dentro** del botón deshabilitado (que el lector de pantalla anuncia como tal), el
-     molde alcanza; conviene confirmarlo en el UI-SPEC.
+   - Sub-pregunta: ¿el motivo necesita `role="status"` o basta el texto? El molde del paso 3 no lo
+     tiene; el aviso de cobertura del panel sí (`settings-client.tsx:2622`). Como acá el texto está
+     **dentro** del botón deshabilitado (que el lector de pantalla anuncia como tal), el molde alcanza.
+   - Resolución: adoptado el literal del molde para el motivo de franja ("Sin horarios disponibles") y
+     un segundo literal distinguible para el motivo de staff ("Sin profesional disponible", D-05), sin
+     `role="status"` adicional — implementado en el Plan `20-02` (Task 1). Esta fase corrió con
+     `--skip-ui` (no hubo `ui-phase`); el molde citado alcanzó como contrato visual.
 
-4. **¿Hay que avisarle al dueño desde el panel que un servicio quedó sin franjas?**
+4. **(RESOLVED, informativo) ¿Hay que avisarle al dueño desde el panel que un servicio quedó sin
+   franjas?**
    - El panel de la Phase 19 ya tiene el aviso D-06 y `isServiceScheduled` existe para eso. Fuera del
      alcance declarado de la 20 (que es la superficie pública). Solo verificar en la UAT que el dueño
      tiene **alguna** forma de enterarse antes de que el cliente vea la tarjeta apagada.
+   - Resolución: confirmado fuera de alcance — sin acción en esta fase. El Plan `20-02` Task 3 (UAT
+     humana) incluye un paso que confirma que el aviso del panel de la Phase 19 sigue visible para el
+     dueño.
 
 ## Sources
 
