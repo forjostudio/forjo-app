@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: verifying
+status: executing
 stopped_at: Completado 19-06-PLAN.md — fase 19 lista para verificacion
-last_updated: "2026-08-31T18:01:54.520Z"
-last_activity: 2026-08-31
+last_updated: "2026-09-04T03:01:36.299Z"
+last_activity: 2026-09-04 -- Phase 20 planning complete
 progress:
   total_phases: 20
   completed_phases: 19
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 20
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-08-31
+Status: Ready to execute
+Last activity: 2026-09-04 -- Phase 20 planning complete
 
 ## Milestone v0.28 — decisiones LOCKED
 
