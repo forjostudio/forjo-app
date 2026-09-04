@@ -6,7 +6,6 @@ import { LandingRenderer } from '@/components/landing/landing-renderer'
 import type { PublicBusiness, Location, PublicCancha } from '@/lib/types'
 import { parseLandingConfig } from '@/lib/landing/schema'
 import { resolveVertical } from '@/lib/verticals'
-import { bookableServices } from '@/lib/staff-services'
 import { buildJsonLd } from '@/lib/landing/seo'
 import { ThemeOverrideScript } from '@/components/theme-override-script'
 import { EmbedHeightReporter } from '@/components/embed-height-reporter'
@@ -73,7 +72,7 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
 
   // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
   const todayStr = new Date().toISOString().slice(0, 10)
-  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }, { data: canchas }, { data: professionalServices }] = await Promise.all([
+  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }, { data: canchas }, { data: professionalServices }, { data: timeBlockServices }] = await Promise.all([
     // Vista pública acotada (migración 027): leer la vista, NO la tabla base `services` con anon
     // key. La vista ya filtra WHERE active = true, así que el .eq('active', true) es redundante
     // (consistente con cómo leemos public_professionals). Tras el DROP POLICY de 028, anon ya no
@@ -95,6 +94,19 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
     // aplicada en la DB, el select devuelve []/error y el `|| []` lo neutraliza — el booking sigue
     // funcionando (sin la vista, "Cualquiera" simplemente no se gatea con precisión).
     supabase.from('public_professional_services').select('*').eq('business_id', business.id),
+    // Vista pública acotada (migración 071 §3): mapeo franja↔servicio (business_id, time_block_id,
+    // service_id), SIN abrir la tabla puente `time_block_services` a anon — mismo criterio que D-07
+    // de la migr. 059 para el staff (y sus permisos ya quedaron en solo-lectura en la migr. 072:
+    // REVOKE ALL + GRANT SELECT, verificado en test/isolation.test.ts). La Phase 18 creó la vista a
+    // propósito SIN consumidor: este es el consumidor.
+    // La consume BookingClient con la regla del comodín (lib/time-block-services) para deshabilitar
+    // con motivo el servicio que ninguna franja cubre (D-02) y para no ofrecer días mudos (D-04,
+    // AGENDA-07). Viaja CRUDA, sin filtrar por franja server-side: el filtro por servicio depende del
+    // servicio que el cliente elige recién en el paso 1, así que se resuelve en el cliente.
+    // Fail-safe: si la vista fallara (permiso mal aplicado, schema cache sin refrescar), el `|| []`
+    // deja la puente VACÍA ⇒ regla del comodín ⇒ TODO servicio queda agendado. Degrada al
+    // comportamiento de hoy, nunca al revés (nunca apaga servicios por un error de lectura).
+    supabase.from('public_time_block_services').select('*').eq('business_id', business.id),
   ])
 
   // JSON-LD LocalBusiness (SEO-03 / D9-04): se construye SOLO con la data ya fetcheada
@@ -133,12 +145,15 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
   // sin profesional ni duración custom), leyendo public_canchas; el resto (salud/belleza/general)
   // renderiza BookingClient byte-idéntico. `vertical` ya se resolvió arriba (:76) — se reusa.
   const isCanchas = vertical.key === 'canchas'
-  // Gap UAT Phase 10: un servicio que NINGÚN profesional nombrado hace NO debe ofrecerse (hoy caía al
-  // fallback "Sin preferencia" y se reservaba contra el sentinel). Filtramos la lista SOLO para el
-  // selector de reserva con staff (BookingClient), aplicando la regla del comodín + la guarda de modo
-  // sentinel (0 profesionales nombrados → todos los servicios, sin regresión). El catálogo del
-  // LandingRenderer (superficie de marketing) NO se toca: sigue mostrando el catálogo completo.
-  const staffBookableServices = bookableServices(services || [], professionals || [], professionalServices || [])
+  // D-05 (Phase 20): el filtro por cobertura de staff SE MUDÓ de acá al cliente. Hasta hoy este RSC
+  // OCULTABA con `bookableServices` los servicios que ningún profesional nombrado hace (gap UAT de la
+  // Phase 10); ahora BookingClient recibe el catálogo COMPLETO y deshabilita-con-motivo cada tarjeta
+  // del paso 1 usando `isServiceStaffed` por servicio (Plan 20-02). El motivo: un estado mal
+  // configurado no puede verse igual que uno correcto — ocultar el servicio le esconde al dueño que
+  // quedó invisible, deshabilitarlo con el motivo a la vista le dice qué le falta configurar (mismo
+  // criterio que D-02 para el eje franja y que AGENDA-06 con el chip "cualquiera").
+  // ⚠ Esto MODIFICA INTENCIONALMENTE un comportamiento que ya pasó UAT en producción: decisión de
+  // producto, con el costo aceptado explícitamente en el D-05 del CONTEXT de la fase.
   // El slot de booking resuelto por vertical: se usa tanto en la rama legacy (directo) como
   // dentro del LandingRenderer (como prop bookingSlot), para no acoplar el renderer al modelo canchas.
   const bookingNode = isCanchas ? (
@@ -152,12 +167,13 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
   ) : (
     <BookingClient
       business={business as unknown as PublicBusiness}
-      services={staffBookableServices}
+      services={services || []}
       professionals={professionals || []}
       timeBlocks={timeBlocks || []}
       exceptions={exceptions || []}
       locations={locations || []}
       professionalServices={professionalServices || []}
+      timeBlockServices={timeBlockServices || []}
     />
   )
 

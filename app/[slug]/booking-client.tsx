@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, isSameMonth, isSameDay, isBefore, isAfter } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import type { PublicBusiness, Service, Professional, TimeBlock, ProfessionalService } from '@/lib/types'
+import type { PublicBusiness, Service, Professional, TimeBlock, ProfessionalService, TimeBlockService } from '@/lib/types'
 import { effectiveBookingCutoff } from '@/lib/booking-window'
 import { professionalsForService } from '@/lib/staff-services'
 import { anyCardPlacement } from '@/lib/booking-selector'
@@ -32,6 +32,12 @@ interface Props {
   // la regla del comodín (lib/staff-services): 0 filas para un profesional = capaz de todos. Sirve
   // para filtrar la lista de profesionales al servicio elegido y gatear "Cualquiera" (≥2 capaces).
   professionalServices: ProfessionalService[]
+  // Mapeo franja↔servicio (vista acotada public_time_block_services, migr. 071 §3). Se interpreta
+  // con la regla del comodín (lib/time-block-services): 0 filas para una franja = sirve para todos
+  // los servicios. Declarada acá en el Plan 20-01 SOLO para que el RSC pueda pasarla; todavía no se
+  // consume — la derivación por servicio (deshabilitar-con-motivo, D-02; días mudos, D-04) es del
+  // Plan 20-02. Opcional a propósito: el BookingClient de fallback del LandingRenderer no la pasa.
+  timeBlockServices?: TimeBlockService[]
 }
 
 function timeToMinutes(t: string) {
