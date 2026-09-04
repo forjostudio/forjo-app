@@ -13,9 +13,18 @@ import type { Service, Professional, ProfessionalService } from '@/lib/types'
 // ── Cobertura de servicios en la grilla pública con staff — Phase 10 (gap UAT) ──────────────────
 //
 // Bug cerrado: un servicio que NINGÚN profesional nombrado hace seguía siendo reservable en público
-// (caía al fallback "Sin preferencia" y se reservaba contra el sentinel). El fix filtra la lista que
-// `app/[slug]/page.tsx` pasa a BookingClient con `bookableServices` (regla del comodín + guarda de
-// modo sentinel). Este test ejercita ese cálculo contra la DB LOCAL leyendo las MISMAS vistas
+// (caía al fallback "Sin preferencia" y se reservaba contra el sentinel). El cálculo que lo detecta es
+// `bookableServices` (regla del comodín + guarda de modo sentinel), y ESO es lo que verifica este
+// archivo: la función pura en sí misma, que sigue existiendo y sigue siendo correcta.
+//
+// ⚠ Lo que cambió en la Phase 20 (D-05) es QUIÉN la consume y QUÉ hace el público con la respuesta:
+// `app/[slug]/page.tsx` ya NO filtra con ella el array que le pasa a BookingClient — pasa el catálogo
+// completo, y `booking-client.tsx` deshabilita-con-motivo cada tarjeta usando `isServiceStaffed`
+// (misma regla, misma guarda, preguntada por servicio). El comportamiento VISIBLE al público del eje
+// staff lo verifica ahora esa superficie (ver Plan 20-02); el contrato de la función no cambió y por
+// eso los 3 casos de acá siguen intactos.
+//
+// Este test ejercita ese cálculo contra la DB LOCAL leyendo las MISMAS vistas
 // acotadas que el RSC (public_services / public_professionals / public_professional_services, migr.
 // 059 viva del reset del Plan 04) — no dobles de Supabase: espeja el patrón de staff-assignment.test.ts.
 //
