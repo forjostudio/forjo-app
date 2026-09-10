@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
-status: executing
-stopped_at: Completado 20-01-PLAN.md — prop timeBlockServices + isServiceStaffed + test del eje franja
-last_updated: "2026-09-10T22:15:27.914Z"
+status: verifying
+stopped_at: Completado 20-02-PLAN.md (UAT humana PASS 4/4)
+last_updated: "2026-09-10T22:40:44.973Z"
 last_activity: 2026-09-04 -- Phase 20 execution started
 progress:
   total_phases: 21
-  completed_phases: 19
+  completed_phases: 20
   total_plans: 100
-  completed_plans: 99
-  percent: 90
+  completed_plans: 100
+  percent: 95
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 20 (lo-que-el-publico-ve) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-04 -- Phase 20 execution started
 
 ## Milestone v0.28 — decisiones LOCKED
@@ -164,6 +164,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 19 P05 | 35min | 2 tasks | 1 files |
 | Phase 19 P06 | 20min | 2 tasks | 1 files |
 | Phase 20 P01 | 25min | 3 tasks | 5 files |
+| Phase 20 P02 | 19min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -336,6 +337,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 19]: 19-06: no se emite una migracion 075 — la proxima migracion libre del proyecto es la 075 — La residualidad de supabase_admin en pg_default_acl es una limitacion de plataforma (42501) que ninguna migracion de este proyecto puede cerrar; los dos criterios de privilegios se cumplen en produccion
 - [Phase 20]: D-05 aplicado en 20-01: page.tsx deja de ocultar servicios sin cobertura de staff (bookableServices fuera del RSC); el chequeo pasa a ser por-servicio con isServiceStaffed, a consumir en el Plan 20-02
 - [Phase 20]: AGENDA-07 NO se marca completo en 20-01: el plan solo prepara el dato (prop timeBlockServices); el criterio visible al publico lo cierra el Plan 20-02
+- [Phase 20]: AGENDA-07 cerrado: el paso 1 del booking publico deshabilita con motivo visible y distinguible por los dos ejes (franja/staff) y el calendario solo ofrece los dias donde el servicio elegido se da
 
 ### Pending Todos
 
@@ -418,8 +420,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-10T22:15:27.888Z
-Stopped at: Completado 20-01-PLAN.md — prop timeBlockServices + isServiceStaffed + test del eje franja
+Last session: 2026-09-10T22:40:37.903Z
+Stopped at: Completado 20-02-PLAN.md (UAT humana PASS 4/4)
 Resume file: None
 
 ## Operator Next Steps

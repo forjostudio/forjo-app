@@ -79,7 +79,7 @@ natural es que también declare **qué**.
 
 ### El booking público y el onboarding (Phase 20)
 
-- [ ] **AGENDA-07** — El cliente que elige un servicio ve **solo** los horarios donde ese servicio se
+- [x] **AGENDA-07** — El cliente que elige un servicio ve **solo** los horarios donde ese servicio se
       da. Si un servicio no tiene ninguna franja que lo cubra, el vacío se explica en vez de mostrar un
       calendario mudo.
 
@@ -108,7 +108,7 @@ natural es que también declare **qué**.
 | AGENDA-04 | Phase 18 | Complete |
 | AGENDA-05 | Phase 19 | Complete |
 | AGENDA-06 | Phase 19 | Complete |
-| AGENDA-07 | Phase 20 | Pending |
+| AGENDA-07 | Phase 20 | Complete |
 | AGENDA-08 | Phase 20 | Pending |
 
 ## Riesgo

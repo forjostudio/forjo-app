@@ -66,7 +66,7 @@ Faseo por riesgo: el cambio del motor (cupo por solape) va primero y aislado com
 
 - [x] **Phase 18: El modelo y la disponibilidad** - Tabla puente `time_block_services` con la regla del comodín (0 filas = cualquier servicio), la regla encapsulada en un helper puro con tests (molde `lib/staff-services.ts`), y `/api/booking/availability` respetándola — el endpoint ya recibe `serviceId` desde v0.27. **Cero regresión por construcción:** el día de la migración todos los negocios tienen 0 filas. **`secure-phase` obligatorio** (completed 2026-08-25)
 - [x] **Phase 19: El panel** - El dueño asigna servicios a cada franja desde Agenda y la grilla muestra qué se da en cada una sin abrir nada; una franja sin servicios se lee como "cualquiera", no como un estado vacío (6/6 planes — UAT 3/3 verificada en PRODUCCIÓN, `19-UAT.md`) (completed 2026-08-31)
-- [ ] **Phase 20: Lo que el público ve** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, y un servicio sin franjas que lo cubran queda deshabilitado con el motivo a la vista, en vez de un calendario mudo (AGENDA-07)
+- [x] **Phase 20: Lo que el público ve** - El cliente que elige un servicio ve solo los horarios donde ese servicio se da, y un servicio sin franjas que lo cubran queda deshabilitado con el motivo a la vista, en vez de un calendario mudo (AGENDA-07) (completed 2026-09-10)
 - [ ] **Phase 21: Lo que el negocio declara** - El onboarding deja que un negocio de clases declare su agenda real desde el alta, sin tener que entrar al panel después (AGENDA-08)
 
 ### Milestone v0.27 — Cupo unificado por servicio (shipped 2026-08-24)
@@ -741,7 +741,7 @@ Plans:
 **Security/Integrity relevance**: Media. La superficie pública ya la endurecieron la Phase 18 (backstop del `create`) y el quick 260902-h6m (revocación de `book_slot_atomic` al rol anónimo). Acá se consume, no se abre nada nuevo.
 **UI hint**: yes
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -750,7 +750,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 20-02-PLAN.md — Cliente: paso 1 deshabilita con motivo por franja (D-02) y por staff (D-05), calendario filtra días al servicio elegido (D-04), UAT humana con el negocio de prueba local
+- [x] 20-02-PLAN.md — Cliente: paso 1 deshabilita con motivo por franja (D-02) y por staff (D-05), calendario filtra días al servicio elegido (D-04), UAT humana con el negocio de prueba local
 
 ---
 
