@@ -4,8 +4,8 @@ milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: verifying
 stopped_at: Completado 20-02-PLAN.md (UAT humana PASS 4/4)
-last_updated: "2026-09-10T22:40:44.973Z"
-last_activity: 2026-09-04 -- Phase 20 execution started
+last_updated: "2026-09-10T23:02:22.568Z"
+last_activity: 2026-09-10
 progress:
   total_phases: 21
   completed_phases: 20
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 20 (lo-que-el-publico-ve) — EXECUTING
-Plan: 2 of 2
+Phase: 21
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-09-04 -- Phase 20 execution started
+Last activity: 2026-09-10
 
 ## Milestone v0.28 — decisiones LOCKED
 
@@ -102,6 +102,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | 15 | 5 | - | - |
 | 16 | 2 | - | - |
 | 18 | 4 | - | - |
+| 20 | 2 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
