@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.27
 milestone_name: — Cupo unificado por servicio
 status: executing
-stopped_at: Completado 19-06-PLAN.md — fase 19 lista para verificacion
-last_updated: "2026-09-04T03:01:36.299Z"
-last_activity: 2026-09-04 -- Phase 20 planning complete
+stopped_at: Completado 20-01-PLAN.md — prop timeBlockServices + isServiceStaffed + test del eje franja
+last_updated: "2026-09-10T22:15:27.914Z"
+last_activity: 2026-09-04 -- Phase 20 execution started
 progress:
-  total_phases: 20
+  total_phases: 21
   completed_phases: 19
-  total_plans: 98
-  completed_plans: 98
-  percent: 95
+  total_plans: 100
+  completed_plans: 99
+  percent: 90
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 19 — el-panel
+**Current focus:** Phase 20 — lo-que-el-publico-ve
 
 ## Current Position
 
-Phase: 20
-Plan: Not started
+Phase: 20 (lo-que-el-publico-ve) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-09-04 -- Phase 20 planning complete
+Last activity: 2026-09-04 -- Phase 20 execution started
 
 ## Milestone v0.28 — decisiones LOCKED
 
@@ -163,6 +163,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 19 P04 | 20min | 3 tasks | 2 files |
 | Phase 19 P05 | 35min | 2 tasks | 1 files |
 | Phase 19 P06 | 20min | 2 tasks | 1 files |
+| Phase 20 P01 | 25min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -333,6 +334,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase ?]: 19-05: el rechazo de la base se clasifica a codigo de dominio y la copy vive en un mapa aparte; a consola va el code, nunca el message
 - [Phase 19]: 19-06: la contradiccion de la Phase 18 sobre el estado de produccion se resolvio MIDIENDO — las 071/072/073 ya estaban aplicadas — 18-VERIFICATION.md:152 (prod en la 070) queda obsoleto frente a 18-SECURITY.md 9. La salida cruda del Paso 1 esta pegada en 19-06-SUMMARY.md
 - [Phase 19]: 19-06: no se emite una migracion 075 — la proxima migracion libre del proyecto es la 075 — La residualidad de supabase_admin en pg_default_acl es una limitacion de plataforma (42501) que ninguna migracion de este proyecto puede cerrar; los dos criterios de privilegios se cumplen en produccion
+- [Phase 20]: D-05 aplicado en 20-01: page.tsx deja de ocultar servicios sin cobertura de staff (bookableServices fuera del RSC); el chequeo pasa a ser por-servicio con isServiceStaffed, a consumir en el Plan 20-02
+- [Phase 20]: AGENDA-07 NO se marca completo en 20-01: el plan solo prepara el dato (prop timeBlockServices); el criterio visible al publico lo cierra el Plan 20-02
 
 ### Pending Todos
 
@@ -415,8 +418,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-08-26T13:21:48.858Z
-Stopped at: Completado 19-06-PLAN.md — fase 19 lista para verificacion
+Last session: 2026-09-10T22:15:27.888Z
+Stopped at: Completado 20-01-PLAN.md — prop timeBlockServices + isServiceStaffed + test del eje franja
 Resume file: None
 
 ## Operator Next Steps

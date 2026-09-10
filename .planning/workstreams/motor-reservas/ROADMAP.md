@@ -741,12 +741,12 @@ Plans:
 **Security/Integrity relevance**: Media. La superficie pública ya la endurecieron la Phase 18 (backstop del `create`) y el quick 260902-h6m (revocación de `book_slot_atomic` al rol anónimo). Acá se consume, no se abre nada nuevo.
 **UI hint**: yes
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 20-01-PLAN.md — RSC: suma `public_time_block_services` al `Promise.all` + prop `timeBlockServices`; deja de pre-filtrar el catálogo con `bookableServices` (D-05) y agrega `isServiceStaffed` + test de la vista por anon key
+- [x] 20-01-PLAN.md — RSC: suma `public_time_block_services` al `Promise.all` + prop `timeBlockServices`; deja de pre-filtrar el catálogo con `bookableServices` (D-05) y agrega `isServiceStaffed` + test de la vista por anon key
 
 **Wave 2** *(blocked on Wave 1)*
 
