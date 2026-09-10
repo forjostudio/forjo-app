@@ -7,7 +7,8 @@ import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import type { PublicBusiness, Service, Professional, TimeBlock, ProfessionalService, TimeBlockService } from '@/lib/types'
 import { effectiveBookingCutoff } from '@/lib/booking-window'
-import { professionalsForService } from '@/lib/staff-services'
+import { professionalsForService, isServiceStaffed } from '@/lib/staff-services'
+import { isServiceScheduled } from '@/lib/time-block-services'
 import { anyCardPlacement } from '@/lib/booking-selector'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,9 +35,12 @@ interface Props {
   professionalServices: ProfessionalService[]
   // Mapeo franja↔servicio (vista acotada public_time_block_services, migr. 071 §3). Se interpreta
   // con la regla del comodín (lib/time-block-services): 0 filas para una franja = sirve para todos
-  // los servicios. Declarada acá en el Plan 20-01 SOLO para que el RSC pueda pasarla; todavía no se
-  // consume — la derivación por servicio (deshabilitar-con-motivo, D-02; días mudos, D-04) es del
-  // Plan 20-02. Opcional a propósito: el BookingClient de fallback del LandingRenderer no la pasa.
+  // los servicios. Acá adentro sirve para DOS cosas (Plan 20-02): deshabilitar-con-motivo en el paso
+  // 1 el servicio que ninguna franja cubre (D-02) y apagar en el calendario del paso 3 los días donde
+  // el servicio elegido no se da (D-04). Opcional a propósito: el BookingClient de fallback del
+  // LandingRenderer no la pasa; cuando falta se degrada a la puente vacía ⇒ regla del comodín ⇒ todo
+  // agendado, que es el comportamiento previo a la migr. 071. El fail-safe es DIRECCIONAL: un dato
+  // ausente nunca puede apagar el catálogo.
   timeBlockServices?: TimeBlockService[]
 }
 
@@ -63,7 +67,7 @@ function phoneDigits(v: string) {
   return v.replace(/\D/g, '')
 }
 
-export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations, professionalServices }: Props) {
+export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations, professionalServices, timeBlockServices }: Props) {
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedPro, setSelectedPro] = useState<Professional | null | 'none'>('none')
@@ -546,15 +550,38 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
           <div>
             <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí tu servicio</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {services.map(service => (
+              {services.map(service => {
+                // ── Cobertura por servicio: los DOS ejes, cada uno con su fuente única ──────────
+                // Eje franja (D-02, AGENDA-07): ¿alguna franja de horario da este servicio? La regla
+                // del comodín NO se reimplementa acá — sale de lib/time-block-services, la misma que
+                // ya usan la disponibilidad pública y el backstop del create. El `?? []` cubre el
+                // call site del LandingRenderer, que no pasa la prop: puente vacía ⇒ comodín ⇒ todo
+                // agendado (degrada al comportamiento de hoy, nunca apaga el catálogo).
+                const scheduled = isServiceScheduled(service.id, timeBlocks, timeBlockServices ?? [])
+                // Eje staff (D-05): ¿algún profesional activo lo hace? Misma disciplina, fuente única
+                // en lib/staff-services (incluye el modo sentinel: sin staff nombrado, todo reservable).
+                // Antes este eje OCULTABA el servicio del array (page.tsx lo pre-filtraba); ahora los
+                // dos ejes se tratan igual: deshabilitar con el motivo a la vista, porque un estado mal
+                // configurado no puede verse igual que uno correcto.
+                const staffed = isServiceStaffed(service.id, professionals, professionalServices)
+                const enabled = scheduled && staffed
+                return (
                 <button
                   key={service.id}
+                  type="button"
+                  disabled={!enabled}
                   onClick={() => { setSelectedService(service); setBookingLoc(null); setSelectedDate(undefined); setSelectedTime(''); setStep(2) }}
                   className={cn(
                     'rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                    selectedService?.id === service.id
-                      ? 'border-primary bg-primary/[0.06]'
-                      : 'border-border bg-card hover:border-primary'
+                    // Precedencia deliberada: `!enabled` PRIMERO. Con el `disabled` nativo puesto, el
+                    // onClick de una tarjeta apagada nunca corre, así que "esta tarjeta está
+                    // seleccionada Y deshabilitada" es un estado inalcanzable; evaluar la selección
+                    // antes pintaría un borde de foco que el usuario no puede haber producido.
+                    !enabled
+                      ? 'border-border/50 bg-secondary/30 opacity-60 cursor-not-allowed'
+                      : selectedService?.id === service.id
+                        ? 'border-primary bg-primary/[0.06]'
+                        : 'border-border bg-card hover:border-primary'
                   )}
                 >
                   {/* Tarjeta: izq = título + descripción (si hay); der = precio + duración a la
@@ -574,8 +601,21 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                       </p>
                     </div>
                   </div>
+                  {/* El motivo, con el mismo tag y las mismas clases que el picker de consultorios del
+                      paso 3 (mismo problema, misma solución: apagar sin explicar es peor que ocultar).
+                      Precedencia cuando fallan los dos ejes a la vez: gana el motivo de FRANJA, que es
+                      el eje del requisito de esta fase; el motivo de STAFF (regresión candidata,
+                      aceptada aparte) solo aparece cuando la franja sí cubre el servicio. Copy
+                      deliberadamente genérica: un anónimo no tiene por qué enterarse de quién cubre qué
+                      ni de qué le falta tocar al dueño en su panel. */}
+                  {!enabled && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {!scheduled ? 'Sin horarios disponibles' : 'Sin profesional disponible'}
+                    </p>
+                  )}
                 </button>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
