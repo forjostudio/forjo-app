@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import type { PublicBusiness, Service, Professional, TimeBlock, ProfessionalService, TimeBlockService } from '@/lib/types'
 import { effectiveBookingCutoff } from '@/lib/booking-window'
 import { professionalsForService, isServiceStaffed } from '@/lib/staff-services'
-import { isServiceScheduled } from '@/lib/time-block-services'
+import { isServiceScheduled, blocksForService } from '@/lib/time-block-services'
 import { anyCardPlacement } from '@/lib/booking-selector'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -190,8 +190,22 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
     }
   }, [requireDeposit, siteKey])
 
-  // Días de la semana abiertos (de los time_blocks) para deshabilitar el resto en el calendario.
-  const openDaysSet = useMemo(() => new Set(timeBlocks.map(b => b.day_of_week)), [timeBlocks])
+  // Las franjas que dan el servicio ELEGIDO (D-04). Sin servicio todavía (paso 1) son todas: la
+  // pregunta no tiene sujeto, y usar `timeBlocks` crudo deja el calendario byte-idéntico a hoy.
+  // Misma fuente única que el paso 1 (lib/time-block-services); cero regla del comodín reescrita.
+  const serviceBlocks = useMemo(
+    () => (selectedService ? blocksForService(selectedService.id, timeBlocks, timeBlockServices ?? []) : timeBlocks),
+    [selectedService, timeBlocks, timeBlockServices],
+  )
+  // Días de la semana abiertos, ahora POR SERVICIO cuando hay uno elegido (D-04): un servicio que
+  // solo se da los martes deja de ofrecer el lunes clickeable para devolver una grilla vacía.
+  //
+  // ⚠ Es un no-op sobre los horarios reservables, no un filtro nuevo: el endpoint de disponibilidad
+  // YA oculta (vía `full`) exactamente los mismos horarios desde la Phase 18 —`starts(todas) − full
+  // = starts(ofrecen)`—, así que esto no saca ni agrega un solo turno; lo único que cambia es qué
+  // DÍAS aparecen clickeables. Y `serviceBlocks` es siempre un SUBCONJUNTO de `timeBlocks`: nunca
+  // puede abrir un día que hoy esté cerrado.
+  const openDaysSet = useMemo(() => new Set(serviceBlocks.map(b => b.day_of_week)), [serviceBlocks])
   // Excepciones indexadas. Global (location_id null) = todo el negocio ese día. Por consultorio
   // (location_id) = solo ese consultorio. La de consultorio manda sobre la global.
   type Exc = { closed: boolean; start_time: string | null; end_time: string | null }
