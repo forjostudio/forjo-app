@@ -96,6 +96,21 @@ describe('isServiceScheduled — servicio sin franja que lo cubra (D-06)', () =>
       blocksForService('ceramica', blocks, bridge).length > 0,
     )
   })
+
+  it('SIN NINGUNA FRANJA devuelve false para todo — el helper no guarda, guarda el CALLER', () => {
+    // Documenta el contrato que muerde: blocksForService FILTRA el arreglo de franjas, asi que con
+    // el arreglo vacio no queda nada que devolver y este helper responde false para CUALQUIER
+    // servicio. No es un bug del modulo —sin franjas la pregunta "¿que franja lo da?" no tiene
+    // sujeto— pero es una trampa cargada para quien lo consuma: leido ingenuamente, un negocio sin
+    // franjas cargadas (o un time_blocks que fallo al leerse) apagaria el catalogo ENTERO en
+    // silencio. Por eso el paso 1 de app/[slug]/booking-client.tsx antepone `timeBlocks.length ===
+    // 0 ||`, degradando al comportamiento de hoy en vez de apagar todo. Si alguien "arregla" este
+    // helper para devolver true con blocks vacio, este test cae y obliga a mirar los dos call sites.
+    expect(isServiceScheduled('corte', [], [])).toBe(false)
+    expect(isServiceScheduled('ceramica', [], [map('manana', 'corte')])).toBe(false)
+    // consistente con la fuente unica, igual que el caso de arriba
+    expect(blocksForService('corte', [], [])).toEqual([])
+  })
 })
 
 // ── Suite 3: isServiceAllowedAt (la regla del ACEPTA, D-04) ───────────────────────
