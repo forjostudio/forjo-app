@@ -109,7 +109,7 @@ natural es que también declare **qué**.
 | AGENDA-05 | Phase 19 | Complete |
 | AGENDA-06 | Phase 19 | Complete |
 | AGENDA-07 | Phase 20 | Complete |
-| AGENDA-08 | Phase 20 | Pending |
+| AGENDA-08 | Phase 21 | Pending |
 
 ## Riesgo
 
