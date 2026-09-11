@@ -763,10 +763,22 @@ Plans:
 
   1. El onboarding deja declarar la agenda real de un negocio de clases desde el alta (AGENDA-08).
 
-**Alcance**: `app/(onboarding)/onboarding/page.tsx`.
-⚠ **Corrección de una nota vieja del roadmap:** el onboarding **NO** usa un endpoint service-role para escribir la agenda — escribe `time_blocks` directo desde el cliente con la sesión del dueño y la RLS vigente (`page.tsx:388`). El único endpoint service-role es `slug-available`, y eso salió de la colisión de slug de v0.20, no de la agenda. Verificado 2026-09-02.
-**Security/Integrity relevance**: Media. Escribe agenda durante el alta; el aislamiento lo sostiene la RLS por `business_id` como en el resto del panel.
+**Alcance**: `app/(onboarding)/onboarding/page.tsx` **más** `components/agenda/block-services-line.tsx` (nuevo), `app/(dashboard)/agenda/agenda-client.tsx` y `lib/onboarding-agenda.ts` (nuevo). La ampliación es deliberada y está registrada en D-05 del CONTEXT: el editor de chips se **extrae** a un módulo compartido en vez de reimplementarse en el alta.
+⚠ **Corrección de una nota vieja del roadmap:** el onboarding **NO** usa un endpoint service-role para escribir la agenda — escribe con la sesión del dueño y la RLS vigente. El único endpoint service-role es `slug-available`, y eso salió de la colisión de slug de v0.20, no de la agenda. Verificado 2026-09-02.
+⚠ **Corrección al planificar (2026-09-11):** el alta deja de escribir `time_blocks` a mano y pasa a llamar el RPC `save_agenda_blocks` (migr. 074, Phase 19, ya en producción), que escribe franjas + mapeo en **una sola transacción**. Cero migraciones nuevas en esta fase.
+**Security/Integrity relevance**: Media. Escribe agenda durante el alta; el aislamiento lo sostiene la RLS por `business_id` como en el resto del panel, más el guard de autoría del RPC y las FK compuestas de la migr. 073.
 **UI hint**: yes
+
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 21-01-PLAN.md — **Tracer**: extracción del editor de chips a `components/agenda/block-services-line.tsx` (D-05) + clave local por servicio con `crypto.randomUUID()` (D-08/D-09) + toggle del paso Horarios con sus gates (D-01/D-02/D-03/D-04) + chips por franja (D-06) + el submit por `save_agenda_blocks` con D-10, probado end-to-end contra la DB local — AGENDA-08
+
+**Wave 2** *(bloqueado por 21-01: mismos archivos)*
+
+- [ ] 21-02-PLAN.md — `servicesWithoutCoverage` (sobre `hasScheduleCoverage`, con la guarda de cero franjas de CR-01) + el aviso no bloqueante al pie del paso Horarios, anticipando la frase pública "Sin horarios disponibles" (D-07) — AGENDA-08
 
 ---
 
