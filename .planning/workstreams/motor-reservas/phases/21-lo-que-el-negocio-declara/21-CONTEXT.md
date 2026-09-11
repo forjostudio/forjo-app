@@ -89,6 +89,30 @@ está en producción desde la migr. 071.
   `service_id`. La identidad local es la única forma de que el dueño que corrige un typo en el paso 2 no
   pierda el trabajo del paso 4.
 
+### Resueltas al planificar (2026-09-11)
+
+> Las dos preguntas abiertas que RESEARCH.md pidió cerrar antes de escribir los planes. Ambas
+> confirmadas por el dueño; ambas coinciden con la recomendación del research.
+
+- **D-09:** La clave local de D-08 es el **`uuid` generado en el cliente**: cada fila de servicio del
+  paso 2 nace con `crypto.randomUUID()` y ese mismo `id` viaja en el `INSERT` a `services`, así que el
+  payload del RPC se arma **antes** de que los servicios existan.
+  **Por qué no correlacionar por índice:** PostgreSQL no garantiza el orden de `INSERT … RETURNING` con
+  múltiples filas (Pitfall 1 de RESEARCH.md) — correlacionar por posición es un bug estructural, no un
+  atajo. De paso arregla el `key={i}` del paso 2 (`page.tsx:696-698`).
+  ⚠ Es el **único patrón sin precedente in-repo** de la fase (PK generada en el cliente). Fallback
+  registrado por si el plan-check lo rechaza: `insert().select().single()` por servicio, molde exacto
+  de `app/(dashboard)/settings/settings-client.tsx:1353-1355`.
+  — **Reversibility:** reversible.
+
+- **D-10:** Si el toggle de D-01 queda **apagado al finalizar el alta, se persiste comodín**, aunque el
+  dueño haya mapeado antes. El mapeo sigue vivo en el estado del cliente (D-04: volver a prenderlo lo
+  recupera), pero no se escribe.
+  **Por qué:** es el principio que ya sostiene el panel — *lo que veo es lo que queda*
+  (`lib/agenda-hours-payload.ts:150-153`). Persistir algo que la última pantalla no muestra es dato que
+  se pierde sin ruido, al revés.
+  — **Reversibility:** reversible.
+
 ### Claude's Discretion
 
 - El **copy exacto** del toggle y del aviso. Hay precedente directo y caro de mirar: la Phase 17 de este

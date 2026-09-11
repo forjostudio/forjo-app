@@ -974,7 +974,7 @@ supabase.from('time_block_services').select('business_id, time_block_id, service
 
 ## Open Questions
 
-1. **¿Se acepta generar el `uuid` del servicio en el cliente?**
+1. **¿Se acepta generar el `uuid` del servicio en el cliente?** — ✅ **RESUELTA 2026-09-11: SÍ.** Confirmado por el dueño al planificar; ver **D-09** en `21-CONTEXT.md`. El fallback queda registrado ahí por si el plan-check lo rechaza.
    - Lo que sabemos: es el camino que elimina la correlación, cumple D-08 literalmente y arregla el
      `key={i}` del paso 2. La columna lo admite y no hay trigger que interfiera.
    - Lo que no está claro: es el **único patrón sin precedente in-repo** que introduce esta fase.
@@ -983,7 +983,7 @@ supabase.from('time_block_services').select('business_id, time_block_id, service
      Es una decisión de una línea que cambia la forma de todo el submit — conviene resolverla **antes**
      de escribir los planes, no durante.
 
-2. **Si el dueño apaga el toggle de D-01 con mapeo ya cargado, ¿qué se persiste?**
+2. **Si el dueño apaga el toggle de D-01 con mapeo ya cargado, ¿qué se persiste?** — ✅ **RESUELTA 2026-09-11: se persiste COMODÍN.** Confirmado por el dueño al planificar; ver **D-10** en `21-CONTEXT.md`.
    - Lo que sabemos: D-04 dice que el toggle es control de UI y que el estado sobrevive al apagado.
      D-02 dice que el toggle arranca apagado = todo comodín.
    - Lo que no está claro: las dos cosas juntas no determinan el submit. Si el toggle está apagado al
