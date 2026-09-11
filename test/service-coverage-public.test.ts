@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
+import { createClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import {
   seedOneTenant,
@@ -24,9 +25,12 @@ import type { Service, Professional, ProfessionalService } from '@/lib/types'
 // staff lo verifica ahora esa superficie (ver Plan 20-02); el contrato de la función no cambió y por
 // eso los 3 casos de acá siguen intactos.
 //
-// Este test ejercita ese cálculo contra la DB LOCAL leyendo las MISMAS vistas
-// acotadas que el RSC (public_services / public_professionals / public_professional_services, migr.
-// 059 viva del reset del Plan 04) — no dobles de Supabase: espeja el patrón de staff-assignment.test.ts.
+// Este test ejercita ese cálculo contra la DB LOCAL leyendo las MISMAS vistas acotadas que el RSC
+// (public_services / public_professionals / public_professional_services, migr. 059 viva del reset
+// del Plan 04) y —desde el 2026-09-11— con el MISMO ROL: `anon` sin sesión. No dobles de Supabase.
+// Antes leía con service role, que bypassa la RLS: el archivo pasaba aunque los GRANT estuvieran
+// rotos, así que valía como test de `bookableServices` pero NO como evidencia de permisos (WR-05
+// del code review de la Phase 20). Ahora vale como las dos cosas.
 //
 // Los 3 casos que blindan el fix + la NO-regresión:
 //   (a) con mapeos y un servicio SIN cobertura → ese servicio NO está en la lista reservable.
@@ -64,13 +68,40 @@ describe.skipIf(!hasSupabaseCreds)('cobertura de servicios en la reserva públic
     await t.admin.from('professionals').update({ active: true, location_id: null, service_id: null }).eq('id', t.professionalId)
   })
 
-  // Lee las MISMAS vistas acotadas que consume el RSC público, filtradas por tenant (aislamiento).
+  // Cliente anon SIN sesión: el rol `anon` puro, el que atiende la página pública de reservas.
+  // Mismo patrón que `anonPublic()` en test/isolation.test.ts y en el hermano del eje franja.
+  const anonPublic = () =>
+    createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false },
+    })
+
+  // Lee las MISMAS vistas acotadas que consume el RSC público, por la MISMA ruta y con el MISMO rol,
+  // filtradas por tenant (el caller filtra, contrato D-16).
+  //
+  // ⚠ Deliberadamente NO es `t.admin`. Hasta el 2026-09-11 esta función leía con service role
+  // mientras el comentario de cabecera decía ejercitar "las MISMAS vistas acotadas que el RSC": el
+  // service role BYPASSA la RLS, así que el archivo habría seguido verde con los GRANT de `anon`
+  // completamente rotos. Lo marcó el code review de la Phase 20 (WR-05) y lo confirmó el
+  // secure-phase, que dictaminó que este archivo no servía como evidencia de permisos. Las
+  // ESCRITURAS del seed y del afterEach siguen con `t.admin` (montar el escenario es setup, no lo
+  // que se está midiendo); lo que pasó a anon es la LECTURA, que es lo que el público hace.
+  //
+  // Los `error` se asertan: un fallo de permisos que devolviera `[]` en silencio haría pasar los
+  // casos (b) y (c) por el motivo equivocado — todo reservable porque no llegó NADA, no porque la
+  // regla del comodín dijera que sí.
   async function readPublicBooking(): Promise<{ services: Service[]; professionals: Professional[]; bridge: ProfessionalService[] }> {
+    const pub = anonPublic()
     const [svc, pros, bridge] = await Promise.all([
-      t.admin.from('public_services').select('*').eq('business_id', t.businessId),
-      t.admin.from('public_professionals').select('*').eq('business_id', t.businessId),
-      t.admin.from('public_professional_services').select('*').eq('business_id', t.businessId),
+      pub.from('public_services').select('*').eq('business_id', t.businessId),
+      pub.from('public_professionals').select('*').eq('business_id', t.businessId),
+      pub.from('public_professional_services').select('*').eq('business_id', t.businessId),
     ])
+    expect(svc.error).toBeNull()
+    expect(pros.error).toBeNull()
+    expect(bridge.error).toBeNull()
+    // El catálogo nunca puede venir vacío en estos escenarios: si viniera, la regla se estaría
+    // evaluando sobre la nada y los casos (b)/(c) darían verde por el motivo equivocado.
+    expect((svc.data || []).length).toBeGreaterThan(0)
     return {
       services: (svc.data || []) as Service[],
       professionals: (pros.data || []) as Professional[],

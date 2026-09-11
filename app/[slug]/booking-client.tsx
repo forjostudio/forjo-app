@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import type { PublicBusiness, Service, Professional, TimeBlock, ProfessionalService, TimeBlockService } from '@/lib/types'
 import { effectiveBookingCutoff } from '@/lib/booking-window'
 import { professionalsForService, isServiceStaffed } from '@/lib/staff-services'
-import { isServiceScheduled, blocksForService } from '@/lib/time-block-services'
+import { hasScheduleCoverage, blocksForService } from '@/lib/time-block-services'
 import { anyCardPlacement } from '@/lib/booking-selector'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -571,19 +571,10 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 // ya usan la disponibilidad pública y el backstop del create. El `?? []` cubre el
                 // call site del LandingRenderer, que no pasa la prop: puente vacía ⇒ comodín ⇒ todo
                 // agendado (degrada al comportamiento de hoy, nunca apaga el catálogo).
-                // ⚠ El `timeBlocks.length === 0` no es defensivo de más: es la MISMA promesa del
-                // fail-safe de page.tsx:106 ("nunca apaga servicios por un error de lectura"), que
-                // allá cubre sólo la puente. `blocksForService` FILTRA el array de franjas, así que
-                // con cero franjas devuelve `[]` y este eje daría `false` para TODO el catálogo: la
-                // falla más cara posible, y silenciosa. Es alcanzable por dos caminos reales — un
-                // `time_blocks` que falla al leerse (page.tsx pasa `timeBlocks || []`) y un negocio
-                // sin ninguna franja cargada que HOY igual es reservable por `schedule_exceptions`
-                // de horario especial (la rama de horario especial arma el día sin mirar `weekly`).
-                // Sin franjas, la pregunta "¿qué franja da este servicio?" no tiene sujeto: no se
-                // puede afirmar que NO esté agendado, así que se degrada al comportamiento de hoy —
-                // idéntico criterio al comodín de D-01, aplicado un nivel más arriba.
-                const scheduled =
-                  timeBlocks.length === 0 || isServiceScheduled(service.id, timeBlocks, timeBlockServices ?? [])
+                // `hasScheduleCoverage` y NO `isServiceScheduled`: la cruda da false con cero franjas
+                // y apagaría el catálogo entero (CR-01). La guarda vive en el módulo, testeada, no
+                // inline acá — mismo principio que AGENDA-02 y misma forma que `isServiceStaffed`.
+                const scheduled = hasScheduleCoverage(service.id, timeBlocks, timeBlockServices ?? [])
                 // Eje staff (D-05): ¿algún profesional activo lo hace? Misma disciplina, fuente única
                 // en lib/staff-services (incluye el modo sentinel: sin staff nombrado, todo reservable).
                 // Antes este eje OCULTABA el servicio del array (page.tsx lo pre-filtraba); ahora los

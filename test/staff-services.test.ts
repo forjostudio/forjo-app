@@ -3,6 +3,7 @@ import {
   servicesForProfessional,
   professionalsForService,
   isServiceCovered,
+  isServiceStaffed,
 } from '@/lib/staff-services'
 import type { Professional, Service, ProfessionalService } from '@/lib/types'
 
@@ -119,6 +120,56 @@ describe('professionalsForService / isServiceCovered — cobertura (D-16)', () =
       expect(isServiceCovered(id, activos, bridge)).toBe(
         professionalsForService(id, activos, bridge).length > 0,
       )
+    }
+  })
+})
+// ── Suite 3: isServiceStaffed (el eje staff del paso 1 público, D-05 de la Phase 20) ──
+// Es isServiceCovered MÁS la guarda de modo sentinel. Esa guarda es la que evita la inversión
+// vacío⇒nada: sin ningún profesional nombrado el negocio reserva contra el UUID mágico
+// ("Sin preferencia"), así que TODO servicio sigue siendo reservable. Sin ella, un negocio que
+// nunca cargó equipo —la mayoría— vería el catálogo entero deshabilitado.
+//
+// ⚠ Por qué vive acá y no sólo en test/service-coverage-public.test.ts: ese archivo lee las vistas
+// públicas con service role (t.admin), así que sirve como test de bookableServices pero NO como
+// evidencia de permisos ni como unidad de esta función. Hasta esta suite, isServiceStaffed —que la
+// Phase 20 EXTRAJO justamente para que el componente no reimplementara la regla— no tenía ningún
+// test puro propio.
+describe('isServiceStaffed — cobertura por servicio con modo sentinel (D-05)', () => {
+  it('MODO SENTINEL: sin ningún profesional nombrado, TODO servicio queda reservable', () => {
+    // la trampa que esta guarda existe para evitar: isServiceCovered daría false para todo
+    expect(isServiceCovered('corte', [], [])).toBe(false)
+    expect(isServiceStaffed('corte', [], [])).toBe(true)
+    expect(isServiceStaffed('color', [], [])).toBe(true)
+    // y el mapeo huérfano no cambia nada: sin activos, el sentinel manda igual
+    expect(isServiceStaffed('barba', [], [map('juan', 'corte')])).toBe(true)
+  })
+
+  it('COMODÍN: con staff nombrado pero la puente vacía, todo servicio está cubierto', () => {
+    const activos = [pro('ana'), pro('juan')]
+    expect(isServiceStaffed('corte', activos, [])).toBe(true)
+    expect(isServiceStaffed('color', activos, [])).toBe(true)
+  })
+
+  it('CONTROL NEGATIVO: con staff nombrado y mapeos explícitos, el servicio que nadie marcó da false', () => {
+    const activos = [pro('ana'), pro('juan')]
+    const bridge = [map('ana', 'corte'), map('juan', 'barba')]
+    expect(isServiceStaffed('color', activos, bridge)).toBe(false)
+    // los mapeados siguen reservables — false es un estado LEGAL, no un error
+    expect(isServiceStaffed('corte', activos, bridge)).toBe(true)
+    expect(isServiceStaffed('barba', activos, bridge)).toBe(true)
+  })
+
+  it('un solo comodín entre los activos vuelve a cubrir todo', () => {
+    const activos = [pro('ana'), pro('juan')]
+    const bridge = [map('juan', 'barba')] // ana queda comodín
+    expect(isServiceStaffed('color', activos, bridge)).toBe(true)
+  })
+
+  it('delega en isServiceCovered siempre que HAYA activos (fuente única, sin divergencia)', () => {
+    const activos = [pro('ana'), pro('juan')]
+    const bridge = [map('ana', 'corte'), map('juan', 'barba')]
+    for (const id of ['corte', 'color', 'barba']) {
+      expect(isServiceStaffed(id, activos, bridge)).toBe(isServiceCovered(id, activos, bridge))
     }
   })
 })

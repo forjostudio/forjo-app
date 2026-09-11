@@ -117,6 +117,40 @@ export function isServiceScheduled<T extends { id: string }>(
 }
 
 /**
+ * ¿`serviceId` es RESERVABLE por el eje franja, desde el punto de vista de una SUPERFICIE PÚBLICA?
+ *
+ * Es `isServiceScheduled` MÁS la guarda del negocio sin franjas, y existe por la misma razón exacta
+ * por la que `isServiceStaffed` envuelve a `isServiceCovered` en `lib/staff-services.ts`: la función
+ * cruda responde la pregunta del motor, y la superficie pública necesita la pregunta del usuario.
+ *
+ * ⚠ LA TRAMPA, que ya mordió una vez (CR-01 del code review de la Phase 20): `blocksForService`
+ * FILTRA `blocks`, así que con CERO franjas devuelve `[]` y `isServiceScheduled` da `false` para
+ * **todo** servicio. Un consumidor que la use cruda apaga el catálogo ENTERO, en silencio, y es
+ * alcanzable por dos caminos reales:
+ *   1. una lectura de `time_blocks` que falla — `app/[slug]/page.tsx` pasa `timeBlocks || []`, y el
+ *      fail-safe documentado ahí ("nunca apaga servicios por un error de lectura") cubría sólo la
+ *      puente, no este otro input;
+ *   2. un negocio sin ninguna franja cargada que HOY igual es reservable por `schedule_exceptions`
+ *      de horario especial (la rama de horario especial arma el día sin mirar la grilla semanal).
+ *
+ * Sin franjas la pregunta "¿qué franja da este servicio?" no tiene sujeto: no se puede AFIRMAR que el
+ * servicio no esté agendado, así que se degrada al comportamiento de hoy. Es el mismo criterio del
+ * comodín de D-01 —la ausencia de dato significa "todo vale", nunca "nada vale"— aplicado un nivel
+ * más arriba: ahí es la franja sin filas, acá es el negocio sin franjas.
+ *
+ * `isServiceScheduled` se conserva cruda a propósito: el motor (backstop del `create`, disponibilidad)
+ * quiere la respuesta literal. Quien le muestre algo a un humano quiere ésta.
+ */
+export function hasScheduleCoverage<T extends { id: string }>(
+  serviceId: string,
+  blocks: T[],
+  bridge: TimeBlockService[],
+): boolean {
+  if (blocks.length === 0) return true // negocio sin franjas cargadas: la pregunta no tiene sujeto
+  return isServiceScheduled(serviceId, blocks, bridge)
+}
+
+/**
  * La regla del ACEPTA (D-04): ¿se puede tomar `serviceId` a `startMinutes`?
  *
  * Sólo mira las franjas que CONTIENEN ese horario de inicio (`start_time <= t < end_time`):

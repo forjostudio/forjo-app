@@ -7,6 +7,7 @@ import {
   servicesOfBlock,
   isBlockWildcard,
   blocksBecomingWildcard,
+  hasScheduleCoverage,
 } from '@/lib/time-block-services'
 import type { BlockWindow } from '@/lib/time-block-services'
 import type { TimeBlockService } from '@/lib/types'
@@ -290,5 +291,37 @@ describe('blocksBecomingWildcard — el subconjunto que se AGRANDA al borrar un 
   it('no depende de la PK para no repetir una franja', () => {
     // la PK (time_block_id, service_id) ya lo garantiza, pero la función no se apoya en eso
     expect(blocksBecomingWildcard('corte', [map('b1', 'corte'), map('b1', 'corte')])).toEqual(['b1'])
+  })
+})
+
+// ── Suite: hasScheduleCoverage (el eje franja como lo pregunta una superficie PÚBLICA) ──
+// Hermana de isServiceStaffed: la cruda (isServiceScheduled) responde al motor, ésta al usuario.
+// Estos casos son el candado de CR-01 — borrar la guarda `blocks.length === 0` de
+// lib/time-block-services.ts los hace fallar, que es exactamente el punto: antes de existir esta
+// función la guarda vivía inline en el JSX de booking-client.tsx y borrarla dejaba la suite ENTERA
+// en verde mientras el catálogo público se apagaba en producción.
+describe('hasScheduleCoverage — la guarda del negocio sin franjas (CR-01)', () => {
+  it('NEGOCIO SIN FRANJAS: todo servicio queda agendado — degrada, nunca apaga', () => {
+    // el contraste con la cruda ES el test: misma entrada, respuesta opuesta
+    expect(isServiceScheduled('corte', [], [])).toBe(false)
+    expect(hasScheduleCoverage('corte', [], [])).toBe(true)
+    expect(hasScheduleCoverage('ceramica', [], [])).toBe(true)
+  })
+
+  it('sin franjas, un mapeo huérfano en la puente tampoco apaga nada', () => {
+    // reproduce la falla por lectura: time_blocks vino vacío pero la puente sí cargó
+    const bridge = [map('manana', 'corte')]
+    expect(isServiceScheduled('ceramica', [], bridge)).toBe(false)
+    expect(hasScheduleCoverage('ceramica', [], bridge)).toBe(true)
+  })
+
+  it('CON franjas delega en isServiceScheduled, byte por byte (una sola fuente)', () => {
+    const blocks = [block('manana', '09:00', '13:00'), block('tarde', '14:00', '18:00')]
+    const bridge = [map('manana', 'corte'), map('tarde', 'color')]
+    for (const id of ['corte', 'color', 'ceramica']) {
+      expect(hasScheduleCoverage(id, blocks, bridge)).toBe(isServiceScheduled(id, blocks, bridge))
+    }
+    // y el control negativo sigue en pie: con franjas mapeadas, el no marcado da false
+    expect(hasScheduleCoverage('ceramica', blocks, bridge)).toBe(false)
   })
 })
