@@ -2,15 +2,17 @@
 gsd_state_version: "1.0"
 milestone: v0.27
 current_phase: 21
-status: verifying
+current_phase_name: Lo que el negocio declara
+status: executing
 stopped_at: Phase 21 context gathered
-last_updated: "2026-09-11T20:38:19.580Z"
-last_activity: 2026-09-10
-state_head: a591537d08dda4753fb7bb2d1cce74d532ab2d3a
+last_updated: "2026-09-11T21:34:20.989Z"
+last_activity: 2026-09-11
+last_activity_desc: Phase 21 planning complete
+state_head: ec01475b6107bae6752b5d052e7e0a00233bbd8b
 progress:
   total_phases: 21
   completed_phases: 16
-  total_plans: 100
+  total_plans: 102
   completed_plans: 100
   percent: 76
 milestone_name: — Cupo unificado por servicio
@@ -27,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 21
+Phase: 21 (Lo que el negocio declara) — READY TO EXECUTE
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-09-10
+Status: Ready to execute
+Last activity: 2026-09-11 — Phase 21 planning complete
 
 ## Milestone v0.28 — decisiones LOCKED
 
