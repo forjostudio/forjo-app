@@ -1,17 +1,19 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: v0.27
-milestone_name: — Cupo unificado por servicio
+current_phase: 21
 status: verifying
-stopped_at: Completado 20-02-PLAN.md (UAT humana PASS 4/4)
-last_updated: "2026-09-10T23:02:22.568Z"
+stopped_at: Phase 21 context gathered
+last_updated: "2026-09-11T20:38:19.580Z"
 last_activity: 2026-09-10
+state_head: a591537d08dda4753fb7bb2d1cce74d532ab2d3a
 progress:
   total_phases: 21
-  completed_phases: 20
+  completed_phases: 16
   total_plans: 100
   completed_plans: 100
-  percent: 95
+  percent: 76
+milestone_name: — Cupo unificado por servicio
 ---
 
 # Project State
@@ -421,9 +423,9 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-10T22:40:37.903Z
-Stopped at: Completado 20-02-PLAN.md (UAT humana PASS 4/4)
-Resume file: None
+Last session: 2026-09-11T20:38:12.856Z
+Stopped at: Phase 21 context gathered
+Resume file: .planning/workstreams/motor-reservas/phases/21-lo-que-el-negocio-declara/21-CONTEXT.md
 
 ## Operator Next Steps
 
