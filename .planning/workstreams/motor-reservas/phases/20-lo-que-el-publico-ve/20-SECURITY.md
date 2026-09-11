@@ -35,10 +35,10 @@ pruebas empíricas y se borró al terminar (la base quedó con `negocio-prueba` 
 |-----------|----------|-----------|-------------|------------|--------|
 | T-20-01 | Information Disclosure | Query nueva en `app/[slug]/page.tsx` podría filtrar el mapeo de otro negocio | mitigate | `.eq('business_id', business.id)` en `page.tsx:109`, cliente anon. **Verificado empíricamente**: con un 2º tenant sembrado, la lectura anon *sin* filtro devolvió filas de 2 `business_id` distintos; *con* filtro, 13 filas y 1 solo id. El filtro es load-bearing y está puesto | closed |
 | T-20-02 | Tampering | La vista `public_time_block_services` podría quedar escribible por `anon` (repetición del CR-01 de la Phase 18) | accept | Mitigado aguas arriba en la Phase 18 (migr. 072/073). Confirmado vivo: `schema.sql:1426-1433` (cuerpo de la vista, sin `security_invoker`) y `:4356-4358` (`GRANT SELECT` solo a `anon`/`authenticated`). Regression-locked por `test/isolation.test.ts` (8 aserciones, verdes) | closed |
-| T-20-03 | Denial of Service (fallo mudo) | Un fallo de lectura podría **apagar** servicios en vez de degradar al comportamiento de hoy | mitigate | Guard en `booking-client.tsx:586` (`timeBlocks.length === 0 \|\| isServiceScheduled(...)`, commit `42bd134`) + fail-safes de la puente en `page.tsx:176` y `booking-client.tsx:197,586`. Barrido de la misma clase de inversión en todos los consumidores: sin otro caso dentro de la fase | closed |
+| T-20-03 | Denial of Service (fallo mudo) | Un fallo de lectura podría **apagar** servicios en vez de degradar al comportamiento de hoy | mitigate | Guarda en `hasScheduleCoverage` (`lib/time-block-services.ts`, commit `ad2c35e`; nació inline por `42bd134`), consumida por el paso 1 y con tests que la candan + fail-safes de la puente en `page.tsx:176` y `booking-client.tsx:197,577`. Barrido de la misma clase de inversión en todos los consumidores: sin otro caso dentro de la fase | closed |
 | T-20-04 | Elevation of Privilege | Quitar el pre-filtro `bookableServices` de `page.tsx` (D-05) podría leerse como aflojar un control | accept | El pre-filtro solo achicaba el array renderizado; **no cambiaba el conjunto de POSTs que el server acepta**. Los UUID de servicio ya eran enumerables por `public_services` (DEFINER, `GRANT SELECT` a anon, predicado `WHERE active = true`) antes y después | closed |
 | T-20-05 | Tampering | Request forjada a `/api/booking/create` con un `serviceId` cuya tarjeta está deshabilitada | accept | El `disabled` es UX. La autoridad es el backstop server-side: `create/route.ts:227` pasa `enforceServiceWindow: true` → `booking-core.ts:218-264` rechaza con 400 `service_not_scheduled`. Ninguno de los dos archivos aparece en el diff de la fase | closed |
-| T-20-06 | Information Disclosure | El motivo "Sin profesional disponible" podría filtrar configuración interna del negocio | mitigate | `booking-client.tsx:637-639`: las únicas dos cadenas son `'Sin horarios disponibles'` y `'Sin profesional disponible'`. Sin nombres de profesionales, sin conteos, sin instrucciones del panel (`asignalo en Equipo` ausente) | closed |
+| T-20-06 | Information Disclosure | El motivo "Sin profesional disponible" podría filtrar configuración interna del negocio | mitigate | `booking-client.tsx:630`: las únicas dos cadenas son `'Sin horarios disponibles'` y `'Sin profesional disponible'`. Sin nombres de profesionales, sin conteos, sin instrucciones del panel (`asignalo en Equipo` ausente) | closed |
 | T-20-07 | Elevation of Privilege | Un booking con un profesional que NO cubre el servicio elegido no se re-valida server-side | accept | Preexistente y sin cambios en esta fase. Grep de `professional_services\|isServiceStaffed\|professionalsForService` sobre `booking-core.ts` + `create/route.ts` → **sin matches**; `booking-core.ts:275-284` valida solo pertenencia al tenant. **Residual real — ver Accepted Risks** | closed |
 | T-20-08 | Denial of Service | El filtro de días (D-04, `serviceBlocks`) podría ocultar un día que hoy sí está disponible | mitigate | `booking-client.tsx:196-198`: `blocksForService` es un `.filter()` puro sobre `timeBlocks` ⇒ subconjunto por construcción; con `selectedService` nulo cae a `timeBlocks` completo. Greps anti-regresión intactos (`weekly` = 1, `locHasBlocks` = 1, `.filter(r => r.service_id` = 0) | closed |
 | T-20-SC | Tampering (supply chain) | npm installs | accept | `git diff 7904fa3^..HEAD -- package.json package-lock.json` vacío | closed |
@@ -66,6 +66,11 @@ pruebas empíricas y se borró al terminar (la base quedó con `negocio-prueba` 
 |------------|---------------|--------|------|--------|
 | 2026-09-11 | 9 | 9 | 0 | gsd-security-auditor (opus) |
 
+Cierre de residuales de cobertura el **2026-09-11** (commit `ad2c35e`): los dos residuales que
+estaban anotados abajo quedaron cerrados, más el WR-05 del code review. Suite **1089 passed** (+8),
+`tsc` 0, `eslint` 0. Ninguna amenaza cambió de estado — los residuales eran de COBERTURA, no de
+mitigación.
+
 **Pruebas ejecutadas en esta auditoría** (no tomadas de los SUMMARY):
 
 - `npx vitest run test/schedule-coverage-public.test.ts test/service-coverage-public.test.ts test/time-block-services.test.ts` → **3 archivos, 36 passed**, casos DB-backed realmente ejecutados contra la instancia local.
@@ -76,19 +81,32 @@ pruebas empíricas y se borró al terminar (la base quedó con `negocio-prueba` 
 
 ## Notas que sobreviven a esta fase
 
-**Cuál de los dos tests de cobertura sirve como evidencia.** `test/schedule-coverage-public.test.ts`
-es el confiable: arma un cliente **anon pelado** (`createClient(URL, ANON_KEY, { auth: { persistSession: false } })`),
-asierta `error === null` en las dos lecturas y asierta **cantidad de filas** antes de aplicar la
-regla, así que un 0-filas silencioso no puede pasarlo. Su hermano `test/service-coverage-public.test.ts:69-78`
-lee las vistas con **`t.admin` (service role)** pese a que su docstring dice ejercitar "las MISMAS
-vistas acotadas que el RSC": seguiría verde con los grants completamente rotos. Tratarlo como test
-unitario de `bookableServices`, **nunca** como evidencia sobre RLS o permisos (es el WR-05 del review).
+**~~Los dos residuales de cobertura~~ — CERRADOS el 2026-09-11 (commit `ad2c35e`).** Quedan
+escritos porque el modo de falla se repite y conviene saber reconocerlo:
 
-**El guard de T-20-03 no tiene test propio.** El test que sumó `42bd134`
-(`test/time-block-services.test.ts:100-113`) fija el contrato del **helper**, no la guarda del
-**caller**: borrar `timeBlocks.length === 0 ||` de `booking-client.tsx` deja la suite entera verde.
-Es un residual de cobertura, no una amenaza reabierta — la mitigación está en el código que se
-despliega. Candidato a cerrar cuando `booking-client.tsx` tenga tests de componente.
+1. **`test/service-coverage-public.test.ts` leía con `t.admin` (service role)** mientras su cabecera
+   afirmaba ejercitar "las MISMAS vistas acotadas que el RSC". El service role **bypassa la RLS**: el
+   archivo pasaba aunque los GRANT de `anon` estuvieran rotos — y esa cabecera mentirosa es lo que
+   hizo que el agujero sobreviviera a dos auditorías. La LECTURA pasó a `anon` sin sesión (las
+   escrituras del seed siguen con admin: montar el escenario es setup, no lo que se mide), con
+   aserción de `error === null` y de cantidad de filas. **Medido**: revocando
+   `SELECT ON public_services FROM anon` en la base local fallan los 3 casos; antes habrían pasado
+   igual. Grant restaurado y verificado.
+2. **La guarda de T-20-03 no tenía test propio** porque vivía como expresión inline en el JSX. Se
+   extrajo a `hasScheduleCoverage` en `lib/time-block-services.ts` —misma forma en que
+   `isServiceStaffed` envuelve a `isServiceCovered` en el eje staff: la cruda responde al motor, la
+   envuelta a la superficie pública— y quedó con sus casos. **Medido**: borrando la guarda del módulo
+   fallan 2 tests; antes, 0. Comportamiento byte-idéntico; la página renderiza exactamente lo mismo
+   que verificó la UAT humana.
+
+De paso se cerró el tercer hueco (**WR-05**): `isServiceStaffed`, la función que esta fase
+**extrajo**, no tenía ningún test unitario propio. Ahora tiene 5 casos en
+`test/staff-services.test.ts`, su archivo natural, incluido el modo sentinel.
+
+**La lección, que vale más que los tres fixes:** un test que usa credenciales privilegiadas para
+verificar una superficie pública no verifica nada de lo que dice verificar, y se ve exactamente igual
+de verde que uno que sí. Cuando un test afirme en prosa que ejercita "lo mismo que el RSC", chequear
+con qué **rol** lo hace.
 
 **Un caso de la misma clase de inversión, preexistente y fuera de la fase.**
 `app/api/booking/availability/route.ts:225-245`: si falla la lectura de `professionals`,
