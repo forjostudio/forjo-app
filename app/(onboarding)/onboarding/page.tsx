@@ -682,8 +682,12 @@ export default function OnboardingPage() {
   const canAddProfessional = !!lastProfessional?.name.trim()
 
   return (
-    <div className="min-h-screen p-4 flex flex-col items-center">
-      <div className="w-full max-w-2xl mt-8">
+    <div className="min-h-screen p-4 pt-3 sm:pt-4 flex flex-col items-center">
+      {/* Aire superior de 12px en mobile: con el botón de salida ya en su propia fila, el p-4 + mt-8
+          original dejaba 48px muertos arriba. El padre aporta pt-3 (12px) y acá el margen queda en 0,
+          separando el padding de arriba del horizontal (los costados siguen en p-4). Desde sm+ vuelve
+          todo al original: pt-4 + mt-8. */}
+      <div className="w-full max-w-2xl mt-0 sm:mt-8">
         <div className="relative text-center mb-8">
           {/* Salida discreta (ONB-02): no compite con el lockup centrado. Visible en todos los pasos
               para que el usuario con la cuenta equivocada pueda salir siempre.
@@ -691,7 +695,7 @@ export default function OnboardingPage() {
               de flujo, así que nada separa el botón del logo centrado y a ~390px se superponen (el
               texto "Cerrar sesión" es más ancho que el margen que deja el lockup). Desde sm+ vuelve
               a la esquina, donde sí sobra ancho. */}
-          <div className="mb-1 flex justify-end sm:absolute sm:right-0 sm:top-0 sm:mb-0">
+          <div className="mb-3 flex justify-end sm:absolute sm:right-0 sm:top-0 sm:mb-0">
             <Button
               variant="ghost"
               size="sm"
