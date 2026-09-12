@@ -49,6 +49,25 @@ export type ProvisionResult =
 
 export type DeleteResult = { ok: true } | { ok: false; error: string }
 
+// ── El guard de números, fail-closed y ANTES del primer insert (G-21-11) ────────────────────
+//
+// `services.duration_minutes` y `services.price` son NOT NULL, y un no-finito serializa `null` ⇒
+// 23502. Desde la migr. 077, además, una duración <= 0 rebota contra el CHECK
+// `services_duration_positive`. Las tres formas de fallar tarde, atajadas temprano.
+//
+// Corre ANTES del primer insert por un motivo estructural, no de prolijidad: `provisionCancha`
+// arma la tupla cancha en cuatro pasos (service → professional → space → agenda_spaces) con
+// rollback MANUAL en cada uno. Un rechazo a mitad de camino deja una tupla a medias que hay que
+// desarmar; un rechazo antes del primer insert no deja nada que desarmar.
+//
+// Y vive acá y no sólo en el componente porque el componente es un client component que el runner
+// (`environment: 'node'`) no puede renderizar: su guard sólo se puede verificar por lectura. Este
+// tiene test (`test/canchas-provision.test.ts`), y el test assertea sobre el LOG del mock — un
+// `ok:false` que igual escribió filas es exactamente el bug que el guard existe para impedir.
+function numerosValidos(input: { price: number; duration: number }): boolean {
+  return Number.isFinite(input.price) && Number.isFinite(input.duration) && input.duration > 0
+}
+
 // ── provisionCancha ─────────────────────────────────────────────────────────────────────────
 // Inserta en secuencia service → professional(service_id) → space(s) → agenda_spaces, con rollback
 // manual en cada paso. Todo con business_id explícito.
@@ -57,6 +76,7 @@ export async function provisionCancha(
   businessId: string,
   input: CanchaInput,
 ): Promise<ProvisionResult> {
+  if (!numerosValidos(input)) return { ok: false, error: 'invalid_input' }
   const shared = input.sharedSpaceIds?.filter(Boolean) ?? []
 
   // 1. service (precio + duración fija).
@@ -277,6 +297,7 @@ export async function editCancha(
   patch: { name: string; price: number; duration: number },
   agendaSpaces: AgendaSpace[],
 ): Promise<DeleteResult> {
+  if (!numerosValidos(patch)) return { ok: false, error: 'invalid_input' }
   const name = patch.name
   // 1. service: nombre + precio + duración fija propia (cada cancha edita SOLO su service → D-01).
   const { error: svcErr } = await client.from('services')

@@ -457,3 +457,50 @@ describe('canchas: setCanchaActive (toggle reversible)', () => {
     expect((opsOn(log, 'professionals', 'update')[0].payload as Record<string, unknown>).active).toBe(false)
   })
 })
+
+// ── G-21-11: un número no finito no puede dejar una tupla cancha a medias ───────────────
+//
+// QUÉ SE ROMPE SI ESTE BLOQUE SE PONE ROJO: `services.duration_minutes` y `price` son NOT NULL, así
+// que un NaN serializa `null` y el insert rebota con 23502 — pero `provisionCancha` arma la tupla en
+// CUATRO pasos, así que un rechazo a mitad de camino deja filas colgadas que hay que rollbackear a
+// mano. El guard corre antes del primer insert justamente para que no haya nada que desarmar.
+//
+// La aserción que importa es la del LOG, no la del `ok`: un `ok:false` que igual escribió filas es
+// el bug que el guard existe para impedir, y un test que sólo mira el discriminante no lo ve.
+describe('canchas: guard fail-closed de números (G-21-11)', () => {
+  for (const [caso, input] of [
+    ['duración NaN (el campo vaciado)', { name: 'Cancha 11', price: 8000, duration: NaN }],
+    ['duración 0', { name: 'Cancha 11', price: 8000, duration: 0 }],
+    ['precio NaN', { name: 'Cancha 11', price: NaN, duration: 90 }],
+  ] as const) {
+    it(`provisionCancha rechaza ${caso} SIN escribir una sola fila`, async () => {
+      const { client, log } = makeMockClient()
+      const res = await provisionCancha(client as never, BID, input)
+
+      expect(res.ok).toBe(false)
+      if (!res.ok) expect(res.error).toBe('invalid_input')
+      expect(log).toHaveLength(0)
+    })
+
+    it(`editCancha rechaza ${caso} SIN un solo update`, async () => {
+      const { client, log } = makeMockClient()
+      const cancha = {
+        service: { id: 'svc-1', business_id: BID, name: 'Cancha 11', price: 8000, duration_minutes: 90 } as unknown as Service,
+        professional: { id: 'pro-1', business_id: BID, name: 'Cancha 11' } as unknown as Professional,
+        spaceIds: ['sp-1'],
+      }
+      const res = await editCancha(client as never, BID, cancha, input, [])
+
+      expect(res.ok).toBe(false)
+      if (!res.ok) expect(res.error).toBe('invalid_input')
+      expect(log).toHaveLength(0)
+    })
+  }
+
+  it('el camino feliz sigue escribiendo (el guard no es un no-op disfrazado)', async () => {
+    const { client, log } = makeMockClient()
+    const res = await provisionCancha(client as never, BID, { name: 'Cancha 11', price: 8000, duration: 90 })
+    expect(res.ok).toBe(true)
+    expect(log.length).toBeGreaterThan(0)
+  })
+})

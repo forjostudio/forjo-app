@@ -69,7 +69,7 @@ export function CanchasManager({
   const [newName, setNewName] = useState('')
   // Precio como string para permitir la celda VACÍA (no un 0 fijo que no se puede borrar). Se parsea al alta.
   const [newPrice, setNewPrice] = useState('')
-  const [newDuration, setNewDuration] = useState(60)
+  const [newDuration, setNewDuration] = useState('60') // string → permite celda vacía; se parsea al alta
   // Control "compartir espacio" (D-04): por defecto vacío → provisionCancha crea un space dedicado 1:1.
   // Si el dueño marca espacios existentes, se pasan como sharedSpaceIds y NO se crea space nuevo (F11→{A,B,C}).
   const [sharedSpaceIds, setSharedSpaceIds] = useState<string[]>([])
@@ -83,12 +83,16 @@ export function CanchasManager({
   async function addCancha() {
     const name = newName.trim()
     const price = parseFloat(newPrice)
+    // El parseo vive acá y no en el onChange (G-21-11): coercionar mientras se escribe reescribe el
+    // estado con el valor anterior y deshace cada backspace. El idiom `!(x > 0)` cubre NaN además
+    // del 0, así que la celda vaciada cae en el mismo toast que una duración inválida.
+    const duration = parseInt(newDuration, 10)
     if (!name) { toast.error('Poné un nombre para la cancha'); return }
     if (!(price > 0)) { toast.error('El precio debe ser mayor a 0'); return }
-    if (!(newDuration > 0)) { toast.error('La duración debe ser mayor a 0'); return }
+    if (!(duration > 0)) { toast.error('La duración debe ser mayor a 0'); return }
     setSaving(true)
     const res = await provisionCancha(supabase, business.id, {
-      name, price, duration: newDuration,
+      name, price, duration,
       sharedSpaceIds: sharedSpaceIds.length ? sharedSpaceIds : undefined,
     })
     setSaving(false)
@@ -105,7 +109,7 @@ export function CanchasManager({
       ...res.spaceIds.map(space_id => ({ business_id: business.id, professional_id: res.professional.id, space_id })),
     ])
     // Reset del form.
-    setNewName(''); setNewPrice(''); setNewDuration(60); setSharedSpaceIds([]); setShareOpen(false)
+    setNewName(''); setNewPrice(''); setNewDuration('60'); setSharedSpaceIds([]); setShareOpen(false)
     toast.success('Cancha creada')
   }
 
@@ -113,28 +117,29 @@ export function CanchasManager({
   const [editCancha, setEditCancha] = useState<Cancha | null>(null)
   const [editName, setEditName] = useState('')
   const [editPrice, setEditPrice] = useState('') // string → permite celda vacía; se parsea al guardar
-  const [editDuration, setEditDuration] = useState(60)
+  const [editDuration, setEditDuration] = useState('60') // string → permite celda vacía; se parsea al guardar
   const [savingEdit, setSavingEdit] = useState(false)
 
   function openEdit(c: Cancha) {
     setEditCancha(c)
     setEditName(c.service.name)
     setEditPrice(String(c.service.price))
-    setEditDuration(c.service.duration_minutes)
+    setEditDuration(String(c.service.duration_minutes))
   }
 
   async function saveEdit() {
     if (!editCancha) return
     const name = editName.trim()
     const price = parseFloat(editPrice)
+    const duration = parseInt(editDuration, 10) // ver addCancha: el parseo va al guardar, no al tipear
     if (!name) { toast.error('El nombre no puede quedar vacío'); return }
     if (!(price > 0)) { toast.error('El precio debe ser mayor a 0'); return }
-    if (!(editDuration > 0)) { toast.error('La duración debe ser mayor a 0'); return }
+    if (!(duration > 0)) { toast.error('La duración debe ser mayor a 0'); return }
     setSavingEdit(true)
     // Propaga el nombre a TODAS las filas que lo muestran (service + professional + espacios DEDICADOS);
     // los espacios compartidos NO se renombran. Cada cancha edita SOLO su service → conserva su duración/precio.
     const target = editCancha
-    const res = await persistCanchaEdit(supabase, business.id, target, { name, price, duration: editDuration }, agendaSpaces)
+    const res = await persistCanchaEdit(supabase, business.id, target, { name, price, duration }, agendaSpaces)
     setSavingEdit(false)
     if (!res.ok) { toast.error('Error al guardar'); return }
     // Ids de los espacios DEDICADOS de esta cancha (mapeados solo a su agenda) → se renombran en el estado.
@@ -142,7 +147,7 @@ export function CanchasManager({
       const m = agendaSpaces.filter(a => a.space_id === id)
       return m.length === 1 && m[0].professional_id === target.professional.id
     })
-    setServices(prev => prev.map(s => s.id === target.service.id ? { ...s, name, price, duration_minutes: editDuration } : s))
+    setServices(prev => prev.map(s => s.id === target.service.id ? { ...s, name, price, duration_minutes: duration } : s))
     setProfessionals(prev => prev.map(p => p.id === target.professional.id ? { ...p, name } : p))
     setSpaces(prev => prev.map(sp => dedicatedIds.includes(sp.id) ? { ...sp, name } : sp))
     setEditCancha(null)
@@ -324,7 +329,7 @@ export function CanchasManager({
             </div>
             <div className="col-span-3 space-y-1">
               <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Duración</Label>
-              <Input type="number" value={newDuration} onChange={e => setNewDuration(parseInt(e.target.value) || 0)} min={5} step={5} />
+              <Input type="number" value={newDuration} onChange={e => setNewDuration(e.target.value)} min={5} step={5} />
             </div>
             <div className="col-span-3 space-y-1">
               <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
@@ -396,7 +401,7 @@ export function CanchasManager({
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Duración</Label>
-                <Input type="number" value={editDuration} onChange={e => setEditDuration(parseInt(e.target.value) || 0)} min={5} step={5} />
+                <Input type="number" value={editDuration} onChange={e => setEditDuration(e.target.value)} min={5} step={5} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
