@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOnboardingAgendaPayload, type OnboardingDayDraft } from '@/lib/onboarding-agenda'
+import { buildOnboardingAgendaPayload, servicesWithoutCoverage, type OnboardingDayDraft } from '@/lib/onboarding-agenda'
 
 // ── El traductor del estado del wizard al payload del RPC (AGENDA-08, Phase 21) — suite pura ────
 //
@@ -107,5 +107,83 @@ describe('buildOnboardingAgendaPayload: el estado del alta → el payload de sav
       expect(b.label).toBeNull()
       expect(b.location_id).toBeNull()
     }
+  })
+})
+
+// ── El aviso de D-07: qué servicios no cubre NINGUNA franja (Plan 21-02) ────────────────────────
+//
+// QUÉ SE ROMPE SI ESTE BLOQUE SE PONE ROJO: el dueño termina el alta creyendo que su catálogo está
+// reservable y el cliente se encuentra con "Sin horarios disponibles" en la página pública. O, peor,
+// el aviso se pone a mentir: con los 7 días cerrados —que es UN click— diría que TODO el catálogo se
+// quedó sin horario, y un aviso que grita cuando no pasa nada es un aviso que el dueño aprende a
+// ignorar. Ese caso (el de cero franjas) es el discriminante de la suite: apoyado en la función cruda
+// `isServiceScheduled` en vez de en `hasScheduleCoverage`, es el único que se pone rojo.
+
+/** Un servicio del paso 2 tal como lo tiene el wizard: id estable (D-09) y el nombre que escribió el dueño. */
+function svc(id: string, name: string) {
+  return { id, name }
+}
+
+describe('servicesWithoutCoverage: los servicios que ninguna franja del alta cubre (D-07)', () => {
+  it('con cada servicio declarado en alguna franja, no avisa nada', () => {
+    const days = week({
+      1: [block({ service_ids: [svcA] })],
+      2: [block({ service_ids: [svcB] })],
+    })
+
+    expect(servicesWithoutCoverage([svc(svcA, 'Cerámica'), svc(svcB, 'Yoga')], days)).toEqual([])
+  })
+
+  it('nombra SOLO al servicio que ninguna franja declara', () => {
+    const days = week({
+      1: [block({ service_ids: [svcA] })],
+      2: [block({ service_ids: [svcA] })],
+    })
+
+    const sinCobertura = servicesWithoutCoverage([svc(svcA, 'Cerámica'), svc(svcB, 'Yoga')], days)
+
+    expect(sinCobertura.map(s => s.name)).toEqual(['Yoga'])
+  })
+
+  it('con los SIETE días cerrados no avisa de nada (la guarda del negocio sin franjas, CR-01)', () => {
+    const days = week({}) // cero franjas abiertas: la pregunta no tiene sujeto
+
+    // Apoyado en `isServiceScheduled` en vez de en `hasScheduleCoverage`, acá saldrían los DOS
+    // servicios y el dueño vería su catálogo entero marcado como sin horario.
+    expect(servicesWithoutCoverage([svc(svcA, 'Cerámica'), svc(svcB, 'Yoga')], days)).toEqual([])
+  })
+
+  it('una sola franja comodín alcanza para cubrir todo el catálogo (D-01)', () => {
+    const days = week({
+      1: [block({ service_ids: [svcA] })],
+      2: [block()], // comodín: no declara ningún servicio ⇒ sirve para todos
+    })
+
+    expect(servicesWithoutCoverage([svc(svcA, 'Cerámica'), svc(svcB, 'Yoga')], days)).toEqual([])
+  })
+
+  it('ignora las filas de servicio sin nombre: el dueño no puede recibir un aviso de una fila que ni cargó', () => {
+    const days = week({
+      1: [block({ service_ids: [svcA] })],
+    })
+
+    const sinCobertura = servicesWithoutCoverage(
+      [svc(svcA, 'Cerámica'), svc(svcB, '  '), svc(svcBorrado, 'Yoga')],
+      days,
+    )
+
+    expect(sinCobertura.map(s => s.id)).toEqual([svcBorrado])
+  })
+
+  it('un día cerrado no aporta sus franjas, pero un día abierto entre cerrados sí', () => {
+    const days = week({ 3: [block({ service_ids: [svcA] })] })
+    // Lunes cerrado con basura adentro: declara svcB, pero como el día está cerrado no cuenta.
+    days[1] = { enabled: false, blocks: [block({ service_ids: [svcB] })] }
+
+    const sinCobertura = servicesWithoutCoverage([svc(svcA, 'Cerámica'), svc(svcB, 'Yoga')], days)
+
+    // svcA está cubierto por el miércoles (abierto, en el medio de días cerrados); svcB no, porque su
+    // única franja está en un día cerrado.
+    expect(sinCobertura.map(s => s.name)).toEqual(['Yoga'])
   })
 })

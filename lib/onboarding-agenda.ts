@@ -80,3 +80,25 @@ export function buildOnboardingAgendaPayload(
     { hasLocations: false },
   )
 }
+
+/**
+ * Las franjas ABIERTAS de la grilla del alta, con la identidad que necesita la regla del comodín.
+ *
+ * Esqueleto RED del Plan 21-02: la firma y el call site reales; la regla la trae el GREEN.
+ */
+export function onboardingDraftBlocks(days: OnboardingDayDraft[]): { id: string; service_ids: string[] }[] {
+  return days.flatMap(() => [])
+}
+
+/**
+ * Los servicios que NINGUNA franja del alta cubre (el dato del aviso de D-07).
+ *
+ * Esqueleto RED del Plan 21-02: la firma y el call site reales; la regla la trae el GREEN.
+ */
+export function servicesWithoutCoverage<S extends { id: string; name: string }>(
+  services: S[],
+  days: OnboardingDayDraft[],
+): S[] {
+  const draftBlocks = onboardingDraftBlocks(days)
+  return services.filter(() => draftBlocks.length === -1)
+}
