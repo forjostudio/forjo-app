@@ -3,7 +3,7 @@ status: complete
 phase: 21-lo-que-el-negocio-declara
 source: [21-VERIFICATION.md]
 started: 2026-09-12T03:01:04.576Z
-updated: 2026-09-12T16:15:35.000Z
+updated: 2026-09-12T18:52:18.000Z
 ---
 
 ## Current Test
@@ -102,37 +102,56 @@ blocked: 1
 ## Gaps
 
 - gap_id: G-21-10
+  status: resolved
   truth: "El boton 'Cerrar sesion' del paso 1 del alta no se superpone al lockup de Forjo"
-  status: failed
   reason: "User reported: Paso 1 encontre algo, el boton de cerrar sesion quedo pisando el logo, hay lugar para que vaya contra el borde de arriba."
   severity: cosmetic
   test: 10
-  artifacts: []
-  missing: []
+  status_note: "Cerrado por 670f7b2 (/gsd-fast)."
+  root_cause: "El boton estaba en `absolute right-0 top-0` dentro de un contenedor `text-center`: fuera de flujo, nada separaba el boton del lockup centrado y a ~390px se superponian."
+  artifacts:
+    - path: "app/(onboarding)/onboarding/page.tsx"
+  missing:
+    - "Fila propia en flujo arriba del lockup en mobile; absolute solo desde sm+."
 
 - gap_id: G-21-11
+  status: failed  # ABIERTO: no es cosmetico, requiere /gsd-quick
   truth: "Los campos numericos del paso 2 (Precio y Min.) se pueden vaciar con el teclado, y Min. en 0 avisa"
-  status: failed
   reason: "User reported: Paso 2: no me deja borrar el 0 con el teclado, solo saliendo y clickeando la celda para que se seleccione, esto ya lo solucionamos dentro del panel. Lo mismo pasa con los minutos, solo que hay que poner un warning para que no quede en 0 minutos."
   severity: major
   test: 11
-  artifacts: []
-  missing: []
+  root_cause: "`value={service.price}` es estado numerico controlado y onChange hace `toNumberOr(e.target.value, 0)`. Al borrar, el campo queda en cadena vacia, toNumberOr devuelve el fallback (0 para precio, 30 para minutos), ese valor vuelve al estado y se re-renderiza: cada backspace se deshace solo. Igual en duration_minutes."
+  artifacts:
+    - path: "app/(onboarding)/onboarding/page.tsx"
+      issue: "services state tipa duration_minutes/price como number; ~10 sitios dependen de eso"
+    - path: "lib/onboarding-agenda.ts"
+      issue: "toNumberOr existe para que NaN no llegue a una columna NOT NULL (23502)"
+  missing:
+    - "Guardar el valor crudo como string (patron ya usado en components/dashboard/canchas-manager.tsx para Precio) y coercionar recien al armar el payload"
+    - "Aviso de validacion cuando Min. queda en 0"
 
 - gap_id: G-21-12
+  status: resolved
   truth: "El desplegable de Rubro del paso 1 muestra sus opciones completas, sin apretar el texto ni salirse del viewport en mobile"
-  status: failed
   reason: "User reported: anota para corregir el selector ese que queda todo apretado el texto de estetica/spa. Observado a ~390px: la opcion 'Belleza/Estetica/Spa' llega justo al borde del panel y el panel desborda el margen izquierdo."
   severity: cosmetic
   test: 12
-  artifacts: []
-  missing: []
+  status_note: "Cerrado por 670f7b2 (/gsd-fast)."
+  root_cause: "`SelectContent` usa `w-(--anchor-width)`: el popup copia el ancho del TRIGGER, que en Rubro es angosto, asi que 'Belleza/Estetica/Spa' no entraba."
+  artifacts:
+    - path: "app/(onboarding)/onboarding/page.tsx"
+  missing:
+    - "className scoped al select: `w-auto min-w-(--anchor-width) max-w-[calc(100vw-2rem)]`."
 
 - gap_id: G-21-13
+  status: resolved
   truth: "Los inputs de hora del paso Horarios muestran la hora completa en mobile, sin recortar el sufijo AM/PM"
-  status: failed
   reason: "User reported: tenemos que arreglar los campos de hora que quedan cortados. Observado a ~390px: el control nativo de hora renderiza '9:00 a.ı' / '6:00 p.ı' en vez de '9:00 a.m.' / '6:00 p.m.' porque el contenido excede el ancho del campo."
   severity: cosmetic
   test: 13
-  artifacts: []
-  missing: []
+  status_note: "Cerrado por 670f7b2 (/gsd-fast)."
+  root_cause: "`w-24` (96px) fijo: alcanzaba para '09:00' en locale de 24h, pero un navegador en 12h renderiza '9:00 a. m.' y el sufijo se recortaba."
+  artifacts:
+    - path: "app/(onboarding)/onboarding/page.tsx"
+  missing:
+    - "`w-auto min-w-24`: el ancho lo decide el control nativo, con el piso anterior."
