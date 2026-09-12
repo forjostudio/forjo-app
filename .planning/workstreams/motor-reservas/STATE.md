@@ -4,11 +4,11 @@ milestone: v0.27
 current_phase: 21
 current_phase_name: Lo que el negocio declara
 status: executing
-stopped_at: Phase 21 context gathered
-last_updated: "2026-09-11T21:34:20.989Z"
+stopped_at: Completed 21-01-PLAN.md
+last_updated: "2026-09-12T00:07:52.583Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 21 planning complete
-state_head: ec01475b6107bae6752b5d052e7e0a00233bbd8b
+last_activity_desc: Phase 21 execution started
+state_head: d9d6f530a715100a5c3646b4f989f4e544d2ec09
 progress:
   total_phases: 21
   completed_phases: 16
@@ -25,14 +25,14 @@ milestone_name: — Cupo unificado por servicio
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 20 — lo-que-el-publico-ve
+**Current focus:** Phase 21 — Lo que el negocio declara
 
 ## Current Position
 
-Phase: 21 (Lo que el negocio declara) — READY TO EXECUTE
-Plan: Not started
+Phase: 21 (Lo que el negocio declara) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-09-11 — Phase 21 planning complete
+Last activity: 2026-09-11 — Phase 21 execution started
 
 ## Milestone v0.28 — decisiones LOCKED
 
@@ -170,6 +170,11 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 19 P06 | 20min | 2 tasks | 1 files |
 | Phase 20 P01 | 25min | 3 tasks | 5 files |
 | Phase 20 P02 | 19min | 3 tasks | 1 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 21 P01 | 17 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -343,6 +348,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 20]: D-05 aplicado en 20-01: page.tsx deja de ocultar servicios sin cobertura de staff (bookableServices fuera del RSC); el chequeo pasa a ser por-servicio con isServiceStaffed, a consumir en el Plan 20-02
 - [Phase 20]: AGENDA-07 NO se marca completo en 20-01: el plan solo prepara el dato (prop timeBlockServices); el criterio visible al publico lo cierra el Plan 20-02
 - [Phase 20]: AGENDA-07 cerrado: el paso 1 del booking publico deshabilita con motivo visible y distinguible por los dos ejes (franja/staff) y el calendario solo ofrece los dias donde el servicio elegido se da
+- [Phase 21]: El alta escribe la agenda por save_agenda_blocks (migr. 074), no por time_blocks.insert: franjas y mapeo en una sola transaccion
+- [Phase 21]: El editor de chips por franja vive en components/agenda/block-services-line.tsx y lo comparten el panel y el alta (D-05)
+- [Phase 21]: services.id lo genera el cliente en el paso 2 del alta (D-09): verificado contra la base local que la policy de INSERT acepta PK provista (asuncion A2 cerrada)
 
 ### Pending Todos
 
@@ -425,9 +433,9 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-11T20:38:12.856Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/workstreams/motor-reservas/phases/21-lo-que-el-negocio-declara/21-CONTEXT.md
+Last session: 2026-09-12T00:07:24.927Z
+Stopped at: Completed 21-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

@@ -769,7 +769,7 @@ Plans:
 **Security/Integrity relevance**: Media. Escribe agenda durante el alta; el aislamiento lo sostiene la RLS por `business_id` como en el resto del panel, más el guard de autoría del RPC y las FK compuestas de la migr. 073.
 **UI hint**: yes
 
-**Plans**: 2 plans
+**Plans**: 0/2 plans executed
 
 Plans:
 **Wave 1**
