@@ -16,17 +16,40 @@ import { cn } from '@/lib/utils'
 import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
+import { BlockServicesLine } from '@/components/agenda/block-services-line'
+import { buildOnboardingAgendaPayload } from '@/lib/onboarding-agenda'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
+// La clave local de cada servicio del paso 2 (D-08/D-09), y a la vez el `services.id` final.
+//
+// Es UNA sola clave para dos trabajos, y esa es la decisión: el mapeo franja↔servicio del paso 4 se
+// arma ANTES de que los servicios existan en la base, así que necesita una identidad estable desde
+// que la fila nace en el paso 2 —renombrar el servicio conserva su mapeo, borrarlo saca sus chips—
+// y a la vez necesita coincidir con el id real de la fila insertada. Generarlo acá resuelve las dos
+// cosas de una: el mismo uuid viaja en el INSERT a `services` y en el payload del RPC.
+//
+// ⚠ Lo que NO se hace es correlacionar por posición lo insertado con lo devuelto: PostgreSQL no
+// garantiza el orden de un `INSERT … RETURNING` de varias filas, así que esa correlación es un bug
+// estructural, no un atajo. Por eso el insert de servicios tampoco lleva `.select()`.
+// Forma tomada de `lib/landing/editor-upload.ts` (`globalThis.crypto`: secure context).
+function newServiceId(): string {
+  return globalThis.crypto.randomUUID()
+}
+
 // Estado del paso de horarios: un día → { enabled, blocks[] }, donde cada bloque es una ventana
 // simple { start_time, end_time }. Modelo N-bloques/día para soportar horario partido (D-04, ej.
-// Lun 9-12 y 15-19). En el insert cada bloque se mapea a una fila time_blocks con label=null,
-// location_id=null, capacity=1 fijos (el onboarding no maneja sedes ni cupos). error = validación
-// inline por bloque (fin > inicio), mismo criterio que el panel (agenda-client.tsx:validateBlocks).
+// Lun 9-12 y 15-19). Cada bloque se persiste como una fila time_blocks vía `save_agenda_blocks`
+// (migr. 074), con label/consultorio nulos: el onboarding no maneja sedes. error = validación
+// inline por bloque (forma y orden), mismo criterio que el panel (agenda-client.tsx:validateBlocks).
+//
+// `service_ids` (AGENDA-08, D-04) = qué servicios declara la franja. Vacío = COMODÍN: sirve para
+// todos. Es estado de configuración, no de vista: sobrevive a apagar el toggle del paso 4 (lo que
+// el toggle decide es si se MUESTRA y si se PERSISTE, nunca si se borra del estado).
 interface HourBlock {
   start_time: string
   end_time: string
+  service_ids: string[]
   error?: string
 }
 
@@ -39,15 +62,17 @@ interface DayState {
 // dom cerrado. Índice del array = day_of_week (0=domingo … 6=sábado).
 const DEFAULT_DAY_STATES: DayState[] = [
   { enabled: false, blocks: [] },                                    // 0 domingo — cerrado
-  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 1 lunes
-  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 2 martes
-  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 3 miércoles
-  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 4 jueves
-  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00' }] }, // 5 viernes
-  { enabled: true, blocks: [{ start_time: '09:00', end_time: '13:00' }] }, // 6 sábado
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00', service_ids: [] }] }, // 1 lunes
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00', service_ids: [] }] }, // 2 martes
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00', service_ids: [] }] }, // 3 miércoles
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00', service_ids: [] }] }, // 4 jueves
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '18:00', service_ids: [] }] }, // 5 viernes
+  { enabled: true, blocks: [{ start_time: '09:00', end_time: '13:00', service_ids: [] }] }, // 6 sábado
 ]
 
 interface Service {
+  // Clave local estable (D-08/D-09) y `services.id` final. Ver newServiceId().
+  id: string
   name: string
   duration_minutes: number
   price: number
@@ -103,14 +128,35 @@ export default function OnboardingPage() {
     setLogoPreview(URL.createObjectURL(file))
   }
 
-  // Step 2 - Services
-  const [services, setServices] = useState<Service[]>([{ name: '', duration_minutes: 30, price: 0 }])
+  // Step 2 - Services. Inicializador LAZY: `newServiceId()` genera un uuid, así que llamarlo en el
+  // cuerpo del render quemaría uno nuevo en cada tecla que el dueño toca.
+  const [services, setServices] = useState<Service[]>(() => [{ id: newServiceId(), name: '', duration_minutes: 30, price: 0 }])
 
   // Step 3 - Professionals
   const [professionals, setProfessionals] = useState<Professional[]>([{ name: '' }])
 
   // Step 4 - Hours (día → { enabled, blocks[] }, índice = day_of_week)
   const [dayStates, setDayStates] = useState<DayState[]>(DEFAULT_DAY_STATES)
+
+  // ── Servicios por franja en el alta (AGENDA-08, D-01/D-02/D-04) ──────────────────────────────
+  // El toggle arranca APAGADO: el negocio que atiende todos sus servicios en cualquier horario está
+  // perfectamente descrito por el comodín, y el que no toca nada sale del alta exactamente igual que
+  // antes de esta fase (cero regresión, D-02). Es control de UI y NADA más: prenderlo revela los
+  // chips, apagarlo los esconde — el mapeo cargado sigue vivo en `dayStates` (D-04), y lo único que
+  // el toggle decide sobre la base es si ese mapeo se persiste o si todo viaja en comodín (D-10).
+  const [perFranja, setPerFranja] = useState(false)
+  // Colapso de la línea de chips, por franja. Estado de VISTA (no se guarda, no viaja a la base).
+  // La clave `día-índice` alcanza porque el alta no maneja sedes. Copiado del panel.
+  const [expandedChips, setExpandedChips] = useState<Set<string>>(new Set())
+  function toggleChipsExpanded(day: number, idx: number) {
+    setExpandedChips(prev => {
+      const next = new Set(prev)
+      const key = `${day}-${idx}`
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   // Chequeo de disponibilidad de slug vía el endpoint service-role (ONB-01, D-01/D-03). ANTES corría
   // bajo RLS (supabase.from('businesses')): un futuro-owner no veía slugs ajenos → decía "disponible"
@@ -165,7 +211,7 @@ export default function OnboardingPage() {
 
   // Services
   function addService() {
-    setServices([...services, { name: '', duration_minutes: 30, price: 0 }])
+    setServices([...services, { id: newServiceId(), name: '', duration_minutes: 30, price: 0 }])
   }
 
   function removeService(i: number) {
@@ -229,7 +275,7 @@ export default function OnboardingPage() {
   function toggleDay(day: number) {
     setDayStates(prev => {
       const next = [...prev]
-      const blocks: HourBlock[] = next[day].enabled ? [] : [{ start_time: '09:00', end_time: '18:00' }]
+      const blocks: HourBlock[] = next[day].enabled ? [] : [{ start_time: '09:00', end_time: '18:00', service_ids: [] }]
       next[day] = { enabled: blocks.length > 0, blocks }
       return next
     })
@@ -243,7 +289,25 @@ export default function OnboardingPage() {
       const newStart = last?.end_time || '09:00'
       const [h, m] = newStart.split(':').map(Number)
       const newEnd = `${String(Math.min(h + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      next[day] = { enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd }] }
+      next[day] = { enabled: true, blocks: [...next[day].blocks, { start_time: newStart, end_time: newEnd, service_ids: [] }] }
+      return next
+    })
+  }
+
+  // Toglea un servicio en UNA franja concreta (día + índice dentro del día). Inmutable: se
+  // reemplazan el arreglo de días, el de bloques y el de servicios, nunca se muta ninguno.
+  // Molde del panel (agenda-client.tsx:toggleBlockService) SIN su `setHoursDirty`: el alta no tiene
+  // indicador de cambios sin guardar porque el submit es la única salida del wizard.
+  function toggleBlockService(day: number, idx: number, serviceId: string) {
+    setDayStates(prev => {
+      const next = [...prev]
+      const blocks = [...next[day].blocks]
+      const current = blocks[idx].service_ids
+      const service_ids = current.includes(serviceId)
+        ? current.filter(id => id !== serviceId)
+        : [...current, serviceId]
+      blocks[idx] = { ...blocks[idx], service_ids }
+      next[day] = { ...next[day], blocks }
       return next
     })
   }
@@ -353,39 +417,65 @@ export default function OnboardingPage() {
       // priceError es solo estado de UI (validación inline): NO se envía al insert (columna inexistente
       // en services). Se arma la fila con los campos de dominio explícitos. Precio 0 se persiste tal cual
       // (servicio gratuito, D-09).
-      await supabase.from('services').insert(
-        services.filter(s => s.name.trim()).map(s => ({
-          name: s.name,
-          duration_minutes: s.duration_minutes,
-          price: s.price,
-          business_id: business.id,
-        }))
-      )
+      //
+      // El `id` lo pone el cliente (D-09): es el mismo uuid con el que la fila viene viviendo desde el
+      // paso 2 y el mismo que el mapeo del paso 4 referencia. No hay `.select()` ni correlación por
+      // posición — ver el comentario de newServiceId().
+      const filasDeServicios = services.filter(s => s.name.trim()).map(s => ({
+        id: s.id,
+        name: s.name,
+        duration_minutes: s.duration_minutes,
+        price: s.price,
+        business_id: business.id,
+      }))
+      // El error de este insert SÍ se chequea, y no por prolijidad: si los servicios no entraron, el
+      // mapeo del paso 4 apuntaría a ids que no existen, la FK compuesta `tbs_service_same_tenant`
+      // (migr. 073) rebotaría con 23503 y —como el RPC de la agenda es todo-o-nada— el negocio se
+      // quedaría TAMBIÉN sin horarios. Cuando falla, la agenda se degrada a comodín en vez de
+      // arrastrar al fondo a toda la configuración.
+      let falloServicios = false
+      if (filasDeServicios.length > 0) {
+        const { error: svcErr } = await supabase.from('services').insert(filasDeServicios)
+        if (svcErr) {
+          falloServicios = true
+          console.error('[onboarding/services]', svcErr.code)
+          toast.error('Creamos tu negocio, pero no pudimos guardar tus servicios. Entrá a Servicios y cargalos.')
+        }
+      }
 
       await supabase.from('professionals').insert(
         professionals.filter(p => p.name).map(p => ({ ...p, business_id: business.id }))
       )
 
-      // Horarios → time_blocks (fuente única canónica, D-01/D-04). Cada bloque de un día habilitado es
-      // una fila; días sin bloques = cerrado (no se inserta nada). label/location_id null y capacity=1
-      // fijos: el onboarding no maneja sedes ni cupos (patrón del panel, agenda-client.tsx:saveHours).
-      // business_id = SIEMPRE el del negocio recién creado por esta sesión (business.id), nunca del
-      // cliente (aislamiento por tenant + RLS de time_blocks por business_id ya vigente, T-01-01).
-      const timeBlocksToInsert = dayStates.flatMap((ds, day) =>
-        ds.enabled
-          ? ds.blocks.map(b => ({
-              business_id: business.id,
-              day_of_week: day,
-              start_time: b.start_time,
-              end_time: b.end_time,
-              label: null,
-              location_id: null,
-              capacity: 1,
-            }))
-          : []
-      )
-      if (timeBlocksToInsert.length > 0) {
-        await supabase.from('time_blocks').insert(timeBlocksToInsert)
+      // Horarios + mapeo franja↔servicio → `save_agenda_blocks` (migr. 074), el MISMO RPC atómico
+      // que usa el panel. Una sola llamada todo-o-nada en vez de dos escrituras sin transacción: las
+      // franjas y sus servicios entran juntos o no entra nada, así que el estado "horarios sí, mapeo
+      // no" —que el dueño no podría distinguir de "todavía no lo configuré"— deja de ser alcanzable.
+      //
+      // business_id = SIEMPRE el del negocio recién creado por ESTA sesión (business.id), nunca del
+      // estado del formulario: aislamiento por tenant, con el guard `not_your_business` de la propia
+      // función y la RLS de time_blocks/time_block_services como capas de abajo.
+      const p_blocks = buildOnboardingAgendaPayload(dayStates, {
+        mapServices: canMapServices && perFranja && !falloServicios,
+        liveServiceIds: filasDeServicios.map(s => s.id),
+      })
+      const { error: agendaErr } = await supabase.rpc('save_agenda_blocks', {
+        p_business_id: business.id,
+        p_blocks,
+      })
+      if (agendaErr) {
+        // Se registra el CÓDIGO, nunca el mensaje: alcanza para diagnosticar y no arrastra nombres
+        // de tabla ni de constraint a ningún lado.
+        console.error('[onboarding/agenda]', agendaErr.code)
+        if (agendaErr.code === 'PGRST202') {
+          // Sin esta línea el síntoma es indistinguible de un problema de red, y el diagnóstico real
+          // es otro (mismo caso que el panel).
+          console.error('[onboarding/agenda] la función de guardado de la agenda no está expuesta por PostgREST — verificar que la migración 074 esté aplicada y que se haya recargado el cache del schema')
+        }
+        toast.error('Creamos tu negocio, pero no pudimos guardar los horarios. Entrá a Agenda y cargalos.')
+        // NO se tira: el negocio ya existe y el alta no es re-entrante (un segundo submit crearía
+        // OTRO negocio), así que cortar el redirect dejaría al dueño peor de lo que está. Un solo
+        // mensaje, honesto sobre qué se guardó y qué no, y el camino de salida es el panel.
       }
 
       // Conversión automática lead→negocio (CRM, PIPE-03 / D-05). Este es el punto de integración
@@ -427,6 +517,21 @@ export default function OnboardingPage() {
   const visibleSteps = vertical === 'canchas'
     ? steps.filter(s => s.n !== 3)
     : steps
+
+  // ── Los gates del mapeo franja↔servicio del paso Horarios (AGENDA-08) ───────────────────────
+  // 1) Vertical canchas (D-03): en ese rubro un "servicio" ES una cancha con su propia agenda
+  //    (v0.13), así que declarar "qué se da en esta franja" duplicaría ese eje con otro que no lo
+  //    decide. Es un CONTROL oculto, NO un paso oculto: canchas necesita horarios, así que el paso
+  //    se sigue mostrando y por eso este gate no filtra `steps`. Se evalúa contra el estado local
+  //    `vertical` y nunca contra resolveVertical(business): acá el negocio todavía no existe.
+  const canMapServices = vertical !== 'canchas'
+  // 2) El catálogo de los chips, fabricado desde el estado local del paso 2. `active` siempre true:
+  //    durante el alta no existe un servicio dado de baja (el matiz D-11 del panel no aplica acá).
+  const chipCatalog = services.filter(s => s.name.trim()).map(s => ({ id: s.id, name: s.name, active: true }))
+  // 3) Catálogo vacío: no se ofrece el toggle. Un alta puede tener 14 franjas, y un control que no
+  //    tiene nada para elegir es ruido; en su lugar va UNA línea guía en la card (son mutuamente
+  //    excluyentes).
+  const showServicesToggle = canMapServices && chipCatalog.length > 0
 
   // Índice del paso actual dentro de `visibleSteps` (posición, no `n`). La navegación se mueve entre
   // posiciones para saltar limpio el paso oculto en canchas (Servicios n=2 → Horarios n=4 sin pasar
@@ -695,7 +800,7 @@ export default function OnboardingPage() {
                     desktop (sm+) = fila en la grilla 12-col alineada al header sticky. */}
                 {services.map((service, i) => (
                   <div
-                    key={i}
+                    key={service.id}
                     className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:border-0 sm:p-0 sm:grid sm:grid-cols-12 sm:gap-2 sm:items-center"
                   >
                     {/* Línea 1 mobile / col Nombre desktop */}
@@ -807,6 +912,39 @@ export default function OnboardingPage() {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4 text-center sm:text-left">Horarios de atención</h2>
               <p className="text-sm text-muted-foreground">Tocá cada día para abrirlo o cerrarlo. Podés cargar horario partido: agregá más de un bloque por día (ej. 9-12 y 15-19). Un día sin bloques queda cerrado.</p>
+
+              {/* El toggle de D-01: la pregunta que sólo el dueño puede contestar. No discrimina por
+                  rubro ni por cantidad de servicios —una peluquería con 5 servicios que atiende 9-18
+                  está perfectamente descrita por el comodín, y un taller con 2 no—; lo que distingue
+                  es si la franja ES la clase. Arranca en No (D-02) y no bloquea el avance. */}
+              {showServicesToggle && (
+                <div className="space-y-2 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">¿Cada franja es para un servicio puntual?</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={perFranja}
+                      aria-pressed={perFranja}
+                      onClick={() => setPerFranja(v => !v)}
+                      className={cn(
+                        'inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        perFranja
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {perFranja ? 'Sí' : 'No'}
+                    </button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Si atendés todos tus servicios en cualquiera de tus horarios, dejalo en No. Si tenés horarios dedicados —por ejemplo, los martes de 15 a 16 hacés cerámica y nada más— ponelo en Sí y elegí qué se da en cada franja.</p>
+                </div>
+              )}
+              {/* Línea guía del catálogo vacío: UNA sola vez en la card, nunca una por franja. */}
+              {canMapServices && chipCatalog.length === 0 && (
+                <p className="text-xs text-muted-foreground">Cargá tus servicios en el paso anterior y vas a poder elegir qué se da en cada franja.</p>
+              )}
+
               <div className="space-y-2">
                 {dayStates.map((ds, day) => (
                   // Mobile (< sm): día como barra full-width centrada arriba y los bloques debajo (stack
@@ -861,6 +999,22 @@ export default function OnboardingPage() {
                               )}
                             </div>
                             {b.error && <p className="text-xs text-destructive">{b.error}</p>}
+                            {/* Los chips van TERCEROS, después del párrafo de error: el error tiene
+                                que quedar pegado a los inputs que lo causaron y los servicios abajo
+                                de todo (mismo orden que el panel). `disabled={loading}` es el
+                                análogo del congelado del panel: un chip tocado con el submit en
+                                vuelo no llegaría a la base y se perdería sin ruido. */}
+                            {showServicesToggle && perFranja && (
+                              <BlockServicesLine
+                                serviceIds={b.service_ids}
+                                catalog={chipCatalog}
+                                groupLabel={`Servicios de la franja de ${b.start_time} a ${b.end_time}`}
+                                expanded={expandedChips.has(`${day}-${idx}`)}
+                                disabled={loading}
+                                onToggleExpanded={() => toggleChipsExpanded(day, idx)}
+                                onToggleService={serviceId => toggleBlockService(day, idx, serviceId)}
+                              />
+                            )}
                           </div>
                         ))}
                         <Button
