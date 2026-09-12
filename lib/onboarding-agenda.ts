@@ -164,6 +164,89 @@ export function toNumberOr(value: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+// ── El borde donde el texto de un formulario se vuelve el número que se persiste (G-21-11) ──────
+//
+// Estas tres piezas las consumen las TRES superficies que escriben `services`: el paso 2 del alta,
+// el panel de canchas y el panel de servicios de Ajustes. Viven ACÁ, y no adentro de cada
+// componente, por el mismo motivo que todo lo demás de este módulo: el runner corre con
+// `environment: 'node'` y no puede renderizar un client component, así que la rama del fallback
+// quedaría sin ejercitar — y un fallback que nunca corrió es una suposición, no una red.
+//
+// La otra mitad del motivo es que la regla se escribía distinta en cada pantalla, y cada variante
+// fallaba distinto: `parseInt(x)` sin fallback daba `NaN` (⇒ `null` ⇒ 23502 contra una columna NOT
+// NULL, y en el alta eso se lleva el catálogo ENTERO porque el insert es UNA sentencia multi-fila),
+// y `parseInt(x) || 0` daba **0**, que sí se guarda y produce un desajuste silencioso: el dueño cree
+// que el servicio dura X y el motor reserva 30. Una sola definición no puede divergir de sí misma.
+
+/** El default de duración del paso 2 y de los dos formularios de Ajustes, con un solo nombre. */
+export const DEFAULT_SERVICE_MINUTES = 30
+
+/**
+ * El texto del campo "Min." → los minutos que se van a guardar, más el aviso si hubo corrección.
+ *
+ * Las dos entradas degeneradas NO son la misma cosa y por eso no reciben el mismo trato:
+ *
+ * - **Vaciar el campo** (`''`, `'   '`, o basura que no es número) es volver al default. No avisa:
+ *   el dueño está a mitad de escribir, y el 30 que la pantalla vuelve a mostrar al salir del campo
+ *   ya dice todo lo que hay que decir.
+ * - **Tipear `0` o un negativo** es una duración imposible para la grilla horaria. Se corrige al
+ *   mínimo Y avisa, porque acá el valor guardado NO es el que el dueño escribió.
+ *
+ * Se redondea antes de comparar contra el mínimo porque `services.duration_minutes` es `integer`:
+ * mandar `7.5` a una columna entera es otra forma de que el insert rebote lejos del formulario.
+ * El texto del aviso es el que ya usaba la validación inline del alta, movido tal cual: una segunda
+ * redacción de la misma regla es una segunda regla esperando divergir.
+ */
+export function normalizeServiceDuration(raw: string): { value: number; warning?: string } {
+  const n = Math.round(toNumberOr(raw, DEFAULT_SERVICE_MINUTES))
+  if (n >= MIN_SERVICE_MINUTES) return { value: n }
+  return {
+    value: MIN_SERVICE_MINUTES,
+    warning: `La duración mínima es de ${MIN_SERVICE_MINUTES} minutos: la ajustamos a ${MIN_SERVICE_MINUTES}. Escribí cuántos minutos dura el servicio.`,
+  }
+}
+
+/**
+ * El texto del campo "Precio" → el número que se va a guardar, más el error si es negativo.
+ *
+ * Precio 0 es VÁLIDO (servicio gratuito, D-09), así que el campo vaciado cae a 0 sin error. El
+ * negativo avisa pero **conserva lo tipeado**: es el comportamiento que ya tenía
+ * `validateServicePrice` y este plan no vino a cambiarlo — corregirle el signo al dueño sin
+ * preguntarle es adivinarle la intención.
+ */
+export function normalizeServicePrice(raw: string): { value: number; error?: string } {
+  const value = toNumberOr(raw, 0)
+  return value < 0 ? { value, error: 'El precio no puede ser negativo' } : { value }
+}
+
+/**
+ * Las filas de `services` que un formulario manda al insert, con los números ya normalizados.
+ *
+ * Es el ÚNICO punto donde el texto del formulario se vuelve el número que viaja a la base, y por eso
+ * es una capa aparte de la normalización onBlur de la pantalla: si alguien confiara sólo en el blur,
+ * un submit que no lo dispare (Enter, click directo en Finalizar desde el campo enfocado) volvería a
+ * mandar una cadena vacía contra una columna NOT NULL.
+ *
+ * Filtra por `esServicioVigente` —el mismo criterio único que usan el payload de la agenda y la
+ * línea de chips— y conserva el `id` de entrada: el mapeo franja↔servicio del paso 4 lo referencia,
+ * y correlacionar por posición lo insertado con lo devuelto es el Pitfall 1 de esta superficie.
+ *
+ * El `business_id` sale SIEMPRE del argumento (derivado de la sesión), nunca de la fila: ningún
+ * campo de formulario puede influirlo.
+ */
+export function buildServiceRows<S extends { id: string; name: string; duration_minutes: string; price: string }>(
+  services: S[],
+  businessId: string,
+): { id: string; name: string; duration_minutes: number; price: number; business_id: string }[] {
+  return services.filter(esServicioVigente).map(s => ({
+    id: s.id,
+    name: s.name,
+    duration_minutes: normalizeServiceDuration(s.duration_minutes).value,
+    price: normalizeServicePrice(s.price).value,
+    business_id: businessId,
+  }))
+}
+
 /**
  * Una franja del paso Horarios del alta, tal como la tiene el wizard mientras el dueño la edita.
  *

@@ -1,11 +1,15 @@
 import { afterEach, describe, it, expect } from 'vitest'
 import {
   buildOnboardingAgendaPayload,
+  buildServiceRows,
+  DEFAULT_SERVICE_MINUTES,
   canMapServicesInVertical,
   esServicioVigente,
   franjaServiceIdsVigentes,
   MIN_SERVICE_MINUTES,
   newServiceId,
+  normalizeServiceDuration,
+  normalizeServicePrice,
   servicesWithoutCoverage,
   shouldMapServices,
   toNumberOr,
@@ -438,5 +442,105 @@ describe('toNumberOr: el valor de un input numérico vaciado (WR-03)', () => {
 
   it('MIN_SERVICE_MINUTES es el piso que usa la validación inline de duración', () => {
     expect(MIN_SERVICE_MINUTES).toBeGreaterThan(0)
+  })
+})
+
+// ── G-21-11: el borde donde el texto del formulario se vuelve el número que se persiste ─────────
+//
+// QUÉ SE ROMPE SI ESTE BLOQUE SE PONE ROJO: las TRES superficies que escriben `services` (el paso 2
+// del alta, el panel de canchas y el panel de servicios de Ajustes) comparten estos helpers. Si
+// alguno deja pasar un no-finito, `JSON.stringify` lo serializa `null`, `duration_minutes` y `price`
+// son NOT NULL ⇒ 23502 — y en el alta, que inserta con UNA sola sentencia multi-fila, eso no pierde
+// una fila: pierde el catálogo ENTERO y con él el mapeo franja↔servicio.
+//
+// El runner corre con `environment: 'node'`: no hay DOM. Por eso la coerción vive acá, en un módulo
+// puro, y no adentro de cada componente — un fallback que nunca corrió es una suposición, no una red.
+describe('normalizeServiceDuration: el campo Min. se puede vaciar sin perder el catálogo', () => {
+  it('el campo vaciado vuelve al default, sin aviso (vaciar no es entrada degenerada)', () => {
+    expect(normalizeServiceDuration('')).toEqual({ value: DEFAULT_SERVICE_MINUTES })
+    expect(normalizeServiceDuration('   ')).toEqual({ value: DEFAULT_SERVICE_MINUTES })
+    expect(DEFAULT_SERVICE_MINUTES).toBe(30)
+  })
+
+  it('0 y los negativos se corrigen al mínimo Y avisan', () => {
+    for (const raw of ['0', '3', '-10']) {
+      const r = normalizeServiceDuration(raw)
+      expect(r.value).toBe(MIN_SERVICE_MINUTES)
+      expect(r.warning).toBeTruthy()
+    }
+  })
+
+  it('el texto basura cae al default, nunca a NaN', () => {
+    const r = normalizeServiceDuration('abc')
+    expect(r.value).toBe(DEFAULT_SERVICE_MINUTES)
+    expect(Number.isNaN(r.value)).toBe(false)
+  })
+
+  it('los valores legítimos pasan, redondeados a entero (la columna es integer)', () => {
+    expect(normalizeServiceDuration('45')).toEqual({ value: 45 })
+    expect(normalizeServiceDuration('7.5').value).toBe(8)
+  })
+
+  it('PROPIEDAD: siempre entero y nunca por debajo del mínimo', () => {
+    for (const raw of ['', '   ', '0', '3', '-10', 'abc', '45', '7.5', '1e999', '-1e999']) {
+      const { value } = normalizeServiceDuration(raw)
+      expect(Number.isInteger(value)).toBe(true)
+      expect(value).toBeGreaterThanOrEqual(MIN_SERVICE_MINUTES)
+    }
+  })
+})
+
+describe('normalizeServicePrice: precio 0 es válido, el negativo avisa sin corregir', () => {
+  it('vacío y basura dan 0 sin error (servicio gratuito, D-09)', () => {
+    for (const raw of ['', '   ', 'abc']) {
+      expect(normalizeServicePrice(raw)).toEqual({ value: 0 })
+    }
+  })
+
+  it('los decimales viven: la columna es numeric(10,2)', () => {
+    expect(normalizeServicePrice('1500.5')).toEqual({ value: 1500.5 })
+  })
+
+  it('el negativo conserva lo tipeado y devuelve el error (no se corrige solo)', () => {
+    const r = normalizeServicePrice('-100')
+    expect(r.value).toBe(-100)
+    expect(r.error).toBeTruthy()
+  })
+
+  it('PROPIEDAD: el valor siempre es finito', () => {
+    for (const raw of ['', '   ', 'abc', '-100', '1500.5', '1e999', '-1e999']) {
+      expect(Number.isFinite(normalizeServicePrice(raw).value)).toBe(true)
+    }
+  })
+})
+
+describe('buildServiceRows: el único borde donde el formulario se vuelve el payload del insert', () => {
+  const draft = (over: Partial<{ id: string; name: string; duration_minutes: string; price: string }> = {}) => ({
+    id: svcA, name: 'Yoga', duration_minutes: '45', price: '8000', ...over,
+  })
+
+  it('descarta las filas que esServicioVigente rechaza (nombre vacío)', () => {
+    const rows = buildServiceRows([draft(), draft({ id: svcB, name: '   ' })], 'biz')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].name).toBe('Yoga')
+  })
+
+  it('los campos vaciados NO serializan null contra una columna NOT NULL', () => {
+    const rows = buildServiceRows([draft({ duration_minutes: '', price: '' })], 'biz')
+    expect(rows[0].duration_minutes).toBe(DEFAULT_SERVICE_MINUTES)
+    expect(rows[0].price).toBe(0)
+    const serializada = JSON.parse(JSON.stringify(rows[0]))
+    // La forma EXACTA en que se perdía el catálogo entero con 23502.
+    expect(Object.values(serializada).some(v => v === null)).toBe(false)
+  })
+
+  it('conserva el uuid de entrada (el mapeo del paso 4 lo referencia — Pitfall 1)', () => {
+    const rows = buildServiceRows([draft({ id: svcB }), draft({ id: svcA })], 'biz')
+    expect(rows.map(r => r.id)).toEqual([svcB, svcA])
+  })
+
+  it('el business_id sale del argumento, nunca de la fila', () => {
+    const rows = buildServiceRows([{ ...draft(), business_id: 'ajeno' } as never], 'biz')
+    expect(rows[0].business_id).toBe('biz')
   })
 })
