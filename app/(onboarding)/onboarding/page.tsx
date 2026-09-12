@@ -18,6 +18,7 @@ import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 import { BlockServicesLine } from '@/components/agenda/block-services-line'
 import { buildOnboardingAgendaPayload } from '@/lib/onboarding-agenda'
+import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -214,8 +215,26 @@ export default function OnboardingPage() {
     setServices([...services, { id: newServiceId(), name: '', duration_minutes: 30, price: 0 }])
   }
 
+  // Borrar un servicio del paso 2 también le saca sus chips a TODAS las franjas del paso 4 (D-08).
+  //
+  // El chip desaparecía solo —el componente pinta lo que está en el catálogo— pero el id seguía vivo
+  // adentro del bloque, que es exactamente lo que D-08 promete que no pasa. Es la PRIMERA de dos
+  // capas: la segunda es el filtro contra el catálogo vigente dentro de buildOnboardingAgendaPayload,
+  // que existe porque sin él la FK compuesta `tbs_service_same_tenant` rebota con 23503 y —como el
+  // RPC de la agenda es todo-o-nada— se revierte la agenda COMPLETA. Esta capa es de UX (que el
+  // estado diga la verdad); aquélla es el backstop que evita perder los horarios.
   function removeService(i: number) {
+    const idBorrado = services[i]?.id
     setServices(services.filter((_, idx) => idx !== i))
+    if (!idBorrado) return
+    setDayStates(prev => prev.map(ds => ({
+      ...ds,
+      blocks: ds.blocks.map(b => (
+        b.service_ids.includes(idBorrado)
+          ? { ...b, service_ids: b.service_ids.filter(id => id !== idBorrado) }
+          : b
+      )),
+    })))
   }
 
   function updateService(i: number, field: keyof Service, value: string | number) {
@@ -331,14 +350,24 @@ export default function OnboardingPage() {
     })
   }
 
-  // Validación inline por bloque: fin > inicio (mismo criterio que validateBlocks del panel).
-  // No valida solapamiento (el onboarding no maneja consultorios). Marca errores en el estado y
-  // devuelve false si hay alguno para bloquear el finalizar.
+  // Validación inline por bloque: PRIMERO la forma, después el orden (mismo criterio y mismo orden
+  // que validateBlocks del panel). No valida solapamiento (el onboarding no maneja consultorios).
+  // Marca errores en el estado y devuelve false si hay alguno para bloquear el finalizar.
+  //
+  // Por qué la forma va primero: un `<input type="time">` se puede VACIAR, y entonces la comparación
+  // de orden miente — es lexicográfica, y cualquier cadena no vacía ordena DESPUÉS de la vacía, así
+  // que `'18:00' <= ''` da false y el bloque pasaba el filtro entero. Del otro lado el `::time` del
+  // RPC revienta con 22007 ANTES de poder llegar a su propio backstop `invalid_block`, y el dueño se
+  // come un error crudo de la base por un campo que la pantalla podía haberle marcado.
   function validateHours(): boolean {
     let valid = true
     const next = dayStates.map(ds => {
       if (!ds.enabled) return ds
       const blocks = ds.blocks.map(b => {
+        if (!isValidBlockTime(b.start_time) || !isValidBlockTime(b.end_time)) {
+          valid = false
+          return { ...b, error: 'Completá la hora de inicio y la de fin.' }
+        }
         if (b.end_time <= b.start_time) { valid = false; return { ...b, error: 'La hora fin debe ser mayor a la hora inicio' } }
         return { ...b, error: undefined }
       })
