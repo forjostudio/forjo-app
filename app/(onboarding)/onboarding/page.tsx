@@ -19,14 +19,17 @@ import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 import { BlockServicesLine } from '@/components/agenda/block-services-line'
 import {
   buildOnboardingAgendaPayload,
+  buildServiceRows,
   canMapServicesInVertical,
+  DEFAULT_SERVICE_MINUTES,
   esServicioVigente,
   franjaServiceIdsVigentes,
   MIN_SERVICE_MINUTES,
   newServiceId,
+  normalizeServiceDuration,
+  normalizeServicePrice,
   servicesWithoutCoverage,
   shouldMapServices,
-  toNumberOr,
 } from '@/lib/onboarding-agenda'
 import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 
@@ -76,8 +79,13 @@ interface Service {
   // Clave local estable (D-08/D-09) y `services.id` final. Ver newServiceId().
   id: string
   name: string
-  duration_minutes: number
-  price: number
+  // Los dos campos numéricos guardan el TEXTO CRUDO del input, no un número (G-21-11). Es lo que
+  // permite que la celda quede vacía mientras se escribe: coercionar en cada `onChange` reescribía el
+  // estado con el valor anterior y deshacía cada backspace. El número se produce en el borde del
+  // payload (`buildServiceRows`) y a la vista al salir del campo (`validateService*`) — dos capas,
+  // porque un submit que no dispare blur volvería a mandar la cadena vacía a una columna NOT NULL.
+  duration_minutes: string
+  price: string
   // Error inline de precio (validación onBlur, D-08). Vive en el estado del item, mismo criterio que
   // HourBlock.error / validateBlocks del panel. Solo estado de UI: NO se persiste en la fila de services.
   priceError?: string
@@ -135,7 +143,7 @@ export default function OnboardingPage() {
 
   // Step 2 - Services. Inicializador LAZY: `newServiceId()` genera un uuid, así que llamarlo en el
   // cuerpo del render quemaría uno nuevo en cada tecla que el dueño toca.
-  const [services, setServices] = useState<Service[]>(() => [{ id: newServiceId(), name: '', duration_minutes: 30, price: 0 }])
+  const [services, setServices] = useState<Service[]>(() => [{ id: newServiceId(), name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0' }])
 
   // Step 3 - Professionals
   const [professionals, setProfessionals] = useState<Professional[]>([{ name: '' }])
@@ -216,7 +224,7 @@ export default function OnboardingPage() {
 
   // Services
   function addService() {
-    setServices([...services, { id: newServiceId(), name: '', duration_minutes: 30, price: 0 }])
+    setServices([...services, { id: newServiceId(), name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0' }])
   }
 
   // Borrar un servicio del paso 2 también le saca sus chips a TODAS las franjas del paso 4 (D-08).
@@ -241,12 +249,12 @@ export default function OnboardingPage() {
     })))
   }
 
-  function updateService(i: number, field: keyof Service, value: string | number) {
+  function updateService(i: number, field: keyof Service, value: string) {
     const updated = [...services]
     // Limpiar el error del campo editado al escribir → feedback en vivo (se re-valida onBlur). El nombre
     // limpia su error solo cuando pasa a ser no-vacío; los demás campos limpian nameError igual porque
     // cambiar precio/duración puede resolver la condición "fila con datos sin nombre".
-    const clearName = field === 'name' ? (typeof value === 'string' && value.trim() !== '') : true
+    const clearName = field === 'name' ? value.trim() !== '' : true
     updated[i] = {
       ...updated[i],
       [field]: value,
@@ -257,47 +265,50 @@ export default function OnboardingPage() {
     setServices(updated)
   }
 
-  // Validación inline de duración onBlur (WR-03). Dos cosas distintas y las dos necesarias:
+  // Normalización inline de duración onBlur (WR-03 / G-21-11): lo que veo es lo que se guarda.
   //
-  // 1. El `NaN` ya no puede llegar hasta acá: el onChange usa `toNumberOr`, porque `parseInt('')` de
-  //    un campo vaciado serializaba a `null` contra una columna NOT NULL y reventaba el insert ENTERO
-  //    de servicios (una sola sentencia multi-fila) — y con él, desde esta fase, el mapeo de franjas.
-  // 2. Lo que sí puede llegar es un `0` o un negativo tipeados a mano, que son entrada degenerada
-  //    para la grilla horaria. Se CORRIGE a la vista (el campo pasa a 5) y se explica por qué, en vez
-  //    de bloquear Finalizar: dejar al dueño encerrado en el wizard por esto contradice D-02/D-06, y
-  //    dejarlo pasar en silencio le rompe la disponibilidad después. La corrección es visible y
-  //    reversible — escribir 30 encima la deshace.
+  // La regla vive en `normalizeServiceDuration` (módulo puro, con suite propia) y acá sólo se escribe
+  // de vuelta en el estado. Las dos entradas degeneradas NO son la misma cosa:
+  //
+  // 1. La celda VACIADA vuelve al default 30 y no da error. Vaciar el campo es lo que uno hace para
+  //    reescribirlo, no un error del dueño; el 30 que reaparece al salir ya dice todo lo que hay que
+  //    decir. (Antes daba error, y el error trababa "Agregar servicio" por vaciar un campo.)
+  // 2. El `0` o el negativo TIPEADOS a mano sí son entrada degenerada para la grilla horaria. Se
+  //    CORRIGEN a la vista (el campo pasa a 5) y se explica por qué, en vez de bloquear Finalizar:
+  //    dejar al dueño encerrado en el wizard contradice D-02/D-06, y dejarlo pasar en silencio le
+  //    rompe la disponibilidad después. La corrección es visible y reversible — escribir 30 la deshace.
   function validateServiceDuration(i: number) {
     setServices(prev => prev.map((s, idx) => {
       if (idx !== i) return s
-      if (Number.isFinite(s.duration_minutes) && s.duration_minutes >= MIN_SERVICE_MINUTES) {
-        return { ...s, durationError: undefined }
-      }
-      return {
-        ...s,
-        duration_minutes: MIN_SERVICE_MINUTES,
-        durationError: `La duración mínima es de ${MIN_SERVICE_MINUTES} minutos: la ajustamos a ${MIN_SERVICE_MINUTES}. Escribí cuántos minutos dura el servicio.`,
-      }
+      const { value, warning } = normalizeServiceDuration(s.duration_minutes)
+      return { ...s, duration_minutes: String(value), durationError: warning }
     }))
   }
 
-  // Validación inline de precio onBlur (D-08/D-09): precio 0 y positivos son VÁLIDOS (servicio gratuito);
-  // solo el negativo da error. El error vive en el item, se limpia al corregir (updateService).
+  // Normalización inline de precio onBlur (D-08/D-09): precio 0 y positivos son VÁLIDOS (servicio
+  // gratuito), así que la celda vaciada queda en '0' sin error; sólo el negativo da error y, a
+  // diferencia de la duración, CONSERVA lo tipeado — corregirle el signo al dueño sin preguntarle es
+  // adivinarle la intención. El error vive en el item y se limpia al corregir (updateService).
   function validateServicePrice(i: number) {
-    setServices(prev => prev.map((s, idx) =>
-      idx === i
-        ? { ...s, priceError: s.price < 0 ? 'El precio no puede ser negativo' : undefined }
-        : s
-    ))
+    setServices(prev => prev.map((s, idx) => {
+      if (idx !== i) return s
+      const { value, error } = normalizeServicePrice(s.price)
+      return { ...s, price: String(value), priceError: error }
+    }))
   }
 
   // Validación inline de nombre onBlur: el nombre es obligatorio SOLO si la fila tiene datos (precio > 0
-  // o duración distinta del default 30). Una fila totalmente vacía se ignora (se filtra en handleFinish),
+  // o duración distinta del default). Una fila totalmente vacía se ignora (se filtra en handleFinish),
   // así que no molesta con error. Mismo precedente que validateServicePrice; no bloquea el avance (D-02).
+  //
+  // La heurística compara sobre los valores NORMALIZADOS, nunca sobre el texto crudo: con el estado
+  // en string, `'' !== '30'` da `true` y una fila con los dos campos vacíos —o sea, una fila SIN
+  // datos— dispararía el error de nombre obligatorio.
   function validateServiceName(i: number) {
     setServices(prev => prev.map((s, idx) => {
       if (idx !== i) return s
-      const hasData = s.price > 0 || s.duration_minutes !== 30
+      const hasData = normalizeServicePrice(s.price).value > 0
+        || normalizeServiceDuration(s.duration_minutes).value !== DEFAULT_SERVICE_MINUTES
       const missing = s.name.trim() === '' && hasData
       return { ...s, nameError: missing ? 'El nombre es obligatorio' : undefined }
     }))
@@ -472,20 +483,19 @@ export default function OnboardingPage() {
         }
       }
 
-      // priceError es solo estado de UI (validación inline): NO se envía al insert (columna inexistente
-      // en services). Se arma la fila con los campos de dominio explícitos. Precio 0 se persiste tal cual
-      // (servicio gratuito, D-09).
+      // `buildServiceRows` es el ÚNICO borde donde el texto del formulario se vuelve el número que
+      // viaja al insert (G-21-11): coerciona duración y precio y filtra por `esServicioVigente`. Los
+      // errores inline (priceError/nameError/durationError) son sólo estado de UI y no salen de acá:
+      // esas columnas no existen en `services`. Precio 0 se persiste tal cual (servicio gratuito, D-09).
+      //
+      // Es una capa APARTE de la normalización onBlur, no la misma: un submit que no dispare blur
+      // (Enter, o un click en Finalizar desde el campo enfocado) mandaría la cadena vacía contra una
+      // columna NOT NULL. La segunda capa existe justamente para cuando la primera no corrió.
       //
       // El `id` lo pone el cliente (D-09): es el mismo uuid con el que la fila viene viviendo desde el
       // paso 2 y el mismo que el mapeo del paso 4 referencia. No hay `.select()` ni correlación por
       // posición — ver el comentario de newServiceId().
-      const filasDeServicios = services.filter(esServicioVigente).map(s => ({
-        id: s.id,
-        name: s.name,
-        duration_minutes: s.duration_minutes,
-        price: s.price,
-        business_id: business.id,
-      }))
+      const filasDeServicios = buildServiceRows(services, business.id)
       // El error de este insert SÍ se chequea, y no por prolijidad: si los servicios no entraron, el
       // mapeo del paso 4 apuntaría a ids que no existen, la FK compuesta `tbs_service_same_tenant`
       // (migr. 073) rebotaría con 23503 y —como el RPC de la agenda es todo-o-nada— el negocio se
@@ -959,13 +969,14 @@ export default function OnboardingPage() {
                         <Label className="sm:hidden text-xs text-muted-foreground flex items-center gap-1">
                           <Clock className="w-3 h-3" /> Min.
                         </Label>
-                        {/* `toNumberOr` y no `parseInt` (WR-03): un campo vaciado daba NaN, que
-                            JSON.stringify serializa a null contra una columna NOT NULL y voltea el
-                            insert COMPLETO de servicios — y con él el mapeo franja↔servicio. */}
+                        {/* El onChange escribe el texto CRUDO (G-21-11): el estado guarda lo que se
+                            tipeó, y por eso la celda se puede vaciar para reescribirla. Coercionar acá
+                            reescribía el estado con el valor anterior y deshacía cada backspace. El
+                            número se produce al salir del campo y, de nuevo, en buildServiceRows. */}
                         <Input
                           type="number"
                           value={service.duration_minutes}
-                          onChange={e => updateService(i, 'duration_minutes', toNumberOr(e.target.value, 30))}
+                          onChange={e => updateService(i, 'duration_minutes', e.target.value)}
                           onFocus={e => e.target.select()}
                           onBlur={() => validateServiceDuration(i)}
                           min={MIN_SERVICE_MINUTES}
@@ -977,12 +988,13 @@ export default function OnboardingPage() {
                         <Label className="sm:hidden text-xs text-muted-foreground flex items-center gap-1">
                           <DollarSign className="w-3 h-3" /> Precio
                         </Label>
-                        {/* Precio valida onBlur (D-08/D-09): negativo = error inline; 0 y positivos válidos.
+                        {/* Texto crudo en el estado, igual que Min. (G-21-11). Precio valida onBlur
+                            (D-08/D-09): negativo = error inline; 0 y positivos válidos.
                             onFocus select() → escribir reemplaza el 0 preseteado (antes escribía "05"). */}
                         <Input
                           type="number"
                           value={service.price}
-                          onChange={e => updateService(i, 'price', toNumberOr(e.target.value, 0))}
+                          onChange={e => updateService(i, 'price', e.target.value)}
                           onFocus={e => e.target.select()}
                           onBlur={() => validateServicePrice(i)}
                           min={0}
