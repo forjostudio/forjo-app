@@ -3,7 +3,7 @@ status: complete
 phase: 21-lo-que-el-negocio-declara
 source: [21-VERIFICATION.md]
 started: 2026-09-12T03:01:04.576Z
-updated: 2026-09-12T21:02:36.000Z
+updated: 2026-09-12T23:54:08.000Z
 ---
 
 ## Current Test
@@ -52,9 +52,8 @@ note: "Probado en celular real sobre http://192.168.0.7:3000 (contexto inseguro)
 ### 8. Con un lector de pantalla (VoiceOver/NVDA), enfocar el switch '¿Cada franja es para un servicio puntual?'.
 expected: Se anuncia la pregunta completa junto con el estado (encendido/apagado), no sólo 'Sí/No, switch'.
 why_human: WR-04 se corrigió (aria-labelledby en vez de aria-pressed) y el lint confirma que el único diagnóstico nuevo desapareció, pero el anuncio real de un lector de pantalla no lo prueba ningún test.
-result: blocked
-blocked_by: other
-reason: "Sin lector de pantalla disponible en el entorno de prueba (NVDA/VoiceOver). Prerequisito de entorno, no un defecto de codigo."
+result: skipped
+reason: "No probado: no hay lector de pantalla (NVDA/VoiceOver) en el entorno de prueba, y no se va a instalar en esta pasada. NO es un defecto: el fix de WR-04 (aria-labelledby en vez de aria-pressed) ya esta aplicado y el lint confirma que el unico diagnostico jsx-a11y nuevo desaparecio. Lo que falta es OIR el anuncio, no corregirlo. Candidato a una pasada dedicada de accesibilidad."
 
 
 ### 9. Vaciar el campo de hora de inicio o fin de un bloque en el paso Horarios y tocar Finalizar (o cambiar de paso).
@@ -72,9 +71,9 @@ retest: "Re-testeado en celular real tras 670f7b2 — no se superpone. Ajuste ad
 ### 11. Paso 2 (Servicios), mobile: borrar con el teclado el 0 de Precio y el valor de Min.
 expected: El campo se puede vaciar tecleando backspace, sin tener que salir y volver a clickear la celda; ademas, Min. en 0 muestra un aviso de validacion.
 found_during: test 1 (hallazgo incidental, fuera del alcance del test)
-result: issue
+result: pass
 reported: "Paso 2: no me deja borrar el 0 con el teclado, solo saliendo y clickeando la celda para que se seleccione, esto ya lo solucionamos dentro del panel. Lo mismo pasa con los minutos, solo que hay que poner un warning para que no quede en 0 minutos."
-severity: major
+retest: "Re-testeado tras el quick 260912-pm1 (commits 9b63dbf..b4c408e). Los campos se vacian con backspace; vacio toma el default al salir y un 0 explicito queda en 5 con aviso inline."
 
 ### 12. Paso 1 (Tu negocio), mobile: desplegable de Rubro.
 expected: Las opciones se leen completas y con aire; el panel no se sale del viewport ni aprieta el texto contra los bordes.
@@ -93,11 +92,11 @@ retest: "Re-testeado en celular real tras 670f7b2 — la hora se lee completa co
 ## Summary
 
 total: 13
-passed: 11
-issues: 1
+passed: 12
+issues: 0
 pending: 0
-skipped: 0
-blocked: 1
+skipped: 1
+blocked: 0
 
 ## Gaps
 
@@ -115,7 +114,9 @@ blocked: 1
     - "Fila propia en flujo arriba del lockup en mobile; absolute solo desde sm+."
 
 - gap_id: G-21-11
-  status: failed  # ABIERTO: no es cosmetico, requiere /gsd-quick
+  status: resolved
+  resolved_by: "quick 260912-pm1 (9b63dbf..b4c408e) + migr. 077"
+  resolved_at: 2026-09-12
   truth: "Los campos numericos del paso 2 (Precio y Min.) se pueden vaciar con el teclado, y Min. en 0 avisa"
   reason: "User reported: Paso 2: no me deja borrar el 0 con el teclado, solo saliendo y clickeando la celda para que se seleccione, esto ya lo solucionamos dentro del panel. Lo mismo pasa con los minutos, solo que hay que poner un warning para que no quede en 0 minutos."
   severity: major
