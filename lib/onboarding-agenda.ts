@@ -27,6 +27,7 @@
 // (que no tiene sedes, ni etiquetas, ni ids de franja) y se aplican las dos reglas de arriba.
 
 import { buildSaveHoursPayload, type AgendaBlockPayload } from '@/lib/agenda-hours-payload'
+import { hasScheduleCoverage } from '@/lib/time-block-services'
 
 /**
  * Una franja del paso Horarios del alta, tal como la tiene el wizard mientras el dueño la edita.
@@ -81,24 +82,65 @@ export function buildOnboardingAgendaPayload(
   )
 }
 
+// ── El dato del aviso de D-07: qué servicios no cubre NINGUNA franja del alta ───────────────────
+//
+// Lo que cambió y hace que esto valga la pena: hasta la Phase 20 un servicio sin franja que lo diera
+// era INVISIBLE en la página pública. Desde la Phase 20 aparece deshabilitado con la frase "Sin
+// horarios disponibles". O sea que el estado dejó de ser inocuo, y el alta puede anticiparlo.
+
 /**
- * Las franjas ABIERTAS de la grilla del alta, con la identidad que necesita la regla del comodín.
+ * Las franjas ABIERTAS de la grilla del alta, con una identidad estable para cada una.
  *
- * Esqueleto RED del Plan 21-02: la firma y el call site reales; la regla la trae el GREEN.
+ * La clave es `${día}-${índice}`, la MISMA que ya usa el estado de colapso de los chips del paso
+ * Horarios: ninguna de estas franjas existe todavía en la base, así que la identidad hay que
+ * fabricarla, y fabricar una segunda la volvería a inventar en otro lado.
+ *
+ * Sólo los días con `enabled: true`. Un día cerrado puede conservar bloques en el estado local (el
+ * wizard no los borra al cerrarlo), y contarlos diría que un servicio está cubierto por una franja
+ * que no se va a persistir.
  */
 export function onboardingDraftBlocks(days: OnboardingDayDraft[]): { id: string; service_ids: string[] }[] {
-  return days.flatMap(() => [])
+  return days.flatMap((day, dayIndex) =>
+    day.enabled
+      ? day.blocks.map((block, idx) => ({ id: `${dayIndex}-${idx}`, service_ids: block.service_ids }))
+      : [],
+  )
 }
 
 /**
- * Los servicios que NINGUNA franja del alta cubre (el dato del aviso de D-07).
+ * Los servicios del paso 2 que NINGUNA franja abierta cubre (el dato del aviso de D-07).
  *
- * Esqueleto RED del Plan 21-02: la firma y el call site reales; la regla la trae el GREEN.
+ * ⚠ 1. Se apoya en `hasScheduleCoverage`, NUNCA en `isServiceScheduled`. La cruda FILTRA las
+ * franjas, así que con CERO franjas devuelve `[]` y da `false` para **todo** servicio. En el alta
+ * cerrar los siete días es un click, y ahí el aviso pasaría de informar a decirle al dueño que su
+ * catálogo ENTERO se quedó sin horario — un aviso que grita cuando no pasa nada es un aviso que se
+ * aprende a ignorar. Es literalmente CR-01 del code review de la Phase 20, la misma trampa que ya
+ * mordió una vez. (El CONTEXT de esta fase, `21-CONTEXT.md:82` y `:112`, nombra la función
+ * equivocada: la corrección queda registrada acá.) Sin franjas la pregunta "¿qué franja da este
+ * servicio?" no tiene sujeto, y la ausencia de dato significa "todo vale", nunca "nada vale".
+ *
+ * ⚠ 2. El `business_id` va en cadena vacía porque el contrato D-16 de `lib/time-block-services`
+ * dice que el caller ya filtró por tenant ANTES de llamar — y en el alta se cumple trivialmente:
+ * todas estas filas se fabrican desde el estado local del wizard del negocio que se está creando,
+ * no salen de ninguna query. Es el mismo molde que ya usa el adaptador de la línea de chips del
+ * panel (`components/agenda/block-services-line.tsx`).
+ *
+ * ⚠ 3. Las filas de servicio sin nombre se ignoran: `handleFinish` ya las descarta al insertar, así
+ * que avisar sobre ellas sería avisar sobre un servicio que no va a existir.
+ *
+ * `false` NO bloquea nada (D-07): un servicio sin franja que lo cubra es un estado LEGAL —el dueño
+ * está a mitad de configurar, D-06 de la Phase 18—, sólo que desde la Phase 20 tiene consecuencia
+ * pública real. Por eso se informa en vez de impedir.
  */
 export function servicesWithoutCoverage<S extends { id: string; name: string }>(
   services: S[],
   days: OnboardingDayDraft[],
 ): S[] {
   const draftBlocks = onboardingDraftBlocks(days)
-  return services.filter(() => draftBlocks.length === -1)
+  // Las filas sintéticas de la puente: una por cada servicio que declara cada franja. Una franja sin
+  // ninguna fila ES el comodín (D-01) — la ausencia es la regla, no un dato faltante.
+  const draftBridge = draftBlocks.flatMap(b =>
+    b.service_ids.map(serviceId => ({ business_id: '', time_block_id: b.id, service_id: serviceId })),
+  )
+  return services.filter(s => s.name.trim() !== '' && !hasScheduleCoverage(s.id, draftBlocks, draftBridge))
 }
