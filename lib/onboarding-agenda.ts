@@ -65,6 +65,39 @@ export function franjaServiceIdsVigentes(serviceIds: string[], vigentes: Readonl
 }
 
 /**
+ * ¿El rubro admite declarar "qué se da en esta franja"? (D-03)
+ *
+ * En 'canchas' un "servicio" ES una cancha con su propia agenda (v0.13), así que el mapeo duplicaría
+ * ese eje con otro que no lo decide. Es un CONTROL oculto, no un paso oculto: canchas necesita
+ * horarios igual, así que el paso Horarios se sigue mostrando. Vive acá y no como literal suelto en
+ * el componente para que el gate de la UI y el del submit no se puedan separar.
+ */
+export function canMapServicesInVertical(vertical: string): boolean {
+  return vertical !== 'canchas'
+}
+
+/**
+ * ¿Se persiste el mapeo franja↔servicio? Las TRES condiciones, en un solo lugar que se puede testear.
+ *
+ * Vivía como una expresión suelta adentro del submit (`canMapServices && perFranja && !falloServicios`),
+ * o sea adentro de un client component que el runner de este repo no puede renderizar
+ * (`environment: 'node'`): se le podía invertir cualquiera de los tres términos y la suite entera
+ * seguía verde. Y lo que decide es lo PEOR que puede salir mal de la fase — con `servicesFailed` mal
+ * leído el payload referencia ids que nunca se insertaron, la FK compuesta `tbs_service_same_tenant`
+ * (migr. 073) rebota con 23503 y el RPC todo-o-nada se lleva puestas TAMBIÉN las franjas: el negocio
+ * sale del alta sin ningún horario.
+ *
+ * @param vertical       El rubro elegido en el paso 1 (estado local: el negocio todavía no existe).
+ * @param perFranja      El toggle del paso Horarios, tal como quedó al finalizar (D-10).
+ * @param servicesFailed Si el INSERT de servicios falló. `true` ⇒ jamás se mapea: los ids no existen.
+ */
+export function shouldMapServices(
+  { vertical, perFranja, servicesFailed }: { vertical: string; perFranja: boolean; servicesFailed: boolean },
+): boolean {
+  return canMapServicesInVertical(vertical) && perFranja && !servicesFailed
+}
+
+/**
  * Una franja del paso Horarios del alta, tal como la tiene el wizard mientras el dueño la edita.
  *
  * No tiene `id` —ninguna de estas franjas existe todavía en la base— ni `label` ni `location_id`:

@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildOnboardingAgendaPayload,
+  canMapServicesInVertical,
   esServicioVigente,
   franjaServiceIdsVigentes,
   servicesWithoutCoverage,
+  shouldMapServices,
   type OnboardingDayDraft,
 } from '@/lib/onboarding-agenda'
 import { isBlockWildcard } from '@/lib/time-block-services'
@@ -270,5 +272,60 @@ describe('CR-01: un servicio al que se le vació el nombre y quedó mapeado', ()
     })
 
     expect(servicesWithoutCoverage(services, days)).toEqual([])
+  })
+})
+
+// ── WR-05: el gate que decide QUÉ SE PERSISTE, con su tabla de verdad completa ──────────────────
+//
+// QUÉ SE ROMPE SI ESTE BLOQUE SE PONE ROJO: según qué término se invierta, o bien el negocio sale del
+// alta con el mapeo que configuró tirado a la basura (se persiste comodín cuando no correspondía), o
+// bien —el caro— el payload referencia ids de servicios que el INSERT nunca llegó a escribir, la FK
+// compuesta `tbs_service_same_tenant` rebota con 23503 y el RPC todo-o-nada revierte TAMBIÉN las
+// franjas: el negocio termina el alta sin un solo horario.
+//
+// La expresión vivía suelta adentro del submit, o sea adentro de un client component que este runner
+// no renderiza: se le podía invertir cualquiera de los tres términos y las 15 aserciones de arriba
+// seguían verdes. Las OCHO filas se enumeran a mano y no se derivan de la implementación — derivarlas
+// de `shouldMapServices` haría un test que se pone de acuerdo consigo mismo pase lo que pase.
+describe('shouldMapServices: el gate de las TRES condiciones (WR-05)', () => {
+  const filas: { vertical: string; perFranja: boolean; servicesFailed: boolean; esperado: boolean }[] = [
+    // El ÚNICO caso que persiste el mapeo: rubro que lo admite + toggle en Sí + servicios guardados.
+    { vertical: 'belleza', perFranja: true, servicesFailed: false, esperado: true },
+    // El toggle apagado manda, aunque haya mapeo cargado en el estado (D-10).
+    { vertical: 'belleza', perFranja: false, servicesFailed: false, esperado: false },
+    // Servicios fallados ⇒ NUNCA se mapea: los ids que el payload nombraría no existen en la base.
+    { vertical: 'belleza', perFranja: true, servicesFailed: true, esperado: false },
+    { vertical: 'belleza', perFranja: false, servicesFailed: true, esperado: false },
+    // Canchas: el rubro no admite el eje (D-03), pase lo que pase con los otros dos.
+    { vertical: 'canchas', perFranja: true, servicesFailed: false, esperado: false },
+    { vertical: 'canchas', perFranja: false, servicesFailed: false, esperado: false },
+    { vertical: 'canchas', perFranja: true, servicesFailed: true, esperado: false },
+    { vertical: 'canchas', perFranja: false, servicesFailed: true, esperado: false },
+  ]
+
+  for (const { vertical, perFranja, servicesFailed, esperado } of filas) {
+    it(`vertical=${vertical} perFranja=${perFranja} servicesFailed=${servicesFailed} ⇒ ${esperado}`, () => {
+      expect(shouldMapServices({ vertical, perFranja, servicesFailed })).toBe(esperado)
+    })
+  }
+
+  it('el gate y el payload son la MISMA decisión: con los servicios fallados no viaja ningún mapeo', () => {
+    // El gate no se testea en el aire: se lo enchufa al traductor tal como lo hace `handleFinish`.
+    // Si `!servicesFailed` se invirtiera, acá saldría [svcA] y el RPC se llevaría puestas las franjas.
+    const days = week({ 1: [block({ service_ids: [svcA] })] })
+    const mapServices = shouldMapServices({ vertical: 'belleza', perFranja: true, servicesFailed: true })
+    const payload = buildOnboardingAgendaPayload(days, { mapServices, liveServiceIds: [svcA] })
+
+    expect(payload).toHaveLength(1) // la franja SÍ se crea: lo que se cae es el mapeo, no el horario
+    expect(payload[0].service_ids).toEqual([])
+  })
+
+  it('canMapServicesInVertical: sólo canchas queda afuera; el resto de los rubros entra', () => {
+    // Sin este caso, cambiar el literal a otro rubro dejaría la tabla de arriba verde salvo 4 filas
+    // que no distinguirían "canchas" de "cualquier rubro que no sea belleza".
+    expect(canMapServicesInVertical('canchas')).toBe(false)
+    for (const v of ['belleza', 'salud', 'general', '']) {
+      expect(canMapServicesInVertical(v)).toBe(true)
+    }
   })
 })

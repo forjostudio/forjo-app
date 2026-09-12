@@ -19,9 +19,11 @@ import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 import { BlockServicesLine } from '@/components/agenda/block-services-line'
 import {
   buildOnboardingAgendaPayload,
+  canMapServicesInVertical,
   esServicioVigente,
   franjaServiceIdsVigentes,
   servicesWithoutCoverage,
+  shouldMapServices,
 } from '@/lib/onboarding-agenda'
 import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 
@@ -489,8 +491,13 @@ export default function OnboardingPage() {
       // business_id = SIEMPRE el del negocio recién creado por ESTA sesión (business.id), nunca del
       // estado del formulario: aislamiento por tenant, con el guard `not_your_business` de la propia
       // función y la RLS de time_blocks/time_block_services como capas de abajo.
+      // La decisión de si el mapeo se persiste NO se escribe acá: sale del módulo puro
+      // (`shouldMapServices`), que es donde se la puede testear. Mientras vivía como una expresión
+      // suelta en este submit se le podía invertir cualquiera de los tres términos sin que un solo
+      // test se pusiera rojo — y el término que más caro sale (`servicesFailed`) es justo el que
+      // decide entre "agenda en comodín" y "negocio sin ningún horario".
       const p_blocks = buildOnboardingAgendaPayload(dayStates, {
-        mapServices: canMapServices && perFranja && !falloServicios,
+        mapServices: shouldMapServices({ vertical, perFranja, servicesFailed: falloServicios }),
         liveServiceIds: filasDeServicios.map(s => s.id),
       })
       const { error: agendaErr } = await supabase.rpc('save_agenda_blocks', {
@@ -558,7 +565,9 @@ export default function OnboardingPage() {
   //    decide. Es un CONTROL oculto, NO un paso oculto: canchas necesita horarios, así que el paso
   //    se sigue mostrando y por eso este gate no filtra `steps`. Se evalúa contra el estado local
   //    `vertical` y nunca contra resolveVertical(business): acá el negocio todavía no existe.
-  const canMapServices = vertical !== 'canchas'
+  //    La regla sale del módulo puro para que este gate y el del submit (`shouldMapServices`) no
+  //    puedan separarse: son la MISMA condición leída en dos momentos.
+  const canMapServices = canMapServicesInVertical(vertical)
   // 2) El catálogo de los chips, fabricado desde el estado local del paso 2. `active` siempre true:
   //    durante el alta no existe un servicio dado de baja (el matiz D-11 del panel no aplica acá).
   const chipCatalog = services.filter(esServicioVigente).map(s => ({ id: s.id, name: s.name, active: true }))
