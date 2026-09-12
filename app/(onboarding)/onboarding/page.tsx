@@ -22,6 +22,7 @@ import {
   canMapServicesInVertical,
   esServicioVigente,
   franjaServiceIdsVigentes,
+  newServiceId,
   servicesWithoutCoverage,
   shouldMapServices,
 } from '@/lib/onboarding-agenda'
@@ -29,21 +30,12 @@ import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
-// La clave local de cada servicio del paso 2 (D-08/D-09), y a la vez el `services.id` final.
-//
-// Es UNA sola clave para dos trabajos, y esa es la decisión: el mapeo franja↔servicio del paso 4 se
-// arma ANTES de que los servicios existan en la base, así que necesita una identidad estable desde
-// que la fila nace en el paso 2 —renombrar el servicio conserva su mapeo, borrarlo saca sus chips—
-// y a la vez necesita coincidir con el id real de la fila insertada. Generarlo acá resuelve las dos
-// cosas de una: el mismo uuid viaja en el INSERT a `services` y en el payload del RPC.
-//
-// ⚠ Lo que NO se hace es correlacionar por posición lo insertado con lo devuelto: PostgreSQL no
-// garantiza el orden de un `INSERT … RETURNING` de varias filas, así que esa correlación es un bug
-// estructural, no un atajo. Por eso el insert de servicios tampoco lleva `.select()`.
-// Forma tomada de `lib/landing/editor-upload.ts` (`globalThis.crypto`: secure context).
-function newServiceId(): string {
-  return globalThis.crypto.randomUUID()
-}
+// La clave local de cada servicio del paso 2 (D-08/D-09), y a la vez el `services.id` final, vive en
+// `lib/onboarding-agenda.ts`. Se mudó al módulo puro por WR-02: llamaba a `globalThis.crypto
+// .randomUUID()` directo, y ese método es `[SecureContext]` —en http:// NO EXISTE—, así que en la
+// UAT desde el celular en la LAN tiraba `TypeError` adentro del inicializador lazy de un `useState`
+// y dejaba la pantalla del alta en blanco. La rama de degradación no se puede ejercitar desde acá
+// (el runner no renderiza este componente), y un fallback que nunca corrió no es una red.
 
 // Estado del paso de horarios: un día → { enabled, blocks[] }, donde cada bloque es una ventana
 // simple { start_time, end_time }. Modelo N-bloques/día para soportar horario partido (D-04, ej.

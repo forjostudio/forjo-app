@@ -98,6 +98,46 @@ export function shouldMapServices(
 }
 
 /**
+ * El uuid con el que una fila de servicio del paso 2 nace, vive y se inserta (D-08/D-09).
+ *
+ * Es UNA sola clave para dos trabajos: el mapeo franja↔servicio del paso 4 se arma ANTES de que los
+ * servicios existan en la base —así que necesita identidad estable desde que la fila nace— y a la vez
+ * tiene que coincidir con el id real de la fila insertada. El mismo uuid viaja en el INSERT a
+ * `services` y en el payload del RPC. Lo que NO se hace es correlacionar por posición lo insertado
+ * con lo devuelto: PostgreSQL no garantiza el orden de un `INSERT … RETURNING` de varias filas, y por
+ * eso el insert de servicios tampoco lleva `.select()`.
+ *
+ * ⚠ `Crypto.randomUUID` es `[SecureContext]`: en un origen que NO es https el método no existe —no es
+ * que falle, no está—, así que llamarlo directo tira `TypeError`. Y esto corre en el inicializador
+ * lazy de un `useState`, o sea durante el primer render y sin error boundary arriba: la pantalla del
+ * alta quedaba EN BLANCO. `https://` en producción está bien; `http://192.168.x.x:3000` —que es como
+ * se hace la UAT desde el celular en este proyecto— no lo estaba, y es justo el dispositivo donde la
+ * UAT encuentra los bugs. Por eso degrada en vez de tirar (WR-02).
+ *
+ * `getRandomValues` NO es secure-context, así que la rama del medio es la que corre de verdad en la
+ * LAN. La de `Math.random` es la última red: un entorno sin `crypto` tampoco puede dejar la pantalla
+ * en blanco, y la unicidad que hace falta acá es dentro de UNA sesión del wizard — la real la
+ * garantiza la PK de `services`.
+ *
+ * Vive en este módulo puro y no en el componente por el mismo motivo que todo lo demás de acá: en un
+ * client component que el runner no renderiza, la rama del fallback no se puede ejercitar, y un
+ * fallback que nunca se corrió es una suposición, no una red.
+ */
+export function newServiceId(): string {
+  const c = globalThis.crypto
+  if (typeof c?.randomUUID === 'function') return c.randomUUID()
+  const bytes = new Uint8Array(16)
+  if (typeof c?.getRandomValues === 'function') c.getRandomValues(bytes)
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
+  // Versión 4 y variante RFC 4122, igual que lo que devuelve randomUUID: la columna es `uuid` y el id
+  // viaja en el payload del RPC, así que la FORMA tiene que ser la misma por las tres ramas.
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+/**
  * Una franja del paso Horarios del alta, tal como la tiene el wizard mientras el dueño la edita.
  *
  * No tiene `id` —ninguna de estas franjas existe todavía en la base— ni `label` ni `location_id`:

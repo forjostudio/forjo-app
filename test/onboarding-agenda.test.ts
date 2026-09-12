@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import {
   buildOnboardingAgendaPayload,
   canMapServicesInVertical,
   esServicioVigente,
   franjaServiceIdsVigentes,
+  newServiceId,
   servicesWithoutCoverage,
   shouldMapServices,
   type OnboardingDayDraft,
@@ -327,5 +328,57 @@ describe('shouldMapServices: el gate de las TRES condiciones (WR-05)', () => {
     for (const v of ['belleza', 'salud', 'general', '']) {
       expect(canMapServicesInVertical(v)).toBe(true)
     }
+  })
+})
+
+// ── WR-02: el id del servicio tiene que salir TAMBIÉN fuera de un contexto seguro ───────────────
+//
+// QUÉ SE ROMPE SI ESTE BLOQUE SE PONE ROJO: la pantalla del alta queda EN BLANCO en `http://`.
+// `Crypto.randomUUID` es `[SecureContext]`: en un origen no-https el método no existe, y la llamada
+// corre en el inicializador lazy de un `useState` —primer render, sin error boundary arriba—, así
+// que el `TypeError` se lleva puesta la página entera. `https://` en producción anda; el que no anda
+// es `http://192.168.x.x:3000`, que es como este proyecto hace la UAT desde el celular, o sea
+// justamente el dispositivo donde la UAT encuentra los bugs.
+//
+// Las TRES ramas se ejercitan de verdad, no se leen: `globalThis.crypto` se reemplaza por un doble
+// sin `randomUUID` (el caso real de la LAN) y por uno sin nada (la última red). Restaurar en
+// `afterEach` es obligatorio: dejar el doble puesto contaminaría cualquier test posterior del mismo
+// worker.
+const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+describe('newServiceId: el uuid del paso 2 sin contexto seguro (WR-02)', () => {
+  const realCrypto = globalThis.crypto
+
+  function fakeCrypto(value: unknown) {
+    Object.defineProperty(globalThis, 'crypto', { value, configurable: true, writable: true })
+  }
+
+  afterEach(() => {
+    fakeCrypto(realCrypto)
+  })
+
+  it('con randomUUID disponible (https) usa randomUUID', () => {
+    expect(newServiceId()).toMatch(V4)
+    expect(typeof globalThis.crypto.randomUUID).toBe('function')
+  })
+
+  it('SIN randomUUID (http:// en la LAN) NO tira y devuelve un uuid v4 válido', () => {
+    // El doble es el `Crypto` real de un origen inseguro: `getRandomValues` sí, `randomUUID` no.
+    fakeCrypto({ getRandomValues: (b: Uint8Array) => realCrypto.getRandomValues(b) })
+
+    expect(() => newServiceId()).not.toThrow()
+    const id = newServiceId()
+    expect(id).toMatch(V4)
+    // Dos llamadas seguidas no pueden devolver el mismo id: son dos filas distintas del paso 2, y
+    // dos ids iguales harían que el mapeo de una franja apuntara al servicio equivocado.
+    expect(new Set(Array.from({ length: 200 }, () => newServiceId())).size).toBe(200)
+  })
+
+  it('sin crypto en absoluto tampoco tira (la última red)', () => {
+    fakeCrypto(undefined)
+
+    expect(() => newServiceId()).not.toThrow()
+    expect(newServiceId()).toMatch(V4)
+    expect(new Set(Array.from({ length: 200 }, () => newServiceId())).size).toBe(200)
   })
 })
