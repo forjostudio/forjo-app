@@ -475,7 +475,16 @@ export default function OnboardingPage() {
         if (svcErr) {
           falloServicios = true
           console.error('[onboarding/services]', svcErr.code)
-          toast.error('Creamos tu negocio, pero no pudimos guardar tus servicios. Entrá a Servicios y cargalos.')
+          // El mensaje tiene que nombrar TODO lo que se perdió, no sólo la mitad visible (WR-01).
+          // Cuando el dueño venía mapeando franjas, este fallo NO se lleva sólo el catálogo: fuerza
+          // `mapServices: false`, así que la agenda se persiste entera en comodín —o sea, abierta a
+          // todo— y él no tiene forma de enterarse. Recrear los servicios en el panel no reconstruye
+          // ese mapeo, así que el mensaje también dice dónde terminar de configurarlo.
+          toast.error(
+            canMapServices && perFranja
+              ? 'Creamos tu negocio, pero no pudimos guardar tus servicios, así que tampoco pudimos guardar qué se da en cada franja: tus horarios quedaron abiertos a cualquier servicio. Entrá a Servicios, cargalos, y después definí las franjas en Agenda.'
+              : 'Creamos tu negocio, pero no pudimos guardar tus servicios. Entrá a Servicios y cargalos.'
+          )
         }
       }
 
