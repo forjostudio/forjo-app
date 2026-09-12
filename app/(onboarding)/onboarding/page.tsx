@@ -510,9 +510,25 @@ export default function OnboardingPage() {
         }
       }
 
-      await supabase.from('professionals').insert(
-        professionals.filter(p => p.name).map(p => ({ ...p, business_id: business.id }))
-      )
+      // El error de este insert también se chequea (WR-07). No es prolijidad: hasta acá eran tres
+      // escrituras consecutivas con tres políticas distintas —servicios reportado, agenda reportada,
+      // profesionales tirado a la basura—, y un fallo de ésta era pérdida TOTALMENTE silenciosa: el
+      // dueño caía en el dashboard con un toast de éxito y sin ningún profesional. No se tira ni se
+      // corta el redirect, por el mismo motivo que las otras dos: el negocio ya existe y el alta no
+      // es re-entrante (un segundo submit crearía OTRO negocio).
+      //
+      // Y no se llama con el arreglo vacío: con todos los nombres en blanco eso era un round-trip a
+      // la base para insertar nada.
+      const filasDeProfesionales = professionals
+        .filter(p => p.name.trim())
+        .map(p => ({ name: p.name, business_id: business.id }))
+      if (filasDeProfesionales.length > 0) {
+        const { error: proErr } = await supabase.from('professionals').insert(filasDeProfesionales)
+        if (proErr) {
+          console.error('[onboarding/professionals]', proErr.code)
+          toast.error('Creamos tu negocio, pero no pudimos guardar tus profesionales. Entrá a Profesionales y cargalos.')
+        }
+      }
 
       // Horarios + mapeo franja↔servicio → `save_agenda_blocks` (migr. 074), el MISMO RPC atómico
       // que usa el panel. Una sola llamada todo-o-nada en vez de dos escrituras sin transacción: las
