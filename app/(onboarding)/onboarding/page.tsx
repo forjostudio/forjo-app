@@ -685,16 +685,22 @@ export default function OnboardingPage() {
     <div className="min-h-screen p-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-8">
         <div className="relative text-center mb-8">
-          {/* Salida discreta arriba a la derecha (ONB-02): no compite con el lockup centrado. Visible
-              en todos los pasos para que el usuario con la cuenta equivocada pueda salir siempre. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="absolute right-0 top-0 gap-1.5 text-muted-foreground"
-          >
-            <LogOut className="w-4 h-4" /> Cerrar sesión
-          </Button>
+          {/* Salida discreta (ONB-02): no compite con el lockup centrado. Visible en todos los pasos
+              para que el usuario con la cuenta equivocada pueda salir siempre.
+              ⚠ En mobile va en su PROPIA FILA arriba del lockup, no en absolute. `absolute` lo saca
+              de flujo, así que nada separa el botón del logo centrado y a ~390px se superponen (el
+              texto "Cerrar sesión" es más ancho que el margen que deja el lockup). Desde sm+ vuelve
+              a la esquina, donde sí sobra ancho. */}
+          <div className="mb-1 flex justify-end sm:absolute sm:right-0 sm:top-0 sm:mb-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="gap-1.5 text-muted-foreground"
+            >
+              <LogOut className="w-4 h-4" /> Cerrar sesión
+            </Button>
+          </div>
           <div className="flex items-center justify-center">
             <Image src="/brand/forjo-gestion-lockup-tinta.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto dark:hidden" />
             <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="hidden h-10 w-auto dark:block" />
@@ -810,7 +816,12 @@ export default function OnboardingPage() {
                         {(v: string | null) => (v && v in VERTICALS ? VERTICALS[v as VerticalKey].label : 'Elegí tu rubro')}
                       </SelectValue>
                     </SelectTrigger>
-                    <SelectContent>
+                    {/* El popup por defecto es `w-(--anchor-width)`: copia el ancho del TRIGGER, que
+                        acá es angosto. "Belleza/Estética/Spa" no entra y queda apretado contra los
+                        bordes (y el panel se sale del viewport). `w-auto` lo deja medir por su
+                        contenido, `min-w` conserva el piso del trigger y `max-w` lo mantiene dentro
+                        de la pantalla en mobile. Scoped a este select: no toca el resto de la app. */}
+                    <SelectContent className="w-auto min-w-(--anchor-width) max-w-[calc(100vw-2rem)]">
                       {(Object.keys(VERTICALS) as VerticalKey[]).map(k => (
                         <SelectItem key={k} value={k}>{VERTICALS[k].label}</SelectItem>
                       ))}
@@ -1103,14 +1114,18 @@ export default function OnboardingPage() {
                         {ds.blocks.map((b, idx) => (
                           <div key={idx} className="space-y-1">
                             <div className="flex items-center justify-center sm:justify-start gap-2">
-                              {/* Inputs de hora: ancho fijo snug (w-24 = 96px) y texto centrado — entra
-                                  "09:00" + el ícono nativo del reloj sin truncar; centrados bajo el día en
-                                  mobile, alineados a la izquierda en sm+. */}
+                              {/* Inputs de hora: texto centrado, centrados bajo el día en mobile y
+                                  alineados a la izquierda en sm+.
+                                  ⚠ El ancho lo decide el CONTROL NATIVO (`w-auto`), no un valor fijo.
+                                  Con `w-24` (96px) entraba "09:00" + el ícono del reloj, pero un
+                                  navegador en locale de 12 horas renderiza "9:00 a. m." y el sufijo
+                                  quedaba recortado ("9:00 a.ı" en Android Chrome). `min-w-24` conserva
+                                  el piso anterior para los locales de 24 horas. */}
                               <Input
                                 type="time"
                                 value={b.start_time}
                                 onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                                className="w-24 text-center text-sm"
+                                className="w-auto min-w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               <span className="text-muted-foreground text-sm">—</span>
@@ -1118,7 +1133,7 @@ export default function OnboardingPage() {
                                 type="time"
                                 value={b.end_time}
                                 onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                                className="w-24 text-center text-sm"
+                                className="w-auto min-w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               {ds.blocks.length > 1 && (
