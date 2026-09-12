@@ -3,7 +3,7 @@ status: complete
 phase: 21-lo-que-el-negocio-declara
 source: [21-VERIFICATION.md]
 started: 2026-09-12T03:01:04.576Z
-updated: 2026-09-12T18:52:18.000Z
+updated: 2026-09-12T21:02:36.000Z
 ---
 
 ## Current Test
@@ -65,9 +65,9 @@ result: pass
 ### 10. Paso 1 (Tu negocio), mobile: posicion del boton 'Cerrar sesion' respecto del logo.
 expected: El boton no se superpone al lockup de Forjo; hay espacio libre arriba para anclarlo contra el borde superior.
 found_during: test 1 (hallazgo incidental, fuera del alcance del test)
-result: issue
+result: pass
 reported: "Paso 1 encontre algo, el boton de cerrar sesion quedo pisando el logo, hay lugar para que vaya contra el borde de arriba."
-severity: cosmetic
+retest: "Re-testeado en celular real tras 670f7b2 — no se superpone. Ajuste adicional pedido durante el retest: aire superior a 12px en mobile."
 
 ### 11. Paso 2 (Servicios), mobile: borrar con el teclado el 0 de Precio y el valor de Min.
 expected: El campo se puede vaciar tecleando backspace, sin tener que salir y volver a clickear la celda; ademas, Min. en 0 muestra un aviso de validacion.
@@ -79,22 +79,22 @@ severity: major
 ### 12. Paso 1 (Tu negocio), mobile: desplegable de Rubro.
 expected: Las opciones se leen completas y con aire; el panel no se sale del viewport ni aprieta el texto contra los bordes.
 found_during: test 7 (hallazgo incidental, fuera del alcance del test)
-result: issue
+result: pass
 reported: "anota para corregir el selector ese que queda todo apretado el texto de estetica/spa"
-severity: cosmetic
+retest: "Re-testeado en celular real tras 670f7b2 — las opciones se leen completas y el panel no desborda."
 
 ### 13. Paso Horarios, mobile: ancho de los inputs de hora.
 expected: La hora se lee completa dentro del campo (9:00 a.m. / 6:00 p.m.), sin recorte del sufijo AM/PM.
 found_during: test 9 (hallazgo incidental, fuera del alcance del test)
-result: issue
+result: pass
 reported: "tenemos que arreglar los campos de hora que quedan cortados"
-severity: cosmetic
+retest: "Re-testeado en celular real tras 670f7b2 — la hora se lee completa con el sufijo AM/PM. Era el unico de los tres que no reproducia en escritorio (locale de 24h)."
 
 ## Summary
 
 total: 13
-passed: 8
-issues: 4
+passed: 11
+issues: 1
 pending: 0
 skipped: 0
 blocked: 1
