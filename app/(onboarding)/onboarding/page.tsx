@@ -1032,12 +1032,20 @@ export default function OnboardingPage() {
               {showServicesToggle && (
                 <div className="space-y-2 rounded-lg border border-border p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium">¿Cada franja es para un servicio puntual?</span>
+                    {/* El `id` no es decorativo: es lo único que le da nombre accesible al switch
+                        (WR-04). Sin él, el lector de pantalla anunciaba "No, switch, apagado" y el
+                        dueño no tenía forma de saber QUÉ se estaba apagando — la pregunta vive en
+                        este span, no en el botón, cuyo texto visible es sólo "Sí"/"No". */}
+                    <span id="per-franja-label" className="text-sm font-medium">¿Cada franja es para un servicio puntual?</span>
+                    {/* `aria-checked` y NUNCA `aria-pressed`: el estado de un `role="switch"` lo lleva
+                        el primero; `aria-pressed` es del rol `button` y el rol switch no lo soporta
+                        (lo marca `jsx-a11y/role-supports-aria-props`). Tener los dos no reforzaba
+                        nada: duplicaba el estado en un atributo que este rol ignora. */}
                     <button
                       type="button"
                       role="switch"
                       aria-checked={perFranja}
-                      aria-pressed={perFranja}
+                      aria-labelledby="per-franja-label"
                       onClick={() => setPerFranja(v => !v)}
                       className={cn(
                         'inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
