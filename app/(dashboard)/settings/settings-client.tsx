@@ -18,6 +18,11 @@ import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
+// Los tres helpers son del módulo del alta sólo por dónde nacieron: desde G-21-11 los comparten las
+// TRES superficies que escriben `services`, y una cuarta variante de "texto de input → número" es
+// exactamente cómo las reglas divergen. El rename del módulo queda pendiente a propósito: toca
+// imports de varias pantallas y no es lo que este cambio vino a hacer.
+import { DEFAULT_SERVICE_MINUTES, normalizeServiceDuration, normalizeServicePrice } from '@/lib/onboarding-agenda'
 import { AGENDA_SENTINEL, OCCUPYING_STATUSES, occupiesSeat } from '@/lib/agenda-occupancy'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -1135,7 +1140,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [services, setServices] = useState<Service[]>(initialServices)
   // capacity_mode/capacity (migr. 062, ampliado por la 068): el default espeja el de la DB → un
   // servicio nuevo nace INDIVIDUAL con cupo 1, y el dueño opta explícitamente por los otros dos modos.
-  const [newService, setNewService] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
+  // `duration_minutes` y `price` guardan el TEXTO CRUDO del input (G-21-11): es lo que permite
+  // vaciar la celda con el teclado. Coercionar en el `onChange` reescribía el estado con el valor
+  // anterior y deshacía cada backspace. El número se produce a la vista en el `onBlur` y, de nuevo,
+  // al armar el payload — dos capas, porque un submit que no dispare blur mandaría la cadena vacía.
+  const [newService, setNewService] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1 })
   // Guard de doble submit del alta (T-17-05): hasta ahora `addService` no deshabilitaba nada, así que
   // dos clicks seguidos creaban DOS servicios idénticos y el segundo quedaba huérfano de intención.
   // Espeja a `savingEditSvc` del diálogo de edición.
@@ -1348,16 +1357,21 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setSavingNewSvc(true)
     try {
       const { name, duration_minutes, price, location_ids, capacity_mode } = newService
+      // El borde donde el texto del formulario se vuelve el número que se persiste (G-21-11). Antes
+      // el alta hacía `parseInt(e.target.value)` sin fallback: vaciar la celda daba NaN, que
+      // serializa `null` contra una columna NOT NULL ⇒ 23502, y el guardado moría con un "Error".
+      const durationMinutes = normalizeServiceDuration(duration_minutes).value
+      const priceValue = normalizeServicePrice(price).value
       // Desde la migr. 068 el cupo vale para los TRES modos y está atado al modo por CHECK: individual
       // ⇒ exactamente 1; grupal y simultáneo ⇒ >= 2. Se normaliza con el piso del modo para que el
       // INSERT no pueda rebotar contra services_capacity_matches_mode_chk.
       const capacity = capacity_mode === 'individual' ? 1 : normalizeCapacity(newService.capacity, 2)
       const { data, error } = await supabase.from('services')
-        .insert({ name, duration_minutes, price, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id })
+        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id })
         .select().single()
       if (error) { toast.error('Error'); return }
       setServices(prev => [...prev, data as Service])
-      setNewService({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
+      setNewService({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1 })
       toast.success('Servicio agregado')
     } finally {
       // `finally` y no una línea antes de cada `return`: el early return por error del INSERT y
@@ -1415,7 +1429,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // Edición de servicio (reusa el form de alta: nombre, duración, precio, consultorios).
   const [editSvc, setEditSvc] = useState<Service | null>(null)
-  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: number; price: number; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: 30, price: 0, location_ids: [], capacity_mode: 'individual', capacity: 1 })
+  // Mismo criterio que `newService`: los dos campos numéricos son texto crudo (G-21-11).
+  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1 })
   const [savingEditSvc, setSavingEditSvc] = useState(false)
   // Guardado del cupo inline, POR TARJETA (D-08). NO se puede copiar el shape booleano de
   // `savingEditSvc`: el diálogo es uno solo, pero las tarjetas son muchas y están todas en pantalla a
@@ -1438,8 +1453,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     const mode: CapacityMode = s.capacity_mode ?? 'individual'
     setEditSvcForm({
       name: s.name,
-      duration_minutes: s.duration_minutes,
-      price: Number(s.price),
+      // `String(...)` y no `Number(...)`: el estado ahora es texto. De paso normaliza que `price`
+      // llega de PostgREST como string (la columna es `numeric`) y `duration_minutes` como número.
+      duration_minutes: String(s.duration_minutes),
+      price: String(s.price),
       location_ids: serviceLocSet(s),
       capacity_mode: mode,
       capacity: normalizeCapacity(Number(s.capacity), minCapacityFor(mode)),
@@ -1451,8 +1468,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // Normaliza igual que addService/setServiceLocations: array vacío → null = "todos"; limpia el legacy location_id.
     const payload = {
       name: editSvcForm.name.trim(),
-      duration_minutes: editSvcForm.duration_minutes,
-      price: editSvcForm.price,
+      // Mismo borde que en addService (G-21-11). Acá el bug tenía la OTRA forma: `parseInt(...) || 0`
+      // convertía la celda vaciada en un 0 que SÍ se guardaba — un desajuste silencioso (el dueño
+      // cree que el servicio dura X y el motor reserva 30) que desde la migr. 077 además rebota
+      // contra el CHECK `services_duration_positive`.
+      duration_minutes: normalizeServiceDuration(editSvcForm.duration_minutes).value,
+      price: normalizeServicePrice(editSvcForm.price).value,
       location_ids: editSvcForm.location_ids.length ? editSvcForm.location_ids : null,
       location_id: null,
       capacity_mode: editSvcForm.capacity_mode,
@@ -2702,11 +2723,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 </div>
                 <div className="col-span-12 sm:col-span-3 space-y-1">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Min.</Label>
-                  <Input type="number" value={newService.duration_minutes} onChange={e => setNewService(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))} min={5} step={5} />
+                  {/* Texto crudo al escribir + normalización al salir del campo (G-21-11). Acá no
+                      hay slot de error inline como en el alta del onboarding, así que el campo
+                      corrigiéndose A LA VISTA ES el aviso: lo que veo es lo que se guarda. Un toast
+                      por cada blur sería ruido en una pantalla que se edita mucho. */}
+                  <Input type="number" value={newService.duration_minutes} onChange={e => setNewService(f => ({ ...f, duration_minutes: e.target.value }))} onBlur={e => setNewService(f => ({ ...f, duration_minutes: String(normalizeServiceDuration(e.target.value).value) }))} min={5} step={5} />
                 </div>
                 <div className="col-span-12 sm:col-span-3 space-y-1">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
-                  <Input type="number" value={newService.price} onFocus={e => e.target.select()} onChange={e => setNewService(f => ({ ...f, price: parseFloat(e.target.value) }))} min={0} step={100} />
+                  <Input type="number" value={newService.price} onFocus={e => e.target.select()} onChange={e => setNewService(f => ({ ...f, price: e.target.value }))} onBlur={e => setNewService(f => ({ ...f, price: String(normalizeServicePrice(e.target.value).value) }))} min={0} step={100} />
                 </div>
               </div>
               <CapacityModeFields
@@ -2779,11 +2804,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Min.</Label>
-                    <Input type="number" value={editSvcForm.duration_minutes} onChange={e => setEditSvcForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) || 0 }))} min={5} step={5} />
+                    <Input type="number" value={editSvcForm.duration_minutes} onChange={e => setEditSvcForm(f => ({ ...f, duration_minutes: e.target.value }))} onBlur={e => setEditSvcForm(f => ({ ...f, duration_minutes: String(normalizeServiceDuration(e.target.value).value) }))} min={5} step={5} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="w-3 h-3" /> Precio</Label>
-                    <Input type="number" value={editSvcForm.price} onFocus={e => e.target.select()} onChange={e => setEditSvcForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} min={0} step={100} />
+                    <Input type="number" value={editSvcForm.price} onFocus={e => e.target.select()} onChange={e => setEditSvcForm(f => ({ ...f, price: e.target.value }))} onBlur={e => setEditSvcForm(f => ({ ...f, price: String(normalizeServicePrice(e.target.value).value) }))} min={0} step={100} />
                   </div>
                 </div>
                 <CapacityModeFields
