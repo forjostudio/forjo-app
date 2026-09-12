@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v0.27
 current_phase: 21
 current_phase_name: Lo que el negocio declara
-status: executing
-stopped_at: Completed 21-01-PLAN.md
-last_updated: "2026-09-12T00:07:52.583Z"
+status: verifying
+stopped_at: Completed 21-02-PLAN.md
+last_updated: "2026-09-12T00:27:41.752Z"
 last_activity: 2026-09-11
 last_activity_desc: Phase 21 execution started
-state_head: d9d6f530a715100a5c3646b4f989f4e544d2ec09
+state_head: 18819cd4788a2e95f77af137e680dc60a62d5ec1
 progress:
   total_phases: 21
   completed_phases: 16
   total_plans: 102
-  completed_plans: 100
+  completed_plans: 102
   percent: 76
 milestone_name: — Cupo unificado por servicio
 ---
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 21 (Lo que el negocio declara) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-11 — Phase 21 execution started
 
 ## Milestone v0.28 — decisiones LOCKED
@@ -175,6 +175,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 21 P01 | 17 min | 3 tasks | 6 files |
+| Phase 21 P02 | 8 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -351,6 +352,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 21]: El alta escribe la agenda por save_agenda_blocks (migr. 074), no por time_blocks.insert: franjas y mapeo en una sola transaccion
 - [Phase 21]: El editor de chips por franja vive en components/agenda/block-services-line.tsx y lo comparten el panel y el alta (D-05)
 - [Phase 21]: services.id lo genera el cliente en el paso 2 del alta (D-09): verificado contra la base local que la policy de INSERT acepta PK provista (asuncion A2 cerrada)
+- [Phase 21]: El aviso de servicios sin franja del alta se apoya en hasScheduleCoverage y NUNCA en isServiceScheduled — La cruda filtra las franjas: con cero franjas daria false para todo el catalogo y el aviso pasaria de informar a mentir. Cerrar los 7 dias en el alta es un click. Probado por mutacion (CR-01 de la Phase 20).
+- [Phase 21]: El aviso de D-07 es no bloqueante por estructura, no por promesa — handleFinish no referencia la constante del aviso (gate con awk acotado a la funcion) y Finalizar conserva su unico disabled={loading}. Un servicio sin franja es un estado legal (D-06 de la Phase 18).
 
 ### Pending Todos
 
@@ -433,8 +436,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-12T00:07:24.927Z
-Stopped at: Completed 21-01-PLAN.md
+Last session: 2026-09-12T00:26:46.620Z
+Stopped at: Completed 21-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

@@ -83,7 +83,7 @@ natural es que también declare **qué**.
       da. Si un servicio no tiene ninguna franja que lo cubra, el vacío se explica en vez de mostrar un
       calendario mudo.
 
-- [ ] **AGENDA-08** — El onboarding deja declarar la agenda real de un negocio de clases desde el día
+- [x] **AGENDA-08** — El onboarding deja declarar la agenda real de un negocio de clases desde el día
       uno, en vez de pedirle un horario genérico que no describe su negocio.
 
 ## Fuera de alcance
@@ -109,7 +109,7 @@ natural es que también declare **qué**.
 | AGENDA-05 | Phase 19 | Complete |
 | AGENDA-06 | Phase 19 | Complete |
 | AGENDA-07 | Phase 20 | Complete |
-| AGENDA-08 | Phase 21 | Pending |
+| AGENDA-08 | Phase 21 | Complete |
 
 ## Riesgo
 

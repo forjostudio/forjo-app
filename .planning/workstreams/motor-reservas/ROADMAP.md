@@ -769,16 +769,16 @@ Plans:
 **Security/Integrity relevance**: Media. Escribe agenda durante el alta; el aislamiento lo sostiene la RLS por `business_id` como en el resto del panel, más el guard de autoría del RPC y las FK compuestas de la migr. 073.
 **UI hint**: yes
 
-**Plans**: 0/2 plans executed
+**Plans**: 2/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 21-01-PLAN.md — **Tracer**: extracción del editor de chips a `components/agenda/block-services-line.tsx` (D-05) + clave local por servicio con `crypto.randomUUID()` (D-08/D-09) + toggle del paso Horarios con sus gates (D-01/D-02/D-03/D-04) + chips por franja (D-06) + el submit por `save_agenda_blocks` con D-10, probado end-to-end contra la DB local — AGENDA-08
+- [x] 21-01-PLAN.md — **Tracer**: extracción del editor de chips a `components/agenda/block-services-line.tsx` (D-05) + clave local por servicio con `crypto.randomUUID()` (D-08/D-09) + toggle del paso Horarios con sus gates (D-01/D-02/D-03/D-04) + chips por franja (D-06) + el submit por `save_agenda_blocks` con D-10, probado end-to-end contra la DB local — AGENDA-08
 
 **Wave 2** *(bloqueado por 21-01: mismos archivos)*
 
-- [ ] 21-02-PLAN.md — `servicesWithoutCoverage` (sobre `hasScheduleCoverage`, con la guarda de cero franjas de CR-01) + el aviso no bloqueante al pie del paso Horarios, anticipando la frase pública "Sin horarios disponibles" (D-07) — AGENDA-08
+- [x] 21-02-PLAN.md — `servicesWithoutCoverage` (sobre `hasScheduleCoverage`, con la guarda de cero franjas de CR-01) + el aviso no bloqueante al pie del paso Horarios, anticipando la frase pública "Sin horarios disponibles" (D-07) — AGENDA-08
 
 ---
 
