@@ -4,9 +4,11 @@ import {
   canMapServicesInVertical,
   esServicioVigente,
   franjaServiceIdsVigentes,
+  MIN_SERVICE_MINUTES,
   newServiceId,
   servicesWithoutCoverage,
   shouldMapServices,
+  toNumberOr,
   type OnboardingDayDraft,
 } from '@/lib/onboarding-agenda'
 import { isBlockWildcard } from '@/lib/time-block-services'
@@ -380,5 +382,61 @@ describe('newServiceId: el uuid del paso 2 sin contexto seguro (WR-02)', () => {
     expect(() => newServiceId()).not.toThrow()
     expect(newServiceId()).toMatch(V4)
     expect(new Set(Array.from({ length: 200 }, () => newServiceId())).size).toBe(200)
+  })
+})
+
+// ── WR-03: un campo numérico vaciado no puede llevarse puesto el catálogo entero ────────────────
+//
+// QUÉ SE ROMPE SI ESTE BLOQUE SE PONE ROJO: el dueño borra el "30" del campo Min. para reescribirlo,
+// `parseInt('')` da NaN, `JSON.stringify` lo serializa como `null`, y `services.duration_minutes` es
+// NOT NULL ⇒ 23502. Como el insert de servicios es UNA sola sentencia multi-fila, no se pierde esa
+// fila: se pierde el catálogo COMPLETO. Y desde esta fase, con él, el mapeo franja↔servicio, porque
+// `falloServicios` degrada la agenda a comodín. Nada lo atajaba: `validateServicePrice` sólo mira
+// `< 0` y `NaN < 0` es false.
+//
+// La aserción es sobre el JSON, no sobre el número: `NaN !== NaN` hace que un `toEqual` distraído
+// pase, y lo que rompe la base es la SERIALIZACIÓN, que es lo que se chequea.
+describe('toNumberOr: el valor de un input numérico vaciado (WR-03)', () => {
+  it('el campo vacío cae al default en vez de dar NaN', () => {
+    expect(toNumberOr('', 30)).toBe(30)
+    expect(toNumberOr('   ', 30)).toBe(30)
+    expect(toNumberOr('', 0)).toBe(0)
+    // La trampa que esto cierra: Number('') es 0, no NaN. La version "obvia" del fix dejaba
+    // pasar un servicio de 0 minutos en vez de un NaN — el mismo bug con otro disfraz.
+    expect(Number('')).toBe(0)
+    // Esto es lo que hacía `parseInt`/`parseFloat` y lo que ya no puede pasar.
+    expect(Number.isNaN(parseInt(''))).toBe(true)
+  })
+
+  it('texto basura y no-finitos también caen al default', () => {
+    for (const v of ['', '   ', 'abc', '1e999', '-1e999']) {
+      expect(Number.isFinite(toNumberOr(v, 30))).toBe(true)
+    }
+  })
+
+  it('los valores legítimos pasan intactos, decimales incluidos', () => {
+    expect(toNumberOr('45', 30)).toBe(45)
+    expect(toNumberOr('0', 30)).toBe(0)
+    expect(toNumberOr('1500.5', 0)).toBe(1500.5)
+    expect(toNumberOr('-100', 0)).toBe(-100) // el precio negativo lo sigue atajando validateServicePrice
+  })
+
+  it('la fila que viaja al insert nunca serializa null en una columna NOT NULL', () => {
+    const fila = {
+      id: svcA,
+      name: 'Yoga',
+      duration_minutes: toNumberOr('', 30),
+      price: toNumberOr('', 0),
+      business_id: 'biz',
+    }
+    const serializada = JSON.parse(JSON.stringify(fila))
+    expect(serializada.duration_minutes).toBe(30)
+    expect(serializada.price).toBe(0)
+    // El contraejemplo: así se veía la fila con parseInt, y así llegaba a un NOT NULL ⇒ 23502.
+    expect(JSON.parse(JSON.stringify({ duration_minutes: parseInt('') })).duration_minutes).toBeNull()
+  })
+
+  it('MIN_SERVICE_MINUTES es el piso que usa la validación inline de duración', () => {
+    expect(MIN_SERVICE_MINUTES).toBeGreaterThan(0)
   })
 })

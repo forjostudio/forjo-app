@@ -22,9 +22,11 @@ import {
   canMapServicesInVertical,
   esServicioVigente,
   franjaServiceIdsVigentes,
+  MIN_SERVICE_MINUTES,
   newServiceId,
   servicesWithoutCoverage,
   shouldMapServices,
+  toNumberOr,
 } from '@/lib/onboarding-agenda'
 import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 
@@ -83,6 +85,9 @@ interface Service {
   // distintos del default) pero sin nombre → el nombre es obligatorio para que la fila sea un servicio
   // real. NO bloquea Siguiente/Omitir (gating relajado, D-02). Solo estado de UI, no se persiste.
   nameError?: string
+  // Explicación inline de la duración (WR-03). Mismo molde que priceError: estado de UI, no se
+  // persiste, no bloquea el avance.
+  durationError?: string
 }
 
 interface Professional {
@@ -246,9 +251,34 @@ export default function OnboardingPage() {
       ...updated[i],
       [field]: value,
       priceError: undefined,
+      durationError: field === 'duration_minutes' ? undefined : updated[i].durationError,
       nameError: clearName ? undefined : updated[i].nameError,
     }
     setServices(updated)
+  }
+
+  // Validación inline de duración onBlur (WR-03). Dos cosas distintas y las dos necesarias:
+  //
+  // 1. El `NaN` ya no puede llegar hasta acá: el onChange usa `toNumberOr`, porque `parseInt('')` de
+  //    un campo vaciado serializaba a `null` contra una columna NOT NULL y reventaba el insert ENTERO
+  //    de servicios (una sola sentencia multi-fila) — y con él, desde esta fase, el mapeo de franjas.
+  // 2. Lo que sí puede llegar es un `0` o un negativo tipeados a mano, que son entrada degenerada
+  //    para la grilla horaria. Se CORRIGE a la vista (el campo pasa a 5) y se explica por qué, en vez
+  //    de bloquear Finalizar: dejar al dueño encerrado en el wizard por esto contradice D-02/D-06, y
+  //    dejarlo pasar en silencio le rompe la disponibilidad después. La corrección es visible y
+  //    reversible — escribir 30 encima la deshace.
+  function validateServiceDuration(i: number) {
+    setServices(prev => prev.map((s, idx) => {
+      if (idx !== i) return s
+      if (Number.isFinite(s.duration_minutes) && s.duration_minutes >= MIN_SERVICE_MINUTES) {
+        return { ...s, durationError: undefined }
+      }
+      return {
+        ...s,
+        duration_minutes: MIN_SERVICE_MINUTES,
+        durationError: `La duración mínima es de ${MIN_SERVICE_MINUTES} minutos: la ajustamos a ${MIN_SERVICE_MINUTES}. Escribí cuántos minutos dura el servicio.`,
+      }
+    }))
   }
 
   // Validación inline de precio onBlur (D-08/D-09): precio 0 y positivos son VÁLIDOS (servicio gratuito);
@@ -631,7 +661,7 @@ export default function OnboardingPage() {
   // Profesionales → solo nombre. NO toca el gating de Siguiente/Omitir (D-02 sigue relajado); solo el
   // affordance de agregar. El disabled usa el estilo built-in de shadcn.
   const lastService = services[services.length - 1]
-  const canAddService = !!lastService?.name.trim() && !lastService?.priceError
+  const canAddService = !!lastService?.name.trim() && !lastService?.priceError && !lastService?.durationError
   const lastProfessional = professionals[professionals.length - 1]
   const canAddProfessional = !!lastProfessional?.name.trim()
 
@@ -898,13 +928,18 @@ export default function OnboardingPage() {
                         <Label className="sm:hidden text-xs text-muted-foreground flex items-center gap-1">
                           <Clock className="w-3 h-3" /> Min.
                         </Label>
+                        {/* `toNumberOr` y no `parseInt` (WR-03): un campo vaciado daba NaN, que
+                            JSON.stringify serializa a null contra una columna NOT NULL y voltea el
+                            insert COMPLETO de servicios — y con él el mapeo franja↔servicio. */}
                         <Input
                           type="number"
                           value={service.duration_minutes}
-                          onChange={e => updateService(i, 'duration_minutes', parseInt(e.target.value))}
+                          onChange={e => updateService(i, 'duration_minutes', toNumberOr(e.target.value, 30))}
                           onFocus={e => e.target.select()}
-                          min={5}
+                          onBlur={() => validateServiceDuration(i)}
+                          min={MIN_SERVICE_MINUTES}
                           step={5}
+                          aria-invalid={!!service.durationError}
                         />
                       </div>
                       <div className="flex-1 min-w-0 sm:col-span-3 space-y-1">
@@ -916,7 +951,7 @@ export default function OnboardingPage() {
                         <Input
                           type="number"
                           value={service.price}
-                          onChange={e => updateService(i, 'price', parseFloat(e.target.value))}
+                          onChange={e => updateService(i, 'price', toNumberOr(e.target.value, 0))}
                           onFocus={e => e.target.select()}
                           onBlur={() => validateServicePrice(i)}
                           min={0}
@@ -938,9 +973,9 @@ export default function OnboardingPage() {
                         )}
                       </div>
                     </div>
-                    {(service.nameError || service.priceError) && (
+                    {(service.nameError || service.priceError || service.durationError) && (
                       <p className="sm:col-span-12 text-xs text-destructive">
-                        {service.nameError || service.priceError}
+                        {service.nameError || service.priceError || service.durationError}
                       </p>
                     )}
                   </div>

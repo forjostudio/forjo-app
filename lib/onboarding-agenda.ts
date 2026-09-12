@@ -137,6 +137,33 @@ export function newServiceId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
+/** La duración mínima de un servicio. Menos que esto es entrada degenerada para la grilla horaria. */
+export const MIN_SERVICE_MINUTES = 5
+
+/**
+ * El valor de un `<input type="number">` → número, sin dejar pasar JAMÁS un no-finito (WR-03).
+ *
+ * `parseInt('')` y `parseFloat('')` dan `NaN`; `JSON.stringify({ duration_minutes: NaN })` serializa
+ * `null`; y `services.duration_minutes` / `services.price` son NOT NULL ⇒ 23502. Como el insert de
+ * servicios es UNA sola sentencia multi-fila, un campo vaciado no pierde esa fila: pierde el catálogo
+ * ENTERO. Y desde esta fase se lleva además el mapeo franja↔servicio, porque `falloServicios` degrada
+ * la agenda a comodín. O sea: un backspace de más en "Min." costaba el catálogo y la agenda.
+ *
+ * Nada de esto lo atajaba la validación existente: `validateServicePrice` sólo mira `< 0` y
+ * `NaN < 0` es `false`, y `validateServiceName` lee `NaN !== 30` como `true`.
+ *
+ * ⚠ La cadena vacía se chequea ANTES y aparte, y no es un detalle: `Number('')` es `0`, no `NaN`, así
+ * que la versión "obvia" (`Number.isFinite(Number(value)) ? … : fallback`) no tira el campo vaciado
+ * al default — lo convierte en CERO. Cambiaría reventar el insert por persistir un servicio de 0
+ * minutos, que es entrada degenerada para la grilla horaria: el mismo bug con otro disfraz. Lo mismo
+ * con `'   '`, que también da `0`.
+ */
+export function toNumberOr(value: string, fallback: number): number {
+  if (value.trim() === '') return fallback
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
 /**
  * Una franja del paso Horarios del alta, tal como la tiene el wizard mientras el dueño la edita.
  *
