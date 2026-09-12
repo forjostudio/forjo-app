@@ -17,7 +17,7 @@ import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 import { BlockServicesLine } from '@/components/agenda/block-services-line'
-import { buildOnboardingAgendaPayload } from '@/lib/onboarding-agenda'
+import { buildOnboardingAgendaPayload, servicesWithoutCoverage } from '@/lib/onboarding-agenda'
 import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -562,6 +562,32 @@ export default function OnboardingPage() {
   //    excluyentes).
   const showServicesToggle = canMapServices && chipCatalog.length > 0
 
+  // ── El aviso de D-07: los servicios que NINGUNA franja cubre ─────────────────────────────────
+  // Sólo tiene sentido con el toggle prendido: apagado se persiste comodín (D-10), así que ningún
+  // servicio queda sin cobertura y el aviso estaría mintiendo. En canchas no aparece nunca porque
+  // `showServicesToggle` ya lo cubre (D-03).
+  //
+  // El dato sale del módulo puro, jamás de un filtro sobre el mapeo escrito acá (AGENDA-02): una
+  // segunda interpretación de la regla del comodín es exactamente cómo el alta y el booking público
+  // terminan diciendo cosas distintas sobre la misma franja.
+  //
+  // ⚠ NO BLOQUEA, y eso es estructural y no una promesa: `handleFinish` no consulta esta constante,
+  // Finalizar conserva su único `disabled={loading}` y `validateHours()` no cambia. Un servicio sin
+  // franja es un estado LEGAL —el dueño está a mitad de configurar, D-06 de la Phase 18—, sólo que
+  // desde la Phase 20 tiene consecuencia pública real. Por eso se informa en vez de impedir: dejarlo
+  // encerrado en el wizard por un estado que el modelo declara válido sería peor que el silencio.
+  const sinCobertura = showServicesToggle && perFranja ? servicesWithoutCoverage(services, dayStates) : []
+  // La frase entre comillas angulares es VERBATIM la que el cliente ya ve en la página pública desde
+  // la Phase 20 (`app/[slug]/booking-client.tsx`): el objetivo es que el dueño RECONOZCA el efecto
+  // cuando lo vea en su propia página, no que se entere de dos cosas parecidas con dos palabras
+  // distintas. Los nombres salen del paso 2, tal como los escribió, y en ese orden.
+  const avisoSinCobertura =
+    sinCobertura.length === 0
+      ? ''
+      : sinCobertura.length === 1
+        ? `${sinCobertura[0].name} no se da en ninguna franja: en tu página de reservas va a aparecer como «Sin horarios disponibles».`
+        : `Estos servicios no se dan en ninguna franja y van a aparecer como «Sin horarios disponibles» en tu página de reservas: ${sinCobertura.map(s => s.name).join(', ')}.`
+
   // Índice del paso actual dentro de `visibleSteps` (posición, no `n`). La navegación se mueve entre
   // posiciones para saltar limpio el paso oculto en canchas (Servicios n=2 → Horarios n=4 sin pasar
   // por el Profesionales inexistente). También define cuál es el "último paso" (Finalizar) y si mostrar
@@ -1062,6 +1088,21 @@ export default function OnboardingPage() {
                   </div>
                 ))}
               </div>
+
+              {/* El aviso de D-07, al pie del paso y después de la grilla: se lee cuando el dueño
+                  terminó de mapear, no mientras arrastra el primer chip.
+
+                  SIEMPRE MONTADO, y lo único que cambia es su texto. Es el mismo motivo que ya está
+                  escrito en `components/agenda/block-services-line.tsx`: una región viva (status)
+                  que se monta JUNTO con su contenido no la locuta ningún lector de pantalla —el nodo
+                  aparece ya con el texto adentro y no hay cambio que anunciar—. Cuando no hay nada
+                  que avisar el contenido es cadena vacía, así que no ocupa alto ni deja hueco.
+
+                  Tratamiento NEUTRO a propósito: `text-muted-foreground`, sin color de error, sin
+                  `aria-invalid` y sin ícono de alerta. No es un campo mal llenado: es información
+                  sobre lo que un cliente va a ver. Y no es un `toast` porque tiene que quedar en
+                  pantalla mientras el dueño ajusta los chips, que es justo lo que un toast no hace. */}
+              <p role="status" className="text-xs text-muted-foreground">{avisoSinCobertura}</p>
             </div>
           )}
 
