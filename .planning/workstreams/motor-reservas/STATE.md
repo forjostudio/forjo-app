@@ -4,11 +4,11 @@ milestone: v0.27
 current_phase: 21
 current_phase_name: Lo que el negocio declara
 status: verifying
-stopped_at: Completed 21-02-PLAN.md
-last_updated: "2026-09-12T00:27:41.752Z"
+stopped_at: Completed quick 260912-pm1 (G-21-11 + migr. 077)
+last_updated: "2026-09-12T23:27:12.491Z"
 last_activity: 2026-09-11
 last_activity_desc: Phase 21 execution started
-state_head: 18819cd4788a2e95f77af137e680dc60a62d5ec1
+state_head: b4c408e52b7b1eb80484fd3a07dee5678930714e
 progress:
   total_phases: 21
   completed_phases: 16
@@ -354,6 +354,7 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 21]: services.id lo genera el cliente en el paso 2 del alta (D-09): verificado contra la base local que la policy de INSERT acepta PK provista (asuncion A2 cerrada)
 - [Phase 21]: El aviso de servicios sin franja del alta se apoya en hasScheduleCoverage y NUNCA en isServiceScheduled — La cruda filtra las franjas: con cero franjas daria false para todo el catalogo y el aviso pasaria de informar a mentir. Cerrar los 7 dias en el alta es un click. Probado por mutacion (CR-01 de la Phase 20).
 - [Phase 21]: El aviso de D-07 es no bloqueante por estructura, no por promesa — handleFinish no referencia la constante del aviso (gate con awk acotado a la funcion) y Finalizar conserva su unico disabled={loading}. Un servicio sin franja es un estado legal (D-06 de la Phase 18).
+- [Phase 21]: quick 260912-pm1: la coercion texto->numero de services vive en lib/onboarding-agenda (3 superficies la comparten) y la invariante duration > 0 pasa a la base (migr. 077, pendiente de aplicar en prod; ultima en prod = 076)
 
 ### Pending Todos
 
@@ -436,8 +437,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-12T00:26:46.620Z
-Stopped at: Completed 21-02-PLAN.md
+Last session: 2026-09-12T23:27:04.120Z
+Stopped at: Completed quick 260912-pm1 (G-21-11 + migr. 077)
 Resume file: None
 
 ## Operator Next Steps
