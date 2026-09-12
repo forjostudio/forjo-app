@@ -75,6 +75,16 @@ describe.skipIf(!hasSupabaseCreds)('onboarding → save_agenda_blocks: el mapeo 
 
   // Lectura INDEPENDIENTE con service-role: verifica el EFECTO de la escritura por fuera del camino
   // que se está probando. No es la aserción de RLS (esa la hace el RPC con anon + sesión).
+  /** Las franjas del negocio, para poder probar que un rechazo NO se las lleva puestas. */
+  async function readBlocks(businessId: string) {
+    const { data, error } = await seeded.admin
+      .from('time_blocks')
+      .select('id, day_of_week')
+      .eq('business_id', businessId)
+    if (error) throw new Error(`lectura independiente de las franjas falló: ${error.message}`)
+    return data ?? []
+  }
+
   async function readBridge(businessId: string) {
     const { data, error } = await seeded.admin
       .from('time_block_services')
@@ -166,5 +176,51 @@ describe.skipIf(!hasSupabaseCreds)('onboarding → save_agenda_blocks: el mapeo 
     expect(bridge).toHaveLength(1)
     expect(bridge[0].service_id).toBe(svcCeramica)
     expect(bridge.some(r => r.service_id === borrado)).toBe(false)
+  })
+
+  // ── La mitad NEGATIVA del backstop, que es la única que necesita una base (WR-06) ─────────────
+  //
+  // El caso (c) de arriba prueba que un payload válido se guarda bien. Eso NO prueba que el filtro
+  // haga falta: prueba que lo válido es válido. La afirmación que el comentario de (c) hace —"sin el
+  // filtro la FK compuesta rebota con 23503 y el RPC, todo-o-nada, revierte TAMBIÉN las franjas"—
+  // no la ejercitaba nadie. Si mañana se cayera `tbs_service_same_tenant` (migr. 073), o el RPC
+  // pasara a tragarse el error por fila en vez de abortar, la suite entera seguiría verde mientras
+  // el alta escribe mapeos a servicios de otro negocio o de ninguno.
+  //
+  // Por eso este caso EVADE el filtro a propósito: manda el id fantasma crudo, como si el backstop
+  // no existiera. Es el único caso de la fase que no se puede escribir sin base.
+  it('c-bis. sin el filtro, el id fantasma rebota con 23503 y NO toca lo que ya estaba guardado', async () => {
+    // El estado ANTES: lo que dejó el caso (c). Se lee en vez de asumirse, así que la aserción de
+    // atomicidad no depende del orden en que corran los casos de arriba.
+    const franjasAntes = await readBlocks(seeded.bizA)
+    const puenteAntes = await readBridge(seeded.bizA)
+    expect(franjasAntes.length).toBeGreaterThan(0) // si no hay nada guardado, no hay atomicidad que probar
+
+    const fantasma = crypto.randomUUID()
+    const days = dayStatesDelAlta()
+    days[1].blocks[0].service_ids = [fantasma]
+    // Se construye el payload SIN vigentes (el filtro lo vacía) y después se le vuelve a meter el id
+    // a mano: así el payload que viaja es exactamente el que el alta mandaría si el backstop no
+    // estuviera, y el rechazo que se mide es el de la BASE, no el del módulo puro.
+    const crudo = buildOnboardingAgendaPayload(days, { mapServices: true, liveServiceIds: [] })
+    expect(crudo[0].service_ids).toEqual([]) // el filtro hizo su trabajo…
+    crudo[0].service_ids = [fantasma]        // …y acá lo evadimos a propósito
+
+    const { error } = await anonA.rpc('save_agenda_blocks', {
+      p_business_id: seeded.bizA,
+      p_blocks: crudo,
+    })
+
+    // La FK compuesta rebota: el id no es un servicio de ESTE negocio (ni de ninguno).
+    expect(error).not.toBeNull()
+    expect(error?.code).toBe('23503')
+
+    // Todo-o-nada: el rechazo no se llevó puestas las franjas que ya estaban. Esto es lo que el
+    // backstop del módulo puro existe para evitar que pase en el alta de verdad — ahí no habría
+    // nada guardado que salvar y el negocio saldría del wizard sin un solo horario.
+    expect(await readBlocks(seeded.bizA)).toHaveLength(franjasAntes.length)
+    expect(await readBridge(seeded.bizA)).toHaveLength(puenteAntes.length)
+    const puenteDespues = await readBridge(seeded.bizA)
+    expect(puenteDespues.some(r => r.service_id === fantasma)).toBe(false)
   })
 })
