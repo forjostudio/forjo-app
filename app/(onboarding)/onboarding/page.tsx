@@ -17,7 +17,12 @@ import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
 import { linkLeadOnSignup } from '@/app/(crm)/admin/_pipeline-actions'
 import { BlockServicesLine } from '@/components/agenda/block-services-line'
-import { buildOnboardingAgendaPayload, servicesWithoutCoverage } from '@/lib/onboarding-agenda'
+import {
+  buildOnboardingAgendaPayload,
+  esServicioVigente,
+  franjaServiceIdsVigentes,
+  servicesWithoutCoverage,
+} from '@/lib/onboarding-agenda'
 import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -450,7 +455,7 @@ export default function OnboardingPage() {
       // El `id` lo pone el cliente (D-09): es el mismo uuid con el que la fila viene viviendo desde el
       // paso 2 y el mismo que el mapeo del paso 4 referencia. No hay `.select()` ni correlación por
       // posición — ver el comentario de newServiceId().
-      const filasDeServicios = services.filter(s => s.name.trim()).map(s => ({
+      const filasDeServicios = services.filter(esServicioVigente).map(s => ({
         id: s.id,
         name: s.name,
         duration_minutes: s.duration_minutes,
@@ -556,7 +561,14 @@ export default function OnboardingPage() {
   const canMapServices = vertical !== 'canchas'
   // 2) El catálogo de los chips, fabricado desde el estado local del paso 2. `active` siempre true:
   //    durante el alta no existe un servicio dado de baja (el matiz D-11 del panel no aplica acá).
-  const chipCatalog = services.filter(s => s.name.trim()).map(s => ({ id: s.id, name: s.name, active: true }))
+  const chipCatalog = services.filter(esServicioVigente).map(s => ({ id: s.id, name: s.name, active: true }))
+  // Los ids VIGENTES, para filtrar lo que cada franja le pasa a la línea de chips (CR-01). Sin esto,
+  // el id de un servicio al que se le vació el nombre y quedó mapeado no pintaba ningún chip marcado
+  // (no está en el catálogo) NI el comodín (el arreglo no estaba vacío): la franja no decía nada,
+  // mientras la base la guardaba abierta a TODO el catálogo. El filtro se aplica acá, en el borde del
+  // componente, y no adentro del estado: limpiar `dayStates` desde `updateService` le destruiría el
+  // mapeo al dueño mientras retipea un nombre, que es una segunda pérdida silenciosa.
+  const chipCatalogIds = new Set(chipCatalog.map(s => s.id))
   // 3) Catálogo vacío: no se ofrece el toggle. Un alta puede tener 14 franjas, y un control que no
   //    tiene nada para elegir es ruido; en su lugar va UNA línea guía en la card (son mutuamente
   //    excluyentes).
@@ -1061,7 +1073,7 @@ export default function OnboardingPage() {
                                 vuelo no llegaría a la base y se perdería sin ruido. */}
                             {showServicesToggle && perFranja && (
                               <BlockServicesLine
-                                serviceIds={b.service_ids}
+                                serviceIds={franjaServiceIdsVigentes(b.service_ids, chipCatalogIds)}
                                 catalog={chipCatalog}
                                 groupLabel={`Servicios de la franja de ${b.start_time} a ${b.end_time}`}
                                 expanded={expandedChips.has(`${day}-${idx}`)}

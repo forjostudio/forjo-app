@@ -29,6 +29,41 @@
 import { buildSaveHoursPayload, type AgendaBlockPayload } from '@/lib/agenda-hours-payload'
 import { hasScheduleCoverage } from '@/lib/time-block-services'
 
+// ── "Vigente" es UNA sola regla, aplicada en TODOS los bordes (CR-01 del code review) ───────────
+//
+// La fila de servicio del paso 2 que se queda SIN NOMBRE no existe para el alta: `handleFinish` no
+// la inserta. Pero su id puede seguir vivo adentro de un bloque del paso 4, porque el estado sólo se
+// limpia cuando el servicio se BORRA (`removeService`), nunca cuando se le vacía el nombre — y
+// vaciarlo está a una navegación hacia atrás y un select-all + delete.
+//
+// Cuando cada borde aplicaba su propio criterio, esa franja decía TRES cosas distintas a la vez:
+//   - la línea de chips no pintaba el comodín (el id no estaba vacío) ni ningún chip marcado (el id
+//     no estaba en el catálogo) ⇒ una franja que no decía nada;
+//   - el aviso de D-07 la contaba como RESTRINGIDA ⇒ decía que el resto del catálogo se quedaba sin
+//     horario;
+//   - el payload la mandaba en COMODÍN (el id se caía contra `liveServiceIds`) ⇒ la base la guardaba
+//     abierta a TODO el catálogo, que es la configuración más permisiva posible.
+//
+// O sea: el dato que se persistía era el opuesto del que el aviso afirmaba, y ninguno de los dos era
+// el que la pantalla mostraba. Por eso el criterio se declara UNA vez acá y los tres bordes lo
+// consumen; una segunda definición de "vigente" es exactamente cómo vuelven a divergir.
+
+/** El criterio ÚNICO de "servicio vigente" del alta: la fila tiene nombre. */
+export function esServicioVigente(service: { name: string }): boolean {
+  return service.name.trim() !== ''
+}
+
+/**
+ * Los ids que una franja declara DE VERDAD: los suyos, menos los que ya no están vigentes.
+ *
+ * Devolver `[]` NO es "perdimos el dato": es la franja diciendo comodín (D-01), que es exactamente
+ * lo que se va a persistir. El mapeo original sigue intacto en el estado del wizard, así que volver
+ * a escribir el nombre del servicio lo recupera entero.
+ */
+export function franjaServiceIdsVigentes(serviceIds: string[], vigentes: ReadonlySet<string>): string[] {
+  return serviceIds.filter(id => vigentes.has(id))
+}
+
 /**
  * Una franja del paso Horarios del alta, tal como la tiene el wizard mientras el dueño la edita.
  *
@@ -73,7 +108,7 @@ export function buildOnboardingAgendaPayload(
         // traduce a `null`. Y sin `id`, así el RPC trata cada franja como INSERT.
         label: '',
         location_id: '',
-        service_ids: mapServices ? block.service_ids.filter(id => vigentes.has(id)) : [],
+        service_ids: mapServices ? franjaServiceIdsVigentes(block.service_ids, vigentes) : [],
       })),
     })),
     // En el alta nunca hay consultorios cargados, así que ningún bloque se descarta por no tener
@@ -125,8 +160,14 @@ export function onboardingDraftBlocks(days: OnboardingDayDraft[]): { id: string;
  * no salen de ninguna query. Es el mismo molde que ya usa el adaptador de la línea de chips del
  * panel (`components/agenda/block-services-line.tsx`).
  *
- * ⚠ 3. Las filas de servicio sin nombre se ignoran: `handleFinish` ya las descarta al insertar, así
- * que avisar sobre ellas sería avisar sobre un servicio que no va a existir.
+ * ⚠ 3. Las filas de servicio sin nombre se ignoran DE LOS DOS LADOS, y eso es CR-01 del code review
+ * de esta fase: no alcanza con no nombrarlas en la salida, hay que sacarles el id de las franjas
+ * ANTES de razonar. Mientras el aviso miraba los `service_ids` CRUDOS, una franja cuyo único
+ * servicio declarado se había quedado sin nombre contaba como restringida-a-nada y el aviso denunciaba
+ * al resto del catálogo — mientras el payload, que sí filtraba, la persistía como COMODÍN, o sea
+ * abierta a ese mismo catálogo. El aviso afirmaba lo contrario de lo que se guardaba. Por eso la
+ * vigencia se aplica con `esServicioVigente`/`franjaServiceIdsVigentes`, las mismas dos funciones que
+ * usan el payload y la línea de chips.
  *
  * `false` NO bloquea nada (D-07): un servicio sin franja que lo cubra es un estado LEGAL —el dueño
  * está a mitad de configurar, D-06 de la Phase 18—, sólo que desde la Phase 20 tiene consecuencia
@@ -136,11 +177,17 @@ export function servicesWithoutCoverage<S extends { id: string; name: string }>(
   services: S[],
   days: OnboardingDayDraft[],
 ): S[] {
-  const draftBlocks = onboardingDraftBlocks(days)
+  const vigentes = new Set(services.filter(esServicioVigente).map(s => s.id))
+  // El MISMO criterio que aplica el payload. Si el aviso razonara sobre ids que el payload descarta,
+  // diría algo distinto de lo que se guarda — que es exactamente el bug que esto cierra.
+  const draftBlocks = onboardingDraftBlocks(days).map(b => ({
+    ...b,
+    service_ids: franjaServiceIdsVigentes(b.service_ids, vigentes),
+  }))
   // Las filas sintéticas de la puente: una por cada servicio que declara cada franja. Una franja sin
   // ninguna fila ES el comodín (D-01) — la ausencia es la regla, no un dato faltante.
   const draftBridge = draftBlocks.flatMap(b =>
     b.service_ids.map(serviceId => ({ business_id: '', time_block_id: b.id, service_id: serviceId })),
   )
-  return services.filter(s => s.name.trim() !== '' && !hasScheduleCoverage(s.id, draftBlocks, draftBridge))
+  return services.filter(s => esServicioVigente(s) && !hasScheduleCoverage(s.id, draftBlocks, draftBridge))
 }
