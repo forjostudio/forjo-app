@@ -238,6 +238,26 @@ DECLARE
   v_space_ids uuid[];   -- (042) espacios físicos que ocupa la agenda reservada (vía agenda_spaces)
   v_sid uuid;           -- (042) iterador del FOREACH del lock por espacio
 BEGIN
+  -- ── (077) GUARD FAIL-CLOSED DE p_duration — corre ANTES de cualquier lectura o lock ───────────
+  -- Todos los chequeos de solape de más abajo arman el intervalo pedido como
+  -- `tsrange(p_date + p_time, p_date + p_time + make_interval(mins => p_duration))`. Con
+  -- `p_duration = 0` ese rango es **VACÍO**, y un rango vacío NO SOLAPA CON NADA: los seis gates
+  -- anti-doble-booking pasan en silencio y el turno se inserta encima de cualquier otro. Es el Core
+  -- Value del proyecto fallando sin un solo error visible.
+  --
+  -- ⚠ `COALESCE(duration_minutes, 30)` (el del EXCLUDE `appointments_no_overlap`) ataja el NULL
+  -- pero NO el 0 — esa asimetría es la trampa exacta que este guard cierra.
+  --
+  -- Falla FUERTE a propósito. Hoy NO puede dispararse con el código de la app: el único caller
+  -- coerciona (`lib/booking-core.ts`, `Number(service.duration_minutes || 30)`) y la migr. 076 ya le
+  -- revocó EXECUTE a `anon`. Lo que hace no es tapar un bug vivo: convierte un futuro desajuste
+  -- silencioso en un error visible, que es toda la diferencia entre un dato plausible y equivocado
+  -- y un rechazo que alguien puede leer.
+  IF p_duration IS NULL OR p_duration <= 0 THEN
+    RAISE EXCEPTION 'invalid_duration: la duración del turno tiene que ser mayor a 0 minutos (recibido: %). Un intervalo vacío no solapa con nada y saltearía TODOS los chequeos anti-doble-booking.', COALESCE(p_duration::text, 'NULL')
+      USING ERRCODE = 'P0001';
+  END IF;
+
   -- 0. (062, D-07) Modo y CUPO del servicio, leídos ANTES del lock (es configuración, no compite en la
   --    carrera — y define QUÉ lock tomar). business_id EXPLÍCITO: adentro de un SECURITY DEFINER la RLS
   --    no aplica. (068) El fail-safe del COALESCE pasa a 'individual' y es MÁS fail-closed que el
@@ -1373,7 +1393,8 @@ CREATE TABLE IF NOT EXISTS "public"."services" (
     "capacity" smallint DEFAULT 1 NOT NULL,
     CONSTRAINT "services_capacity_matches_mode_chk" CHECK (((("capacity_mode" = 'individual'::"text") AND ("capacity" = 1)) OR (("capacity_mode" = ANY (ARRAY['group_class'::"text", 'simultaneous_resource'::"text"])) AND ("capacity" >= 2)))),
     CONSTRAINT "services_capacity_mode_chk" CHECK (("capacity_mode" = ANY (ARRAY['individual'::"text", 'group_class'::"text", 'simultaneous_resource'::"text"]))),
-    CONSTRAINT "services_capacity_positive" CHECK (("capacity" >= 1))
+    CONSTRAINT "services_capacity_positive" CHECK (("capacity" >= 1)),
+    CONSTRAINT "services_duration_positive" CHECK (("duration_minutes" > 0))
 );
 
 
@@ -1546,6 +1567,11 @@ ALTER TABLE ONLY "public"."appointment_spaces"
 
 ALTER TABLE ONLY "public"."appointment_spaces"
     ADD CONSTRAINT "appointment_spaces_pkey" PRIMARY KEY ("appointment_id", "space_id");
+
+
+
+ALTER TABLE ONLY "public"."appointments"
+    ADD CONSTRAINT "appointments_duration_positive" CHECK ((("duration_minutes" IS NULL) OR ("duration_minutes" > 0))) NOT VALID;
 
 
 
