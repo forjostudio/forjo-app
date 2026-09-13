@@ -2,19 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v0.27
 current_phase: 21
-current_phase_name: Lo que el negocio declara
-status: verifying
-stopped_at: Completed quick 260912-pm1 (G-21-11 + migr. 077)
-last_updated: "2026-09-12T23:27:12.491Z"
-last_activity: 2026-09-11
-last_activity_desc: Phase 21 execution started
-state_head: b4c408e52b7b1eb80484fd3a07dee5678930714e
+status: completed
+stopped_at: Phase 21 complete — all phases complete
+last_updated: "2026-09-13T05:03:11.011Z"
+last_activity: 2026-09-13
+last_activity_desc: Phase 21 complete
+state_head: 57e870c91bd6925be0d476afbdc5708601894e38
 progress:
   total_phases: 21
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 102
   completed_plans: 102
-  percent: 76
+  percent: 81
 milestone_name: — Cupo unificado por servicio
 ---
 
@@ -29,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 21 (Lo que el negocio declara) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
-Last activity: 2026-09-11 — Phase 21 execution started
+Phase: 21
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-09-13 — Phase 21 complete
 
 ## Milestone v0.28 — decisiones LOCKED
 
@@ -107,6 +106,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | 16 | 2 | - | - |
 | 18 | 4 | - | - |
 | 20 | 2 | - | - |
+| 21 | 2 | - | - |
 
 *Updated after each plan completion*
 | Phase 06 P01 | 20min | 2 tasks | 3 files |
@@ -438,7 +438,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 ## Session Continuity
 
 Last session: 2026-09-12T23:27:04.120Z
-Stopped at: Completed quick 260912-pm1 (G-21-11 + migr. 077)
+Stopped at: Phase 21 complete — all phases complete
 Resume file: None
 
 ## Operator Next Steps
