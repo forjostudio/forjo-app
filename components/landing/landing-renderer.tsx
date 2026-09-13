@@ -1,14 +1,20 @@
 // ── LandingRenderer (RSC dispatcher) ─────────────────────────────────────────────
 // Server Component SIN 'use client': marcarlo client arrastraría todo el árbol de
-// secciones al bundle y mataría el beneficio RSC (RESEARCH Anti-Pattern). Un RSC puede
-// renderizar <BookingClient/> ('use client') directo, pasándole props serializables
-// (Next 16 docs: server-and-client-components).
+// secciones al bundle y mataría el beneficio RSC (RESEARCH Anti-Pattern).
 //
 // Compone las 7 secciones fijas + booking por order/enabled. La fuente de orden e
 // inyección de booking es orderedSections (derive.ts): filtra enabled=false, ordena por
 // order asc y GARANTIZA que booking esté presente aunque el config la omita (D7-05).
 // Cada sección decide su PROPIO empty-state (retorna null si está vacía, 07-02/03); el
 // renderer no centraliza esa lógica.
+//
+// EL RENDERER NO TIENE WIDGET DE RESERVA PROPIO (quick 260913-3tv). El booking entra por la
+// prop REQUERIDA `bookingSlot`, que cada call site arma ya resuelto por vertical. Antes era
+// opcional y había un widget alternativo acá adentro para cuando faltaba; ese camino
+// paralelo se desfasó tres veces en silencio, porque su único usuario real —el preview del
+// CMS— no recibía los mapeos franja↔servicio / staff↔servicios ni resolvía el vertical. Ya
+// no existe: los dos call sites (web pública y preview) pasan por el MISMO nodo, y uno
+// nuevo no compila sin resolverlo.
 //
 // Polish F8.1 (fidelidad mock 04/05):
 //  1) Numeración SECUENCIAL de los números fantasma derivada del orden real (no hardcode):
@@ -19,7 +25,6 @@
 //     fantasma cuando AMBAS están visibles. Si sólo una está visible, va full-width como hoy.
 
 import type { CSSProperties, ReactNode } from 'react'
-import { BookingClient } from '@/app/[slug]/booking-client'
 import {
   orderedSections,
   shouldHideAbout,
@@ -41,7 +46,7 @@ import { WhatsappFloat } from '@/components/landing/whatsapp-float'
 import { aboutData, galleryData } from '@/lib/landing/schema'
 import { normalizeMotion, resolveLandingTheme } from '@/lib/landing/theme'
 import type { LandingConfig } from '@/lib/landing/schema'
-import type { PublicBusiness, Service, Professional, TimeBlock, Location as LocationType, ProfessionalService } from '@/lib/types'
+import type { PublicBusiness, Service, Professional, TimeBlock, Location as LocationType } from '@/lib/types'
 
 // Shapes acotados que page.tsx ya fetchea desde vistas públicas (skill RLS regla #4):
 // exceptions y locations llegan con SOLO las columnas no sensibles, idénticos a los
@@ -54,19 +59,26 @@ interface Props {
   config: LandingConfig
   business: PublicBusiness
   services: Service[]
+  // ⚠ DEUDA TRIVIAL (quick 260913-3tv): `professionals` y `exceptions` ya NO los consume este
+  // componente — su único consumidor era el widget de reserva propio que este quick borró. Siguen
+  // declarados porque sacarlos del tipo obligaría a editar `app/[slug]/page.tsx` (el call site que
+  // los pasa), y ese archivo quedó explícitamente fuera del alcance del quick. Son inertes: no se
+  // desestructuran abajo.
   professionals: Professional[]
   timeBlocks: TimeBlock[]
   exceptions: ExceptionLite[]
   locations: LocationLite[]
-  // Booking ya resuelto por vertical en page.tsx (D-05): si viene, reemplaza al BookingClient
-  // por defecto dentro de la caja negra <section id="reservar"> (p.ej. CanchasBookingClient para
-  // el vertical canchas). Así el renderer NO conoce el modelo canchas ni agrega queries: es un
-  // slot ReactNode opaco. Si es undefined, cae en el BookingClient de siempre (otros verticales).
-  bookingSlot?: ReactNode
-  // Mapeo staff↔servicios (migr. 059) para el BookingClient de fallback. Opcional: en la práctica
-  // page.tsx SIEMPRE pasa `bookingSlot` (ya resuelto por vertical), así que el fallback es un camino
-  // muerto; el default [] mantiene el tipo sin obligar a page.tsx a threadearlo por esta rama.
-  professionalServices?: ProfessionalService[]
+  // El widget de reserva, YA resuelto por vertical por el call site, que el renderer mete tal cual en
+  // su caja negra <section id="reservar">. Es un ReactNode OPACO: así el renderer no conoce el modelo
+  // canchas ni agrega queries.
+  //
+  // REQUERIDO, y el tipo ES el mecanismo (quick 260913-3tv). Cuando era opcional había un widget de
+  // reserva DE RESERVA acá adentro como fallback, y ese fallback se desfasó tres veces en silencio:
+  // nacía sin las puentes franja↔servicio / staff↔servicios y sin noción del vertical, así que el
+  // preview del CMS —su único usuario real— mostraba todo habilitado y, en canchas, directamente otro
+  // componente. Sin el fallback, un call site nuevo NO COMPILA hasta resolver el widget por vertical:
+  // la unificación deja de ser disciplina y pasa a ser invariante del typecheck.
+  bookingSlot: ReactNode
 }
 
 // Tipos numerados (los que llevan número fantasma en el mock). hero/booking/cta NO numeran.
@@ -89,7 +101,9 @@ const Reveal = ({ children }: { children: ReactNode }) => (
   <div className="frj-reveal">{children}</div>
 )
 
-export function LandingRenderer({ config, business, services, professionals, timeBlocks, exceptions, locations, bookingSlot, professionalServices = [] }: Props) {
+// `professionals` y `exceptions` NO se desestructuran a propósito (ver la nota en Props): ya no hay
+// nada acá adentro que los consuma.
+export function LandingRenderer({ config, business, services, timeBlocks, locations, bookingSlot }: Props) {
   // orderedSections: orden + filtro enabled + inyección de booking al final (D7-05).
   const sections = orderedSections(config.sections)
 
@@ -279,9 +293,10 @@ export function LandingRenderer({ config, business, services, professionals, tim
             // <section id="reservar">. PROHIBIDO transform/overflow-hidden/position:fixed|sticky/
             // filter/perspective/altura-fija alrededor — cualquiera crea un containing block que
             // rompe el position:fixed de vaul (drawers), sonner (toasts) y react-day-picker
-            // (popover del calendario). D-05: si page.tsx pasó un `bookingSlot` ya resuelto por
-            // vertical (CanchasBookingClient), lo renderizamos dentro de la MISMA caja negra sin
-            // envoltorios nuevos; si no, el BookingClient de siempre (props VERBATIM, SC#2/LAND-02).
+            // (popover del calendario). D-05: el widget llega YA resuelto por vertical desde el call
+            // site y se renderiza tal cual, sin envoltorios nuevos. Acá NO hay alternativa ni camino
+            // muerto: el slot es obligatorio (ver Props), así que este es el ÚNICO booking que existe
+            // y las dos superficies —web pública y preview del CMS— pasan por el mismo nodo.
             return (
               <section id="reservar" key={i}>
                 {/* Galería RSV (RSV-01): header + strip horizontal de fotos de confianza,
@@ -290,20 +305,9 @@ export function LandingRenderer({ config, business, services, professionals, tim
                     de la sección booking del config, que RsvStrip parsea fail-safe con
                     rsvData.parse (sin fotos/roto → null → #reservar byte-idéntico a hoy). NO
                     envuelve al widget: su overflow-x vive confinado en su propio div, y el
-                    booking NO recibe motion/overflow/transform (caja negra, RSV-02/MOTION-04).
-                    Las props de BookingClient quedan VERBATIM. */}
+                    booking NO recibe motion/overflow/transform (caja negra, RSV-02/MOTION-04). */}
                 <RsvStrip data={dataOf('booking')} />
-                {bookingSlot ?? (
-                  <BookingClient
-                    business={business}
-                    services={services}
-                    professionals={professionals}
-                    timeBlocks={timeBlocks}
-                    exceptions={exceptions}
-                    locations={locations}
-                    professionalServices={professionalServices}
-                  />
-                )}
+                {bookingSlot}
               </section>
             )
           default:
