@@ -2,6 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { WebEditorClient } from './web-client'
 import { WebUpsell } from './_web-upsell'
+import { BookingClient } from '@/app/[slug]/booking-client'
+import { CanchasBookingClient } from '@/app/[slug]/canchas-booking-client'
+import { previewBookingInputs } from '@/lib/preview-booking'
+import { resolveVertical } from '@/lib/verticals'
 
 // ── Editor CMS: ruta server gateada por el add-on has_web_custom (Phase 17, PUB-01) ──────────────
 //
@@ -63,11 +67,23 @@ export default async function WebEditorPage() {
     return <WebUpsell slug={business.slug} />
   }
 
-  // 4. Datos del preview: los 5 datasets que el LandingRenderer consume además del config, todos
+  // 4. Datos del preview: los datasets que el LandingRenderer consume además del config, todos
   //    acotados a este tenant. Los selects de schedule_exceptions y locations piden EXACTAMENTE las
   //    columnas que declaran los tipos ExceptionLite/LocationLite del renderer (landing-renderer.tsx),
   //    para que el cast a los Props del renderer sea seguro. schedule_exceptions se filtra desde hoy
   //    (las pasadas no afectan el preview), igual que [slug]/page.tsx.
+  //
+  //    Las DOS PUENTES (professional_services, time_block_services) son lo que le faltaba al preview
+  //    para dejar de mentir: sin ellas el widget caía en la regla del comodín (puente vacía = sirve
+  //    para todo) y TODA tarjeta de servicio se veía habilitada, mientras la página pública
+  //    deshabilitaba con motivo al servicio que ninguna franja cubre (AGENDA-07) y filtraba el staff
+  //    al servicio elegido (AGENDA-06). Se leen de la TABLA BASE con el cliente de SESIÓN y
+  //    `.eq('business_id', …)`, igual que las otras cinco y que servicios/page.tsx: la base suma la
+  //    RLS al filtro explícito (las dos capas), mientras las vistas `public_*` son DEFINER — sin
+  //    security_invoker — y dejarían el aislamiento colgado de una sola. Las dos vistas públicas son
+  //    proyecciones SIN WHERE, así que base y vista devuelven las mismas filas para el mismo tenant:
+  //    no se pierde fidelidad (pinchado en test/preview-booking-parity.test.ts).
+  //    Columnas EXPLÍCITAS: las 3 del mapeo, las que declaran ProfessionalService/TimeBlockService.
   const todayStr = new Date().toISOString().slice(0, 10)
   const [
     { data: services },
@@ -75,6 +91,8 @@ export default async function WebEditorPage() {
     { data: timeBlocks },
     { data: exceptions },
     { data: locations },
+    { data: professionalServices },
+    { data: timeBlockServices },
   ] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id),
     supabase.from('professionals').select('*').eq('business_id', business.id),
@@ -89,6 +107,14 @@ export default async function WebEditorPage() {
       .select('id, name, address, phone')
       .eq('business_id', business.id)
       .or('is_active.is.null,is_active.eq.true'),
+    supabase
+      .from('professional_services')
+      .select('business_id, professional_id, service_id')
+      .eq('business_id', business.id),
+    supabase
+      .from('time_block_services')
+      .select('business_id, time_block_id, service_id')
+      .eq('business_id', business.id),
   ])
 
   // 5. Los DOS configs, crudos (jsonb), al cliente. Phase 15 parte el dato en dos (migración 050) y
@@ -113,6 +139,58 @@ export default async function WebEditorPage() {
   const initialDraft = draftRaw ?? publishedConfig
   const hasPersistedDraft = draftRaw !== null && draftRaw !== undefined
 
+  // 6. EL NODO DE BOOKING DEL PREVIEW, armado acá y no en el cliente (quick 260913-3tv).
+  //
+  //    Hasta este quick el preview renderizaba <LandingRenderer> SIN `bookingSlot` y caía en un
+  //    fallback interno del renderer: un BookingClient armado ahí mismo, sin las dos puentes y sin
+  //    noción del vertical. O sea: el preview mentía sobre qué servicios son reservables (toda
+  //    tarjeta habilitada, todo el staff capaz de todo) y en el vertical canchas mostraba un
+  //    COMPONENTE DISTINTO del que ve el cliente final. El fallback ya no existe: el nodo se arma
+  //    acá, por el MISMO camino que app/[slug]/page.tsx.
+  //
+  //    Por qué en el RSC y no en el client: (a) el gateo por vertical queda server-side, en el mismo
+  //    eslabón de la cadena que en la página pública; (b) un elemento que llega por el payload RSC es
+  //    referencialmente ESTABLE entre renders, así que el widget deja de re-crearse con cada tecla del
+  //    editor (el fallback vivía dentro del render del client y se re-creaba siempre).
+  //
+  //    `previewBookingInputs` reproduce los WHERE de las vistas acotadas del público (el por qué de
+  //    derivar en vez de leer la vista está en su docblock) y deriva las canchas de las dos tablas
+  //    base que ya se fetchearon: cero query nueva, cero vista DEFINER en el dashboard.
+  //
+  //    Fail-safe DIRECCIONAL de los `|| []`: una lectura que falla deja la puente VACÍA ⇒ regla del
+  //    comodín ⇒ todo queda agendado/cubierto, que es el comportamiento previo a las migraciones. Un
+  //    error de lectura NUNCA puede apagar el catálogo del preview.
+  const vertical = resolveVertical(business)
+  const isCanchas = vertical.key === 'canchas'
+  const {
+    services: visibleServices,
+    professionals: visibleStaff,
+    canchas,
+  } = previewBookingInputs({
+    services: services || [],
+    professionals: professionals || [],
+  })
+  const bookingNode = isCanchas ? (
+    <CanchasBookingClient
+      business={publicBusiness}
+      canchas={canchas}
+      timeBlocks={timeBlocks || []}
+      exceptions={exceptions || []}
+      locations={locations || []}
+    />
+  ) : (
+    <BookingClient
+      business={publicBusiness}
+      services={visibleServices}
+      professionals={visibleStaff}
+      timeBlocks={timeBlocks || []}
+      exceptions={exceptions || []}
+      locations={locations || []}
+      professionalServices={professionalServices || []}
+      timeBlockServices={timeBlockServices || []}
+    />
+  )
+
   return (
     <WebEditorClient
       // Sin cast: `publicBusiness` YA es el subconjunto público (columnas explícitas, sin
@@ -122,11 +200,18 @@ export default async function WebEditorPage() {
       initialDraft={initialDraft}
       publishedConfig={publishedConfig}
       hasPersistedDraft={hasPersistedDraft}
+      // ⚠ DIVERGENCIA CONOCIDA Y DELIBERADA: estas dos props siguen SIN proyectar (catálogo crudo,
+      // inactivos incluidos) porque las consumen el editor de secciones y las SECCIONES del landing
+      // — filtrarlas cambiaría qué servicios puede elegir el dueño en el editor, que es una decisión
+      // de producto, no un fix de camino. La proyección fiel se aplica al NODO DE BOOKING (arriba),
+      // que es lo que este quick vino a unificar.
       services={services || []}
       professionals={professionals || []}
       timeBlocks={timeBlocks || []}
       exceptions={exceptions || []}
       locations={locations || []}
+      // El widget de reserva YA resuelto por vertical (ReactNode opaco): el client sólo lo reenvía.
+      bookingSlot={bookingNode}
     />
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Check, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -40,6 +41,14 @@ import { ThemeControls } from './_sections/theme-controls'
 //   - Mantiene el BORRADOR completo del landing_config en memoria (D-03): overwrite-total, así que
 //     el draft carga el config real y se muta con lib/landing/editor-draft.ts — nunca se arma desde
 //     cero (landmine L5: Zod v4 estripa claves no reconstruidas al guardar).
+//   - EL WIDGET DE RESERVA NO SE ARMA ACÁ (quick 260913-3tv): llega como prop `bookingSlot`, ya
+//     resuelto por vertical en el RSC (page.tsx), y se reenvía VERBATIM al LandingRenderer. Antes el
+//     preview no pasaba nada y el renderer caía en un fallback propio — un BookingClient sin las
+//     puentes franja↔servicio / staff↔servicios y sin noción del vertical, o sea un preview que
+//     MENTÍA sobre qué es reservable y que en canchas montaba otro componente. Ese fallback ya no
+//     existe (bookingSlot es REQUERIDO en el renderer), así que no hay camino para volver a
+//     divergir. Bonus: un elemento del payload RSC es referencialmente estable, así que el widget ya
+//     no se re-crea con cada tecla del editor.
 //   - PREVIEW EN VIVO: importa LandingRenderer DIRECTO y lo renderiza client-side con config={draft}
 //     (RESEARCH Focus 1: el renderer es una función PURA de props, sin dependencia server-only, así
 //     que arrastrarlo al bundle client desde este boundary 'use client' es legal). El tema se aplica
@@ -88,6 +97,9 @@ interface Props {
   timeBlocks: TimeBlock[]
   exceptions: ExceptionLite[]
   locations: LocationLite[]
+  // Widget de reserva del preview, armado en el RSC (page.tsx) y ya resuelto por vertical. Este
+  // componente NO decide nada sobre el booking: lo reenvía VERBATIM al LandingRenderer.
+  bookingSlot: ReactNode
 }
 
 // Mapa ÚNICO de códigos de error → toast en español, compartido por las 3 acciones (15-UI-SPEC
@@ -142,6 +154,7 @@ export function WebEditorClient({
   timeBlocks,
   exceptions,
   locations,
+  bookingSlot,
 }: Props) {
   // Borrador inicial: el config parseado, o el DEFAULT sembrado (D-03 / §7).
   // stripPrimary: se quitó el control "Color principal" del editor (pisaba el acento de cualquier
@@ -424,6 +437,7 @@ export function WebEditorClient({
           timeBlocks={timeBlocks}
           exceptions={exceptions}
           locations={locations}
+          bookingSlot={bookingSlot}
         />
       </div>
     </div>
