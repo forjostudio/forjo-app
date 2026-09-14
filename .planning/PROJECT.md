@@ -172,7 +172,30 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 **Decisiones LOCKED (no re-litigar en discuss-phase):** cupo por solape = **modo nuevo por servicio** que **coexiste** con clase grupal — NO reemplaza (reemplazar rompería las clases grupales, donde la clase de las 16:00 y la de las 17:00 no deben sumar entre sí); el control por solape corre **dentro del RPC atómico** con el advisory lock re-granularizado y el `seat` separado del criterio de cupo — nunca `count` sin lock; cambiar la granularidad del lock **no puede degradar** `slot_full`/`slot_taken` ni el caso cupo 1, y afecta a los CUATRO consumidores del RPC (booking público, alta manual, generación forward de abonos, canchas) → **secure-phase obligatorio**; borrado con solo-pasados **preserva el historial** (desacople/snapshot, NUNCA hard-delete de la historia); el copy de los 3 toasts de borrado ya está shipeado (no re-hacerlo). La columna exacta del flag por servicio y el mecanismo de desacople (snapshot vs otra vía) se cierran en discuss-phase. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
 
-## Current Milestone (workstream `motor-reservas`): v0.28 La agenda por servicio
+## Milestone (workstream `motor-reservas`): v0.28 La agenda por servicio — ✅ SHIPPED 2026-09-14 (tag v0.28)
+
+> **Cerrado.** Phases 18-21, 14 planes, migraciones **071-077** (todas en producción). Archivado en
+> `.planning/milestones/v0.28-*`. Auditoría de cierre: 8/8 requirements, 0 blockers, 3 warnings de deuda.
+>
+> **Lo que entregó:** la franja declara **qué** se da en ella vía tabla puente con la regla del comodín
+> (0 filas = cualquier servicio ⇒ cutover gratis y cero regresión por construcción); el dueño lo
+> configura desde el panel con escritura atómica; el cliente ve sólo los horarios donde el servicio se
+> da, y uno sin cobertura queda deshabilitado con el motivo; y el alta lo declara desde el día uno.
+>
+> **Lo que no estaba en el plan y salió igual:** un **doble-booking silencioso** medido, no supuesto —
+> con `p_duration = 0` cada `tsrange` es un rango vacío, que no solapa con nada, así que los seis gates
+> anti-doble-booking pasaban sin un solo error (`COALESCE(x, 30)` atrapa el NULL pero **no el 0**).
+> Cerrado por la migr. **077**. Y la **076** revocó `book_slot_atomic` a `anon`, el riesgo alto que
+> v0.27 dejó abierto.
+>
+> **Deuda que queda:** sin aviso en el panel para un servicio sin franja · el gate de canchas
+> implementado dos veces · `invalid_duration` sin mapeo a 4xx · la suite flakea en
+> `test/abono-generation.test.ts` caso 5b.
+>
+> _Lo que sigue es la definición original del milestone, conservada como registro._
+
+<details>
+<summary>Definición original de v0.28 (pre-ejecución)</summary>
 
 > v0.27 Cupo unificado por servicio — ✅ **SHIPPED 2026-08-24** (tag `v0.27`, Phases 15-17, migr. 068/069/070). Archivado en `.planning/milestones/v0.27-*`.
 
@@ -188,6 +211,8 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 **Out of scope este milestone (deferred):** el cruce con **multi-staff** (*"martes 15-16 cerámica con Ana"*) — la franja declara **qué**, no **quién**; el quién ya lo resuelve `professional_services` desde v0.25, y esto se suma después **sin re-migrar** · dropear `time_blocks.capacity` (migración destructiva sin beneficio) · los **9 todos** pendientes del workstream, incluido el de severidad **alta** (`book_slot_atomic` ejecutable por `anon`), que es candidato al milestone siguiente y es **otro eje y otro riesgo**.
 
 **Decisiones LOCKED (no re-litigar en discuss-phase):** el modelo es **tabla puente con comodín**, NO una columna `service_id` — cubre *"martes 15-16 cerámica"* y *"mañanas: corte y color, no alisado"* sin duplicar bloques superpuestos, y el repo ya tiene el patrón probado · **la cero regresión es POR CONSTRUCCIÓN**: el día de la migración todos los negocios tienen 0 filas ⇒ todas las franjas son comodín ⇒ nada cambia (misma jugada que `individual` en v0.27) · la regla del comodín vive en **un helper puro con tests**, nunca reimplementada por consumidor (molde `lib/staff-services.ts`) · **multi-staff queda afuera** · el onboarding **entra**, fusionado con el booking público en la Phase 20. ⚠ Antes de escribir la migración, leer la **059** (`public_professional_services`): v0.25 ya tuvo que crear una vista acotada para exponerle un mapeo a `anon` sin abrir la tabla entera, y acá hace falta lo mismo. Aplican skills `supabase-multitenant-rls` + `convenciones-forjo`.
+
+</details>
 
 ## Requirements
 
