@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useGoogleSignIn } from '@/components/auth/google-button'
+import { ForjoSocials } from '@/components/auth/forjo-socials'
 
 // Login mobile de Forjo Gestión: hero full-screen (naranja de marca) con bottom sheet.
 //
@@ -125,6 +126,10 @@ export function MobileLoginHero() {
           </span>
         </div>
 
+        {/* Debajo del logo y centradas: arriba acompañan a la marca. Al pie competían con los tres
+            CTA apilados, que es donde el pulgar tiene que ir. */}
+        <ForjoSocials className="relative mt-1 justify-center" />
+
         {/* Cuerpo */}
         <div className="relative mt-auto">
           <h1 className="max-w-[11ch] font-[family-name:var(--font-archivo)] text-[clamp(30px,8.5vw,38px)] font-black uppercase leading-[1.02] tracking-[-.03em]">
@@ -153,6 +158,7 @@ export function MobileLoginHero() {
               Continuar con Google
             </button>
           </div>
+
         </div>
       </header>
 

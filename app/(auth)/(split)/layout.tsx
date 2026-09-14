@@ -13,6 +13,8 @@
 // <MobileLoginHero /> (hero + bottom sheet); forgot/reset muestran el form crema a pantalla completa.
 //
 // Es Server Component (sin 'use client'): no tiene interactividad. Las páginas hijas siguen 'use client'.
+import { ForjoSocials } from '@/components/auth/forjo-socials'
+
 export default function SplitAuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen items-stretch bg-[#141110]">
@@ -46,18 +48,26 @@ export default function SplitAuthLayout({ children }: { children: React.ReactNod
           Tu agenda, clientes y finanzas en <span className="text-[#d94a2b]">un solo lugar.</span>
         </h1>
 
-        {/* Crédito "hecho con Forjo Studio" — mismo copy/link que el footer de la página de reservas. */}
-        <p className="relative text-[13px] text-[#a39989]">
-          hecho con{' '}
-          <a
-            href="https://www.forjo.studio"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-[family-name:var(--font-archivo)] transition-opacity hover:opacity-80"
-          >
-            <span className="font-bold text-[#f3ead8]">Forjo</span> Studio
-          </a>
-        </p>
+        {/* Pie del panel: crédito a la izquierda, redes a la derecha, en la MISMA fila.
+            ⚠ Tiene que ser UN SOLO hijo del flex-col justify-between de arriba. Como dos hijos
+            separados, el reparto pasaba de 3 a 4 elementos y empujaba el crédito hacia el medio del
+            panel en vez de dejarlo abajo. El -mr-3 compensa el padding del área táctil de 44px para
+            que el último glifo quede a ras del margen, alineado con el resto del panel. */}
+        <div className="relative flex items-end justify-between gap-4">
+          {/* Crédito "hecho con Forjo Studio" — mismo copy/link que el footer de la página de reservas. */}
+          <p className="text-[13px] text-[#a39989]">
+            hecho con{' '}
+            <a
+              href="https://www.forjo.studio"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-[family-name:var(--font-archivo)] transition-opacity hover:opacity-80"
+            >
+              <span className="font-bold text-[#f3ead8]">Forjo</span> Studio
+            </a>
+          </p>
+          <ForjoSocials className="-mr-3" />
+        </div>
       </div>
 
       {/* Panel derecho — form crema (skin fijo .auth-cream-panel; lo aporta cada página hija). */}
