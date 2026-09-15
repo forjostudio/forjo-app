@@ -165,6 +165,28 @@ describe('groupCatalog — orden de los servicios dentro de su grupo', () => {
     expect(ids(grupos[0])).toEqual(['roto', 'barato', 'nan'])
   })
 
+  it("'price': un precio NULO o VACÍO no se lee como GRATIS — NO salta al principio del grupo", () => {
+    // EL QUE MUERDE, y el caso que el comentario del comparador nombraba por su nombre sin cubrir:
+    // `Number(null)`, `Number('')` y `Number('   ')` devuelven 0, que es FINITO. Con la coerción
+    // cruda, un precio roto se ordenaba como el servicio MÁS BARATO y saltaba al primer lugar del
+    // grupo —la posición más ruidosa que hay— por un dato que el dueño no ve. Acá el roto va
+    // SEGUNDO en la entrada a propósito: si el par tuviera criterio, la aserción caería.
+    const rotos: [string, unknown][] = [
+      ['null', null],
+      ['string vacío', ''],
+      ['sólo espacios', '   '],
+      ['undefined', undefined],
+    ]
+    for (const [etiqueta, valor] of rotos) {
+      const servicios = [
+        svc('barato', { category_id: 'cortes', price: 100 }),
+        svc('roto', { category_id: 'cortes', price: valor as number }),
+      ]
+      const grupos = groupCatalog(servicios, categorias, modes({ services: 'price' }))
+      expect(ids(grupos[0]), etiqueta).toEqual(['barato', 'roto'])
+    }
+  })
+
   it('el grupo de los SUELTOS se ordena con el MISMO modo de servicios que los demás', () => {
     // si el grupo de sueltos quedara sin ordenar, el dueño vería su catálogo ordenado por precio
     // salvo el último bloque — que se lee como roto

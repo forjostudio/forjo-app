@@ -139,17 +139,32 @@ function porNombre(a: { name: string }, b: { name: string }): number {
 }
 
 /**
+ * Normaliza a número lo que llega de PostgREST, o a `NaN` cuando NO HAY precio que comparar.
+ *
+ * ⚠ Existe por un agujero de la coerción, no por prolijidad: `Number(null)`, `Number(undefined ?? '')`
+ * y `Number('   ')` devuelven **0**, que es finito. Sin esta normalización, un precio roto se
+ * ordenaba como si el servicio fuera GRATIS y salía PRIMERO en su grupo —la posición más ruidosa
+ * posible— por un dato que el dueño no ve. La ausencia acá significa "sin criterio", nunca "cero".
+ */
+function precioDe(v: unknown): number {
+  if (v === null || v === undefined) return NaN
+  if (typeof v === 'string' && v.trim() === '') return NaN
+  return Number(v)
+}
+
+/**
  * Por precio ascendente.
  *
  * ⚠ Si alguno de los dos NO es un número finito, devuelve 0: el par queda SIN CRITERIO y el orden
  * estable conserva la entrada. El precio llega de PostgREST como `numeric` —que puede viajar como
- * string, igual que ya normaliza `booking-client.tsx`— y una lectura rota puede traer `null`.
+ * string, igual que ya normaliza `booking-client.tsx`— y una lectura rota puede traer `null` o el
+ * string vacío, que {@link precioDe} manda a `NaN` en vez de dejar que se coercionen a 0.
  * Mandar el inválido "al final" (o al principio) sería una decisión de producto que nadie tomó, y
  * le movería el catálogo al dueño por un dato roto que él no ve.
  */
 function porPrecio(a: { price: number }, b: { price: number }): number {
-  const pa = Number(a.price)
-  const pb = Number(b.price)
+  const pa = precioDe(a.price)
+  const pb = precioDe(b.price)
   if (!Number.isFinite(pa) || !Number.isFinite(pb)) return 0
   return pa - pb
 }
