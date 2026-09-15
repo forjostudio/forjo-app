@@ -29,12 +29,20 @@
 // como `string` plano en `title` y JAMÁS construye marcado. Restricción HEREDADA por quien lo pinte:
 // se interpola en JSX (auto-escape de React), nunca por `dangerouslySetInnerHTML` (T-22-10).
 //
-// ⚠ ALCANCE DE ESTE PLAN (22-01): acá vive SÓLO la regla de agrupar. Los comparadores de los tres
-// modos de orden ('custom' / 'alpha' / 'price') los trae el plan 22-02, junto con el parámetro de
-// modos de `groupCatalog`. Hasta entonces el agrupado respeta EL ORDEN EN QUE LLEGAN las filas, que
-// es exactamente lo que hace el modo 'custom' con todos los `sort_order` en 0 — o sea, el default de
-// la base y el estado de todos los negocios de producción. El rojo temporal es deliberado, no una
-// sorpresa.
+// ⚠ ESTA FUNCIÓN NO ESCRIBE, Y DE ESO DEPENDE CAT-06. El modo de orden NO es un estado que se
+// guarda: es un COMPARADOR que se elige adentro de una función pura. Como la función no persiste
+// nada, el `sort_order` que el dueño arrastró no tiene POR DÓNDE perderse cuando él elige
+// alfabético o precio — "el modo pisa PARA MOSTRAR, no borra" (D-06) no es una promesa que alguien
+// tiene que acordarse de cumplir, es lo único que la función puede hacer. Si algún día hace falta
+// PERSISTIR un reordenamiento (CAT-03, Phase 23), eso es un write path aparte, en otro archivo:
+// meterlo acá adentro rompería CAT-06 en silencio y para todos los negocios a la vez.
+//
+// ⚠ EL DEFAULT ES LA IDENTIDAD, NO UN ORDEN "MEJOR". Los dos modos arrancan en 'custom' y todos los
+// `sort_order` de producción están en 0; con un comparador que devuelve 0 ante el empate y un
+// `sort` ESTABLE (garantizado por ES2019), la salida es la lista que llegó, byte por byte. Por eso
+// ningún comparador de acá desempata por otra cosa: un "desempate alfabético" agregado de buena fe
+// le cambiaría el orden del catálogo a TODOS los negocios el día del deploy, sin que ninguno haya
+// tocado nada. El orden estable no es un detalle de implementación: es el mecanismo de CAT-07.
 
 /** Modo de orden de las CATEGORÍAS, a nivel negocio (`businesses.category_sort_mode`, migr. 078). */
 export type CategorySortMode = 'custom' | 'alpha'
@@ -108,6 +116,68 @@ export interface CatalogGroup<S> {
   services: S[]
 }
 
+// ── Los comparadores de los dos ejes ──────────────────────────────────────────────────────────
+// TODOS devuelven 0 ante el empate y NUNCA desempatan por otra cosa. `Array.prototype.sort` es
+// estable desde ES2019, así que el 0 PRESERVA el orden de entrada — ver el segundo ⚠ de la cabecera.
+
+/** Por `sort_order` ascendente. El ausente cuenta como 0, igual que el DEFAULT de la migr. 078. */
+function porOrden(a: { sort_order?: number | null }, b: { sort_order?: number | null }): number {
+  return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+}
+
+/**
+ * Por nombre, en español, insensible a acentos y a capitalización.
+ *
+ * El locale `'es'` importa (la Ñ es una letra propia, no una N decorada). Y `sensitivity: 'base'`
+ * es COHERENTE CON LA BASE, no una preferencia: el índice único `service_categories_name_uq` está
+ * sobre `(business_id, lower(name))`, así que dos categorías del mismo negocio no PUEDEN diferir
+ * sólo en capitalización — un comparador sensible a mayúsculas estaría resolviendo un empate que la
+ * base hace imposible.
+ */
+function porNombre(a: { name: string }, b: { name: string }): number {
+  return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+}
+
+/**
+ * Por precio ascendente.
+ *
+ * ⚠ Si alguno de los dos NO es un número finito, devuelve 0: el par queda SIN CRITERIO y el orden
+ * estable conserva la entrada. El precio llega de PostgREST como `numeric` —que puede viajar como
+ * string, igual que ya normaliza `booking-client.tsx`— y una lectura rota puede traer `null`.
+ * Mandar el inválido "al final" (o al principio) sería una decisión de producto que nadie tomó, y
+ * le movería el catálogo al dueño por un dato roto que él no ve.
+ */
+function porPrecio(a: { price: number }, b: { price: number }): number {
+  const pa = Number(a.price)
+  const pb = Number(b.price)
+  if (!Number.isFinite(pa) || !Number.isFinite(pb)) return 0
+  return pa - pb
+}
+
+/** El comparador del eje CATEGORÍAS según el modo. Ordenar categorías por precio no significa nada. */
+function comparadorDeCategorias(mode: CategorySortMode) {
+  return mode === 'alpha' ? porNombre : porOrden
+}
+
+/** El comparador del eje SERVICIOS según el modo. */
+function comparadorDeServicios<S extends CatalogService>(mode: ServiceSortMode) {
+  if (mode === 'alpha') return porNombre as (a: S, b: S) => number
+  if (mode === 'price') return porPrecio as (a: S, b: S) => number
+  return porOrden as (a: S, b: S) => number
+}
+
+/**
+ * Ordena SOBRE UNA COPIA, siempre.
+ *
+ * `Array.prototype.sort` ordena IN PLACE: aplicado al arreglo que mandó el caller le reordenaría su
+ * prop. Los consumidores son componentes de React —y en un RSC el mismo arreglo alimenta otras
+ * lecturas—, así que mutar la entrada es un bug de re-render esperando. Ninguna llamada a `.sort()`
+ * de este módulo se hace sobre un parámetro: todas pasan por acá.
+ */
+function ordenadas<T>(arr: T[], cmp: (a: T, b: T) => number): T[] {
+  return [...arr].sort(cmp)
+}
+
 /**
  * Agrupa el catálogo de un negocio en grupos con título.
  *
@@ -124,11 +194,22 @@ export interface CatalogGroup<S> {
  *    También cubre el caso del dueño que creó categorías pero todavía no asignó ninguna — no tendría
  *    sentido pintarle "Otros" a un catálogo entero que no cambió.
  *
- * 2. **Un grupo por categoría CON servicios**, en el orden en que llegaron las categorías. Una
+ * 2. **Un grupo por categoría CON servicios**, ordenadas entre sí por `modes.categories`. Una
  *    categoría vacía NO produce grupo: un encabezado sin nada abajo es ruido para el cliente y un
  *    estado normal para el dueño que está a mitad de configurar.
  *
  * 3. **Los sueltos van al final**, con `title` = {@link OTHER_GROUP_TITLE}, y SÓLO si hay alguno.
+ *    Se ordenan con el MISMO `modes.services` que los demás grupos: un último bloque sin ordenar
+ *    se lee como roto.
+ *
+ * `modes` es opcional y se completa campo por campo con {@link DEFAULT_SORT_MODES}, para que un
+ * caller que sólo conoce un eje no pierda el default del otro.
+ *
+ * ⚠ **EN EL CAMINO DE LA IDENTIDAD LOS MODOS NI SE MIRAN** (D-08). Con cero categorías —o con
+ * categorías creadas pero ninguna asignada— la salida es la lista que llegó, en el orden que llegó,
+ * CUALQUIERA sea `modes`. Es la única lectura de CAT-07 que no le deja a un negocio de producción
+ * un orden distinto al del día anterior: sin categorías no hay nada que agrupar, así que tampoco
+ * hay nada que ordenar.
  *
  * ⚠ **INVARIANTE DE CONSERVACIÓN — todo servicio de la entrada aparece EXACTAMENTE UNA VEZ en la
  * salida.** Un servicio cuyo `category_id` no matchea ninguna categoría recibida —nulo, colgado, de
@@ -144,7 +225,10 @@ export interface CatalogGroup<S> {
 export function groupCatalog<S extends CatalogService>(
   services: S[],
   categories: CatalogCategory[],
+  modes?: Partial<CatalogSortModes>,
 ): CatalogGroup<S>[] {
+  // Campo por campo: un caller que sólo sabe el modo de servicios no pierde el de categorías.
+  const { categories: modoCategorias, services: modoServicios } = { ...DEFAULT_SORT_MODES, ...modes }
   // Índice de las categorías REALMENTE recibidas. Es lo que decide si un `category_id` "matchea":
   // un id colgado (categoría borrada entre dos lecturas) o de otro tenant no está acá, así que su
   // servicio cae en los sueltos por el mismo camino que un `category_id` nulo — sin una rama aparte.
@@ -168,21 +252,29 @@ export function groupCatalog<S extends CatalogService>(
   // Regla 1 — la identidad. `porCategoria` vacío ⇔ ninguna categoría recibida tiene servicios.
   // Se pregunta por el resultado del reparto y no por `categories.length === 0` a propósito: así el
   // negocio con categorías pero sin ninguna asignada cae en el mismo camino, que es el correcto.
+  // ⚠ SALE ANTES DE TOCAR NINGÚN COMPARADOR: acá los modos no se miran (D-08, ver el JSDoc).
   if (porCategoria.size === 0) {
     return [{ categoryId: null, title: null, services: [...services] }]
   }
 
-  // Regla 2 — un grupo por categoría con servicios, en el orden en que llegaron las categorías.
+  const ordenarServicios = comparadorDeServicios<S>(modoServicios)
+
+  // Regla 2 — un grupo por categoría con servicios, las categorías ordenadas por su propio eje.
   const grupos: CatalogGroup<S>[] = []
-  for (const c of categories) {
+  for (const c of ordenadas(categories, comparadorDeCategorias(modoCategorias))) {
     const suyos = porCategoria.get(c.id)
     if (!suyos || suyos.length === 0) continue
-    grupos.push({ categoryId: c.id, title: c.name, services: suyos })
+    grupos.push({ categoryId: c.id, title: c.name, services: ordenadas(suyos, ordenarServicios) })
   }
 
   // Regla 3 — los sueltos, últimos y sólo si hay. Nunca se descartan (invariante de conservación).
+  // Mismo comparador que los demás grupos: el último bloque no queda "crudo".
   if (sueltos.length > 0) {
-    grupos.push({ categoryId: null, title: OTHER_GROUP_TITLE, services: sueltos })
+    grupos.push({
+      categoryId: null,
+      title: OTHER_GROUP_TITLE,
+      services: ordenadas(sueltos, ordenarServicios),
+    })
   }
 
   return grupos
