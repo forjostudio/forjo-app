@@ -755,7 +755,7 @@ Plans:
 **Alcance**: `supabase/migrations/078_*.sql` + `supabase/schema.sql` (espejo) + un módulo puro nuevo en `lib/` + el tipo en `lib/types.ts`. **Sin superficie**: el panel es la Phase 23 y la pública es la 24. ⚠ Dos trampas del repo que se resuelven acá: (a) exponerle `category_id` al anon implica **redefinir `public_services`**, y `CREATE OR REPLACE VIEW` sólo permite **agregar columnas al final** —si el orden de las viejas no coincide exactamente, la redefinición falla—; (b) la 078 se aplica a producción **a mano y coordinada con el deploy**, y sin `NOTIFY pgrst, 'reload schema';` PostgREST no expone la vista nueva al RSC anónimo (el mismo fail-safe que documentó la 059: el booking de hoy sigue funcionando, pero las categorías nunca aparecen).
 **Security/Integrity relevance**: **ALTA — `secure-phase` obligatorio.** Es la **única** fase del milestone que abre una lectura nueva para un cliente **anónimo**, y en este repo eso tiene un patrón obligatorio: **vista acotada, nunca la tabla**. Leer ANTES de escribir la 078: `public_professional_services` (migr. **059**, v0.25) y `public_time_block_services` (migr. **071**, v0.28) — las dos son `OWNER postgres` (DEFINER, **no** `security_invoker`, con el motivo escrito en 059:20-25) y el aislamiento efectivo lo da el `.eq('business_id', ...)` del RSC. Precedente directo de v0.13: `public_canchas` tuvo que **no** exponer `service_id`; acá vale la misma pregunta columna por columna, y el nombre de la categoría es texto del dueño que va a ver un anónimo. Y el tenant no se sostiene sólo con la RLS del dueño: `services.category_id` necesita **FK compuesta**, que es exactamente lo que las migr. 073 y 075 tuvieron que agregar cuando faltó.
 **UI hint**: no (modelo y regla pura; la superficie va en las Phases 23 y 24)
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -765,7 +765,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1)*
 
 - [x] 22-02-PLAN.md — La regla pura completa: comparadores de los dos ejes (categorías: alfabético · personalizado; servicios: alfabético · precio · personalizado), grupo de sueltos al final, y los tres casos que muerden (control negativo de CAT-07 con los modos puestos · ida y vuelta de modo para CAT-06 · invariante de conservación)
-- [ ] 22-04-PLAN.md — Espejo quirúrgico de la 078 en `supabase/schema.sql`, recién después de que el catálogo confirmó la migración (seis inserciones localizadas; gate anti-dump sobre el `numstat`)
+- [x] 22-04-PLAN.md — Espejo quirúrgico de la 078 en `supabase/schema.sql`, recién después de que el catálogo confirmó la migración (seis inserciones localizadas; gate anti-dump sobre el `numstat`)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -841,6 +841,6 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 19. El panel | 6/6 | Complete | 2026-08-31 |
 | 20. Lo que el público ve | 2/2 | Complete | 2026-09-10 |
 | 21. Lo que el negocio declara | 2/2 | Complete | 2026-09-13 |
-| 22. El modelo del catálogo | 2/4 | In Progress|  |
+| 22. El modelo del catálogo | 3/4 | In Progress|  |
 | 23. El panel que organiza el catálogo | 0/TBD | Not started | - |
 | 24. El catálogo que el cliente lee | 0/TBD | Not started | - |

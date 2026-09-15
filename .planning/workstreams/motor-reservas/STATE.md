@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 22
 current_phase_name: El modelo del catálogo
 status: executing
-stopped_at: Completed 22-02-PLAN.md
-last_updated: "2026-09-15T19:50:09.951Z"
+stopped_at: Completed 22-04-PLAN.md
+last_updated: "2026-09-15T20:00:13.414Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 22 execution started
-state_head: 80813c6e4d5a8f7179278d5f895190224835e9e0
+state_head: 004a6a25c81991dcd857e22a7787a841f5c5a4f7
 progress:
   total_phases: 20
   completed_phases: 13
   total_plans: 92
-  completed_plans: 90
+  completed_plans: 91
   percent: 65
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 22 (El modelo del catálogo) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-15 — Phase 22 execution started
 
@@ -206,6 +206,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 21 P02 | 8 min | 2 tasks | 3 files |
 | Phase 22 P01 | 22 min | 2 tasks | 4 files |
 | Phase 22 P02 | 10 min | 2 tasks | 2 files |
+| Phase 22 P04 | 14 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -391,6 +392,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 22]: 22-02: el modo de orden es un COMPARADOR DE DISPLAY dentro de una funcion pura, no un estado que se persiste — CAT-06 queda garantizado por construccion (la funcion no escribe, el sort_order del dueno no tiene por donde perderse)
 - [Phase 22]: 22-02: los comparadores devuelven 0 ante el empate y NINGUNO desempata por otra cosa; el sort estable de ES2019 convierte ese 0 en la identidad, que es el mecanismo de CAT-07 (todos los sort_order de produccion estan en 0)
 - [Phase 22]: 22-02: Regla 0 — sin servicios no hay grupos (groupCatalog devuelve lista vacia); ningun grupo de la salida esta vacio jamas
+- [Phase 22]: El espejo de schema.sql no lleva GRANT de tabla base para service_categories: medido contra el catalogo, anon solo tiene SELECT ahi (el ALTER DEFAULT PRIVILEGES de la migr. 073 revoca la escritura a toda tabla futura), asi que copiar el GRANT ALL de time_block_services habria documentado permisos que la base no da
+- [Phase 22]: La lista de columnas del ON DELETE se escribe SIN comillas (ON DELETE SET NULL (category_id)): es la forma exacta que imprime pg_get_constraintdef, o sea el texto con el que se compara el espejo contra el catalogo
 
 ### Pending Todos
 
@@ -473,8 +476,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-15T19:49:31.770Z
-Stopped at: Completed 22-02-PLAN.md
+Last session: 2026-09-15T19:59:42.911Z
+Stopped at: Completed 22-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
