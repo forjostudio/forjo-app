@@ -130,9 +130,9 @@ function porOrden(a: { sort_order?: number | null }, b: { sort_order?: number | 
  *
  * El locale `'es'` importa (la Ñ es una letra propia, no una N decorada). Y `sensitivity: 'base'`
  * es COHERENTE CON LA BASE, no una preferencia: el índice único `service_categories_name_uq` está
- * sobre `(business_id, lower(name))`, así que dos categorías del mismo negocio no PUEDEN diferir
- * sólo en capitalización — un comparador sensible a mayúsculas estaría resolviendo un empate que la
- * base hace imposible.
+ * sobre `(business_id, lower(btrim(name)))` (migr. 078, normalizado por la 079), así que dos
+ * categorías del mismo negocio no PUEDEN diferir sólo en capitalización ni en espacios de borde —
+ * un comparador sensible a mayúsculas estaría resolviendo un empate que la base hace imposible.
  *
  * ⚠ UN NOMBRE ROTO NO PUEDE TIRAR. `a.name.localeCompare(...)` a secas explota con `null`, y un
  * throw ACÁ ADENTRO es un 500 en la página pública de reservas: el comparador corre dentro del

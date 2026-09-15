@@ -197,4 +197,41 @@ describe.skipIf(!hasSupabaseCreds)('modelo del catálogo: service_categories →
     expect([...idsAgrupados].sort()).toEqual([...services.map((s) => s.id)].sort())
   })
 
+  it("CAT-01 EN LA BASE: 'Color' y 'Color ' no pueden convivir en el mismo negocio (migr. 079)", async () => {
+    // La 078 justificó su índice único diciendo que CAT-01 quedaba resuelto EN LA BASE y no en la
+    // pantalla, con el daño escrito: dos títulos que el cliente lee como UNO. Pero `lower(name)` a
+    // secas sólo cerraba la capitalización — 'Color' y 'Color ' entraban las dos, y el espacio de
+    // borde es INVISIBLE en HTML, o sea el mismo daño por la variante que nadie diagnostica
+    // mirando. La 079 normaliza con `btrim`. Se siembra con service-role a propósito: bypassa la
+    // RLS pero NO los constraints, que es exactamente lo que este caso viene a medir.
+    await seedCategoria('__test_cat_Unico', 0)
+
+    const variantes = [
+      '__test_cat_Unico ', // espacio al final (el que la 078 dejaba pasar)
+      ' __test_cat_Unico', // espacio al principio
+      '  __test_cat_Unico  ', // de los dos lados
+      '__TEST_CAT_UNICO', // capitalización (esta la 078 ya la cerraba)
+      '  __TEST_CAT_unico ', // las dos cosas juntas
+    ]
+    for (const variante of variantes) {
+      const dup = await seeded.admin
+        .from('service_categories')
+        .insert({ business_id: seeded.businessId, name: variante })
+        .select('id')
+      expect(dup.error?.code, JSON.stringify(variante)).toBe('23505')
+    }
+  })
+
+  it('un encabezado público NO puede quedar EN BLANCO (migr. 079)', async () => {
+    // Sin el CHECK, un `name` vacío o de puros espacios era insertable: un título fantasma arriba de
+    // un grupo de servicios, y el cliente sin forma de saber qué está mirando. La Phase 23 es la que
+    // va a traducir este 23514 a un error de formulario.
+    for (const enBlanco of ['', '   ', '\t']) {
+      const ins = await seeded.admin
+        .from('service_categories')
+        .insert({ business_id: seeded.businessId, name: enBlanco })
+        .select('id')
+      expect(ins.error?.code, JSON.stringify(enBlanco)).toBe('23514')
+    }
+  })
 })

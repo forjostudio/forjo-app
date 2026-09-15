@@ -1397,7 +1397,11 @@ CREATE TABLE IF NOT EXISTS "public"."service_categories" (
     "business_id" "uuid" NOT NULL,
     "name" "text" NOT NULL,
     "sort_order" integer DEFAULT 0 NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    -- (migr. 079 — PENDIENTE de aplicación a producción) Este `name` no es un nombre cualquiera: es
+    -- un ENCABEZADO que se le pinta a un visitante anónimo. Vacío o de puros espacios dejaría un
+    -- título fantasma arriba de un grupo de servicios. Cuando la 079 se aplique, borrar la marca.
+    CONSTRAINT "service_categories_name_not_blank" CHECK (("btrim"("name", E' \t\n\r') <> ''::"text"))
 );
 
 
@@ -1901,11 +1905,18 @@ CREATE INDEX "schedule_exceptions_business_date" ON "public"."schedule_exception
 
 
 
--- (migr. 078, T-22-07 / CAT-01) UNIQUE sobre la EXPRESIÓN `lower(name)`, no sobre la columna cruda:
--- un índice sobre `name` no atrapa "Color" vs "COLOR", que es justo el caso que muerde —el catálogo
--- quedaría con dos títulos que el cliente lee como UNO—. Es índice y no constraint porque Postgres
--- no acepta expresiones en un UNIQUE de tabla.
-CREATE UNIQUE INDEX "service_categories_name_uq" ON "public"."service_categories" USING "btree" ("business_id", "lower"("name"));
+-- (migr. 078, T-22-07 / CAT-01) UNIQUE sobre la EXPRESIÓN, no sobre la columna cruda: un índice
+-- sobre `name` no atrapa "Color" vs "COLOR", que es justo el caso que muerde —el catálogo quedaría
+-- con dos títulos que el cliente lee como UNO—. Es índice y no constraint porque Postgres no acepta
+-- expresiones en un UNIQUE de tabla.
+-- (migr. 079 — PENDIENTE de aplicación a producción) La 079 lo recrea con `btrim` adentro: sin
+-- recortar, "Color" y "Color " entraban las dos y se renderizan IDÉNTICAS, o sea el mismo daño por
+-- la variante invisible. El segundo argumento de `btrim` es necesario y no decorativo: `btrim(x)` a
+-- secas recorta SÓLO el espacio, no el tab ni el salto de línea (medido contra la base, no deducido).
+-- ⚠ Escrito con la forma `E'...'` a mano: `pg_dump` imprime los caracteres de control CRUDOS dentro
+-- del literal —un tab y un salto reales, ilegibles en un espejo que se lee y se edita a mano— y las
+-- dos formas son exactamente equivalentes. Cuando la 079 se aplique, borrar la marca de pendiente.
+CREATE UNIQUE INDEX "service_categories_name_uq" ON "public"."service_categories" USING "btree" ("business_id", "lower"("btrim"("name", E' \t\n\r')));
 
 
 
