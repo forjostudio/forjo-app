@@ -4490,6 +4490,25 @@ GRANT ALL ON TABLE "public"."public_professionals" TO "service_role";
 
 
 
+-- (migr. 078) La TABLA BASE. La 078 no emite ni un GRANT para ella: este ACL sale ENTERO de los
+-- ALTER DEFAULT PRIVILEGES de la 073 (abajo), porque `service_categories` es la PRIMERA tabla creada
+-- después de esa migración — verificado: ni la 074, ni la 075, ni la 076, ni la 077 crean tablas.
+--
+-- ⚠ ESTAS TRES LÍNEAS NO SON DECORATIVAS: sin ellas el espejo dice que `anon` NO TIENE NINGÚN
+-- PRIVILEGIO sobre esta tabla, y lo que hay es `anon = SELECT`. O sea que lo único que separa al
+-- público de los nombres de categoría de TODOS los negocios es la RLS (esta tabla no tiene policy
+-- `anon`, por eso devuelve cero filas). Un autor de migraciones que lea el espejo y concluya lo
+-- contrario es exactamente el error que produjo el CR-01 de la migr. 072.
+--
+-- Copiado TAL CUAL de `pg_dump --schema-only` contra la base local con la 078 aplicada, no deducido:
+-- `anon = rxtm`, `authenticated = arwdxtm` (ALL menos TRUNCATE), `service_role = ALL`. `MAINTAIN`
+-- existe desde PG17: en una base PG15/16 el mismo ACL se imprime sin ese privilegio.
+GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE "public"."service_categories" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,MAINTAIN,UPDATE ON TABLE "public"."service_categories" TO "authenticated";
+GRANT ALL ON TABLE "public"."service_categories" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."services" TO "anon";
 GRANT ALL ON TABLE "public"."services" TO "authenticated";
 GRANT ALL ON TABLE "public"."services" TO "service_role";
