@@ -1,20 +1,21 @@
 ---
 gsd_state_version: "1.0"
 milestone: v0.29
+milestone_name: El catálogo del booking (en curso)
 current_phase: 22
-status: not_started
-stopped_at: Roadmap de v0.29 escrito — Phase 22 sin planificar
-last_updated: "2026-09-15T00:00:00.000Z"
+current_phase_name: El modelo del catálogo
+status: executing
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-09-15T19:28:59.494Z"
 last_activity: 2026-09-15
-last_activity_desc: Roadmap v0.29 (Phases 22-24) escrito y trazabilidad CAT-01..11 completada
-state_head: 1a72f59
+last_activity_desc: Phase 22 execution started
+state_head: af5c430aab3449c51981b0a5f2eb8ca3b769c13a
 progress:
-  total_phases: 24
-  completed_phases: 21
-  total_plans: 116
-  completed_plans: 116
-  percent: 88
-milestone_name: — El catálogo del booking
+  total_phases: 20
+  completed_phases: 13
+  total_plans: 92
+  completed_plans: 88
+  percent: 65
 ---
 
 # Project State
@@ -24,14 +25,14 @@ milestone_name: — El catálogo del booking
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. **v0.29 organiza el catálogo**: categorías propias por negocio que llegan al booking público, con la regla de que **la ausencia de dato muestra lo de hoy y nunca esconde un servicio** — un negocio sin categorías ve la lista de siempre y un servicio sin categoría siempre se puede reservar.
-**Current focus:** Phase 22 — El modelo del catálogo (sin planificar)
+**Current focus:** Phase 22 — El modelo del catálogo
 
 ## Current Position
 
-Phase: 22
-Plan: Not started
-Status: Roadmap escrito, fase sin planificar
-Last activity: 2026-09-15 — Roadmap de v0.29 (Phases 22-24) escrito
+Phase: 22 (El modelo del catálogo) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-09-15 — Phase 22 execution started
 
 ## Milestone v0.29 — decisiones LOCKED
 
@@ -203,6 +204,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 |------|----------|-------|-------|
 | Phase 21 P01 | 17 min | 3 tasks | 6 files |
 | Phase 21 P02 | 8 min | 2 tasks | 3 files |
+| Phase 22 P01 | 22 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -382,6 +384,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 21]: El aviso de servicios sin franja del alta se apoya en hasScheduleCoverage y NUNCA en isServiceScheduled — La cruda filtra las franjas: con cero franjas daria false para todo el catalogo y el aviso pasaria de informar a mentir. Cerrar los 7 dias en el alta es un click. Probado por mutacion (CR-01 de la Phase 20).
 - [Phase 21]: El aviso de D-07 es no bloqueante por estructura, no por promesa — handleFinish no referencia la constante del aviso (gate con awk acotado a la funcion) y Finalizar conserva su unico disabled={loading}. Un servicio sin franja es un estado legal (D-06 de la Phase 18).
 - [Phase 21]: quick 260912-pm1: la coercion texto->numero de services vive en lib/onboarding-agenda (3 superficies la comparten) y la invariante duration > 0 pasa a la base (migr. 077, pendiente de aplicar en prod; ultima en prod = 076)
+- [Phase 22]: La FK a la categoría lleva LISTA DE COLUMNAS: ON DELETE SET NULL (category_id). Sin la lista, Postgres nulea también services.business_id (que es NULLABLE) y el servicio sale de la RLS de su dueño y de public_services — deja de venderse en silencio. — Molde de la migr. 075, que midió ese comportamiento contra este mismo motor. Medido acá: pg_get_constraintdef termina en ON DELETE SET NULL (category_id).
+- [Phase 22]: Los GRANT de las tres vistas públicas van en la forma de la migr. 072 (REVOKE ALL + GRANT SELECT), nunca en la de la 059/061/071 (GRANT ALL a anon). — public_services y public_businesses ya están en producción: re-emitir el GRANT amplio al redefinirlas reabriría CR-01 (escritura anónima que saltea RLS sobre todos los tenants).
+- [Phase 22]: groupCatalog decide la identidad por el RESULTADO DEL REPARTO (ninguna categoría con servicios), no por categories.length === 0. — Así el negocio que creó categorías pero todavía no asignó ninguna cae en el mismo camino correcto: ve la lista de hoy, sin un "Otros" que envuelva todo el catálogo.
 
 ### Pending Todos
 
@@ -464,8 +469,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-12T23:27:04.120Z
-Stopped at: Phase 21 complete — all phases complete
+Last session: 2026-09-15T19:28:14.105Z
+Stopped at: Completed 22-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
