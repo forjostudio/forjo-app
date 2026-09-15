@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, seedService, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
@@ -20,6 +20,15 @@ import { groupCatalog, OTHER_GROUP_TITLE, type CatalogCategory, type CatalogServ
 // ⚠ EL CLIENTE DE LAS ASERCIONES ES `anon` PURO — anon key y SIN sesión, el mismo rol que atiende
 // `/[slug]`. El service-role del fixture se usa SÓLO para sembrar (crear categorías, asignarlas):
 // asertar con él daría un falso verde, porque bypassa RLS y no pasa por la vista.
+//
+// ⚠ CADA CASO SIEMBRA LO SUYO Y NO ASUME NADA DE LO QUE DEJÓ OTRO. Es la convención explícita del
+// archivo hermano de esta familia (`test/isolation.test.ts`, caso 8: "order-independent, como el
+// resto del archivo... partimos de `category_id = null` sin asumir qué dejó otro caso"), y la razón
+// es práctica: un caso que se apoya en el estado del anterior falla por motivos que no tienen NADA
+// que ver con lo que vino a probar —corrido solo con `-t`, bajo `--sequence.shuffle`, o después de
+// que su predecesor se rompa—, y ese ruido cuesta más que sembrar dos filas de más. El `afterEach`
+// borra las categorías del negocio, y el `ON DELETE SET NULL (category_id)` de la FK compuesta de
+// la 078 devuelve solo los servicios a "sin categoría".
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -30,9 +39,32 @@ type PublicServiceRow = CatalogService & { business_id: string }
 describe.skipIf(!hasSupabaseCreds)('modelo del catálogo: service_categories → vista anon → groupCatalog', () => {
   let seeded: SeededTenant
   let anon: SupabaseClient
-  let categoryId: string
   const CATEGORY_NAME = '__test_cat_Color'
   const CATEGORY_SORT = 3
+
+  // Siembra con SERVICE-ROLE — no es la aserción, es la herramienta correcta para crear fixtures.
+  // Lo que se asierta siempre es lo que ve el ANÓNIMO después.
+  const seedCategoria = async (name = CATEGORY_NAME, sort = CATEGORY_SORT): Promise<string> => {
+    const ins = await seeded.admin
+      .from('service_categories')
+      .insert({ business_id: seeded.businessId, name, sort_order: sort })
+      .select('id')
+      .single()
+    if (ins.error || !ins.data) throw new Error(`insert de categoría falló: ${ins.error?.message}`)
+    return ins.data.id as string
+  }
+
+  const asignarCategoria = async (serviceId: string, catId: string | null) => {
+    const upd = await seeded.admin
+      .from('services')
+      .update({ category_id: catId })
+      .eq('id', serviceId)
+      .eq('business_id', seeded.businessId)
+      .select('id')
+    if (upd.error) throw new Error(`asignar la categoría al servicio falló: ${upd.error.message}`)
+    // 0 filas vuelve SIN error en PostgREST: exigir la fila o el fixture mentiría en silencio.
+    expect(upd.data ?? []).toHaveLength(1)
+  }
 
   // Lee las dos vistas públicas como el RSC: cliente anónimo + `.eq('business_id', ...)`.
   const leerCatalogoPublico = async () => {
@@ -55,15 +87,30 @@ describe.skipIf(!hasSupabaseCreds)('modelo del catálogo: service_categories →
   }
 
   beforeAll(async () => {
-    seeded = await seedOneTenant()
-    anon = createClient(url, anonKey, { auth: { persistSession: false } })
-
     // GUARD anti-falso-verde (Pitfall 12 de isolation.test.ts): si el cliente de aserción quedara
     // configurado con la service-role key, leería bypasseando RLS y la vista — y este archivo
     // dejaría de probar lo único que vino a probar.
+    // ⚠ VA PRIMERO, antes de sembrar y antes de construir el cliente: con un entorno mal configurado
+    // no hay que dejar fixtures escritos ni clientes creados, hay que abortar.
     if (anonKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('GUARD: NEXT_PUBLIC_SUPABASE_ANON_KEY == SUPABASE_SERVICE_ROLE_KEY — config rota, abortar')
     }
+
+    seeded = await seedOneTenant()
+    anon = createClient(url, anonKey, { auth: { persistSession: false } })
+  })
+
+  // Deja al negocio SIN categorías después de cada caso, que es el estado de producción. El
+  // `ON DELETE SET NULL (category_id)` de la 078 devuelve los servicios a "sin categoría" solo, así
+  // que ningún caso hereda una asignación que no hizo él.
+  afterEach(async () => {
+    if (!seeded) return
+    const del = await seeded.admin
+      .from('service_categories')
+      .delete()
+      .eq('business_id', seeded.businessId)
+      .select('id')
+    if (del.error) throw new Error(`limpieza de categorías falló: ${del.error.message}`)
   })
 
   afterAll(async () => {
@@ -91,24 +138,8 @@ describe.skipIf(!hasSupabaseCreds)('modelo del catálogo: service_categories →
   })
 
   it('el camino completo: una categoría nace en la base, sale por la vista anónima y llega al catálogo agrupado', async () => {
-    // Se siembra con service-role (NO es la aserción): es la herramienta correcta para crear
-    // fixtures. Lo que se asierta es lo que el ANÓNIMO ve después.
-    const insCat = await seeded.admin
-      .from('service_categories')
-      .insert({ business_id: seeded.businessId, name: CATEGORY_NAME, sort_order: CATEGORY_SORT })
-      .select('id')
-      .single()
-    if (insCat.error || !insCat.data) throw new Error(`insert de categoría falló: ${insCat.error?.message}`)
-    categoryId = insCat.data.id
-
-    const updSvc = await seeded.admin
-      .from('services')
-      .update({ category_id: categoryId })
-      .eq('id', seeded.serviceId)
-      .eq('business_id', seeded.businessId)
-      .select('id')
-    if (updSvc.error) throw new Error(`asignar la categoría al servicio falló: ${updSvc.error.message}`)
-    expect((updSvc.data ?? []).length).toBe(1) // 0 filas vuelve SIN error en PostgREST: exigir la fila
+    const categoryId = await seedCategoria()
+    await asignarCategoria(seeded.serviceId, categoryId)
 
     const { categories, services } = await leerCatalogoPublico()
 
@@ -124,33 +155,46 @@ describe.skipIf(!hasSupabaseCreds)('modelo del catálogo: service_categories →
     const elServicio = services.find((s) => s.id === seeded.serviceId)
     expect(elServicio?.category_id).toBe(categoryId)
 
-    // (c) Y el módulo puro lo agrupa bajo su título.
+    // (c) Y el módulo puro lo agrupa bajo su título. Se busca EL grupo de la categoría sembrada en
+    //     vez de asumir `grupos[0]` y una longitud total: el negocio puede tener otros servicios
+    //     sueltos —los siembre este caso o no— y eso no es lo que este caso vino a probar.
     const grupos = groupCatalog(services, categories)
-    expect(grupos).toHaveLength(1)
-    expect(grupos[0].categoryId).toBe(categoryId)
-    expect(grupos[0].title).toBe(CATEGORY_NAME)
-    expect(grupos[0].services.map((s) => s.id)).toEqual([seeded.serviceId])
+    const suGrupo = grupos.find((g) => g.categoryId === categoryId)
+    expect(suGrupo?.title).toBe(CATEGORY_NAME)
+    expect(suGrupo?.services.map((s) => s.id)).toEqual([seeded.serviceId])
   })
 
   it('D-03: un servicio SIN categoría no desaparece — va al grupo de los sueltos, último', async () => {
     // La invariante de conservación, MEDIDA: el modo de falla que ya mordió dos veces en este repo
     // es un helper que devuelve "no" para todo y apaga el catálogo entero. Acá se prueba que la
     // suma de lo agrupado es igual a lo que devolvió la vista: ni un servicio se pierde.
-    const sueltoId = await seedService(seeded, { name: '__test_svc_suelto' })
+    // Siembra propia: la categoría, la asignación y el servicio suelto los crea ESTE caso. No se
+    // apoya en lo que dejó el anterior ni en un total acumulado de servicios.
+    const categoryId = await seedCategoria()
+    await asignarCategoria(seeded.serviceId, categoryId)
+    const sueltoId = await seedService(seeded, { name: `__test_svc_suelto_${crypto.randomUUID().slice(0, 8)}` })
 
     const { categories, services } = await leerCatalogoPublico()
-    expect(services).toHaveLength(2)
 
     const grupos = groupCatalog(services, categories)
 
-    expect(grupos).toHaveLength(2)
-    expect(grupos[0].title).toBe(CATEGORY_NAME)
-    // Los sueltos van ÚLTIMOS y con el título compartido.
-    expect(grupos[1].categoryId).toBeNull()
-    expect(grupos[1].title).toBe(OTHER_GROUP_TITLE)
-    expect(grupos[1].services.map((s) => s.id)).toEqual([sueltoId])
+    // El servicio CON categoría está bajo su título...
+    const suGrupo = grupos.find((g) => g.categoryId === categoryId)
+    expect(suGrupo?.title).toBe(CATEGORY_NAME)
+    expect(suGrupo?.services.map((s) => s.id)).toContain(seeded.serviceId)
 
-    const total = grupos.reduce((acc, g) => acc + g.services.length, 0)
-    expect(total).toBe(services.length)
+    // ...y el SUELTO no desapareció: cayó en el grupo de los sueltos, que va ÚLTIMO.
+    const ultimo = grupos[grupos.length - 1]
+    expect(ultimo.categoryId).toBeNull()
+    expect(ultimo.title).toBe(OTHER_GROUP_TITLE)
+    expect(ultimo.services.map((s) => s.id)).toContain(sueltoId)
+
+    // La conservación, medida contra lo que devolvió LA VISTA (no contra una constante): la suma de
+    // lo agrupado es exactamente lo que llegó, sin repetidos.
+    const idsAgrupados = grupos.flatMap((g) => g.services.map((s) => s.id))
+    expect(idsAgrupados).toHaveLength(services.length)
+    expect(new Set(idsAgrupados).size).toBe(services.length)
+    expect([...idsAgrupados].sort()).toEqual([...services.map((s) => s.id)].sort())
   })
+
 })
