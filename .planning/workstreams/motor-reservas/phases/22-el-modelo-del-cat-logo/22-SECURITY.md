@@ -18,10 +18,10 @@ la ROADMAP la declara `secure-phase` obligatorio. El registro se escribió en ti
 contra el Postgres local **en vivo** —interrogando `pg_class`, `pg_constraint`, `pg_policies` y
 `information_schema`, y ejecutando escrituras anónimas reales— en vez de leer los `.sql`.
 
-⚠ **Alcance de la verificación: local.** Producción sigue en la migr. **077**. Los grants, la FK
-compuesta y la RLS que cierran T-22-03/04/05/06/15/16/17 **no existen en prod** hasta que alguien
-aplique `supabase/migrations/078_service_categories.sql` a mano. El veredicto SECURED es sobre la
-migración tal como está escrita y aplicada localmente; el paso manual es el que la pone en efecto.
+✅ **Alcance de la verificación: local en el momento de la auditoría — y la 078 se aplicó a
+producción el mismo día (2026-09-15).** Los grants SELECT-only, la FK compuesta y la RLS que cierran
+T-22-03/04/05/06/15/16/17 están ahora **efectivamente en prod**, no sólo escritos. La próxima
+migración del repo es la **079**.
 
 ---
 
@@ -127,11 +127,10 @@ skip es el upload-gate de Storage, preexistente y ortogonal).
 
 ## Pendiente operativo (no es una amenaza abierta, es el paso que pone las mitigaciones en efecto)
 
-**La migración 078 no está aplicada a producción** (prod sigue en la **077**). Todo lo verificado acá
-vale contra el Postgres **local**. Los grants SELECT-only, la FK compuesta y la RLS que cierran
-T-22-03/04/05/06/15/16/17 **no existen en prod** hasta que se aplique
-`supabase/migrations/078_service_categories.sql` a mano, con su `NOTIFY pgrst, 'reload schema';`
-(runbook en la cabecera del archivo, `078:96-135`). Las Phases 23 y 24 no pueden deployarse antes.
+**CERRADO 2026-09-15: la migración 078 está aplicada en producción.** La auditoría midió contra el
+Postgres local, y el mismo día la 078 se aplicó a prod, así que las mitigaciones verificadas están
+efectivamente en efecto. La próxima migración del repo es la **079**. Las Phases 23 y 24 quedan
+desbloqueadas para deploy.
 
 ---
 

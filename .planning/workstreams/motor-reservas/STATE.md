@@ -414,7 +414,7 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
-- **[Phase 22 — deploy, PENDIENTE]** La migración **078** está escrita y validada en local pero **NO aplicada a producción** (última en prod = **077**). Es aditiva e inerte, así que puede aplicarse antes del deploy sin coordinar nada, pero **necesita el `NOTIFY pgrst, 'reload schema';`** o PostgREST no expone `public_service_categories` al RSC anónimo (mismo fail-safe que documentó la 059: el booking de hoy sigue funcionando, pero las categorías nunca aparecen). Runbook en la cabecera del archivo. **Las Phases 23 y 24 no pueden deployarse antes.**
+- **[Phase 22 — deploy, RESUELTO 2026-09-15]** La migración **078 YA ESTÁ APLICADA EN PRODUCCIÓN**. La próxima migración del repo es la **079**. Con esto, las mitigaciones que el `22-SECURITY.md` cerró midiendo contra el local (grants SELECT-only en las tres vistas, FK compuesta, RLS de `service_categories`) están efectivamente en prod. **Desbloquea el deploy de las Phases 23 y 24.**
 - **[Phase 22 — code review, ABIERTO]** `22-REVIEW.md`: 0 BLOCKER / **7 WARNING** / 5 INFO, ninguno corregido todavía. Son contratos defensivos que el módulo declara y no honra (`porPrecio` trata un precio `null` como gratis y lo pone primero; `porNombre` **tira** con `null` → 500 en el RSC de `/[slug]`; un `id` de categoría duplicado emite el mismo servicio en dos grupos; el merge de `modes` no restaura defaults ante `undefined` explícito, que es justo lo que pasará el call site natural de la Phase 23; el espejo de grants de `service_categories` en `schema.sql`; `lower(name)` sin `btrim`). **Ninguno es alcanzable hoy** (`NOT NULL` en ambos `name` y en `price`, `id` es PK, y todavía no hay consumidor). Cerrar antes o junto con el primer call site de la Phase 23.
 - **[Phase 22 — seguridad, CERRADO 2026-09-15]** `secure-phase` corrió: **SECURED, 23/23 amenazas cerradas, `threats_open: 0`** (`22-SECURITY.md`). Los dos vectores críticos se **midieron** contra el PG local en vivo, no se leyeron del `.sql`: ACL crudo de `pg_class` → `anon=r` / `authenticated=r` en las tres vistas (+ 5 escrituras anónimas reales rebotadas), y medición conductual del borrado de categoría → el servicio conserva `business_id` y sigue visible en `public_services`. ⚠ **Todo eso vale contra el LOCAL**: las mitigaciones no existen en prod hasta aplicar la 078 a mano.
 - **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Runbook completo en `15-01-SUMMARY.md` §User Setup Required. ⚠ El sub-bloqueo de ORDEN ("no debería llegar a prod antes que el guard del editor, D-10") quedó **CERRADO por el plan 15-02**: el editor ya ofrece los tres modos y sube el cupo a 2 al salir de individual, así que no puede producir la combinación que el CHECK rechaza. La 068 sigue teniendo que aplicarse a mano y coordinada con el deploy de ese código.
@@ -490,7 +490,7 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-15T21:15:11.253Z
+Last session: 2026-09-15T21:17:36.765Z
 Stopped at: Phase 22 complete, ready to plan Phase 23
 Resume file: None
 
@@ -498,5 +498,5 @@ Resume file: None
 
 - ~~Correr `/gsd-secure-phase 22`~~ — **HECHO (2026-09-15): SECURED, `threats_open: 0`**
 - Decidir qué hacer con los **7 WARNINGs** de `22-REVIEW.md`: `/gsd-code-review 22 --fix` ahora, o cerrarlos junto con el primer call site de la Phase 23
-- Antes de deployar la Phase 23 o la 24: aplicar la migración **078** a mano en producción + `NOTIFY pgrst, 'reload schema';` (runbook en la cabecera del archivo)
+- ~~Aplicar la migración 078 a prod~~ — **HECHO (2026-09-15)**. Próxima migración del repo = **079**
 - Después: `/gsd-discuss-phase 23 --ws motor-reservas` — la fase 23 no tiene CONTEXT.md todavía
