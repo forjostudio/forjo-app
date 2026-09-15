@@ -372,10 +372,19 @@ describe('groupCatalog — invariante de conservación: ningún servicio se pier
     },
     { nombre: 'lista de categorías VACÍA', servicios: [svc('a'), svc('b')], categorias: [] },
     { nombre: 'lista de servicios VACÍA', servicios: [], categorias: propias },
+    {
+      // "EXACTAMENTE una vez" también prohíbe DOS veces, y ése es el lado que faltaba alimentar:
+      // la aserción `new Set(salida).size === entrada.length` ya estaba escrita, pero ningún caso
+      // le daba ids de categoría repetidos. Un caller que concatena dos lecturas, mezcla una lista
+      // cacheada o agrega optimistamente una categoría que el refetch también devuelve llega acá.
+      nombre: 'DOS categorías con el MISMO id (dos lecturas concatenadas)',
+      servicios: [svc('a', { category_id: 'cortes' }), svc('b', { category_id: 'color' })],
+      categorias: [...propias, cat('cortes', { name: 'Cortes (repetida)' })],
+    },
   ]
 
   for (const modo of ['custom', 'alpha', 'price'] as const) {
-    it(`la unión de los grupos es EXACTAMENTE la entrada, en los 6 casos (services: '${modo}')`, () => {
+    it(`la unión de los grupos es EXACTAMENTE la entrada, en los 7 casos (services: '${modo}')`, () => {
       for (const caso of casos) {
         const grupos = groupCatalog(caso.servicios, caso.categorias, modes({ services: modo }))
         const salida = idsDeTodaLaSalida(grupos)
@@ -410,6 +419,21 @@ describe('groupCatalog — invariante de conservación: ningún servicio se pier
     const grupos = groupCatalog(servicios, propias)
     expect(titles(grupos)).toEqual(['Cortes', OTHER_GROUP_TITLE])
     expect(ids(grupos[grupos.length - 1])).toEqual(['ajeno'])
+  })
+
+  it('una categoría REPETIDA no duplica sus servicios: el bucket se consume', () => {
+    // El otro filo de la invariante. Sin consumir el bucket, las dos filas con el mismo id leen el
+    // MISMO arreglo y lo empujan a dos grupos: el cliente vería el mismo servicio reservable bajo
+    // dos títulos, y React recibiría keys repetidas. Gana la PRIMERA en el orden del eje de
+    // categorías; la segunda no produce grupo, porque un grupo vacío nunca sale.
+    const repetidas = [cat('cortes', { name: 'Cortes' }), cat('cortes', { name: 'Cortes (repetida)' })]
+    const servicios = [svc('a', { category_id: 'cortes' }), svc('b', { category_id: 'cortes' })]
+
+    const grupos = groupCatalog(servicios, repetidas)
+
+    expect(grupos).toHaveLength(1)
+    expect(titles(grupos)).toEqual(['Cortes'])
+    expect(idsDeTodaLaSalida(grupos)).toEqual(['a', 'b'])
   })
 
   it('lista de servicios VACÍA: la salida NO inventa grupos vacíos', () => {

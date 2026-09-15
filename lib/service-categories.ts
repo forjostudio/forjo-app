@@ -297,6 +297,14 @@ export function groupCatalog<S extends CatalogService>(
   for (const c of ordenadas(categories, comparadorDeCategorias(modoCategorias))) {
     const suyos = porCategoria.get(c.id)
     if (!suyos || suyos.length === 0) continue
+    // ⚠ SE CONSUME EL BUCKET, y de eso depende la invariante de conservación en su otra dirección:
+    // "EXACTAMENTE una vez" también prohíbe DOS veces. Si `categories` trae dos filas con el mismo
+    // `id`, sin este `delete` las dos iteraciones leen el MISMO arreglo y lo empujan a dos grupos
+    // distintos: el cliente ve el mismo servicio reservable bajo dos títulos, y React recibe keys
+    // repetidas. La PK de `service_categories` lo impide en la base, pero este módulo recibe filas
+    // de un tercero: alcanza con que un caller concatene dos lecturas, mezcle una lista cacheada, o
+    // que una UI optimista agregue una categoría que el refetch también devuelve (Phase 23).
+    porCategoria.delete(c.id)
     grupos.push({ categoryId: c.id, title: c.name, services: ordenadas(suyos, ordenarServicios) })
   }
 
