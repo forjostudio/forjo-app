@@ -57,7 +57,7 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
 
 ### Booking público
 
-- [ ] **CAT-07** — Un negocio **sin ninguna categoría creada** muestra sus servicios exactamente como
+- [x] **CAT-07** — Un negocio **sin ninguna categoría creada** muestra sus servicios exactamente como
   hoy: sueltos, sin títulos. **Cero regresión, y por construcción**: es el estado de todos los
   negocios el día de la migración.
 - [ ] **CAT-08** — Con al menos una categoría creada, el cliente ve los servicios **agrupados bajo
@@ -94,8 +94,8 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
 | CAT-03 | Phase 23 | Pendiente |
 | CAT-04 | Phase 23 | Pendiente |
 | CAT-05 | Phase 23 | Pendiente |
-| CAT-06 | Phase 22 | Pendiente |
-| CAT-07 | Phase 22 | Pendiente |
+| CAT-06 | Phase 22 | Completo |
+| CAT-07 | Phase 22 | Completo |
 | CAT-08 | Phase 24 | Pendiente |
 | CAT-09 | Phase 24 | Pendiente |
 | CAT-10 | Phase 24 | Pendiente |
