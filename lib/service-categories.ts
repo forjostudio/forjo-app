@@ -254,8 +254,18 @@ export function groupCatalog<S extends CatalogService>(
   categories: CatalogCategory[],
   modes?: Partial<CatalogSortModes>,
 ): CatalogGroup<S>[] {
-  // Campo por campo: un caller que sólo sabe el modo de servicios no pierde el de categorías.
-  const { categories: modoCategorias, services: modoServicios } = { ...DEFAULT_SORT_MODES, ...modes }
+  // Campo por campo con `??`, y NO con `{ ...DEFAULT_SORT_MODES, ...modes }`: el spread NO cae al
+  // default cuando la clave EXISTE con valor `undefined` — la pisa con `undefined`. Y ése es
+  // justamente el call site natural de las Phases 23/24, porque en `lib/types.ts` las dos columnas
+  // son opcionales (`category_sort_mode?` / `service_sort_mode?`): pasar
+  // `{ categories: business.category_sort_mode, services: business.service_sort_mode }` manda
+  // `undefined` en los dos cada vez que la fila se leyó con un `select` más angosto. Hoy la salida
+  // igual coincide con 'custom', pero POR CASUALIDAD (los dos comparadores caen a `porOrden` al
+  // final de su cadena de `if`); el día que cambie un default, o que alguien meta un `switch` con
+  // guarda exhaustiva, sería un orden equivocado para TODOS los negocios y en silencio — la clase
+  // exacta de cambio que CAT-07 existe para impedir.
+  const modoCategorias = modes?.categories ?? DEFAULT_SORT_MODES.categories
+  const modoServicios = modes?.services ?? DEFAULT_SORT_MODES.services
 
   // Regla 0 — SIN SERVICIOS NO HAY GRUPOS. Devolver un grupo con cero servicios no le sirve a
   // ningún consumidor y sí lo puede confundir: un `groups.length > 0` leído como "hay catálogo"

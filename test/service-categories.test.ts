@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupCatalog, OTHER_GROUP_TITLE } from '@/lib/service-categories'
+import { groupCatalog, DEFAULT_SORT_MODES, OTHER_GROUP_TITLE } from '@/lib/service-categories'
 import type { CatalogCategory, CatalogService, CatalogSortModes } from '@/lib/service-categories'
 
 // ── Phase 22 (el modelo del catálogo) — tests PUROS de lib/service-categories.ts ──────────────
@@ -503,5 +503,73 @@ describe('groupCatalog — un nombre roto no tira ni pierde a nadie', () => {
       const grupos = groupCatalog(servicios, categorias, modes({ categories: 'alpha' }))
       expect(idsDeTodaLaSalida(grupos).sort(), `posición ${posicion}`).toEqual(['s-roto', 's-sano'])
     }
+  })
+})
+
+// ── Bloque E: el merge de los MODOS — un campo ausente cae al DEFAULT, no a `undefined` ────────
+// ⚠ ESTE BLOQUE NO MUERDE HOY, Y ESTÁ ESCRITO IGUAL A PROPÓSITO. Con `{ ...DEFAULT, ...modes }` un
+// campo presente-con-valor-`undefined` PISA el default con `undefined`, y aun así la salida coincide
+// con 'custom' — pero por CASUALIDAD: los dos comparadores caen a `porOrden` al final de su cadena
+// de `if`, así que hoy "sin modo" y "modo custom" toman el mismo camino. El día que cambie un
+// default, o que alguien reemplace esos `if` por un `switch` con guarda exhaustiva, la casualidad se
+// termina y el bug sería un orden equivocado para TODOS los negocios, en silencio (la clase exacta
+// de cambio que CAT-07 existe para impedir). Esto es el candado que convierte ese accidente en
+// contrato: fija el COMPORTAMIENTO OBSERVABLE, no la implementación del merge.
+//
+// Importa porque es el call site natural de las Phases 23/24: en `lib/types.ts` las dos columnas son
+// opcionales, así que `{ categories: business.category_sort_mode, services: business.service_sort_mode }`
+// manda `undefined` en las dos cada vez que la fila se leyó con un `select` más angosto.
+describe('groupCatalog — un modo ausente o `undefined` cae al DEFAULT_SORT_MODES', () => {
+  // Deliberadamente desalineados: el sort_order va al revés del alfabético y del precio, así que si
+  // un eje cayera en un modo distinto del default la aserción se vería.
+  const categorias = [
+    cat('c-zeta', { name: 'Zeta', sort_order: 1 }),
+    cat('c-alfa', { name: 'Alfa', sort_order: 2 }),
+  ]
+  const servicios = [
+    svc('z1', { name: 'Zurcido', category_id: 'c-zeta', sort_order: 1, price: 9000 }),
+    svc('z2', { name: 'Afeitado', category_id: 'c-zeta', sort_order: 2, price: 1000 }),
+    svc('a1', { name: 'Uñas', category_id: 'c-alfa', sort_order: 1, price: 7000 }),
+  ]
+
+  const conDefaults = () => groupCatalog(servicios, categorias, DEFAULT_SORT_MODES)
+
+  it('el default es el orden manual: es la referencia contra la que se comparan los demás', () => {
+    // Sin esto el bloque entero podría estar comparando dos salidas idénticas por la razón
+    // equivocada. 'custom' TIENE que dar el orden de `sort_order`, al revés del alfabético.
+    expect(titles(conDefaults())).toEqual(['Zeta', 'Alfa'])
+    expect(ids(conDefaults()[0])).toEqual(['z1', 'z2'])
+  })
+
+  it('`modes` omitido por completo', () => {
+    expect(groupCatalog(servicios, categorias)).toEqual(conDefaults())
+  })
+
+  it('`modes` presente pero VACÍO', () => {
+    expect(groupCatalog(servicios, categorias, {})).toEqual(conDefaults())
+  })
+
+  it('las dos claves PRESENTES con valor `undefined` — el caso que el spread no cubre', () => {
+    expect(
+      groupCatalog(servicios, categorias, { categories: undefined, services: undefined }),
+    ).toEqual(conDefaults())
+  })
+
+  it('UNA clave real y la otra `undefined`: la real manda, la ausente cae al default', () => {
+    // El caller que sólo conoce un eje no pierde el del otro (es lo que promete el JSDoc).
+    const soloAlfaEnCategorias = groupCatalog(servicios, categorias, {
+      categories: 'alpha',
+      services: undefined,
+    })
+    expect(titles(soloAlfaEnCategorias)).toEqual(['Alfa', 'Zeta'])
+    // ...y los servicios quedaron en el orden manual, no en alfabético ni por precio.
+    expect(ids(soloAlfaEnCategorias[1])).toEqual(['z1', 'z2'])
+
+    const soloPrecioEnServicios = groupCatalog(servicios, categorias, {
+      categories: undefined,
+      services: 'price',
+    })
+    expect(titles(soloPrecioEnServicios)).toEqual(['Zeta', 'Alfa'])
+    expect(ids(soloPrecioEnServicios[0])).toEqual(['z2', 'z1'])
   })
 })
