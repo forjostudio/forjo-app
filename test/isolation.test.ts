@@ -553,7 +553,10 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
     // Semillas con service-role (NO son aserciones): una categoría y un servicio propios por tenant.
     // Se crean acá y no se reusan los del bloque de la agenda, para que ningún caso de este bloque
     // dependa de lo que otro bloque haya dejado.
-    let catA: string, catB: string, svcA: string, svcB: string
+    // `mk` crea la pareja categoría+servicio en los DOS tenants (la simetría importa: el servicio de
+    // B existe para que las lecturas cross no sean triviales), pero acá sólo se capturan los ids que
+    // los casos usan.
+    let catA: string, catB: string, svcA: string
 
     beforeAll(async () => {
       const mk = async (biz: string) => {
@@ -572,7 +575,7 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
         return [c.id as string, s.id as string] as const
       }
       ;[catA, svcA] = await mk(seeded.bizA)
-      ;[catB, svcB] = await mk(seeded.bizB)
+      ;[catB] = await mk(seeded.bizB)
     })
 
     // Cliente anon SIN sesión: el rol `anon` puro, el que atiende la página pública de reservas.
@@ -701,6 +704,108 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
         .eq('business_id', seeded.bizB)
         .eq('name', '__iso_cat_cross')
       expect((check ?? []).length).toBe(0)
+    })
+
+    it('cross-tenant: la BASE rechaza apuntar un servicio propio a la categoría de otro negocio', async () => {
+      // Caso 8. Acá NO se está midiendo la RLS: la fila que se actualiza es de A, así que la policy
+      // `owner_id = auth.uid()` PERMITIRÍA este update. Lo que lo rechaza es la FK COMPUESTA
+      // `services_category_same_tenant (category_id, business_id) → service_categories (id,
+      // business_id)`: las FK simples garantizan EXISTENCIA, no PERTENENCIA (la medición de WR-02 en
+      // la migr. 073), y los ids ajenos son públicos por diseño, así que no hay nada que adivinar
+      // (T-22-16).
+      //
+      // Centinela sembrado con service-role (order-independent, como el resto del archivo): partimos
+      // de `category_id = null` sin asumir qué dejó otro caso.
+      await seeded.admin.from('services').update({ category_id: null }).eq('id', svcA)
+
+      const { data, error } = await anonA
+        .from('services')
+        .update({ category_id: catB })
+        .eq('id', svcA)
+        .select('id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+      // Check INDEPENDIENTE del efecto con service-role (no es la aserción): la columna no se movió.
+      const { data: check } = await seeded.admin
+        .from('services')
+        .select('category_id')
+        .eq('id', svcA)
+        .single()
+      expect(check?.category_id).toBeNull()
+    })
+
+    it('control positivo del caso 8: A SÍ puede apuntar su servicio a su PROPIA categoría', async () => {
+      // Sin este control, el caso 8 pasaría igual si `category_id` fuera de sólo lectura para todo el
+      // mundo — un falso verde con la misma forma que el de la lectura anónima del caso 5. Lo que se
+      // asierta es que la FK compuesta rechaza EL AJENO y acepta EL PROPIO, no que nadie escribe nada.
+      const { error } = await anonA
+        .from('services')
+        .update({ category_id: catA })
+        .eq('id', svcA)
+        .select('id')
+      expect(error).toBeNull()
+
+      const { data: check } = await seeded.admin
+        .from('services')
+        .select('category_id')
+        .eq('id', svcA)
+        .single()
+      expect(check?.category_id).toBe(catA)
+
+      // Limpieza del propio caso: volvemos a dejar el servicio sin categoría.
+      await seeded.admin.from('services').update({ category_id: null }).eq('id', svcA)
+    })
+
+    it('CAT-07 / CAT-09: borrar una categoría NO borra ni desactiva un solo servicio', async () => {
+      // Caso 9, el criterio de la fase que no se puede romper: organizar el catálogo jamás puede sacar
+      // algo de la venta.
+      //
+      // ⚠⚠ POR QUÉ LAS TRES ASERCIONES DEL PUNTO 3 VAN JUNTAS, y por qué la que suele faltar es la del
+      // `business_id`: es la ÚNICA que distingue las dos implementaciones posibles de la migración.
+      // `services.business_id` es NULLABLE, y con `ON DELETE SET NULL` **a secas** Postgres nulea LAS
+      // DOS columnas de la clave foránea — medido contra este mismo motor por la migr. 075
+      // (`business_id_quedo_null = t`). El servicio seguiría existiendo y su `category_id` seguiría en
+      // null, o sea que las otras dos aserciones pasarían IGUAL; pero se habría quedado sin negocio:
+      // fuera de la RLS de su dueño y fuera de `public_services` —que el RSC lee acotando por
+      // `business_id`—, y por lo tanto FUERA DE LA VENTA, sin un solo error a la vista (T-22-17).
+      // La 078 lleva la lista de columnas (`ON DELETE SET NULL (category_id)`) justamente por esto.
+
+      // 1) siembra con service-role: una categoría propia de A y el servicio de A apuntando a ella.
+      const { data: cat, error: ce } = await seeded.admin
+        .from('service_categories')
+        .insert({ business_id: seeded.bizA, name: '__iso_cat_borrado' })
+        .select('id')
+        .single()
+      if (ce || !cat) throw new Error(`siembra del caso 9 falló: ${ce?.message}`)
+      const { error: ue } = await seeded.admin
+        .from('services')
+        .update({ category_id: cat.id })
+        .eq('id', svcA)
+      expect(ue).toBeNull()
+
+      // 2) borrar la categoría (es la acción del dueño que el requisito permite).
+      const { error: de } = await seeded.admin.from('service_categories').delete().eq('id', cat.id)
+      expect(de).toBeNull()
+
+      // 3) las TRES propiedades del servicio, juntas.
+      const { data: svc } = await seeded.admin
+        .from('services')
+        .select('id, category_id, business_id')
+        .eq('id', svcA)
+        .maybeSingle()
+      expect(svc).not.toBeNull() // sigue existiendo
+      expect(svc?.category_id).toBeNull() // perdió la categoría, que es lo único que debía perder
+      expect(svc?.business_id).toBe(seeded.bizA) // ⚠ y SIGUE SIENDO DE SU NEGOCIO
+
+      // 4) la aserción que cierra el requisito desde el lado del cliente final, que es donde el daño
+      // se notaría: un anon PURO leyendo `public_services` sigue viendo el servicio.
+      const pub = anonPublic()
+      const { data: pubSvc, error } = await pub
+        .from('public_services')
+        .select('id')
+        .eq('business_id', seeded.bizA)
+      expect(error).toBeNull()
+      expect((pubSvc ?? []).some((r) => r.id === svcA)).toBe(true)
     })
   })
 })
