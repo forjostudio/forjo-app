@@ -51,6 +51,21 @@ export interface Business {
   // el cliente ve primero a las personas ("Cualquiera" sigue disponible con ≥2 capaces, D-07). Se lee
   // vía la vista public_businesses (no la tabla). Es flag de presentación, no dato sensible.
   public_selector_default?: 'any' | 'choose'
+  // Modos de orden del catálogo (migración 078, v0.29). El modo es POR NEGOCIO y no por categoría
+  // (D-05): si algún día se pide por categoría, se agrega sin re-migrar. Los dos NOT NULL DEFAULT
+  // 'custom' en la DB, con CHECK de enum, y viajan al anon por la vista `public_businesses` — son
+  // flags de PRESENTACIÓN del propio negocio (enum acotado), no dato sensible ni PII, mismo criterio
+  // con el que la migr. 061 expuso `public_selector_default`.
+  //
+  // ⚠ 'custom' es el DEFAULT a propósito: con el modo personalizado + todos los `sort_order` en 0 +
+  // un orden estable, el catálogo sale EN EL ORDEN EN QUE LLEGÓ. La lectura pública de hoy no tiene
+  // `ORDER BY`, así que "el mismo orden que hoy" sólo es reproducible si el modelo no reordena nada;
+  // cualquier otro default sería un cambio visible para todos los negocios el día de la migración.
+  // El orden manual NO se borra cuando el modo es 'alpha'/'price': esos modos lo PISAN para mostrar
+  // (D-06), así que volver a 'custom' devuelve el orden que el dueño había armado.
+  category_sort_mode?: 'custom' | 'alpha'
+  // 'price' sólo existe para servicios: ordenar categorías por precio no significa nada.
+  service_sort_mode?: 'custom' | 'alpha' | 'price'
   // MercadoPago Connect (OAuth): user_id de la cuenta MP. NO es secreto (es el id de cuenta);
   // el dashboard lo usa como flag (¿conectó por OAuth?) → se queda en Business.
   mp_user_id?: string | null
@@ -183,6 +198,32 @@ export interface TimeBlockService {
   service_id: string
 }
 
+// Categoría del catálogo de servicios (migración 078, v0.29). Tabla PROPIA por negocio y no texto
+// libre en `services` (D-01): así se puede renombrar y reordenar una categoría sin tocar cada fila.
+//
+// ⚠ LA REGLA DE LA AUSENCIA, que es la razón de ser de todo este modelo (D-03/D-08): un servicio con
+// `category_id` nulo y un negocio con CERO categorías son estados LEGALES Y PERMANENTES, no datos a
+// completar. La ausencia significa "vale igual", nunca "no vale" — misma regla del comodín que
+// `professional_services` (v0.25) y `time_block_services` (v0.28), y el modo de falla contrario
+// (un helper que devuelve "no" para todo y apaga el catálogo entero) ya mordió dos veces en este
+// repo. El día de la migración TODOS los negocios de producción tienen cero categorías, así que
+// "sin categorías" no es un caso borde: es el camino de todos los clientes actuales, y tiene que
+// devolver la lista de hoy sin una sola rama que lo cuide (CAT-07 por construcción).
+//
+// `name` es texto escrito por el dueño que termina RENDERIZADO para un visitante anónimo: se
+// interpola en JSX (auto-escape de React), jamás por `dangerouslySetInnerHTML`.
+// El anon la lee por la vista acotada `public_service_categories` (4 columnas: sin `created_at`),
+// nunca por la tabla base — que no tiene policy `anon`.
+// Campos snake_case espejo de la fila DB (convención del repo: la capa TS no renombra a camelCase).
+export interface ServiceCategory {
+  id: string
+  business_id: string
+  name: string
+  // Orden manual dentro del negocio. DEFAULT 0 en la DB: con todo en 0 el orden es el de llegada.
+  sort_order: number
+  created_at: string
+}
+
 // Cancha pública (vista acotada `public_canchas`, migr. 044). Forma que ve el anon en el
 // booking público de canchas: `id` = professional_id de la agenda-cancha; `price`/`duration_minutes`
 // salen del service 1:1 de la cancha (D-03). NUNCA expone `service_id` (vive solo en JOIN+WHERE).
@@ -230,6 +271,15 @@ export interface Service {
   // Cupo N del servicio. Es la ÚNICA fuente del número para los TRES modos (migr. 068):
   // time_blocks.capacity ya no decide nada. DEFAULT 1 en la DB.
   capacity: number
+  // Categoría del catálogo (migr. 078, v0.29). NULLABLE Y ASÍ SE QUEDA: un servicio sin categoría es
+  // un estado legal y permanente, y NUNCA desaparece de la página pública (D-03) — cae en el grupo
+  // de los sueltos. La base garantiza que la categoría sea del MISMO negocio (FK compuesta
+  // `services_category_same_tenant`), y borrar la categoría deja este campo en null SIN tocar
+  // `business_id` (`ON DELETE SET NULL (category_id)`): el servicio sigue vendiéndose.
+  category_id?: string | null
+  // Orden manual dentro de su grupo. DEFAULT 0 en la DB ⇒ el día de la migración todos empatan y el
+  // orden resultante es el de llegada, o sea el de hoy. Viaja al anon por `public_services`.
+  sort_order?: number
   created_at: string
 }
 
