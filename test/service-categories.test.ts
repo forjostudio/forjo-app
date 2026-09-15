@@ -433,3 +433,51 @@ describe('groupCatalog — invariante de conservación: ningún servicio se pier
     }
   })
 })
+
+// ── Bloque D: filas ROTAS — el peor caso es "se ve como hoy", nunca una excepción ──────────────
+// El contrato de la cabecera del módulo es explícito: recibe filas de un tercero y NO PUEDE validar
+// su origen. Los dos consumidores (el panel de la Phase 23 y la página pública de la 24) lo llaman
+// DENTRO del render de un RSC, así que un throw acá adentro no lo atrapa nadie: es un 500 en la
+// página de reservas — o sea "no se ve nada", el único modo de falla que el módulo declara
+// imposible. Hoy la base lo impide (`services.name` y `service_categories.name` son las dos NOT
+// NULL), así que esto congela la defensa ANTES de que haya dos superficies dependiendo de ella.
+describe('groupCatalog — un nombre roto no tira ni pierde a nadie', () => {
+  const nombreRoto = null as unknown as string
+
+  it("'alpha': un SERVICIO con name nulo no rompe en NINGUNA de las dos posiciones", () => {
+    // La posición importa, y por eso se prueban las dos: `'b'.localeCompare(null)` coerciona al
+    // string "null" y NO tira, mientras que `null.localeCompare('b')` sí. La misma fila rota o
+    // rompía la página o se mis-ordenaba en silencio, según dónde hubiera caído en la lectura.
+    const categorias = [cat('cortes', { name: 'Cortes' })]
+    for (const posicion of [0, 1]) {
+      const sano = svc('sano', { name: 'Afeitado', category_id: 'cortes' })
+      const roto = svc('roto', { name: nombreRoto, category_id: 'cortes' })
+      const servicios = posicion === 0 ? [roto, sano] : [sano, roto]
+      expect(
+        () => groupCatalog(servicios, categorias, modes({ services: 'alpha' })),
+        `posición ${posicion}`,
+      ).not.toThrow()
+      const grupos = groupCatalog(servicios, categorias, modes({ services: 'alpha' }))
+      // Y la conservación no se negocia ni con filas rotas: ninguno de los dos se perdió.
+      expect(idsDeTodaLaSalida(grupos).sort(), `posición ${posicion}`).toEqual(['roto', 'sano'])
+    }
+  })
+
+  it("'alpha': una CATEGORÍA con name nulo no rompe en NINGUNA de las dos posiciones", () => {
+    const sana = cat('cortes', { name: 'Cortes' })
+    const rota = cat('sin-nombre', { name: nombreRoto })
+    const servicios = [
+      svc('s-sano', { category_id: 'cortes' }),
+      svc('s-roto', { category_id: 'sin-nombre' }),
+    ]
+    for (const posicion of [0, 1]) {
+      const categorias = posicion === 0 ? [rota, sana] : [sana, rota]
+      expect(
+        () => groupCatalog(servicios, categorias, modes({ categories: 'alpha' })),
+        `posición ${posicion}`,
+      ).not.toThrow()
+      const grupos = groupCatalog(servicios, categorias, modes({ categories: 'alpha' }))
+      expect(idsDeTodaLaSalida(grupos).sort(), `posición ${posicion}`).toEqual(['s-roto', 's-sano'])
+    }
+  })
+})

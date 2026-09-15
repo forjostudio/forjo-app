@@ -133,9 +133,19 @@ function porOrden(a: { sort_order?: number | null }, b: { sort_order?: number | 
  * sobre `(business_id, lower(name))`, así que dos categorías del mismo negocio no PUEDEN diferir
  * sólo en capitalización — un comparador sensible a mayúsculas estaría resolviendo un empate que la
  * base hace imposible.
+ *
+ * ⚠ UN NOMBRE ROTO NO PUEDE TIRAR. `a.name.localeCompare(...)` a secas explota con `null`, y un
+ * throw ACÁ ADENTRO es un 500 en la página pública de reservas: el comparador corre dentro del
+ * render de un RSC, así que la excepción no la atrapa nadie y el cliente ve "no se ve nada" — el
+ * único modo de falla que la cabecera de este módulo declara imposible. Peor todavía, el crash era
+ * POSICIONAL (`'b'.localeCompare(null)` coerciona al string "null" y no tira), así que la misma
+ * fila rota o rompía la página o mis-ordenaba según dónde hubiera caído. Se normaliza a '' y el
+ * orden estable hace el resto.
  */
 function porNombre(a: { name: string }, b: { name: string }): number {
-  return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+  const na = typeof a.name === 'string' ? a.name : ''
+  const nb = typeof b.name === 'string' ? b.name : ''
+  return na.localeCompare(nb, 'es', { sensitivity: 'base' })
 }
 
 /**
