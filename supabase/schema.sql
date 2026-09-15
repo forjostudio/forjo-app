@@ -1018,8 +1018,15 @@ CREATE TABLE IF NOT EXISTS "public"."businesses" (
     "max_advance_date" "date",
     "abono_window_weeks" integer DEFAULT 8,
     "public_selector_default" "text" DEFAULT 'any'::"text" NOT NULL,
+    -- (migr. 078) El modo de orden del catálogo es POR NEGOCIO, no por categoría (D-05). El default
+    -- es 'custom' y no alfabético a propósito: la lectura pública de hoy no tiene ORDER BY, así que
+    -- "el mismo orden que hoy" sólo es reproducible si el modelo no reordena nada (CAT-07).
+    "category_sort_mode" "text" DEFAULT 'custom'::"text" NOT NULL,
+    "service_sort_mode" "text" DEFAULT 'custom'::"text" NOT NULL,
     CONSTRAINT "businesses_abono_window_weeks_range" CHECK ((("abono_window_weeks" IS NULL) OR (("abono_window_weeks" >= 1) AND ("abono_window_weeks" <= 52)))),
-    CONSTRAINT "businesses_public_selector_default_chk" CHECK (("public_selector_default" = ANY (ARRAY['any'::"text", 'choose'::"text"])))
+    CONSTRAINT "businesses_category_sort_mode_chk" CHECK (("category_sort_mode" = ANY (ARRAY['custom'::"text", 'alpha'::"text"]))),
+    CONSTRAINT "businesses_public_selector_default_chk" CHECK (("public_selector_default" = ANY (ARRAY['any'::"text", 'choose'::"text"]))),
+    CONSTRAINT "businesses_service_sort_mode_chk" CHECK (("service_sort_mode" = ANY (ARRAY['custom'::"text", 'alpha'::"text", 'price'::"text"])))
 );
 
 
@@ -1357,7 +1364,9 @@ CREATE OR REPLACE VIEW "public"."public_businesses" AS
     "landing_config",
     "max_advance_days",
     "max_advance_date",
-    "public_selector_default"
+    "public_selector_default",
+    "category_sort_mode",
+    "service_sort_mode"
    FROM "public"."businesses";
 
 
@@ -1378,6 +1387,23 @@ CREATE OR REPLACE VIEW "public"."public_professionals" AS
 ALTER VIEW "public"."public_professionals" OWNER TO "postgres";
 
 
+-- (migr. 078) Los títulos del catálogo, por negocio (D-01). `business_id` es NOT NULL acá —a
+-- diferencia de `services.business_id`, que quedó nullable por historia—: una categoría sin negocio
+-- no tendría dueño que la vea ni vista pública que la filtre. La FK a `businesses` es ON DELETE
+-- CASCADE: cerrar un negocio se lleva sus categorías, y el ON DELETE SET NULL de
+-- `services_category_same_tenant` deja a sus servicios sin categoría, nunca sin negocio.
+CREATE TABLE IF NOT EXISTS "public"."service_categories" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "business_id" "uuid" NOT NULL,
+    "name" "text" NOT NULL,
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."service_categories" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."services" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "business_id" "uuid",
@@ -1391,6 +1417,8 @@ CREATE TABLE IF NOT EXISTS "public"."services" (
     "location_ids" "uuid"[],
     "capacity_mode" "text" DEFAULT 'individual'::"text" NOT NULL,
     "capacity" smallint DEFAULT 1 NOT NULL,
+    "category_id" "uuid",
+    "sort_order" integer DEFAULT 0 NOT NULL,
     CONSTRAINT "services_capacity_matches_mode_chk" CHECK (((("capacity_mode" = 'individual'::"text") AND ("capacity" = 1)) OR (("capacity_mode" = ANY (ARRAY['group_class'::"text", 'simultaneous_resource'::"text"])) AND ("capacity" >= 2)))),
     CONSTRAINT "services_capacity_mode_chk" CHECK (("capacity_mode" = ANY (ARRAY['individual'::"text", 'group_class'::"text", 'simultaneous_resource'::"text"]))),
     CONSTRAINT "services_capacity_positive" CHECK (("capacity" >= 1)),
@@ -1412,7 +1440,9 @@ CREATE OR REPLACE VIEW "public"."public_services" AS
     "location_id",
     "location_ids",
     "created_at",
-    "capacity_mode"
+    "capacity_mode",
+    "category_id",
+    "sort_order"
    FROM "public"."services"
   WHERE ("active" = true);
 
@@ -1452,6 +1482,27 @@ CREATE OR REPLACE VIEW "public"."public_time_block_services" AS
 
 
 ALTER VIEW "public"."public_time_block_services" OWNER TO "postgres";
+
+
+-- (migr. 078, T-22-01 / T-22-02) La vista acotada por la que el público lee los títulos: CUATRO
+-- columnas y nada más. `created_at` queda AFUERA a propósito —ningún consumidor lo necesita y es
+-- metadato de cuándo se configuró el negocio—. Lo que expone (`name`) es un TÍTULO PÚBLICO POR
+-- DISEÑO: sin dato de cliente, sin precio, sin ocupación.
+--
+-- ⚠ DEFINER, NUNCA `security_invoker` (Pitfall 5, documentado en la 044 y repetido en la 059 y la
+-- 071): con invocador la vista heredaría la RLS de la tabla base, que `anon` no cumple (no tiene
+-- policy) ⇒ el público leería 0 filas SIEMPRE y en silencio, indistinguible de "este negocio no tiene
+-- categorías". Owner `postgres`, sin excepción. El aislamiento efectivo lo da el
+-- `.eq('business_id', ...)` que hace el RSC al leerla, igual que las otras vistas `public_*`.
+CREATE OR REPLACE VIEW "public"."public_service_categories" AS
+ SELECT "id",
+    "business_id",
+    "name",
+    "sort_order"
+   FROM "public"."service_categories";
+
+
+ALTER VIEW "public"."public_service_categories" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."saved_products" (
@@ -1557,6 +1608,15 @@ ALTER TABLE ONLY "public"."time_blocks"
 -- time_blocks pueda referenciar el par (id, business_id).
 ALTER TABLE ONLY "public"."locations"
     ADD CONSTRAINT "locations_id_business_uq" UNIQUE ("id", "business_id");
+
+
+
+-- (migr. 078, T-22-04) Mismo requisito, ahora sobre service_categories: habilita la FK compuesta
+-- services_category_same_tenant. Redundante en cuanto a unicidad —id ya es PK—; existe sólo para que
+-- services pueda referenciar el par (id, business_id) y así una categoría de OTRO negocio sea
+-- imposible de declarar, por la base y no por confianza en la pantalla.
+ALTER TABLE ONLY "public"."service_categories"
+    ADD CONSTRAINT "service_categories_id_business_uq" UNIQUE ("id", "business_id");
 
 
 
@@ -1692,6 +1752,11 @@ ALTER TABLE ONLY "public"."saved_products"
 
 ALTER TABLE ONLY "public"."schedule_exceptions"
     ADD CONSTRAINT "schedule_exceptions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."service_categories"
+    ADD CONSTRAINT "service_categories_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1833,6 +1898,18 @@ CREATE UNIQUE INDEX "schedule_exceptions_biz_date_loc" ON "public"."schedule_exc
 
 
 CREATE INDEX "schedule_exceptions_business_date" ON "public"."schedule_exceptions" USING "btree" ("business_id", "date");
+
+
+
+-- (migr. 078, T-22-07 / CAT-01) UNIQUE sobre la EXPRESIÓN `lower(name)`, no sobre la columna cruda:
+-- un índice sobre `name` no atrapa "Color" vs "COLOR", que es justo el caso que muerde —el catálogo
+-- quedaría con dos títulos que el cliente lee como UNO—. Es índice y no constraint porque Postgres
+-- no acepta expresiones en un UNIQUE de tabla.
+CREATE UNIQUE INDEX "service_categories_name_uq" ON "public"."service_categories" USING "btree" ("business_id", "lower"("name"));
+
+
+
+CREATE INDEX "service_categories_order_idx" ON "public"."service_categories" USING "btree" ("business_id", "sort_order");
 
 
 
@@ -2164,8 +2241,32 @@ ALTER TABLE ONLY "public"."schedule_exceptions"
 
 
 
+ALTER TABLE ONLY "public"."service_categories"
+    ADD CONSTRAINT "service_categories_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."services"
     ADD CONSTRAINT "services_business_id_fkey" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE CASCADE;
+
+
+
+-- (migr. 078, T-22-04 / T-22-05) FK COMPUESTA: un servicio jamás puede apuntar a una categoría de
+-- OTRO negocio, y la garantía es DECLARATIVA en vez de confiada al predicado de las policies (que
+-- sólo miran el business_id de la PROPIA fila; las FK simples garantizan EXISTENCIA, no PERTENENCIA).
+-- Molde exacto de las migr. 073 y 075.
+--
+-- La lista de columnas en ON DELETE es OBLIGATORIA (PG15+). Sin ella, borrar una categoría pone en
+-- NULL las DOS columnas de la clave —`services.business_id` es NULLABLE— y el servicio se huerfaniza:
+-- sale de la RLS de su dueño y de `public_services`, o sea que DEJA DE VENDERSE, en silencio. Medido
+-- contra este mismo motor en la 075, no supuesto.
+--
+-- ⚠ La lista de columnas va SIN COMILLAS acá a propósito: es la forma EXACTA que imprime
+-- `pg_get_constraintdef` contra el catálogo (`ON DELETE SET NULL (category_id)`), o sea el texto con
+-- el que se compara este espejo. No "corregirla" a `("category_id")` por simetría con
+-- `tb_location_same_tenant`: las dos formas son SQL válido, pero sólo ésta coincide con el catálogo.
+ALTER TABLE ONLY "public"."services"
+    ADD CONSTRAINT "services_category_same_tenant" FOREIGN KEY ("category_id", "business_id") REFERENCES "public"."service_categories"("id", "business_id") ON DELETE SET NULL (category_id);
 
 
 
@@ -2360,6 +2461,40 @@ CREATE POLICY "time_block_services tenant select" ON "public"."time_block_servic
 
 
 CREATE POLICY "time_block_services tenant update" ON "public"."time_block_services" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+-- (migr. 078, T-22-06) RLS habilitada en la MISMA migración que crea la tabla, y 4 policies por
+-- operación con el predicado de tenant por `owner_id` (molde 071). SIN policy `anon`: el público
+-- nunca lee la tabla base, para eso está la vista acotada `public_service_categories`.
+ALTER TABLE "public"."service_categories" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "service_categories tenant delete" ON "public"."service_categories" FOR DELETE USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "service_categories tenant insert" ON "public"."service_categories" FOR INSERT WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+CREATE POLICY "service_categories tenant select" ON "public"."service_categories" FOR SELECT USING (("business_id" IN ( SELECT "businesses"."id"
+   FROM "public"."businesses"
+  WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid")))));
+
+
+
+-- El WITH CHECK del UPDATE no es decorativo (regla 3 de la skill supabase-multitenant-rls): sin él un
+-- dueño podría REASIGNAR su categoría al business_id de otro negocio.
+CREATE POLICY "service_categories tenant update" ON "public"."service_categories" FOR UPDATE USING (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
   WHERE ("businesses"."owner_id" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("business_id" IN ( SELECT "businesses"."id"
    FROM "public"."businesses"
@@ -4382,6 +4517,16 @@ GRANT ALL ON TABLE "public"."public_professional_services" TO "service_role";
 GRANT SELECT ON TABLE "public"."public_time_block_services" TO "anon";
 GRANT SELECT ON TABLE "public"."public_time_block_services" TO "authenticated";
 GRANT ALL ON TABLE "public"."public_time_block_services" TO "service_role";
+
+
+
+-- (migr. 078, T-22-03) Forma de la migr. 072, NO la de la 059/061/071. Una vista SIMPLE sobre una
+-- tabla es AUTO-ACTUALIZABLE para Postgres, y siendo DEFINER un permiso de escritura acá es una
+-- puerta de escritura SIN AUTENTICAR que saltea la RLS de la tabla base. La 078 emite REVOKE ALL
+-- para anon/authenticated antes de estos GRANT.
+GRANT SELECT ON TABLE "public"."public_service_categories" TO "anon";
+GRANT SELECT ON TABLE "public"."public_service_categories" TO "authenticated";
+GRANT ALL ON TABLE "public"."public_service_categories" TO "service_role";
 
 
 
