@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.28
-current_phase: 21
-status: completed
-stopped_at: Phase 21 complete — all phases complete
-last_updated: "2026-09-13T05:03:11.011Z"
-last_activity: 2026-09-13
-last_activity_desc: Phase 21 complete
-state_head: 57e870c91bd6925be0d476afbdc5708601894e38
+milestone: v0.29
+current_phase: 22
+status: not_started
+stopped_at: Roadmap de v0.29 escrito — Phase 22 sin planificar
+last_updated: "2026-09-15T00:00:00.000Z"
+last_activity: 2026-09-15
+last_activity_desc: Roadmap v0.29 (Phases 22-24) escrito y trazabilidad CAT-01..11 completada
+state_head: 1a72f59
 progress:
-  total_phases: 21
-  completed_phases: 17
-  total_plans: 102
-  completed_plans: 102
-  percent: 81
-milestone_name: — Cupo unificado por servicio
+  total_phases: 24
+  completed_phases: 21
+  total_plans: 116
+  completed_plans: 116
+  percent: 88
+milestone_name: — El catálogo del booking
 ---
 
 # Project State
@@ -23,15 +23,42 @@ milestone_name: — Cupo unificado por servicio
 
 See: .planning/PROJECT.md (updated 2026-07-16)
 
-**Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. v0.25 agrega **multi-staff**: el negocio declara qué servicios hace cada persona y el cliente reserva eligiendo profesional **o** "cualquiera", con la asignación automática resuelta **dentro del RPC atómico** `book_slot_atomic` — sin regresión para canchas, abonos, cupos grupales ni espacio compartido.
-**Current focus:** Phase 21 — Lo que el negocio declara
+**Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. **v0.29 organiza el catálogo**: categorías propias por negocio que llegan al booking público, con la regla de que **la ausencia de dato muestra lo de hoy y nunca esconde un servicio** — un negocio sin categorías ve la lista de siempre y un servicio sin categoría siempre se puede reservar.
+**Current focus:** Phase 22 — El modelo del catálogo (sin planificar)
 
 ## Current Position
 
-Phase: 21
+Phase: 22
 Plan: Not started
-Status: All phases complete
-Last activity: 2026-09-13 — Phase 21 complete
+Status: Roadmap escrito, fase sin planificar
+Last activity: 2026-09-15 — Roadmap de v0.29 (Phases 22-24) escrito
+
+## Milestone v0.29 — decisiones LOCKED
+
+> Del explore del 2026-09-15 (`.planning/notes/categorias-de-servicios.md`). **No re-litigar en
+> discuss-phase**: cada una tiene su porqué escrito ahí.
+
+- **D-01 Categorías = tabla propia por negocio**, no texto libre en `services`: se eligió tabla para
+  poder ordenarlas y renombrarlas sin tocar cada fila.
+- **D-02 Títulos que agrupan, NO un paso del funnel.** El cliente sigue viendo todo en una pantalla;
+  el booking no gana clicks. Un paso previo se lo agregaría a todos los negocios, incluido el de 3
+  servicios, y obligaría a que las categorías tengan imagen y descripción propias.
+- **D-03 Un servicio sin categoría NUNCA desaparece de la página pública.** Misma regla del comodín
+  que `professional_services` (v0.25) y `time_block_services` (v0.28): la ausencia de dato significa
+  "vale igual", nunca "no vale". El modo de falla contrario ya mordió dos veces en este repo (CR-01
+  de la Phase 20, y otra vez en la 21).
+- **D-04 Sin toggle para elegir entre "Otros" y sueltos.** La diferencia es cosmética; el control no.
+- **D-05 El modo de orden es por negocio**, no por categoría. Si se pide, se agrega sin re-migrar.
+- **D-06 El orden manual siempre está guardado.** Alfabético o precio lo **pisan para mostrar**, no
+  lo borran; y si el modo no es personalizado, el drag y las flechas **desaparecen**.
+- **D-07 El patrón de reordenamiento se PORTA de `forjo-tiendas`, no se copia.** Allá está resuelto
+  con cero dependencias: `draggable` nativo de HTML5 para desktop + botones ▲/▼ con `aria-label`
+  para todo lo demás, y el orden se persiste renumerando la lista completa de hermanas. Las columnas
+  de allá están en español y el esquema de RLS es otro.
+- **D-08 CAT-07 es la promesa que no se puede romper**, y se sostiene **por construcción**: todos los
+  negocios de producción tienen cero categorías el día de la migración.
+- **D-09 Migración 078**, la única del milestone (prod está en 077), aplicada a mano y coordinada con
+  el deploy + `NOTIFY pgrst, 'reload schema';`.
 
 ## Milestone v0.28 — decisiones LOCKED
 

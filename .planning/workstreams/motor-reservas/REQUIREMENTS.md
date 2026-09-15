@@ -89,7 +89,28 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
 
 | Req | Fase | Estado |
 |-----|------|--------|
-| _(lo completa el roadmap)_ | | |
+| CAT-01 | Phase 23 | Pendiente |
+| CAT-02 | Phase 23 | Pendiente |
+| CAT-03 | Phase 23 | Pendiente |
+| CAT-04 | Phase 23 | Pendiente |
+| CAT-05 | Phase 23 | Pendiente |
+| CAT-06 | Phase 22 | Pendiente |
+| CAT-07 | Phase 22 | Pendiente |
+| CAT-08 | Phase 24 | Pendiente |
+| CAT-09 | Phase 24 | Pendiente |
+| CAT-10 | Phase 24 | Pendiente |
+| CAT-11 | Phase 23 | Pendiente |
+
+> **Las tres asignaciones que no son obvias.** (1) **CAT-06 y CAT-07 viven en la Phase 22** —la del
+> modelo— porque las dos son propiedades **por construcción**, no pantallas: cero categorías ⇒ la
+> lista plana de hoy sale de que `category_id` sea nullable, y el orden manual sobrevive al cambio
+> de modo porque el modo sólo elige un comparador dentro de una función **pura**, que no escribe. Es
+> el mismo reparto que en v0.28, donde AGENDA-01 y AGENDA-04 (la "cero regresión") se entregaron en
+> la fase del modelo y no en la de la pantalla. (2) **CAT-11 va con el panel (Phase 23)**, aunque el
+> requisito nombre la tarjeta del booking: su mitad pública **ya está en producción** —`public_services`
+> expone `description` y la tarjeta la renderiza con `line-clamp-2`—, así que lo único que falta es un
+> campo de formulario. (3) **CAT-08 y CAT-10 van juntos (Phase 24)** porque tocan el **mismo bloque de
+> JSX** de `booking-client.tsx`: separarlos obligaría a editar ese archivo dos veces.
 
 ## Riesgo
 
@@ -102,7 +123,7 @@ Las dos precauciones reales:
 1. **La superficie pública se toca** (`booking-client.tsx`), que es lo que ve un anónimo. Toda
    categoría expuesta necesita el mismo tratamiento que tuvo el mapeo en v0.28: una **vista acotada**
    para `anon` en vez de abrir la tabla, como `public_professional_services` (migr. 059) y
-   `public_time_block_services` (migr. 072). Leerlas antes de escribir la nueva.
+   `public_time_block_services` (migr. 071 — la 072 es `public_views_read_only`). Leerlas antes de escribir la nueva.
 2. **CAT-07 es la promesa que no se puede romper**: todos los negocios de producción tienen cero
    categorías el día de la migración, así que el camino sin categorías es el de TODOS los clientes
    actuales. Cualquier regresión ahí se lleva puesto el booking entero.
