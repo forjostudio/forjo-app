@@ -52,7 +52,7 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
   el negocio.
 - [ ] **CAT-05** — Cuando el modo **no** es personalizado, los controles de reordenar **no se
   muestran**. Nunca hay un arrastre que no haga nada.
-- [ ] **CAT-06** — El orden manual **sobrevive** a elegir alfabético o precio. Volver a personalizado
+- [x] **CAT-06** — El orden manual **sobrevive** a elegir alfabético o precio. Volver a personalizado
   devuelve el arreglo del dueño intacto.
 
 ### Booking público

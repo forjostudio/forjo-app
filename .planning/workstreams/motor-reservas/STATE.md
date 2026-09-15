@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 22
 current_phase_name: El modelo del catálogo
 status: executing
-stopped_at: Completed 22-01-PLAN.md
-last_updated: "2026-09-15T19:28:59.494Z"
+stopped_at: Completed 22-02-PLAN.md
+last_updated: "2026-09-15T19:50:09.951Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 22 execution started
-state_head: af5c430aab3449c51981b0a5f2eb8ca3b769c13a
+state_head: 80813c6e4d5a8f7179278d5f895190224835e9e0
 progress:
   total_phases: 20
   completed_phases: 13
   total_plans: 92
-  completed_plans: 88
+  completed_plans: 90
   percent: 65
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 22 (El modelo del catálogo) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-09-15 — Phase 22 execution started
 
@@ -205,6 +205,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 21 P01 | 17 min | 3 tasks | 6 files |
 | Phase 21 P02 | 8 min | 2 tasks | 3 files |
 | Phase 22 P01 | 22 min | 2 tasks | 4 files |
+| Phase 22 P02 | 10 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -387,6 +388,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 22]: La FK a la categoría lleva LISTA DE COLUMNAS: ON DELETE SET NULL (category_id). Sin la lista, Postgres nulea también services.business_id (que es NULLABLE) y el servicio sale de la RLS de su dueño y de public_services — deja de venderse en silencio. — Molde de la migr. 075, que midió ese comportamiento contra este mismo motor. Medido acá: pg_get_constraintdef termina en ON DELETE SET NULL (category_id).
 - [Phase 22]: Los GRANT de las tres vistas públicas van en la forma de la migr. 072 (REVOKE ALL + GRANT SELECT), nunca en la de la 059/061/071 (GRANT ALL a anon). — public_services y public_businesses ya están en producción: re-emitir el GRANT amplio al redefinirlas reabriría CR-01 (escritura anónima que saltea RLS sobre todos los tenants).
 - [Phase 22]: groupCatalog decide la identidad por el RESULTADO DEL REPARTO (ninguna categoría con servicios), no por categories.length === 0. — Así el negocio que creó categorías pero todavía no asignó ninguna cae en el mismo camino correcto: ve la lista de hoy, sin un "Otros" que envuelva todo el catálogo.
+- [Phase 22]: 22-02: el modo de orden es un COMPARADOR DE DISPLAY dentro de una funcion pura, no un estado que se persiste — CAT-06 queda garantizado por construccion (la funcion no escribe, el sort_order del dueno no tiene por donde perderse)
+- [Phase 22]: 22-02: los comparadores devuelven 0 ante el empate y NINGUNO desempata por otra cosa; el sort estable de ES2019 convierte ese 0 en la identidad, que es el mecanismo de CAT-07 (todos los sort_order de produccion estan en 0)
+- [Phase 22]: 22-02: Regla 0 — sin servicios no hay grupos (groupCatalog devuelve lista vacia); ningun grupo de la salida esta vacio jamas
 
 ### Pending Todos
 
@@ -469,8 +473,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-15T19:28:14.105Z
-Stopped at: Completed 22-01-PLAN.md
+Last session: 2026-09-15T19:49:31.770Z
+Stopped at: Completed 22-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
