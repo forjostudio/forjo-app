@@ -526,4 +526,181 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
       await seeded.admin.from('time_block_services').delete().eq('business_id', seeded.bizA)
     })
   })
+
+  // ── el catálogo por categorías: service_categories + sus vistas públicas (Phase 22, migr. 078) ──
+  //
+  // POR QUÉ ESTE BLOQUE EXISTE, y por qué el riesgo acá es MAYOR que el de la 071:
+  // la 078 no sólo crea una vista nueva (`public_service_categories`) — REDEFINE DOS QUE YA ESTÁN EN
+  // PRODUCCIÓN: `public_services` y `public_businesses`. Redefinir una vista obliga a re-emitir sus
+  // permisos, y el molde de "agregarle una columna a una vista pública" que dejó la migr. 061 termina
+  // en `GRANT ALL ... TO anon` — exactamente el permiso que la migr. 072 tuvo que desarmar de urgencia
+  // (CR-01). Como esas dos vistas son SIMPLES sobre una tabla, Postgres las considera
+  // AUTO-ACTUALIZABLES, y siendo DEFINER (owner postgres), un permiso de escritura ahí es una puerta
+  // de escritura SIN AUTENTICAR que SALTEA LA RLS DE TODOS LOS TENANTS A LA VEZ. Medido en la 072:
+  // como rol `anon` y sin sesión, `DELETE FROM public.public_services` borró los servicios de todos
+  // los negocios.
+  //
+  // La suite entera estuvo VERDE mientras CR-01 estaba abierto, porque este archivo —que existe
+  // justamente para esto— no tocaba la tabla nueva. Si alguien vuelve a copiar el molde de la 061,
+  // acá se pone rojo (T-22-15).
+  //
+  // Misma disciplina que el resto del archivo (Pitfall 12): las ASERCIONES usan SOLO anon-key
+  // —`anonA`/`anonB` con sesión de dueño, o un anon PURO sin sesión—; `seeded.admin` (service-role)
+  // se usa exclusivamente para sembrar, limpiar y para chequeos INDEPENDIENTES del efecto, que no son
+  // la aserción de aislamiento. Y nada de `.eq('business_id', …)` en los casos cross-tenant: eso
+  // testearía nuestro WHERE, no la policy.
+  describe('el catálogo por categorías: service_categories + sus vistas públicas', () => {
+    // Semillas con service-role (NO son aserciones): una categoría y un servicio propios por tenant.
+    // Se crean acá y no se reusan los del bloque de la agenda, para que ningún caso de este bloque
+    // dependa de lo que otro bloque haya dejado.
+    let catA: string, catB: string, svcA: string, svcB: string
+
+    beforeAll(async () => {
+      const mk = async (biz: string) => {
+        const { data: c, error: ce } = await seeded.admin
+          .from('service_categories')
+          .insert({ business_id: biz, name: '__iso_cat' })
+          .select('id')
+          .single()
+        if (ce || !c) throw new Error(`seed categoría falló: ${ce?.message}`)
+        const { data: s, error: se } = await seeded.admin
+          .from('services')
+          .insert({ business_id: biz, name: '__iso_cat_svc', duration_minutes: 30, price: 1000 })
+          .select('id')
+          .single()
+        if (se || !s) throw new Error(`seed servicio falló: ${se?.message}`)
+        return [c.id as string, s.id as string] as const
+      }
+      ;[catA, svcA] = await mk(seeded.bizA)
+      ;[catB, svcB] = await mk(seeded.bizB)
+    })
+
+    // Cliente anon SIN sesión: el rol `anon` puro, el que atiende la página pública de reservas.
+    // Distinto de anonA/anonB, que son anon-key CON sesión de dueño.
+    const anonPublic = () => createClient(url, anonKey, { auth: { persistSession: false } })
+
+    it('el público SIN sesión no puede ESCRIBIR por la vista nueva (public_service_categories)', async () => {
+      // Caso 1. La vista es DEFINER a propósito (Pitfall 5: con `security_invoker` el público leería
+      // 0 filas siempre y en silencio), así que lo ÚNICO que la vuelve segura es no tener permiso de
+      // escritura. Eso es lo que se asierta.
+      const pub = anonPublic()
+      const { data, error } = await pub
+        .from('public_service_categories')
+        .insert({ business_id: seeded.bizA, name: '__iso_cat_hack', sort_order: 0 })
+        .select('id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+      // Check INDEPENDIENTE del efecto con service-role (no es la aserción): no se escribió nada.
+      const { data: check } = await seeded.admin
+        .from('service_categories')
+        .select('id')
+        .eq('business_id', seeded.bizA)
+        .eq('name', '__iso_cat_hack')
+      expect((check ?? []).length).toBe(0)
+    })
+
+    it('el público SIN sesión no puede BORRAR por la vista nueva (public_service_categories)', async () => {
+      // Caso 2. El DELETE es el que más duele: sin fila que insertar, un `DELETE FROM public_*` sin
+      // WHERE barrería la tabla de TODOS los tenants. Se siembra una fila legítima para que el intento
+      // tenga algo que borrar — si el DELETE pasara, la aserción de supervivencia lo detecta.
+      const { data: fila, error: se } = await seeded.admin
+        .from('service_categories')
+        .insert({ business_id: seeded.bizA, name: '__iso_cat_del' })
+        .select('id')
+        .single()
+      if (se || !fila) throw new Error(`siembra del caso 2 falló: ${se?.message}`)
+
+      const pub = anonPublic()
+      await pub.from('public_service_categories').delete().eq('business_id', seeded.bizA)
+
+      const { data: check } = await seeded.admin
+        .from('service_categories')
+        .select('id')
+        .eq('id', fila.id)
+      expect((check ?? []).length).toBe(1) // la fila sobrevivió
+
+      await seeded.admin.from('service_categories').delete().eq('id', fila.id)
+    })
+
+    it('CR-01 (regresión): las DOS vistas REDEFINIDAS siguen siendo de sólo lectura para el anon', async () => {
+      // Caso 3, y el motivo principal de este bloque. `public_services` y `public_businesses` YA
+      // ESTÁN EN PRODUCCIÓN y la 078 las redefinió, o sea que volvió a emitir sus permisos. Si esa
+      // re-emisión hubiera copiado el molde de la 061 (`GRANT ALL ... TO anon`), estos dos DELETE
+      // anónimos borrarían servicios y negocios de todos los tenants a la vez — medido en la 072.
+      //
+      // Se asierta la SUPERVIVENCIA de las filas, no sólo el error del intento: PostgREST puede
+      // devolver 2xx sin borrar nada, y al revés, un error de red daría un falso verde si sólo se
+      // mirara el `error`.
+      const pub = anonPublic()
+      await pub.from('public_services').delete().eq('business_id', seeded.bizA)
+      await pub.from('public_businesses').delete().eq('id', seeded.bizA)
+
+      const { data: svc } = await seeded.admin.from('services').select('id').eq('id', svcA)
+      expect((svc ?? []).length).toBe(1) // el servicio de A sobrevivió
+
+      const { data: biz } = await seeded.admin.from('businesses').select('id').eq('id', seeded.bizA)
+      expect((biz ?? []).length).toBe(1) // el negocio de A sobrevivió
+    })
+
+    it('el público SIN sesión no puede escribir la TABLA BASE service_categories', async () => {
+      // Caso 4. La RLS está activa y no hay policy para `anon` (la 078 no la crea a propósito): el
+      // público nunca toca la tabla base, para eso está la vista acotada. Es el control que confirma
+      // que lo de los casos 1-2 no depende de un permiso accidental de la tabla.
+      const pub = anonPublic()
+      const { data, error } = await pub
+        .from('service_categories')
+        .insert({ business_id: seeded.bizA, name: '__iso_cat_base' })
+        .select('id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+      const { data: check } = await seeded.admin
+        .from('service_categories')
+        .select('id')
+        .eq('business_id', seeded.bizA)
+        .eq('name', '__iso_cat_base')
+      expect((check ?? []).length).toBe(0)
+    })
+
+    it('el público SÍ puede LEER por la vista acotada (es el mecanismo de lectura pública)', async () => {
+      // Caso 5, el control positivo que impide que el aislamiento se "logre" apagando la lectura.
+      // Si esto se pusiera rojo, la vista habría quedado con `security_invoker` y el público vería
+      // 0 filas SIEMPRE y EN SILENCIO — indistinguible de "este negocio no tiene categorías", que es
+      // el bug invisible que ningún control de aislamiento puede tapar (T-22-18).
+      const pub = anonPublic()
+      const { data, error } = await pub
+        .from('public_service_categories')
+        .select('id, business_id, name, sort_order')
+        .eq('business_id', seeded.bizA)
+      expect(error).toBeNull()
+      expect((data ?? []).length).toBeGreaterThanOrEqual(1)
+      expect((data ?? []).some((r) => r.id === catA)).toBe(true)
+    })
+
+    it('cross-READ: A no ve las categorías de B (RLS deniega, SIN filtro business_id)', async () => {
+      // Caso 6. NADA de `.eq('business_id', …)` acá: dejamos que la policy sea la que oculta. Con el
+      // filtro puesto estaríamos testeando nuestro WHERE y el caso pasaría aunque la policy estuviera
+      // rota (Pitfall 12).
+      const { data, error } = await anonA.from('service_categories').select('id')
+      expect(error).toBeNull()
+      expect((data ?? []).some((r) => r.id === catB)).toBe(false)
+    })
+
+    it('cross-WRITE: A no puede crear una categoría declarando el business_id de B', async () => {
+      // Caso 7. El `WITH CHECK` de la policy de INSERT es el que deniega. Los ids ajenos son PÚBLICOS
+      // por diseño (`public_businesses` los expone), así que el atacante no tiene nada que adivinar:
+      // eso es parte del modelo, no un supuesto optimista de este test.
+      const { data, error } = await anonA
+        .from('service_categories')
+        .insert({ business_id: seeded.bizB, name: '__iso_cat_cross' })
+        .select('id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+      const { data: check } = await seeded.admin
+        .from('service_categories')
+        .select('id')
+        .eq('business_id', seeded.bizB)
+        .eq('name', '__iso_cat_cross')
+      expect((check ?? []).length).toBe(0)
+    })
+  })
 })
