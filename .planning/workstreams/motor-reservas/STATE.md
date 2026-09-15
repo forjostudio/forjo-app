@@ -25,7 +25,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. **v0.29 organiza el catálogo**: categorías propias por negocio que llegan al booking público, con la regla de que **la ausencia de dato muestra lo de hoy y nunca esconde un servicio** — un negocio sin categorías ve la lista de siempre y un servicio sin categoría siempre se puede reservar.
-**Current focus:** Phase 22 — El modelo del catálogo
+**Current focus:** Phase 23 — El panel que organiza el catálogo
 
 ## Current Position
 
@@ -213,6 +213,14 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 ## Accumulated Context
 
 ### Decisions
+
+Phase 22 (v0.29) — el modelo del catálogo quedó instalado:
+
+- [Phase 22]: 22-01: migración **078** creada y validada en local (`supabase db reset` replayó 001→078 limpio): `service_categories` por negocio (RLS + 4 policies, único por `(business_id, lower(name))`), `services.category_id` **nullable** con **FK compuesta** `(category_id, business_id) → service_categories(id, business_id) ON DELETE SET NULL (category_id)`, `services.sort_order`, los dos modos de orden en `businesses`, vista acotada `public_service_categories` (DEFINER, owner `postgres`) y `public_services`/`public_businesses` redefinidas SELECT-only. **NO aplicada a prod** (allá sigue la 077).
+- [Phase 22]: la regla de agrupar/ordenar vive SOLO en `lib/service-categories.ts` (`groupCatalog`, función **pura**): el modo elige un **comparador de display** y la función no escribe, de ahí sale CAT-06 sin código extra. Cero categorías ⇒ la lista que llegó, en el orden que llegó, sin títulos y sin "Otros" (CAT-07 por construcción).
+- [Phase 22]: 22-02 corrigió una trampa real: `groupCatalog([], cats)` devolvía **un grupo con cero servicios** — un `groups.length > 0` leído como "hay catálogo" habría pintado una sección vacía en la pública. Ahora devuelve `[]`, con la invariante "ningún grupo de la salida está vacío" testeada.
+- [Phase 22]: 22-04 NO escribió `GRANT` de tabla base para `service_categories` aunque el molde de `time_block_services` los tiene: medido, el `ALTER DEFAULT PRIVILEGES` de la migr. 073 ya le revoca la escritura a `anon` en toda tabla futura. Copiar el molde habría documentado permisos que la base no da.
+- [Phase 22]: 22-03 validó las dos garantías caras **rompiéndolas** en el PG local antes de darlas por buenas (un `GRANT DELETE` a `anon` sobre `public_services` pone rojo el caso de CR-01; la FK como `ON DELETE SET NULL` a secas pone roja la aserción de `business_id`).
 
 Decisiones LOCKED de v0.25 (ver REQUIREMENTS.md + PROJECT.md):
 
@@ -406,6 +414,9 @@ Heredadas del workstream (siguen vigentes):
 
 ### Blockers/Concerns
 
+- **[Phase 22 — deploy, PENDIENTE]** La migración **078** está escrita y validada en local pero **NO aplicada a producción** (última en prod = **077**). Es aditiva e inerte, así que puede aplicarse antes del deploy sin coordinar nada, pero **necesita el `NOTIFY pgrst, 'reload schema';`** o PostgREST no expone `public_service_categories` al RSC anónimo (mismo fail-safe que documentó la 059: el booking de hoy sigue funcionando, pero las categorías nunca aparecen). Runbook en la cabecera del archivo. **Las Phases 23 y 24 no pueden deployarse antes.**
+- **[Phase 22 — code review, ABIERTO]** `22-REVIEW.md`: 0 BLOCKER / **7 WARNING** / 5 INFO, ninguno corregido todavía. Son contratos defensivos que el módulo declara y no honra (`porPrecio` trata un precio `null` como gratis y lo pone primero; `porNombre` **tira** con `null` → 500 en el RSC de `/[slug]`; un `id` de categoría duplicado emite el mismo servicio en dos grupos; el merge de `modes` no restaura defaults ante `undefined` explícito, que es justo lo que pasará el call site natural de la Phase 23; el espejo de grants de `service_categories` en `schema.sql`; `lower(name)` sin `btrim`). **Ninguno es alcanzable hoy** (`NOT NULL` en ambos `name` y en `price`, `id` es PK, y todavía no hay consumidor). Cerrar antes o junto con el primer call site de la Phase 23.
+- **[Phase 22 — seguridad, PENDIENTE]** `secure-phase` es **obligatorio** en esta fase (lo declara la ROADMAP): es la única del milestone que abre una lectura nueva para un cliente **anónimo**. Todavía no corrió — no hay `22-SECURITY.md`.
 - **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Runbook completo en `15-01-SUMMARY.md` §User Setup Required. ⚠ El sub-bloqueo de ORDEN ("no debería llegar a prod antes que el guard del editor, D-10") quedó **CERRADO por el plan 15-02**: el editor ya ofrece los tres modos y sube el cupo a 2 al salir de individual, así que no puede producir la combinación que el CHECK rechaza. La 068 sigue teniendo que aplicarse a mano y coordinada con el deploy de ese código.
 - **[Phase 15 — tests, RESUELTO por 15-02 (2026-08-12)]** Las escrituras que el CHECK de coherencia volvió ilegales están todas cerradas, en los **dos** sentidos: los cuatro `capacity_mode: 'group_class', capacity: 1` pasaron a `'individual'/1`, y los **tres** `seedSimultaneousService(t, { capacity: 1 })` de `concurrency.test.ts` (que morían con `23514` porque el helper hace `throw`) migraron o se convirtieron en guard. Suites verdes contra el local con la 068: **20/20** en `test/concurrency.test.ts` y **7/7** en `test/booking-cualquiera-public.test.ts` — el conteo **no bajó**.
 - **[Phase 15 — DESACUERDO TEMPORAL, RESUELTO por 15-04 (2026-08-12)]** El write-path (`book_slot_atomic`) y el read-path (`lib/booking-core.ts` + `app/api/booking/availability/route.ts` con sus tres consumidores) deciden ahora el cupo con **`services.capacity`**, y el booking público manda el `serviceId` que el endpoint necesita para resolverlo. `capacityFor()` se borró entera y `capacity` salió del `select` de bloques. Los seis `seedTimeBlock(t, { capacity: N })` bajaron **salvo uno**: el de `CUPO-07 (b)`, donde el número MIENTE a propósito y es la mentira lo que el caso prueba (bajarlo lo dejaría sin poder discriminante — ver `15-04-SUMMARY.md` §Deviations). Queda **una sola** lectura decidiendo por el bloque: `app/(dashboard)/agenda/agenda-client.tsx:465-474` (+ el `isGroup` de presentación de `:638`), panel **autenticado** ⇒ drift de visualización, no de reserva, asignado a la **Phase 16** por D-08.
@@ -479,13 +490,13 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-15T20:15:59.765Z
+Last session: 2026-09-15T20:41:21.411Z
 Stopped at: Phase 22 complete, ready to plan Phase 23
 Resume file: None
 
 ## Operator Next Steps
 
-- Continuar la Phase 15 con el plan **15-05** (suite de integración del gate de CUPO-08 + runbook de la 068)
-- **La tarea heredada de 15-03 quedó CERRADA en 15-04:** los `seedTimeBlock(t, { capacity: N })` de `test/concurrency.test.ts` bajaron a 1, salvo el de `CUPO-07 (b)` que es control negativo y tiene la razón escrita en el propio test
-- **UAT visual pendiente de 15-02** (declarada `end-of-phase`): en `/servicios` del dev local, crear un servicio (queda Individual), pasarlo a Clase grupal (aparece el campo en 2), subirlo a 10, y volverlo a Individual — ninguno de los cuatro pasos puede terminar en "Error al guardar"
-- Antes de deployar: correr el pre-flight de la 068 contra producción y aplicarla **a mano**, coordinado con el deploy del código de 15-02
+- **Correr `/gsd-secure-phase 22 --ws motor-reservas`** — es el gate obligatorio de la fase y todavía no corrió
+- Decidir qué hacer con los **7 WARNINGs** de `22-REVIEW.md`: `/gsd-code-review 22 --fix` ahora, o cerrarlos junto con el primer call site de la Phase 23
+- Antes de deployar la Phase 23 o la 24: aplicar la migración **078** a mano en producción + `NOTIFY pgrst, 'reload schema';` (runbook en la cabecera del archivo)
+- Después: `/gsd-discuss-phase 23 --ws motor-reservas` — la fase 23 no tiene CONTEXT.md todavía
