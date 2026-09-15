@@ -415,7 +415,8 @@ Heredadas del workstream (siguen vigentes):
 ### Blockers/Concerns
 
 - **[Phase 22 — deploy, RESUELTO 2026-09-15]** La migración **078 YA ESTÁ APLICADA EN PRODUCCIÓN**. La próxima migración del repo es la **079**. Con esto, las mitigaciones que el `22-SECURITY.md` cerró midiendo contra el local (grants SELECT-only en las tres vistas, FK compuesta, RLS de `service_categories`) están efectivamente en prod. **Desbloquea el deploy de las Phases 23 y 24.**
-- **[Phase 22 — code review, ABIERTO]** `22-REVIEW.md`: 0 BLOCKER / **7 WARNING** / 5 INFO, ninguno corregido todavía. Son contratos defensivos que el módulo declara y no honra (`porPrecio` trata un precio `null` como gratis y lo pone primero; `porNombre` **tira** con `null` → 500 en el RSC de `/[slug]`; un `id` de categoría duplicado emite el mismo servicio en dos grupos; el merge de `modes` no restaura defaults ante `undefined` explícito, que es justo lo que pasará el call site natural de la Phase 23; el espejo de grants de `service_categories` en `schema.sql`; `lower(name)` sin `btrim`). **Ninguno es alcanzable hoy** (`NOT NULL` en ambos `name` y en `price`, `id` es PK, y todavía no hay consumidor). Cerrar antes o junto con el primer call site de la Phase 23.
+- **[Phase 22 — code review, CERRADO 2026-09-15]** `/gsd-code-review 22 --fix` corrió: **7/7 WARNINGs arreglados**, 0 skipped (`22-REVIEW-FIX.md`, commits `6ddd141`..`0864949`). Suite **1198 → 1209** passed, `tsc --noEmit` limpio, build 0. Los 5 INFO quedaron fuera de alcance a propósito. ⚠ **WR-04 es el único cuyo test no muerde hoy** (con la implementación vieja la salida coincidía igual porque ambos comparadores caen a `porOrden`): es un candado de contrato, conviene mirarlo con ojo humano cuando aterrice el primer call site real en la Phase 23.
+- **[Phase 22 — deploy de la 079, PENDIENTE]** El fix de WR-06 salió como migración **`079_service_categories_name_normalized.sql`** (la 078 ya está en prod y es inmutable): normaliza espacios en el único de nombre con `btrim(name, E' \t\n\r')` —`btrim` sin segundo argumento NO recorta tabs, medido—. **Queda pendiente de aplicación manual a producción.** Es segura: `service_categories` está vacía en todos los negocios. ⚠ Las dos líneas espejadas en `schema.sql` llevan la marca `(migr. 079 — PENDIENTE de aplicación a producción)` — **hay que borrarlas al aplicar**.
 - **[Phase 22 — seguridad, CERRADO 2026-09-15]** `secure-phase` corrió: **SECURED, 23/23 amenazas cerradas, `threats_open: 0`** (`22-SECURITY.md`). Los dos vectores críticos se **midieron** contra el PG local en vivo, no se leyeron del `.sql`: ACL crudo de `pg_class` → `anon=r` / `authenticated=r` en las tres vistas (+ 5 escrituras anónimas reales rebotadas), y medición conductual del borrado de categoría → el servicio conserva `business_id` y sigue visible en `public_services`. ⚠ **Todo eso vale contra el LOCAL**: las mitigaciones no existen en prod hasta aplicar la 078 a mano.
 - **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Runbook completo en `15-01-SUMMARY.md` §User Setup Required. ⚠ El sub-bloqueo de ORDEN ("no debería llegar a prod antes que el guard del editor, D-10") quedó **CERRADO por el plan 15-02**: el editor ya ofrece los tres modos y sube el cupo a 2 al salir de individual, así que no puede producir la combinación que el CHECK rechaza. La 068 sigue teniendo que aplicarse a mano y coordinada con el deploy de ese código.
 - **[Phase 15 — tests, RESUELTO por 15-02 (2026-08-12)]** Las escrituras que el CHECK de coherencia volvió ilegales están todas cerradas, en los **dos** sentidos: los cuatro `capacity_mode: 'group_class', capacity: 1` pasaron a `'individual'/1`, y los **tres** `seedSimultaneousService(t, { capacity: 1 })` de `concurrency.test.ts` (que morían con `23514` porque el helper hace `throw`) migraron o se convirtieron en guard. Suites verdes contra el local con la 068: **20/20** en `test/concurrency.test.ts` y **7/7** en `test/booking-cualquiera-public.test.ts` — el conteo **no bajó**.
@@ -490,13 +491,14 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-15T21:17:36.765Z
+Last session: 2026-09-15T21:45:09.845Z
 Stopped at: Phase 22 complete, ready to plan Phase 23
 Resume file: None
 
 ## Operator Next Steps
 
 - ~~Correr `/gsd-secure-phase 22`~~ — **HECHO (2026-09-15): SECURED, `threats_open: 0`**
-- Decidir qué hacer con los **7 WARNINGs** de `22-REVIEW.md`: `/gsd-code-review 22 --fix` ahora, o cerrarlos junto con el primer call site de la Phase 23
+- ~~Los 7 WARNINGs de `22-REVIEW.md`~~ — **HECHO (2026-09-15): 7/7 arreglados**
+- **Aplicar la migración 079 a producción a mano** (+ borrar las marcas `PENDIENTE` de `schema.sql` al hacerlo)
 - ~~Aplicar la migración 078 a prod~~ — **HECHO (2026-09-15)**. Próxima migración del repo = **079**
 - Después: `/gsd-discuss-phase 23 --ws motor-reservas` — la fase 23 no tiene CONTEXT.md todavía
