@@ -4,10 +4,15 @@ import type { CatalogCategory, CatalogService, CatalogSortModes } from '@/lib/se
 
 // ── Phase 22 (el modelo del catálogo) — tests PUROS de lib/service-categories.ts ──────────────
 // Espejan test/time-block-services.test.ts y test/staff-services.test.ts: describe/it/expect,
-// import desde @/lib/..., SIN Supabase ni credenciales. Esta suite NO PUEDE importar './env', ni
-// los fixtures, ni '@supabase/supabase-js': si lo hiciera, test/suite-split.ts la mandaría al
-// carril serializado `db` y dejaría de correr sin credenciales. Es pura y tiene que seguir siéndolo
-// (el guard test/suite-split.test.ts lo verifica).
+// import desde @/lib/..., SIN Supabase ni credenciales. Esta suite NO PUEDE importar el módulo de
+// credenciales de test/, ni los helpers de fixtures, ni el cliente de Supabase: si lo hiciera,
+// test/suite-split.ts la mandaría al carril serializado y además dejaría de correr sin credenciales.
+// Es pura y tiene que seguir siéndolo (el guard test/suite-split.test.ts lo verifica).
+//
+// ⚠ Y los NOMBRES exactos de esos tres imports tampoco se escriben acá, ni siquiera en un
+// comentario: el gate de pureza es un grep LITERAL sobre este archivo, así que nombrarlos en prosa
+// lo pone rojo sin que exista ningún import. Es la misma trampa del token suelto que documenta
+// test/suite-split.ts y que ese módulo resuelve anclando su regex al import y no al token.
 //
 // ⚠ El estándar del workstream es el CONTROL NEGATIVO, y acá hay un agravante propio de la fase
 // (D-08): el caso de CERO categorías es el camino de HOY — pasa aunque la regla no exista y por sí
@@ -191,5 +196,218 @@ describe('groupCatalog — orden de los servicios dentro de su grupo', () => {
 
     expect(servicios).toEqual(serviciosAntes)
     expect(categoriasLocales).toEqual(categoriasAntes)
+  })
+})
+
+// ── Bloque A: el control negativo de CAT-07, y el agravante de esta fase (D-08) ────────────────
+// El caso "cero categorías devuelve la lista plana" PASA AUNQUE LA FUNCIÓN ESTÉ VACÍA, así que por
+// sí solo no prueba nada. Va emparejado con el caso que sí muerde: los modos en 'alpha' y en
+// 'price' dando LA MISMA salida.
+describe('groupCatalog — CAT-07: el catálogo de hoy, sin títulos (D-08)', () => {
+  const catalogoDeHoy = [
+    svc('corte', { name: 'Corte', price: 9000 }),
+    svc('color', { name: 'Color', price: 2000 }),
+    svc('barba', { name: 'Barba', price: 5000 }),
+  ]
+
+  it('cero categorías: UN grupo sin título con la lista EXACTA y en el mismo orden', () => {
+    const grupos = groupCatalog(catalogoDeHoy, [])
+    expect(grupos).toHaveLength(1)
+    expect(grupos[0].categoryId).toBeNull()
+    expect(grupos[0].title).toBeNull()
+    // La SECUENCIA completa, no la longitud: un toHaveLength no vería un reordenamiento.
+    expect(ids(grupos[0])).toEqual(['corte', 'color', 'barba'])
+  })
+
+  it('EL QUE MUERDE: con cero categorías los modos NI SE MIRAN — alpha y price dan la misma salida', () => {
+    // Los sort_order están todos en 0, los nombres al revés del alfabético y los precios al revés
+    // del orden de entrada: si algún modo se aplicara, esta aserción caería. Es la única lectura de
+    // CAT-07 que garantiza que un negocio de producción no vea un orden distinto al del día
+    // anterior — el día de la migración TODOS tienen cero categorías.
+    const base = groupCatalog(catalogoDeHoy, [])
+    expect(groupCatalog(catalogoDeHoy, [], modes({ categories: 'alpha', services: 'alpha' }))).toEqual(base)
+    expect(groupCatalog(catalogoDeHoy, [], modes({ services: 'price' }))).toEqual(base)
+    expect(groupCatalog(catalogoDeHoy, [], modes({ categories: 'alpha', services: 'price' }))).toEqual(base)
+  })
+
+  it('categorías CREADAS pero NINGUNA con servicios: también la lista plana, sin títulos', () => {
+    // El estado real del dueño que acaba de crear su primera categoría y todavía no asignó nada.
+    // Sin esta rama su página pública mostraría todo el catálogo bajo un encabezado de "Otros", que
+    // se lee como roto. Misma regla de siempre —sin agrupación real no hay títulos—, un nivel arriba.
+    const categorias = [cat('cortes', { name: 'Cortes' }), cat('color', { name: 'Color' })]
+    const grupos = groupCatalog(catalogoDeHoy, categorias)
+    expect(titles(grupos)).toEqual([null])
+    expect(ids(grupos[0])).toEqual(['corte', 'color', 'barba'])
+    // y tampoco acá se miran los modos
+    expect(
+      groupCatalog(catalogoDeHoy, categorias, modes({ categories: 'alpha', services: 'price' })),
+    ).toEqual(grupos)
+  })
+})
+
+// ── Bloque B: CAT-06 — la ida y vuelta de modo ────────────────────────────────────────────────
+describe('groupCatalog — CAT-06: el orden manual sobrevive a elegir alfabético o precio', () => {
+  // Los sort_order están DELIBERADAMENTE desalineados del alfabético y del precio: si coincidieran,
+  // el test pasaría por casualidad y no probaría nada.
+  function catalogo() {
+    return {
+      categorias: [
+        cat('c-zeta', { name: 'Zeta', sort_order: 1 }),
+        cat('c-alfa', { name: 'Alfa', sort_order: 2 }),
+      ],
+      servicios: [
+        svc('z1', { name: 'Zurcido', category_id: 'c-zeta', sort_order: 1, price: 9000 }),
+        svc('z2', { name: 'Afeitado', category_id: 'c-zeta', sort_order: 2, price: 1000 }),
+        svc('a1', { name: 'Uñas', category_id: 'c-alfa', sort_order: 1, price: 7000 }),
+        svc('a2', { name: 'Bordado', category_id: 'c-alfa', sort_order: 2, price: 3000 }),
+      ],
+    }
+  }
+
+  it('custom → alpha → price → custom devuelve el arreglo del dueño IDÉNTICO', () => {
+    const { categorias, servicios } = catalogo()
+
+    const personalizadoAntes = groupCatalog(servicios, categorias, modes({}))
+    // El dueño prueba alfabético...
+    const alfabetico = groupCatalog(
+      servicios,
+      categorias,
+      modes({ categories: 'alpha', services: 'alpha' }),
+    )
+    // ...después por precio...
+    const porPrecio = groupCatalog(servicios, categorias, modes({ services: 'price' }))
+    // ...y vuelve a personalizado.
+    const personalizadoDespues = groupCatalog(servicios, categorias, modes({}))
+
+    // Los dos modos SÍ pisaron el orden para mostrar (si no, el test sería vacío)...
+    expect(titles(alfabetico)).toEqual(['Alfa', 'Zeta'])
+    expect(ids(porPrecio[0])).toEqual(['z2', 'z1'])
+    expect(alfabetico).not.toEqual(personalizadoAntes)
+    expect(porPrecio).not.toEqual(personalizadoAntes)
+    // ...pero no BORRARON nada: volver a personalizado devuelve exactamente lo de antes.
+    expect(personalizadoDespues).toEqual(personalizadoAntes)
+    expect(titles(personalizadoDespues)).toEqual(['Zeta', 'Alfa'])
+    expect(ids(personalizadoDespues[0])).toEqual(['z1', 'z2'])
+    expect(ids(personalizadoDespues[1])).toEqual(['a1', 'a2'])
+  })
+
+  it('y NO HAY POR DÓNDE BORRARLO: los arreglos de entrada quedan intactos tras las tres corridas', () => {
+    // Esto es lo que hace de CAT-06 una garantía por construcción y no una promesa: la función es
+    // pura, así que el sort_order del dueño no tiene dónde perderse. El write path del
+    // reordenamiento (CAT-03, Phase 23) vive fuera de este módulo a propósito.
+    const { categorias, servicios } = catalogo()
+    const categoriasAntes = JSON.parse(JSON.stringify(categorias))
+    const serviciosAntes = JSON.parse(JSON.stringify(servicios))
+
+    groupCatalog(servicios, categorias, modes({ categories: 'alpha', services: 'alpha' }))
+    groupCatalog(servicios, categorias, modes({ services: 'price' }))
+    groupCatalog(servicios, categorias, modes({}))
+
+    expect(categorias).toEqual(categoriasAntes)
+    expect(servicios).toEqual(serviciosAntes)
+  })
+})
+
+// ── Bloque C: la invariante de CONSERVACIÓN (D-03, T-22-11) ────────────────────────────────────
+// El modo de falla que ya mordió DOS veces en este repo (CR-01 del code review de la Phase 20, y
+// otra vez en la 21): un helper que descarta de más y apaga el catálogo entero, EN SILENCIO. Acá el
+// peor caso posible tiene que ser "se ve como hoy", nunca "no se ve nada".
+
+/** Todos los ids de la salida, aplanados en el orden en que quedaron. */
+function idsDeTodaLaSalida(grupos: { services: CatalogService[] }[]): string[] {
+  return grupos.flatMap((g) => g.services.map((s) => s.id))
+}
+
+describe('groupCatalog — invariante de conservación: ningún servicio se pierde (D-03)', () => {
+  const propias = [cat('cortes', { name: 'Cortes' }), cat('color', { name: 'Color' })]
+
+  const casos: { nombre: string; servicios: CatalogService[]; categorias: CatalogCategory[] }[] = [
+    {
+      nombre: 'todos con categoría válida',
+      servicios: [svc('a', { category_id: 'cortes' }), svc('b', { category_id: 'color' })],
+      categorias: propias,
+    },
+    {
+      nombre: 'algunos con category_id NULO',
+      servicios: [svc('a', { category_id: 'cortes' }), svc('b'), svc('c', { category_id: null })],
+      categorias: propias,
+    },
+    {
+      nombre: 'uno con un category_id COLGADO (categoría borrada entre dos lecturas)',
+      servicios: [
+        svc('a', { category_id: 'cortes' }),
+        svc('fantasma', { category_id: 'ya-no-existe' }),
+      ],
+      categorias: propias,
+    },
+    {
+      nombre: 'uno con un category_id de OTRA lista (cross-tenant)',
+      servicios: [
+        svc('a', { category_id: 'cortes' }),
+        svc('ajeno', { category_id: 'cat-de-otro-negocio' }),
+      ],
+      categorias: propias,
+    },
+    { nombre: 'lista de categorías VACÍA', servicios: [svc('a'), svc('b')], categorias: [] },
+    { nombre: 'lista de servicios VACÍA', servicios: [], categorias: propias },
+  ]
+
+  for (const modo of ['custom', 'alpha', 'price'] as const) {
+    it(`la unión de los grupos es EXACTAMENTE la entrada, en los 6 casos (services: '${modo}')`, () => {
+      for (const caso of casos) {
+        const grupos = groupCatalog(caso.servicios, caso.categorias, modes({ services: modo }))
+        const salida = idsDeTodaLaSalida(grupos)
+        const entrada = caso.servicios.map((s) => s.id)
+        // misma cantidad, sin repetidos, y exactamente el mismo conjunto
+        expect(salida, caso.nombre).toHaveLength(entrada.length)
+        expect(new Set(salida).size, caso.nombre).toBe(entrada.length)
+        expect([...salida].sort(), caso.nombre).toEqual([...entrada].sort())
+      }
+    })
+  }
+
+  it('el COLGADO cae en el grupo de los sueltos, y ese grupo va ÚLTIMO', () => {
+    const servicios = [
+      svc('a', { category_id: 'cortes' }),
+      svc('fantasma', { category_id: 'ya-no-existe' }),
+    ]
+    const grupos = groupCatalog(servicios, propias)
+    expect(titles(grupos)).toEqual(['Cortes', OTHER_GROUP_TITLE])
+    expect(ids(grupos[grupos.length - 1])).toEqual(['fantasma'])
+  })
+
+  it('el CROSS-TENANT cae en el grupo de los sueltos, y ese grupo va ÚLTIMO', () => {
+    // La FK compuesta services_category_same_tenant de la migr. 078 impide este estado EN LA BASE.
+    // Esto es la otra capa: la función tiene que sobrevivirlo igual, porque recibe filas de un
+    // tercero y no puede validar su origen (contrato de la cabecera).
+    const ajenas = [cat('cat-de-otro-negocio', { name: 'Ajena' })]
+    const servicios = [
+      svc('a', { category_id: 'cortes' }),
+      svc('ajeno', { category_id: ajenas[0].id }),
+    ]
+    const grupos = groupCatalog(servicios, propias)
+    expect(titles(grupos)).toEqual(['Cortes', OTHER_GROUP_TITLE])
+    expect(ids(grupos[grupos.length - 1])).toEqual(['ajeno'])
+  })
+
+  it('lista de servicios VACÍA: la salida NO inventa grupos vacíos', () => {
+    // Un grupo con cero servicios no le sirve a ningún consumidor y sí lo puede confundir (un
+    // grupos.length > 0 leído como "hay catálogo"). La invariante general: NINGÚN grupo de la
+    // salida está vacío.
+    expect(groupCatalog([], propias)).toEqual([])
+    expect(groupCatalog([], [])).toEqual([])
+    expect(groupCatalog([], propias, modes({ categories: 'alpha', services: 'price' }))).toEqual([])
+  })
+
+  it('NINGÚN grupo de la salida está vacío, en ningún caso ni con ningún modo', () => {
+    for (const caso of casos) {
+      for (const modo of ['custom', 'alpha', 'price'] as const) {
+        const grupos = groupCatalog(caso.servicios, caso.categorias, modes({ services: modo }))
+        expect(
+          grupos.filter((g) => g.services.length === 0),
+          `${caso.nombre} / ${modo}`,
+        ).toEqual([])
+      }
+    }
   })
 })

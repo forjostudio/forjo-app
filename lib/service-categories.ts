@@ -185,7 +185,9 @@ function ordenadas<T>(arr: T[], cmp: (a: T, b: T) => number): T[] {
  * `category_id`/`sort_order`) para que sirva IGUAL a la fila de `public_services` y a `Service`, sin
  * obligar a un cast mentiroso en ningún call site.
  *
- * Las tres reglas, en este orden:
+ * Las reglas, en este orden:
+ *
+ * 0. **Sin servicios no hay grupos**: devuelve `[]`. Ningún grupo de la salida está vacío jamás.
  *
  * 1. **Identidad (CAT-07, D-08).** Si NINGUNA categoría recibida tiene al menos un servicio —lo que
  *    incluye el caso de cero categorías, que es el de todos los negocios de producción el día de la
@@ -229,6 +231,12 @@ export function groupCatalog<S extends CatalogService>(
 ): CatalogGroup<S>[] {
   // Campo por campo: un caller que sólo sabe el modo de servicios no pierde el de categorías.
   const { categories: modoCategorias, services: modoServicios } = { ...DEFAULT_SORT_MODES, ...modes }
+
+  // Regla 0 — SIN SERVICIOS NO HAY GRUPOS. Devolver un grupo con cero servicios no le sirve a
+  // ningún consumidor y sí lo puede confundir: un `groups.length > 0` leído como "hay catálogo"
+  // pintaría una sección vacía. La invariante que esto sostiene es general y la testea la suite:
+  // NINGÚN grupo de la salida está vacío, nunca.
+  if (services.length === 0) return []
   // Índice de las categorías REALMENTE recibidas. Es lo que decide si un `category_id` "matchea":
   // un id colgado (categoría borrada entre dos lecturas) o de otro tenant no está acá, así que su
   // servicio cae en los sueltos por el mismo camino que un `category_id` nulo — sin una rama aparte.
