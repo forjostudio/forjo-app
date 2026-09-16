@@ -2511,6 +2511,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             business={business}
             supabase={supabase}
             services={services}
+            setServices={setServices}
             categories={serviceCategories}
             setCategories={setServiceCategories}
           />

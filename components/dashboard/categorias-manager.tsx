@@ -26,6 +26,11 @@ import { toast } from 'sonner'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Business, Service, ServiceCategory } from '@/lib/types'
 import {
+  SIN_CATEGORIA,
+  categoryPatch,
+  fromCategoryId,
+  mapCategoryWriteError,
+  moveRejectCopy,
   renumber,
   moveWithinList,
   categoryCountLabel,
@@ -34,21 +39,54 @@ import {
   CATEGORY_WRITE_REJECT_COPY,
   ORDER_REJECT_COPY,
 } from '@/lib/catalog-panel'
+import { groupCatalog } from '@/lib/service-categories'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronUp, GripVertical, Plus, Tags } from 'lucide-react'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Check, ChevronDown, ChevronUp, GripVertical, Plus, Tags } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
   business: Business
   supabase: SupabaseClient
+  // Par valor + setter compartido con SettingsClient (molde canchas-manager): asignar una categoría
+  // mergea al estado del padre, así la lista de servicios de abajo y los chips de acá no divergen.
   services: Service[]
+  setServices: React.Dispatch<React.SetStateAction<Service[]>>
   categories: ServiceCategory[]
   setCategories: React.Dispatch<React.SetStateAction<ServiceCategory[]>>
 }
 
-export function CategoriasManager({ business, supabase, services, categories, setCategories }: Props) {
+// Un chip de servicio. Vive a nivel de MÓDULO y no dentro del componente: una función-componente
+// declarada adentro cambia de identidad en cada render, React remonta el subárbol y el arrastre del
+// plan 23-03 se cortaría a mitad de gesto.
+//
+// UN SOLO CONTROL POR CHIP, no tres (desviación declarada de la lectura literal de D-08): tres botones
+// inline de 44px (▲ ▼ mover) son 132px más el nombre, o sea un chip por fila a 375px, que destruye los
+// chips compactos que eligió D-06. El diálogo "Mover …" contiene categoría y posición, así que el
+// mecanismo sigue disponible con teclado y en mobile, que es lo que exigen CAT-03 y D-08.
+// El nombre NUNCA se trunca: `whitespace-nowrap` + el `flex-wrap` del contenedor hacen que un nombre
+// largo ocupe su fila entera; un nombre cortado volvería ambiguo cuál servicio estás por mover.
+function ServiceChip({ service, onMove }: { service: Service; onMove: (s: Service) => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        aria-label={`Mover “${service.name}”`}
+        onClick={() => onMove(service)}
+        className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground whitespace-nowrap">
+          {service.name}
+        </span>
+      </button>
+    </li>
+  )
+}
+
+export function CategoriasManager({ business, supabase, services, setServices, categories, setCategories }: Props) {
   // D-02: arranca colapsada con cero categorías (el estado de TODOS los negocios de producción el día
   // del deploy: /servicios no crece de alto) y abierta con al menos una. Sin localStorage a propósito.
   const [open, setOpen] = useState(categories.length > 0)
@@ -58,8 +96,23 @@ export function CategoriasManager({ business, supabase, services, categories, se
   const [savingOrder, setSavingOrder] = useState(false)
   const [announce, setAnnounce] = useState('')
 
+  // Diálogo "Mover …": UNO SOLO para toda la Card (evita N portales montados en una lista densa).
+  // `draft` es el valor del control SIN traducir (un uuid o el sentinel): la traducción a la columna
+  // la hace `categoryPatch` adentro del escritor.
+  const [moving, setMoving] = useState<Service | null>(null)
+  const [draft, setDraft] = useState<string>(SIN_CATEGORIA)
+  const [savingMove, setSavingMove] = useState(false)
+
   const bodyId = useId()
   const errorId = useId()
+  const categoryLabelId = useId()
+
+  // La regla de agrupar vive en groupCatalog (no se reimplementa acá). Los dos modos pueden llegar
+  // `undefined` y la función ya lo cubre campo por campo. En el camino de la identidad (ninguna
+  // categoría con servicios) devuelve un único grupo con `categoryId` nulo: son todos sueltos.
+  const groups = groupCatalog(services, categories, { categories: business.category_sort_mode, services: business.service_sort_mode })
+  const serviciosPorCategoria = new Map(groups.flatMap(g => (g.categoryId ? [[g.categoryId, g.services] as const] : [])))
+  const sueltos = groups.find(g => g.categoryId === null)?.services ?? []
 
   // D-12: los controles de orden de las categorías sólo existen con el modo personalizado. El modo
   // es opcional en el tipo (una lectura angosta puede no traerlo): ausente vale el default de la base.
@@ -147,7 +200,73 @@ export function CategoriasManager({ business, supabase, services, categories, se
     void persistCategoryOrder(nuevos)
   }
 
+  // ── Asignar categoría ───────────────────────────────────────────────────────
+  // EL ÚNICO update suelto de la columna de categoría de un servicio en todo el código (D-07,
+  // restricción dura, reversibilidad costosa). Lo usan el diálogo "Mover …" (plan 23-01) y el
+  // arrastre de chips (plan 23-03).
+  //
+  // Las TRES superficies que escriben la columna convergen en dos funciones de `@/lib/catalog-panel`:
+  // `categoryPatch` produce todo valor escrito y `mapCategoryWriteError` traduce todo rechazo. El alta
+  // y la edición del form (plan 23-02) NO llaman a esta función a propósito: esparcen `categoryPatch`
+  // dentro de su ÚNICA sentencia, porque partir un "Guardar" en dos escrituras abre una ventana de
+  // fallo parcial —el servicio guardado y su categoría no— que viola D-10.2, y en el alta ni siquiera
+  // hay id contra el cual hacer el segundo update. Es una interpretación de D-07 APROBADA POR EL
+  // USUARIO el 2026-09-16, no un atajo.
+  //
+  // La pertenencia al tenant de la categoría la garantiza la base de forma DECLARATIVA: la FK
+  // compuesta `services_category_same_tenant` rechaza con 23503 una categoría de otro negocio (y
+  // `mapCategoryWriteError` le pone copy propia). El `.eq('business_id', …)` es la segunda capa.
+  //
+  // El aviso vive ACÁ y no en los call sites: el diálogo y el arrastre sólo miran el booleano, así no
+  // pueden divergir en qué le dicen al dueño.
+  async function assignServiceCategory(service: Service, value: string): Promise<boolean> {
+    const { data, error } = await supabase.from('services').update(categoryPatch(value)).eq('id', service.id).eq('business_id', business.id).select('id')
+    if (error) {
+      // El código, jamás el texto: el mensaje de Postgres trae el nombre del constraint.
+      console.error('[catalogo/asignar] rechazo:', error.code)
+      toast.error(mapCategoryWriteError(error.code) ?? moveRejectCopy(service.name))
+      return false
+    }
+    // Un update que la RLS filtró vuelve sin error y con CERO filas: eso no es un éxito.
+    if (!data || data.length === 0) {
+      toast.error(moveRejectCopy(service.name))
+      return false
+    }
+    // El espejo en memoria también sale de categoryPatch, nunca de una clave escrita a mano.
+    setServices(prev => prev.map(s => (s.id === service.id ? { ...s, ...categoryPatch(value) } : s)))
+    return true
+  }
+
+  function openMove(service: Service) {
+    setDraft(fromCategoryId(service.category_id))
+    setMoving(service)
+  }
+
+  // Se aplica al CONFIRMAR, no en cada toque: una sola escritura, una sola ventana de fallo. Si el
+  // borrador no cambió no se escribe nada. Si falla, el aviso ya lo dio el escritor y el chip sigue en
+  // su grupo original (el estado del padre sólo se mergea en éxito), así que alcanza con cerrar.
+  async function confirmMove() {
+    if (!moving || savingMove) return
+    const target = moving
+    if (draft === fromCategoryId(target.category_id)) { setMoving(null); return }
+    setSavingMove(true)
+    try {
+      await assignServiceCategory(target, draft)
+    } finally {
+      setSavingMove(false)
+      setMoving(null)
+    }
+  }
+
+  // Opciones del diálogo: una por categoría y "Sin categoría" SIEMPRE última y siempre presente
+  // (CAT-02: asignar nunca es obligatorio).
+  const moveOptions = [
+    ...categories.map(c => ({ value: c.id, label: c.name, loose: false })),
+    { value: SIN_CATEGORIA, label: 'Sin categoría', loose: true },
+  ]
+
   return (
+    <>
     <Card className="p-6 space-y-4">
       <button
         type="button"
@@ -183,7 +302,8 @@ export function CategoriasManager({ business, supabase, services, categories, se
               {categories.map((c, i) => {
                 const isFirst = i === 0
                 const isLast = i === categories.length - 1
-                const count = services.filter(s => s.category_id === c.id).length
+                const suyos = serviciosPorCategoria.get(c.id) ?? []
+                const count = suyos.length
                 return (
                   <li key={c.id} className="rounded-md border border-border bg-secondary/50 flex flex-col gap-2 p-2 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-2">
                     {/* Línea 1 (mobile) / columnas 1-2 (desktop): grip + nombre. */}
@@ -223,9 +343,31 @@ export function CategoriasManager({ business, supabase, services, categories, se
                         </>
                       )}
                     </div>
+                    {/* Chips del grupo. Sin servicios no se renderiza el ul: habla el conteo de la fila. */}
+                    {suyos.length > 0 && (
+                      <ul className="flex flex-wrap gap-2 px-2 pb-2 sm:col-span-3" role="list">
+                        {suyos.map(s => <ServiceChip key={s.id} service={s} onMove={openMove} />)}
+                      </ul>
+                    )}
                   </li>
                 )
               })}
+              {/* El grupo de los sueltos: NO es una categoría (sin grip, sin flechas, sin renombrar ni
+                  eliminar) y va ÚLTIMO, siempre — espeja OTHER_GROUP_TITLE. Sólo con ≥1 categoría:
+                  con cero, todos son sueltos y el grupo sería el catálogo entero duplicado, sin ningún
+                  lugar a donde moverlo. */}
+              {sueltos.length > 0 && (
+                <li className="rounded-md border border-dashed border-border bg-secondary/50 flex flex-col gap-2 p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 text-sm font-medium text-foreground">Sin categoría</span>
+                    <span className="ml-auto text-xs text-muted-foreground">{serviceCountLabel(sueltos.length)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Estos se reservan igual. En tu página aparecen al final, bajo “Otros”.</p>
+                  <ul className="flex flex-wrap gap-2 px-2 pb-2" role="list">
+                    {sueltos.map(s => <ServiceChip key={s.id} service={s} onMove={openMove} />)}
+                  </ul>
+                </li>
+              )}
             </ul>
           )}
 
@@ -259,5 +401,50 @@ export function CategoriasManager({ business, supabase, services, categories, se
           Lo que cambia es el contenido, nunca el nodo. */}
       <div aria-live="polite" className="sr-only">{announce}</div>
     </Card>
+
+    {/* Diálogo "Mover …". Escape, click afuera y la X descartan el borrador SIN escribir: lo da el
+        Dialog de @base-ui/react (portal, focus trap y Escape resueltos), no se hand-rollea. No contiene
+        ningún Select a propósito — sus opciones son botones planos —, lo que lo deja fuera del bug de
+        portal del Select dentro del Drawer que ya mordió en producción. La cadena de clases del
+        DialogContent es copia literal de "Editar servicio": scroll interno con pie anclado, las
+        cuatro piezas son solidarias. La sección "Posición" la entrega el plan 23-04. */}
+    <Dialog open={!!moving} onOpenChange={o => { if (!o && !savingMove) setMoving(null) }}>
+      <DialogContent className="grid max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 sm:max-w-sm">
+        <DialogHeader className="pb-3 pr-8">
+          <DialogTitle className="break-words">{moving ? `Mover “${moving.name}”` : 'Mover'}</DialogTitle>
+        </DialogHeader>
+        <div className="-mx-4 min-h-0 space-y-2 overflow-y-auto overscroll-contain px-4 py-1">
+          <Label id={categoryLabelId} className="text-xs text-muted-foreground">Categoría</Label>
+          <div role="radiogroup" aria-labelledby={categoryLabelId} className="space-y-1">
+            {moveOptions.map(opt => {
+              const checked = draft === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  disabled={savingMove}
+                  onClick={() => setDraft(opt.value)}
+                  className={cn(
+                    'flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    checked && 'bg-secondary',
+                    opt.loose && 'border border-dashed border-border',
+                  )}
+                >
+                  {/* Portador NO cromático de la selección: el Check, además del relleno. */}
+                  {checked ? <Check aria-hidden="true" className="size-4 shrink-0" /> : <span aria-hidden="true" className="size-4 shrink-0" />}
+                  <span className="min-w-0 break-words">{opt.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <DialogFooter className="mt-4">
+          <Button onClick={() => void confirmMove()} disabled={savingMove} className="min-h-11 w-full sm:min-h-0 sm:w-auto">{savingMove ? 'Guardando…' : 'Guardar'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
