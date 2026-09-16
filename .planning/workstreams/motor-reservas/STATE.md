@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 23
 current_phase_name: El panel que organiza el catálogo
 status: executing
-stopped_at: Completed 23-02-PLAN.md
-last_updated: "2026-09-16T13:18:07.695Z"
+stopped_at: Completed 23-03-PLAN.md
+last_updated: "2026-09-16T13:27:40.998Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 23 execution started
-state_head: f2defe5af850111b9b27f94dc9bf67f8dedabaeb
+state_head: b6146d7784061e8e7bce11ea6b5a24ae79e281cf
 progress:
   total_phases: 20
   completed_phases: 13
   total_plans: 96
-  completed_plans: 94
+  completed_plans: 95
   percent: 65
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 23 (El panel que organiza el catálogo) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-16 — Phase 23 execution started
 
@@ -211,6 +211,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 22 P03 | 13 min | 2 tasks | 1 files |
 | Phase 23 P01 | 15 min | 2 tasks | 5 files |
 | Phase 23 P02 | 5 min | 2 tasks | 1 files |
+| Phase 23 P03 | 5min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -411,6 +412,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 23]: 23-01: todo valor de services.category_id sale de categoryPatch y todo rechazo lo traduce mapCategoryWriteError (lib/catalog-panel.ts); el único update suelto es assignServiceCategory dentro del organizador (D-07)
 - [Phase 23]: 23-02: alta y edición del servicio escriben categoría y descripción en UNA sola sentencia (categoryPatch esparcido + description trim/''→null), rechazo 23503 vía mapCategoryWriteError
 - [Phase 23]: 23-02: SelectValue de categoría con min-w-0 + span truncate para que nombres de 40+ caracteres no ensanchen el diálogo a 375px
+- [Phase 23]: 23-03: el chip es arrastrable solo con service_sort_mode personalizado (sin el modo pierde grip y draggable, sigue abriendo Mover)
+- [Phase 23]: 23-03: si falla el borrado de una categoría, la acción tira y el ConfirmDialog queda abierto con la copy genérica vía onConfirmError
 
 ### Pending Todos
 
@@ -498,8 +501,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-16T13:18:03.078Z
-Stopped at: Completed 23-02-PLAN.md
+Last session: 2026-09-16T13:27:37.782Z
+Stopped at: Completed 23-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
