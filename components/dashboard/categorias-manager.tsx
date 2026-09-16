@@ -33,6 +33,7 @@ import {
   moveRejectCopy,
   renumber,
   nextSortOrder,
+  categorySiblings,
   moveWithinList,
   categoryCountLabel,
   serviceCountLabel,
@@ -577,8 +578,16 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   //
   // El aviso vive ACÁ y no en los call sites: el diálogo y el arrastre sólo miran el booleano, así no
   // pueden divergir en qué le dicen al dueño.
+  //
+  // POSICIÓN DE LLEGADA (code review WR-02): en la MISMA sentencia viaja `sort_order` = la mayor
+  // posición del grupo destino más uno, así el servicio llega AL FINAL y no con el `sort_order` de su
+  // grupo anterior (que lo dejaba en cualquier lugar del nuevo). No renumera a nadie más, así que vale
+  // en cualquier modo de orden y no pisa el arreglo manual. Los caminos que eligen una posición
+  // explícita (el diálogo y el drop sobre un chip) la aplican DESPUÉS con persistServiceOrder.
   async function assignServiceCategory(service: Service, value: string): Promise<boolean> {
-    const { data, error } = await supabase.from('services').update(categoryPatch(value)).eq('id', service.id).eq('business_id', business.id).select('id')
+    // Se calcula ANTES del await, sobre el estado que se ve ahora.
+    const llegada = { sort_order: nextSortOrder(categorySiblings(services, value, categories.map(c => c.id), service.id)) }
+    const { data, error } = await supabase.from('services').update({ ...categoryPatch(value), ...llegada }).eq('id', service.id).eq('business_id', business.id).select('id')
     if (error) {
       // El código, jamás el texto: el mensaje de Postgres trae el nombre del constraint.
       console.error('[catalogo/asignar] rechazo:', error.code)
@@ -591,7 +600,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
       return false
     }
     // El espejo en memoria también sale de categoryPatch, nunca de una clave escrita a mano.
-    setServices(prev => prev.map(s => (s.id === service.id ? { ...s, ...categoryPatch(value) } : s)))
+    setServices(prev => prev.map(s => (s.id === service.id ? { ...s, ...categoryPatch(value), ...llegada } : s)))
     return true
   }
 

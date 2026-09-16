@@ -113,6 +113,29 @@ export function nextSortOrder(rows: { sort_order?: number | null }[]): number {
 }
 
 /**
+ * Los servicios que comparten grupo con el valor `value` del control (un uuid o el sentinel), para
+ * calcular DÓNDE LLEGA un servicio que entra a ese grupo (code review WR-02). No es para pintar: el
+ * orden y los títulos siguen siendo de `groupCatalog`.
+ *
+ * Mismo reparto que `groupCatalog`: un `category_id` nulo o que no está en `liveIds` (colgado, de otro
+ * tenant) cuenta como suelto, o sea hermano del sentinel. `excludeId` saca al propio servicio (el
+ * que se edita o se mueve) para que no se cuente a sí mismo. No muta la entrada.
+ */
+export function categorySiblings<S extends { id: string; category_id?: string | null }>(
+  services: S[],
+  value: string,
+  liveIds: Iterable<string>,
+  excludeId?: string,
+): S[] {
+  const vivas = new Set(liveIds)
+  return services.filter(s => {
+    if (s.id === excludeId) return false
+    const suyo = s.category_id && vivas.has(s.category_id) ? s.category_id : SIN_CATEGORIA
+    return suyo === value
+  })
+}
+
+/**
  * Saca el elemento de `from` y lo inserta en `to`, sobre una COPIA.
  *
  * No-op (copia idéntica) si los índices son iguales o si alguno cae fuera del rango. Es la operación

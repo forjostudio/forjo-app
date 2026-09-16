@@ -7,6 +7,7 @@ import {
   mapCategoryWriteError,
   renumber,
   nextSortOrder,
+  categorySiblings,
   moveWithinList,
   categoryCountLabel,
   serviceCountLabel,
@@ -122,6 +123,49 @@ describe('nextSortOrder — una fila nueva entra al final (code review WR-01)', 
 
   it('no depende del orden de la entrada', () => {
     expect(nextSortOrder([{ sort_order: 5 }, { sort_order: 1 }, { sort_order: 3 }])).toBe(6)
+  })
+})
+
+describe('categorySiblings — el grupo al que llega un servicio (code review WR-02)', () => {
+  const COLOR = 'cat-color'
+  const UNAS = 'cat-unas'
+  const vivas = [COLOR, UNAS]
+  const servicios = [
+    { id: 's1', category_id: COLOR, sort_order: 0 },
+    { id: 's2', category_id: UNAS, sort_order: 0 },
+    { id: 's3', category_id: COLOR, sort_order: 1 },
+    { id: 's4', category_id: null, sort_order: 0 },
+    { id: 's5', category_id: 'cat-borrada', sort_order: 3 },
+    { id: 's6', sort_order: 1 },
+  ]
+  const ids = (xs: { id: string }[]) => xs.map(x => x.id)
+
+  it('un uuid vivo devuelve los de esa categoría, en el orden de entrada', () => {
+    expect(ids(categorySiblings(servicios, COLOR, vivas))).toEqual(['s1', 's3'])
+  })
+
+  it('el sentinel junta nulos, ausentes y categorías colgadas (mismo reparto que groupCatalog)', () => {
+    expect(ids(categorySiblings(servicios, SIN_CATEGORIA, vivas))).toEqual(['s4', 's5', 's6'])
+  })
+
+  it('excludeId saca al propio servicio', () => {
+    expect(ids(categorySiblings(servicios, COLOR, vivas, 's3'))).toEqual(['s1'])
+  })
+
+  it('una categoría sin servicios devuelve lista vacía (llega en la posición 0)', () => {
+    expect(categorySiblings(servicios, 'cat-nueva', [...vivas, 'cat-nueva'])).toEqual([])
+    expect(nextSortOrder(categorySiblings(servicios, 'cat-nueva', [...vivas, 'cat-nueva']))).toBe(0)
+  })
+
+  it('compuesto con nextSortOrder, el servicio llega detrás del último del grupo, no empatado con el primero', () => {
+    expect(nextSortOrder(categorySiblings(servicios, COLOR, vivas))).toBe(2)
+    expect(nextSortOrder(categorySiblings(servicios, SIN_CATEGORIA, vivas))).toBe(4)
+  })
+
+  it('no muta la entrada', () => {
+    const copia = structuredClone(servicios)
+    categorySiblings(servicios, COLOR, vivas, 's1')
+    expect(servicios).toEqual(copia)
   })
 })
 

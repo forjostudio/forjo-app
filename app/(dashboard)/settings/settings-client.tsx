@@ -17,7 +17,7 @@ import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { CategoriasManager } from '@/components/dashboard/categorias-manager'
-import { SIN_CATEGORIA, categoryPatch, fromCategoryId, liveCategoryValue, mapCategoryWriteError } from '@/lib/catalog-panel'
+import { SIN_CATEGORIA, categoryPatch, categorySiblings, fromCategoryId, liveCategoryValue, mapCategoryWriteError, nextSortOrder } from '@/lib/catalog-panel'
 import { groupCatalog, type CategorySortMode, type ServiceSortMode } from '@/lib/service-categories'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
@@ -1405,9 +1405,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // El valor se sanea contra las categorías VIVAS antes de traducirlo (code review CR-01): si el
       // dueño borró desde el organizador la categoría que tenía elegida, el Select ya muestra "Sin
       // categoría" y eso es lo que se escribe, en vez de un uuid borrado que rebota con 23503.
-      const categoria = liveCategoryValue(newService.category, serviceCategories.map(c => c.id))
+      const categoriasVivas = serviceCategories.map(c => c.id)
+      const categoria = liveCategoryValue(newService.category, categoriasVivas)
+      // Llega AL FINAL de su grupo, en el mismo INSERT (code review WR-02): sin `sort_order` la base
+      // pone 0 y el servicio empata con el primero del grupo, así que se pintaba segundo. La mayor
+      // posición del grupo más uno no renumera a nadie, así que vale en cualquier modo de orden.
+      const sortOrder = nextSortOrder(categorySiblings(services, categoria, categoriasVivas))
       const { data, error } = await supabase.from('services')
-        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id, description: newService.description.trim() || null, ...categoryPatch(categoria) })
+        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id, description: newService.description.trim() || null, ...categoryPatch(categoria), sort_order: sortOrder })
         .select().single()
       // El rechazo propio de la columna (23503: la categoría ya no existe) lo traduce
       // `mapCategoryWriteError` por código; cualquier otro sigue con el literal de siempre.
@@ -1511,6 +1516,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   async function saveEditService() {
     if (!editSvc || !editSvcForm.name.trim()) return
     setSavingEditSvc(true)
+    // Saneado contra las categorías VIVAS, igual que el alta (code review CR-01).
+    const categoriasVivas = serviceCategories.map(c => c.id)
+    const categoria = liveCategoryValue(editSvcForm.category, categoriasVivas)
+    // Si la categoría CAMBIA, el servicio llega al final del grupo destino en este mismo UPDATE (code
+    // review WR-02); si no cambia, su posición no se toca. Arrastrar el `sort_order` del grupo de
+    // origen lo dejaba en cualquier lugar del nuevo.
+    const cambiaCategoria = categoria !== liveCategoryValue(fromCategoryId(editSvc.category_id), categoriasVivas)
+    const posicionDeLlegada = cambiaCategoria
+      ? { sort_order: nextSortOrder(categorySiblings(services, categoria, categoriasVivas, editSvc.id)) }
+      : {}
     // Normaliza igual que addService/setServiceLocations: array vacío → null = "todos"; limpia el legacy location_id.
     const payload = {
       name: editSvcForm.name.trim(),
@@ -1532,8 +1547,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // Descripción (CAT-11): se normaliza SÓLO acá. Vacía ⇒ `null`, nunca '': una cadena vacía
       // guardada haría que la tarjeta del booking la trate como contenido y pinte un párrafo en blanco.
       description: editSvcForm.description.trim() || null,
-      // Saneado contra las categorías VIVAS, igual que el alta (code review CR-01).
-      ...categoryPatch(liveCategoryValue(editSvcForm.category, serviceCategories.map(c => c.id))),
+      ...categoryPatch(categoria),
+      ...posicionDeLlegada,
     }
     // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
     const { error } = await supabase.from('services').update(payload).eq('id', editSvc.id).eq('business_id', business.id)
