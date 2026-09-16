@@ -4,17 +4,17 @@ milestone: v0.29
 milestone_name: El catálogo del booking (en curso)
 current_phase: 23
 current_phase_name: El panel que organiza el catálogo
-status: executing
-stopped_at: Completed 23-03-PLAN.md
-last_updated: "2026-09-16T13:27:40.998Z"
+status: verifying
+stopped_at: Completed 23-04-PLAN.md
+last_updated: "2026-09-16T15:02:56.204Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 23 execution started
-state_head: b6146d7784061e8e7bce11ea6b5a24ae79e281cf
+state_head: 4def7b013987b0388ae9dd3d868374191e09afcc
 progress:
   total_phases: 20
   completed_phases: 13
   total_plans: 96
-  completed_plans: 95
+  completed_plans: 96
   percent: 65
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 23 (El panel que organiza el catálogo) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-16 — Phase 23 execution started
 
 ## Milestone v0.29 — decisiones LOCKED
@@ -212,6 +212,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 23 P01 | 15 min | 2 tasks | 5 files |
 | Phase 23 P02 | 5 min | 2 tasks | 1 files |
 | Phase 23 P03 | 5min | 3 tasks | 1 files |
+| Phase 23 P04 | 6min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -414,6 +415,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 23]: 23-02: SelectValue de categoría con min-w-0 + span truncate para que nombres de 40+ caracteres no ensanchen el diálogo a 375px
 - [Phase 23]: 23-03: el chip es arrastrable solo con service_sort_mode personalizado (sin el modo pierde grip y draggable, sigue abriendo Mover)
 - [Phase 23]: 23-03: si falla el borrado de una categoría, la acción tira y el ConfirmDialog queda abierto con la copy genérica vía onConfirmError
+- [Phase 23]: 23-04: cambiar de modo de orden escribe una sola columna de businesses, nunca sort_order (D-11, checkpoint A)
+- [Phase 23]: 23-04: sortCategories exportada en lib/service-categories (groupCatalog la usa) pinta las filas del organizador por modo; la sección Posición solo existe fuera del camino de identidad (usuario: A + 1 sí + 3 sí)
 
 ### Pending Todos
 
@@ -501,8 +504,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-16T13:27:37.782Z
-Stopped at: Completed 23-03-PLAN.md
+Last session: 2026-09-16T15:02:52.975Z
+Stopped at: Completed 23-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
