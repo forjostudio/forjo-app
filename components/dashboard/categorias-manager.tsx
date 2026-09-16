@@ -70,16 +70,57 @@ interface Props {
 // mecanismo sigue disponible con teclado y en mobile, que es lo que exigen CAT-03 y D-08.
 // El nombre NUNCA se trunca: `whitespace-nowrap` + el `flex-wrap` del contenedor hacen que un nombre
 // largo ocupe su fila entera; un nombre cortado volvería ambiguo cuál servicio estás por mover.
-function ServiceChip({ service, onMove }: { service: Service; onMove: (s: Service) => void }) {
+//
+// ARRASTRE (plan 23-03): el chip es a la vez ORIGEN (sólo con el modo de servicios personalizado) y
+// DESTINO (soltar un chip sobre otro chip toma la categoría de ese chip). Lo que desaparece sin el modo
+// personalizado es el atajo —grip y `draggable`—, nunca la acción: el botón sigue abriendo "Mover …".
+function ServiceChip({ service, onMove, canDrag, dragging, onDragStart, onDragEnd, onDropOnChip }: {
+  service: Service
+  onMove: (s: Service) => void
+  canDrag: boolean
+  dragging: boolean
+  onDragStart: (serviceId: string) => void
+  onDragEnd: () => void
+  // Devuelve si el drop era de un chip y lo resolvió: sólo entonces se corta la propagación, así un
+  // arrastre de FILA que se suelta encima de un chip sigue llegando a su fila.
+  onDropOnChip: (target: Service) => boolean
+}) {
   return (
     <li>
       <button
         type="button"
         aria-label={`Mover “${service.name}”`}
         onClick={() => onMove(service)}
-        className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        draggable={canDrag}
+        onDragStart={e => {
+          // Sin esto el dragstart burbujea a la fila (que también es arrastrable) y arrancarían dos
+          // gestos a la vez.
+          e.stopPropagation()
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', service.id)
+          onDragStart(service.id)
+        }}
+        onDragEnd={e => { e.stopPropagation(); onDragEnd() }}
+        onDragOver={e => {
+          // Obligatorio: sin preventDefault el navegador rechaza el drop en silencio. NO se corta la
+          // propagación: la fila de abajo sigue marcándose como zona de drop mientras se está encima.
+          e.preventDefault()
+        }}
+        onDrop={e => {
+          e.preventDefault()
+          if (onDropOnChip(service)) e.stopPropagation()
+        }}
+        className={cn(
+          'inline-flex min-h-11 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          canDrag && 'cursor-grab active:cursor-grabbing',
+        )}
       >
-        <span className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground whitespace-nowrap">
+        {/* Siendo arrastrado: borde punteado + cursor de agarre. Sin transparencia (baja el contraste). */}
+        <span className={cn(
+          'inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground whitespace-nowrap',
+          dragging && 'border-dashed cursor-grabbing',
+        )}>
+          {canDrag && <GripVertical aria-hidden="true" className="size-3 text-muted-foreground/60" />}
           {service.name}
         </span>
       </button>
@@ -113,6 +154,16 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // no tiene que volver a guardar. Es un ref y no estado porque el blur llega antes del re-render.
   const skipRenameBlurRef = useRef(false)
 
+  // Arrastre nativo (atajo de desktop; en touch no existe y para eso están las flechas y el diálogo).
+  // Los ids viajan por ESTADO: el dato del navegador devuelve cadena vacía mientras se está encima
+  // (modo protegido del spec) y sólo es legible al soltar.
+  const [draggingCategoryId, setDraggingCategoryId] = useState<string | null>(null)
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
+  const [draggingServiceId, setDraggingServiceId] = useState<string | null>(null)
+  // La fila resaltada como zona de drop de un chip: el id de la categoría o SIN_CATEGORIA.
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [assigning, setAssigning] = useState(false)
+
   // Borrado: UN diálogo de confirmación para toda la Card, hermano de la Card (molde canchas-manager).
   const [deleting, setDeleting] = useState<ServiceCategory | null>(null)
 
@@ -131,6 +182,8 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // D-12: los controles de orden de las categorías sólo existen con el modo personalizado. El modo
   // es opcional en el tipo (una lectura angosta puede no traerlo): ausente vale el default de la base.
   const categoryCustom = (business.category_sort_mode ?? 'custom') === 'custom'
+  // Mismo criterio para el eje de los servicios: sin modo personalizado el chip pierde el atajo.
+  const serviceCustom = (business.service_sort_mode ?? 'custom') === 'custom'
 
   // ── Alta ────────────────────────────────────────────────────────────────────
   async function createCategory() {
@@ -290,12 +343,73 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // y manda la lista completa renumerada (un swap deja huecos y empates, y con dos filas empatadas
   // el orden lo decide la lectura, que cambia entre reloads).
   function moveCategory(index: number, delta: -1 | 1) {
-    const ids = categories.map(c => c.id)
     const destino = index + delta
-    if (destino < 0 || destino >= ids.length) return
-    const nuevos = moveWithinList(ids, index, destino)
-    setAnnounce(`“${categories[index].name}” movida a la posición ${destino + 1} de ${ids.length}`)
+    if (destino < 0 || destino >= categories.length) return
+    reorderCategory(index, destino)
+  }
+
+  // La regla ÚNICA de reorden que comparten las flechas y el arrastre: sacar de `from`, insertar en
+  // `to` y mandar la lista completa al único mutador, que la renumera. Dos disparadores, una regla.
+  function reorderCategory(from: number, to: number) {
+    const ids = categories.map(c => c.id)
+    if (from === to || from < 0 || to < 0 || from >= ids.length || to >= ids.length) return
+    const nuevos = moveWithinList(ids, from, to)
+    setAnnounce(`“${categories[from].name}” movida a la posición ${to + 1} de ${ids.length}`)
     void persistCategoryOrder(nuevos)
+  }
+
+  // ── Arrastre ────────────────────────────────────────────────────────────────
+  // Se llama en el fin del gesto, en cada drop (ANTES de cualquier await) y al colapsar la Card: si la
+  // Card se colapsa a mitad de un gesto el nodo se desmonta, su dragend nunca corre y la fila quedaría
+  // con el borde punteado para siempre.
+  function resetDrag() {
+    setDraggingCategoryId(null)
+    setDragOverCategoryId(null)
+    setDraggingServiceId(null)
+    setDropTargetId(null)
+  }
+
+  // Soltar una FILA sobre la fila de índice `targetIndex`: se inserta en ese índice.
+  function dropCategoryOn(targetIndex: number) {
+    const fromId = draggingCategoryId
+    resetDrag()
+    if (!fromId || !categoryCustom) return
+    const from = categories.findIndex(c => c.id === fromId)
+    // No-op si el destino es el origen.
+    if (from < 0 || from === targetIndex) return
+    reorderCategory(from, targetIndex)
+  }
+
+  // Soltar un CHIP sobre un destino cuyo valor es el id de una categoría o SIN_CATEGORIA. La escritura
+  // la hace assignServiceCategory, la MISMA que usa el diálogo (D-07), con el valor tal cual: la
+  // traducción a la columna es de categoryPatch y el aviso ante rechazo es de esa función, así que acá
+  // no se repite. Si falla, el chip queda en su grupo original porque el padre sólo se mergea en éxito.
+  function dropServiceOn(value: string): boolean {
+    const serviceId = draggingServiceId
+    if (!serviceId) return false
+    resetDrag()
+    const service = services.find(s => s.id === serviceId)
+    if (!service || assigning) return true
+    // No-op si el servicio ya está en ese destino.
+    if (fromCategoryId(service.category_id) === value) return true
+    setAssigning(true)
+    void assignServiceCategory(service, value).finally(() => setAssigning(false))
+    return true
+  }
+
+  // Soltar un chip sobre OTRO chip: toma la categoría de ese chip. La parte de posición dentro del
+  // grupo la entrega el plan 23-04 junto con el modo de orden de servicios que la gatea.
+  function dropServiceOnChip(target: Service): boolean {
+    if (!draggingServiceId) return false
+    return dropServiceOn(fromCategoryId(target.category_id))
+  }
+
+  // onDragLeave con la guarda de `contains`: pasar por encima de un hijo de la fila dispara un
+  // dragleave de la fila, y sin la guarda el resaltado se apaga y parpadea.
+  function leaveRow(e: React.DragEvent<HTMLElement>, rowId: string) {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setDragOverCategoryId(cur => (cur === rowId ? null : cur))
+    setDropTargetId(cur => (cur === rowId ? null : cur))
   }
 
   // ── Asignar categoría ───────────────────────────────────────────────────────
@@ -370,7 +484,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
         type="button"
         aria-expanded={open}
         aria-controls={bodyId}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { setOpen(o => !o); resetDrag() }}
         className="flex w-full min-h-11 items-center gap-2 text-left"
       >
         <Tags aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
@@ -403,7 +517,47 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                 const suyos = serviciosPorCategoria.get(c.id) ?? []
                 const count = suyos.length
                 return (
-                  <li key={c.id} className="rounded-md border border-border bg-secondary/50 flex flex-col gap-2 p-2 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-2">
+                  <li
+                    key={c.id}
+                    // El atributo de arrastre lo lleva la fila ENTERA y las acciones quedan como botones
+                    // hermanos: así ningún botón anidado "roba" el gesto. Sólo con el modo personalizado,
+                    // igual que el grip y las flechas; nunca mientras se renombra esa fila (el campo
+                    // necesita seleccionar texto) ni con un reorden en vuelo.
+                    draggable={categoryCustom && renamingId !== c.id && !savingOrder}
+                    onDragStart={e => {
+                      e.dataTransfer.effectAllowed = 'move'
+                      e.dataTransfer.setData('text/plain', c.id)
+                      setDraggingCategoryId(c.id)
+                    }}
+                    onDragEnd={resetDrag}
+                    onDragOver={e => {
+                      e.preventDefault()
+                      if (draggingCategoryId) {
+                        if (draggingCategoryId !== c.id && dragOverCategoryId !== c.id) setDragOverCategoryId(c.id)
+                      } else if (draggingServiceId && dropTargetId !== c.id) {
+                        setDropTargetId(c.id)
+                      }
+                    }}
+                    onDragLeave={e => leaveRow(e, c.id)}
+                    onDrop={e => {
+                      e.preventDefault()
+                      if (draggingServiceId) { dropServiceOn(c.id); return }
+                      dropCategoryOn(i)
+                    }}
+                    className={cn(
+                      'rounded-md border border-border bg-secondary/50 flex flex-col gap-2 p-2 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-2',
+                      categoryCustom && 'cursor-grab active:cursor-grabbing',
+                      // Siendo arrastrada: borde punteado. Sin transparencia.
+                      draggingCategoryId === c.id && 'border-dashed',
+                      // Indicador de inserción: el borde superior que la fila YA tiene, engrosado y
+                      // teñido. No es un nodo nuevo: agregar un elemento al DOM en medio del gesto
+                      // corre el layout; engrosar el borde existente lo deja en 1px y se queda en la
+                      // escala de bordes (px) sin inventar un alto fuera de la grilla de 4.
+                      dragOverCategoryId === c.id && 'border-t-2 border-t-primary',
+                      // Zona de drop de un chip: relleno + anillo, dos portadores, ninguno sólo cromático.
+                      dropTargetId === c.id && 'bg-secondary ring-2 ring-ring',
+                    )}
+                  >
                     {/* Línea 1 (mobile) / columnas 1-2 (desktop): grip + nombre. */}
                     <div className="flex min-w-0 items-center gap-2 sm:col-span-2">
                       {categoryCustom && (
@@ -488,7 +642,18 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                     {/* Chips del grupo. Sin servicios no se renderiza el ul: habla el conteo de la fila. */}
                     {suyos.length > 0 && (
                       <ul className="flex flex-wrap gap-2 px-2 pb-2 sm:col-span-3" role="list">
-                        {suyos.map(s => <ServiceChip key={s.id} service={s} onMove={openMove} />)}
+                        {suyos.map(s => (
+                          <ServiceChip
+                            key={s.id}
+                            service={s}
+                            onMove={openMove}
+                            canDrag={serviceCustom}
+                            dragging={draggingServiceId === s.id}
+                            onDragStart={setDraggingServiceId}
+                            onDragEnd={resetDrag}
+                            onDropOnChip={dropServiceOnChip}
+                          />
+                        ))}
                       </ul>
                     )}
                   </li>
@@ -499,14 +664,41 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                   con cero, todos son sueltos y el grupo sería el catálogo entero duplicado, sin ningún
                   lugar a donde moverlo. */}
               {sueltos.length > 0 && (
-                <li className="rounded-md border border-dashed border-border bg-secondary/50 flex flex-col gap-2 p-2">
+                <li
+                  // Recibe chips (soltar acá desasigna) y NADA más: no es una categoría, así que no se
+                  // arrastra ni recibe filas.
+                  onDragOver={e => {
+                    e.preventDefault()
+                    if (draggingServiceId && dropTargetId !== SIN_CATEGORIA) setDropTargetId(SIN_CATEGORIA)
+                  }}
+                  onDragLeave={e => leaveRow(e, SIN_CATEGORIA)}
+                  onDrop={e => {
+                    e.preventDefault()
+                    if (!dropServiceOn(SIN_CATEGORIA)) resetDrag()
+                  }}
+                  className={cn(
+                    'rounded-md border border-dashed border-border bg-secondary/50 flex flex-col gap-2 p-2',
+                    dropTargetId === SIN_CATEGORIA && 'bg-secondary ring-2 ring-ring',
+                  )}
+                >
                   <div className="flex items-center gap-2">
                     <span className="min-w-0 text-sm font-medium text-foreground">Sin categoría</span>
                     <span className="ml-auto text-xs text-muted-foreground">{serviceCountLabel(sueltos.length)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">Estos se reservan igual. En tu página aparecen al final, bajo “Otros”.</p>
                   <ul className="flex flex-wrap gap-2 px-2 pb-2" role="list">
-                    {sueltos.map(s => <ServiceChip key={s.id} service={s} onMove={openMove} />)}
+                    {sueltos.map(s => (
+                      <ServiceChip
+                        key={s.id}
+                        service={s}
+                        onMove={openMove}
+                        canDrag={serviceCustom}
+                        dragging={draggingServiceId === s.id}
+                        onDragStart={setDraggingServiceId}
+                        onDragEnd={resetDrag}
+                        onDropOnChip={dropServiceOnChip}
+                      />
+                    ))}
                   </ul>
                 </li>
               )}
