@@ -21,7 +21,7 @@
 // cliente otro. Las posiciones, la columna de categoría y la copy de los rechazos salen de
 // `@/lib/catalog-panel`.
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Business, Service, ServiceCategory } from '@/lib/types'
@@ -103,8 +103,18 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   const [draft, setDraft] = useState<string>(SIN_CATEGORIA)
   const [savingMove, setSavingMove] = useState(false)
 
+  // Renombrado in situ: UNA fila a la vez. `renameError` es el slot inline DE ESA FILA (no del alta).
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [renameError, setRenameError] = useState<string | null>(null)
+  // Escape y Enter ya resolvieron la edición: el blur que puede venir detrás (al desmontarse el campo)
+  // no tiene que volver a guardar. Es un ref y no estado porque el blur llega antes del re-render.
+  const skipRenameBlurRef = useRef(false)
+
   const bodyId = useId()
   const errorId = useId()
+  const renameErrorId = useId()
   const categoryLabelId = useId()
 
   // La regla de agrupar vive en groupCatalog (no se reimplementa acá). Los dos modos pueden llegar
@@ -143,6 +153,58 @@ export function CategoriasManager({ business, supabase, services, setServices, c
       toast.success('Categoría creada')
     } finally {
       setCreating(false)
+    }
+  }
+
+  // ── Renombrar ───────────────────────────────────────────────────────────────
+  function startRename(c: ServiceCategory) {
+    skipRenameBlurRef.current = false
+    setRenameDraft(c.name)
+    setRenameError(null)
+    setRenamingId(c.id)
+  }
+
+  function cancelRename() {
+    skipRenameBlurRef.current = true
+    setRenamingId(null)
+    setRenameError(null)
+  }
+
+  // Enter, blur: los dos guardan por acá. El campo en blanco y el nombre repetido los garantiza LA
+  // BASE (CHECK de no-blanco + índice normalizado de la migr. 079); el chequeo de acá es UX y el
+  // cliente sólo traduce el código.
+  async function saveRename(c: ServiceCategory) {
+    if (renaming) return
+    // trim al guardar, igual que la base normaliza los blancos de borde: no mientras se escribe.
+    const name = renameDraft.trim()
+    // Sin cambios = no-op: se cierra sin escribir nada.
+    if (name === c.name) { setRenamingId(cur => (cur === c.id ? null : cur)); setRenameError(null); return }
+    if (!name) { skipRenameBlurRef.current = false; setRenameError(CATEGORY_WRITE_REJECT_COPY.blank); return }
+    setRenaming(true)
+    try {
+      const { data, error } = await supabase.from('service_categories').update({ name }).eq('id', c.id).eq('business_id', business.id).select('id')
+      if (error) {
+        const reason = classifyCategoryWriteError(error)
+        // El código, jamás el texto: el mensaje de Postgres trae el nombre del constraint.
+        console.error('[catalogo/renombrar-categoria] rechazo:', reason, error.code)
+        if (reason === 'unknown') toast.error(CATEGORY_WRITE_REJECT_COPY.unknown)
+        else setRenameError(CATEGORY_WRITE_REJECT_COPY[reason])
+        // El estado local NO se toca: el campo sigue abierto con lo que escribió el dueño.
+        skipRenameBlurRef.current = false
+        return
+      }
+      // Un update que la RLS filtró vuelve SIN error y con CERO filas: eso no es un éxito.
+      if (!data || data.length === 0) {
+        console.error('[catalogo/renombrar-categoria] rechazo:', 'sin_filas')
+        toast.error(CATEGORY_WRITE_REJECT_COPY.unknown)
+        skipRenameBlurRef.current = false
+        return
+      }
+      setCategories(prev => prev.map(x => (x.id === c.id ? { ...x, name } : x)))
+      setRenamingId(cur => (cur === c.id ? null : cur))
+      setRenameError(null)
+    } finally {
+      setRenaming(false)
     }
   }
 
@@ -311,7 +373,37 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                       {categoryCustom && (
                         <GripVertical aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/60" />
                       )}
-                      <span className="min-w-0 text-sm font-medium text-foreground break-words sm:truncate">{c.name}</span>
+                      {renamingId === c.id ? (
+                        <Input
+                          autoFocus
+                          value={renameDraft}
+                          readOnly={renaming}
+                          onFocus={e => e.currentTarget.select()}
+                          onChange={e => { setRenameDraft(e.target.value); if (renameError) setRenameError(null) }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); skipRenameBlurRef.current = true; void saveRename(c) }
+                            else if (e.key === 'Escape') { e.preventDefault(); cancelRename() }
+                          }}
+                          onBlur={() => {
+                            if (skipRenameBlurRef.current) { skipRenameBlurRef.current = false; return }
+                            void saveRename(c)
+                          }}
+                          aria-label={`Nombre de “${c.name}”`}
+                          aria-invalid={renameError ? true : undefined}
+                          aria-describedby={renameError ? renameErrorId : undefined}
+                          className="h-8 text-sm"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={`Renombrar “${c.name}”`}
+                          disabled={renaming}
+                          onClick={() => startRename(c)}
+                          className="min-h-11 min-w-0 rounded-sm text-left text-sm font-medium text-foreground break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:truncate"
+                        >
+                          {c.name}
+                        </button>
+                      )}
                     </div>
                     {/* Línea 2 (mobile) / columna 3 (desktop): conteo + acciones, a la derecha. */}
                     <div className="flex items-center justify-end gap-2">
@@ -343,6 +435,10 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                         </>
                       )}
                     </div>
+                    {/* Slot de error del renombrado, DE ESTA FILA. `role="status"` (polite), nunca alert. */}
+                    {renamingId === c.id && renameError && (
+                      <p id={renameErrorId} role="status" className="px-2 text-xs text-destructive sm:col-span-3">{renameError}</p>
+                    )}
                     {/* Chips del grupo. Sin servicios no se renderiza el ul: habla el conteo de la fila. */}
                     {suyos.length > 0 && (
                       <ul className="flex flex-wrap gap-2 px-2 pb-2 sm:col-span-3" role="list">
