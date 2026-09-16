@@ -101,6 +101,18 @@ export function renumber(ids: string[]): { id: string; sort_order: number }[] {
 }
 
 /**
+ * La posición de una fila que entra AL FINAL de una lista de hermanas: la mayor que hay, más uno.
+ * Lista vacía ⇒ 0. Un `sort_order` ausente cuenta como 0 (el DEFAULT de la columna).
+ *
+ * NO es `rows.length` (code review WR-01): borrar deja huecos, y con `[C:2]` el largo daría 1, que
+ * pinta la fila nueva ANTES de C. Tampoco renumera a nadie: la fila nueva va detrás de todas sin
+ * escribir ninguna otra posición, así que vale en cualquier modo de orden.
+ */
+export function nextSortOrder(rows: { sort_order?: number | null }[]): number {
+  return rows.reduce((max, r) => Math.max(max, r.sort_order ?? 0), -1) + 1
+}
+
+/**
  * Saca el elemento de `from` y lo inserta en `to`, sobre una COPIA.
  *
  * No-op (copia idéntica) si los índices son iguales o si alguno cae fuera del rango. Es la operación

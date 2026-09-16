@@ -6,6 +6,7 @@ import {
   liveCategoryValue,
   mapCategoryWriteError,
   renumber,
+  nextSortOrder,
   moveWithinList,
   categoryCountLabel,
   serviceCountLabel,
@@ -95,6 +96,32 @@ describe('moveWithinList — saca de `from` e inserta en `to`, sobre una copia',
     const entrada = ['a', 'b', 'c']
     moveWithinList(entrada, 0, 2)
     expect(entrada).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('nextSortOrder — una fila nueva entra al final (code review WR-01)', () => {
+  it('lista vacía ⇒ 0', () => {
+    expect(nextSortOrder([])).toBe(0)
+  })
+
+  it('lista renumerada 0..n-1 ⇒ n', () => {
+    expect(nextSortOrder([{ sort_order: 0 }, { sort_order: 1 }, { sort_order: 2 }])).toBe(3)
+  })
+
+  it('con huecos no usa el largo: [2] ⇒ 3, no 1 (la fila nueva no se pinta arriba de otra)', () => {
+    expect(nextSortOrder([{ sort_order: 2 }])).toBe(3)
+  })
+
+  it('todas empatadas en 0 (el estado de producción) ⇒ 1', () => {
+    expect(nextSortOrder([{ sort_order: 0 }, { sort_order: 0 }])).toBe(1)
+  })
+
+  it('un sort_order ausente o nulo cuenta como 0', () => {
+    expect(nextSortOrder([{}, { sort_order: null }])).toBe(1)
+  })
+
+  it('no depende del orden de la entrada', () => {
+    expect(nextSortOrder([{ sort_order: 5 }, { sort_order: 1 }, { sort_order: 3 }])).toBe(6)
   })
 })
 

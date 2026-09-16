@@ -32,6 +32,7 @@ import {
   mapCategoryWriteError,
   moveRejectCopy,
   renumber,
+  nextSortOrder,
   moveWithinList,
   categoryCountLabel,
   serviceCountLabel,
@@ -251,7 +252,9 @@ export function CategoriasManager({ business, supabase, services, setServices, c
     if (!name) { setNameError(CATEGORY_WRITE_REJECT_COPY.blank); return }
     setCreating(true)
     try {
-      const { data, error } = await supabase.from('service_categories').insert({ business_id: business.id, name, sort_order: categories.length }).select().single()
+      // Al final de la lista: la mayor posición más uno, NO `categories.length` (borrar deja huecos y
+      // el largo pintaría la nueva arriba de otra — code review WR-01).
+      const { data, error } = await supabase.from('service_categories').insert({ business_id: business.id, name, sort_order: nextSortOrder(categories) }).select().single()
       if (error) {
         const reason = classifyCategoryWriteError(error)
         // Se registra el CÓDIGO, jamás el texto: el mensaje de Postgres trae el nombre del constraint.
