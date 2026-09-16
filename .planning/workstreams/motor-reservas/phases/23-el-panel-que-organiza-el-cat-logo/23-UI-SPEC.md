@@ -113,7 +113,13 @@ Escala del proyecto. **Sólo múltiplos de 4 en el código nuevo.**
 
 **Iconos:** `size-4` (16px) en botones de acción · `size-3` (12px) dentro del chip.
 
-**Excepciones: ninguna.** Prohibido en el código nuevo: `gap-1.5`, `space-y-1.5`, `p-2.5`, `text-[11px]`, `pb-0.5` y cualquier valor arbitrario entre corchetes. El repo tiene esos valores en código preexistente y **no se corrigen de paso** — pero no entran en lo nuevo.
+**Excepciones: ninguna.** Prohibido en el código nuevo: `gap-1.5`, `space-y-1.5`, `p-2.5`, `pb-0.5`, `text-[11px]` y cualquier valor arbitrario que caiga fuera de la grilla de 4.
+
+**Alcance de la regla "sólo múltiplos de 4" — dicho explícito para que no haya un portillo.** La regla gobierna **espaciado y dimensionado**: `gap`, `space-y`, `padding`, `margin`, `width`, `height`, `min-h`, `min-w`, `size`, `top/right/bottom/left`. **Todos** los valores de esas familias en este contrato están en la grilla (4, 8, 12, 16, 24, 28, 32, 44, 160), sin una sola excepción.
+
+Los **grosores de trazo** —`border-*`, `ring-*`, `outline-*`— **no son espaciado y no se miden con esta escala**: son la escala de bordes de Tailwind (1px / 2px), en píxeles, que es exactamente lo que manda la regla de unidades del proyecto ("rem para tipografía y espaciados globales, **px para borders y sombras**", CLAUDE.md). Esta fase usa **dos** trazos y ninguno más: `border` (1px, el de toda la app) y `border-t-2` / `ring-2` (2px, el foco y el indicador de drop). Un trazo de 4px sería una barra, no un borde.
+
+Únicos valores entre corchetes admitidos: los de la cadena de clases del `DialogContent` que se **copia literal** del diálogo ya shipeado (`settings-client.tsx:2795`) — `max-h-[calc(100svh-2rem)]` y `grid-rows-[auto_minmax(0,1fr)_auto]`. El primero resuelve a *viewport − 32px*, o sea que también cae en la grilla; el segundo es un **template de grilla**, no una medida. Se copian byte por byte porque las cuatro piezas de ese patrón son solidarias: retocar una lo rompe.
 
 ---
 
@@ -156,7 +162,7 @@ Todo por custom property de `app/globals.css`. **Cero hex en componentes**: cada
 
 1. El botón **"Agregar categoría"** (`Button` primary) — el único botón lleno del organizador.
 2. El **anillo de foco** (`focus-visible:ring-ring`), que es global y preexistente.
-3. La **barra de inserción de 2px** (`bg-primary`) que marca dónde va a caer lo que se arrastra — transitoria y sólo con puntero.
+3. El **borde superior de inserción** (`border-t-2 border-t-primary`) que marca dónde va a caer lo que se arrastra — transitorio y sólo con puntero.
 
 **NO llevan acento, deliberadamente:** los chips (ni en reposo ni marcados), las filas de categoría, los conteos, los dos selectores de modo, las ▲/▼, el grip, el grupo "Sin categoría", ni el estado "arrastrando".
 
@@ -169,7 +175,7 @@ Todo por custom property de `app/globals.css`. **Cero hex en componentes**: cada
 | `--muted-foreground` sobre `--card` | ≥ 4.99:1 (medido en el 19-UI-SPEC sobre `--background`, que es la superficie más oscura de las dos) | 4.5:1 texto | ✓ AA |
 | `--foreground` sobre `--card` | 16.2:1 | 4.5:1 texto | ✓ AAA |
 | `--destructive` sobre `--card` | 5.41:1 | 4.5:1 texto | ✓ AA |
-| `--ring` / `--primary` sobre `--card` | 3.84:1 | 3:1 no-texto | ✓ AA (foco + barra de inserción) |
+| `--ring` / `--primary` sobre `--card` | 3.84:1 | 3:1 no-texto | ✓ AA (foco + borde de inserción) |
 | `--border` sobre `--card` | 1.42:1 | — | **No es portador de estado.** Ver abajo |
 
 **El borde NO identifica ningún control, y eso es deliberado.** `--border` está por debajo de 3:1 en todo el repo (es el borde de shadcn y ya está en producción en cada Card e Input). Esta fase **no lo arregla y tampoco se apoya en él**: cada control nuevo se identifica por su **etiqueta de texto** + su **área táctil de 44px** + su **anillo de foco a 3.84:1**. Ningún estado de esta fase se comunica sólo con el borde.
@@ -179,7 +185,7 @@ Todo por custom property de `app/globals.css`. **Cero hex en componentes**: cada
 | Estado | Portadores (siempre ≥2, y al menos uno no-cromático) |
 |--------|------------------------------------------------------|
 | Fila / chip **siendo arrastrado** | `border-dashed` + `cursor-grabbing` — **sin `opacity`** |
-| Zona de **drop activa** | `bg-secondary` + `ring-2 ring-ring` + la barra de inserción |
+| Zona de **drop activa** | `bg-secondary` + `ring-2 ring-ring` + el borde de inserción |
 | Grupo **"Sin categoría"** | `border-dashed` + el texto literal "Sin categoría" + ausencia de acciones |
 | **Error** del nombre | icono ausente pero **texto explícito** + `role="status"` + `aria-invalid` en el `Input` |
 | **Límite de 120** alcanzado | el contador pasa a `text-foreground font-medium` + anuncio polite en texto |
@@ -292,7 +298,8 @@ sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-2
 
 - El `<li>` entero lleva `draggable`, `cursor-grab active:cursor-grabbing`, `onDragStart` (con `e.dataTransfer.effectAllowed = 'move'` y `setData('text/plain', c.id)`), `onDragEnd`.
 - Estado "siendo arrastrado": `border-dashed`. **Sin `opacity`.**
-- Al pasar por encima de otra fila: esa fila muestra la **barra de inserción** — un `<div aria-hidden className="h-0.5 bg-primary rounded-full" />` de 2px en su borde superior. Transitoria y sólo con puntero.
+- Al pasar por encima de otra fila: esa fila **engrosa y tiñe su borde superior** — `border-t-2 border-t-primary`. Transitorio y sólo con puntero.
+  **No es un `<div>` nuevo, y no es casualidad.** La fila ya lleva `border border-border`: pintar el indicador sobre ese borde (a) evita agregar un nodo al DOM en medio de un arrastre, (b) deja el corrimiento de layout en **1px** en vez de 2 (el borde pasa de 1 a 2, no aparece una barra entera), y (c) mantiene el indicador en la **escala de bordes**, que se mide en px, en vez de inventar un alto de 2px que rompería la grilla de 4 declarada arriba.
 - **Regla de drop, determinista:** se saca la fila arrastrada de la lista y se inserta **en el índice de la fila sobre la que se soltó**; después se **renumera la lista completa de hermanas** desde 0. Nunca swaps sueltos — dejan huecos y empates (CAT-03).
 
 ### Los chips (segunda línea de cada grupo)
@@ -617,7 +624,7 @@ Applicable state considerations resolved: **17 covered, 2 backstop, 0 unresolved
 - [ ] `hover` nunca es el único feedback: cada estado tiene equivalente por teclado y en touch. El grip cambia el cursor, pero lo que informa es el texto y el foco.
 - [ ] Ningún estado se comunica sólo por color (tabla en `## Color`). **Prohibido `opacity`** para atenuar.
 - [ ] Jerarquía de headings intacta: la fase **no agrega ningún heading**. El `h1` de la página sigue siendo el único.
-- [ ] Contraste verificado por token: `--muted-foreground` ≥4.99:1 · `--foreground` 16.2:1 · `--destructive` 5.41:1 · `--ring` 3.84:1 (no-texto). **Ninguno depende de `--primary`** salvo el anillo de foco y la barra de inserción, los dos por encima de 3:1.
+- [ ] Contraste verificado por token: `--muted-foreground` ≥4.99:1 · `--foreground` 16.2:1 · `--destructive` 5.41:1 · `--ring` 3.84:1 (no-texto). **Ninguno depende de `--primary`** salvo el anillo de foco y el borde de inserción, los dos por encima de 3:1.
 - [ ] Animaciones: sólo `transform` (rotación del chevron) y `colors`, ≤300ms. **Nada que dispare layout** (`height`, `width`, `margin`).
 
 ---
