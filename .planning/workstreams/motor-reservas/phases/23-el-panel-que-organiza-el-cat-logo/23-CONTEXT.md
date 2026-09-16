@@ -159,7 +159,7 @@ migraciones** (ver D-09, que es la decisión que lo sostiene).
   - **Recordar:** `services.description` **ya existe**, `public_services` **ya la expone** y la tarjeta
     **ya la renderiza**. Esta fase agrega **sólo el campo del panel**. No tocar la superficie pública.
 
-- **D-06 y D-09** también salieron de "vos decidís" — están escritas arriba como decisiones cerradas,
+- Las decisiones D-06 y D-09 también salieron de "vos decidís" — están escritas arriba como decisiones cerradas,
   con el razonamiento completo, porque el planner necesita el *porqué* para poder apartarse con causa.
 
 ### Reviewed Todos (not folded)

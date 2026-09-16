@@ -794,9 +794,17 @@ Plans:
 **Plans**: 4 plans (waves 1 → 2 ‖ 2 → 3)
 
 Plans:
+**Wave 1**
+
 - [ ] 23-01-PLAN.md — wave 1 · tracer de punta a punta: módulo puro `lib/catalog-panel.ts` + read path + el organizador (crear, listar, reordenar con ▲/▼, persistir) + asignar desde el diálogo "Mover …"
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 23-02-PLAN.md — wave 2 · los dos campos nuevos del servicio (Categoría + Descripción corta), espejados en el alta y en el diálogo de edición
 - [ ] 23-03-PLAN.md — wave 2 · renombrar in situ, borrar con confirmación que cuenta los servicios, y el arrastre nativo de filas y chips
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 23-04-PLAN.md — wave 3 · los dos modos de orden, los gates de D-12 por eje, y la sección "Posición" del diálogo con el mutador del orden de servicios
 
 ---
