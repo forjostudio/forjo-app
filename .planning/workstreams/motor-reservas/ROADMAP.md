@@ -791,7 +791,13 @@ Plans:
 **Alcance**: `app/(dashboard)/servicios/page.tsx` (las lecturas nuevas, por tenant) + `app/(dashboard)/settings/settings-client.tsx` (**3636 líneas** — la pantalla de servicios vive ahí y la sirve también `/settings`, así que lo que se agregue conviene que salga a componentes propios), más el organizador de categorías y el campo de descripción. **El patrón de reordenar se PORTA, no se copia**: la fuente es `forjo-tiendas` → `app/(consola)/(panel)/categorias/Organizador.tsx` (`onDragStart`/`onDrop` en `:260` y `:597`, botones ▲/▼ con `aria-label` en `:392-414`, renumerado de la lista completa en `:125`) y `supabase/migrations/20260813100000_categorias.sql`; allá las columnas están en **español** (`tienda_id`, `nombre`, `orden`) y el esquema de RLS es otro, así que se copia la **forma** —dos mecanismos conviviendo, cero dependencias de drag-and-drop— y no el código. **Cero migraciones nuevas**: el modelo entero lo instaló la 078.
 **Security/Integrity relevance**: Media. Es un write path del dueño sobre sus propios datos: `.eq('business_id', business.id)` en cada query como todo el panel, y el rechazo del índice único mapeado a **copy propia** en vez de interpolar el mensaje de la base (T-14-25 / T-13-09). Dos cuidados propios de esta fase: el reordenamiento **escribe N filas de una vez**, así que tiene que ir por un solo camino que no pueda renumerar filas de otro negocio ni dejar el orden a medias (el precedente del repo para escrituras multi-fila del panel es el RPC transaccional `save_agenda_blocks`, migr. 074); y el cambio de **modo** no debe persistir ningún orden — si lo hiciera, rompería CAT-06, que la Phase 22 garantizó por construcción.
 **UI hint**: yes
-**Plans**: TBD
+**Plans**: 4 plans (waves 1 → 2 ‖ 2 → 3)
+
+Plans:
+- [ ] 23-01-PLAN.md — wave 1 · tracer de punta a punta: módulo puro `lib/catalog-panel.ts` + read path + el organizador (crear, listar, reordenar con ▲/▼, persistir) + asignar desde el diálogo "Mover …"
+- [ ] 23-02-PLAN.md — wave 2 · los dos campos nuevos del servicio (Categoría + Descripción corta), espejados en el alta y en el diálogo de edición
+- [ ] 23-03-PLAN.md — wave 2 · renombrar in situ, borrar con confirmación que cuenta los servicios, y el arrastre nativo de filas y chips
+- [ ] 23-04-PLAN.md — wave 3 · los dos modos de orden, los gates de D-12 por eje, y la sección "Posición" del diálogo con el mutador del orden de servicios
 
 ---
 
@@ -842,5 +848,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 20. Lo que el público ve | 2/2 | Complete | 2026-09-10 |
 | 21. Lo que el negocio declara | 2/2 | Complete | 2026-09-13 |
 | 22. El modelo del catálogo | 4/4 | Complete    | 2026-09-15 |
-| 23. El panel que organiza el catálogo | 0/TBD | Not started | - |
+| 23. El panel que organiza el catálogo | 0/4 | Not started | - |
 | 24. El catálogo que el cliente lee | 0/TBD | Not started | - |
