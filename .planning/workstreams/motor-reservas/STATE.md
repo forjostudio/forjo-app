@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 23
 current_phase_name: El panel que organiza el catálogo
 status: executing
-stopped_at: Completed 23-01-PLAN.md
-last_updated: "2026-09-16T13:06:40.544Z"
+stopped_at: Completed 23-02-PLAN.md
+last_updated: "2026-09-16T13:18:07.695Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 23 execution started
-state_head: 71e262bea745d7d9aa44629db4de596899f04679
+state_head: f2defe5af850111b9b27f94dc9bf67f8dedabaeb
 progress:
   total_phases: 20
   completed_phases: 13
   total_plans: 96
-  completed_plans: 93
+  completed_plans: 94
   percent: 65
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 23 (El panel que organiza el catálogo) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-09-16 — Phase 23 execution started
 
@@ -210,6 +210,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 22 P04 | 14 min | 1 tasks | 1 files |
 | Phase 22 P03 | 13 min | 2 tasks | 1 files |
 | Phase 23 P01 | 15 min | 2 tasks | 5 files |
+| Phase 23 P02 | 5 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -408,6 +409,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 22]: Las garantias de seguridad de la 078 se congelaron con control negativo MEDIDO: el caso de CR-01 se verifico rompiendolo (GRANT DELETE al anon sobre public_services) y el del borrado tambien (FK re-creada sin lista de columnas), antes de darlos por buenos — Un test de seguridad que pasa sin haberse medido roto no prueba nada. Con la FK a secas, dos de las tres aserciones del borrado pasan igual: solo la del business_id discrimina
 - [Phase 23]: 23-01: el reorden de categorías son N updates de sort_order sobre la lista completa renumerada, acotados por business_id, con 0 filas = fallo y re-lectura de la base ante cualquier fallo (D-1 opción B + D-10.2)
 - [Phase 23]: 23-01: todo valor de services.category_id sale de categoryPatch y todo rechazo lo traduce mapCategoryWriteError (lib/catalog-panel.ts); el único update suelto es assignServiceCategory dentro del organizador (D-07)
+- [Phase 23]: 23-02: alta y edición del servicio escriben categoría y descripción en UNA sola sentencia (categoryPatch esparcido + description trim/''→null), rechazo 23503 vía mapCategoryWriteError
+- [Phase 23]: 23-02: SelectValue de categoría con min-w-0 + span truncate para que nombres de 40+ caracteres no ensanchen el diálogo a 375px
 
 ### Pending Todos
 
@@ -495,8 +498,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-16T13:06:36.745Z
-Stopped at: Completed 23-01-PLAN.md
+Last session: 2026-09-16T13:18:03.078Z
+Stopped at: Completed 23-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

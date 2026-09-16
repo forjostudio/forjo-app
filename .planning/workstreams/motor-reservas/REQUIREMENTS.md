@@ -67,7 +67,7 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
   aparece al final bajo **"Otros"**; nunca desaparece del catálogo público.
 - [ ] **CAT-10** — En desktop las tarjetas de servicio son **horizontales a lo ancho**, el mismo
   formato que ya tienen en mobile. El nombre largo deja de partirse en dos líneas.
-- [ ] **CAT-11** — El dueño escribe una **descripción corta** por servicio desde el panel, con
+- [x] **CAT-11** — El dueño escribe una **descripción corta** por servicio desde el panel, con
   **límite de 120 caracteres** y contador a la vista, y se muestra en la tarjeta del booking debajo
   del nombre. ⚠ La columna `services.description` **ya existe** y la tarjeta **ya la renderiza**
   recortada a dos líneas (`booking-client.tsx:610`, `line-clamp-2`): hoy es una columna muerta que
