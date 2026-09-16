@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -1159,7 +1160,13 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // `category` (Phase 23, D-07) NO es la columna: es el valor del `Select` tal cual —el sentinel
   // SIN_CATEGORIA o un uuid—. La clave de la columna sólo la produce `categoryPatch` al escribir.
   // Arranca en el sentinel: "Sin categoría" es el valor por defecto real del alta (D-05).
-  const [newService, setNewService] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA })
+  // `description` (CAT-11) es el texto del control, cadena y no `null`: se recorta y la cadena vacía
+  // pasa a ausencia de dato SÓLO al guardar, nunca a la vista.
+  const [newService, setNewService] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string; description: string }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA, description: '' })
+  // Un id por superficie para enlazar label, ayuda y control de la descripción (alta y edición
+  // pueden estar montados a la vez).
+  const newSvcDescId = useId()
+  const editSvcDescId = useId()
   // Guard de doble submit del alta (T-17-05): hasta ahora `addService` no deshabilitaba nada, así que
   // dos clicks seguidos creaban DOS servicios idénticos y el segundo quedaba huérfano de intención.
   // Espeja a `savingEditSvc` del diálogo de edición.
@@ -1385,14 +1392,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // en el alta todavía no hay `id` contra el cual hacer un update, así que partirlo en dos
       // sentencias crearía un servicio sin categoría y una ventana de fallo en el medio (D-10.2). El
       // valor de la columna lo produce `categoryPatch`, la misma función que usa el organizador.
+      // La descripción (CAT-11) se normaliza SÓLO acá: recortada, y vacía ⇒ `null` (nunca '').
       const { data, error } = await supabase.from('services')
-        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id, ...categoryPatch(newService.category) })
+        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id, description: newService.description.trim() || null, ...categoryPatch(newService.category) })
         .select().single()
       // El rechazo propio de la columna (23503: la categoría ya no existe) lo traduce
       // `mapCategoryWriteError` por código; cualquier otro sigue con el literal de siempre.
       if (error) { toast.error(mapCategoryWriteError(error.code) ?? 'Error'); return }
       setServices(prev => [...prev, data as Service])
-      setNewService({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA })
+      setNewService({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA, description: '' })
       toast.success('Servicio agregado')
     } finally {
       // `finally` y no una línea antes de cada `return`: el early return por error del INSERT y
@@ -1451,8 +1459,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // Edición de servicio (reusa el form de alta: nombre, duración, precio, consultorios).
   const [editSvc, setEditSvc] = useState<Service | null>(null)
   // Mismo criterio que `newService`: los dos campos numéricos son texto crudo (G-21-11), y
-  // `category` es el valor del control, no la columna (D-07).
-  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA })
+  // `category` es el valor del control, no la columna (D-07); `description` es texto crudo.
+  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string; description: string }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA, description: '' })
   const [savingEditSvc, setSavingEditSvc] = useState(false)
   // Guardado del cupo inline, POR TARJETA (D-08). NO se puede copiar el shape booleano de
   // `savingEditSvc`: el diálogo es uno solo, pero las tarjetas son muchas y están todas en pantalla a
@@ -1484,6 +1492,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       capacity: normalizeCapacity(Number(s.capacity), minCapacityFor(mode)),
       // Al reabrir, la categoría guardada vuelve seleccionada; sin categoría ⇒ el sentinel.
       category: fromCategoryId(s.category_id),
+      description: s.description ?? '',
     })
   }
   async function saveEditService() {
@@ -1507,6 +1516,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // La categoría va DENTRO de este mismo UPDATE (D-07, interpretación aprobada el 2026-09-16):
       // partirlo en dos sentencias abriría una ventana donde el servicio queda guardado y su categoría
       // no, que es exactamente lo que D-10.2 prohíbe. El valor lo produce `categoryPatch`.
+      // Descripción (CAT-11): se normaliza SÓLO acá. Vacía ⇒ `null`, nunca '': una cadena vacía
+      // guardada haría que la tarjeta del booking la trate como contenido y pinte un párrafo en blanco.
+      description: editSvcForm.description.trim() || null,
       ...categoryPatch(editSvcForm.category),
     }
     // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
@@ -2803,6 +2815,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   </Select>
                 </div>
               )}
+              {/* Descripción corta (CAT-11). Tope DURO de 120: lo que el dueño escribe es exactamente lo
+                  que la tarjeta del booking deja ver con su recorte de dos líneas; un tope blando le
+                  recortaría sin avisar. Contador visible desde 0/120 y `aria-hidden` (anunciar cada
+                  tecla es ruido); el anuncio polite ocurre una sola vez, al tocar el límite. Al límite
+                  cambian peso y color del texto, nunca a un token de advertencia: llegar al tope es el
+                  diseño funcionando. SIN normalización en onBlur (a diferencia de duración y precio):
+                  es texto libre y recortarlo a la vista se leería como que el campo borra lo escrito. */}
+              <div className="space-y-1">
+                <Label htmlFor={newSvcDescId} className="text-xs text-muted-foreground">Descripción corta (opcional)</Label>
+                <Textarea id={newSvcDescId} rows={2} maxLength={120} value={newService.description} onChange={e => setNewService(f => ({ ...f, description: e.target.value }))} aria-describedby={`${newSvcDescId}-help`} placeholder="Ej. Incluye lavado, corte y peinado" />
+                <div className="flex items-start justify-between gap-2">
+                  <p id={`${newSvcDescId}-help`} className="text-xs text-muted-foreground">Aparece debajo del nombre en tu página de reservas. Se ven 2 líneas.</p>
+                  <span aria-hidden="true" className={cn('shrink-0 text-xs tabular-nums', newService.description.length >= 120 ? 'font-medium text-foreground' : 'text-muted-foreground')}>{newService.description.length}/120</span>
+                </div>
+                <p role="status" className="sr-only">{newService.description.length >= 120 ? 'Llegaste al máximo de 120 caracteres.' : ''}</p>
+              </div>
               <CapacityModeFields
                 value={newService.capacity_mode}
                 capacity={newService.capacity}
@@ -2896,6 +2924,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     </Select>
                   </div>
                 )}
+                {/* Descripción corta: espejo literal del campo del alta (ver el comentario de allá). */}
+                <div className="space-y-1">
+                  <Label htmlFor={editSvcDescId} className="text-xs text-muted-foreground">Descripción corta (opcional)</Label>
+                  <Textarea id={editSvcDescId} rows={2} maxLength={120} value={editSvcForm.description} onChange={e => setEditSvcForm(f => ({ ...f, description: e.target.value }))} aria-describedby={`${editSvcDescId}-help`} placeholder="Ej. Incluye lavado, corte y peinado" />
+                  <div className="flex items-start justify-between gap-2">
+                    <p id={`${editSvcDescId}-help`} className="text-xs text-muted-foreground">Aparece debajo del nombre en tu página de reservas. Se ven 2 líneas.</p>
+                    <span aria-hidden="true" className={cn('shrink-0 text-xs tabular-nums', editSvcForm.description.length >= 120 ? 'font-medium text-foreground' : 'text-muted-foreground')}>{editSvcForm.description.length}/120</span>
+                  </div>
+                  <p role="status" className="sr-only">{editSvcForm.description.length >= 120 ? 'Llegaste al máximo de 120 caracteres.' : ''}</p>
+                </div>
                 <CapacityModeFields
                   value={editSvcForm.capacity_mode}
                   capacity={editSvcForm.capacity}
