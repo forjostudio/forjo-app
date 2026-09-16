@@ -46,6 +46,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Separator } from '@/components/ui/separator'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Check, ChevronDown, ChevronUp, GripVertical, Plus, Tags, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -161,7 +162,12 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // la hace `categoryPatch` adentro del escritor.
   const [moving, setMoving] = useState<Service | null>(null)
   const [draft, setDraft] = useState<string>(SIN_CATEGORIA)
+  // La posición del borrador (plan 23-04): el índice dentro del grupo DESTINO del borrador, sobre el
+  // orden que se ve. Se aplica al confirmar, junto con la categoría.
+  const [draftIndex, setDraftIndex] = useState(0)
   const [savingMove, setSavingMove] = useState(false)
+  // Reorden de servicios en vuelo (el segundo mutador de orden de la fase).
+  const [savingServiceOrder, setSavingServiceOrder] = useState(false)
 
   // Renombrado in situ: UNA fila a la vez. `renameError` es el slot inline DE ESA FILA (no del alta).
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -193,6 +199,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   const renameErrorId = useId()
   const categoryLabelId = useId()
   const categoryModeId = useId()
+  const positionLabelId = useId()
 
   // La regla de agrupar vive en groupCatalog (no se reimplementa acá). Los dos modos pueden llegar
   // `undefined` y la función ya lo cubre campo por campo. En el camino de la identidad (ninguna
@@ -212,6 +219,28 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   const categoryCustom = categorySortMode === 'custom'
   // Mismo criterio para el eje de los servicios: sin modo personalizado el chip pierde el atajo.
   const serviceCustom = serviceSortMode === 'custom'
+  // La posición de un servicio dentro de su grupo sólo existe con el modo personalizado Y fuera del
+  // camino de identidad de groupCatalog (ninguna categoría con servicios): ahí la función devuelve la
+  // lista como llega sin mirar `sort_order`, así que un Subir/Bajar persistiría un orden sin ningún
+  // efecto visible — una acción inerte, lo que CAT-05 prohíbe. Decisión del usuario del 2026-09-16.
+  const hayAgrupacion = groups.some(g => g.categoryId !== null)
+  const posicionDisponible = serviceCustom && hayAgrupacion
+
+  // El grupo, EN EL ORDEN QUE SE VE, al que iría `service` con el valor `value` del control. Si el
+  // valor es su categoría de hoy, es el grupo donde groupCatalog lo puso (también cubre una categoría
+  // colgada, que cae en los sueltos). Devuelve los ids SIN el propio servicio.
+  function idsDelGrupoDestino(value: string, service: Service): string[] {
+    const grupo = value === fromCategoryId(service.category_id)
+      ? (groups.find(g => g.services.some(x => x.id === service.id))?.services ?? [])
+      : value === SIN_CATEGORIA ? sueltos : (serviciosPorCategoria.get(value) ?? [])
+    return grupo.filter(x => x.id !== service.id).map(x => x.id)
+  }
+
+  // El índice que el servicio tiene HOY dentro de su grupo.
+  function indiceActual(service: Service): number {
+    const grupo = groups.find(g => g.services.some(x => x.id === service.id))?.services ?? []
+    return Math.max(0, grupo.findIndex(x => x.id === service.id))
+  }
 
   // ── Alta ────────────────────────────────────────────────────────────────────
   async function createCategory() {
@@ -388,6 +417,42 @@ export function CategoriasManager({ business, supabase, services, setServices, c
     void persistCategoryOrder(nuevos)
   }
 
+  // EL ÚNICO mutador del orden de los SERVICIOS (el segundo y último de la fase, D-09/D-10.1): espejo
+  // literal de persistCategoryOrder sobre la otra tabla. Una sentencia por fila, SOLO la columna de
+  // orden, sobre la lista COMPLETA del grupo renumerada desde 0. Ni el nombre, ni el precio, ni la
+  // duración viajan: un cliente con un dato viejo en memoria pisaría un precio para tocar el orden.
+  async function persistServiceOrder(idsEnOrden: string[]) {
+    if (savingServiceOrder) return
+    const posiciones = new Map(renumber(idsEnOrden).map(({ id, sort_order }) => [id, sort_order] as const))
+    // La posición anterior de cada fila tocada, por si no hay relectura posible. Sólo la posición:
+    // una asignación de categoría que ya se confirmó en esta misma pasada no se deshace.
+    const antes = new Map(services.filter(s => posiciones.has(s.id)).map(s => [s.id, s.sort_order] as const))
+    // Optimista: el orden nuevo se pinta ya.
+    setServices(prev => prev.map(s => (posiciones.has(s.id) ? { ...s, sort_order: posiciones.get(s.id) } : s)))
+    setSavingServiceOrder(true)
+    try {
+      const resultados = await Promise.all(renumber(idsEnOrden).map(({ id, sort_order }) =>
+        supabase.from('services').update({ sort_order }).eq('id', id).eq('business_id', business.id).select('id'),
+      ))
+      // Un update que la RLS filtró vuelve SIN error y con CERO filas: eso no es un éxito.
+      const fallo = resultados.find(r => r.error || !r.data || r.data.length === 0)
+      if (!fallo) return
+      console.error('[catalogo/orden-servicios] rechazo:', fallo.error?.code ?? 'sin_filas')
+      // D-10.2, no opcional: re-leer los servicios reales con el mismo doble orden del RSC y pintar ESO.
+      const { data: reales, error: releerError } = await supabase.from('services').select('*').eq('business_id', business.id).order('sort_order', { ascending: true }).order('created_at', { ascending: true })
+      if (releerError || !reales) {
+        // Sin lectura no hay verdad que pintar: se vuelve a la posición que la base había confirmado.
+        console.error('[catalogo/orden-servicios] relectura:', releerError?.code ?? 'sin_datos')
+        setServices(prev => prev.map(s => (antes.has(s.id) ? { ...s, sort_order: antes.get(s.id) } : s)))
+      } else {
+        setServices(reales as Service[])
+      }
+      toast.error(ORDER_REJECT_COPY)
+    } finally {
+      setSavingServiceOrder(false)
+    }
+  }
+
   // ── Arrastre ────────────────────────────────────────────────────────────────
   // Se llama en el fin del gesto, en cada drop (ANTES de cualquier await) y al colapsar la Card: si la
   // Card se colapsa a mitad de un gesto el nodo se desmonta, su dragend nunca corre y la fila quedaría
@@ -427,11 +492,30 @@ export function CategoriasManager({ business, supabase, services, setServices, c
     return true
   }
 
-  // Soltar un chip sobre OTRO chip: toma la categoría de ese chip. La parte de posición dentro del
-  // grupo la entrega el plan 23-04 junto con el modo de orden de servicios que la gatea.
+  // Soltar un chip sobre OTRO chip: toma la categoría de ese chip (por assignServiceCategory, D-07) Y,
+  // con la posición disponible, se inserta en el índice de ese chip dentro de su grupo, por el mismo
+  // moveWithinList y el mismo persistServiceOrder que el diálogo. Sin la posición disponible (modo no
+  // personalizado o camino de identidad) sólo asigna la categoría.
   function dropServiceOnChip(target: Service): boolean {
-    if (!draggingServiceId) return false
-    return dropServiceOn(fromCategoryId(target.category_id))
+    const serviceId = draggingServiceId
+    if (!serviceId) return false
+    if (!posicionDisponible) return dropServiceOn(fromCategoryId(target.category_id))
+    resetDrag()
+    const service = services.find(s => s.id === serviceId)
+    if (!service || service.id === target.id || assigning || savingServiceOrder) return true
+    const destino = fromCategoryId(target.category_id)
+    // Se calcula ANTES de cualquier await, sobre el orden que se ve ahora.
+    const base = idsDelGrupoDestino(destino, service)
+    const to = base.indexOf(target.id)
+    const lista = moveWithinList([...base, service.id], base.length, to < 0 ? base.length : to)
+    const cambiaCategoria = destino !== fromCategoryId(service.category_id)
+    setAssigning(true)
+    void (async () => {
+      // Si la asignación falla, el aviso ya lo dio el escritor y el orden NO se toca.
+      if (cambiaCategoria && !(await assignServiceCategory(service, destino))) return
+      await persistServiceOrder(lista)
+    })().finally(() => setAssigning(false))
+    return true
   }
 
   // onDragLeave con la guarda de `contains`: pasar por encima de un hijo de la fila dispara un
@@ -510,24 +594,49 @@ export function CategoriasManager({ business, supabase, services, setServices, c
 
   function openMove(service: Service) {
     setDraft(fromCategoryId(service.category_id))
+    // La posición arranca en la que el servicio tiene hoy dentro de su grupo.
+    setDraftIndex(indiceActual(service))
     setMoving(service)
   }
 
-  // Se aplica al CONFIRMAR, no en cada toque: una sola escritura, una sola ventana de fallo. Si el
-  // borrador no cambió no se escribe nada. Si falla, el aviso ya lo dio el escritor y el chip sigue en
-  // su grupo original (el estado del padre sólo se mergea en éxito), así que alcanza con cerrar.
+  // Cambiar la categoría del borrador resetea la posición al FINAL del grupo destino: mantener un
+  // índice de otro grupo sería mentir sobre dónde va a caer.
+  function pickDraftCategory(value: string) {
+    if (!moving || value === draft) return
+    setDraft(value)
+    setDraftIndex(idsDelGrupoDestino(value, moving).length)
+  }
+
+  // Se aplica al CONFIRMAR, no en cada toque: categoría y posición en UNA pasada y en ese orden. Si el
+  // borrador no cambió no se escribe nada. Si la asignación falla, el aviso ya lo dio el escritor, el
+  // chip sigue en su grupo original y el orden NO se toca (mover dentro de un grupo al que el servicio
+  // no llegó no significa nada).
   async function confirmMove() {
-    if (!moving || savingMove) return
+    if (!moving || savingMove || savingServiceOrder) return
     const target = moving
-    if (draft === fromCategoryId(target.category_id)) { setMoving(null); return }
+    const cambiaCategoria = draft !== fromCategoryId(target.category_id)
+    // Todo lo de la posición se calcula ANTES de cualquier await, sobre el orden que se ve ahora.
+    const base = idsDelGrupoDestino(draft, target)
+    const cambiaPosicion = posicionDisponible && (cambiaCategoria || draftPos !== indiceActual(target))
+    if (!cambiaCategoria && !cambiaPosicion) { setMoving(null); return }
     setSavingMove(true)
     try {
-      await assignServiceCategory(target, draft)
+      if (cambiaCategoria && !(await assignServiceCategory(target, draft))) return
+      if (cambiaPosicion) {
+        // La lista del grupo destino YA con el servicio adentro, movido al índice elegido.
+        await persistServiceOrder(moveWithinList([...base, target.id], base.length, Math.min(draftPos, base.length)))
+      }
     } finally {
       setSavingMove(false)
       setMoving(null)
     }
   }
+
+  // El contador de la sección "Posición", calculado sobre el BORRADOR y no sobre lo guardado.
+  const draftTotal = moving ? idsDelGrupoDestino(draft, moving).length + 1 : 0
+  const draftPos = Math.min(Math.max(draftIndex, 0), Math.max(draftTotal - 1, 0))
+  const subirOff = draftPos <= 0 || savingMove
+  const bajarOff = draftPos >= draftTotal - 1 || savingMove
 
   // Opciones del diálogo: una por categoría y "Sin categoría" SIEMPRE última y siempre presente
   // (CAT-02: asignar nunca es obligatorio).
@@ -817,7 +926,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
         ningún Select a propósito — sus opciones son botones planos —, lo que lo deja fuera del bug de
         portal del Select dentro del Drawer que ya mordió en producción. La cadena de clases del
         DialogContent es copia literal de "Editar servicio": scroll interno con pie anclado, las
-        cuatro piezas son solidarias. La sección "Posición" la entrega el plan 23-04. */}
+        cuatro piezas son solidarias. La sección "Posición" es del plan 23-04. */}
     <Dialog open={!!moving} onOpenChange={o => { if (!o && !savingMove) setMoving(null) }}>
       <DialogContent className="grid max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 sm:max-w-sm">
         <DialogHeader className="pb-3 pr-8">
@@ -835,7 +944,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                   role="radio"
                   aria-checked={checked}
                   disabled={savingMove}
-                  onClick={() => setDraft(opt.value)}
+                  onClick={() => pickDraftCategory(opt.value)}
                   className={cn(
                     'flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     checked && 'bg-secondary',
@@ -849,9 +958,44 @@ export function CategoriasManager({ business, supabase, services, setServices, c
               )
             })}
           </div>
+          {/* Sección "Posición" (plan 23-04): sólo con la posición disponible (D-12 + fuera del camino
+              de identidad). Subir en la primera y Bajar en la última quedan disabled Y aria-disabled. */}
+          {posicionDisponible && moving && (
+            <>
+              <Separator className="my-4" />
+              <div className="flex items-center gap-2">
+                <Label id={positionLabelId} className="text-xs text-muted-foreground">Posición</Label>
+                <span aria-live="polite" className="ml-auto text-xs text-muted-foreground tabular-nums">{draftPos + 1} de {draftTotal}</span>
+              </div>
+              <div role="group" aria-labelledby={positionLabelId} className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 sm:min-h-8"
+                  disabled={subirOff}
+                  aria-disabled={subirOff}
+                  onClick={() => setDraftIndex(Math.max(draftPos - 1, 0))}
+                >
+                  <ChevronUp className="size-4" />
+                  Subir
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 sm:min-h-8"
+                  disabled={bajarOff}
+                  aria-disabled={bajarOff}
+                  onClick={() => setDraftIndex(Math.min(draftPos + 1, draftTotal - 1))}
+                >
+                  <ChevronDown className="size-4" />
+                  Bajar
+                </Button>
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter className="mt-4">
-          <Button onClick={() => void confirmMove()} disabled={savingMove} className="min-h-11 w-full sm:min-h-0 sm:w-auto">{savingMove ? 'Guardando…' : 'Guardar'}</Button>
+          <Button onClick={() => void confirmMove()} disabled={savingMove || savingServiceOrder} className="min-h-11 w-full sm:min-h-0 sm:w-auto">{savingMove ? 'Guardando…' : 'Guardar'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
