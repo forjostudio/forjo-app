@@ -17,6 +17,7 @@ import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { CategoriasManager } from '@/components/dashboard/categorias-manager'
+import { SIN_CATEGORIA, categoryPatch, fromCategoryId, mapCategoryWriteError } from '@/lib/catalog-panel'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
 // Los tres helpers son del módulo del alta sólo por dónde nacieron: desde G-21-11 los comparten las
@@ -1155,7 +1156,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // vaciar la celda con el teclado. Coercionar en el `onChange` reescribía el estado con el valor
   // anterior y deshacía cada backspace. El número se produce a la vista en el `onBlur` y, de nuevo,
   // al armar el payload — dos capas, porque un submit que no dispare blur mandaría la cadena vacía.
-  const [newService, setNewService] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1 })
+  // `category` (Phase 23, D-07) NO es la columna: es el valor del `Select` tal cual —el sentinel
+  // SIN_CATEGORIA o un uuid—. La clave de la columna sólo la produce `categoryPatch` al escribir.
+  // Arranca en el sentinel: "Sin categoría" es el valor por defecto real del alta (D-05).
+  const [newService, setNewService] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA })
   // Guard de doble submit del alta (T-17-05): hasta ahora `addService` no deshabilitaba nada, así que
   // dos clicks seguidos creaban DOS servicios idénticos y el segundo quedaba huérfano de intención.
   // Espeja a `savingEditSvc` del diálogo de edición.
@@ -1377,12 +1381,18 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // ⇒ exactamente 1; grupal y simultáneo ⇒ >= 2. Se normaliza con el piso del modo para que el
       // INSERT no pueda rebotar contra services_capacity_matches_mode_chk.
       const capacity = capacity_mode === 'individual' ? 1 : normalizeCapacity(newService.capacity, 2)
+      // La categoría viaja DENTRO de este mismo INSERT (D-07, interpretación aprobada el 2026-09-16):
+      // en el alta todavía no hay `id` contra el cual hacer un update, así que partirlo en dos
+      // sentencias crearía un servicio sin categoría y una ventana de fallo en el medio (D-10.2). El
+      // valor de la columna lo produce `categoryPatch`, la misma función que usa el organizador.
       const { data, error } = await supabase.from('services')
-        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id })
+        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id, ...categoryPatch(newService.category) })
         .select().single()
-      if (error) { toast.error('Error'); return }
+      // El rechazo propio de la columna (23503: la categoría ya no existe) lo traduce
+      // `mapCategoryWriteError` por código; cualquier otro sigue con el literal de siempre.
+      if (error) { toast.error(mapCategoryWriteError(error.code) ?? 'Error'); return }
       setServices(prev => [...prev, data as Service])
-      setNewService({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1 })
+      setNewService({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA })
       toast.success('Servicio agregado')
     } finally {
       // `finally` y no una línea antes de cada `return`: el early return por error del INSERT y
@@ -1440,8 +1450,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // Edición de servicio (reusa el form de alta: nombre, duración, precio, consultorios).
   const [editSvc, setEditSvc] = useState<Service | null>(null)
-  // Mismo criterio que `newService`: los dos campos numéricos son texto crudo (G-21-11).
-  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1 })
+  // Mismo criterio que `newService`: los dos campos numéricos son texto crudo (G-21-11), y
+  // `category` es el valor del control, no la columna (D-07).
+  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA })
   const [savingEditSvc, setSavingEditSvc] = useState(false)
   // Guardado del cupo inline, POR TARJETA (D-08). NO se puede copiar el shape booleano de
   // `savingEditSvc`: el diálogo es uno solo, pero las tarjetas son muchas y están todas en pantalla a
@@ -1471,6 +1482,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       location_ids: serviceLocSet(s),
       capacity_mode: mode,
       capacity: normalizeCapacity(Number(s.capacity), minCapacityFor(mode)),
+      // Al reabrir, la categoría guardada vuelve seleccionada; sin categoría ⇒ el sentinel.
+      category: fromCategoryId(s.category_id),
     })
   }
   async function saveEditService() {
@@ -1491,6 +1504,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // Mismo criterio que addService: el cupo se ata al modo con el piso de la migr. 068 (individual
       // ⇒ 1; los otros dos ⇒ >= 2) para que el UPDATE no rebote contra el CHECK de coherencia.
       capacity: editSvcForm.capacity_mode === 'individual' ? 1 : normalizeCapacity(editSvcForm.capacity, 2),
+      // La categoría va DENTRO de este mismo UPDATE (D-07, interpretación aprobada el 2026-09-16):
+      // partirlo en dos sentencias abriría una ventana donde el servicio queda guardado y su categoría
+      // no, que es exactamente lo que D-10.2 prohíbe. El valor lo produce `categoryPatch`.
+      ...categoryPatch(editSvcForm.category),
     }
     // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
     const { error } = await supabase.from('services').update(payload).eq('id', editSvc.id).eq('business_id', business.id)
@@ -1501,6 +1518,13 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // PROPIA y fija: NUNCA se interpola `error.message` ni el nombre del servicio (T-14-14 / T-13-09).
       if (error.code === 'P0001' && error.message?.includes('service_mode_has_future_appointments')) {
         toast.error(GATE_MODE_CHANGE_MESSAGE)
+        return
+      }
+      // Rechazo propio de la columna de categoría (23503), traducido por la misma función que usa
+      // el organizador. Como la escritura es una sola, no queda nada guardado a medias.
+      const categoryReject = mapCategoryWriteError(error.code)
+      if (categoryReject) {
+        toast.error(categoryReject)
         return
       }
       toast.error('Error al guardar')
@@ -2757,6 +2781,28 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   <Input type="number" value={newService.price} onFocus={e => e.target.select()} onChange={e => setNewService(f => ({ ...f, price: e.target.value }))} onBlur={e => setNewService(f => ({ ...f, price: String(normalizeServicePrice(e.target.value).value) }))} min={0} step={100} />
                 </div>
               </div>
+              {/* Categoría (Phase 23, CAT-02). Va después del precio y antes del modo de cupo: junto con
+                  la descripción dice QUÉ es el servicio; el cupo y las sedes, CÓMO se presta. Con cero
+                  categorías el campo no se renderiza: un selector con una sola opción es ruido. El
+                  estado guarda el valor del control tal cual; la columna la arma `categoryPatch` al
+                  escribir. El SelectValue usa la forma render-prop porque Base UI muestra el valor
+                  crudo (un uuid o el sentinel); un id que ya no existe —la categoría se borró desde
+                  el organizador— se muestra como "Sin categoría". `min-w-0` + `truncate`: un nombre
+                  largo se corta dentro del disparador en vez de ensancharlo. */}
+              {serviceCategories.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Categoría (opcional)</Label>
+                  <Select value={newService.category} onValueChange={v => setNewService(f => ({ ...f, category: v as string }))}>
+                    <SelectTrigger className="w-full"><SelectValue className="min-w-0">{(v: string | null) => <span className="truncate">{serviceCategories.find(c => c.id === v)?.name ?? 'Sin categoría'}</span>}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SIN_CATEGORIA}>Sin categoría</SelectItem>
+                      {serviceCategories.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <CapacityModeFields
                 value={newService.capacity_mode}
                 capacity={newService.capacity}
@@ -2834,6 +2880,22 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     <Input type="number" value={editSvcForm.price} onFocus={e => e.target.select()} onChange={e => setEditSvcForm(f => ({ ...f, price: e.target.value }))} onBlur={e => setEditSvcForm(f => ({ ...f, price: String(normalizeServicePrice(e.target.value).value) }))} min={0} step={100} />
                   </div>
                 </div>
+                {/* Categoría: espejo literal del campo del alta (mismo markup, mismo label, mismo
+                    sentinel primero). Ver el comentario de allá para el porqué de cada pieza. */}
+                {serviceCategories.length > 0 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Categoría (opcional)</Label>
+                    <Select value={editSvcForm.category} onValueChange={v => setEditSvcForm(f => ({ ...f, category: v as string }))}>
+                      <SelectTrigger className="w-full"><SelectValue className="min-w-0">{(v: string | null) => <span className="truncate">{serviceCategories.find(c => c.id === v)?.name ?? 'Sin categoría'}</span>}</SelectValue></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SIN_CATEGORIA}>Sin categoría</SelectItem>
+                        {serviceCategories.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <CapacityModeFields
                   value={editSvcForm.capacity_mode}
                   capacity={editSvcForm.capacity}
