@@ -40,17 +40,17 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
 
 ### Modelo y panel
 
-- [x] **CAT-01** — El dueño crea, renombra y borra categorías desde el panel. Dos categorías con el
+- [ ] **CAT-01** — El dueño crea, renombra y borra categorías desde el panel. Dos categorías con el
   mismo nombre en un negocio se rechazan **en la base** y sin distinguir mayúsculas: `"Cortes"` y
   `"cortes"` no coexisten. (Molde: el índice único `(tienda_id, lower(nombre))` de tiendas.)
-- [x] **CAT-02** — El dueño asigna a cada servicio **una** categoría, o ninguna. Asignar no es
+- [ ] **CAT-02** — El dueño asigna a cada servicio **una** categoría, o ninguna. Asignar no es
   obligatorio en ningún punto del flujo.
-- [x] **CAT-03** — El dueño ordena las categorías arrastrándolas **y** con botones ▲/▼. Las flechas
+- [ ] **CAT-03** — El dueño ordena las categorías arrastrándolas **y** con botones ▲/▼. Las flechas
   no son un extra: son lo que hace que reordenar funcione en mobile y con teclado.
-- [x] **CAT-04** — El dueño elige cómo se ordenan las categorías (alfabético · personalizado) y cómo
+- [ ] **CAT-04** — El dueño elige cómo se ordenan las categorías (alfabético · personalizado) y cómo
   se ordenan los servicios dentro de cada una (alfabético · precio · personalizado). Vale para todo
   el negocio.
-- [x] **CAT-05** — Cuando el modo **no** es personalizado, los controles de reordenar **no se
+- [ ] **CAT-05** — Cuando el modo **no** es personalizado, los controles de reordenar **no se
   muestran**. Nunca hay un arrastre que no haga nada.
 - [x] **CAT-06** — El orden manual **sobrevive** a elegir alfabético o precio. Volver a personalizado
   devuelve el arreglo del dueño intacto.
@@ -67,7 +67,7 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
   aparece al final bajo **"Otros"**; nunca desaparece del catálogo público.
 - [ ] **CAT-10** — En desktop las tarjetas de servicio son **horizontales a lo ancho**, el mismo
   formato que ya tienen en mobile. El nombre largo deja de partirse en dos líneas.
-- [x] **CAT-11** — El dueño escribe una **descripción corta** por servicio desde el panel, con
+- [ ] **CAT-11** — El dueño escribe una **descripción corta** por servicio desde el panel, con
   **límite de 120 caracteres** y contador a la vista, y se muestra en la tarjeta del booking debajo
   del nombre. ⚠ La columna `services.description` **ya existe** y la tarjeta **ya la renderiza**
   recortada a dos líneas (`booking-client.tsx:610`, `line-clamp-2`): hoy es una columna muerta que
