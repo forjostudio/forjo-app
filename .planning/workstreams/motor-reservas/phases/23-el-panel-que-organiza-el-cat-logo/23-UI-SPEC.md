@@ -581,30 +581,175 @@ Categoría y descripción van **juntas y después del precio** porque son las do
 
 ## UI Considerations
 
-Applicable state considerations resolved: **17 covered, 2 backstop, 0 unresolved.**
+Producido por el **ui-consideration-probe** sobre las 12 superficies descritas en este contrato (sus clases de elemento están declaradas, no inferidas por heurística). **77 consideraciones aplicables · 69 resueltas (explicit) · 8 resueltas (backstop) · 0 descartadas · 0 sin resolver.** Ninguna superficie quedó `unclassified`.
 
-| Category | Element(s) | Status | Resolution / Reason |
-|----------|------------|--------|---------------------|
-| empty | organizador (list-collection) | ✅ covered | Cero categorías ⇒ Card colapsada por D-02 y, al abrirla, el empty state con el heading y el body de `## Copywriting Contract` |
-| empty | grupo "Sin categoría" (list-collection) | ✅ covered | No se renderiza con cero categorías; con ≥1 y cero huérfanos tampoco (`groupCatalog` nunca devuelve un grupo vacío) |
-| empty | form de categoría (form) | ✅ covered | Input vacío ⇒ "Agregar" `disabled` por `!name.trim()`; el `23514` queda de backstop con su copy |
-| empty | campo descripción (form) | ✅ covered | Vacío es el estado normal y legal: `(opcional)` en el label, contador en `0/120`, se guarda como `null` |
-| loading | organizador (list-collection) | ✅ covered | **No aplica fetch-on-mount**: los datos bajan del RSC como props. No hay skeleton porque no hay espera |
-| loading | alta / renombrado / mover / modo (interactive-control) | ✅ covered | Botón `disabled` + label en gerundio (`Agregando…` / `Guardando…`), que es lo que evita el doble submit |
-| error | escritura del orden (list-collection) | 🧪 backstop | D-10.2: ante fallo parcial se **re-lee el orden real de la base**, se pinta eso (no el estado optimista) y se avisa con la copy de `## Copywriting Contract`. Lo que el dueño ve tiene que ser lo que está guardado |
-| error | alta / renombrado (form) | ✅ covered | `23505` y `23514` mapeados a copy propia inline con `role="status"` + `aria-invalid` en el `Input`; el estado local **no se toca** ante el rechazo |
-| error | modo de orden (interactive-control) | ✅ covered | El `Select` vuelve al valor anterior + toast; nunca queda mostrando un modo que no se guardó |
-| error | mover servicio (interactive-control) | ✅ covered | Toast con el nombre del servicio; el chip vuelve a su grupo original |
-| populated | organizador (list-collection) | ✅ covered | Volumen típico medido contra el dominio: una peluquería tiene 3-6 categorías y 8-15 servicios. La Card abierta entra sin scroll propio a 768px |
-| populated | chips por grupo (list-collection) | ✅ covered | `flex-wrap`, sin scroll horizontal jamás, sin umbral de "ver todos" (a este volumen no hace falta) |
-| partial | form de servicio (form) | ✅ covered | Categoría y descripción son **las dos opcionales**: un servicio con nombre/duración/precio y nada más es el estado válido de hoy y sigue siéndolo |
-| partial | catálogo a medio configurar (list-collection) | ✅ covered | Categorías creadas sin ningún servicio asignado: `groupCatalog` toma el camino de identidad; el panel lo dice con la ayuda condicional del Bloque B |
-| overflow | nombre de categoría (static-content) | ✅ covered | Desktop `sm:truncate` (molde de la tarjeta de servicio) · mobile `break-words` en varias líneas, nunca truncado |
-| overflow | fila de acciones a 375px (nav) | ✅ covered | La fila se parte en dos líneas en mobile (`flex-col` → `sm:grid`); las tres acciones nunca comprimen el nombre |
-| overflow | lista de categorías del diálogo (list-collection) | ✅ covered | Scroll interno con pie anclado, patrón ya shipeado en "Editar servicio" |
-| zero-one-many | conteos y pills (list-collection) | ✅ covered | Copy con singular/plural real en los tres: `Sin categorías`/`1 categoría`/`{n} categorías`, `Sin servicios`/`1 servicio`/`{n} servicios`, y las tres variantes de la confirmación de borrado |
-| long-text | chip de servicio (interactive-control) | 🧪 backstop | `whitespace-nowrap` + `flex-wrap`: un nombre largo ocupa su fila entera y envuelve la siguiente. **No se trunca** — un nombre cortado haría ambiguo cuál servicio se está por mover. Verificable con un servicio de ≥40 caracteres a 375px |
-| long-text | descripción corta (form) | ✅ covered | Tope duro `maxLength={120}` + contador desde `0/120`: es imposible escribir más de lo que la tarjeta muestra |
+Las filas **backstop** no son huecos: son verdades que sólo se confirman midiendo (un caso sembrado, una captura a 375px). El planner debe levantarlas a `must_haves.truths`, y en verificación cada una necesita **evidencia explícita** o rutea a `insufficient_spec → human_needed` — nunca pasa en silencio.
+
+La **copy** de los estados vacíos y de error no se repite acá: vive en `## Copywriting Contract` y estas filas la referencian. Esta sección cubre la **cobertura de estados**, no el texto.
+
+### E1 — Card "Categorías del catálogo" (organizador)
+
+> Clases de elemento: `list-collection · interactive-control`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | Cero categorías ⇒ la Card arranca **colapsada** (D-02) y, al abrirla, el cuerpo muestra el empty state — heading `Todavía no tenés categorías` + el cuerpo del `## Copywriting Contract`. Ningún negocio de producción ve la pantalla cambiar de alto el día del deploy. |
+| `loading` | ✅ explicit | **No hay carga que mostrar**: los datos bajan del RSC como props, no hay fetch-on-mount. Sin skeleton y sin spinner — la Card se pinta ya poblada en el primer render. |
+| `error` | ✅ explicit | La Card **no tiene estado de error propio** porque no tiene lectura que pueda fallar. Todo error es de escritura y lo muestra el control que la originó (E2, E5, E7, E8, E12). |
+| `populated` | ✅ explicit | Volumen típico del dominio: 3-6 categorías y 8-15 servicios. La Card abierta entra **sin scroll propio** a 768px; crece con la página, no adentro. |
+| `partial` | ✅ explicit | Categorías creadas sin ningún servicio asignado es un estado válido: `groupCatalog()` toma el camino de identidad y la ayuda condicional del Bloque B lo dice en pantalla. |
+| `overflow` | 🧪 backstop | `{ verification: backstop }` — Con un volumen atípico (20+ categorías) la Card crece con la página y nunca abre scroll interno propio; el header colapsable sigue alcanzable. Verificable con un negocio sembrado de 20 categorías a 375px. |
+| `zero-one-many` | ✅ explicit | La pill del header lleva singular/plural real: `Sin categorías` · `1 categoría` · `{n} categorías`. |
+| `long-text` | ✅ explicit | El header es copy literal fijo (`Categorías del catálogo`) — no interpola nada. El texto variable de la Card es el nombre de categoría, y lo cubre E2. |
+
+### E2 — Fila de categoría
+
+> Clases de elemento: `list-collection · interactive-control · form`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | Una categoría **sin servicios** se renderiza igual, con el conteo `Sin servicios` y sin la segunda línea de chips. Es un estado normal, nunca un error ni un hueco. |
+| `loading` | ✅ explicit | Renombrado, reorden y borrado dejan su control `disabled` mientras la escritura está en vuelo. Sin skeleton: no hay carga, hay escritura. |
+| `error` | ✅ explicit | Renombrado: `23505` y `23514` mapeados a copy propia **inline**, con `aria-invalid` en el `Input`, y el estado local **no se toca** ante el rechazo. Reorden: D-10.2 — se re-lee el orden real de la base, se pinta eso (no el optimista) y se avisa por toast. |
+| `populated` | ✅ explicit | Grip + nombre + conteo + tres acciones. Mobile: dos líneas (`flex-col`) — línea 1 grip+nombre, línea 2 conteo+acciones. Desktop: una fila (`sm:grid`) con el nombre truncado. |
+| `partial` | ✅ explicit | Con `category_sort_mode = 'alpha'` la fila **pierde grip y ▲/▼** y conserva nombre, conteo y eliminar (D-12). Es un estado declarado por gate, no una fila incompleta. |
+| `overflow` | ✅ explicit | Desktop `sm:truncate` (molde de la tarjeta de servicio). Mobile `break-words` en varias líneas, **nunca** truncado. |
+| `zero-one-many` | ✅ explicit | Conteo por categoría con plural real: `Sin servicios` · `1 servicio` · `{n} servicios`. ▲ queda `disabled` en la primera fila y ▼ en la última, con `aria-disabled`. |
+| `long-text` | 🧪 backstop | `{ verification: backstop }` — Un nombre de categoría de ≥40 caracteres a 375px envuelve en varias líneas sin empujar las tres acciones fuera de la fila ni provocar scroll horizontal. Verificable visualmente con ese caso. |
+
+### E3 — Chips de servicios
+
+> Clases de elemento: `list-collection · interactive-control`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | Un grupo sin servicios **no renderiza el `ul` de chips**: `groupCatalog()` no devuelve grupos vacíos en el camino agrupado. Quien habla en ese caso es el conteo `Sin servicios` de la fila. |
+| `loading` | ✅ explicit | El chip **no tiene estado de carga propio**: mover se confirma desde el diálogo (E12) y el estado en vuelo vive en su botón `Guardar`. |
+| `error` | ✅ explicit | Fallo al mover ⇒ `toast.error` con el nombre del servicio (`No se pudo mover "{servicio}". Probá de nuevo.`) y el chip **vuelve a su grupo original**. |
+| `populated` | ✅ explicit | `flex-wrap` con pill visual de 28px (`h-7`) dentro de un área táctil de 44px (`min-h-11`). A 8-15 servicios repartidos, los chips entran sin scroll. |
+| `partial` | ✅ explicit | Con `service_sort_mode !== 'custom'` el chip **pierde el grip** (D-12) y sigue siendo el disparador del diálogo "Mover …". La acción nunca desaparece; lo que desaparece es el atajo de arrastre. |
+| `overflow` | ✅ explicit | `flex-wrap` en el contenedor: **nunca** scroll horizontal y **sin** umbral de "ver todos" — a este volumen no hace falta. |
+| `zero-one-many` | ✅ explicit | Un solo chip ocupa una fila y muchos envuelven. El conteo autoritativo del grupo no lo dan los chips sino la fila (E2), así que no hay dos fuentes de verdad. |
+| `long-text` | 🧪 backstop | `{ verification: backstop }` — Un nombre de servicio de ≥40 caracteres ocupa su fila entera y envuelve la siguiente (`whitespace-nowrap` + `flex-wrap`), **sin truncarse nunca** — un nombre cortado haría ambiguo cuál servicio se está por mover. Verificable a 375px. |
+
+### E4 — Grupo "Sin categoría"
+
+> Clases de elemento: `list-collection · static-content`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | No se renderiza con cero categorías (sería el catálogo entero duplicado) ni cuando no hay ningún servicio huérfano. |
+| `loading` | ✅ explicit | No aplica: es render derivado del mismo estado en memoria que el resto de la Card. |
+| `error` | ✅ explicit | No tiene acciones propias — sin grip, sin ▲/▼, sin renombrar, sin eliminar — así que no puede fallar. |
+| `populated` | ✅ explicit | `li` con `border-dashed`, **siempre último** (espeja `OTHER_GROUP_TITLE` de `lib/service-categories.ts`), con su línea de ayuda permanente debajo del encabezado. |
+| `partial` | ✅ explicit | Es él mismo el estado "a medio asignar" del catálogo, y el copy lo declara **válido y permanente**, nunca una tarea pendiente (CAT-02). |
+| `overflow` | ✅ explicit | Sus chips heredan el `flex-wrap` de E3: envuelven, no scrollean. |
+| `zero-one-many` | ✅ explicit | Conteo con el mismo plural real que las categorías: `1 servicio` · `{n} servicios`. |
+| `long-text` | ✅ explicit | El título es el literal fijo `Sin categoría` y la ayuda es copy fijo. El texto variable son los nombres de servicio, cubiertos por E3. |
+
+### E5 — Bloque de alta de categoría
+
+> Clases de elemento: `form · interactive-control`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | Input vacío es el estado **inicial normal**: "Agregar" queda `disabled` por `!name.trim()` y **no** se muestra ningún mensaje de error hasta que hay un intento real. |
+| `loading` | ✅ explicit | Botón en gerundio `Agregando…` + `disabled` mientras la escritura está en vuelo — que es lo que evita el doble submit. |
+| `error` | ✅ explicit | `23505` → `Ya tenés una categoría con ese nombre.` inline bajo el input (el duplicado case-insensitive lo rechaza **la base**). `23514` → `Escribí un nombre para la categoría.`. Genérico → toast. **Nunca** el texto crudo de Postgres en pantalla (T-14-25 / T-13-09). |
+| `partial` | ✅ explicit | Un solo campo: no existe estado parcial posible. |
+| `long-text` | 🧪 backstop | `{ verification: backstop }` — Un nombre de ≥60 caracteres escrito en el input no rompe la fila del alta ni desborda la fila/chip que genera después. Verificable a 375px. |
+
+### E6 — Empty state de cero categorías
+
+> Clases de elemento: `static-content · list-collection`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | **Es él mismo el empty state**: icono `Tags size-5`, heading `Todavía no tenés categorías` y un cuerpo que además dice —a propósito— que sin categorías los servicios se muestran como hasta ahora (CAT-07 en voz alta). |
+| `loading` | ✅ explicit | No aplica: contenido estático derivado de `categories.length === 0`, sin carga. |
+| `error` | ✅ explicit | No aplica: no tiene acciones propias. Su salida es el bloque de alta (E5), que sí las tiene. |
+| `populated` | ✅ explicit | Desaparece en cuanto existe la primera categoría; el cuerpo pasa a mostrar el selector de modo y la lista. |
+| `partial` | ✅ explicit | No aplica: se renderiza entero o no se renderiza. |
+| `overflow` | ✅ explicit | Copy fijo y corto, centrado, `text-xs` en el cuerpo. No hay contenido variable que pueda desbordar. |
+| `zero-one-many` | ✅ explicit | El cero es su **única** condición de render; con uno o más, la lista lo reemplaza. |
+| `long-text` | ✅ explicit | Copy literal del `## Copywriting Contract`, sin ninguna interpolación. |
+
+### E7 — Selector de orden de los servicios
+
+> Clases de elemento: `interactive-control · form`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | Sin servicios el `Select` se renderiza igual con su valor guardado — es una preferencia del negocio, no una vista de datos. |
+| `loading` | ✅ explicit | `disabled` mientras la escritura está en vuelo. Éxito **sin toast**: el resultado es visible (los controles de reorden aparecen o desaparecen). |
+| `error` | ✅ explicit | El valor **vuelve al anterior** + `toast.error`. Nunca queda mostrando un modo que no se guardó. |
+| `partial` | ✅ explicit | Camino de identidad (ningún servicio con categoría): `groupCatalog()` ni mira los modos. El `Select` persiste una elección real y la ayuda condicional `Se aplica cuando al menos un servicio tenga categoría.` lo dice. No viola CAT-05/D-12: lo prohibido es una **acción** inerte, no una preferencia guardada con su condición escrita. |
+| `long-text` | ✅ explicit | Las tres labels son literales fijas y cortas; el trigger es `w-auto min-w-40`. |
+
+### E8 — Selector de orden de las categorías
+
+> Clases de elemento: `interactive-control · form`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | **No se renderiza** con cero categorías (gate declarado en la tabla de visibilidad): no hay nada que ordenar. |
+| `loading` | ✅ explicit | `disabled` en vuelo, mismo contrato que E7. |
+| `error` | ✅ explicit | Vuelve al valor anterior + `toast.error`, mismo contrato que E7. |
+| `partial` | ✅ explicit | Cambiar de modo escribe **sólo** la columna de `businesses` y **nunca** persiste `sort_order` (D-11). Si lo hiciera rompería CAT-06, ya entregado, y el arreglo manual del dueño no se recupera de ningún lado. |
+| `long-text` | ✅ explicit | Dos labels literales fijas. |
+
+### E9 — Campo "Categoría" del servicio
+
+> Clases de elemento: `form · interactive-control`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | `Sin categoría` es la **primera opción, siempre presente y el valor por defecto del alta** (D-05) — nunca un estado al que se llega sólo por omisión. Y el campo entero no se renderiza si no hay ninguna categoría creada. |
+| `loading` | ✅ explicit | Sin carga propia: hereda el estado en vuelo del form de servicio (CTA en gerundio + `disabled`). |
+| `error` | ✅ explicit | La escritura de `services.category_id` pasa por **una sola función compartida** (D-07, los tres call sites), así que su fallo es el del form de servicio y no hay un tercer camino de error que mantener. |
+| `partial` | ✅ explicit | Dejarlo en `Sin categoría` es un estado **completo y válido**, no un formulario a medias: el `(opcional)` del label es CAT-02 escrito en la etiqueta. |
+| `long-text` | 🧪 backstop | `{ verification: backstop }` — Un nombre de categoría de ≥40 caracteres dentro del `SelectValue` a 375px no desborda el trigger (`w-full`) ni empuja el diálogo de edición. Verificable con ese caso. |
+
+### E10 — Campo "Descripción corta"
+
+> Clases de elemento: `form · interactive-control`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | Vacío es el estado **normal y legal**: `(opcional)` en el label, contador en `0/120` desde el arranque, y se guarda como `null` (`trim()` y `'' → null`). |
+| `loading` | ✅ explicit | Sin carga propia: hereda el submit del form de servicio. |
+| `error` | ✅ explicit | **No tiene error propio**: el tope es duro (`maxLength={120}`), así que no hay validación que pueda rechazar lo escrito. Al llegar al límite cambia peso y color de texto — nunca a `--warning`: llegar al tope es el diseño funcionando, no un problema. |
+| `partial` | ✅ explicit | Opcional por definición; un servicio sin descripción es el estado de hoy y sigue siéndolo. |
+| `long-text` | ✅ explicit | Tope **duro** de 120 + contador visible + `rows={2}`: es imposible escribir más de lo que la tarjeta del booking deja ver con el `line-clamp-2` que ya está en producción. Un tope blando devolvería el problema que el número viene a resolver. |
+
+### E11 — Confirmación de borrado
+
+> Clases de elemento: `interactive-control · static-content`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `loading` | ✅ explicit | **No tiene estado `loading`**, y es deliberado: el conteo sale del estado ya en memoria (`services.filter(…)`), sin ninguna query de pre-check, así que "Eliminar" está disponible desde que el diálogo abre. |
+| `error` | 🧪 backstop | `{ verification: backstop }` — Si la escritura del borrado falla, la categoría **sigue en la lista** (nada se saca de forma optimista) y se avisa con el toast genérico de categoría. Verificable forzando el fallo de la escritura. |
+| `overflow` | ✅ explicit | La descripción condicional ocupa de una a tres líneas y el `ConfirmDialog` ya shipeado maneja su propio alto. |
+| `long-text` | 🧪 backstop | `{ verification: backstop }` — El nombre se interpola en el título y en las tres variantes de la descripción (`Vas a eliminar "{nombre}"…`); con ≥60 caracteres la descripción envuelve sin desbordar el diálogo. Verificable con ese caso. |
+
+### E12 — Diálogo "Mover …"
+
+> Clases de elemento: `list-collection · form · interactive-control`
+
+| Categoría | Estado | Verdad / verificación |
+|---|---|---|
+| `empty` | ✅ explicit | La lista **nunca está vacía**: sólo se abre desde un chip, los chips sólo existen con ≥1 categoría, y `Sin categoría` está siempre presente como última opción. |
+| `loading` | ✅ explicit | `Guardando…` + `disabled` durante la única escritura. Se aplica **al confirmar**, no en cada toque: una sola llamada, una sola ventana de fallo. |
+| `error` | ✅ explicit | `toast.error` con el nombre (`No se pudo mover "{servicio}". Probá de nuevo.`) y el chip vuelve a su grupo original. |
+| `populated` | ✅ explicit | Radiogroup con una opción por categoría más `Sin categoría` última (`border-dashed`), y la sección "Posición" con `N de M` sólo en modo `custom`. El portador de selección es no-cromático (`Check`) + `bg-secondary`, sin acento. |
+| `partial` | ✅ explicit | Borrador local `{ categoryId, index }`: al cambiar de categoría la posición **se resetea al final del grupo destino** y el contador se recalcula — mantener un índice de otro grupo sería mentir sobre dónde va a caer. |
+| `overflow` | ✅ explicit | `grid max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]`: scroll interno con pie anclado, copia literal del patrón ya shipeado en "Editar servicio" (`settings-client.tsx:2795`). Las cuatro piezas son solidarias. |
+| `zero-one-many` | ✅ explicit | Con una sola categoría el radiogroup tiene dos opciones. "Subir" en la primera posición y "Bajar" en la última quedan `disabled` + `aria-disabled`. |
+| `long-text` | 🧪 backstop | `{ verification: backstop }` — El título `Mover "{servicio}"` y las opciones de categoría con nombres de ≥40 caracteres envuelven dentro de `sm:max-w-sm` sin desbordar el diálogo a 375px. Verificable con ese caso. |
+
+**Fuera de esta taxonomía cerrada** (y por eso no aparecen como filas acá): accesibilidad en profundidad, reduced-motion e i18n. Las dos primeras están cubiertas en `## Accesibilidad (no negociable)` y en el contrato de animación del header; i18n no aplica — la app es monolingüe (es-AR).
+
 
 ---
 
@@ -711,12 +856,12 @@ Esta fase **no instala componentes, no agrega dependencias y no agrega ninguna l
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
-**Approval:** pending
+**Approval:** APPROVED — gsd-ui-checker, 2026-09-15 (7/7 PASS, sin recomendaciones; el BLOCK de Dimension 5 se cerró en la revisión 1). UI-consideration probe: 77 aplicables, 69 explicit + 8 backstop, 0 sin resolver.
