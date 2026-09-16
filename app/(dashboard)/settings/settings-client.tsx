@@ -9,13 +9,14 @@ import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService } from '@/lib/types'
+import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService, ServiceCategory } from '@/lib/types'
 import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
 import { blocksBecomingWildcard } from '@/lib/time-block-services'
 import { nowInAR } from '@/lib/appointment-time'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
+import { CategoriasManager } from '@/components/dashboard/categorias-manager'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
 // Los tres helpers son del módulo del alta sólo por dónde nacieron: desde G-21-11 los comparten las
@@ -891,6 +892,13 @@ interface Props {
   // Mapeo profesional→servicio (migr. 057, STAFF v0.25). Cargado por tenant en equipo/servicios page.
   // Opcional: solo lo pasan las vistas /equipo (editor) y /servicios (cobertura); default [].
   initialProfessionalServices?: ProfessionalService[]
+  // Categorías del catálogo (migr. 078, Phase 23). Opcional con default [], igual que el mapeo de
+  // arriba: SOLO la pasa /servicios, y alcanza con eso porque el panel `services` sólo se monta con
+  // view="servicios" — `TabsContent` es `TabsPrimitive.Panel` con `keepMounted = false` y la
+  // `TabsList` de /settings sólo tiene appearance/seguridad/suscripcion. El día que alguien agregue
+  // un trigger "Servicios" a esa lista, o monte el panel siempre, el organizador va a decir "Sin
+  // categorías" con categorías creadas: hay que cargarlas también en esa ruta.
+  initialServiceCategories?: ServiceCategory[]
   mpConnectEnabled: boolean
   // Google Calendar (mismo estado/conexión que el control de la Agenda): presencia del refresh_token
   // (booleano, nunca el token) + si la integración está configurada. Se leen server-side en negocio/page.
@@ -915,7 +923,7 @@ function GoogleCalendarLogo({ className }: { className?: string }) {
   return <Image src="/google-calendar.png" alt="" width={20} height={20} className={className} />
 }
 
-export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], initialProfessionalServices = [], mpConnectEnabled, googleEnabled = false, googleConnected = false, ownerEmail = null, view = 'config' }: Props) {
+export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServices, initialProfessionals, initialLocations, initialSpaces = [], initialAgendaSpaces = [], initialProfessionalServices = [], initialServiceCategories = [], mpConnectEnabled, googleEnabled = false, googleConnected = false, ownerEmail = null, view = 'config' }: Props) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -1138,6 +1146,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   // ── Tab 2 — Services ──────────────────────────────────────────────────────
   const [services, setServices] = useState<Service[]>(initialServices)
+  // Categorías del catálogo (Phase 23): el par valor + setter se comparte con el organizador, igual
+  // que `services` con el manager de canchas.
+  const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>(initialServiceCategories)
   // capacity_mode/capacity (migr. 062, ampliado por la 068): el default espeja el de la DB → un
   // servicio nuevo nace INDIVIDUAL con cupo 1, y el dueño opta explícitamente por los otros dos modos.
   // `duration_minutes` y `price` guardan el TEXTO CRUDO del input (G-21-11): es lo que permite
@@ -2492,6 +2503,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             />
           ) : (
           <>
+          {/* Organizador del catálogo (Phase 23, D-01). Va dentro de esta rama a propósito y SIN
+              condición propia: en canchas el CRUD genérico de services no existe, su página pública
+              es otra y el manager de canchas tiene un leak guard que un selector de categoría
+              contradiría. */}
+          <CategoriasManager
+            business={business}
+            supabase={supabase}
+            services={services}
+            categories={serviceCategories}
+            setCategories={setServiceCategories}
+          />
           <Card className="p-6 space-y-4">
             {/* Píldoras de filtro (D-14), desde el módulo compartido (D-13): el mismo componente lo
                 usa el manager de canchas, así que las dos pantallas no pueden divergir. */}
