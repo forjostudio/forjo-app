@@ -45,7 +45,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Check, ChevronDown, ChevronUp, GripVertical, Plus, Tags } from 'lucide-react'
+import { ConfirmDialog } from '@/components/crm/confirm-dialog'
+import { Check, ChevronDown, ChevronUp, GripVertical, Plus, Tags, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -111,6 +112,9 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // Escape y Enter ya resolvieron la edición: el blur que puede venir detrás (al desmontarse el campo)
   // no tiene que volver a guardar. Es un ref y no estado porque el blur llega antes del re-render.
   const skipRenameBlurRef = useRef(false)
+
+  // Borrado: UN diálogo de confirmación para toda la Card, hermano de la Card (molde canchas-manager).
+  const [deleting, setDeleting] = useState<ServiceCategory | null>(null)
 
   const bodyId = useId()
   const errorId = useId()
@@ -207,6 +211,38 @@ export function CategoriasManager({ business, supabase, services, setServices, c
       setRenaming(false)
     }
   }
+
+  // ── Borrar ──────────────────────────────────────────────────────────────────
+  // Lo que NO se pierde lo garantiza la base: la FK compuesta de la migr. 078 termina en
+  // `ON DELETE SET NULL (category_id)`, o sea deja la referencia nula SIN tocar el negocio del
+  // servicio, que sigue activo y reservable. Esta acción escribe, espeja en memoria y retorna: NO
+  // navega (una redirección de servidor dentro de una acción del ConfirmDialog tira un toast espurio).
+  async function deleteCategory(c: ServiceCategory) {
+    const { data, error } = await supabase.from('service_categories').delete().eq('id', c.id).eq('business_id', business.id).select('id')
+    // Un delete que la RLS filtró vuelve SIN error y con CERO filas: eso no es un éxito.
+    if (error || !data || data.length === 0) {
+      console.error('[catalogo/borrar-categoria] rechazo:', error?.code ?? 'sin_filas')
+      // Se tira para que el diálogo quede abierto; el aviso lo da `onConfirmError` con copy propia.
+      // La fila SIGUE en la lista: nada se sacó antes del await.
+      throw new Error('borrar-categoria')
+    }
+    setCategories(prev => prev.filter(x => x.id !== c.id))
+    // Espejo de lo que la base acaba de hacer, para que los chips salten a "Sin categoría" sin
+    // recargar. El valor sale de categoryPatch (D-07): nunca otra traducción de "sin categoría".
+    setServices(prev => prev.map(s => (s.category_id === c.id ? { ...s, ...categoryPatch(SIN_CATEGORIA) } : s)))
+    setRenamingId(cur => (cur === c.id ? null : cur))
+  }
+
+  // La descripción se arma ANTES del render del diálogo, con el conteo que ya está en memoria: cero
+  // consultas de pre-chequeo, y por eso el diálogo no tiene estado de carga ni de error propio.
+  const deletingCount = deleting ? services.filter(s => s.category_id === deleting.id).length : 0
+  const deleteDescription = !deleting
+    ? undefined
+    : deletingCount === 0
+      ? `Vas a eliminar “${deleting.name}”. No tiene ningún servicio asignado.`
+      : deletingCount === 1
+        ? `Vas a eliminar “${deleting.name}”. Su servicio queda sin categoría: sigue activo y se puede reservar igual. Después lo podés asignar a otra.`
+        : `Vas a eliminar “${deleting.name}”. Sus ${deletingCount} servicios quedan sin categoría: siguen activos y se pueden reservar igual. Después los podés asignar a otra.`
 
   // ── Orden ───────────────────────────────────────────────────────────────────
   // EL ÚNICO mutador del orden de las categorías (D-09 con la resolución de D-1, opción B): una
@@ -434,6 +470,16 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                           </Button>
                         </>
                       )}
+                      {/* Eliminar: SIEMPRE visible — borrar no depende del modo de orden. */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive h-11 w-11 sm:h-8 sm:w-8"
+                        aria-label={`Eliminar “${c.name}”`}
+                        onClick={() => setDeleting(c)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
                     </div>
                     {/* Slot de error del renombrado, DE ESTA FILA. `role="status"` (polite), nunca alert. */}
                     {renamingId === c.id && renameError && (
@@ -541,6 +587,21 @@ export function CategoriasManager({ business, supabase, services, setServices, c
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmación de borrado: nivel simple. `risk="medio"` y NO alto a propósito: la base garantiza
+        que ningún servicio se borra (ON DELETE SET NULL de la migr. 078); lo único irrecuperable es
+        QUÉ servicios estaban en esa categoría, y eso es justo lo que dice la descripción. */}
+    <ConfirmDialog
+      open={!!deleting}
+      onOpenChange={o => { if (!o) setDeleting(null) }}
+      title="¿Eliminar la categoría?"
+      description={deleteDescription}
+      risk="medio"
+      confirmLabel="Eliminar"
+      destructive
+      onConfirm={async () => { if (deleting) await deleteCategory(deleting) }}
+      onConfirmError={() => toast.error(CATEGORY_WRITE_REJECT_COPY.unknown)}
+    />
     </>
   )
 }
