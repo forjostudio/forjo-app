@@ -35,6 +35,8 @@ import {
   nextSortOrder,
   categorySiblings,
   moveWithinList,
+  placeOnTarget,
+  sameOrder,
   categoryCountLabel,
   serviceCountLabel,
   classifyCategoryWriteError,
@@ -497,8 +499,8 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   }
 
   // Soltar un chip sobre OTRO chip: toma la categoría de ese chip (por assignServiceCategory, D-07) Y,
-  // con la posición disponible, se inserta en el índice de ese chip dentro de su grupo, por el mismo
-  // moveWithinList y el mismo persistServiceOrder que el diálogo. Sin la posición disponible (modo no
+  // con la posición disponible, ocupa el índice de ese chip dentro de su grupo (placeOnTarget) y se
+  // guarda por el mismo persistServiceOrder que el diálogo. Sin la posición disponible (modo no
   // personalizado o camino de identidad) sólo asigna la categoría.
   function dropServiceOnChip(target: Service): boolean {
     const serviceId = draggingServiceId
@@ -509,10 +511,18 @@ export function CategoriasManager({ business, supabase, services, setServices, c
     if (!service || service.id === target.id || assigning || savingServiceOrder) return true
     const destino = fromCategoryId(target.category_id)
     // Se calcula ANTES de cualquier await, sobre el orden que se ve ahora.
-    const base = idsDelGrupoDestino(destino, service)
-    const to = base.indexOf(target.id)
-    const lista = moveWithinList([...base, service.id], base.length, to < 0 ? base.length : to)
-    const cambiaCategoria = destino !== fromCategoryId(service.category_id)
+    // Dentro del MISMO grupo visible la lista incluye al servicio y placeOnTarget aplica la semántica de
+    // las filas (bajar uno y llegar al último son posibles); desde otro grupo se inserta en el índice
+    // del destino (code review WR-03).
+    const grupoActual = groups.find(g => g.services.some(x => x.id === service.id))?.services ?? []
+    const mismoGrupo = grupoActual.some(x => x.id === target.id)
+    const idsGrupo = mismoGrupo ? grupoActual.map(x => x.id) : idsDelGrupoDestino(destino, service)
+    const lista = placeOnTarget(idsGrupo, service.id, target.id)
+    // En el mismo grupo visible no se escribe la categoría: ya comparten grupo (y si el destino tiene
+    // una categoría colgada, escribirla rebotaría con 23503).
+    const cambiaCategoria = !mismoGrupo && destino !== fromCategoryId(service.category_id)
+    // Nada que escribir: ni cambia la categoría ni el orden resultante.
+    if (!cambiaCategoria && sameOrder(lista, idsGrupo)) return true
     setAssigning(true)
     void (async () => {
       // Si la asignación falla, el aviso ya lo dio el escritor y el orden NO se toca.

@@ -150,6 +150,31 @@ export function moveWithinList(ids: string[], from: number, to: number): string[
   return copia
 }
 
+/**
+ * La lista de un grupo después de soltar `movedId` sobre el elemento `targetId` (code review WR-03).
+ *
+ * `groupIds` es el grupo DESTINO en el orden que se ve.
+ *   - Si ya contiene a `movedId` (mismo grupo): la misma semántica que el arrastre de filas,
+ *     `moveWithinList(groupIds, from, índice del destino)`. Así bajar uno y llegar al último son
+ *     posibles; con "insertar antes del destino" soltar A sobre B en `[A, B, C]` no cambiaba nada.
+ *   - Si no lo contiene (viene de otro grupo): se inserta EN el índice del destino, o al final si el
+ *     destino no está en la lista.
+ * No muta la entrada. Soltar un elemento sobre sí mismo devuelve la copia idéntica.
+ */
+export function placeOnTarget(groupIds: string[], movedId: string, targetId: string): string[] {
+  const from = groupIds.indexOf(movedId)
+  const to = groupIds.indexOf(targetId)
+  if (from >= 0) return to < 0 ? [...groupIds] : moveWithinList(groupIds, from, to)
+  const copia = [...groupIds]
+  copia.splice(to < 0 ? copia.length : to, 0, movedId)
+  return copia
+}
+
+/** true si las dos listas tienen los mismos ids en el mismo orden. */
+export function sameOrder(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i])
+}
+
 /** Pill del header: `Sin categorías` · `1 categoría` · `{n} categorías`. */
 export function categoryCountLabel(n: number): string {
   if (n <= 0) return 'Sin categorías'

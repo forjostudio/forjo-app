@@ -9,6 +9,8 @@ import {
   nextSortOrder,
   categorySiblings,
   moveWithinList,
+  placeOnTarget,
+  sameOrder,
   categoryCountLabel,
   serviceCountLabel,
   classifyCategoryWriteError,
@@ -166,6 +168,55 @@ describe('categorySiblings — el grupo al que llega un servicio (code review WR
     const copia = structuredClone(servicios)
     categorySiblings(servicios, COLOR, vivas, 's1')
     expect(servicios).toEqual(copia)
+  })
+})
+
+describe('placeOnTarget — soltar un chip sobre otro chip (code review WR-03)', () => {
+  it('mismo grupo: soltar A sobre B baja uno (antes era un no-op)', () => {
+    expect(placeOnTarget(['a', 'b', 'c'], 'a', 'b')).toEqual(['b', 'a', 'c'])
+  })
+
+  it('mismo grupo: soltar A sobre C lo lleva al ÚLTIMO lugar', () => {
+    expect(placeOnTarget(['a', 'b', 'c'], 'a', 'c')).toEqual(['b', 'c', 'a'])
+  })
+
+  it('mismo grupo: soltar C sobre A lo lleva al primero (subir sigue funcionando)', () => {
+    expect(placeOnTarget(['a', 'b', 'c'], 'c', 'a')).toEqual(['c', 'a', 'b'])
+  })
+
+  it('mismo grupo: misma semántica que moveWithinList con los índices del grupo', () => {
+    const ids = ['a', 'b', 'c', 'd']
+    expect(placeOnTarget(ids, 'b', 'd')).toEqual(moveWithinList(ids, 1, 3))
+  })
+
+  it('soltar sobre sí mismo no cambia nada', () => {
+    expect(placeOnTarget(['a', 'b'], 'a', 'a')).toEqual(['a', 'b'])
+  })
+
+  it('otro grupo: se inserta EN el índice del destino', () => {
+    expect(placeOnTarget(['b', 'c'], 'x', 'c')).toEqual(['b', 'x', 'c'])
+    expect(placeOnTarget(['b', 'c'], 'x', 'b')).toEqual(['x', 'b', 'c'])
+  })
+
+  it('destino ausente: al final si viene de otro grupo, sin cambios si ya estaba', () => {
+    expect(placeOnTarget(['b', 'c'], 'x', 'zz')).toEqual(['b', 'c', 'x'])
+    expect(placeOnTarget(['a', 'b'], 'a', 'zz')).toEqual(['a', 'b'])
+  })
+
+  it('no muta la entrada', () => {
+    const entrada = ['a', 'b', 'c']
+    placeOnTarget(entrada, 'a', 'c')
+    placeOnTarget(entrada, 'x', 'b')
+    expect(entrada).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('sameOrder', () => {
+  it('mismos ids en el mismo orden ⇒ true; otro orden o largo ⇒ false', () => {
+    expect(sameOrder(['a', 'b'], ['a', 'b'])).toBe(true)
+    expect(sameOrder(['a', 'b'], ['b', 'a'])).toBe(false)
+    expect(sameOrder(['a'], ['a', 'b'])).toBe(false)
+    expect(sameOrder([], [])).toBe(true)
   })
 })
 
