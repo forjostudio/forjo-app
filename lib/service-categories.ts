@@ -204,6 +204,23 @@ function ordenadas<T>(arr: T[], cmp: (a: T, b: T) => number): T[] {
 }
 
 /**
+ * Las categorías ordenadas por el modo del negocio, sobre una COPIA. Incluye las VACÍAS.
+ *
+ * Existe porque el organizador del panel (Phase 23) pinta TODAS las categorías —también las que
+ * todavía no tienen servicios, que {@link groupCatalog} omite a propósito— y tiene que pintarlas en
+ * el MISMO orden que ve el cliente. Exportar la función que ordena, y no el comparador, mantiene la
+ * regla en un solo lugar: `groupCatalog` usa esta misma función para su eje de categorías, así que
+ * el panel y la página pública no pueden divergir. Decisión del usuario del 2026-09-16 (plan 23-04).
+ *
+ * Mismas garantías que el resto del módulo: estable ante el empate (con 'custom' y todos los
+ * `sort_order` en 0 devuelve la entrada tal cual), un nombre roto no tira, y NO ESCRIBE NADA — el
+ * modo sigue siendo un comparador, nunca un orden que se persiste (CAT-06).
+ */
+export function sortCategories<C extends CatalogCategory>(categories: C[], mode?: CategorySortMode): C[] {
+  return ordenadas(categories, comparadorDeCategorias(mode ?? DEFAULT_SORT_MODES.categories))
+}
+
+/**
  * Agrupa el catálogo de un negocio en grupos con título.
  *
  * Genérica sobre el shape de la fila (cualquier objeto con `id`, `name`, `price` y opcionalmente
@@ -304,7 +321,7 @@ export function groupCatalog<S extends CatalogService>(
 
   // Regla 2 — un grupo por categoría con servicios, las categorías ordenadas por su propio eje.
   const grupos: CatalogGroup<S>[] = []
-  for (const c of ordenadas(categories, comparadorDeCategorias(modoCategorias))) {
+  for (const c of sortCategories(categories, modoCategorias)) {
     const suyos = porCategoria.get(c.id)
     if (!suyos || suyos.length === 0) continue
     // ⚠ SE CONSUME EL BUCKET, y de eso depende la invariante de conservación en su otra dirección:

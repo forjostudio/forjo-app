@@ -39,11 +39,12 @@ import {
   CATEGORY_WRITE_REJECT_COPY,
   ORDER_REJECT_COPY,
 } from '@/lib/catalog-panel'
-import { groupCatalog } from '@/lib/service-categories'
+import { groupCatalog, sortCategories, type CategorySortMode, type ServiceSortMode } from '@/lib/service-categories'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Check, ChevronDown, ChevronUp, GripVertical, Plus, Tags, Trash2 } from 'lucide-react'
@@ -58,7 +59,24 @@ interface Props {
   setServices: React.Dispatch<React.SetStateAction<Service[]>>
   categories: ServiceCategory[]
   setCategories: React.Dispatch<React.SetStateAction<ServiceCategory[]>>
+  // Los dos modos de orden (plan 23-04) viven en el PADRE y bajan por acá: el selector de servicios
+  // está en SettingsClient y el de categorías acá, y los dos gatean cosas de este componente. Una
+  // sola vía para el valor efectivo, así ninguno lee `business` por su cuenta y quedan desincronizados
+  // hasta el próximo reload.
+  categorySortMode: CategorySortMode
+  setCategorySortMode: React.Dispatch<React.SetStateAction<CategorySortMode>>
+  serviceSortMode: ServiceSortMode
 }
+
+// Etiquetas literales del Copywriting Contract. El disparador del Select las necesita en forma de
+// render-prop: Base UI muestra por defecto el valor CRUDO (diría `custom`).
+const CATEGORY_MODE_LABELS: Record<CategorySortMode, string> = {
+  custom: 'Como las ordené yo',
+  alpha: 'Alfabético (A-Z)',
+}
+
+// El fallo de guardar un modo: copy propia del contrato, nunca el texto de la base.
+const SORT_MODE_REJECT_COPY = 'No se pudo guardar el orden. Probá de nuevo.'
 
 // Un chip de servicio. Vive a nivel de MÓDULO y no dentro del componente: una función-componente
 // declarada adentro cambia de identidad en cada render, React remonta el subárbol y el arrastre del
@@ -128,7 +146,7 @@ function ServiceChip({ service, onMove, canDrag, dragging, onDragStart, onDragEn
   )
 }
 
-export function CategoriasManager({ business, supabase, services, setServices, categories, setCategories }: Props) {
+export function CategoriasManager({ business, supabase, services, setServices, categories, setCategories, categorySortMode, setCategorySortMode, serviceSortMode }: Props) {
   // D-02: arranca colapsada con cero categorías (el estado de TODOS los negocios de producción el día
   // del deploy: /servicios no crece de alto) y abierta con al menos una. Sin localStorage a propósito.
   const [open, setOpen] = useState(categories.length > 0)
@@ -164,6 +182,9 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const [assigning, setAssigning] = useState(false)
 
+  // Guardado del modo de orden de las categorías: el Select queda deshabilitado mientras vuela.
+  const [savingCategoryMode, setSavingCategoryMode] = useState(false)
+
   // Borrado: UN diálogo de confirmación para toda la Card, hermano de la Card (molde canchas-manager).
   const [deleting, setDeleting] = useState<ServiceCategory | null>(null)
 
@@ -171,19 +192,26 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   const errorId = useId()
   const renameErrorId = useId()
   const categoryLabelId = useId()
+  const categoryModeId = useId()
 
   // La regla de agrupar vive en groupCatalog (no se reimplementa acá). Los dos modos pueden llegar
   // `undefined` y la función ya lo cubre campo por campo. En el camino de la identidad (ninguna
   // categoría con servicios) devuelve un único grupo con `categoryId` nulo: son todos sueltos.
-  const groups = groupCatalog(services, categories, { categories: business.category_sort_mode, services: business.service_sort_mode })
+  // Los modos salen del estado del PADRE (plan 23-04), no de `business`: así un cambio de modo se ve
+  // al instante acá y en la lista de servicios, sin esperar un reload.
+  const groups = groupCatalog(services, categories, { categories: categorySortMode, services: serviceSortMode })
   const serviciosPorCategoria = new Map(groups.flatMap(g => (g.categoryId ? [[g.categoryId, g.services] as const] : [])))
   const sueltos = groups.find(g => g.categoryId === null)?.services ?? []
 
-  // D-12: los controles de orden de las categorías sólo existen con el modo personalizado. El modo
-  // es opcional en el tipo (una lectura angosta puede no traerlo): ausente vale el default de la base.
-  const categoryCustom = (business.category_sort_mode ?? 'custom') === 'custom'
+  // Las FILAS se pintan con la misma regla del eje categorías que usa groupCatalog, pero incluyendo
+  // las vacías (que groupCatalog omite). Con "Alfabético (A-Z)" la lista se reordena sin que el panel
+  // ordene por su cuenta y sin tocar el `sort_order` guardado. Decisión del usuario del 2026-09-16.
+  const categoriasOrdenadas = sortCategories(categories, categorySortMode)
+
+  // D-12: los controles de orden de las categorías sólo existen con el modo personalizado.
+  const categoryCustom = categorySortMode === 'custom'
   // Mismo criterio para el eje de los servicios: sin modo personalizado el chip pierde el atajo.
-  const serviceCustom = (business.service_sort_mode ?? 'custom') === 'custom'
+  const serviceCustom = serviceSortMode === 'custom'
 
   // ── Alta ────────────────────────────────────────────────────────────────────
   async function createCategory() {
@@ -344,17 +372,19 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // el orden lo decide la lectura, que cambia entre reloads).
   function moveCategory(index: number, delta: -1 | 1) {
     const destino = index + delta
-    if (destino < 0 || destino >= categories.length) return
+    if (destino < 0 || destino >= categoriasOrdenadas.length) return
     reorderCategory(index, destino)
   }
 
   // La regla ÚNICA de reorden que comparten las flechas y el arrastre: sacar de `from`, insertar en
   // `to` y mandar la lista completa al único mutador, que la renumera. Dos disparadores, una regla.
+  // Los índices son los de la lista PINTADA: con el modo personalizado (el único en el que existen
+  // flechas y arrastre) es el orden de `sort_order`, que es justo lo que se renumera.
   function reorderCategory(from: number, to: number) {
-    const ids = categories.map(c => c.id)
+    const ids = categoriasOrdenadas.map(c => c.id)
     if (from === to || from < 0 || to < 0 || from >= ids.length || to >= ids.length) return
     const nuevos = moveWithinList(ids, from, to)
-    setAnnounce(`“${categories[from].name}” movida a la posición ${to + 1} de ${ids.length}`)
+    setAnnounce(`“${categoriasOrdenadas[from].name}” movida a la posición ${to + 1} de ${ids.length}`)
     void persistCategoryOrder(nuevos)
   }
 
@@ -374,7 +404,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
     const fromId = draggingCategoryId
     resetDrag()
     if (!fromId || !categoryCustom) return
-    const from = categories.findIndex(c => c.id === fromId)
+    const from = categoriasOrdenadas.findIndex(c => c.id === fromId)
     // No-op si el destino es el origen.
     if (from < 0 || from === targetIndex) return
     reorderCategory(from, targetIndex)
@@ -410,6 +440,35 @@ export function CategoriasManager({ business, supabase, services, setServices, c
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
     setDragOverCategoryId(cur => (cur === rowId ? null : cur))
     setDropTargetId(cur => (cur === rowId ? null : cur))
+  }
+
+  // ── Modo de orden de las categorías ─────────────────────────────────────────
+  // ⚠ D-11, el límite irreversible de la fase: cambiar de modo escribe UNA SOLA columna del negocio y
+  // NADA MÁS. El orden manual del dueño no se toca acá, ni antes ni después: el modo es un
+  // COMPARADOR que eligen groupCatalog/sortCategories, no un orden que se materializa. Persistirlo
+  // destruiría el arreglo del dueño sin forma de recuperarlo (CAT-06).
+  // Éxito sin toast: el resultado se ve (los controles de reorden aparecen o desaparecen).
+  async function saveCategorySortMode(value: string | null) {
+    if (savingCategoryMode) return
+    if (value !== 'custom' && value !== 'alpha') return
+    if (value === categorySortMode) return
+    const anterior = categorySortMode
+    // Cambiar de modo desmonta las filas arrastrables y su dragend nunca corre: se limpia acá.
+    resetDrag()
+    setCategorySortMode(value)
+    setSavingCategoryMode(true)
+    try {
+      const { data, error } = await supabase.from('businesses').update({ category_sort_mode: value }).eq('id', business.id).select('id')
+      // Un update que la RLS filtró vuelve sin error y con CERO filas: el modo NO se guardó.
+      if (error || !data || data.length === 0) {
+        console.error('[catalogo/modo-categorias] rechazo:', error?.code ?? 'sin_filas')
+        // Nunca queda mostrando un modo que no se guardó.
+        setCategorySortMode(anterior)
+        toast.error(SORT_MODE_REJECT_COPY)
+      }
+    } finally {
+      setSavingCategoryMode(false)
+    }
   }
 
   // ── Asignar categoría ───────────────────────────────────────────────────────
@@ -501,6 +560,23 @@ export function CategoriasManager({ business, supabase, services, setServices, c
             Agrupá tus servicios bajo títulos. El orden que armes acá es el que ve tu cliente en la página de reservas.
           </p>
 
+          {/* Selector del orden de las categorías: donde se arrastra. Sin categorías no se renderiza:
+              no hay nada que ordenar. */}
+          {categories.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Label htmlFor={categoryModeId} className="text-xs text-muted-foreground">Orden de las categorías</Label>
+              <Select value={categorySortMode} onValueChange={v => void saveCategorySortMode(v)} disabled={savingCategoryMode}>
+                <SelectTrigger id={categoryModeId} className="w-auto min-w-40">
+                  <SelectValue>{(v: string | null) => CATEGORY_MODE_LABELS[v === 'alpha' ? 'alpha' : 'custom']}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">{CATEGORY_MODE_LABELS.custom}</SelectItem>
+                  <SelectItem value="alpha">{CATEGORY_MODE_LABELS.alpha}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {categories.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-4 text-center">
               <Tags aria-hidden="true" className="size-5 text-muted-foreground/60" />
@@ -511,9 +587,9 @@ export function CategoriasManager({ business, supabase, services, setServices, c
             </div>
           ) : (
             <ul className="space-y-2">
-              {categories.map((c, i) => {
+              {categoriasOrdenadas.map((c, i) => {
                 const isFirst = i === 0
-                const isLast = i === categories.length - 1
+                const isLast = i === categoriasOrdenadas.length - 1
                 const suyos = serviciosPorCategoria.get(c.id) ?? []
                 const count = suyos.length
                 return (

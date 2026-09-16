@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupCatalog, DEFAULT_SORT_MODES, OTHER_GROUP_TITLE } from '@/lib/service-categories'
+import { groupCatalog, sortCategories, DEFAULT_SORT_MODES, OTHER_GROUP_TITLE } from '@/lib/service-categories'
 import type { CatalogCategory, CatalogService, CatalogSortModes } from '@/lib/service-categories'
 
 // ── Phase 22 (el modelo del catálogo) — tests PUROS de lib/service-categories.ts ──────────────
@@ -571,5 +571,55 @@ describe('groupCatalog — un modo ausente o `undefined` cae al DEFAULT_SORT_MOD
     })
     expect(titles(soloPrecioEnServicios)).toEqual(['Zeta', 'Alfa'])
     expect(ids(soloPrecioEnServicios[0])).toEqual(['z2', 'z1'])
+  })
+})
+
+// ── Plan 23-04: `sortCategories`, la misma regla del eje categorías expuesta para el organizador ──
+// El panel pinta TODAS las categorías (también las vacías, que groupCatalog omite) y tiene que
+// pintarlas en el mismo orden que ve el cliente. Estos tests congelan que es la MISMA regla, no otra.
+describe('sortCategories — el eje categorías, con las vacías incluidas', () => {
+  const categorias = [
+    cat('c-unas', { name: 'Uñas', sort_order: 0 }),
+    cat('c-color', { name: 'color', sort_order: 1 }),
+    cat('c-barb', { name: 'Barbería', sort_order: 2 }),
+  ]
+
+  it("'custom': por sort_order, y el empate conserva la entrada (NO desempata por nombre)", () => {
+    expect(sortCategories(categorias, 'custom').map(c => c.id)).toEqual(['c-unas', 'c-color', 'c-barb'])
+    const empatadas = [cat('b', { name: 'B' }), cat('a', { name: 'A' })]
+    expect(sortCategories(empatadas, 'custom').map(c => c.id)).toEqual(['b', 'a'])
+  })
+
+  it("'alpha': por nombre en español, insensible a capitalización", () => {
+    expect(sortCategories(categorias, 'alpha').map(c => c.id)).toEqual(['c-barb', 'c-color', 'c-unas'])
+  })
+
+  it('modo ausente cae al default (custom)', () => {
+    expect(sortCategories(categorias).map(c => c.id)).toEqual(['c-unas', 'c-color', 'c-barb'])
+    expect(sortCategories(categorias, undefined).map(c => c.id)).toEqual(['c-unas', 'c-color', 'c-barb'])
+  })
+
+  it('incluye las categorías VACÍAS y NO muta la entrada (CAT-06: no hay por dónde borrar el orden)', () => {
+    const antes = categorias.map(c => ({ ...c }))
+    const alfa = sortCategories(categorias, 'alpha')
+    expect(alfa).toHaveLength(3)
+    expect(alfa).not.toBe(categorias)
+    expect(categorias).toEqual(antes)
+    // Ida y vuelta: volver a 'custom' devuelve el arreglo del dueño idéntico.
+    expect(sortCategories(categorias, 'custom').map(c => c.id)).toEqual(['c-unas', 'c-color', 'c-barb'])
+  })
+
+  it('un nombre roto no tira en ninguna posición', () => {
+    const rotas = [cat('x', { name: null as unknown as string }), cat('y', { name: 'Alfa' })]
+    expect(() => sortCategories(rotas, 'alpha')).not.toThrow()
+    expect(() => sortCategories([...rotas].reverse(), 'alpha')).not.toThrow()
+  })
+
+  it('es LA MISMA regla que usa groupCatalog: los títulos salen en el mismo orden', () => {
+    const servicios = categorias.map(c => svc(`s-${c.id}`, { category_id: c.id }))
+    for (const mode of ['custom', 'alpha'] as const) {
+      const titulos = groupCatalog(servicios, categorias, { categories: mode }).map(g => g.title)
+      expect(titulos).toEqual(sortCategories(categorias, mode).map(c => c.name))
+    }
   })
 })

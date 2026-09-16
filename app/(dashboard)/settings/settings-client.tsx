@@ -18,6 +18,7 @@ import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { CategoriasManager } from '@/components/dashboard/categorias-manager'
 import { SIN_CATEGORIA, categoryPatch, fromCategoryId, mapCategoryWriteError } from '@/lib/catalog-panel'
+import { groupCatalog, type CategorySortMode, type ServiceSortMode } from '@/lib/service-categories'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
 // Los tres helpers son del módulo del alta sólo por dónde nacieron: desde G-21-11 los comparten las
@@ -1151,6 +1152,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // Categorías del catálogo (Phase 23): el par valor + setter se comparte con el organizador, igual
   // que `services` con el manager de canchas.
   const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>(initialServiceCategories)
+  // Los dos modos de orden del catálogo (plan 23-04), a nivel negocio (D-05). Viven ACÁ y bajan al
+  // organizador por props: el selector de servicios está en esta pantalla y el de categorías en el
+  // organizador, y los dos gatean controles de ese componente. Un solo dueño del valor efectivo.
+  // Los dos son opcionales en el tipo (una lectura angosta puede no traerlos): ausente vale el
+  // default de la base, 'custom'.
+  const [categorySortMode, setCategorySortMode] = useState<CategorySortMode>(business.category_sort_mode ?? 'custom')
+  const [serviceSortMode, setServiceSortMode] = useState<ServiceSortMode>(business.service_sort_mode ?? 'custom')
+  const [savingServiceMode, setSavingServiceMode] = useState(false)
   // capacity_mode/capacity (migr. 062, ampliado por la 068): el default espeja el de la DB → un
   // servicio nuevo nace INDIVIDUAL con cupo 1, y el dueño opta explícitamente por los otros dos modos.
   // `duration_minutes` y `price` guardan el TEXTO CRUDO del input (G-21-11): es lo que permite
@@ -1823,6 +1832,36 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // decidiera por su cuenta el tab podría decir "Activos (1)" sobre una lista vacía.
   const { tab: serviceTab, setTab: setServiceTab, visible: visibleServices, counts: serviceTabCounts } =
     useActiveTabs(manageableServices, isServiceActive)
+  // ── Modo de orden de los servicios (plan 23-04) ──────────────────────────────
+  // ⚠ D-11, el límite irreversible de la fase: cambiar de modo escribe UNA SOLA columna del negocio y
+  // NADA MÁS. El orden manual del dueño no se toca acá, ni antes ni después: el modo es un
+  // COMPARADOR que elige groupCatalog, no un orden que se materializa. Persistirlo destruiría el
+  // arreglo del dueño sin forma de recuperarlo (CAT-06). Molde: selectTheme/selectPalette.
+  // Éxito sin toast: el resultado se ve (los controles de reorden aparecen o desaparecen).
+  async function saveServiceSortMode(value: string | null) {
+    if (savingServiceMode) return
+    if (value !== 'custom' && value !== 'alpha' && value !== 'price') return
+    if (value === serviceSortMode) return
+    const anterior = serviceSortMode
+    setServiceSortMode(value)
+    setSavingServiceMode(true)
+    try {
+      const { data, error } = await supabase.from('businesses').update({ service_sort_mode: value }).eq('id', business.id).select('id')
+      // Un update que la RLS filtró vuelve sin error y con CERO filas: el modo NO se guardó.
+      if (error || !data || data.length === 0) {
+        console.error('[catalogo/modo-servicios] rechazo:', error?.code ?? 'sin_filas')
+        // Nunca queda mostrando un modo que no se guardó.
+        setServiceSortMode(anterior)
+        toast.error('No se pudo guardar el orden. Probá de nuevo.')
+      }
+    } finally {
+      setSavingServiceMode(false)
+    }
+  }
+  // El camino de identidad de groupCatalog (ninguna categoría con servicios, o cero categorías): ahí
+  // los modos ni se miran. Se pregunta a la MISMA función en vez de reimplementar la condición.
+  const catalogoSinAgrupar = groupCatalog(services, serviceCategories).every(g => g.categoryId === null)
+
   // Término del eje según el rubro: 'Cancha'/'Canchas' para canchas, 'Profesional'/'Equipo' resto.
   const resourceWord = term.resource
   const resourcesWord = term.resources
@@ -2550,11 +2589,39 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             setServices={setServices}
             categories={serviceCategories}
             setCategories={setServiceCategories}
+            categorySortMode={categorySortMode}
+            setCategorySortMode={setCategorySortMode}
+            serviceSortMode={serviceSortMode}
           />
           <Card className="p-6 space-y-4">
             {/* Píldoras de filtro (D-14), desde el módulo compartido (D-13): el mismo componente lo
                 usa el manager de canchas, así que las dos pantallas no pueden divergir. */}
             <ActiveTabs tab={serviceTab} onChange={setServiceTab} counts={serviceTabCounts} />
+            {/* Selector del orden de los servicios (plan 23-04, D-03): donde actúa, arriba de la lista
+                y FUERA del colapso del organizador. Se renderiza siempre, aun con cero categorías o
+                cero servicios: es una preferencia del negocio, no una vista de datos. */}
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Label htmlFor="orden-servicios" className="text-xs text-muted-foreground">Orden de los servicios</Label>
+                <Select value={serviceSortMode} onValueChange={v => void saveServiceSortMode(v)} disabled={savingServiceMode}>
+                  {/* Base UI muestra el valor crudo (diría `custom`): render-prop con la etiqueta. */}
+                  <SelectTrigger id="orden-servicios" className="w-auto min-w-40">
+                    <SelectValue>{(v: string | null) => (v === 'alpha' ? 'Alfabético (A-Z)' : v === 'price' ? 'Por precio (de menor a mayor)' : 'Como los ordené yo')}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="custom">Como los ordené yo</SelectItem>
+                    <SelectItem value="alpha">Alfabético (A-Z)</SelectItem>
+                    <SelectItem value="price">Por precio (de menor a mayor)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="max-w-prose text-xs text-muted-foreground">Vale para todo el negocio, dentro de cada categoría.</p>
+              {/* Honestidad, no una acción inerte: en el camino de identidad la elección se guarda
+                  pero no cambia nada de lo que se ve. Sólo en ese caso se dice. */}
+              {catalogoSinAgrupar && (
+                <p className="max-w-prose text-xs text-muted-foreground">Se aplica cuando al menos un servicio tenga categoría.</p>
+              )}
+            </div>
             {visibleServices.length === 0 ? (
               <ActiveTabsEmptyState
                 tab={serviceTab}
