@@ -249,7 +249,9 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // ── Alta ────────────────────────────────────────────────────────────────────
   async function createCategory() {
     // El guard vive acá además del botón deshabilitado: el botón es la señal, esto es la defensa.
-    if (creating) return
+    // Tampoco con un reorden en vuelo (code review WR-05): si ese reorden falla y no hay relectura, la
+    // reversión no tiene que poder tocar una categoría que se creó en el medio.
+    if (creating || savingOrder) return
     // trim al guardar, no en el onChange: recortar mientras se escribe se come el espacio entre palabras.
     const name = newName.trim()
     if (!name) { setNameError(CATEGORY_WRITE_REJECT_COPY.blank); return }
@@ -369,12 +371,15 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // puede pisar un renombrado para tocar el orden.
   async function persistCategoryOrder(idsEnOrden: string[]) {
     if (savingOrder) return
-    const antes = categories
-    const porId = new Map(antes.map(c => [c.id, c]))
-    // Optimista: se pinta el orden nuevo ya, reasignando la posición de cada fila.
-    setCategories(renumber(idsEnOrden).flatMap(({ id, sort_order }) => {
-      const c = porId.get(id)
-      return c ? [{ ...c, sort_order }] : []
+    const posiciones = new Map(renumber(idsEnOrden).map(({ id, sort_order }) => [id, sort_order] as const))
+    // La posición anterior de cada fila tocada, y SÓLO la posición (code review WR-05): la reversión
+    // mergea por id sobre el estado de ese momento en vez de reemplazar la lista entera, así no borra
+    // una categoría ni deshace un renombrado que se confirmaron mientras el reorden volaba.
+    const antes = new Map(categories.filter(c => posiciones.has(c.id)).map(c => [c.id, c.sort_order] as const))
+    // Optimista: se pinta el orden nuevo ya, reasignando la posición de cada fila (funcional, por id).
+    setCategories(prev => prev.map(c => {
+      const sort_order = posiciones.get(c.id)
+      return sort_order === undefined ? c : { ...c, sort_order }
     }))
     setSavingOrder(true)
     try {
@@ -392,7 +397,10 @@ export function CategoriasManager({ business, supabase, services, setServices, c
         // Sin lectura no hay verdad que pintar: se vuelve a lo que había antes del gesto, que era
         // lo último que la base confirmó.
         console.error('[catalogo/orden-categorias] relectura:', releerError?.code ?? 'sin_datos')
-        setCategories(antes)
+        setCategories(prev => prev.map(c => {
+          const sort_order = antes.get(c.id)
+          return sort_order === undefined ? c : { ...c, sort_order }
+        }))
       } else {
         setCategories(reales as ServiceCategory[])
       }
@@ -831,11 +839,15 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                           </Button>
                         </>
                       )}
-                      {/* Eliminar: SIEMPRE visible — borrar no depende del modo de orden. */}
+                      {/* Eliminar: SIEMPRE visible — borrar no depende del modo de orden. Deshabilitado
+                          con un reorden en vuelo (code review WR-05): el update de la fila borrada
+                          volvería con 0 filas y el reorden avisaría un fallo que no fue. */}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="text-muted-foreground hover:text-destructive h-11 w-11 sm:h-8 sm:w-8"
+                        disabled={savingOrder}
+                        aria-disabled={savingOrder}
                         aria-label={`Eliminar “${c.name}”`}
                         onClick={() => setDeleting(c)}
                       >
@@ -926,7 +938,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                 aria-describedby={nameError ? errorId : undefined}
                 className="h-11 sm:h-8"
               />
-              <Button onClick={() => void createCategory()} disabled={creating || !newName.trim()} className="h-11 shrink-0 sm:h-8">
+              <Button onClick={() => void createCategory()} disabled={creating || savingOrder || !newName.trim()} className="h-11 shrink-0 sm:h-8">
                 <Plus className="size-4" />
                 {creating ? 'Agregando…' : 'Agregar'}
               </Button>
