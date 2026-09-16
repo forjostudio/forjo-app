@@ -3,6 +3,7 @@ import {
   SIN_CATEGORIA,
   categoryPatch,
   fromCategoryId,
+  liveCategoryValue,
   mapCategoryWriteError,
   renumber,
   moveWithinList,
@@ -124,6 +125,35 @@ describe('categoryPatch / fromCategoryId — la única traducción del sentinel 
   it('ida y vuelta: hidratar y guardar sin tocar el control no cambia el dato', () => {
     expect(categoryPatch(fromCategoryId(null))).toStrictEqual({ category_id: null })
     expect(categoryPatch(fromCategoryId(UUID))).toStrictEqual({ category_id: UUID })
+  })
+})
+
+describe('liveCategoryValue — lo que se escribe es lo que se ve (code review CR-01)', () => {
+  const OTRO = '0b6e2f1a-3c4d-4e5f-8a9b-0c1d2e3f4a5b'
+
+  it('un uuid que sigue existiendo pasa tal cual', () => {
+    expect(liveCategoryValue(UUID, [OTRO, UUID])).toBe(UUID)
+  })
+
+  it('un uuid borrado (ya no está entre las vivas) cae al sentinel', () => {
+    expect(liveCategoryValue(UUID, [OTRO])).toBe(SIN_CATEGORIA)
+  })
+
+  it('borrada la ÚLTIMA categoría (cero vivas) también cae al sentinel', () => {
+    expect(liveCategoryValue(UUID, [])).toBe(SIN_CATEGORIA)
+  })
+
+  it('el sentinel pasa tal cual, haya o no categorías', () => {
+    expect(liveCategoryValue(SIN_CATEGORIA, [])).toBe(SIN_CATEGORIA)
+    expect(liveCategoryValue(SIN_CATEGORIA, [UUID])).toBe(SIN_CATEGORIA)
+  })
+
+  it('acepta cualquier iterable (un Set, un generador de ids)', () => {
+    expect(liveCategoryValue(UUID, new Set([UUID]))).toBe(UUID)
+  })
+
+  it('compuesto con categoryPatch, un uuid borrado escribe la columna en null', () => {
+    expect(categoryPatch(liveCategoryValue(UUID, [OTRO]))).toStrictEqual({ category_id: null })
   })
 })
 

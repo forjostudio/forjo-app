@@ -17,7 +17,7 @@ import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
 import { CanchasManager } from '@/components/dashboard/canchas-manager'
 import { CategoriasManager } from '@/components/dashboard/categorias-manager'
-import { SIN_CATEGORIA, categoryPatch, fromCategoryId, mapCategoryWriteError } from '@/lib/catalog-panel'
+import { SIN_CATEGORIA, categoryPatch, fromCategoryId, liveCategoryValue, mapCategoryWriteError } from '@/lib/catalog-panel'
 import { groupCatalog, type CategorySortMode, type ServiceSortMode } from '@/lib/service-categories'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { canchasFromData, nonCanchaServices } from '@/lib/canchas'
@@ -1402,8 +1402,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // sentencias crearía un servicio sin categoría y una ventana de fallo en el medio (D-10.2). El
       // valor de la columna lo produce `categoryPatch`, la misma función que usa el organizador.
       // La descripción (CAT-11) se normaliza SÓLO acá: recortada, y vacía ⇒ `null` (nunca '').
+      // El valor se sanea contra las categorías VIVAS antes de traducirlo (code review CR-01): si el
+      // dueño borró desde el organizador la categoría que tenía elegida, el Select ya muestra "Sin
+      // categoría" y eso es lo que se escribe, en vez de un uuid borrado que rebota con 23503.
+      const categoria = liveCategoryValue(newService.category, serviceCategories.map(c => c.id))
       const { data, error } = await supabase.from('services')
-        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id, description: newService.description.trim() || null, ...categoryPatch(newService.category) })
+        .insert({ name, duration_minutes: durationMinutes, price: priceValue, location_ids: location_ids.length ? location_ids : null, capacity_mode, capacity, business_id: business.id, description: newService.description.trim() || null, ...categoryPatch(categoria) })
         .select().single()
       // El rechazo propio de la columna (23503: la categoría ya no existe) lo traduce
       // `mapCategoryWriteError` por código; cualquier otro sigue con el literal de siempre.
@@ -1528,7 +1532,8 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // Descripción (CAT-11): se normaliza SÓLO acá. Vacía ⇒ `null`, nunca '': una cadena vacía
       // guardada haría que la tarjeta del booking la trate como contenido y pinte un párrafo en blanco.
       description: editSvcForm.description.trim() || null,
-      ...categoryPatch(editSvcForm.category),
+      // Saneado contra las categorías VIVAS, igual que el alta (code review CR-01).
+      ...categoryPatch(liveCategoryValue(editSvcForm.category, serviceCategories.map(c => c.id))),
     }
     // El `.eq('business_id', ...)` es defensa en profundidad (la RLS es la segunda capa, no la única).
     const { error } = await supabase.from('services').update(payload).eq('id', editSvc.id).eq('business_id', business.id)

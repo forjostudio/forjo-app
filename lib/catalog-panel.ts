@@ -58,6 +58,25 @@ export function fromCategoryId(id: string | null | undefined): string {
 }
 
 /**
+ * El valor del control saneado contra las categorías que EXISTEN hoy (code review CR-01).
+ *
+ * Un borrador del form (alta o edición) guarda el uuid que eligió el dueño. Si después borra esa
+ * categoría desde el organizador, sin recargar, el `Select` pinta "Sin categoría" (su fallback) pero
+ * el valor sigue siendo el uuid borrado, y la escritura rebota con 23503 contra un control que dice
+ * que no eligió ninguna. Si era la ÚLTIMA categoría, el Select ni se renderiza y todas las altas
+ * fallan hasta recargar. Saneado acá, lo que se escribe es lo que se ve: un uuid que ya no está en
+ * `liveIds` pasa a ser el sentinel. El sentinel y los uuids vivos pasan tal cual.
+ *
+ * Se aplica ANTES de {@link categoryPatch}, nunca en su lugar: la traducción a la columna sigue
+ * siendo una sola.
+ */
+export function liveCategoryValue(value: string, liveIds: Iterable<string>): string {
+  if (value === SIN_CATEGORIA) return value
+  for (const id of liveIds) if (id === value) return value
+  return SIN_CATEGORIA
+}
+
+/**
  * La ÚNICA traducción de un rechazo de escritura de la columna de categoría a copy propia (D-07).
  *
  * Recibe SÓLO el código. `'23503'` es la FK compuesta `services_category_same_tenant`: la categoría
