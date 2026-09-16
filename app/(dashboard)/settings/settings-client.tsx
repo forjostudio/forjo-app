@@ -1843,9 +1843,20 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // canchas: la tupla existe igual si el negocio cambió de rubro. El emparejamiento sale de
   // canchasFromData (por service_id, NUNCA por nombre — Pitfall 2). Al CanchasManager se le sigue
   // pasando `services` COMPLETO: el filtro es del CRUD genérico, no de la fuente de datos.
+  //
+  // ORDEN (code review WR-04): la lista pasa por `groupCatalog` con los dos modos del negocio y se
+  // aplana, así la lista que está justo debajo del selector "Orden de los servicios" respeta el modo y
+  // los grupos —el mismo orden que ve el cliente— en vez del arreglo de estado (global por
+  // `sort_order`, que tras renumerar por grupo queda intercalado, y con las altas al final). No se
+  // reimplementa ninguna regla: groupCatalog conserva cada servicio exactamente una vez, y en su
+  // camino de identidad (ninguna categoría con servicios) devuelve la lista tal cual llegó.
   const manageableServices = useMemo(
-    () => nonCanchaServices(services, canchasFromData(services, professionals, agendaSpaces)),
-    [services, professionals, agendaSpaces],
+    () => groupCatalog(
+      nonCanchaServices(services, canchasFromData(services, professionals, agendaSpaces)),
+      serviceCategories,
+      { categories: categorySortMode, services: serviceSortMode },
+    ).flatMap(g => g.services),
+    [services, professionals, agendaSpaces, serviceCategories, categorySortMode, serviceSortMode],
   )
   // Tab + filtro + contadores (D-13). El hook compartido garantiza el invariante que antes vivía acá:
   // el filtro y el contador llaman al MISMO predicado (`isServiceActive`), porque si cada uno
