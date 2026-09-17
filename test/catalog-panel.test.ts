@@ -17,6 +17,7 @@ import {
   CATEGORY_WRITE_REJECT_COPY,
   ORDER_REJECT_COPY,
   moveRejectCopy,
+  chipDragGates,
 } from '@/lib/catalog-panel'
 
 // ── Phase 23 (el panel del catálogo) — tests PUROS de lib/catalog-panel.ts ────────────────────
@@ -359,5 +360,26 @@ describe('copy de los fallos de orden y de mover', () => {
 
   it('moveRejectCopy interpola el nombre del servicio', () => {
     expect(moveRejectCopy('Corte')).toBe('No se pudo mover “Corte”. Probá de nuevo.')
+  })
+})
+
+// ── Gates del chip (G-23-10a) ─────────────────────────────────────────────────────────────────
+// Arrastrar un chip a otra categoría es ASIGNAR (D-05/D-06) y hace algo en cualquier modo; lo que el
+// modo de servicios apaga es UBICAR (chip sobre chip y la sección "Posición", D-12/CAT-05).
+describe('chipDragGates — asignar no es reordenar (G-23-10a)', () => {
+  it('sin categorías no hay a dónde asignar: ni arrastre ni posición', () => {
+    expect(chipDragGates({ categoryCount: 0, serviceCustom: true, hasGrouping: false })).toEqual({ canDrag: false, canPlace: false })
+  })
+
+  it('el caso del reporte: servicios en Alfabético con categorías ⇒ asignar sí, ubicar no', () => {
+    expect(chipDragGates({ categoryCount: 1, serviceCustom: false, hasGrouping: true })).toEqual({ canDrag: true, canPlace: false })
+  })
+
+  it('camino de identidad (ninguna categoría con servicios): la posición sería inerte', () => {
+    expect(chipDragGates({ categoryCount: 3, serviceCustom: true, hasGrouping: false })).toEqual({ canDrag: true, canPlace: false })
+  })
+
+  it('modo personalizado con agrupación: arrastra y ubica', () => {
+    expect(chipDragGates({ categoryCount: 3, serviceCustom: true, hasGrouping: true })).toEqual({ canDrag: true, canPlace: true })
   })
 })
