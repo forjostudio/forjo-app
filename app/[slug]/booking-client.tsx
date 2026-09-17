@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { resolveVertical, getVerticalLabel } from '@/lib/verticals'
 import { cn } from '@/lib/utils'
+import { ServiceDescription } from '@/components/booking/service-description'
 import { notifyEmbedScroll } from '@/lib/embed-bridge'
 
 interface Props {
@@ -583,13 +584,10 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 const staffed = isServiceStaffed(service.id, professionals, professionalServices)
                 const enabled = scheduled && staffed
                 return (
-                <button
+                <div
                   key={service.id}
-                  type="button"
-                  disabled={!enabled}
-                  onClick={() => { setSelectedService(service); setBookingLoc(null); setSelectedDate(undefined); setSelectedTime(''); setStep(2) }}
                   className={cn(
-                    'rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                    'relative isolate rounded-lg border p-4 text-left transition-colors',
                     // Precedencia deliberada: `!enabled` PRIMERO. Con el `disabled` nativo puesto, el
                     // onClick de una tarjeta apagada nunca corre, así que "esta tarjeta está
                     // seleccionada Y deshabilitada" es un estado inalcanzable; evaluar la selección
@@ -601,36 +599,66 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                         : 'border-border bg-card hover:border-primary'
                   )}
                 >
-                  {/* Tarjeta: izq = título + descripción (si hay); der = precio + duración a la
-                      derecha. items-center → SIN descripción el título queda centrado contra el
-                      bloque de precio (no parece 3 líneas). La descripción se edita en el admin. */}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
-                      {service.description && (
-                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{service.description}</p>
-                      )}
+                  {/* La tarjeta es un CONTENEDOR y el botón de selección se estira sobre ella con un
+                      pseudo-elemento (`after:absolute after:-inset-px`, sobre la caja de borde: el anillo
+                      de foco cae donde caía cuando la tarjeta entera era el botón). Motivo (G-23-6): el
+                      "Ver más" de la descripción no puede vivir adentro del botón — un botón dentro de
+                      otro es HTML inválido y un toque en "Ver más" elegiría el servicio. Con el
+                      pseudo-elemento, tocar el nombre, el precio o el texto de la descripción sigue
+                      seleccionando la tarjeta como antes.
+                      Fila: izq = título; der = precio + duración. items-center → el título queda
+                      centrado contra el bloque de precio. La descripción salió de esa columna izquierda
+                      y va abajo a ancho completo: ahí le quedaban 181-229px a 375px, donde en dos
+                      renglones entraban 59-84 caracteres contra el tope de 120 del panel. */}
+                  <button
+                    type="button"
+                    disabled={!enabled}
+                    onClick={() => { setSelectedService(service); setBookingLoc(null); setSelectedDate(undefined); setSelectedTime(''); setStep(2) }}
+                    aria-describedby={[
+                      service.description ? `svc-desc-${service.id}` : null,
+                      !enabled ? `svc-reason-${service.id}` : null,
+                    ].filter(Boolean).join(' ') || undefined}
+                    className="block w-full text-left focus-visible:outline-none after:absolute after:-inset-px after:rounded-lg focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-lg font-bold leading-tight font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
+                        <p className="mt-0.5 flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                          <Clock className="w-3 h-3" /> {service.duration_minutes} min
+                        </p>
+                      </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-lg font-bold leading-tight font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
-                      <p className="mt-0.5 flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" /> {service.duration_minutes} min
-                      </p>
-                    </div>
-                  </div>
+                  </button>
+                  {/* Hermana del botón, nunca hija. `isolate` en el contenedor encierra el z-index:
+                      el `z-10` del toggle lo levanta sobre el pseudo-elemento del botón (si no, el
+                      toque caería en la selección) sin competir con nada fuera de la tarjeta. Una
+                      tarjeta deshabilitada no se selecciona, pero su descripción se puede abrir. */}
+                  {service.description && (
+                    <ServiceDescription
+                      text={service.description}
+                      name={service.name}
+                      id={`svc-desc-${service.id}`}
+                      className="mt-2 text-xs text-muted-foreground"
+                      toggleClassName="relative z-10 text-xs font-medium text-foreground"
+                    />
+                  )}
                   {/* El motivo, con el mismo tag y las mismas clases que el picker de consultorios del
                       paso 3 (mismo problema, misma solución: apagar sin explicar es peor que ocultar).
                       Precedencia cuando fallan los dos ejes a la vez: gana el motivo de FRANJA, que es
                       el eje del requisito de esta fase; el motivo de STAFF (regresión candidata,
                       aceptada aparte) solo aparece cuando la franja sí cubre el servicio. Copy
                       deliberadamente genérica: un anónimo no tiene por qué enterarse de quién cubre qué
-                      ni de qué le falta tocar al dueño en su panel. */}
+                      ni de qué le falta tocar al dueño en su panel. Fuera del botón, referenciado por
+                      su aria-describedby. */}
                   {!enabled && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p id={`svc-reason-${service.id}`} className="text-xs text-muted-foreground mt-1">
                       {!scheduled ? 'Sin horarios disponibles' : 'Sin profesional disponible'}
                     </p>
                   )}
-                </button>
+                </div>
                 )
               })}
             </div>
