@@ -74,6 +74,9 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
   sólo se puede escribir por SQL. Lo que falta es poder cargarla. El límite de 120 hace que lo que
   el dueño escribe coincida con lo que el `line-clamp` deja ver a 375px, en vez de recortarle sin
   avisar.
+  **Actualizado por la UAT de la Phase 23 (G-23-6, 2026-09-17):** el tope de 120 se mantiene y la
+  tarjeta pública ya no recorta a dos renglones: muestra tres a ancho completo y abre el resto con
+  "Ver más" cuando no entra (planes 23-05/23-07).
 
 ## Fuera de alcance
 

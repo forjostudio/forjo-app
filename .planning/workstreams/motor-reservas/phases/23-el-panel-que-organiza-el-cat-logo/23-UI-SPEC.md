@@ -37,6 +37,8 @@ Cinco bloques, en tres archivos (uno nuevo). Nada más entra en este contrato.
 - La **tarjeta de servicio** de la lista de abajo (`settings-client.tsx:2494-2710`): no se agrupa, no se reordena, no se refactoriza. Su estructura de grilla está documentada línea por línea con la invariante de 32px de G-04. **No se toca** (D-06).
 - `components/ui/*`: no se instala ni se modifica ningún componente. **Prohibido `npx shadcn add`** en esta fase.
 
+> **Actualizado después de la UAT (2026-09-17):** la tarjeta pública y la tarjeta de la lista de servicios recibieron cambios acotados (G-23-6 en 23-05/23-07, G-23-6b en 23-07). Ver `## Cambios post-UAT`.
+
 ---
 
 ## Design System
@@ -457,7 +459,7 @@ Y para el eje categorías (dentro de la Card del organizador):
   />
   <div className="flex items-start justify-between gap-2">
     <p id={`${descId}-help`} className="text-xs text-muted-foreground">
-      Aparece debajo del nombre en tu página de reservas. Se ven 2 líneas.
+      Aparece debajo del nombre en tu página de reservas. Si no entra entera, tu cliente la abre con “Ver más”.
     </p>
     <span aria-hidden="true" className={cn('shrink-0 text-xs tabular-nums', atLimit ? 'font-medium text-foreground' : 'text-muted-foreground')}>
       {len}/120
@@ -469,12 +471,12 @@ Y para el eje categorías (dentro de la Card del organizador):
 
 **Decisión delegada, resuelta: el tope de 120 es DURO** (`maxLength={120}`), con **contador visible desde el arranque** (`0/120`), no sólo al acercarse al límite.
 
-El sentido del 120 es que **lo que el dueño escribe sea exactamente lo que la tarjeta deja ver** a 375px con el `line-clamp-2` que ya está en producción (`booking-client.tsx:610`). Un tope blando devuelve justo el problema que el número viene a resolver: recortarle sin avisar.
+~~El sentido del 120 era que lo que el dueño escribe coincidiera con lo que dejaba ver el recorte a dos renglones de la tarjeta.~~ **Actualizado por la UAT (G-23-6, 2026-09-17):** ese recorte nunca se midió y a 375px entraban 59-84 caracteres, no 120. El **tope duro de 120 se mantiene** (decisión del usuario del 2026-09-17); lo que cambió es la tarjeta pública: la descripción va **a ancho completo** debajo de la fila nombre/precio, con **tres renglones** y **"Ver más"/"Ver menos" sólo si desborda, medido en pantalla** (`components/booking/service-description.tsx`, planes 23-05 y 23-07). El tope sigue siendo duro para que el texto no crezca sin límite.
 
 - El contador es `aria-hidden` (un live region que dispara en cada tecla es ruido para un lector de pantalla). El anuncio polite ocurre **una sola vez**, al tocar el límite.
 - Al llegar a 120 el contador cambia de **peso y color de texto** — no de color solo, y **nunca a `--warning`**: llegar al límite no es un problema, es el diseño funcionando.
 - **Sin normalización en `onBlur`.** Duración y precio la tienen (G-21-11) porque son números que hay que interpretar; una descripción es texto libre del dueño y recortarle espacios a la vista se leería como que el campo le está borrando lo que escribió. Lo único que se normaliza es el guardado: `trim()` y `'' → null`.
-- **La superficie pública NO se toca.** `services.description` ya existe, `public_services` ya la expone y la tarjeta ya la renderiza. Esta fase agrega **sólo el campo del panel**.
+- ~~La superficie pública NO se toca.~~ **Actualizado por la UAT (G-23-6):** `services.description` ya existía y `public_services` ya la exponía, pero la tarjeta pública se tocó en 23-05: ancho completo, tres renglones y "Ver más"/"Ver menos" medido, con el tope de 120 intacto. Ver `## Cambios post-UAT`.
 
 ### Orden de los campos (idéntico en alta y en edición)
 
@@ -568,7 +570,9 @@ Categoría y descripción van **juntas y después del precio** porque son las do
 | Éxito de mover | *(sin toast — el chip cambia de grupo a la vista)* |
 | Label campo categoría | `Categoría (opcional)` · opción `Sin categoría` |
 | Label campo descripción | `Descripción corta (opcional)` |
-| Ayuda de la descripción | `Aparece debajo del nombre en tu página de reservas. Se ven 2 líneas.` |
+| Ayuda de la descripción | `Aparece debajo del nombre en tu página de reservas. Si no entra entera, tu cliente la abre con “Ver más”.` (G-23-6) |
+| Toggle de la descripción en la tarjeta pública | `Ver más` / `Ver menos`, con sufijo accesible `sobre “{servicio}”` (G-23-6, 23-05) |
+| Link de la tarjeta del panel | Con descripción: `Editar` · `aria-label` `Editar descripción de {servicio}`. Sin descripción: `Agregar descripción` · `aria-label` `Agregar descripción a {servicio}` (G-23-6b, 23-07) |
 | Placeholder de la descripción | `Ej. Incluye lavado, corte y peinado` |
 | Contador | `{n}/120` · al límite, anuncio polite `Llegaste al máximo de 120 caracteres.` |
 | **Destructive confirmation** | Título: `¿Eliminar la categoría?` · Confirmar: `Eliminar` |
@@ -723,7 +727,7 @@ La **copy** de los estados vacíos y de error no se repite acá: vive en `## Cop
 | `loading` | ✅ explicit | Sin carga propia: hereda el submit del form de servicio. |
 | `error` | ✅ explicit | **No tiene error propio**: el tope es duro (`maxLength={120}`), así que no hay validación que pueda rechazar lo escrito. Al llegar al límite cambia peso y color de texto — nunca a `--warning`: llegar al tope es el diseño funcionando, no un problema. |
 | `partial` | ✅ explicit | Opcional por definición; un servicio sin descripción es el estado de hoy y sigue siéndolo. |
-| `long-text` | ✅ explicit | Tope **duro** de 120 + contador visible + `rows={2}`: es imposible escribir más de lo que la tarjeta del booking deja ver con el `line-clamp-2` que ya está en producción. Un tope blando devolvería el problema que el número viene a resolver. |
+| `long-text` | ✅ explicit | Tope **duro** de 120 + contador visible + `rows={2}` (se mantiene, decisión del usuario del 2026-09-17). **Actualizado por la UAT (G-23-6, 23-05/23-07):** el tope ya no se justifica por un recorte de dos renglones —nunca se midió—; la tarjeta pública muestra la descripción a ancho completo con tres renglones y "Ver más"/"Ver menos" sólo si desborda medido en pantalla, y la ayuda del campo dice eso. |
 
 ### E11 — Confirmación de borrado
 
@@ -860,6 +864,19 @@ Esta fase **no instala componentes, no agrega dependencias y no agrega ninguna l
 ## Cambios post-UAT (gap closure 23-05 … 23-07)
 
 Cambios pedidos en la UAT del 2026-09-17, cada uno con su gap y su plan.
+
+### G-23-6 — La descripción se lee entera en la tarjeta pública (23-05, 23-07)
+
+- **Diagnóstico:** el tope de 120 se había calibrado contra un recorte de dos renglones que nunca se midió. En la columna angosta de la tarjeta, a 375px, entraban 59-84 caracteres: el dueño escribía 120 y el cliente leía la mitad, sin aviso.
+- **Decisión del usuario (2026-09-17):** el tope de 120 queda intacto; la tarjeta se adapta al texto con el patrón de `forjo-tiendas` (recorte con "Ver más").
+- **Qué se hizo:** componente compartido `components/booking/service-description.tsx` con tres renglones (`line-clamp-3` + `break-words`) a ancho completo debajo de la fila nombre/precio, y "Ver más"/"Ver menos" sólo si el texto desborda **medido** (ResizeObserver + `document.fonts.ready`), con sufijo accesible `sobre “{servicio}”`. La tarjeta del paso 1 dejó de ser un `<button>`: es un contenedor con el botón de selección estirado y el toggle como hermano. La web de marca usa el mismo componente (23-05). La ayuda del campo en el alta y en la edición dice lo que ve el cliente (23-07).
+- **Invariante que hereda la Phase 24:** nada interactivo anidado dentro del botón de selección. Al pasar las tarjetas a horizontales en desktop se conserva el contenedor con botón estirado, y no se vuelve a un recorte por cantidad fija de renglones.
+
+### G-23-6b — Renglón de descripción y link en la tarjeta del panel (23-07)
+
+- **Qué se agregó:** debajo del nombre, un hijo de contenido con `sm:col-start-1`: un renglón de la descripción (`line-clamp-1` + `break-words`, no `truncate`) y, en su propia línea, un `<button>` subrayado `Editar` que llama a `openEditService(s)`, lo mismo que el lápiz. Sin descripción, el link dice `Agregar descripción` y abre el mismo diálogo. Ningún camino de escritura nuevo; el lápiz sigue.
+- **Supera a D-06 sólo en ese punto:** el usuario pidió explícitamente el renglón y el link. La lista sigue sin agruparse ni reordenarse y su grilla no se refactorizó.
+- **Decisión escrita sobre G-04:** el link lleva 44px táctiles en mobile pero **no** la zona de exclusión de 24/32px. G-04 nació de un stepper que **escribía** el cupo ante un toque corregido; este link sólo abre un diálogo que no escribe y se cierra con Escape. Si en producción aparece un toque errado molesto sobre la línea de datos, el arreglo es darle al bloque `pb-4`.
 
 ### G-23-10a — El chip se arrastra para asignar con cualquier modo (23-06)
 

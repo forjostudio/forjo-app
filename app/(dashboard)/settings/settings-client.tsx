@@ -2962,7 +2962,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 <Label htmlFor={newSvcDescId} className="text-xs text-muted-foreground">Descripción corta (opcional)</Label>
                 <Textarea id={newSvcDescId} rows={2} maxLength={120} value={newService.description} onChange={e => setNewService(f => ({ ...f, description: e.target.value }))} aria-describedby={`${newSvcDescId}-help`} placeholder="Ej. Incluye lavado, corte y peinado" />
                 <div className="flex items-start justify-between gap-2">
-                  <p id={`${newSvcDescId}-help`} className="text-xs text-muted-foreground">Aparece debajo del nombre en tu página de reservas. Se ven 2 líneas.</p>
+                  <p id={`${newSvcDescId}-help`} className="text-xs text-muted-foreground">Aparece debajo del nombre en tu página de reservas. Si no entra entera, tu cliente la abre con “Ver más”.</p>
                   <span aria-hidden="true" className={cn('shrink-0 text-xs tabular-nums', newService.description.length >= 120 ? 'font-medium text-foreground' : 'text-muted-foreground')}>{newService.description.length}/120</span>
                 </div>
                 <p role="status" className="sr-only">{newService.description.length >= 120 ? 'Llegaste al máximo de 120 caracteres.' : ''}</p>
@@ -3065,7 +3065,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   <Label htmlFor={editSvcDescId} className="text-xs text-muted-foreground">Descripción corta (opcional)</Label>
                   <Textarea id={editSvcDescId} rows={2} maxLength={120} value={editSvcForm.description} onChange={e => setEditSvcForm(f => ({ ...f, description: e.target.value }))} aria-describedby={`${editSvcDescId}-help`} placeholder="Ej. Incluye lavado, corte y peinado" />
                   <div className="flex items-start justify-between gap-2">
-                    <p id={`${editSvcDescId}-help`} className="text-xs text-muted-foreground">Aparece debajo del nombre en tu página de reservas. Se ven 2 líneas.</p>
+                    <p id={`${editSvcDescId}-help`} className="text-xs text-muted-foreground">Aparece debajo del nombre en tu página de reservas. Si no entra entera, tu cliente la abre con “Ver más”.</p>
                     <span aria-hidden="true" className={cn('shrink-0 text-xs tabular-nums', editSvcForm.description.length >= 120 ? 'font-medium text-foreground' : 'text-muted-foreground')}>{editSvcForm.description.length}/120</span>
                   </div>
                   <p role="status" className="sr-only">{editSvcForm.description.length >= 120 ? 'Llegaste al máximo de 120 caracteres.' : ''}</p>
