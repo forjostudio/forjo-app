@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 23-el-panel-que-organiza-el-cat-logo
 source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW-FIX.md]
 started: 2026-09-16T16:30:00Z
@@ -115,24 +115,51 @@ blocked: 0
   reason: "User reported: primero cortada en una línea (palabra sin espacios); re-probado con texto real: muestra dos líneas pero no se ve completa, se corta con … a 375px"
   severity: minor
   test: 6
-  artifacts: []
-  missing: []
+  root_cause: "El tope de 120 nunca se midió (CAT-11 lo daba por cierto; 23-02-PLAN lo marcaba unresolved). En app/[slug]/booking-client.tsx:607-619 la descripción comparte fila con precio (text-lg) y duración, en text-xs con line-clamp-2: a 375px quedan 181-229px y entran 59-84 caracteres en 2 líneas. 120 ocupa 3-5 líneas y siempre se corta. Además falta break-words (una palabra sin espacios se recorta sin puntos suspensivos)."
+  artifacts:
+    - path: "app/[slug]/booking-client.tsx"
+      issue: "descripción en columna angosta junto a precio/duración, text-xs + line-clamp-2, sin break-words (L607-619)"
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "maxLength 120 y copy de ayuda (Se ven 2 líneas) no calibrados"
+    - path: "components/landing/services.tsx"
+      issue: "misma descripción con line-clamp-2 en la web de marca (L74-77), no medido"
+  missing:
+    - "Decidir: bajar el tope a lo medido (~55-60), o sacar la descripción a ancho completo con 3 líneas (entra 120 a 360/375px), o aflojar el clamp"
+    - "Agregar break-words al párrafo de la descripción"
+    - "Alinear el copy de ayuda del campo con el resultado"
+  debug_session: .planning/debug/descripcion-120-no-entra-tarjeta-publica.md
 - gap_id: G-23-6b
   truth: "La tarjeta del servicio en el panel muestra al menos una línea de la descripción y un link subrayado Editar que abre el mismo diálogo que el lápiz"
   status: failed
   reason: "User reported: en el panel, estaría bueno que la tarjeta muestre al menos una línea de la descripción y un link subrayado de editar que abra lo mismo que el botón del lápiz"
   severity: minor
   test: 6
-  artifacts: []
-  missing: []
+  root_cause: "No es un bug: la fase no le pidió nada a la tarjeta de la lista (23-CONTEXT D-06: la lista de servicios de abajo NO se toca; UI-SPEC limita CAT-11 al formulario). La tarjeta (settings-client.tsx:2692-2865) nunca lee s.description y la única vía de edición es el lápiz (:2858, openEditService(s))."
+  artifacts:
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "tarjeta de servicio sin línea de descripción ni link de texto Editar (L2692-2865; lápiz en L2858)"
+  missing:
+    - "Línea de descripción después del bloque del nombre (sm:col-start-1), text-xs text-muted-foreground, 1 línea truncada con break-words, nada si es null"
+    - "Botón-link Editar (underline underline-offset-2) que llama openEditService(s), con aria-label, focus visible y target 44px en mobile, en su propia línea"
+    - "Decidir qué mostrar si no hay descripción"
+  debug_session: .planning/debug/tarjeta-panel-sin-descripcion-ni-link-editar.md
 - gap_id: G-23-10a
   truth: "Con el orden de categorías en Alfabético, el dueño igual puede pasar un servicio de una categoría a otra arrastrando el chip (el modo de categorías no debería bloquear la asignación)"
   status: failed
   reason: "User reported: si elijo alfabético en las categorías ya no puedo pasar servicios de una a otra; los chips sólo se mueven haciéndoles clic y eligiendo en el modal"
   severity: minor
   test: 10
-  artifacts: []
-  missing: []
+  root_cause: "El arrastre del chip NO depende del modo de categorías sino del de servicios: canDrag={serviceCustom} (categorias-manager.tsx:869,914; draggable :117, grip :146) apaga también la asignación a otra categoría cuando Orden de los servicios no es personalizado. En la captura el modo de servicios estaba en no-personalizado (en la base local service_sort_mode=alpha). Fue decisión de diseño (23-03-PLAN E3, 23-04-PLAN :236) que contradice el snippet de 23-UI-SPEC:314 y D-05/D-06."
+  artifacts:
+    - path: "components/dashboard/categorias-manager.tsx"
+      issue: "canDrag={serviceCustom} (L869, L914) mezcla puede asignar con puede reordenar"
+    - path: ".planning/workstreams/motor-reservas/phases/23-el-panel-que-organiza-el-cat-logo/23-UI-SPEC.md"
+      issue: "tabla de gates (:352/:630) ata el arrastre del chip al modo de servicios"
+  missing:
+    - "Separar el inicio del arrastre (habilitado si hay al menos una categoría) del reorden chip-sobre-chip (sigue detrás de posicionDisponible, :231)"
+    - "Actualizar la tabla de gates del UI-SPEC y el expected del Test 10"
+    - "Decidir si el grip se muestra cuando sólo se puede asignar y qué pasa al soltar en el propio grupo en modo no personalizado"
+  debug_session: .planning/debug/chips-no-arrastrables-con-categorias-alfabetico.md
 - gap_id: G-23-10b
   truth: "El dueño puede acomodar a mano el orden de los servicios (no sólo por orden de alta)"
   status: withdrawn
