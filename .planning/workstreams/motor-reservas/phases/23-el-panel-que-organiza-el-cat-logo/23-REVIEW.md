@@ -1,151 +1,117 @@
 ---
 phase: 23-el-panel-que-organiza-el-cat-logo
-reviewed: 2026-09-16T00:00:00Z
+reviewed: 2026-09-17T00:00:00Z
 depth: standard
-files_reviewed: 7
+files_reviewed: 9
 files_reviewed_list:
-  - app/(dashboard)/servicios/page.tsx
   - app/(dashboard)/settings/settings-client.tsx
+  - app/[slug]/booking-client.tsx
+  - components/booking/service-description.test.tsx
+  - components/booking/service-description.tsx
+  - components/dashboard/categorias-manager.test.tsx
   - components/dashboard/categorias-manager.tsx
+  - components/landing/services.tsx
   - lib/catalog-panel.ts
-  - lib/service-categories.ts
   - test/catalog-panel.test.ts
-  - test/service-categories.test.ts
 findings:
-  critical: 1
-  warning: 5
-  info: 5
-  total: 11
+  critical: 0
+  warning: 2
+  info: 4
+  total: 6
 status: issues_found
 ---
 
 # Phase 23: Code Review Report
 
-**Reviewed:** 2026-09-16
+**Reviewed:** 2026-09-17
 **Depth:** standard
-**Files Reviewed:** 7
+**Files Reviewed:** 9
 **Status:** issues_found
 
 ## Summary
 
-Revisé el organizador del catálogo (`categorias-manager.tsx`), las reglas puras (`lib/catalog-panel.ts`, `sortCategories` en `lib/service-categories.ts`), la integración en `settings-client.tsx` (solo el diff de la fase y lo que toca), la lectura de `/servicios` y los tests.
+Se revisó el diff `41a69ba..HEAD` de los 9 archivos: los fixes del review anterior (CR-01, WR-01..WR-05) y los planes de cierre de gaps 23-05 (`ServiceDescription` + tarjeta del booking como contenedor con botón estirado + web de marca), 23-06 (`chipDragGates`/`chipDropIntent`, soltar en el propio grupo no hace nada) y 23-07 (renglón de descripción + link en la tarjeta de `/servicios`, copy de ayuda).
 
-Las tres invariantes centrales se cumplen:
-1. **Un servicio sin categoría nunca desaparece:** `groupCatalog` conserva cada servicio, y al borrar una categoría el espejo en memoria pasa por `categoryPatch(SIN_CATEGORIA)`.
-2. **Cambiar el modo escribe solo esa columna:** `saveCategorySortMode` y `saveServiceSortMode` hacen `update({ <modo> })` y nada más. Las dos columnas quedan fuera del trigger `businesses_protect_admin_columns`, así que no se revierten en silencio.
-3. **Reordenar renumera la lista de hermanas completa:** cada update va acotado por `.eq('business_id')` + RLS, y si vuelven 0 filas cuenta como fallo, con relectura.
+Verificación: `./node_modules/.bin/tsc --noEmit` sale con 0 y los 3 archivos de test de la fase pasan (86/86).
 
-Tenant scoping: todas las escrituras llevan `.eq('business_id', business.id)` (las de `businesses` van por `.eq('id', business.id)` + RLS del dueño). No encontré fugas entre tenants.
+Los fixes del review anterior están bien. `liveCategoryValue` sanea el alta y la edición, `nextSortOrder` + `categorySiblings` reemplazan bien a `length`, la reversión del reorden mergea por id y el listado respeta `groupCatalog`. Todas las escrituras siguen acotadas por `.eq('business_id', business.id)` y la FK compuesta sigue siendo la barrera del tenant. La descripción se pinta como texto (React la escapa, cubierto por test). No encontré regresiones de aislamiento multi-tenant ni de seguridad.
 
-Los defectos son de **corrección del estado y del orden**:
-- El form de alta puede mostrar "Sin categoría" y a la vez mandar el id de una categoría borrada. Eso bloquea el alta hasta recargar.
-- Las nuevas filas (categorías y servicios) entran en posiciones arbitrarias.
-- Soltar un chip sobre otro chip no puede llevarlo al último lugar.
-- La lista de servicios que está justo debajo del selector "Orden de los servicios" no respeta ni el modo ni los grupos, y después de reordenar queda intercalada.
-
-## Critical Issues
-
-### CR-01: El form de servicio manda el id de una categoría borrada mientras muestra "Sin categoría"
-
-**File:** `app/(dashboard)/settings/settings-client.tsx:1406`, `:2871-2885`, `:2980-2993`; `components/dashboard/categorias-manager.tsx:330-344`
-**Issue:** `newService.category` guarda el uuid que eligió el dueño. Si después borra esa categoría desde el organizador (misma pantalla, sin recargar), `deleteCategory` actualiza `serviceCategories` y `services`, pero **no** el borrador del alta. Pasan dos cosas:
-- Si quedan otras categorías, el `SelectValue` usa el fallback `?? 'Sin categoría'` y muestra "Sin categoría", pero el valor sigue siendo el uuid borrado. Al guardar, `categoryPatch` escribe ese uuid, la FK compuesta rechaza con 23503 y el dueño ve "Esa categoría ya no existe. Recargá la página y elegí otra.", con un control que dice que no eligió ninguna.
-- Si era la última categoría, `serviceCategories.length > 0` oculta el Select. No queda ningún control para corregir el valor, y **todas** las altas fallan hasta recargar.
-
-La UI muestra un valor y escribe otro, y el flujo principal (dar de alta un servicio) queda bloqueado.
-**Fix:** sanear el valor al escribir, contra las categorías vivas, y/o resetear el borrador al borrar:
-```tsx
-// settings-client.tsx, addService / saveEditService
-const categoriaVigente = (v: string) =>
-  v !== SIN_CATEGORIA && !serviceCategories.some(c => c.id === v) ? SIN_CATEGORIA : v
-...categoryPatch(categoriaVigente(newService.category))
-```
-Si no, exponer un callback `onCategoryDeleted(id)` desde `CategoriasManager` que haga `setNewService(f => f.category === id ? { ...f, category: SIN_CATEGORIA } : f)`. El mismo saneo va en `editSvcForm`.
+Quedan dos defectos de lógica en el organizador:
+1. El drop "place" (chip sobre chip) no recibió el arreglo de categoría colgada que sí recibió la rama "assign".
+2. La guarda `savingServiceOrder` es chequear-y-después-usar: un orden elegido por el dueño se puede descartar en silencio.
 
 ## Warnings
 
-### WR-01: Una categoría nueva puede aparecer arriba o en el medio en vez de al final
+### WR-01: Soltar un chip sobre otro con posición disponible sigue usando el `category_id` del destino, no su grupo visible
 
-**File:** `components/dashboard/categorias-manager.tsx:254`
-**Issue:** `sort_order: categories.length` supone que las posiciones son 0..n-1 sin huecos. Borrar deja huecos. Ejemplo: con `[A:0, B:1, C:2]`, borrar A y B deja `[C:2]`, y la nueva D se inserta con `sort_order: 1`. `sortCategories` (modo custom) la pinta **antes** que C, en pantalla y en la página pública. El dueño agrega una categoría y la ve aparecer arriba de otra.
-**Fix:**
-```ts
-const siguiente = categories.reduce((m, c) => Math.max(m, c.sort_order ?? 0), -1) + 1
-.insert({ business_id: business.id, name, sort_order: siguiente })
+**File:** `components/dashboard/categorias-manager.tsx:545-556`
+**Issue:** En G-23-10a la rama `'assign'` pasó a usar `grupoDestino = grupoVisibleDe(target.id)`. Así, un destino con una categoría colgada (pintado entre los sueltos) asigna "Sin categoría" en vez de rebotar con 23503. El comentario de la línea 539-540 lo dice explícitamente. La rama `'place'` (modo personalizado con agrupación) hace otra cosa: calcula `const destino = fromCategoryId(target.category_id)`.
+
+Pasa esto cuando el destino es un suelto con categoría colgada y el servicio arrastrado viene de otra categoría:
+- `mismoGrupo` es `false` y `cambiaCategoria` es `true`.
+- `idsDelGrupoDestino(destino, service)` devuelve `[]` (el uuid colgado no está en `serviciosPorCategoria`).
+- `assignServiceCategory(service, <uuid colgado>)` escribe un uuid inexistente, la base lo rechaza con 23503 y el dueño ve "Esa categoría ya no existe. Recargá la página…".
+
+El dueño soltó el chip sobre un servicio que en pantalla está en "Sin categoría". Si la base lo aceptara, la lista a renumerar (`[service]`) tampoco sería la del grupo donde lo soltó. Es exactamente la clase de bug que 23-06 decía cerrar, pero cerrada sólo en una de las dos ramas.
+**Fix:** Usar el grupo visible ya calculado como destino en las dos ramas:
+```tsx
+resetDrag()
+const service = services.find(s => s.id === serviceId)
+if (!service || service.id === target.id || assigning || savingServiceOrder) return true
+const destino = grupoDestino // no fromCategoryId(target.category_id)
 ```
+`idsDelGrupoDestino(SIN_CATEGORIA, service)` devuelve `sueltos`, así que el orden también sale del grupo correcto. Conviene sumar un test del intent/destino con un servicio con categoría colgada.
 
-### WR-02: Servicios nuevos o reasignados sin renumerar caen en una posición arbitraria dentro del grupo
+### WR-02: `persistServiceOrder` puede descartar en silencio el orden de "Mover …" o de un drop con posición
 
-**File:** `app/(dashboard)/settings/settings-client.tsx:1406`; `components/dashboard/categorias-manager.tsx:482-493`
-**Issue:** en un grupo ya renumerado (0..n-1), estos caminos dejan un `sort_order` que no corresponde al grupo destino:
-- El alta con categoría no manda `sort_order`, así que la base pone 0. El servicio empata con el primero del grupo y queda **segundo** (desempate por orden de llegada o `created_at`), no al final.
-- La edición del form y `dropServiceOn` (soltar un chip sobre la **fila** de una categoría) llaman solo a `assignServiceCategory`. El servicio arrastra el `sort_order` de su grupo anterior y aterriza en cualquier lugar del nuevo, aunque `posicionDisponible` sea true.
+**File:** `components/dashboard/categorias-manager.tsx:453-454, 559-564, 669-687`
+**Issue:** `persistServiceOrder` arranca con `if (savingServiceOrder) return`: sale sin toast y sin valor de retorno. Los dos callers compuestos (`confirmMove` y la rama `'place'` de `dropServiceOnChip`) chequean `savingServiceOrder` ANTES de `await assignServiceCategory(...)` y llaman a `persistServiceOrder` DESPUÉS de ese await.
 
-El diálogo "Mover …" sí renumera. Resultado: tres caminos para asignar categoría y tres posiciones de llegada distintas.
-**Fix:** en modo custom con agrupación, después de asignar por fila, llamar a `persistServiceOrder([...idsDelGrupoDestino(value, service), service.id])`, como hace `confirmMove`. En el alta y la edición con cambio de categoría, mandar `sort_order: max(sort_order del grupo destino) + 1` dentro del mismo INSERT/UPDATE.
+`confirmMove` no mira `assigning`, y el chip sigue clickeable mientras un drop está en vuelo, así que se puede dar esta secuencia:
+1. Un drop "place" de X está en la fase de asignar (`assigning=true`, `savingServiceOrder=false`).
+2. El dueño abre "Mover" sobre Y y confirma una categoría + posición.
+3. Las dos cadenas llegan a `persistServiceOrder`. La segunda encuentra `savingServiceOrder=true` y retorna.
 
-### WR-03: Soltar un chip sobre otro chip nunca lo lleva al último lugar, y "bajar uno" no hace nada
-
-**File:** `components/dashboard/categorias-manager.tsx:508-510`
-**Issue:** `base` excluye el servicio arrastrado y `lista = moveWithinList([...base, service.id], base.length, base.indexOf(target.id))`, así que el servicio siempre se inserta **antes** del chip destino. Con `[A, B, C]`:
-- Soltar A sobre B da `[A, B, C]`: no cambia nada, pero igual escribe N updates.
-- Soltar A sobre C da `[B, A, C]`.
-
-No hay ningún drop de chip que deje A último. Soltar sobre la fila tampoco sirve: en el mismo grupo es un no-op. Esto no es consistente con el arrastre de filas de categoría, donde `moveWithinList(ids, from, target)` sí permite bajar y llegar al final.
-**Fix:** dentro del mismo grupo, usar los índices del grupo visible (`from = indiceActual(service)`, `to = índice de target`) con `moveWithinList(idsDelGrupoCompleto, from, to)`, que es la misma semántica que las filas. Entre grupos, mantener "insertar en el índice del destino". Además, cortar antes de escribir si la lista resultante es igual a la actual.
-
-### WR-04: La lista de servicios bajo el selector "Orden de los servicios" ignora el modo y queda intercalada después de reordenar
-
-**File:** `app/(dashboard)/servicios/page.tsx:24` (orden por `sort_order, created_at`); `app/(dashboard)/settings/settings-client.tsx:2603-2640`
-**Issue:** el selector se pinta arriba de la Card de servicios (`visibleServices.map`), pero esa lista no pasa por `groupCatalog` ni por el modo. Toma el orden del arreglo de estado, que es:
-- el del RSC, que ahora es **global** por `sort_order`;
-- con los `push` del alta al final.
-
-Como `persistServiceOrder` renumera **por grupo** desde 0, después de reordenar y recargar la lista queda intercalada (`Color#0, Uñas#0, Barbería#0, Color#1…`): no es ni el orden de antes (`created_at`) ni el de los grupos. Si el dueño elige "Alfabético" o "Por precio", la lista que tiene debajo no cambia. Lo mismo pasa si después borra todas las categorías: el camino de identidad devuelve ese orden intercalado, no el que tenía antes.
-**Fix:** ordenar `manageableServices` con la misma regla, por ejemplo `groupCatalog(manageableServices, serviceCategories, { categories: categorySortMode, services: serviceSortMode }).flatMap(g => g.services)` antes de `useActiveTabs`. Otra opción: mover el selector al organizador y dejar la lista en `created_at`.
-
-### WR-05: Escribir en el reorden de categorías con una lista vieja convierte cambios concurrentes en errores o los pisa
-
-**File:** `components/dashboard/categorias-manager.tsx:364-397`
-**Issue:** `persistCategoryOrder` captura `antes = categories` y hace `setCategories(...)` **no funcional**. Ni el alta ni el borrado se bloquean mientras `savingOrder` está en true. Hay dos casos:
-- **Borrar durante un reorden en vuelo:** el update de la fila borrada vuelve con 0 filas y se trata como fallo. Aparece el toast "No se pudo guardar el orden", aunque el resto del orden sí se guardó.
-- **Alta durante el reorden:** si además falla la relectura, `setCategories(antes)` borra de la pantalla la categoría recién creada, aunque existe en la base.
-**Fix:** deshabilitar "Agregar" y "Eliminar" mientras `savingOrder` está en true, y usar `setCategories(prev => …)` para el optimista y la reversión, mergeando por id en vez de reemplazar la lista entera.
+`confirmMove` cierra el diálogo como si hubiera guardado, pero la posición elegida nunca se escribió. Y ya se escribió la llegada al final (`assignServiceCategory`), así que el servicio queda en un lugar distinto al que el dueño eligió y sin ningún aviso. Además, cada cadena calculó su lista sobre el `groups` anterior a la otra, así que la que sí escribe puede renumerar un grupo al que le falta el servicio de la otra y dejar empates de `sort_order`.
+**Fix:** Que un orden no guardado nunca pase por éxito, y serializar los tres caminos de escritura de servicios con una sola bandera:
+```tsx
+async function persistServiceOrder(idsEnOrden: string[]): Promise<boolean> {
+  if (savingServiceOrder) { toast.error(ORDER_REJECT_COPY); return false }
+  // ...
+}
+// y en confirmMove / openMove:
+if (!moving || savingMove || savingServiceOrder || assigning) return
+```
+Otra opción: un único `busyRef` (ref, no estado, para que la guarda no lea un closure viejo) que tomen `dropServiceOn`, `dropServiceOnChip` y `confirmMove` antes del primer await y liberen en `finally`.
 
 ## Info
 
-### IN-01: El tope de 120 caracteres de la descripción es solo del cliente
+### IN-01: Soltar en el propio grupo sin modo personalizado sigue anunciando un drop válido
 
-**File:** `app/(dashboard)/settings/settings-client.tsx:2894`, `:2997`
-**Issue:** `maxLength={120}` es el único límite. `services.description` no tiene un `CHECK` de longitud en `schema.sql`, así que una escritura directa por PostgREST con la sesión del dueño guarda cualquier largo. El impacto es acotado: son datos propios y la tarjeta los recorta a dos líneas.
-**Fix:** agregar `CHECK (char_length(description) <= 120)` en una migración futura (080+) si el tope es contrato del producto.
+**File:** `components/dashboard/categorias-manager.tsx:131-135, 773-786, 920-928`
+**Issue:** 23-06 quitó el resaltado de la fila propia cuando `chipDropIntent` da `'none'`. Pero tanto el `onDragOver` del chip como el de la fila/sueltos siguen llamando `e.preventDefault()` sin condición. El navegador muestra el cursor de "mover" (drop aceptado) justo donde el drop no hace nada, que es la sensación de "roto" que D-12 aplicado al destino quería evitar.
+**Fix:** Cuando el intent es `'none'`, poner `e.dataTransfer.dropEffect = 'none'`. Para el chip, pasarle el intent o un `canDropHere` por prop.
 
-### IN-02: Un error de renombrado puede aparecer en la fila equivocada
+### IN-02: Si la asignación se guardó pero el reorden falla y tampoco se puede releer, el estado local queda distinto de la base
 
-**File:** `components/dashboard/categorias-manager.tsx:172-176`, `:305`
-**Issue:** `renameError` es un único slot que se pinta en la fila `renamingId`. Si el blur de la fila 1 dispara `saveRename(c1)` y el dueño abre la fila 2 antes de que vuelva la respuesta, un rechazo de c1 (por ejemplo, duplicado) se muestra debajo de c2.
-**Fix:** guardar el error como `{ id, message }` y pintarlo solo si `id === c.id`.
+**File:** `components/dashboard/categorias-manager.tsx:458, 472-476`
+**Issue:** En `confirmMove`/drop "place", `assignServiceCategory` ya escribió `category_id` + `sort_order` de llegada y lo espejó en memoria. Después, `persistServiceOrder` toma `antes` del closure de `services`, que es anterior a la asignación. Si el update falla Y la relectura falla, la reversión le vuelve a poner al servicio movido su `sort_order` del grupo VIEJO pero conserva la categoría nueva. Ese par no existe en la base (que tiene la posición de llegada). Es un doble fallo y la próxima carga lo corrige, pero la promesa de "se pinta lo que está guardado" no se cumple.
+**Fix:** Para el servicio recién asignado, revertir a la posición de llegada, o forzar `router.refresh()` en esa rama.
 
-### IN-03: Doble Enter en el alta de categoría muestra "Ya tenés una categoría con ese nombre"
+### IN-03: El link "Editar descripción" abre el diálogo completo sin llevar al campo
 
-**File:** `components/dashboard/categorias-manager.tsx:248`, `:900`
-**Issue:** el guard `if (creating) return` lee estado de la clausura. Dos Enter antes del re-render mandan dos INSERT: el segundo rebota con 23505 y pinta el error de duplicado sobre una alta que salió bien.
-**Fix:** usar un `useRef` como guard síncrono (`creatingRef.current`).
+**File:** `app/(dashboard)/settings/settings-client.tsx:2762-2769`
+**Issue:** El nombre accesible es "Editar descripción de X" / "Agregar descripción a X", pero el botón llama a `openEditService(s)`, igual que el lápiz. El foco queda al principio del diálogo, y en mobile el textarea de la descripción queda más abajo, dentro de un cuerpo con scroll. Un lector de pantalla anuncia una acción más específica que la que ocurre, y el dueño tiene que buscar el campo.
+**Fix:** Pasar una opción (`openEditService(s, { focus: 'description' })`) y enfocar/scrollear el `Textarea` de `editSvcDescId` al abrir. Si no, alinear la etiqueta con lo que hace ("Editar X").
 
-### IN-04: El Label "Categoría (opcional)" no está asociado a su control
+### IN-04: En la tarjeta del booking, pasar el mouse por "Ver más" pinta el hover de selección
 
-**File:** `app/(dashboard)/settings/settings-client.tsx:2873`, `:2982`
-**Issue:** `<Label>` no tiene `htmlFor` y el `SelectTrigger` no tiene `id`, así que el lector de pantalla anuncia el disparador sin nombre. La descripción sí usa `useId`.
-**Fix:** `const newSvcCatId = useId()` → `<Label htmlFor={newSvcCatId}>` + `<SelectTrigger id={newSvcCatId}>` (y lo mismo en la edición).
-
-### IN-05: Los tests no cubren la regla que produce los bugs de posición
-
-**File:** `test/catalog-panel.test.ts`
-**Issue:** se testean `renumber` y `moveWithinList` sueltos, pero no la construcción `moveWithinList([...base, id], base.length, to)` que usan el arrastre de chips y el diálogo (WR-03), ni el cálculo del `sort_order` de una alta (WR-01). Los dos defectos pasan con la suite en verde.
-**Fix:** extraer a `lib/catalog-panel.ts` una función pura `insertIntoGroup(groupIds, serviceId, targetIndex)` y `nextSortOrder(rows)`, y testear los casos "al último", "bajar uno" y "con huecos".
+**File:** `app/[slug]/booking-client.tsx:590-599, 640-646`
+**Issue:** `hover:border-primary` vive en el contenedor, así que pasar el puntero por el toggle "Ver más" (que NO selecciona) tiñe el borde igual que al apuntar la zona de selección. Además, el pseudo-elemento `after:absolute` del botón cubre el párrafo de la descripción, así que ese texto no se puede seleccionar ni copiar (cualquier arrastre del mouse arranca una selección de servicio). Ninguna de las dos cosas rompe el flujo, pero la señal visual dice "esto elige el servicio" donde no lo hace.
+**Fix:** Mover el hover al botón: `has-[button:not([data-toggle]):hover]:border-primary` en el contenedor, o `group` + `group-hover` sobre el botón de selección. Opcional: `select-text` + `relative z-10` en el párrafo si se quiere que la descripción sea copiable (a costa de que tocar el texto ya no seleccione).
 
 ---
 
-_Reviewed: 2026-09-16_
+_Reviewed: 2026-09-17_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
