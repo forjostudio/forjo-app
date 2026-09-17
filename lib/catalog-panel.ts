@@ -194,6 +194,28 @@ export function chipDragGates(input: { categoryCount: number; serviceCustom: boo
   }
 }
 
+/** Lo que hace soltar un chip sobre un destino: ubicar, sólo asignar, o nada. */
+export type ChipDropIntent = 'place' | 'assign' | 'none'
+
+/**
+ * Qué hace soltar un chip sobre un destino (una fila, el grupo de sueltos u otro chip) (G-23-10a).
+ *
+ *   - Con `canPlace` (ver {@link chipDragGates}) da `'place'`: el camino con posición que ya existe
+ *     decide adentro, incluido el propio grupo (ahí soltar sobre un chip reordena).
+ *   - Sin `canPlace`, `'none'` si el destino es el grupo VISIBLE del chip y `'assign'` si es otro.
+ *     `'assign'` escribe sólo la categoría con la llegada al final y no renumera a nadie, así el orden
+ *     manual guardado sobrevive a un modo alfabético o por precio (CAT-06, D-11). `'none'` no escribe
+ *     ni resalta: un arrastre que no hace nada se lee como roto (D-12 aplicado al destino).
+ *
+ * "Grupo visible" y no igualdad de `category_id`: un servicio con una categoría colgada se pinta entre
+ * los sueltos (así lo reparte `groupCatalog`), y soltarlo ahí tiene que ser el mismo no-op que
+ * cualquier otro drop en el propio grupo.
+ */
+export function chipDropIntent(input: { canPlace: boolean; sameVisibleGroup: boolean }): ChipDropIntent {
+  if (input.canPlace) return 'place'
+  return input.sameVisibleGroup ? 'none' : 'assign'
+}
+
 /** true si las dos listas tienen los mismos ids en el mismo orden. */
 export function sameOrder(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((id, i) => id === b[i])

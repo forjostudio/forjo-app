@@ -38,6 +38,7 @@ import {
   placeOnTarget,
   sameOrder,
   chipDragGates,
+  chipDropIntent,
   categoryCountLabel,
   serviceCountLabel,
   classifyCategoryWriteError,
@@ -245,6 +246,13 @@ export function CategoriasManager({ business, supabase, services, setServices, c
       ? (groups.find(g => g.services.some(x => x.id === service.id))?.services ?? [])
       : value === SIN_CATEGORIA ? sueltos : (serviciosPorCategoria.get(value) ?? [])
     return grupo.filter(x => x.id !== service.id).map(x => x.id)
+  }
+
+  // El valor del grupo VISIBLE donde groupCatalog pintó a un servicio: el id de su categoría, o
+  // SIN_CATEGORIA si está entre los sueltos (o si no aparece). Es el grupo visible y no el
+  // `category_id` porque una categoría colgada se pinta entre los sueltos (G-23-10a).
+  function grupoVisibleDe(serviceId: string | null): string {
+    return groups.find(g => g.services.some(x => x.id === serviceId))?.categoryId ?? SIN_CATEGORIA
   }
 
   // El índice que el servicio tiene HOY dentro de su grupo.
@@ -506,8 +514,10 @@ export function CategoriasManager({ business, supabase, services, setServices, c
     resetDrag()
     const service = services.find(s => s.id === serviceId)
     if (!service || assigning) return true
-    // No-op si el servicio ya está en ese destino.
-    if (fromCategoryId(service.category_id) === value) return true
+    // No-op si el servicio ya está en ese destino: por su categoría guardada o por el grupo VISIBLE
+    // donde se pinta (una categoría colgada cae entre los sueltos). Soltar en el propio grupo no escribe
+    // nada (G-23-10a).
+    if (fromCategoryId(service.category_id) === value || grupoVisibleDe(service.id) === value) return true
     setAssigning(true)
     void assignServiceCategory(service, value).finally(() => setAssigning(false))
     return true
@@ -516,11 +526,19 @@ export function CategoriasManager({ business, supabase, services, setServices, c
   // Soltar un chip sobre OTRO chip: toma la categoría de ese chip (por assignServiceCategory, D-07) Y,
   // con la posición disponible, ocupa el índice de ese chip dentro de su grupo (placeOnTarget) y se
   // guarda por el mismo persistServiceOrder que el diálogo. Sin la posición disponible (modo no
-  // personalizado o camino de identidad) sólo asigna la categoría.
+  // personalizado o camino de identidad) decide chipDropIntent (G-23-10a): en el propio grupo visible
+  // no hace nada y en otro sólo asigna la categoría, sin renumerar a nadie.
   function dropServiceOnChip(target: Service): boolean {
     const serviceId = draggingServiceId
     if (!serviceId) return false
-    if (!posicionDisponible) return dropServiceOn(fromCategoryId(target.category_id))
+    const grupoDestino = grupoVisibleDe(target.id)
+    const intent = chipDropIntent({ canPlace: posicionDisponible, sameVisibleGroup: grupoVisibleDe(serviceId) === grupoDestino })
+    // El drop ya se resolvió (no hace nada): se devuelve true para cortar la propagación, así la fila
+    // de abajo no lo reinterpreta.
+    if (intent === 'none') { resetDrag(); return true }
+    // Sólo asignar, al grupo VISIBLE del destino y no a su `category_id`: un destino con una categoría
+    // colgada asigna "Sin categoría" en vez de rebotar con 23503. persistServiceOrder no corre acá.
+    if (intent === 'assign') return dropServiceOn(grupoDestino)
     resetDrag()
     const service = services.find(s => s.id === serviceId)
     if (!service || service.id === target.id || assigning || savingServiceOrder) return true
@@ -756,7 +774,13 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                       e.preventDefault()
                       if (draggingCategoryId) {
                         if (draggingCategoryId !== c.id && dragOverCategoryId !== c.id) setDragOverCategoryId(c.id)
-                      } else if (draggingServiceId && dropTargetId !== c.id) {
+                      } else if (
+                        draggingServiceId && dropTargetId !== c.id
+                        // Sin resaltado donde nada va a pasar (G-23-10a): sin modo personalizado, la
+                        // fila del propio grupo no es zona de drop. Con el modo personalizado se resalta
+                        // como siempre, porque ahí soltar sobre un chip del grupo reordena.
+                        && chipDropIntent({ canPlace: posicionDisponible, sameVisibleGroup: grupoVisibleDe(draggingServiceId) === c.id }) !== 'none'
+                      ) {
                         setDropTargetId(c.id)
                       }
                     }}
@@ -895,7 +919,12 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                   // arrastra ni recibe filas.
                   onDragOver={e => {
                     e.preventDefault()
-                    if (draggingServiceId && dropTargetId !== SIN_CATEGORIA) setDropTargetId(SIN_CATEGORIA)
+                    // Misma regla que las filas (G-23-10a): sin modo personalizado, el grupo propio de
+                    // los sueltos no se marca como zona de drop.
+                    if (
+                      draggingServiceId && dropTargetId !== SIN_CATEGORIA
+                      && chipDropIntent({ canPlace: posicionDisponible, sameVisibleGroup: grupoVisibleDe(draggingServiceId) === SIN_CATEGORIA }) !== 'none'
+                    ) setDropTargetId(SIN_CATEGORIA)
                   }}
                   onDragLeave={e => leaveRow(e, SIN_CATEGORIA)}
                   onDrop={e => {
