@@ -311,7 +311,8 @@ Cada chip es **un solo botón** que abre el diálogo "Mover …" (Bloque E):
 ```tsx
 <button
   type="button"
-  draggable={serviceMode === 'custom' || categories.length > 0}
+  // G-23-10a: arrastrar para asignar sólo depende de que haya categorías, no del modo de servicios.
+  draggable={categories.length > 0}
   onClick={() => setMoving(s)}
   aria-label={`Mover “${s.name}”`}
   className="inline-flex min-h-11 items-center"
@@ -326,7 +327,7 @@ Cada chip es **un solo botón** que abre el diálogo "Mover …" (Bloque E):
 - **Pill visual de 28px dentro de un área táctil de 44px** — el molde exacto del 19-UI-SPEC. La Card queda compacta y el piso táctil se respeta.
 - **El nombre NO se trunca nunca.** `whitespace-nowrap` + `flex-wrap` en el contenedor: un nombre largo ocupa su fila entera y envuelve la siguiente. Un nombre cortado en un chip haría ambiguo cuál servicio estás por mover.
 - **Un solo control por chip, no tres.** *(Desviación declarada de la lectura literal de D-08 "el mismo mecanismo".)* Tres botones inline de 44px por chip (▲ ▼ mover) son 132px + el nombre ⇒ **un chip por fila a 375px**, que destruye los "chips compactos" que D-06 eligió. El diálogo "Mover …" contiene **las dos cosas** (categoría y posición), así que el mecanismo sigue estando disponible con teclado y en mobile, que es lo que CAT-03/D-08 exigen. El arrastre sigue siendo el atajo de desktop.
-- **Arrastre del chip:** `onDragStart` setea el `service_id`; los drop targets son la **fila de categoría** (soltar en cualquier parte de la fila ⇒ asignar a esa categoría, al final de su grupo) y **otro chip** (⇒ insertar antes de ese chip, resolviendo categoría y posición a la vez). La fila que recibe se realza con `bg-secondary ring-2 ring-ring`.
+- **Arrastre del chip:** `onDragStart` setea el `service_id`; los drop targets son la **fila de categoría** (soltar en cualquier parte de la fila ⇒ asignar a esa categoría, al final de su grupo) y **otro chip** (⇒ insertar antes de ese chip, resolviendo categoría y posición a la vez). La fila que recibe se realza con `bg-secondary ring-2 ring-ring`. Con un modo de servicios no personalizado (G-23-10a): soltar sobre un chip de **otro** grupo sólo asigna (llega al final, nadie se renumera), y soltar en el **propio** grupo no hace nada y no resalta la fila.
 
 ### El grupo "Sin categoría"
 
@@ -349,10 +350,12 @@ Es la lectura de CAT-02 en pantalla: el estado sin categoría es **válido, perm
 | Selector de modo de **categorías** | `categories.length > 0` |
 | Filas de categoría + chips + grupo "Sin categoría" | `categories.length > 0` |
 | Grip y ▲/▼ de **categorías** | `business.category_sort_mode === 'custom'` (D-12) |
-| Grip del **chip** y sección "Posición" del diálogo | `business.service_sort_mode === 'custom'` (D-12) |
+| Grip y arrastre del **chip** (asignar a otra categoría) | `categories.length > 0` (G-23-10a) |
+| Reorden chip sobre chip y sección "Posición" del diálogo | `business.service_sort_mode === 'custom'` y al menos un servicio con categoría (D-12) |
 | Bloque de alta de categoría | siempre (es la salida del estado vacío) |
 
 ⚠ **Los dos ejes se gatean por separado** (D-12): `category_sort_mode='alpha'` apaga los controles de categorías y **deja vivos** los de servicios si `service_sort_mode='custom'`.
+**Asignar no es reordenar:** el arrastre del chip es el camino de asignación de D-05/D-06 y hace algo con cualquier modo, así que no es el control inerte que prohíben CAT-05/D-12; lo que el modo de servicios apaga es **ubicar**. Decisión del usuario del 2026-09-17 (UAT G-23-10a).
 
 ### Empty state — cero categorías
 
@@ -627,7 +630,7 @@ La **copy** de los estados vacíos y de error no se repite acá: vive en `## Cop
 | `loading` | ✅ explicit | El chip **no tiene estado de carga propio**: mover se confirma desde el diálogo (E12) y el estado en vuelo vive en su botón `Guardar`. |
 | `error` | ✅ explicit | Fallo al mover ⇒ `toast.error` con el nombre del servicio (`No se pudo mover "{servicio}". Probá de nuevo.`) y el chip **vuelve a su grupo original**. |
 | `populated` | ✅ explicit | `flex-wrap` con pill visual de 28px (`h-7`) dentro de un área táctil de 44px (`min-h-11`). A 8-15 servicios repartidos, los chips entran sin scroll. |
-| `partial` | ✅ explicit | Con `service_sort_mode !== 'custom'` el chip **pierde el grip** (D-12) y sigue siendo el disparador del diálogo "Mover …". La acción nunca desaparece; lo que desaparece es el atajo de arrastre. |
+| `partial` | ✅ explicit | Con `service_sort_mode !== 'custom'` el chip **conserva el grip y el arrastre para asignar** a otra categoría y sigue siendo el disparador del diálogo "Mover …"; lo que desaparece es el reorden (chip sobre chip del mismo grupo y la sección "Posición", D-12). Soltar en el propio grupo no hace nada (G-23-10a). |
 | `overflow` | ✅ explicit | `flex-wrap` en el contenedor: **nunca** scroll horizontal y **sin** umbral de "ver todos" — a este volumen no hace falta. |
 | `zero-one-many` | ✅ explicit | Un solo chip ocupa una fila y muchos envuelven. El conteo autoritativo del grupo no lo dan los chips sino la fila (E2), así que no hay dos fuentes de verdad. |
 | `long-text` | 🧪 backstop | `{ verification: backstop }` — Un nombre de servicio de ≥40 caracteres ocupa su fila entera y envuelve la siguiente (`whitespace-nowrap` + `flex-wrap`), **sin truncarse nunca** — un nombre cortado haría ambiguo cuál servicio se está por mover. Verificable a 375px. |
@@ -851,6 +854,18 @@ Esta fase **no instala componentes, no agrega dependencias y no agrega ninguna l
 6. **El estado del arrastre se resetea al colapsar la Card y al cambiar de modo.** Un `draggingId` colgado de un nodo desmontado deja la fila en `border-dashed` para siempre.
 7. **Deuda anotada, NO se arregla acá:** los chips de servicio por profesional (`settings-client.tsx:2783`) usan `text-primary`, que falla AA en las paletas red/green/yellow en light. Ya estaba anotado en el 19-UI-SPEC; sigue fuera de alcance.
 8. **`--border` está por debajo de 3:1 en todo el repo.** No es de esta fase y no se toca; este spec sólo declara que **no se apoya en él** para identificar ningún control.
+
+---
+
+## Cambios post-UAT (gap closure 23-05 … 23-07)
+
+Cambios pedidos en la UAT del 2026-09-17, cada uno con su gap y su plan.
+
+### G-23-10a — El chip se arrastra para asignar con cualquier modo (23-06)
+
+- **Qué cambió:** el grip y el arrastre del chip dependen sólo de que haya categorías (`chipDragGates().canDrag`). El reorden chip sobre chip y la sección "Posición" siguen atados a `service_sort_mode === 'custom'` con agrupación (`canPlace`). Con un modo no personalizado, `chipDropIntent` decide: soltar en otro grupo sólo asigna por `assignServiceCategory` (llegada `max + 1`, sin renumerar a nadie, CAT-06) y soltar en el propio grupo **visible** no escribe ni resalta.
+- **Por qué:** el diagnóstico mostró que el gate del chip estaba atado al modo de servicios. Fue una decisión de 23-03 (E3) y 23-04, que resolvió la contradicción entre el snippet de §"Los chips" y la tabla de gates hacia el lado que no distinguía asignar de reordenar. D-05/D-06 definen el arrastre del chip como camino de asignación; D-12/CAT-05 sólo prohíben controles de reordenar inertes.
+- **Qué no cambió:** las filas de categoría (grip, flechas y arrastre sólo con `category_sort_mode === 'custom'`), la sección "Posición" del diálogo y D-07 (la columna la escribe sólo `assignServiceCategory` y el form). El arrastre táctil en mobile sigue diferido.
 
 ---
 

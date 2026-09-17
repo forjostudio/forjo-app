@@ -54,7 +54,7 @@ result: pass
 note: "En mobile no hay arrastre pero se ven los puntitos (grip). Queda como follow-up diferido."
 
 ### 10. Modos de orden: ida y vuelta sin perder tu orden
-expected: Acomodás categorías y servicios a mano. En "Orden de las categorías" elegís Alfabético: las filas se reordenan A-Z y desaparecen flechas/grip de las filas. En "Orden de los servicios" elegís Alfabético o Por precio: la lista de servicios de abajo se reordena al instante agrupada por categoría y desaparecen grip/arrastre del chip. Volvés a "Como los ordené yo" en ambos: vuelve exactamente tu orden manual, también tras recargar.
+expected: Acomodás categorías y servicios a mano. En "Orden de las categorías" elegís Alfabético: las filas se reordenan A-Z y desaparecen flechas/grip de las filas. En "Orden de los servicios" elegís Alfabético o Por precio: la lista de servicios de abajo se reordena al instante agrupada por categoría y desaparecen el reorden chip sobre chip y la sección "Posición"; el chip conserva el grip y se sigue pudiendo arrastrar a otra categoría (G-23-10a). Volvés a "Como los ordené yo" en ambos: vuelve exactamente tu orden manual, también tras recargar.
 result: issue
 reported: "Pass. Lo que no me gusta es que si elijo alfabetico en las categorías, ya no puedo pasar servicios de una a otra, los chips de servicios se pueden mover solo haciendole clic y eligiendo del modal. Y los servicios nunca se pudieron acomodar a mano, solo por orden de agregado."
 severity: minor
