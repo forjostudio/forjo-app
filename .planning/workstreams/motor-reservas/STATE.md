@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 23
 current_phase_name: El panel que organiza el catálogo
 status: executing
-stopped_at: Completed 23-06-PLAN.md
-last_updated: "2026-09-17T15:56:26.363Z"
+stopped_at: Completed 23-07-PLAN.md
+last_updated: "2026-09-17T16:02:34.387Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 23 execution started
-state_head: a880cd9f2042302ddc8e80649f167af089be34fb
+state_head: 482c0776fbcdf25874df74bd5b06fd514e6795a7
 progress:
   total_phases: 20
   completed_phases: 13
   total_plans: 99
-  completed_plans: 98
+  completed_plans: 99
   percent: 65
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 23 (El panel que organiza el catálogo) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-09-17 — Phase 23 execution started
 
@@ -215,6 +215,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 23 P04 | 6min | 3 tasks | 4 files |
 | Phase 23 P05 | 4min | 2 tasks | 4 files |
 | Phase 23 P06 | 5min | 3 tasks | 6 files |
+| Phase 23 P07 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -423,6 +424,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 23]: G-23-6: la tarjeta del paso 1 es contenedor con botón de selección estirado (after:-inset-px); Ver más es hermano, nunca hijo
 - [Phase 23]: G-23-6: la web de marca usa el mismo ServiceDescription
 - [Phase 23]: G-23-10a (23-06): el arrastre del chip (asignar) depende sólo de que haya categorías; el reorden chip sobre chip y la sección Posición siguen en modo de servicios personalizado + agrupación. chipDragGates/chipDropIntent son la única fuente; soltar en el propio grupo visible sin modo personalizado no escribe ni resalta
+- [Phase 23]: G-23-6b: la tarjeta del panel muestra un renglón de la descripción y un link Editar / Agregar descripción que abre openEditService(s); el link no lleva zona de exclusión G-04 porque sólo abre un diálogo
+- [Phase 23]: G-23-6: la ayuda del campo dice que el cliente abre el texto largo con Ver más; UI-SPEC, Phase 24 criterio 4 y CAT-11 dejan de prometer dos renglones
 
 ### Pending Todos
 
@@ -510,8 +513,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-17T15:56:22.170Z
-Stopped at: Completed 23-06-PLAN.md
+Last session: 2026-09-17T16:02:30.147Z
+Stopped at: Completed 23-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
