@@ -37,6 +37,7 @@ import {
   moveWithinList,
   placeOnTarget,
   sameOrder,
+  chipDragGates,
   categoryCountLabel,
   serviceCountLabel,
   classifyCategoryWriteError,
@@ -94,9 +95,11 @@ const SORT_MODE_REJECT_COPY = 'No se pudo guardar el orden. Probá de nuevo.'
 // El nombre NUNCA se trunca: `whitespace-nowrap` + el `flex-wrap` del contenedor hacen que un nombre
 // largo ocupe su fila entera; un nombre cortado volvería ambiguo cuál servicio estás por mover.
 //
-// ARRASTRE (plan 23-03): el chip es a la vez ORIGEN (sólo con el modo de servicios personalizado) y
-// DESTINO (soltar un chip sobre otro chip toma la categoría de ese chip). Lo que desaparece sin el modo
-// personalizado es el atajo —grip y `draggable`—, nunca la acción: el botón sigue abriendo "Mover …".
+// ARRASTRE (plan 23-03, gate corregido en G-23-10a): el chip es a la vez ORIGEN —siempre que haya al
+// menos una categoría, porque asignar a otra categoría no depende del modo de orden (D-05/D-06)— y
+// DESTINO (soltar un chip sobre otro chip toma la categoría de ese chip). Lo que depende del modo de
+// servicios es UBICAR: el reorden chip sobre chip y la sección "Posición" del diálogo (D-12/CAT-05).
+// Sin categorías no hay grip ni `draggable`, pero la acción sigue: el botón abre "Mover …".
 function ServiceChip({ service, onMove, canDrag, dragging, onDragStart, onDragEnd, onDropOnChip }: {
   service: Service
   onMove: (s: Service) => void
@@ -221,14 +224,18 @@ export function CategoriasManager({ business, supabase, services, setServices, c
 
   // D-12: los controles de orden de las categorías sólo existen con el modo personalizado.
   const categoryCustom = categorySortMode === 'custom'
-  // Mismo criterio para el eje de los servicios: sin modo personalizado el chip pierde el atajo.
+  // Mismo criterio para el eje de los servicios, pero sólo sobre UBICAR: sin modo personalizado se van
+  // el reorden chip sobre chip y la sección "Posición"; el arrastre para asignar se queda (G-23-10a).
   const serviceCustom = serviceSortMode === 'custom'
   // La posición de un servicio dentro de su grupo sólo existe con el modo personalizado Y fuera del
   // camino de identidad de groupCatalog (ninguna categoría con servicios): ahí la función devuelve la
   // lista como llega sin mirar `sort_order`, así que un Subir/Bajar persistiría un orden sin ningún
   // efecto visible — una acción inerte, lo que CAT-05 prohíbe. Decisión del usuario del 2026-09-16.
   const hayAgrupacion = groups.some(g => g.categoryId !== null)
-  const posicionDisponible = serviceCustom && hayAgrupacion
+  // UNA sola fuente para "puede arrastrar" (asignar: hay categorías) y "puede ubicar" (la condición de
+  // arriba). Separarlas es G-23-10a: asignar no es reordenar.
+  const chipGates = chipDragGates({ categoryCount: categories.length, serviceCustom, hasGrouping: hayAgrupacion })
+  const posicionDisponible = chipGates.canPlace
 
   // El grupo, EN EL ORDEN QUE SE VE, al que iría `service` con el valor `value` del control. Si el
   // valor es su categoría de hoy, es el grupo donde groupCatalog lo puso (también cubre una categoría
@@ -866,7 +873,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                             key={s.id}
                             service={s}
                             onMove={openMove}
-                            canDrag={serviceCustom}
+                            canDrag={chipGates.canDrag}
                             dragging={draggingServiceId === s.id}
                             onDragStart={setDraggingServiceId}
                             onDragEnd={resetDrag}
@@ -911,7 +918,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                         key={s.id}
                         service={s}
                         onMove={openMove}
-                        canDrag={serviceCustom}
+                        canDrag={chipGates.canDrag}
                         dragging={draggingServiceId === s.id}
                         onDragStart={setDraggingServiceId}
                         onDragEnd={resetDrag}

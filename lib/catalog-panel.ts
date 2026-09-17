@@ -170,6 +170,30 @@ export function placeOnTarget(groupIds: string[], movedId: string, targetId: str
   return copia
 }
 
+/**
+ * Qué puede hacer el arrastre de un chip de servicio en el organizador (G-23-10a).
+ *
+ * Son DOS flags y no uno porque asignar no es reordenar:
+ *   - `canDrag` — el chip es origen de un arrastre. Arrastrarlo a otra categoría es el camino rápido de
+ *     ASIGNACIÓN de D-05/D-06 y hace algo con cualquier modo de orden, así que sólo exige que haya a
+ *     dónde asignar: `categoryCount > 0`.
+ *   - `canPlace` — el arrastre y el diálogo "Mover …" pueden elegir una POSICIÓN dentro del grupo
+ *     (chip sobre chip, sección "Posición"). Eso es reordenar, y un control de reordenar inerte es lo
+ *     que prohíben CAT-05/D-12: sólo con el modo de servicios personalizado Y fuera del camino de
+ *     identidad de `groupCatalog` (ninguna categoría con servicios), donde un Subir/Bajar persistiría
+ *     un orden sin ningún efecto visible.
+ *
+ * Antes las dos cosas estaban atadas al modo de servicios y con "Alfabético" o "Por precio" el dueño
+ * perdía el atajo de asignar. Decisión del usuario del 2026-09-17 (UAT G-23-10a): asignar siempre que
+ * haya categorías; ubicar sólo en "Como los ordené yo".
+ */
+export function chipDragGates(input: { categoryCount: number; serviceCustom: boolean; hasGrouping: boolean }): { canDrag: boolean; canPlace: boolean } {
+  return {
+    canDrag: input.categoryCount > 0,
+    canPlace: input.serviceCustom && input.hasGrouping,
+  }
+}
+
 /** true si las dos listas tienen los mismos ids en el mismo orden. */
 export function sameOrder(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((id, i) => id === b[i])
