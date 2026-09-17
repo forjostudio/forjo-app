@@ -2,6 +2,7 @@ import { servicesData } from '@/lib/landing/schema'
 import { shouldHideServices } from '@/lib/landing/derive'
 import { Kicker, GhostIndex, PillButton } from '@/components/landing/_premium'
 import type { Service } from '@/lib/types'
+import { ServiceDescription } from '@/components/booking/service-description'
 
 // ── Sección Services (RSC) ──────────────────────────────────────────────────────────
 // La LISTA de servicios SIEMPRE deriva de la tabla `services` (D7-06), pasada por props
@@ -10,8 +11,11 @@ import type { Service } from '@/lib/types'
 //
 // Restyle F8.1 (D81-08, mock 05-screen.png): lista editorial (NO el grid de cards plano de
 // F7). Cada item: número mono primary + nombre display (con duración·descripción small muted)
-// + precio mono, separados por hairline. Items NO interactivos (el CTA de la página es el
-// booking). Headings: <h2> de sección (kicker + display) y <h3> por servicio, sin saltos.
+// + precio mono, separados por hairline. Items NO interactivos como tarjeta (el CTA de la página
+// sigue siendo el booking). Única excepción (G-23-6): el "Ver más" de una descripción que no entra,
+// que es un desplegable de lectura y no compite con el CTA. Es el mismo componente del booking
+// público, así la regla de recorte y medición es una sola en las dos superficies.
+// Headings: <h2> de sección (kicker + display) y <h3> por servicio, sin saltos.
 // Cero hex; tokens / --frj-*; mobile-first 375px.
 
 export function Services({
@@ -72,9 +76,12 @@ export function Services({
                 {service.name}
               </h3>
               {service.description && (
-                <small className="mt-[0.5em] block max-w-[48ch] text-[clamp(13px,1.5cqw,16px)] font-normal leading-snug tracking-normal text-muted-foreground line-clamp-2">
-                  {service.description}
-                </small>
+                <ServiceDescription
+                  text={service.description}
+                  name={service.name}
+                  className="mt-[0.5em] max-w-[48ch] text-[clamp(13px,1.5cqw,16px)] font-normal leading-snug tracking-normal text-muted-foreground"
+                  toggleClassName="text-[clamp(12px,1.3cqw,14px)] font-medium text-foreground"
+                />
               )}
             </div>
 
