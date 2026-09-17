@@ -18,6 +18,7 @@ import {
   ORDER_REJECT_COPY,
   moveRejectCopy,
   chipDragGates,
+  chipDropIntent,
 } from '@/lib/catalog-panel'
 
 // ── Phase 23 (el panel del catálogo) — tests PUROS de lib/catalog-panel.ts ────────────────────
@@ -381,5 +382,23 @@ describe('chipDragGates — asignar no es reordenar (G-23-10a)', () => {
 
   it('modo personalizado con agrupación: arrastra y ubica', () => {
     expect(chipDragGates({ categoryCount: 3, serviceCustom: true, hasGrouping: true })).toEqual({ canDrag: true, canPlace: true })
+  })
+})
+
+describe('chipDropIntent — el propio grupo sin modo personalizado no hace nada (G-23-10a)', () => {
+  it('con posición disponible, el propio grupo es place (reordena, Test 9)', () => {
+    expect(chipDropIntent({ canPlace: true, sameVisibleGroup: true })).toBe('place')
+  })
+
+  it('con posición disponible, otro grupo es place (asigna y ubica)', () => {
+    expect(chipDropIntent({ canPlace: true, sameVisibleGroup: false })).toBe('place')
+  })
+
+  it('sin posición, el propio grupo visible es none: no escribe ni resalta', () => {
+    expect(chipDropIntent({ canPlace: false, sameVisibleGroup: true })).toBe('none')
+  })
+
+  it('sin posición, otro grupo es assign: sólo asigna, nadie se renumera', () => {
+    expect(chipDropIntent({ canPlace: false, sameVisibleGroup: false })).toBe('assign')
   })
 })
