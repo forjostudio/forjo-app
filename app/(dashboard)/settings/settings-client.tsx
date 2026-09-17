@@ -2712,7 +2712,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         columna. Con las acciones colocadas explícitamente en la segunda columna de la
                         primera fila, la ubicación automática de la grilla mandaría uno de los bloques
                         de abajo al hueco que queda a la derecha. Un hijo de contenido NUEVO tiene que
-                        declarar su columna igual que los cinco que ya están, o se va a la columna de
+                        declarar su columna igual que los seis que ya están, o se va a la columna de
                         las acciones en desktop.
 
                         El centrado vertical se CONSERVA, y va con prefijo de desktop a propósito: en
@@ -2729,6 +2729,44 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                           Sin cobertura
                         </span>
                       )}
+                    </div>
+                    {/* DESCRIPCIÓN + LINK DE EDICIÓN (G-23-6b). Pedido explícito del dueño en la UAT del
+                        2026-09-17: ver un renglón de la descripción en la tarjeta y poder editarla sin
+                        buscar el lápiz; si no hay descripción, un link para agregarla. Supera a D-06
+                        ("la lista NO se toca") SÓLO en este punto: la tarjeta no se agrupa, no se
+                        reordena y su grilla no se refactoriza — es UN hijo de contenido más, y por eso
+                        declara la primera columna como los demás.
+
+                        El renglón recorta con line-clamp-1 + break-words y NO con truncate: truncate
+                        fuerza nowrap y anula break-words, así que una palabra larga sin espacios
+                        desbordaba la tarjeta en vez de partirse y cerrar con "…" (el defecto secundario
+                        de la sesión de debug de G-23-6). Es un recordatorio, no una vista previa fiel de
+                        la tarjeta pública.
+
+                        Sin zona de exclusión de G-04, y es DECISIÓN ESCRITA: G-04 nació de un stepper
+                        que ESCRIBÍA el cupo cuando el navegador corregía el toque hacia él. Este link
+                        sólo ABRE un diálogo que no escribe nada y se cierra con Escape: un toque
+                        corregido cuesta una tecla, no un dato. Lleva su propia línea y 44px táctiles en
+                        mobile (los márgenes negativos devuelven 24 de esos 44 al flujo, así la tarjeta
+                        no gana un renglón vacío). Si en producción aparece un toque errado molesto sobre
+                        la línea de datos, el arreglo es darle a este bloque pb-4.
+
+                        Es un <button> y no un <Link>: abre un diálogo, no navega. Llama a la MISMA
+                        función que el lápiz, así que no hay camino de escritura nuevo. El renglón se
+                        actualiza solo al guardar porque saveEditService ya mergea la descripción
+                        normalizada en el estado local. */}
+                    <div className="flex flex-col items-start gap-1 sm:col-start-1">
+                      {s.description && (
+                        <p className="w-full text-xs text-muted-foreground break-words line-clamp-1">{s.description}</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openEditService(s)}
+                        aria-label={s.description ? `Editar descripción de ${s.name}` : `Agregar descripción a ${s.name}`}
+                        className="-my-3 inline-flex min-h-11 items-center rounded-sm text-xs text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:my-0 sm:min-h-0"
+                      >
+                        {s.description ? 'Editar' : 'Agregar descripción'}
+                      </button>
                     </div>
                     {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER
                         dato —mismo registro que duración y precio—, y no como pill junto al nombre:
