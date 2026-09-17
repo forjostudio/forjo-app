@@ -128,6 +128,7 @@ blocked: 0
     - "Agregar break-words al párrafo de la descripción"
     - "Alinear el copy de ayuda del campo con el resultado"
   debug_session: .planning/debug/descripcion-120-no-entra-tarjeta-publica.md
+  user_decision: "Mantener el tope de 120. Portar el patrón de forjo-tiendas (components/tienda/CatalogoLista.tsx, FilaDeProducto L449-601, diseño agualaboca mobile): descripción a 2-3 líneas (line-clamp) con botón Ver más / Ver menos que aparece SOLO si el texto desborda medido en pantalla (scrollHeight > clientHeight + 1 con ResizeObserver, arranca en false), aria-expanded, target 44px con márgenes negativos, y al expandir cambia el alto de la tarjeta. Sumar break-words."
 - gap_id: G-23-6b
   truth: "La tarjeta del servicio en el panel muestra al menos una línea de la descripción y un link subrayado Editar que abre el mismo diálogo que el lápiz"
   status: failed
@@ -143,6 +144,7 @@ blocked: 0
     - "Botón-link Editar (underline underline-offset-2) que llama openEditService(s), con aria-label, focus visible y target 44px en mobile, en su propia línea"
     - "Decidir qué mostrar si no hay descripción"
   debug_session: .planning/debug/tarjeta-panel-sin-descripcion-ni-link-editar.md
+  user_decision: "Mostrar la línea de descripción y el link subrayado Editar; si el servicio no tiene descripción, mostrar un link Agregar descripción que abre el mismo diálogo de edición."
 - gap_id: G-23-10a
   truth: "Con el orden de categorías en Alfabético, el dueño igual puede pasar un servicio de una categoría a otra arrastrando el chip (el modo de categorías no debería bloquear la asignación)"
   status: failed
@@ -160,6 +162,7 @@ blocked: 0
     - "Actualizar la tabla de gates del UI-SPEC y el expected del Test 10"
     - "Decidir si el grip se muestra cuando sólo se puede asignar y qué pasa al soltar en el propio grupo en modo no personalizado"
   debug_session: .planning/debug/chips-no-arrastrables-con-categorias-alfabetico.md
+  user_decision: "Asignar siempre: el chip se puede arrastrar a otra categoría (con grip) aunque el orden de servicios no sea personalizado; el reorden chip-sobre-chip sigue sólo en Como los ordené yo; soltar en su propio grupo en modo no personalizado no hace nada. Actualizar tabla de gates del UI-SPEC."
 - gap_id: G-23-10b
   truth: "El dueño puede acomodar a mano el orden de los servicios (no sólo por orden de alta)"
   status: withdrawn
