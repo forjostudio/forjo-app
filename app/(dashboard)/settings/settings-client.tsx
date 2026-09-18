@@ -2246,7 +2246,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setSavingEditLoc(true)
     // El payload sale del normalizador COMPARTIDO con la huella: una sola normalización para la sede.
     const payload = locToPayload(editLocForm)
-    const { error } = await supabase.from('locations').update(payload).eq('id', editLoc.id)
+    // El `.eq('business_id', ...)` es defensa en profundidad (code-review WR-06, pasada 3): la RLS es
+    // la segunda capa, no la única. Era la ÚNICA de las tres escrituras de edición de esta pantalla
+    // sin el filtro —`saveEditService` y `saveEditPro` sí lo llevan—, y la convención del proyecto es
+    // que ninguna query del dashboard lo omita.
+    const { error } = await supabase.from('locations').update(payload).eq('id', editLoc.id).eq('business_id', business.id)
     setSavingEditLoc(false)
     if (error) { toast.error('Error al guardar'); return }
     setLocations(prev => prev.map(l => l.id === editLoc.id ? { ...l, ...payload } : l))
