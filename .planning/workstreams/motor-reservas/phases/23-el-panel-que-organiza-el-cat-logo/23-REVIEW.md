@@ -1,7 +1,19 @@
 ---
 phase: 23-el-panel-que-organiza-el-cat-logo
 reviewed: 2026-09-17T00:00:00Z
+updated: 2026-09-18T00:00:00Z
 depth: standard
+passes:
+  - id: 1
+    date: 2026-09-17
+    scope: "planes 23-01..23-07 (diff 41a69ba..5063038)"
+    files: 9
+    findings: { critical: 0, warning: 2, info: 4 }
+  - id: 2
+    date: 2026-09-18
+    scope: "plan 23-08 / G-23-20 (diff 5063038..HEAD, sólo app/(dashboard)/settings/settings-client.tsx)"
+    files: 1
+    findings: { critical: 0, warning: 2, info: 4 }
 files_reviewed: 9
 files_reviewed_list:
   - app/(dashboard)/settings/settings-client.tsx
@@ -15,17 +27,17 @@ files_reviewed_list:
   - test/catalog-panel.test.ts
 findings:
   critical: 0
-  warning: 2
-  info: 4
-  total: 6
+  warning: 4
+  info: 8
+  total: 12
 status: issues_found
 ---
 
 # Phase 23: Code Review Report
 
-**Reviewed:** 2026-09-17
+**Reviewed:** 2026-09-17 (pasada 1) · **Actualizado:** 2026-09-18 (pasada 2, incremental)
 **Depth:** standard
-**Files Reviewed:** 9
+**Files Reviewed:** 9 (pasada 1) + 1 re-revisado en el delta de 23-08
 **Status:** issues_found
 
 ## Summary
@@ -111,7 +123,121 @@ Otra opción: un único `busyRef` (ref, no estado, para que la guarda no lea un 
 **Fix:** Mover el hover al botón: `has-[button:not([data-toggle]):hover]:border-primary` en el contenedor, o `group` + `group-hover` sobre el botón de selección. Opcional: `select-text` + `relative z-10` en el párrafo si se quiere que la descripción sea copiable (a costa de que tocar el texto ya no seleccione).
 
 ---
+---
 
-_Reviewed: 2026-09-17_
+## Pasada incremental — 23-08 (G-23-20)
+
+**Reviewed:** 2026-09-18
+**Depth:** standard
+**Alcance:** `git diff 5063038..HEAD -- "app/(dashboard)/settings/settings-client.tsx"` — un solo archivo fuente. Los hallazgos de la pasada 1 (WR-01, WR-02, IN-01..IN-04) **siguen abiertos**: no hubo commits de fix entre `5063038` y `HEAD`, los tres commits del rango son el plan 23-08 y sus docs.
+**Status de esta pasada:** issues_found (0 críticos · 2 warnings · 4 info)
+
+### Resumen de la pasada
+
+Cambio puro de layout: dos `<p>` nuevos en la columna derecha de la grilla (precio en `sm:row-start-1`, duración en `sm:row-start-2`), la línea de datos convertida en renglón de mobile con `sm:hidden`, y el bloque de acciones movido de `sm:row-start-1` a `sm:row-start-3 sm:self-start`. Más dos constantes derivadas (`durationLabel`, `priceLabel`) y reescritura de tres comentarios.
+
+Lo que verifiqué y **está bien**:
+
+- **Sin duplicación visible ni en el árbol de accesibilidad.** El par es excluyente: `hidden … sm:block` en los dos bloques nuevos y `sm:hidden` en el renglón de mobile y en su separador. Los dos usan `display:none`, no `visibility`/`sr-only`/`opacity`, así que el nodo oculto sale del árbol de accesibilidad y ningún lector repite el precio. En el breakpoint exacto (640px) `sm:` ya aplica, así que no hay ancho donde se solapen. Confirmado por conteo sobre la región: `hidden … sm:block`=2, `sm:hidden`=3.
+- **Una sola derivación.** `toLocaleString` aparece **1 vez** en la región; `durationLabel` y `priceLabel` se usan 3 veces cada una (derivación + renglón de mobile + celda de desktop). El texto de mobile queda idéntico al anterior (`60min · $5.000`).
+- **Sin colisión de auto-placement.** Derivé la colocación con el algoritmo de §8.5 de CSS Grid: los tres items con fila y columna definidas (precio r1, duración r2, acciones r3, todos en col 2) se colocan primero; los hijos de contenido, todos con columna definida y fila automática, se reparten las filas 1,2,3,… de la columna 1 en orden de DOM con cursor disperso. Ninguno cae en la columna derecha y ninguno pisa otro.
+- **Sin fila vacía para el servicio individual.** El contenedor de la línea de datos lleva `sm:hidden` condicional, y `display:none` lo saca de la grilla, no deja celda. Y `capacityModeLabel` nunca puede quedar vacío: `CAPACITY_MODE_HELP` cubre las **tres** claves de `Service['capacity_mode']`, así que no existe el caso "contenedor visible en desktop sin contenido".
+- **Invariantes preservadas.** Rótulo del modo y `CapacityInlineControl` siguen en `sm:col-start-1` con el envoltorio sin padding (invariante de 32px de G-04 intacta); `pt-4 border-t border-border/60 sm:pt-0 sm:border-t-0` del bloque de acciones sin tocar (zona de exclusión y divisoria de mobile); el bloque de acciones sigue siendo el **último** hijo del DOM (no hay reordenamiento de DOM que ponga acciones antes del contenido); 2 aperturas de `openEditService`, 1 `line-clamp-1`, 1 `CapacityInlineControl`.
+- **Mobile sin cambios efectivos.** Las clases base (sin prefijo) de los hijos existentes son las mismas; lo único que se agregó por debajo de 640px es `hidden` en dos nodos nuevos, que no participan del `flex flex-col gap-2`.
+- **Truncado del nombre.** La columna 1 sigue siendo `minmax(0,1fr)` y el nombre `min-w-0` + `sm:truncate`. La columna 2 es `auto`, dimensionada por el max-content más ancho: el grupo de acciones (~160px) contra el precio (~70px para 7 dígitos), así que el nombre no pierde ancho con precios reales (ver IN-07 para el borde).
+- **Cero superficie de seguridad.** El diff no toca ninguna lectura ni escritura: `from('services')` sigue en 6 líneas, no hay `dangerouslySetInnerHTML`, no hay interpolación en HTML (React escapa `s.name`/`s.description`), no se tocó el diálogo de edición ni el alta, y no hay nada relacionado con `business_id` en el delta. Sin paquetes ni migraciones nuevas.
+- **Gates duros:** `tsc --noEmit` sale limpio (0 líneas `error TS` fuera de `.next/`) y `eslint` sobre el archivo reporta **11 errores**, exactamente el piso preexistente.
+
+Lo que **no** está bien está abajo.
+
+## Warnings (pasada 2)
+
+### WR-03: En desktop las acciones quedan ancladas a la fila 3, así que hay contenido de la tarjeta **debajo** de los botones (y el foco salta hacia atrás)
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:2933` (con `2854-2865`, `2866-2874`, `2878-2891`)
+**Issue:** `sm:row-start-3` es un número fijo, pero la cantidad de filas de la columna izquierda es **variable**: depende de `capMode`, de `activeLocations.length` y de `showCoverage`. Cuando la izquierda pasa de tres filas, las acciones dejan de cerrar la tarjeta y quedan en el medio, con contenido por debajo.
+
+Derivación del auto-placement (columna 1, fila automática, en orden de DOM):
+
+| Caso | Filas de la columna izquierda | Fila de las acciones | Qué queda **debajo** de los botones |
+|---|---|---|---|
+| Individual, sin sedes, <2 pros | nombre(1), descripción(2) | 3 | nada ✅ |
+| **Individual, con sedes, ≥2 pros** | nombre(1), descripción(2), sedes(3), **cobertura(4)** | 3 | la línea de cobertura |
+| **Cupo compartido, con sedes, ≥2 pros** | nombre(1), descripción(2), línea de datos(3), **cupo(4), sedes(5), cobertura(6)** | 3 | el stepper de cupo, las píldoras de sedes y la cobertura |
+
+Los dos últimos son configuraciones normales de producción (multi-staff con sedes). Dos consecuencias:
+
+1. **Visual:** el bloque de acciones flota a media tarjeta y la mitad inferior derecha queda vacía — que es literalmente el síntoma que G-23-20 venía a corregir, sólo que corrido hacia abajo. El `human-check` 2 del plan ("debajo de las dos, las tres acciones") pasa igual, porque ninguno de los cinco checks usa una tarjeta con cobertura o con cupo compartido **y** sedes al mismo tiempo. El check 3 sí menciona cupo compartido pero sólo mira el rótulo y el hueco, no dónde terminan los botones.
+2. **Foco (WCAG 2.4.3 / 1.3.2):** el recorrido con Tab en desktop pasa por el link "Editar" (fila 2), después por los botones del stepper de cupo (fila 4), las píldoras de sedes (fila 5) y el `Link href="/equipo"` de la rama sin cobertura (fila 6) — todos **visualmente por debajo** — y recién ahí sube a Desactivar/lápiz/tacho (fila 3). Es un salto hacia atrás. El párrafo "ORDEN DE FOCO" del propio archivo (líneas 2921-2932) sigue justificando el desfase con "es una secuencia significativa y habitual para una tarjeta —contenido primero, acciones después—", y en desktop eso ya **no** describe lo que se ve: hay contenido después de las acciones. La decisión escrita cubría el layout viejo (acciones arriba a la derecha), no éste.
+
+No pude renderizarlo (la UAT visual del plan quedó pendiente), pero la colocación es determinista y se deriva del algoritmo de grilla, no de una impresión.
+
+**Fix:** que la fila de las acciones sea la **última**, no la 3 fija. La cuenta ya existe en el cuerpo del `map`, así que sale sin envolver ningún hijo (la prohibición del plan se respeta):
+
+```tsx
+// Filas de la columna izquierda en desktop: nombre + descripción + [línea de datos] + [cupo]
+// + [sedes] + [cobertura]. Las acciones cierran la tarjeta: van a la ÚLTIMA, nunca antes de la 3
+// (abajo del precio y de la duración, que ocupan las filas 1 y 2).
+const leftRows = 2
+  + (capMode !== 'individual' ? 2 : 0)
+  + (activeLocations.length > 0 ? 1 : 0)
+  + (showCoverage ? 1 : 0)
+const actionsRow = Math.max(3, leftRows)
+```
+
+```tsx
+<div
+  style={{ '--actions-row': actionsRow } as React.CSSProperties}
+  className="flex shrink-0 items-center gap-1 pt-4 border-t border-border/60 sm:pt-0 sm:border-t-0 sm:col-start-2 sm:[grid-row-start:var(--actions-row)] sm:self-start"
+>
+```
+
+(La variable CSS es necesaria porque `sm:row-start-${n}` con valor dinámico no lo genera el JIT de Tailwind; el `style` inline no puede gatearse por viewport, pero la clase que lo consume sí, así que en mobile la variable se ignora y el bloque sigue siendo el último hijo del flex.)
+
+Si en cambio se decide **aceptar** el layout tal como está, entonces hay que hacer dos cosas antes de cerrar el gap: (a) agregar a la UAT un check explícito sobre una tarjeta con cupo compartido + sedes + cobertura, y (b) corregir el párrafo ORDEN DE FOCO y la entrada G-23-20 del `23-UI-SPEC`, que hoy afirman lo contrario. Lo que no puede quedar es el layout así **y** la justificación escrita diciendo que las acciones van después del contenido.
+
+### WR-04: Quedaron comentarios que describen el layout viejo, en un archivo donde el comentario es el contrato de la región
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:2919`, `2809-2811`, `2945-2946`
+**Issue:** La acción (e) del 23-08-PLAN hacía de los comentarios parte del entregable ("Los comentarios que dejaron de ser ciertos… son parte del entregable, no un extra") y el `must_have` correspondiente pide que los comentarios del layout viejo describan el nuevo. Tres frases sobrevivieron sin actualizar y ahora afirman cosas falsas:
+
+1. **Línea 2919** — "En desktop se resetean a cero tanto el padding como el borde, **y la primera fila queda idéntica a como estaba**." Falso: la primera fila ya no es *nombre + acciones*, ahora es *nombre + precio*, y este bloque no está en la primera fila. Es la frase que más puede desorientar, porque está en el comentario de G-04 que el próximo lector va a tomar como invariante.
+2. **Líneas 2809-2811** — "El modo de cupo entra acá como **TERCER dato** —mismo registro que duración y precio—". En desktop la duración y el precio ya no están en esa línea, así que el rótulo es el **único** dato y no comparte registro con nada. El párrafo nuevo de abajo lo aclara, pero la frase de apertura contradice al resto del bloque.
+3. **Líneas 2945-2946** — "En desktop la columna se dimensiona al contenido… y **esta fila se ve igual que siempre**." La fila cambió de la 1 a la 3 y ahora comparte banda con las píldoras de sedes (ver WR-03).
+
+**Fix:** tres ediciones de una línea cada una:
+- 2919 → "En desktop el padding y el borde se resetean a cero: la separación la da el ritmo de la grilla, y este bloque queda en la tercera fila de la columna derecha (G-23-20)."
+- 2809-2811 → "El modo de cupo entra acá como tercer dato de la línea de mobile —mismo registro que la duración y el precio, que en ese viewport siguen acá—; en desktop es el único que queda."
+- 2945-2946 → "…así que nunca hubo espacio libre que repartir y el grupo se ve igual que siempre, ahora en la tercera fila."
+
+## Info (pasada 2)
+
+### IN-05: El gate estructural de la región quedó midiendo otra cosa y va a fallar en falso en la re-verificación
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:2836` (instrumento en `23-08-PLAN.md`, verify del Task 1)
+**Issue:** Al envolver el `className` de la línea de datos en `cn()`, el gate `grep -cE 'className="[^"]*sm:col-start-1'` pasó a devolver **5** contra el **6** que exige. Lo confirmé: `className="…"` literal = 5, `sm:col-start-1` = 6. El desvío está documentado en el `23-08-SUMMARY` y el código es correcto, pero el instrumento quedó roto para todo el que lo vuelva a correr (empezando por `/gsd-verify-work`), y un gate que falla en falso se termina ignorando — que es justo lo que este gate existe para evitar.
+**Fix:** corregir la regex del gate a `grep -cE 'sm:col-start-1'` en el plan y en el `23-VERIFICATION`, o mejor, contar sobre el atributo ya normalizado (`grep -oE "(className=\"|cn\(')[^\"']*sm:col-start-1"`). Vale para las otras anclas también: en cuanto otro hijo necesite una clase condicional, el mismo gate se rompe igual.
+
+### IN-06: La exclusión mutua de viewports se sostiene con el breakpoint repetido en cinco lugares y ningún gate la verifica
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:2769-2770, 2836-2837, 2846`
+**Issue:** Que el precio no se vea dos veces depende de que los cinco gates usen el mismo breakpoint: `hidden … sm:block` en dos nodos y `sm:hidden` en tres. Los gates del plan cuentan ocurrencias (`hidden … sm:block` = 2, `sm:hidden` ≥ 3) pero no verifican que sean el **mismo** breakpoint ni que se muevan juntos: cambiar uno solo a `md:` deja el precio duplicado entre 640 y 768px, y los conteos siguen dando lo mismo. El comentario lo advierte en prosa; nada lo hace cumplir.
+**Fix:** si esta región vuelve a tocarse, derivar los dos pares de una constante local de clases (p. ej. `const ONLY_DESKTOP = 'hidden sm:block'` / `const ONLY_MOBILE = 'sm:hidden'`) y usarla en los cinco lugares. Con eso el gate pasa a ser "la constante se usa N veces", que sí falla cuando alguien desalinea un breakpoint.
+
+### IN-07: La afirmación "el nombre no pierde ni un píxel de ancho" es una suposición, no una restricción
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:2755-2758, 2769`
+**Issue:** La columna derecha es `auto`, o sea se dimensiona al max-content del item más ancho. Hoy ése es el grupo de acciones (~160px con "Desactivar", ~140px con "Activar" en la pestaña Desactivados) contra ~70px del precio de 7 dígitos, así que la afirmación se cumple. Pero nada la enforcea: el precio no tiene `max-w` ni `truncate`, y `normalizeServicePrice` no tiene tope superior (sólo rechaza negativos, y ni siquiera los bloquea: conserva lo tipeado). Un precio absurdo tipeado a mano ensancha la columna derecha y le roba ancho al nombre, que es exactamente el defecto que G-02 costó dos gaps cerrar.
+**Fix:** `sm:max-w-[10ch] sm:truncate` en el `<p>` del precio, o dejar escrito el umbral en el comentario ("mientras el precio sea más angosto que el grupo de acciones") para que el próximo sepa qué está asumiendo.
+
+### IN-08: En desktop el precio y la duración se anuncian sueltos entre el nombre y la descripción
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:2769-2770`
+**Issue:** El orden de lectura en desktop pasa a ser *nombre → "$5.000" → "60min" → descripción → "Editar"*. Antes los dos datos viajaban juntos en un renglón después de la descripción. No es una regresión fuerte (el signo de peso y el sufijo "min" son autodescriptivos) y no hay duplicación, pero son dos nodos de texto sin relación explícita con el servicio, intercalados antes de su descripción.
+**Fix:** si se quiere cerrar del todo, `<span className="sr-only">Precio: </span>` / `"Duración: "` dentro de cada `<p>` — quedan dentro del nodo gateado, así que no se anuncian en mobile y la exclusión mutua se conserva. Alternativa sin markup: `aria-label` en los dos `<p>`.
+
+---
+
+_Reviewed: 2026-09-17 (pasada 1) · 2026-09-18 (pasada 2, incremental sobre 23-08)_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
