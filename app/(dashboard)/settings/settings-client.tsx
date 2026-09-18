@@ -3039,9 +3039,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         grilla, los dos en la primera columna, así que la ubicación automática les daba
                         una fila a cada uno y el rótulo del modo quedaba arriba del stepper con un hueco
                         grande en el medio. Ahora son UN solo hijo: en mobile se apilan con el mismo
-                        ritmo de 8px de siempre (medido bit a bit: 33px de la línea al botón, 33px del
-                        botón a "Se ofrece en:", 343px de alto), y en desktop comparten una línea con
-                        centrado vertical.
+                        ritmo de 8px de siempre (medido bit a bit a 375px, sin cambio antes/después:
+                        33px de la línea al botón, 32px del botón a "Se ofrece en:", 346px de alto en
+                        la configuración más cargada), y en desktop comparten una línea con centrado
+                        vertical.
 
                         EL GATE DE VIEWPORT VIVE ACÁ, y no en la línea de datos como antes. No es
                         cosmética: con cupo individual la línea de datos no muestra nada en desktop, y
@@ -3355,9 +3356,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   el scroll de la página de atrás.
 
                   (G-23-22, causa 1) El hueco de la barra de scroll se reserva SIEMPRE, aparezca o no la
-                  barra. El cuerpo cambia de alto al elegir un modo de cupo compartido (aparece "Cuántos
-                  lugares", +126px medidos), cruza el alto disponible y Windows materializa una barra
-                  clásica de 15px. Sin la reserva, esos 15px se los come el ancho ÚTIL de esta fila
+                  barra. El cuerpo crece al elegir un modo de cupo compartido (aparece el bloque
+                  "Cuántos lugares", que la sonda nunca midió por separado), cruza el alto disponible y
+                  Windows materializa una barra clásica de 15px. Sin la reserva, esos 15px se los come el ancho ÚTIL de esta fila
                   mientras el header y el pie —que son filas HERMANAS del grid, no hijas de acá—
                   conservan los suyos: el borde del popup deja de alinear con el borde derecho de los
                   campos y se lee como si el diálogo se hubiera ensanchado. Medido: el popup mide 384.00px
