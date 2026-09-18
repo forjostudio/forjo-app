@@ -1,15 +1,36 @@
 ---
 phase: 23-el-panel-que-organiza-el-cat-logo
-fixed_at: 2026-09-16T00:00:00Z
+fixed_at: 2026-09-18T00:00:00Z
 review_path: .planning/workstreams/motor-reservas/phases/23-el-panel-que-organiza-el-cat-logo/23-REVIEW.md
-iteration: 1
-findings_in_scope: 6
-fixed: 6
+iteration: 2
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
+passes:
+  - id: 1
+    fixed_at: 2026-09-16
+    scope: "pasada 1 — CR-01 + WR-01..WR-05 (planes 23-01..23-07)"
+    findings_in_scope: 6
+    fixed: 6
+    skipped: 0
+    status: all_fixed
+  - id: 2
+    fixed_at: 2026-09-18
+    scope: "pasada incremental 23-08 / G-23-20 — WR-03, WR-04"
+    findings_in_scope: 2
+    fixed: 2
+    skipped: 0
+    status: all_fixed
 ---
 
 # Phase 23: Reporte de corrección del code review
+
+> Este archivo tiene **dos pasadas**. La pasada 1 (abajo) cubre los planes 23-01..23-07 y quedó
+> tal como se escribió el 2026-09-16. La **pasada 2** (al final del archivo, después del separador)
+> cubre sólo el plan 23-08 / G-23-20. Ninguna pisa a la otra.
+
+## Pasada 1 — planes 23-01..23-07
 
 **Corregido:** 2026-09-16
 **Review de origen:** `.planning/workstreams/motor-reservas/phases/23-el-panel-que-organiza-el-cat-logo/23-REVIEW.md`
@@ -111,3 +132,162 @@ Invariantes de la fase, verificadas contra el diff:
 _Corregido: 2026-09-16_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteración: 1_
+
+---
+---
+
+## Pasada 2 — plan 23-08 / G-23-20 (WR-03, WR-04)
+
+**Corregido:** 2026-09-18
+**Review de origen:** sección `## Pasada incremental — 23-08 (G-23-20)` de `23-REVIEW.md`
+**Iteración:** 2
+**Archivo tocado:** `app/(dashboard)/settings/settings-client.tsx` (único)
+
+**Resumen:**
+- Hallazgos en alcance (critical + warning de esta pasada): 2
+- Corregidos: 2
+- Salteados: 0
+- Los 4 Info de esta pasada (IN-05..IN-08) quedan **abiertos**, fuera de alcance.
+- Los hallazgos de la pasada 1 que seguían abiertos (WR-01, WR-02, IN-01..IN-04) **siguen abiertos**:
+  no se tocó `components/dashboard/categorias-manager.tsx` ni `app/[slug]/booking-client.tsx`.
+
+### Verificación
+
+- **Dónde corrió:** en el **checkout principal** (`workflow.use_worktrees=false`, rama `main`). Sin
+  worktree, así que los números se reproducen desde este mismo árbol.
+- `./node_modules/.bin/tsc --noEmit`: **0 líneas `error TS`** fuera de `.next/`, leído de la salida
+  (no del exit code: en este repo `npx tsc` sale 0 aunque haya errores).
+- `./node_modules/.bin/eslint "app/(dashboard)/settings/settings-client.tsx"`: **11 errores** antes y
+  **11 después**, exactamente el piso preexistente. Medido antes de tocar nada.
+- `npm test`: **95 archivos, 1301 passed, 4 expected fail, 1 skipped**. Idéntico al piso.
+- `npm run build`: **✓ Compiled successfully**, 61/61 páginas estáticas generadas.
+- Sin paquetes nuevos y sin migraciones.
+
+**Medición propia de la grilla (Chrome headless, no derivación de escritorio).** Antes de elegir la
+forma del fix armé una réplica de la tarjeta con la misma grilla
+(`grid-template-columns: minmax(0,1fr) auto`, `align-items:center`, `gap:8px`), los mismos hijos en
+el mismo orden de DOM y las mismas condiciones de render, y medí en qué fila cae cada item leyendo
+`gridTemplateRows` computado. Tres variantes × cinco configuraciones:
+
+| Configuración | Filas izquierda | `row-start-3` (antes) | fila dinámica (aplicada) |
+|---|---|---|---|
+| individual, sin sedes, sin cobertura | 2 | fila 3 ✅ nada debajo | fila 3 ✅ |
+| individual, con sedes, con cobertura | 4 | fila 3 ❌ **cobertura debajo** | fila 4 ✅ |
+| **compartido, sin sedes, sin cobertura** | 4 | fila 3 ❌ **cupo debajo** | fila 4 ✅ |
+| compartido, con sedes, sin cobertura | 5 | fila 3 ❌ cupo + sedes debajo | fila 5 ✅ |
+| compartido, con sedes, con cobertura | 6 | fila 3 ❌ cupo + sedes + cobertura debajo | fila 6 ✅ |
+
+El defecto es **peor que lo que decía el REVIEW**: no hace falta multi-staff con sedes, alcanza con
+**cupo compartido solo** (fila 3 de la tabla) para que el stepper quede debajo de los botones. El
+único caso sano era la tarjeta mínima. Con la fila dinámica, las acciones caen en la última fila en
+las cinco configuraciones y ningún hijo de contenido queda por debajo.
+
+### Fixed Issues
+
+#### WR-03: en desktop las acciones quedaban ancladas a la fila 3 con contenido debajo
+
+**Archivos modificados:** `app/(dashboard)/settings/settings-client.tsx`
+**Commit:** `13629dd`
+**Status:** fixed
+**Fix aplicado:** se deriva la fila dentro del `map`, con los booleanos que ya existían en ese scope:
+
+```tsx
+const leftRows = 2
+  + (capMode !== 'individual' ? 2 : 0)
+  + (activeLocations.length > 0 ? 1 : 0)
+  + (showCoverage ? 1 : 0)
+const actionsRow = Math.max(3, leftRows)
+```
+
+y el bloque de acciones pasó de `sm:row-start-3` a
+`style={{ ['--actions-row']: actionsRow } as CSSProperties}` +
+`sm:[grid-row-start:var(--actions-row)]`.
+
+`Math.max(3, …)` **verificado, no asumido**: `leftRows` nunca baja de 2 (nombre y descripción son
+incondicionales), y el piso de 3 es el que mantiene las acciones por debajo del precio (fila 1) y de
+la duración (fila 2) en la tarjeta mínima. Medido: en esa configuración la fila medida es 3 y la
+última fila de contenido es la 2.
+
+Cosas que verifiqué en vez de asumirlas:
+
+1. **La variable CSS llega intacta.** React, para claves que empiezan con `--`, usa
+   `style.setProperty(name, value)` y **no** le agrega `px` a los números — leído en el runtime
+   instalado (`node_modules/react-dom/cjs/react-dom-client.development.js`, rama `isCustomProperty`,
+   y la rama equivalente del render de servidor, que concatena `("" + value).trim()`). Por eso el
+   número va como número y no hace falta `String()`.
+2. **Tailwind emite la clase.** No había precedente de propiedad arbitraria en el repo, así que lo
+   medí sobre el CSS construido: la regla emitida es
+   `.sm\:\[grid-row-start\:var\(--actions-row\)\]{grid-row-start:var(--actions-row)}`.
+3. **Mobile no cambia.** Esa regla queda **dentro** de `@media (min-width:40rem)` (verificado
+   contando llaves desde la apertura del `@media` hasta la regla). Por debajo de 640px la tarjeta
+   sigue siendo `flex flex-col` y la variable queda sin consumir.
+4. **Prohibiciones del plan respetadas:** no se reordenó el DOM (las acciones siguen siendo el último
+   hijo), no se envolvió ningún hijo existente, el rótulo del modo y `CapacityInlineControl` siguen
+   en la columna izquierda con la invariante de 32px de G-04 intacta, y `pt-4 border-t
+   border-border/60 sm:pt-0 sm:border-t-0` (divisoria + zona de exclusión de 24px de mobile) quedó
+   igual. No se tocó el diálogo de edición, ni el alta, ni ningún camino de escritura sobre
+   `services`.
+
+**Alternativa más simple que medí y descarté (con motivo).** Borrar `sm:row-start-3` y no poner nada
+también funciona: por el cursor de auto-colocación de CSS Grid (§8.5), un item con columna definida y
+fila automática que es el último del DOM cae en la fila del último hermano de la columna 1. Lo medí y
+dio **idéntico** a la fila dinámica en las cinco configuraciones. Lo descarté igual por dos razones:
+
+- El modo de falla es **silencioso y es exactamente el defecto de hoy**: cualquier motor que reinicie
+  el cursor colocaría las acciones en el primer hueco libre de la columna derecha, que es la fila 3.
+  Acá sólo puedo medir Blink; no tengo Gecko ni WebKit para confirmarlo.
+- La fila dinámica **degrada a esa misma alternativa**: si la variable faltara, `grid-row-start` cae
+  en `auto`, o sea el comportamiento medido como correcto. Es decir, es estrictamente mejor o igual.
+- Además el comentario de la región ya tenía escrito el contrato "cada hijo de la columna derecha
+  declara su columna **y** su fila, o la tarjeta se desarma sola". La fila dinámica lo respeta; la
+  alternativa implícita lo contradice.
+
+**Comentario extra actualizado en este mismo commit** (no es WR-04, es el comentario que el propio
+fix vuelve falso): el bloque que decía que las acciones quedan "ancladas a la TERCERA fila" ahora
+dice que cierran la tarjeta en la última y apunta a `actionsRow`.
+
+#### WR-04: comentarios que describían el layout viejo
+
+**Archivos modificados:** `app/(dashboard)/settings/settings-client.tsx`
+**Commit:** `cdf0c79`
+**Status:** fixed
+**Fix aplicado:** diff de comentarios puro — **0 líneas de código tocadas** (verificado sobre el diff
+antes de commitear). Los tres que marcaba el REVIEW:
+
+1. *"…y la primera fila queda idéntica a como estaba"* → ahora dice que en desktop el padding y el
+   borde se resetean a cero, la separación la da el ritmo de la grilla y el bloque no comparte
+   renglón con el nombre: se va a la última fila de la columna derecha.
+2. *"El modo de cupo entra acá como TERCER dato —mismo registro que duración y precio—"* → ahora
+   aclara que es el tercer dato del **renglón de mobile**, donde la duración y el precio siguen
+   estando, y que en desktop el modo queda como único dato de esa línea.
+3. *"…y esta fila se ve igual que siempre"* → ahora dice que el **grupo** se ve igual que siempre,
+   pero en la última fila de la columna en vez de compartir la primera con el nombre.
+
+**Párrafo ORDEN DE FOCO (pedido explícito).** Justificaba un desfase entre posición visual y orden de
+tabulación en desktop. Con la fila dinámica ese desfase **desaparece**: leyendo la tarjeta de arriba
+abajo y de izquierda a derecha, los botones son lo último, igual que en el orden de tabulación. El
+párrafo ahora describe el mecanismo real (`actionsRow` manda el bloque a la última fila), deja
+escrito qué pasaba antes (con 4+ filas el foco bajaba al stepper/sedes/Equipo y volvía a subir: un
+salto hacia atrás, no un desfase aceptado) y deja la condición que lo rompe ("si alguien vuelve a
+anclar esta fila a un número fijo, hay que reescribir este párrafo"). La prohibición de compensar con
+`tabindex` positivo se conserva textual.
+
+### Qué necesita confirmación visual
+
+La colocación está medida en un motor real, pero sobre una réplica de la grilla, no sobre la app
+corriendo con datos reales. Falta abrir `/servicios` en el navegador y confirmar, en desktop:
+
+1. Un servicio con **cupo compartido** (sin sedes ni cobertura): los tres botones tienen que quedar
+   a la derecha del stepper de cupo, **no** encima.
+2. Un servicio con **cupo compartido + sedes + ≥2 profesionales**: los botones tienen que cerrar la
+   tarjeta, con la línea de cobertura a su izquierda y **nada** por debajo.
+3. Un servicio **individual sin sedes ni cobertura**: sin cambios respecto de lo que ya se vio en la
+   UAT (precio, duración, botones debajo).
+4. **Mobile a 375px**: la tarjeta tiene que verse exactamente igual que antes de esta corrección
+   (divisoria, hueco de 24px y orden de bloques sin tocar).
+
+---
+
+_Corregido: 2026-09-18_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteración: 2_

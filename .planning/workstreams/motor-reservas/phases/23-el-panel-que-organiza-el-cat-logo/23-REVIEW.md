@@ -14,6 +14,8 @@ passes:
     scope: "plan 23-08 / G-23-20 (diff 5063038..HEAD, sólo app/(dashboard)/settings/settings-client.tsx)"
     files: 1
     findings: { critical: 0, warning: 2, info: 4 }
+    fixed: "WR-03 (13629dd), WR-04 (cdf0c79) — 2026-09-18, ver 23-REVIEW-FIX.md pasada 2"
+    open: "IN-05, IN-06, IN-07, IN-08"
 files_reviewed: 9
 files_reviewed_list:
   - app/(dashboard)/settings/settings-client.tsx
@@ -131,6 +133,9 @@ Otra opción: un único `busyRef` (ref, no estado, para que la guarda no lea un 
 **Depth:** standard
 **Alcance:** `git diff 5063038..HEAD -- "app/(dashboard)/settings/settings-client.tsx"` — un solo archivo fuente. Los hallazgos de la pasada 1 (WR-01, WR-02, IN-01..IN-04) **siguen abiertos**: no hubo commits de fix entre `5063038` y `HEAD`, los tres commits del rango son el plan 23-08 y sus docs.
 **Status de esta pasada:** issues_found (0 críticos · 2 warnings · 4 info)
+**Corrección aplicada (2026-09-18):** los **2 warnings de esta pasada están RESUELTOS** — WR-03
+(`13629dd`) y WR-04 (`cdf0c79`). Los 4 Info de esta pasada (IN-05..IN-08) y todos los hallazgos de la
+pasada 1 (WR-01, WR-02, IN-01..IN-04) **siguen abiertos**. Detalle y evidencia en `23-REVIEW-FIX.md`.
 
 ### Resumen de la pasada
 
@@ -153,6 +158,12 @@ Lo que **no** está bien está abajo.
 ## Warnings (pasada 2)
 
 ### WR-03: En desktop las acciones quedan ancladas a la fila 3, así que hay contenido de la tarjeta **debajo** de los botones (y el foco salta hacia atrás)
+
+**Status: RESUELTO** (2026-09-18, commit `13629dd` — ver `23-REVIEW-FIX.md`, pasada 2). Se aplicó la
+opción de la fila dinámica. Al medirlo en Chrome headless resultó **peor de lo descrito acá**: no
+hace falta multi-staff con sedes, con **cupo compartido solo** (4 filas) el stepper de cupo ya
+quedaba debajo de los botones. Las cinco configuraciones medidas dan ahora las acciones en la última
+fila, sin contenido por debajo.
 
 **File:** `app/(dashboard)/settings/settings-client.tsx:2933` (con `2854-2865`, `2866-2874`, `2878-2891`)
 **Issue:** `sm:row-start-3` es un número fijo, pero la cantidad de filas de la columna izquierda es **variable**: depende de `capMode`, de `activeLocations.length` y de `showCoverage`. Cuando la izquierda pasa de tres filas, las acciones dejan de cerrar la tarjeta y quedan en el medio, con contenido por debajo.
@@ -197,6 +208,10 @@ const actionsRow = Math.max(3, leftRows)
 Si en cambio se decide **aceptar** el layout tal como está, entonces hay que hacer dos cosas antes de cerrar el gap: (a) agregar a la UAT un check explícito sobre una tarjeta con cupo compartido + sedes + cobertura, y (b) corregir el párrafo ORDEN DE FOCO y la entrada G-23-20 del `23-UI-SPEC`, que hoy afirman lo contrario. Lo que no puede quedar es el layout así **y** la justificación escrita diciendo que las acciones van después del contenido.
 
 ### WR-04: Quedaron comentarios que describen el layout viejo, en un archivo donde el comentario es el contrato de la región
+
+**Status: RESUELTO** (2026-09-18, commit `cdf0c79` — ver `23-REVIEW-FIX.md`, pasada 2). Las tres
+frases actualizadas + el párrafo ORDEN DE FOCO, que con WR-03 resuelto ya no tiene desfase que
+justificar en desktop. Diff de comentarios puro, 0 líneas de código.
 
 **File:** `app/(dashboard)/settings/settings-client.tsx:2919`, `2809-2811`, `2945-2946`
 **Issue:** La acción (e) del 23-08-PLAN hacía de los comentarios parte del entregable ("Los comentarios que dejaron de ser ciertos… son parte del entregable, no un extra") y el `must_have` correspondiente pide que los comentarios del layout viejo describan el nuevo. Tres frases sobrevivieron sin actualizar y ahora afirman cosas falsas:
