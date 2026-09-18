@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 23
 current_phase_name: El panel que organiza el catálogo
 status: executing
-stopped_at: Completed 23-08-PLAN.md
-last_updated: "2026-09-18T13:38:49.993Z"
+stopped_at: Completed 23-11-PLAN.md
+last_updated: "2026-09-18T19:03:27.336Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 23 execution started
-state_head: 9a4d16bb1bd81d9fe154710c157baa002a3ca708
+state_head: 91aa7a1373c5aaed88ff34e16b212890cb4cc3fb
 progress:
   total_phases: 20
   completed_phases: 13
-  total_plans: 100
-  completed_plans: 100
+  total_plans: 103
+  completed_plans: 103
   percent: 65
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 23 (El panel que organiza el catálogo) — EXECUTING
-Plan: 2 of 8
+Plan: 4 of 11
 Status: Ready to execute
 Last activity: 2026-09-18 — Phase 23 execution started
 
@@ -217,6 +217,9 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 23 P06 | 5min | 3 tasks | 6 files |
 | Phase 23 P07 | 3min | 2 tasks | 4 files |
 | Phase 23 P08 | 8min | 2 tasks | 2 files |
+| Phase 23 P09 | 30min | 3 tasks | 1 files |
+| Phase 23 P10 | 55 min | 4 tasks | 1 files |
+| Phase 23 P11 | 12 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -430,6 +433,10 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 23]: 23-08: precio y duración se mudan a la columna derecha de la tarjeta de /servicios como DOS celdas hermanas (filas 1 y 2), no como un bloque apilado: sólo así el centrado vertical que la tarjeta ya tenía alinea el precio con el nombre (G-23-20)
 - [Phase 23]: 23-08: el layout nuevo va sólo desde 640px y la línea de datos queda como renglón de mobile con gate de viewport; mobile no se toca para no reabrir el desborde medido de 375px (G-02) ni los toques errados (G-04)
 - [Phase 23]: 23-08: gate C1 del plan incompatible con su propia acción (exige el prefijo className=" y a la vez cn()); se midieron las seis anclas de columna con grep sm:col-start-1 — re-medir así en verify-work
+- [Phase 23]: G-23-22 causa 1: el hueco del scrollbar se reserva en el caller del dialogo, no en components/ui/dialog.tsx (el scroll es por caller desde la Phase 17)
+- [Phase 23]: G-23-22 causa 2: el toggle del modo de cupo se apila tambien en desktop; tres columnas a 384px nunca alcanzaron (133.58px necesarios contra 87.33 de celda)
+- [Phase 23]: G-23-25: el cierre se cancela desde el propio onOpenChange y NO con disablePointerDismissal, que corta el evento antes del handler y mataria el aviso
+- [Phase 23]: 23-11: la entrada G-23-20 del UI-SPEC pasa a describir la fila DERIVADA de las acciones y su regla nombra WR-03 — una regla que no nombra el defecto que ya ocurrió no lo previene la segunda vez
 
 ### Pending Todos
 
@@ -517,8 +524,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-18T13:38:20.203Z
-Stopped at: Completed 23-08-PLAN.md
+Last session: 2026-09-18T19:03:06.886Z
+Stopped at: Completed 23-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
