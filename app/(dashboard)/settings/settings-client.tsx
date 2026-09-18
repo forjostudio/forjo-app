@@ -3167,8 +3167,19 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                   grid no encoge y el overflow-y-auto nunca se activa. El sangrado -mx-4 px-4 hace que el
                   área scrolleable llegue al borde del diálogo, así el scrollbar y los anillos de foco no
                   quedan recortados por el padding. El overscroll contenido evita que llegar al final arrastre
-                  el scroll de la página de atrás. */}
-              <div className="-mx-4 min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 py-1">
+                  el scroll de la página de atrás.
+
+                  (G-23-22, causa 1) El hueco de la barra de scroll se reserva SIEMPRE, aparezca o no la
+                  barra. El cuerpo cambia de alto al elegir un modo de cupo compartido (aparece "Cuántos
+                  lugares", +126px medidos), cruza el alto disponible y Windows materializa una barra
+                  clásica de 15px. Sin la reserva, esos 15px se los come el ancho ÚTIL de esta fila
+                  mientras el header y el pie —que son filas HERMANAS del grid, no hijas de acá—
+                  conservan los suyos: el borde del popup deja de alinear con el borde derecho de los
+                  campos y se lee como si el diálogo se hubiera ensanchado. Medido: el popup mide 384.00px
+                  idéntico en los tres modos; lo que se movía era este ancho útil (384 → 369).
+                  Va ACÁ, en el caller, y NO en components/ui/dialog.tsx: el patrón de scroll es por
+                  caller (Phase 17), así los ~15 diálogos restantes del panel quedan byte-idénticos. */}
+              <div className="-mx-4 min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 py-1 [scrollbar-gutter:stable]">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Nombre</Label>
                   <Input value={editSvcForm.name} onChange={e => setEditSvcForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre" />
