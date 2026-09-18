@@ -1,7 +1,7 @@
 ---
 phase: 23-el-panel-que-organiza-el-cat-logo
 reviewed: 2026-09-17T00:00:00Z
-updated: 2026-09-18T00:00:00Z
+updated: 2026-09-18T23:00:00Z
 depth: standard
 passes:
   - id: 1
@@ -16,6 +16,12 @@ passes:
     findings: { critical: 0, warning: 2, info: 4 }
     fixed: "WR-03 (13629dd), WR-04 (cdf0c79) — 2026-09-18, ver 23-REVIEW-FIX.md pasada 2"
     open: "IN-05, IN-06, IN-07, IN-08"
+  - id: 3
+    date: 2026-09-18
+    scope: "planes 23-09 y 23-10 / G-23-21, G-23-23, G-23-22, G-23-25 (diff 9bbe98b..HEAD, sólo app/(dashboard)/settings/settings-client.tsx). 23-11 no tocó código fuente."
+    files: 1
+    findings: { critical: 0, warning: 6, info: 6 }
+    open: "WR-05..WR-10, IN-09..IN-14"
 files_reviewed: 9
 files_reviewed_list:
   - app/(dashboard)/settings/settings-client.tsx
@@ -29,9 +35,9 @@ files_reviewed_list:
   - test/catalog-panel.test.ts
 findings:
   critical: 0
-  warning: 4
-  info: 8
-  total: 12
+  warning: 10
+  info: 14
+  total: 24
 status: issues_found
 ---
 
@@ -252,7 +258,181 @@ justificar en desktop. Diff de comentarios puro, 0 líneas de código.
 **Fix:** si se quiere cerrar del todo, `<span className="sr-only">Precio: </span>` / `"Duración: "` dentro de cada `<p>` — quedan dentro del nodo gateado, así que no se anuncian en mobile y la exclusión mutua se conserva. Alternativa sin markup: `aria-label` en los dos `<p>`.
 
 ---
+---
 
-_Reviewed: 2026-09-17 (pasada 1) · 2026-09-18 (pasada 2, incremental sobre 23-08)_
+## Pasada incremental — 23-09 + 23-10 (G-23-21, G-23-23, G-23-22, G-23-25)
+
+**Reviewed:** 2026-09-18
+**Depth:** standard
+**Alcance:** `git diff 9bbe98b..HEAD -- "app/(dashboard)/settings/settings-client.tsx"` — **un solo archivo fuente** (298 inserciones / 78 borrados; commits `24087b7`, `3259e60`, `bba8f94`, `25655ec`, `f11307c`). El plan 23-11 sólo tocó documentos de planificación: fuera del review de código.
+**Status de esta pasada:** issues_found (**0 críticos · 6 warnings · 6 info**)
+**Arrastre:** siguen abiertos WR-01, WR-02, IN-01..IN-04 (pasada 1) e IN-05..IN-08 (pasada 2). No hubo commits de fix sobre ellos en este rango.
+
+### Resumen de la pasada
+
+Cuatro cambios en la pantalla de servicios: `min-w-0` en el `<p>` del nombre (G-23-21); la fusión de la línea de datos y el control de cupo en un único hijo de grilla, con el gate de viewport mudado al envoltorio y `py-6 sm:py-0` en el control (G-23-23); la reserva del hueco del scrollbar en el cuerpo del diálogo más el toggle de cupo apilado también en desktop (G-23-22); y la guarda compartida contra el descarte accidental del borrador en los tres diálogos de edición (G-23-25).
+
+**Gates duros re-corridos por mí, no tomados del SUMMARY:**
+
+- `npx tsc --noEmit` → **0 líneas `error TS`** fuera de `.next/`.
+- `npx eslint` sobre el archivo → **11 errores**, los mismos 11 preexistentes (859, 1098, 1112, 1120×2, 1121×2, 1133, 1142, 1266, 1868 — todos `react-hooks/purity|immutability`). **Ninguno cae en código nuevo.**
+- `git diff --check` → 3 líneas con espacios finales (ver IN-13).
+
+Lo que verifiqué a mano y **está bien**:
+
+- **La huella NO es un falso positivo en el caso general, y lo comprobé campo por campo.** `serviceFormFingerprint` (`:203-212`) corre exactamente los mismos normalizadores que `saveEditService` (`:1674-1696`): `normalizeServiceDuration`, `normalizeServicePrice`, el clamp del cupo contra el piso del modo, `liveCategoryValue` y los `trim()`. El punto de partida sale del **mismo objeto** que inicializa el borrador (`:1643-1658`), así que los dos lados no se pueden desincronizar por un segundo mapeo. Tres de los cuatro falsos positivos que el plan declara cubiertos lo están de verdad: **normalizar al salir de un campo** no ensucia (los dos lados normalizan y el `onBlur` reescribe el texto al mismo valor); **prender y apagar una sede** no ensucia (`[...f.location_ids].sort()`); y un **servicio con la categoría borrada** tampoco (`liveCategoryValue` colapsa el uuid muerto al centinela en los dos lados). El cuarto **no** está cubierto: ver WR-05.
+- **La guarda deja siempre una salida.** Los tres `DialogContent` usan el `showCloseButton` por defecto (`components/ui/dialog.tsx:75-90`) y la ✕ emite `close-press`, motivo que la guarda no mira. El caso “nombre vacío + Guardar deshabilitado” del diálogo de servicio tiene salida por la ✕, tal como está documentado.
+- **Los motivos se tipan contra la unión real del paquete.** `DialogRootChangeEventReason` (`node_modules/@base-ui/react/dialog/root/DialogRoot.d.ts:85`) incluye `outside-press`, `escape-key`, `close-press`, `trigger-press`, `focus-out`, `imperative-action` y `none`: un motivo mal escrito no compila. El descarte de `disablePointerDismissal` está bien fundado (la prop existe en `DialogRootProps:47` y corta antes del handler).
+- **Todas las aperturas pasan por el `openEdit*` que setea la huella.** `setEditSvc(` fuera de `openEditService` aparece 1 sola vez y es el cierre del guardado (`:1719`); ídem sede y profesional. No hay camino que abra un diálogo con la huella de partida en `''`, que dejaría el borrador sucio desde el primer render.
+- **Aritmética de la grilla correcta.** Con el envoltorio único la columna izquierda rinde 5 hijos y `leftRows = 2 + (compartido?1:0) + sedes + cobertura` los cuenta bien: el envoltorio con `sm:hidden` es `display:none` y no reclama fila, y el renglón de la descripción (`:3003`) se renderiza **siempre**, así que el sumando base de 2 es correcto. Las acciones caen en las filas 3/3/4/4/5 en las cinco configuraciones: WR-03 **no** se reabre.
+- **`min-w-0 break-words sm:truncate` no tiene conflicto de utilidades.** `truncate` y `break-words` caen en grupos distintos de tailwind-merge y además viajan con prefijos distintos; `flex flex-col` y `sm:hidden` tampoco colisionan dentro de `cn()`.
+- **Cero superficie de seguridad nueva.** El diff no agrega ninguna lectura ni escritura a Supabase: `from('services')` sigue en 6 líneas, `saveEditService` conserva su `.eq('business_id', business.id)` (`:1698`), no hay `dangerouslySetInnerHTML`, ni interpolación de HTML, ni secretos, ni paquetes, ni migraciones. El único roce con el aislamiento por tenant es por omisión y es preexistente: WR-06.
+
+Lo que **no** está bien está abajo.
+
+## Warnings (pasada 3)
+
+### WR-05: Ir a “Individual” y volver deja el borrador sucio **y** baja el cupo a 2 en silencio — el único falso positivo de los cuatro que el plan declara cubiertos
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:612` (el `onClick` del toggle), con `:203-212` (la huella) y `:1687` (el guardado)
+**Issue:** El patch del toggle es `capacity: o.key === 'individual' ? 1 : normalizeCapacity(capacity, 2)`. Pasar a **individual pisa el cupo con 1**, y al volver a un modo compartido el piso lo levanta a **2**, no al valor original: el cupo se pierde en el camino de ida.
+
+Escenario concreto, con una clase de 12 lugares:
+
+1. El dueño abre “Editar servicio” de una clase grupal con `capacity = 12`. Huella de partida: `capacity: 12`.
+2. Toca “Individual” (el explicador invita a **comparar** los tres modos, y la pill es el control obvio para hacerlo). El borrador queda `{individual, capacity: 1}`.
+3. Vuelve a “Clase grupal”. El borrador queda `{group_class, capacity: 2}` — **los 12 se perdieron**.
+4. La huella da distinta ⇒ `isEditSvcDirty()` devuelve `true` ⇒ el click afuera y el Escape quedan **bloqueados** con el aviso, aunque el dueño no haya querido cambiar nada.
+5. El aviso le dice literalmente **“Guardá para conservarlos”** (`UNSAVED_CHANGES_HINT`, `:175`). Si sigue esa instrucción, `saveEditService` escribe `capacity: 2` sobre una clase de 12.
+
+El paso 5 es el que importa: ese camino de guardado **no tiene** el pre-chequeo de bajada de cupo que sí tiene la tarjeta (`maxFutureSeatsOf` se llama sólo desde `saveCapacityInline`, `:1780`). La clase queda con `12/2 lleno` en la agenda y el motor rechazando toda reserva nueva con `slot_full`, sin un solo aviso. El toggle lossy es **preexistente**; lo que agrega este plan es que (a) la huella reporta como “cambios sin guardar” una operación que el dueño vivió como lectura, y (b) el texto del aviso empuja al guardado que consuma la pérdida.
+
+Contradice de frente la cobertura **D9** del `23-10-SUMMARY` (“ir y volver de modo de cupo … dejan el diálogo cerrable”), declarada cubierta por un gate de región. El gate mira que la huella use los normalizadores; no puede ver este caso, porque el defecto no está en la huella sino en el patch del toggle. Con `capacity ≤ 2` el round-trip sí es inocuo — que es probablemente por qué nadie lo vio.
+
+**Fix (mínimo y del lado correcto):** no pisar el cupo al ir a individual. El piso de 1 ya lo imponen el guardado (`:1687`), el alta y la propia huella (`:204`), así que conservar el número mientras el modo es individual no puede producir una combinación que el CHECK de la migr. 068 rechace, y el campo “Cuántos lugares” ni siquiera se renderiza en ese modo:
+
+```tsx
+// El cupo sólo se toca al ENTRAR a un modo compartido, para respetar su piso. Al ir a individual se
+// CONSERVA: el 1 lo impone el guardado, y pisarlo acá hace que ir y volver degrade 12 → 2.
+onClick={() => onChange({
+  capacity_mode: o.key,
+  capacity: o.key === 'individual' ? capacity : normalizeCapacity(capacity, 2),
+})}
+```
+
+Con eso el round-trip vuelve a dar la huella de partida y el diálogo cierra con un click afuera, sin tocar la guarda. Aparte, conviene llevar el pre-chequeo de bajada de cupo también al guardado del diálogo, hoy exclusivo de la tarjeta.
+
+### WR-06: `saveEditLocation` es la única de las tres escrituras de edición sin el filtro por `business_id`
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:2238`
+**Issue:** El plan mudó el payload de la sede a `locToPayload` y dejó la sentencia como estaba:
+
+```tsx
+const { error } = await supabase.from('locations').update(payload).eq('id', editLoc.id)
+```
+
+Sus dos hermanas del mismo archivo, tocadas por el mismo plan, sí lo llevan: `saveEditService` (`:1698`, con el comentario “defensa en profundidad — la RLS es la segunda capa, no la única”) y `saveEditPro` (`:1953-1957`). La convención del proyecto (`.claude/CLAUDE.md`: “toda query del dashboard filtra por `.eq('business_id', business.id)`. Nunca omitir”) y la skill `supabase-multitenant-rls` piden las dos capas.
+
+**No es explotable hoy:** la policy `"business access" ON public.locations` (`supabase/schema.sql:2555`) es `USING (business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid()))` y, al no declarar un `WITH CHECK` propio, Postgres reusa ese predicado para el `UPDATE`, así que un id de otro negocio no escribe nada. Es exactamente la clase de defecto que la convención existe para evitar: la única barrera queda del lado de la base, y si mañana esa policy se relaja o aparece un rol nuevo, este call site no avisa.
+**Fix:**
+
+```tsx
+const { error } = await supabase.from('locations').update(payload).eq('id', editLoc.id).eq('business_id', business.id)
+```
+
+### WR-07: En “Editar sede”, con el nombre vacío el diálogo se percibe **trabado**: el click afuera queda bloqueado, “Guardar” no hace nada y no hay “Cancelar”
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:3786` (el botón), con `:2233` (el early return) y `:3776` (la guarda)
+**Issue:** `saveEditLocation` arranca con `if (!editLoc || !editLocForm.name.trim()) return` — **sin toast y sin marcar el campo**. Y a diferencia del diálogo de servicio, el botón sólo está `disabled={savingEditLoc}`: con el nombre vacío se puede clickear y **no pasa absolutamente nada**.
+
+Antes de este plan eso era un no-op molesto con una salida obvia (el click afuera). Ahora, con el nombre vacío el borrador está sucio por definición (`''` contra el nombre original), así que:
+
+- click afuera o Escape → bloqueados, con el aviso “Guardá para conservarlos, o cerrá con la ✕”;
+- “Guardar” → no hace nada, ni un mensaje;
+- no hay botón “Cancelar” en este diálogo (el de profesional sí lo tiene, `:4125`).
+
+Queda la ✕, que el aviso nombra. Pero el primer reflejo del dueño va a ser el botón grande que dice Guardar, y ése es el que le devuelve silencio: es la combinación que hace que una pantalla se lea como rota.
+**Fix:** espejar lo que ya hace el diálogo de servicio (`:3416`), que es el patrón del propio archivo:
+
+```tsx
+<Button onClick={saveEditLocation} disabled={savingEditLoc || !editLocForm.name.trim()}>
+```
+
+Y, ya que el aviso empuja a “Guardar”, que el early return de `:2233` deje de ser silencioso (`toast.error('Poné un nombre para la sede')`).
+
+### WR-08: El único feedback del cierre bloqueado vive en una región que el propio diálogo modal marca como inerte
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:218` (el `toast.warning` de la guarda)
+**Issue:** El diálogo se monta con `modal` por defecto, y Base UI lo resuelve con `FloatingFocusManager modal` (`node_modules/@base-ui/react/dialog/popup/DialogPopup.js:115-122`), que aplica `markOthers` sobre los hermanos del popup en `<body>` poniéndoles `inert` (o `aria-hidden` donde no haya soporte) — `floating-ui-react/utils/markOthers.js:76-81`. El `<Toaster />` de sonner se monta en `app/layout.tsx:65`, o sea **fuera** del portal del diálogo: mientras el diálogo está abierto, su región `aria-live` cae dentro del subárbol marcado.
+
+Consecuencia concreta: quien cierra con **Escape** —camino de teclado, y uno de los dos motivos que la guarda mira— percibe que la tecla “no hace nada” y no recibe ningún anuncio. Visualmente el toast sí se ve (`inert` no oculta), así que el usuario con puntero y vista queda cubierto; el de teclado + lector de pantalla, no. Es el mismo eje que WR-03 de la pasada 2 (WCAG 1.3.2 / 4.1.3): un estado nuevo que se comunica por un solo canal.
+**Fix:** duplicar el mensaje **adentro** del popup, que es lo único que el modal no marca. Un nodo por diálogo alcanza y no agrega un modal anidado (que `CLAUDE.md` prohíbe):
+
+```tsx
+// dentro de cada DialogContent, arriba del cuerpo
+<p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? `${UNSAVED_CHANGES_MESSAGE}. ${UNSAVED_CHANGES_HINT}` : ''}</p>
+```
+
+con un `useState` que la guarda prenda al cancelar y que cualquier `onChange` de campo apague. Alternativa más barata: mover el foco al Guardar (o a la ✕) al cancelar el cierre, para que el lector anuncie algo.
+
+### WR-09: La lógica pura más riesgosa del cambio quedó dentro del componente cliente, sin exportar y sin un solo test
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:181-225` (`guardDraftOnDismiss`, `serviceFormFingerprint`, `locToPayload`, `locationFormFingerprint`, `proFormFingerprint`)
+**Issue:** Las cinco funciones son **puras** y no dependen de React ni del DOM, pero viven en un módulo `'use client'` de 4.100 líneas y no se exportan: **no se pueden testear**. El resultado es que las coberturas D7, D8, D9 y D10 del `23-10-SUMMARY` quedan todas en `human_judgment: true` + un gate de `grep`, para un arreglo cuyo modo de falla el propio plan clasifica como GRAVE (T-23-49: “una huella mal normalizada encierra al dueño en un diálogo que ya no cierra”).
+
+El repo tiene el patrón opuesto y a mano: `lib/catalog-panel.ts` + `test/catalog-panel.test.ts` nacieron en esta misma fase justamente para poder testear `liveCategoryValue`, `categoryPatch` y `nextSortOrder` — las mismas funciones que la huella reusa. La suite tiene 1.301 casos y **ninguno** puede tocar la huella. WR-05 es la prueba de que el gate de `grep` no alcanza: dio verde sobre un caso que rompe.
+**Fix:** mover las cinco a `lib/panel-draft.ts` (o extender `lib/catalog-panel.ts`) y agregar `test/panel-draft.test.ts` con, como mínimo, los cuatro falsos positivos declarados: normalizar al salir de un campo, prender y apagar una sede, ir y volver de modo de cupo (el de WR-05) y un servicio con y otro sin categoría. Son tests de función pura: no hace falta jsdom ni montar el componente.
+
+### WR-10: Los comentarios nuevos citan tres números que **no** son los que se midieron
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:3021-3022` y `:3338`
+**Issue:** En este archivo el comentario es el contrato de la región — WR-04 de la pasada 2 se abrió y se arregló exactamente por esto, y el propio plan 23-10 se jacta de haber corregido “el comentario que mentía, con el número que lo desmiente”. Los comentarios nuevos reintroducen el problema:
+
+1. **`:3021-3022`** — “medido bit a bit: 33px de la línea al botón, **33px del botón a “Se ofrece en:”**, **343px de alto**”. La medición registrada en el `23-09-SUMMARY` (cobertura D8) dice `línea→botón 33/33`, **`botón→"Se ofrece en:" 32/32`** y **alto `346 → 346`**. Dos de los tres números están mal, y el de 32px no es decorativo: es el ritmo que sostiene la invariante de la zona de exclusión de G-04, que el mismo comentario invoca dos párrafos más abajo.
+2. **`:3338`** — “(aparece “Cuántos lugares”, **+126px medidos**)”. Los 126px que midió la sonda son el **alto del radiogroup** en la variante nueva (46 → 126, o sea +80), no lo que aporta el bloque “Cuántos lugares”, que la sonda nunca midió por separado. El número es real pero está atribuido a otra caja.
+
+**Fix:** tres correcciones de texto, sin tocar código: `33px` → `32px` y `343px` → `346px` en `:3021-3022`; y en `:3338`, o el número que corresponda al bloque “Cuántos lugares”, o reformular (“el cuerpo crece al aparecer ‘Cuántos lugares’ y cruza el alto disponible”) sin citar una cifra que no se midió.
+
+## Info (pasada 3)
+
+### IN-09: Quitar `: ServiceEditForm` sí pierde algo concreto: el chequeo de propiedades en exceso
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:1641-1655`
+**Issue:** La desviación declarada (Rule 3) quitó la anotación para que el gate de “el nombre del tipo aparece 3 veces” diera. Lo que se conserva: un campo **faltante** o **mal tipado** sigue reventando en `setEditSvcForm(inicial)` y en `serviceFormFingerprint(inicial, …)`. Lo que se pierde: al ser una variable y no un literal fresco, TypeScript ya **no** aplica excess property checking, así que un campo de más (un `sort_order`, o un `descripcion` mal escrito **junto** al `description` correcto) pasa en silencio y termina en el borrador. `tsc --noEmit` confirma que hoy no hay ninguno.
+**Fix:** `const inicial = { … } satisfies ServiceEditForm` recupera las dos cosas sin re-anotar, y el gate —que es un instrumento del plan, no una restricción del código— se corrige a 4. Un conteo de ocurrencias de un identificador no es razón suficiente para bajar el tipado: el gate está para proteger al código, no al revés.
+
+### IN-10: `scrollbar-gutter: stable` no elimina el desalineado, lo vuelve permanente (y la UAT corre justo en la plataforma donde se ve)
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:3346`
+**Issue:** El arreglo congela el ancho útil en 369px, pero el header y el pie —filas hermanas del grid, no hijas del contenedor scrolleable— siguen midiendo 384. O sea que en Windows/Linux (scrollbar clásico) los campos quedan **siempre** 15px adentro del borde derecho del popup, también en los modos que no scrollean, donde antes alineaban. En macOS/iOS (scrollbar overlay) el hueco es 0 y no se nota. El defecto reportado (“el diálogo se ensanchó”) desaparece porque ya no *cambia*; el desalineado en sí queda fijo.
+**Fix:** ninguno obligatorio — es el trade-off que el usuario aceptó. Pero el check visual de la UAT a 1440×900 conviene que mire explícitamente el borde derecho de los inputs contra el del pie, porque el entorno del dueño es Windows y es donde el hueco se materializa. Si molesta, la alternativa es llevar la reserva al popup y sacarle el sangrado `-mx-4 px-4` a la fila scrolleable, para que header, cuerpo y pie compartan el mismo borde.
+
+### IN-11: “Cancelar” descarta sin aviso lo que un click 2px más afuera sí protege
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:4125`
+**Issue:** En “Editar profesional”, “Cancelar” llama a `setEditingPro(null)` directo, sin pasar por la guarda. Es coherente con la decisión (“descartar explícito no cobra fricción”), pero deja el modelo mental partido: el mismo borrador se pierde sin chistar por un botón y queda retenido con aviso por un click en el backdrop. Y el texto del aviso sólo nombra la ✕, no el “Cancelar” que está a la vista en ese diálogo.
+**Fix:** decidirlo y dejarlo escrito. Si “Cancelar” es descarte explícito, alcanza con que `UNSAVED_CHANGES_HINT` lo contemple (“…o descartá con Cancelar / la ✕”). Si no, cablearlo a la misma guarda.
+
+### IN-12: El aviso en español manda a un control cuyo nombre accesible está en inglés
+
+**File:** `components/ui/dialog.tsx:88` (consumido por los tres diálogos)
+**Issue:** `UNSAVED_CHANGES_HINT` dice “cerrá con la ✕ para descartarlos”, y el nombre accesible de esa ✕ es `<span className="sr-only">Close</span>`. Un lector de pantalla en español anuncia “Close”. Es preexistente y compartido por ~15 diálogos, pero este plan es el primero que convierte a ese botón en **la única salida documentada** de un estado.
+**Fix:** `Cerrar` en `components/ui/dialog.tsx` (una palabra, no toca layout), o pasar el label por prop desde el caller si se quiere mantener el componente compartido byte-idéntico.
+
+### IN-13: Tres líneas con espacios finales en los comentarios re-indentados
+
+**File:** `app/(dashboard)/settings/settings-client.tsx:3042, 3047, 3056`
+**Issue:** `git diff --check` marca tres líneas en blanco del bloque de comentario que se re-indentó al entrar en el envoltorio nuevo. Sin efecto de runtime; ensucia el próximo diff de esa región.
+**Fix:** borrar los espacios finales de esas tres líneas.
+
+### IN-14: El diálogo “Mover …” del organizador quedó afuera de la guarda, en la misma pantalla
+
+**File:** `components/dashboard/categorias-manager.tsx:1000`
+**Issue:** G-23-25 se definió como “los tres diálogos de edición del panel”, y así se implementó. Pero en `/servicios` hay un cuarto diálogo con borrador: “Mover …”, que sostiene la categoría destino **y** la posición elegidas, y se descarta con `onOpenChange={o => { if (!o && !savingMove) setMoving(null) }}`. Para el dueño es la misma pantalla y el mismo tipo de pérdida. (“Cancelar suscripción”, `settings-client.tsx:4067`, sí está bien afuera: no tiene borrador.)
+**Fix:** decidirlo explícitamente. Si entra, `guardDraftOnDismiss` es reusable tal cual en cuanto se exporte (ver WR-09), y su huella sería `JSON.stringify({ categoria, posicion })` contra lo capturado en `openMove`. Si no entra, que quede escrito en el `23-UI-SPEC` para que el próximo no lo lea como un olvido.
+
+---
+
+_Reviewed: 2026-09-17 (pasada 1) · 2026-09-18 (pasada 2, incremental sobre 23-08) · 2026-09-18 (pasada 3, incremental sobre 23-09 + 23-10)_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
