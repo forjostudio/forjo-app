@@ -2688,6 +2688,13 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 // Antes lo resolvía el control; se mudó junto con el label, sin cambiar el cálculo:
                 // CAPACITY_MODE_HELP sigue siendo la única fuente de los rótulos (D-03).
                 const capacityModeLabel = CAPACITY_MODE_HELP.find(h => h.key === capMode)?.label ?? ''
+                // La duración y el precio se pintan en DOS lugares —el renglón de mobile y el bloque
+                // de la columna derecha en desktop—, cada uno con su gate de viewport, así que
+                // exactamente uno está visible por vez. Por eso salen de UNA sola derivación: dos
+                // expresiones inline separadas podrían divergir de formato con el tiempo y mostrarle
+                // al dueño el mismo dato escrito de dos maneras según el ancho de la pantalla.
+                const durationLabel = `${s.duration_minutes}min`
+                const priceLabel = `$${Number(s.price).toLocaleString('es-AR')}`
                 return (
                   <div key={s.id} className="p-3 rounded-lg bg-secondary/50 flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                     {/* ESTRUCTURA DE LA TARJETA — una sola pasada, sin markup duplicado.
@@ -2699,21 +2706,26 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         no alcanzó: con nombres largos el NOMBRE seguía truncando a 375px ("Mechas
                         califo…", "Alisado perma…"), reportado desde un navegador real con captura.
 
-                        Ahora en MOBILE la tarjeta es una columna y las acciones son el ÚLTIMO hijo: el
+                        En MOBILE la tarjeta es una columna y las acciones son el ÚLTIMO hijo: el
                         nombre se lleva el ancho interior entero y envuelve en varias líneas en vez de
-                        truncar. En DESKTOP la tarjeta es una grilla de dos columnas y las acciones
-                        quedan ancladas a la primera fila, así que se ve igual que siempre —inline a la
-                        derecha del título y centradas con él— y el título vuelve a truncar. El
+                        truncar. Eso NO cambió con G-23-20 y no es un olvido: los dos motivos de arriba
+                        —el desborde medido de 375px (G-02) y los toques errados (G-04)— siguen
+                        vigentes, y por eso la decisión del usuario limitó el layout nuevo a desktop. El
                         precedente de bajar un bloque a su propia línea en vez de pedirle ancho al que
                         ya estaba es la fila mobile de Finanzas (POLISH-10): la única de las tres
                         superficies de esa fase que pasó la UAT sin un solo issue.
 
+                        En DESKTOP la tarjeta es una grilla de dos columnas. A la izquierda, los seis
+                        hijos de CONTENIDO apilados. A la derecha, TRES celdas: el precio en la fila del
+                        nombre, la duración debajo y las tres acciones debajo de las dos (G-23-20).
+
                         CORRECTITUD, no decoración: cada hijo de CONTENIDO fija a mano la primera
-                        columna. Con las acciones colocadas explícitamente en la segunda columna de la
-                        primera fila, la ubicación automática de la grilla mandaría uno de los bloques
-                        de abajo al hueco que queda a la derecha. Un hijo de contenido NUEVO tiene que
-                        declarar su columna igual que los seis que ya están, o se va a la columna de
-                        las acciones en desktop.
+                        columna, y cada hijo de la columna DERECHA fija a mano su columna Y su fila. Con
+                        tres celdas colocadas explícitamente a la derecha, la ubicación automática de la
+                        grilla mandaría cualquier bloque suelto al primer hueco libre de esa columna. La
+                        regla para el que toque esto después: un hijo de contenido NUEVO declara la
+                        primera columna igual que los seis que ya están, y un hijo de la derecha declara
+                        columna y fila, o la tarjeta se desarma sola.
 
                         El centrado vertical se CONSERVA, y va con prefijo de desktop a propósito: en
                         la columna de mobile centraría todo en horizontal. El ritmo de 8px también se
@@ -2730,6 +2742,32 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         </span>
                       )}
                     </div>
+                    {/* PRECIO Y DURACIÓN A LA DERECHA, SÓLO DESKTOP (G-23-20, pedido del dueño en la
+                        UAT del 2026-09-17). Van como DOS celdas hermanas y no como un bloque apilado:
+                        el bloque del nombre y el precio son items de la MISMA fila, y el centrado
+                        vertical que la tarjeta ya tiene los alinea solo, que es literalmente lo que se
+                        pidió —el precio a la altura del título—. Un solo contenedor con los dos datos
+                        adentro sería UN item alto en la primera fila, y el nombre quedaría centrado
+                        contra ese bloque en vez de alineado con el precio.
+
+                        La duración se alinea al tope de su propia fila para quedar pegada debajo del
+                        precio sin importar cuánto mida el renglón de descripción que tiene al lado.
+                        Los dos se alinean contra el borde derecho de la tarjeta, igual que en la
+                        tarjeta pública; la columna derecha la sigue dimensionando el grupo de
+                        acciones, que es más ancho, así que el nombre no pierde ni un píxel de ancho y
+                        sigue truncando donde truncaba.
+
+                        Se replica la JERARQUÍA de la tarjeta pública, no sus clases: el precio va en
+                        el mismo registro que el nombre y la duración en el de la descripción. Allá el
+                        precio va en un cuerpo mayor y con la fuente de títulos porque es otra
+                        superficie y otra densidad.
+
+                        Los dos están ocultos por debajo de 640px y ésa es la mitad vinculante de la
+                        decisión del usuario: en mobile la tarjeta no se toca, para no reabrir ni el
+                        desborde de 375px (G-02) ni los toques errados (G-04), los dos medidos y
+                        derivados en el comentario de arriba. */}
+                    <p className="hidden text-sm font-medium sm:block sm:col-start-2 sm:row-start-1 sm:justify-self-end">{priceLabel}</p>
+                    <p className="hidden text-xs text-muted-foreground sm:block sm:col-start-2 sm:row-start-2 sm:justify-self-end sm:self-start">{durationLabel}</p>
                     {/* DESCRIPCIÓN + LINK DE EDICIÓN (G-23-6b). Pedido explícito del dueño en la UAT del
                         2026-09-17: ver un renglón de la descripción en la tarjeta y poder editarla sin
                         buscar el lápiz; si no hay descripción, un link para agregarla. Supera a D-06
@@ -2775,10 +2813,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
                         "mejora" que va a proponer el próximo que lea esto; la respuesta es no.
 
-                        El contenedor pasa de <p> a flex-wrap, pero la duración y el precio siguen
-                        siendo UN solo nodo de texto: así la línea de un servicio `individual` —que es
-                        el 100 % de producción hoy— se ve exactamente igual que antes. Sin badge, el
-                        badge se vuelve señal.
+                        EN MOBILE ésta sigue siendo la línea de siempre: la duración y el precio son UN
+                        solo nodo de texto, así que un servicio `individual` —que es el 100 % de
+                        producción hoy— se ve exactamente igual que antes. Sin badge, el badge se
+                        vuelve señal.
+
+                        EN DESKTOP esos dos datos ya no viven acá: se mudaron a la columna derecha con
+                        su propia jerarquía (G-23-20, pedido del dueño en la UAT del 2026-09-17), así
+                        que esta línea queda como el RENGLÓN DE MOBILE. Con cupo individual el
+                        contenedor entero desaparece en desktop: no le quedaría nada que mostrar y una
+                        celda vacía le sumaría una fila de separación a la tarjeta. Con cupo compartido
+                        se queda el rótulo del modo, sin el separador que lo unía a la duración.
 
                         POR QUÉ EL CONTROL DEL CUPO YA NO VIVE ACÁ ADENTRO (G-04). Esta línea es texto
                         inerte y el control tiene botones de 44px. Los navegadores móviles corrigen el
@@ -2788,15 +2833,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         el modo lo subía. Ahora el control es HERMANO de esta línea y se lleva 32px de
                         zona de exclusión (24 de padding propio + 8 del ritmo de la tarjeta). Meterlo de
                         vuelta acá adentro reabre el defecto entero. */}
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:col-start-1">
-                      <span>{s.duration_minutes}min · ${Number(s.price).toLocaleString('es-AR')}</span>
+                    <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:col-start-1', capMode === 'individual' && 'sm:hidden')}>
+                      <span className="sm:hidden">{durationLabel} · {priceLabel}</span>
                       {capMode !== 'individual' && (
                         <>
                           {/* El separador no puede leerse en voz alta: ya hay uno en el nodo de
                               arriba y el lector de pantalla repetiría "punto medio" dos veces. Viaja
                               junto al label dentro del MISMO condicional: así nunca queda colgando
-                              solo en una tarjeta individual (R2-1). */}
-                          <span aria-hidden="true">·</span>
+                              solo en una tarjeta individual (R2-1). En desktop desaparece con el
+                              renglón que tiene adelante: ahí el rótulo del modo es lo único que queda
+                              en esta línea y no tendría de qué separarlo. */}
+                          <span aria-hidden="true" className="sm:hidden">·</span>
                           {/* TERCER dato de la línea (D-07): un span de texto, sin manejador de click,
                               sin rol y sin índice de tabulación (D-09). Desde la tarjeta se cambia el
                               NÚMERO, nunca el MODO. */}
@@ -2846,8 +2893,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         huecos entre ellas en vez de robárselo al nombre. Son el ÚLTIMO hijo del DOM,
                         así que en mobile caen al final de la tarjeta —"Desactivar" a la izquierda, el
                         lápiz y el tacho juntos contra el borde derecho— y en desktop quedan ancladas a
-                        la segunda columna de la primera fila, o sea inline al lado del título como
-                        siempre. */}
+                        la TERCERA fila de la segunda columna, debajo del precio y de la duración
+                        (G-23-20). Se alinean al tope de su fila para quedar pegadas a esos dos datos
+                        aunque la celda de la izquierda de esa fila sea alta (por ejemplo las píldoras
+                        de sedes envolviendo en dos renglones). */}
                     {/* ZONA DE EXCLUSIÓN DE 24px EN MOBILE + DIVISORIA (G-04, segunda aplicación). Al
                         bajar las acciones al final, el texto inerte que les queda encima —la línea de
                         datos, "Se ofrece en:", "Lo hacen: …"— pasa a tener un botón cerca. Es la misma
@@ -2870,15 +2919,18 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         estaba.
 
                         ORDEN DE FOCO: con las acciones al final del DOM, el recorrido de la tarjeta pasa
-                        a ser contenido → acciones en las DOS vistas. En mobile eso alinea foco y orden
-                        visual (WCAG 2.4.3 / 1.3.2). En desktop queda un desfase entre la posición visual
-                        (arriba a la derecha) y el orden de tabulación (último): es una secuencia
+                        a ser contenido → acciones en las DOS vistas. El reordenamiento visual de desktop
+                        lo hace LA GRILLA, declarando filas: el DOM sigue siendo contenido → acciones y
+                        nunca se sube el bloque de acciones más arriba entre los hermanos. En mobile eso
+                        alinea foco y orden visual (WCAG 2.4.3 / 1.3.2). En desktop queda un desfase
+                        entre la posición visual (ahora abajo a la derecha, debajo del precio y de la
+                        duración) y el orden de tabulación (último): es una secuencia
                         significativa y habitual para una tarjeta —contenido primero, acciones después— y
                         los tres botones llevan el nombre del servicio en su etiqueta accesible, así que
                         no hay ambigüedad. Es DECISIÓN ESCRITA, no olvido: prohibido compensarla con un
                         índice de tabulación positivo, que es antipatrón y rompería el orden de la
                         página entera. */}
-                    <div className="flex shrink-0 items-center gap-1 pt-4 border-t border-border/60 sm:pt-0 sm:border-t-0 sm:col-start-2 sm:row-start-1">
+                    <div className="flex shrink-0 items-center gap-1 pt-4 border-t border-border/60 sm:pt-0 sm:border-t-0 sm:col-start-2 sm:row-start-3 sm:self-start">
                       {/* El nombre accesible incluye el del servicio: hasta ahora este botón se apoyaba
                           en compartir renglón con el título, y ese renglón deja de existir en mobile. El
                           texto visible no cambia y sigue contenido en la etiqueta (WCAG 2.5.3). */}
