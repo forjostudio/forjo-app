@@ -2242,7 +2242,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setEditLocBaselineFp(locationFormFingerprint(inicial))
   }
   async function saveEditLocation() {
-    if (!editLoc || !editLocForm.name.trim()) return
+    if (!editLoc) return
+    // El early return del nombre vacío ya no es SILENCIOSO (code-review WR-07, pasada 3). Con la
+    // guarda de G-23-25 el nombre vacío deja el borrador sucio por definición, así que el click afuera
+    // y el Escape quedan bloqueados con el aviso que empuja a "Guardar" — y "Guardar" no hacía
+    // absolutamente nada. Es la combinación que hace que un diálogo se lea como trabado. El botón
+    // además ya está deshabilitado en ese estado (espejo del diálogo de servicio); esto es el
+    // backstop para cualquier otro camino que llegue acá.
+    if (!editLocForm.name.trim()) { toast.error('Escribí un nombre para guardar.'); return }
     setSavingEditLoc(true)
     // El payload sale del normalizador COMPARTIDO con la huella: una sola normalización para la sede.
     const payload = locToPayload(editLocForm)
@@ -3797,7 +3804,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 <Input value={editLocForm.address} onChange={e => setEditLocForm(f => ({ ...f, address: e.target.value }))} placeholder="Dirección (opcional)" />
                 <Input value={editLocForm.phone} onChange={e => setEditLocForm(f => ({ ...f, phone: e.target.value }))} placeholder="Teléfono (opcional)" />
               </div>
-              <Button onClick={saveEditLocation} disabled={savingEditLoc}>{savingEditLoc ? 'Guardando...' : 'Guardar'}</Button>
+              {/* `!editLocForm.name.trim()` en el disabled: espejo literal del Guardar del diálogo de
+                  servicio (code-review WR-07, pasada 3). Sin esto el botón se podía clickear con el
+                  nombre vacío y no pasaba NADA, mientras la guarda de G-23-25 bloqueaba el click
+                  afuera y el Escape con un aviso que justamente manda a guardar: el diálogo se leía
+                  como trabado. Ahora el estado se ve (botón apagado) y la salida sigue siendo la ✕. */}
+              <Button onClick={saveEditLocation} disabled={savingEditLoc || !editLocForm.name.trim()}>{savingEditLoc ? 'Guardando...' : 'Guardar'}</Button>
             </DialogContent>
           </Dialog>
         </TabsContent>
