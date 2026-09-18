@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo, useId } from 'react'
+import { useState, useRef, useEffect, useMemo, useId, type CSSProperties } from 'react'
 import { format, parseISO } from 'date-fns'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -2695,6 +2695,27 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 // al dueño el mismo dato escrito de dos maneras según el ancho de la pantalla.
                 const durationLabel = `${s.duration_minutes}min`
                 const priceLabel = `$${Number(s.price).toLocaleString('es-AR')}`
+                // FILA DE LAS ACCIONES EN DESKTOP. La columna izquierda tiene una cantidad VARIABLE
+                // de filas —la línea de datos y el control de cupo existen sólo con cupo compartido,
+                // las sedes sólo si hay alguna activa, la cobertura sólo con ≥2 profesionales— así que
+                // una fila FIJA deja contenido DEBAJO de los botones en cuanto la tarjeta pasa de tres
+                // filas. Medido en Chrome sobre esta misma grilla, no derivado en el pizarrón: con
+                // `row-start-3`, cupo compartido solo (4 filas) ya dejaba el stepper debajo de las
+                // acciones, y con sedes + cobertura (6) quedaban debajo el stepper, las píldoras de
+                // sedes y la línea de cobertura.
+                //
+                // El piso de 3 es duro y no es defensivo: las filas 1 y 2 de la columna derecha son el
+                // precio y la duración, y las acciones van SIEMPRE debajo de las dos, también en la
+                // tarjeta más corta (individual, sin sedes, sin cobertura), donde la izquierda ocupa 2.
+                //
+                // Los sumandos siguen el ORDEN DEL DOM de los hijos de contenido: nombre + descripción
+                // (siempre) + línea de datos y control de cupo (cupo compartido) + sedes + cobertura.
+                // El que agregue un hijo de contenido nuevo suma su fila ACÁ, o vuelve el defecto.
+                const leftRows = 2
+                  + (capMode !== 'individual' ? 2 : 0)
+                  + (activeLocations.length > 0 ? 1 : 0)
+                  + (showCoverage ? 1 : 0)
+                const actionsRow = Math.max(3, leftRows)
                 return (
                   <div key={s.id} className="p-3 rounded-lg bg-secondary/50 flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                     {/* ESTRUCTURA DE LA TARJETA — una sola pasada, sin markup duplicado.
@@ -2892,9 +2913,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                     {/* Las tres acciones, agrupadas en un solo item: recuperan ancho achicando los
                         huecos entre ellas en vez de robárselo al nombre. Son el ÚLTIMO hijo del DOM,
                         así que en mobile caen al final de la tarjeta —"Desactivar" a la izquierda, el
-                        lápiz y el tacho juntos contra el borde derecho— y en desktop quedan ancladas a
-                        la TERCERA fila de la segunda columna, debajo del precio y de la duración
-                        (G-23-20). Se alinean al tope de su fila para quedar pegadas a esos dos datos
+                        lápiz y el tacho juntos contra el borde derecho— y en desktop CIERRAN la
+                        tarjeta: van a la ÚLTIMA fila de la segunda columna, siempre debajo del precio
+                        y de la duración (G-23-20). La fila no es un número fijo —la calcula
+                        `actionsRow`, arriba— justamente para que nunca quede contenido por debajo de
+                        los botones. Se alinean al tope de su fila para quedar pegadas al contenido
                         aunque la celda de la izquierda de esa fila sea alta (por ejemplo las píldoras
                         de sedes envolviendo en dos renglones). */}
                     {/* ZONA DE EXCLUSIÓN DE 24px EN MOBILE + DIVISORIA (G-04, segunda aplicación). Al
@@ -2930,7 +2953,17 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         no hay ambigüedad. Es DECISIÓN ESCRITA, no olvido: prohibido compensarla con un
                         índice de tabulación positivo, que es antipatrón y rompería el orden de la
                         página entera. */}
-                    <div className="flex shrink-0 items-center gap-1 pt-4 border-t border-border/60 sm:pt-0 sm:border-t-0 sm:col-start-2 sm:row-start-3 sm:self-start">
+                    {/* La fila viaja como VARIABLE CSS y no como clase: `sm:row-start-${n}` con un
+                        valor dinámico no lo genera el JIT de Tailwind. El `style` inline no se puede
+                        gatear por viewport, pero la clase que lo CONSUME sí, así que en mobile la
+                        variable queda sin usar y el bloque sigue siendo el último hijo del flex.
+                        Si la variable llegara a faltar, `grid-row-start` cae en `auto` y la grilla
+                        coloca igual el bloque en la última fila: el degradado es el layout correcto,
+                        nunca el defecto de la fila fija. */}
+                    <div
+                      style={{ ['--actions-row']: actionsRow } as CSSProperties}
+                      className="flex shrink-0 items-center gap-1 pt-4 border-t border-border/60 sm:pt-0 sm:border-t-0 sm:col-start-2 sm:[grid-row-start:var(--actions-row)] sm:self-start"
+                    >
                       {/* El nombre accesible incluye el del servicio: hasta ahora este botón se apoyaba
                           en compartir renglón con el título, y ese renglón deja de existir en mobile. El
                           texto visible no cambia y sigue contenido en la etiqueta (WCAG 2.5.3). */}
