@@ -193,6 +193,8 @@ const UNSAVED_CHANGES_HINT = 'Guardá para conservarlos, o cerrá con la ✕ par
 // Identificador fijo: sonner REEMPLAZA el aviso vivo en vez de apilar uno nuevo, así que cinco clicks
 // afuera seguidos dejan UN solo toast en pantalla.
 const UNSAVED_CHANGES_TOAST_ID = 'unsaved-changes'
+// El MISMO aviso, en una sola cadena, para la región viva que va ADENTRO del popup (ver abajo).
+const UNSAVED_CHANGES_ANNOUNCE = `${UNSAVED_CHANGES_MESSAGE}. ${UNSAVED_CHANGES_HINT}`
 
 // La guarda, compartida por los tres diálogos de edición. Recibe una función que responde "¿hay
 // cambios?" y la que cierra, y devuelve el handler de apertura.
@@ -209,13 +211,22 @@ const UNSAVED_CHANGES_TOAST_ID = 'unsaved-changes'
 // Caso borde que hay que conocer: si el dueño VACÍA el nombre, el borrador queda sucio y "Guardar"
 // queda deshabilitado (ya era así). La única salida es la ✕ — y ésa es justamente la razón por la que
 // la ✕ nunca puede entrar acá.
-function guardDraftOnDismiss(isDirty: () => boolean, close: () => void) {
+//
+// ⚠ EL AVISO NO LO DA ESTA FUNCIÓN (code-review WR-08, pasada 3). Recibe `onBlocked` y lo llama: el
+// toast NO alcanza como único canal. El diálogo se monta modal y Base UI lo resuelve con
+// FloatingFocusManager modal, que marca `inert` a los hermanos del popup en <body>; el <Toaster /> de
+// sonner vive en app/layout.tsx, o sea AFUERA del portal, así que mientras el diálogo está abierto su
+// región aria-live cae dentro del subárbol inerte. Quien cierra con Escape —camino de teclado, y uno
+// de los dos motivos que esta guarda mira— percibe que la tecla "no hace nada" y no recibe ningún
+// anuncio. El caller duplica el mensaje en una región viva ADENTRO del popup, que es lo único que el
+// modal no marca.
+function guardDraftOnDismiss(isDirty: () => boolean, close: () => void, onBlocked: () => void) {
   return (open: boolean, details: DialogRootChangeEventDetails) => {
     if (open) return
     const accidental = details.reason === 'outside-press' || details.reason === 'escape-key'
     if (accidental && isDirty()) {
       details.cancel()
-      toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_CHANGES_HINT })
+      onBlocked()
       return
     }
     close()
@@ -1641,7 +1652,37 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // resincronización del efecto le pisaba la edición nueva al confirmar. Un conjunto hace que cada
   // tarjeta prenda y apague SU flag y ninguna toque el de otra.
   const [savingCapacityIds, setSavingCapacityIds] = useState<ReadonlySet<string>>(() => new Set())
+  // ── El aviso del cierre bloqueado, también ADENTRO del popup (code-review WR-08, pasada 3) ──────
+  //
+  // El toast de sonner se ve, pero su región aria-live queda marcada `inert` por el modal mientras el
+  // diálogo está abierto (el porqué, en el comentario de `guardDraftOnDismiss`). Este estado alimenta
+  // una región viva `sr-only` que vive DENTRO de cada uno de los tres popups, que es lo único que el
+  // modal no marca. Un nodo por diálogo: no agrega un modal anidado (CLAUDE.md los prohíbe).
+  //
+  // Se apaga al ABRIR cualquiera de los tres diálogos, que es lo que garantiza que la región nunca se
+  // monte con el texto ya puesto (una región viva que nace con contenido no anuncia nada).
+  //
+  // Límite conocido y aceptado: dos intentos bloqueados seguidos DENTRO del mismo diálogo anuncian una
+  // sola vez —una región viva cuyo texto no cambia no vuelve a hablar—. No se resuelve con un timer
+  // que la apague sola porque eso obliga a guardar el id en un ref, y el ref lo lee el render al armar
+  // el handler de cierre (el linter de React lo marca, con razón). El primer anuncio es el que
+  // comunica el estado nuevo; el toast, además, se vuelve a ver en cada intento.
+  const [dismissBlocked, setDismissBlocked] = useState(false)
+  function clearDismissBlocked() {
+    setDismissBlocked(false)
+  }
+  function noticeDismissBlocked() {
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_CHANGES_HINT })
+    setDismissBlocked(true)
+  }
+  // La región viva, idéntica en los tres diálogos. `sr-only` es `position: absolute`, así que NO
+  // reclama una fila del grid del diálogo de servicio ni mueve nada en los otros dos.
+  const dismissBlockedNotice = (
+    <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_CHANGES_ANNOUNCE : ''}</p>
+  )
+
   function openEditService(s: Service) {
+    clearDismissBlocked()
     setEditSvc(s)
     // El fallback cubre filas viejas en memoria (el DEFAULT de la 068 ya las cubre en la DB): al
     // reabrir, el modo y el cupo guardados vuelven seleccionados (CUPO-01). El cupo se normaliza con
@@ -1942,6 +1983,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   }
 
   function openEditPro(p: Professional) {
+    clearDismissBlocked()
     setEditingPro(p)
     const inicial = {
       name: p.name ?? '',
@@ -2236,6 +2278,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [editLocBaselineFp, setEditLocBaselineFp] = useState('')
   const [savingEditLoc, setSavingEditLoc] = useState(false)
   function openEditLocation(l: Location) {
+    clearDismissBlocked()
     setEditLoc(l)
     const inicial = { name: l.name, address: l.address || '', phone: l.phone || '' }
     setEditLocForm(inicial)
@@ -3326,7 +3369,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
           {/* Editar servicio (reusa el form de alta: nombre, min, precio, consultorios).
               Los chips espejan el alta; usa el cliente browser directo (sin server actions). */}
-          <Dialog open={!!editSvc} onOpenChange={guardDraftOnDismiss(isEditSvcDirty, () => setEditSvc(null))}>
+          <Dialog open={!!editSvc} onOpenChange={guardDraftOnDismiss(isEditSvcDirty, () => setEditSvc(null), noticeDismissBlocked)}>
             {/* Scroll interno + pie anclado (D-05 / UI-SPEC §3.1). El patrón se aplica ACÁ, por caller,
                 y NO en components/ui/dialog.tsx: así los ~15 diálogos restantes del panel quedan
                 byte-idénticos. Las cuatro piezas son solidarias — cualquiera sola no alcanza:
@@ -3348,6 +3391,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
               <DialogHeader className="pb-3 pr-8">
                 <DialogTitle>Editar servicio</DialogTitle>
               </DialogHeader>
+              {dismissBlockedNotice}
               {/* La fila del medio es la ÚNICA que scrollea: el título queda fijo (contexto de qué estás
                   editando) y el pie queda fijo (la salida). min-h-0 es obligatorio — sin él un hijo de
                   grid no encoge y el overflow-y-auto nunca se activa. El sangrado -mx-4 px-4 hace que el
@@ -3795,11 +3839,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             )}
           </Card>
 
-          <Dialog open={!!editLoc} onOpenChange={guardDraftOnDismiss(isEditLocDirty, () => setEditLoc(null))}>
+          <Dialog open={!!editLoc} onOpenChange={guardDraftOnDismiss(isEditLocDirty, () => setEditLoc(null), noticeDismissBlocked)}>
             <DialogContent className="sm:max-w-sm">
               <DialogHeader>
                 <DialogTitle>Editar {locWord}</DialogTitle>
               </DialogHeader>
+              {dismissBlockedNotice}
               <div className="space-y-2">
                 <Input value={editLocForm.name} onChange={e => setEditLocForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre *" />
                 <Input value={editLocForm.address} onChange={e => setEditLocForm(f => ({ ...f, address: e.target.value }))} placeholder="Dirección (opcional)" />
@@ -4111,9 +4156,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       </Dialog>
 
       {/* Editar profesional */}
-      <Dialog open={!!editingPro} onOpenChange={guardDraftOnDismiss(isEditProDirty, () => setEditingPro(null))}>
+      <Dialog open={!!editingPro} onOpenChange={guardDraftOnDismiss(isEditProDirty, () => setEditingPro(null), noticeDismissBlocked)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Editar profesional</DialogTitle></DialogHeader>
+          {dismissBlockedNotice}
           {/* Foto del profesional — se muestra en la página pública de reservas */}
           <div className="flex items-center gap-4">
             {editingPro?.photo_url ? (
