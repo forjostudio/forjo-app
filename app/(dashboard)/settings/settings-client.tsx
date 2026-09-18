@@ -797,13 +797,20 @@ function CapacityInlineControl({ service, saving, onSave }: {
     // COROLARIO, que es lo que evita la recaída: si alguien vuelve a meter este bloque adentro de la
     // línea de datos "para ahorrar una línea", el defecto vuelve entero.
     //
+    // EL PADDING VERTICAL ES DE MOBILE A PROPÓSITO, y tiene su contraparte de desktop en cero. Abajo
+    // de 640px es la zona de exclusión de arriba: sin ella, un toque corregido por el navegador
+    // ESCRIBE el cupo, que es el defecto entero de G-04. Arriba de 640px no hay dedo que corregir y
+    // no compra nada: eran 48 de los 82px que medía esta fila —el 58 %—, el "hueco vertical grande"
+    // que el dueño reportó en la UAT del 2026-09-18 (G-23-23). El gate va SÓLO en el lado de desktop:
+    // sacar el padding también de mobile reabre G-04 donde sí hay dedo.
+    //
     // La composición interna NO cambia (G-02b): 146 del stepper + 8 de hueco + 96 del botón = 250px,
     // que entran en los 271px que mide la tarjeta a 375px. El tamaño y el color del texto se declaran
     // acá porque el bloque ya no los hereda de la línea de datos: sin ellos el sufijo saltaría de 12px
     // a 14px y de gris a texto pleno. El manejador de teclado vive en este contenedor para que Escape
     // restaure con el foco en cualquier parte del bloque, incluido el botón Guardar.
     <div
-      className="flex items-center gap-x-2 gap-y-1 py-6 text-xs text-muted-foreground"
+      className="flex items-center gap-x-2 gap-y-1 py-6 sm:py-0 text-xs text-muted-foreground"
       onKeyDown={e => { if (e.key === 'Escape') revert() }}
     >
       {/* La tarjeta consume el control compartido y sigue siendo dueña de su guardado: el clamp de
@@ -2709,10 +2716,14 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                 // tarjeta más corta (individual, sin sedes, sin cobertura), donde la izquierda ocupa 2.
                 //
                 // Los sumandos siguen el ORDEN DEL DOM de los hijos de contenido: nombre + descripción
-                // (siempre) + línea de datos y control de cupo (cupo compartido) + sedes + cobertura.
+                // (siempre) + el envoltorio que comparten la línea de datos y el control de cupo
+                // (cupo compartido) + sedes + cobertura. Ese envoltorio es UN solo hijo de la grilla
+                // desde G-23-23 —antes eran dos y este sumando valía 2—: si vuelve a valer 2, los
+                // botones se van a una fila fantasma y se pierde la compactación (medido: compartido
+                // sin sedes 128→168px, compartido+sedes+cobertura 198→222px).
                 // El que agregue un hijo de contenido nuevo suma su fila ACÁ, o vuelve el defecto.
                 const leftRows = 2
-                  + (capMode !== 'individual' ? 2 : 0)
+                  + (capMode !== 'individual' ? 1 : 0)
                   + (activeLocations.length > 0 ? 1 : 0)
                   + (showCoverage ? 1 : 0)
                 const actionsRow = Math.max(3, leftRows)
@@ -2736,17 +2747,19 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         ya estaba es la fila mobile de Finanzas (POLISH-10): la única de las tres
                         superficies de esa fase que pasó la UAT sin un solo issue.
 
-                        En DESKTOP la tarjeta es una grilla de dos columnas. A la izquierda, los seis
-                        hijos de CONTENIDO apilados. A la derecha, TRES celdas: el precio en la fila del
-                        nombre, la duración debajo y las tres acciones debajo de las dos (G-23-20).
+                        En DESKTOP la tarjeta es una grilla de dos columnas. A la izquierda, los CINCO
+                        hijos de CONTENIDO apilados: nombre, descripción, el envoltorio que comparten la
+                        línea de datos y el control del cupo —UNO solo desde G-23-23, antes eran dos—,
+                        sedes y cobertura. A la derecha, TRES celdas: el precio en la fila del nombre,
+                        la duración debajo y las tres acciones debajo de las dos (G-23-20).
 
                         CORRECTITUD, no decoración: cada hijo de CONTENIDO fija a mano la primera
                         columna, y cada hijo de la columna DERECHA fija a mano su columna Y su fila. Con
                         tres celdas colocadas explícitamente a la derecha, la ubicación automática de la
                         grilla mandaría cualquier bloque suelto al primer hueco libre de esa columna. La
                         regla para el que toque esto después: un hijo de contenido NUEVO declara la
-                        primera columna igual que los seis que ya están, y un hijo de la derecha declara
-                        columna y fila, o la tarjeta se desarma sola.
+                        primera columna igual que los cinco que ya están, y un hijo de la derecha
+                        declara columna y fila, o la tarjeta se desarma sola.
 
                         El centrado vertical se CONSERVA, y va con prefijo de desktop a propósito: en
                         la columna de mobile centraría todo en horizontal. El ritmo de 8px también se
@@ -2836,65 +2849,88 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         {s.description ? 'Editar' : 'Agregar descripción'}
                       </button>
                     </div>
-                    {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER dato
-                        del renglón de MOBILE —mismo registro que la duración y el precio, que en ese
-                        viewport siguen acá; en desktop se mudaron a la columna derecha y el modo queda
-                        como único dato de esta línea—, y no como pill junto al nombre:
-                        las pills de arriba están reservadas para advertencias (la de cobertura) y
-                        mezclar los dos registros le sube el volumen a un dato normal. Por eso la
-                        pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
-                        "mejora" que va a proponer el próximo que lea esto; la respuesta es no.
+                    {/* ENVOLTORIO DEL MODO Y EL CUPO (G-23-23, pedido del dueño en la UAT del
+                        2026-09-18). La línea de datos y el control del cupo eran DOS hijos de la
+                        grilla, los dos en la primera columna, así que la ubicación automática les daba
+                        una fila a cada uno y el rótulo del modo quedaba arriba del stepper con un hueco
+                        grande en el medio. Ahora son UN solo hijo: en mobile se apilan con el mismo
+                        ritmo de 8px de siempre (medido bit a bit: 33px de la línea al botón, 33px del
+                        botón a "Se ofrece en:", 343px de alto), y en desktop comparten una línea con
+                        centrado vertical.
 
-                        EN MOBILE ésta sigue siendo la línea de siempre: la duración y el precio son UN
-                        solo nodo de texto, así que un servicio `individual` —que es el 100 % de
-                        producción hoy— se ve exactamente igual que antes. Sin badge, el badge se
-                        vuelve señal.
-
-                        EN DESKTOP esos dos datos ya no viven acá: se mudaron a la columna derecha con
-                        su propia jerarquía (G-23-20, pedido del dueño en la UAT del 2026-09-17), así
-                        que esta línea queda como el RENGLÓN DE MOBILE. Con cupo individual el
-                        contenedor entero desaparece en desktop: no le quedaría nada que mostrar y una
-                        celda vacía le sumaría una fila de separación a la tarjeta. Con cupo compartido
-                        se queda el rótulo del modo, sin el separador que lo unía a la duración.
-
-                        POR QUÉ EL CONTROL DEL CUPO YA NO VIVE ACÁ ADENTRO (G-04). Esta línea es texto
-                        inerte y el control tiene botones de 44px. Los navegadores móviles corrigen el
-                        punto de toque hacia el elemento interactivo más cercano cuando el dedo no
-                        aterrizó en ninguno, así que texto inerte y botón no pueden ser vecinos: con el
-                        control adentro, a 4px de este renglón, tocar la duración bajaba el cupo y tocar
-                        el modo lo subía. Ahora el control es HERMANO de esta línea y se lleva 32px de
-                        zona de exclusión (24 de padding propio + 8 del ritmo de la tarjeta). Meterlo de
-                        vuelta acá adentro reabre el defecto entero. */}
-                    <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:col-start-1', capMode === 'individual' && 'sm:hidden')}>
-                      <span className="sm:hidden">{durationLabel} · {priceLabel}</span>
+                        EL GATE DE VIEWPORT VIVE ACÁ, y no en la línea de datos como antes. No es
+                        cosmética: con cupo individual la línea de datos no muestra nada en desktop, y
+                        un envoltorio VACÍO igual reclama una fila de 0px más los 8px del hueco. Eso
+                        desfasa la grilla hacia abajo mientras la fila de las acciones se queda donde
+                        estaba, y la línea de cobertura termina POR DEBAJO de los botones (medido:
+                        filas=[20 34 0 32 16], acciones en la 4 y cobertura en la 5) — o sea WR-03
+                        reabierto, con el salto hacia atrás en el orden de foco. Si alguien saca este
+                        gate de acá, el defecto vuelve entero. */}
+                    <div className={cn('flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:col-start-1', capMode === 'individual' && 'sm:hidden')}>
+                      {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER dato
+                          del renglón de MOBILE —mismo registro que la duración y el precio, que en ese
+                          viewport siguen acá; en desktop se mudaron a la columna derecha y el modo queda
+                          como único dato de esta línea—, y no como pill junto al nombre:
+                          las pills de arriba están reservadas para advertencias (la de cobertura) y
+                          mezclar los dos registros le sube el volumen a un dato normal. Por eso la
+                          pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
+                          "mejora" que va a proponer el próximo que lea esto; la respuesta es no.
+  
+                          EN MOBILE ésta sigue siendo la línea de siempre: la duración y el precio son UN
+                          solo nodo de texto, así que un servicio `individual` —que es el 100 % de
+                          producción hoy— se ve exactamente igual que antes. Sin badge, el badge se
+                          vuelve señal.
+  
+                          EN DESKTOP esos dos datos ya no viven acá: se mudaron a la columna derecha con
+                          su propia jerarquía (G-23-20, pedido del dueño en la UAT del 2026-09-17), así
+                          que esta línea queda como el RENGLÓN DE MOBILE. Con cupo individual desaparece
+                          en desktop el ENVOLTORIO entero —esta línea incluida—: no le quedaría nada que
+                          mostrar y una caja vacía le sumaría una fila de separación a la tarjeta. Por eso
+                          esta línea ya no declara ni su columna ni su gate: las dos cosas las pone ahora
+                          el envoltorio de arriba. Con cupo compartido se queda el rótulo del modo, sin el
+                          separador que lo unía a la duración.
+  
+                          POR QUÉ EL CONTROL DEL CUPO YA NO VIVE ACÁ ADENTRO (G-04). Esta línea es texto
+                          inerte y el control tiene botones de 44px. Los navegadores móviles corrigen el
+                          punto de toque hacia el elemento interactivo más cercano cuando el dedo no
+                          aterrizó en ninguno, así que texto inerte y botón no pueden ser vecinos: con el
+                          control adentro, a 4px de este renglón, tocar la duración bajaba el cupo y tocar
+                          el modo lo subía. Ahora el control es HERMANO de esta línea y se lleva 32px de
+                          zona de exclusión (24 de padding propio + 8 del ritmo de la tarjeta). Meterlo de
+                          vuelta acá adentro reabre el defecto entero. Sigue siendo hermano después de
+                          G-23-23: los dos comparten el envoltorio de arriba, pero el control NO es hijo
+                          de esta línea, y en mobile el envoltorio los apila con el mismo hueco de 8px. */}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        <span className="sm:hidden">{durationLabel} · {priceLabel}</span>
+                        {capMode !== 'individual' && (
+                          <>
+                            {/* El separador no puede leerse en voz alta: ya hay uno en el nodo de
+                                arriba y el lector de pantalla repetiría "punto medio" dos veces. Viaja
+                                junto al label dentro del MISMO condicional: así nunca queda colgando
+                                solo en una tarjeta individual (R2-1). En desktop desaparece con el
+                                renglón que tiene adelante: ahí el rótulo del modo es lo único que queda
+                                en esta línea y no tendría de qué separarlo. */}
+                            <span aria-hidden="true" className="sm:hidden">·</span>
+                            {/* TERCER dato de la línea (D-07): un span de texto, sin manejador de click,
+                                sin rol y sin índice de tabulación (D-09). Desde la tarjeta se cambia el
+                                NÚMERO, nunca el MODO. */}
+                            <span className="font-medium text-foreground">{capacityModeLabel}</span>
+                          </>
+                        )}
+                      </div>
+                      {/* Hijo DIRECTO del envoltorio: el div intermedio que antes existía sólo para
+                          declararle la columna al control (que no acepta className) dejó de tener
+                          motivo —la columna la declara el envoltorio— y un div sin clases en el medio
+                          es markup muerto. Los 32px de la invariante de G-04 los siguen dando el
+                          padding interno del control más el ritmo de la tarjeta, sin cambio. */}
                       {capMode !== 'individual' && (
-                        <>
-                          {/* El separador no puede leerse en voz alta: ya hay uno en el nodo de
-                              arriba y el lector de pantalla repetiría "punto medio" dos veces. Viaja
-                              junto al label dentro del MISMO condicional: así nunca queda colgando
-                              solo en una tarjeta individual (R2-1). En desktop desaparece con el
-                              renglón que tiene adelante: ahí el rótulo del modo es lo único que queda
-                              en esta línea y no tendría de qué separarlo. */}
-                          <span aria-hidden="true" className="sm:hidden">·</span>
-                          {/* TERCER dato de la línea (D-07): un span de texto, sin manejador de click,
-                              sin rol y sin índice de tabulación (D-09). Desde la tarjeta se cambia el
-                              NÚMERO, nunca el MODO. */}
-                          <span className="font-medium text-foreground">{capacityModeLabel}</span>
-                        </>
-                      )}
-                    </div>
-                    {capMode !== 'individual' && (
-                      // El control no acepta className, así que su columna la declara este envoltorio.
-                      // El envoltorio NO lleva padding propio: los 32px de la invariante de G-04 los
-                      // siguen dando el padding interno del control más el ritmo de la tarjeta.
-                      <div className="sm:col-start-1">
                         <CapacityInlineControl
                           service={s}
                           saving={savingCapacityIds.has(s.id)}
                           onSave={c => saveCapacityInline(s, c)}
                         />
-                      </div>
-                    )}
+                      )}
+                    </div>
                     {activeLocations.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5 sm:col-start-1">
                         <span className="text-[11px] text-muted-foreground mr-0.5">Se ofrece en:</span>
