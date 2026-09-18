@@ -791,7 +791,7 @@ Plans:
 **Alcance**: `app/(dashboard)/servicios/page.tsx` (las lecturas nuevas, por tenant) + `app/(dashboard)/settings/settings-client.tsx` (**3636 líneas** — la pantalla de servicios vive ahí y la sirve también `/settings`, así que lo que se agregue conviene que salga a componentes propios), más el organizador de categorías y el campo de descripción. **El patrón de reordenar se PORTA, no se copia**: la fuente es `forjo-tiendas` → `app/(consola)/(panel)/categorias/Organizador.tsx` (`onDragStart`/`onDrop` en `:260` y `:597`, botones ▲/▼ con `aria-label` en `:392-414`, renumerado de la lista completa en `:125`) y `supabase/migrations/20260813100000_categorias.sql`; allá las columnas están en **español** (`tienda_id`, `nombre`, `orden`) y el esquema de RLS es otro, así que se copia la **forma** —dos mecanismos conviviendo, cero dependencias de drag-and-drop— y no el código. **Cero migraciones nuevas**: el modelo entero lo instaló la 078.
 **Security/Integrity relevance**: Media. Es un write path del dueño sobre sus propios datos: `.eq('business_id', business.id)` en cada query como todo el panel, y el rechazo del índice único mapeado a **copy propia** en vez de interpolar el mensaje de la base (T-14-25 / T-13-09). Dos cuidados propios de esta fase: el reordenamiento **escribe N filas de una vez**, así que tiene que ir por un solo camino que no pueda renumerar filas de otro negocio ni dejar el orden a medias (el precedente del repo para escrituras multi-fila del panel es el RPC transaccional `save_agenda_blocks`, migr. 074); y el cambio de **modo** no debe persistir ningún orden — si lo hiciera, rompería CAT-06, que la Phase 22 garantizó por construcción.
 **UI hint**: yes
-**Plans**: 8 plans · 7/8 ejecutados (waves 1 → 2 ‖ 2 → 3 · gaps de la UAT: 1 ‖ 1 → 2 · segunda ronda de gaps: 1)
+**Plans**: 8/8 plans executed · 7/8 ejecutados (waves 1 → 2 ‖ 2 → 3 · gaps de la UAT: 1 ‖ 1 → 2 · segunda ronda de gaps: 1)
 
 Plans:
 **Wave 1**
@@ -820,7 +820,7 @@ Plans:
 
 **Segunda ronda de gaps** *(la re-UAT dejó un solo gap abierto: G-23-20, severidad cosmetic — es un layout nuevo, no un bug)*
 
-- [ ] 23-08-PLAN.md — **G-23-20**: en desktop la tarjeta de servicio pone el precio a la altura del título, la duración debajo más chica y las tres acciones debajo de esos datos (la columna derecha de la grilla pasa de una celda a tres, cada una con columna y fila declaradas); en mobile la tarjeta **no se toca**, para no reabrir el desborde de 375px (G-02) ni los toques errados (G-04) — CAT-11
+- [x] 23-08-PLAN.md — **G-23-20**: en desktop la tarjeta de servicio pone el precio a la altura del título, la duración debajo más chica y las tres acciones debajo de esos datos (la columna derecha de la grilla pasa de una celda a tres, cada una con columna y fila declaradas); en mobile la tarjeta **no se toca**, para no reabrir el desborde de 375px (G-02) ni los toques errados (G-04) — CAT-11
 
 ---
 
@@ -872,5 +872,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 20. Lo que el público ve | 2/2 | Complete | 2026-09-10 |
 | 21. Lo que el negocio declara | 2/2 | Complete | 2026-09-13 |
 | 22. El modelo del catálogo | 4/4 | Complete    | 2026-09-15 |
-| 23. El panel que organiza el catálogo | 7/7 | In Progress|  |
+| 23. El panel que organiza el catálogo | 8/8 | In Progress|  |
 | 24. El catálogo que el cliente lee | 0/TBD | Not started | - |

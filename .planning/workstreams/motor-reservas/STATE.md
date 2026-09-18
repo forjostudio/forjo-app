@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 23
 current_phase_name: El panel que organiza el catálogo
 status: executing
-stopped_at: Completed 23-07-PLAN.md
-last_updated: "2026-09-17T16:02:34.387Z"
-last_activity: 2026-09-17
+stopped_at: Completed 23-08-PLAN.md
+last_updated: "2026-09-18T13:38:49.993Z"
+last_activity: 2026-09-18
 last_activity_desc: Phase 23 execution started
-state_head: 482c0776fbcdf25874df74bd5b06fd514e6795a7
+state_head: 9a4d16bb1bd81d9fe154710c157baa002a3ca708
 progress:
   total_phases: 20
   completed_phases: 13
-  total_plans: 99
-  completed_plans: 99
+  total_plans: 100
+  completed_plans: 100
   percent: 65
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 23 (El panel que organiza el catálogo) — EXECUTING
-Plan: 4 of 7
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-09-17 — Phase 23 execution started
+Last activity: 2026-09-18 — Phase 23 execution started
 
 ## Milestone v0.29 — decisiones LOCKED
 
@@ -216,6 +216,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 23 P05 | 4min | 2 tasks | 4 files |
 | Phase 23 P06 | 5min | 3 tasks | 6 files |
 | Phase 23 P07 | 3min | 2 tasks | 4 files |
+| Phase 23 P08 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -426,6 +427,9 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 23]: G-23-10a (23-06): el arrastre del chip (asignar) depende sólo de que haya categorías; el reorden chip sobre chip y la sección Posición siguen en modo de servicios personalizado + agrupación. chipDragGates/chipDropIntent son la única fuente; soltar en el propio grupo visible sin modo personalizado no escribe ni resalta
 - [Phase 23]: G-23-6b: la tarjeta del panel muestra un renglón de la descripción y un link Editar / Agregar descripción que abre openEditService(s); el link no lleva zona de exclusión G-04 porque sólo abre un diálogo
 - [Phase 23]: G-23-6: la ayuda del campo dice que el cliente abre el texto largo con Ver más; UI-SPEC, Phase 24 criterio 4 y CAT-11 dejan de prometer dos renglones
+- [Phase 23]: 23-08: precio y duración se mudan a la columna derecha de la tarjeta de /servicios como DOS celdas hermanas (filas 1 y 2), no como un bloque apilado: sólo así el centrado vertical que la tarjeta ya tenía alinea el precio con el nombre (G-23-20)
+- [Phase 23]: 23-08: el layout nuevo va sólo desde 640px y la línea de datos queda como renglón de mobile con gate de viewport; mobile no se toca para no reabrir el desborde medido de 375px (G-02) ni los toques errados (G-04)
+- [Phase 23]: 23-08: gate C1 del plan incompatible con su propia acción (exige el prefijo className=" y a la vez cn()); se midieron las seis anclas de columna con grep sm:col-start-1 — re-medir así en verify-work
 
 ### Pending Todos
 
@@ -513,8 +517,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-17T16:02:30.147Z
-Stopped at: Completed 23-07-PLAN.md
+Last session: 2026-09-18T13:38:20.203Z
+Stopped at: Completed 23-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
