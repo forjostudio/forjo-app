@@ -29,9 +29,25 @@ import { DEFAULT_SERVICE_MINUTES, normalizeServiceDuration, normalizeServicePric
 import { AGENDA_SENTINEL, OCCUPYING_STATUSES, occupiesSeat } from '@/lib/agenda-occupancy'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-// Sólo el TIPO del detalle del evento de cierre, directo del paquete: así los motivos que mira la
-// guarda de abajo quedan chequeados contra la unión real de Base UI y un motivo mal escrito no compila.
-import type { DialogRootChangeEventDetails } from '@base-ui/react/dialog'
+// Las reglas PURAS de los borradores de esta pantalla (code-review WR-09): la guarda del descarte
+// accidental, las tres huellas, los normalizadores que comparten con sus guardados y el patch del
+// toggle de modo de cupo. Viven en lib/ para poder testearse (`test/panel-draft.test.ts`).
+import {
+  MAX_CAPACITY,
+  capacityModePatch,
+  guardDraftOnDismiss,
+  locToPayload,
+  locationFormFingerprint,
+  minCapacityFor,
+  normalizeCapacity,
+  proFormFingerprint,
+  proToPayload,
+  serviceFormFingerprint,
+  type CapacityMode,
+  type LocationEditForm,
+  type ProForm,
+  type ServiceEditForm,
+} from '@/lib/panel-draft'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { Card } from '@/components/ui/card'
@@ -62,7 +78,9 @@ type DeleteServiceResult = { ok: true } | { ok: false; error: 'has_future_appoin
 const isServiceActive = (s: Service) => !!s.active
 
 // ── Profesionales: form ampliado + labels por rubro ─────────────────────────
-type ProForm = { name: string; last_name: string; specialty: string; license_number: string; phone: string; email: string }
+// `ProForm`, su normalizador (`proToPayload`) y su huella viven en `@/lib/panel-draft` (code-review
+// WR-09): los comparten el alta, la edición y la guarda del borrador, y adentro de este archivo no se
+// podían testear.
 const EMPTY_PRO: ProForm = { name: '', last_name: '', specialty: '', license_number: '', phone: '', email: '' }
 
 // Etiquetas de Especialidad/Matrícula adaptadas al rubro (sin sobrecomplicar).
@@ -70,18 +88,6 @@ const PRO_LABELS: Record<string, { specialty: string; specialtyPh: string; licen
   salud:   { specialty: 'Especialidad',       specialtyPh: 'Cardiología, Pediatría…',  license: 'Matrícula profesional',      licensePh: 'MN 12345' },
   belleza: { specialty: 'Especialidad',       specialtyPh: 'Colorista, barbero…',      license: 'Matrícula',                  licensePh: 'Opcional' },
   general: { specialty: 'Especialidad / rol', specialtyPh: 'Rol o especialidad',        license: 'Matrícula / N° de registro', licensePh: 'Opcional' },
-}
-
-function proToPayload(f: ProForm) {
-  // Normaliza: trim y opcionales vacíos → null.
-  return {
-    name: f.name.trim(),
-    last_name: f.last_name.trim() || null,
-    specialty: f.specialty.trim() || null,
-    license_number: f.license_number.trim() || null,
-    phone: f.phone.trim() || null,
-    email: f.email.trim() || null,
-  }
 }
 
 // Campos del profesional, reutilizados en alta (inline) y edición (dialog).
@@ -140,29 +146,10 @@ function ProFields({ value, onChange, labels }: {
 // de intervalos (2 camillas). Desde la 068 los TRES leen el número de `services.capacity`:
 // `time_blocks.capacity` dejó de decidirlo.
 // Los labels son FIJOS para todos los rubros (D-10): NO se rutean por lib/use-terminology.
-type CapacityMode = Service['capacity_mode']
-
-// Piso de cupo por modo. ESPEJA el CHECK `services_capacity_matches_mode_chk` de la migr. 068
-// (individual ⇒ capacity = 1; group_class / simultaneous_resource ⇒ capacity >= 2). La AUTORIDAD es
-// la base — este helper es su espejo de UX, para que el editor NO pueda producir una combinación que
-// el constraint rechace, nunca un reemplazo del constraint.
-function minCapacityFor(mode: CapacityMode): number {
-  return mode === 'individual' ? 1 : 2
-}
-
-// Techo del cupo declarable desde el panel (code-review de Phase 15, WR-03). NO es un invariante de
-// dominio: `services.capacity` es `smallint` (máx 32767) y la base no tiene tope propio. Es el guard
-// que evita que un número pegado o tipeado de más (40000) viaje al UPDATE y vuelva como
-// `22003 smallint out of range`, que el panel colapsa en un `toast.error('Error al guardar')` sin
-// decir qué pasó. 99 lugares ya está muy por encima de cualquier clase real y mantiene usable la
-// grilla del roster.
-const MAX_CAPACITY = 99
-
-// El cupo N es un entero entre `min` (mismo CHECK que la DB) y MAX_CAPACITY. Un input vacío o basura
-// cae al piso del modo.
-function normalizeCapacity(n: number, min = 1): number {
-  return Number.isFinite(n) ? Math.min(MAX_CAPACITY, Math.max(min, Math.floor(n))) : min
-}
+// El TIPO (`CapacityMode`), el piso por modo (`minCapacityFor`), el techo (`MAX_CAPACITY`), el
+// normalizador (`normalizeCapacity`) y el patch del toggle (`capacityModePatch`) viven ahora en
+// `@/lib/panel-draft` (code-review WR-09): son reglas puras que la huella del borrador comparte con el
+// guardado, y acá adentro no se podían testear.
 
 // ── Descarte accidental del borrador (G-23-25) ──────────────────────────────────────────────────
 //
@@ -186,6 +173,13 @@ function normalizeCapacity(n: number, min = 1): number {
 //
 // No hay precedente en el repo: cero usos de las props de descarte de Base UI en todo `app/` y
 // `components/`. El patrón se establece acá y queda comentado para el próximo diálogo del panel.
+//
+// ⚠ LA LÓGICA PURA DE TODO ESTO VIVE EN `@/lib/panel-draft` (code-review WR-09, pasada 3): la guarda,
+// las tres huellas, los dos normalizadores compartidos con los guardados y el patch del toggle de modo
+// de cupo. Acá quedan SÓLO la copy y el cableado con la pantalla. El motivo es que este archivo es un
+// módulo `'use client'` de 4.100 líneas que el runner no puede importar: adentro, ninguna de esas
+// reglas se podía testear, para un arreglo cuyo modo de falla es encerrar al dueño en un diálogo.
+// Los tests están en `test/panel-draft.test.ts`.
 const UNSAVED_CHANGES_MESSAGE = 'Tenés cambios sin guardar'
 // La pista es ADITIVA (microcopy de CLAUDE.md: un aviso dice qué pasó Y cómo resolverlo). No
 // reemplaza el texto de arriba, que es el que fijó el dueño.
@@ -196,92 +190,6 @@ const UNSAVED_CHANGES_TOAST_ID = 'unsaved-changes'
 // El MISMO aviso, en una sola cadena, para la región viva que va ADENTRO del popup (ver abajo).
 const UNSAVED_CHANGES_ANNOUNCE = `${UNSAVED_CHANGES_MESSAGE}. ${UNSAVED_CHANGES_HINT}`
 
-// La guarda, compartida por los tres diálogos de edición. Recibe una función que responde "¿hay
-// cambios?" y la que cierra, y devuelve el handler de apertura.
-//
-// `isDirty` viaja como FUNCIÓN y no como booleano a propósito: así la huella se calcula recién cuando
-// hay un intento de cierre, no en cada tecleo. Y el motivo se evalúa ANTES que isDirty(), para no
-// calcularla en los cierres que igual van a pasar.
-//
-// La guarda mira EXACTAMENTE dos motivos: el click afuera y la tecla Escape. El cierre por la ✕
-// (close-press) y el que dispara el guardado no pasan por ninguna condición nueva — si la guarda los
-// alcanzara, el dueño quedaría encerrado en un diálogo sin salida. `focus-out` queda afuera a
-// propósito: con el diálogo modal el foco está atrapado, así que no es un camino real.
-//
-// Caso borde que hay que conocer: si el dueño VACÍA el nombre, el borrador queda sucio y "Guardar"
-// queda deshabilitado (ya era así). La única salida es la ✕ — y ésa es justamente la razón por la que
-// la ✕ nunca puede entrar acá.
-//
-// ⚠ EL AVISO NO LO DA ESTA FUNCIÓN (code-review WR-08, pasada 3). Recibe `onBlocked` y lo llama: el
-// toast NO alcanza como único canal. El diálogo se monta modal y Base UI lo resuelve con
-// FloatingFocusManager modal, que marca `inert` a los hermanos del popup en <body>; el <Toaster /> de
-// sonner vive en app/layout.tsx, o sea AFUERA del portal, así que mientras el diálogo está abierto su
-// región aria-live cae dentro del subárbol inerte. Quien cierra con Escape —camino de teclado, y uno
-// de los dos motivos que esta guarda mira— percibe que la tecla "no hace nada" y no recibe ningún
-// anuncio. El caller duplica el mensaje en una región viva ADENTRO del popup, que es lo único que el
-// modal no marca.
-function guardDraftOnDismiss(isDirty: () => boolean, close: () => void, onBlocked: () => void) {
-  return (open: boolean, details: DialogRootChangeEventDetails) => {
-    if (open) return
-    const accidental = details.reason === 'outside-press' || details.reason === 'escape-key'
-    if (accidental && isDirty()) {
-      details.cancel()
-      onBlocked()
-      return
-    }
-    close()
-  }
-}
-
-// Forma del borrador del diálogo de edición de servicio. Estaba escrita en línea en el useState; se
-// extrae acá para que la huella se pueda tipar. El formulario de ALTA tiene el mismo tipo en línea y
-// se deja como está: unificarlos es otro cambio.
-type ServiceEditForm = { name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string; description: string }
-
-// Huella comparable del borrador de servicio.
-//
-// ⚠ CONTRATO CON EL GUARDADO, y es el modo de falla GRAVE de este arreglo. Cada campo pasa por la
-// MISMA normalización que aplica saveEditService. Si el guardado cambia una normalización, esta huella
-// cambia con ella: son las dos caras del mismo acuerdo. Una huella desincronizada marca sucio un
-// formulario que nadie tocó —el precio se normaliza solo al salir del campo, el cupo se satura contra
-// el piso del modo, la categoría se sanea contra las vivas— y ahí el dueño queda ENCERRADO en un
-// diálogo que ya no puede cerrar con un click afuera: la mejora se convierte en la trampa.
-//
-// Las sedes se ordenan SÓLO acá adentro: apagar y volver a prender una sede deja el mismo conjunto en
-// otro orden, y sin ordenar la huella lo leería como un cambio. El guardado sigue escribiendo el
-// arreglo tal como está.
-function serviceFormFingerprint(f: ServiceEditForm, liveCategoryIds: readonly string[]): string {
-  const capacity = f.capacity_mode === 'individual' ? 1 : normalizeCapacity(f.capacity, 2)
-  return JSON.stringify({
-    name: f.name.trim(),
-    duration: normalizeServiceDuration(f.duration_minutes).value,
-    price: normalizeServicePrice(f.price).value,
-    location_ids: [...f.location_ids].sort(),
-    capacity_mode: f.capacity_mode,
-    capacity,
-    category: liveCategoryValue(f.category, liveCategoryIds),
-    // El guardado hace `.trim() || null`; acá alcanza con el trim porque los DOS lados pasan por la
-    // misma línea, así que vacío y nulo colapsan igual.
-    description: f.description.trim(),
-  })
-}
-
-// Forma del borrador de la sede y su normalización, mudada TAL CUAL desde la línea en la que se armaba
-// dentro de saveEditLocation. Ahora la sede tiene UNA sola normalización, compartida por el guardado y
-// por la huella: no hay nada que espejar y nada que pueda divergir.
-type LocationEditForm = { name: string; address: string; phone: string }
-function locToPayload(f: LocationEditForm) {
-  return { name: f.name.trim(), address: f.address.trim() || null, phone: f.phone.trim() || null }
-}
-function locationFormFingerprint(f: LocationEditForm): string {
-  return JSON.stringify(locToPayload(f))
-}
-
-// La huella del profesional reusa el normalizador que ya existía. Su FOTO no entra: se sube y se
-// persiste sola, así que no es un cambio sin guardar.
-function proFormFingerprint(f: ProForm): string {
-  return JSON.stringify(proToPayload(f))
-}
 
 // Copy del rechazo del gate de cambio de modo (CUPO-08, migr. 068/070) en UN SOLO LUGAR: la leen los
 // DOS caminos de escritura sobre `services` —el diálogo de edición y el guardado inline de la tarjeta
@@ -622,16 +530,9 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
             // o simultáneo con el cupo en 1 rebota contra services_capacity_matches_mode_chk, así que
             // el cambio de modo sube el cupo a su piso legal en el mismo estado.
             //
-            // ⚠ AL IR A INDIVIDUAL EL CUPO SE CONSERVA (code-review WR-05, pasada 3). Antes se pisaba
-            // con 1, y como volver a un modo compartido sólo aplica el PISO, el round-trip
-            // grupal → individual → grupal degradaba una clase de 12 a 2 en silencio. Y con la guarda
-            // de G-23-25 eso además ensucia el borrador: el dueño que sólo fue a COMPARAR los tres
-            // modos se encontraba con "Tenés cambios sin guardar. Guardá para conservarlos", y
-            // siguiendo esa instrucción escribía capacity: 2 sobre la clase de 12.
-            // Conservarlo no puede producir una combinación que el CHECK de la migr. 068 rechace: el 1
-            // de individual lo imponen el guardado (`saveEditService`), el alta y la propia huella, y
-            // el campo "Cuántos lugares" ni siquiera se renderiza en ese modo.
-            onClick={() => onChange({ capacity_mode: o.key, capacity: o.key === 'individual' ? capacity : normalizeCapacity(capacity, 2) })}
+            // La regla completa —incluido por qué ir a individual CONSERVA el cupo (code-review
+            // WR-05)— vive en `capacityModePatch`, que es donde se puede testear.
+            onClick={() => onChange(capacityModePatch(o.key, capacity))}
             className={cn(
               'w-full min-h-11 sm:min-h-0 sm:h-9 px-3 rounded text-sm font-medium transition-colors disabled:opacity-60',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
