@@ -29,6 +29,9 @@ import { DEFAULT_SERVICE_MINUTES, normalizeServiceDuration, normalizeServicePric
 import { AGENDA_SENTINEL, OCCUPYING_STATUSES, occupiesSeat } from '@/lib/agenda-occupancy'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+// Sólo el TIPO del detalle del evento de cierre, directo del paquete: así los motivos que mira la
+// guarda de abajo quedan chequeados contra la unión real de Base UI y un motivo mal escrito no compila.
+import type { DialogRootChangeEventDetails } from '@base-ui/react/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { Card } from '@/components/ui/card'
@@ -159,6 +162,114 @@ const MAX_CAPACITY = 99
 // cae al piso del modo.
 function normalizeCapacity(n: number, min = 1): number {
   return Number.isFinite(n) ? Math.min(MAX_CAPACITY, Math.max(min, Math.floor(n))) : min
+}
+
+// ── Descarte accidental del borrador (G-23-25) ──────────────────────────────────────────────────
+//
+// El problema: los tres diálogos de edición del panel descartaban el borrador ante CUALQUIER motivo
+// de cierre, y Base UI cierra por click afuera por default. Un click fuera del modal por accidente y
+// el dueño perdía lo escrito, sin aviso.
+//
+// La decisión del dueño (2026-09-18): bloquear SÓLO si hay cambios.
+//   borrador sin cambios → click afuera cierra · Escape cierra · la ✕ cierra
+//   borrador con cambios → click afuera NO cierra + aviso · Escape NO cierra + aviso · la ✕ cierra
+// Sin cambios no hay fricción nueva (la regla de CLAUDE.md sobre modales queda intacta). Con cambios
+// el aviso es un TOAST y no un diálogo de confirmación: CLAUDE.md prohíbe los modales anidados.
+//
+// ⚠ POR QUÉ NO SE USA `disablePointerDismissal`, que es lo que uno buscaría primero. Medido contra el
+// paquete instalado (@base-ui/react 1.5, dialog/root/useDialogRoot.js:79-96): esa prop corta el
+// predicado del click afuera ANTES de que se dispare onOpenChange. El diálogo no se cerraría, pero
+// TAMPOCO habría aviso — y el aviso es parte de la decisión. El camino correcto lo da
+// dialog/store/DialogStore.js:40-60: el store llama al handler PRIMERO y recién después, si el detalle
+// del evento quedó cancelado, corta sin tocar el estado. O sea que cancelar desde adentro del handler
+// bloquea el cierre Y deja lugar al aviso, con un solo camino de código para los dos motivos.
+//
+// No hay precedente en el repo: cero usos de las props de descarte de Base UI en todo `app/` y
+// `components/`. El patrón se establece acá y queda comentado para el próximo diálogo del panel.
+const UNSAVED_CHANGES_MESSAGE = 'Tenés cambios sin guardar'
+// La pista es ADITIVA (microcopy de CLAUDE.md: un aviso dice qué pasó Y cómo resolverlo). No
+// reemplaza el texto de arriba, que es el que fijó el dueño.
+const UNSAVED_CHANGES_HINT = 'Guardá para conservarlos, o cerrá con la ✕ para descartarlos.'
+// Identificador fijo: sonner REEMPLAZA el aviso vivo en vez de apilar uno nuevo, así que cinco clicks
+// afuera seguidos dejan UN solo toast en pantalla.
+const UNSAVED_CHANGES_TOAST_ID = 'unsaved-changes'
+
+// La guarda, compartida por los tres diálogos de edición. Recibe una función que responde "¿hay
+// cambios?" y la que cierra, y devuelve el handler de apertura.
+//
+// `isDirty` viaja como FUNCIÓN y no como booleano a propósito: así la huella se calcula recién cuando
+// hay un intento de cierre, no en cada tecleo. Y el motivo se evalúa ANTES que isDirty(), para no
+// calcularla en los cierres que igual van a pasar.
+//
+// La guarda mira EXACTAMENTE dos motivos: el click afuera y la tecla Escape. El cierre por la ✕
+// (close-press) y el que dispara el guardado no pasan por ninguna condición nueva — si la guarda los
+// alcanzara, el dueño quedaría encerrado en un diálogo sin salida. `focus-out` queda afuera a
+// propósito: con el diálogo modal el foco está atrapado, así que no es un camino real.
+//
+// Caso borde que hay que conocer: si el dueño VACÍA el nombre, el borrador queda sucio y "Guardar"
+// queda deshabilitado (ya era así). La única salida es la ✕ — y ésa es justamente la razón por la que
+// la ✕ nunca puede entrar acá.
+function guardDraftOnDismiss(isDirty: () => boolean, close: () => void) {
+  return (open: boolean, details: DialogRootChangeEventDetails) => {
+    if (open) return
+    const accidental = details.reason === 'outside-press' || details.reason === 'escape-key'
+    if (accidental && isDirty()) {
+      details.cancel()
+      toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_CHANGES_HINT })
+      return
+    }
+    close()
+  }
+}
+
+// Forma del borrador del diálogo de edición de servicio. Estaba escrita en línea en el useState; se
+// extrae acá para que la huella se pueda tipar. El formulario de ALTA tiene el mismo tipo en línea y
+// se deja como está: unificarlos es otro cambio.
+type ServiceEditForm = { name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string; description: string }
+
+// Huella comparable del borrador de servicio.
+//
+// ⚠ CONTRATO CON EL GUARDADO, y es el modo de falla GRAVE de este arreglo. Cada campo pasa por la
+// MISMA normalización que aplica saveEditService. Si el guardado cambia una normalización, esta huella
+// cambia con ella: son las dos caras del mismo acuerdo. Una huella desincronizada marca sucio un
+// formulario que nadie tocó —el precio se normaliza solo al salir del campo, el cupo se satura contra
+// el piso del modo, la categoría se sanea contra las vivas— y ahí el dueño queda ENCERRADO en un
+// diálogo que ya no puede cerrar con un click afuera: la mejora se convierte en la trampa.
+//
+// Las sedes se ordenan SÓLO acá adentro: apagar y volver a prender una sede deja el mismo conjunto en
+// otro orden, y sin ordenar la huella lo leería como un cambio. El guardado sigue escribiendo el
+// arreglo tal como está.
+function serviceFormFingerprint(f: ServiceEditForm, liveCategoryIds: readonly string[]): string {
+  const capacity = f.capacity_mode === 'individual' ? 1 : normalizeCapacity(f.capacity, 2)
+  return JSON.stringify({
+    name: f.name.trim(),
+    duration: normalizeServiceDuration(f.duration_minutes).value,
+    price: normalizeServicePrice(f.price).value,
+    location_ids: [...f.location_ids].sort(),
+    capacity_mode: f.capacity_mode,
+    capacity,
+    category: liveCategoryValue(f.category, liveCategoryIds),
+    // El guardado hace `.trim() || null`; acá alcanza con el trim porque los DOS lados pasan por la
+    // misma línea, así que vacío y nulo colapsan igual.
+    description: f.description.trim(),
+  })
+}
+
+// Forma del borrador de la sede y su normalización, mudada TAL CUAL desde la línea en la que se armaba
+// dentro de saveEditLocation. Ahora la sede tiene UNA sola normalización, compartida por el guardado y
+// por la huella: no hay nada que espejar y nada que pueda divergir.
+type LocationEditForm = { name: string; address: string; phone: string }
+function locToPayload(f: LocationEditForm) {
+  return { name: f.name.trim(), address: f.address.trim() || null, phone: f.phone.trim() || null }
+}
+function locationFormFingerprint(f: LocationEditForm): string {
+  return JSON.stringify(locToPayload(f))
+}
+
+// La huella del profesional reusa el normalizador que ya existía. Su FOTO no entra: se sube y se
+// persiste sola, así que no es un cambio sin guardar.
+function proFormFingerprint(f: ProForm): string {
+  return JSON.stringify(proToPayload(f))
 }
 
 // Copy del rechazo del gate de cambio de modo (CUPO-08, migr. 068/070) en UN SOLO LUGAR: la leen los
@@ -1502,7 +1613,11 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [editSvc, setEditSvc] = useState<Service | null>(null)
   // Mismo criterio que `newService`: los dos campos numéricos son texto crudo (G-21-11), y
   // `category` es el valor del control, no la columna (D-07); `description` es texto crudo.
-  const [editSvcForm, setEditSvcForm] = useState<{ name: string; duration_minutes: string; price: string; location_ids: string[]; capacity_mode: CapacityMode; capacity: number; category: string; description: string }>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA, description: '' })
+  const [editSvcForm, setEditSvcForm] = useState<ServiceEditForm>({ name: '', duration_minutes: String(DEFAULT_SERVICE_MINUTES), price: '0', location_ids: [], capacity_mode: 'individual', capacity: 1, category: SIN_CATEGORIA, description: '' })
+  // Punto de partida de "¿hay cambios?" (G-23-25): la HUELLA del borrador inicial, no el objeto. Se
+  // captura al abrir, a partir del MISMO objeto con el que se inicializa el borrador — un solo mapeo,
+  // imposible de desincronizar. Reconstruirlo a mano desde la fila sería una segunda fuente de verdad.
+  const [editSvcBaselineFp, setEditSvcBaselineFp] = useState('')
   const [savingEditSvc, setSavingEditSvc] = useState(false)
   // Guardado del cupo inline, POR TARJETA (D-08). NO se puede copiar el shape booleano de
   // `savingEditSvc`: el diálogo es uno solo, pero las tarjetas son muchas y están todas en pantalla a
@@ -1523,7 +1638,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // el piso del modo que se acaba de resolver, para no abrir el diálogo en un estado que la base
     // rechazaría.
     const mode: CapacityMode = s.capacity_mode ?? 'individual'
-    setEditSvcForm({
+    // Sin anotación de tipo a propósito: la forma la imponen sus DOS consumidores de abajo (el setter
+    // del borrador y la huella), que es justamente lo que garantiza que los dos vean el mismo objeto.
+    const inicial = {
       name: s.name,
       // `String(...)` y no `Number(...)`: el estado ahora es texto. De paso normaliza que `price`
       // llega de PostgREST como string (la columna es `numeric`) y `duration_minutes` como número.
@@ -1535,7 +1652,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       // Al reabrir, la categoría guardada vuelve seleccionada; sin categoría ⇒ el sentinel.
       category: fromCategoryId(s.category_id),
       description: s.description ?? '',
-    })
+    }
+    // El MISMO objeto se usa dos veces: inicializa el borrador y produce la huella de partida.
+    setEditSvcForm(inicial)
+    setEditSvcBaselineFp(serviceFormFingerprint(inicial, serviceCategories.map(c => c.id)))
   }
   async function saveEditService() {
     if (!editSvc || !editSvcForm.name.trim()) return
@@ -1598,6 +1718,13 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setServices(prev => prev.map(s => s.id === editSvc.id ? { ...s, ...payload } : s))
     setEditSvc(null)
     toast.success('Servicio actualizado')
+  }
+
+  // ¿El borrador de servicio tiene cambios? (G-23-25) Va pegada al guardado de arriba a propósito: la
+  // huella espeja SU normalización campo por campo, y las dos se tienen que poder leer juntas. La lista
+  // de categorías vivas se arma igual que allá.
+  function isEditSvcDirty() {
+    return serviceFormFingerprint(editSvcForm, serviceCategories.map(c => c.id)) !== editSvcBaselineFp
   }
 
   // ── Bajar el cupo por debajo de los inscriptos vivos AVISA (code-review WR-06) ─────────────────
@@ -1717,6 +1844,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const [savingPro, setSavingPro] = useState(false)
   const [editingPro, setEditingPro] = useState<Professional | null>(null)
   const [editPro, setEditPro] = useState<ProForm>(EMPTY_PRO)
+  // Mismo criterio que los otros dos (G-23-25). Ojo con los nombres, que acá están invertidos respecto
+  // del servicio y de la sede: `editingPro` es el ORIGINAL y `editPro` el BORRADOR.
+  const [editProBaselineFp, setEditProBaselineFp] = useState('')
   const [savingEditPro, setSavingEditPro] = useState(false)
   const [uploadingProPhoto, setUploadingProPhoto] = useState(false)
   const [newProPhoto, setNewProPhoto] = useState<File | null>(null)
@@ -1803,14 +1933,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
   function openEditPro(p: Professional) {
     setEditingPro(p)
-    setEditPro({
+    const inicial = {
       name: p.name ?? '',
       last_name: p.last_name ?? '',
       specialty: p.specialty ?? '',
       license_number: p.license_number ?? '',
       phone: p.phone ?? '',
       email: p.email ?? '',
-    })
+    }
+    setEditPro(inicial)
+    setEditProBaselineFp(proFormFingerprint(inicial))
   }
 
   async function saveEditPro() {
@@ -1828,6 +1960,12 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     setProfessionals(prev => prev.map(p => p.id === editingPro.id ? { ...p, ...payload } as Professional : p))
     setEditingPro(null)
     toast.success('Profesional actualizado')
+  }
+
+  // ¿El borrador del profesional tiene cambios? (G-23-25) Pegada a su guardado, que usa el MISMO
+  // normalizador. La FOTO queda afuera a propósito: se persiste sola, así que no es un cambio pendiente.
+  function isEditProDirty() {
+    return proFormFingerprint(editPro) !== editProBaselineFp
   }
 
   async function deleteProfessional(id: string) {
@@ -2083,22 +2221,31 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     toast.success(is_active ? 'Activado' : 'Desactivado')
   }
   const [editLoc, setEditLoc] = useState<Location | null>(null)
-  const [editLocForm, setEditLocForm] = useState({ name: '', address: '', phone: '' })
+  const [editLocForm, setEditLocForm] = useState<LocationEditForm>({ name: '', address: '', phone: '' })
+  // Mismo criterio que el servicio (G-23-25): la huella del borrador inicial, capturada al abrir.
+  const [editLocBaselineFp, setEditLocBaselineFp] = useState('')
   const [savingEditLoc, setSavingEditLoc] = useState(false)
   function openEditLocation(l: Location) {
     setEditLoc(l)
-    setEditLocForm({ name: l.name, address: l.address || '', phone: l.phone || '' })
+    const inicial = { name: l.name, address: l.address || '', phone: l.phone || '' }
+    setEditLocForm(inicial)
+    setEditLocBaselineFp(locationFormFingerprint(inicial))
   }
   async function saveEditLocation() {
     if (!editLoc || !editLocForm.name.trim()) return
     setSavingEditLoc(true)
-    const payload = { name: editLocForm.name.trim(), address: editLocForm.address.trim() || null, phone: editLocForm.phone.trim() || null }
+    // El payload sale del normalizador COMPARTIDO con la huella: una sola normalización para la sede.
+    const payload = locToPayload(editLocForm)
     const { error } = await supabase.from('locations').update(payload).eq('id', editLoc.id)
     setSavingEditLoc(false)
     if (error) { toast.error('Error al guardar'); return }
     setLocations(prev => prev.map(l => l.id === editLoc.id ? { ...l, ...payload } : l))
     setEditLoc(null)
     toast.success('Guardado')
+  }
+  // ¿El borrador de la sede tiene cambios? (G-23-25) Pegada a su guardado, que usa el MISMO normalizador.
+  function isEditLocDirty() {
+    return locationFormFingerprint(editLocForm) !== editLocBaselineFp
   }
 
   // ── Tab 5 — Payments ──────────────────────────────────────────────────────
@@ -3157,7 +3304,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
 
           {/* Editar servicio (reusa el form de alta: nombre, min, precio, consultorios).
               Los chips espejan el alta; usa el cliente browser directo (sin server actions). */}
-          <Dialog open={!!editSvc} onOpenChange={open => { if (!open) setEditSvc(null) }}>
+          <Dialog open={!!editSvc} onOpenChange={guardDraftOnDismiss(isEditSvcDirty, () => setEditSvc(null))}>
             {/* Scroll interno + pie anclado (D-05 / UI-SPEC §3.1). El patrón se aplica ACÁ, por caller,
                 y NO en components/ui/dialog.tsx: así los ~15 diálogos restantes del panel quedan
                 byte-idénticos. Las cuatro piezas son solidarias — cualquiera sola no alcanza:
@@ -3626,7 +3773,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
             )}
           </Card>
 
-          <Dialog open={!!editLoc} onOpenChange={open => { if (!open) setEditLoc(null) }}>
+          <Dialog open={!!editLoc} onOpenChange={guardDraftOnDismiss(isEditLocDirty, () => setEditLoc(null))}>
             <DialogContent className="sm:max-w-sm">
               <DialogHeader>
                 <DialogTitle>Editar {locWord}</DialogTitle>
@@ -3937,7 +4084,7 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
       </Dialog>
 
       {/* Editar profesional */}
-      <Dialog open={!!editingPro} onOpenChange={open => { if (!open) setEditingPro(null) }}>
+      <Dialog open={!!editingPro} onOpenChange={guardDraftOnDismiss(isEditProDirty, () => setEditingPro(null))}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Editar profesional</DialogTitle></DialogHeader>
           {/* Foto del profesional — se muestra en la página pública de reservas */}
