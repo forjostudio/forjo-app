@@ -320,3 +320,27 @@ blocked: 0
   missing:
     - "Que el bullet 'Qué se hizo' diga que la fila de las acciones se DERIVA de cuántos hijos rinde la columna izquierda"
     - "Que la regla advierta explícitamente el defecto de WR-03: una fila fija en la columna derecha se rompe cuando la izquierda crece"
+
+- gap_id: G-23-25
+  truth: "Un diálogo de edición con cambios sin guardar no se descarta por un click afuera o un Escape accidental; sin cambios, cierra como siempre"
+  status: failed
+  reason: "User reported (2026-09-18, DESPUÉS de cerrar la UAT): 'Al editar un servicio, si toco fuera del modal por accidente se cierra sin guardar ni warning.'"
+  severity: minor
+  reported_post_uat: true
+  root_cause: "settings-client.tsx:3098 — `<Dialog open={!!editSvc} onOpenChange={open => { if (!open) setEditSvc(null) }}>`. El handler descarta el borrador ante CUALQUIER motivo de cierre sin mirar si hay cambios. Base UI (`@base-ui/react/dialog`) cierra por outside-press por default: `DialogRootProps.disablePointerDismissal` es `false`. Verificado en node_modules/@base-ui/react/dialog/root/DialogRoot.d.ts."
+  precedent: "NINGUNO. Cero ocurrencias de onInteractOutside / onPointerDownOutside / dismissible / disablePointerDismissal en todo app/ y components/. La suposición de que 'ya se usa en otro lado del panel' no se sostiene."
+  artifacts:
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "L3098 diálogo Editar servicio: onOpenChange descarta sin mirar si el form está sucio"
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "L3556 diálogo Editar sede: misma forma, mismo par original+borrador (editLoc / editLocForm)"
+  user_decision: "Bloquear SÓLO si hay cambios (2026-09-18). Sin cambios: cierra como siempre por click afuera, Escape y X — cero fricción, y respeta la regla de CLAUDE.md ('Modales: cerrar con Escape, click fuera y botón X'). Con cambios sin guardar: el click afuera y Escape NO cierran y sale un toast 'Tenés cambios sin guardar' (sonner ya está importado en :10). La X SÍ cierra: es intención explícita. SIN modales anidados — la regla de CLAUDE.md los prohíbe, y por eso se descartó la confirmación '¿Descartar cambios?'."
+  how: "`disablePointerDismissal={sucio}` en el <Dialog> (el wrapper de components/ui/dialog.tsx reenvía props a DialogPrimitive.Root sin tocar nada, así que NO hay que modificar dialog.tsx) + guarda por `eventDetails.reason === 'escape-key'` en onOpenChange. Los reasons de Base UI están en node_modules/@base-ui/react/internals/reason-parts.d.ts: 'outside-press', 'escape-key', 'close-press'."
+  scope:
+    - "Editar servicio (:3098) — lo que reportó el usuario"
+    - "Editar sede (:3556) — misma forma y el par editLoc/editLocForm ya existe, sale gratis"
+    - "Editar profesional (:3867) — VERIFICAR si tiene estado de borrador separado; si no lo tiene, dejarlo documentado como follow-up en vez de inventar uno"
+    - "FUERA: cancelar suscripción (:3847) — es una confirmación, no un formulario"
+  missing:
+    - "Derivar `sucio` comparando el borrador contra el original, con la MISMA normalización que usa el guardado (normalizeServiceDuration / normalizeServicePrice / trim), o un campo recién normalizado en onBlur va a marcar sucio un form que nadie tocó"
+    - "El toast no puede spamear: un click afuera sostenido o repetido no debe apilar toasts"
