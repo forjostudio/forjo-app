@@ -37,7 +37,7 @@ Cinco bloques, en tres archivos (uno nuevo). Nada más entra en este contrato.
 - La **tarjeta de servicio** de la lista de abajo (`settings-client.tsx:2494-2710`): no se agrupa, no se reordena, no se refactoriza. Su estructura de grilla está documentada línea por línea con la invariante de 32px de G-04. **No se toca** (D-06).
 - `components/ui/*`: no se instala ni se modifica ningún componente. **Prohibido `npx shadcn add`** en esta fase.
 
-> **Actualizado después de la UAT (2026-09-17):** la tarjeta pública y la tarjeta de la lista de servicios recibieron cambios acotados (G-23-6 en 23-05/23-07, G-23-6b en 23-07). Ver `## Cambios post-UAT`.
+> **Actualizado después de la UAT (2026-09-17):** la tarjeta pública y la tarjeta de la lista de servicios recibieron cambios acotados (G-23-6 en 23-05/23-07, G-23-6b en 23-07, G-23-20 en 23-08). Ver `## Cambios post-UAT`.
 
 ---
 
@@ -861,7 +861,7 @@ Esta fase **no instala componentes, no agrega dependencias y no agrega ninguna l
 
 ---
 
-## Cambios post-UAT (gap closure 23-05 … 23-07)
+## Cambios post-UAT (gap closure 23-05 … 23-08)
 
 Cambios pedidos en la UAT del 2026-09-17, cada uno con su gap y su plan.
 
@@ -883,6 +883,15 @@ Cambios pedidos en la UAT del 2026-09-17, cada uno con su gap y su plan.
 - **Qué cambió:** el grip y el arrastre del chip dependen sólo de que haya categorías (`chipDragGates().canDrag`). El reorden chip sobre chip y la sección "Posición" siguen atados a `service_sort_mode === 'custom'` con agrupación (`canPlace`). Con un modo no personalizado, `chipDropIntent` decide: soltar en otro grupo sólo asigna por `assignServiceCategory` (llegada `max + 1`, sin renumerar a nadie, CAT-06) y soltar en el propio grupo **visible** no escribe ni resalta.
 - **Por qué:** el diagnóstico mostró que el gate del chip estaba atado al modo de servicios. Fue una decisión de 23-03 (E3) y 23-04, que resolvió la contradicción entre el snippet de §"Los chips" y la tabla de gates hacia el lado que no distinguía asignar de reordenar. D-05/D-06 definen el arrastre del chip como camino de asignación; D-12/CAT-05 sólo prohíben controles de reordenar inertes.
 - **Qué no cambió:** las filas de categoría (grip, flechas y arrastre sólo con `category_sort_mode === 'custom'`), la sección "Posición" del diálogo y D-07 (la columna la escribe sólo `assignServiceCategory` y el form). El arrastre táctil en mobile sigue diferido.
+
+### G-23-20 — Precio y duración a la derecha en la tarjeta del panel, sólo desktop (23-08)
+
+- **Diagnóstico:** no es un bug, es un layout nuevo. La tarjeta había acumulado seis hijos de contenido apilados en la columna izquierda —nombre, renglón de descripción + link (G-23-6b), línea de datos, control de cupo, sedes y cobertura— con las acciones solas arriba a la derecha: en desktop la mitad derecha de la tarjeta queda vacía y la izquierda se lee como una lista de datos sueltos.
+- **Decisión del usuario (2026-09-17, UAT Test 20):** el precio a la altura del título, la duración abajo más chica —la misma jerarquía que hay entre el nombre y la descripción, que es la de la tarjeta pública— y las acciones debajo de esos datos. Con dos límites vinculantes: **sólo desktop** (≥ 640px, el mismo breakpoint que la tarjeta ya usaba) y **sólo el precio y la duración** se mudan.
+- **Qué se hizo:** la columna derecha de la grilla pasa de una celda a **tres**, cada una con su columna y su fila declaradas a mano: precio en la fila del nombre (el centrado vertical que la tarjeta ya tenía los alinea sin una sola clase de alineación extra, porque son items de la misma fila), duración debajo alineada al tope de su fila, y las tres acciones debajo de las dos. Los dos textos se derivan **una sola vez** por servicio y se pintan en dos lugares con gate de viewport —el renglón de mobile y el bloque de desktop—, así que exactamente uno está visible por vez y ninguno se lee dos veces. La línea de datos queda como el renglón de mobile: con cupo individual no se renderiza en desktop (una celda vacía le sumaría una fila de separación a la tarjeta) y con cupo compartido conserva el rótulo del modo, ahora sin el separador que lo unía a la duración.
+- **Por qué mobile queda afuera, y no es un olvido:** los dos motivos están medidos y escritos en el propio archivo. A 375px el layout de dos columnas producía **61px de desborde real** contra el ancho interior de la tarjeta (G-02), y la adyacencia entre texto inerte y botón producía toques errados corregidos por el navegador (G-04), que es de donde salieron la divisoria y la zona de exclusión de 24px del bloque de acciones. **Ninguno de los dos se reabre.**
+- **Qué no cambió:** el rótulo del modo de cupo y el `CapacityInlineControl` siguen en la columna izquierda con su invariante de 32px; el orden del DOM sigue siendo contenido → acciones, así que el orden de foco de mobile no se movió (el reordenamiento visual de desktop lo hace la grilla declarando filas, nunca el DOM); el renglón de descripción y el link de G-23-6b siguen igual y el lápiz sigue abriendo el mismo diálogo; ningún camino de escritura nuevo, cero paquetes y cero migraciones.
+- **Regla para el que toque esta región después (empezando por la Phase 24):** un hijo de contenido nuevo declara la primera columna igual que los seis que ya están; un hijo de la columna derecha declara columna **y** fila. Un hijo sin celda declarada se lo lleva la ubicación automática al primer hueco libre de la derecha.
 
 ---
 
