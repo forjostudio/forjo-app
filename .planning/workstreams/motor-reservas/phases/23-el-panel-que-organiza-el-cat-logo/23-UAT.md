@@ -247,12 +247,13 @@ blocked: 0
   reason: "User reported con captura: 'Salvo lo del nombre en +40 caracteres en movil'. Un servicio llamado Premiumssssss… (40+ caracteres sin espacios) no envuelve en mobile."
   severity: minor
   test: 21
-  root_cause: "[pendiente de diagnóstico]"
+  root_cause: "settings-client.tsx:2758 — el <p> del nombre no declara `min-w-0`. Es flex item y en mobile `sm:truncate` no aplica, así que su overflow queda `visible` y el tamaño mínimo automático de flex item (Flexbox §4.5) resuelve a min-content. `break-words` (overflow-wrap: break-word) NO reduce el min-content: medido, 307.88px con `normal` y 307.88px con `break-word` (vs 12px con `anywhere` o `break-all`). El item no puede encoger. Interior de la tarjeta a 375px = 271px exactos → DESBORDE de 36.88px, y 147px cuando está la pill 'Sin cobertura'. Desktop no funciona por mérito propio: funciona porque `sm:truncate` pone overflow:hidden, que es lo que anula el mínimo automático. El `min-w-0` del PADRE (2756) ya existe y no tiene nada que ver. La descripción (2819) se salvó del mismo defecto por accidente: `line-clamp-1` también implica overflow:hidden (ya habían chocado con esto en G-23-6; al nombre nunca le llegó el mismo tratamiento — es el mismo defecto, segunda vez)."
   artifacts:
     - path: "app/(dashboard)/settings/settings-client.tsx"
-      issue: "el <p> del nombre (~2736) es `break-words sm:truncate` sin `min-w-0`, dentro de un padre flex (~2735)"
+      issue: "L2758 — el <p> del nombre es `text-sm font-medium break-words sm:truncate`, sin `min-w-0`"
   missing:
-    - "Que el nombre largo sin espacios envuelva en mobile sin romper el `sm:truncate` de desktop ni robarle ancho al nombre"
+    - "Agregar `min-w-0` al <p> de 2758 CONSERVANDO `break-words` — los dos son necesarios juntos: min-w-0 deja encoger la caja, break-words parte la palabra una vez acotada (medido: min-w-0 solo deja width=271 pero scrollWidth=308)"
+  fix_decision: "Opción A (`min-w-0` + `break-words`). Las 4 candidatas eliminan el desborde (271px / 2 líneas / 0); se deciden por el daño colateral. `break-all` parte nombres NORMALES a mitad de palabra ('Masaje descontracturant|e', 'Depilación definitiva Pre|mium') — descartada. `min-w-0` y `overflow-wrap: anywhere` son indistinguibles en resultado medido, pero min-w-0 tiene 73 usos en el repo (dos en este mismo archivo sobre el mismo shape: :3305 y :3418) contra CERO de break-all/anywhere/overflow-wrap. Regresión de desktop verificada a 640px: las 5 candidatas dan colIzq=363.31, truncando=true, sin scroll horizontal."
 
 - gap_id: G-23-22
   truth: "El diálogo Editar servicio conserva el mismo ancho al cambiar el modo de cupo, y las tres etiquetas del toggle mantienen columnas de ancho estable"
@@ -261,14 +262,30 @@ blocked: 0
   severity: cosmetic
   test: 21
   found_outside_scope: true
-  root_cause: "[pendiente de diagnóstico]"
+  root_cause: "SON DOS, y las dos premisas del reporte resultaron falsas al medirlas. (1) EL DIÁLOGO NO CAMBIA DE ANCHO: popup.offsetWidth = 384.00px idéntico en los tres estados (dialog.tsx:69 declara `sm:max-w-sm`, ancho FIJO no derivado del contenido). Lo que cambia es el ancho ÚTIL del cuerpo: settings-client.tsx:3126 tiene `overflow-y-auto` SIN `scrollbar-gutter`; al elegir un modo compartido aparece el bloque 'Cuántos lugares' (:590), el cuerpo pasa de 609 a 735px de alto, supera el disponible (648) y Chrome/Windows materializa un scrollbar clásico de 15px → body 384→369, radiogroup 350→335, celda 111.33→106.33. El header (:3117) y el footer (:3195) NO están dentro de ese contenedor (son filas hermanas del grid de :3116), así que conservan 384 mientras los campos se angostan: el borde del popup deja de alinear con el de los inputs y se lee como 'el diálogo se ensanchó'. (2) LAS TRES COLUMNAS SÍ SON IGUALES: 111.33/111.33/111.34 y 106.33/106.33/106.34 — `sm:grid-cols-3` funciona perfecto, no hay desbalance. El flip es de UN píxel: 'Clase grupal' necesita 83.33px y con scrollbar quedan 82.33 (sin scrollbar hay 87.33). `px-3` (:487) se come 24px de la celda."
   artifacts:
     - path: "app/(dashboard)/settings/settings-client.tsx"
-      issue: "toggle `grid grid-cols-1 gap-1 … sm:grid-cols-3` (~463); bloque 'Cuántos lugares' condicional (~592); ancho del contenedor de diálogo"
+      issue: "L3126 — `overflow-y-auto` sin `scrollbar-gutter: stable`"
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "L463 toggle `sm:grid-cols-3` + L487 `px-3` y `sm:h-9`: el ancho de celda (87.33/82.33) nunca alcanzó para las etiquetas"
+  also_found:
+    - "'Recurso simultáneo' NUNCA entró en una línea a 384px: necesita 133.58px de celda, o sea un popup de ≥522.74px. El comentario de L462 ('tres columnas iguales en desktop, donde Recurso simultáneo entra en una línea') es FALSO desde que se escribió. Medido: max-w-md (448) sigue dando 2 líneas; recién max-w-xl (576) da 1/1/1."
+    - "Defecto no reportado: `sm:h-9` fija 36px y dos líneas miden 40 → button.scrollHeight=40 vs clientHeight=36 con overflow visible. El texto SOBRESALE 2px arriba y abajo de la píldora; en el estado B la que desborda es la seleccionada (bg-primary)."
+  origin: "Phase 17 puso la bomba, Phase 23 la movió al escritorio del usuario. Causa (2) y el comentario falso: 228fa13 feat(17-01). Causa (1) el mecanismo: 3991789 fix(17-02). El DISPARADOR: 93e8da6 + 713dbd5 feat(23-02) (Categoría + Descripción corta) sumaron +188px al cuerpo y corrieron la ventana del flip de ~[535,605] a ~[801,901]px de alto de viewport — justo encima de un laptop 1440x900. NO es regresión de 23-08 (el diálogo no se tocó ahí), pero tampoco es ajeno a la Phase 23."
+  and_gate: "El flip requiere TRES condiciones simultáneas: scrollbar clásico (Windows — en macOS con overlay scrollbars es 0px y el flip NO existe) + viewport de ~801 a ~901px de alto + el contenido post-23. El wrap de 'Recurso simultáneo' en cambio es de causa única y se ve siempre, en todas las plataformas. Descartado que sea la fuente del tema: medidas las cinco familias --font-sans del panel, 'Recurso simultáneo' es en todas ~1.6x 'Clase grupal'."
   missing:
-    - "Ancho del diálogo estable entre estados del modo de cupo"
-    - "Columnas del toggle de ancho estable, sin re-envoltorio según cuál opción esté seleccionada"
-  note: "Preexistente: el plan 23-08 tenía prohibido tocar el diálogo de edición, así que NO es regresión de esta fase. La UAT recién ahora lo miró de cerca."
+    - "`scrollbar-gutter: stable` en L3126 — cierra la causa (1) para siempre"
+    - "Quitar `sm:grid-cols-3` de L463 — el toggle queda apilado también en desktop"
+    - "Corregir el comentario de L462, que afirma lo contrario de lo que el layout puede cumplir"
+  user_decision: "Apilar en desktop (opción C, 2026-09-18). Quitar `sm:grid-cols-3` de L463: las tres opciones una debajo de otra como ya se ven en mobile. Las tres etiquetas enteras en una línea, ancho estable, cero reflow horizontal, y la lectura vertical rima con el explicador de abajo (:539) que ya son tres grupos apilados. Cuesta +80px de alto (46→126), aceptado: con el `scrollbar-gutter: stable` puesto, más scroll ya no cambia el ancho. Descartadas: conservar el segmented horizontal (obligaría a asumir por escrito 'Recurso simultáneo' en dos líneas) y ensanchar el diálogo a max-w-xl (rompe la consistencia con los ~15 diálogos del panel y no toca la causa del ancho). Aplica a las DOS instancias del componente: la tarjeta de alta (:3064) y el diálogo de edición (:3167)."
+  invariants_to_preserve:
+    - "Target táctil de 44px en mobile: `min-h-11 sm:min-h-0` (:487) — la rama base queda intacta"
+    - "Accesibilidad del radiogroup: role=radiogroup + role=radio + aria-checked + aria-describedby={helpId(o.key)} (:475-480). La etiqueta tiene que quedar VISIBLE COMPLETA: es el ancla del aria-describedby hacia el explicador. Nada de text-ellipsis."
+    - "Los ids por instancia (useId, :432): el componente se monta DOS veces a la vez (alta :3064 + diálogo :3167). Volver a ids literales revive el WR-03 de la Phase 17 — el aria-describedby del diálogo resuelve al bloque del alta."
+    - "Leer no puede escribir (D-02, :523-528): el explicador NO es interactivo. Al apilar el toggle, NO fusionarlo con el explicador ni hacer clickeable cada grupo — cada lectura pasaría a disparar onChange."
+    - "El patch lleva SIEMPRE capacity_mode + capacity juntos (D-06, :485). Separarlos rebota el INSERT/UPDATE contra services_capacity_matches_mode_chk (migr. 068)."
+    - "Los labels son fuente única (CAPACITY_MODE_HELP, :221). El arreglo es de CSS: acortar el texto lo desincroniza con la copy del gate, el aviso de espacio compartido y los comentarios (D-03, :196-198)."
+    - "El patrón de scroll es POR CALLER, no del componente (:3099-3101). El `scrollbar-gutter` va en settings-client.tsx:3126, NO en components/ui/dialog.tsx — ahí dejaría de ser byte-idéntico para los ~15 diálogos restantes, que es lo que la Phase 17 decidió evitar."
 
 - gap_id: G-23-23
   truth: "En desktop, el rótulo del modo de cupo y el control inline del cupo comparten una misma línea en vez de ocupar una fila cada uno"
@@ -277,13 +294,23 @@ blocked: 0
   severity: cosmetic
   test: 21
   found_outside_scope: true
-  root_cause: "[pendiente de diagnóstico]"
+  root_cause: "SON DOS causas que aportan en simultáneo — un fix que atienda una sola deja la otra en pie. (1) settings-client.tsx:2859 y :2881 — el rótulo del modo vive en la línea de datos y el control en su envoltorio hermano: dos hijos distintos de la grilla, los dos en `sm:col-start-1`, así que la ubicación automática les da una fila a cada uno. (2) settings-client.tsx:806 — el contenedor interno de CapacityInlineControl lleva `py-6` SIN gate de viewport, así que los 48px de zona de exclusión táctil de G-04 se renderizan también en desktop. Medido a 1280px con cupo compartido + sedes + cobertura: grid-template-rows = [20 36 16 82 24 32], alto de tarjeta 274px, separación rótulo→stepper 32px, y el 82px de esa fila descompone en 24 (py-6) + 34 (stepper) + 24 (py-6). El 'hueco vertical grande' que reportó el dueño ES la zona de exclusión de G-04 renderizándose en un viewport que no tiene dedo."
   artifacts:
     - path: "app/(dashboard)/settings/settings-client.tsx"
-      issue: "el rótulo vive en la línea de datos (~2836) y el control en su envoltorio hermano (~2858): dos hijos distintos de la columna izquierda, una fila cada uno"
+      issue: "L2859 (línea de datos) y L2881 (envoltorio del control): dos hijos de grilla, una fila cada uno"
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "L806 — `py-6` sin gate de viewport en el contenedor interno de CapacityInlineControl"
   missing:
-    - "Juntarlos en una línea en desktop conservando los 32px de zona de exclusión de G-04 en mobile (el control se separó a propósito: el navegador corregía el punto de toque y tocar la duración bajaba el cupo)"
-    - "Revisar que el cálculo derivado de la fila de acciones (leftRows / actionsRow, fix de WR-03) siga dando la fila correcta si cambia la cantidad de hijos"
+    - "Envolver la línea de datos y el envoltorio del control en un único hijo de grilla: `flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:col-start-1`"
+    - "Mudar el gate `capMode === 'individual' && 'sm:hidden'` de la línea de datos AL ENVOLTORIO"
+    - "En L806: `py-6` → `py-6 sm:py-0` (nunca `py-0` a secas)"
+    - "Actualizar `leftRows` (L2714-2717): cupo compartido pasa a sumar 1 en vez de 2, y el comentario de L2711-2713 que explica los sumandos"
+  fix_decision: "Opción 1 (envoltorio + `sm:py-0`): alto de tarjeta 274 → 202px (−26%), mobile BIT-IDÉNTICO. Se puede juntarlos sólo en desktop sin reabrir G-04: medido a 375px, el `flex-col gap-2` del envoltorio reproduce exactamente el ritmo de hoy (líneaDatos→botón 33px y botón→'Se ofrece en:' 33px, iguales con y sin envoltorio; alto 343px en los dos), y el `py-6` sigue vigente por debajo de 640px, que es donde existe el dedo. Descartadas: juntar sin tocar el py-6 sólo baja a 250px; duplicar el rótulo viola 'una sola pasada, sin markup duplicado' (L2721) y no ahorra nada; meter el rótulo adentro del control rompe D-07 (deja de ser el tercer dato del renglón de mobile) y pone texto inerte pegado horizontalmente a los botones del stepper; misma fila explícita es inviable (los dos son col-start-1 → superposición)."
+  actions_row_verified: "Con la fórmula actualizada, las 5 configuraciones a 1280px dan las acciones en la ÚLTIMA fila y ningún hijo de la izquierda queda después: individual 2→r3 (126px), compartido 3→r3 (128px), individual+sedes+cobertura 4→r4 (156px), compartido+sedes 4→r4 (168px), compartido+sedes+cobertura 5→r5 (198px). WR-03 no se reabre."
+  failure_modes:
+    - "GRAVE — olvidar mudar el gate `sm:hidden` al envoltorio: con cupo individual queda un envoltorio VACÍO reclamando una fila de 0px (+8 de gap) que desfasa todo hacia abajo mientras actionsRow se queda donde estaba. Medido: filas=[20 34 0 32 16], acciones en r4 y la cobertura en r5 → WR-03 REABIERTO, con el salto hacia atrás en el orden de foco."
+    - "No grave — olvidar actualizar `leftRows` (sigue sumando 2): no queda contenido debajo de las acciones, pero los botones se van a una fila fantasma y se pierde la compactación (compartido sin sedes 128→168px, compartido+sedes+cobertura 198→222px)."
+    - "De contrato — el `py-6` NO se toca por debajo de 640px. El gate tiene que ser `sm:py-0`, nunca `py-0`. El comentario de L789-798 es el contrato: el control se separó porque el navegador corregía el punto de toque y tocar la duración bajaba el cupo."
 
 - gap_id: G-23-24
   truth: "La entrada G-23-20 del 23-UI-SPEC.md describe el layout REAL, incluida la fila derivada de las acciones, y su regla previene el defecto que ya ocurrió"
