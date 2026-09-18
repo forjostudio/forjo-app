@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 23-el-panel-que-organiza-el-cat-logo
-source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW-FIX.md]
+source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW-FIX.md]
 started: 2026-09-16T16:30:00Z
-updated: 2026-09-17T13:00:00Z
+updated: 2026-09-18T00:20:00Z
 ---
 
 ## Current Test
@@ -92,11 +92,32 @@ result: pass
 source: automated
 coverage_id: 23-04-D2
 
+### 17. La descripción larga se lee entera en la tarjeta del booking público (G-23-6)
+expected: En /[slug], paso 1, con 120 caracteres: el texto va a ancho completo debajo de la fila nombre/precio y se lee entero a 375px y 360px, sin "…" y sin botón. Con una palabra de 120 letras sin espacios se recorta a tres renglones y aparece "Ver más"; abrirlo/cerrarlo cambia el alto y nunca avanza al paso 2. Tocar nombre, precio o el texto sí selecciona. Teclado: Tab enfoca la tarjeta entera, Enter selecciona, el Tab siguiente enfoca "Ver más". Servicio deshabilitado: motivo visible, no se selecciona, "Ver más" abre. Servicio sin descripción: idéntico a antes. Consola sin avisos de hidratación.
+result: pass
+note: "Verificado en /negocio-prueba local: descripción de 120 caracteres a ancho completo en tres renglones bajo nombre/precio. Consola sin avisos de hidratación (sólo preloads de Next y Vercel Analytics)."
+
+### 18. La misma descripción en la web de marca (G-23-6)
+expected: En la web de marca (o el preview /web), sección Servicios, con 120 caracteres: a 375px se recorta a tres renglones con "Ver más" si no entra, y abre y cierra; el número y el precio siguen centrados. En desktop se lee entero sin botón.
+result: pass
+note: "Verificado en el preview /web (add-on has_web_custom activado en local con service_role para esta UAT). El recorte a tres renglones con Ver más se comporta igual que en la página pública de reservas."
+
+### 19. El chip se arrastra para asignar con cualquier modo de orden (G-23-10a)
+expected: En /servicios (desktop), con 3 categorías y servicios repartidos. (a) Servicios en Alfabético y categorías en personalizado: los chips muestran grip y arrastrar uno a otra fila lo asigna sin abrir el diálogo; las filas conservan grip y flechas. (b) Categorías en Alfabético y servicios en Por precio: los chips siguen con grip y se asignan arrastrando; las filas ya no tienen grip ni flechas. (c) Con servicios en Alfabético, "Mover …" no muestra la sección "Posición". (d) Con DevTools → Network y servicios en Alfabético: pasar un chip sobre su propia fila NO la resalta, y soltarlo ahí o sobre otro chip del mismo grupo no hace nada (sin toast, sin request). (e) Soltarlo sobre un chip de otra categoría lo asigna con un solo request y ningún otro chip se mueve. (f) Ida y vuelta: acomodás un grupo a mano en "Como los ordené yo", pasás a Alfabético, arrastrás un chip ajeno a ese grupo y volvés a "Como los ordené yo": tu orden manual quedó intacto y el recién llegado está último, también tras recargar. (g) Con servicios en "Como los ordené yo", soltar un chip sobre otro del mismo grupo lo sigue reordenando y la fila propia se sigue resaltando (sin regresión del Test 9).
+result: pass
+
+### 20. Renglón de descripción y link Editar en la tarjeta del panel (G-23-6b)
+expected: En /servicios, pestaña Activos, a 375px y en desktop. Con una descripción de 120 caracteres: un solo renglón recortado con "…" debajo del nombre y el link subrayado "Editar" debajo; con una palabra de 120 letras sin espacios no hay desborde ni scroll horizontal. "Editar" abre el mismo diálogo que el lápiz con la descripción cargada, y el lápiz sigue funcionando. Sin descripción: sólo "Agregar descripción", abre el mismo diálogo, y al guardar aparece el renglón y el link pasa a "Editar" sin recargar. Teclado: Tab llega al link con anillo visible, Enter abre. Desktop: nombre y acciones en la primera fila, renglón y link en la columna izquierda. Mobile: tocar el centro de la línea de duración y precio no abre el diálogo. La pestaña Desactivados se comporta igual. En el alta y en la edición, la ayuda debajo de "Descripción corta" dice la oración nueva completa y el contador 0/120 no se le superpone a 375px.
+result: issue
+reported: "pass. Lo unico que veo que me gustaría corregir, es sacar el campo de precio y duración de ese lado y pasarlo al lado derecho, a la altura del título el precio y abajo la duración más chico parecido a la página publica o a la jerarquia entre titulo y descripcion. Y abajo de eso los botones, de desactivar lapit y tacho. Creo que lo deja más legible al servicio."
+severity: cosmetic
+note: "El comportamiento de G-23-6b pasó (renglón, link Editar / Agregar descripción, diálogo, teclado). El issue es un pedido de layout NUEVO sobre la misma tarjeta, registrado como G-23-20."
+
 ## Summary
 
-total: 16
-passed: 14
-issues: 2
+total: 20
+passed: 17
+issues: 3
 pending: 0
 skipped: 0
 blocked: 0
@@ -111,7 +132,10 @@ blocked: 0
 
 - gap_id: G-23-6
   truth: "Una descripción corta de hasta 120 caracteres se lee completa en la tarjeta pública a 375px (el tope coincide con lo que entra)"
-  status: failed
+  status: resolved
+  resolved_by: 23-05-PLAN.md, 23-07-PLAN.md
+  resolved_at: 2026-09-17
+  verify_test: 17, 18
   reason: "User reported: primero cortada en una línea (palabra sin espacios); re-probado con texto real: muestra dos líneas pero no se ve completa, se corta con … a 375px"
   severity: minor
   test: 6
@@ -131,7 +155,10 @@ blocked: 0
   user_decision: "Mantener el tope de 120. Portar el patrón de forjo-tiendas (components/tienda/CatalogoLista.tsx, FilaDeProducto L449-601, diseño agualaboca mobile): descripción a 2-3 líneas (line-clamp) con botón Ver más / Ver menos que aparece SOLO si el texto desborda medido en pantalla (scrollHeight > clientHeight + 1 con ResizeObserver, arranca en false), aria-expanded, target 44px con márgenes negativos, y al expandir cambia el alto de la tarjeta. Sumar break-words."
 - gap_id: G-23-6b
   truth: "La tarjeta del servicio en el panel muestra al menos una línea de la descripción y un link subrayado Editar que abre el mismo diálogo que el lápiz"
-  status: failed
+  status: resolved
+  resolved_by: 23-07-PLAN.md
+  resolved_at: 2026-09-17
+  verify_test: 20
   reason: "User reported: en el panel, estaría bueno que la tarjeta muestre al menos una línea de la descripción y un link subrayado de editar que abra lo mismo que el botón del lápiz"
   severity: minor
   test: 6
@@ -147,7 +174,10 @@ blocked: 0
   user_decision: "Mostrar la línea de descripción y el link subrayado Editar; si el servicio no tiene descripción, mostrar un link Agregar descripción que abre el mismo diálogo de edición."
 - gap_id: G-23-10a
   truth: "Con el orden de categorías en Alfabético, el dueño igual puede pasar un servicio de una categoría a otra arrastrando el chip (el modo de categorías no debería bloquear la asignación)"
-  status: failed
+  status: resolved
+  resolved_by: 23-06-PLAN.md
+  resolved_at: 2026-09-17
+  verify_test: 19
   reason: "User reported: si elijo alfabético en las categorías ya no puedo pasar servicios de una a otra; los chips sólo se mueven haciéndoles clic y eligiendo en el modal"
   severity: minor
   test: 10
@@ -172,3 +202,18 @@ blocked: 0
   test: 10
   artifacts: []
   missing: []
+- gap_id: G-23-20
+  truth: "En desktop, la tarjeta de servicio de /servicios muestra el precio a la altura del título y la duración debajo, más chica, con las acciones (Desactivar, lápiz, tacho) debajo de esos datos — la jerarquía de la página pública"
+  status: failed
+  reason: "User reported: sacar precio y duración de la columna izquierda y pasarlos a la derecha, el precio a la altura del título y la duración abajo más chica (como en la página pública); los botones Desactivar / lápiz / tacho debajo de eso. Lo deja más legible."
+  severity: cosmetic
+  test: 20
+  root_cause: "No es un bug: es un layout nuevo. La tarjeta (settings-client.tsx:2692) es una columna en mobile y una grilla sm:grid-cols-[minmax(0,1fr)_auto] en desktop, donde CADA hijo de contenido declara sm:col-start-1 y el bloque de acciones —último hijo del DOM— queda anclado a la columna 2 de la primera fila. Duración y precio viven hoy en la línea de datos (D-07, :2791) como un solo nodo de texto en la columna izquierda, junto al modo de cupo cuando el servicio no es individual."
+  artifacts:
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "línea de datos (duración · precio · modo de cupo) en la columna izquierda (L2791-2806); acciones ancladas a col-2 fila-1 (L2845+)"
+  missing:
+    - "Mover duración y precio a la columna derecha en desktop, con el precio a la altura del nombre (jerarquía precio grande / duración chica, como la tarjeta pública) y las acciones debajo"
+    - "Mantener el orden del DOM contenido → acciones para no romper el orden de foco, y las anclas sm:col-start-1 del resto de los hijos"
+    - "Conservar la zona de exclusión de G-04 y la divisoria de mobile intactas"
+  user_decision: "Sólo desktop (≥640px): en mobile la tarjeta sigue igual (columna, acciones al final) para no reabrir el desborde de 375px (G-02) ni los toques errados (G-04). A la columna derecha se mudan SÓLO el precio y la duración; el modo de cupo y su control inline se quedan donde están."
