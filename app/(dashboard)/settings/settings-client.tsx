@@ -458,9 +458,26 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
       <Label className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Cómo se ocupa el cupo</Label>
       {/* Grid determinista (D-13). Con el inline-flex + wrap de antes las tres opciones no entraban a
           375px y el envoltorio dejaba la caja dentada, con la tercera pill colgando sola. En grid son
-          tres filas de 44px en mobile —lectura vertical que RIMA con los tres grupos del explicador de
-          abajo— y tres columnas iguales en desktop, donde "Recurso simultáneo" entra en una línea. */}
-      <div role="radiogroup" aria-label="Cómo se ocupa el cupo" className="grid grid-cols-1 gap-1 rounded-md border border-border p-1 sm:grid-cols-3">
+          tres FILAS en las dos vistas —lectura vertical que RIMA con los tres grupos apilados del
+          explicador de abajo, que es lo que hace que esto se lea como diseño y no como falta de espacio.
+
+          (G-23-22, causa 2) Antes acá había una segunda declaración de columnas para desktop, con el
+          comentario afirmando que así "Recurso simultáneo entra en una línea". Era FALSO desde que se
+          escribió, y ahora está medido: esa etiqueta necesita 133.58px de contenido contra los
+          87.33px (sin barra de scroll) / 82.33px (con) que da una celda de tres columnas dentro de un
+          popup de 384px. O sea envolvía SIEMPRE — en los tres estados, en las cinco familias de fuente
+          del panel y en todas las alturas de viewport. "Clase grupal" necesita 83.33px: entraba por 4px
+          sin barra y NO entraba por 1px con barra, y ese 1px era todo el "flip" que reportó el dueño.
+          Para que las tres entraran en horizontal harían falta ~139px más de popup, o sea ensanchar el
+          diálogo y romper la consistencia con los ~15 restantes del panel: descartado por escrito.
+
+          Costo aceptado: el control pasa de 46 a ~126px de alto (+80px). Ese alto extra ya no puede
+          mover el ancho, porque el cuerpo del diálogo reserva el hueco de la barra de scroll (ver el
+          comentario del contenedor scrolleable, misma tanda).
+
+          El alto fijo del botón en desktop SE CONSERVA: el desborde de 2px del texto sobre la píldora
+          sólo existía con la etiqueta en dos líneas, así que se apaga solo. */}
+      <div role="radiogroup" aria-label="Cómo se ocupa el cupo" className="grid grid-cols-1 gap-1 rounded-md border border-border p-1">
         {CAPACITY_MODE_HELP.map(o => {
           // El modo bloqueado sigue siendo visible (no se esconde la opción: el dueño tiene que
           // entender POR QUÉ no está disponible), pero no se puede activar. Si el servicio YA estaba
