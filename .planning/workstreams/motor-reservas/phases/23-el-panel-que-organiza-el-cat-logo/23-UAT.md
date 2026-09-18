@@ -1,14 +1,23 @@
 ---
-status: complete
+status: testing
 phase: 23-el-panel-que-organiza-el-cat-logo
-source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md, 23-08-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW-FIX.md]
+source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md, 23-08-SUMMARY.md, 23-09-SUMMARY.md, 23-10-SUMMARY.md, 23-11-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW.md, 23-REVIEW-FIX.md]
 started: 2026-09-16T16:30:00Z
-updated: 2026-09-18T16:10:00Z
+updated: 2026-09-18T17:10:00Z
 ---
 
 ## Current Test
 
-[testing complete]
+number: 23
+name: Tarjeta de /servicios — nombre largo en mobile y modo/cupo en una línea en desktop (G-23-21, G-23-23)
+expected: |
+  A 375px, un servicio con un nombre de 40+ caracteres SIN espacios envuelve adentro de la tarjeta:
+  no se sale por el costado y la tarjeta no gana scroll horizontal. Lo mismo con la píldora
+  "Sin cobertura" al lado. En desktop, el rótulo del modo de cupo y el selector de cupo comparten
+  UNA línea (antes una cada uno, con un hueco grande en el medio) y la tarjeta queda visiblemente
+  más compacta. Las acciones (Desactivar / lápiz / tacho) siguen cerrando la tarjeta abajo de todo,
+  sin que la línea de cobertura ni las píldoras de sedes queden colgando debajo.
+awaiting: user response
 
 ## Tests
 
@@ -127,12 +136,46 @@ result: pass
 reported: "se entiende"
 note: "La legibilidad —el criterio del test— pasó. Aparte, durante la presentación del checkpoint detecté que la entrada quedó DESACTUALIZADA respecto del fix de WR-03: describe las acciones en una fila fija ('debajo de las dos') y su 'Regla para el que toque esta región' no advierte que la fila de las acciones no puede ser un número fijo, que es justo el defecto que ya ocurrió una vez. Registrado como G-23-24."
 
+<!-- ── Tercera ronda de gaps: planes 23-09, 23-10, 23-11 + code review pasada 3 (WR-05..WR-10) ── -->
+
+### 23. Tarjeta de /servicios — nombre largo en mobile y modo/cupo en una línea en desktop (G-23-21, G-23-23, plan 23-09)
+expected: A 375px un nombre de 40+ caracteres sin espacios envuelve adentro de la tarjeta (no se sale, sin scroll horizontal), también con la píldora "Sin cobertura". En desktop el rótulo del modo de cupo y el selector comparten UNA línea y la tarjeta queda más compacta. Las acciones siguen cerrando la tarjeta abajo de todo, sin cobertura ni sedes colgando debajo.
+result: [pending]
+
+### 24. El resto de la tarjeta en mobile quedó igual que antes (regresión de 23-09)
+expected: Con la configuración más cargada (cupo compartido + sedes + cobertura), mobile se ve idéntico a antes del cambio: mismo ritmo vertical, mismas separaciones, mismo alto. El foco por teclado recorre la tarjeta igual, y el cupo se sigue editando y guardando desde la tarjeta sin recargar.
+result: [pending]
+
+### 25. Diálogo Editar servicio — ancho estable y toggle apilado (G-23-22, plan 23-10)
+expected: Al cambiar entre los tres modos de cupo, los campos del diálogo NO se angostan ni se ensanchan: el borde del popup sigue alineado con el borde derecho de los inputs en los tres modos. Las tres etiquetas del toggle ("Individual", "Clase grupal", "Recurso simultáneo") entran enteras en una línea cada una, apiladas una debajo de la otra, en desktop y en mobile. Probar en Windows, que es donde aparece la barra de scroll clásica que causaba el defecto.
+result: [pending]
+
+### 26. Un click afuera ya no descarta el borrador (G-23-25, plan 23-10)
+expected: En los tres diálogos de edición (servicio, sede, profesional) — (a) tocá un campo y hacé click afuera: NO cierra, avisa y el borrador queda; (b) lo mismo con Escape; (c) sin tocar nada, click afuera / Escape / ✕ cierran igual que siempre, sin fricción; (d) la ✕ siempre cierra, aun con cambios.
+result: [pending]
+
+### 27. Los cuatro falsos positivos de la guarda (G-23-25 + WR-05)
+expected: Estas cuatro operaciones NO deben ensuciar el borrador (o sea, después de hacerlas el click afuera tiene que cerrar normalmente) — (a) entrar y salir de un campo que se normaliza solo; (b) prender y apagar una sede dejándola como estaba; (c) ir a "Individual" y volver a "Clase grupal": **el cupo tiene que seguir en su número original** (antes una clase de 12 volvía con 2 — es el fix WR-05); (d) abrir un servicio cuya categoría fue borrada.
+result: [pending]
+
+### 28. "Editar sede" con el nombre vacío no queda trabada (WR-07)
+expected: Borrá el nombre de una sede: el botón Guardar queda deshabilitado (no un botón que parece activo y no hace nada), la ✕ sigue cerrando, y queda claro qué falta. No debe leerse como un diálogo trabado.
+result: [pending]
+
+### 29. El aviso de cierre bloqueado se escucha, no sólo se ve (WR-08)
+expected: Con un lector de pantalla (o el inspector de accesibilidad del navegador), repetí el caso del test 26 usando **Escape**: el aviso tiene que anunciarse, no sólo aparecer como toast visual. El toast vive fuera del portal del modal, así que la vía visual sola no alcanzaba.
+result: [pending]
+
+### 30. Lectura de la entrada G-23-20 del 23-UI-SPEC.md, ya corregida (G-23-24, plan 23-11)
+expected: Leyendo SÓLO esa entrada, alguien que no vio esta UAT puede responder: qué ve el dueño en desktop, qué ve en mobile, por qué no son lo mismo, y —lo nuevo— que la fila de las acciones se DERIVA de cuántos hijos rinde la columna izquierda (no es un número fijo) y qué se rompe si alguien la vuelve a clavar.
+result: [pending]
+
 ## Summary
 
-total: 22
+total: 30
 passed: 18
 issues: 4
-pending: 0
+pending: 8
 skipped: 0
 blocked: 0
 
