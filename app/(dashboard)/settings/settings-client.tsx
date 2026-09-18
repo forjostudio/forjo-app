@@ -610,7 +610,17 @@ function CapacityModeFields({ value, capacity, onChange, disabled, sharedCapacit
             // El patch lleva SIEMPRE el cupo junto con el modo (D-06): pasar de individual a grupal
             // o simultáneo con el cupo en 1 rebota contra services_capacity_matches_mode_chk, así que
             // el cambio de modo sube el cupo a su piso legal en el mismo estado.
-            onClick={() => onChange({ capacity_mode: o.key, capacity: o.key === 'individual' ? 1 : normalizeCapacity(capacity, 2) })}
+            //
+            // ⚠ AL IR A INDIVIDUAL EL CUPO SE CONSERVA (code-review WR-05, pasada 3). Antes se pisaba
+            // con 1, y como volver a un modo compartido sólo aplica el PISO, el round-trip
+            // grupal → individual → grupal degradaba una clase de 12 a 2 en silencio. Y con la guarda
+            // de G-23-25 eso además ensucia el borrador: el dueño que sólo fue a COMPARAR los tres
+            // modos se encontraba con "Tenés cambios sin guardar. Guardá para conservarlos", y
+            // siguiendo esa instrucción escribía capacity: 2 sobre la clase de 12.
+            // Conservarlo no puede producir una combinación que el CHECK de la migr. 068 rechace: el 1
+            // de individual lo imponen el guardado (`saveEditService`), el alta y la propia huella, y
+            // el campo "Cuántos lugares" ni siquiera se renderiza en ese modo.
+            onClick={() => onChange({ capacity_mode: o.key, capacity: o.key === 'individual' ? capacity : normalizeCapacity(capacity, 2) })}
             className={cn(
               'w-full min-h-11 sm:min-h-0 sm:h-9 px-3 rounded text-sm font-medium transition-colors disabled:opacity-60',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
