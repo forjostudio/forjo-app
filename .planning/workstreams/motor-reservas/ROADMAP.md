@@ -791,7 +791,7 @@ Plans:
 **Alcance**: `app/(dashboard)/servicios/page.tsx` (las lecturas nuevas, por tenant) + `app/(dashboard)/settings/settings-client.tsx` (**3636 líneas** — la pantalla de servicios vive ahí y la sirve también `/settings`, así que lo que se agregue conviene que salga a componentes propios), más el organizador de categorías y el campo de descripción. **El patrón de reordenar se PORTA, no se copia**: la fuente es `forjo-tiendas` → `app/(consola)/(panel)/categorias/Organizador.tsx` (`onDragStart`/`onDrop` en `:260` y `:597`, botones ▲/▼ con `aria-label` en `:392-414`, renumerado de la lista completa en `:125`) y `supabase/migrations/20260813100000_categorias.sql`; allá las columnas están en **español** (`tienda_id`, `nombre`, `orden`) y el esquema de RLS es otro, así que se copia la **forma** —dos mecanismos conviviendo, cero dependencias de drag-and-drop— y no el código. **Cero migraciones nuevas**: el modelo entero lo instaló la 078.
 **Security/Integrity relevance**: Media. Es un write path del dueño sobre sus propios datos: `.eq('business_id', business.id)` en cada query como todo el panel, y el rechazo del índice único mapeado a **copy propia** en vez de interpolar el mensaje de la base (T-14-25 / T-13-09). Dos cuidados propios de esta fase: el reordenamiento **escribe N filas de una vez**, así que tiene que ir por un solo camino que no pueda renumerar filas de otro negocio ni dejar el orden a medias (el precedente del repo para escrituras multi-fila del panel es el RPC transaccional `save_agenda_blocks`, migr. 074); y el cambio de **modo** no debe persistir ningún orden — si lo hiciera, rompería CAT-06, que la Phase 22 garantizó por construcción.
 **UI hint**: yes
-**Plans**: 8/8 plans executed · 7/8 ejecutados (waves 1 → 2 ‖ 2 → 3 · gaps de la UAT: 1 ‖ 1 → 2 · segunda ronda de gaps: 1)
+**Plans**: 11 plans · 8 ejecutados (waves 1 → 2 ‖ 2 → 3 · gaps de la UAT: 1 ‖ 1 → 2 · segunda ronda: 1 · tercera ronda: 3 pendientes, serializados por archivo compartido)
 
 Plans:
 **Wave 1**
@@ -821,6 +821,20 @@ Plans:
 **Segunda ronda de gaps** *(la re-UAT dejó un solo gap abierto: G-23-20, severidad cosmetic — es un layout nuevo, no un bug)*
 
 - [x] 23-08-PLAN.md — **G-23-20**: en desktop la tarjeta de servicio pone el precio a la altura del título, la duración debajo más chica y las tres acciones debajo de esos datos (la columna derecha de la grilla pasa de una celda a tres, cada una con columna y fila declaradas); en mobile la tarjeta **no se toca**, para no reabrir el desborde de 375px (G-02) ni los toques errados (G-04) — CAT-11
+
+**Tercera ronda de gaps** *(la UAT cerró con 17 pass y 4 gaps: G-23-21 y G-23-23 sobre la tarjeta, G-23-22 sobre el diálogo de edición —los dos últimos `found_outside_scope`— y G-23-24 sobre el contrato. Los tres de código tocan el MISMO archivo, así que van serializados: no hay paralelismo real)*
+
+**Wave 1 (gaps, ronda 3)**
+
+- [ ] 23-09-PLAN.md — **G-23-21 + G-23-23** (la tarjeta): el nombre largo sin espacios envuelve en mobile en vez de salirse 36.88px (`min-w-0` junto a `break-words`: el mínimo automático del flex item no lo reduce la regla de corte), y en desktop el rótulo del modo de cupo y el control comparten UNA línea — envoltorio único de grilla con el gate de viewport **mudado a él**, padding del control gateado a mobile y el sumando de la fila derivada de las acciones bajando de 2 a 1 (274 → ~200px de tarjeta, mobile bit-idéntico) — CAT-11
+
+**Wave 2 (gaps, ronda 3)** *(23-10 blocked on 23-09: mismo archivo, el orquestador serializa por `files_modified` solapados)*
+
+- [ ] 23-10-PLAN.md — **G-23-22** (el diálogo de edición): el popup nunca cambió de ancho —384px constantes— sino el ancho **útil** del cuerpo, por un scrollbar de 15px que aparece y desaparece; se reserva el hueco en el **caller** (no en `components/ui/dialog.tsx`, que la Phase 17 dejó byte-idéntico) y el toggle del modo de cupo pasa a una sola columna también en desktop (decisión del usuario, opción C: las tres etiquetas enteras, +80px de alto aceptados), con el comentario que afirmaba lo contrario corregido — CAT-11
+
+**Wave 3 (gaps, ronda 3)** *(23-11 blocked on 23-09 y 23-10: documenta el estado final, incluida la fila derivada y el `leftRows` nuevo)*
+
+- [ ] 23-11-PLAN.md — **G-23-24** (el contrato): la entrada G-23-20 del 23-UI-SPEC describe las acciones en una fila **fija** y su regla no advierte el defecto de WR-03 que ya ocurrió sobre ese mismo fix; pasa a decir que la fila se **deriva** de cuántos hijos rinde la columna izquierda, más una entrada nueva por cada gap de esta ronda y el alcance al día — CAT-11
 
 ---
 
