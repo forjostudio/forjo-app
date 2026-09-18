@@ -2755,7 +2755,16 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         la invariante de 32px de G-04. */}
                     <div className="flex items-center gap-2 min-w-0 sm:col-start-1">
                       {/* Sin tachado: en el tab "Desactivados" todos lo están, es ruido visual (D-14). */}
-                      <p className="text-sm font-medium break-words sm:truncate">{s.name}</p>
+                      {/* En MOBILE este párrafo es flex item SIN recorte, así que su tamaño mínimo
+                          automático se planta en el min-content del texto, y una palabra sin espacios
+                          no lo reduce ni un píxel: la caja no puede encoger y se sale de la tarjeta
+                          (G-23-21). La utilidad de ancho mínimo cero es la que deja encoger la caja;
+                          la regla de corte es la que parte la palabra DESPUÉS, ya acotada. Hacen falta
+                          LAS DOS: con la primera sola el texto se sigue saliendo adentro del propio
+                          párrafo. En desktop el recorte ya hacía ese mismo trabajo por otro camino
+                          —recortar implica overflow oculto, que también anula el mínimo automático—,
+                          que es por qué el defecto sólo se veía en mobile. */}
+                      <p className="text-sm font-medium min-w-0 break-words sm:truncate">{s.name}</p>
                       {showCoverage && !covered && (
                         <span className="inline-flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full border border-warning/30 bg-warning/10 text-warning text-[11px] font-medium">
                           <TriangleAlert aria-hidden="true" className="w-3 h-3" />
