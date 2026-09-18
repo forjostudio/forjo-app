@@ -2,9 +2,9 @@
 phase: 23-el-panel-que-organiza-el-cat-logo
 fixed_at: 2026-09-18T00:00:00Z
 review_path: .planning/workstreams/motor-reservas/phases/23-el-panel-que-organiza-el-cat-logo/23-REVIEW.md
-iteration: 2
-findings_in_scope: 2
-fixed: 2
+iteration: 3
+findings_in_scope: 6
+fixed: 6
 skipped: 0
 status: all_fixed
 passes:
@@ -22,13 +22,21 @@ passes:
     fixed: 2
     skipped: 0
     status: all_fixed
+  - id: 3
+    fixed_at: 2026-09-18
+    scope: "pasada incremental 23-09 + 23-10 — WR-05..WR-10"
+    findings_in_scope: 6
+    fixed: 6
+    skipped: 0
+    status: all_fixed
 ---
 
 # Phase 23: Reporte de corrección del code review
 
-> Este archivo tiene **dos pasadas**. La pasada 1 (abajo) cubre los planes 23-01..23-07 y quedó
-> tal como se escribió el 2026-09-16. La **pasada 2** (al final del archivo, después del separador)
-> cubre sólo el plan 23-08 / G-23-20. Ninguna pisa a la otra.
+> Este archivo tiene **tres pasadas**. La pasada 1 (abajo) cubre los planes 23-01..23-07 y quedó
+> tal como se escribió el 2026-09-16. La **pasada 2** cubre sólo el plan 23-08 / G-23-20. La
+> **pasada 3** (al final del archivo) cubre los planes 23-09 y 23-10 (WR-05..WR-10). Ninguna pisa a
+> las otras.
 
 ## Pasada 1 — planes 23-01..23-07
 
@@ -291,3 +299,249 @@ corriendo con datos reales. Falta abrir `/servicios` en el navegador y confirmar
 _Corregido: 2026-09-18_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteración: 2_
+
+---
+---
+
+## Pasada 3 — planes 23-09 y 23-10 (WR-05..WR-10)
+
+**Corregido:** 2026-09-18
+**Review de origen:** sección `## Pasada incremental — 23-09 + 23-10 (G-23-21, G-23-23, G-23-22, G-23-25)` de `23-REVIEW.md`
+**Iteración:** 3
+**Archivos tocados:** `app/(dashboard)/settings/settings-client.tsx`, `lib/panel-draft.ts` (nuevo),
+`test/panel-draft.test.ts` (nuevo), `23-UI-SPEC.md`
+
+**Resumen:**
+- Hallazgos en alcance (los **6 warnings** de la pasada 3): 6
+- Corregidos: **6**
+- Salteados: **0**
+- **Medio hallazgo de WR-05 queda ABIERTO a propósito** (el pre-chequeo de bajada de cupo en el
+  guardado del diálogo): el motivo, medido, está en la sección de WR-05.
+- Los 6 Info de esta pasada (IN-09..IN-14) quedan **fuera de alcance**, por decisión del usuario.
+- Los hallazgos abiertos de las pasadas 1 y 2 (WR-01, WR-02, IN-01..IN-08) **siguen abiertos**: no se
+  tocó `components/dashboard/categorias-manager.tsx` ni `app/[slug]/booking-client.tsx`.
+
+### Verificación
+
+- **Dónde corrió:** en el **checkout principal** (`workflow.use_worktrees=false`, rama `main`). Sin
+  worktree: los números se reproducen desde este mismo árbol.
+- `./node_modules/.bin/tsc --noEmit -p tsconfig.json`: **0 líneas `error TS`** fuera de `.next/`,
+  leído de la SALIDA y no del exit code (en este repo `npx tsc` sale 0 aunque haya errores). Corrido
+  después de cada fix, no sólo al final.
+- `npx vitest run` (suite completa, después del último commit): **96 archivos, 1325 passed,
+  4 expected fail, 1 skipped** (1330 casos). El piso era 95 archivos / 1301 passed; los **24** de más
+  son `test/panel-draft.test.ts`. Dos de las cuatro corridas tiraron un
+  `Worker exited unexpectedly`; la última salió **limpia** (96/96), así que es la flakiness conocida
+  de Windows y no una regresión — en una de esas corridas el conteo de casos igual dio completo.
+- `npx eslint "app/(dashboard)/settings/settings-client.tsx"`: **11 errores**, exactamente el piso
+  preexistente (los mismos `react-hooks/purity|immutability|set-state-in-effect` de siempre).
+  `npx eslint lib/panel-draft.ts test/panel-draft.test.ts`: **0 problemas**.
+- `git diff --check` por commit: **limpio en los seis**. Las tres líneas con espacios finales que
+  marca IN-13 son preexistentes y siguen ahí (Info, fuera de alcance).
+- Sin paquetes nuevos y sin migraciones.
+
+**Lo que NO se verificó:** no hay confirmación visual en navegador. WR-07 y WR-08 son de
+comportamiento y el detalle de qué mirar está al final de esta sección.
+
+### Fixed Issues
+
+#### WR-05: ir a "Individual" y volver degradaba el cupo (12 → 2) y ensuciaba el borrador
+
+**Archivos modificados:** `app/(dashboard)/settings/settings-client.tsx` (después, la regla se mudó a
+`lib/panel-draft.ts` en el commit de WR-09)
+**Commits:** `691d5da` (el fix) · `880d0dc` (extracción a `capacityModePatch` + tests)
+**Status:** fixed
+
+**Qué estaba mal.** El patch del toggle era
+`capacity: o.key === 'individual' ? 1 : normalizeCapacity(capacity, 2)`. Ir a individual **pisaba** el
+cupo con 1, y volver a un modo compartido sólo aplicaba el **piso**: una clase de 12 lugares quedaba
+en 2. Con la guarda de G-23-25 eso además marcaba el borrador como sucio, el aviso decía "Guardá para
+conservarlos", y siguiendo esa instrucción `saveEditService` escribía `capacity: 2` sobre la clase de
+12 — la agenda pasa a mostrar `12/2 lleno` y el motor rechaza toda reserva nueva con `slot_full`.
+
+**Qué se cambió.** El cupo se **conserva** al ir a individual. Verifiqué la premisa que el review
+daba por buena, y es correcta: `saveEditService` (`:1687` antes del refactor) ya fuerza
+`capacity: capacity_mode === 'individual' ? 1 : normalizeCapacity(capacity, 2)` por su cuenta, el alta
+hace lo mismo y la propia huella también, así que conservar el número en el borrador **no puede**
+producir una combinación que rechace el CHECK `services_capacity_matches_mode_chk` de la migr. 068. Y
+el campo "Cuántos lugares" ni siquiera se renderiza en modo individual, así que el número conservado
+no se ve.
+
+En el commit de WR-09 la regla salió a `capacityModePatch(next, capacity)` para poder testearla. Hay
+test de regresión explícito: `grupal → individual → grupal` conserva 12, y la huella del borrador
+vuelve a ser la de partida (o sea el diálogo vuelve a cerrar con un click afuera).
+
+**ABIERTO a propósito — la segunda mitad de WR-05.** El review pedía además llevar el pre-chequeo de
+bajada de cupo (`maxFutureSeatsOf` + `askCapacityDowngrade`) al guardado del diálogo, que hoy sólo
+existe en el stepper de la tarjeta (`saveCapacityInline`). **No se aplicó**, y el motivo no es
+esfuerzo: el aviso de bajada es un `ConfirmDialog`, y dispararlo desde `saveEditService` lo abre
+**encima** del diálogo de edición que está abierto. Eso es un **modal anidado**, que `CLAUDE.md`
+prohíbe explícitamente y que el propio comentario de G-23-25 cita como límite de diseño. Cerrar esa
+asimetría bien exige decidir otra superficie para el aviso (un paso dentro del mismo diálogo, o mover
+la confirmación al pie), y eso es diseño, no una corrección de review. Con el fix aplicado, el camino
+que WR-05 describía —el dueño que sólo fue a comparar los modos— ya no llega nunca a esa escritura;
+lo que queda abierto es el caso en que el dueño **tipea a mano** un cupo menor en el diálogo, que es
+preexistente y no lo introdujo esta ronda.
+
+#### WR-06: `saveEditLocation` era la única escritura de edición sin `.eq('business_id', …)`
+
+**Archivos modificados:** `app/(dashboard)/settings/settings-client.tsx`
+**Commit:** `dbee8e9`
+**Status:** fixed
+
+**Qué estaba mal.** `supabase.from('locations').update(payload).eq('id', editLoc.id)` — sin el filtro
+por tenant. Sus dos hermanas del mismo archivo lo llevan (`saveEditService`, `saveEditPro`), y la
+convención del proyecto (`.claude/CLAUDE.md` + skill `supabase-multitenant-rls`) es defensa en
+profundidad: RLS **y** filtro explícito.
+
+**Qué se cambió.** Se agregó `.eq('business_id', business.id)` con el mismo comentario que usan sus
+hermanas. No es explotable hoy —la policy `"business access" ON public.locations` no declara
+`WITH CHECK` propio, así que Postgres reusa su `USING` para el UPDATE y un id ajeno no escribe nada—,
+pero dejaba la única barrera del lado de la base. Es exactamente la clase de defecto que la
+convención existe para evitar.
+
+Verificado que no hay nada más en el delta: `from('services')` sigue en 6 líneas y las tres
+escrituras de edición del panel llevan ahora el filtro.
+
+#### WR-07: "Editar sede" con el nombre vacío se leía como trabada
+
+**Archivos modificados:** `app/(dashboard)/settings/settings-client.tsx`
+**Commit:** `41ee31f`
+**Status:** fixed
+
+**Qué estaba mal.** `saveEditLocation` arrancaba con `if (!editLoc || !editLocForm.name.trim()) return`
+—sin toast y sin marcar el campo— y el botón sólo estaba `disabled={savingEditLoc}`. Con el nombre
+vacío el borrador está sucio por definición, así que la guarda de G-23-25 bloqueaba el click afuera y
+el Escape con un aviso que empuja a "Guardar"… y "Guardar" no hacía **nada**. Este diálogo tampoco
+tiene "Cancelar".
+
+**Qué se cambió.** Espejo literal del diálogo de servicio: `disabled={savingEditLoc || !editLocForm.name.trim()}`
+y el early return dejó de ser silencioso (`toast.error('Escribí un nombre para guardar.')`). La copy
+no nombra la entidad porque `locWord` cambia por rubro (sede/consultorio/local/sucursal) y el género
+del artículo con ella; el aviso sirve para los cuatro sin inventar concordancia.
+
+La salida sigue siendo la ✕, que es lo que el aviso nombra. **No contradice el `23-UI-SPEC`**: el
+contrato ya decía que con el nombre vacío "Guardar" queda deshabilitado y la única salida es la ✕ —
+sólo que eso valía para el diálogo de servicio y no para éste. Igual se dejó escrito en el UI-SPEC
+(commit de WR-08, que toca el mismo párrafo).
+
+#### WR-08: el aviso del cierre bloqueado vivía en una región que el modal marca inerte
+
+**Archivos modificados:** `app/(dashboard)/settings/settings-client.tsx`, `23-UI-SPEC.md`
+**Commit:** `846a68b`
+**Status:** fixed
+
+**Qué estaba mal.** El único canal del aviso era el toast de sonner, y el `<Toaster />` se monta en
+`app/layout.tsx`, o sea **fuera** del portal del diálogo. Con el diálogo modal, Base UI aplica
+`markOthers` sobre los hermanos del popup en `<body>` y los deja `inert`: la región `aria-live` del
+toaster queda dentro de ese subárbol. Quien cierra con **Escape** —camino de teclado, y uno de los dos
+motivos que la guarda mira— percibe que la tecla no hace nada y no recibe ningún anuncio.
+
+**Qué se cambió.**
+1. `guardDraftOnDismiss` ya no llama al toast: recibe `onBlocked` y lo llama. La función queda pura
+   (lo que además la hizo testeable en WR-09) y la pantalla decide los canales.
+2. La pantalla da **dos** canales: el toast de siempre y una región viva `sr-only`
+   (`role="status"` + `aria-live="assertive"`) **adentro de cada uno de los tres popups**, que es lo
+   único que el modal no marca. Un nodo por diálogo: no agrega un modal anidado.
+3. La región se apaga al **abrir** cualquiera de los tres diálogos, para que nunca se monte con el
+   texto ya puesto.
+
+**Desvío consciente respecto de la propuesta del review, y por qué.** La primera versión apagaba la
+región sola con un `setTimeout` guardado en un `useRef`, para que un segundo intento bloqueado
+volviera a anunciar (una región viva cuyo texto no cambia no habla). Eso **sumó 3 errores de eslint**
+(`react-hooks/refs`: el render lee el ref al armar el handler de cierre) y el piso del archivo es 11,
+inamovible. Se sacó el ref y el timer. **Límite aceptado y documentado en el código y en el UI-SPEC:**
+dos intentos bloqueados seguidos dentro del mismo diálogo anuncian una sola vez. El primer anuncio es
+el que comunica el estado nuevo, y el toast se vuelve a ver en cada intento.
+
+`sr-only` es `position: absolute`, así que el nodo nuevo **no** reclama una fila del grid del diálogo
+de servicio (`grid-rows-[auto_minmax(0,1fr)_auto]`) ni mueve nada en los otros dos.
+
+**Contrato actualizado en el mismo commit:** `23-UI-SPEC.md`, entrada G-23-25, que hasta ahora
+nombraba al toast como único canal. Se le sumaron las dos correcciones (WR-08 y WR-07).
+
+#### WR-09: la lógica pura más riesgosa quedó dentro del componente, sin tests
+
+**Archivos modificados:** `lib/panel-draft.ts` (nuevo), `test/panel-draft.test.ts` (nuevo),
+`app/(dashboard)/settings/settings-client.tsx`
+**Commit:** `880d0dc`
+**Status:** fixed
+
+**Qué estaba mal.** `guardDraftOnDismiss`, las tres huellas y `locToPayload` son funciones puras, pero
+vivían en un módulo `'use client'` de 4.100 líneas y sin exportar: el runner (environment `node`) no
+las puede importar. Las coberturas D7..D10 del `23-10-SUMMARY` quedaban en `human_judgment` + un gate
+de `grep`, para un arreglo cuyo modo de falla el plan clasifica como GRAVE. **WR-05 es la prueba de
+que el gate no alcanzaba**: dio verde sobre un caso que rompía.
+
+**Qué se cambió.** Nuevo módulo `lib/panel-draft.ts`, con el molde de `lib/catalog-panel.ts` de esta
+misma fase. Se mudaron:
+
+- la guarda (`guardDraftOnDismiss`) y el tipo estructural de su detalle (`DraftDismissDetails`, con el
+  `reason` tomado de la unión real de Base UI vía `import type`, así un motivo mal escrito sigue sin
+  compilar y el módulo sigue sin runtime de UI);
+- las tres huellas (`serviceFormFingerprint`, `locationFormFingerprint`, `proFormFingerprint`) con sus
+  tipos y sus normalizadores compartidos con los guardados (`locToPayload`, `proToPayload`);
+- las reglas de cupo que la huella comparte con las escrituras: `CapacityMode`, `minCapacityFor`,
+  `MAX_CAPACITY`, `normalizeCapacity`;
+- y `capacityModePatch`, la regla de WR-05, extraída del `onClick` justamente para poder testearla.
+
+En `settings-client.tsx` quedaron **sólo la copy y el cableado**, con un comentario que apunta al
+módulo y a su suite.
+
+**Tests: `test/panel-draft.test.ts`, 24 casos, carril `pure`** (no importa `./env` ni fixtures, así
+que `test/suite-split.ts` lo deja en el carril paralelo). Cubre:
+
+- los **cuatro falsos positivos** que el plan declaraba cubiertos: normalizar al salir de un campo,
+  prender y apagar una sede, ir y volver de modo de cupo (el de WR-05) y un servicio con la categoría
+  borrada;
+- la **regresión de WR-05** (`grupal → individual → grupal` conserva 12) y el techo/piso del cupo;
+- que la guarda mira **exactamente** dos motivos y que la ✕ (`close-press`) cierra **siempre**, que es
+  lo que impide encerrar al dueño con el nombre vacío;
+- que la huella **no** se calcula en un cierre que igual va a pasar.
+
+Un test falló al escribirlo y el que estaba mal era el test, no el código: asumí que
+`normalizeCapacity(Infinity, 2)` daba el techo, y `Number.isFinite` lo manda al piso. Queda escrito
+así, con el porqué.
+
+#### WR-10: los comentarios nuevos citaban tres números que no son los que se midieron
+
+**Archivos modificados:** `app/(dashboard)/settings/settings-client.tsx`
+**Commit:** `b9d6491`
+**Status:** fixed
+
+**Qué estaba mal y qué dice ahora** (contrastado contra el `23-09-SUMMARY`, cobertura D8, y el
+`23-10-SUMMARY`, no contra el review):
+
+1. `33px del botón a "Se ofrece en:"` → **32px**. La sonda registró `línea→botón 33/33` y
+   `botón→"Se ofrece en:" 32/32`. No es decorativo: ése es el ritmo que sostiene la zona de exclusión
+   de G-04, que el mismo comentario invoca dos párrafos más abajo.
+2. `343px de alto` → **346px** (medido `346 → 346`, sin cambio).
+3. `(aparece "Cuántos lugares", +126px medidos)` → reformulado **sin cifra**. Los 126px son el alto
+   del **radiogroup** en la variante nueva (46 → 126, o sea +80), no lo que aporta el bloque "Cuántos
+   lugares", que la sonda nunca midió por separado. El número era real pero estaba atribuido a otra
+   caja.
+
+Diff de comentarios puro: **0 líneas de código**.
+
+### Qué necesita confirmación visual
+
+Ningún fix de esta pasada se abrió en un navegador. Lo que conviene mirar en `/servicios`:
+
+1. **WR-05 (el que más importa):** abrir "Editar servicio" de una clase grupal con cupo 12, tocar
+   "Individual", volver a "Clase grupal" y confirmar que el campo "Cuántos lugares" vuelve a decir
+   **12** y que un click afuera **cierra** el diálogo (sin el aviso de cambios sin guardar).
+2. **WR-07:** en "Editar sede", borrar el nombre. "Guardar" tiene que verse **deshabilitado**; si se
+   llega a clickear, tiene que aparecer el aviso. La ✕ sigue cerrando.
+3. **WR-08:** con un lector de pantalla (o con el inspector de accesibilidad), escribir algo en
+   cualquiera de los tres diálogos y apretar **Escape**: además del toast, se tiene que anunciar
+   "Tenés cambios sin guardar…" desde adentro del diálogo.
+4. **Sin regresiones de la ronda:** el nombre largo sigue envolviendo en mobile (G-23-21), el modo y
+   el cupo siguen compartiendo línea en desktop (G-23-23), el hueco de la barra de scroll sigue
+   reservado y el toggle apilado (G-23-22), y la guarda sigue funcionando en los tres diálogos
+   (G-23-25).
+
+---
+
+_Corregido: 2026-09-18_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteración: 3_
