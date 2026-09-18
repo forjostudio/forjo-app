@@ -8,23 +8,11 @@ updated: 2026-09-18T14:30:00Z
 
 ## Current Test
 
-number: 21
-name: Layout nuevo de la tarjeta de /servicios en desktop y su equivalente en mobile (G-23-20, 23-08)
+number: 22
+name: Lectura de la entrada G-23-20 del 23-UI-SPEC.md
 expected: |
-  Mobile a 375px: la tarjeta es idéntica a antes de 23-08 — nombre, renglón de descripción + link, la
-  línea con duración y precio en UN renglón (con el modo de cupo detrás del punto medio si
-  corresponde), sedes, cobertura, y al final la divisoria con las tres acciones. El precio NO aparece
-  dos veces, sin scroll horizontal.
-  Desktop (>=640px): a la derecha del nombre y a su misma altura, el precio; debajo la duración, más
-  chica y en gris; debajo de las dos, Desactivar / lápiz / tacho — en la ÚLTIMA fila de esa columna,
-  nunca con contenido de la izquierda por debajo.
-  Servicio con cupo compartido + sedes + cobertura (la configuración que WR-03 encontró rota): las
-  acciones cierran la tarjeta, sin la línea de cobertura ni las píldoras de sedes colgando debajo de
-  los botones.
-  Nombre de 40+ caracteres y precio de 7 dígitos: sigue truncando en desktop sin robarle ancho al
-  nombre, y envolviendo en mobile.
-  Foco por teclado: Tab recorre link Editar → Desactivar → lápiz → tacho con anillo visible, en las
-  dos vistas y también en la pestaña Desactivados.
+  Alguien que no vio la UAT del 2026-09-17 puede responder, leyendo sólo esa entrada, qué ve el dueño
+  en desktop, qué ve en mobile, y por qué no son lo mismo (los dos motivos medidos: G-02 y G-04).
 awaiting: user response
 
 ## Tests
@@ -132,20 +120,24 @@ note: "El comportamiento de G-23-6b pasó (renglón, link Editar / Agregar descr
 
 ### 21. Layout nuevo de la tarjeta de /servicios en desktop y su equivalente en mobile (G-23-20, 23-08)
 expected: Mobile a 375px: la tarjeta es idéntica a antes de 23-08 — nombre, renglón de descripción + link, la línea con duración y precio en UN renglón (con el modo de cupo detrás del punto medio si corresponde), sedes, cobertura, y al final la divisoria con las tres acciones. El precio NO aparece dos veces, sin scroll horizontal. Desktop (>=640px): a la derecha del nombre y a su misma altura, el precio; debajo la duración, más chica y en gris; debajo de las dos, Desactivar / lápiz / tacho — en la ÚLTIMA fila de esa columna, nunca con contenido de la izquierda por debajo. Servicio con cupo compartido + sedes + cobertura (la configuración que WR-03 encontró rota): las acciones cierran la tarjeta, sin la línea de cobertura ni las píldoras de sedes colgando debajo de los botones. Nombre de 40+ caracteres y precio de 7 dígitos: sigue truncando en desktop sin robarle ancho al nombre, y envolviendo en mobile. Foco por teclado: Tab recorre link Editar → Desactivar → lápiz → tacho con anillo visible, en las dos vistas y también en la pestaña Desactivados.
-result: [pending]
-why_human: "Medición real de layout responsive (dónde cae cada fila de la grilla con distintas combinaciones de datos), superposición visual y foco por teclado sólo se observan en un navegador. Ni el ejecutor de 23-08 ni el reviewer abrieron uno; el fix de WR-03 se midió en Chrome headless pero sobre una réplica de la grilla, no sobre la app con datos reales."
+result: issue
+reported: "Salvo lo del nombre en +40 caracteres en movil: pass. Encontre un par de cosas a corregir. El modal de edición, cuando elijo recurso simultáneo cambia el ancho y en el toggle clase grupal pasa a tener dos lineas. La tarjeta en desktop: Recurso compartido y el selector terminan tomando una línea cada uno, cuando podriamos ponerlos en una misma línea y compactar un poco la tarjeta."
+severity: cosmetic
+confirmed_pass: "G-23-20 quedó confirmado en la app real, incluida la configuración que WR-03 había roto (cupo compartido + sedes + cobertura): en desktop el precio está a la altura del nombre, la duración debajo en gris, y Desactivar / lápiz / tacho cierran la tarjeta en la última fila, sin la línea de cobertura ni las píldoras de sedes colgando debajo. Mobile sin precio duplicado y sin scroll horizontal."
+note: "Un gap del contrato del propio test (el nombre largo en mobile, G-23-21) y dos hallazgos nuevos fuera de 23-08: el modal de edición (G-23-22) y la compactación de la tarjeta en desktop (G-23-23)."
 
 ### 22. Lectura de la entrada G-23-20 del 23-UI-SPEC.md
 expected: Alguien que no vio la UAT del 2026-09-17 puede responder, leyendo sólo esa entrada, qué ve el dueño en desktop, qué ve en mobile, y por qué no son lo mismo (los dos motivos medidos: G-02 y G-04).
-result: [pending]
-why_human: "Juicio de legibilidad del contrato, no verificable por grep."
+result: pass
+reported: "se entiende"
+note: "La legibilidad —el criterio del test— pasó. Aparte, durante la presentación del checkpoint detecté que la entrada quedó DESACTUALIZADA respecto del fix de WR-03: describe las acciones en una fila fija ('debajo de las dos') y su 'Regla para el que toque esta región' no advierte que la fila de las acciones no puede ser un número fijo, que es justo el defecto que ya ocurrió una vez. Registrado como G-23-24."
 
 ## Summary
 
 total: 22
 passed: 17
-issues: 3
-pending: 2
+issues: 4
+pending: 1
 skipped: 0
 blocked: 0
 
@@ -248,3 +240,61 @@ blocked: 0
     - "Mantener el orden del DOM contenido → acciones para no romper el orden de foco, y las anclas sm:col-start-1 del resto de los hijos"
     - "Conservar la zona de exclusión de G-04 y la divisoria de mobile intactas"
   user_decision: "Sólo desktop (≥640px): en mobile la tarjeta sigue igual (columna, acciones al final) para no reabrir el desborde de 375px (G-02) ni los toques errados (G-04). A la columna derecha se mudan SÓLO el precio y la duración; el modo de cupo y su control inline se quedan donde están."
+
+- gap_id: G-23-21
+  truth: "En mobile a 375px, un nombre de servicio de 40+ caracteres sin espacios envuelve dentro de la tarjeta — no la desborda ni produce scroll horizontal"
+  status: failed
+  reason: "User reported con captura: 'Salvo lo del nombre en +40 caracteres en movil'. Un servicio llamado Premiumssssss… (40+ caracteres sin espacios) no envuelve en mobile."
+  severity: minor
+  test: 21
+  root_cause: "[pendiente de diagnóstico]"
+  artifacts:
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "el <p> del nombre (~2736) es `break-words sm:truncate` sin `min-w-0`, dentro de un padre flex (~2735)"
+  missing:
+    - "Que el nombre largo sin espacios envuelva en mobile sin romper el `sm:truncate` de desktop ni robarle ancho al nombre"
+
+- gap_id: G-23-22
+  truth: "El diálogo Editar servicio conserva el mismo ancho al cambiar el modo de cupo, y las tres etiquetas del toggle mantienen columnas de ancho estable"
+  status: failed
+  reason: "User reported con dos capturas: 'El modal de edición, cuando elijo recurso simultáneo cambia el ancho y en el toggle clase grupal pasa a tener dos lineas.' Con Individual seleccionado la que envuelve es 'Recurso simultáneo'; con Recurso simultáneo seleccionado, la que envuelve es 'Clase grupal'."
+  severity: cosmetic
+  test: 21
+  found_outside_scope: true
+  root_cause: "[pendiente de diagnóstico]"
+  artifacts:
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "toggle `grid grid-cols-1 gap-1 … sm:grid-cols-3` (~463); bloque 'Cuántos lugares' condicional (~592); ancho del contenedor de diálogo"
+  missing:
+    - "Ancho del diálogo estable entre estados del modo de cupo"
+    - "Columnas del toggle de ancho estable, sin re-envoltorio según cuál opción esté seleccionada"
+  note: "Preexistente: el plan 23-08 tenía prohibido tocar el diálogo de edición, así que NO es regresión de esta fase. La UAT recién ahora lo miró de cerca."
+
+- gap_id: G-23-23
+  truth: "En desktop, el rótulo del modo de cupo y el control inline del cupo comparten una misma línea en vez de ocupar una fila cada uno"
+  status: failed
+  reason: "User reported con captura: 'La tarjeta en desktop: Recurso compartido y el selector terminan tomando una línea cada uno, cuando podriamos ponerlos en una misma línea y compactar un poco la tarjeta.'"
+  severity: cosmetic
+  test: 21
+  found_outside_scope: true
+  root_cause: "[pendiente de diagnóstico]"
+  artifacts:
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "el rótulo vive en la línea de datos (~2836) y el control en su envoltorio hermano (~2858): dos hijos distintos de la columna izquierda, una fila cada uno"
+  missing:
+    - "Juntarlos en una línea en desktop conservando los 32px de zona de exclusión de G-04 en mobile (el control se separó a propósito: el navegador corregía el punto de toque y tocar la duración bajaba el cupo)"
+    - "Revisar que el cálculo derivado de la fila de acciones (leftRows / actionsRow, fix de WR-03) siga dando la fila correcta si cambia la cantidad de hijos"
+
+- gap_id: G-23-24
+  truth: "La entrada G-23-20 del 23-UI-SPEC.md describe el layout REAL, incluida la fila derivada de las acciones, y su regla previene el defecto que ya ocurrió"
+  status: failed
+  reason: "Detectado por Claude al presentar el Test 22 (la legibilidad, que era el criterio del test, el usuario la aprobó). La entrada quedó escrita antes del fix de WR-03."
+  severity: minor
+  test: 22
+  root_cause: "El REVIEW-FIX de WR-03 tocó sólo settings-client.tsx y los artefactos del review; la entrada del UI-SPEC —escrita por 23-08 con el layout de fila fija— no se actualizó."
+  artifacts:
+    - path: ".planning/workstreams/motor-reservas/phases/23-el-panel-que-organiza-el-cat-logo/23-UI-SPEC.md"
+      issue: "bullet 'Qué se hizo' (L891) describe las acciones en fila fija; 'Regla para el que toque esta región' (L894) no advierte que la fila de las acciones no puede ser un número fijo"
+  missing:
+    - "Que el bullet 'Qué se hizo' diga que la fila de las acciones se DERIVA de cuántos hijos rinde la columna izquierda"
+    - "Que la regla advierta explícitamente el defecto de WR-03: una fila fija en la columna derecha se rompe cuando la izquierda crece"
