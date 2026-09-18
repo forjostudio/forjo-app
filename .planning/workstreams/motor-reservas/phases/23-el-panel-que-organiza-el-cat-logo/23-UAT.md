@@ -1,14 +1,31 @@
 ---
-status: complete
+status: testing
 phase: 23-el-panel-que-organiza-el-cat-logo
-source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW-FIX.md]
+source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md, 23-08-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW-FIX.md]
 started: 2026-09-16T16:30:00Z
-updated: 2026-09-18T00:20:00Z
+updated: 2026-09-18T14:30:00Z
 ---
 
 ## Current Test
 
-[testing complete]
+number: 21
+name: Layout nuevo de la tarjeta de /servicios en desktop y su equivalente en mobile (G-23-20, 23-08)
+expected: |
+  Mobile a 375px: la tarjeta es idéntica a antes de 23-08 — nombre, renglón de descripción + link, la
+  línea con duración y precio en UN renglón (con el modo de cupo detrás del punto medio si
+  corresponde), sedes, cobertura, y al final la divisoria con las tres acciones. El precio NO aparece
+  dos veces, sin scroll horizontal.
+  Desktop (>=640px): a la derecha del nombre y a su misma altura, el precio; debajo la duración, más
+  chica y en gris; debajo de las dos, Desactivar / lápiz / tacho — en la ÚLTIMA fila de esa columna,
+  nunca con contenido de la izquierda por debajo.
+  Servicio con cupo compartido + sedes + cobertura (la configuración que WR-03 encontró rota): las
+  acciones cierran la tarjeta, sin la línea de cobertura ni las píldoras de sedes colgando debajo de
+  los botones.
+  Nombre de 40+ caracteres y precio de 7 dígitos: sigue truncando en desktop sin robarle ancho al
+  nombre, y envolviendo en mobile.
+  Foco por teclado: Tab recorre link Editar → Desactivar → lápiz → tacho con anillo visible, en las
+  dos vistas y también en la pestaña Desactivados.
+awaiting: user response
 
 ## Tests
 
@@ -113,12 +130,22 @@ reported: "pass. Lo unico que veo que me gustaría corregir, es sacar el campo d
 severity: cosmetic
 note: "El comportamiento de G-23-6b pasó (renglón, link Editar / Agregar descripción, diálogo, teclado). El issue es un pedido de layout NUEVO sobre la misma tarjeta, registrado como G-23-20."
 
+### 21. Layout nuevo de la tarjeta de /servicios en desktop y su equivalente en mobile (G-23-20, 23-08)
+expected: Mobile a 375px: la tarjeta es idéntica a antes de 23-08 — nombre, renglón de descripción + link, la línea con duración y precio en UN renglón (con el modo de cupo detrás del punto medio si corresponde), sedes, cobertura, y al final la divisoria con las tres acciones. El precio NO aparece dos veces, sin scroll horizontal. Desktop (>=640px): a la derecha del nombre y a su misma altura, el precio; debajo la duración, más chica y en gris; debajo de las dos, Desactivar / lápiz / tacho — en la ÚLTIMA fila de esa columna, nunca con contenido de la izquierda por debajo. Servicio con cupo compartido + sedes + cobertura (la configuración que WR-03 encontró rota): las acciones cierran la tarjeta, sin la línea de cobertura ni las píldoras de sedes colgando debajo de los botones. Nombre de 40+ caracteres y precio de 7 dígitos: sigue truncando en desktop sin robarle ancho al nombre, y envolviendo en mobile. Foco por teclado: Tab recorre link Editar → Desactivar → lápiz → tacho con anillo visible, en las dos vistas y también en la pestaña Desactivados.
+result: [pending]
+why_human: "Medición real de layout responsive (dónde cae cada fila de la grilla con distintas combinaciones de datos), superposición visual y foco por teclado sólo se observan en un navegador. Ni el ejecutor de 23-08 ni el reviewer abrieron uno; el fix de WR-03 se midió en Chrome headless pero sobre una réplica de la grilla, no sobre la app con datos reales."
+
+### 22. Lectura de la entrada G-23-20 del 23-UI-SPEC.md
+expected: Alguien que no vio la UAT del 2026-09-17 puede responder, leyendo sólo esa entrada, qué ve el dueño en desktop, qué ve en mobile, y por qué no son lo mismo (los dos motivos medidos: G-02 y G-04).
+result: [pending]
+why_human: "Juicio de legibilidad del contrato, no verificable por grep."
+
 ## Summary
 
-total: 20
+total: 22
 passed: 17
 issues: 3
-pending: 0
+pending: 2
 skipped: 0
 blocked: 0
 
@@ -204,7 +231,11 @@ blocked: 0
   missing: []
 - gap_id: G-23-20
   truth: "En desktop, la tarjeta de servicio de /servicios muestra el precio a la altura del título y la duración debajo, más chica, con las acciones (Desactivar, lápiz, tacho) debajo de esos datos — la jerarquía de la página pública"
-  status: failed
+  status: resolved
+  resolved_by: 23-08-PLAN.md, 23-REVIEW-FIX.md (WR-03)
+  resolved_at: 2026-09-18
+  verify_test: 21
+  resolution_note: "Cerrado por código y medido en Chrome headless sobre una réplica de la grilla (5 configuraciones); falta la confirmación visual en la app real (Test 21). El code review incremental encontró WR-03 sobre el propio fix — las acciones quedaban clavadas en sm:row-start-3 mientras la columna izquierda tiene entre 2 y 6 filas, así que con cupo compartido / sedes / cobertura el contenido quedaba DEBAJO de los botones. Corregido en 13629dd con la fila derivada (Math.max(3, leftRows)) aplicada por custom property sólo en sm:."
   reason: "User reported: sacar precio y duración de la columna izquierda y pasarlos a la derecha, el precio a la altura del título y la duración abajo más chica (como en la página pública); los botones Desactivar / lápiz / tacho debajo de eso. Lo deja más legible."
   severity: cosmetic
   test: 20
