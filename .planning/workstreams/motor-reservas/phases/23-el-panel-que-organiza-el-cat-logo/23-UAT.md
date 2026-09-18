@@ -1,19 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 23-el-panel-que-organiza-el-cat-logo
 source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md, 23-08-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW-FIX.md]
 started: 2026-09-16T16:30:00Z
-updated: 2026-09-18T14:30:00Z
+updated: 2026-09-18T16:10:00Z
 ---
 
 ## Current Test
 
-number: 22
-name: Lectura de la entrada G-23-20 del 23-UI-SPEC.md
-expected: |
-  Alguien que no vio la UAT del 2026-09-17 puede responder, leyendo sólo esa entrada, qué ve el dueño
-  en desktop, qué ve en mobile, y por qué no son lo mismo (los dos motivos medidos: G-02 y G-04).
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -135,9 +130,9 @@ note: "La legibilidad —el criterio del test— pasó. Aparte, durante la prese
 ## Summary
 
 total: 22
-passed: 17
+passed: 18
 issues: 4
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
