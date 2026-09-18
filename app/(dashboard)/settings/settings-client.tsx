@@ -2827,8 +2827,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         {s.description ? 'Editar' : 'Agregar descripción'}
                       </button>
                     </div>
-                    {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER
-                        dato —mismo registro que duración y precio—, y no como pill junto al nombre:
+                    {/* Línea de DATOS de la tarjeta (D-07). El modo de cupo entra acá como TERCER dato
+                        del renglón de MOBILE —mismo registro que la duración y el precio, que en ese
+                        viewport siguen acá; en desktop se mudaron a la columna derecha y el modo queda
+                        como único dato de esta línea—, y no como pill junto al nombre:
                         las pills de arriba están reservadas para advertencias (la de cobertura) y
                         mezclar los dos registros le sube el volumen a un dato normal. Por eso la
                         pill de alarma NO se toca acá: sigue en el bloque del nombre. Es la primera
@@ -2937,22 +2939,28 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                         es este número y el arreglo es volver a `pt-6`.
 
                         Va como padding y no como margen por el mismo motivo que allá: el padding suma al
-                        ritmo de forma determinista, un margen pelearía con él. En desktop se resetean a
-                        cero tanto el padding como el borde, y la primera fila queda idéntica a como
-                        estaba.
+                        ritmo de forma determinista, un margen pelearía con él. En desktop el padding y
+                        el borde se resetean a cero: ahí la separación la da el ritmo de la grilla, y
+                        este bloque no comparte renglón con el nombre —se va a la última fila de la
+                        columna derecha, debajo del precio y de la duración (G-23-20)—.
 
                         ORDEN DE FOCO: con las acciones al final del DOM, el recorrido de la tarjeta pasa
                         a ser contenido → acciones en las DOS vistas. El reordenamiento visual de desktop
                         lo hace LA GRILLA, declarando filas: el DOM sigue siendo contenido → acciones y
                         nunca se sube el bloque de acciones más arriba entre los hermanos. En mobile eso
-                        alinea foco y orden visual (WCAG 2.4.3 / 1.3.2). En desktop queda un desfase
-                        entre la posición visual (ahora abajo a la derecha, debajo del precio y de la
-                        duración) y el orden de tabulación (último): es una secuencia
-                        significativa y habitual para una tarjeta —contenido primero, acciones después— y
-                        los tres botones llevan el nombre del servicio en su etiqueta accesible, así que
-                        no hay ambigüedad. Es DECISIÓN ESCRITA, no olvido: prohibido compensarla con un
-                        índice de tabulación positivo, que es antipatrón y rompería el orden de la
-                        página entera. */}
+                        alinea foco y orden visual (WCAG 2.4.3 / 1.3.2).
+
+                        En desktop lo alinea también, pero no porque sí: lo sostiene `actionsRow`, que
+                        manda este bloque a la ÚLTIMA fila. Leyendo la tarjeta de arriba abajo y de
+                        izquierda a derecha, los botones son lo último que aparece, igual que en el orden
+                        de tabulación. Mientras la fila era fija, con cuatro o más filas a la izquierda
+                        quedaban el stepper de cupo, las píldoras de sedes y el link de Equipo POR DEBAJO
+                        de los botones, y el foco tenía que bajar y volver a subir (WR-03): un salto
+                        hacia atrás, no un desfase aceptado. Si alguien vuelve a anclar esta fila a un
+                        número fijo, rompe esta afirmación y hay que reescribir el párrafo.
+
+                        Lo que sigue prohibido: compensar el orden con un índice de tabulación positivo,
+                        que es antipatrón y rompería el orden de la página entera. */}
                     {/* La fila viaja como VARIABLE CSS y no como clase: `sm:row-start-${n}` con un
                         valor dinámico no lo genera el JIT de Tailwind. El `style` inline no se puede
                         gatear por viewport, pero la clase que lo CONSUME sí, así que en mobile la
@@ -2975,9 +2983,10 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
                           vacío contra "Desactivar" y los tres dejaban de leerse como un grupo. NO volver
                           a poner separación automática acá ni en el contenedor: en el contenedor además
                           separaría el lápiz del tacho, que son un par. En desktop la columna se
-                          dimensiona al contenido, así que nunca hubo espacio libre que repartir y esta
-                          fila se ve igual que siempre. Los dos botones de icono suben al piso táctil de
-                          44px en mobile con el mismo molde que ya usan los del stepper de cupo. */}
+                          dimensiona al contenido, así que nunca hubo espacio libre que repartir y el
+                          grupo se ve igual que siempre, ahora en la última fila de esa columna en vez
+                          de compartir la primera con el nombre. Los dos botones de icono suben al piso
+                          táctil de 44px en mobile con el mismo molde que usan los del stepper de cupo. */}
                       <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-11 w-11 sm:h-8 sm:w-8" onClick={() => openEditService(s)} aria-label={`Editar ${s.name}`}>
                         <Pencil className="w-4 h-4" />
                       </Button>
