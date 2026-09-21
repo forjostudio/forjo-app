@@ -45,7 +45,7 @@ covered_files:
   - "test/catalog-panel.test.ts"
   - "test/panel-draft.test.ts"
   - "test/service-categories.test.ts"
-covered_digest: "v1:sha256:8f4ab835d55224239e6ec3b16e01fff7743018d545c656e4bac061aa147de2d4"
+covered_digest: "v1:sha256:3c9c63efbb669d7c1ac814f3dd536ed069d00bec73d0be4e8a4475131fe34b62"
 behavior_unverified: 0
 overrides_applied: 1
 overrides:
