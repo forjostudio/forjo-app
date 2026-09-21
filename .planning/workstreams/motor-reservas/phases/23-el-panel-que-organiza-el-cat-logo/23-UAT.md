@@ -1,23 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 23-el-panel-que-organiza-el-cat-logo
 source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md, 23-08-SUMMARY.md, 23-09-SUMMARY.md, 23-10-SUMMARY.md, 23-11-SUMMARY.md, 23-VERIFICATION.md, 23-REVIEW.md, 23-REVIEW-FIX.md]
 started: 2026-09-16T16:30:00Z
-updated: 2026-09-18T17:10:00Z
+updated: 2026-09-21T00:00:00Z
 ---
 
 ## Current Test
 
-number: 23
-name: Tarjeta de /servicios — nombre largo en mobile y modo/cupo en una línea en desktop (G-23-21, G-23-23)
-expected: |
-  A 375px, un servicio con un nombre de 40+ caracteres SIN espacios envuelve adentro de la tarjeta:
-  no se sale por el costado y la tarjeta no gana scroll horizontal. Lo mismo con la píldora
-  "Sin cobertura" al lado. En desktop, el rótulo del modo de cupo y el selector de cupo comparten
-  UNA línea (antes una cada uno, con un hueco grande en el medio) y la tarjeta queda visiblemente
-  más compacta. Las acciones (Desactivar / lápiz / tacho) siguen cerrando la tarjeta abajo de todo,
-  sin que la línea de cobertura ni las píldoras de sedes queden colgando debajo.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -44,7 +35,8 @@ result: pass
 
 ### 6. Descripción corta (120 caracteres)
 expected: El campo arranca en 0/120, no deja tipear más de 120 y el contador cambia de peso/color al acercarse al tope. Guardado con 120 caracteres, en la página pública /[slug] la tarjeta del servicio lo muestra en dos líneas a 375px sin romper el layout. Vaciarlo y guardar deja la tarjeta sin descripción.
-result: issue
+result: pass
+reclassified: Reclasificado a pass el 2026-09-21 al cierre de la UAT. El comportamiento probado por el test (contador 0/120, tope duro, guardado y borrado) pasó; el `issue` era el pedido derivado que se registró como G-23-6 y G-23-6b. G-23-6 quedó resolved (planes 23-05/23-07) y re-verificado en navegador real por los Tests 17 y 18, ambos pass.
 reported: "En pagina publica queda cortado en una linea. En el panel, estaría bueno acomodar la tarjeta para que se vea al menos una linea de la descripcion y un link subrayado de editar que abra lo mismo que abre el boton del lapiz."
 severity: minor
 note: "Re-probado con texto real con espacios: se ve en dos líneas pero NO entra completo (se corta con …). La hipótesis de la palabra sin espacios queda descartada: el tope de 120 no coincide con lo que entra en line-clamp-2 a 375px (assumption flagueada en 23-02-PLAN CAT-11)."
@@ -64,7 +56,8 @@ note: "En mobile no hay arrastre pero se ven los puntitos (grip). Queda como fol
 
 ### 10. Modos de orden: ida y vuelta sin perder tu orden
 expected: Acomodás categorías y servicios a mano. En "Orden de las categorías" elegís Alfabético: las filas se reordenan A-Z y desaparecen flechas/grip de las filas. En "Orden de los servicios" elegís Alfabético o Por precio: la lista de servicios de abajo se reordena al instante agrupada por categoría y desaparecen el reorden chip sobre chip y la sección "Posición"; el chip conserva el grip y se sigue pudiendo arrastrar a otra categoría (G-23-10a). Volvés a "Como los ordené yo" en ambos: vuelve exactamente tu orden manual, también tras recargar.
-result: issue
+result: pass
+reclassified: Reclasificado a pass el 2026-09-21 al cierre de la UAT. El propio reporte abre con `Pass.`: la ida y vuelta de modos funciona. Los dos reclamos derivados se registraron aparte — G-23-10a resolved (plan 23-06) y re-verificado por el Test 19 (pass), y G-23-10b withdrawn por decisión.
 reported: "Pass. Lo que no me gusta es que si elijo alfabetico en las categorías, ya no puedo pasar servicios de una a otra, los chips de servicios se pueden mover solo haciendole clic y eligiendo del modal. Y los servicios nunca se pudieron acomodar a mano, solo por orden de agregado."
 severity: minor
 note: "La ida y vuelta de modos funciona (pass del comportamiento probado). Los dos reclamos se registran como gaps G-23-10a y G-23-10b."
@@ -117,14 +110,16 @@ result: pass
 
 ### 20. Renglón de descripción y link Editar en la tarjeta del panel (G-23-6b)
 expected: En /servicios, pestaña Activos, a 375px y en desktop. Con una descripción de 120 caracteres: un solo renglón recortado con "…" debajo del nombre y el link subrayado "Editar" debajo; con una palabra de 120 letras sin espacios no hay desborde ni scroll horizontal. "Editar" abre el mismo diálogo que el lápiz con la descripción cargada, y el lápiz sigue funcionando. Sin descripción: sólo "Agregar descripción", abre el mismo diálogo, y al guardar aparece el renglón y el link pasa a "Editar" sin recargar. Teclado: Tab llega al link con anillo visible, Enter abre. Desktop: nombre y acciones en la primera fila, renglón y link en la columna izquierda. Mobile: tocar el centro de la línea de duración y precio no abre el diálogo. La pestaña Desactivados se comporta igual. En el alta y en la edición, la ayuda debajo de "Descripción corta" dice la oración nueva completa y el contador 0/120 no se le superpone a 375px.
-result: issue
+result: pass
+reclassified: Reclasificado a pass el 2026-09-21 al cierre de la UAT. El propio reporte abre con `pass.`: G-23-6b (renglón, link Editar/Agregar descripción, diálogo, teclado) pasó. El `issue` era el pedido de layout nuevo, registrado como G-23-20, hoy resolved (plan 23-08 + WR-03) y confirmado en navegador real en el Test 21.
 reported: "pass. Lo unico que veo que me gustaría corregir, es sacar el campo de precio y duración de ese lado y pasarlo al lado derecho, a la altura del título el precio y abajo la duración más chico parecido a la página publica o a la jerarquia entre titulo y descripcion. Y abajo de eso los botones, de desactivar lapit y tacho. Creo que lo deja más legible al servicio."
 severity: cosmetic
 note: "El comportamiento de G-23-6b pasó (renglón, link Editar / Agregar descripción, diálogo, teclado). El issue es un pedido de layout NUEVO sobre la misma tarjeta, registrado como G-23-20."
 
 ### 21. Layout nuevo de la tarjeta de /servicios en desktop y su equivalente en mobile (G-23-20, 23-08)
 expected: Mobile a 375px: la tarjeta es idéntica a antes de 23-08 — nombre, renglón de descripción + link, la línea con duración y precio en UN renglón (con el modo de cupo detrás del punto medio si corresponde), sedes, cobertura, y al final la divisoria con las tres acciones. El precio NO aparece dos veces, sin scroll horizontal. Desktop (>=640px): a la derecha del nombre y a su misma altura, el precio; debajo la duración, más chica y en gris; debajo de las dos, Desactivar / lápiz / tacho — en la ÚLTIMA fila de esa columna, nunca con contenido de la izquierda por debajo. Servicio con cupo compartido + sedes + cobertura (la configuración que WR-03 encontró rota): las acciones cierran la tarjeta, sin la línea de cobertura ni las píldoras de sedes colgando debajo de los botones. Nombre de 40+ caracteres y precio de 7 dígitos: sigue truncando en desktop sin robarle ancho al nombre, y envolviendo en mobile. Foco por teclado: Tab recorre link Editar → Desactivar → lápiz → tacho con anillo visible, en las dos vistas y también en la pestaña Desactivados.
-result: issue
+result: pass
+reclassified: Reclasificado a pass el 2026-09-21 al cierre de la UAT. El test ya traía `confirmed_pass` de G-23-20 en la app real, incluida la configuración que WR-03 había roto. El `issue` eran los cuatro hallazgos derivados: G-23-21 y G-23-23 (cerrados y verificados en el Test 23), G-23-22 (Test 25) y G-23-24 (Test 30). Los cuatro resolved.
 reported: "Salvo lo del nombre en +40 caracteres en movil: pass. Encontre un par de cosas a corregir. El modal de edición, cuando elijo recurso simultáneo cambia el ancho y en el toggle clase grupal pasa a tener dos lineas. La tarjeta en desktop: Recurso compartido y el selector terminan tomando una línea cada uno, cuando podriamos ponerlos en una misma línea y compactar un poco la tarjeta."
 severity: cosmetic
 confirmed_pass: "G-23-20 quedó confirmado en la app real, incluida la configuración que WR-03 había roto (cupo compartido + sedes + cobertura): en desktop el precio está a la altura del nombre, la duración debajo en gris, y Desactivar / lápiz / tacho cierran la tarjeta en la última fila, sin la línea de cobertura ni las píldoras de sedes colgando debajo. Mobile sin precio duplicado y sin scroll horizontal."
@@ -140,42 +135,63 @@ note: "La legibilidad —el criterio del test— pasó. Aparte, durante la prese
 
 ### 23. Tarjeta de /servicios — nombre largo en mobile y modo/cupo en una línea en desktop (G-23-21, G-23-23, plan 23-09)
 expected: A 375px un nombre de 40+ caracteres sin espacios envuelve adentro de la tarjeta (no se sale, sin scroll horizontal), también con la píldora "Sin cobertura". En desktop el rótulo del modo de cupo y el selector comparten UNA línea y la tarjeta queda más compacta. Las acciones siguen cerrando la tarjeta abajo de todo, sin cobertura ni sedes colgando debajo.
-result: [pending]
+result: pass
+reported: "pass"
+evidence: "Dos capturas del dueño (mobile 375px y desktop) con el servicio `SupercalifragilisticoEspialidoso123456` en Clase grupal y Sin cobertura. Mobile: el nombre envuelve en dos renglones adentro de la tarjeta, con la píldora al lado, sin desborde ni scroll horizontal. Desktop: `Clase grupal` comparte línea con el stepper `− 2 + lugares`; precio a la altura del nombre y duración debajo; Desactivar / lápiz / tacho en la última fila, con la línea de cobertura a su izquierda y NADA colgando por debajo."
+closes: G-23-21, G-23-23
 
 ### 24. El resto de la tarjeta en mobile quedó igual que antes (regresión de 23-09)
 expected: Con la configuración más cargada (cupo compartido + sedes + cobertura), mobile se ve idéntico a antes del cambio: mismo ritmo vertical, mismas separaciones, mismo alto. El foco por teclado recorre la tarjeta igual, y el cupo se sigue editando y guardando desde la tarjeta sin recargar.
-result: [pending]
+result: pass
+reported: "pass"
+note: "Confirma que mudar el gate `capMode === 'individual' && 'sm:hidden'` al envoltorio no corrió el ritmo vertical de mobile, y que la zona de exclusión táctil de G-04 (`py-6 sm:py-0`) sigue vigente donde hay dedo."
 
 ### 25. Diálogo Editar servicio — ancho estable y toggle apilado (G-23-22, plan 23-10)
 expected: Al cambiar entre los tres modos de cupo, los campos del diálogo NO se angostan ni se ensanchan: el borde del popup sigue alineado con el borde derecho de los inputs en los tres modos. Las tres etiquetas del toggle ("Individual", "Clase grupal", "Recurso simultáneo") entran enteras en una línea cada una, apiladas una debajo de la otra, en desktop y en mobile. Probar en Windows, que es donde aparece la barra de scroll clásica que causaba el defecto.
-result: [pending]
+result: pass
+reported: "pass"
+note: "Confirmado en Windows, la plataforma del dueño y la única donde la barra de scroll clásica de 15px materializaba el defecto. Cierra el reporte original ('cuando elijo recurso simultáneo cambia el ancho y en el toggle clase grupal pasa a tener dos líneas') por sus dos causas medidas: el hueco del scrollbar sin reservar en el cuerpo scrolleable, y el ancho de celda que nunca alcanzaba para 'Recurso simultáneo' (133.58px necesarios contra 111.33px de celda)."
+closes: G-23-22
 
 ### 26. Un click afuera ya no descarta el borrador (G-23-25, plan 23-10)
 expected: En los tres diálogos de edición (servicio, sede, profesional) — (a) tocá un campo y hacé click afuera: NO cierra, avisa y el borrador queda; (b) lo mismo con Escape; (c) sin tocar nada, click afuera / Escape / ✕ cierran igual que siempre, sin fricción; (d) la ✕ siempre cierra, aun con cambios.
-result: [pending]
+result: pass
+reported: "si, pass"
+note: "Los cuatro sub-casos (a/b/c/d) en los tres diálogos. Confirma la integración real con Base UI —qué `reason` entrega un click afuera y un Escape de verdad— que ningún test unitario podía cubrir: `test/panel-draft.test.ts` sólo ejercita la lógica de decisión con motivos mockeados. El sub-caso (c) es el que prueba que la guarda no agregó fricción donde no hay nada que perder."
+closes: G-23-25
 
 ### 27. Los cuatro falsos positivos de la guarda (G-23-25 + WR-05)
 expected: Estas cuatro operaciones NO deben ensuciar el borrador (o sea, después de hacerlas el click afuera tiene que cerrar normalmente) — (a) entrar y salir de un campo que se normaliza solo; (b) prender y apagar una sede dejándola como estaba; (c) ir a "Individual" y volver a "Clase grupal": **el cupo tiene que seguir en su número original** (antes una clase de 12 volvía con 2 — es el fix WR-05); (d) abrir un servicio cuya categoría fue borrada.
-result: [pending]
+result: pass
+reported: "pass"
+note: "El sub-caso (c) es la confirmación en navegador real del fix de WR-05 (commit 691d5da): `capacityModePatch` conserva el número al ir a Individual en vez de pisarlo con 1, así que volver a un modo compartido ya no degrada una clase de 12 a 2. Cierra el camino de pérdida de datos que la guarda de G-23-25 había vuelto alcanzable (bloqueaba el cierre y el aviso empujaba a guardar la pérdida, por una ruta que además no tiene el pre-chequeo de bajada de cupo). Cubierto también por `test/panel-draft.test.ts` (`grupal → individual → grupal conserva 12`)."
+closes: WR-05
 
 ### 28. "Editar sede" con el nombre vacío no queda trabada (WR-07)
 expected: Borrá el nombre de una sede: el botón Guardar queda deshabilitado (no un botón que parece activo y no hace nada), la ✕ sigue cerrando, y queda claro qué falta. No debe leerse como un diálogo trabado.
-result: [pending]
+result: pass
+reported: "Se entiende, se podría poner un texto rojo abajo del nombre como en otros lugares pero se entiende"
+note: "El criterio del test —que no se lea como trabada— pasó. Aparte, el dueño señala que falta el error inline en rojo debajo del campo, que es el patrón que el resto del panel ya usa y que las reglas de diseño del proyecto exigen ('errores inline e inmediatos', validación onBlur). Registrado como follow-up de consistencia, no como gap: el diálogo es usable y la salida existe."
 
 ### 29. El aviso de cierre bloqueado se escucha, no sólo se ve (WR-08)
 expected: Con un lector de pantalla (o el inspector de accesibilidad del navegador), repetí el caso del test 26 usando **Escape**: el aviso tiene que anunciarse, no sólo aparecer como toast visual. El toast vive fuera del portal del modal, así que la vía visual sola no alcanzaba.
-result: [pending]
+result: pass
+reported: "se anuncia"
+note: "Confirma la región `sr-only role=status aria-live=assertive` montada DENTRO de cada popup (commit 846a68b). Sin ella el aviso era inalcanzable para lector de pantalla: el toast de sonner vive en app/layout.tsx, fuera del portal, y el modal marca esa región inert/aria-hidden. Límite aceptado y documentado: la región no se auto-apaga (un timer en useRef sumaba 3 errores de eslint contra un piso fijo), así que dos cierres bloqueados seguidos dentro del mismo diálogo anuncian una sola vez."
 
 ### 30. Lectura de la entrada G-23-20 del 23-UI-SPEC.md, ya corregida (G-23-24, plan 23-11)
 expected: Leyendo SÓLO esa entrada, alguien que no vio esta UAT puede responder: qué ve el dueño en desktop, qué ve en mobile, por qué no son lo mismo, y —lo nuevo— que la fila de las acciones se DERIVA de cuántos hijos rinde la columna izquierda (no es un número fijo) y qué se rompe si alguien la vuelve a clavar.
-result: [pending]
+result: pass
+reported: "Se entiende"
+note: "Segunda lectura humana de esta entrada: el Test 22 aprobó la versión anterior ('se entiende') y ahí mismo se detectó que había quedado desactualizada respecto del fix de WR-03. El plan 23-11 corrigió dos cosas —un bullet nuevo, 'La fila de las acciones se DERIVA, no se fija', y la regla final, que ahora nombra WR-03 como un defecto que YA ocurrió y no como una precaución teórica— y además puso la entrada al día con la tarjeta post-23-09 (cinco hijos en la columna izquierda, no seis). Cierra G-23-24."
+closes: G-23-24
 
 ## Summary
 
 total: 30
-passed: 18
-issues: 4
-pending: 8
+passed: 30
+issues: 0
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -184,6 +200,14 @@ blocked: 0
 - test: 9
   idea: "En mobile no hay arrastre pero figuran los puntitos de arrastre; me interesa que se puedan ordenar con el dedo en móvil en algún momento (en web cms funcionó con el panel de inmobiliarias para ordenar fotos). Después lo vemos."
   deferred_at: 2026-09-17
+- test: 23
+  idea: "El link a Equipo que hoy aparece SÓLO cuando no hay cobertura ('Nadie lo ofrece — asignalo en Equipo') podría aparecer también cuando SÍ hay cobertura, con el texto 'Cambiar', para tener acceso directo a reasignar desde la tarjeta."
+  deferred_at: 2026-09-21
+  note: "Capacidad nueva, no un defecto del Test 23 (que pasó). Es un cambio de la línea de cobertura de la tarjeta de /servicios — la misma región bajo contrato de G-23-20, así que quien lo tome tiene que respetar la fila derivada de las acciones."
+- test: 28
+  idea: "En 'Editar sede' con el nombre vacío, sumar el error inline en rojo debajo del campo, como ya hace el resto del panel. Hoy sólo se deshabilita Guardar."
+  deferred_at: 2026-09-21
+  note: "El test pasó (no se lee como trabada). Es consistencia con el patrón que el proyecto ya exige: 'errores inline e inmediatos', validación onBlur y no al enviar. Cambio chico, acotado al diálogo de sede."
 
 ## Gaps
 
@@ -281,7 +305,10 @@ blocked: 0
 
 - gap_id: G-23-21
   truth: "En mobile a 375px, un nombre de servicio de 40+ caracteres sin espacios envuelve dentro de la tarjeta — no la desborda ni produce scroll horizontal"
-  status: failed
+  status: resolved
+  resolved_by: 23-09-PLAN.md
+  resolved_at: 2026-09-21
+  verify_test: 23
   reason: "User reported con captura: 'Salvo lo del nombre en +40 caracteres en movil'. Un servicio llamado Premiumssssss… (40+ caracteres sin espacios) no envuelve en mobile."
   severity: minor
   test: 21
@@ -295,7 +322,10 @@ blocked: 0
 
 - gap_id: G-23-22
   truth: "El diálogo Editar servicio conserva el mismo ancho al cambiar el modo de cupo, y las tres etiquetas del toggle mantienen columnas de ancho estable"
-  status: failed
+  status: resolved
+  resolved_by: 23-10-PLAN.md
+  resolved_at: 2026-09-21
+  verify_test: 25
   reason: "User reported con dos capturas: 'El modal de edición, cuando elijo recurso simultáneo cambia el ancho y en el toggle clase grupal pasa a tener dos lineas.' Con Individual seleccionado la que envuelve es 'Recurso simultáneo'; con Recurso simultáneo seleccionado, la que envuelve es 'Clase grupal'."
   severity: cosmetic
   test: 21
@@ -327,7 +357,10 @@ blocked: 0
 
 - gap_id: G-23-23
   truth: "En desktop, el rótulo del modo de cupo y el control inline del cupo comparten una misma línea en vez de ocupar una fila cada uno"
-  status: failed
+  status: resolved
+  resolved_by: 23-09-PLAN.md
+  resolved_at: 2026-09-21
+  verify_test: 23
   reason: "User reported con captura: 'La tarjeta en desktop: Recurso compartido y el selector terminan tomando una línea cada uno, cuando podriamos ponerlos en una misma línea y compactar un poco la tarjeta.'"
   severity: cosmetic
   test: 21
@@ -352,7 +385,10 @@ blocked: 0
 
 - gap_id: G-23-24
   truth: "La entrada G-23-20 del 23-UI-SPEC.md describe el layout REAL, incluida la fila derivada de las acciones, y su regla previene el defecto que ya ocurrió"
-  status: failed
+  status: resolved
+  resolved_by: 23-11-PLAN.md
+  resolved_at: 2026-09-21
+  verify_test: 30
   reason: "Detectado por Claude al presentar el Test 22 (la legibilidad, que era el criterio del test, el usuario la aprobó). La entrada quedó escrita antes del fix de WR-03."
   severity: minor
   test: 22
@@ -366,7 +402,10 @@ blocked: 0
 
 - gap_id: G-23-25
   truth: "Un diálogo de edición con cambios sin guardar no se descarta por un click afuera o un Escape accidental; sin cambios, cierra como siempre"
-  status: failed
+  status: resolved
+  resolved_by: 23-10-PLAN.md, 23-REVIEW-FIX.md (WR-05)
+  resolved_at: 2026-09-21
+  verify_test: 26, 27
   reason: "User reported (2026-09-18, DESPUÉS de cerrar la UAT): 'Al editar un servicio, si toco fuera del modal por accidente se cierra sin guardar ni warning.'"
   severity: minor
   reported_post_uat: true
