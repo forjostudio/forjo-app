@@ -90,7 +90,7 @@ Faseo por riesgo, igual que en v0.26: el cambio del modelo y del motor va primer
 Faseo **por superficie**, no por riesgo creciente: el milestone tiene un solo punto sensible y está en el modelo (es donde se abre la lectura anónima → **`secure-phase` obligatorio**). Después el panel, y al cierre la página pública, que se toca **una sola vez** para los títulos y el formato de tarjeta a la vez. **Sin fase de onboarding** (ningún CAT la menciona; un negocio nuevo nace con cero categorías = el camino de CAT-07). Migración **078**, la única del milestone.
 
 - [x] **Phase 22: El modelo del catálogo** - Tabla `service_categories` por negocio + `services.category_id` nullable + el orden guardado y el modo de orden, la **vista acotada** `public_service_categories` para el anon, y la regla de agrupar/ordenar en **un módulo puro con tests**: cero categorías ⇒ la lista plana de hoy, sin títulos y sin "Otros". **CAT-07 por construcción · `secure-phase` obligatorio** (completed 2026-09-15)
-- [ ] **Phase 23: El panel que organiza el catálogo** - El dueño crea, renombra y borra categorías, asigna una (o ninguna) por servicio, las reordena arrastrando **y** con ▲/▼, elige los dos modos de orden para todo el negocio, y por fin puede escribir la descripción corta del servicio (120 caracteres con contador) que la tarjeta del booking ya renderiza
+- [x] **Phase 23: El panel que organiza el catálogo** - El dueño crea, renombra y borra categorías, asigna una (o ninguna) por servicio, las reordena arrastrando **y** con ▲/▼, elige los dos modos de orden para todo el negocio, y por fin puede escribir la descripción corta del servicio (120 caracteres con contador) que la tarjeta del booking ya renderiza (completed 2026-09-21)
 - [ ] **Phase 24: El catálogo que el cliente lee** - El cliente ve los servicios agrupados bajo títulos en el orden del dueño, los sin categoría al final bajo "Otros", y en desktop las tarjetas pasan a ser horizontales a lo ancho como ya son en mobile — una sola pasada sobre `booking-client.tsx`, sin sumarle un click al funnel
 
 ## Phase Details
@@ -886,5 +886,5 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 20. Lo que el público ve | 2/2 | Complete | 2026-09-10 |
 | 21. Lo que el negocio declara | 2/2 | Complete | 2026-09-13 |
 | 22. El modelo del catálogo | 4/4 | Complete    | 2026-09-15 |
-| 23. El panel que organiza el catálogo | 11/11 | In Progress|  |
+| 23. El panel que organiza el catálogo | 11/11 | Complete    | 2026-09-21 |
 | 24. El catálogo que el cliente lee | 0/TBD | Not started | - |

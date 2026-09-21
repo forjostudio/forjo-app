@@ -40,14 +40,14 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
 
 ### Modelo y panel
 
-- [ ] **CAT-01** — El dueño crea, renombra y borra categorías desde el panel. Dos categorías con el
+- [x] **CAT-01** — El dueño crea, renombra y borra categorías desde el panel. Dos categorías con el
   mismo nombre en un negocio se rechazan **en la base** y sin distinguir mayúsculas: `"Cortes"` y
   `"cortes"` no coexisten. (Molde: el índice único `(tienda_id, lower(nombre))` de tiendas.)
 - [x] **CAT-02** — El dueño asigna a cada servicio **una** categoría, o ninguna. Asignar no es
   obligatorio en ningún punto del flujo.
-- [ ] **CAT-03** — El dueño ordena las categorías arrastrándolas **y** con botones ▲/▼. Las flechas
+- [x] **CAT-03** — El dueño ordena las categorías arrastrándolas **y** con botones ▲/▼. Las flechas
   no son un extra: son lo que hace que reordenar funcione en mobile y con teclado.
-- [ ] **CAT-04** — El dueño elige cómo se ordenan las categorías (alfabético · personalizado) y cómo
+- [x] **CAT-04** — El dueño elige cómo se ordenan las categorías (alfabético · personalizado) y cómo
   se ordenan los servicios dentro de cada una (alfabético · precio · personalizado). Vale para todo
   el negocio.
 - [x] **CAT-05** — Cuando el modo **no** es personalizado, los controles de reordenar **no se
