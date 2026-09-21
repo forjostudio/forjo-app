@@ -208,5 +208,39 @@ La marcación "Pendiente" de la tabla de Traceability en `REQUIREMENTS.md` para 
 
 ---
 
+## Addendum — auditoría de seguridad (2026-09-21, posterior a esta verificación)
+
+Las rondas 4 y 5 dejaron anotado que la fase no tenía `23-SECURITY.md` y que el enforcement de
+seguridad estaba activo. Ese pendiente **se cerró después** de escribir este reporte, y el resultado
+se registra acá para que la verificación quede al día con el último artefacto de la fase.
+
+`/gsd-secure-phase 23 --ws motor-reservas` → **SECURED · 57/57 cerradas · `threats_open: 0`**
+(ASVS L1, umbral de bloqueo `high`). El registro estaba escrito en tiempo de planificación: los 11
+planes traen su bloque `<threat_model>`. Se resolvió una colisión de IDs (23-11 reusaba
+`T-23-49/50/51` de 23-10 para amenazas distintas → renumeradas a `T-23-54/55/56`).
+
+El auditor **corrió las suites él mismo** en vez de apoyarse en lo reportado: `test/isolation.test.ts`
+→ 31 passed / 1 skipped (incluye el caso cross-tenant de T-23-02 y su control positivo), y
+`catalog-panel` + `panel-draft` + `service-description` + `categorias-manager` → 110 passed.
+
+**Nada de esto cambia las 11 truths ni el `status: passed` de arriba.** Lo que agrega:
+
+1. **Un hallazgo nuevo fuera del registro**, aceptado con motivo escrito (AR-23-05): `saveEditService`
+   no tiene el pre-chequeo de bajada de cupo que sí tiene `saveCapacityInline`. Severidad `medium`
+   (por debajo del umbral `high`): no borra turnos, es reversible, es auto-evidente en la agenda y no
+   cruza el límite de tenant. Es la deuda que esta fase ya había declarado abierta a propósito.
+2. **Cuatro escrituras preexistentes sin `.eq('business_id', …)`** (`settings-client.tsx:1526`, `:1840`,
+   `:1849`, `:1875`), las cuatro de junio de 2026 según `git blame`, verificado de forma independiente.
+   **No las introdujo esta fase** — quedan registradas en `23-SECURITY.md` como candidatas a un
+   `/gsd-quick` de defensa en profundidad.
+3. Confirmación de que el fix de **WR-06** aterrizó (`saveEditLocation` lleva el filtro, commit
+   `dbee8e9`) y de que sus dos hermanas ya lo tenían.
+
+Ver `23-SECURITY.md` para el registro completo, el log de riesgos aceptados y las dos reservas que el
+auditor declaró en vez de ocultar.
+
+---
+
 _Verified: 2026-09-21_
 _Verifier: Claude (gsd-verifier)_
+_Security addendum: 2026-09-21 (gsd-security-auditor)_
