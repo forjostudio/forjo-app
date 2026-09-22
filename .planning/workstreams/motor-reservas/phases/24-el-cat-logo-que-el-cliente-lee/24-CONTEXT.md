@@ -46,7 +46,8 @@ Que la organización que el dueño le dio a su catálogo en el panel **llegue a 
 
 - **D-13:** El preview de `/web` tiene que mostrar el catálogo **como lo va a ver el cliente**: agrupado bajo títulos y con el ancho nuevo, no la lista plana del fallback. En concreto, ese call site **recibe las categorías y los modos de orden**. *Pedido explícito del usuario al cierre.* Esto va **más allá** del Success Criterion 5 del ROADMAP, que solo garantizaba que el preview no se rompa si el dato falta.
 - **D-14:** **No hace falta escalar nada.** *Dato verificado durante la discusión:* `BookingClient` lleva su propio `max-w-lg mx-auto`, así que montado dentro del contenedor del panel (`max-w-[1400px]`) ya se renderiza al ancho real, 512px centrados. El preview es fiel por construcción; lo único que le faltaba era el dato.
-- **D-15:** El `?? []` **se mantiene como red de seguridad** para el `LandingRenderer`, que no pasa la prop. *Motivo:* es el molde que ya usa `timeBlockServices` (`booking-client.tsx:566`) y el que sostiene el Success Criterion 5 — ante el dato ausente el default es la lista plana, **nunca un catálogo vacío**. D-13 (pasar el dato en `/web`) y D-15 (degradar bien cuando no llega) conviven: no son alternativas.
+- **D-15:** El `?? []` **se mantiene como red de seguridad**, aunque hoy no tenga un consumidor concreto. *Motivo:* es el molde que ya usa `timeBlockServices` (`booking-client.tsx:566`) y el que sostiene el Success Criterion 5 — ante el dato ausente el default es la lista plana, **nunca un catálogo vacío**. D-13 (pasar el dato en `/web`) y D-15 (degradar bien si no llega) conviven: no son alternativas.
+  > **⚠ Corregido el 2026-09-22 por la research, antes de planificar.** Esta decisión se escribió creyendo que el `LandingRenderer` era un tercer call site que no pasaba la prop. **Ya no lo es:** `components/landing/landing-renderer.tsx` dejó de montar `BookingClient` en el quick 260913-3tv, que hizo `bookingSlot` un `ReactNode` **requerido** (`:71-78`) — así un call site nuevo no compila hasta resolver el widget por vertical. Verificado por el orquestador con `grep -rn "<BookingClient"`: **hay exactamente dos**, `app/[slug]/page.tsx:168` y `app/(dashboard)/web/page.tsx:182`. El camino del landing recibe las categorías **gratis** (el `bookingNode` de `page.tsx` viaja como `bookingSlot`). El `?? []` se conserva igual, pero **no se verifica apuntándole al `LandingRenderer`**: el SC-5 se comprueba por los dos caminos que sí existen. El ROADMAP quedó corregido en el mismo sentido.
 
 ### Claude's Discretion
 
@@ -70,7 +71,7 @@ Que la organización que el dueño le dio a su catálogo en el panel **llegue a 
 - `app/[slug]/booking-client.tsx` — **una sola pasada** sobre la misma región: la grilla de tarjetas (`:567`) y el render de la descripción (`:640`). El bloque de comentarios de `:601-613` es el contrato G-23-6 de la tarjeta (contenedor + botón estirado con pseudo-elemento + toggle hermano) — **se conserva entero**.
 - `app/[slug]/page.tsx` — el `Promise.all` de lecturas públicas (`:75`). Acá entra la lectura de categorías.
 - `app/(dashboard)/web/page.tsx:182` — el call site del preview del panel (D-13).
-- `components/landing/landing-renderer.tsx:53` — props congelados de `BookingClient`; el call site que **no** pasa la prop y depende del `?? []` (D-15).
+- `components/landing/landing-renderer.tsx:71-78` — **NO monta `BookingClient`**: recibe `bookingSlot` como `ReactNode` requerido y lo mete tal cual en su caja negra. Leer el comentario de esas líneas: el tipo requerido **es** el mecanismo que impide que vuelva a existir un widget de reserva fallback que se desfase en silencio. No hay nada que cambiar acá.
 
 ### Contratos heredados que NO se pueden romper
 
@@ -108,7 +109,7 @@ Que la organización que el dueño le dio a su catálogo en el panel **llegue a 
 - `app/[slug]/page.tsx` — una lectura más en el `Promise.all` (`public_service_categories`) y dos props más a `BookingClient`.
 - `app/[slug]/booking-client.tsx` — la grilla pasa de `services.map` a iterar grupos; la tarjeta en sí no cambia salvo el ancho.
 - `app/(dashboard)/web/page.tsx:182` — el preview recibe el mismo dato (D-13).
-- `components/landing/landing-renderer.tsx` — no cambia; depende del default (D-15).
+- `components/landing/landing-renderer.tsx` — **no cambia y no es un call site**: recibe el widget ya armado como `bookingSlot`, así que hereda las categorías del `bookingNode` de `app/[slug]/page.tsx` sin tocar una línea.
 
 </code_context>
 
