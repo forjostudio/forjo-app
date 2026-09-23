@@ -4,18 +4,18 @@ milestone: v0.29
 milestone_name: El catálogo del booking (en curso)
 current_phase: 24
 current_phase_name: El catálogo que el cliente lee
-status: planning
+status: executing
 stopped_at: Phase 23 complete, ready to plan Phase 24
-last_updated: "2026-09-21T20:04:37.812Z"
+last_updated: "2026-09-23T01:06:44.259Z"
 last_activity: 2026-09-21
 last_activity_desc: Phase 23 complete, transitioned to Phase 24
-state_head: d90c7bb6037b5e41a3af707224182ffbbea0cb03
+state_head: fd5edad0b02cb8b53a899ff3a9dd9d1a2439aec0
 progress:
   total_phases: 20
   completed_phases: 14
-  total_plans: 103
+  total_plans: 105
   completed_plans: 103
-  percent: 70
+  percent: 65
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 ## Current Position
 
-Phase: 24 — El catálogo que el cliente lee
+Phase: 24 — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-09-21 — Phase 23 complete, transitioned to Phase 24
 
 ## Milestone v0.29 — decisiones LOCKED
