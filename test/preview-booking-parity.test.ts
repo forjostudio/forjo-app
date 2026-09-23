@@ -62,6 +62,7 @@ describe.skipIf(!hasSupabaseCreds)('paridad preview ↔ vistas públicas (quick 
   let proOffId: string // profesional extra DESACTIVADO
   let svcHuerfanoId: string // servicio activo que NINGUNA franja da
   let blockId: string // la única franja del negocio
+  let catIds: string[] = [] // las dos categorías del tenant (Phase 24): el fixture del caso (4)
 
   beforeAll(async () => {
     t = await seedOneTenant({ bufferMinutes: 0, serviceDurationMinutes: 30 })
@@ -115,6 +116,21 @@ describe.skipIf(!hasSupabaseCreds)('paridad preview ↔ vistas públicas (quick 
     await seedTimeBlockService(t, { timeBlockId: blockId, serviceId: t.serviceId })
     await seedProfessionalService(t, { professionalId: t.professionalId, serviceId: t.serviceId })
 
+    // DOS CATEGORÍAS del tenant (Phase 24, migr. 078): el fixture del caso (4). Se siembran con
+    // SERVICE-ROLE —la siembra es la herramienta, nunca la aserción— y después se leen por los dos
+    // caminos reales, con los dos roles que este archivo ya tiene montados.
+    const catsIns = await t.admin
+      .from('service_categories')
+      .insert([
+        { business_id: t.businessId, name: `__test_cat_uno_${run}`, sort_order: 1 },
+        { business_id: t.businessId, name: `__test_cat_dos_${run}`, sort_order: 2 },
+      ])
+      .select('id')
+    if (catsIns.error || !catsIns.data) {
+      throw new Error(`seed: insert de service_categories falló: ${catsIns.error?.message}`)
+    }
+    catIds = (catsIns.data as { id: string }[]).map((r) => r.id).sort()
+
     // Sesión anon autenticada como el dueño (molde manual-client.test.ts).
     ownerAnon = createClient(url, anonKey, { auth: { persistSession: false } })
     const sign = await ownerAnon.auth.signInWithPassword({ email: t.email, password: t.password })
@@ -131,6 +147,12 @@ describe.skipIf(!hasSupabaseCreds)('paridad preview ↔ vistas públicas (quick 
   })
 
   afterAll(async () => {
+    // Las categorías sembradas se borran explícitamente ANTES del teardown. El `ON DELETE CASCADE`
+    // de su FK a `businesses` (migr. 078 §1) ya se las llevaría, pero dejarlo escrito acá hace que
+    // la limpieza de este fixture no dependa de que el borrado del negocio siga siendo el que limpia.
+    if (t?.admin && catIds.length) {
+      await t.admin.from('service_categories').delete().in('id', catIds)
+    }
     if (t) await teardownOneTenant(t)
   })
 
@@ -257,5 +279,46 @@ describe.skipIf(!hasSupabaseCreds)('paridad preview ↔ vistas públicas (quick 
     expect(isServiceScheduled(svcHuerfanoId, blocks, bridgeSchedView)).toBe(
       isServiceScheduled(svcHuerfanoId, blocks, bridgeSchedOwner),
     )
+  })
+
+  // (4) — Paridad de CATEGORÍAS del catálogo (Phase 24, D-13): el conjunto que el PREVIEW lee de la
+  // tabla base con la sesión del dueño es el mismo que el PÚBLICO lee por la vista acotada.
+  //
+  // Es el backstop de la fila `long-text / E4` del 24-UI-SPEC: la paridad preview ↔ público se
+  // sostiene con un test, no con la vista. `app/(dashboard)/web/page.tsx` lee `service_categories`
+  // (tabla base, RLS + filtro explícito) porque `public_service_categories` es DEFINER sin
+  // security_invoker y leerla desde una superficie autenticada dejaría el aislamiento en UNA sola
+  // capa; la premisa que autoriza esa asimetría es que la vista es una proyección SIN WHERE, así que
+  // los dos caminos devuelven las MISMAS filas para el mismo tenant. Este caso es el que la pincha.
+  it('(4) el set de categorías es el mismo leído como dueño (tabla base) que como anónimo (vista acotada)', async () => {
+    const pub = anonPublic()
+    const [ownerRes, viewRes] = await Promise.all([
+      // El camino del PREVIEW: mismas columnas y mismo filtro que el RSC del panel.
+      ownerAnon
+        .from('service_categories')
+        .select('id, business_id, name, sort_order')
+        .eq('business_id', t.businessId),
+      // El camino del PÚBLICO: anon SIN sesión, la vista acotada.
+      pub
+        .from('public_service_categories')
+        .select('id, business_id, name, sort_order')
+        .eq('business_id', t.businessId),
+    ])
+    expect(ownerRes.error).toBeNull()
+    expect(viewRes.error).toBeNull()
+
+    const idsOwner = ((ownerRes.data || []) as { id: string }[]).map((r) => r.id).sort()
+    const idsView = ((viewRes.data || []) as { id: string }[]).map((r) => r.id).sort()
+
+    // EL DATO LLEGÓ, primero. Sin esto, dos listas vacías "coincidirían" y el caso pasaría en verde
+    // con la policy de tenant de la 078 rota: RLS devuelve 0 filas EN SILENCIO, no un error, y un
+    // arreglo vacío es indistinguible de una proyección correcta. El preview se quedaría sin
+    // categorías (⇒ lista plana) mientras el cliente ve los grupos, que es justo el desfasaje que
+    // este archivo existe para cazar.
+    expect(idsOwner).toEqual(catIds)
+    expect(idsView.length).toBe(catIds.length)
+
+    // Y el conjunto es el MISMO por los dos caminos.
+    expect(idsView).toEqual(idsOwner)
   })
 })

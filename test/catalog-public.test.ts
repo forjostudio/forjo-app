@@ -75,8 +75,18 @@ function recorteDeLlamada(src: string, desde: number): string {
  */
 const LLAMADA = 'groupCatalog' + '('
 
+/**
+ * La marca del MONTAJE del componente, también por concatenación y por el mismo motivo: el barrido
+ * del preview cuenta call sites sobre TODAS las fuentes del repo, y este archivo es una de ellas.
+ */
+const MONTAJE = '<Booking' + 'Client'
+
+/** La prop con su red de seguridad, tal cual tiene que aparecer en los dos call sites. */
+const PROP_CON_DEFAULT = 'serviceCategories={serviceCategories || []}'
+
 const PUBLIC_PAGE = join('app', '[slug]', 'page.tsx')
 const BOOKING_CLIENT = join('app', '[slug]', 'booking-client.tsx')
+const PANEL_PAGE = join('app', '(dashboard)', 'web', 'page.tsx')
 
 describe('el camino del dato: de la vista de Postgres a la pantalla pública', () => {
   const publicPage = read(PUBLIC_PAGE)
@@ -224,4 +234,70 @@ describe('el render del paso 1', () => {
     // React) y el literal del grupo de sueltos viene del módulo puro, nunca escrito a mano acá.
     expect(sinComentarios(bookingClient)).not.toContain('dangerouslySetInnerHTML')
   })
+})
+
+describe('el preview del panel: el mismo dato por el otro camino de lectura (D-13, G-24-7)', () => {
+  const panelPage = read(PANEL_PAGE)
+
+  it('el select de negocio del PANEL pide LOS DOS modos de orden, igual que el del público', () => {
+    // Previene el preview que ORDENA DISTINTO del público, sin ningún error a la vista. Los dos RSC
+    // de negocio usan columnas EXPLÍCITAS a propósito (esa fila viaja entera al bundle del cliente),
+    // así que las dos columnas van en LOS DOS selects o no van: el propio comentario de
+    // app/(dashboard)/web/page.tsx declara que su lista es "misma lista que app/[slug]/page.tsx", así
+    // que agregarlas en uno solo rompe una invariante escrita en el repo, además de D-09/D-13.
+    const at = panelPage.indexOf("from('businesses')")
+    expect(at).toBeGreaterThan(-1)
+    const fin = panelPage.indexOf('.single()', at)
+    expect(fin).toBeGreaterThan(at)
+    const bloque = sinComentarios(panelPage.slice(at, fin))
+    expect(bloque).toContain('category_sort_mode')
+    expect(bloque).toContain('service_sort_mode')
+    // Y nunca el comodín: un select('*') publicaría notification_email, plan_status, mp_subscription_id.
+    expect(bloque).not.toContain("select('*')")
+  })
+
+  it('el preview lee las categorías de la TABLA BASE, por tenant y con el doble orden del panel', () => {
+    // Previene DOS cosas distintas. (a) Que el dashboard termine leyendo la vista
+    // `public_service_categories`, que es DEFINER sin security_invoker: desde una superficie
+    // autenticada dejaría el aislamiento por tenant colgado de UNA sola capa, contra la doctrina
+    // escrita en lib/preview-booking.ts. La tabla base suma la RLS al filtro explícito: las dos.
+    // (b) Que al preview le falte la clave de desempate y quede en un orden distinto del de
+    // /servicios — acá `created_at` SÍ existe (es la tabla base), y es la única de las dos lecturas
+    // nuevas de la fase donde el doble `.order` es legal.
+    const lectura = panelPage.match(/\.from\('service_categories'\)[\s\S]*?\),/)
+    expect(lectura).not.toBeNull()
+    const sentencia = sinComentarios(String(lectura))
+    expect(sentencia).toContain("eq('business_id'")
+    expect(sentencia).toContain("order('sort_order'")
+    expect(sentencia).toContain("order('created_at'")
+    expect(sinComentarios(panelPage)).not.toContain("from('public_service_categories')")
+  })
+
+  it('los call sites de BookingClient son exactamente DOS y los dos pasan la prop', () => {
+    // Previene P-5 en su forma general: que una de las dos pantallas que montan el MISMO componente
+    // reciba el dato y la otra no — el preview que miente, que es el defecto que el quick 260913-3tv
+    // ya tuvo que cerrar una vez. Y deja clavado el hallazgo que corrigió el criterio 5 de la fase:
+    // components/landing/landing-renderer.tsx NO es un call site desde que su `bookingSlot` pasó a
+    // ser un ReactNode REQUERIDO (hereda las categorías del nodo que arma app/[slug]/page.tsx), así
+    // que un TERCER montaje que aparezca sin la prop es una regresión, no una variante aceptable.
+    // Barrido sobre todas las fuentes del repo: si no, "los dos call sites" es una afirmación sobre
+    // los archivos que a alguien se le ocurrió mirar.
+    const conMontaje: string[] = []
+    let total = 0
+    for (const archivo of fuentesDelRepo()) {
+      const src = sinComentarios(readFileSync(archivo, 'utf8'))
+      const veces = src.split(MONTAJE).length - 1
+      if (veces === 0) continue
+      total += veces
+      conMontaje.push(archivo)
+    }
+    expect(total).toBe(2)
+    expect(conMontaje).toHaveLength(2)
+    for (const archivo of conMontaje) {
+      // Cada archivo que MONTA el componente tiene que pasarle la prop con su red de seguridad
+      // (D-15): el dato ausente deja la lista plana, nunca un catálogo vacío.
+      expect(sinComentarios(readFileSync(archivo, 'utf8'))).toContain(PROP_CON_DEFAULT)
+    }
+    // Mismo timeout generoso que el barrido de arriba y por el mismo motivo (árbol frío en Windows).
+  }, 60_000)
 })
