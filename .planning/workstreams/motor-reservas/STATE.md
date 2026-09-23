@@ -5,16 +5,16 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 24
 current_phase_name: El catálogo que el cliente lee
 status: executing
-stopped_at: Phase 23 complete, ready to plan Phase 24
-last_updated: "2026-09-23T01:06:44.259Z"
-last_activity: 2026-09-21
-last_activity_desc: Phase 23 complete, transitioned to Phase 24
-state_head: fd5edad0b02cb8b53a899ff3a9dd9d1a2439aec0
+stopped_at: Completed 24-01-PLAN.md
+last_updated: "2026-09-23T04:05:30.902Z"
+last_activity: 2026-09-23
+last_activity_desc: Phase 24 execution started
+state_head: a871fbf516877c01eaf0ff672a11a2c65f5c466d
 progress:
   total_phases: 20
-  completed_phases: 14
+  completed_phases: 13
   total_plans: 105
-  completed_plans: 103
+  completed_plans: 104
   percent: 65
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. **v0.29 organiza el catálogo**: categorías propias por negocio que llegan al booking público, con la regla de que **la ausencia de dato muestra lo de hoy y nunca esconde un servicio** — un negocio sin categorías ve la lista de siempre y un servicio sin categoría siempre se puede reservar.
-**Current focus:** Phase 23 — El panel que organiza el catálogo
+**Current focus:** Phase 24 — El catálogo que el cliente lee
 
 ## Current Position
 
-Phase: 24 — READY TO EXECUTE
-Plan: Not started
+Phase: 24 (El catálogo que el cliente lee) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-09-21 — Phase 23 complete, transitioned to Phase 24
+Last activity: 2026-09-23 — Phase 24 execution started
 
 ## Milestone v0.29 — decisiones LOCKED
 
@@ -221,6 +221,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 23 P09 | 30min | 3 tasks | 1 files |
 | Phase 23 P10 | 55 min | 4 tasks | 1 files |
 | Phase 23 P11 | 12 min | 2 tasks | 1 files |
+| Phase 24 P01 | 46 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -438,6 +439,11 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 23]: G-23-22 causa 2: el toggle del modo de cupo se apila tambien en desktop; tres columnas a 384px nunca alcanzaron (133.58px necesarios contra 87.33 de celda)
 - [Phase 23]: G-23-25: el cierre se cancela desde el propio onOpenChange y NO con disablePointerDismissal, que corta el evento antes del handler y mataria el aviso
 - [Phase 23]: 23-11: la entrada G-23-20 del UI-SPEC pasa a describir la fila DERIVADA de las acciones y su regla nombra WR-03 — una regla que no nombra el defecto que ya ocurrió no lo previene la segunda vez
+- [Phase 24]: Las dos columnas de modo de orden van al select EXPLICITO de public_businesses: sin nombrarlas los modos viajan undefined y el catalogo ordena igual que hoy por casualidad, sin error visible
+- [Phase 24]: La lectura publica de categorias ordena por UNA sola clave (sort_order): copiar el .order('created_at') del panel haria fallar la query contra una vista de cuatro columnas y desagruparia el catalogo en silencio
+- [Phase 24]: La prop se tipa con CatalogCategory (modulo puro), no con ServiceCategory (lib/types), que exige una columna que la vista publica no expone
+- [Phase 24]: El <h3> del grupo se condiciona SOLO por group.title !== null: la regla de 'sin titulos' vive en el dato, no en un if sobre el largo de un arreglo
+- [Phase 24]: La jerarquia del titulo de grupo descansa en el TAMANO (14px vs 20px del h2), no en el peso: themes.css se importa sin capa y reescribe el peso del h3 en 2 de los 5 themes
 
 ### Pending Todos
 
@@ -525,8 +531,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-18T19:03:06.886Z
-Stopped at: Phase 23 complete, ready to plan Phase 24
+Last session: 2026-09-23T04:04:52.325Z
+Stopped at: Completed 24-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

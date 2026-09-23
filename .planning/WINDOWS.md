@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 6
 waived_count: 0
 fixed_count: 0
-total_count: 5
-last_updated: 2026-09-13T06:14:15.130Z
+total_count: 6
+last_updated: 2026-09-23T04:05:46.228Z
 ---
 
 # Broken Windows Ledger
@@ -20,6 +20,7 @@ last_updated: 2026-09-13T06:14:15.130Z
 | 3 | quick | unrun-verify | components/dashboard/canchas-manager.tsx |  | el vaciado de Duracion en alta y edicion de canchas quedo como human-check sin correr: sin DOM en el runner | open |  | 2026-09-12T23:26:55.027Z |  |
 | 4 | quick | unrun-verify | app/(dashboard)/settings/settings-client.tsx |  | el vaciado y la normalizacion onBlur de los cuatro campos de Ajustes > Servicios quedo como human-check sin correr: sin DOM en el runner | open |  | 2026-09-12T23:26:55.683Z |  |
 | 5 | quick | unrun-verify | app/(dashboard)/web/web-client.tsx |  | quick 260913-3tv: los 4 human-check del preview (servicio sin franja deshabilitado, staff filtrado, wizard de canchas, widget que no se reinicia al tipear) NO se corrieron — el runner es environment:node y auto_advance los auto-aprobo | open |  | 2026-09-13T06:14:15.130Z |  |
+| 6 | 24 | unrun-verify | app/[slug]/booking-client.tsx |  | UAT visual de los 10 puntos del plan 24-01 sin correr (human_verify_mode: end-of-phase); cubre el backstop de CAT-10 (nombre largo a ~432px) y el control negativo de cero categorias en pantalla real | open |  | 2026-09-23T04:05:46.228Z |  |
 
 ````json
 [
@@ -81,6 +82,18 @@ last_updated: 2026-09-13T06:14:15.130Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-13T06:14:15.130Z",
+    "resolved_at": null
+  },
+  {
+    "id": 6,
+    "kind": "unrun-verify",
+    "phase": "24",
+    "file": "app/[slug]/booking-client.tsx",
+    "line": null,
+    "description": "UAT visual de los 10 puntos del plan 24-01 sin correr (human_verify_mode: end-of-phase); cubre el backstop de CAT-10 (nombre largo a ~432px) y el control negativo de cero categorias en pantalla real",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-23T04:05:46.228Z",
     "resolved_at": null
   }
 ]
