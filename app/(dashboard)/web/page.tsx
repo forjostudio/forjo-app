@@ -43,10 +43,16 @@ export default async function WebEditorPage() {
   //    lo que consume el LandingRenderer + el BookingClient del preview (misma lista que
   //    app/[slug]/page.tsx), MÁS: theme/palette/font (fallback de resolveLandingTheme en el preview),
   //    has_web_custom (el gate del add-on) y los dos configs.
+  //    ⚠ category_sort_mode / service_sort_mode (Phase 24, D-09/D-13) van EN LOS DOS SELECTS o no van:
+  //    el select público de app/[slug]/page.tsx pide las mismas dos. Si faltan acá los dos modos
+  //    viajan `undefined`, el preview ordena el catálogo con el default mientras el cliente lo ve con
+  //    el modo que el dueño eligió — y no hay ningún error: es un preview que miente sobre el orden,
+  //    la misma clase de bug que el quick 260913-3tv vino a cerrar. Viajan solas por la
+  //    desestructuración que arma `publicBusiness` más abajo.
   const { data: business } = await supabase
     .from('businesses')
     .select(
-      'id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, palette, theme, font, has_web_custom, landing_config, landing_draft',
+      'id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, palette, theme, font, has_web_custom, landing_config, landing_draft, category_sort_mode, service_sort_mode',
     )
     .eq('owner_id', user.id)
     .single()
@@ -93,6 +99,7 @@ export default async function WebEditorPage() {
     { data: locations },
     { data: professionalServices },
     { data: timeBlockServices },
+    { data: serviceCategories },
   ] = await Promise.all([
     supabase.from('services').select('*').eq('business_id', business.id),
     supabase.from('professionals').select('*').eq('business_id', business.id),
@@ -115,6 +122,32 @@ export default async function WebEditorPage() {
       .from('time_block_services')
       .select('business_id, time_block_id, service_id')
       .eq('business_id', business.id),
+    // service_categories (Phase 24, D-13): los títulos con los que el BookingClient agrupa el paso 1.
+    // Sin esta lectura el preview muestra la LISTA PLANA mientras /{slug} muestra grupos — el preview
+    // vuelve a mentir, sin un solo error (P-5).
+    //   · TABLA BASE, no la vista `public_service_categories`: misma doctrina que las dos puentes de
+    //     arriba y que servicios/page.tsx — la vista es DEFINER (sin security_invoker) y leerla desde
+    //     una superficie autenticada dejaría el aislamiento colgado de UNA sola capa; la base suma la
+    //     RLS (policy de tenant, migr. 078) al `.eq('business_id', …)` explícito: las dos capas.
+    //   · NO se pierde fidelidad: la vista es una proyección SIN WHERE, así que base y vista devuelven
+    //     las MISMAS filas para el mismo tenant (pinchado en test/preview-booking-parity.test.ts, que
+    //     lee por los dos caminos con los dos roles reales).
+    //   · Columnas EXPLÍCITAS: las cuatro que consume el módulo puro (CatalogCategory pide id y name,
+    //     sort_order opcional; business_id es el eje del filtro).
+    //   · DOBLE `.order`, copiado verbatim de servicios/page.tsx:35 — acá SÍ es legal porque es la
+    //     tabla base y `created_at` existe (la vista pública no la proyecta, por eso la lectura de
+    //     app/[slug]/page.tsx lleva UNA sola clave). El desempate no es decorativo: varias categorías
+    //     recién creadas quedan empatadas en 0 y sin segunda clave PostgREST no garantiza el orden
+    //     entre lecturas. Con las dos, el preview queda en el MISMO orden que /servicios.
+    //   · Fail-safe DIRECCIONAL (D-15): si falla, el `|| []` del mount deja cero categorías ⇒
+    //     `groupCatalog` cae en su camino de identidad ⇒ un único grupo sin título ⇒ la lista plana de
+    //     hoy. Un error de lectura DESAGRUPA el catálogo, nunca lo apaga.
+    supabase
+      .from('service_categories')
+      .select('id, business_id, name, sort_order')
+      .eq('business_id', business.id)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
   ])
 
   // 5. Los DOS configs, crudos (jsonb), al cliente. Phase 15 parte el dato en dos (migración 050) y
@@ -188,6 +221,7 @@ export default async function WebEditorPage() {
       locations={locations || []}
       professionalServices={professionalServices || []}
       timeBlockServices={timeBlockServices || []}
+      serviceCategories={serviceCategories || []}
     />
   )
 
