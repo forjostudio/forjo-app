@@ -10,6 +10,7 @@ import { effectiveBookingCutoff } from '@/lib/booking-window'
 import { professionalsForService, isServiceStaffed } from '@/lib/staff-services'
 import { hasScheduleCoverage, blocksForService } from '@/lib/time-block-services'
 import { anyCardPlacement } from '@/lib/booking-selector'
+import { groupCatalog, type CatalogCategory } from '@/lib/service-categories'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,6 +44,18 @@ interface Props {
   // agendado, que es el comportamiento previo a la migr. 071. El fail-safe es DIRECCIONAL: un dato
   // ausente nunca puede apagar el catálogo.
   timeBlockServices?: TimeBlockService[]
+  // Títulos del catálogo (vista acotada public_service_categories, migr. 078 §5: id, business_id,
+  // name, sort_order). La regla de agrupar y ordenar NO se reimplementa acá: la interpreta
+  // `groupCatalog` (lib/service-categories), la misma que ya usa el panel — así el cliente ve
+  // exactamente el orden que el dueño armó.
+  // El tipo es `CatalogCategory` y NO el `ServiceCategory` de lib/types: ese exige `created_at`, que
+  // la vista pública deliberadamente no expone, y tiparlo así obligaría a un cast mentiroso.
+  // Opcional a propósito (D-15): es la declaración en el tipo de que el dato ausente DEGRADA. Sin
+  // categorías —porque el negocio no creó ninguna, o porque la lectura falló y el `|| []` del RSC la
+  // convirtió en cero filas— `groupCatalog` devuelve un único grupo sin título y la pantalla es la
+  // lista plana de hoy. El fail-safe es DIRECCIONAL: un dato ausente desagrupa el catálogo, nunca lo
+  // apaga.
+  serviceCategories?: CatalogCategory[]
 }
 
 function timeToMinutes(t: string) {
@@ -68,7 +81,7 @@ function phoneDigits(v: string) {
   return v.replace(/\D/g, '')
 }
 
-export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations, professionalServices, timeBlockServices }: Props) {
+export function BookingClient({ business, services, professionals, timeBlocks, exceptions, locations, professionalServices, timeBlockServices, serviceCategories }: Props) {
   const [step, setStep] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedPro, setSelectedPro] = useState<Professional | null | 'none'>('none')
@@ -190,6 +203,26 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
       document.head.appendChild(script)
     }
   }, [requireDeposit, siteKey])
+
+  // El catálogo del paso 1, ya agrupado y ordenado (CAT-08). La regla vive en `groupCatalog`
+  // (lib/service-categories) y NO se reimplementa acá: es la misma función que usa el panel, que es
+  // lo único que garantiza que el dueño ordene una cosa y el cliente vea exactamente esa.
+  // Sin categorías devuelve UN único grupo con `title` nulo ⇒ la pantalla de hoy (CAT-07): la regla
+  // "sin títulos" vive en el dato, no en un `if` que alguien tiene que acordarse de escribir.
+  // ⚠ El tercer argumento es un OBJETO LITERAL con esas dos claves y nada más (D-10): queda
+  // prohibido componerlo con un spread desde la tabla de defaults del módulo, porque el spread NO
+  // cae al default cuando la clave existe con valor `undefined` — la PISA. El `??` campo por campo
+  // ya vive adentro de `groupCatalog` (lib/service-categories.ts:275-285), que es el único lugar
+  // donde puede estar sin volverse un orden equivocado y silencioso para todos los negocios.
+  // Memoizado porque este componente re-renderiza en CADA TECLA del formulario del paso 4 y la
+  // función devuelve arreglos nuevos: sin el memo, cada pulsación remontaría el catálogo entero.
+  const catalogGroups = useMemo(
+    () => groupCatalog(services, serviceCategories ?? [], {
+      categories: business.category_sort_mode,
+      services: business.service_sort_mode,
+    }),
+    [services, serviceCategories, business.category_sort_mode, business.service_sort_mode],
+  )
 
   // Las franjas que dan el servicio ELEGIDO (D-04). Sin servicio todavía (paso 1) son todas: la
   // pregunta no tiene sujeto, y usar `timeBlocks` crudo deja el calendario byte-idéntico a hoy.
@@ -564,103 +597,126 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         {step === 1 && (
           <div>
             <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí tu servicio</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {services.map(service => {
-                // ── Cobertura por servicio: los DOS ejes, cada uno con su fuente única ──────────
-                // Eje franja (D-02, AGENDA-07): ¿alguna franja de horario da este servicio? La regla
-                // del comodín NO se reimplementa acá — sale de lib/time-block-services, la misma que
-                // ya usan la disponibilidad pública y el backstop del create. El `?? []` cubre el
-                // call site del LandingRenderer, que no pasa la prop: puente vacía ⇒ comodín ⇒ todo
-                // agendado (degrada al comportamiento de hoy, nunca apaga el catálogo).
-                // `hasScheduleCoverage` y NO `isServiceScheduled`: la cruda da false con cero franjas
-                // y apagaría el catálogo entero (CR-01). La guarda vive en el módulo, testeada, no
-                // inline acá — mismo principio que AGENDA-02 y misma forma que `isServiceStaffed`.
-                const scheduled = hasScheduleCoverage(service.id, timeBlocks, timeBlockServices ?? [])
-                // Eje staff (D-05): ¿algún profesional activo lo hace? Misma disciplina, fuente única
-                // en lib/staff-services (incluye el modo sentinel: sin staff nombrado, todo reservable).
-                // Antes este eje OCULTABA el servicio del array (page.tsx lo pre-filtraba); ahora los
-                // dos ejes se tratan igual: deshabilitar con el motivo a la vista, porque un estado mal
-                // configurado no puede verse igual que uno correcto.
-                const staffed = isServiceStaffed(service.id, professionals, professionalServices)
-                const enabled = scheduled && staffed
-                return (
-                <div
-                  key={service.id}
-                  className={cn(
-                    'relative isolate rounded-lg border p-4 text-left transition-colors',
-                    // Precedencia deliberada: `!enabled` PRIMERO. Con el `disabled` nativo puesto, el
-                    // onClick de una tarjeta apagada nunca corre, así que "esta tarjeta está
-                    // seleccionada Y deshabilitada" es un estado inalcanzable; evaluar la selección
-                    // antes pintaría un borde de foco que el usuario no puede haber producido.
-                    !enabled
-                      ? 'border-border/50 bg-secondary/30 opacity-60 cursor-not-allowed'
-                      : selectedService?.id === service.id
-                        ? 'border-primary bg-primary/[0.06]'
-                        : 'border-border bg-card hover:border-primary'
+            {/* El catálogo, agrupado por las categorías que armó el dueño (CAT-08). El orden de los
+                dos ejes sale ENTERO de `groupCatalog`: acá no se filtra, no se reordena y no se
+                decide visibilidad — el único condicional de la región es el del título, y lo decide
+                EL DATO (`title` nulo ⇒ no hay texto que pintar ⇒ la pantalla de hoy, CAT-07).
+                El envoltorio por grupo es obligatorio y no puede ser un Fragment: con Fragment el
+                aire de 24px caería entre el título y SUS PROPIAS tarjetas y el agrupado se leería al
+                revés. La escalera es 8px (título ↔ sus tarjetas) < 12px (tarjeta ↔ tarjeta) < 24px
+                (grupo ↔ grupo): el agrupado se lee por proximidad, sin una línea divisoria.
+                La key es el id de la categoría, único por construcción porque el módulo emite como
+                MÁXIMO un grupo sin categoría (los sueltos, siempre últimos — CAT-09/D-03). Nunca el
+                índice: con modo alfabético la posición de un grupo cambia entre renders y React
+                reusaría el estado de la tarjeta equivocada.
+                Una sola columna a lo ancho (CAT-10): a ~432px útiles el nombre largo deja de
+                partirse. En mobile no cambia nada, la grilla ya era de una columna debajo de 640px. */}
+            <div className="space-y-6">
+              {catalogGroups.map(group => (
+                <div key={group.categoryId ?? '__sueltos__'}>
+                  {group.title !== null && (
+                    <h3 className="text-sm font-bold break-words mb-2">{group.title}</h3>
                   )}
-                >
-                  {/* La tarjeta es un CONTENEDOR y el botón de selección se estira sobre ella con un
-                      pseudo-elemento (`after:absolute after:-inset-px`, sobre la caja de borde: el anillo
-                      de foco cae donde caía cuando la tarjeta entera era el botón). Motivo (G-23-6): el
-                      "Ver más" de la descripción no puede vivir adentro del botón — un botón dentro de
-                      otro es HTML inválido y un toque en "Ver más" elegiría el servicio. Con el
-                      pseudo-elemento, tocar el nombre, el precio o el texto de la descripción sigue
-                      seleccionando la tarjeta como antes.
-                      Fila: izq = título; der = precio + duración. items-center → el título queda
-                      centrado contra el bloque de precio. La descripción salió de esa columna izquierda
-                      y va abajo a ancho completo: ahí le quedaban 181-229px a 375px, donde en dos
-                      renglones entraban 59-84 caracteres contra el tope de 120 del panel. */}
-                  <button
-                    type="button"
-                    disabled={!enabled}
-                    onClick={() => { setSelectedService(service); setBookingLoc(null); setSelectedDate(undefined); setSelectedTime(''); setStep(2) }}
-                    aria-describedby={[
-                      service.description ? `svc-desc-${service.id}` : null,
-                      !enabled ? `svc-reason-${service.id}` : null,
-                    ].filter(Boolean).join(' ') || undefined}
-                    className="block w-full text-left focus-visible:outline-none after:absolute after:-inset-px after:rounded-lg focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
+                  <div className="grid grid-cols-1 gap-3">
+                    {group.services.map(service => {
+                      // ── Cobertura por servicio: los DOS ejes, cada uno con su fuente única ──────────
+                      // Eje franja (D-02, AGENDA-07): ¿alguna franja de horario da este servicio? La regla
+                      // del comodín NO se reimplementa acá — sale de lib/time-block-services, la misma que
+                      // ya usan la disponibilidad pública y el backstop del create. El `?? []` cubre el
+                      // call site del LandingRenderer, que no pasa la prop: puente vacía ⇒ comodín ⇒ todo
+                      // agendado (degrada al comportamiento de hoy, nunca apaga el catálogo).
+                      // `hasScheduleCoverage` y NO `isServiceScheduled`: la cruda da false con cero franjas
+                      // y apagaría el catálogo entero (CR-01). La guarda vive en el módulo, testeada, no
+                      // inline acá — mismo principio que AGENDA-02 y misma forma que `isServiceStaffed`.
+                      const scheduled = hasScheduleCoverage(service.id, timeBlocks, timeBlockServices ?? [])
+                      // Eje staff (D-05): ¿algún profesional activo lo hace? Misma disciplina, fuente única
+                      // en lib/staff-services (incluye el modo sentinel: sin staff nombrado, todo reservable).
+                      // Antes este eje OCULTABA el servicio del array (page.tsx lo pre-filtraba); ahora los
+                      // dos ejes se tratan igual: deshabilitar con el motivo a la vista, porque un estado mal
+                      // configurado no puede verse igual que uno correcto.
+                      const staffed = isServiceStaffed(service.id, professionals, professionalServices)
+                      const enabled = scheduled && staffed
+                      return (
+                      <div
+                        key={service.id}
+                        className={cn(
+                          'relative isolate rounded-lg border p-4 text-left transition-colors',
+                          // Precedencia deliberada: `!enabled` PRIMERO. Con el `disabled` nativo puesto, el
+                          // onClick de una tarjeta apagada nunca corre, así que "esta tarjeta está
+                          // seleccionada Y deshabilitada" es un estado inalcanzable; evaluar la selección
+                          // antes pintaría un borde de foco que el usuario no puede haber producido.
+                          !enabled
+                            ? 'border-border/50 bg-secondary/30 opacity-60 cursor-not-allowed'
+                            : selectedService?.id === service.id
+                              ? 'border-primary bg-primary/[0.06]'
+                              : 'border-border bg-card hover:border-primary'
+                        )}
+                      >
+                        {/* La tarjeta es un CONTENEDOR y el botón de selección se estira sobre ella con un
+                            pseudo-elemento (`after:absolute after:-inset-px`, sobre la caja de borde: el anillo
+                            de foco cae donde caía cuando la tarjeta entera era el botón). Motivo (G-23-6): el
+                            "Ver más" de la descripción no puede vivir adentro del botón — un botón dentro de
+                            otro es HTML inválido y un toque en "Ver más" elegiría el servicio. Con el
+                            pseudo-elemento, tocar el nombre, el precio o el texto de la descripción sigue
+                            seleccionando la tarjeta como antes.
+                            Fila: izq = título; der = precio + duración. items-center → el título queda
+                            centrado contra el bloque de precio. La descripción salió de esa columna izquierda
+                            y va abajo a ancho completo: ahí le quedaban 181-229px a 375px, donde en dos
+                            renglones entraban 59-84 caracteres contra el tope de 120 del panel. */}
+                        <button
+                          type="button"
+                          disabled={!enabled}
+                          onClick={() => { setSelectedService(service); setBookingLoc(null); setSelectedDate(undefined); setSelectedTime(''); setStep(2) }}
+                          aria-describedby={[
+                            service.description ? `svc-desc-${service.id}` : null,
+                            !enabled ? `svc-reason-${service.id}` : null,
+                          ].filter(Boolean).join(' ') || undefined}
+                          className="block w-full text-left focus-visible:outline-none after:absolute after:-inset-px after:rounded-lg focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-lg font-bold leading-tight font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
+                              <p className="mt-0.5 flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                                <Clock className="w-3 h-3" /> {service.duration_minutes} min
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                        {/* Hermana del botón, nunca hija. `isolate` en el contenedor encierra el z-index:
+                            el `z-10` del toggle lo levanta sobre el pseudo-elemento del botón (si no, el
+                            toque caería en la selección) sin competir con nada fuera de la tarjeta. Una
+                            tarjeta deshabilitada no se selecciona, pero su descripción se puede abrir. */}
+                        {service.description && (
+                          <ServiceDescription
+                            text={service.description}
+                            name={service.name}
+                            id={`svc-desc-${service.id}`}
+                            className="mt-2 text-xs text-muted-foreground"
+                            toggleClassName="relative z-10 text-xs font-medium text-foreground"
+                          />
+                        )}
+                        {/* El motivo, con el mismo tag y las mismas clases que el picker de consultorios del
+                            paso 3 (mismo problema, misma solución: apagar sin explicar es peor que ocultar).
+                            Precedencia cuando fallan los dos ejes a la vez: gana el motivo de FRANJA, que es
+                            el eje del requisito de esta fase; el motivo de STAFF (regresión candidata,
+                            aceptada aparte) solo aparece cuando la franja sí cubre el servicio. Copy
+                            deliberadamente genérica: un anónimo no tiene por qué enterarse de quién cubre qué
+                            ni de qué le falta tocar al dueño en su panel. Fuera del botón, referenciado por
+                            su aria-describedby. */}
+                        {!enabled && (
+                          <p id={`svc-reason-${service.id}`} className="text-xs text-muted-foreground mt-1">
+                            {!scheduled ? 'Sin horarios disponibles' : 'Sin profesional disponible'}
+                          </p>
+                        )}
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-lg font-bold leading-tight font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>
-                        <p className="mt-0.5 flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" /> {service.duration_minutes} min
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                  {/* Hermana del botón, nunca hija. `isolate` en el contenedor encierra el z-index:
-                      el `z-10` del toggle lo levanta sobre el pseudo-elemento del botón (si no, el
-                      toque caería en la selección) sin competir con nada fuera de la tarjeta. Una
-                      tarjeta deshabilitada no se selecciona, pero su descripción se puede abrir. */}
-                  {service.description && (
-                    <ServiceDescription
-                      text={service.description}
-                      name={service.name}
-                      id={`svc-desc-${service.id}`}
-                      className="mt-2 text-xs text-muted-foreground"
-                      toggleClassName="relative z-10 text-xs font-medium text-foreground"
-                    />
-                  )}
-                  {/* El motivo, con el mismo tag y las mismas clases que el picker de consultorios del
-                      paso 3 (mismo problema, misma solución: apagar sin explicar es peor que ocultar).
-                      Precedencia cuando fallan los dos ejes a la vez: gana el motivo de FRANJA, que es
-                      el eje del requisito de esta fase; el motivo de STAFF (regresión candidata,
-                      aceptada aparte) solo aparece cuando la franja sí cubre el servicio. Copy
-                      deliberadamente genérica: un anónimo no tiene por qué enterarse de quién cubre qué
-                      ni de qué le falta tocar al dueño en su panel. Fuera del botón, referenciado por
-                      su aria-describedby. */}
-                  {!enabled && (
-                    <p id={`svc-reason-${service.id}`} className="text-xs text-muted-foreground mt-1">
-                      {!scheduled ? 'Sin horarios disponibles' : 'Sin profesional disponible'}
-                    </p>
-                  )}
+                      )
+                    })}
+                  </div>
                 </div>
-                )
-              })}
+              ))}
             </div>
           </div>
         )}

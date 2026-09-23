@@ -59,7 +59,13 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
   // resend_api_key, recaptcha_secret_key, google_refresh_token, …).
   const { data: business } = await supabase
     .from('public_businesses')
-    .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, landing_config, max_advance_days, max_advance_date, public_selector_default')
+    // ⚠ `category_sort_mode` / `service_sort_mode` (migr. 078, Phase 23) NO son decorativos acá: son
+    // los dos ejes de orden que el dueño configuró y el ÚNICO camino por el que llegan al catálogo
+    // público. Este select es de columnas EXPLÍCITAS a propósito (ver el comentario de arriba), así
+    // que una columna nueva no llega sola: sin nombrarlas, las dos viajan `undefined`, `groupCatalog`
+    // cae en su default y el catálogo ordena igual que hoy POR CASUALIDAD — un orden equivocado para
+    // todos los negocios, sin un solo error a la vista (lib/service-categories.ts:275-285 lo explica).
+    .select('id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, landing_config, max_advance_days, max_advance_date, public_selector_default, category_sort_mode, service_sort_mode')
     .eq('slug', slug)
     .single()
 
@@ -72,7 +78,7 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
 
   // Solo excepciones de hoy en adelante (las pasadas no afectan la reserva).
   const todayStr = new Date().toISOString().slice(0, 10)
-  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }, { data: canchas }, { data: professionalServices }, { data: timeBlockServices }] = await Promise.all([
+  const [{ data: services }, { data: professionals }, { data: timeBlocks }, { data: exceptions }, { data: locations }, { data: canchas }, { data: professionalServices }, { data: timeBlockServices }, { data: serviceCategories }] = await Promise.all([
     // Vista pública acotada (migración 027): leer la vista, NO la tabla base `services` con anon
     // key. La vista ya filtra WHERE active = true, así que el .eq('active', true) es redundante
     // (consistente con cómo leemos public_professionals). Tras el DROP POLICY de 028, anon ya no
@@ -107,6 +113,19 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
     // deja la puente VACÍA ⇒ regla del comodín ⇒ TODO servicio queda agendado. Degrada al
     // comportamiento de hoy, nunca al revés (nunca apaga servicios por un error de lectura).
     supabase.from('public_time_block_services').select('*').eq('business_id', business.id),
+    // Vista pública acotada (migración 078 §5): los títulos del catálogo (id, business_id, name,
+    // sort_order) — CUATRO columnas y nada más, SIN abrir la tabla base `service_categories` a anon
+    // (mismo criterio que las migr. 059/071: para eso está la vista; la 078 sólo define policies de
+    // tenant sobre la tabla, así que leerla con anon key ni siquiera es una alternativa que exista).
+    // La vista es DEFINER y es una proyección SIN `WHERE`: el aislamiento por tenant lo pone este
+    // `.eq('business_id', business.id)`, igual que las ocho lecturas de arriba.
+    // ⚠ UNA SOLA clave de orden. Prohibido copiar el `.order('created_at')` del panel
+    // (app/(dashboard)/servicios/page.tsx:35): `created_at` NO existe en la vista, la query fallaría,
+    // el `|| []` la convertiría en cero categorías y el catálogo se desagruparía EN SILENCIO.
+    // Fail-safe DIRECCIONAL (D-15): si esta lectura falla, el `|| []` deja cero categorías ⇒
+    // `groupCatalog` cae en su camino de identidad ⇒ un único grupo sin título ⇒ la lista plana de
+    // hoy. Un error de lectura DESAGRUPA el catálogo, nunca lo apaga.
+    supabase.from('public_service_categories').select('*').eq('business_id', business.id).order('sort_order', { ascending: true }),
   ])
 
   // JSON-LD LocalBusiness (SEO-03 / D9-04): se construye SOLO con la data ya fetcheada
@@ -174,6 +193,7 @@ export default async function PublicBookingPage({ params, searchParams }: Props)
       locations={locations || []}
       professionalServices={professionalServices || []}
       timeBlockServices={timeBlockServices || []}
+      serviceCategories={serviceCategories || []}
     />
   )
 
