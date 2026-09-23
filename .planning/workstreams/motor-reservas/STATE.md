@@ -4,17 +4,17 @@ milestone: v0.29
 milestone_name: El catálogo del booking (en curso)
 current_phase: 24
 current_phase_name: El catálogo que el cliente lee
-status: executing
-stopped_at: Completed 24-01-PLAN.md
-last_updated: "2026-09-23T04:05:30.902Z"
+status: verifying
+stopped_at: Completed 24-02-PLAN.md
+last_updated: "2026-09-23T04:17:02.071Z"
 last_activity: 2026-09-23
 last_activity_desc: Phase 24 execution started
-state_head: a871fbf516877c01eaf0ff672a11a2c65f5c466d
+state_head: bc1bb6b9a6c18c7dc5be0455109b7e6975180f85
 progress:
   total_phases: 20
   completed_phases: 13
   total_plans: 105
-  completed_plans: 104
+  completed_plans: 105
   percent: 65
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 
 Phase: 24 (El catálogo que el cliente lee) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-23 — Phase 24 execution started
 
 ## Milestone v0.29 — decisiones LOCKED
@@ -222,6 +222,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 23 P10 | 55 min | 4 tasks | 1 files |
 | Phase 23 P11 | 12 min | 2 tasks | 1 files |
 | Phase 24 P01 | 46 min | 2 tasks | 3 files |
+| Phase 24 P02 | 6 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -444,6 +445,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 24]: La prop se tipa con CatalogCategory (modulo puro), no con ServiceCategory (lib/types), que exige una columna que la vista publica no expone
 - [Phase 24]: El <h3> del grupo se condiciona SOLO por group.title !== null: la regla de 'sin titulos' vive en el dato, no en un if sobre el largo de un arreglo
 - [Phase 24]: La jerarquia del titulo de grupo descansa en el TAMANO (14px vs 20px del h2), no en el peso: themes.css se importa sin capa y reescribe el peso del h3 en 2 de los 5 themes
+- [Phase 24]: El preview del panel lee las categorías de la TABLA BASE con la sesión del dueño (RLS + .eq business_id), nunca de la vista public_service_categories: la vista es DEFINER sin security_invoker y dejaría el aislamiento en una sola capa
+- [Phase 24]: Las dos columnas de modo de orden van en los DOS selects de negocio (público y panel) o no van: el comentario del propio archivo declara que su lista es la misma, y agregarlas en uno solo hace que el preview ordene distinto del público sin ningún error
 
 ### Pending Todos
 
@@ -531,8 +534,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-23T04:04:52.325Z
-Stopped at: Completed 24-01-PLAN.md
+Last session: 2026-09-23T04:16:41.069Z
+Stopped at: Completed 24-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

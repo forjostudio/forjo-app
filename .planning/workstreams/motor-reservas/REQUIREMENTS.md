@@ -60,12 +60,12 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
 - [x] **CAT-07** — Un negocio **sin ninguna categoría creada** muestra sus servicios exactamente como
   hoy: sueltos, sin títulos. **Cero regresión, y por construcción**: es el estado de todos los
   negocios el día de la migración.
-- [ ] **CAT-08** — Con al menos una categoría creada, el cliente ve los servicios **agrupados bajo
+- [x] **CAT-08** — Con al menos una categoría creada, el cliente ve los servicios **agrupados bajo
   títulos**, en el orden que el dueño definió. El funnel no gana pasos: sigue siendo elegir servicio
   → profesional → día → horario.
-- [ ] **CAT-09** — Un servicio sin categoría **siempre se puede reservar**. Con categorías creadas
+- [x] **CAT-09** — Un servicio sin categoría **siempre se puede reservar**. Con categorías creadas
   aparece al final bajo **"Otros"**; nunca desaparece del catálogo público.
-- [ ] **CAT-10** — En desktop las tarjetas de servicio son **horizontales a lo ancho**, el mismo
+- [x] **CAT-10** — En desktop las tarjetas de servicio son **horizontales a lo ancho**, el mismo
   formato que ya tienen en mobile. El nombre largo deja de partirse en dos líneas.
 - [x] **CAT-11** — El dueño escribe una **descripción corta** por servicio desde el panel, con
   **límite de 120 caracteres** y contador a la vista, y se muestra en la tarjeta del booking debajo
