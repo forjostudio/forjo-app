@@ -1,10 +1,13 @@
 ---
 phase: 24
 slug: el-catalogo-que-el-cliente-lee
-status: draft
+status: approved
 shadcn_initialized: true
 preset: "style=base-nova · baseColor=neutral · cssVariables=true · rsc=true · iconLibrary=lucide"
 created: "2026-09-22"
+verified: "2026-09-22"
+checker: "gsd-ui-checker — 7/7 dimensiones PASS"
+ui_considerations: "22 applicable · 20 resolved (18 explicit + 2 backstop) · 2 diferidas por decision del usuario"
 ---
 
 # Phase 24 — UI Design Contract
@@ -297,30 +300,50 @@ Cero controles nuevos, cero iconos, cero componentes, cero dependencias, cero mi
 
 ## UI Considerations
 
-> Probe de completitud de estados (eje UI). Elementos clasificados: **E1** `lista-agrupada-del-paso-1` (`list-collection`), **E2** `titulo-de-grupo` (`static-content`), **E3** `tarjeta-de-servicio` (`interactive-control`, existente y bajo contrato G-23-6).
+> Probe de completitud de estados (eje UI), corrido el 2026-09-22 con `ui-consideration-probe.cjs`.
+> **Elementos y sus tipos** — los tipos se corrigieron a mano tras la confirmación del usuario: el
+> clasificador heurístico había dejado la lista agrupada y el preview en `unclassified` (levantaba 13
+> consideraciones); con los tipos correctos levanta **22 y ninguna sin clasificar**. Esa corrección es
+> el paso que hace sólida la cobertura — el cue automático es una señal, no una prueba.
+>
+> | ID | Superficie | Tipos |
+> |----|-----------|-------|
+> | **E1** | El título de grupo (`<h3>`) | `static-content` |
+> | **E2** | La lista agrupada del paso 1 | `list-collection`, `static-content` |
+> | **E3** | La tarjeta de servicio pública | `interactive-control`, `static-content` |
+> | **E4** | El preview del catálogo en `/web` | `list-collection`, `static-content` |
 
-Applicable state considerations resolved: **12 covered, 1 backstop, 2 unresolved**
+**Applicable: 22 · resolved: 20 (18 explicit + 2 backstop) · unresolved: 2 (diferidas por decisión del usuario)**
 
-| Category | Element(s) | Status | Resolution / Reason |
-|----------|------------|--------|---------------------|
-| empty | E1 (cero categorías) | ✅ covered | `groupCatalog` devuelve un grupo con `title: null` ⇒ cero `<h3>`, cero "Otros", cero desplazamiento vertical (G-24-2, P1-P3) |
-| empty | E1 (cero servicios) | ⚠ unresolved | Pantalla en blanco bajo el `h2`, **preexistente**. Ninguna decisión D-01…D-15 la cubre y crear copy de empty state es superficie no autorizada. El planner lo trata como asunción declarada, no como trabajo |
-| empty | E2 | ✅ covered | Un grupo sin título no renderiza `<h3>`; un grupo vacío **no existe** (Regla 0 del módulo: ningún grupo de la salida está vacío) |
-| loading | E1 | ✅ covered | La página es RSC con `export const dynamic = 'force-dynamic'` (`page.tsx:36`): el HTML llega con el catálogo ya renderizado. **Sin skeleton y sin spinner nuevos** — no hay carga en cliente para esta lista |
-| loading | E3 | ✅ covered | La selección es estado local (`setStep(2)`), sin viaje al servidor. Sin cambios |
-| error | E1 | ✅ covered | `\|\| []` direccional ⇒ lista plana, nunca catálogo vacío ni mensaje de error (ver `## Copywriting Contract`) |
-| error | E3 | ✅ covered | El servicio no reservable se **deshabilita con su motivo a la vista** (`:656-660`), existente. No se toca |
-| populated | E1 | ✅ covered | N grupos con `space-y-6` (24px), título 14px a 8px de sus tarjetas, tarjetas a 432px útiles en una columna |
-| partial | E1 | ✅ covered | Servicio con `category_id` nulo, colgado o de otro tenant ⇒ cae en "Otros" y va último (invariante de conservación, ya testeado). **Ninguna tarjeta desaparece** — CAT-09 |
-| overflow | E1 | ✅ covered | El paso 1 **scrollea con la página** (D-11): sin contenedor de scroll propio, sin colapsar, sin índice, sin paginado (G-24-6) |
-| overflow | E2 | ✅ covered | `break-words` en el `h3`: el nombre envuelve dentro de los 327px de interior a 375px en vez de salirse (G-23-21, tercera aparición del mismo modo de falla) |
-| zero-one-many | E1 | ✅ covered | **0** categorías ⇒ lista plana sin títulos · **1** categoría con todo asignado ⇒ un título y **sin** "Otros" (Regla 3 sólo empuja el grupo si hay sueltos) · **N** ⇒ N títulos + "Otros" último. La copy **no concuerda en número** porque D-01 prohíbe el contador: no hay singular/plural que mantener |
-| long-text | E2 | ✅ covered | Ver `overflow / E2`. El tope no existe en el panel ni en la base [medido], así que la defensa es de CSS |
-| long-text | E3 (nombre del servicio, desktop) | 🧪 backstop | Es literalmente CAT-10: a 432px el nombre deja de partirse. Se verifica **midiendo en el navegador** con un nombre largo real, no derivándolo — el repo ya se equivocó dos veces estimando anchos de texto en el pizarrón (G-23-6, G-23-21) |
-| long-text | E3 (nombre del servicio sin espacios, **mobile**) | ⚠ unresolved | El `<p>` del nombre (`:625`) no lleva `break-words`: una cadena larga sin espacios se sale a 375px, igual que G-23-21 en el panel. **No se arregla acá**: tocarlo violaría D-07 (*"mobile byte-idéntico"*), que es una decisión LOCKED. Queda anotado como deuda con causa conocida y arreglo conocido |
+| Category | Elem. | Status | Resolution / Reason |
+|----------|-------|--------|---------------------|
+| overflow | E1 | ✅ explicit | El `<h3>` es hermano del grid, a ancho completo del contenedor (432px desktop / 327px interior a 375px). No tiene contenedor de scroll propio |
+| long-text | E1 | ✅ explicit | `break-words` es **obligatorio**, no decorativo: el nombre de categoría **no tiene tope** — sin `maxLength` en los dos `Input` del panel y sin `CHECK` en la migr. 078 [medido]. Es G-23-21 en su tercera aparición potencial; acá se ataja antes de que ocurra |
+| empty | E2 | ✅ explicit | **Cero categorías:** `groupCatalog` devuelve un grupo con `title: null` ⇒ cero `<h3>`, cero "Otros", cero desplazamiento vertical (G-24-2, propiedades P1-P3). **Cero grupos vacíos:** la Regla 0 del módulo garantiza que ningún grupo de la salida está vacío |
+| empty | E2 | ⚠ **unresolved** | **Cero SERVICIOS:** el paso 1 queda en blanco bajo el `h2`. **Preexistente — no lo crea esta fase.** Diferido por decisión explícita del usuario (2026-09-22): escribir copy de empty state es superficie que ninguna de las 15 decisiones autoriza, y un negocio sin ningún servicio activo no debería estar recibiendo reservas igual. Queda visible para una fase de copy del booking público |
+| loading | E2 | ✅ explicit | No hay estado de carga: la página es RSC con `export const dynamic = 'force-dynamic'`, el HTML llega con el catálogo ya renderizado. **Sin skeleton y sin spinner nuevos** |
+| error | E2 | ✅ explicit | La lectura de categorías falla ⇒ `|| []` ⇒ cero categorías ⇒ **lista plana**. El contrato es *"desagrupa, nunca apaga"*: el cliente ve el catálogo de hoy, no un error ni una pantalla vacía. Es la defensa contra el modo de falla que ya mordió dos veces en este repo (CR-01 de la Phase 20, y otra vez en la 21) |
+| populated | E2 | ✅ explicit | N grupos separados por `space-y-6` (24px), cada título a `mb-2` (8px) de sus tarjetas, tarjetas en una columna a ~432px útiles |
+| partial | E2 | ✅ explicit | Un servicio con `category_id` nulo, colgado, o de otro tenant cae en "Otros" y va último — invariante de conservación, ya testeada. **Ninguna tarjeta desaparece nunca** (CAT-09) |
+| overflow | E2 | ✅ explicit | El paso 1 scrollea con la página (D-11): sin contenedor de scroll propio, sin colapsar, sin índice, sin paginado (G-24-6) |
+| zero-one-many | E2 | ✅ explicit | **0** categorías ⇒ lista plana sin títulos · **1** con todo asignado ⇒ un título y **sin** "Otros" · **N** ⇒ N títulos + "Otros" último. La copy **no concuerda en número** porque D-01 prohíbe el contador: no hay singular/plural que mantener |
+| long-text | E2 | ✅ explicit | Hereda E1: el título envuelve con `break-words` |
+| loading | E3 | ✅ explicit | La selección es estado local (`setStep(2)`), sin viaje al servidor. Sin cambios |
+| error | E3 | ✅ explicit | La tarjeta no carga datos propios. Un servicio no reservable se **deshabilita con su motivo a la vista** (existente, `:656-660`), y con cupo/pago el error vive en pasos posteriores del wizard |
+| overflow | E3 | ✅ explicit | La descripción sigue con "Ver más" **medido** (D-08): a 432px normalmente entra y el toggle no aparece; a 375px aparece como hoy. No se vuelve a un recorte por cantidad de renglones fija |
+| long-text | E3 | 🧪 **backstop** | **Nombre largo en desktop:** es literalmente CAT-10. Se verifica **midiendo en el navegador** con un nombre real, no derivándolo — el repo ya se equivocó dos veces estimando anchos de texto en el pizarrón (G-23-6, G-23-21) |
+| long-text | E3 | ⚠ **unresolved** | **Nombre de servicio SIN ESPACIOS en mobile:** el `<p>` del nombre (`:625`) no lleva `min-w-0`, así que una cadena de 40+ caracteres sin espacios se sale a 375px — el mismo defecto que G-23-21 cerró en el panel. **Diferido por decisión explícita del usuario (2026-09-22): gana D-07** (*"mobile byte-idéntico"*), que es LOCKED. Queda con causa y arreglo ya diagnosticados: `min-w-0` junto al `break-words`, el par indivisible que funcionó en el panel. Es un fix de una clase para una fase futura |
+| empty · loading · error · populated · partial · overflow · zero-one-many | E4 | ✅ explicit (×7) | **Hereda E2 en bloque, por construcción y no por disciplina:** el preview monta el MISMO componente con los MISMOS datos (D-13/D-14, G-24-7), y `BookingClient` se auto-restringe a `max-w-lg`, así que no hay nada que escalar ni una variante que pueda divergir |
+| long-text | E4 | 🧪 **backstop** | La paridad preview↔público se sostiene con un test, no con la vista: un caso más en `test/preview-booking-parity.test.ts` que exija que el preview reciba categorías y modos igual que la pública. Sin él, el preview puede desfasarse en silencio — que es exactamente lo que le pasó al fallback del `LandingRenderer` tres veces antes de que lo borraran |
+
+### Las dos diferidas, juntas
+
+Las dos son **deuda preexistente con diagnóstico completo**, no huecos de esta fase, y las dos las
+difirió el usuario a propósito el 2026-09-22. Ninguna es un bloqueo del plan: el planner las trata
+como asunciones declaradas, **no** como trabajo pendiente. Lo que las hace baratas de retomar es que
+ya tienen causa medida y arreglo nombrado.
 
 ---
-
 ## Regla para el que toque esta región después
 
 > En el estilo de **G-23-20**, cuya regla equivalente ya atrapó un defecto real (WR-03). Esto no es prosa de cierre: es lo que hay que leer **antes** de editar `booking-client.tsx:564-666`.
