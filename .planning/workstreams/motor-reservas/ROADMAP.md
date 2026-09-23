@@ -856,7 +856,17 @@ Plans:
 **Alcance**: `app/[slug]/page.tsx` (una lectura más en el `Promise.all`) y `app/[slug]/booking-client.tsx` —**una sola pasada** sobre la misma región: la grilla de tarjetas (`:566`) y el render de la descripción (`:610`)—, más el call site del preview del panel (`app/(dashboard)/web/page.tsx:182`). **La decisión de cohesión, explícita**: CAT-08 y CAT-10 tocan el **mismo bloque de JSX**, así que van juntos y el archivo se edita **una vez**; CAT-11 **no** entra acá aunque el requisito nombre la tarjeta, porque su mitad pública **ya está en producción** —la tarjeta renderiza `description` desde antes de este milestone— y lo único que falta es el campo del panel: ponerlo acá sería partir un campo de formulario en dos fases y dejar la Phase 23 entregando medio requisito. **Cero migraciones nuevas.**
 **Security/Integrity relevance**: Media. Acá se **consume** la vista que abrió la Phase 22; no se abre ninguna superficie nueva — el mismo reparto que en v0.28 entre la Phase 18 (creó la vista, `secure-phase` obligatorio) y la Phase 20 (la consumió, Media). Dos cuidados: los **nombres de categoría son texto escrito por el dueño que ve un anónimo**, así que se interpolan en JSX (auto-escape de React) y nunca por `dangerouslySetInnerHTML`; y la lectura pública lleva `.eq('business_id', ...)` como las otras del `Promise.all`. ⚠ **Si esta fase termina necesitando cualquier lectura anónima nueva** (una columna que la vista no expone), hereda la obligación de `secure-phase` de la Phase 22.
 **UI hint**: yes
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+
+**Wave 1** *(el tracer: una sola punta a punta, de la vista de Postgres a la pantalla del cliente)*
+
+- [ ] 24-01-PLAN.md — El catálogo agrupado en la **pantalla pública**: los dos modos de orden al select de `public_businesses`, la lectura de `public_service_categories` en el `Promise.all` (filtro por tenant, **una sola** clave de orden — la vista no proyecta la de desempate), la prop opcional tipada como `CatalogCategory`, el agrupado memoizado con los dos modos campo por campo (D-10) y el paso 1 iterando grupos con el `<h3>` condicionado **por el dato**, en **una** columna. El cuerpo de la tarjeta queda idéntico módulo espacios (G-23-6). Más `test/catalog-public.test.ts` con los 8 invariantes del camino público — CAT-08, CAT-09, CAT-10
+
+**Wave 2** *(24-02 blocked on 24-01: consume la prop que el tracer declara y extiende su archivo de gates)*
+
+- [ ] 24-02-PLAN.md — El **preview del panel** (`/web`) muestra el mismo catálogo: las mismas dos columnas en el select de `businesses`, la lectura de `service_categories` contra la **tabla base** (RLS + filtro, con el doble orden de `/servicios`) y la prop en el mount. Cero CSS propio: `BookingClient` se auto-restringe a `max-w-lg` (D-14). Más los 3 gates del preview —incluido el conteo de que los call sites son **dos**, no tres— y el caso de paridad de categorías en `test/preview-booking-parity.test.ts` — CAT-08, CAT-09, CAT-10
 
 ## Progress
 
@@ -888,4 +898,4 @@ Phases execute in numeric order: 1 → 2 → 3 (v0.12, shipped) → 4 → 5 (v0.
 | 21. Lo que el negocio declara | 2/2 | Complete | 2026-09-13 |
 | 22. El modelo del catálogo | 4/4 | Complete    | 2026-09-15 |
 | 23. El panel que organiza el catálogo | 11/11 | Complete    | 2026-09-21 |
-| 24. El catálogo que el cliente lee | 0/TBD | Not started | - |
+| 24. El catálogo que el cliente lee | 0/2 | Planned | - |
