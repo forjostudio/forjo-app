@@ -4,6 +4,7 @@ import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
+import { useOverlayHistory } from "@/lib/overlay-history"
 
 // ── Contenedor de portales de los popups que viven DENTRO del drawer ─────────────────────────
 // vaul (Radix Dialog por debajo) monta el drawer en modo MODAL: marca como inerte / bloquea los
@@ -20,9 +21,34 @@ function useDrawerPortalContainer(): HTMLElement | null {
 }
 
 function Drawer({
+  open,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root data-slot="drawer" {...props} />
+  // El "atrás" del celular cierra el drawer en vez de navegar (quick 260928-seo). Los 4 drawers del
+  // panel pasan por este wrapper, así que se arreglan los 4 de una.
+  //
+  // ACÁ NO VIAJA NINGÚN DETALLE DE CIERRE, a diferencia del Dialog: el contrato de vaul es
+  // `onOpenChange?: (open: boolean) => void` — no tiene `reason` ni `cancel()` en NINGÚN motivo, ni
+  // siquiera en los suyos. Inventarle un detalle sintético a todos los cierres del drawer sería
+  // agregar un motivo falso a los cierres que hoy funcionan bien, y ningún drawer usa
+  // `guardDraftOnDismiss` (es de los diálogos de Ajustes). Los dos drawers que SÍ tienen guarda de
+  // borrador (el alta de turno y la de abono) vetan adentro de su `requestClose`, que abre su propio
+  // diálogo "¿Descartar?" y NO baja `open` — y eso alcanza, porque el re-push de la entrada lo
+  // decide el hook observando que el overlay siguió ABIERTO, nunca leyendo un `cancel()`. Un solo
+  // mecanismo de veto para los dos wrappers.
+  useOverlayHistory({
+    open,
+    dismiss: onOpenChange ? () => onOpenChange(false) : undefined,
+  })
+  return (
+    <DrawerPrimitive.Root
+      data-slot="drawer"
+      open={open}
+      onOpenChange={onOpenChange}
+      {...props}
+    />
+  )
 }
 
 function DrawerTrigger({

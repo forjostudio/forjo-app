@@ -7,10 +7,43 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useShellScope } from "@/components/ui/shell-scope"
 import { portalScopeClass } from "@/lib/shell-scope"
+import {
+  createHistoryBackDetails,
+  useOverlayHistory,
+  type OverlayDismissDetails,
+} from "@/lib/overlay-history"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+/**
+ * Props del wrapper = las del primitivo con UN solo cambio: el detalle que acompaña al cierre puede
+ * ser el de Base UI o el que sintetiza el "atrás" del celular (quick 260928-seo). Ver
+ * {@link OverlayDismissDetails} — es una unión, así que la rama de Base UI llega intacta a las
+ * pantallas y ninguna pierde tipado.
+ */
+type DialogProps = Omit<DialogPrimitive.Root.Props, "onOpenChange"> & {
+  onOpenChange?: (open: boolean, details: OverlayDismissDetails) => void
+}
+
+function Dialog({ open, onOpenChange, ...props }: DialogProps) {
+  // El "atrás" del celular cierra el diálogo en vez de navegar (quick 260928-seo). Engancharlo ACÁ
+  // arregla los 35 diálogos del panel de una: todos pasan por este wrapper. El cierre viaja por el
+  // MISMO `onOpenChange` que el click afuera y el Escape, con su propio motivo y un `cancel()` que
+  // funciona, así que `guardDraftOnDismiss` puede vetarlo igual que veta un click afuera — sin eso el
+  // back descartaría un borrador sucio sin avisar (G-23-25). Cero cambio de markup y de clases.
+  useOverlayHistory({
+    open,
+    dismiss: onOpenChange
+      ? (event) => onOpenChange(false, createHistoryBackDetails(event))
+      : undefined,
+  })
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      open={open}
+      onOpenChange={onOpenChange}
+      {...props}
+    />
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
