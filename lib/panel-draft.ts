@@ -28,6 +28,10 @@ import type { Service } from '@/lib/types'
 // guarda quedan chequeados contra la unión real de Base UI y un motivo mal escrito no compila. Es un
 // `import type`: se borra al compilar, así que este módulo sigue sin runtime de UI.
 import type { DialogRootChangeEventDetails } from '@base-ui/react/dialog'
+// El motivo del cierre disparado por el "atrás" del celular. Es un valor (no un tipo) porque también
+// se compara en runtime más abajo. Lo define `lib/overlay-history.ts`, que es quien sintetiza ese
+// detalle de cierre; acá sólo se consume, así que no hay ciclo de imports.
+import { HISTORY_BACK_REASON } from '@/lib/overlay-history'
 import { liveCategoryValue } from '@/lib/catalog-panel'
 import { normalizeServiceDuration, normalizeServicePrice } from '@/lib/onboarding-agenda'
 
@@ -86,9 +90,14 @@ export function capacityModePatch(next: CapacityMode, capacity: number): { capac
  * Se declara estructuralmente (y no como el tipo entero del paquete) para que la guarda se pueda
  * testear con un objeto plano, sin construir un evento de Base UI. El `reason` sí sale de la unión
  * real: un motivo mal escrito no compila.
+ *
+ * ⚠ POR QUÉ LA UNIÓN SE ENSANCHA con {@link HISTORY_BACK_REASON} (quick 260928-seo): el cierre que
+ * dispara el "atrás" del celular no lo origina Base UI —lo sintetiza `lib/overlay-history.ts`— así
+ * que su motivo NO está en la unión cerrada del paquete y sin ensanchar el tipo no se podría ni
+ * nombrar acá. No alcanza con sumarlo al `if` de abajo: sin este ensanche el motivo nuevo ni compila.
  */
 export type DraftDismissDetails = {
-  reason: DialogRootChangeEventDetails['reason']
+  reason: DialogRootChangeEventDetails['reason'] | typeof HISTORY_BACK_REASON
   cancel: () => void
 }
 
@@ -100,7 +109,12 @@ export type DraftDismissDetails = {
  * hay un intento de cierre, no en cada tecleo. Y el motivo se evalúa ANTES que `isDirty()`, para no
  * calcularla en los cierres que igual van a pasar.
  *
- * Mira EXACTAMENTE dos motivos: el click afuera y la tecla Escape. El cierre por la ✕ (`close-press`)
+ * Mira EXACTAMENTE tres motivos: el click afuera, la tecla Escape y el "atrás" del celular. Los tres
+ * son cierres ACCIDENTALES: gestos que el dueño hace sin la intención de descartar lo que cargó. El
+ * del "atrás" se sumó en el quick 260928-seo, y es el que había que sumar sí o sí: los overlays
+ * empezaron a cerrarse con el back del celular y esta lista es LITERAL, así que un cierre por
+ * `popstate` caía derecho en `close()` y descartaba el borrador sucio SIN AVISAR — el mismo bug que
+ * G-23-25 arregló, entrando por la puerta de atrás. El cierre por la ✕ (`close-press`)
  * y el que dispara el guardado no pasan por ninguna condición nueva — si la guarda los alcanzara, el
  * dueño quedaría encerrado en un diálogo sin salida (el caso real: vaciar el nombre deja el borrador
  * sucio y "Guardar" deshabilitado). `focus-out` queda afuera a propósito: con el diálogo modal el foco
@@ -113,7 +127,10 @@ export type DraftDismissDetails = {
 export function guardDraftOnDismiss(isDirty: () => boolean, close: () => void, onBlocked: () => void) {
   return (open: boolean, details: DraftDismissDetails) => {
     if (open) return
-    const accidental = details.reason === 'outside-press' || details.reason === 'escape-key'
+    const accidental =
+      details.reason === 'outside-press' ||
+      details.reason === 'escape-key' ||
+      details.reason === HISTORY_BACK_REASON
     if (accidental && isDirty()) {
       details.cancel()
       onBlocked()
