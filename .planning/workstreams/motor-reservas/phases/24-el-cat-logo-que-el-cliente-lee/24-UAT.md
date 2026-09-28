@@ -8,12 +8,12 @@ updated: 2026-09-28T00:00:00Z
 
 ## Current Test
 
-number: 18
-name: La barra en mobile y con teclado
+number: 3
+name: Los dos ejes y los tres modos de orden (el defecto que no da ningún error)
 expected: |
-  A 375px los chips no se apilan: la fila scrollea de costado, sin barra de scroll a la vista, y
-  cada chip se toca cómodo (44px de alto real). Con teclado: Tab llega a los chips, el foco se ve,
-  y Enter/Espacio filtra.
+  Cambiando "Orden de las categorías" (Personalizado / Alfabético) y "Orden de los servicios"
+  (Personalizado / Alfabético / Por precio) en el panel, la pantalla pública se reordena IGUAL que
+  el panel en cada combinación.
 awaiting: user response
 
 ## Tests
@@ -27,7 +27,9 @@ observed_preexisting: "Con captura: el nombre `SupercalifragilisticoEspialidoso1
 
 ### 2. Con categorías — el agrupado y "Otros" (CAT-08, CAT-09, D-03)
 expected: Creá 2 categorías desde el panel, asigná algunos servicios y dejá **uno sin asignar**. En la pública: los dos títulos con sus tarjetas y, último, el grupo "Otros" con el **mismo** tamaño, peso y tarjetas que una categoría real. El servicio suelto se puede reservar.
-result: [pending]
+result: pass
+reported: "pass"
+note: "CAT-08 (agrupado bajo títulos en el orden del dueño) y CAT-09 (el servicio sin categoría aparece último bajo 'Otros' y se puede reservar) confirmados en navegador real. D-03 tambien: 'Otros' se ve idéntico a una categoría real, sin degradar visualmente servicios que se venden igual." 
 
 ### 3. Los dos ejes y los tres modos de orden ⚠ el más importante
 expected: Cambiá "Orden de las categorías" entre Personalizado y Alfabético, y "Orden de los servicios" entre Personalizado, Alfabético y Por precio. La pantalla pública se reordena **igual que el panel** en cada combinación.
@@ -113,9 +115,9 @@ observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/ser
 ## Summary
 
 total: 18
-passed: 4
+passed: 5
 issues: 0
-pending: 14
+pending: 13
 skipped: 0
 blocked: 0
 
