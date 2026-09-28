@@ -8,11 +8,12 @@ updated: 2026-09-28T00:00:00Z
 
 ## Current Test
 
-number: 17
-name: La barra NO aparece con 0 ni con 1 categoria
+number: 18
+name: La barra en mobile y con teclado
 expected: |
-  Con 0 categorias: ni barra ni titulos, la pantalla de hoy. Con 1 categoria: tampoco hay barra,
-  aunque se vean el titulo de esa categoria y "Otros". El umbral es 2 o mas categorias CREADAS.
+  A 375px los chips no se apilan: la fila scrollea de costado, sin barra de scroll a la vista, y
+  cada chip se toca cómodo (44px de alto real). Con teclado: Tab llega a los chips, el foco se ve,
+  y Enter/Espacio filtra.
 awaiting: user response
 
 ## Tests
@@ -97,19 +98,24 @@ expected: |
   (c) **2 grupos con pocos servicios** (p. ej. 2 + 2) — el catálogo ya entra en una pantalla.
   Y que SÍ aparece en el caso que encontraste: **1 categoría con muchos servicios + sueltos** — son
   dos grupos y una página larga, así que ahora sí hay barra (`Todo` / la categoría / `Otros`).
-result: [pending]
+result: pass
+reported: "pass"
+confirmed: "Los tres controles negativos (0 categorías · 2 creadas sin asignar · 2 grupos con pocos servicios) y el caso positivo que el dueño encontró (1 categoría con muchos servicios + sueltos). El umbral revisado se comporta en la app real como lo describen los tests puros."
 note: "El test original decía 'no aparece con 0 ni con 1 categoría'. El propio dueño objetó el umbral durante este test y tenía razón: contaba categorías cuando el problema es la longitud de la página. Regla vigente: >=2 grupos Y >=6 servicios.
 
 ### 18. La barra en mobile y con teclado
 expected: A **375px** los chips no se apilan: la fila scrollea de costado, sin barra de scroll a la vista, y cada chip se toca cómodo (44px de alto real). Con **teclado**: Tab llega a los chips, el foco se ve, y Enter/Espacio filtra.
-result: [pending]
+result: pass
+reported: "pass"
+note: "Cierra el bloque de la barra de chips (tests 16, 17 y 18): D-16 / G-24-6 verificados en la app real, en desktop, en mobile y con teclado."
+observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/servicios), NO de esta fase: la zona 'Sin categoría' del organizador sólo se renderiza cuando YA hay servicios sueltos (`categorias-manager.tsx:916`, `sueltos.length > 0`), así que no hay dónde soltar el primer chip para desasignarlo — hay que abrir el diálogo 'Mover …'. Es superficie de la Phase 23, que está cerrada. Medido: el COMENTARIO de :912-915 justifica gatear por '>=1 categoría', que es una condición distinta de la que el código aplica; divergen justo en el caso del dueño (3 categorías, 0 sueltos). Registrado para tratarlo aparte, no como gap de la Phase 24."
 
 ## Summary
 
 total: 18
-passed: 2
+passed: 4
 issues: 0
-pending: 16
+pending: 14
 skipped: 0
 blocked: 0
 
