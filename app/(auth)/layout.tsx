@@ -1,3 +1,5 @@
+import type { Metadata } from 'next'
+import { NOINDEX } from '@/lib/noindex'
 import { ResetThemeScript } from '@/components/reset-theme-script'
 
 // Layout del route group (auth): padre común de (auth)/(split)/{login,forgot-password,reset-password}
@@ -9,6 +11,11 @@ import { ResetThemeScript } from '@/components/reset-theme-script'
 // Bauhaus vive en (auth)/(split)/layout.tsx a propósito: ponerlo acá arrastraría /register al split y
 // violaría el diseño de Phase 4. Este layout es solo el vehículo del reset (D-04: no toca otros layouts).
 // ResetThemeScript va ANTES de {children} para correr antes de pintarlos.
+
+// Ninguna pantalla de esta superficie va a buscadores. Ver `lib/noindex.ts` para por qué el meta
+// va ADEMÁS del `app/robots.ts` (robots.txt pide no rastrear; el noindex es el que des-indexa).
+export const metadata: Metadata = { robots: NOINDEX }
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <>

@@ -1,3 +1,5 @@
+import type { Metadata } from 'next'
+import { NOINDEX } from '@/lib/noindex'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -22,6 +24,11 @@ import { CrmToaster } from '@/components/crm/crm-toaster'
  * excepción de control (NEXT_REDIRECT) para cortar la ejecución; dentro de un
  * try la atraparíamos y el guard no cortaría.
  */
+
+// Ninguna pantalla de esta superficie va a buscadores. Ver `lib/noindex.ts` para por qué el meta
+// va ADEMÁS del `app/robots.ts` (robots.txt pide no rastrear; el noindex es el que des-indexa).
+export const metadata: Metadata = { robots: NOINDEX }
+
 export default async function CrmLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

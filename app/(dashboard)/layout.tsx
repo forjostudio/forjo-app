@@ -1,3 +1,5 @@
+import type { Metadata } from 'next'
+import { NOINDEX } from '@/lib/noindex'
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -9,6 +11,11 @@ import { UnsavedChangesProvider } from '@/components/dashboard/unsaved-changes-g
 import { VerticalProvider } from '@/lib/use-terminology'
 import { resolveVertical } from '@/lib/verticals'
 import { PaletteScript } from '@/components/palette-script'
+
+
+// Ninguna pantalla de esta superficie va a buscadores. Ver `lib/noindex.ts` para por qué el meta
+// va ADEMÁS del `app/robots.ts` (robots.txt pide no rastrear; el noindex es el que des-indexa).
+export const metadata: Metadata = { robots: NOINDEX }
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
