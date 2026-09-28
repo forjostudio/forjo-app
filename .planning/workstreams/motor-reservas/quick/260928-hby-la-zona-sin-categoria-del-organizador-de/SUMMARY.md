@@ -175,3 +175,14 @@ drop y que arrastrar el primer chip hasta ahí lo desasigna.
 - commit `afc2fbd` — FOUND
 - commit `ab4eced` — FOUND
 - `git rev-list --count 8d43f71..HEAD` → **2**, igual a `actuals.commits`
+
+---
+
+## Verificación visual — CONFIRMADA por el dueño (2026-09-28)
+
+El único punto que los gates automáticos no podían cubrir. El dueño abrió `/servicios` con ≥1
+categoría y 0 servicios sueltos y confirmó que **el recuadro punteado vacío se lee como zona de
+drop** y que **arrastrar el primer chip hasta ahí lo desasigna**.
+
+Con eso queda cerrado el círculo vicioso que originó la tarea: el destino de arrastre ya no aparece
+recién cuando dejó de hacer falta.
