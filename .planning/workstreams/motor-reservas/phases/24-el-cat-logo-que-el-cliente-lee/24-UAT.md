@@ -8,11 +8,11 @@ updated: 2026-09-28T00:00:00Z
 
 ## Current Test
 
-number: 15
-name: El nombre largo sin espacios ya no se encima con el precio
+number: 4
+name: Desktop — el nombre largo deja de partirse (CAT-10, backstop)
 expected: |
-  A 375px, el servicio con nombre de 40+ caracteres SIN espacios envuelve dentro de la tarjeta:
-  no se encima con el precio ni se sale por el costado. En desktop sigue entrando en una línea.
+  En desktop (>=640px), un servicio con nombre largo CON espacios entra en una sola línea a ~432px
+  útiles: ya no se parte en dos. Es el backstop de CAT-10 — se mide en el navegador, no se deriva.
 awaiting: user response
 
 ## Tests
@@ -85,7 +85,9 @@ result: [pending]
 
 ### 15. El nombre largo sin espacios ya no se encima con el precio (fix del 2026-09-28)
 expected: A 375px, el servicio con nombre de 40+ caracteres **sin espacios** envuelve dentro de la tarjeta. No se encima con el precio ni se sale por el costado. En desktop sigue entrando en una línea (CAT-10, test 4).
-result: [pending]
+result: pass
+reported: "pass"
+note: "Cierra el defecto que el dueño vio en el Test 1 (nombre encimado con el precio). Era la asunción diferida #2 del UI-SPEC: se relajó D-07 a propósito porque existía para que mobile no se rompiera, no para conservarlo roto." 
 note: "Arreglo nacido de la observación del dueño en el Test 1. `min-w-0 break-words` en el `<p>` del nombre — el par que ya cerró G-23-21 en el panel. Commit e7b5ef1."
 
 ### 16. La barra de chips aparece y filtra (D-16, G-24-6)
@@ -117,9 +119,9 @@ observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/ser
 ## Summary
 
 total: 18
-passed: 6
+passed: 7
 issues: 0
-pending: 12
+pending: 11
 skipped: 0
 blocked: 0
 
