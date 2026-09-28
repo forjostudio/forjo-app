@@ -910,10 +910,15 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                 )
               })}
               {/* El grupo de los sueltos: NO es una categoría (sin grip, sin flechas, sin renombrar ni
-                  eliminar) y va ÚLTIMO, siempre — espeja OTHER_GROUP_TITLE. Sólo con ≥1 categoría:
-                  con cero, todos son sueltos y el grupo sería el catálogo entero duplicado, sin ningún
-                  lugar a donde moverlo. */}
-              {sueltos.length > 0 && (
+                  eliminar) y va ÚLTIMO, siempre — espeja OTHER_GROUP_TITLE.
+                  La condición es ≥1 CATEGORÍA, no ≥1 suelto. Gatearlo por los sueltos armaba un
+                  círculo vicioso: la zona donde soltar un chip para desasignarlo sólo existía cuando
+                  ya había algo desasignado, así que para sacar el PRIMER servicio de su categoría no
+                  quedaba más que el diálogo "Mover …" (encontrado en la UAT de la Phase 24, con 3
+                  categorías y 0 sueltos). Vacía es una zona de drop, y por eso se pinta igual.
+                  Con CERO categorías sigue sin renderizarse: ahí todos los servicios son sueltos y el
+                  grupo sería el catálogo entero duplicado, sin ningún lugar a donde moverlo. */}
+              {categories.length > 0 && (
                 <li
                   // Recibe chips (soltar acá desasigna) y NADA más: no es una categoría, así que no se
                   // arrastra ni recibe filas.
@@ -940,21 +945,39 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                     <span className="min-w-0 text-sm font-medium text-foreground">Sin categoría</span>
                     <span className="ml-auto text-xs text-muted-foreground">{serviceCountLabel(sueltos.length)}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Estos se reservan igual. En tu página aparecen al final, bajo “Otros”.</p>
-                  <ul className="flex flex-wrap gap-2 px-2 pb-2" role="list">
-                    {sueltos.map(s => (
-                      <ServiceChip
-                        key={s.id}
-                        service={s}
-                        onMove={openMove}
-                        canDrag={chipGates.canDrag}
-                        dragging={draggingServiceId === s.id}
-                        onDragStart={setDraggingServiceId}
-                        onDragEnd={resetDrag}
-                        onDropOnChip={dropServiceOnChip}
-                      />
-                    ))}
-                  </ul>
+                  {/* Copy por estado: con sueltos habla de ELLOS; vacía no puede hablar en presente de
+                      servicios que no existen, así que describe qué es la zona y cómo traer uno.
+                      El atajo depende del dispositivo: el arrastre nativo no existe en touch (misma
+                      razón por la que el pipeline del CRM esconde su "arrastrá las tarjetas" en
+                      mobile), y ahí el camino es el mismo botón del chip que abre "Mover …". */}
+                  {sueltos.length > 0 ? (
+                    <p className="text-xs text-muted-foreground">Estos se reservan igual. En tu página aparecen al final, bajo “Otros”.</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Acá van los servicios que no estén en ninguna categoría: se reservan igual y aparecen al final de tu página, bajo “Otros”.{' '}
+                      <span className="hidden sm:inline">Arrastrá uno hasta acá para sacarlo de su categoría.</span>
+                      <span className="sm:hidden">Tocá un servicio y elegí “Sin categoría” para traerlo acá.</span>
+                    </p>
+                  )}
+                  {/* Sin sueltos no se renderiza el ul: vacío sumaría el gap del flex + su padding
+                      inferior como un hueco muerto dentro del recuadro punteado. Mismo criterio que
+                      los chips de cada categoría. */}
+                  {sueltos.length > 0 && (
+                    <ul className="flex flex-wrap gap-2 px-2 pb-2" role="list">
+                      {sueltos.map(s => (
+                        <ServiceChip
+                          key={s.id}
+                          service={s}
+                          onMove={openMove}
+                          canDrag={chipGates.canDrag}
+                          dragging={draggingServiceId === s.id}
+                          onDragStart={setDraggingServiceId}
+                          onDragEnd={resetDrag}
+                          onDropOnChip={dropServiceOnChip}
+                        />
+                      ))}
+                    </ul>
+                  )}
                 </li>
               )}
             </ul>
