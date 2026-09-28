@@ -23,7 +23,7 @@ covered_files:
   - "test/catalog-public.test.ts"
   - "test/preview-booking-parity.test.ts"
   - "test/service-categories.test.ts"
-covered_digest: "v1:sha256:88159d06e824349e25a64054c462df9defe35b3cef779a93a08b64ccdb37df55"
+covered_digest: "v1:sha256:a28e7dc5d0982c5f5f9e936b91decc7e36399716a194fc90430b63c939c32dbe"
 behavior_unverified_items: []
 re_verification:
   previous_status: human_needed
