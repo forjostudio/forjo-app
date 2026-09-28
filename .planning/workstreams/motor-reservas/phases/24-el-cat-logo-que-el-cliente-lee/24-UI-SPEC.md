@@ -254,7 +254,12 @@ Una categoría con **todos** sus servicios deshabilitados renderiza su `<h3>` **
 
 El paso 1 **sigue scrolleando con la página**: la barra no introduce ningún contenedor de scroll propio para la lista.
 
-**Cuándo aparece la barra:** cuando el negocio tiene **2 o más categorías creadas**. El umbral vive en una **constante nombrada y testeada**, nunca como literal suelto. Con 0 categorías la pantalla es la de hoy (CAT-07 / G-24-2 intactos, la barra **no** se renderiza). Con 1 categoría tampoco: filtrar entre un grupo y "Otros" que ya entran juntos en pantalla es ruido.
+**Cuándo aparece la barra** *(revisado el 2026-09-28 durante la UAT — ver D-16)*: cuando se cumplen **las dos** condiciones a la vez — **≥2 grupos con título** y **≥6 servicios en total**. Los dos umbrales viven en **constantes nombradas y testeadas** (`CHIPS_MIN_GROUPS`, `CHIPS_MIN_SERVICES` en `lib/service-categories.ts`), nunca como literales sueltos.
+
+- **≥2 grupos** — tiene que haber entre qué elegir. Con uno solo los chips serían `Todo` + uno: un control que no filtra nada. Esto es además lo que protege CAT-07 / G-24-2 **sin una rama aparte**: con 0 categorías `groupCatalog` devuelve un grupo sin título, y con categorías creadas pero ninguna asignada cae en su camino de identidad y devuelve también uno solo.
+- **≥6 servicios** — la página tiene que ser efectivamente larga. Seis tarjetas entran en una pantalla; una barra encima de un catálogo que ya se ve entero es ruido permanente a cambio de nada.
+
+> La primera versión de esta entrada contaba **categorías creadas**, y contaba la cosa equivocada: lo que la barra resuelve es la longitud de la página, que la maneja la cantidad de servicios. Fallaba en los dos sentidos (una categoría con 10 servicios + 5 sueltos no mostraba barra; dos categorías con 4 servicios sí).
 
 **Qué es:** una fila horizontal de chips — **`Todo` primero y seleccionado por defecto**, después un chip por grupo en el orden que definió el dueño (incluido "Otros" al final cuando hay servicios sueltos). Tocar un chip **filtra** la lista a ese grupo; tocar `Todo` vuelve al catálogo completo.
 
