@@ -347,3 +347,115 @@ export function groupCatalog<S extends CatalogService>(
 
   return grupos
 }
+
+// ── La barra de chips que FILTRA el catálogo público (D-16 / G-24-6) ──────────────────────────
+// Decidida el 2026-09-28 DURANTE LA UAT de la Phase 24, con el catálogo real del dueño cargado:
+// D-16 REVISA D-11 (que decía "catálogo largo: nada"), no lo contradice a ciegas.
+//
+// Vive acá, en el módulo PURO, y no en el JSX del paso 1, por el mismo motivo que `groupCatalog`:
+// "cuándo aparece la barra" y "qué muestra el filtro" son reglas, y una regla en el render no se
+// puede testear en este repo (Vitest corre en entorno `node`, sin DOM, y `BookingClient` llama al
+// router en su cuerpo). Acá se testean directo, sin leer código fuente con un grep.
+//
+// ⚠ LA INVARIANTE QUE SOSTIENE CAT-09, y que es la razón por la que esta forma NO reabre la
+// objeción que fundaba D-11: el chip `Todo` viene PRIMERO y es el estado inicial, así que al entrar
+// se ve el catálogo COMPLETO y reservar no cuesta ni un click más que antes. Filtrar es opt-in y
+// reversible de un toque. Un estado inicial distinto de `Todo` escondería servicios al entrar, que
+// es exactamente lo que D-11 no quería. `ALL_GROUPS_KEY` no es un detalle: es esa invariante.
+//
+// ⚠ FILTRA, NUNCA APAGA. Ante una clave desconocida —un grupo que desapareció entre dos renders
+// porque el dueño borró la categoría en otra pestaña— la salida es el catálogo ENTERO, nunca cero
+// grupos. Es la misma regla direccional de la invariante de conservación de `groupCatalog`, y el
+// mismo modo de falla que ya mordió dos veces en este repo (CR-01 de la Phase 20, y otra vez en
+// la 21): el peor caso posible es "se ve como hoy".
+
+/**
+ * El umbral de D-16: **desde 2**.
+ *
+ * Es una constante nombrada y NO un literal suelto en el JSX porque el umbral es una elección
+ * explícita del dueño y moverla tiene que costar una línea, en un lugar, con su test al lado.
+ *
+ * Gatea DOS cosas con el mismo número, y las dos son el mismo criterio ("hacen falta al menos dos
+ * baldes entre los que elegir"):
+ *   1. las categorías CREADAS por el negocio — con 0 la pantalla es la de hoy (CAT-07 / G-24-2: la
+ *      barra no se renderiza, no se renderiza vacía), y con 1 filtrar entre un grupo y "Otros" que
+ *      ya entran juntos en pantalla es ruido;
+ *   2. los grupos que REALMENTE tienen título en la salida de `groupCatalog` — con categorías
+ *      creadas pero ninguna asignada, `groupCatalog` cae en su camino de identidad y devuelve un
+ *      único grupo sin título: una barra con sólo `Todo` encima de una lista plana sería un control
+ *      que no filtra nada y que además insinuaría un agrupado que no existe.
+ */
+export const CHIPS_MIN_CATEGORIES = 2
+
+/**
+ * La clave sentinela del chip `Todo`, el estado inicial de la barra.
+ *
+ * Es una clave propia y NO el texto visible (el molde de `forjo-tiendas` usa el rótulo como
+ * sentinela): acá las claves de los grupos son ids de categoría, y un negocio es perfectamente
+ * capaz de llamar `Todo` a una categoría suya. Con el rótulo como sentinela, ese negocio tendría
+ * dos chips que hacen cosas distintas y se leen igual.
+ */
+export const ALL_GROUPS_KEY = '__todo__'
+
+/** El rótulo del chip que no filtra. Constante por el mismo motivo que `OTHER_GROUP_TITLE`. */
+export const ALL_GROUPS_TITLE = 'Todo'
+
+/**
+ * La clave del grupo de los SUELTOS ("Otros"), que no tiene `categoryId` del cual colgarse.
+ *
+ * La misma que ya usaba el `key` de React en el render del paso 1: es una constante para que el
+ * chip y la tarjeta no puedan quedar hablando de claves distintas — si divergieran, el chip de
+ * "Otros" filtraría a cero grupos y caería en la red de seguridad sin que nada lo avise.
+ */
+export const LOOSE_GROUP_KEY = '__sueltos__'
+
+/** Un chip de la barra: la clave con la que se filtra y el texto que se pinta. */
+export interface CatalogChip {
+  key: string
+  title: string
+}
+
+/** La clave estable de un grupo. `categoryId` cuando lo tiene; la sentinela de los sueltos si no. */
+export function catalogGroupKey<S>(group: CatalogGroup<S>): string {
+  return group.categoryId ?? LOOSE_GROUP_KEY
+}
+
+/**
+ * La fila de chips, o **vacía** cuando la barra no corresponde.
+ *
+ * Devolver `[]` —y no un booleano aparte— es deliberado: la condición de render del consumidor es
+ * "¿hay chips?", así que no hay ningún `if` de visibilidad que alguien se tenga que acordar de
+ * escribir en el JSX, igual que `title: null` hace con el encabezado de grupo.
+ *
+ * `categoryCount` es la cantidad de categorías que el negocio TIENE CREADAS (no la de grupos): es
+ * el eje que nombra D-16 y el único que distingue "cero categorías" de "categorías sin asignar".
+ */
+export function catalogChips<S>(groups: CatalogGroup<S>[], categoryCount: number): CatalogChip[] {
+  if (categoryCount < CHIPS_MIN_CATEGORIES) return []
+  const conTitulo = groups.filter(
+    (g): g is CatalogGroup<S> & { title: string } => g.title !== null,
+  )
+  if (conTitulo.length < CHIPS_MIN_CATEGORIES) return []
+  return [
+    { key: ALL_GROUPS_KEY, title: ALL_GROUPS_TITLE },
+    ...conTitulo.map((g) => ({ key: catalogGroupKey(g), title: g.title })),
+  ]
+}
+
+/**
+ * Los grupos que se ven con el chip elegido.
+ *
+ * `ALL_GROUPS_KEY` devuelve LA MISMA referencia que entró (no una copia): el consumidor es un
+ * `useMemo` de React y devolver un arreglo nuevo en el estado por defecto re-renderizaría el
+ * catálogo completo por nada.
+ *
+ * Una clave que no matchea ningún grupo devuelve el catálogo ENTERO, nunca `[]`.
+ */
+export function filterCatalogGroups<S>(
+  groups: CatalogGroup<S>[],
+  chipKey: string,
+): CatalogGroup<S>[] {
+  if (chipKey === ALL_GROUPS_KEY) return groups
+  const elegidos = groups.filter((g) => catalogGroupKey(g) === chipKey)
+  return elegidos.length > 0 ? elegidos : groups
+}
