@@ -367,3 +367,52 @@
 - Tests de aislamiento multi-tenant (RLS owner-level) que ponen ROJA la suite si un negocio puede leer/modificar datos de otro — con 2 sesiones anon autenticadas (nunca service-role), más el workflow de CI que corre toda la suite en push/PR con skip graceful.
 
 ---
+
+## v0.29 — El catálogo del booking
+
+**Shipped:** 2026-09-28 · **Workstream:** `motor-reservas` · **Phases 22-24**
+
+**Phases completed:** 3 phases, 18 plans · 172 commits · 27 archivos de código, +6.769 / −229 líneas
+· 1 migración (**078**, ya en producción) · cero paquetes nuevos.
+
+**Qué entrega:** el booking público mostraba **todos los servicios en una grilla plana de dos
+columnas**, sin jerarquía. v0.29 le da al dueño la herramienta para organizarlo y hace que esa
+organización **llegue al cliente**.
+
+**Key accomplishments:**
+
+- **El modelo, con la regla del comodín un escalón más abajo** (Phase 22, migr. 078): tabla de
+  categorías por negocio + `services.category_id` nullable, leída por el anon a través de una **vista
+  acotada** (`public_service_categories`) en vez de abrir la tabla. La ausencia de dato significa
+  *"se muestra como hoy"*, **nunca** *"no se muestra"*.
+- **CAT-07 verdadero POR CONSTRUCCIÓN, y verificado como tal**: la rama de identidad de
+  `groupCatalog` decide por el **resultado del reparto** (no por `categories.length`) y retorna
+  **antes de construir ningún comparador**. El día de la migración todos los negocios de producción
+  tenían cero categorías — ése era el camino de **todos** los clientes actuales, y no podía romperse.
+- **El panel que organiza** (Phase 23, 11 planes): crear, renombrar y borrar categorías con el
+  duplicado rechazado por **la base** (UNIQUE sobre `lower(name)`) y copy propia; asignar una o
+  ninguna por servicio; reordenar **arrastrando y con ▲/▼** —las flechas no son un extra: son lo que
+  hace que funcione en mobile y con teclado—; los dos modos de orden para todo el negocio; y la
+  descripción corta, que hasta entonces era una **columna muerta** que sólo se podía escribir por SQL.
+- **El catálogo que el cliente lee** (Phase 24): agrupado bajo títulos en el orden del dueño, los
+  sueltos al final bajo "Otros" y **nunca escondidos**, tarjetas horizontales en desktop, y el preview
+  de `/web` mostrando exactamente lo mismo.
+- **Un defecto que no producía ningún error, atrapado por verificación humana**: las dos columnas de
+  modo de orden **no estaban en ninguno de los dos `select`**, así que llegaban `undefined` y el orden
+  salía bien **por casualidad**. Todos los negocios habrían visto el orden equivocado sin un solo
+  síntoma. Hoy lo cubre un test de regresión que hace grep sobre el código fuente.
+- **Dos UAT humanas, 30/30 y 18/18**, que además **produjeron trabajo**: de la de la fase 24 salieron
+  la barra de chips que filtra (D-16, revisando una decisión que el dueño había cerrado en abstracto),
+  el arreglo de un nombre largo que se encimaba con el precio, y la corrección de un título que era
+  más chico que los ítems que agrupaba.
+
+**Calidad:** 3 × `secure-phase` con `threats_open: 0` (17 amenazas en la fase 24, incluyendo un
+registro **retroactivo** para la barra de chips, que nació de un brief durante la UAT y nunca pasó por
+el planner) · auditoría de milestone **`passed`**, 0 blockers, 0 warnings · suite en **1365 tests**.
+
+**Deuda declarada, no olvidada:** pantalla en blanco con cero **servicios** (preexistente); seis ítems
+del panel que el dueño juntó probando (incluido **asignar sede a un profesional** — la columna
+`professionals.location_id` ya existe, falta la UI — y un cuarto modo de orden que necesita la
+migración **080**); y cuatro writes sin `.eq('business_id', …)` heredados de junio 2026.
+
+---

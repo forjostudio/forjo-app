@@ -24,14 +24,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16)
 
 **Core value:** Un negocio NUNCA puede leer ni modificar datos de otro y los pagos no pueden falsificarse; el núcleo de integridad anti-doble-booking (v0.9/v0.12) no puede regresar. **v0.29 organiza el catálogo**: categorías propias por negocio que llegan al booking público, con la regla de que **la ausencia de dato muestra lo de hoy y nunca esconde un servicio** — un negocio sin categorías ve la lista de siempre y un servicio sin categoría siempre se puede reservar.
-**Current focus:** Phase 24 — El catálogo que el cliente lee
+**Current focus:** ninguno — **v0.29 shipped y archivado el 2026-09-28**. El workstream espera el próximo milestone (`/gsd-new-milestone`).
 
 ## Current Position
 
-Phase: 24
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-09-28 — Phase 24 complete
+Phase: — (sin milestone activo)
+Plan: —
+Status: v0.29 archivado · 3 fases, 18 planes, 11/11 requisitos, auditoría `passed`
+Last activity: 2026-09-28 — milestone v0.29 archivado y taggeado
+
+## Milestone v0.29 — ARCHIVADO (2026-09-28)
+
+> Roadmap, requisitos y auditoría en `.planning/milestones/v0.29-*` y
+> `v0.29-MILESTONE-AUDIT.md`. Las decisiones de abajo quedan como historial del milestone cerrado.
 
 ## Milestone v0.29 — decisiones LOCKED
 
@@ -462,7 +467,8 @@ Heredadas del workstream (siguen vigentes):
 - **[Phase 22 — deploy, RESUELTO 2026-09-15]** La migración **078 YA ESTÁ APLICADA EN PRODUCCIÓN**. La próxima migración del repo es la **079**. Con esto, las mitigaciones que el `22-SECURITY.md` cerró midiendo contra el local (grants SELECT-only en las tres vistas, FK compuesta, RLS de `service_categories`) están efectivamente en prod. **Desbloquea el deploy de las Phases 23 y 24.**
 - **[Phase 22 — code review, CERRADO 2026-09-15]** `/gsd-code-review 22 --fix` corrió: **7/7 WARNINGs arreglados**, 0 skipped (`22-REVIEW-FIX.md`, commits `6ddd141`..`0864949`). Suite **1198 → 1209** passed, `tsc --noEmit` limpio, build 0. Los 5 INFO quedaron fuera de alcance a propósito. ⚠ **WR-04 es el único cuyo test no muerde hoy** (con la implementación vieja la salida coincidía igual porque ambos comparadores caen a `porOrden`): es un candado de contrato, conviene mirarlo con ojo humano cuando aterrice el primer call site real en la Phase 23.
 - **[Phase 22 — deploy de la 079, RESUELTO 2026-09-15]** La migración **079 YA ESTÁ APLICADA EN PRODUCCIÓN** (normaliza espacios en el único de nombre de categoría con `btrim(name, E' 	
-')` + CHECK de nombre no en blanco). Verificación del runbook corrida y OK. Las marcas `PENDIENTE` de `supabase/schema.sql` ya se borraron. **No lleva `NOTIFY pgrst, 'reload schema'`** y es correcto: no agrega columna, vista, función ni FK — un índice y un CHECK los hace cumplir Postgres, no PostgREST. **La próxima migración del repo es la 080.**
+
+')` + CHECK de nombre no en blanco). Verificación del runbook corrida y OK. Las marcas `PENDIENTE` de `supabase/schema.sql` ya se borraron. **No lleva `NOTIFY pgrst, 'reload schema'`** y es correcto: no agrega columna, vista, función ni FK — un índice y un CHECK los hace cumplir Postgres, no PostgREST. **La próxima migración del repo es la 080.**
 - **[Phase 22 — seguridad, CERRADO 2026-09-15]** `secure-phase` corrió: **SECURED, 23/23 amenazas cerradas, `threats_open: 0`** (`22-SECURITY.md`). Los dos vectores críticos se **midieron** contra el PG local en vivo, no se leyeron del `.sql`: ACL crudo de `pg_class` → `anon=r` / `authenticated=r` en las tres vistas (+ 5 escrituras anónimas reales rebotadas), y medición conductual del borrado de categoría → el servicio conserva `business_id` y sigue visible en `public_services`. ⚠ **Todo eso vale contra el LOCAL**: las mitigaciones no existen en prod hasta aplicar la 078 a mano.
 - **[Phase 15 — deploy, PENDIENTE]** La migración **068** está escrita y validada en local pero **NO aplicada a producción**. Última en prod = **067**. Antes de aplicarla hay que correr el **pre-flight** que está escrito en el header del archivo, con criterio de **ABORTO** si `max(capacity) from time_blocks > 1`. Runbook completo en `15-01-SUMMARY.md` §User Setup Required. ⚠ El sub-bloqueo de ORDEN ("no debería llegar a prod antes que el guard del editor, D-10") quedó **CERRADO por el plan 15-02**: el editor ya ofrece los tres modos y sube el cupo a 2 al salir de individual, así que no puede producir la combinación que el CHECK rechaza. La 068 sigue teniendo que aplicarse a mano y coordinada con el deploy de ese código.
 - **[Phase 15 — tests, RESUELTO por 15-02 (2026-08-12)]** Las escrituras que el CHECK de coherencia volvió ilegales están todas cerradas, en los **dos** sentidos: los cuatro `capacity_mode: 'group_class', capacity: 1` pasaron a `'individual'/1`, y los **tres** `seedSimultaneousService(t, { capacity: 1 })` de `concurrency.test.ts` (que morían con `23514` porque el helper hace `throw`) migraron o se convirtieron en guard. Suites verdes contra el local con la 068: **20/20** en `test/concurrency.test.ts` y **7/7** en `test/booking-cualquiera-public.test.ts` — el conteo **no bajó**.
