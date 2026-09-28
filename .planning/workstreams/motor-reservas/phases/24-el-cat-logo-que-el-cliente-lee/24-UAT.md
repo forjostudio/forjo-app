@@ -8,12 +8,11 @@ updated: 2026-09-28T00:00:00Z
 
 ## Current Test
 
-number: 3
-name: Los dos ejes y los tres modos de orden (el defecto que no da ningún error)
+number: 15
+name: El nombre largo sin espacios ya no se encima con el precio
 expected: |
-  Cambiando "Orden de las categorías" (Personalizado / Alfabético) y "Orden de los servicios"
-  (Personalizado / Alfabético / Por precio) en el panel, la pantalla pública se reordena IGUAL que
-  el panel en cada combinación.
+  A 375px, el servicio con nombre de 40+ caracteres SIN espacios envuelve dentro de la tarjeta:
+  no se encima con el precio ni se sale por el costado. En desktop sigue entrando en una línea.
 awaiting: user response
 
 ## Tests
@@ -33,7 +32,10 @@ note: "CAT-08 (agrupado bajo títulos en el orden del dueño) y CAT-09 (el servi
 
 ### 3. Los dos ejes y los tres modos de orden ⚠ el más importante
 expected: Cambiá "Orden de las categorías" entre Personalizado y Alfabético, y "Orden de los servicios" entre Personalizado, Alfabético y Por precio. La pantalla pública se reordena **igual que el panel** en cada combinación.
-result: [pending]
+result: pass
+reported: "pass"
+note: "EL TEST QUE MAS IMPORTABA de la fase. Cierra el defecto silencioso: `category_sort_mode` y `service_sort_mode` NO estaban en ninguno de los dos `select` antes de esta fase (medido: 0 y 0), así que los modos llegaban `undefined` y `groupCatalog` caía a 'custom' POR CASUALIDAD. Ningún test automático lo habría cantado — no produce error. Confirmado por el dueño en la pantalla real, en los dos ejes."
+derived_request: "El dueño pidió acá un CUARTO modo: precio de MAYOR a MENOR. No es un gap de esta fase — es capacidad nueva de la Phase 23 (CAT-04/CAT-05), y necesita migración. Diferido por decisión suya: terminar la UAT primero. Ver 'Ideas surgidas en la UAT' al pie." 
 
 ### 4. Desktop — el nombre largo deja de partirse (CAT-10, backstop)
 expected: En desktop (≥640px), un servicio con nombre largo **con espacios**: entra en una sola línea a ~432px útiles, ya no se parte en dos.
@@ -115,9 +117,9 @@ observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/ser
 ## Summary
 
 total: 18
-passed: 5
+passed: 6
 issues: 0
-pending: 13
+pending: 12
 skipped: 0
 blocked: 0
 
@@ -140,3 +142,24 @@ sólo para que nadie las confunda con un defecto encontrado en la UAT:
 > CONTEXT y el UI-SPEC corregidos en el mismo commit que lo introduce.
 
 ## Gaps
+
+## Ideas surgidas en la UAT (NO son gaps — capacidad nueva, diferida)
+
+### Cuarto modo de orden: por precio, de MAYOR a MENOR
+
+Pedido por el dueño en el Test 3 (2026-09-28). **No es de esta fase:** los modos de orden son
+CAT-04/CAT-05, superficie del panel (Phase 23). La Fase 24 sólo los consume — en cuanto el modo
+exista, la pública y el preview lo respetan **sin tocar una línea**, porque leen `service_sort_mode`
+y se lo pasan a `groupCatalog`.
+
+**La cadena, ya medida (2026-09-28) para que quien lo tome no la re-derive:**
+
+| Punto | Detalle |
+|---|---|
+| **Migración 080** | `businesses_service_sort_mode_chk` es un CHECK con la lista literal `['custom','alpha','price']` (`schema.sql:1029`). Un valor nuevo no entra sin alterar el constraint. ⚠ Las migraciones de este proyecto se aplican a prod **a mano y coordinadas con el deploy**. |
+| Tipo | `ServiceSortMode = 'custom' \| 'alpha' \| 'price'` (`lib/service-categories.ts:54`) |
+| Comparador | `porPrecio` (`:175`) y el `switch` de `comparadorDeServicios` (`:188`) |
+| Selector del panel | `settings-client.tsx:2776` — el rótulo actual dice literal *"Por precio (de menor a mayor)"*, así que el copy de los dos modos hay que rehacerlo junto |
+| Whitelist de escritura | `settings-client.tsx:1989` rechaza hoy cualquier valor fuera de los tres |
+
+**Decisión del dueño:** terminar la UAT de la Fase 24 primero y decidir después.
