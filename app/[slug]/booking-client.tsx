@@ -10,7 +10,14 @@ import { effectiveBookingCutoff } from '@/lib/booking-window'
 import { professionalsForService, isServiceStaffed } from '@/lib/staff-services'
 import { hasScheduleCoverage, blocksForService } from '@/lib/time-block-services'
 import { anyCardPlacement } from '@/lib/booking-selector'
-import { groupCatalog, type CatalogCategory } from '@/lib/service-categories'
+import {
+  groupCatalog,
+  catalogChips,
+  catalogGroupKey,
+  filterCatalogGroups,
+  ALL_GROUPS_KEY,
+  type CatalogCategory,
+} from '@/lib/service-categories'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -222,6 +229,27 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
       services: business.service_sort_mode,
     }),
     [services, serviceCategories, business.category_sort_mode, business.service_sort_mode],
+  )
+
+  // ── La barra de chips que filtra el catálogo (D-16 / G-24-6) ─────────────────────────────────
+  // Decidida el 2026-09-28 durante la UAT, con el catálogo real cargado: D-16 revisa D-11.
+  // El estado arranca en `ALL_GROUPS_KEY` y eso NO es un default cómodo: es la invariante que hace
+  // que esto no choque con CAT-09 — al entrar se ve el catálogo COMPLETO y reservar no cuesta ni un
+  // click más que antes. Un estado inicial distinto de `Todo` escondería servicios al llegar, que es
+  // exactamente la objeción que fundaba la versión anterior de esta entrada.
+  // ⚠ Las DOS reglas de la barra ("cuándo aparece" y "qué muestra el filtro") viven en el módulo
+  // puro, testeadas directo (lib/service-categories.ts). Acá no hay umbral escrito a mano, no hay
+  // `.filter()` sobre grupos y no hay ningún condicional por cantidad: `catalogChips` devuelve un
+  // arreglo VACÍO cuando no corresponde barra, así que la condición de render es "¿hay chips?" — el
+  // mismo mecanismo con el que `title: null` decide el encabezado de grupo.
+  const [catalogChip, setCatalogChip] = useState<string>(ALL_GROUPS_KEY)
+  const chips = useMemo(
+    () => catalogChips(catalogGroups, (serviceCategories ?? []).length),
+    [catalogGroups, serviceCategories],
+  )
+  const visibleCatalogGroups = useMemo(
+    () => filterCatalogGroups(catalogGroups, catalogChip),
+    [catalogGroups, catalogChip],
   )
 
   // Las franjas que dan el servicio ELEGIDO (D-04). Sin servicio todavía (paso 1) son todas: la
@@ -597,10 +625,57 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
         {step === 1 && (
           <div>
             <h2 className="text-xl font-bold mb-4 font-[family-name:var(--font-heading)]">Elegí tu servicio</h2>
+            {/* La barra de chips que FILTRA el catálogo, desde 2 categorías (D-16 / G-24-6, decidida
+                durante la UAT del 2026-09-28). `chips` viene VACÍO cuando no corresponde barra, así
+                que acá no hay umbral escrito a mano ni ningún condicional por cantidad: la regla vive
+                en `catalogChips` (lib/service-categories), testeada directo.
+                `role="tablist"` + `role="tab"` con `aria-selected` es el molde probado de la tienda
+                hermana (forjo-tiendas, components/tienda/CatalogoCarta.tsx): un lector de pantalla
+                anuncia "1 de 4 seleccionado" en vez de leer cuatro botones sueltos.
+                ⚠ Alto real de 44px (`min-h-11`) y NO el truco del pseudo-elemento que usa la tarjeta:
+                adentro de un contenedor con `overflow-x` el pseudo-elemento que sobresale vuelve
+                scrolleable TAMBIÉN el eje vertical, y la rueda del mouse parada encima mueve la barra.
+                Está medido en el comentario de `:56-60` del molde.
+                La fila scrollea en horizontal con la barra oculta (`[scrollbar-width:none]` para
+                Firefox + el pseudo-elemento de WebKit): con 8 categorías los chips no se apilan en
+                tres renglones ni empujan el catálogo abajo del fold.
+                Colores por token, cero hex: el chip elegido usa el par `bg-primary`/`text-primary-foreground`
+                que ya pinta el hero, y el apagado va en `text-foreground` (16.2:1) — NUNCA
+                `text-primary` sobre el fondo, que a cuerpo chico falla AA en 3 de las 5 paletas. */}
+            {chips.length > 0 && (
+              <div
+                role="tablist"
+                aria-label="Filtrar el catálogo por categoría"
+                className="mb-4 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {chips.map(chip => {
+                  const elegido = chip.key === catalogChip
+                  return (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={elegido}
+                      onClick={() => setCatalogChip(chip.key)}
+                      className={cn(
+                        'flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                        elegido
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border text-foreground hover:border-primary'
+                      )}
+                    >
+                      {chip.title}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             {/* El catálogo, agrupado por las categorías que armó el dueño (CAT-08). El orden de los
-                dos ejes sale ENTERO de `groupCatalog`: acá no se filtra, no se reordena y no se
-                decide visibilidad — el único condicional de la región es el del título, y lo decide
-                EL DATO (`title` nulo ⇒ no hay texto que pintar ⇒ la pantalla de hoy, CAT-07).
+                dos ejes sale ENTERO de `groupCatalog` y el filtro de la barra de chips sale ENTERO
+                de `filterCatalogGroups`: acá no se reordena, no se filtra a mano y no se decide
+                visibilidad — el único condicional de la región es el del título, y lo decide EL DATO
+                (`title` nulo ⇒ no hay texto que pintar ⇒ la pantalla de hoy, CAT-07). Con el chip
+                `Todo` (el estado inicial) `visibleCatalogGroups` ES `catalogGroups`, misma referencia.
                 El envoltorio por grupo es obligatorio y no puede ser un Fragment: con Fragment el
                 aire de 24px caería entre el título y SUS PROPIAS tarjetas y el agrupado se leería al
                 revés. La escalera es 8px (título ↔ sus tarjetas) < 12px (tarjeta ↔ tarjeta) < 24px
@@ -612,8 +687,8 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                 Una sola columna a lo ancho (CAT-10): a ~432px útiles el nombre largo deja de
                 partirse. En mobile no cambia nada, la grilla ya era de una columna debajo de 640px. */}
             <div className="space-y-6">
-              {catalogGroups.map(group => (
-                <div key={group.categoryId ?? '__sueltos__'}>
+              {visibleCatalogGroups.map(group => (
+                <div key={catalogGroupKey(group)}>
                   {group.title !== null && (
                     <h3 className="text-sm font-bold break-words mb-2">{group.title}</h3>
                   )}

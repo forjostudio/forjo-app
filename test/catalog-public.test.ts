@@ -205,7 +205,11 @@ describe('el render del paso 1', () => {
     // ninguna asignada", que groupCatalog ya manda al camino de identidad.
     expect(desde).toBeGreaterThan(-1)
     expect(hasta).toBeGreaterThan(desde)
-    expect(region).toContain('catalogGroups.map')
+    // `visibleCatalogGroups` y no `catalogGroups`: desde el plan 24-03 el paso 1 pinta los grupos
+    // que dejó el chip elegido (D-16). El filtro NO está acá — lo resolvió `filterCatalogGroups` en
+    // el módulo puro, y con el chip `Todo` (el estado inicial) devuelve la MISMA referencia, así que
+    // la pantalla de entrada sigue siendo el catálogo completo.
+    expect(region).toContain('visibleCatalogGroups.map')
     expect(region).toContain('group.services.map')
     expect(region).toContain('group.title !== null')
     expect(region).toContain('{group.title}')
@@ -300,4 +304,105 @@ describe('el preview del panel: el mismo dato por el otro camino de lectura (D-1
     }
     // Mismo timeout generoso que el barrido de arriba y por el mismo motivo (árbol frío en Windows).
   }, 60_000)
+})
+
+describe('la barra de chips que filtra, desde 2 categorías (D-16 / G-24-6)', () => {
+  const bookingClient = read(BOOKING_CLIENT)
+  const limpio = sinComentarios(bookingClient)
+  const desde = bookingClient.indexOf('Step 1 - Service')
+  const hasta = bookingClient.indexOf('Step 2 - Professional')
+  const region = sinComentarios(bookingClient.slice(desde, hasta))
+
+  it('el umbral NO se escribe acá: no hay una sola comparación contra un número distinto de cero', () => {
+    // Previene el literal suelto que D-16 prohíbe explícitamente ("va como constante nombrada, para
+    // que moverla sea una línea"). Un `categories.length >= 2` en el JSX pone el umbral en un lugar
+    // sin test, y el día que el dueño lo quiera en 3 hay que buscarlo leyendo JSX.
+    // La ÚNICA comparación de largo permitida en la región es contra 0 — la pregunta "¿hay chips?",
+    // que es la misma forma con la que `title: null` decide el encabezado de grupo.
+    expect(desde).toBeGreaterThan(-1)
+    expect(hasta).toBeGreaterThan(desde)
+    expect(region).toMatch(/chips\.length > 0/)
+    expect(region).not.toMatch(/\.length\s*[<>]=?\s*[1-9]/)
+    // Y el umbral existe, nombrado, en el módulo puro (su valor lo testea
+    // test/service-categories.test.ts, que lo importa y lo ejecuta en vez de leerlo).
+    expect(sinComentarios(read(join('lib', 'service-categories.ts')))).toContain('export const CHIPS_MIN_CATEGORIES = 2')
+  })
+
+  it('el chip seleccionado por defecto es la sentinela `Todo`', () => {
+    // ES LA INVARIANTE DE LA ENTRADA, no un default cómodo: con `Todo` elegido al montar, el cliente
+    // ve el catálogo COMPLETO y reservar no cuesta ni un click más que antes (CAT-09 intacto). Un
+    // estado inicial distinto reabre exactamente la objeción que fundaba la versión anterior de
+    // G-24-6, y es un cambio de una palabra que ningún otro gate vería.
+    expect(limpio).toContain('useState<string>(ALL_GROUPS_KEY)')
+    expect(limpio).toContain("ALL_GROUPS_KEY,")
+  })
+
+  it('la barra se gatea por la CANTIDAD DE CATEGORÍAS del negocio, no por la de grupos', () => {
+    // Es el eje que nombra D-16 y el único que distingue "cero categorías" (la pantalla de hoy,
+    // CAT-07 / G-24-2) de "categorías creadas pero ninguna asignada". Si acá se pasara
+    // `catalogGroups.length`, un negocio con una sola categoría + sueltos tendría dos grupos y la
+    // barra aparecería con un umbral que el dueño no eligió.
+    const at = limpio.indexOf('const chips = useMemo(')
+    expect(at).toBeGreaterThan(-1)
+    const bloque = recorteDeLlamada(limpio, limpio.indexOf('(', at + 'const chips = useMemo'.length))
+    expect(bloque).toContain('catalogChips(catalogGroups, (serviceCategories ?? []).length)')
+  })
+
+  it('el filtro no se escribe en el JSX: la región no filtra ni reordena a mano', () => {
+    // Previene la deriva que D-09/D-10 vienen atajando desde la Phase 22: un `.filter()` o un
+    // `.sort()` en el render es una SEGUNDA regla de catálogo, y el día que difiera de la del módulo
+    // el dueño ordena una cosa y el cliente ve otra sin ningún error a la vista.
+    // El gate se acota a los GRUPOS y no a cualquier `.filter(`: la tarjeta ya usa uno legítimo para
+    // componer su `aria-describedby` (`[…].filter(Boolean)`), preexistente y fuera de esta fase.
+    expect(region).not.toContain('catalogGroups.filter')
+    expect(region).not.toContain('visibleCatalogGroups.filter')
+    expect(region).not.toContain('Groups.sort')
+    expect(region).not.toContain('services.filter')
+    expect(region).not.toContain('services.sort')
+  })
+
+  it('la accesibilidad del molde portado está completa: tablist con nombre, tab con estado y 44px reales', () => {
+    // Las cuatro juntas o ninguna: cuatro `<button>` sueltos sin `role` no le dicen a un lector de
+    // pantalla que son un grupo de opciones con una elegida, y `aria-selected` sin `role="tab"` es
+    // un atributo inválido que los lectores ignoran.
+    expect(region).toContain('role="tablist"')
+    expect(region).toContain('aria-label="Filtrar el catálogo por categoría"')
+    expect(region).toContain('role="tab"')
+    expect(region).toContain('aria-selected={elegido}')
+    // Alto REAL de 44px, nunca el pseudo-elemento de la tarjeta: adentro de un contenedor con
+    // `overflow-x` el pseudo-elemento que sobresale vuelve scrolleable también el eje vertical
+    // (medido en el molde, forjo-tiendas/components/tienda/CatalogoCarta.tsx:56-60).
+    expect(region).toContain('min-h-11')
+    expect(region).not.toMatch(/after:-inset-[0-9]/)
+    // Foco visible en cada chip (regla no negociable del proyecto).
+    expect(region).toContain('focus-visible:ring-ring/50')
+    // La fila scrollea en horizontal con la barra oculta en los dos motores.
+    expect(region).toContain('overflow-x-auto')
+    expect(region).toContain('[scrollbar-width:none]')
+    expect(region).toContain('[&::-webkit-scrollbar]:hidden')
+  })
+
+  it('NO se portó el buscador ni la segunda fila de subcategorías', () => {
+    // D-16 lo dice con todas las letras: del molde se porta SÓLO la fila de chips y su filtro. Forjo
+    // no tiene subcategorías (fuera de alcance explícito en REQUIREMENTS.md) y nadie pidió búsqueda
+    // — dos superficies que nadie decidió y que habría que mantener.
+    expect(region).not.toContain('type="search"')
+    expect(region).not.toContain('<input')
+    expect(region).not.toContain('placeholder')
+    // Y sigue sin colapsables ni contenedor de scroll propio para la lista (G-24-6).
+    expect(region).not.toContain('<details')
+    expect(region).not.toMatch(/max-h-\[?[0-9]/)
+  })
+
+  it('cero hex hardcodeado y cero acento a cuerpo chico en el chip apagado', () => {
+    // El chip elegido usa el par `bg-primary`/`text-primary-foreground` que ya pinta el hero, y el
+    // apagado va en `text-foreground` (16.2:1). `text-primary` a 14px falla AA en 3 de las 5 paletas
+    // (3.54 / 3.59 / 2.36:1, medido en el 19-UI-SPEC), así que no puede llevar el texto del chip.
+    const barra = region.slice(region.indexOf('role="tablist"'), region.indexOf('space-y-6'))
+    expect(barra).toContain('bg-primary text-primary-foreground')
+    expect(barra).toContain('text-foreground')
+    expect(barra).not.toMatch(/#[0-9a-fA-F]{3,8}/)
+    expect(barra).not.toContain('text-primary ')
+    expect(barra).not.toContain('text-muted-foreground')
+  })
 })
