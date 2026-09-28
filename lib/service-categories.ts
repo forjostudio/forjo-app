@@ -370,22 +370,37 @@ export function groupCatalog<S extends CatalogService>(
 // la 21): el peor caso posible es "se ve como hoy".
 
 /**
- * El umbral de D-16: **desde 2**.
+ * Los DOS umbrales de D-16, que se exigen JUNTOS. Ver la revisión del 2026-09-28 en D-16.
  *
- * Es una constante nombrada y NO un literal suelto en el JSX porque el umbral es una elección
- * explícita del dueño y moverla tiene que costar una línea, en un lugar, con su test al lado.
+ * Son constantes nombradas y NO literales sueltos en el JSX porque son elecciones explícitas del
+ * dueño, y moverlas tiene que costar una línea, en un lugar, con su test al lado.
  *
- * Gatea DOS cosas con el mismo número, y las dos son el mismo criterio ("hacen falta al menos dos
- * baldes entre los que elegir"):
- *   1. las categorías CREADAS por el negocio — con 0 la pantalla es la de hoy (CAT-07 / G-24-2: la
- *      barra no se renderiza, no se renderiza vacía), y con 1 filtrar entre un grupo y "Otros" que
- *      ya entran juntos en pantalla es ruido;
- *   2. los grupos que REALMENTE tienen título en la salida de `groupCatalog` — con categorías
- *      creadas pero ninguna asignada, `groupCatalog` cae en su camino de identidad y devuelve un
- *      único grupo sin título: una barra con sólo `Todo` encima de una lista plana sería un control
- *      que no filtra nada y que además insinuaría un agrupado que no existe.
+ * **Por qué dos y no uno.** La barra existe para una sola cosa: que un catálogo largo se pueda
+ * navegar. Eso impone dos condiciones independientes, y una sola no alcanza:
+ *
+ *   - `CHIPS_MIN_GROUPS` — **tiene que haber entre qué elegir.** Con un único grupo los chips serían
+ *     `Todo` + uno: un control que no filtra nada. Esto es además lo que protege CAT-07 / G-24-2 sin
+ *     una rama aparte: con cero categorías `groupCatalog` devuelve UN grupo sin título, y con
+ *     categorías creadas pero ninguna asignada cae en su camino de identidad y devuelve también uno
+ *     solo — los dos casos quedan por debajo del umbral por el mismo camino, no por un `if` especial.
+ *
+ *   - `CHIPS_MIN_SERVICES` — **la página tiene que ser efectivamente larga.** Seis tarjetas entran
+ *     en una pantalla; la barra encima de un catálogo que ya se ve entero es ruido permanente a
+ *     cambio de nada.
+ *
+ * **Por qué el umbral NO cuenta categorías** (la primera versión de D-16, del 2026-09-22, lo hacía):
+ * el problema que la barra resuelve es la LONGITUD de la página, y eso lo maneja la cantidad de
+ * servicios, no la de categorías. Contar categorías fallaba en los dos sentidos, y el dueño lo
+ * detectó en la UAT razonando sobre su propio catálogo: una categoría con diez servicios más cinco
+ * sueltos es una página eterna con dos grupos filtrables, y no mostraba barra; dos categorías con
+ * cuatro servicios en total entran en una pantalla, y sí la mostraba. Contar grupos y servicios
+ * describe el problema real y, de paso, hace que `catalogChips` no necesite ningún dato que no esté
+ * ya en `groups`.
  */
-export const CHIPS_MIN_CATEGORIES = 2
+export const CHIPS_MIN_GROUPS = 2
+
+/** Ver `CHIPS_MIN_GROUPS`. Seis tarjetas entran en una pantalla; la barra aparece desde la sexta. */
+export const CHIPS_MIN_SERVICES = 6
 
 /**
  * La clave sentinela del chip `Todo`, el estado inicial de la barra.
@@ -427,15 +442,24 @@ export function catalogGroupKey<S>(group: CatalogGroup<S>): string {
  * "¿hay chips?", así que no hay ningún `if` de visibilidad que alguien se tenga que acordar de
  * escribir en el JSX, igual que `title: null` hace con el encabezado de grupo.
  *
- * `categoryCount` es la cantidad de categorías que el negocio TIENE CREADAS (no la de grupos): es
- * el eje que nombra D-16 y el único que distingue "cero categorías" de "categorías sin asignar".
+ * **Todo lo que decide sale de `groups`** — no recibe la cantidad de categorías creadas ni ningún
+ * otro dato. Eso no es economía de parámetros: un segundo argumento que el call site tiene que
+ * calcular por su cuenta es un lugar más donde el público y el preview pueden divergir en silencio,
+ * que es exactamente el modo de falla que esta fase ya tuvo que arreglar dos veces (las columnas de
+ * modo de orden que faltaban en los dos `select`).
  */
-export function catalogChips<S>(groups: CatalogGroup<S>[], categoryCount: number): CatalogChip[] {
-  if (categoryCount < CHIPS_MIN_CATEGORIES) return []
+export function catalogChips<S>(groups: CatalogGroup<S>[]): CatalogChip[] {
   const conTitulo = groups.filter(
     (g): g is CatalogGroup<S> & { title: string } => g.title !== null,
   )
-  if (conTitulo.length < CHIPS_MIN_CATEGORIES) return []
+  // Los dos umbrales se exigen JUNTOS — ver `CHIPS_MIN_GROUPS`. El corte por grupos va primero
+  // porque es el que hace verdadero "hay entre qué elegir"; sin él, el de servicios solo podría
+  // pintar una barra de `Todo` + uno sobre un catálogo largo de un solo grupo.
+  if (conTitulo.length < CHIPS_MIN_GROUPS) return []
+  // Se cuentan los servicios de TODOS los grupos, no los del más grande: lo que hace larga a la
+  // página es el total que hay que scrollear.
+  const servicios = groups.reduce((n, g) => n + g.services.length, 0)
+  if (servicios < CHIPS_MIN_SERVICES) return []
   return [
     { key: ALL_GROUPS_KEY, title: ALL_GROUPS_TITLE },
     ...conTitulo.map((g) => ({ key: catalogGroupKey(g), title: g.title })),

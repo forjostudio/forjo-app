@@ -44,6 +44,24 @@ Que la organización que el dueño le dio a su catálogo en el panel **llegue a 
   > 1. *"Colapsar esconde servicios"* — **filtrar con `Todo` por defecto no esconde nada al entrar**, y no agrega ni un click para reservar. CAT-09 queda intacto. El patrón hermano lo dice con todas las letras (`forjo-tiendas`, `components/tienda/CatalogoCarta.tsx:21-27`): *"El filtro NO es un acordeón por categoría… el que ya sabe qué quiere filtra, y el que viene a mirar scrollea de corrido. Un acordeón obliga a las dos personas a abrir y cerrar cajones."*
   > 2. *"El umbral es un número inventado"* — sigue siendo una elección, pero ahora es **explícita, del dueño y testeada**: **2 o más categorías**. Va como constante nombrada, no como un literal suelto, para que moverla sea una línea.
   >
+  > **REVISADA el 2026-09-28, durante la UAT (Test 17).** El umbral original era *"desde 2 categorías
+  > creadas"*. El dueño lo objetó razonando sobre su propio catálogo y tenía razón: **el umbral
+  > contaba la cosa equivocada.** Lo que la barra resuelve es la LONGITUD de la página, y eso lo
+  > maneja la cantidad de SERVICIOS, no la de categorías. Fallaba en los dos sentidos — una categoría
+  > con diez servicios más cinco sueltos es una página eterna con dos grupos filtrables y no mostraba
+  > barra; dos categorías con cuatro servicios entran en una pantalla y sí la mostraba.
+  >
+  > **La regla vigente: la barra aparece con ≥2 GRUPOS Y ≥6 SERVICIOS, los dos a la vez.** Con un
+  > solo grupo no hay entre qué elegir (los chips serían `Todo` + uno); con menos de seis servicios
+  > la página no es larga. Constantes `CHIPS_MIN_GROUPS` y `CHIPS_MIN_SERVICES` en
+  > `lib/service-categories.ts`. Como efecto lateral bueno, `catalogChips` ya **no recibe la cantidad
+  > de categorías**: todo sale de `groups`, así que el call site no deriva ningún dato que la pública
+  > y el preview puedan calcular distinto.
+  >
+  > Esto no debilita CAT-07: con cero categorías `groupCatalog` devuelve UN grupo sin título, y con
+  > categorías creadas pero ninguna asignada cae en su camino de identidad y devuelve también uno
+  > solo — los dos quedan por debajo del umbral de grupos por el mismo camino, sin una rama especial.
+  >
   > *Alcance de lo que se porta de `agualaboca`:* **sólo** la fila de chips y su filtro. **NO** se porta el buscador ni la segunda fila de subcategorías — Forjo no tiene subcategorías (fuera de alcance explícito en REQUIREMENTS.md) y nadie pidió búsqueda.
 
 ### Grupos donde nada se puede reservar

@@ -243,10 +243,12 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   // arreglo VACÍO cuando no corresponde barra, así que la condición de render es "¿hay chips?" — el
   // mismo mecanismo con el que `title: null` decide el encabezado de grupo.
   const [catalogChip, setCatalogChip] = useState<string>(ALL_GROUPS_KEY)
-  const chips = useMemo(
-    () => catalogChips(catalogGroups, (serviceCategories ?? []).length),
-    [catalogGroups, serviceCategories],
-  )
+  // Todo lo que decide la barra sale de `catalogGroups`: no se le pasa la cantidad de categorías ni
+  // ningún otro dato que este call site tenga que calcular. Un segundo argumento derivado acá sería
+  // un lugar más donde la pública y el preview pueden divergir en silencio — el modo de falla que
+  // esta misma fase ya tuvo que arreglar con las columnas de modo de orden que faltaban en los dos
+  // `select`.
+  const chips = useMemo(() => catalogChips(catalogGroups), [catalogGroups])
   const visibleCatalogGroups = useMemo(
     () => filterCatalogGroups(catalogGroups, catalogChip),
     [catalogGroups, catalogChip],

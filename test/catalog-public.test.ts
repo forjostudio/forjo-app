@@ -159,6 +159,53 @@ describe('el cableado del cliente: la prop, su default y los dos modos', () => {
   })
 })
 
+/**
+ * El TERCER argumento de una llamada `groupCatalog(...)`, o `''` si no lo tiene.
+ *
+ * Existe porque el gate de abajo afirma una regla sobre el tercer argumento y antes la chequeaba
+ * sobre la llamada ENTERA: un `groupCatalog([...a, ...b], cats)` —spread legítimo en la lista de
+ * servicios, que no tiene nada que ver con D-10— la hacía fallar. Un gate que muerde código correcto
+ * termina borrado, y con él se va la invariante que sí importaba. Acotarlo NO lo debilita: el caso
+ * de abajo prueba que sigue atrapando el spread que D-10 prohíbe.
+ *
+ * Corta por comas de PRIMER nivel contando profundidad de `(`/`[`/`{`. No entiende de strings ni de
+ * template literals, y no hace falta: los tres argumentos de `groupCatalog` son expresiones de datos.
+ */
+function tercerArgumento(llamada: string): string {
+  const adentro = llamada.slice(llamada.indexOf('(') + 1, llamada.lastIndexOf(')'))
+  const partes: string[] = []
+  let prof = 0
+  let desde = 0
+  for (let i = 0; i < adentro.length; i++) {
+    const c = adentro[i]
+    if (c === '(' || c === '[' || c === '{') prof++
+    else if (c === ')' || c === ']' || c === '}') prof--
+    else if (c === ',' && prof === 0) {
+      partes.push(adentro.slice(desde, i))
+      desde = i + 1
+    }
+  }
+  partes.push(adentro.slice(desde))
+  return (partes[2] ?? '').trim()
+}
+
+describe('el recorte del tercer argumento (el gate que vigila al gate)', () => {
+  it('encuentra el spread donde D-10 lo prohíbe, y lo ignora donde es legítimo', () => {
+    // Sin este caso, un error en `tercerArgumento` volvería VACUO el barrido de abajo: devolvería
+    // '' para todo y ningún call site fallaría nunca.
+    // ⚠ El nombre de la función va PARTIDO en estos fixtures, a propósito: el barrido de abajo lee
+    // TODAS las fuentes del repo — incluida ésta — y un literal con el nombre entero se leería como
+    // un call site de verdad. Pasó: la primera versión de este caso hacía fallar al gate contra su
+    // propio fixture. Partirlo acá es preferible a excluir este archivo del barrido, que crearía un
+    // punto ciego justo en el archivo que define el gate.
+    const fn = 'group' + 'Catalog'
+    expect(tercerArgumento(`${fn}(svcs, cats, { ...DEFAULT_SORT_MODES, ...modes })`)).toContain('...')
+    expect(tercerArgumento(`${fn}([...a, ...b], cats)`)).toBe('')
+    expect(tercerArgumento(`${fn}([...a], cats, { categories: x, services: y })`)).not.toContain('...')
+    expect(tercerArgumento(`${fn}(a, b, { categories: f(z), services: g(w) })`)).toBe('{ categories: f(z), services: g(w) }')
+  })
+})
+
 describe('la regla dura del tercer argumento (D-10 / CAT-07)', () => {
   it('ningún call site del repo compone los modos por propagación', () => {
     // Previene el único cambio que volvería equivocado el orden de TODOS los negocios en silencio:
@@ -180,7 +227,7 @@ describe('la regla dura del tercer argumento (D-10 / CAT-07)', () => {
     // Un barrido que no encuentra nada pasa por vacío y no prueba nada.
     expect(encontrados.length).toBeGreaterThan(0)
     for (const llamada of encontrados) {
-      expect(llamada).not.toContain('...')
+      expect(tercerArgumento(llamada)).not.toContain('...')
     }
     // Timeout explícito y generoso: el barrido lee ~370 archivos y en caliente tarda ~200ms, pero en
     // frío (primer toque del antivirus de Windows sobre el árbol entero, medido una vez en esta
@@ -325,7 +372,11 @@ describe('la barra de chips que filtra, desde 2 categorías (D-16 / G-24-6)', ()
     expect(region).not.toMatch(/\.length\s*[<>]=?\s*[1-9]/)
     // Y el umbral existe, nombrado, en el módulo puro (su valor lo testea
     // test/service-categories.test.ts, que lo importa y lo ejecuta en vez de leerlo).
-    expect(sinComentarios(read(join('lib', 'service-categories.ts')))).toContain('export const CHIPS_MIN_CATEGORIES = 2')
+    // Y los DOS umbrales existen, nombrados, en el módulo puro (sus valores los testea
+    // test/service-categories.test.ts, que los importa y los ejecuta en vez de leerlos).
+    const puro = sinComentarios(read(join('lib', 'service-categories.ts')))
+    expect(puro).toContain('export const CHIPS_MIN_GROUPS = 2')
+    expect(puro).toContain('export const CHIPS_MIN_SERVICES = 6')
   })
 
   it('el chip seleccionado por defecto es la sentinela `Todo`', () => {
@@ -337,15 +388,17 @@ describe('la barra de chips que filtra, desde 2 categorías (D-16 / G-24-6)', ()
     expect(limpio).toContain("ALL_GROUPS_KEY,")
   })
 
-  it('la barra se gatea por la CANTIDAD DE CATEGORÍAS del negocio, no por la de grupos', () => {
-    // Es el eje que nombra D-16 y el único que distingue "cero categorías" (la pantalla de hoy,
-    // CAT-07 / G-24-2) de "categorías creadas pero ninguna asignada". Si acá se pasara
-    // `catalogGroups.length`, un negocio con una sola categoría + sueltos tendría dos grupos y la
-    // barra aparecería con un umbral que el dueño no eligió.
+  it('la barra se decide SÓLO con los grupos: el call site no deriva ningún segundo argumento', () => {
+    // D-16 revisada (2026-09-28): los dos umbrales (grupos y servicios) salen ambos de `groups`, así
+    // que `catalogChips` recibe UN argumento. Que no haya un segundo dato calculado acá no es
+    // economía de parámetros: un argumento derivado en el call site es un lugar más donde la pública
+    // y el preview pueden divergir en silencio — el modo de falla que esta misma fase ya tuvo que
+    // arreglar con las columnas de modo de orden que faltaban en los dos `select`.
     const at = limpio.indexOf('const chips = useMemo(')
     expect(at).toBeGreaterThan(-1)
     const bloque = recorteDeLlamada(limpio, limpio.indexOf('(', at + 'const chips = useMemo'.length))
-    expect(bloque).toContain('catalogChips(catalogGroups, (serviceCategories ?? []).length)')
+    expect(bloque).toContain('catalogChips(catalogGroups)')
+    expect(bloque).not.toContain('serviceCategories')
   })
 
   it('el filtro no se escribe en el JSX: la región no filtra ni reordena a mano', () => {

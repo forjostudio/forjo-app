@@ -6,7 +6,8 @@ import {
   OTHER_GROUP_TITLE,
   ALL_GROUPS_KEY,
   ALL_GROUPS_TITLE,
-  CHIPS_MIN_CATEGORIES,
+  CHIPS_MIN_GROUPS,
+  CHIPS_MIN_SERVICES,
   LOOSE_GROUP_KEY,
   catalogChips,
   catalogGroupKey,
@@ -644,58 +645,80 @@ describe('sortCategories — el eje categorías, con las vacías incluidas', () 
 // "Con 2 categorías hay chips" pasaría igual con una barra que se muestra siempre.
 describe('la barra de chips del catálogo público (D-16)', () => {
   const dos = [cat('c-corte', { name: 'Corte' }), cat('c-color', { name: 'Color' })]
-  const conDosGrupos = groupCatalog(
-    [svc('s1', { category_id: 'c-corte' }), svc('s2', { category_id: 'c-color' })],
-    dos,
-  )
+  /** N servicios de una categoría, para cruzar (o no) el umbral de servicios sin ruido. */
+  const svcs = (n: number, categoryId: string | null, desde = 0) =>
+    Array.from({ length: n }, (_, i) => svc(`s${desde + i + 1}`, categoryId ? { category_id: categoryId } : {}))
+  /** Dos grupos y SEIS servicios: el caso mínimo en que la barra corresponde. */
+  const conBarra = groupCatalog([...svcs(3, 'c-corte'), ...svcs(3, 'c-color', 3)], dos)
 
-  it('el umbral es UNA CONSTANTE del módulo y vale 2', () => {
-    // El número es una elección explícita del dueño (D-16). Vive nombrado para que moverla sea una
-    // línea; este caso es el que hace que moverla no pase desapercibida.
-    expect(CHIPS_MIN_CATEGORIES).toBe(2)
+  it('los umbrales son CONSTANTES del módulo: 2 grupos y 6 servicios', () => {
+    // Los dos números son elecciones explícitas del dueño (D-16, revisada el 2026-09-28). Viven
+    // nombrados para que moverlos cueste una línea; este caso es el que hace que moverlos no pase
+    // desapercibido.
+    expect(CHIPS_MIN_GROUPS).toBe(2)
+    expect(CHIPS_MIN_SERVICES).toBe(6)
   })
 
   it('con CERO categorías no hay barra: la pantalla es la de hoy (CAT-07 / G-24-2)', () => {
-    // El caso de TODOS los negocios de producción el día del deploy. La barra no se renderiza
+    // El caso de TODOS los negocios de producción el día del deploy. Cae por el umbral de GRUPOS
+    // (identidad ⇒ un solo grupo sin título), no por una rama especial. La barra no se renderiza
     // vacía: no se renderiza.
-    const identidad = groupCatalog([svc('s1'), svc('s2')], [])
-    expect(catalogChips(identidad, 0)).toEqual([])
-  })
-
-  it('con UNA categoría tampoco: filtrar entre un grupo y "Otros" es ruido', () => {
-    const una = [cat('c-corte', { name: 'Corte' })]
-    const grupos = groupCatalog([svc('s1', { category_id: 'c-corte' }), svc('s2')], una)
-    // Dos grupos en la salida ("Corte" + "Otros") y aun así CERO chips: el umbral cuenta
-    // CATEGORÍAS CREADAS, que es el eje que nombra D-16.
-    expect(grupos).toHaveLength(2)
-    expect(catalogChips(grupos, una.length)).toEqual([])
+    expect(catalogChips(groupCatalog(svcs(10, null), []))).toEqual([])
   })
 
   it('con categorías creadas pero NINGUNA asignada tampoco: una barra con sólo "Todo" no filtra nada', () => {
-    // `groupCatalog` cae en su camino de identidad (un grupo sin título). Una barra acá insinuaría
-    // un agrupado que la pantalla no muestra.
-    const identidad = groupCatalog([svc('s1'), svc('s2')], dos)
+    // `groupCatalog` cae en su camino de identidad (un grupo sin título) por más servicios que haya.
+    const identidad = groupCatalog(svcs(10, null), dos)
     expect(identidad).toHaveLength(1)
     expect(identidad[0].title).toBeNull()
-    expect(catalogChips(identidad, dos.length)).toEqual([])
+    expect(catalogChips(identidad)).toEqual([])
   })
 
-  it('desde 2 categorías: "Todo" PRIMERO y después un chip por grupo, en el orden del dueño', () => {
+  it('DOS grupos pero POCOS servicios: no hay barra, el catálogo ya entra en una pantalla', () => {
+    // ⚠ El control negativo del segundo umbral, y el caso que la PRIMERA versión de D-16 hacía mal:
+    // contando categorías, dos categorías con cuatro servicios mostraban una barra sobre un catálogo
+    // que se ve entero.
+    const pocos = groupCatalog([...svcs(2, 'c-corte'), ...svcs(2, 'c-color', 2)], dos)
+    expect(pocos).toHaveLength(2)
+    expect(catalogChips(pocos)).toEqual([])
+  })
+
+  it('UNA categoría + "Otros" con bastantes servicios SÍ tiene barra (el caso que encontró el dueño)', () => {
+    // ⚠ Éste es el que la versión del 2026-09-22 hacía mal al revés: una categoría con diez
+    // servicios más cinco sueltos es una página eterna con dos grupos filtrables, y el umbral por
+    // CATEGORÍAS la dejaba sin barra. Son los GRUPOS los que dicen "hay entre qué elegir".
+    const una = [cat('c-corte', { name: 'Corte' })]
+    const grupos = groupCatalog([...svcs(10, 'c-corte'), ...svcs(5, null, 10)], una)
+    expect(grupos).toHaveLength(2)
+    const chips = catalogChips(grupos)
+    expect(chips.map(c => c.title)).toEqual([ALL_GROUPS_TITLE, 'Corte', OTHER_GROUP_TITLE])
+  })
+
+  it('se cuentan los servicios de TODOS los grupos, no los del más grande', () => {
+    // Tres y tres llegan a seis. Si contara sólo el grupo mayor, este caso no tendría barra.
+    expect(catalogChips(conBarra)).not.toEqual([])
+  })
+
+  it('cruzando el umbral: con cinco servicios no hay barra y con seis sí', () => {
+    const cinco = groupCatalog([...svcs(3, 'c-corte'), ...svcs(2, 'c-color', 3)], dos)
+    const seis = groupCatalog([...svcs(3, 'c-corte'), ...svcs(3, 'c-color', 3)], dos)
+    expect(catalogChips(cinco)).toEqual([])
+    expect(catalogChips(seis)).not.toEqual([])
+  })
+
+  it('"Todo" PRIMERO y después un chip por grupo, en el orden del dueño', () => {
     // El orden de los chips no se decide acá: sale de `groupCatalog`, que es la fuente única del
     // orden en los dos ejes (D-09). Si divergiera, el dueño ordenaría una cosa y el cliente vería
     // otra sin ningún error.
-    const chips = catalogChips(conDosGrupos, dos.length)
+    const chips = catalogChips(conBarra)
     expect(chips.map(c => c.title)).toEqual([ALL_GROUPS_TITLE, 'Corte', 'Color'])
     expect(chips[0].key).toBe(ALL_GROUPS_KEY)
-    expect(chips.slice(1).map(c => c.key)).toEqual(conDosGrupos.map(catalogGroupKey))
+    expect(chips.slice(1).map(c => c.key)).toEqual(conBarra.map(catalogGroupKey))
   })
 
   it('"Otros" es un chip más y va último, con la clave sentinela de los sueltos', () => {
-    const grupos = groupCatalog(
-      [svc('s1', { category_id: 'c-corte' }), svc('s2', { category_id: 'c-color' }), svc('s3')],
-      dos,
-    )
-    const chips = catalogChips(grupos, dos.length)
+    const grupos = groupCatalog([...svcs(3, 'c-corte'), ...svcs(3, 'c-color', 3), ...svcs(1, null, 6)], dos)
+    const chips = catalogChips(grupos)
     expect(chips.map(c => c.title)).toEqual([ALL_GROUPS_TITLE, 'Corte', 'Color', OTHER_GROUP_TITLE])
     expect(chips[chips.length - 1].key).toBe(LOOSE_GROUP_KEY)
   })
@@ -703,35 +726,35 @@ describe('la barra de chips del catálogo público (D-16)', () => {
   it('el estado inicial (`Todo`) devuelve el catálogo COMPLETO y la MISMA referencia', () => {
     // La invariante que sostiene CAT-09: al entrar no hay nada escondido y reservar no cuesta un
     // click más. La identidad referencial además evita un re-render del catálogo por nada.
-    expect(filterCatalogGroups(conDosGrupos, ALL_GROUPS_KEY)).toBe(conDosGrupos)
+    expect(filterCatalogGroups(conBarra, ALL_GROUPS_KEY)).toBe(conBarra)
   })
 
   it('un chip de grupo deja EXACTAMENTE ese grupo, con sus servicios intactos', () => {
-    const soloColor = filterCatalogGroups(conDosGrupos, 'c-color')
+    const soloColor = filterCatalogGroups(conBarra, 'c-color')
     expect(soloColor).toHaveLength(1)
     expect(soloColor[0].title).toBe('Color')
-    expect(soloColor[0].services.map(s => s.id)).toEqual(['s2'])
+    expect(soloColor[0].services.map(s => s.id)).toEqual(['s4', 's5', 's6'])
   })
 
   it('el chip de "Otros" filtra por la sentinela, no por un id nulo', () => {
-    const grupos = groupCatalog([svc('s1', { category_id: 'c-corte' }), svc('s2', { category_id: 'c-color' }), svc('s3')], dos)
+    const grupos = groupCatalog([...svcs(3, 'c-corte'), ...svcs(3, 'c-color', 3), ...svcs(1, null, 6)], dos)
     const sueltos = filterCatalogGroups(grupos, LOOSE_GROUP_KEY)
     expect(sueltos).toHaveLength(1)
     expect(sueltos[0].title).toBe(OTHER_GROUP_TITLE)
-    expect(sueltos[0].services.map(s => s.id)).toEqual(['s3'])
+    expect(sueltos[0].services.map(s => s.id)).toEqual(['s7'])
   })
 
   it('una clave DESCONOCIDA devuelve el catálogo entero, nunca cero grupos (filtra, no apaga)', () => {
     // El dueño borró la categoría en otra pestaña entre dos renders. El peor caso posible es "se ve
     // como hoy" — el mismo modo de falla que ya mordió dos veces en este repo (CR-01 Phase 20/21).
-    expect(filterCatalogGroups(conDosGrupos, 'c-borrada')).toEqual(conDosGrupos)
-    expect(filterCatalogGroups(conDosGrupos, '')).toEqual(conDosGrupos)
+    expect(filterCatalogGroups(conBarra, 'c-borrada')).toEqual(conBarra)
+    expect(filterCatalogGroups(conBarra, '')).toEqual(conBarra)
   })
 
   it('no muta la entrada: filtrar es leer', () => {
-    const antes = JSON.stringify(conDosGrupos)
-    filterCatalogGroups(conDosGrupos, 'c-color')
-    catalogChips(conDosGrupos, dos.length)
-    expect(JSON.stringify(conDosGrupos)).toBe(antes)
+    const antes = JSON.stringify(conBarra)
+    filterCatalogGroups(conBarra, 'c-color')
+    catalogChips(conBarra)
+    expect(JSON.stringify(conBarra)).toBe(antes)
   })
 })
