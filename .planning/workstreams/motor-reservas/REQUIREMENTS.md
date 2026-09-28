@@ -92,17 +92,24 @@ cliente. Es la contracara de v0.28: aquel milestone hizo que la franja declarara
 
 | Req | Fase | Estado |
 |-----|------|--------|
-| CAT-01 | Phase 23 | Pendiente |
-| CAT-02 | Phase 23 | Pendiente |
-| CAT-03 | Phase 23 | Pendiente |
-| CAT-04 | Phase 23 | Pendiente |
-| CAT-05 | Phase 23 | Pendiente |
+| CAT-01 | Phase 23 | Completo |
+| CAT-02 | Phase 23 | Completo |
+| CAT-03 | Phase 23 | Completo |
+| CAT-04 | Phase 23 | Completo |
+| CAT-05 | Phase 23 | Completo |
 | CAT-06 | Phase 22 | Completo |
 | CAT-07 | Phase 22 | Completo |
-| CAT-08 | Phase 24 | Pendiente |
-| CAT-09 | Phase 24 | Pendiente |
-| CAT-10 | Phase 24 | Pendiente |
-| CAT-11 | Phase 23 | Pendiente |
+| CAT-08 | Phase 24 | Completo |
+| CAT-09 | Phase 24 | Completo |
+| CAT-10 | Phase 24 | Completo |
+| CAT-11 | Phase 23 | Completo |
+
+> **Nota de mantenimiento (2026-09-28).** Esta tabla se sincronizó **a mano** con la checklist de
+> arriba, que es la fuente real y estaba correcta. `phase.complete` no la escribe en este proyecto:
+> devuelve `requirements_updated: false` con el aviso *"no matching row found"*, y el efecto no es de
+> una fase sino del layout de workstream — las filas de la **Phase 23** también habían quedado en
+> "Pendiente" pese a haber cerrado el 2026-09-21 con verificación 11/11 y `secure-phase` 57/57.
+> Las tres fases del milestone (22, 23, 24) figuran **Complete** en el ROADMAP.
 
 > **Las tres asignaciones que no son obvias.** (1) **CAT-06 y CAT-07 viven en la Phase 22** —la del
 > modelo— porque las dos son propiedades **por construcción**, no pantallas: cero categorías ⇒ la
