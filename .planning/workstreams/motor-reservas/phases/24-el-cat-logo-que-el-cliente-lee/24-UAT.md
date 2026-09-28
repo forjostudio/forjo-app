@@ -3,17 +3,18 @@ status: testing
 phase: 24-el-cat-logo-que-el-cliente-lee
 source: [24-01-SUMMARY.md, 24-02-SUMMARY.md, 24-VERIFICATION.md, 24-UI-SPEC.md]
 started: 2026-09-23T00:00:00Z
-updated: 2026-09-28T00:00:00Z
+updated: 2026-09-28T18:00:00Z
 ---
 
 ## Current Test
 
-number: 8
-name: Re-confirmar el título de grupo en spa y cyber (18px)
+number: 6
+name: Mobile — lo que cambió es sólo lo que decidimos cambiar (D-07 revisada)
 expected: |
-  Con el theme `spa`: el título de grupo ahora se lee como un nivel ENTRE "Elegí tu servicio" y las
-  tarjetas, no por debajo de ellas. Con `cyber`: sigue leyéndose bien con la mayúscula que el theme
-  aplica solo, sin que nada quede hardcodeado.
+  A 375px, en el paso 1: el ancho de la tarjeta, el "Ver más" de la descripción, los motivos de las
+  deshabilitadas y el ritmo vertical dentro de la tarjeta siguen como antes de la fase. Lo único
+  distinto tiene que ser lo decidido: el nombre largo que ahora envuelve, la barra de chips y el
+  título de grupo.
 awaiting: user response
 
 ## Tests
@@ -52,8 +53,14 @@ reported: "Confirmado con captura del paso 3: 'Sede Central' y 'Sede Campana' en
 note: "El control de que el conteo 2->1 de grillas no tocó la del paso 3. Salió de rebote mientras el dueño resolvía lo de los horarios de la sucursal nueva."
 observed: "El encabezado del paso dice 'Elegí el sucursal' — sucursal es femenino. Anotado como copy a corregir, superficie del panel/booking fuera de esta fase."
 
-### 6. Mobile byte-idéntico (D-07)
-expected: A 375px, comparar el paso 1 con y sin categorías: igual salvo los títulos nuevos — mismo ancho de tarjeta, mismo "Ver más", mismos motivos.
+### 6. Mobile: lo que cambió es sólo lo que decidimos cambiar (D-07, revisada)
+expected: |
+  ⚠ El enunciado original decía "byte-idéntico". Quedó obsoleto: D-07 se relajó TRES veces a
+  propósito durante esta UAT — el fix del nombre largo (`min-w-0 break-words`), la barra de chips
+  (D-16) y el título de grupo a 18px (Test 8). El test correcto es que mobile cambió SÓLO en eso.
+  A 375px, en el paso 1, tienen que seguir igual que antes de la fase: el ancho de la tarjeta (una
+  columna, como siempre fue en mobile), el "Ver más" de la descripción con su medición, los motivos
+  de las tarjetas deshabilitadas, y el ritmo vertical dentro de cada tarjeta.
 result: [pending]
 
 ### 7. Grupo mudo (D-12)
@@ -64,12 +71,12 @@ note: "D-12 confirmado: una categoría con todos sus servicios deshabilitados se
 
 ### 8. Los themes no rompen la jerarquía
 expected: Con los themes `spa` y `cyber`: el título de grupo se sigue leyendo un nivel **por debajo** de "Elegí tu servicio" (la jerarquía es por tamaño, no por negrita) y no se rompe con la mayúscula automática de `cyber`.
-result: issue
-reported: "Funciona, pero en SPA se ve muy chiquito el titulo del grupo."
+result: pass
+reported: "Funciona, pero en SPA se ve muy chiquito el titulo del grupo." -> arreglado en el acto y re-confirmado: "Test 8 pass"
 severity: minor
 root_cause: "MEDIDO al reportarlo, y era peor que estético: a `text-sm` (14px) el título quedaba más chico Y más liviano que los nombres de servicio que agrupa (16px/600) — un encabezado por debajo de sus propios ítems. Sólo se veía en `spa` porque `app/themes.css`, importado SIN capa (layout.tsx:12), baja el peso de h1/h2/h3 a 500 ahí y a 600 en `elegante` (:150, :250): el `font-bold` que lo compensaba desaparece en 2 de los 5 themes."
 resolved: "En el acto, 2026-09-28: `text-sm` -> `text-lg` (18px). La escalera queda 20 (h2) > 18 (grupo) > 16 (servicio) y se sostiene en los cinco themes porque descansa en el TAMAÑO, que ningún theme pisa. `text-lg` ya se usaba en la pantalla (el precio), así que sigue sin agregarse ningún tamaño nuevo. Gate y UI-SPEC actualizados en el mismo commit."
-pendiente: "Re-confirmación visual del dueño en `spa` y `cyber`."
+reconfirmado: "2026-09-28 — el dueño confirmó `spa` y `cyber` con 18px: 'Test 8 pass'. El título ahora se lee como un nivel entre el h2 y las tarjetas en los dos themes."
 
 ### 9. Un nombre de categoría con `<script>` adentro
 expected: Se ve como **texto plano**. No ejecuta nada.
@@ -85,19 +92,27 @@ note: "Sin avisos de hidratación ni de `key` en el flujo completo. Un problema 
 
 ### 11. El preview de /web contra la pública, lado a lado (D-13, D-14)
 expected: Con un negocio con categorías, abrí `/web` y `/{slug}` en paralelo: el preview muestra el catálogo agrupado **con el mismo ancho**, sin nada achicado, estirado ni escalado — 512px centrados dentro del contenedor ancho del panel.
-result: [pending]
+result: pass
+reported: "Test 11 pass"
+note: "D-13 y D-14 confirmados lado a lado: el preview muestra el catálogo agrupado con el mismo ancho que la pública, sin escalar nada. G-24-7 — es fiel por construcción porque BookingClient se auto-restringe a max-w-lg." 
 
 ### 12. El preview respeta los modos de orden
 expected: Cambiá el modo de orden de categorías y de servicios, recargá `/web`: el preview se reordena **igual que la pantalla pública**.
-result: [pending]
+result: pass
+reported: "Test 12 pass"
+note: "El mismo defecto silencioso del Test 3, cerrado también en la superficie del panel: a `web/page.tsx` le faltaban las dos columnas de modo de orden igual que a la pública (plan 24-02)." 
 
 ### 13. El preview con un negocio SIN categorías
 expected: Lista plana de siempre, sin títulos y sin "Otros".
-result: [pending]
+result: pass
+reported: "Test 13 pass"
+note: "Control negativo del preview: sin categorías, lista plana, sin títulos y sin 'Otros'." 
 
 ### 14. Consola del navegador — /web
 expected: Sin avisos nuevos.
-result: [pending]
+result: pass
+reported: "Test 14 dejo captura"
+note: "PASS. El único aviso de la consola es de Next.js, NO de React: detecta `scroll-behavior: smooth` en el <html> y sugiere `data-scroll-behavior`. Verificado preexistente y ajeno a esta fase — viene de `app/globals.css:323`, commit a4d99a7 (julio, el lightbox). El criterio del test son los warnings de HIDRATACIÓN y de `key`, y de esos hay CERO. Anotado como pendiente aparte." 
 
 <!-- ── Añadidos durante la UAT: el fix del nombre + la barra de chips (D-16 / G-24-6) ── -->
 
@@ -137,9 +152,9 @@ observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/ser
 ## Summary
 
 total: 18
-passed: 12
-issues: 1
-pending: 5
+passed: 17
+issues: 0
+pending: 1
 skipped: 0
 blocked: 0
 
