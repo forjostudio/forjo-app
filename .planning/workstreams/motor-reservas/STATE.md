@@ -5,11 +5,11 @@ milestone_name: El catálogo del booking (en curso)
 current_phase: 24
 current_phase_name: El catálogo que el cliente lee
 status: verifying
-stopped_at: Completed 24-02-PLAN.md
-last_updated: "2026-09-23T04:17:02.071Z"
-last_activity: 2026-09-23
+stopped_at: Completado 24-03 (barra de chips, D-16) — UAT visual pendiente
+last_updated: "2026-09-28T03:55:56.074Z"
+last_activity: 2026-09-28
 last_activity_desc: Phase 24 execution started
-state_head: bc1bb6b9a6c18c7dc5be0455109b7e6975180f85
+state_head: 9dc5c1fb8596dae01edddddbf78c8e6c252deda7
 progress:
   total_phases: 20
   completed_phases: 13
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-07-16)
 ## Current Position
 
 Phase: 24 (El catálogo que el cliente lee) — EXECUTING
-Plan: 2 of 2
+Plan: 3 of 3 (24-03 agregado durante la UAT — D-16)
 Status: Phase complete — ready for verification
-Last activity: 2026-09-23 — Phase 24 execution started
+Last activity: 2026-09-28 — 24-03 (barra de chips, D-16) ejecutado; UAT visual pendiente
 
 ## Milestone v0.29 — decisiones LOCKED
 
@@ -223,6 +223,7 @@ que la Phase 18 ponga sólo en el handler hereda el mismo agujero**.
 | Phase 23 P11 | 12 min | 2 tasks | 1 files |
 | Phase 24 P01 | 46 min | 2 tasks | 3 files |
 | Phase 24 P02 | 6 min | 2 tasks | 3 files |
+| Phase 24 P03 | 25 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -447,6 +448,8 @@ Heredadas del workstream (siguen vigentes):
 - [Phase 24]: La jerarquia del titulo de grupo descansa en el TAMANO (14px vs 20px del h2), no en el peso: themes.css se importa sin capa y reescribe el peso del h3 en 2 de los 5 themes
 - [Phase 24]: El preview del panel lee las categorías de la TABLA BASE con la sesión del dueño (RLS + .eq business_id), nunca de la vista public_service_categories: la vista es DEFINER sin security_invoker y dejaría el aislamiento en una sola capa
 - [Phase 24]: Las dos columnas de modo de orden van en los DOS selects de negocio (público y panel) o no van: el comentario del propio archivo declara que su lista es la misma, y agregarlas en uno solo hace que el preview ordene distinto del público sin ningún error
+- [Phase 24]: D-16 (Phase 24, decidida DURANTE la UAT): barra de chips que FILTRA el catalogo publico desde 2 categorias, con 'Todo' primero y seleccionado por defecto. Revisa D-11. El umbral vive en CHIPS_MIN_CATEGORIES=2 (lib/service-categories.ts), nunca como literal en el JSX.
+- [Phase 24]: Las reglas de un control opcional van en el modulo PURO y se testean ejecutandolas: catalogChips() devuelve [] cuando no corresponde barra, asi que la condicion de render es '¿hay chips?' y no un umbral escrito en el JSX (mismo mecanismo que title:null para el encabezado de grupo).
 
 ### Pending Todos
 
@@ -534,8 +537,8 @@ el cierre. No se auto-cerraron porque el paso `close_phase_todos` de `execute-ph
 
 ## Session Continuity
 
-Last session: 2026-09-23T04:16:41.069Z
-Stopped at: Completed 24-02-PLAN.md
+Last session: 2026-09-28T03:55:07.485Z
+Stopped at: Completado 24-03 (barra de chips, D-16) — UAT visual pendiente
 Resume file: None
 
 ## Operator Next Steps
