@@ -675,7 +675,16 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="font-semibold font-[family-name:var(--font-heading)]">{service.name}</p>
+                              {/* `min-w-0 break-words` en el <p> MISMO, no en el div padre: el padre ya
+                                  lo tenía y no alcanzaba. Un <p> que es flex item sin recorte resuelve su
+                                  tamaño mínimo automático a min-content (Flexbox §4.5), así que un nombre
+                                  sin espacios no puede encoger y se sale de la tarjeta — a 375px se encimaba
+                                  con el precio. `break-words` solo no baja el min-content; el par es
+                                  indivisible. Es el mismo defecto y el mismo arreglo que G-23-21 cerró en la
+                                  tarjeta del panel (settings-client.tsx:2909). SIN `sm:truncate`: acá el
+                                  ancho de desktop (~432px) es justamente lo que CAT-10 consigue para que el
+                                  nombre entre entero, así que recortarlo sería contradecir el requisito. */}
+                              <p className="font-semibold font-[family-name:var(--font-heading)] min-w-0 break-words">{service.name}</p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p className="text-lg font-bold leading-tight font-[family-name:var(--font-heading)]">${Number(service.price).toLocaleString('es-AR')}</p>

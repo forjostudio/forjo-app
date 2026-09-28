@@ -248,9 +248,26 @@ Mismo tag, **las mismas cuatro clases**, el mismo ritmo, las mismas tarjetas. La
 
 Una categoría con **todos** sus servicios deshabilitados renderiza su `<h3>` **normal**, en su posición del orden, y cada tarjeta conserva su motivo (`Sin horarios disponibles` / `Sin profesional disponible`). **Prohibido**: `aria-disabled` en el heading (un heading no es un control y no tiene estado deshabilitado), un aviso en el título, un color apagado, o mandar el grupo al final. Esconder o degradar ese grupo le oculta el problema de configuración **justo al dueño**, que es la única persona que puede arreglarlo y que ve su propia web; y moverlo rompería el orden que CAT-08 promete respetar, por un estado transitorio.
 
-### G-24-6 — Catálogo largo: nada (D-11)
+### G-24-6 — Barra de chips que filtra, desde 2 categorías (D-16, revisa D-11)
 
-El paso 1 **se scrollea con la página**. **Prohibido en esta fase**: índice de categorías, chips de salto, grupos colapsables, buscador, paginado, `max-h-*` con `overflow-auto` sobre la lista, y cualquier gate por cantidad de categorías. Un umbral inventado es una decisión de producto disfrazada de detalle de implementación, y colapsar esconde servicios detrás de un click que nadie pidió (roza el espíritu de CAT-09).
+> **⚠ Entrada REVISADA el 2026-09-28, durante la UAT.** La versión anterior decía *"Catálogo largo: nada"* y prohibía explícitamente los chips. El dueño cambió la decisión al ver su catálogo real cargado — el caso de uso para el que existe la UAT. La decisión y su fundamento completo están en **D-16** del `24-CONTEXT.md`; acá va el contrato visual.
+
+El paso 1 **sigue scrolleando con la página**: la barra no introduce ningún contenedor de scroll propio para la lista.
+
+**Cuándo aparece la barra:** cuando el negocio tiene **2 o más categorías creadas**. El umbral vive en una **constante nombrada y testeada**, nunca como literal suelto. Con 0 categorías la pantalla es la de hoy (CAT-07 / G-24-2 intactos, la barra **no** se renderiza). Con 1 categoría tampoco: filtrar entre un grupo y "Otros" que ya entran juntos en pantalla es ruido.
+
+**Qué es:** una fila horizontal de chips — **`Todo` primero y seleccionado por defecto**, después un chip por grupo en el orden que definió el dueño (incluido "Otros" al final cuando hay servicios sueltos). Tocar un chip **filtra** la lista a ese grupo; tocar `Todo` vuelve al catálogo completo.
+
+**La invariante que hace que esto NO choque con CAT-09:** `Todo` seleccionado por defecto ⇒ **al entrar se ve el catálogo completo** y reservar no cuesta ni un click más que hoy. Filtrar es opt-in y reversible de un toque. Un estado inicial que no sea `Todo` reabre exactamente la objeción que fundaba la versión anterior de esta entrada.
+
+**Molde a portar** — `forjo-tiendas`, `components/tienda/CatalogoCarta.tsx`. Se porta **la forma, no el código** (otro repo, otro modelo de datos):
+- `role="tablist"` con `aria-label` en el contenedor; cada chip `role="tab"` + `aria-selected`.
+- Alto real de **44px** en el chip, **sin** el truco del pseudo-elemento para agrandar el área de toque: el comentario de `:56-60` lo explica medido — dentro de un contenedor con `overflow-x` el pseudo-elemento vuelve scrolleable también el eje vertical.
+- Fila con `overflow-x-auto` y la barra de scroll oculta (`[scrollbar-width:none]` + `[&::-webkit-scrollbar]:hidden`).
+
+**NO se porta:** el buscador ni la segunda fila de subcategorías. Forjo no tiene subcategorías (fuera de alcance explícito en `REQUIREMENTS.md`) y nadie pidió búsqueda.
+
+**Sigue prohibido:** grupos colapsables, paginado, y `max-h-*` con `overflow-auto` sobre la lista de servicios. Colapsar esconde servicios detrás de un click que nadie pidió; el filtro con `Todo` por defecto, no.
 
 ### G-24-7 — El preview de `/web` es fiel por construcción (D-13, D-14)
 

@@ -36,7 +36,15 @@ Que la organización que el dueño le dio a su catálogo en el panel **llegue a 
 
 ### Catálogo largo
 
-- **D-11:** **Nada.** Sin índice de categorías, sin grupos colapsables, sin buscador: el paso 1 se scrollea. *Motivo:* el problema es teórico hasta que exista un negocio real con muchas categorías; una peluquería con 12 servicios se scrollea en diez segundos. Colapsar esconde servicios detrás de un click que nadie pidió (roza el espíritu de CAT-09) y un índice necesitaría gatearse por cantidad de categorías, o sea un umbral inventado que habría que elegir y defender.
+- **D-11:** ~~**Nada.** Sin índice de categorías, sin grupos colapsables, sin buscador: el paso 1 se scrollea.~~ **REVISADA — ver D-16.**
+  > *Motivo original (2026-09-22):* el problema es teórico hasta que exista un negocio real con muchas categorías; una peluquería con 12 servicios se scrollea en diez segundos. Colapsar esconde servicios detrás de un click que nadie pidió (roza el espíritu de CAT-09) y un índice necesitaría gatearse por cantidad de categorías, o sea un umbral inventado que habría que elegir y defender.
+
+- **D-16:** **Barra de chips que FILTRA, desde 2 categorías.** Decidida el 2026-09-28, **durante la UAT**, viendo la pantalla con datos reales. *Qué es:* una fila horizontal de chips arriba del catálogo — `Todo` + un chip por grupo, en el orden del dueño — donde tocar un chip **filtra** la lista a ese grupo. `Todo` viene **seleccionado por defecto**, así que al entrar se ve el catálogo completo.
+  > **Por qué esto revisa D-11 y no lo contradice a ciegas:** D-11 se decidió en abstracto y el dueño cambió de opinión al verlo con su catálogo real cargado — que es literalmente para lo que existe la UAT. Y las dos objeciones que fundaban D-11 **no aplican a esta forma**:
+  > 1. *"Colapsar esconde servicios"* — **filtrar con `Todo` por defecto no esconde nada al entrar**, y no agrega ni un click para reservar. CAT-09 queda intacto. El patrón hermano lo dice con todas las letras (`forjo-tiendas`, `components/tienda/CatalogoCarta.tsx:21-27`): *"El filtro NO es un acordeón por categoría… el que ya sabe qué quiere filtra, y el que viene a mirar scrollea de corrido. Un acordeón obliga a las dos personas a abrir y cerrar cajones."*
+  > 2. *"El umbral es un número inventado"* — sigue siendo una elección, pero ahora es **explícita, del dueño y testeada**: **2 o más categorías**. Va como constante nombrada, no como un literal suelto, para que moverla sea una línea.
+  >
+  > *Alcance de lo que se porta de `agualaboca`:* **sólo** la fila de chips y su filtro. **NO** se porta el buscador ni la segunda fila de subcategorías — Forjo no tiene subcategorías (fuera de alcance explícito en REQUIREMENTS.md) y nadie pidió búsqueda.
 
 ### Grupos donde nada se puede reservar
 
