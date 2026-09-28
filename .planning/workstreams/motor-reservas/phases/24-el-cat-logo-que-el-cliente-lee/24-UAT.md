@@ -8,11 +8,12 @@ updated: 2026-09-28T00:00:00Z
 
 ## Current Test
 
-number: 5
-name: El paso 3 quedó intacto (las dos grillas byte-idénticas)
+number: 8
+name: Re-confirmar el título de grupo en spa y cyber (18px)
 expected: |
-  Con un negocio de 2+ sedes, el selector de sede/consultorio del paso 3 sigue EN DOS COLUMNAS,
-  sin cambios. Es el control de que el conteo 2->1 no tocó la grilla equivocada.
+  Con el theme `spa`: el título de grupo ahora se lee como un nivel ENTRE "Elegí tu servicio" y las
+  tarjetas, no por debajo de ellas. Con `cyber`: sigue leyéndose bien con la mayúscula que el theme
+  aplica solo, sin que nada quede hardcodeado.
 awaiting: user response
 
 ## Tests
@@ -46,7 +47,10 @@ primer_intento: "El dueño probó primero con un nombre de ~60 caracteres, que s
 
 ### 5. El paso 3 quedó intacto
 expected: Con un negocio de 2+ sedes, el selector de sede/consultorio del paso 3 sigue **en dos columnas**, sin cambios.
-result: [pending]
+result: pass
+reported: "Confirmado con captura del paso 3: 'Sede Central' y 'Sede Campana' en DOS columnas."
+note: "El control de que el conteo 2->1 de grillas no tocó la del paso 3. Salió de rebote mientras el dueño resolvía lo de los horarios de la sucursal nueva."
+observed: "El encabezado del paso dice 'Elegí el sucursal' — sucursal es femenino. Anotado como copy a corregir, superficie del panel/booking fuera de esta fase."
 
 ### 6. Mobile byte-idéntico (D-07)
 expected: A 375px, comparar el paso 1 con y sin categorías: igual salvo los títulos nuevos — mismo ancho de tarjeta, mismo "Ver más", mismos motivos.
@@ -54,19 +58,30 @@ result: [pending]
 
 ### 7. Grupo mudo (D-12)
 expected: Una categoría con **todos** sus servicios deshabilitados: título normal, en su posición del orden, y cada tarjeta con su motivo a la vista.
-result: [pending]
+result: pass
+reported: "Test 7 - Pass"
+note: "D-12 confirmado: una categoría con todos sus servicios deshabilitados se pinta igual, en su posición del orden, con el motivo a la vista en cada tarjeta."
 
 ### 8. Los themes no rompen la jerarquía
 expected: Con los themes `spa` y `cyber`: el título de grupo se sigue leyendo un nivel **por debajo** de "Elegí tu servicio" (la jerarquía es por tamaño, no por negrita) y no se rompe con la mayúscula automática de `cyber`.
-result: [pending]
+result: issue
+reported: "Funciona, pero en SPA se ve muy chiquito el titulo del grupo."
+severity: minor
+root_cause: "MEDIDO al reportarlo, y era peor que estético: a `text-sm` (14px) el título quedaba más chico Y más liviano que los nombres de servicio que agrupa (16px/600) — un encabezado por debajo de sus propios ítems. Sólo se veía en `spa` porque `app/themes.css`, importado SIN capa (layout.tsx:12), baja el peso de h1/h2/h3 a 500 ahí y a 600 en `elegante` (:150, :250): el `font-bold` que lo compensaba desaparece en 2 de los 5 themes."
+resolved: "En el acto, 2026-09-28: `text-sm` -> `text-lg` (18px). La escalera queda 20 (h2) > 18 (grupo) > 16 (servicio) y se sostiene en los cinco themes porque descansa en el TAMAÑO, que ningún theme pisa. `text-lg` ya se usaba en la pantalla (el precio), así que sigue sin agregarse ningún tamaño nuevo. Gate y UI-SPEC actualizados en el mismo commit."
+pendiente: "Re-confirmación visual del dueño en `spa` y `cyber`."
 
 ### 9. Un nombre de categoría con `<script>` adentro
 expected: Se ve como **texto plano**. No ejecuta nada.
-result: [pending]
+result: pass
+reported: "Test 9 - Pass"
+note: "El nombre de categoría con <script> adentro se ve como texto plano. Confirma en navegador la interpolación JSX (T-23-06 / T-23-10 / T-23-26 del registro de amenazas)."
 
 ### 10. Consola del navegador — pública
 expected: Recorré el flujo completo: sin avisos de hidratación ni warnings de `key`.
-result: [pending]
+result: pass
+reported: "Me muevo con la consola abierta y no sale nada, estoy parado bien?" — sí: la captura muestra sólo ruido de desarrollo (HMR, Vercel Analytics). CERO warnings de React.
+note: "Sin avisos de hidratación ni de `key` en el flujo completo. Un problema de esos aparecería como 'Warning:' en amarillo o rojo."
 
 ### 11. El preview de /web contra la pública, lado a lado (D-13, D-14)
 expected: Con un negocio con categorías, abrí `/web` y `/{slug}` en paralelo: el preview muestra el catálogo agrupado **con el mismo ancho**, sin nada achicado, estirado ni escalado — 512px centrados dentro del contenedor ancho del panel.
@@ -122,9 +137,9 @@ observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/ser
 ## Summary
 
 total: 18
-passed: 8
-issues: 0
-pending: 10
+passed: 12
+issues: 1
+pending: 5
 skipped: 0
 blocked: 0
 

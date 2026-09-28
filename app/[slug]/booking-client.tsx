@@ -692,7 +692,17 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
               {visibleCatalogGroups.map(group => (
                 <div key={catalogGroupKey(group)}>
                   {group.title !== null && (
-                    <h3 className="text-sm font-bold break-words mb-2">{group.title}</h3>
+                    /* `text-lg` (18px) y NO `text-sm`: la jerarquía tiene que descansar en el TAMAÑO,
+                        que ningún theme pisa, y no en la negrita. `app/themes.css` se importa sin capa
+                        (layout.tsx:12) y baja el peso de h1/h2/h3 a 500 en `spa` y a 600 en `elegante`
+                        (:150, :250), así que el `font-bold` desaparece en 2 de los 5 themes.
+                        A 14px el título quedaba MÁS CHICO Y MÁS LIVIANO que los nombres de servicio que
+                        agrupa (16px/600, que el theme no toca porque son `<p>`): un encabezado por
+                        debajo de sus propios ítems. En `spa` se veía al descubierto — lo reportó el
+                        dueño en la UAT (Test 8). Con 18px la escalera queda 20 (h2) > 18 (grupo) > 16
+                        (servicio) y se sostiene en los cinco themes. NUNCA hardcodear `uppercase`: los
+                        themes `cyber` y `tech` ya la aplican por su cuenta. */
+                    <h3 className="text-lg font-bold break-words mb-2">{group.title}</h3>
                   )}
                   <div className="grid grid-cols-1 gap-3">
                     {group.services.map(service => {

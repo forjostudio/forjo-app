@@ -155,7 +155,7 @@ Ese es el modo de falla de **G-23-21**, que en este repo ya se pagó **dos veces
 ### Markup canónico del título
 
 ```tsx
-<h3 className="text-sm font-bold break-words mb-2">{group.title}</h3>
+<h3 className="text-lg font-bold break-words mb-2">{group.title}</h3>
 ```
 
 Nada más. `{group.title}` **interpolado** (auto-escape de React): el nombre es texto del dueño que lee un anónimo — T-23-06 / T-23-10 / T-23-26, `closed`. **`dangerouslySetInnerHTML` está prohibido en esta región, sin excepción.** El literal `Otros` **nunca** se escribe en el JSX: viene en `group.title` desde `OTHER_GROUP_TITLE` (`lib/service-categories.ts:80`).
@@ -199,7 +199,16 @@ Todo por custom property. **Cero hex en el código nuevo.** Esta fase **no intro
 
 - **Tag:** `<h3>`. Un nivel debajo del `h2` de `:566`, sin saltar niveles (D-04).
 - **Ubicación:** **hermano** de la grilla, **dentro** del envoltorio del grupo y **siempre fuera de cualquier tarjeta**. Un `<h3>` adentro del `<div>` de la tarjeta metería un heading por servicio y anidaría contenido en la caja del botón estirado (G-23-6).
-- **Clases, exactas:** `text-sm font-bold break-words mb-2`. Nada más.
+- **Clases, exactas:** `text-lg font-bold break-words mb-2`. Nada más.
+  > **Revisado el 2026-09-28 en la UAT (Test 8).** Era `text-sm` (14px). El dueño reportó que en el
+  > theme `spa` el título se leía demasiado chico, y al medirlo el problema era peor que estético:
+  > a 14px el título quedaba **más chico Y más liviano que los nombres de servicio que agrupa**
+  > (16px/600), o sea un encabezado por debajo de sus propios ítems. Se veía sólo en `spa` porque
+  > `themes.css` —importado **sin capa**— baja el peso de `h1/h2/h3` a 500 ahí y a 600 en `elegante`
+  > (`:150`, `:250`), así que el `font-bold` que lo compensaba desaparece en 2 de los 5 themes.
+  > Con **18px** la escalera queda **20 (h2) > 18 (grupo) > 16 (servicio)** y se sostiene en los cinco,
+  > porque descansa en el tamaño —que ningún theme pisa— y no en la negrita. `text-lg` ya se usa en
+  > esta pantalla (el precio), así que sigue sin agregarse ningún tamaño nuevo.
 - **Condición de render:** `group.title !== null`, y **nada más**. Prohibido `serviceCategories.length > 0`, `group.services.length > 0`, o cualquier otro condicional: la regla vive en el dato (`lib/service-categories.ts:108-112`) y un `if` sobre el largo del arreglo se olvida del caso "categorías creadas pero ninguna asignada", que `groupCatalog` ya manda al camino de identidad (`:312-318`).
 - **Contenido:** `{group.title}`, interpolado. Sin prefijos, sin sufijos, sin contador, sin icono, sin línea, sin `aria-label` que difiera del texto visible.
 - **No es sticky** (D-02): sin `sticky`, sin `top-*`, sin `z-*`, sin `backdrop-blur`. La región ya tiene sus capas resueltas y bajo contrato (`isolate` de la tarjeta + pseudo-elemento del botón + `z-10` del toggle); sumar un plano nuevo acá es reabrir G-23-6 por un efecto que nadie pidió.

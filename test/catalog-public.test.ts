@@ -260,7 +260,7 @@ describe('el render del paso 1', () => {
     expect(region).toContain('group.services.map')
     expect(region).toContain('group.title !== null')
     expect(region).toContain('{group.title}')
-    expect(region).toContain('text-sm font-bold break-words mb-2')
+    expect(region).toContain('text-lg font-bold break-words mb-2')
     expect(region).toContain('space-y-6')
     // Ningún condicional por cantidad de elementos decide visibilidad acá.
     expect(region).not.toContain('serviceCategories.length')
