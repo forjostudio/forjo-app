@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 24-el-cat-logo-que-el-cliente-lee
 source: [24-01-SUMMARY.md, 24-02-SUMMARY.md, 24-VERIFICATION.md, 24-UI-SPEC.md]
 started: 2026-09-23T00:00:00Z
@@ -8,14 +8,7 @@ updated: 2026-09-28T18:00:00Z
 
 ## Current Test
 
-number: 6
-name: Mobile — lo que cambió es sólo lo que decidimos cambiar (D-07 revisada)
-expected: |
-  A 375px, en el paso 1: el ancho de la tarjeta, el "Ver más" de la descripción, los motivos de las
-  deshabilitadas y el ritmo vertical dentro de la tarjeta siguen como antes de la fase. Lo único
-  distinto tiene que ser lo decidido: el nombre largo que ahora envuelve, la barra de chips y el
-  título de grupo.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -61,7 +54,10 @@ expected: |
   A 375px, en el paso 1, tienen que seguir igual que antes de la fase: el ancho de la tarjeta (una
   columna, como siempre fue en mobile), el "Ver más" de la descripción con su medición, los motivos
   de las tarjetas deshabilitadas, y el ritmo vertical dentro de cada tarjeta.
-result: [pending]
+result: pass
+reported: "El ver más no aparece más, directamente aparecen los 3 renglones con los 120 caracteres. Es lo unico, despues pass"
+note: "NO es una regresión — es D-08 funcionando como se especificó, verificado en el código al reportarlo. `ServiceDescription` muestra el toggle SÓLO si el texto desborda MEDIDO (`descriptionOverflows`: `scrollHeight > clientHeight + 1`, service-description.tsx:32-33) con `line-clamp-3` (:103). La descripción del dueño entra justo en los tres renglones, así que no hay nada que expandir: un 'Ver más' que no revela nada sería peor. Es el contrato G-23-6 de la Phase 23 (el recorte se mide, no se asume por cantidad de caracteres) y lo que D-08 ya anticipaba por escrito. El toggle aparece recién cuando el texto necesita un CUARTO renglón."
+resto: "Todo lo demás de mobile igual: ancho de tarjeta, motivos de las deshabilitadas y ritmo vertical dentro de la tarjeta." 
 
 ### 7. Grupo mudo (D-12)
 expected: Una categoría con **todos** sus servicios deshabilitados: título normal, en su posición del orden, y cada tarjeta con su motivo a la vista.
@@ -152,9 +148,9 @@ observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/ser
 ## Summary
 
 total: 18
-passed: 17
+passed: 18
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
