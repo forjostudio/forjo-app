@@ -8,11 +8,11 @@ updated: 2026-09-28T00:00:00Z
 
 ## Current Test
 
-number: 4
-name: Desktop — el nombre largo deja de partirse (CAT-10, backstop)
+number: 5
+name: El paso 3 quedó intacto (las dos grillas byte-idénticas)
 expected: |
-  En desktop (>=640px), un servicio con nombre largo CON espacios entra en una sola línea a ~432px
-  útiles: ya no se parte en dos. Es el backstop de CAT-10 — se mide en el navegador, no se deriva.
+  Con un negocio de 2+ sedes, el selector de sede/consultorio del paso 3 sigue EN DOS COLUMNAS,
+  sin cambios. Es el control de que el conteo 2->1 no tocó la grilla equivocada.
 awaiting: user response
 
 ## Tests
@@ -39,7 +39,10 @@ derived_request: "El dueño pidió acá un CUARTO modo: precio de MAYOR a MENOR.
 
 ### 4. Desktop — el nombre largo deja de partirse (CAT-10, backstop)
 expected: En desktop (≥640px), un servicio con nombre largo **con espacios**: entra en una sola línea a ~432px útiles, ya no se parte en dos.
-result: [pending]
+result: pass
+reported: "pasa" (con captura: "Coloración completa con mechas", 30 caracteres, una sola línea)
+note: "CAT-10 confirmado midiendo en el navegador, que es como el UI-SPEC exigía cerrarlo (backstop: 'el repo ya se equivocó dos veces estimando anchos de texto en el pizarrón' — G-23-6, G-23-21)."
+primer_intento: "El dueño probó primero con un nombre de ~60 caracteres, que se veía en dos renglones. Correcto pero NO probaba CAT-10: ese largo no entra en una línea a ningún ancho de este contenedor, así que se partiría con el cambio o sin él. Se re-probó con ~30 caracteres, que es el rango que antes se partía por falta de ancho (194px útiles en dos columnas) y ahora entra (432px en una)." 
 
 ### 5. El paso 3 quedó intacto
 expected: Con un negocio de 2+ sedes, el selector de sede/consultorio del paso 3 sigue **en dos columnas**, sin cambios.
@@ -119,9 +122,9 @@ observed_otra_superficie: "El dueño reportó acá una fricción del PANEL (/ser
 ## Summary
 
 total: 18
-passed: 7
+passed: 8
 issues: 0
-pending: 11
+pending: 10
 skipped: 0
 blocked: 0
 
