@@ -96,11 +96,11 @@ Salieron de medir el código el 2026-09-28, no de suponer:
 
 | Requisito | Fase | Estado |
 |---|---|---|
-| NAV-01 | Phase 1 | Pending |
-| NAV-02 | Phase 1 | Pending |
+| NAV-01 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
+| NAV-02 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
 | NAV-03 | Phase 2 | Pending |
 | NAV-04 | Phase 2 | Pending |
-| NAV-05 | Phase 1 | Pending |
-| NAV-06 | Phase 1 | Pending |
+| NAV-05 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
+| NAV-06 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
 
 **Coverage:** 6 requisitos · mapeados a fases: 6/6 (ROADMAP.md, 2026-09-28) · sin mapear: 0

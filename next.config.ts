@@ -40,7 +40,15 @@ const nextConfig: NextConfig = {
   // desde localhost y, por defecto, bloquea como cross-origin los recursos de dev (_next/*, HMR y los
   // chunks del cliente) pedidos desde 127.0.0.1 → la página no hidrata y los forms caen al submit
   // nativo (GET). Declarar el origin lo desbloquea. No afecta el build de producción.
-  allowedDevOrigins: ["127.0.0.1"],
+  // `192.168.0.7` es la IP de esta máquina en la LAN, y está acá para poder abrir el panel de dev
+  // DESDE EL CELULAR (UAT de navegación mobile: el botón atrás sólo se puede probar en un teléfono
+  // real). Sin esto el teléfono pide `_next/*` desde un origin distinto al que arrancó el server,
+  // Next lo bloquea como cross-origin, la página no hidrata y los forms caen al submit nativo —
+  // exactamente el mismo síntoma que ya documentaba el caso de 127.0.0.1 de arriba.
+  // Ver `node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/allowedDevOrigins.md`.
+  // ⚠ La IP es por DHCP: si el router se la cambia, hay que actualizar esta línea.
+  // No afecta el build de producción (`allowedDevOrigins` es solo-dev).
+  allowedDevOrigins: ["127.0.0.1", "192.168.0.7"],
 };
 
 export default nextConfig;
