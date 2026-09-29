@@ -156,5 +156,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. El detalle de cliente, con la regla de historial que lo gobierna | 2/2 | In Progress|  |
+| 1. El detalle de cliente, con la regla de historial que lo gobierna | 3/4 | In Progress|  |
 | 2. Los tabs profundos sobre la misma regla | 0/? | Not started | - |

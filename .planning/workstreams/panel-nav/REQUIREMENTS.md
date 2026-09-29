@@ -59,13 +59,13 @@ una subsección, y no hay dolor reportado.
 
 ### El stack de secciones (agregado 2026-09-29, tras la UAT de la Phase 1)
 
-- [ ] **NAV-07**: El menú lateral deja **una sola sección** en la pila por encima del dashboard. Ir
+- [x] **NAV-07**: El menú lateral deja **una sola sección** en la pila por encima del dashboard. Ir
       del dashboard a una sección **empuja**; ir de una sección a otra **reemplaza**. Consecuencia
       buscada: el atrás desde cualquier sección cae en el **dashboard**, nunca en otra sección
       abierta antes.
       ⚠ Caso aceptado y documentado: si se entra **directo** a una sección (URL pegada o F5), no hay
       dashboard debajo y el atrás sale del panel. Empujar uno falso sería reescribir historial (D-01).
-- [ ] **NAV-08**: Tocar en el menú la sección **en la que ya estás** cierra la subsección abierta en
+- [x] **NAV-08**: Tocar en el menú la sección **en la que ya estás** cierra la subsección abierta en
       vez de apilar una entrada de ruta encima. Sin esto queda una entrada de subsección **sepultada**
       que el atrás desentierra más tarde, llevando a un destino equivocado.
 
@@ -118,8 +118,8 @@ Salieron de medir el código el 2026-09-28, no de suponer:
 | NAV-03 | Phase 2 | Pending |
 | NAV-04 | Phase 2 | Pending |
 | NAV-05 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
-| NAV-07 | Phase 1 (cierre de gaps) | Pending |
-| NAV-08 | Phase 1 (cierre de gaps) | Pending |
+| NAV-07 | Phase 1 (cierre de gaps) | Ejecutado (01-03) · **UAT en celular pendiente** |
+| NAV-08 | Phase 1 (cierre de gaps) | Ejecutado (01-03) · **UAT en celular pendiente** |
 | NAV-06 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
 
 **Coverage:** 6 requisitos · mapeados a fases: 6/6 (ROADMAP.md, 2026-09-28) · sin mapear: 0
