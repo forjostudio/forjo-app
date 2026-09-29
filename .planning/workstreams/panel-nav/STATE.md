@@ -5,16 +5,16 @@ milestone_name: La navegación del panel
 current_phase: 1 — El detalle de cliente, con la regla de historial que lo gobierna
 current_plan: 2 of 2
 status: Phase 1 en ejecución — plan 01-01 completo
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-09-29T16:40:24.267Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-09-29T16:53:15.161Z"
 last_activity: 2026-09-29
 last_activity_desc: "Plan 01-01 ejecutado: lib/panel-history.ts (4 acciones x 6 causas, 53 casos) + el detalle de cliente derivado de /clients?c=<id>. UAT en celular PENDIENTE (la corre el dueño)."
-state_head: 71457a58ada9f649ef5ef9135e955b8193a1e02f
+state_head: 483c36fc5879604db16d34019e593691cdc45e04
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
@@ -36,9 +36,9 @@ created: 2026-09-28
 
 ## Session Continuity
 
-**Last session:** 2026-09-29T16:39:51.175Z
+**Last session:** 2026-09-29T16:53:04.710Z
 
-**Stopped At:** Completed 01-01-PLAN.md
+**Stopped At:** Completed 01-02-PLAN.md
 **Resume File:** None
 
 ## Performance Metrics
@@ -46,6 +46,7 @@ created: 2026-09-28
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P01 | 12min | 2 tasks | 4 files |
+| Phase 01 P02 | 13min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -53,3 +54,5 @@ created: 2026-09-28
 - [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: ② El saneo corre en un efecto con guarda de idempotencia doble (sanitizeAction + regla 0) y memoria que se resetea (reconciledMemo)
 - [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: La fusión de duplicados NO escribe historial: registra una redirección idBorrado→idConservado y la reconciliación aplica el replace cuando el modal suelta la entrada
 - [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: La regla 0 (overlayOwnsTop ⇒ none) es absoluta: debilitarla cambiaría una regresión por un defecto (entrada huérfana + atrás muerto)
+- [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: El invariante de NAV-06 basado en git (los 3 archivos intocables en su commit original) vive como gate de bash y NO como test: el CI clona a profundidad 1 y seria rojo en cada push por falta de historia
+- [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: El cableado se verifica por REGION recortada (recorte + sinComentarios + guarda de 'no encontro nada'), nunca sobre el archivo entero: clients-client.tsx tiene ~1400 lineas y una asercion global pasaria por casualidad
