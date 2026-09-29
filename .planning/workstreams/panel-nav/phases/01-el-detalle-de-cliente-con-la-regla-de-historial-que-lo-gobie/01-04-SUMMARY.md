@@ -15,8 +15,9 @@ affects: [panel-nav Phase 2 (hereda el instrumento de medición a 375px con ifra
 actuals:
   tokens: 2401
   tasks: 2
-  commits: 2
+  commits: 4
 plan_head_before: 23d836d2ddefb05e2509963c3094a1467e0c77c7
+commits_note: "`git rev-list --count 23d836d..HEAD` da **6**, no 4: el ejecutor del plan `01-03` corrió en paralelo sobre la misma rama `main` y commiteó `34b5115` y `6db682d` entre los míos. Los 3 de este plan, medidos por ruta (`git rev-list --count 23d836d..HEAD -- <clients-client.tsx> <01-04-SUMMARY.md>`): `0ad7f04` (Task A), `acc3bf7` (Task B), `346545b` (SUMMARY + STATE + ROADMAP) y el commit de cierre de este SUMMARY (hash no citado a propósito: citarse a sí mismo es imposible)."
 
 tech-stack:
   added: []
@@ -88,7 +89,7 @@ status: complete
 
 - **Duration:** ~40 min
 - **Tasks:** 2/2
-- **Commits:** 2 (`0ad7f04` Task A · `acc3bf7` Task B)
+- **Commits:** 4 — `0ad7f04` (Task A) · `acc3bf7` (Task B) · `346545b` (SUMMARY + STATE + ROADMAP) · el de cierre de este SUMMARY (conteo real)
 
 ## A — El modal de fusión, en tres filas
 
@@ -158,6 +159,7 @@ El control se apaga por el tipo: `onMerge?: () => void`, y el padre pasa `undefi
 | `git diff --name-only HEAD~2 HEAD -- package.json package-lock.json` | vacío — **cero paquetes nuevos** |
 | `git diff --name-only HEAD~2 HEAD` | **un solo archivo**: `app/(dashboard)/clients/clients-client.tsx` — no se tocó nada del plan `01-03` |
 | `git diff --diff-filter=D --name-only HEAD~2 HEAD` | vacío — cero borrados |
+| `git rev-list --count 23d836d..HEAD` | **6** — 4 de este plan (`0ad7f04`, `acc3bf7`, `346545b` + el de cierre de este SUMMARY) + **2 ajenos** del ejecutor de `01-03`, que corrió en paralelo sobre la misma `main` (`34b5115`, `6db682d`). Medido por ruta, los de este plan son **4** |
 
 > ⚠ **Flake de la suite medido, no atribuible a este plan.** Tres corridas completas intermedias dieron entre 1 y 8 casos rojos, **todos por timeout** (`Hook timed out in 10000ms` / `Test timed out in 5000ms`) y en **archivos distintos en cada corrida** (`abono-generation`, `manual-booking`, `clients-import`, `schedule-coverage-public`, `abono-create`, `shell-scope`). Cada archivo corrido **solo** pasó en verde (`abono-generation` + `manual-booking` → 18 passed; `shell-scope` → 13 passed; `panel-history-clients` → 12 passed). Causa: contención de máquina — el ejecutor del plan `01-03` corría su propio `vitest` y su propio `tsc` en paralelo sobre el mismo Postgres local. La corrida final, ya sin contención, dio **101/101 archivos y 0 rojos**.
 >
@@ -217,5 +219,5 @@ Ninguna. Este plan no abre superficie: no toca queries, ni policies, ni route ha
 - `app/(dashboard)/clients/clients-client.tsx` — **FOUND** (modificado, idéntico byte a byte al archivo sobre el que corrieron `tsc`, `eslint` y `vitest`: verificado con `diff -q` antes de commitear)
 - commit `0ad7f04` — **FOUND** (`fix(01-04): el modal de fusionar duplicados, en tres filas y con el mail entero`)
 - commit `acc3bf7` — **FOUND** (`feat(01-04): fusionar al alcance con la ficha abierta, solo si es duplicada`)
-- `git rev-list --count 23d836d..HEAD` = **2** — coincide con `commits: 2` del frontmatter
+- `git rev-list --count 23d836d..HEAD` = **6**; medido por ruta, los de este plan son **4** — los 2 restantes (`34b5115`, `6db682d`) son del ejecutor de `01-03`, que corrió en paralelo sobre la misma `main`. Anotado en `commits_note`
 - Archivos del plan `01-03` (`components/dashboard/sidebar.tsx`, `lib/panel-history.ts`, `lib/panel-history.test.ts`) — **NO tocados** (`git diff --name-only HEAD~2 HEAD` devuelve un solo archivo)
