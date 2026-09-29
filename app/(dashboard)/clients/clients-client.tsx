@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { format, parseISO, differenceInDays, differenceInMonths, isSameMonth, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -20,6 +21,14 @@ import { classifyClient } from '@/lib/client-status'
 // para que Finanzas, el CSV y Turnos no tengan cada uno su propia copia del ternario.
 import { apptServiceName, apptServicePrice } from '@/lib/appointment-service'
 import { useVertical } from '@/lib/use-terminology'
+// La política de historial del panel vive en UN módulo (NAV-05): acá se declara QUÉ pasó y el helper
+// decide qué se le hace al historial. Esta pantalla no escribe historial a mano en ningún lado.
+import {
+  applyPanelView,
+  resolveViewParam,
+  sanitizeAction,
+  reconciledMemo,
+} from '@/lib/panel-history'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,6 +49,12 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGri
 import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-panel'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+// El nombre del parámetro que gobierna el detalle abierto (D-03: el detalle vive en la QUERY, no en
+// un segmento de ruta). Corto a propósito: la URL del panel es privada y `noindex`, y este id no es
+// un secreto para su propio dueño. Auditado: el panel sólo lee `subscription` (plan-banner),
+// `mp` (settings-client) y `google` (agenda-client) — no hay colisión.
+const VIEW_PARAM = 'c'
+
 type StatusKey = 'new' | 'active' | 'frequent' | 'paused'
 type FilterKey = 'all' | StatusKey
 
@@ -217,7 +232,16 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   // State
   const [clients, setClients] = useState(initialClients)
   const [appts, setAppts] = useState(initialAppts)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // El cliente abierto YA NO es estado: se deriva de la URL más abajo (D-03/NAV-01). Si volviera a
+  // existir como estado local habría dos fuentes de verdad para "qué cliente está abierto" y el
+  // atrás volvería a mentir, que es justamente el Bug B.
+  //
+  // Tabla de REDIRECCIÓN de la fusión de duplicados: `idBorrado → idConservado`. No es una segunda
+  // fuente de verdad —la verdad sigue siendo la URL—: es lo que permite que, cuando una fusión borra
+  // el cliente que estaba abierto, el detalle pase a mostrar el conservado EN EL ACTO y sin tocar el
+  // historial. La URL converge después, con un `replace`, vía el efecto de reconciliación.
+  const [mergedInto, setMergedInto] = useState<Record<string, string>>({})
+  const searchParams = useSearchParams()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterKey>('all')
   const [filterPro, setFilterPro] = useState('all')
@@ -496,7 +520,87 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   const availableLetters = Object.keys(groupedByLetter).sort()
 
   // ── Selected client data ──────────────────────────────────────────────────
-  const selected = clients.find(c => c.id === selectedId) ?? null
+  // El detalle vive en la QUERY (`/clients?c=<id>`, D-03) y se DERIVA de ella: por eso abrir un
+  // cliente es navegación real (el atrás vuelve al listado con su búsqueda y sus tres filtros
+  // intactos, porque nada se desmonta) y por eso la URL se recarga y se comparte.
+  //
+  // ⚠ La resolución es contra `clients` —la lista que ya vino filtrada por
+  // `.eq('business_id', business.id)` en `page.tsx`— y NUNCA contra la base. De ahí sale NAV-02: un
+  // id inexistente, uno recién borrado y uno DE OTRO NEGOCIO son los tres "no está en la lista", así
+  // que producen exactamente el mismo resultado observable (el listado) y no hay ningún oracle de
+  // existencia cross-tenant. El id de la URL no amplía nada: sólo SELECCIONA dentro de un conjunto
+  // que el server ya autorizó.
+  //
+  // El param pasa antes por la tabla de redirección de la fusión: si el cliente que la URL nombra fue
+  // absorbido por un duplicado, lo que se muestra es el conservado.
+  const viewParam = searchParams.get(VIEW_PARAM)
+  const targetId = viewParam === null || viewParam === '' ? null : (mergedInto[viewParam] ?? viewParam)
+  const resolved = targetId === null ? null : (clients.find(c => c.id === targetId) ?? null)
+  const view = resolveViewParam({ param: viewParam, resolvedTo: resolved?.id ?? null })
+  // Mismo nombre y mismo tipo que antes, para que el resto del archivo no se entere del cambio.
+  const selectedId = view.selected
+  const selected = resolved
+  // Se desestructura para que el array de deps del efecto lleve identificadores planos: `view` es un
+  // objeto nuevo en cada render y meterlo entero haría correr el efecto en todos.
+  const { reconcile: debeReconciliar, cause: causaReconciliacion, to: destinoReconciliacion } = view
+
+  // ¿Hay algún overlay de esta pantalla abierto? Es el SEGUNDO disparador del reintento de
+  // reconciliación, y se lee de verdad adentro del efecto: si quedara sólo en el array de deps,
+  // `react-hooks/exhaustive-deps` lo marcaría como dependencia innecesaria —y acá esa regla es
+  // warning, así que eslint saldría en 0— y el próximo que "limpie deps que no se usan" borraría el
+  // reintento sin que nada se ponga rojo.
+  const hayOverlayAbierto = confirmDelete || mergeModal || importOpen || newClientOpen
+  const reconciliadoRef = useRef<string | null>(null)
+
+  // ── Reconciliación URL ↔ vista ────────────────────────────────────────────
+  // Es la ÚNICA pieza que ejecuta un desajuste, y sirve a los dos casos con el mismo código: la URL
+  // que quedó apuntando a nada (borrado, id inexistente, id ajeno) y la URL que quedó apuntando al
+  // duplicado que una fusión acaba de absorber.
+  //
+  // LOS DOS CORTES NO SON REDUNDANTES, cada uno cubre lo que el otro no ve:
+  //   · `hayOverlayAbierto` es la verdad de React y cubre el overlay ABIERTO Y ESTABLE — el modal de
+  //     fusión sigue abierto mientras su botón corre, y puede cerrarse sin que la URL cambie, así que
+  //     sin este disparador el reintento no llegaría nunca.
+  //   · la regla 0 del helper (que mira el marcador del historial) cubre el overlay cuyo `back()`
+  //     está EN VUELO — el borrado apaga su flag en el mismo lote, pero la entrada de arriba todavía
+  //     es suya.
+  // Sacar cualquiera de los dos deja un caso descubierto.
+  //
+  // La ref se lee y se escribe SÓLO adentro del efecto, nunca durante el render (`react-hooks/refs`:
+  // un render descartado dejaría la ref escrita). Y su valor siguiente no se asigna a mano: sale de
+  // `reconciledMemo`, que lo resetea cuando la URL y la vista vuelven a coincidir — sin ese reset, un
+  // forward del navegador hacia una URL que ya se saneó una vez quedaría mintiendo para siempre.
+  useEffect(() => {
+    if (hayOverlayAbierto) return
+    // Se lee de `searchParams` y no del valor del render a propósito: es lo que hace que el objeto de
+    // `useSearchParams` sea una dependencia GENUINA. Su identidad cambia con cada cambio de la URL
+    // canónica, que es el único aviso que llega cuando el `back()` de un overlay por fin asienta.
+    const enLaUrl = searchParams.get(VIEW_PARAM)
+    let escribio = false
+    if (
+      sanitizeAction({
+        reconcile: debeReconciliar,
+        param: enLaUrl,
+        lastApplied: reconciliadoRef.current,
+      }) === 'apply' &&
+      causaReconciliacion !== null
+    ) {
+      escribio =
+        applyPanelView({
+          cause: causaReconciliacion,
+          param: VIEW_PARAM,
+          from: enLaUrl,
+          to: destinoReconciliacion,
+        }) !== 'none'
+    }
+    reconciliadoRef.current = reconciledMemo({
+      reconcile: debeReconciliar,
+      applied: escribio,
+      param: enLaUrl,
+      previous: reconciliadoRef.current,
+    })
+  }, [searchParams, hayOverlayAbierto, debeReconciliar, causaReconciliacion, destinoReconciliacion])
+
   const selectedAppts = useMemo(() => selectedId ? appts.filter(a => a.client_id === selectedId).sort((a, b) => b.date < a.date ? -1 : 1) : [], [selectedId, appts])
   const stats = selectedId ? clientStats[selectedId] : null
 
@@ -524,7 +628,21 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
     if (!ok) { toast.error('Error al eliminar'); return }
     setClients(prev => prev.filter(c => c.id !== id))
     setAppts(prev => prev.filter(a => a.client_id !== id))
-    setSelectedId(null)
+    // ⚠ ES C-1, LA CARRERA. Esta línea y la de abajo corren en el MISMO lote, y el `<Dialog>` de
+    // confirmación participa de `lib/overlay-history.ts`: al cerrarse deshace su propia entrada, pero
+    // ese deshacer es asincrónico. En este instante la entrada de arriba del stack es LA DEL OVERLAY,
+    // no la del detalle.
+    //   1) Si escribiéramos historial acá, le borraríamos al overlay su marca ⇒ el overlay dejaría de
+    //      reconocer su entrada y no la desharía ⇒ la entrada del detalle quedaría huérfana ⇒ el
+    //      atrás mostraría la ficha de un cliente recién borrado.
+    //   2) Por eso la decisión correcta no es reemplazar: es NO TOCAR NADA. Se declara igual —no es
+    //      código muerto—: es la declaración greppable y testeable de que acá la vista cambia y la
+    //      política es no escribir. Si mañana la política cambia, este call site la hereda.
+    //   3) Y la ficha fantasma no puede aparecer aunque el saneo fallara: el detalle se resuelve
+    //      contra `clients`, y el cliente borrado ya no está ahí. Lo que el saneo limpia es la URL,
+    //      que es cosmético. El invariante duro lo sostiene la resolución contra la lista — no
+    //      "fortalezcas" el saneo metiendo una escritura acá.
+    applyPanelView({ cause: 'concurrent', param: VIEW_PARAM, from: id, to: null })
     setConfirmDelete(false)
     toast.success('Cliente eliminado')
   }
@@ -567,7 +685,23 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       }
       setClients(prev => prev.filter(c => !toDelete.find(d => d.id === c.id)))
       setAppts(prev => prev.map(a => toDelete.find(d => d.id === a.client_id) ? { ...a, client_id: keep.id } : a))
-      if (selectedId && toDelete.find(d => d.id === selectedId)) setSelectedId(keep.id)
+      // La fusión NO llama al ejecutor de historial: REGISTRA una redirección. Tres razones, porque
+      // es contraintuitivo:
+      //   1) El modal de fusión está ABIERTO mientras esta función corre (el botón "Fusionar" vive
+      //      adentro del `<Dialog open={mergeModal}>` y nada lo cierra acá), así que SU entrada es la
+      //      de arriba del stack. Escribir ahí le borraría su marca ⇒ al cerrarlo no desharía su
+      //      entrada ⇒ entrada huérfana y un atrás que no hace nada.
+      //   2) Por eso no se escribe: se redirige. La resolución del detalle pasa por `mergedInto`, así
+      //      que el cliente conservado aparece EN EL ACTO, exactamente como antes — cero regresión.
+      //   3) La URL converge sola: la resolución ve que el param no coincide con lo que se muestra y
+      //      el efecto de reconciliación aplica un `replace` a `?c=<conservado>` en cuanto el modal
+      //      suelta la entrada. El criterio 3 del ROADMAP ("la fusión reemplaza en vez de empujar")
+      //      se cumple sobre la ACCIÓN EFECTIVA, y hay un caso de test compuesto que lo mide.
+      setMergedInto(prev => {
+        const next = { ...prev }
+        for (const dup of toDelete) next[dup.id] = keep.id
+        return next
+      })
       toast.success(`Fusionados ${group.length} → ${keep.name}`)
     } catch { toast.error('Error al fusionar') }
   }
@@ -720,7 +854,9 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                   return (
                     <button
                       key={client.id}
-                      onClick={() => setSelectedId(client.id)}
+                      // Abrir un cliente es un DESTINO: se declara la situación y el helper empuja
+                      // una entrada. Nada se desmonta, así que búsqueda y filtros sobreviven al atrás.
+                      onClick={() => applyPanelView({ cause: 'user-open', param: VIEW_PARAM, from: selectedId, to: client.id })}
                       className={cn(
                         'w-full flex items-center gap-3 px-4 py-3 text-left border-l-2 transition-all',
                         isSelected
@@ -794,7 +930,10 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
             isSalud={isSalud}
             isBelleza={isBelleza}
             businessId={businessId}
-            onBack={() => setSelectedId(null)}
+            // El "Volver" de mobile. El helper CONSUME la entrada si la de arriba es nuestra (el caso
+            // normal: el dueño abrió el cliente desde el listado) y REEMPLAZA si no lo es — el dueño
+            // entró pegando la URL, y un back ahí lo sacaría del sitio.
+            onBack={() => applyPanelView({ cause: 'user-close', param: VIEW_PARAM, from: selected.id, to: null })}
             onRequestDelete={() => setConfirmDelete(true)}
             onMarkStatus={markStatus}
             onDeleteAppt={deleteAppt}
