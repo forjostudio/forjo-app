@@ -969,17 +969,40 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
             {duplicates.map((group, i) => {
               const keep = [...group].sort((a, b) => a.created_at < b.created_at ? -1 : 1)[0]
               return (
-                <div key={i} className="p-3 rounded-lg border border-border space-y-2">
-                  {group.map(c => (
-                    <div key={c.id} className="flex items-center gap-2 text-sm">
-                      {c.id === keep.id && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">CONSERVAR</span>}
-                      <span className="font-medium">{c.name}</span>
-                      {c.phone && <span className="text-muted-foreground text-xs">{c.phone}</span>}
-                      {c.email && <span className="text-muted-foreground text-xs">{c.email}</span>}
-                    </div>
-                  ))}
-                  <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => mergeGroup(group)}>
-                    <GitMerge className="w-3 h-3" /> Fusionar
+                <div key={i} className="p-3 rounded-lg border border-border space-y-3">
+                  {/* GAP A DE LA UAT EN CELULAR (2026-09-29): cada candidato pasa de TRES COLUMNAS a
+                      TRES FILAS —nombre, teléfono y mail uno debajo del otro—. A 375px las tres
+                      columnas partían el nombre en tres renglones y CORTABAN el mail
+                      (`francovellani@gmai…`), y este modal no es informativo: pide autorizar que se
+                      BORREN clientes y se reasignen sus turnos. Sin el mail entero el dueño no puede
+                      confirmar que sean la misma persona, así que el reflow es de CORRECCIÓN, no de
+                      estética.
+                      ⚠ `min-w-0` en toda la cadena + `break-all` en el mail. Un item de flex NO
+                      encoge por debajo de su contenido (`min-width:auto`) y un mail largo no tiene
+                      espacios donde cortar: sin las dos cosas vuelve a desbordar. Es la misma
+                      cicatriz de la UAT de v0.29 (tarjetas del catálogo) y del quick `260929-g4d`
+                      (chips de servicio) — no se paga una tercera vez.
+                      El `divide-y` separa candidato de candidato: ahora cada uno ocupa varias
+                      líneas, y sin la hairline dos fichas de 3 filas se leen como una sola de 6. */}
+                  <div className="divide-y divide-border">
+                    {group.map(c => (
+                      <div key={c.id} className="min-w-0 space-y-1 py-2 first:pt-0 last:pb-0">
+                        <div className="flex items-start gap-2 min-w-0">
+                          {/* La insignia no encoge (`shrink-0`): es la ÚNICA señal de qué ficha
+                              sobrevive a la fusión y tiene que leerse de un vistazo. */}
+                          {c.id === keep.id && <span className="shrink-0 text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">CONSERVAR</span>}
+                          <span className="min-w-0 text-sm font-medium break-words">{c.name}</span>
+                        </div>
+                        {c.phone && <p className="min-w-0 text-xs text-muted-foreground break-words">{c.phone}</p>}
+                        {c.email && <p className="min-w-0 text-xs text-muted-foreground break-all">{c.email}</p>}
+                      </div>
+                    ))}
+                  </div>
+                  {/* `h-11` = 44px de área táctil (la acción destructiva del modal, en un celular) y
+                      `w-full sm:w-auto`, el mismo par que ya usan las acciones del header del panel
+                      (D-01/POLISH-04). El foco visible lo trae `buttonVariants`. */}
+                  <Button variant="outline" className="h-11 w-full sm:w-auto" onClick={() => mergeGroup(group)}>
+                    <GitMerge className="w-4 h-4" /> Fusionar
                   </Button>
                 </div>
               )
