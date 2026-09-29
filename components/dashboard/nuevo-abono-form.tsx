@@ -20,9 +20,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, resetDrawerDrag } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Minus, Check, UserPlus, ChevronLeft, Repeat } from 'lucide-react'
+import {
+  UNSAVED_CHANGES_MESSAGE,
+  UNSAVED_CHANGES_TOAST_ID,
+  UNSAVED_NEW_ANNOUNCE,
+  UNSAVED_NEW_HINT,
+  guardDraftOnDismiss,
+  guardDraftOnDrawerDismiss,
+} from '@/lib/panel-draft'
+import type { OverlayDismissDetails } from '@/lib/overlay-history'
+import { Plus, Minus, Check, UserPlus, ChevronLeft, Repeat, XIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Hook responsive mínimo (idéntico al de nuevo-turno-form) ─────────────────────────────────
@@ -98,28 +107,59 @@ interface Props {
 export function NuevoAbonoForm({ open, onOpenChange, business, clients, services, professionals, locations, onCreated }: Props) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
-  // Anti-descarte accidental (UX): si el form tiene datos, cualquier cierre pide confirmación.
+  // ── Anti-descarte accidental: MISMO modelo y mismos motivos que en nuevo-turno-form ────────────
+  //
+  // ⚠ Acá había un segundo `<Dialog>` "¿Descartar el abono?" HERMANO del shell, y en mobile no se
+  // podía tocar NUNCA (era el peor de los dos, según la UAT en celular real del quick 260929-g4d):
+  // vaul monta el drawer en modo modal y mata los pointer-events de todo lo que esté fuera de su
+  // subárbol. Se sacó el anidamiento —CLAUDE.md prohíbe anidar modales— y se adoptó la guarda de
+  // Ajustes, que veta el cierre accidental y avisa sin abrir ningún segundo modal. El detalle largo
+  // del modelo está escrito en `nuevo-turno-form.tsx` y en `lib/panel-draft.ts`; no se repite acá.
   const dirtyRef = useRef(false)
-  const [discardOpen, setDiscardOpen] = useState(false)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const [dismissBlocked, setDismissBlocked] = useState(false)
 
-  const requestClose = useCallback(
-    (next: boolean) => {
-      if (!next && dirtyRef.current) { setDiscardOpen(true); return }
-      onOpenChange(next)
-    },
-    [onOpenChange],
-  )
-  const confirmDiscard = useCallback(() => {
-    setDiscardOpen(false)
+  // El cierre DELIBERADO: descarta sin preguntar. Lo usan la ✕, "Cancelar" y el éxito del submit.
+  //
+  // Apaga el aviso de paso, y ése es el ÚNICO lugar donde se apaga (no hay un efecto que lo resetee
+  // al abrir): una región viva que nace con el texto ya puesto no anuncia nada, así que reabrir con
+  // el aviso viejo colgado sería un anuncio perdido. Todos los cierres de este shell pasan por acá
+  // —la ✕, "Cancelar", el éxito del submit y el cierre accidental que la guarda deja pasar—, así que
+  // la región siempre se vuelve a montar limpia.
+  const close = useCallback(() => {
     dirtyRef.current = false
+    setDismissBlocked(false)
     onOpenChange(false)
   }, [onOpenChange])
+
+  const noticeDismissBlocked = useCallback(() => {
+    // Primero el rebote: si el veto cortó un arrastre, el drawer quedó traducido a media pantalla.
+    resetDrawerDrag(drawerRef.current)
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_NEW_HINT })
+    setDismissBlocked(true)
+  }, [])
+
+  // Los dos handlers de cierre se arman ADENTRO del callback, no en el render (la ref se lee recién
+  // en el intento de cierre). El porqué largo está en nuevo-turno-form.tsx.
+  const handleDialogDismiss = useCallback(
+    (nextOpen: boolean, details: OverlayDismissDetails) =>
+      guardDraftOnDismiss(() => dirtyRef.current, close, noticeDismissBlocked)(nextOpen, details),
+    [close, noticeDismissBlocked],
+  )
+  const handleDrawerDismiss = useCallback(
+    (nextOpen: boolean) =>
+      guardDraftOnDrawerDismiss(() => dirtyRef.current, close, noticeDismissBlocked)(nextOpen),
+    [close, noticeDismissBlocked],
+  )
+
+  const blockedNotice = (
+    <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_NEW_ANNOUNCE : ''}</p>
+  )
 
   const body = (
     <AbonoFormBody
       key={open ? 'open' : 'closed'}
-      onClose={() => onOpenChange(false)}
-      requestClose={() => requestClose(false)}
+      onClose={close}
       dirtyRef={dirtyRef}
       business={business}
       clients={clients}
@@ -130,48 +170,47 @@ export function NuevoAbonoForm({ open, onOpenChange, business, clients, services
     />
   )
 
-  const shell = isDesktop ? (
-    <Dialog open={open} onOpenChange={requestClose}>
+  return isDesktop ? (
+    <Dialog open={open} onOpenChange={handleDialogDismiss}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+        <DialogHeader className="pr-8">
           <DialogTitle>Nuevo abono</DialogTitle>
         </DialogHeader>
+        {blockedNotice}
         {body}
       </DialogContent>
     </Dialog>
   ) : (
-    <Drawer open={open} onOpenChange={requestClose}>
-      <DrawerContent>
-        <DrawerHeader>
+    <Drawer open={open} onOpenChange={handleDrawerDismiss}>
+      <DrawerContent ref={drawerRef}>
+        {/* px-8 y no pr-8: el título del drawer va centrado (ver la nota en nuevo-turno-form). */}
+        <DrawerHeader className="px-8">
           <DrawerTitle>Nuevo abono</DrawerTitle>
         </DrawerHeader>
+        {/* La ✕ del drawer: espeja la del DialogContent y NO pasa por la guarda (salida deliberada).
+            El ::after de `-inset-2` lleva el área táctil de los 28px de `icon-sm` a 44×44 sin agrandar
+            el icono (ver la nota larga en nuevo-turno-form.tsx). */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-2 right-2 after:absolute after:-inset-2 after:content-['']"
+          onClick={close}
+        >
+          <XIcon />
+          <span className="sr-only">Cerrar</span>
+        </Button>
+        {blockedNotice}
         <div className="overflow-y-auto px-4 pb-6">{body}</div>
       </DrawerContent>
     </Drawer>
   )
-
-  return (
-    <>
-      {shell}
-      <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>¿Descartar el abono?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">Vas a perder los datos que cargaste.</p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setDiscardOpen(false)}>Seguir editando</Button>
-            <Button type="button" variant="destructive" onClick={confirmDiscard}>Descartar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
 }
 
 type BodyProps = {
+  // El cierre deliberado del shell: descarta y cierra. Lo llaman "Cancelar" y el éxito del submit.
+  // Ya NO existe un `requestClose` aparte: el cierre accidental lo intercepta la guarda del shell.
   onClose: () => void
-  requestClose: () => void
   dirtyRef: { current: boolean }
   business: Business
   clients: Client[]
@@ -181,7 +220,7 @@ type BodyProps = {
   onCreated?: () => void
 }
 
-function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, services, professionals, locations, onCreated }: BodyProps) {
+function AbonoFormBody({ onClose, dirtyRef, business, clients, services, professionals, locations, onCreated }: BodyProps) {
   const router = useRouter()
 
   // Terminología por vertical: en canchas el bookable ES la cancha (professional con service_id), no hay
@@ -654,7 +693,7 @@ function AbonoFormBody({ onClose, requestClose, dirtyRef, business, clients, ser
 
       {/* Submit — min-h 44px para touch (WCAG AA), disabled + loading anti doble-submit */}
       <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="outline" className="min-h-11" onClick={requestClose} disabled={saving}>
+        <Button type="button" variant="outline" className="min-h-11" onClick={onClose} disabled={saving}>
           Cancelar
         </Button>
         <Button type="button" className="min-h-11 gap-1.5" onClick={doSubmit} disabled={saving}>

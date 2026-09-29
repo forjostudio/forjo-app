@@ -20,6 +20,32 @@ function useDrawerPortalContainer(): HTMLElement | null {
   return React.useContext(DrawerPortalContainerContext)
 }
 
+// ── Devolver el drawer a su lugar cuando se VETA un cierre por arrastre (quick 260929-g4d) ───────
+//
+// POR QUÉ HACE FALTA, medido en vaul 1.1.2 y no deducido:
+//   · `onDrag` (dist/index.mjs, rama `!snapPoints`) escribe un `transform: translate3d(0, Ypx, 0)`
+//     INLINE sobre el contenido mientras arrastrás, con `transition: none`.
+//   · al soltar pasando el umbral, `onRelease` llama a `closeDrawer()` — y `closeDrawer` (index.mjs
+//     :1173) hace `cancelDrag()` + `setIsOpen(false)` y NUNCA llama a `resetDrawer()`. El único
+//     camino que resetea el transform es el de soltar SIN pasar el umbral.
+//   · el drawer es controlado, así que `setIsOpen(false)` sólo invoca nuestro `onOpenChange`
+//     (`useControllableState`, index.mjs:480). Si la guarda del borrador veta el cierre, `open` sigue
+//     en true… con el transform del arrastre todavía puesto: el drawer queda CLAVADO a media pantalla.
+//
+// Esto hace lo mismo que el `resetDrawer()` privado de vaul para el caso sin snap points, con sus
+// mismos valores (`TRANSITIONS`, index.mjs:437): vuelve a 0 con la curva propia del paquete, así que
+// el veto se siente como el rebote de soltar corto, que es exactamente lo que es.
+//
+// NO pisa la animación de cierre posterior: `slideToBottom` es una @keyframes, y en la cascada las
+// animaciones ganan sobre el estilo inline normal. Por eso el propio vaul se permite el mismo truco.
+//
+// La firma tolera `null` a propósito: el caller pasa `ref.current`, que es null antes del montaje.
+function resetDrawerDrag(node: HTMLElement | null | undefined) {
+  if (!node) return
+  node.style.transition = "transform 0.5s cubic-bezier(0.32, 0.72, 0, 1)"
+  node.style.transform = "translate3d(0, 0, 0)"
+}
+
 function Drawer({
   open,
   onOpenChange,
@@ -31,12 +57,19 @@ function Drawer({
   // ACÁ NO VIAJA NINGÚN DETALLE DE CIERRE, a diferencia del Dialog: el contrato de vaul es
   // `onOpenChange?: (open: boolean) => void` — no tiene `reason` ni `cancel()` en NINGÚN motivo, ni
   // siquiera en los suyos. Inventarle un detalle sintético a todos los cierres del drawer sería
-  // agregar un motivo falso a los cierres que hoy funcionan bien, y ningún drawer usa
-  // `guardDraftOnDismiss` (es de los diálogos de Ajustes). Los dos drawers que SÍ tienen guarda de
-  // borrador (el alta de turno y la de abono) vetan adentro de su `requestClose`, que abre su propio
-  // diálogo "¿Descartar?" y NO baja `open` — y eso alcanza, porque el re-push de la entrada lo
-  // decide el hook observando que el overlay siguió ABIERTO, nunca leyendo un `cancel()`. Un solo
-  // mecanismo de veto para los dos wrappers.
+  // agregar un motivo falso a los cierres que hoy funcionan bien.
+  //
+  // Los dos drawers que SÍ tienen guarda de borrador (el alta de turno y la de abono) usan
+  // `guardDraftOnDrawerDismiss` (`lib/panel-draft.ts`), la hermana sin motivos de la de los diálogos
+  // de Ajustes: veta NO bajando `open`. Y eso alcanza, porque el re-push de la entrada lo decide el
+  // hook observando que el overlay siguió ABIERTO, nunca leyendo un `cancel()`. Un solo mecanismo de
+  // veto para los dos wrappers.
+  //
+  // ⚠ Hasta el quick 260929-g4d esos dos vetaban abriendo un segundo diálogo "¿Descartar?" hermano
+  // del drawer. Era INTOCABLE en mobile: el modo modal de vaul bloquea los pointer-events de todo lo
+  // que está fuera de su subárbol (el mismo bug que documenta el contexto de acá arriba para los
+  // popups del Select). Se sacó el anidamiento en vez de parchear su portal — CLAUDE.md prohíbe
+  // anidar modales.
   useOverlayHistory({
     open,
     dismiss: onOpenChange ? () => onOpenChange(false) : undefined,
@@ -190,4 +223,5 @@ export {
   DrawerTitle,
   DrawerDescription,
   useDrawerPortalContainer,
+  resetDrawerDrag,
 }

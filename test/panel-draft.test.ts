@@ -3,6 +3,7 @@ import {
   MAX_CAPACITY,
   capacityModePatch,
   guardDraftOnDismiss,
+  guardDraftOnDrawerDismiss,
   locToPayload,
   locationFormFingerprint,
   minCapacityFor,
@@ -241,6 +242,43 @@ describe('guardDraftOnDismiss — qué cierra, qué se cancela y qué avisa', ()
     expect(isDirty).not.toHaveBeenCalled()
     handler(false, { reason: 'close-press', cancel: vi.fn() })
     expect(close).toHaveBeenCalledTimes(1)
+    expect(isDirty).not.toHaveBeenCalled()
+  })
+})
+
+// ── El drawer (vaul), que no tiene motivos de cierre (quick 260929-g4d) ─────────────────────────
+// Lo que esto congela es la DECISIÓN, no una limitación: vaul entrega `(open: boolean) => void` y
+// nada más, así que el click afuera, el Escape, el arrastre y el "atrás" llegan indistinguibles y los
+// cuatro se tratan como accidentales. La ✕ y "Cancelar" no pasan por acá (llaman al cierre directo),
+// que es lo que deja salida a un formulario sucio. Si algún día vaul mandara un motivo, este archivo
+// es donde tiene que romperse la suposición.
+describe('guardDraftOnDrawerDismiss — el drawer sin motivo de cierre', () => {
+  function run(dirty: boolean) {
+    const close = vi.fn()
+    const onBlocked = vi.fn()
+    guardDraftOnDrawerDismiss(() => dirty, close, onBlocked)(false)
+    return { close, onBlocked }
+  }
+
+  it('sin cambios, cualquier cierre de vaul pasa (arrastrar sigue cerrando, que es lo que el dueño pidió conservar)', () => {
+    const { close, onBlocked } = run(false)
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(onBlocked).not.toHaveBeenCalled()
+  })
+
+  it('con cambios, el cierre se VETA y avisa — el veto es no llamar a close(), no hay cancel() que llamar', () => {
+    const { close, onBlocked } = run(true)
+    expect(close).not.toHaveBeenCalled()
+    expect(onBlocked).toHaveBeenCalledTimes(1)
+  })
+
+  it('abrir no hace nada, y el estado sucio NO se consulta al abrir', () => {
+    const close = vi.fn()
+    const onBlocked = vi.fn()
+    const isDirty = vi.fn(() => true)
+    guardDraftOnDrawerDismiss(isDirty, close, onBlocked)(true)
+    expect(close).not.toHaveBeenCalled()
+    expect(onBlocked).not.toHaveBeenCalled()
     expect(isDirty).not.toHaveBeenCalled()
   })
 })

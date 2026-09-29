@@ -140,6 +140,86 @@ export function guardDraftOnDismiss(isDirty: () => boolean, close: () => void, o
   }
 }
 
+/**
+ * La MISMA guarda, para el shell de DRAWER (vaul) de los dos formularios de alta (quick 260929-g4d).
+ *
+ * POR QUÉ NO ALCANZA CON LA DE ARRIBA: vaul no entrega NINGÚN detalle de cierre. Su contrato es
+ * `onOpenChange?: (open: boolean) => void` —medido en `vaul/dist/index.d.ts:40`, v1.1.2—, así que el
+ * click afuera, el Escape, el arrastre hacia abajo y el "atrás" del celular llegan los cuatro
+ * IGUALES: un `false` pelado. Por eso acá no hay lista de motivos: no hay motivo que mirar. (Sí
+ * existen `onRelease(event, open)` y `onClose()`, pero son eventos del GESTO, no un motivo del
+ * cierre; y distinguirlos no cambiaría nada, porque los cuatro son accidentales en este modelo.)
+ *
+ * LA REGLA QUE QUEDA, y es una DECISIÓN, no una limitación sufrida: todo cierre originado por vaul se
+ * trata como ACCIDENTAL. Las salidas DELIBERADAS —la ✕ del drawer y el botón "Cancelar"— no pasan por
+ * acá: llaman al cierre directo. Con el formulario limpio la guarda no muerde, así que arrastrar para
+ * cerrar (que el dueño pidió conservar) sigue funcionando exactamente igual que antes.
+ *
+ * TAMPOCO HAY `cancel()`: el veto es, literalmente, NO bajar `open`. El drawer es controlado y vaul
+ * sólo cierra cuando el caller baja la prop (`useControllableState`, `vaul/dist/index.mjs:480`: con
+ * `prop !== undefined` el setter interno SÓLO llama al `onOpenChange` del caller). El re-push de la
+ * entrada del historial cuando el veto corta un "atrás" lo decide `lib/overlay-history.ts` observando
+ * que el overlay SIGUIÓ abierto, nunca leyendo un `cancel()` — ya estaba escrito así.
+ *
+ * ⚠ EL VETO DEL ARRASTRE NECESITA ADEMÁS UN RESET VISUAL, y no vive acá porque toca el DOM: vaul
+ * aplica un `transform` inline mientras arrastrás y, cuando el gesto cruza el umbral, llama a
+ * `closeDrawer()` —que NO llama a `resetDrawer()`—, así que un veto a secas dejaría el drawer clavado
+ * a media pantalla. Lo devuelve a su lugar `resetDrawerDrag` (`components/ui/drawer.tsx`), que el
+ * caller encadena en su `onBlocked`.
+ */
+export function guardDraftOnDrawerDismiss(isDirty: () => boolean, close: () => void, onBlocked: () => void) {
+  return (open: boolean) => {
+    if (open) return
+    if (isDirty()) {
+      onBlocked()
+      return
+    }
+    close()
+  }
+}
+
+// ── La copy del cierre bloqueado, en UN SOLO LUGAR ──────────────────────────────────────────────
+//
+// Nació adentro de `settings-client.tsx` (Phase 23 · G-23-25) porque la guarda tenía un solo
+// consumidor. Desde el quick 260929-g4d son TRES pantallas —los tres diálogos de Ajustes, el alta de
+// turno y el alta de abono—, así que las cadenas suben acá, al lado de la guarda que las provoca:
+// escritas dos veces se renombran a medias, que es la trampa que este repo ya evita con la copy del
+// gate de cupo. Son cadenas puras: no rompen el "este módulo no habla con React ni con el DOM".
+
+/** El aviso que fijó el dueño. Es el mismo en Ajustes y en las dos altas: una sola voz en el panel. */
+export const UNSAVED_CHANGES_MESSAGE = 'Tenés cambios sin guardar'
+
+/**
+ * La pista es ADITIVA (microcopy de CLAUDE.md: un aviso dice qué pasó Y cómo resolverlo). No
+ * reemplaza el texto de arriba, que es el que fijó el dueño.
+ */
+export const UNSAVED_CHANGES_HINT = 'Guardá para conservarlos, o cerrá con la ✕ para descartarlos.'
+
+/**
+ * La pista de las ALTAS (turno y abono), y por qué no se reusa la de arriba: en un alta no hay nada
+ * que "guardar" todavía —el registro no existe— y el botón no dice "Guardar", dice "Agregar turno" /
+ * "Crear abono". Mandar al dueño a apretar un botón que no está en pantalla es peor que no avisar. Lo
+ * que sí es idéntico es la salida: la ✕, que es lo que hace cerrable un formulario sucio.
+ */
+export const UNSAVED_NEW_HINT = 'Terminá de cargarlo, o cerrá con la ✕ para descartarlo.'
+
+/**
+ * Identificador fijo: sonner REEMPLAZA el aviso vivo en vez de apilar uno nuevo, así que cinco clicks
+ * afuera seguidos dejan UN solo toast en pantalla. Compartido por las tres pantallas sin riesgo: no
+ * hay ninguna en la que un diálogo de Ajustes y un alta estén abiertos a la vez.
+ */
+export const UNSAVED_CHANGES_TOAST_ID = 'unsaved-changes'
+
+/**
+ * El MISMO aviso, en una sola cadena, para la región viva que va ADENTRO del popup. Hace falta porque
+ * la región `aria-live` del toast vive FUERA del portal y el modal la marca `inert`: el toast se ve,
+ * pero no se anuncia (el porqué completo, en el comentario de {@link guardDraftOnDismiss}).
+ *
+ * Una por pista, porque el anuncio tiene que decir la MISMA salida que el toast que lo acompaña.
+ */
+export const UNSAVED_CHANGES_ANNOUNCE = `${UNSAVED_CHANGES_MESSAGE}. ${UNSAVED_CHANGES_HINT}`
+export const UNSAVED_NEW_ANNOUNCE = `${UNSAVED_CHANGES_MESSAGE}. ${UNSAVED_NEW_HINT}`
+
 // ── Servicio ────────────────────────────────────────────────────────────────────────────────────
 
 /** Forma del borrador del diálogo de edición de servicio. */

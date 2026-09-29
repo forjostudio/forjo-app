@@ -34,6 +34,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 // toggle de modo de cupo. Viven en lib/ para poder testearse (`test/panel-draft.test.ts`).
 import {
   MAX_CAPACITY,
+  UNSAVED_CHANGES_ANNOUNCE,
+  UNSAVED_CHANGES_HINT,
+  UNSAVED_CHANGES_MESSAGE,
+  UNSAVED_CHANGES_TOAST_ID,
   capacityModePatch,
   guardDraftOnDismiss,
   locToPayload,
@@ -180,15 +184,10 @@ function ProFields({ value, onChange, labels }: {
 // módulo `'use client'` de 4.100 líneas que el runner no puede importar: adentro, ninguna de esas
 // reglas se podía testear, para un arreglo cuyo modo de falla es encerrar al dueño en un diálogo.
 // Los tests están en `test/panel-draft.test.ts`.
-const UNSAVED_CHANGES_MESSAGE = 'Tenés cambios sin guardar'
-// La pista es ADITIVA (microcopy de CLAUDE.md: un aviso dice qué pasó Y cómo resolverlo). No
-// reemplaza el texto de arriba, que es el que fijó el dueño.
-const UNSAVED_CHANGES_HINT = 'Guardá para conservarlos, o cerrá con la ✕ para descartarlos.'
-// Identificador fijo: sonner REEMPLAZA el aviso vivo en vez de apilar uno nuevo, así que cinco clicks
-// afuera seguidos dejan UN solo toast en pantalla.
-const UNSAVED_CHANGES_TOAST_ID = 'unsaved-changes'
-// El MISMO aviso, en una sola cadena, para la región viva que va ADENTRO del popup (ver abajo).
-const UNSAVED_CHANGES_ANNOUNCE = `${UNSAVED_CHANGES_MESSAGE}. ${UNSAVED_CHANGES_HINT}`
+//
+// ⚠ Y LA COPY TAMBIÉN SUBIÓ A `@/lib/panel-draft` (quick 260929-g4d): dejó de tener un solo consumidor
+// el día que los dos formularios de alta (turno y abono) adoptaron esta misma guarda. Escrita dos
+// veces se renombra a medias. Acá queda SÓLO el cableado.
 
 
 // Copy del rechazo del gate de cambio de modo (CUPO-08, migr. 068/070) en UN SOLO LUGAR: la leen los

@@ -15,9 +15,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, resetDrawerDrag } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Check, UserPlus, ChevronLeft, CalendarDays } from 'lucide-react'
+import {
+  UNSAVED_CHANGES_MESSAGE,
+  UNSAVED_CHANGES_TOAST_ID,
+  UNSAVED_NEW_ANNOUNCE,
+  UNSAVED_NEW_HINT,
+  guardDraftOnDismiss,
+  guardDraftOnDrawerDismiss,
+} from '@/lib/panel-draft'
+import type { OverlayDismissDetails } from '@/lib/overlay-history'
+import { Plus, Check, UserPlus, ChevronLeft, CalendarDays, XIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Calendar } from '@/components/ui/calendar'
 import { format, parseISO } from 'date-fns'
@@ -82,30 +91,84 @@ interface Props {
 export function NuevoTurnoForm({ open, onOpenChange, clients, services, professionals, locations, prefill, onCreated }: Props) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
-  // Anti-descarte accidental (UX): si el form tiene datos cargados, cualquier cierre (click afuera,
-  // Escape, X o Cancelar) pide confirmación en vez de borrar todo. `dirtyRef` lo actualiza el body en
-  // cada render; el cierre por ÉXITO (submit) usa onClose directo y NO pasa por esta confirmación.
+  // ── Anti-descarte accidental: el MISMO modelo que los diálogos de edición de Ajustes ───────────
+  //
+  // ⚠ ACÁ HABÍA UN SEGUNDO `<Dialog>` "¿Descartar el turno?", HERMANO del shell, y en mobile era
+  // INTOCABLE (UAT en celular real, quick 260929-g4d): vaul monta el drawer en modo modal y bloquea
+  // los pointer-events de todo lo que esté FUERA de su subárbol, así que el confirm se veía pero
+  // estaba muerto. Se podía montarlo adentro del drawer (existe el contexto para eso, lo usa el
+  // Select), pero eso deja el anidamiento de modales en pie — CLAUDE.md los prohíbe — y sólo tapa el
+  // síntoma. Se sacó el anidamiento y se adoptó `guardDraftOnDismiss`, que ya resolvía exactamente
+  // esto en los tres diálogos de Ajustes SIN abrir ningún segundo modal: veta el cierre y avisa.
+  //
+  // EL MODELO, y por qué la ✕ es la pieza que lo cierra:
+  //   · cierre ACCIDENTAL (click afuera · Escape · atrás del celular · arrastrar el drawer) con datos
+  //     cargados ⇒ no cierra, avisa;
+  //   · ✕ y "Cancelar" ⇒ cierran y descartan SIEMPRE. Son la salida deliberada, y sin ellas un
+  //     formulario sucio no tendría cómo descartarse.
+  // El mismo modelo en los dos viewports: el dueño pidió que la protección sea IGUAL a la de editar
+  // un servicio, no un dialecto por tamaño de pantalla.
   const dirtyRef = useRef(false)
-  const [discardOpen, setDiscardOpen] = useState(false)
+  // El nodo del DrawerContent, sólo para devolverlo a su lugar cuando se veta un cierre por arrastre
+  // (vaul deja el transform del gesto puesto; ver `resetDrawerDrag`).
+  const drawerRef = useRef<HTMLDivElement>(null)
+  // El aviso, TAMBIÉN adentro del overlay: la región aria-live del toast vive fuera del portal y el
+  // modal la marca `inert`, así que el toast se ve pero no se anuncia (el porqué largo está escrito
+  // en `lib/panel-draft.ts`). Los dos canales son necesarios, no redundantes.
+  const [dismissBlocked, setDismissBlocked] = useState(false)
 
-  const requestClose = useCallback(
-    (next: boolean) => {
-      if (!next && dirtyRef.current) { setDiscardOpen(true); return }
-      onOpenChange(next)
-    },
-    [onOpenChange],
-  )
-  const confirmDiscard = useCallback(() => {
-    setDiscardOpen(false)
+  // El cierre DELIBERADO: descarta sin preguntar. Lo usan la ✕, "Cancelar" y el éxito del submit.
+  //
+  // Apaga el aviso de paso, y ése es el ÚNICO lugar donde se apaga (no hay un efecto que lo resetee
+  // al abrir): una región viva que nace con el texto ya puesto no anuncia nada, así que reabrir con
+  // el aviso viejo colgado sería un anuncio perdido. Todos los cierres de este shell pasan por acá
+  // —la ✕, "Cancelar", el éxito del submit y el cierre accidental que la guarda deja pasar—, así que
+  // la región siempre se vuelve a montar limpia.
+  const close = useCallback(() => {
     dirtyRef.current = false
+    setDismissBlocked(false)
     onOpenChange(false)
   }, [onOpenChange])
+
+  const noticeDismissBlocked = useCallback(() => {
+    // Primero el rebote: si el veto cortó un arrastre, el drawer quedó traducido a media pantalla.
+    resetDrawerDrag(drawerRef.current)
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_NEW_HINT })
+    setDismissBlocked(true)
+  }, [])
+
+  // Los dos handlers de cierre, ARMADOS ADENTRO de un callback y no en el render.
+  //
+  // POR QUÉ ESTA VUELTA y no `guardDraftOnDismiss(isDirty, …)` suelto en el JSX, que es como lo usa
+  // Ajustes: ahí `isEditSvcDirty` lee ESTADO, acá lee una REF. `react-hooks/refs` marca como error
+  // pasarle a una función, durante el render, algo que puede leer `ref.current` —y tiene razón como
+  // regla general—. Envolviendo la construcción en el callback, la ref se lee recién cuando el
+  // usuario intenta cerrar, que es exactamente cuando tenía que leerse: el contrato de la guarda es
+  // que la respuesta a “¿hay cambios?” se calcule en el intento de cierre, no en cada tecleo.
+  //
+  // La ref se conserva (en vez de subir el estado sucio al shell) porque el cuerpo la escribe en un
+  // efecto: con estado sería un setState sincrónico adentro de un efecto —la otra regla— y un render
+  // extra del shell por cada vez que el formulario pasa de limpio a sucio.
+  const handleDialogDismiss = useCallback(
+    (nextOpen: boolean, details: OverlayDismissDetails) =>
+      guardDraftOnDismiss(() => dirtyRef.current, close, noticeDismissBlocked)(nextOpen, details),
+    [close, noticeDismissBlocked],
+  )
+  const handleDrawerDismiss = useCallback(
+    (nextOpen: boolean) =>
+      guardDraftOnDrawerDismiss(() => dirtyRef.current, close, noticeDismissBlocked)(nextOpen),
+    [close, noticeDismissBlocked],
+  )
+
+  // `sr-only` es `position: absolute`: no reclama espacio ni mueve nada del layout.
+  const blockedNotice = (
+    <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_NEW_ANNOUNCE : ''}</p>
+  )
 
   const body = (
     <TurnoFormBody
       key={open ? 'open' : 'closed'}
-      onClose={() => onOpenChange(false)}
-      requestClose={() => requestClose(false)}
+      onClose={close}
       dirtyRef={dirtyRef}
       clients={clients}
       services={services}
@@ -116,51 +179,57 @@ export function NuevoTurnoForm({ open, onOpenChange, clients, services, professi
     />
   )
 
-  // Desktop ≥768px → Dialog · mobile <768px → Drawer (vaul). D-09. onOpenChange = requestClose:
-  // intercepta click-afuera/Escape/X para confirmar si hay datos.
-  const shell = isDesktop ? (
-    <Dialog open={open} onOpenChange={requestClose}>
+  // Desktop ≥768px → Dialog · mobile <768px → Drawer (vaul). D-09.
+  // El Dialog usa `guardDraftOnDismiss` TAL CUAL: Base UI sí manda el motivo del cierre, así que la
+  // ✕ que ya trae el DialogContent (`close-press`) pasa derecho y el click afuera/Escape/atrás se
+  // vetan. El Drawer necesita la hermana sin motivos (vaul no entrega ninguno) y su propia ✕.
+  return isDesktop ? (
+    <Dialog open={open} onOpenChange={handleDialogDismiss}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+        <DialogHeader className="pr-8">
           <DialogTitle>Nuevo turno</DialogTitle>
         </DialogHeader>
+        {blockedNotice}
         {body}
       </DialogContent>
     </Dialog>
   ) : (
-    <Drawer open={open} onOpenChange={requestClose}>
-      <DrawerContent>
-        <DrawerHeader>
+    <Drawer open={open} onOpenChange={handleDrawerDismiss}>
+      <DrawerContent ref={drawerRef}>
+        {/* px-8 y no pr-8 (que es lo que lleva el diálogo de servicio en Ajustes): el título del
+            drawer va CENTRADO, así que despejar un solo lado lo correría 8px del centro. Simétrico
+            queda centrado de verdad y con la misma holgura contra la ✕. */}
+        <DrawerHeader className="px-8">
           <DrawerTitle>Nuevo turno</DrawerTitle>
         </DrawerHeader>
+        {/* La ✕ del drawer: espeja la del DialogContent (ghost · icon-sm · absolute top-2 right-2).
+            NO pasa por la guarda — es la salida deliberada.
+            TOUCH TARGET: `icon-sm` mide 28px, abajo de los 44 que pide CLAUDE.md. Se agranda el área
+            táctil con un ::after de `-inset-2` (8px por lado ⇒ 28+16 = 44×44) SIN tocar el tamaño
+            visual del icono, que es el mismo truco que usa vaul para su propio handle
+            (`[data-vaul-handle-hitarea]`). El ::after ancla contra el botón porque ya es `absolute`. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-2 right-2 after:absolute after:-inset-2 after:content-['']"
+          onClick={close}
+        >
+          <XIcon />
+          <span className="sr-only">Cerrar</span>
+        </Button>
+        {blockedNotice}
         <div className="overflow-y-auto px-4 pb-6">{body}</div>
       </DrawerContent>
     </Drawer>
   )
-
-  return (
-    <>
-      {shell}
-      {/* Confirmación de descarte (UX): evita perder el turno por un click afuera sin querer. */}
-      <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>¿Descartar el turno?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">Vas a perder los datos que cargaste.</p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setDiscardOpen(false)}>Seguir editando</Button>
-            <Button type="button" variant="destructive" onClick={confirmDiscard}>Descartar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
 }
 
 type BodyProps = {
+  // El cierre deliberado del shell: descarta y cierra. Lo llaman "Cancelar" y el éxito del submit.
+  // Ya NO existe un `requestClose` aparte: el único cierre que pregunta algo es el accidental, y ése
+  // lo intercepta la guarda del shell, no el cuerpo.
   onClose: () => void
-  requestClose: () => void
   dirtyRef: { current: boolean }
   clients: Client[]
   services: Service[]
@@ -170,7 +239,7 @@ type BodyProps = {
   onCreated?: () => void
 }
 
-function TurnoFormBody({ onClose, requestClose, dirtyRef, clients, services, professionals, locations, prefill, onCreated }: BodyProps) {
+function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, locations, prefill, onCreated }: BodyProps) {
   const router = useRouter()
 
   // Consultorios activos (igual criterio que el resto del dashboard).
@@ -671,7 +740,7 @@ function TurnoFormBody({ onClose, requestClose, dirtyRef, clients, services, pro
 
       {/* Submit — min-h 44px para touch (WCAG AA), disabled + loading anti doble-submit */}
       <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="outline" className="min-h-11" onClick={requestClose}>
+        <Button type="button" variant="outline" className="min-h-11" onClick={onClose}>
           Cancelar
         </Button>
         <Button type="button" className="min-h-11 gap-1.5" onClick={goToConfirm}>
