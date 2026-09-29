@@ -82,12 +82,14 @@ Verificación: vitest sobre las decisiones puras del helper · `npm run lint` ·
 
 **Security/Integrity relevance**: Superficie autenticada del dashboard, sin cambios de esquema ni de policies. El único invariante en juego es el de lectura: un id de cliente que viene de la **URL** no es autorización — la garantía sigue siendo `business.id` resuelto por `owner_id` (`app/(dashboard)/clients/page.tsx:10-16`) y el filtro `.eq('business_id', business.id)` en cada query. No se expone nada a `anon` (el panel no es superficie pública) y no se toca el service role. Riesgo bajo salvo el punto (b) de arriba, que es el que un `secure-phase` tendría que mirar si se elige la variante con lectura por id en el server.
 
-**Plans**: 2/2 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 
 - [x] 01-01-PLAN.md — El mecanismo (`lib/panel-history.ts`: 4 acciones × 6 causas, puro y testeado) nace junto con su primer consumidor: el detalle de cliente pasa a vivir en `/clients?c=<id>` (D-03), con `<Suspense>` en `page.tsx` y los cuatro cambios de vista declarados al helper — incluido el borrado (C-1)
 - [x] 01-02-PLAN.md — El candado de C-1: una suite pura que lee fuentes (molde `test/catalog-public.test.ts`) y se pone roja si el call site del borrado degrada su causa, si vuelve una mutación cruda de historial a `app/(dashboard)/clients/`, si el helper compone el state por propagación, o si deriva la clave de `lib/overlay-history.ts`
+- [x] 01-03-PLAN.md — Cierre de gaps de la UAT (NAV-07 + NAV-08): `panelNavMode` (push-vs-replace del menú, pura y sobre rutas) y `consumeOwnedPanelEntry` en `lib/panel-history.ts`; el sidebar las consume
+- [x] 01-04-PLAN.md — Cierre de gaps de la UAT (NAV-01, pantalla de Clientes): el modal de fusionar duplicados pasa a **tres filas** con el mail entero (desborde a 375px medido `+36.4px → −13.0px`), y la acción de fusionar existe con la **ficha abierta** en mobile, espejada del control del listado y sólo si ese cliente es duplicado (el `lg:hidden` se mudó a la fila ⇒ desktop intacto)
 
 ### Phase 2: Los tabs profundos sobre la misma regla
 
@@ -156,5 +158,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. El detalle de cliente, con la regla de historial que lo gobierna | 3/4 | In Progress|  |
+| 1. El detalle de cliente, con la regla de historial que lo gobierna | 4/4 | In Progress|  |
 | 2. Los tabs profundos sobre la misma regla | 0/? | Not started | - |
