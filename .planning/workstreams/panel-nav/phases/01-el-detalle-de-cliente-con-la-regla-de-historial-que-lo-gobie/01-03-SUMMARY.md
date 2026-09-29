@@ -212,7 +212,7 @@ Ninguno.
 
 ## Known Stubs
 
-Ninguno. No quedó ningún `it.skip`, ningún `todo`, ningún caso que pase sin afirmar: las 3 llamadas a `recorte(` del archivo nuevo tienen 6 guardas de "no encontró nada" cubriéndolas, y los dos `describe` de `lib/panel-history.test.ts` afirman sobre `vi.fn()` contadas (`toHaveBeenCalledTimes(1)` / `not.toHaveBeenCalled()`), no sobre un booleano de retorno solo.
+Ninguno. No quedó ningún `it.skip`, ningún `todo`, ningún caso que pase sin afirmar: los **4** cortes de `recorte(` del archivo nuevo tienen **4** guardas de "no encontró nada" cubriéndolos (1:1, medido con `grep -c`; el 5º hit de `recorte(` es su propia definición), y los dos `describe` de `lib/panel-history.test.ts` afirman sobre `vi.fn()` contadas (`toHaveBeenCalledTimes(1)` / `not.toHaveBeenCalled()`), no sobre un booleano de retorno solo.
 
 ## Threat Flags
 
