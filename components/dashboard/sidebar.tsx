@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNavigationGuard } from '@/components/dashboard/unsaved-changes-guard'
+import { consumeOwnedPanelEntry, panelNavMode } from '@/lib/panel-history'
 import { useState } from 'react'
 
 type NavItem = { href: string; label: string; icon: LucideIcon }
@@ -143,8 +144,24 @@ export function Sidebar({ business }: { business: Business }) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    // NAV-07 — el atrás desde cualquier sección cae en el DASHBOARD, nunca en otra
+                    // sección abierta antes. El sidebar no decide nada: CONSUME la regla pura de
+                    // lib/panel-history.ts (mismo criterio que NAV-05 — una sola forma de tocar el
+                    // historial, testeable sin jsdom). Ojo: NO es `replace` a secas, que reemplazaría
+                    // también la entrada del dashboard y el primer atrás sacaría del panel.
+                    replace={panelNavMode({ from: pathname, to: item.href }) === 'replace'}
                     onClick={() => setMobileOpen(false)}
-                    onNavigate={(e) => { if (requestNavigation(item.href)) e.preventDefault() }}
+                    // El guard de cambios sin guardar se evalúa PRIMERO y no se toca: si bloquea, él
+                    // se hace cargo del diálogo y acá no pasa nada más.
+                    // NAV-08 — tocar la sección en la que YA estás cierra la subsección en vez de
+                    // apilarla encima (el `/clients` que entierra un `?c=` y lo desentierra tres
+                    // atrás después). `history.back()` es ASÍNCRONO: hay que PREVENIR la navegación,
+                    // no encadenarla — si dejáramos navegar, el router empujaría su entrada antes de
+                    // que el browser procese el pop y volveríamos a enterrar la ficha.
+                    onNavigate={(e) => {
+                      if (requestNavigation(item.href)) { e.preventDefault(); return }
+                      if (active && consumeOwnedPanelEntry()) e.preventDefault()
+                    }}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
                       'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
@@ -177,10 +194,19 @@ export function Sidebar({ business }: { business: Business }) {
         {/* Acceso a la ayuda estática desde el footer (HELP-01 / D-07): HELP-01 pide un acceso
             desde el footer del sidebar además del de Configuración. Misma fila que los links de nav
             y cierra el drawer en mobile igual que ellos. */}
+        {/* La Ayuda es una ruta más del panel y entra por el MISMO menú, así que se rige por la misma
+            regla que los items de arriba: si no compartiera la política, salir de Clientes por Ayuda
+            dejaría Clientes debajo y el atrás caería ahí en vez del dashboard — el dialecto que
+            NAV-05 viene a evitar. El consumo de NAV-08 hoy es un no-op acá (Ayuda no tiene
+            subsecciones) y se deja igual para que no haya dos formas de escribir esta fila. */}
         <Link
           href="/ayuda"
+          replace={panelNavMode({ from: pathname, to: '/ayuda' }) === 'replace'}
           onClick={() => setMobileOpen(false)}
-          onNavigate={(e) => { if (requestNavigation('/ayuda')) e.preventDefault() }}
+          onNavigate={(e) => {
+            if (requestNavigation('/ayuda')) { e.preventDefault(); return }
+            if (pathname === '/ayuda' && consumeOwnedPanelEntry()) e.preventDefault()
+          }}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <HelpCircle className="w-4 h-4 flex-shrink-0" />
