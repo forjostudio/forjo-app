@@ -1,4 +1,21 @@
 ---
+gsd_state_version: "1.0"
+milestone: v0.30
+milestone_name: La navegación del panel
+current_phase: 1 — El detalle de cliente, con la regla de historial que lo gobierna
+current_plan: 2 of 2
+status: Phase 1 en ejecución — plan 01-01 completo
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-09-29T16:40:24.267Z"
+last_activity: 2026-09-29
+last_activity_desc: "Plan 01-01 ejecutado: lib/panel-history.ts (4 acciones x 6 causas, 53 casos) + el detalle de cliente derivado de /clients?c=<id>. UAT en celular PENDIENTE (la corre el dueño)."
+state_head: 71457a58ada9f649ef5ef9135e955b8193a1e02f
+progress:
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 0
 workstream: panel-nav
 created: 2026-09-28
 ---
@@ -7,17 +24,32 @@ created: 2026-09-28
 
 ## Current Position
 
-**Status:** Roadmap listo — sin ejecutar
-**Current Phase:** None (próxima: Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna)
-**Last Activity:** 2026-09-28
-**Last Activity Description:** ROADMAP.md escrito (2 fases, NAV-01..06 mapeados 6/6). Cero migraciones (próxima libre sigue siendo la 080). Ninguna fase necesita UI-SPEC.
+**Status:** Phase 1 en ejecución — plan 01-01 completo
+**Current Phase:** 1 — El detalle de cliente, con la regla de historial que lo gobierna
+**Last Activity:** 2026-09-29
+**Last Activity Description:** Plan 01-01 ejecutado: `lib/panel-history.ts` (4 acciones x 6 causas, 53 casos) + el detalle de cliente derivado de `/clients?c=<id>`. UAT en celular PENDIENTE (la corre el dueño).
 
 ## Progress
 
 **Phases Complete:** 0/2
-**Current Plan:** N/A
+**Current Plan:** 2 of 2 (01-01 completo)
 
 ## Session Continuity
 
-**Stopped At:** Roadmap escrito; próximo paso `/gsd-discuss-phase 1 --ws panel-nav` (o `/gsd-plan-phase 1 --ws panel-nav`)
+**Last session:** 2026-09-29T16:39:51.175Z
+
+**Stopped At:** Completed 01-01-PLAN.md
 **Resume File:** None
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 12min | 2 tasks | 4 files |
+
+## Decisions
+
+- [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: ① A→B empuja (no reemplaza): el helper es agnóstico del viewport y una política replace obligaría a una séptima causa
+- [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: ② El saneo corre en un efecto con guarda de idempotencia doble (sanitizeAction + regla 0) y memoria que se resetea (reconciledMemo)
+- [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: La fusión de duplicados NO escribe historial: registra una redirección idBorrado→idConservado y la reconciliación aplica el replace cuando el modal suelta la entrada
+- [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: La regla 0 (overlayOwnsTop ⇒ none) es absoluta: debilitarla cambiaría una regresión por un defecto (entrada huérfana + atrás muerto)

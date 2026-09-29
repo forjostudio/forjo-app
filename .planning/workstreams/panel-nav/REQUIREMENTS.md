@@ -27,6 +27,7 @@ arregla *solo* por existir la entrada. **No se intercepta `popstate` ni se reesc
 ⚠ Esto **acota a propósito** el pedido original de julio. El dueño pidió que el back "en última
 instancia lleve al dashboard y nunca a otra sección abierta antes". La primera mitad sale sola; la
 segunda **no se implementa**, porque:
+
 - Si el usuario viene de Finanzas, esa entrada **existe**. Sacarla es reescribir historial.
 - `components/dashboard/unsaved-changes-guard.tsx` **ya documenta** (verificado contra Next 16.2.7,
   no de memoria) que el App Router no expone API de bloqueo para `popstate`, y que el truco de
@@ -41,10 +42,10 @@ una subsección, y no hay dolor reportado.
 
 ### Detalle de cliente
 
-- [ ] **NAV-01**: El detalle de un cliente es una ruta propia. Abrir un cliente empuja una entrada, y
+- [x] **NAV-01**: El detalle de un cliente es una ruta propia. Abrir un cliente empuja una entrada, y
       el back vuelve **al listado de Clientes** con su búsqueda y filtros como estaban, no a la
       sección anterior.
-- [ ] **NAV-02**: La URL del detalle se puede recargar y compartir: entrar directo muestra ese
+- [x] **NAV-02**: La URL del detalle se puede recargar y compartir: entrar directo muestra ese
       cliente, y un id inexistente o **de otro negocio** no filtra nada (404 o vuelta al listado, sin
       confirmar que el id existe).
 
@@ -58,11 +59,11 @@ una subsección, y no hay dolor reportado.
 
 ### La regla de fondo
 
-- [ ] **NAV-05**: Queda **una** forma de hacer esto en el panel, no cuatro copias. Un helper
+- [x] **NAV-05**: Queda **una** forma de hacer esto en el panel, no cuatro copias. Un helper
       compartido decide cuándo un cambio de vista **empuja** entrada y cuándo **reemplaza**, y las
       superficies lo consumen. Sin esto, la próxima subsección que alguien agregue vuelve a romper el
       back.
-- [ ] **NAV-06**: Nada de lo anterior rompe el arreglo de Bug A ni la guarda de cambios sin guardar:
+- [x] **NAV-06**: Nada de lo anterior rompe el arreglo de Bug A ni la guarda de cambios sin guardar:
       con un overlay abierto el back sigue cerrando el overlay (no navegando), y con cambios sin
       guardar en Agenda el back/cambio de vista sigue avisando.
 
