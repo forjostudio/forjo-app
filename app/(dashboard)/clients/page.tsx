@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ClientsClient } from './clients-client'
@@ -31,12 +32,20 @@ export default async function ClientsPage() {
       .order('name', { ascending: true }),
   ])
 
+  // `ClientsClient` lee el cliente abierto de la query (`?c=<id>`) con `useSearchParams`, que obliga a
+  // un boundary de Suspense. Acá el fallback NUNCA se renderiza —esta ruta es dinámica porque el
+  // `createClient()` de arriba usa `cookies()`, así que el bailout de prerender no puede dispararse—,
+  // pero se envuelve igual: cuesta tres líneas, ya es el patrón del repo
+  // (`app/(dashboard)/layout.tsx:60-62` alrededor de `<PlanBanner>`), y así el build deja de depender
+  // de que nadie vuelva estática la ruta.
   return (
-    <ClientsClient
-      initialClients={clients || []}
-      appointments={appointments || []}
-      professionals={professionals || []}
-      businessId={business.id}
-    />
+    <Suspense fallback={null}>
+      <ClientsClient
+        initialClients={clients || []}
+        appointments={appointments || []}
+        professionals={professionals || []}
+        businessId={business.id}
+      />
+    </Suspense>
   )
 }
