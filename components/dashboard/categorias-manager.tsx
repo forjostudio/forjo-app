@@ -93,8 +93,20 @@ const SORT_MODE_REJECT_COPY = 'No se pudo guardar el orden. Probá de nuevo.'
 // inline de 44px (▲ ▼ mover) son 132px más el nombre, o sea un chip por fila a 375px, que destruye los
 // chips compactos que eligió D-06. El diálogo "Mover …" contiene categoría y posición, así que el
 // mecanismo sigue disponible con teclado y en mobile, que es lo que exigen CAT-03 y D-08.
-// El nombre NUNCA se trunca: `whitespace-nowrap` + el `flex-wrap` del contenedor hacen que un nombre
-// largo ocupe su fila entera; un nombre cortado volvería ambiguo cuál servicio estás por mover.
+// ⚠ EL NOMBRE SÍ SE TRUNCA, y esto REVIERTE lo que decía acá (quick 260929-g4d). La regla anterior
+// era "el nombre NUNCA se trunca: `whitespace-nowrap` + el `flex-wrap` del contenedor hacen que un
+// nombre largo ocupe su fila entera". No es lo que pasa: el `min-width: auto` de un item de flex le
+// impide encoger por debajo de su contenido, así que con `whitespace-nowrap` y sin ancho máximo un
+// nombre largo no ocupa su fila — se PASA del borde derecho de la tarjeta. Medido a 375px en la UAT
+// en celular real, con el mismo servicio larguísimo que ya había roto una tarjeta del catálogo
+// público en la UAT de v0.29 (allá se arregló con `break-words`; los chips del panel quedaron afuera).
+//
+// El miedo que motivaba la regla vieja —"un nombre cortado vuelve ambiguo cuál servicio estás por
+// mover"— se cubre por otros tres caminos, así que el truncado no deja a nadie sin el nombre entero:
+//   · el `aria-label` del botón lo lleva completo (lectores de pantalla);
+//   · el `title` lo muestra al pasar el mouse (desktop);
+//   · el diálogo "Mover …" abre con el nombre completo en el título, con `break-words` (mobile, que
+//     no tiene hover — y es justo el viewport donde el chip se trunca).
 //
 // ARRASTRE (plan 23-03, gate corregido en G-23-10a): el chip es a la vez ORIGEN —siempre que haya al
 // menos una categoría, porque asignar a otra categoría no depende del modo de orden (D-05/D-06)— y
@@ -113,10 +125,16 @@ function ServiceChip({ service, onMove, canDrag, dragging, onDragStart, onDragEn
   onDropOnChip: (target: Service) => boolean
 }) {
   return (
-    <li>
+    // `min-w-0` en el item: sin él, el `min-width: auto` de un item de flex lo deja crecer hasta el
+    // ancho de su contenido y el chip se pasa de la tarjeta. Es la mitad del arreglo; la otra es el
+    // `truncate` del nombre, unas líneas más abajo.
+    <li className="min-w-0 max-w-full">
       <button
         type="button"
         aria-label={`Mover “${service.name}”`}
+        // El nombre entero al pasar el mouse, ahora que el chip lo puede cortar. En mobile no hay
+        // hover: ahí el nombre completo lo da el título del diálogo "Mover …" que abre este botón.
+        title={service.name}
         onClick={() => onMove(service)}
         draggable={canDrag}
         onDragStart={e => {
@@ -138,17 +156,25 @@ function ServiceChip({ service, onMove, canDrag, dragging, onDragStart, onDragEn
           if (onDropOnChip(service)) e.stopPropagation()
         }}
         className={cn(
-          'inline-flex min-h-11 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'inline-flex min-h-11 max-w-full items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           canDrag && 'cursor-grab active:cursor-grabbing',
         )}
       >
-        {/* Siendo arrastrado: borde punteado + cursor de agarre. Sin transparencia (baja el contraste). */}
+        {/* Siendo arrastrado: borde punteado + cursor de agarre. Sin transparencia (baja el contraste).
+            `min-w-0 max-w-full` acá también: esta píldora es item de flex del botón y arrastra el mismo
+            `min-width: auto` que el <li>. El `whitespace-nowrap` que estaba en esta línea se fue con el
+            nombre: `truncate` ya lo incluye, y duplicado acá impediría que la píldora encoja. */}
         <span className={cn(
-          'inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground whitespace-nowrap',
+          'inline-flex h-7 min-w-0 max-w-full items-center gap-1 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground',
           dragging && 'border-dashed cursor-grabbing',
         )}>
-          {canDrag && <GripVertical aria-hidden="true" className="size-3 text-muted-foreground/60" />}
-          {service.name}
+          {/* `shrink-0`: el grip es el asidero del arrastre, nunca se encoge — se encoge el nombre. */}
+          {canDrag && <GripVertical aria-hidden="true" className="size-3 shrink-0 text-muted-foreground/60" />}
+          {/* El nombre en su propio span: `text-overflow` no actúa sobre los hijos de un contenedor
+              flex, así que la elipsis necesita este nodo propio. `truncate` trae `overflow-hidden`,
+              que además le resuelve solo el `min-width: 0` (el mínimo automático es 0 cuando el
+              overflow no es visible). Ningún handler de arrastre cambia: siguen todos en el <button>. */}
+          <span className="truncate">{service.name}</span>
         </span>
       </button>
     </li>
