@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   panelHistoryAction,
   panelViewState,
   isPanelViewEntry,
+  panelViewEntryParam,
   isOverlayOwnedEntry,
+  consumeOwnedPanelEntry,
+  panelNavMode,
+  PANEL_ROOT,
   panelViewUrl,
   resolveViewParam,
   sanitizeAction,
@@ -352,5 +356,174 @@ describe('panelViewUrl — el armado de URL, puro', () => {
 
   it('preserva los params ajenos', () => {
     expect(panelViewUrl({ pathname: '/clients', search: '?otro=1&c=abc', param: 'c', value: null })).toBe('/clients?otro=1')
+  })
+})
+
+// ── NAV-08 — el menú no sepulta subsecciones ─────────────────────────────────────────────────────
+
+describe('panelViewEntryParam — la marca, leída sin saber de qué vista es', () => {
+  // El sidebar no sabe nada de `?c=`: pregunta "¿la entrada de arriba es de ALGUNA subsección del
+  // panel?". Que el literal 'frjView' se lea en UN solo lugar es lo que evita el segundo dialecto.
+  it('devuelve null para cualquier state que no sea nuestro', () => {
+    expect(panelViewEntryParam(null)).toBeNull()
+    expect(panelViewEntryParam(undefined)).toBeNull()
+    expect(panelViewEntryParam(42)).toBeNull()
+    expect(panelViewEntryParam({})).toBeNull()
+    expect(panelViewEntryParam({ __NA: true })).toBeNull() // el state del router de Next
+    expect(panelViewEntryParam({ frjOverlay: 3 })).toBeNull() // el de un overlay
+  })
+
+  it('devuelve el param de CUALQUIER subsección, no sólo la de Clientes', () => {
+    // La Phase 2 marca con otro param y hereda el arreglo sin tocar nada de este módulo.
+    expect(panelViewEntryParam({ frjView: 'c' })).toBe('c')
+    expect(panelViewEntryParam({ frjView: 'tab' })).toBe('tab')
+  })
+
+  it('una marca con destino nulo NO es nuestra', () => {
+    // `panelViewState(param, null)` deja `frjView: null`: una entrada que no lleva ninguna vista no
+    // se puede consumir.
+    expect(panelViewEntryParam(panelViewState('c', null))).toBeNull()
+  })
+
+  it('isPanelViewEntry sigue derivándose de él (una sola definición de la marca)', () => {
+    expect(isPanelViewEntry({ frjView: 'c' }, 'c')).toBe(true)
+    expect(isPanelViewEntry({ frjView: 'tab' }, 'c')).toBe(false)
+    expect(isPanelViewEntry(panelViewState('c', 'abc'), 'c')).toBe(true)
+  })
+})
+
+describe('consumeOwnedPanelEntry — tocar la sección en la que ya estás cierra la subsección', () => {
+  // El runner corre con environment 'node': no hay `window`. Se stubea uno mínimo con lo único que
+  // el ejecutor toca (`history.state` y `history.back`), que además deja CONTAR los back().
+  function montarHistorial(state: unknown) {
+    const back = vi.fn()
+    vi.stubGlobal('window', { history: { state, back } })
+    return back
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('con NUESTRA entrada arriba hace exactamente un back() y avisa que consumió', () => {
+    const back = montarHistorial(panelViewState('c', 'abc'))
+    expect(consumeOwnedPanelEntry()).toBe(true)
+    expect(back).toHaveBeenCalledTimes(1)
+  })
+
+  it('es genérico: consume también la subsección de otra pantalla (Phase 2)', () => {
+    const back = montarHistorial({ frjView: 'tab' })
+    expect(consumeOwnedPanelEntry()).toBe(true)
+    expect(back).toHaveBeenCalledTimes(1)
+  })
+
+  it('CERO back() sobre una entrada ajena — es la cicatriz 2, saca al dueño del sitio', () => {
+    for (const ajena of [null, { __NA: true }, {}, panelViewState('c', null)]) {
+      const back = montarHistorial(ajena)
+      expect(consumeOwnedPanelEntry()).toBe(false)
+      expect(back).not.toHaveBeenCalled()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('CERO back() cuando la entrada de arriba es de un overlay', () => {
+    // La guarda explícita de `lib/overlay-history.ts:362-366`: si el `back()` cayera sobre la entrada
+    // del overlay, desharíamos SU entrada creyendo deshacer la nuestra. Hoy las dos formas de state
+    // son disjuntas, y justamente por eso la guarda se escribe en vez de darse por supuesta.
+    const back = montarHistorial({ frjOverlay: 1 })
+    expect(consumeOwnedPanelEntry()).toBe(false)
+    expect(back).not.toHaveBeenCalled()
+  })
+
+  it('una entrada que lleva las DOS marcas se considera del overlay y no se toca', () => {
+    // El candado independiente: aunque alguien empujara un state con las dos, gana el overlay.
+    const back = montarHistorial({ frjOverlay: 1, frjView: 'c' })
+    expect(consumeOwnedPanelEntry()).toBe(false)
+    expect(back).not.toHaveBeenCalled()
+  })
+})
+
+// ── NAV-07 — el atrás desde una sección cae en el dashboard ──────────────────────────────────────
+
+describe('panelNavMode — la regla de push-vs-replace del menú', () => {
+  it('dashboard → sección EMPUJA: el dashboard tiene que quedar debajo', () => {
+    expect(panelNavMode({ from: PANEL_ROOT, to: '/clients' })).toBe('push')
+    expect(panelNavMode({ from: PANEL_ROOT, to: '/finances' })).toBe('push')
+  })
+
+  it('sección → sección REEMPLAZA: encima del dashboard hay SIEMPRE una sola sección', () => {
+    // Es literalmente el pedido de julio: Finanzas → Clientes no puede dejar Finanzas debajo.
+    expect(panelNavMode({ from: '/finances', to: '/clients' })).toBe('replace')
+    expect(panelNavMode({ from: '/negocio', to: '/settings' })).toBe('replace')
+  })
+
+  it('NO es `replace` a secas: reemplazar desde el dashboard sacaría del panel', () => {
+    // El candado contra la simplificación tentadora. Si alguien pone `replace` en todos los links,
+    // este caso se pone rojo: la entrada del dashboard desaparecería y el primer atrás saldría del
+    // sitio en vez de volver al panel.
+    expect(panelNavMode({ from: PANEL_ROOT, to: '/agenda' })).not.toBe('replace')
+  })
+
+  it('la misma ruta REEMPLAZA: empujarla sería un atrás muerto (cicatriz 1)', () => {
+    // Es la rama que cierra NAV-08 cuando la entrada de arriba NO es nuestra y por lo tanto no se
+    // puede consumir (el dueño pegó `/clients?c=A`): el replace limpia la query sin apilar nada.
+    expect(panelNavMode({ from: '/clients', to: '/clients' })).toBe('replace')
+    expect(panelNavMode({ from: PANEL_ROOT, to: PANEL_ROOT })).toBe('replace')
+  })
+
+  it('sección → dashboard EMPUJA: reemplazar dejaría /dashboard sobre /dashboard', () => {
+    // Dos entradas idénticas = un atrás que no hace nada visible, la "entrada basura" que el
+    // criterio 3 prohíbe. Con push, el atrás desde el dashboard devuelve la sección de la que se
+    // venía: siempre hace algo.
+    expect(panelNavMode({ from: '/clients', to: PANEL_ROOT })).toBe('push')
+  })
+
+  it('la raíz es un parámetro, no un literal escondido en la regla', () => {
+    expect(panelNavMode({ from: '/a', to: '/b', root: '/a' })).toBe('push')
+    expect(panelNavMode({ from: '/x', to: '/b', root: '/a' })).toBe('replace')
+  })
+})
+
+describe('panelNavMode — el invariante, simulado sobre la pila del navegador', () => {
+  /** La pila que produciría el `<Link>` del sidebar aplicando la regla. El último es el actual. */
+  function navegar(pila: string[], to: string): string[] {
+    const from = pila[pila.length - 1]
+    return panelNavMode({ from, to }) === 'push' ? [...pila, to] : [...pila.slice(0, -1), to]
+  }
+  /** El atrás del navegador: devuelve dónde aterriza, o `null` si se salió del panel. */
+  function atras(pila: string[]): string | null {
+    return pila.length > 1 ? pila[pila.length - 2] : null
+  }
+
+  it('Dashboard → Finanzas → Clientes → atrás aterriza en el DASHBOARD (el pedido de julio)', () => {
+    let pila = [PANEL_ROOT]
+    pila = navegar(pila, '/finances')
+    pila = navegar(pila, '/clients')
+    expect(pila).toEqual([PANEL_ROOT, '/clients'])
+    expect(atras(pila)).toBe(PANEL_ROOT)
+  })
+
+  it('desde CUALQUIER sección del menú, después de cualquier recorrido, el atrás cae en el dashboard', () => {
+    // Las 13 rutas reales del sidebar (los ~14 items del menú + la Ayuda del footer). La regla se
+    // define sobre RUTAS y no sobre pantallas a propósito: Negocio y Ajustes comparten pantalla pero
+    // son rutas distintas.
+    const RUTAS = [
+      '/appointments', '/agenda', '/abonos', '/negocio', '/web', '/servicios',
+      '/equipo', '/consultorios', '/clients', '/finances', '/settings', '/ayuda',
+    ]
+    for (const primera of RUTAS) {
+      for (const segunda of RUTAS) {
+        const pila = navegar(navegar([PANEL_ROOT], primera), segunda)
+        // Incluye el caso primera === segunda (tocar la sección en la que ya estás): tampoco apila.
+        expect(pila).toEqual([PANEL_ROOT, segunda])
+        expect(atras(pila)).toBe(PANEL_ROOT)
+      }
+    }
+  })
+
+  it('entrar DIRECTO a una sección deja el atrás fuera del panel — caso declarado, no hackeado', () => {
+    // URL pegada o F5: no hay ningún dashboard debajo. Empujar uno falso sería inventar una entrada
+    // que el dueño nunca visitó (D-01, historia honesta). Se declara y se vive con eso.
+    expect(atras(['/clients'])).toBeNull()
   })
 })

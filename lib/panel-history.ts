@@ -167,19 +167,36 @@ export function panelViewState(param: string, value: string | null): PanelViewSt
 }
 
 /**
- * ¿La entrada de arriba del historial es una que empujamos nosotros PARA ESTA VISTA?
+ * ¿Qué vista marca la entrada de arriba? Devuelve el NOMBRE del param que la gobierna, o `null` si
+ * la entrada no es nuestra.
  *
  * Narrowing manual, sin `any` (tsconfig `strict`), copiando la forma de `isOverlayHistoryEntry`
  * (`lib/overlay-history.ts:110-117`): `history.state` es `unknown` de verdad — puede traer el state
  * del router de Next, el de un overlay, el de otra librería, o `null`.
+ *
+ * **Por qué devuelve el param en vez de un booleano:** hay dos preguntas distintas y una sola
+ * propiedad que las contesta. La pantalla pregunta *"¿la entrada de arriba es MÍA?"* (sabe su param);
+ * el sidebar, que no sabe nada de `?c=`, pregunta *"¿la entrada de arriba es de ALGUNA subsección del
+ * panel?"* (NAV-08). Con el param crudo las dos se derivan de acá y el literal `'frjView'` sigue
+ * escrito UNA sola vez — que es la única defensa real contra el segundo dialecto.
+ *
+ * Un destino nulo deja la marca en `null` ({@link panelViewState}) y por lo tanto NO es nuestra: una
+ * entrada que no lleva ninguna vista no se puede consumir.
+ */
+export function panelViewEntryParam(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('frjView' in state)) return null
+  const marca: unknown = (state as { frjView?: unknown }).frjView
+  return typeof marca === 'string' ? marca : null
+}
+
+/**
+ * ¿La entrada de arriba del historial es una que empujamos nosotros PARA ESTA VISTA?
+ *
+ * Es {@link panelViewEntryParam} preguntado por un param concreto. La pantalla que empujó `?c=` lo
+ * usa como guarda de la cicatriz 2 antes de consumir.
  */
 export function isPanelViewEntry(state: unknown, param: string): boolean {
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    'frjView' in state &&
-    (state as { frjView?: unknown }).frjView === param
-  )
+  return panelViewEntryParam(state) === param
 }
 
 /**
@@ -226,6 +243,70 @@ export function panelViewUrl({
   else sp.set(param, value)
   const qs = sp.toString()
   return qs ? `${pathname}?${qs}` : pathname
+}
+
+// ── La navegación ENTRE SECCIONES del panel (NAV-07) ─────────────────────────────────────────────
+
+/** La raíz del panel: la única ruta que tiene que quedar SIEMPRE debajo de la sección abierta. */
+export const PANEL_ROOT = '/dashboard'
+
+/** Cómo entra en el historial una navegación del menú. */
+export type PanelNavMode = 'push' | 'replace'
+
+/**
+ * La regla de push-vs-replace del menú, pura y sobre RUTAS.
+ *
+ * **El pedido (NAV-07, julio):** `Dashboard → Finanzas → Clientes → atrás` tiene que caer en el
+ * **dashboard**, no en Finanzas. El invariante que lo consigue es: *entre la sección abierta y el
+ * dashboard que tiene debajo no hay nunca otra sección*.
+ *
+ * ⚠ **NO es `replace` a secas, y por eso la regla vive acá y no en el JSX.** Reemplazar en TODOS los
+ * links reemplazaría también la entrada del dashboard, y entonces el primer atrás sacaría al dueño
+ * del panel. Hacen falta las cuatro ramas, en este orden:
+ *
+ *   1. **misma ruta → `replace`.** Empujar la misma URL es la cicatriz 1 (dos entradas idénticas = un
+ *      atrás muerto, la "entrada basura" que el criterio 3 prohíbe). Reemplazar además LIMPIA la
+ *      query: es lo que cierra el agujero de NAV-08 cuando la entrada de arriba no es nuestra y por
+ *      lo tanto no se puede consumir (el dueño pegó `/clients?c=A`, o hay un overlay arriba).
+ *   2. **dashboard → sección → `push`.** El dashboard tiene que quedar DEBAJO: es el destino del
+ *      atrás. Es la rama que hace que el invariante exista.
+ *   3. **sección → dashboard → `push`.** Decidido así, y no `replace`, porque reemplazar dejaría
+ *      `/dashboard` encima de `/dashboard`: dos entradas idénticas otra vez ⇒ atrás muerto. Con
+ *      `push`, el atrás desde el dashboard devuelve la sección de la que se venía — un atrás que
+ *      SIEMPRE hace algo visible, y coherente con el invariante, que habla de la sección abierta y
+ *      del dashboard que tiene inmediatamente debajo, no de la pila entera.
+ *   4. **sección → sección → `replace`.** La sección nueva PISA a la anterior, así que encima del
+ *      dashboard hay siempre una sola. Es literalmente el pedido de julio.
+ *
+ * ⚠ **CASO ACEPTADO Y DOCUMENTADO, no hackeado:** si se entra **directo** a una sección (URL pegada,
+ * F5, el rebote del proxy después del login) no hay ningún dashboard debajo, y el atrás sale del
+ * panel. Empujar un dashboard falso para tapar eso sería inventar una entrada que el dueño nunca
+ * visitó — exactamente la reescritura de historial que D-01 prohíbe. Se declara y se vive con eso.
+ *
+ * ⚠ **El otro límite conocido:** si un overlay empujó su entrada (`lib/overlay-history.ts`) y el
+ * dueño toca el menú sin cerrarlo, el `replace` cae sobre la entrada DEL OVERLAY y no sobre la de la
+ * sección ⇒ quedan dos secciones encima del dashboard. Sigue siendo mejor que hoy (hoy esa entrada
+ * queda enterrada y suma un atrás muerto), y el overlay no se rompe: su limpieza mira la marca antes
+ * de cualquier `back()` y al no encontrarla no toca nada. Pelearlo exigiría interceptar la navegación
+ * del router, que es D-01.
+ *
+ * `from` y `to` son PATHNAMES (`usePathname()` ignora la query a propósito: `/clients?c=A` y
+ * `/clients` son la misma sección). La regla se define sobre rutas y no sobre pantallas justamente
+ * porque el hub Negocio y Ajustes comparten pantalla pero son rutas distintas.
+ */
+export function panelNavMode({
+  from,
+  to,
+  root = PANEL_ROOT,
+}: {
+  from: string
+  to: string
+  root?: string
+}): PanelNavMode {
+  if (from === to) return 'replace'
+  if (from === root) return 'push'
+  if (to === root) return 'push'
+  return 'replace'
 }
 
 // ── La reconciliación entre la URL y lo que se está mostrando ────────────────────────────────────
@@ -393,4 +474,45 @@ export function applyPanelView({
   if (action === 'push') window.history.pushState(next, '', url)
   else window.history.replaceState(next, '', url)
   return action
+}
+
+/**
+ * Deshace la entrada de subsección que tengamos arriba, **sea cual sea la subsección** (NAV-08).
+ * Devuelve `true` si consumió algo, `false` si no tocó nada.
+ *
+ * **Para qué existe:** el menú del panel no sabe nada de `?c=`. Cuando el dueño toca "Clientes"
+ * TENIENDO UNA FICHA ABIERTA, el `<Link>` empuja una entrada de ruta `/clients` ENCIMA de
+ * `/clients?c=A`, y esa entrada de ficha queda sepultada para siempre: este módulo sólo consume la
+ * de arriba y, por D-01, no escucha `popstate` ni reescribe historial ajeno. Al volver atrás hasta
+ * esa profundidad la ficha RE-APARECE — el bug medido con CDP en
+ * `.planning/debug/atras-en-clients-aterriza-en-ficha.md`. Consumiendo nuestra entrada ANTES de
+ * navegar, tocar la sección en la que ya estás CIERRA la subsección en vez de apilarse.
+ *
+ * ⚠ **Es genérico a propósito.** No recibe el param: pregunta "¿la entrada de arriba es de alguna
+ * subsección del panel?". El agujero no es exclusivo de Clientes — los tabs de Negocio/Ajustes que
+ * llegan en la Phase 2 lo heredan igual, y van a heredar también este arreglo sin tocar nada de acá.
+ *
+ * ⚠ **NUNCA un `back()` sobre una entrada ajena** (cicatriz 2): consumir lo que no empujamos expulsa
+ * al dueño del sitio. Por eso son DOS guardas independientes y no una:
+ *   · la marca propia tiene que estar arriba ({@link panelViewEntryParam} con valor no nulo), y
+ *   · la entrada no puede ser de un overlay ({@link isOverlayOwnedEntry}) — hoy las dos formas de
+ *     state son disjuntas y la segunda guarda es redundante, pero es justo la cicatriz que
+ *     `lib/overlay-history.ts:362-366` documenta ("si el desmontaje fue por una navegación… llamar
+ *     `back()` DESHARÍA la navegación del usuario"), así que se escribe explícita en vez de
+ *     depender de que dos formas de state nunca se solapen.
+ *
+ * ⚠ **`history.back()` es ASÍNCRONO.** El call site tiene que PREVENIR la navegación (`true` ⇒
+ * `e.preventDefault()`), nunca encadenarla: si dejara navegar, el router empujaría su entrada antes
+ * de que el browser procese el pop y volveríamos a enterrar la ficha, que es el bug entero.
+ *
+ * **Trade-off aceptado:** con dos fichas apiladas (A → B), un toque consume UNA sola y deja la ficha
+ * A a la vista. Es exactamente el mismo modelo que el botón "Volver" de mobile, así que el gesto es
+ * coherente: el menú, estando ya en la sección, se comporta como un "Volver".
+ */
+export function consumeOwnedPanelEntry(): boolean {
+  const actual: unknown = window.history.state
+  if (isOverlayOwnedEntry(actual)) return false
+  if (panelViewEntryParam(actual) === null) return false
+  window.history.back()
+  return true
 }
