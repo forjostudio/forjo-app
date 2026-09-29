@@ -714,6 +714,18 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
 
   const showDetail = selectedId !== null
 
+  // GAP B DE LA UAT EN CELULAR (2026-09-29): ¿el cliente abierto pertenece a un grupo de duplicados?
+  // El botón de fusionar vive en el header del panel IZQUIERDO, y en mobile ese panel entero se
+  // oculta cuando hay detalle (`showDetail && 'hidden lg:flex'`) ⇒ con una ficha abierta la acción
+  // NO EXISTE en el celular. Eso además dejaba sin poder probar a mano la redirección `mergedInto`,
+  // que se implementó justamente para el caso "fusiono con la ficha del duplicado abierta".
+  // Se resuelve con la MISMA acción en el header del detalle, y sólo acá: mostrarla siempre sería
+  // ruido en el 99% de las fichas, que no tienen duplicado.
+  const selectedIsDuplicate = useMemo(
+    () => selected !== null && duplicates.some(g => g.some(c => c.id === selected.id)),
+    [duplicates, selected]
+  )
+
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
     <div className="-m-4 sm:-m-6 lg:-m-8 flex h-[calc(100vh-56px)] lg:h-screen overflow-hidden bg-background">
@@ -934,6 +946,9 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
             // normal: el dueño abrió el cliente desde el listado) y REEMPLAZA si no lo es — el dueño
             // entró pegando la URL, y un back ahí lo sacaría del sitio.
             onBack={() => applyPanelView({ cause: 'user-close', param: VIEW_PARAM, from: selected.id, to: null })}
+            // Sólo se pasa cuando la ficha abierta ES un duplicado: `undefined` apaga el control en
+            // el detalle, así el resto de las fichas no gana un botón que no les sirve.
+            onMerge={selectedIsDuplicate ? () => setMergeModal(true) : undefined}
             onRequestDelete={() => setConfirmDelete(true)}
             onMarkStatus={markStatus}
             onDeleteAppt={deleteAppt}
@@ -1266,7 +1281,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
 // tipea encima), por eso el patrón correcto es remount-por-key y no "derivar en render".
 function ClientDetail({
   client, stats, num, selectedAppts, isSalud, isBelleza, businessId,
-  onBack, onRequestDelete, onMarkStatus, onDeleteAppt, onPatchClient,
+  onBack, onMerge, onRequestDelete, onMarkStatus, onDeleteAppt, onPatchClient,
 }: {
   client: Client
   stats: ClientStats
@@ -1276,6 +1291,8 @@ function ClientDetail({
   isBelleza: boolean
   businessId: string
   onBack: () => void
+  /** Abre el modal de fusión. OPCIONAL a propósito: el padre lo pasa sólo si esta ficha es duplicada. */
+  onMerge?: () => void
   onRequestDelete: () => void
   onMarkStatus: (status: string) => void
   onDeleteAppt: (id: string) => void
@@ -1363,10 +1380,32 @@ function ClientDetail({
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-4xl">
-      {/* ── Back button (mobile) ── */}
-      <button onClick={onBack} className="lg:hidden flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2">
-        <ChevronLeft className="w-4 h-4" /> Volver
-      </button>
+      {/* ── Fila de acciones de mobile: "Volver" + (si corresponde) fusionar ──
+          El `lg:hidden` se mudó del botón a LA FILA: en desktop la fila entera desaparece, así que el
+          detalle de escritorio queda EXACTAMENTE como estaba —ahí el listado nunca se oculta y el
+          botón global de fusionar sigue al alcance—. La acción nueva es sólo para el celular, que es
+          donde el control global no existe.
+          ⚠ ÚNICA ADICIÓN VISUAL DE LA FASE. Espeja el control que ya vive en el header del listado:
+          mismo icono (`GitMerge`), mismo tamaño (`w-4 h-4`) y mismo `title`. No se inventó ni un
+          patrón ni un menú. `justify-between` evita que se pise con "Volver". */}
+      <div className="lg:hidden flex items-center justify-between gap-2 mb-2">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ChevronLeft className="w-4 h-4" /> Volver
+        </button>
+        {onMerge && (
+          // 44×44 de área táctil sin engordar la fila: la caja mide 44×44 y los `-my-3` le devuelven
+          // 12px arriba y abajo, de modo que la fila sigue midiendo los mismos 20px del "Volver"
+          // (medido a 375px: fila=20.0px, botón=44.0×44.0, solape con "Volver" = −247.9px).
+          <button
+            onClick={onMerge}
+            title="Fusionar duplicados"
+            aria-label="Fusionar duplicados"
+            className="-my-3 -mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <GitMerge className="w-4 h-4" />
+          </button>
+        )}
+      </div>
 
       {/* ── Header ── */}
       <div className="space-y-1">
