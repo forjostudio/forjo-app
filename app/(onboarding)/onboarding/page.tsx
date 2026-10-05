@@ -1134,18 +1134,20 @@ export default function OnboardingPage() {
                             <div className="flex items-center justify-center sm:justify-start gap-2">
                               {/* Campos de hora: texto centrado, centrados bajo el día en mobile y
                                   alineados a la izquierda en sm+.
-                                  ⚠ El ancho sigue siendo intrínseco (`w-auto`) con piso de 96px
-                                  (`min-w-24`), y ese piso es el que decide: `TimeField` pide 5
-                                  caracteres ("09:00") de ancho intrínseco, que es menos que el piso.
-                                  O sea: el ancho no se mueve. Lo que YA NO pasa es el recorte del
-                                  sufijo ("9:00 a.ı" en Android Chrome), porque el control nativo —y
-                                  con él el locale de 12 horas del SO— desapareció: este campo es
-                                  siempre 24hs. */}
+                                  ⚠ Vuelve el ancho FIJO `w-24` (96px) que había antes del parche de
+                                  los locales de 12 horas. Ese parche existía porque el ancho lo
+                                  decidía el control nativo (`w-auto` + piso `min-w-24`): un navegador
+                                  en locale de 12hs renderizaba "9:00 a. m." y recortaba el sufijo
+                                  ("9:00 a.ı" en Android Chrome). `TimeField` es siempre 24hs, así que
+                                  el contenido ya no depende del SO y el ancho no tiene por qué
+                                  depender de la tipografía. Medido a 375px: el nativo daba 96px (su
+                                  intrínseco de 88.69px caía bajo el piso) y esto da los mismos 96px,
+                                  ahora sin que la fuente pueda moverlo. */}
                               <TimeField
                                 value={b.start_time}
                                 onValueChange={v => updateBlock(day, idx, 'start_time', v)}
                                 aria-label={`Hora de inicio de la franja ${idx + 1} de ${DAYS[day]}`}
-                                className="w-auto min-w-24 text-center text-sm"
+                                className="w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               <span className="text-muted-foreground text-sm">—</span>
@@ -1153,7 +1155,7 @@ export default function OnboardingPage() {
                                 value={b.end_time}
                                 onValueChange={v => updateBlock(day, idx, 'end_time', v)}
                                 aria-label={`Hora de fin de la franja ${idx + 1} de ${DAYS[day]}`}
-                                className="w-auto min-w-24 text-center text-sm"
+                                className="w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               {ds.blocks.length > 1 && (
