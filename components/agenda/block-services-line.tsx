@@ -79,8 +79,32 @@ function isDraftBlockWildcard(serviceIds: string[]): boolean {
 // de las cinco paletas, la default incluida (medido en el contrato visual de la fase). El cambio de
 // estado lo llevan TRES portadores a la vez (relleno + color de texto + tilde), nunca el color
 // solo, y ninguno de los tres depende de la paleta.
-function ServiceChip({ label, selected, inactive, ariaLabel, disabled, onToggle }: {
-  label: string
+//
+// ── Y el nombre largo NO se sale de la tarjeta (quick 261005-pbj, UAT en celular) ──────────────
+//
+// Es la TERCERA vez que el repo paga el mismo defecto: tarjetas del catálogo público (UAT de v0.29),
+// chips del manager de categorías (quick 260929-g4d) y éste. Cada superficie escribió su propio chip
+// y cada una lo reintrodujo. El arreglo es el MISMO de `components/dashboard/categorias-manager.tsx`
+// y tiene tres partes que sólo funcionan juntas:
+//
+// 1. `max-w-full` en el botón y `min-w-0 max-w-full` en el pill: los dos son items de un flex y
+//    arrastran el `min-width: auto` que les impide encoger por debajo de su contenido.
+// 2. El `whitespace-nowrap` que estaba en el pill SE FUE con el nombre: `truncate` ya lo incluye, y
+//    suelto en el pill es justo lo que bloquea el encogimiento.
+// 3. El nombre en su PROPIO span con `truncate`: `text-overflow` no actúa sobre los hijos de un
+//    contenedor flex, así que la elipsis necesita nodo propio. Es la cicatriz exacta de 260929-g4d.
+//
+// Medido a 375px (ancho útil de la línea: 295px): el pill de un nombre de 73 caracteres medía 443px
+// y se pasaba 74px del borde derecho de la tarjeta, con 54px de scroll horizontal. Ahora el pill
+// mide 295px, el exceso es 0 y no hay scroll.
+function ServiceChip({ name, selected, inactive, ariaLabel, disabled, onToggle }: {
+  /**
+   * El nombre PELADO, sin el sufijo del inactivo. El chip lo compone él: desde que el nombre se
+   * trunca, el sufijo tiene que vivir en su propio nodo `shrink-0` o `truncate` se lo come justo en
+   * el caso que D-11 necesita que se lea (un servicio de baja con nombre largo quedaría distinguido
+   * sólo por el borde punteado, y D-11 pide forma Y palabra).
+   */
+  name: string
   selected: boolean
   /** Servicio dado de baja que sigue mapeado (D-11): la señal es forma y palabra, jamás opacidad. */
   inactive?: boolean
@@ -94,6 +118,9 @@ function ServiceChip({ label, selected, inactive, ariaLabel, disabled, onToggle 
   disabled?: boolean
   onToggle: () => void
 }) {
+  // El texto visible COMPLETO, para el `title`. Se compone acá y no en el call site para que el
+  // sufijo y lo que anuncia el tooltip no puedan divergir.
+  const label = inactive ? `${name} · inactivo` : name
   return (
     <button
       type="button"
@@ -101,19 +128,41 @@ function ServiceChip({ label, selected, inactive, ariaLabel, disabled, onToggle 
       disabled={disabled}
       aria-pressed={selected}
       aria-label={ariaLabel}
-      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+      // El nombre ENTERO al pasar el mouse, ahora que el chip lo puede cortar. Va en TODOS los chips
+      // y no sólo en los inactivos: el `ariaLabel` existe nada más que cuando el texto visible no
+      // alcanza para nombrar al servicio (el sufijo "· inactivo"), y desde que el nombre se trunca
+      // cualquier chip puede quedar sin mostrarlo completo. Para lectores de pantalla el nombre sigue
+      // llegando entero por el contenido del botón: `truncate` recorta en pantalla, no en el DOM.
+      title={label}
+      // `min-w-11` se queda y NO se le agrega `min-w-0`: los 44px son el mínimo táctil del proyecto y
+      // son los que hacen que este botón no necesite el `min-w-0` del molde de categorías (un mínimo
+      // declarado ya desactiva el `min-width: auto` automático). `max-w-full` es el que impide que se
+      // pase de la línea.
+      className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
     >
       <span
         className={cn(
-          'inline-flex h-7 items-center gap-1 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors',
+          // El `whitespace-nowrap` que vivía en esta línea se fue con el nombre (`truncate` lo trae):
+          // suelto acá impedía que el pill encogiera. `min-w-0 max-w-full` porque este pill es item
+          // de flex del botón y arrastra el mismo `min-width: auto`.
+          'inline-flex h-7 min-w-0 max-w-full items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
           selected
             ? 'border-foreground/30 bg-secondary text-foreground'
             : 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground',
           inactive && 'border-dashed',
         )}
       >
-        {selected && <Check aria-hidden="true" className="size-3" />}
-        {label}
+        {/* `shrink-0`: la tilde es uno de los tres portadores del estado seleccionado, nunca se
+            encoge — se encoge el nombre. */}
+        {selected && <Check aria-hidden="true" className="size-3 shrink-0" />}
+        {/* El nombre en su propio span: `text-overflow` no actúa sobre los hijos de un contenedor
+            flex, así que la elipsis necesita este nodo. `truncate` trae `overflow-hidden`, que de
+            paso le resuelve el `min-width: 0` (el mínimo automático es 0 cuando el overflow no es
+            visible). El `onToggle`, el `aria-pressed` y el área táctil siguen todos en el <button>. */}
+        <span className="truncate">{name}</span>
+        {/* `shrink-0`: la palabra que nombra el estado de baja (D-11) nunca se recorta; lo que se
+            recorta es el nombre. El punto medio y el espacio los da el `gap-1` del pill. */}
+        {inactive && <span className="shrink-0">· inactivo</span>}
       </span>
     </button>
   )
@@ -212,7 +261,7 @@ export function BlockServicesLine({ serviceIds, catalog, groupLabel, expanded, d
       {visible.map(s => (
         <ServiceChip
           key={s.id}
-          label={s.active ? s.name : `${s.name} · inactivo`}
+          name={s.name}
           selected={serviceIds.includes(s.id)}
           inactive={!s.active}
           disabled={disabled}
