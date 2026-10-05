@@ -116,6 +116,32 @@ export function isCompleteTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
 }
 
+/**
+ * Qué emitir al CONFIRMAR el campo (al salir, o con Enter). `null` = no emitir nada.
+ *
+ * Vive como función aparte —y no como tres líneas adentro de `commit()`— porque es la única parte de
+ * la confirmación que el entorno `node` de Vitest puede medir, y lo que decide es justo lo que se
+ * puede romper al soltar el foco: CUÁNTAS veces se le avisa al padre.
+ *
+ * Confirmar DOS VECES el mismo gesto dejó de ser hipotético desde que Enter baja el teclado: el
+ * `blur()` dispara `onBlur` de forma SÍNCRONA, antes de que React haya aplicado el `setDraft(null)`
+ * del primer commit, así que el segundo commit corre con el borrador VIEJO. Por eso el borrador se
+ * lee por `ref` (se escribe en el acto) y no por estado (se escribe recién en el próximo render).
+ *
+ * Idempotente POR CONSTRUCCIÓN, no por casualidad: sin borrador vivo no hay nada que confirmar.
+ *
+ * `null` y `''` son cosas distintas a propósito: `''` es un valor LEGÍTIMO que hay que emitir (el
+ * vacío funcional de `normalizeTimeOnBlur`), así que el "no emitir nada" necesita un centinela que
+ * no pueda confundirse con una hora posible.
+ */
+export function decideTimeCommit(draft: string | null, value: string): string | null {
+  if (draft === null) return null
+  const normalized = normalizeTimeOnBlur(draft)
+  // Y tampoco se avisa cuando lo normalizado es lo que el padre YA tiene: un `onValueChange` que no
+  // cambia nada ensucia el estado sucio de la pantalla (la Agenda marca "sin guardar" con eso).
+  return normalized === value ? null : normalized
+}
+
 // ── Componente ──────────────────────────────────────────────────────────────────────────────────
 
 type TimeFieldProps = Omit<React.ComponentProps<'input'>, 'type' | 'value' | 'onChange'> & {
@@ -146,21 +172,43 @@ export function TimeField({
   // `null` en vez de copiar el valor en un estado evita el espejo que se desincroniza cuando el padre
   // cambia la hora por su cuenta (Agenda al cargar datos, onboarding al agregar un bloque).
   const [draft, setDraft] = React.useState<string | null>(null)
+  // El MISMO borrador, además, en un ref. No es duplicación por comodidad: el estado es lo que se
+  // RENDERIZA y el ref es lo que lee `commit()`, y hacen falta los dos porque `commit()` corre dos
+  // veces en el mismo tick cada vez que se confirma con Enter (normaliza y después suelta el foco, y
+  // `blur()` dispara `onBlur` en el acto). En esa segunda pasada el ESTADO todavía es el de antes del
+  // primer commit —React recién lo aplica en el próximo render— mientras el ref ya está en `null`.
+  const draftRef = React.useRef<string | null>(null)
   const shown = draft ?? value
+
+  // Siempre los dos juntos: un borrador que vive sólo en el estado volvería a abrir la ventana de
+  // confirmación doble que `decideTimeCommit` cierra.
+  function setDraftBoth(next: string | null) {
+    draftRef.current = next
+    setDraft(next)
+  }
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const next = sanitizeTimeTyping(event.target.value)
-    setDraft(next)
+    setDraftBoth(next)
     // Se avisa en el acto sólo cuando ya hay algo que el padre pueda usar: una hora completa, o el
     // vacío (que es un valor legítimo, restricción 1). Todo lo demás espera al `onBlur`.
     if (next === '' || isCompleteTime(next)) onValueChange(next)
   }
 
-  // Normaliza y devuelve el control al padre. Se llama al salir del campo y con Enter.
+  // Normaliza y devuelve el control al padre. Se llama al salir del campo y con Enter. Llamarla dos
+  // veces seguidas NO cambia el resultado ni avisa dos veces: la política está en `decideTimeCommit`.
+  //
+  // ⚠ Sin borrador vivo es un no-op, y eso es deliberado: antes normalizaba el valor del PADRE al
+  // salir del campo sin haber escrito nada. Con los valores reales eso ya era un no-op (el padre sólo
+  // tiene `''` o `'HH:MM'` — la Agenda y el onboarding los recortan a HH:MM en
+  // `buildDayStatesFromRows`), pero si alguna vez entrara un `'09:00:00'` de la base, normalizar sin
+  // que nadie haya tocado el campo lo VACIARÍA solo. Confirmar lo que nadie escribió no es trabajo
+  // de este campo.
   function commit() {
-    const normalized = normalizeTimeOnBlur(shown)
-    setDraft(null)
-    if (normalized !== value) onValueChange(normalized)
+    const emitted = decideTimeCommit(draftRef.current, value)
+    setDraftBoth(null)
+    // `!== null` y no un chequeo truthy: `''` es un valor que SÍ hay que emitir.
+    if (emitted !== null) onValueChange(emitted)
   }
 
   return (
@@ -191,7 +239,41 @@ export function TimeField({
       onKeyDown={event => {
         // Enter normaliza también: en mobile el "listo" del teclado no siempre dispara blur, y así la
         // hora queda completa antes de que el dueño toque Guardar.
-        if (event.key === 'Enter') commit()
+        //
+        // Y además BAJA EL TECLADO (UAT en celular del quick 261005-n41): confirmar dejaba el foco en
+        // el campo y Android mantiene el teclado abierto mientras el campo lo tenga, tapando media
+        // pantalla. No hay API para cerrar el teclado; soltar el foco es el único camino.
+        //
+        // ⚠ EL ORDEN ES EL ARREGLO: `commit()` PRIMERO, soltar el foco DESPUÉS. Al revés, el `onBlur`
+        // llegaría primero y normalizaría igual, pero el commit de Enter quedaría confirmando un
+        // borrador ya descartado. Como `blur()` dispara `onBlur` de forma SÍNCRONA, cada Enter que
+        // suelta el foco corre `commit()` DOS VECES: la segunda es un no-op garantizado por
+        // `decideTimeCommit` (sin borrador no hay nada que confirmar), no por suerte de timing.
+        // Medido con el componente real en Chrome: 1 solo `onValueChange` por Enter; con el borrador
+        // sólo en el estado (sin el ref) el mismo gesto emitía 2.
+        //
+        // ⚠ Nunca se llama `preventDefault()`: lo que el navegador haga con Enter es del navegador.
+        //
+        // ⚠ Y el foco se suelta SÓLO si el campo no vive en un `<form>`. No es paranoia: está MEDIDO
+        // en Chrome con el componente real. El submit implícito de Enter lo dispara el navegador en el
+        // evento de CARÁCTER, que llega después del `keydown`; si el campo ya se blureó, ese submit no
+        // ocurre. Con un `<form>` de prueba alrededor: sin blur → 1 submit (lo de hoy), con blur
+        // síncrono → 0 submits. Y diferir el blur (microtask, rAF, `setTimeout(0)`) tampoco lo salva:
+        // las cuatro variantes dieron 0. O sea que no hay "momento correcto" para soltar el foco sin
+        // comerse el submit — hay que no soltarlo.
+        //
+        // Hoy ninguno de los 4 call sites (agenda, horario especial, alta de turno, alta de abono)
+        // tiene un `<form>`: el repo no tiene ni uno alrededor de estos campos, así que el teclado baja
+        // en los 4 y no hay nada que preservar. El guard es para el día que alguien ponga un
+        // `TimeField` dentro de un form: ahí Enter seguirá enviando como ahora. Perder el envío en
+        // silencio es mucho peor que un teclado que queda abierto, que al menos se ve.
+        if (event.key === 'Enter') {
+          // El elemento se captura ANTES de confirmar: `currentTarget` sólo es el input mientras React
+          // está despachando este handler.
+          const input = event.currentTarget
+          commit()
+          if (!input.form) input.blur()
+        }
         onKeyDown?.(event)
       }}
       placeholder={placeholder}

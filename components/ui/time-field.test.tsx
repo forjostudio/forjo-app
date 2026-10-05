@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { TimeField, isCompleteTime, normalizeTimeOnBlur, sanitizeTimeTyping } from './time-field'
+import { TimeField, decideTimeCommit, isCompleteTime, normalizeTimeOnBlur, sanitizeTimeTyping } from './time-field'
 
 const noop = () => {}
 
@@ -145,7 +145,71 @@ describe('isCompleteTime', () => {
   })
 })
 
-// ── Suite 6: el render (lo que llega al navegador del dueño) ────────────────────────────────────
+// ── Suite 6: confirmar dos veces el mismo gesto (quick 261005-pbj) ──────────────────────────────
+//
+// POR QUÉ: desde que Enter baja el teclado, confirmar dispara `commit()` DOS veces en el mismo tick
+// —`blur()` despacha `onBlur` de forma síncrona, antes de que React aplique el `setDraft(null)` del
+// primer commit—, así que la segunda pasada lee el borrador VIEJO. Lo que se mide acá es que esa
+// segunda pasada no pueda cambiar el resultado ni avisarle dos veces al padre.
+describe('decideTimeCommit — idempotencia de la confirmación', () => {
+  it('con borrador vivo emite la hora normalizada', () => {
+    expect(decideTimeCommit('930', '')).toBe('09:30')
+    expect(decideTimeCommit('9', '18:00')).toBe('09:00')
+    // El vacío se EMITE (es un valor), no se silencia: el centinela de "no emitir" es `null`.
+    expect(decideTimeCommit('25:00', '09:00')).toBe('')
+    expect(decideTimeCommit('', '09:00')).toBe('')
+  })
+
+  it('sin borrador no hay nada que confirmar: `null`', () => {
+    // Es la segunda pasada de cada Enter, y también salir de un campo que nadie tocó.
+    expect(decideTimeCommit(null, '')).toBeNull()
+    expect(decideTimeCommit(null, '09:00')).toBeNull()
+    // Incluso con un valor del padre que `normalizeTimeOnBlur` no sabría leer: no se vacía solo.
+    expect(decideTimeCommit(null, '09:00:00')).toBeNull()
+  })
+
+  it('no avisa cuando lo normalizado es lo que el padre ya tiene', () => {
+    expect(decideTimeCommit('09:00', '09:00')).toBeNull()
+    expect(decideTimeCommit('9', '09:00')).toBeNull()
+    expect(decideTimeCommit('930', '09:30')).toBeNull()
+    expect(decideTimeCommit('', '')).toBeNull()
+  })
+
+  it('Enter + el blur que dispara = UN solo aviso, y el mismo resultado', () => {
+    // Espeja la mecánica exacta del componente: el ref se escribe en el acto, el `value` del padre
+    // NO (los dos commits corren con la misma closure, antes de cualquier re-render).
+    function confirmarDosVeces(tipeado: string, valorDelPadre: string): string[] {
+      const draftRef: { current: string | null } = { current: tipeado }
+      const emitidos: string[] = []
+      const commit = () => {
+        const emitted = decideTimeCommit(draftRef.current, valorDelPadre)
+        draftRef.current = null
+        if (emitted !== null) emitidos.push(emitted)
+      }
+      commit() // Enter: normaliza
+      commit() // el `blur()` que viene inmediatamente después, síncrono
+      return emitidos
+    }
+
+    expect(confirmarDosVeces('930', '')).toEqual(['09:30'])
+    expect(confirmarDosVeces('9', '')).toEqual(['09:00'])
+    expect(confirmarDosVeces('9:3', '')).toEqual(['09:03'])
+    expect(confirmarDosVeces('25:00', '09:00')).toEqual([''])
+    // Ya era lo que el padre tenía: cero avisos, no uno de más ni uno de menos.
+    expect(confirmarDosVeces('0930', '09:30')).toEqual([])
+    expect(confirmarDosVeces('', '')).toEqual([])
+  })
+
+  it('normalizar lo ya normalizado no lo mueve (la tabla del dueño es un punto fijo)', () => {
+    // El contrato del quick 261005-n41, pasado dos veces por la misma función.
+    for (const raw of ['', '   ', '9', '09', '930', '0930', '9:3', '9:', ':30', '25:00', '2359', 'ab:cd']) {
+      const unaVez = normalizeTimeOnBlur(raw)
+      expect(normalizeTimeOnBlur(unaVez)).toBe(unaVez)
+    }
+  })
+})
+
+// ── Suite 7: el render (lo que llega al navegador del dueño) ────────────────────────────────────
 describe('TimeField — render de servidor', () => {
   const html = renderToStaticMarkup(
     <TimeField
