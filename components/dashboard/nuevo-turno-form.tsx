@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import type { Client, Service, Professional, Location } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TimeField } from '@/components/ui/time-field'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, resetDrawerDrag } from '@/components/ui/drawer'
@@ -681,12 +682,15 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${searchListId}-time`}>Hora</Label>
-          <Input
+          {/* `TimeField`: siempre 24hs (el nativo lo decide el locale del SO) y teclado numérico en
+              mobile en vez de la ruedita. Mismo ancho (`w-full` del Input base) y mismo alto; se cae
+              el hack que escondía el ícono del reloj, que ya no existe. El `<Label htmlFor>` de
+              arriba sigue siendo el nombre accesible. */}
+          <TimeField
             id={`${searchListId}-time`}
-            type="time"
             value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="text-center max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+            onValueChange={setTime}
+            className="text-center"
           />
         </div>
       </div>

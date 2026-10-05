@@ -1,6 +1,6 @@
 // Matriz del campo de hora propio (quick 261005-n41).
 //
-// POR QUÉ EXISTE: el componente reemplaza los 8 `<input type="time">` del panel y del onboarding, y
+// POR QUÉ EXISTE: el componente reemplaza los 8 `<input type=time>` del panel y del onboarding, y
 // lo único que hace de verdad es TRADUCIR texto a `'HH:MM'` de 24 horas. Esa traducción es la que
 // puede romper dos pantallas enteras: si deja de poder emitir `''`, la validación de forma de
 // `validateHours()` / `isValidBlockTime()` pierde su caso (el vacío funcional, con el bug 22007 ya

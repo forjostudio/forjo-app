@@ -10,7 +10,7 @@ import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { TimeField } from '@/components/ui/time-field'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -1266,20 +1266,27 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             a 375px cada input pasa de ~78px a ~115px. La línea de servicios va
                             DEBAJO del párrafo de error, no en esta fila. */}
                         <div className="flex items-center gap-1.5">
-                          <Input
-                            type="time"
+                          {/* `TimeField` y no el input nativo: el nativo elige 12 vs 24hs por el
+                              locale del SO (el celular del dueño mostraba "9:00 a. m." con la app
+                              en `lang="es"`) y abre la ruedita del reloj en vez del teclado. Mismas
+                              clases que antes — el alto (h-8) y el `flex-1` no se tocan —, menos el
+                              `max-sm:[&::-webkit-calendar-picker-indicator]:hidden`, que escondía el
+                              ícono de un control que ya no existe. Se les suma nombre accesible:
+                              estas filas no tienen label visible y antes no tenían ninguno. */}
+                          <TimeField
                             value={block.start_time}
                             disabled={savingHours}
-                            onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                            onValueChange={v => updateBlock(day, idx, 'start_time', v)}
+                            aria-label={`Hora de inicio del bloque ${idx + 1} de ${DAYS[day]}`}
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
                           />
                           <span className="shrink-0 text-xs text-muted-foreground">→</span>
-                          <Input
-                            type="time"
+                          <TimeField
                             value={block.end_time}
                             disabled={savingHours}
-                            onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                            onValueChange={v => updateBlock(day, idx, 'end_time', v)}
+                            aria-label={`Hora de fin del bloque ${idx + 1} de ${DAYS[day]}`}
+                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
                           />
                           {/* Único botón de la fila: se le suma nombre accesible (hasta ahora sólo
                               tenía `title`, que un lector de pantalla puede no anunciar) y foco
@@ -1549,9 +1556,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <div className="border-t border-border pt-3 space-y-2">
               <p className="text-xs font-medium">Horario especial</p>
               <div className="flex items-center gap-2">
-                <Input type="time" value={excBulk.start} onChange={e => setExcBulk(s => ({ ...s, start: e.target.value }))} className="w-full text-sm h-8" />
+                <TimeField value={excBulk.start} onValueChange={v => setExcBulk(s => ({ ...s, start: v }))} aria-label="Hora de inicio del horario especial" className="w-full text-sm h-8" />
                 <span className="text-muted-foreground text-sm">→</span>
-                <Input type="time" value={excBulk.end} onChange={e => setExcBulk(s => ({ ...s, end: e.target.value }))} className="w-full text-sm h-8" />
+                <TimeField value={excBulk.end} onValueChange={v => setExcBulk(s => ({ ...s, end: v }))} aria-label="Hora de fin del horario especial" className="w-full text-sm h-8" />
               </div>
               <Button size="sm" className="w-full sm:w-auto" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar horario especial</Button>
             </div>

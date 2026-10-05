@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TimeField } from '@/components/ui/time-field'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
@@ -394,7 +395,8 @@ export default function OnboardingPage() {
   // que validateBlocks del panel). No valida solapamiento (el onboarding no maneja consultorios).
   // Marca errores en el estado y devuelve false si hay alguno para bloquear el finalizar.
   //
-  // Por qué la forma va primero: un `<input type="time">` se puede VACIAR, y entonces la comparación
+  // Por qué la forma va primero: un campo de hora se puede VACIAR —antes el `<input>` nativo, hoy el
+  // `TimeField`, que conserva a propósito ese contrato—, y entonces la comparación
   // de orden miente — es lexicográfica, y cualquier cadena no vacía ordena DESPUÉS de la vacía, así
   // que `'18:00' <= ''` da false y el bloque pasaba el filtro entero. Del otro lado el `::time` del
   // RPC revienta con 22007 ANTES de poder llegar a su propio backstop `invalid_block`, y el dueño se
@@ -1130,25 +1132,27 @@ export default function OnboardingPage() {
                         {ds.blocks.map((b, idx) => (
                           <div key={idx} className="space-y-1">
                             <div className="flex items-center justify-center sm:justify-start gap-2">
-                              {/* Inputs de hora: texto centrado, centrados bajo el día en mobile y
+                              {/* Campos de hora: texto centrado, centrados bajo el día en mobile y
                                   alineados a la izquierda en sm+.
-                                  ⚠ El ancho lo decide el CONTROL NATIVO (`w-auto`), no un valor fijo.
-                                  Con `w-24` (96px) entraba "09:00" + el ícono del reloj, pero un
-                                  navegador en locale de 12 horas renderiza "9:00 a. m." y el sufijo
-                                  quedaba recortado ("9:00 a.ı" en Android Chrome). `min-w-24` conserva
-                                  el piso anterior para los locales de 24 horas. */}
-                              <Input
-                                type="time"
+                                  ⚠ El ancho sigue siendo intrínseco (`w-auto`) con piso de 96px
+                                  (`min-w-24`), y ese piso es el que decide: `TimeField` pide 5
+                                  caracteres ("09:00") de ancho intrínseco, que es menos que el piso.
+                                  O sea: el ancho no se mueve. Lo que YA NO pasa es el recorte del
+                                  sufijo ("9:00 a.ı" en Android Chrome), porque el control nativo —y
+                                  con él el locale de 12 horas del SO— desapareció: este campo es
+                                  siempre 24hs. */}
+                              <TimeField
                                 value={b.start_time}
-                                onChange={e => updateBlock(day, idx, 'start_time', e.target.value)}
+                                onValueChange={v => updateBlock(day, idx, 'start_time', v)}
+                                aria-label={`Hora de inicio de la franja ${idx + 1} de ${DAYS[day]}`}
                                 className="w-auto min-w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />
                               <span className="text-muted-foreground text-sm">—</span>
-                              <Input
-                                type="time"
+                              <TimeField
                                 value={b.end_time}
-                                onChange={e => updateBlock(day, idx, 'end_time', e.target.value)}
+                                onValueChange={v => updateBlock(day, idx, 'end_time', v)}
+                                aria-label={`Hora de fin de la franja ${idx + 1} de ${DAYS[day]}`}
                                 className="w-auto min-w-24 text-center text-sm"
                                 aria-invalid={!!b.error}
                               />

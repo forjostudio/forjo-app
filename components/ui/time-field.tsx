@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 // Campo de hora propio, SIEMPRE en 24 horas.
 //
-// POR QUÉ EXISTE (medido, no estético): `<input type="time">` decide 12 vs 24 horas por el locale
+// POR QUÉ EXISTE (medido, no estético): un `<input type=time>` decide 12 vs 24 horas por el locale
 // del SISTEMA OPERATIVO, no por el HTML. No hay atributo para forzarlo — `app/layout.tsx:56` ya
 // declara `lang="es"` y el celular del dueño igual mostraba "9:00 a. m.". La única salida es no
 // usar el control nativo. De paso cierra el otro reclamo (backlog v0.22): el nativo abre la ruedita
