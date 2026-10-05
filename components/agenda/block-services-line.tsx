@@ -94,9 +94,9 @@ function isDraftBlockWildcard(serviceIds: string[]): boolean {
 // 3. El nombre en su PROPIO span con `truncate`: `text-overflow` no actúa sobre los hijos de un
 //    contenedor flex, así que la elipsis necesita nodo propio. Es la cicatriz exacta de 260929-g4d.
 //
-// Medido a 375px (ancho útil de la línea: 295px): el pill de un nombre de 73 caracteres medía 443px
-// y se pasaba 74px del borde derecho de la tarjeta, con 54px de scroll horizontal. Ahora el pill
-// mide 295px, el exceso es 0 y no hay scroll.
+// Medido a 375px (ancho útil de la línea: 295px): el pill de un nombre de 74 caracteres medía 443px
+// y se pasaba 74px del borde derecho de la tarjeta, con 54px de scroll horizontal en la Card y 45px
+// en el documento. Ahora el pill mide 293px, el exceso es 0 y no hay scroll en ninguno de los dos.
 function ServiceChip({ name, selected, inactive, ariaLabel, disabled, onToggle }: {
   /**
    * El nombre PELADO, sin el sufijo del inactivo. El chip lo compone él: desde que el nombre se
