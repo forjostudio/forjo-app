@@ -549,6 +549,325 @@ describe('overlays anidados: el back cierra SÓLO el de arriba (LIFO)', () => {
   })
 })
 
+// ── El SELECTOR también participa (quick 261006-dzr) ────────────────────────────────────────────
+//
+// EL PEDIDO DEL DUEÑO EN LA UAT: "el gesto hacia atrás para los selectores de servicio y
+// profesional. Es un gesto común el atrás para cerrar cosas." Con un `Select` abierto el atrás se
+// SALTABA el selector y actuaba sobre el drawer de abajo: el mismo hueco que Bug A cerró para
+// diálogos y drawers, con el `Select` afuera.
+//
+// ⚠ LA DIFERENCIA QUE DEFINE EL ARREGLO, Y POR ESO ESTOS TESTS EXISTEN: los 23 `<Select>` de la app
+// son NO CONTROLADOS (medido: 0 de 23 pasa `open`; todos usan `value` + `onValueChange`), y
+// `useOverlayHistory` sólo participa si el overlay es controlado. Enganchar el hook tal cual no
+// habría hecho NADA. Por eso `components/ui/select.tsx` dejó de ser `const Select =
+// SelectPrimitive.Root` y pasó a ser un wrapper que mantiene ÉL el estado de apertura y le pasa al
+// primitivo un `open` siempre definido — con la API externa intacta.
+//
+// {@link montarSelect} reconstruye ese wrapper con las mismas decisiones que el archivo real
+// (estado propio + el orden `onOpenChange` → `isCanceled` → estado que espeja a `SelectRoot.setOpen`)
+// y lo enchufa al mismo {@link montarOverlay} que ya modela el hook. Lo que NO cubre, declarado: que
+// `select.tsx` llame al hook (eso lo ven tsc + lint) y el gesto real en el celular (UAT del dueño).
+
+/** Detalle de cierre al estilo Base UI: lo mínimo que mira el wrapper, con un `cancel()` que asienta. */
+type DetalleFalso = { reason: string; isCanceled: boolean; cancel: () => void }
+
+function detalleBaseUi(reason: string): DetalleFalso {
+  const detalle: DetalleFalso = {
+    reason,
+    isCanceled: false,
+    cancel: () => {
+      detalle.isCanceled = true
+    },
+  }
+  return detalle
+}
+
+/**
+ * El wrapper `Select` de `components/ui/select.tsx`, con su estado de apertura propio.
+ *
+ * `abrir()` / `elegirOpcion()` / `escape()` / `tocarAfuera()` son los cuatro caminos por los que el
+ * primitivo llama al `onOpenChange` del wrapper (`trigger-press`, `item-press`, `escape-key`,
+ * `outside-press`). El atrás entra por `dismiss`, igual que en el archivo real.
+ */
+function montarSelect(
+  h: HistorialFalso,
+  {
+    open: openProp,
+    defaultOpen = false,
+    onOpenChange,
+    vp,
+  }: {
+    /** El `open` del caller. `undefined` = los 23 de la app: el wrapper se hace cargo. */
+    open?: boolean
+    defaultOpen?: boolean
+    onOpenChange?: (next: boolean, details: DetalleFalso) => void
+    vp?: ViewportFalso
+  } = {},
+) {
+  let selfOpen = defaultOpen
+  const controlled = openProp !== undefined
+  const abierto = () => (controlled ? openProp === true : selfOpen)
+
+  // El re-render del wrapper, que es lo que hace correr el efecto del hook. Se asigna después de
+  // montar porque el `dismiss` que recibe el hook ya tiene que existir en el montaje.
+  let aplicarRender: ((next: boolean) => void) | null = null
+
+  const handleOpenChange = (next: boolean, details: DetalleFalso) => {
+    // ⚠ ESTE ORDEN ES LA ASERCIÓN: `SelectRoot.setOpen` llama al handler, DESPUÉS mira `isCanceled`
+    // y sólo entonces mueve el estado. Invertirlo haría que un `cancel()` del caller se pierda.
+    onOpenChange?.(next, details)
+    if (details.isCanceled) return
+    if (!controlled) {
+      selfOpen = next
+      aplicarRender?.(next)
+    }
+  }
+
+  const overlay = montarOverlay(h, {
+    // SIEMPRE definido: es exactamente lo que hace que el hook participe con los 23 sin tocar nada.
+    open: abierto(),
+    dismiss: (e) => handleOpenChange(false, createHistoryBackDetails(e)),
+    vp,
+  })
+  aplicarRender = overlay.setOpen
+
+  return {
+    get abierto() {
+      return abierto()
+    },
+    get holding() {
+      return overlay.holding
+    },
+    abrir: () => handleOpenChange(true, detalleBaseUi('trigger-press')),
+    elegirOpcion: () => handleOpenChange(false, detalleBaseUi('item-press')),
+    escape: () => handleOpenChange(false, detalleBaseUi('escape-key')),
+    tocarAfuera: () => handleOpenChange(false, detalleBaseUi('outside-press')),
+    desmontar: () => overlay.desmontar(),
+  }
+}
+
+describe('el atrás cierra el SELECTOR abierto (quick 261006-dzr)', () => {
+  it('un selector cuyo caller NO pasa `open` igual participa del historial', () => {
+    // ÉSTA es la aserción del quick. Antes el `Select` era un re-export del primitivo: sin `open`,
+    // `participates` daba false y el atrás se saltaba el selector.
+    const h = new HistorialFalso()
+    const sel = montarSelect(h) // ningún `open` del caller, como los 23 de la app
+
+    sel.abrir()
+    expect(h.stack).toHaveLength(2)
+    expect(h.hash).toBe(OVERLAY_HASH_BASE)
+
+    h.back()
+    expect(sel.abierto).toBe(false)
+    // La entrada ya la consumió el browser: NO se hace un segundo back() (ése es el que expulsa).
+    expect(h.stack).toHaveLength(1)
+    expect(sel.holding).toBe(false)
+
+    // La contraprueba del "antes": con el `open` sin definir, el historial no se tocaba nunca.
+    const h2 = new HistorialFalso()
+    montarOverlay(h2, { open: undefined, dismiss: () => {} })
+    expect(h2.stack).toHaveLength(1)
+  })
+
+  it('un selector DENTRO de un drawer: se cierra él y el drawer QUEDA', () => {
+    // El caso del reporte: "Nuevo turno" → abrir Servicio → atrás. El LIFO lo da el id por
+    // instancia; acá se verifica, no se supone.
+    const h = new HistorialFalso()
+    let drawerAbierto = true
+    const drawer = montarOverlay(h, {
+      open: true,
+      dismiss: () => {
+        drawerAbierto = false
+      },
+    })
+    const sel = montarSelect(h)
+    expect(h.stack).toHaveLength(2) // sólo la entrada del drawer: el selector está cerrado
+
+    sel.abrir()
+    // Dos entradas con hash DISTINTO: dos entradas con la misma URL son la cicatriz 1.
+    expect(h.stack).toHaveLength(3)
+    expect(h.hash).toBe(`${OVERLAY_HASH_BASE}-2`)
+
+    h.back()
+    expect(sel.abierto).toBe(false)
+    expect(drawerAbierto).toBe(true) // ⚠ lo que pedía el dueño
+    expect(drawer.holding).toBe(true)
+    expect(h.stack).toHaveLength(2)
+    expect(h.hash).toBe(OVERLAY_HASH_BASE)
+
+    // Y el atrás SIGUIENTE, con el selector ya cerrado, cierra el drawer.
+    h.back()
+    expect(drawerAbierto).toBe(false)
+  })
+
+  it('cerrar el selector eligiendo una opción no deja entrada huérfana ni cierra el drawer', () => {
+    // UAT 4: abrir un selector, elegir, y que el atrás siguiente cierre el drawer DE UNA — sin un
+    // atrás muerto en el medio.
+    const h = new HistorialFalso()
+    let drawerAbierto = true
+    montarOverlay(h, {
+      open: true,
+      dismiss: () => {
+        drawerAbierto = false
+      },
+    })
+    const sel = montarSelect(h)
+
+    sel.abrir()
+    expect(h.stack).toHaveLength(3)
+
+    sel.elegirOpcion()
+    expect(sel.abierto).toBe(false)
+    expect(h.stack).toHaveLength(2) // consumió SU entrada
+    // El back() de limpieza dispara un popstate que el drawer VE: su propia entrada quedó arriba, así
+    // que lo reconoce como de limpieza y no se cierra de fantasma.
+    expect(drawerAbierto).toBe(true)
+
+    h.back()
+    expect(drawerAbierto).toBe(false)
+  })
+
+  it('Escape y tocar afuera cierran igual que antes y consumen su entrada', () => {
+    const h = new HistorialFalso()
+    const sel = montarSelect(h)
+
+    sel.abrir()
+    sel.escape()
+    expect(sel.abierto).toBe(false)
+    expect(h.stack).toHaveLength(1)
+    expect(h.hash).toBe('')
+
+    sel.abrir()
+    sel.tocarAfuera()
+    expect(sel.abierto).toBe(false)
+    expect(h.stack).toHaveLength(1)
+    expect(h.hash).toBe('')
+  })
+
+  it('los selectores CERRADOS no tocan el historial (montar los 23 no empuja nada)', () => {
+    // La defensa de "no se degrada nada en el resto de la app": un `Select` cerrado es inerte, y
+    // abrir/cerrar uno deja el historial y la URL exactamente como estaban.
+    const h = new HistorialFalso()
+    const sels = Array.from({ length: 23 }, () => montarSelect(h))
+    expect(h.stack).toHaveLength(1)
+    expect(h.hash).toBe('')
+
+    sels[0].abrir()
+    sels[0].elegirOpcion()
+    expect(h.stack).toHaveLength(1)
+    expect(h.hash).toBe('')
+
+    // Desmontar los 23 (cambio de pantalla) tampoco deja nada atrás.
+    for (const s of sels) s.desmontar()
+    expect(h.stack).toHaveLength(1)
+  })
+
+  it('`defaultOpen` sigue funcionando: empuja su entrada en el montaje', () => {
+    const h = new HistorialFalso()
+    const sel = montarSelect(h, { defaultOpen: true })
+    expect(sel.abierto).toBe(true)
+    expect(h.stack).toHaveLength(2)
+
+    h.back()
+    expect(sel.abierto).toBe(false)
+    expect(h.stack).toHaveLength(1)
+  })
+
+  it('si el caller SÍ pasa `open`, manda el caller (el estado interno queda dormido)', () => {
+    // Hoy ninguno de los 23 lo pasa, pero el tipo lo permite y el wrapper no tiene que pisarlo.
+    const h = new HistorialFalso()
+    const onOpenChange = vi.fn()
+    const sel = montarSelect(h, { open: true, onOpenChange })
+    expect(h.stack).toHaveLength(2)
+
+    h.back()
+    expect(onOpenChange).toHaveBeenCalledTimes(1)
+    expect(onOpenChange.mock.calls[0][0]).toBe(false)
+    expect(onOpenChange.mock.calls[0][1].reason).toBe(HISTORY_BACK_REASON)
+    // El caller no bajó su `open`, así que el selector sigue abierto… y su entrada VUELVE: sin ese
+    // re-push quedaría abierto sin entrada y el atrás siguiente se llevaría la página.
+    expect(sel.abierto).toBe(true)
+    expect(h.stack).toHaveLength(2)
+    expect(sel.holding).toBe(true)
+  })
+
+  it('un `cancel()` del caller veta el cierre y la entrada vuelve (el orden de SelectRoot.setOpen)', () => {
+    // El primitivo mira `isCanceled` DESPUÉS de llamar al handler. Si el wrapper moviera su estado
+    // antes, el veto se perdería: un comportamiento que en no-controlado SÍ funcionaba.
+    const h = new HistorialFalso()
+    const sel = montarSelect(h, {
+      onOpenChange: (next, details) => {
+        if (!next) details.cancel()
+      },
+    })
+
+    sel.abrir()
+    expect(sel.abierto).toBe(true)
+    expect(h.stack).toHaveLength(2)
+
+    sel.escape()
+    expect(sel.abierto).toBe(true) // vetado, como en el primitivo
+
+    h.back()
+    expect(sel.abierto).toBe(true)
+    expect(h.stack).toHaveLength(2) // y la entrada volvió
+    expect(sel.holding).toBe(true)
+  })
+
+  it('⚠ MEDIDO: abrir un selector dentro de la gracia del teclado absorbe el PRIMER atrás', () => {
+    // El riesgo que el plan pidió medir. Tocar el trigger del selector desenfoca el input y BAJA el
+    // teclado, lo que arranca la ventana de gracia de 300ms del quick 261005-x91. Un atrás que caiga
+    // dentro de esa ventana se ABSORBE: no cierra el selector. El costo máximo es un atrás muerto —
+    // nunca perder la página, porque la entrada vuelve. No se toca el módulo compartido por 300ms:
+    // un segundo apretón deliberado no baja de ~400ms (ver `SOFT_KEYBOARD_GRACE_MS`).
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso()
+    const sel = montarSelect(h, { vp })
+
+    vp.abrirTeclado() // el dueño estaba tipeando el nombre del cliente
+    vp.avanzar(2000)
+    vp.cerrarTeclado() // tocó el trigger del selector: el input se desenfoca y el teclado baja
+    vp.avanzar(100) // dentro de la gracia
+    sel.abrir()
+
+    h.back()
+    expect(sel.abierto).toBe(true)
+    expect(h.stack).toHaveLength(2)
+    expect(sel.holding).toBe(true)
+
+    // Pasada la gracia, el mismo gesto cierra el selector: la absorción no se queda pegada.
+    vp.avanzar(SOFT_KEYBOARD_GRACE_MS)
+    h.back()
+    expect(sel.abierto).toBe(false)
+    expect(h.stack).toHaveLength(1)
+  })
+
+  it('sin teclado en toda la vida del selector (desktop), el atrás cierra de una', () => {
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso() // viewport presente, teclado nunca arriba
+    const sel = montarSelect(h, { vp })
+
+    sel.abrir()
+    h.back()
+    expect(sel.abierto).toBe(false)
+    expect(h.stack).toHaveLength(1)
+  })
+
+  it('abrir y cerrar el mismo selector varias veces no acumula entradas', () => {
+    // Los selectores se abren MUCHO más seguido que los diálogos (filtros de listados): que el
+    // push/consume quede balanceado es lo que evita que la pila se llene de basura.
+    const h = new HistorialFalso()
+    const sel = montarSelect(h)
+    for (let i = 0; i < 5; i += 1) {
+      sel.abrir()
+      expect(h.stack).toHaveLength(2)
+      sel.elegirOpcion()
+      expect(h.stack).toHaveLength(1)
+    }
+    expect(h.hash).toBe('')
+  })
+})
+
 describe('React StrictMode (dev): el doble montaje converge en UNA entrada', () => {
   it('desmontar + volver a montar el efecto no deja entradas de más ni cierra de fantasma', () => {
     // En dev React corre efecto → limpieza → efecto. La limpieza consume la entrada y el segundo
