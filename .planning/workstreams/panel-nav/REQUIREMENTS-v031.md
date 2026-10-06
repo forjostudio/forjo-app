@@ -21,6 +21,10 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
   y dejar que el dueño la configure (una pantalla de ajustes más que casi nadie toca).
 - **D-02 — Sólo mobile.** Debajo del breakpoint entra la barra; en desktop sigue el sidebar **sin
   cambios**. Una barra inferior en pantalla grande es desperdicio de espacio.
+  ⚠ **CORREGIDO (2026-10-06): el breakpoint es `lg` (1024px), no 768.** Medido: el sidebar es
+  `hidden lg:flex` y el header con hamburguesa es `lg:hidden` (`sidebar.tsx:253,279`). **Entre 768 y
+  1023px hoy NO hay sidebar, hay hamburguesa** — si la barra entrara por `md:hidden`, esa banda se
+  quedaría sin ningún menú.
 
 ## Lo medido que condiciona el diseño
 
@@ -29,6 +33,11 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 | T-1 | **El menú varía por rubro.** Hoy son **5 grupos / 12 destinos** (`PANEL` · `AGENDA` · `GESTIÓN` · `REPORTES` · `AJUSTES`) y cada vertical expone un subconjunto. Por eso **Más** no es una lista fija: es el menú resuelto menos lo que ya está en la barra. | `components/dashboard/sidebar.tsx:43-48,57-83` |
 | T-2 | ⚠ **El repo NO usa `env(safe-area-inset-*)` en ningún lado** (barrido: cero coincidencias). Una barra inferior fija sin eso queda **debajo de la zona de gestos** del teléfono. | medido |
 | T-3 | El panel **no tiene ningún elemento flotante fijo**, así que la barra no colisiona con nada existente. | medido |
+| T-6 | ⚠ **"Todo el menú" es MÁS que los 5 grupos.** El footer del sidebar tiene tres filas que no están en `NAV_GROUPS`: **Ayuda**, **Ver mi página** (abre el público en pestaña nueva) y **Cerrar sesión**, más el bloque de identidad. Si **Más** renderiza sólo `buildNavGroups()`, el dueño **pierde el logout en mobile**. | `sidebar.tsx:189,197` |
+| T-7 | ⚠ **El drawer del menú de hoy NO participa del historial** (`useState` pelado, sin marca). Si **Más** se construye con ese molde, **el atrás no lo cierra** y MOB-04 es imposible: Más tiene que ser una **ruta** o una hoja registrada en `overlay-history`. | `sidebar.tsx:262-267` |
+| T-8 | ⚠ **D-01 fija los DESTINOS, no las PALABRAS.** En `canchas` "Turnos" es **"Reservas"**; en `salud` "Clientes" es **"Pacientes"**. A 375px con 5 ítems son ~75px por ítem para la palabra más larga del sistema. Es restricción de diseño. (Verificado: los **4 verticales** exponen los 4 destinos ⇒ D-01 no tiene excepciones.) | `lib/verticals.ts` |
+| T-9 | `viewportFit: 'cover'` **existe** en el tipo de Next aunque no esté documentado, y `app/layout.tsx` **no exporta `viewport`** ⇒ se puede declarar **sólo** en el layout del dashboard, sin afectar landing, `/[slug]` ni CRM. **Sin eso `env(safe-area-inset-bottom)` vale 0** y MOB-02 no se cumple aunque el CSS esté escrito. | `next/dist/lib/metadata/types/extra-types.d.ts:52` |
+| T-10 | ⚠ **MOB-05 no tiene hoy su condición habilitante:** el panel **no es instalable** (no hay `manifest`, cero usos de `display-mode`), así que gatear la guarda por "app instalada" daría **siempre false**. | medido |
 | T-4 | La política de atrás actual es **un solo nivel**: `panelNavMode` deja **una sola sección encima del dashboard** (dashboard→sección empuja, sección→sección reemplaza). El modelo nuevo necesita **dos** (Inicio → Más → sección) ⇒ **esta regla se redefine**. | `lib/panel-history.ts` |
 | T-5 | El sidebar ya consume `panelNavMode` y `consumeOwnedPanelEntry` en su `onNavigate`, y el guard de cambios sin guardar se evalúa **primero**. Lo que se construya tiene que respetar ese orden. | `components/dashboard/sidebar.tsx:152,162-163` |
 
@@ -90,10 +99,28 @@ explícitamente**, no asumirlo.
 | Convertir el panel en PWA instalable | Es otra decisión, aunque MOB-05 la haga atractiva |
 | Rediseñar las pantallas en sí | Esto es navegación, no contenido |
 | — | — |
-| Migraciones | Nada de esto toca datos. Próxima libre: **042** |
+| Migraciones | Nada de esto toca datos. ⚠ **CORREGIDO: la próxima libre es la 080** (la última aplicada es `079_service_categories_name_normalized.sql`), no la 042 como decía este documento |
 
 ## Traceability
 
+> Asignado por `ROADMAP-v031.md` (2026-10-06). Fases **2-4** del workstream `panel-nav`
+> (continúan desde la Phase 2 de v0.30, que quedó sin ejecutar).
+
 | Requisito | Fase | Estado |
 |---|---|---|
-| MOB-01 … MOB-07 | TBD (el roadmap las asigna) | Pending |
+| MOB-01 | Phase 2 — La barra inferior y Más | Pending |
+| MOB-02 | Phase 2 — La barra inferior y Más | Pending |
+| MOB-03 | Phase 2 — La barra inferior y Más | Pending |
+| MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
+| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — decisión abierta |
+| MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
+| MOB-07 | Phase 2 — La barra inferior y Más | Pending |
+| MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
+| MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
+
+**Coverage:** 9 requisitos · mapeados a fases: **9/9** · sin mapear: 0 · duplicados: 0
+
+⚠ **Corrección de dato medida el 2026-10-06:** la tabla "Fuera de alcance" dice que la próxima
+migración libre es la **042**. Es falso: la última aplicada es la **079**
+(`supabase/migrations/079_service_categories_name_normalized.sql`), así que la próxima libre es la
+**080**. No afecta este milestone (cero migraciones), pero conviene no arrastrar el dato.
