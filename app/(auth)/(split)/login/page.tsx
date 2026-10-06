@@ -80,7 +80,16 @@ export default function LoginPage() {
       </Suspense>
       <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold">Iniciá sesión</h1>
       <p className="text-muted-foreground text-sm mt-1.5 mb-6">Entrá a tu panel de Forjo Gestión</p>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* `method="post"` NO lo usa el camino normal: el submit lo maneja `onSubmit`, que sólo
+          existe DESPUÉS de que React hidrata. En la ventana previa a la hidratación, un tap en el
+          botón dispara el submit NATIVO del navegador y, sin `method`, el default del HTML es GET
+          ⇒ los campos de acá — email y CONTRASEÑA — se serializan en el QUERY STRING:
+          quedan en el historial del navegador y en los logs de acceso del server, el proxy y el
+          CDN, que loguean URLs pero NO bodies. Reproducido en producción dos veces, sin buscarlo.
+          SIN `action` a propósito: así el submit nativo va a la URL ACTUAL (medido: 200, el usuario
+          vuelve a ver la pantalla) en vez de abrir una superficie nueva. Ya hidratado,
+          `handleSubmit` hace `preventDefault()` y este atributo queda inerte. */}
+      <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
