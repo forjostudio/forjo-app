@@ -2,14 +2,18 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   HISTORY_BACK_REASON,
   OVERLAY_HASH_BASE,
+  SOFT_KEYBOARD_GRACE_MS,
+  SOFT_KEYBOARD_MIN_INSET,
   createHistoryBackDetails,
   isOverlayHistoryEntry,
+  isSoftKeyboardInset,
   nextOverlayHash,
   nextOverlayId,
   overlayHistoryAction,
   overlayHistoryState,
   overlayUnmountAction,
   popstateAction,
+  softKeyboardGuardsBack,
 } from '@/lib/overlay-history'
 import { guardDraftOnDismiss } from '@/lib/panel-draft'
 
@@ -83,6 +87,51 @@ class HistorialFalso {
 }
 
 /**
+ * El viewport falso: el teclado de software, por donde el código lo lee.
+ *
+ * ⚠ EL LÍMITE, declarado: el teclado de Android NO se puede emular. Lo que sí se puede reproducir es
+ * el modelo que ve el código —`visualViewport.height` encoge y `window.innerHeight` NO (es el
+ * `interactive-widget=resizes-visual` que rige en la app, medido en la sesión de debug)— y es
+ * exactamente lo que hace esta clase. Los altos de teclado son los MEDIDOS en la sonda sobre
+ * 823px: 320 el QWERTY, 240 el keypad numérico.
+ *
+ * `guarda()` espeja al `softKeyboardIsGuarding()` del módulo y `cerrarTeclado()` al listener del
+ * rastreador: el timestamp se anota en la TRANSICIÓN de bajada, no en cada resize con teclado (es la
+ * corrección que forzó la sonda 18; ver el ⚠ de `softKeyboardGuardsBack`). El reloj es manual
+ * (`avanzar`) para poder afirmar los bordes de la ventana de gracia sin temporizadores.
+ */
+class ViewportFalso {
+  innerHeight = 823
+  height = 823
+  leftInsetAt: number | null = null
+  private wasInset = false
+  now = 100_000
+
+  abrirTeclado(alto = 320) {
+    this.height = this.innerHeight - alto
+    this.wasInset = true
+  }
+
+  cerrarTeclado() {
+    this.height = this.innerHeight
+    if (this.wasInset) {
+      this.wasInset = false
+      this.leftInsetAt = this.now
+    }
+  }
+
+  avanzar(ms: number) {
+    this.now += ms
+  }
+
+  guarda(): boolean {
+    const inset = isSoftKeyboardInset({ viewportHeight: this.height, innerHeight: this.innerHeight })
+    if (inset) this.wasInset = true
+    return softKeyboardGuardsBack({ inset, leftInsetAt: this.leftInsetAt, now: this.now })
+  }
+}
+
+/**
  * Una instancia del hook, reconstruida con las MISMAS funciones de decisión que usa el efecto real.
  * `render()` = el efecto de empujar/consumir · `desmontar()` = su limpieza · el listener = el `onPop`.
  */
@@ -91,9 +140,12 @@ function montarOverlay(
   {
     open,
     dismiss,
+    vp,
   }: {
     open: boolean | undefined
     dismiss: ((e: PopStateEvent) => void) | undefined
+    /** Sin viewport no hay guarda de teclado: es el caso desktop (y el de los tests que no lo miran). */
+    vp?: ViewportFalso
   },
 ) {
   const id = nextOverlayId()
@@ -118,10 +170,15 @@ function montarOverlay(
   const desuscribir = participates
     ? h.escuchar((e) => {
         if (!abierto) return // el efecto del listener sólo vive mientras el overlay está abierto
-        if (popstateAction({ topIsOurs: isOverlayHistoryEntry(h.state, id) }) === 'ignore') return
+        const action = popstateAction({
+          topIsOurs: isOverlayHistoryEntry(h.state, id),
+          keyboardGuard: vp ? vp.guarda() : false,
+        })
+        if (action === 'ignore') return
         holding = false
-        dismissActual?.(e)
-        render() // el `tick`: si el cierre se vetó, la entrada vuelve
+        // 'absorb' = el back se lo comió el teclado: no se pide cierre, sólo vuelve la entrada.
+        if (action === 'dismiss') dismissActual?.(e)
+        render() // el `tick`: si el cierre se vetó o se absorbió, la entrada vuelve
       })
     : () => {}
 
@@ -298,6 +355,142 @@ describe('el back con un borrador SUCIO avisa y no cierra (la guarda G-23-25)', 
     expect(cancel).toHaveBeenCalledTimes(1)
     expect(onBlocked).toHaveBeenCalledTimes(1)
     expect(close).not.toHaveBeenCalled()
+  })
+})
+
+describe('el back con el teclado ARRIBA cierra el teclado, no el overlay (quick 261005-x91)', () => {
+  // EL REPORTE DEL DUEÑO: escribiendo el nombre del cliente en el alta de turno, apretó atrás para
+  // bajar el teclado —gesto habitual en Android, donde el primer atrás se lo come el teclado— y se
+  // le cerró el drawer. MEDIDO en la sonda: bajar el teclado por sí solo NO cierra ni desplaza el
+  // drawer; el único camino que reproduce el cierre es un `popstate`. Lo que NO se pudo medir es si
+  // el atrás del celular real lo emite (el teclado de Android no se emula): si no lo emitiera, esto
+  // es un no-op y el cierre viene de otro lado.
+  it('teclado abierto ⇒ NO cierra, y la entrada vuelve al historial', () => {
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso()
+    const dismiss = vi.fn()
+    const overlay = montarOverlay(h, { open: true, dismiss, vp })
+    expect(h.stack).toHaveLength(2)
+
+    vp.abrirTeclado() // el usuario tocó el buscador de cliente: QWERTY de 320px
+    h.back()
+
+    expect(dismiss).not.toHaveBeenCalled()
+    // ⚠ LO QUE MÁS IMPORTA: el browser ya consumió la entrada, así que si no volviera, el overlay
+    // quedaría abierto sin entrada y el back SIGUIENTE se llevaría la página.
+    expect(h.stack).toHaveLength(2)
+    expect(overlay.holding).toBe(true)
+  })
+
+  it('el SEGUNDO back, ya con el teclado abajo, cierra como siempre', () => {
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso()
+    let open = true
+    const overlay = montarOverlay(h, { open: true, dismiss: () => { open = false }, vp })
+
+    vp.abrirTeclado()
+    h.back() // primero: se lo come el teclado
+    expect(open).toBe(true)
+
+    vp.cerrarTeclado()
+    vp.avanzar(SOFT_KEYBOARD_GRACE_MS + 1)
+    h.back() // segundo: ahora sí
+    expect(open).toBe(false)
+
+    overlay.setOpen(false)
+    expect(h.stack).toHaveLength(1)
+  })
+
+  it('con el teclado arriba NO avisa del borrador sucio (el back no fue un intento de cierre)', () => {
+    // Avisar acá sería ruido: el usuario no quiso cerrar nada, quiso bajar el teclado.
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso()
+    const onBlocked = vi.fn()
+    const close = vi.fn()
+    const handler = guardDraftOnDismiss(() => true, close, onBlocked)
+    const overlay = montarOverlay(h, {
+      open: true,
+      dismiss: (e) => handler(false, createHistoryBackDetails(e)),
+      vp,
+    })
+
+    vp.abrirTeclado(240) // keypad numérico del campo Hora
+    h.back()
+
+    expect(onBlocked).not.toHaveBeenCalled()
+    expect(close).not.toHaveBeenCalled()
+    expect(h.stack).toHaveLength(2)
+    expect(overlay.holding).toBe(true)
+  })
+
+  it('la ventana de gracia: el back apenas bajó el teclado sigue siendo "del teclado"', () => {
+    // El atrás y el teclado bajando son el MISMO gesto y el orden de los eventos no está garantizado:
+    // si el resize del cierre le gana al `popstate`, sin gracia cerraríamos el overlay.
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso()
+    const dismiss = vi.fn()
+    montarOverlay(h, { open: true, dismiss, vp })
+
+    vp.abrirTeclado()
+    // ⚠ LOS 5 SEGUNDOS SON LA ASERCIÓN: el usuario estuvo tipeando. El teclado quieto NO emite
+    // resizes, así que una gracia contada desde "la última vez que se lo vio arriba" ya estaría
+    // vencida acá. MEDIDO en la sonda 18 con sólo 350ms: cerraba el drawer igual.
+    vp.avanzar(5000)
+    vp.cerrarTeclado()
+    vp.avanzar(SOFT_KEYBOARD_GRACE_MS - 100)
+    h.back()
+    expect(dismiss).not.toHaveBeenCalled()
+
+    // Pasada la gracia, el mismo gesto vuelve a cerrar: la absorción no se queda pegada.
+    vp.avanzar(SOFT_KEYBOARD_GRACE_MS + 1)
+    h.back()
+    expect(dismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('NO rompe el caso bueno: sin teclado en toda la vida del overlay, el back cierra', () => {
+    // Es el arreglo de Bug A (quick 260928-seo), verificado en celular. Que no se caiga por esto.
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso()
+    let open = true
+    montarOverlay(h, { open: true, dismiss: () => { open = false }, vp })
+
+    h.back()
+    expect(open).toBe(false)
+  })
+})
+
+describe('el umbral y la gracia del teclado, uno por uno', () => {
+  it('el inset cuenta como teclado recién a partir del umbral', () => {
+    const innerHeight = 823
+    // Los dos teclados MEDIDOS en la sonda sobre 823px: QWERTY 320, keypad numérico 240.
+    expect(isSoftKeyboardInset({ viewportHeight: 823 - 320, innerHeight })).toBe(true)
+    expect(isSoftKeyboardInset({ viewportHeight: 823 - 240, innerHeight })).toBe(true)
+    // La barra de URL de Chrome (~56-72px) NO es un teclado: si contara, el back dejaría de cerrar
+    // el overlay después de scrollear.
+    expect(isSoftKeyboardInset({ viewportHeight: 823 - 72, innerHeight })).toBe(false)
+    // Desktop: el inset es 0.
+    expect(isSoftKeyboardInset({ viewportHeight: 823, innerHeight })).toBe(false)
+    // El borde exacto, para que mover el umbral rompa un test y no una pantalla.
+    expect(isSoftKeyboardInset({ viewportHeight: innerHeight - SOFT_KEYBOARD_MIN_INSET, innerHeight })).toBe(true)
+    expect(isSoftKeyboardInset({ viewportHeight: innerHeight - SOFT_KEYBOARD_MIN_INSET + 1, innerHeight })).toBe(false)
+  })
+
+  it('la gracia corre sólo con el teclado abajo y sólo si estuvo arriba alguna vez', () => {
+    // Con el teclado arriba no hace falta mirar el reloj.
+    expect(softKeyboardGuardsBack({ inset: true, leftInsetAt: null, now: 1000 })).toBe(true)
+    // Nunca hubo teclado (desktop, o un overlay que nadie enfocó): el back cierra, sin gracia.
+    expect(softKeyboardGuardsBack({ inset: false, leftInsetAt: null, now: 1000 })).toBe(false)
+    // Los dos bordes de la ventana.
+    expect(softKeyboardGuardsBack({ inset: false, leftInsetAt: 1000, now: 1000 + SOFT_KEYBOARD_GRACE_MS })).toBe(true)
+    expect(softKeyboardGuardsBack({ inset: false, leftInsetAt: 1000, now: 1000 + SOFT_KEYBOARD_GRACE_MS + 1 })).toBe(false)
+  })
+
+  it('popstateAction: la entrada propia gana sobre el teclado (un pop de limpieza es un no-op)', () => {
+    expect(popstateAction({ topIsOurs: true, keyboardGuard: true })).toBe('ignore')
+    expect(popstateAction({ topIsOurs: false, keyboardGuard: true })).toBe('absorb')
+    expect(popstateAction({ topIsOurs: false, keyboardGuard: false })).toBe('dismiss')
+    // Sin el parámetro, el comportamiento es el de antes del quick: cierra.
+    expect(popstateAction({ topIsOurs: false })).toBe('dismiss')
   })
 })
 

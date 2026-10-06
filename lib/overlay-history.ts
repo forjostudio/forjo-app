@@ -37,6 +37,13 @@
 // `popstate`; si el overlay NO se cierra, hay que volver a empujarla o el modal queda abierto sin su
 // entrada y el siguiente back se lleva la página. El disparador de ese re-push es el `tick` del hook.
 //
+// Y EL PRIMER BACK CON EL TECLADO ARRIBA NO CIERRA NADA (quick 261005-x91)
+// En Android la convención del sistema es que el atrás con el teclado abierto cierra EL TECLADO y
+// nada más. El dueño reportó exactamente eso: escribiendo el nombre del cliente apretó atrás para
+// bajar el teclado y se le cerró el drawer. Por eso el `popstate` se ABSORBE mientras hay teclado
+// (ver {@link softKeyboardGuardsBack}): no se pide el cierre, sólo vuelve la entrada, y el segundo
+// back —ya con el teclado abajo— cierra como siempre.
+//
 // QUÉ NO HACE
 //   - NO arregla el otro bug de navegación mobile (que el back salte a otra sección): eso necesita
 //     convertir las subsecciones in-page del panel en rutas reales y es un milestone propio.
@@ -244,9 +251,114 @@ export function overlayUnmountAction({ holding }: { holding: boolean }): Overlay
  * `topIsOurs` = después del pop seguimos parados sobre una entrada de ESTA instancia ⇒ el pop no fue
  * un back del usuario sino un `back()` de limpieza nuestro (o el doble montaje de StrictMode en dev,
  * que empuja dos veces y consume una). Cerrar ahí sería un cierre fantasma.
+ *
+ * `keyboardGuard` = el teclado de software está arriba (o acabó de bajar). Ahí el back NO quiso
+ * cerrar el overlay: quiso cerrar el teclado, que es la convención de Android. Ver
+ * {@link softKeyboardGuardsBack}. El resultado es `'absorb'`: ni cerrar ni ignorar — hay que
+ * DEVOLVER la entrada que el browser ya consumió, o el overlay queda abierto sin entrada y el
+ * siguiente back se lleva la página.
+ *
+ * El orden importa: `topIsOurs` se evalúa PRIMERO. Un pop de limpieza nuestro con el teclado arriba
+ * sigue siendo un no-op, nunca un re-push.
  */
-export function popstateAction({ topIsOurs }: { topIsOurs: boolean }): 'dismiss' | 'ignore' {
-  return topIsOurs ? 'ignore' : 'dismiss'
+export function popstateAction({
+  topIsOurs,
+  keyboardGuard = false,
+}: {
+  topIsOurs: boolean
+  keyboardGuard?: boolean
+}): 'dismiss' | 'ignore' | 'absorb' {
+  if (topIsOurs) return 'ignore'
+  return keyboardGuard ? 'absorb' : 'dismiss'
+}
+
+// ── El teclado de software: el atrás lo cierra a ÉL, no al overlay (quick 261005-x91) ────────────
+//
+// LO QUE REPORTÓ EL DUEÑO: escribiendo el nombre del cliente en el alta de turno, aprieta atrás
+// para bajar el teclado —gesto habitual en Android— y se le CIERRA EL DRAWER.
+//
+// POR QUÉ ES NUESTRO Y NO DE VAUL (medido, sonda 16 sobre la app real, emulación 412x823):
+//   · teclado que baja SIN popstate, con el input todavía enfocado ⇒ el drawer QUEDA ABIERTO y además
+//     recupera su geometría (top 164.6, cero estilos inline). O sea: bajar el teclado, por sí solo,
+//     NO puede parecer "se cerró".
+//   · con el teclado arriba y un `popstate` ⇒ el drawer CIERRA, el hash vuelve de `#modal` a '' y NO
+//     aparece ningún aviso. Eso último encaja exacto con el reporte y tiene su razón: `clientSearch`
+//     NO cuenta como borrador sucio (decisión del dueño: buscar no es trabajo que valga proteger),
+//     así que la guarda del borrador no veta y el cierre pasa limpio.
+//   ⇒ el único camino medido que produce el síntoma es un `popstate`. Lo que NO se pudo medir es si
+//     el atrás del celular REAL emite ese `popstate` con el teclado arriba (el teclado de software de
+//     Android no se emula; lo sintetizable es el resize de `visualViewport`, que es lo que lee este
+//     código). Si no lo emitiera, esto es un no-op y el cierre viene de otro lado.
+//
+// QUÉ HACE: cuando llega un back y el teclado está arriba, el overlay NO se cierra y la entrada se
+// re-empuja. El segundo back —ya con el teclado abajo— cierra como siempre. Es la convención de
+// Android: el primer atrás se lo come el teclado.
+
+/**
+ * Cuánto tiene que haber encogido `visualViewport` para contar como "hay un teclado arriba".
+ *
+ * POR QUÉ 120px y no cualquier número: el umbral tiene que caer en la tierra de nadie entre las dos
+ * cosas que encogen el viewport en Android.
+ *   · ARRIBA de los encogimientos que NO son teclado: la barra de URL de Chrome al scrollear son
+ *     ~56-72px (vaul usa `> 60` para su propia detección de "cambió el teclado", `index.mjs:1131`).
+ *     120px es el doble de esa banda.
+ *   · ABAJO del teclado más chico: los medidos en la sesión de debug son 240px (keypad numérico) y
+ *     320px (QWERTY) sobre 823px de alto. 120 es la mitad del más chico.
+ * En desktop el inset es 0 (y sin `visualViewport` no hay guarda), así que esto no cambia NADA fuera
+ * de mobile.
+ */
+export const SOFT_KEYBOARD_MIN_INSET = 120
+
+/**
+ * Ventana de gracia después de que el teclado baja.
+ *
+ * POR QUÉ HACE FALTA: el atrás y el teclado bajando son el MISMO gesto, y el orden de los dos
+ * eventos no está garantizado. Si el resize que restaura el viewport llega ANTES del `popstate`,
+ * leer el viewport en el handler diría "teclado abajo" y cerraríamos el overlay por un back que
+ * quiso cerrar el teclado — justo el bug.
+ *
+ * 300ms: la animación de ocultado del IME de Android es de ~250ms, más un par de frames de latencia
+ * del `popstate`. Y queda por debajo de un segundo apretón DELIBERADO (que en la práctica no baja de
+ * ~400ms), así que "atrás, atrás" sigue cerrando el overlay en el segundo.
+ */
+export const SOFT_KEYBOARD_GRACE_MS = 300
+
+/** ¿El viewport está encogido lo suficiente como para que haya un teclado arriba? */
+export function isSoftKeyboardInset({
+  viewportHeight,
+  innerHeight,
+}: {
+  viewportHeight: number
+  innerHeight: number
+}): boolean {
+  return innerHeight - viewportHeight >= SOFT_KEYBOARD_MIN_INSET
+}
+
+/**
+ * ¿Este back se lo tiene que comer el teclado?
+ *
+ * `inset` = el teclado está arriba AHORA. `leftInsetAt` = cuándo se lo vio BAJAR por última vez
+ * (`null` = nunca bajó porque nunca estuvo arriba). Con el teclado arriba la respuesta es sí sin
+ * más; con el teclado abajo, sólo dentro de la ventana de gracia.
+ *
+ * ⚠ ES "CUÁNDO BAJÓ", NO "LA ÚLTIMA VEZ QUE SE LO VIO ARRIBA", y la diferencia la encontró una
+ * medición: el teclado abierto NO emite resizes mientras está quieto, así que un timestamp tomado en
+ * cada resize con inset se queda con el momento en que se ABRIÓ. Escribiendo 5 segundos, la gracia ya
+ * estaba vencida antes de que el usuario apretara atrás. MEDIDO (sonda 18, primera versión): con sólo
+ * 350ms de teclado abierto, el back dentro de la gracia cerraba el drawer igual.
+ */
+export function softKeyboardGuardsBack({
+  inset,
+  leftInsetAt,
+  now,
+}: {
+  inset: boolean
+  leftInsetAt: number | null
+  now: number
+}): boolean {
+  if (inset) return true
+  if (leftInsetAt === null) return false
+  return now - leftInsetAt <= SOFT_KEYBOARD_GRACE_MS
 }
 
 // ── La mecánica de React ─────────────────────────────────────────────────────────────────────────
@@ -262,6 +374,59 @@ let overlaySerial = 0
 export function nextOverlayId(): number {
   overlaySerial += 1
   return overlaySerial
+}
+
+// ── El rastreador del teclado: UNO por documento, no uno por overlay ────────────────────────────
+//
+// El estado vive a nivel de módulo a propósito. El teclado es del DOCUMENTO, no de cada overlay: con
+// 39 overlays en el panel, una ref por instancia serían 39 listeners de `visualViewport.resize`
+// midiendo todos exactamente lo mismo. Y el dato que hace falta —cuándo bajó el teclado— tiene que
+// sobrevivir a que el overlay de arriba se desmonte mientras el teclado todavía está bajando.
+//
+// Lo que se guarda es la TRANSICIÓN de bajada, no cada resize con teclado: ver el ⚠ de
+// {@link softKeyboardGuardsBack}, que es un bug ya medido y no una preferencia de estilo.
+let keyboardWasInset = false
+let keyboardLeftInsetAt: number | null = null
+let keyboardTrackerInstalled = false
+
+/**
+ * Engancha una sola vez el listener que anota el momento en que el teclado BAJA.
+ *
+ * SIN TEARDOWN a propósito: es un único listener por documento que escribe un timestamp y sale.
+ * Refcontarlo para poder desengancharlo agregaría un camino de falla (desenganchar de más y perder
+ * la ventana de gracia) a cambio de nada medible. Idempotente por la bandera.
+ */
+function installSoftKeyboardTracker(): void {
+  if (keyboardTrackerInstalled) return
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  if (!vv) return
+  keyboardTrackerInstalled = true
+  vv.addEventListener('resize', () => {
+    if (isSoftKeyboardInset({ viewportHeight: vv.height, innerHeight: window.innerHeight })) {
+      keyboardWasInset = true
+      return
+    }
+    // Primer resize sin teclado después de haberlo tenido: ACÁ empieza la ventana de gracia.
+    if (keyboardWasInset) {
+      keyboardWasInset = false
+      keyboardLeftInsetAt = Date.now()
+    }
+  })
+}
+
+/**
+ * ¿El back que acaba de llegar se lo tiene que comer el teclado?
+ *
+ * Lee el viewport EN EL INSTANTE del `popstate` (no un estado cacheado): si el teclado todavía está
+ * arriba la respuesta sale de ahí y no depende del rastreador. El rastreador sólo aporta la ventana
+ * de gracia, para el caso en que el resize del cierre del teclado le ganó la carrera al `popstate`.
+ */
+function softKeyboardIsGuarding(): boolean {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  if (!vv) return false
+  const inset = isSoftKeyboardInset({ viewportHeight: vv.height, innerHeight: window.innerHeight })
+  if (inset) keyboardWasInset = true
+  return softKeyboardGuardsBack({ inset, leftInsetAt: keyboardLeftInsetAt, now: Date.now() })
 }
 
 /**
@@ -338,15 +503,24 @@ export function useOverlayHistory({
   useEffect(() => {
     if (!participates || !open) return
 
+    // El rastreador del teclado se engancha recién acá: sólo importa mientras hay un overlay abierto,
+    // y es idempotente, así que abrir el segundo overlay no suma un segundo listener.
+    installSoftKeyboardTracker()
+
     const onPop = (event: PopStateEvent) => {
       const topIsOurs = isOverlayHistoryEntry(window.history.state, id)
+      const action = popstateAction({ topIsOurs, keyboardGuard: softKeyboardIsGuarding() })
       // 'ignore': la entrada que quedó arriba sigue siendo nuestra ⇒ no hay nada que cerrar.
-      if (popstateAction({ topIsOurs }) === 'ignore') return
+      if (action === 'ignore') return
       // El browser YA consumió la entrada: dejamos de ser dueños ANTES de pedir el cierre, para que
       // el efecto de arriba no intente un segundo `back()`.
       holdingRef.current = false
-      dismissRef.current?.(event)
-      // Si el cierre se vetó, `open` sigue en true y este tick hace que el efecto re-empuje.
+      // 'absorb': el back se lo comió el teclado (quick 261005-x91). No se pide cierre; lo único que
+      // pasa es que la entrada vuelve, así que el SEGUNDO back —ya con el teclado abajo— cierra como
+      // siempre. Cae por el mismo re-push que el veto del borrador: un solo mecanismo.
+      if (action === 'dismiss') dismissRef.current?.(event)
+      // Si el cierre se vetó (o se absorbió), `open` sigue en true y este tick hace que el efecto
+      // re-empuje la entrada.
       setTick((t) => t + 1)
     }
 
