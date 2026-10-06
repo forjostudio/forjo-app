@@ -416,3 +416,44 @@ del panel que el dueño juntó probando (incluido **asignar sede a un profesiona
 migración **080**); y cuatro writes sin `.eq('business_id', …)` heredados de junio 2026.
 
 ---
+
+## v0.30 — La navegación del panel (2026-10-06)
+
+**Qué resolvió:** el *Bug B* de navegación mobile, reportado en julio: el botón atrás saltaba a otra
+sección porque las subsecciones del panel eran `useState`, no rutas. Workstream `panel-nav`.
+
+**Entregó 9 de 11 requisitos**, cuatro más de los que su roadmap planteaba — los extra salieron de las
+UAT en celular del dueño:
+
+- **NAV-01/02/05/06** (Phase 1): el detalle de cliente vive en la URL (`?c=<id>`, decisión **D-03**:
+  query y no segmento, para que el back devuelva el listado **con búsqueda y filtros intactos** y para
+  no abrir un oracle de existencia cross-tenant). Un helper único decide empujar/reemplazar/consumir.
+- **NAV-07/08** (cierre de gaps): el atrás desde una sección cae en el **dashboard**, y tocar en el
+  menú la sección en la que ya estás **cierra la subsección** en vez de sepultarla. ⚠ NAV-08 era una
+  **regresión que introdujo la propia Phase 1**, encontrada en la UAT y diagnosticada midiendo la pila
+  real del navegador por CDP.
+- **NAV-09/10/11** (quicks): "hay cambios sin guardar" pasó de ser un **latch por gesto** a una
+  comparación real contra lo cargado, y recién entonces el **atrás frena** antes de perder cambios.
+
+**Diferidos a v0.31 con motivo escrito:** NAV-03/04 (los tabs en la URL). La política de atrás pasa de
+un nivel a dos con el rediseño mobile; escribirlos antes era trabajo para rehacer.
+
+**⚠ La enmienda a D-01.** El milestone nació con *"cero intercepción de `popstate`"*, citando un
+comentario del repo. Medido: **la mitad de esa premisa había caducado** — Next conserva las marcas de
+`history.state` al volver atrás **a propósito**. La otra mitad sigue firme y es peor de lo que decía:
+el `popstate` del atrás de usuario llega `cancelable: false` por diseño del estándar. Por eso no se
+*cancela*, se **absorbe**. D-01 quedó firme para rutas y relajada para estado de UI.
+
+**Siete quicks de pulido mobile en el camino**, los siete con UAT pasada en celular: el atrás cierra
+overlays, selectores, el calendario y el teclado antes de navegar; campo de hora propio en 24hs con
+teclado numérico; el confirm del drawer que era **intocable**; y el drawer que quedaba clavado al bajar
+el teclado — tres rondas parcheando síntomas hasta apagar en el origen la función rota de `vaul`.
+
+**Y un hallazgo de seguridad de rebote:** los 5 formularios de auth no declaraban `method`, así que un
+submit **antes de hidratar** mandaba la **contraseña en la URL** (historial + logs). Cerrado con una
+palabra por formulario y un gate que impide la reincidencia.
+
+**La lección:** el pipeline estuvo **verde con todos esos bugs vivos**. Los 1619 tests no veían un
+diálogo intocable, un chip desbordado ni un drawer clavado. Los encontró el dueño con el teléfono en la
+mano. Ver `feedback-uat-prod-real-encuentra-lo-que-el-pipeline-no`.
+

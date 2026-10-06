@@ -1,0 +1,28 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v0.31 — La navegación mobile del panel",
+  "phases": [
+    {
+      "number": "2",
+      "name": "La barra inferior y Más",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "La política de atrás, de un nivel a dos",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Los tabs profundos sobre la política ya fijada",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd-ui-phase 2 --ws panel-nav",
+    "label": "Contrato de diseño de la barra inferior",
+    "reason": "El dueño eligió diseñar primero; la Phase 2 necesita UI-SPEC"
+  },
+  "updated_at": "2026-10-06T23:30:00.000Z"
+}

@@ -1,0 +1,133 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v0.29 — El catálogo del booking (en curso)",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Turnos Manuales",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Cupos Grupales",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Espacio Compartido",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Ventana de reserva pública",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Aviso al cliente en el alta manual",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Modelo del abono + alta manual + generación forward",
+      "status": "complete"
+    },
+    {
+      "number": "7",
+      "name": "Cancelación del abono (mail + panel)",
+      "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "Equipo — qué servicios hace cada profesional",
+      "status": "complete"
+    },
+    {
+      "number": "9",
+      "name": "Asignación automática atómica de profesional",
+      "status": "complete"
+    },
+    {
+      "number": "10",
+      "name": "Reservar con \"cualquiera\" desde la página pública",
+      "status": "complete"
+    },
+    {
+      "number": "11",
+      "name": "Cierre de backlog",
+      "status": "complete"
+    },
+    {
+      "number": "12",
+      "name": "Cupo por solape (recurso simultáneo)",
+      "status": "complete"
+    },
+    {
+      "number": "13",
+      "name": "Borrado de servicio preservando historial",
+      "status": "complete"
+    },
+    {
+      "number": "14",
+      "name": "Cierre de backlog",
+      "status": "complete"
+    },
+    {
+      "number": "15",
+      "name": "Modelo de cupo unificado",
+      "status": "complete"
+    },
+    {
+      "number": "16",
+      "name": "Correcciones del gate",
+      "status": "complete"
+    },
+    {
+      "number": "17",
+      "name": "Superficie y polish",
+      "status": "complete"
+    },
+    {
+      "number": "18",
+      "name": "El modelo y la disponibilidad",
+      "status": "complete"
+    },
+    {
+      "number": "19",
+      "name": "El panel",
+      "status": "complete"
+    },
+    {
+      "number": "20",
+      "name": "Lo que el público ve",
+      "status": "complete"
+    },
+    {
+      "number": "21",
+      "name": "Lo que el negocio declara",
+      "status": "complete"
+    },
+    {
+      "number": "22",
+      "name": "El modelo del catálogo",
+      "status": "complete"
+    },
+    {
+      "number": "23",
+      "name": "El panel que organiza el catálogo",
+      "status": "complete"
+    },
+    {
+      "number": "24",
+      "name": "El catálogo que el cliente lee",
+      "status": "complete"
+    }
+  ],
+  "next": {
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
+  },
+  "updated_at": "2026-09-28T17:53:58.428Z"
+}
