@@ -218,3 +218,101 @@ export function buildDayStatesFromRows(rows: SavedAgendaBlock[]): AgendaDayDraft
   for (const day of days) day.enabled = day.blocks.length > 0
   return days
 }
+
+// ── "Cambios sin guardar" = DISTINTO DEL BASELINE, no "toqué algo" (NAV-09) ──────────────────────
+//
+// POR QUÉ ESTO EXISTE (y por qué va ANTES de que el atrás del celular avise)
+// Hasta acá el editor llevaba una bandera POR GESTO: ocho mutadores la prendían y sólo el guardado la
+// apagaba. Eso tiene dos consecuencias, una vieja y una nueva:
+//   · La vieja: el aviso MIENTE. Prender un chip y volver a apagarlo deja la bandera encendida, así
+//     que el indicador dice "cambios sin guardar" sobre un estado idéntico al que había. Un
+//     indicador que miente es peor que no tenerlo (es la misma regla por la que `validateBlocks`
+//     nunca lo prendió).
+//   · La nueva, que es la que lo vuelve urgente: cuando el botón ATRÁS empieza a frenar sobre esta
+//     bandera, cada gesto reflejo pide confirmación. Cerrar y abrir un día para mirar a qué hora se
+//     abre dispararía el diálogo. El arreglo sería peor que el bug.
+// ⇒ "sucio" pasa a ser una COMPARACIÓN contra el estado que se cargó (o contra el último guardado),
+// y los ocho `setHoursDirty(true)` desaparecen: no hay nada que acordarse de prender.
+//
+// LA REGLA DE NORMALIZACIÓN, elegida y no improvisada: la huella cubre EXACTAMENTE lo que el
+// guardado persiste — lo que lee {@link buildSaveHoursPayload} (la bandera de día abierto y, por
+// bloque, horas, etiqueta, consultorio y servicios) más la configuración que escribe el UPDATE de
+// `businesses` (duración del turno y descanso). Ese criterio es el que cierra la clase de falla
+// "la huella dice limpio y el guardado igual cambiaría algo en la base".
+//
+// LO QUE QUEDA FUERA, con su motivo:
+//   · `id` — decide INSERT vs UPDATE, no QUÉ se guarda. Dos franjas con las mismas horas y los
+//     mismos servicios son la MISMA franja para el dueño; borrar una y volver a crearla idéntica no
+//     es un cambio que valga frenar una navegación. Incluirlo volvería "sucio" un estado que en
+//     pantalla es indistinguible del original, que es justo el defecto que este módulo viene a cerrar.
+//   · `error` — es el resultado de validar, no una intención del dueño (misma razón por la que
+//     `validateBlocks` nunca ensució nada).
+//
+// Y LO QUE NO IMPORTA EL ORDEN, también por un motivo concreto:
+//   · El orden de los BLOQUES dentro de un día. El dueño ve una lista FILTRADA por consultorio; el
+//     orden del arreglo completo es un subproducto de cómo lo reconstruye cada mutador (copiar un
+//     día deja primero los bloques de los otros consultorios) y de cómo vienen las filas de la base.
+//     Dos acomodos con las mismas franjas son el mismo horario.
+//   · El orden de los `service_ids`. Se van agregando en el orden en que el dueño toca los chips, y
+//     la tabla puente no tiene orden: mapear A y después B es el mismo mapeo que B y después A.
+// Se ORDENA en vez de deduplicar a un Set: dos franjas idénticas en el mismo día siguen siendo dos.
+
+/** La configuración de agenda que el mismo botón "Guardar horarios" persiste en `businesses`. */
+export type AgendaHoursConfig = {
+  slotDuration: number
+  bufferMinutes: number
+}
+
+/** Todo lo que "Guardar horarios" persiste, en una sola pieza comparable. */
+export type AgendaHoursModel<B extends AgendaBlockDraft = AgendaBlockDraft> = {
+  days: AgendaDayDraft<B>[]
+  config: AgendaHoursConfig
+}
+
+/**
+ * La huella canónica del editor: misma huella ⇒ guardar no cambiaría nada.
+ *
+ * Es una CADENA y no una estructura a propósito: compararla es una igualdad de strings, así que el
+ * call site no puede equivocarse con un deep-equal a mano, y el resultado es inspeccionable en un
+ * test sin recorrer nada. Molde: `configsEqual` de `lib/landing/editor-draft.ts`, que resolvió este
+ * mismo problema para el editor de la web (y por el mismo motivo: un lado puede venir de la base).
+ *
+ * Cada bloque se serializa con `JSON.stringify` de una TUPLA y no juntando los campos con un
+ * separador: una etiqueta que contenga el separador podría hacer colisionar dos bloques distintos.
+ */
+export function agendaHoursFingerprint<B extends AgendaBlockDraft>(model: AgendaHoursModel<B>): string {
+  const days = model.days.map(day => ({
+    enabled: day.enabled,
+    blocks: day.blocks
+      .map(block =>
+        JSON.stringify([
+          block.start_time ?? '',
+          block.end_time ?? '',
+          // Las mismas reglas que el payload: `''` y `'   '` son lo mismo que "no hay dato".
+          textOrNull(block.label) ?? '',
+          textOrNull(block.location_id) ?? '',
+          [...uniqueIds(block.service_ids)].sort(),
+        ]),
+      )
+      .sort(),
+  }))
+  return JSON.stringify({
+    days,
+    config: [model.config.slotDuration, model.config.bufferMinutes],
+  })
+}
+
+/**
+ * ¿Lo que el dueño tiene en pantalla difiere de lo último cargado o guardado?
+ *
+ * Los dos lados se normalizan igual, así que la respuesta es simétrica y no depende de cuál venga de
+ * la base. Es la fuente ÚNICA del indicador "Cambios sin guardar", del `beforeunload`, del guard de
+ * navegación interna y del sentinel que absorbe el atrás: los cuatro tienen que coincidir o alguno
+ * va a mentir.
+ */
+export function isAgendaHoursDirty<A extends AgendaBlockDraft, B extends AgendaBlockDraft>(
+  current: AgendaHoursModel<A>,
+  baseline: AgendaHoursModel<B>,
+): boolean {
+  return agendaHoursFingerprint(current) !== agendaHoursFingerprint(baseline)
+}

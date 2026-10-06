@@ -22,7 +22,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { buildDayEntries, computeOverlapFull, type DayEntry } from '@/lib/agenda-occupancy'
 import { servicesOfBlock } from '@/lib/time-block-services'
-import { buildDayStatesFromRows, buildSaveHoursPayload, isValidBlockTime, type AgendaBlockDraft, type AgendaDayDraft, type SavedAgendaBlock } from '@/lib/agenda-hours-payload'
+import { buildDayStatesFromRows, buildSaveHoursPayload, isAgendaHoursDirty, isValidBlockTime, type AgendaBlockDraft, type AgendaDayDraft, type AgendaHoursConfig, type AgendaHoursModel, type SavedAgendaBlock } from '@/lib/agenda-hours-payload'
 import { resolveVertical } from '@/lib/verticals'
 import { todayInAR } from '@/lib/booking-window'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
@@ -331,14 +331,15 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   //   · manual: congelarse durante el guardado sigue siendo POR CONTROL — el prop de deshabilitado
   //     atado a `savingHours` se pone en cada control, uno por uno. El control nuevo que lea de este
   //     objeto también lo necesita, y eso es lo único que hay que recordar.
-  const [hoursConfig, setHoursConfig] = useState({
+  const initialHoursConfig: AgendaHoursConfig = {
     slotDuration: business.default_slot_duration ?? 60,
     bufferMinutes: business.buffer_minutes ?? 0,
-  })
-  // Ensuciar PRIMERO y mergear después, con la misma forma que los seis mutadores de la grilla
-  // (`toggleDay`, `addBlock`, `removeBlock`, `updateBlock`, `toggleBlockService`, `applyCopyDay`).
-  function updateHoursConfig(patch: Partial<typeof hoursConfig>) {
-    setHoursDirty(true)
+  }
+  const [hoursConfig, setHoursConfig] = useState<AgendaHoursConfig>(initialHoursConfig)
+  // Ya NO hay que ensuciar a mano (NAV-09): "sucio" es la comparación contra el baseline, así que un
+  // campo nuevo en este objeto queda cubierto por el solo hecho de estar acá. Lo que sí sigue siendo
+  // manual es congelarse durante el guardado (la mitad "por control" de la regla de arriba).
+  function updateHoursConfig(patch: Partial<AgendaHoursConfig>) {
     setHoursConfig(prev => ({ ...prev, ...patch }))
   }
   // Consultorio activo en el editor de horarios. Con consultorios, arranca en el primero;
@@ -356,7 +357,12 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // de un filtro inline sobre las filas de la puente: ese filtro sería una SEGUNDA interpretación
   // de la regla del comodín, y dos interpretaciones es como el panel y el motor terminan diciendo
   // cosas distintas sobre la misma franja (AGENDA-02, P-07).
-  const [dayStates, setDayStates] = useState<DayConfig[]>(() =>
+  //
+  // La derivación está en una función y no inline porque tiene DOS consumidores: el estado editable
+  // y el BASELINE contra el que se compara (NAV-09). Que los dos salgan de la MISMA llamada es lo
+  // que garantiza que el editor arranque limpio — dos derivaciones distintas del mismo dato es
+  // exactamente cómo se llega a un indicador encendido desde el primer render.
+  const deriveInitialDays = () =>
     buildDayStatesFromRows(
       initialTimeBlocks.map(b => ({
         id: b.id,
@@ -368,17 +374,35 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
         service_ids: servicesOfBlock(b.id, initialTimeBlockServices),
       }))
     )
-  )
+  const [dayStates, setDayStates] = useState<DayConfig[]>(deriveInitialDays)
   const [savingHours, setSavingHours] = useState(false)
-  // ── El estado sucio del editor (D-03) ─────────────────────────────────────
+  // ── El estado sucio del editor: DISTINTO DEL BASELINE, no "toqué algo" (NAV-09) ──────────────
   // Con horarios, un input que quedó mal SE VE. Con el mapeo no: el dueño toca cuatro chips, se va
   // sin guardar, y la franja sigue en comodín — un estado visualmente IDÉNTICO a no haber
-  // configurado nada. Por eso los seis gestos que expresan intención del dueño (abrir/cerrar día,
-  // agregar bloque, quitar bloque, editar bloque, copiar día, togglear servicio) prenden esta
-  // bandera. `validateBlocks` NO la prende: marcar errores no es un cambio de intención, y un
-  // indicador que se prende solo miente — y un indicador que miente es peor que no tenerlo.
-  // El indicador visual vive al lado del botón de guardar, y `saveHours` es el ÚNICO que la apaga.
-  const [hoursDirty, setHoursDirty] = useState(false)
+  // configurado nada. De ahí que haga falta avisar. Lo que CAMBIÓ es cómo se decide que hay algo que
+  // avisar: antes eran ocho mutadores prendiendo una bandera (un latch por gesto), ahora es una
+  // COMPARACIÓN contra lo último cargado o guardado. Los dos motivos, en orden de importancia:
+  //   · el latch MENTÍA: prender un chip y volver a apagarlo lo dejaba encendido sobre un estado
+  //     idéntico al original, y un indicador que miente es peor que no tenerlo (es la misma regla
+  //     por la que `validateBlocks` nunca lo prendió);
+  //   · y con el botón ATRÁS frenando sobre esta misma bandera (NAV-10), cada gesto reflejo pediría
+  //     confirmación: cerrar un día para mirar a qué hora abre y volver ⇒ diálogo. El arreglo sería
+  //     peor que el bug. Por eso NAV-09 va PRIMERO.
+  // La comparación es pura y testeada (`isAgendaHoursDirty`), y cubre exactamente lo que el botón
+  // persiste: la regla de normalización y lo que queda afuera están escritos en su módulo.
+  //
+  // ⚠ EL BASELINE ES UNO SOLO PARA TODO EL NEGOCIO, NO UNO POR CONSULTORIO, y cambiar de sucursal
+  // (`activeLoc`) NO lo re-captura. `dayStates` tiene los 7 días de TODAS las sedes y el guardado
+  // manda el set completo (P-03): un baseline por sede diría "limpio" al cambiar de pestaña teniendo
+  // cambios sin guardar en la otra, el dueño se iría sin aviso y los perdería — justo el modo de
+  // falla que este indicador existe para cubrir. Cambiar de sucursal cambia lo que se MUESTRA, no el
+  // modelo.
+  const [hoursBaseline, setHoursBaseline] = useState<AgendaHoursModel<LocalBlock>>(() => ({
+    days: deriveInitialDays(),
+    config: initialHoursConfig,
+  }))
+  // Derivado, no estado: no hay forma de que quede desincronizado de lo que hay en pantalla.
+  const hoursDirty = isAgendaHoursDirty({ days: dayStates, config: hoursConfig }, hoursBaseline)
 
   // ── Avisar antes de perder los cambios de horarios ─────────────────────────
   // El indicador pasivo de arriba NO alcanza, y el motivo es de layout: vive a ~160 líneas de JSX
@@ -386,15 +410,11 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // botón Guardar, la grilla de 7 días en el medio) ⇒ en una pantalla real queda FUERA DE LA VISTA.
   // Lo reportó el dueño perdiendo un cambio de "Duración del turno" en producción.
   //
-  // Ojo con qué significa "sucio" acá: es estado sucio POR GESTO, no por diff contra el estado
-  // inicial. Prender un chip y volver a apagarlo deja la bandera encendida, así que el aviso puede
-  // aparecer aunque el estado final sea idéntico al que había. Es el comportamiento que el indicador
-  // ya tenía desde la fase 19 y este cambio NO lo toca: comparar contra un baseline es alcance nuevo.
-  //
-  // Las dos vías por las que se perdían los cambios se cubren distinto: la navegación INTERNA del
-  // panel la cubre el guard compartido (registrado con la línea de abajo), y recargar/cerrar la
-  // pestaña la cubre el beforeunload de acá. El botón ATRÁS del navegador NO queda cubierto — el
-  // porqué está en el docblock de components/dashboard/unsaved-changes-guard.tsx.
+  // Las TRES vías por las que se perdían los cambios se cubren distinto, y las tres leen la MISMA
+  // bandera de arriba: la navegación INTERNA del panel la cubre el guard compartido (registrado con
+  // la línea de abajo), recargar/cerrar la pestaña la cubre el `beforeunload` de acá, y el botón
+  // ATRÁS lo cubre el sentinel de historial que el mismo guard engancha (NAV-10, `lib/dirty-history.ts`)
+  // — el atrás es navegación client-side y por eso el `beforeunload` nunca lo cubrió.
   useUnsavedChanges(hoursDirty)
   const requestNavigation = useNavigationGuard()
 
@@ -453,7 +473,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // abrir = agregar un bloque por defecto de ese consultorio. Los bloques de otros consultorios
   // del mismo día no se tocan. enabled = hay algún bloque (de cualquier consultorio) ese día.
   function toggleDay(day: number) {
-    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const dayBlocks = next[day].blocks
@@ -467,7 +486,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }
 
   function addBlock(day: number) {
-    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const locBlocks = next[day].blocks.filter(b => (b.location_id || '') === activeLoc)
@@ -483,7 +501,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }
 
   function removeBlock(day: number, idx: number) {
-    setHoursDirty(true)
     // Los índices de las franjas que siguen se corren, así que una clave de colapso guardada pasaría
     // a apuntar a OTRA franja: se limpia el Set entero en vez de reindexarlo.
     setExpandedChips(new Set())
@@ -498,7 +515,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // Con el cupo afuera, TODOS los campos que se editan por acá son texto (hora, hora, etiqueta,
   // consultorio): el tipo del valor se angosta a cadena para que no vuelva a entrar un número.
   function updateBlock(day: number, idx: number, field: keyof LocalBlock, value: string) {
-    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const blocks = [...next[day].blocks]
@@ -514,7 +530,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   // NO persiste nada: D-03 fija "editá y después guardá" con un solo botón, y además sobre un
   // bloque recién agregado no habría a qué mapear porque todavía no tiene id en la base.
   function toggleBlockService(day: number, idx: number, serviceId: string) {
-    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       const blocks = [...next[day].blocks]
@@ -574,7 +589,6 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     // Copia SOLO los bloques del consultorio activo del día origen; en los destinos reemplaza
     // los de ese consultorio y conserva los de los demás.
     const src = dayStates[copyDay].blocks.filter(b => (b.location_id || '') === activeLoc)
-    setHoursDirty(true)
     setDayStates(prev => {
       const next = [...prev]
       for (const d of copyTargets) {
@@ -620,8 +634,8 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     // "Agregar bloque", el toggle de día, "Copiar a otros días" y cada chip de servicio. Sin eso,
     // todo lo que el dueño toque mientras la llamada está en vuelo se PIERDE sin ruido: cuando el
     // RPC vuelve, este handler re-deriva el estado de las filas que devolvió la base (P-01, abajo)
-    // —un reemplazo, no un merge— y encima apaga `hoursDirty`, o sea que borra también la única
-    // señal de que algo quedaba pendiente. El resultado es un mapeo que desaparece y cae en
+    // —un reemplazo, no un merge— y encima re-captura el baseline, o sea que `hoursDirty` se apaga y
+    // borra también la única señal de que algo quedaba pendiente. El resultado es un mapeo que desaparece y cae en
     // comodín, un estado visualmente idéntico a "nunca se configuró": exactamente el modo de falla
     // que la migr. 074 cerró del lado de la base.
     //
@@ -631,11 +645,17 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
     //
     // La regla, por encima de esa enumeración: TODO lo que este botón persiste —los bloques de la
     // grilla y el objeto de configuración declarado arriba— tiene que (a) ensuciar el estado y
-    // (b) congelarse mientras la llamada está en vuelo. La primera mitad la garantiza la estructura
-    // (un solo camino de escritura al objeto); la segunda es por control y hay que ponerla a mano.
+    // (b) congelarse mientras la llamada está en vuelo. La primera mitad ya no hay que recordarla:
+    // desde NAV-09 la ensucia la COMPARACIÓN contra el baseline, así que un campo nuevo queda
+    // cubierto por estar en el modelo; la segunda sigue siendo por control y hay que ponerla a mano.
     // Enumerar en vez de derivar la regla es lo que dejó afuera a la duración del turno y al
     // descanso entre turnos hasta el audit visual de la fase.
     setSavingHours(true)
+    // La configuración que viaja se CONGELA acá, en una constante, y es la misma que después pasa a
+    // ser el baseline: así "lo que se guardó" y "contra qué se compara" no pueden divergir ni siquiera
+    // en teoría. Los controles ya están deshabilitados por `savingHours`, así que esto es un candado
+    // de más, no el único.
+    const configGuardada = hoursConfig
     try {
       // ⚠ El set que viaja es COMPLETO: los 7 días con TODOS sus bloques, de todos los
       // consultorios. La base borra del negocio lo que no venga en el payload, así que armarlo con
@@ -670,8 +690,13 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       // #1 seguiría sin id en memoria y el guardado #2 lo volvería a INSERTAR: cada franja nueva,
       // duplicada. Se usa la MISMA función que el inicializador, así que no hay dos derivaciones
       // del mismo estado que puedan divergir.
-      setDayStates(buildDayStatesFromRows((data ?? []) as SavedAgendaBlock[]))
-      setHoursDirty(false)
+      const diasGuardados = buildDayStatesFromRows((data ?? []) as SavedAgendaBlock[])
+      setDayStates(diasGuardados)
+      // El baseline de los DÍAS se re-captura con lo que devolvió la base —no con lo que había en
+      // pantalla—, así que si el guardado normalizó algo (un bloque sin sede que se descarta, una
+      // hora con segundos) el editor queda limpio contra la verdad y no contra lo que el dueño tipeó.
+      // La config NO se toca todavía: su UPDATE es una llamada aparte y puede fallar.
+      setHoursBaseline(prev => ({ days: diasGuardados, config: prev.config }))
       toast.success('Horarios guardados')
       // La duración del turno y el descanso quedan FUERA de la transacción a propósito: no
       // participan de ninguna invariante con el mapeo —nadie puede observar un estado inconsistente
@@ -680,18 +705,23 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
       // este UPDATE no chequeaba su error, así que podía fallar MUDO y el dueño se iba creyendo que
       // había configurado (T-19-27).
       const { error: bizError } = await supabase.from('businesses')
-        .update({ default_slot_duration: hoursConfig.slotDuration, buffer_minutes: hoursConfig.bufferMinutes })
+        .update({ default_slot_duration: configGuardada.slotDuration, buffer_minutes: configGuardada.bufferMinutes })
         .eq('id', business.id)
       if (bizError) {
         console.error('[agenda/save-hours] duración/descanso:', bizError.code)
-        // Se vuelve a prender la señal: el `setHoursDirty(false)` de arriba es correcto para el RPC
-        // (los horarios SÍ se guardaron), pero si este UPDATE falla queda configuración sin
-        // persistir y el dueño se iría sin ningún indicador — justo el modo de falla que el
-        // indicador existe para cubrir. Así la pantalla no contradice al toast.
-        setHoursDirty(true)
+        // NO se re-captura el baseline de la config, y eso es TODO lo que hace falta para que la
+        // señal quede encendida: el baseline sigue teniendo la config vieja, la pantalla tiene la
+        // nueva, y la comparación da sucio sola. Antes acá había que volver a prender la bandera a
+        // mano (y acordarse de por qué); con el baseline, "no persistió ⇒ sigue sucio" es la
+        // consecuencia de no hacer nada. Si no fuera así, el dueño se iría sin ningún indicador —
+        // justo el modo de falla que el indicador existe para cubrir — y la pantalla contradiría al
+        // toast.
         // La copy dice la verdad completa: los horarios SÍ quedaron guardados.
         toast.error('Los horarios se guardaron, pero no se pudo guardar la duración del turno ni el descanso entre turnos. Probá de nuevo.')
+        return
       }
+      // La config SÍ se persistió: recién acá pasa a ser baseline y el editor queda limpio.
+      setHoursBaseline(prev => ({ ...prev, config: configGuardada }))
     } finally {
       // `finally` y no una línea antes de cada `return`: el botón tiene que volver pase lo que pase,
       // incluida una excepción de red, o el guardado queda muerto hasta recargar.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildSaveHoursPayload, buildDayStatesFromRows, isValidBlockTime } from '@/lib/agenda-hours-payload'
-import type { AgendaBlockDraft, AgendaDayDraft, SavedAgendaBlock } from '@/lib/agenda-hours-payload'
+import { buildSaveHoursPayload, buildDayStatesFromRows, isAgendaHoursDirty, isValidBlockTime } from '@/lib/agenda-hours-payload'
+import type { AgendaBlockDraft, AgendaDayDraft, AgendaHoursConfig, AgendaHoursModel, SavedAgendaBlock } from '@/lib/agenda-hours-payload'
 
 // ── Phase 19 (el panel de la agenda por servicio) — tests puros de lib/agenda-hours-payload.ts ──
 // Espejan test/time-block-services.test.ts: describe/it/expect, import desde @/lib/..., SIN Supabase
@@ -211,5 +211,140 @@ describe('isValidBlockTime — la forma de la hora, antes del orden', () => {
     // volvió a confiar el chequeo al orden lexicográfico.
     expect('18:00' <= '').toBe(false)
     expect(isValidBlockTime('')).toBe(false)
+  })
+})
+
+// ── NAV-09 — "cambios sin guardar" = DISTINTO DEL BASELINE, no "toqué algo" ─────────────────────
+// Es el corazón de los tres requisitos del quick 261006-flm: el indicador, el `beforeunload` y el
+// sentinel que absorbe el atrás leen esta misma comparación. El caso que hoy FALLABA es "tocar y
+// deshacer ⇒ limpio": con el latch por gesto quedaba sucio sobre un estado idéntico al original, y
+// con el atrás interceptado eso significa un diálogo por cada gesto reflejo.
+
+const CONFIG_BASE: AgendaHoursConfig = { slotDuration: 60, bufferMinutes: 0 }
+
+function model(days: AgendaDayDraft[], config: AgendaHoursConfig = CONFIG_BASE): AgendaHoursModel {
+  return { days, config }
+}
+
+describe('isAgendaHoursDirty — la comparación contra el baseline (NAV-09)', () => {
+  it('sin tocar nada ⇒ limpio', () => {
+    const base = model(week({ 1: [draft()] }))
+    expect(isAgendaHoursDirty(model(week({ 1: [draft()] })), base)).toBe(false)
+  })
+
+  it('EL CASO QUE HOY FALLA: prender un chip y volver a apagarlo ⇒ limpio', () => {
+    const base = model(week({ 1: [draft({ service_ids: [] })] }))
+    const prendido = model(week({ 1: [draft({ service_ids: ['s1'] })] }))
+    const apagado = model(week({ 1: [draft({ service_ids: [] })] }))
+    expect(isAgendaHoursDirty(prendido, base)).toBe(true)
+    expect(isAgendaHoursDirty(apagado, base)).toBe(false)
+  })
+
+  it('abrir un día cerrado y volver a cerrarlo ⇒ limpio (el gesto reflejo del diagnóstico)', () => {
+    // Es el gesto medido: se despliega el lunes para mirar a qué hora abre y se vuelve. Con el latch
+    // por gesto, dos backs seguidos daban dos diálogos.
+    const base = model(week({}))
+    const abierto = model(week({ 1: [draft()] }))
+    expect(isAgendaHoursDirty(abierto, base)).toBe(true)
+    expect(isAgendaHoursDirty(model(week({})), base)).toBe(false)
+  })
+
+  it('cerrar un día que TENÍA bloques y reabrirlo sigue sucio, y es la verdad', () => {
+    // Cerrar destruye los bloques; reabrir agrega uno POR DEFECTO, que no es el que había. El estado
+    // final es de verdad distinto, así que el aviso corresponde: la comparación no puede mentir a
+    // favor nuestro.
+    const base = model(week({ 1: [draft({ start_time: '10:00', end_time: '19:00' })] }))
+    const reabierto = model(week({ 1: [draft({ start_time: '09:00', end_time: '18:00' })] }))
+    expect(isAgendaHoursDirty(reabierto, base)).toBe(true)
+  })
+
+  it('un cambio real de hora ⇒ sucio', () => {
+    const base = model(week({ 1: [draft({ start_time: '09:00' })] }))
+    expect(isAgendaHoursDirty(model(week({ 1: [draft({ start_time: '09:30' })] })), base)).toBe(true)
+  })
+
+  it('guardar = re-capturar el baseline ⇒ limpio', () => {
+    const editado = model(week({ 1: [draft({ end_time: '20:00' })] }))
+    expect(isAgendaHoursDirty(editado, editado)).toBe(false)
+  })
+
+  it('la configuración (duración y descanso) también ensucia, sin tocar la grilla', () => {
+    const dias = week({ 1: [draft()] })
+    const base = model(dias, { slotDuration: 60, bufferMinutes: 0 })
+    expect(isAgendaHoursDirty(model(dias, { slotDuration: 30, bufferMinutes: 0 }), base)).toBe(true)
+    expect(isAgendaHoursDirty(model(dias, { slotDuration: 60, bufferMinutes: 15 }), base)).toBe(true)
+    expect(isAgendaHoursDirty(model(dias, { slotDuration: 60, bufferMinutes: 0 }), base)).toBe(false)
+  })
+
+  it('el ORDEN de los bloques del día no es un cambio', () => {
+    const a = draft({ start_time: '09:00', end_time: '13:00', location_id: 'loc-a' })
+    const b = draft({ start_time: '15:00', end_time: '19:00', location_id: 'loc-b' })
+    const base = model(week({ 1: [a, b] }))
+    // Copiar un día deja primero los bloques de los OTROS consultorios: el acomodo cambia sin que
+    // cambie el horario.
+    expect(isAgendaHoursDirty(model(week({ 1: [b, a] })), base)).toBe(false)
+  })
+
+  it('el ORDEN de los servicios de una franja no es un cambio', () => {
+    const base = model(week({ 1: [draft({ service_ids: ['s1', 's2'] })] }))
+    expect(isAgendaHoursDirty(model(week({ 1: [draft({ service_ids: ['s2', 's1'] })] })), base)).toBe(false)
+  })
+
+  it('dos franjas idénticas en el mismo día siguen siendo DOS', () => {
+    const base = model(week({ 1: [draft()] }))
+    expect(isAgendaHoursDirty(model(week({ 1: [draft(), draft()] })), base)).toBe(true)
+  })
+
+  it('el `id` queda fuera: borrar una franja y recrearla idéntica no es un cambio', () => {
+    const base = model(week({ 1: [draft({ id: 'blk-1' })] }))
+    expect(isAgendaHoursDirty(model(week({ 1: [draft()] })), base)).toBe(false)
+  })
+
+  it('el error de validación queda fuera: marcar errores no es una intención del dueño', () => {
+    const base = model(week({ 1: [draft()] }))
+    const marcado = model(week({ 1: [{ ...draft(), error: 'La hora fin debe ser mayor a la hora inicio' } as AgendaBlockDraft] }))
+    expect(isAgendaHoursDirty(marcado, base)).toBe(false)
+  })
+
+  it('etiqueta y consultorio se comparan con la MISMA regla que el payload (trim)', () => {
+    const base = model(week({ 1: [draft({ label: 'Mañana', location_id: 'loc-a' })] }))
+    expect(isAgendaHoursDirty(model(week({ 1: [draft({ label: '  Mañana  ', location_id: 'loc-a' })] })), base)).toBe(false)
+    // Y una etiqueta sólo de espacios es lo mismo que no tener etiqueta, igual que al guardar.
+    const sinEtiqueta = model(week({ 1: [draft({ label: '', location_id: 'loc-a' })] }))
+    expect(isAgendaHoursDirty(model(week({ 1: [draft({ label: '   ', location_id: 'loc-a' })] })), sinEtiqueta)).toBe(false)
+  })
+
+  it('un separador dentro de la etiqueta no puede hacer colisionar dos bloques distintos', () => {
+    const a = model(week({ 1: [draft({ label: 'a|b', location_id: '' })] }))
+    const b = model(week({ 1: [draft({ label: 'a', location_id: 'b' })] }))
+    expect(isAgendaHoursDirty(a, b)).toBe(true)
+  })
+
+  it('el BASELINE es del negocio entero: un cambio en OTRA sede sigue sucio', () => {
+    // Es la decisión de `activeLoc`: cambiar de pestaña muestra otra grilla, no re-captura nada. Un
+    // baseline por sede diría "limpio" y el dueño perdería los cambios de la sede que no está viendo.
+    const base = model(week({ 1: [draft({ location_id: 'loc-a' }), draft({ location_id: 'loc-b' })] }))
+    const tocoLaB = model(week({ 1: [draft({ location_id: 'loc-a' }), draft({ location_id: 'loc-b', end_time: '21:00' })] }))
+    expect(isAgendaHoursDirty(tocoLaB, base)).toBe(true)
+  })
+
+  it('la ida y vuelta por la base deja limpio: HH:MM:SS y null normalizan igual', () => {
+    // Lo que devuelve el RPC pasa por `buildDayStatesFromRows` y ES el baseline nuevo; si la
+    // normalización de los dos lados no coincidiera, el editor quedaría sucio justo DESPUÉS de
+    // guardar con éxito.
+    const guardado = buildDayStatesFromRows([row({ start_time: '09:00:00', end_time: '13:00:00' })])
+    const base = model(guardado)
+    expect(isAgendaHoursDirty(model(buildDayStatesFromRows([row()])), base)).toBe(false)
+  })
+
+  it('la huella cubre lo que el payload LEE: el día apagado con bloques no pasa por limpio', () => {
+    // `buildSaveHoursPayload` saltea los días con `enabled: false`, así que la bandera es un input
+    // del guardado y la comparación la tiene que ver. Si no, habría un estado "la huella dice limpio
+    // y guardar igual cambiaría la base".
+    const prendido: AgendaDayDraft[] = week({ 1: [draft()] })
+    const apagado: AgendaDayDraft[] = prendido.map((d, i) => (i === 1 ? { ...d, enabled: false } : d))
+    expect(buildSaveHoursPayload(prendido, { hasLocations: false }).length).toBe(1)
+    expect(buildSaveHoursPayload(apagado, { hasLocations: false }).length).toBe(0)
+    expect(isAgendaHoursDirty(model(apagado), model(prendido))).toBe(true)
   })
 })
