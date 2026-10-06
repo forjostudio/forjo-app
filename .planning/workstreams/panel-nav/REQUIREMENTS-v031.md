@@ -57,6 +57,19 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 
 - [ ] **MOB-07**: En desktop **no cambia nada** (D-02).
 
+### Heredado de v0.30
+
+- [ ] **MOB-08** (ex **NAV-03**): Los tabs de `/negocio` y `/settings` viven en la URL: el atrás vuelve
+      al tab anterior y el tab se puede compartir y recargar.
+- [ ] **MOB-09** (ex **NAV-04**): Ídem los de `/finances`, y el botón de alta sigue correspondiendo al
+      tab visible.
+
+⚠ **Vinieron de la Phase 2 de v0.30, sin ejecutar.** Se difirieron **a propósito**: la política de
+atrás pasa de **un nivel** a **dos** con este rediseño, y escribir los tabs contra la política vieja
+era trabajo para rehacer. Su análisis ya está hecho —incluidas las trampas T-1 y T-2 de
+`REQUIREMENTS.md` (los 5 rutas que comparten `settings-client.tsx`, y el `replaceState` del retorno del
+OAuth que borraría el tab de la URL)— y sigue siendo válido.
+
 ## ⚠ Advertencia sobre MOB-05, para decidir con los ojos abiertos
 
 Retener el atrás cuando **no hay nada que perder** es intrusivo en una pestaña de navegador, y es el
@@ -76,7 +89,7 @@ explícitamente**, no asumirlo.
 | El sidebar de desktop | D-02 |
 | Convertir el panel en PWA instalable | Es otra decisión, aunque MOB-05 la haga atractiva |
 | Rediseñar las pantallas en sí | Esto es navegación, no contenido |
-| Los tabs en la URL (Phase 2 de v0.30) | Queda pendiente; se decide después de este rediseño porque la navegación cambia |
+| — | — |
 | Migraciones | Nada de esto toca datos. Próxima libre: **042** |
 
 ## Traceability

@@ -142,13 +142,30 @@ Salieron de medir el código el 2026-09-28, no de suponer:
 
 | Requisito | Fase | Estado |
 |---|---|---|
-| NAV-01 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
-| NAV-02 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
-| NAV-03 | Phase 2 | Pending |
-| NAV-04 | Phase 2 | Pending |
-| NAV-05 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
-| NAV-07 | Phase 1 (cierre de gaps) | Ejecutado (01-03) · **UAT en celular pendiente** |
-| NAV-08 | Phase 1 (cierre de gaps) | Ejecutado (01-03) · **UAT en celular pendiente** |
-| NAV-06 | Phase 1 | Ejecutado · verificación 0 gaps · **UAT en celular pendiente** |
+| NAV-01 | Phase 1 | ✅ Completo — UAT en celular PASS |
+| NAV-02 | Phase 1 | ✅ Completo — UAT en celular PASS |
+| NAV-03 | **DIFERIDO a v0.31** | Pending — ver nota |
+| NAV-04 | **DIFERIDO a v0.31** | Pending — ver nota |
+| NAV-05 | Phase 1 | ✅ Completo — UAT en celular PASS |
+| NAV-07 | Phase 1 (cierre de gaps) | ✅ Completo — UAT en celular PASS |
+| NAV-08 | Phase 1 (cierre de gaps) | ✅ Completo — UAT en celular PASS |
+| NAV-06 | Phase 1 | ✅ Completo — UAT en celular PASS |
 
 **Coverage:** 6 requisitos · mapeados a fases: 6/6 (ROADMAP.md, 2026-09-28) · sin mapear: 0
+
+## ⚠ Por qué NAV-03/NAV-04 se difieren a v0.31 (2026-10-06)
+
+La Phase 2 —los tabs de `/negocio`, `/settings` y `/finances` en la URL— **no se ejecutó, y es una
+decisión, no un olvido.**
+
+El dueño pidió rediseñar la navegación mobile con **barra inferior + sección "Más"** (milestone v0.31,
+ver `REQUIREMENTS-v031.md`). Ese rediseño **redefine la política de atrás**: hoy es de **un nivel**
+(una sola sección encima del dashboard) y pasa a ser de **dos** (Inicio → Más → sección).
+
+Los tabs en la URL son independientes del rediseño, **pero la regla que los gobierna no**. Hacerlos
+ahora significaría escribirlos contra una política que está por cambiar. Se difieren para definir la
+política **una sola vez**.
+
+**v0.30 cierra con lo que entregó**, que es más de lo que su roadmap original planteaba: a los 6
+requisitos iniciales se sumaron NAV-07/08 (del cierre de gaps) y NAV-09/10/11 (el aviso de cambios sin
+guardar), los cinco verificados en celular real.
