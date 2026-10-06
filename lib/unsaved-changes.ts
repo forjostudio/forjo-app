@@ -43,34 +43,47 @@ export function decideNavigation(input: { dirty: boolean; href: string | null; c
 /**
  * Cómo entra en el historial la navegación que el dueño confirmó después del aviso (NAV-11).
  *
- * **El bug que cierra, y que existe HOY sin relación con el atrás:** la continuación hacía
- * `router.push` SIEMPRE, ignorando la regla de secciones del panel (`panelNavMode`,
- * `lib/panel-history.ts`). O sea que salir de Agenda por el menú con cambios sin guardar dejaba
- * Agenda DEBAJO del destino y el atrás caía ahí en vez de en el dashboard — rompiendo NAV-07 sólo
- * para quien pasó por el diálogo. La regla no se re-decide acá: se CONSUME la del sidebar.
+ * **El bug que cierra, y que existe sin relación con el atrás:** la continuación hacía `router.push`
+ * SIEMPRE, ignorando la regla de secciones del panel (`panelNavMode`, `lib/panel-history.ts`). O sea
+ * que salir de Agenda por el menú con cambios sin guardar dejaba Agenda DEBAJO del destino y el atrás
+ * caía ahí en vez de en el dashboard — rompiendo NAV-07 sólo para quien pasó por el diálogo. La regla
+ * no se re-decide acá: se CONSUME la del sidebar.
  *
- * **Y la segunda mitad, que es la del sentinel:** si hay un sentinel de cambios sin guardar arriba
- * del stack (`lib/dirty-history.ts`), la continuación tiene que `replace` ENCIMA DE ÉL cualquiera
- * sea la regla de secciones. Está MEDIDO:
- *   · `push` deja el sentinel vivo abajo del destino ⇒ el primer atrás aterriza en una entrada
- *     MUERTA (la misma URL con nuestro hash) y hace falta un segundo atrás para llegar a algún lado;
- *   · `replace` encima del sentinel deja el destino bien y UN SOLO atrás vuelve a la pantalla de
- *     origen — que es exactamente lo que `push` habría conseguido si el sentinel no existiera,
- *     porque el sentinel es una entrada parásita que vive justo arriba de la entrada real.
- * Encadenar un `back()` con la navegación —la otra forma de sacarse el sentinel de encima— está
- * medido como ROTO: `history.back()` es asíncrono y la navegación encadenada se pierde.
+ * **Y la segunda mitad, que es la del sentinel, y que es lo que el quick 261006-iey corrige.** Si hay
+ * un sentinel de cambios sin guardar arriba del stack (`lib/dirty-history.ts`), el modo de sección NO
+ * se puede aplicar tal cual: cae sobre la entrada EQUIVOCADA. Las tres formas están MEDIDAS con
+ * `Page.getNavigationHistory` (entradas + índice actual), sobre `[…, /dashboard, /agenda,
+ * /agenda#sin-guardar]` saliendo hacia `/finances` (sección→sección ⇒ `replace`):
  *
- * **El límite aceptado, igual al que ya documenta `panelNavMode` para las entradas de overlay:**
- * cuando la regla de secciones pedía `replace` y hay sentinel, el reemplazo cae sobre el sentinel y
- * no sobre la entrada de la sección, así que quedan dos secciones encima del dashboard. Es mejor que
- * un atrás muerto, y pelearlo exigiría consumir dos entradas en cadena.
+ *   · **`push`** (lo que había antes de NAV-11) deja el sentinel VIVO abajo del destino ⇒ el primer
+ *     atrás aterriza en una entrada MUERTA (la misma URL con nuestro hash).
+ *   · **`replace` encima del sentinel** (NAV-11, primera versión) deja `[…, /dashboard, /agenda,
+ *     /finances]`: el destino queda bien, pero la entrada de `/agenda` **sigue abajo** y el atrás cae
+ *     AHÍ en vez del dashboard. MEDIDO, y es exactamente lo que el dueño rechazó en la UAT del celular
+ *     (*"puse atrás y me mandó a Agenda, no a Dashboard"*). Era un límite declarado como aceptado; no
+ *     lo era, porque NAV-07 existe para que ese atrás caiga en el dashboard.
+ *   · **consumir el sentinel y RECIÉN ENTONCES aplicar el modo de sección** deja
+ *     `[…, /dashboard, /finances]` con el atrás cayendo en el dashboard. Es lo que se devuelve.
+ *
+ * ⚠ **Por qué es un PLAN de dos pasos y no un modo:** consumir es `history.back()`, que es
+ * ASÍNCRONO. Encadenar el `back()` con la navegación en el mismo tick está medido como ROTO (la
+ * navegación se pierde y el dueño se queda donde estaba). El segundo paso tiene que salir del
+ * `popstate` del primero — el mismo encadenamiento de dos pasos que `dirtyLeavePlan` ya usa para la
+ * salida por el atrás. Esta función sólo dice QUÉ hay que hacer; el cómo (y el orden) vive en
+ * `components/dashboard/unsaved-changes-guard.tsx`.
+ *
+ * El `consume-then-push` no es simetría de adorno: con el modo `push` (sección→dashboard) reemplazar
+ * sobre el sentinel daba el mismo resultado observable, pero dejaba el sentinel como entrada de
+ * FORWARD. Consumiendo primero, el `push` la trunca y no queda nada muerto adelante.
  */
 export type LeaveNavMode = 'push' | 'replace'
 
-export function leaveNavigationMode(input: {
+export type LeaveNavPlan = LeaveNavMode | 'consume-then-push' | 'consume-then-replace'
+
+export function leaveNavigationPlan(input: {
   holdsSentinel: boolean
   sectionMode: LeaveNavMode
-}): LeaveNavMode {
-  if (input.holdsSentinel) return 'replace'
-  return input.sectionMode
+}): LeaveNavPlan {
+  if (!input.holdsSentinel) return input.sectionMode
+  return input.sectionMode === 'replace' ? 'consume-then-replace' : 'consume-then-push'
 }

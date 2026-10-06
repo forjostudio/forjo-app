@@ -55,7 +55,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
-import { decideNavigation, leaveNavigationMode } from '@/lib/unsaved-changes'
+import { decideNavigation, leaveNavigationPlan, type LeaveNavMode } from '@/lib/unsaved-changes'
 import { isDirtyOwnedEntry, useDirtyHistory } from '@/lib/dirty-history'
 import { panelNavMode } from '@/lib/panel-history'
 import { Button } from '@/components/ui/button'
@@ -72,11 +72,14 @@ type GuardApi = {
   // La llama el NAV, y también el sentinel del atrás con `href: null`. Devuelve true si BLOQUEÓ (el
   // call-site tiene que cancelar su navegación).
   requestNavigation: (href: string | null, proceed?: () => void) => boolean
+  // "Hay una salida confirmada EN CURSO". Lo lee `useUnsavedChanges` para apagarle la bandera al
+  // sentinel y que sea ÉL quien consuma su entrada — el primer paso de la continuación de NAV-11.
+  leaving: boolean
 }
 
 // Default no-op: fuera del provider el guard NUNCA bloquea. Mismo criterio que el DEFAULT de
 // `lib/use-terminology.tsx` — un consumidor sin provider sigue funcionando, sólo que sin guard.
-const DEFAULT: GuardApi = { setDirty: () => {}, requestNavigation: () => false }
+const DEFAULT: GuardApi = { setDirty: () => {}, requestNavigation: () => false, leaving: false }
 
 const UnsavedChangesContext = createContext<GuardApi>(DEFAULT)
 
@@ -87,11 +90,33 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
   const dirtyRef = useRef(false)
   // Esto SÍ es estado: es lo que abre el diálogo.
   const [pending, setPending] = useState<PendingNavigation | null>(null)
+  // ── La salida en curso (NAV-11, segunda vuelta) ───────────────────────────────────────────────
+  // `leaving` es ESTADO y no un ref porque lo tiene que VER el sentinel (abajo, en
+  // `useUnsavedChanges`): apagarle su bandera sucia es lo que hace que `lib/dirty-history.ts` consuma
+  // su PROPIA entrada, con su propia guarda de marca. Este archivo no toca el historial por su
+  // cuenta: hacerlo sería un segundo `back()` sin guarda, que es la cicatriz 2 del repo.
+  // Se enciende en `confirmLeave` y se apaga en `setDirty(false)` — o sea cuando la pantalla que se
+  // estaba dejando se desmonta o se declara limpia. El por qué de ESE momento está en `setDirty`.
+  const [leaving, setLeaving] = useState(false)
+  // El destino de esa salida. Ref y no estado: lo lee el listener del `popstate` del consumo, que
+  // necesita el valor fresco del tick anterior y no re-suscribirse por él.
+  const leaveTargetRef = useRef<{ href: string; mode: LeaveNavMode } | null>(null)
   const pathname = usePathname()
   const router = useRouter()
 
   const setDirty = useCallback((dirty: boolean) => {
     dirtyRef.current = dirty
+    // ⚠ ACÁ TERMINA LA SALIDA EN CURSO, y el momento está elegido. Una pantalla llama a esto con
+    // `false` cuando se DESMONTA (su cleanup) o cuando ya no tiene nada que perder: las dos cosas
+    // significan que no queda nadie que pueda re-armar un sentinel encima del destino al que estamos
+    // navegando. Apagarlo antes —por ejemplo en el `popstate`, o en un efecto sobre `pathname`— deja
+    // una ventana en la que la pantalla vieja sigue montada y sucia, y el sentinel vuelve a empujarse
+    // justo arriba del destino. (Y el efecto sobre `pathname` además viola
+    // `react-hooks/set-state-in-effect`, que el repo trata como error.)
+    if (!dirty) {
+      leaveTargetRef.current = null
+      setLeaving(false)
+    }
   }, [])
 
   const requestNavigation = useCallback(
@@ -116,9 +141,9 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
   // continuación la aporta quien absorbió la entrada (`lib/dirty-history.ts`).
   //
   // Sin `proceed` el destino se navega acá, y CÓMO entra en el historial no se decide en este
-  // archivo: lo decide `leaveNavigationMode` sobre la regla de secciones del panel (`panelNavMode`,
+  // archivo: lo decide `leaveNavigationPlan` sobre la regla de secciones del panel (`panelNavMode`,
   // la MISMA que consume el sidebar en su `<Link replace>`) más la pregunta de si hay un sentinel
-  // arriba del stack. Las dos mitades están justificadas en el docblock de `leaveNavigationMode`;
+  // arriba del stack. Las dos mitades están justificadas en el docblock de `leaveNavigationPlan`;
   // acá alcanza con no re-decidir nada. NUNCA `redirect()`: lanza NEXT_REDIRECT y dispara un toast
   // espurio (precedente del CRM).
   function confirmLeave() {
@@ -132,7 +157,7 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
     // Defensa de forma: la variante sin destino siempre trae `proceed`, así que esto no debería
     // ocurrir — y si ocurriera, no hay nada honesto que navegar.
     if (nav.href === null) return
-    const mode = leaveNavigationMode({
+    const plan = leaveNavigationPlan({
       // Se re-verifica la marca EN EL MOMENTO del click y no al abrir el diálogo: entre las dos cosas
       // pudo haber una escritura ajena (el `replace` del sidebar, el `replaceState` crudo de Agenda)
       // que se llevó el sentinel. Es la misma guarda que `lib/overlay-history.ts` pone antes de cada
@@ -140,12 +165,39 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
       holdsSentinel: isDirtyOwnedEntry(window.history.state),
       sectionMode: panelNavMode({ from: pathname, to: nav.href.split(/[?#]/)[0] }),
     })
-    if (mode === 'replace') router.replace(nav.href)
-    else router.push(nav.href)
+    // Sin sentinel el destino se navega EN EL ACTO, con la regla de secciones tal cual.
+    if (plan === 'push') { router.push(nav.href); return }
+    if (plan === 'replace') { router.replace(nav.href); return }
+    // Con sentinel hay que consumirlo PRIMERO (si no, el reemplazo cae sobre el sentinel y la entrada
+    // de la sección queda abajo: el atrás vuelve a la sección que el dueño acaba de dejar, que es el
+    // fallo que reportó en la UAT). Y el consumo NO se hace acá: se APAGA la bandera del sentinel y
+    // lo consume su propio módulo, con su guarda de marca. La navegación se encadena desde el
+    // `popstate` de ese consumo (el efecto de abajo), nunca en este mismo tick: `history.back()` es
+    // asíncrono y encadenarlo a mano está medido como roto.
+    leaveTargetRef.current = { href: nav.href, mode: plan === 'consume-then-replace' ? 'replace' : 'push' }
+    setLeaving(true)
   }
 
+  // ── Segundo paso de la continuación: navegar cuando el sentinel YA se consumió ────────────────
+  // El listener se instala en el MISMO commit en el que el sentinel pide su `back()` — los efectos
+  // del hijo (la pantalla sucia) corren antes que los del padre, y el `popstate` llega en un task
+  // posterior, así que no hay forma de perdérselo.
+  useEffect(() => {
+    if (!leaving) return
+    const onPop = () => {
+      const target = leaveTargetRef.current
+      leaveTargetRef.current = null
+      // Sin destino no hay nada que completar: el pop no es nuestro (o ya navegamos).
+      if (!target) return
+      if (target.mode === 'replace') router.replace(target.href)
+      else router.push(target.href)
+    }
+    window.addEventListener('popstate', onPop, { once: true })
+    return () => window.removeEventListener('popstate', onPop)
+  }, [leaving, router])
+
   return (
-    <UnsavedChangesContext.Provider value={{ setDirty, requestNavigation }}>
+    <UnsavedChangesContext.Provider value={{ setDirty, requestNavigation, leaving }}>
       {children}
 
       {/* El diálogo lo renderiza el PROVIDER, no cada página: es lo que permite que el sidebar
@@ -191,7 +243,7 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
 // —ocho mutadores prendiéndolo, uno de ellos abrir o cerrar un día— cada gesto reflejo habría pedido
 // confirmación: ahí el arreglo era peor que el bug, y por eso NAV-09 fue primero.
 export function useUnsavedChanges(dirty: boolean) {
-  const { setDirty, requestNavigation } = useContext(UnsavedChangesContext)
+  const { setDirty, requestNavigation, leaving } = useContext(UnsavedChangesContext)
   useEffect(() => {
     setDirty(dirty)
     return () => setDirty(false)
@@ -199,8 +251,17 @@ export function useUnsavedChanges(dirty: boolean) {
   // `requestNavigation` devuelve si BLOQUEÓ; el sentinel lo usa para saber si alguien va a mostrar el
   // aviso (fuera del provider nadie lo hace, y ahí el atrás tiene que completarse en vez de quedar
   // muerto). `null` como destino es la variante del atrás: no hay href que ofrecer.
+  //
+  // ⚠ LO QUE SE LE PASA ES `dirty && !leaving`, Y ES EL PRIMER PASO DE LA CONTINUACIÓN DE NAV-11.
+  // Cuando el dueño ya confirmó salir hacia un destino conocido, el sentinel tiene que sacarse de
+  // encima ANTES de que se navegue (si no, el reemplazo cae sobre él y la sección que se deja queda
+  // debajo del destino: el atrás vuelve ahí en vez del dashboard). Apagarle la bandera es lo que
+  // dispara su propio consumo —`dirtyHistoryAction` devuelve `'consume'`— con su guarda de marca y su
+  // listener ya desenganchado en el mismo commit, así que ese `popstate` no se puede leer como un
+  // atrás nuevo ni pedir el aviso en bucle. Este archivo nunca llama a `history.back()`: el único
+  // dueño de la entrada sigue siendo quien la empujó.
   useDirtyHistory({
-    dirty,
+    dirty: dirty && !leaving,
     confirm: (leave) => requestNavigation(null, leave),
   })
 }

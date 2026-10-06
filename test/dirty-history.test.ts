@@ -14,7 +14,7 @@ import {
   nextDirtyId,
 } from '@/lib/dirty-history'
 import { isDirtyGuardOwnedEntry, isForeignOwnedEntry, panelHistoryAction, panelNavMode } from '@/lib/panel-history'
-import { decideNavigation, leaveNavigationMode } from '@/lib/unsaved-changes'
+import { decideNavigation, leaveNavigationPlan } from '@/lib/unsaved-changes'
 
 // ── Quick 261006-flm (NAV-10 / NAV-11) — el atrás frena cuando hay cambios sin guardar ──────────
 // Suite PURA: `environment: 'node'`, sin jsdom ni Testing Library (el milestone prohíbe paquetes
@@ -48,6 +48,7 @@ class HistorialFalso {
   entradas: Entrada[]
   i: number
   listener: (() => void) | null = null
+  listenerProvider: (() => void) | null = null
 
   constructor(inicial: Entrada[]) {
     this.entradas = [...inicial]
@@ -79,6 +80,10 @@ class HistorialFalso {
     if (this.i === 0) throw new Error('el browser se fue del sitio: back() sobre la primera entrada')
     this.i -= 1
     this.listener?.()
+    // El segundo listener es el del PROVIDER (el que encadena la navegación de "Salir sin guardar"
+    // al `popstate` del consumo del sentinel). Va después porque se registra después: el del hook
+    // nace cuando la pantalla se ensucia. En los escenarios que no lo usan queda en `null`.
+    this.listenerProvider?.()
   }
 }
 
@@ -421,34 +426,96 @@ describe('ESCENARIOS — la aritmética del stack de punta a punta', () => {
     expect(h.url).toBe('/dashboard')
   })
 
-  it('8 · NAV-11 · salir por el MENÚ con el sentinel arriba ⇒ replace, y un solo atrás vuelve', () => {
-    // La continuación del provider: el destino REEMPLAZA al sentinel. Las otras variantes están
-    // medidas: `push` deja el sentinel vivo abajo del destino y el primer atrás cae en una entrada
-    // muerta; encadenar un `back()` con la navegación pierde la navegación.
+  it('8 · NAV-07+NAV-11 · salir por el MENÚ consume el sentinel y DESPUÉS reemplaza: el atrás cae en el dashboard', () => {
+    // EL FALLO QUE ESTE CASO CONGELA (punto 6 de la UAT del dueño, en celular real): la primera
+    // versión de NAV-11 reemplazaba SOBRE el sentinel, así que la entrada de `/agenda` quedaba
+    // intacta abajo y el atrás volvía a Agenda en vez del dashboard. MEDIDO antes y después con
+    // Chrome + `Page.getNavigationHistory`.
     const h = stackInicial()
     const g = montarGuard(h, { ruta: AGENDA, confirmar: () => true })
     g.setDirty(true)
+    expect(h.entradas.map((e) => e.url)).toEqual(['/dashboard', AGENDA, '/agenda#sin-guardar'])
     expect(isDirtyOwnedEntry(h.state)).toBe(true)
 
-    const mode = leaveNavigationMode({
+    const plan = leaveNavigationPlan({
       holdsSentinel: isDirtyOwnedEntry(h.state),
       sectionMode: panelNavMode({ from: AGENDA, to: '/finances' }),
     })
-    expect(mode).toBe('replace')
-    h.replaceState({ __NA: true }, '/finances')
-    g.desmontar() // la pantalla se va con la bandera encendida: la guarda de la marca frena el back
+    expect(plan).toBe('consume-then-replace')
+
+    // El provider guarda el destino e instala el listener del SEGUNDO paso; el primero lo ejecuta el
+    // sentinel al quedarse sin bandera (es su propio `consume`, con su guarda de marca). En el
+    // navegador el `popstate` del `back()` llega en un task posterior a la instalación del listener;
+    // acá el simulador lo resuelve en el acto, así que se registra antes para transcribir ese orden.
+    let segundoPaso = 0
+    h.listenerProvider = () => {
+      segundoPaso += 1
+      h.replaceState({ __NA: true }, '/finances')
+    }
+    g.setDirty(false) // ← `dirty && !leaving`: el commit en el que el provider apaga la bandera
+    expect(segundoPaso).toBe(1) // la navegación salió del `popstate` del consumo, no del mismo tick
+    h.listenerProvider = null
+    g.desmontar() // la pantalla se va; el sentinel ya no es nuestro y la guarda frena el back
 
     expect(h.url).toBe('/finances')
+    expect(h.entradas.map((e) => e.url)).toEqual(['/dashboard', '/finances', '/agenda#sin-guardar'])
+    expect(h.i).toBe(1)
     atrasDelUsuario(h)
-    expect(h.url).toBe(AGENDA) // UN solo atrás, y aterriza exacto en la agenda
+    expect(h.url).toBe('/dashboard') // ← lo que NAV-07 promete y el dueño reclamó
+  })
+
+  it('8b · el modo `push` también consume primero, y así no deja una entrada muerta ADELANTE', () => {
+    // Agenda → dashboard es `push` (regla 3 de panelNavMode). Reemplazar sobre el sentinel daba el
+    // mismo resultado hacia atrás, pero dejaba el sentinel como entrada de FORWARD. Consumiendo
+    // primero, el `push` la trunca.
+    const h = stackInicial()
+    const g = montarGuard(h, { ruta: AGENDA, confirmar: () => true })
+    g.setDirty(true)
+
+    const plan = leaveNavigationPlan({
+      holdsSentinel: isDirtyOwnedEntry(h.state),
+      sectionMode: panelNavMode({ from: AGENDA, to: '/dashboard' }),
+    })
+    expect(plan).toBe('consume-then-push')
+
+    h.listenerProvider = () => h.pushState({ __NA: true }, '/dashboard')
+    g.setDirty(false)
+    h.listenerProvider = null
+    g.desmontar()
+
+    expect(h.entradas.map((e) => e.url)).toEqual(['/dashboard', AGENDA, '/dashboard'])
+    expect(h.i).toBe(2)
+    atrasDelUsuario(h)
+    expect(h.url).toBe(AGENDA) // el atrás desde el dashboard devuelve la sección (regla 3)
   })
 
   it('9 · NAV-11 · sin sentinel, la regla de secciones manda (y NAV-07 sigue en pie)', () => {
-    // El caso de hoy: el dueño no tiene el sentinel (le pisaron la marca). La continuación no puede
-    // inventar: usa la MISMA regla que el `<Link replace>` del sidebar.
-    expect(leaveNavigationMode({ holdsSentinel: false, sectionMode: panelNavMode({ from: AGENDA, to: '/finances' }) })).toBe('replace')
-    expect(leaveNavigationMode({ holdsSentinel: false, sectionMode: panelNavMode({ from: '/dashboard', to: AGENDA }) })).toBe('push')
-    expect(leaveNavigationMode({ holdsSentinel: false, sectionMode: panelNavMode({ from: AGENDA, to: '/dashboard' }) })).toBe('push')
+    // El caso en el que el dueño no tiene el sentinel (le pisaron la marca). La continuación no puede
+    // inventar: usa la MISMA regla que el `<Link replace>` del sidebar, y sin nada que consumir.
+    expect(leaveNavigationPlan({ holdsSentinel: false, sectionMode: panelNavMode({ from: AGENDA, to: '/finances' }) })).toBe('replace')
+    expect(leaveNavigationPlan({ holdsSentinel: false, sectionMode: panelNavMode({ from: '/dashboard', to: AGENDA }) })).toBe('push')
+    expect(leaveNavigationPlan({ holdsSentinel: false, sectionMode: panelNavMode({ from: AGENDA, to: '/dashboard' }) })).toBe('push')
+  })
+
+  it('10 · la salida por el ATRÁS (sin destino) no cambió: sigue siendo el plan de dos pasos del módulo', () => {
+    // Es el punto 3 de la UAT y el camino que NO hay que romper: el `popstate` no trae destino, así
+    // que el provider no navega nada y el gesto lo completa `dirtyLeavePlan` (consumir + un atrás
+    // más). Lo que queda debajo es historia HONESTA: el atrás siguiente devuelve lo que el dueño
+    // visitó antes, no una entrada inventada.
+    const h = new HistorialFalso([
+      { url: '/appointments', state: { __NA: true } },
+      { url: '/dashboard', state: { __NA: true } },
+      { url: AGENDA, state: { __NA: true } },
+    ])
+    let salir: (() => void) | null = null
+    const g = montarGuard(h, { ruta: AGENDA, confirmar: (leave) => { salir = leave; return true } })
+    g.setDirty(true)
+    atrasDelUsuario(h) // el atrás del dueño: absorbido por el sentinel
+    expect(salir).not.toBeNull()
+    salir!() // "Salir sin guardar"
+    expect(h.url).toBe('/dashboard') // ← "me mandó al dashboard"
+    atrasDelUsuario(h)
+    expect(h.url).toBe('/appointments') // ← "y el atrás me mandó a turnos": la sección que visitó
   })
 })
 
@@ -555,9 +622,35 @@ describe('auditoría del fuente', () => {
     // El bug que NAV-11 cierra: `router.push` siempre, ignorando la regla de secciones. Si alguien
     // lo vuelve a poner sin pasar por la decisión, esto se cae.
     const guard = sinComentarios(read(GUARD))
-    expect(guard).toContain('leaveNavigationMode')
+    expect(guard).toContain('leaveNavigationPlan')
     expect(guard).toContain('panelNavMode')
     expect(guard).toContain('router.replace')
+  })
+
+  it('(h) el guard NO toca el historial por su cuenta: el consumo lo pide apagando la bandera', () => {
+    // LA DECISIÓN QUE ESTE CASO PROTEGE (quick 261006-iey). Para que el reemplazo caiga sobre la
+    // entrada de la SECCIÓN hay que consumir el sentinel antes — y la forma de pedirlo es apagarle la
+    // bandera al sentinel (`dirty && !leaving`), no llamar `history.back()` acá. Un `back()` en este
+    // archivo sería un segundo consumo SIN la guarda de la marca (cicatriz 2) y además competiría con
+    // el del módulo: dos backs, y el dueño afuera del sitio.
+    const guard = sinComentarios(read(GUARD))
+    expect(guard).toContain('dirty: dirty && !leaving')
+    expect(guard).toContain("addEventListener('popstate'")
+    expect(guard).not.toContain('history.back()')
+    expect(guard).not.toContain('history.pushState')
+    expect(guard).not.toContain('history.replaceState')
+  })
+
+  it('(i) el segundo paso de la continuación sale del `popstate`, NUNCA del mismo tick', () => {
+    // `history.back()` es ASÍNCRONO: encadenar el consumo con la navegación en el mismo tick está
+    // medido como roto (la navegación se pierde). El `router.replace` del destino tiene que vivir
+    // DENTRO del handler del `popstate`, y el destino viajar en un ref para que el handler lo lea
+    // fresco. Si alguien "simplifica" esto llamando a router.replace en el click, esto se cae.
+    const guard = sinComentarios(read(GUARD))
+    const handler = guard.slice(guard.indexOf('const onPop = () =>'))
+    expect(handler.length).toBeGreaterThan(0)
+    expect(handler.slice(0, handler.indexOf('addEventListener'))).toContain('leaveTargetRef.current')
+    expect(guard).toContain('setLeaving(true)')
   })
 
   it('(f) el módulo no declara la directiva de cliente', () => {
