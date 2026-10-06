@@ -868,6 +868,312 @@ describe('el atrás cierra el SELECTOR abierto (quick 261006-dzr)', () => {
   })
 })
 
+// ── El campo FECHA del alta también participa (quick 261006-fln) ────────────────────────────────
+//
+// EL ÚLTIMO HUECO DE LA TANDA. Diálogos, drawers (260928-seo) y selectores (261006-dzr) se
+// arreglaron EN UN WRAPPER COMPARTIDO de `components/ui/`, así que un solo enganche cubrió todas las
+// instancias. El calendario del campo Fecha no tiene componente propio: es estado local de
+// `components/dashboard/nuevo-turno-form.tsx` (`dateOpen`) + un `<button>` que togglea + una
+// expansión EN EL LUGAR, no un portal. Por eso el enganche vive en el formulario y por eso estos
+// tests existen aparte de los del `Select`.
+//
+// ⚠ LO QUE EL FORMULARIO LE PASA AL HOOK ES "EL CALENDARIO ESTÁ EN PANTALLA", NO `dateOpen` A SECAS:
+// el paso de confirmación hace un early return que se lleva la rama del calendario sin tocar
+// `dateOpen`. Con `dateOpen` crudo el hook retendría una entrada por un calendario invisible y el
+// atrás quedaría MUERTO. Eso es lo que afirma {@link montarCampoFecha} y sus dos tests de paso.
+//
+// Lo que esta suite NO cubre, declarado: que `nuevo-turno-form.tsx` llame al hook (eso lo ven tsc +
+// lint) y el gesto real en el celular (UAT del dueño).
+//
+// `components/dashboard/nuevo-abono-form.tsx` NO aparece acá a propósito: el abono es un turno fijo
+// recurrente y su campo temporal es "día de la semana" + hora (un `<Select>`, ya cubierto por
+// 261006-dzr). No tiene calendario, así que no hay un segundo cableado que testear.
+
+/**
+ * El campo Fecha de `TurnoFormBody`, con su estado local y el paso del formulario.
+ *
+ * `tocarBotonFecha()` es el `onClick` que togglea · `elegirDia()` es el `onSelect` del `Calendar`
+ * (que fija la fecha y cierra) · `irAConfirmar()` / `volverAlForm()` mueven el `step`, que es lo que
+ * decide si el calendario sigue en el árbol. El atrás entra por `dismiss`, igual que en el archivo
+ * real.
+ */
+function montarCampoFecha(h: HistorialFalso, { vp }: { vp?: ViewportFalso } = {}) {
+  let dateOpen = false
+  let date = ''
+  let step: 'form' | 'confirm' = 'form'
+  let pendingClient = false // el early return exige `step === 'confirm'` Y un cliente resuelto
+
+  // La MISMA expresión que el archivo real: `dateOpen && !(step === 'confirm' && pendingClient)`.
+  const enPantalla = () => dateOpen && !(step === 'confirm' && pendingClient)
+
+  // Se asigna después de montar porque el `dismiss` que recibe el hook ya tiene que existir en el
+  // montaje (mismo orden que `montarSelect`).
+  let aplicarRender: ((next: boolean) => void) | null = null
+  const sync = () => aplicarRender?.(enPantalla())
+
+  const overlay = montarOverlay(h, {
+    open: enPantalla(),
+    dismiss: () => {
+      dateOpen = false
+      sync()
+    },
+    vp,
+  })
+  aplicarRender = overlay.setOpen
+
+  return {
+    get abierto() {
+      return dateOpen
+    },
+    get enPantalla() {
+      return enPantalla()
+    },
+    get fecha() {
+      return date
+    },
+    get holding() {
+      return overlay.holding
+    },
+    tocarBotonFecha() {
+      dateOpen = !dateOpen
+      sync()
+    },
+    elegirDia(d = '2026-10-10') {
+      date = d
+      dateOpen = false
+      sync()
+    },
+    irAConfirmar() {
+      pendingClient = true
+      step = 'confirm'
+      sync()
+    },
+    volverAlForm() {
+      step = 'form'
+      sync()
+    },
+    desmontar: () => overlay.desmontar(),
+  }
+}
+
+describe('el atrás cierra el CALENDARIO del campo Fecha (quick 261006-fln)', () => {
+  it('cerrado no toca el historial; abrirlo empuja UNA entrada con hash', () => {
+    const h = new HistorialFalso()
+    const fecha = montarCampoFecha(h)
+    expect(h.stack).toHaveLength(1) // montar el formulario no empuja nada: el calendario nace cerrado
+
+    fecha.tocarBotonFecha()
+    expect(h.stack).toHaveLength(2)
+    expect(h.hash).toBe(OVERLAY_HASH_BASE)
+    expect(fecha.holding).toBe(true)
+  })
+
+  it('⚠ DENTRO del drawer del alta: el atrás cierra el CALENDARIO y el formulario QUEDA', () => {
+    // UAT 1, y la aserción central del quick. El LIFO lo da el id por instancia: acá se VERIFICA que
+    // el anidamiento sale bien, no se supone.
+    const h = new HistorialFalso()
+    let formAbierto = true
+    const drawer = montarOverlay(h, {
+      open: true,
+      dismiss: () => {
+        formAbierto = false
+      },
+    })
+    const fecha = montarCampoFecha(h)
+    expect(h.stack).toHaveLength(2) // sólo la entrada del drawer
+
+    fecha.tocarBotonFecha()
+    // Dos entradas con hash DISTINTO: dos entradas con la misma URL son la cicatriz 1.
+    expect(h.stack).toHaveLength(3)
+    expect(h.hash).toBe(`${OVERLAY_HASH_BASE}-2`)
+
+    h.back()
+    expect(fecha.abierto).toBe(false)
+    expect(formAbierto).toBe(true) // ⚠ lo que pedía el dueño
+    expect(drawer.holding).toBe(true)
+    expect(h.stack).toHaveLength(2)
+    expect(h.hash).toBe(OVERLAY_HASH_BASE)
+
+    // Y el atrás SIGUIENTE, con el calendario ya cerrado, cierra el formulario.
+    h.back()
+    expect(formAbierto).toBe(false)
+  })
+
+  it('elegir un día consume la entrada: el atrás siguiente cierra el formulario, sin uno muerto', () => {
+    // UAT 2. Es el defecto que este repo ya pagó: un cierre que no consume su entrada deja un atrás
+    // que no hace nada visible.
+    const h = new HistorialFalso()
+    let formAbierto = true
+    montarOverlay(h, {
+      open: true,
+      dismiss: () => {
+        formAbierto = false
+      },
+    })
+    const fecha = montarCampoFecha(h)
+
+    fecha.tocarBotonFecha()
+    expect(h.stack).toHaveLength(3)
+
+    fecha.elegirDia()
+    expect(fecha.fecha).toBe('2026-10-10') // la fecha elegida QUEDA: cerrar no descarta nada
+    expect(h.stack).toHaveLength(2) // consumió SU entrada
+    expect(fecha.holding).toBe(false)
+    // El back() de limpieza dispara un popstate que el drawer VE: su propia entrada quedó arriba, así
+    // que lo reconoce como de limpieza y no se cierra de fantasma.
+    expect(formAbierto).toBe(true)
+
+    h.back()
+    expect(formAbierto).toBe(false) // de UNA, sin atrás muerto en el medio
+  })
+
+  it('volver a tocar el botón (el toggle) también consume su entrada', () => {
+    const h = new HistorialFalso()
+    const fecha = montarCampoFecha(h)
+    // El calendario se abre y cierra muchas veces en un alta: que el push/consume quede balanceado es
+    // lo que evita que la pila se llene de basura.
+    for (let i = 0; i < 5; i += 1) {
+      fecha.tocarBotonFecha()
+      expect(h.stack).toHaveLength(2)
+      fecha.tocarBotonFecha()
+      expect(h.stack).toHaveLength(1)
+    }
+    expect(h.hash).toBe('')
+  })
+
+  it('⚠ pasar al RESUMEN con el calendario abierto libera la entrada (el atrás no queda muerto)', () => {
+    // El paso de confirmación hace un early return que se lleva la rama del calendario SIN tocar
+    // `dateOpen`. Si el hook mirara `dateOpen` crudo, en el resumen habría una entrada retenida por
+    // un calendario invisible: el atrás "cerraría" algo que no se ve y el dueño no vería nada pasar.
+    const h = new HistorialFalso()
+    let formAbierto = true
+    montarOverlay(h, {
+      open: true,
+      dismiss: () => {
+        formAbierto = false
+      },
+    })
+    const fecha = montarCampoFecha(h)
+
+    fecha.tocarBotonFecha()
+    expect(h.stack).toHaveLength(3)
+
+    fecha.irAConfirmar()
+    expect(fecha.abierto).toBe(true) // `dateOpen` NO se toca: la expansión vuelve tal cual al volver
+    expect(fecha.enPantalla).toBe(false)
+    expect(h.stack).toHaveLength(2) // la entrada se liberó
+    expect(fecha.holding).toBe(false)
+
+    // En el resumen, el atrás cierra el FORMULARIO (que es lo que el dueño espera ahí).
+    h.back()
+    expect(formAbierto).toBe(false)
+  })
+
+  it('volver del RESUMEN al form recupera la entrada del calendario, que sigue expandido', () => {
+    const h = new HistorialFalso()
+    const fecha = montarCampoFecha(h)
+
+    fecha.tocarBotonFecha()
+    fecha.irAConfirmar()
+    expect(h.stack).toHaveLength(1)
+
+    fecha.volverAlForm()
+    expect(fecha.enPantalla).toBe(true)
+    expect(h.stack).toHaveLength(2) // la entrada volvió: el atrás vuelve a cerrar el calendario
+
+    h.back()
+    expect(fecha.abierto).toBe(false)
+  })
+
+  it('cerrar el formulario con el calendario abierto consume la entrada del calendario', () => {
+    // El cuerpo del alta se REMONTA por `key={open}`, así que cerrar el formulario DESMONTA el campo
+    // Fecha con `dateOpen` en true: sin el camino de desmontaje quedaría una entrada huérfana.
+    //
+    // ⚠ LO QUE ESTE FAKE NO PUEDE REPRODUCIR, declarado: en el browser `history.back()` es ASINCRÓNICO
+    // (encola una tarea), así que los dos consumos del mismo commit —el del calendario al desmontarse
+    // y el del shell al bajar su `open`— se encolan juntos y el segundo puede leer un
+    // `history.state` todavía viejo. Su guarda (`isOverlayHistoryEntry`) entonces NO reconoce su marca
+    // y se saltea el `back()`: la entrada del shell queda enterrada. Costo máximo: UN atrás muerto al
+    // volver a esa pantalla — nunca salir de la página, que es exactamente lo que esa guarda protege.
+    // Es la misma forma que ya tiene el anidamiento diálogo-sobre-drawer que está shipeado.
+    const h = new HistorialFalso()
+    const fecha = montarCampoFecha(h)
+
+    fecha.tocarBotonFecha()
+    expect(h.stack).toHaveLength(2)
+
+    fecha.desmontar()
+    expect(h.stack).toHaveLength(1)
+    expect(h.hash).toBe('')
+  })
+
+  it('⚠ MEDIDO: tocar Fecha baja el teclado, y el atrás dentro de la gracia se ABSORBE', () => {
+    // EL CRUCE QUE EL PLAN PIDE MEDIR. Tocar el botón de Fecha desenfoca el input del nombre del
+    // cliente ⇒ el teclado baja ⇒ arranca la ventana de gracia de 300ms del quick 261005-x91, durante
+    // la cual el atrás se absorbe.
+    //
+    // EL RESULTADO ES IGUAL AL DEL `Select`, NO PEOR, y por construcción: el disparador es el mismo
+    // tipo de `<button type="button">` fuera del input (mismo desenfoque), la guarda es la misma
+    // función del módulo compartido, el rastreador del teclado es UNO por documento y la gracia es la
+    // misma constante. Costo máximo: un atrás muerto. Nunca perder la página, porque la entrada
+    // VUELVE. (El teclado real de Android no se emula: eso queda para la UAT, igual que en los otros
+    // tres quicks de la tanda.)
+    const h = new HistorialFalso()
+    const vp = new ViewportFalso()
+    const fecha = montarCampoFecha(h, { vp })
+
+    vp.abrirTeclado() // el dueño estaba tipeando el nombre del cliente
+    vp.avanzar(2000)
+    vp.cerrarTeclado() // tocó el botón de Fecha: el input se desenfoca y el teclado baja
+    vp.avanzar(100) // dentro de la gracia
+    fecha.tocarBotonFecha()
+
+    h.back()
+    expect(fecha.abierto).toBe(true) // absorbido: el calendario NO se cerró
+    expect(h.stack).toHaveLength(2) // y la entrada volvió
+    expect(fecha.holding).toBe(true)
+
+    // Pasada la gracia, el mismo gesto cierra el calendario: la absorción no se queda pegada.
+    vp.avanzar(SOFT_KEYBOARD_GRACE_MS)
+    h.back()
+    expect(fecha.abierto).toBe(false)
+    expect(h.stack).toHaveLength(1)
+  })
+
+  it('MEDIDO: el borde exacto de la gracia (300ms absorbe, 301ms cierra)', () => {
+    // El borde, para que el costo del cruce quede acotado en un número y no en una impresión.
+    const borde = new HistorialFalso()
+    const vpBorde = new ViewportFalso()
+    const enElBorde = montarCampoFecha(borde, { vp: vpBorde })
+    vpBorde.abrirTeclado(240) // keypad numérico: el teclado más chico de los medidos
+    vpBorde.cerrarTeclado()
+    vpBorde.avanzar(SOFT_KEYBOARD_GRACE_MS) // exactamente 300ms: todavía absorbe (<=)
+    enElBorde.tocarBotonFecha()
+    borde.back()
+    expect(enElBorde.abierto).toBe(true)
+
+    const pasado = new HistorialFalso()
+    const vpPasado = new ViewportFalso()
+    const yaFuera = montarCampoFecha(pasado, { vp: vpPasado })
+    vpPasado.abrirTeclado(240)
+    vpPasado.cerrarTeclado()
+    vpPasado.avanzar(SOFT_KEYBOARD_GRACE_MS + 1)
+    yaFuera.tocarBotonFecha()
+    pasado.back()
+    expect(yaFuera.abierto).toBe(false)
+  })
+
+  it('sin teclado en toda la vida del calendario (desktop), el atrás cierra de una', () => {
+    const h = new HistorialFalso()
+    const fecha = montarCampoFecha(h, { vp: new ViewportFalso() })
+
+    fecha.tocarBotonFecha()
+    h.back()
+    expect(fecha.abierto).toBe(false)
+    expect(h.stack).toHaveLength(1)
+  })
+})
+
 describe('React StrictMode (dev): el doble montaje converge en UNA entrada', () => {
   it('desmontar + volver a montar el efecto no deja entradas de más ni cierra de fantasma', () => {
     // En dev React corre efecto → limpieza → efecto. La limpieza consume la entrada y el segundo
