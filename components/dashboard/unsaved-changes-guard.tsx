@@ -95,28 +95,30 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
   // `useUnsavedChanges`): apagarle su bandera sucia es lo que hace que `lib/dirty-history.ts` consuma
   // su PROPIA entrada, con su propia guarda de marca. Este archivo no toca el historial por su
   // cuenta: hacerlo sería un segundo `back()` sin guarda, que es la cicatriz 2 del repo.
-  // Se enciende en `confirmLeave` y se apaga en `setDirty(false)` — o sea cuando la pantalla que se
-  // estaba dejando se desmonta o se declara limpia. El por qué de ESE momento está en `setDirty`.
+  // Se enciende en `confirmLeave` y se apaga en `setDirty(false)`. Su ÚNICO trabajo es disparar el
+  // consumo, que ocurre en el commit inmediato: de la navegación que viene después no participa.
   const [leaving, setLeaving] = useState(false)
-  // El destino de esa salida. Ref y no estado: lo lee el listener del `popstate` del consumo, que
-  // necesita el valor fresco del tick anterior y no re-suscribirse por él.
-  const leaveTargetRef = useRef<{ href: string; mode: LeaveNavMode } | null>(null)
+  // El destino de esa salida, con la pantalla DESDE la que se pidió. Ref y no estado: lo lee el
+  // listener del `popstate` del consumo, que necesita el valor fresco y no re-suscribirse por él.
+  const leaveTargetRef = useRef<{ href: string; mode: LeaveNavMode; from: string } | null>(null)
+  // Y la navegación ya PEDIDA por el `popstate` del consumo, esperando un commit para ejecutarse (el
+  // por qué está en `completarSalida`).
+  const [leaveNow, setLeaveNow] = useState<{ href: string; mode: LeaveNavMode } | null>(null)
   const pathname = usePathname()
   const router = useRouter()
 
   const setDirty = useCallback((dirty: boolean) => {
     dirtyRef.current = dirty
-    // ⚠ ACÁ TERMINA LA SALIDA EN CURSO, y el momento está elegido. Una pantalla llama a esto con
-    // `false` cuando se DESMONTA (su cleanup) o cuando ya no tiene nada que perder: las dos cosas
-    // significan que no queda nadie que pueda re-armar un sentinel encima del destino al que estamos
-    // navegando. Apagarlo antes —por ejemplo en el `popstate`, o en un efecto sobre `pathname`— deja
-    // una ventana en la que la pantalla vieja sigue montada y sucia, y el sentinel vuelve a empujarse
-    // justo arriba del destino. (Y el efecto sobre `pathname` además viola
-    // `react-hooks/set-state-in-effect`, que el repo trata como error.)
-    if (!dirty) {
-      leaveTargetRef.current = null
-      setLeaving(false)
-    }
+    // Acá se apaga la bandera de "salida en curso": una pantalla avisa `false` cuando se desmonta
+    // (su cleanup) o cuando ya no tiene nada que perder, y en los dos casos el consumo del sentinel
+    // —lo único que esa bandera dispara— ya ocurrió en el commit del click.
+    //
+    // ⚠ LO QUE ACÁ **NO** SE TOCA, Y ES LA LECCIÓN MEDIDA: el destino de la salida. El `back()` del
+    // consumo es una navegación same-route, y MEDIDO contra la app real eso puede hacer que la
+    // pantalla reporte `dirty: false` (vuelve a montar contra los datos del servidor) ANTES de que
+    // llegue el `popstate`. Borrar el destino acá dejaba la salida a medio camino: el sentinel
+    // consumido y la navegación nunca disparada — el dueño se quedaba en Agenda.
+    if (!dirty) setLeaving(false)
   }, [])
 
   const requestNavigation = useCallback(
@@ -172,29 +174,50 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
     // de la sección queda abajo: el atrás vuelve a la sección que el dueño acaba de dejar, que es el
     // fallo que reportó en la UAT). Y el consumo NO se hace acá: se APAGA la bandera del sentinel y
     // lo consume su propio módulo, con su guarda de marca. La navegación se encadena desde el
-    // `popstate` de ese consumo (el efecto de abajo), nunca en este mismo tick: `history.back()` es
-    // asíncrono y encadenarlo a mano está medido como roto.
-    leaveTargetRef.current = { href: nav.href, mode: plan === 'consume-then-replace' ? 'replace' : 'push' }
+    // `popstate` de ese consumo, NUNCA en este mismo tick: `history.back()` es asíncrono y
+    // encadenarlo a mano está medido como roto (la navegación se pierde).
+    leaveTargetRef.current = {
+      href: nav.href,
+      mode: plan === 'consume-then-replace' ? 'replace' : 'push',
+      from: pathname,
+    }
+    // ⚠ EL LISTENER SE ENGANCHA ACÁ, EN EL CLICK, Y NO EN UN EFECTO. MEDIDO contra la app real: el
+    // `back()` del consumo es una navegación same-route y puede hacer que la pantalla vuelva a
+    // montar limpia, lo que re-renderiza al provider en el medio. Un listener que dependa de un
+    // efecto (y de que la bandera siga encendida cuando ese efecto corre) se pierde el `popstate` y
+    // la salida queda a medias: sentinel consumido y el dueño todavía en Agenda. Enganchado en el
+    // gesto, el segundo paso no depende de ningún orden de renders.
+    window.addEventListener('popstate', completarSalida, { once: true })
     setLeaving(true)
   }
 
   // ── Segundo paso de la continuación: navegar cuando el sentinel YA se consumió ────────────────
-  // El listener se instala en el MISMO commit en el que el sentinel pide su `back()` — los efectos
-  // del hijo (la pantalla sucia) corren antes que los del padre, y el `popstate` llega en un task
-  // posterior, así que no hay forma de perdérselo.
+  // One-shot (`{ once: true }`), así que no hace falta desengancharlo: se consume solo.
+  function completarSalida() {
+    const target = leaveTargetRef.current
+    leaveTargetRef.current = null
+    // Sin destino no hay nada que completar: el pop no es nuestro, o ya navegamos.
+    if (!target) return
+    // Y sólo se completa si seguimos en la pantalla que se estaba dejando. Si el dueño ya salió por
+    // otro camino, este `popstate` no es el del consumo y navegar lo mandaría a un destino viejo.
+    if (window.location.pathname !== target.from) return
+    // ⚠ NO SE NAVEGA ACÁ DENTRO, Y ESTO ESTÁ MEDIDO CONTRA LA APP REAL. Dentro del `popstate` el
+    // router de Next está procesando SU traverse (su listener corre antes que el nuestro y escribe el
+    // `replaceState` de la entrada a la que volvimos): un `router.replace` pedido ahí mismo se llama,
+    // no escribe NADA y el dueño se queda en Agenda. Se deja PEDIDO en estado y lo ejecuta el efecto
+    // de abajo, o sea desde un commit de React y no desde el medio del evento. Diferirlo no
+    // reintroduce la trampa del encadenamiento: el `back()` ya ocurrió —estamos en su `popstate`—, así
+    // que no hay ninguna navegación asíncrona pendiente que pueda perderse.
+    setLeaveNow({ href: target.href, mode: target.mode })
+  }
+
+  // El segundo paso, ejecutado desde un commit. No hace falta limpiar `leaveNow`: con las mismas
+  // deps el efecto no vuelve a correr, y una salida nueva trae un objeto nuevo.
   useEffect(() => {
-    if (!leaving) return
-    const onPop = () => {
-      const target = leaveTargetRef.current
-      leaveTargetRef.current = null
-      // Sin destino no hay nada que completar: el pop no es nuestro (o ya navegamos).
-      if (!target) return
-      if (target.mode === 'replace') router.replace(target.href)
-      else router.push(target.href)
-    }
-    window.addEventListener('popstate', onPop, { once: true })
-    return () => window.removeEventListener('popstate', onPop)
-  }, [leaving, router])
+    if (!leaveNow) return
+    if (leaveNow.mode === 'replace') router.replace(leaveNow.href)
+    else router.push(leaveNow.href)
+  }, [leaveNow, router])
 
   return (
     <UnsavedChangesContext.Provider value={{ setDirty, requestNavigation, leaving }}>

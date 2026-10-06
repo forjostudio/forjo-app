@@ -647,10 +647,34 @@ describe('auditoría del fuente', () => {
     // DENTRO del handler del `popstate`, y el destino viajar en un ref para que el handler lo lea
     // fresco. Si alguien "simplifica" esto llamando a router.replace en el click, esto se cae.
     const guard = sinComentarios(read(GUARD))
-    const handler = guard.slice(guard.indexOf('const onPop = () =>'))
+    // El cuerpo del handler: de su declaración hasta el efecto que viene justo después.
+    const desde = guard.indexOf('function completarSalida()')
+    const handler = guard.slice(desde, guard.indexOf('useEffect', desde))
+    expect(desde).toBeGreaterThan(0)
     expect(handler.length).toBeGreaterThan(0)
-    expect(handler.slice(0, handler.indexOf('addEventListener'))).toContain('leaveTargetRef.current')
+    expect(handler).toContain('leaveTargetRef.current')
     expect(guard).toContain('setLeaving(true)')
+    // Y el handler NO navega él mismo: deja el pedido en estado. MEDIDO contra la app real: dentro
+    // del `popstate` el router está procesando su traverse y descarta la navegación EN SILENCIO.
+    expect(handler).toContain('setLeaveNow(')
+    expect(handler).not.toContain('router.')
+    expect(guard).toContain('[leaveNow, router]')
+  })
+
+  it('(j) el listener del segundo paso se engancha EN EL GESTO, no en un efecto', () => {
+    // MEDIDO contra la app real: el `back()` del consumo es same-route y puede hacer que la pantalla
+    // vuelva a montar limpia, re-renderizando al provider en el medio. Con el listener atado a un
+    // efecto (y a que la bandera siga encendida cuando ese efecto corre) el `popstate` se perdía y la
+    // salida quedaba a medias: sentinel consumido y el dueño todavía en Agenda. Por la misma razón
+    // `setDirty` NO puede borrar el destino.
+    const guard = sinComentarios(read(GUARD))
+    const click = guard.slice(guard.indexOf('function confirmLeave()'), guard.indexOf('function completarSalida()'))
+    expect(click.length).toBeGreaterThan(0)
+    expect(click).toContain("addEventListener('popstate', completarSalida, { once: true })")
+    const setDirty = guard.slice(guard.indexOf('const setDirty = useCallback'), guard.indexOf('const requestNavigation'))
+    expect(setDirty.length).toBeGreaterThan(0)
+    expect(setDirty).toContain('setLeaving(false)')
+    expect(setDirty).not.toContain('leaveTargetRef')
   })
 
   it('(f) el módulo no declara la directiva de cliente', () => {
