@@ -5,9 +5,115 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
 import { useDrawerPortalContainer } from "@/components/ui/drawer"
+import {
+  createHistoryBackDetails,
+  useOverlayHistory,
+  type OverlayHistoryBackDetails,
+} from "@/lib/overlay-history"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+/**
+ * Lo que recibe el `onOpenChange` del wrapper: el detalle real de Base UI o el que sintetiza el
+ * "atrás" del celular (quick 261006-dzr).
+ *
+ * NO se reusa `OverlayDismissDetails` de `lib/overlay-history` a propósito: esa unión lleva la rama
+ * del DIÁLOGO, cuyos motivos (`'close-press'`, `'focus-out'`, …) y cuyo `preventUnmountOnClose` no
+ * son los del Select. Usar la rama propia del Select mantiene el tipado exacto del primitivo para
+ * cualquier caller futuro que quiera leer `details.reason`.
+ */
+type SelectDismissDetails =
+  | SelectPrimitive.Root.ChangeEventDetails
+  | OverlayHistoryBackDetails
+
+/**
+ * Props del wrapper = las del primitivo con UN solo cambio: el detalle que acompaña al cierre puede
+ * ser el de Base UI o el del "atrás". Todo lo demás (`value`, `onValueChange`, `multiple`, `items`,
+ * `disabled`, …) pasa derecho, así que los 23 call sites de la app no se tocan.
+ */
+type SelectProps<Value, Multiple extends boolean | undefined = false> = Omit<
+  SelectPrimitive.Root.Props<Value, Multiple>,
+  "onOpenChange"
+> & {
+  onOpenChange?: (open: boolean, details: SelectDismissDetails) => void
+}
+
+/**
+ * El "atrás" del celular cierra el SELECTOR abierto, no el overlay de abajo (quick 261006-dzr).
+ *
+ * POR QUÉ ESTO ES UN WRAPPER Y ANTES ERA `const Select = SelectPrimitive.Root`
+ * `useOverlayHistory` tiene que colgarse de algún lado, y un re-export directo no tiene dónde. Mismo
+ * molde que `components/ui/dialog.tsx`: engancharlo ACÁ alcanza a los 23 `<Select>` de la app de una,
+ * sin tocar ninguna pantalla. El pedido del dueño en la UAT fue literal: con el selector de Servicio
+ * abierto dentro del alta de turno, el atrás se saltaba el selector y actuaba sobre el drawer.
+ *
+ * ⚠ POR QUÉ EL WRAPPER SE HACE CARGO DEL ESTADO DE APERTURA (la parte que define el trabajo)
+ * `useOverlayHistory` sólo participa si el overlay es CONTROLADO (`open !== undefined` +
+ * `dismiss !== undefined`): sin `open` no hay forma de saber el estado real ni de forzar el cierre, y
+ * empujar una entrada que después no se puede consumir deja basura en la pila. Pero los 23 `<Select>`
+ * son NO CONTROLADOS (medido: 0 de 23 pasa `open`; todos usan `value` + `onValueChange`), así que
+ * enganchar el hook tal cual no habría hecho NADA. Por eso el wrapper mantiene él mismo el `open`
+ * —`useState` inicializado con `defaultOpen`— y le pasa al primitivo un `open` SIEMPRE definido: el
+ * primitivo queda controlado y el hook participa, con la API externa intacta.
+ *
+ * Si el caller SÍ pasa `open` (hoy ninguno, pero el tipo lo permite) manda el caller: `controlled`
+ * hace que el estado interno quede dormido y nunca se pise el valor de afuera.
+ *
+ * POR QUÉ PASAR DE NO-CONTROLADO A CONTROLADO NO CAMBIA EL COMPORTAMIENTO (leído en el paquete, no
+ * supuesto): `SelectRoot` resuelve la apertura con `useControlled({ controlled: openProp, default:
+ * defaultOpen })` (`esm/select/root/SelectRoot.js`), y la ÚNICA diferencia entre las dos ramas es de
+ * dónde sale el valor de `open` — `setOpenUnwrapped` es un no-op cuando está controlado. Todo lo
+ * demás (`useTransitionStatus(open)` para la animación de cierre, `useOpenChangeComplete`, el foco,
+ * `useDismiss`, la navegación y el typeahead por teclado) se alimenta del `open` ya resuelto. Y
+ * `useControlled` fija `isControlled` en una ref del PRIMER render: como acá `open` siempre va
+ * definido, el primitivo nunca ve un cambio de modo y no dispara su warning de dev.
+ *
+ * ⚠ EL ORDEN DE `handleOpenChange` ESPEJA AL DEL PRIMITIVO, Y NO ES COSMÉTICO. `SelectRoot.setOpen`
+ * hace `onOpenChange?.(…)` → `if (eventDetails.isCanceled) return` → recién entonces mueve el estado.
+ * Si acá moviéramos el estado antes de mirar `isCanceled`, un caller que llame `details.cancel()`
+ * vería su veto IGNORADO (en no-controlado se respetaba). Mismo orden ⇒ mismo comportamiento.
+ *
+ * ⚠ NO SE TOCA `useDrawerPortalContainer` ni el portal del `SelectContent` (ver `SelectContent`): es
+ * el arreglo que hace clickeables las opciones dentro de un drawer en mobile. Cero cambio visual:
+ * este wrapper no renderiza ningún elemento propio ni agrega clases.
+ */
+function Select<Value, Multiple extends boolean | undefined = false>({
+  open: openProp,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: SelectProps<Value, Multiple>) {
+  // `defaultOpen` se consume ACÁ y NO se reenvía al primitivo: con `open` siempre definido el
+  // primitivo lo ignoraría igual (`useControlled` sólo lo usa en la rama no controlada), así que el
+  // único dueño del valor inicial es este estado. Como en `useControlled`, un `defaultOpen` que
+  // cambie después del primer render no reabre nada — es la misma semántica que antes.
+  const [selfOpen, setSelfOpen] = React.useState(defaultOpen ?? false)
+  const controlled = openProp !== undefined
+  const open = controlled ? openProp : selfOpen
+
+  const handleOpenChange = (next: boolean, details: SelectDismissDetails) => {
+    onOpenChange?.(next, details)
+    if (details.isCanceled) return
+    if (!controlled) setSelfOpen(next)
+  }
+
+  // El cierre por "atrás" viaja por el MISMO `onOpenChange` que el click afuera, el Escape y la
+  // elección de una opción, con su propio motivo y un `cancel()` que funciona. El anidamiento lo
+  // resuelve el módulo con el id por instancia (LIFO): un selector abierto dentro de un drawer se
+  // cierra ÉL y la entrada del drawer, que quedó arriba del stack, hace que el drawer vea su propio
+  // popstate como "de limpieza" y lo ignore.
+  useOverlayHistory({
+    open,
+    dismiss: (event) => handleOpenChange(false, createHistoryBackDetails(event)),
+  })
+
+  return (
+    <SelectPrimitive.Root
+      open={open}
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
