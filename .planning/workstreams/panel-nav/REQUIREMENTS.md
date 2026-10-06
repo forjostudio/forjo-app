@@ -74,6 +74,35 @@ diagnosticada midiendo la pila real del navegador por CDP: `sidebar.tsx:141` cal
 `usePathname()`, que ignora la query, así que con `/clients?c=A` el link se pinta activo **y aun así
 navega y empuja**. Antes de la Phase 1 no existía ninguna entrada `?c=` que sepultar.
 
+### El aviso de cambios sin guardar (agregado 2026-10-06)
+
+- [ ] **NAV-09**: "Hay cambios sin guardar" significa **realmente distinto de lo que se cargó**, no
+      "tocaste algo". Hoy es un latch **por gesto**: abrir un día ya marca sucio, y prender y apagar un
+      chip lo deja encendido (`agenda-client.tsx:374-381,389-392`). Es prerrequisito de NAV-10 y
+      arregla además un aviso que **hoy ya miente**.
+- [ ] **NAV-10**: El **atrás del navegador** avisa antes de perder cambios sin guardar, igual que ya
+      avisa un link del menú.
+- [ ] **NAV-11**: Confirmar "Salir sin guardar" respeta la regla de secciones. Hoy `confirmLeave()`
+      usa `router.push` ignorando `panelNavMode` ⇒ **ya rompe NAV-07** (deja dos secciones encima del
+      dashboard). Defecto preexistente, destapado al medir NAV-10.
+
+#### ⚠ Enmienda a D-01 — reabierta a propósito
+
+D-01 decía *"cero intercepción de `popstate`"* citando el encabezado de
+`unsaved-changes-guard.tsx:21-25`: que Next 16 no expone API de bloqueo **y** que empujar una entrada
+y revertirla *"desincroniza el historial del router"*.
+
+**Medido el 2026-10-05** (`.planning/debug/interceptar-atras-aviso-sin-guardar.md`): la primera mitad
+sigue siendo cierta —y peor, el `popstate` del atrás de usuario llega `cancelable: false` por diseño
+del estándar, así que **ni la Navigation API lo cancela**—. Pero **la segunda caducó**:
+`segment-cache/navigation.js:412-413` setea `preserveCustomHistoryState: true` en el camino del
+back/forward, con el comentario de que es **a propósito**. Y la prueba por existencia es
+`lib/overlay-history.ts`, en producción sobre 39 overlays.
+
+⇒ **D-01 se mantiene para el historial de RUTAS** (no se reescribe la navegación entre secciones) y
+**se relaja para el estado de UI**, que es como ya venía funcionando de hecho desde Bug A. No se
+*cancela* el atrás: se **absorbe**, que es lo que el repo ya sabe hacer.
+
 ### La regla de fondo
 
 - [x] **NAV-05**: Queda **una** forma de hacer esto en el panel, no cuatro copias. Un helper
