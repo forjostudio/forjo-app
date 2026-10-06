@@ -62,7 +62,23 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           {children}
-          <Toaster richColors position="top-right" />
+          {/* Toaster responsivo con UN SOLO <Toaster> (quick 261005-vuy).
+              La guía del proyecto pide "top-right en desktop / top-center en mobile", pero
+              `position` de sonner es UNA prop, evaluada en el render: no puede ser responsiva por
+              media query. Así que se declara el valor MOBILE-FIRST acá (top-center) y el desktop se
+              corrige por CSS en app/globals.css (@media min-width:768px → pegado a la derecha).
+              Duplicar el <Toaster> no es opción: sonner montaría dos viewports y los toasts
+              aparecerían en los dos (o, con `id`, habría que elegir destino en cada toast()).
+
+              MEDIDO: a 412px no cambia NADA respecto de antes (x=16 w=380, ya centrado) porque la
+              media query propia de sonner (≤600px) estira el toaster a todo el ancho entre sus
+              offsets, sea cual sea la posición. Lo que ARREGLA es la banda 601-767px, que es mobile
+              para el proyecto (breakpoint 768) y quedaba pegada a la derecha: medido x=320 de 700.
+
+              `swipeDirections` se declara EXPLÍCITO para no perder nada: sonner lo deriva de
+              `position` (getDefaultSwipeDirections, index.mjs:429) y con "top-center" el descarte
+              por swipe a la derecha desaparecería. Así el gesto queda igual que hoy en todos los anchos. */}
+          <Toaster richColors position="top-center" swipeDirections={["top", "right"]} />
           <SpeedInsights />
           <Analytics />
         </ThemeProvider>

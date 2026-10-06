@@ -646,6 +646,32 @@
   visibility: hidden;
 }
 
+/* ── Toaster: top-center en mobile / top-right en desktop (quick 261005-vuy) ──────────────
+   La guía del proyecto pide las dos posiciones, pero `position` de sonner es UNA prop de render:
+   no hay forma de hacerla responsiva sin montar DOS <Toaster> (y entonces los toasts saldrían en
+   los dos viewports). Así que app/layout.tsx declara el valor MOBILE-FIRST (`top-center`) y acá se
+   corrige el DESKTOP.
+
+   ⚠ ESPECIFICIDAD, no orden: sonner inyecta su CSS con `head.appendChild(<style>)` en tiempo de
+   módulo (dist/index.mjs:2-9), o sea DESPUÉS de nuestra hoja. En un empate gana sonner. Su regla a
+   vencer es `[data-sonner-toaster][data-x-position=center] { left:50%; transform:translateX(-50%) }`
+   → 0,2,0. Por eso el selector de acá suma el `[data-y-position]` y queda en 0,3,0: gana sí o sí,
+   venga antes o después en la cascada.
+
+   `--offset-right` lo setea sonner inline en el propio toaster (assignOffset, index.mjs:835);
+   su default es 24px, que es exactamente el valor que tenía el `top-right` de antes.
+
+   `transform: none` es necesario para deshacer el `translateX(-50%)` del centrado. No hay riesgo de
+   pisar animaciones: el transform del toaster es SOLO el centrado (lo del lift y la entrada van en
+   los `[data-sonner-toast]`, que no tocamos). */
+@media (min-width: 768px) {
+  [data-sonner-toaster][data-x-position="center"][data-y-position="top"] {
+    left: auto;
+    right: var(--offset-right);
+    transform: none;
+  }
+}
+
 /* ── Fuga de las reglas DESCENDIENTES de los themes hacia el landing anidado ──────────
    themes.css define reglas con selector DESCENDIENTE, ej:
        [data-theme="cyber"] h1, h2, h3 { text-transform: uppercase }
