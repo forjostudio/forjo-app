@@ -8,10 +8,14 @@ uat: PENDIENTE (celular del dueño, los 7 puntos del PLAN) — medido antes en C
 commits:
   - c52593d
   - 351a53b
-plan_head_before: f6027a04
+  - 34549dc
+  - 72501cd
+  - 7e3d842
+plan_head_before: f6027a0
 actuals:
-  commits: 2
+  commits: 5
   tasks: 3
+  nota_commits: "MEDIDO: `git log f6027a0..HEAD --grep=261006-flm` da 5 (2 de codigo + 3 de este SUMMARY). `git rev-list --count f6027a0..HEAD` da 8 porque incluye los 3 commits del ejecutor paralelo del quick 261006-fln, que trabajo sobre la misma rama."
 key-files:
   created:
     - lib/dirty-history.ts
