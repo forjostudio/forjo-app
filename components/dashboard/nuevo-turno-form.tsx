@@ -26,7 +26,7 @@ import {
   guardDraftOnDismiss,
   guardDraftOnDrawerDismiss,
 } from '@/lib/panel-draft'
-import type { OverlayDismissDetails } from '@/lib/overlay-history'
+import { useOverlayHistory, type OverlayDismissDetails } from '@/lib/overlay-history'
 import { Plus, Check, UserPlus, ChevronLeft, CalendarDays, XIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Calendar } from '@/components/ui/calendar'
@@ -261,6 +261,38 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
   const [step, setStep] = useState<'form' | 'confirm'>('form')
   // Cliente ya resuelto (derivado si era nuevo) para el resumen del paso confirm.
   const [pendingClient, setPendingClient] = useState<SelectedClient | null>(null)
+
+  // ── El "atrás" del celular cierra el CALENDARIO abierto, no el formulario (quick 261006-fln) ───
+  //
+  // ÚLTIMO HUECO DE LA TANDA. Diálogos y drawers (quick 260928-seo) y selectores (261006-dzr) ya
+  // participan del historial porque los tres pasan por un wrapper único de `components/ui/`. El
+  // calendario del campo Fecha NO tiene componente propio: es este `dateOpen` + un `<button>` que
+  // togglea + una expansión EN EL LUGAR (no un portal), así que el enganche va acá, en el formulario.
+  //
+  // El hook sólo participa si el overlay es CONTROLADO (`open` definido + `dismiss` presente). Acá
+  // `dateOpen` ya es estado explícito, así que sale natural: no hubo que controlar nada por dentro
+  // como sí hubo que hacer con el `Select`, que era no controlado en sus 23 call sites.
+  //
+  // ⚠ LO QUE SE LE PASA ES "ESTÁ EN PANTALLA", NO `dateOpen` A SECAS. El paso de confirmación hace un
+  // early return más abajo que se lleva TODA la rama del calendario, pero no toca `dateOpen`: con
+  // `dateOpen` crudo el hook seguiría reteniendo una entrada por un calendario que ya no se ve, y el
+  // atrás en el resumen sería un gesto MUERTO (apretar y que no pase nada visible) en vez de cerrar
+  // el formulario — el defecto exacto que esta tanda viene a no repetir. Al bajar a false el hook
+  // CONSUME la entrada, y al volver al paso 'form' la vuelve a empujar, así que el calendario sigue
+  // expandido igual que antes: cero cambio de UI.
+  //
+  // ANIDAMIENTO: esto convive con el diálogo/drawer del alta, que ya tiene su propia entrada. El
+  // módulo resuelve LIFO con un id por instancia —el `popstate` deja arriba la entrada del shell, que
+  // el calendario ve como ajena (⇒ cierra) y el shell como propia (⇒ ignora)—, así que el atrás
+  // cierra el calendario y el formulario QUEDA. Verificado en `test/overlay-history.test.ts`, no
+  // supuesto.
+  const dateCalendarOnScreen = dateOpen && !(step === 'confirm' && pendingClient)
+  useOverlayHistory({
+    open: dateCalendarOnScreen,
+    // No pasa por `guardDraftOnDismiss`: acá no se descarta nada: la fecha ya elegida queda en `date`
+    // y el borrador lo sigue protegiendo la guarda del shell cuando el atrás llega al formulario.
+    dismiss: () => setDateOpen(false),
+  })
 
   // Cliente: seleccionado de la lista (combobox) o creado inline.
   const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null)
