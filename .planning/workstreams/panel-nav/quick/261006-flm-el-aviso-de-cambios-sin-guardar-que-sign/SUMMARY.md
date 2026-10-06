@@ -191,6 +191,13 @@ regresiones**. Los canarios de reloj **no aplican**: las corridas fueron a las *
 **11:51** (final) hora AR, dentro de `[01:00, 23:30]`, y los 4 expected-fail son los mismos en las
 dos puntas.
 
+⚠ **El baseline no era HEAD limpio y conviene decirlo:** el ejecutor paralelo del quick 261006-fln
+estaba trabajando en el mismo árbol, así que sus cambios (ya sin commitear a las 11:27) entraron en
+las dos corridas. La cuenta igual cierra exacta —1544 + 58 = 1602, y el único archivo nuevo es el
+mío— porque sus 306 líneas de tests ya estaban en el baseline. Sus commits (75394c0, 3d966a8,
+536b5c8, sobre  y ) quedaron intercalados en el
+log antes de los míos y no se solapan con ningún archivo de este quick.
+
 **`./node_modules/.bin/eslint`** sobre los 8 archivos tocados: **0 problemas**. Aparte queda **un
 error preexistente** en `agenda-client.tsx` (`react-hooks/purity`, `Date.now()` dentro de un `useMemo`,
 línea 853 en HEAD y 883 ahora por mis líneas de más): está en código que no toqué, confirmado con
