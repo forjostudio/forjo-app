@@ -27,6 +27,7 @@ import {
   guardDraftOnDrawerDismiss,
 } from '@/lib/panel-draft'
 import { useOverlayHistory, type OverlayDismissDetails } from '@/lib/overlay-history'
+import { revealScrollDelta } from '@/lib/reveal-in-container'
 import { Plus, Check, UserPlus, ChevronLeft, CalendarDays, XIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Calendar } from '@/components/ui/calendar'
@@ -293,6 +294,59 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
     // y el borrador lo sigue protegiendo la guarda del shell cuando el atrás llega al formulario.
     dismiss: () => setDateOpen(false),
   })
+
+  // ── Al desplegar el calendario, LLEVARLO A LA VISTA (quick 261006-iey, pedido del dueño) ───────
+  //
+  // El defecto, en celular: el campo Fecha está a media altura del formulario, así que el calendario
+  // se despliega abajo del borde del drawer y hay que scrollear a mano para verlo entero.
+  //
+  // ⚠ SE SCROLLEA EL CONTENEDOR, NO EL DOCUMENTO. El calendario vive dentro del `overflow-y-auto`
+  // del shell y el drawer bloquea el scroll del documento mientras está abierto: tocar el documento
+  // pelearía con ese bloqueo. Se busca el ancestro que scrollea de verdad y se le mueve el
+  // `scrollTop`; en desktop el diálogo NO tiene scroll interno, no se encuentra ninguno y no pasa
+  // nada (que es lo correcto: ahí el calendario entra en pantalla).
+  //
+  // ⚠ NO TOCA `dateOpen` NI SU CABLEADO DE HISTORIAL (quick 261006-fln, verificado en celular): esto
+  // sólo LEE "está en pantalla" para saber cuándo mover la vista.
+  const dateCalRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!dateCalendarOnScreen) return
+    // Doble rAF: el calendario se acaba de pintar y el drawer puede seguir animando su altura. Medir
+    // antes de que el layout se asiente da la posición vieja — mismo recaudo que el wizard público
+    // (`app/[slug]/booking-client.tsx`).
+    let segundo = 0
+    const primero = requestAnimationFrame(() => {
+      segundo = requestAnimationFrame(() => {
+        const el = dateCalRef.current
+        if (!el) return
+        // El ancestro que scrollea de verdad: `overflow-y` desplazable Y con algo para desplazar.
+        let cont: HTMLElement | null = el.parentElement
+        while (cont) {
+          const oy = window.getComputedStyle(cont).overflowY
+          if ((oy === 'auto' || oy === 'scroll') && cont.scrollHeight > cont.clientHeight) break
+          cont = cont.parentElement
+        }
+        if (!cont) return
+        const c = cont.getBoundingClientRect()
+        const e = el.getBoundingClientRect()
+        const delta = revealScrollDelta({
+          containerTop: c.top,
+          containerBottom: c.bottom,
+          elementTop: e.top,
+          elementBottom: e.bottom,
+          margin: 12,
+        })
+        if (delta === 0) return
+        // Suave salvo que el sistema pida lo contrario (regla del proyecto).
+        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        cont.scrollTo({ top: cont.scrollTop + delta, behavior: reduce ? 'auto' : 'smooth' })
+      })
+    })
+    return () => {
+      cancelAnimationFrame(primero)
+      cancelAnimationFrame(segundo)
+    }
+  }, [dateCalendarOnScreen])
 
   // Cliente: seleccionado de la lista (combobox) o creado inline.
   const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null)
@@ -727,7 +781,8 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
         </div>
       </div>
       {dateOpen && (
-        <div className="rounded-lg border border-border bg-card">
+        // La ref es sólo para medir al abrirse (ver el efecto de arriba): ni clases ni markup cambian.
+        <div ref={dateCalRef} className="rounded-lg border border-border bg-card">
           <Calendar
             mode="single"
             selected={date ? parseISO(date) : undefined}
