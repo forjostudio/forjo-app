@@ -48,6 +48,20 @@ function resetDrawerDrag(node: HTMLElement | null | undefined) {
 
 // ── Backstop: devolver el drawer a su geometría cuando BAJA el teclado (quick 261005-vuy) ────────
 //
+// ⚠ ESTADO DESPUÉS DEL QUICK 261005-x91: esto es ahora una RED DE LA RED, no la defensa principal.
+// El `Drawer` de más abajo pasa `repositionInputs={false}`, así que vaul ya NO escribe los
+// `height`/`bottom` que este listener venía a limpiar: su segunda guarda ("¿hay algo inline?")
+// lo vuelve un no-op en el camino normal. SE DEJA PUESTO, y la razón no es sentimental:
+//   · `Drawer` es un pass-through (`{...props}`) y la prop va ANTES del spread, así que cualquier
+//     caller puede volver a prender `repositionInputs` — este código NO es inalcanzable;
+//   · el plan B declarado, si el browser no alcanza para mantener los campos del fondo a la vista,
+//     es justamente volver a prender la prop y parchear vaul: ahí la red vuelve a hacer falta el
+//     mismo día;
+//   · cuesta un listener pasivo que lee dos strings y sale, y es el único lugar del repo donde queda
+//     documentado con números medidos el latch roto de vaul.
+// Si algún día se borra `repositionInputs={false}` SIN borrar esto, el drawer sigue cubierto. Si se
+// borran los dos, vuelve el bug del quick 261005-vuy tal cual.
+//
 // EL BUG, medido en un celular real y reproducido en la sonda (sesión completa en
 // `.planning/debug/drawer-no-vuelve-al-bajar-teclado.md`): el teclado baja y el drawer NO vuelve —
 // queda un hueco de 240px abajo, el drawer con su `top` en -75.4 (fuera de pantalla POR ARRIBA) y
@@ -138,6 +152,40 @@ function Drawer({
     <DrawerPrimitive.Root
       data-slot="drawer"
       open={open}
+      // ── Apagamos el manejo de teclado de vaul (quick 261005-x91) ─────────────────────────────
+      //
+      // TERCERA ronda sobre el mismo drawer. Tres síntomas distintos, UN bug de vaul 1.1.2:
+      // el rebote del arrastre vetado (260929-g4d), el drawer clavado DESPUÉS de bajar el teclado
+      // (261005-vuy) y el drawer mal calculado CON el teclado todavía arriba (éste). Cada parche
+      // cubría un caso y aparecía el siguiente, así que acá dejamos de parchear síntomas y apagamos
+      // la función rota en el origen. Decisión del dueño.
+      //
+      // QUÉ APAGA, exactamente: `dist/index.mjs:1115` abre el listener de teclado con
+      // `if (!drawerRef.current || !repositionInputs) return`, así que con la prop en false el bloque
+      // ENTERO no corre nunca. vaul deja de escribir `height`/`bottom` inline y su latch roto
+      // (`keyboardIsOpen.current = !keyboardIsOpen.current`, :1132 — un TOGGLE que cualquier paso de
+      // viewport > 60px invierte) deja de importar porque nadie lo lee más.
+      //
+      // QUÉ PASA EN SU LUGAR: el browser scrollea el campo enfocado a la vista dentro del
+      // `overflow-y-auto` que el shell ya tiene, y el drawer conserva su `max-h-[80vh]` del CSS.
+      // MEDIDO en la sonda (Chrome 153, emulación 412x823, app real, los DOS drawers): con el teclado
+      // de 320px arriba, Notas y el checkbox "Avisar al cliente por mail" quedan VISIBLES sobre el
+      // teclado, y el caso que antes clavaba el drawer (QWERTY 320 → numérico 240) ya no lo mueve.
+      //
+      // EL OTRO EFECTO, no obvio: `repositionInputs` aparece también en el `isDisabled` del scroll-lock
+      // (:940, `usePreventScroll`). Apagarla deshabilita ese hook — pero `usePreventScroll` sólo hace
+      // algo `if (isIOS())` (:144), así que en Android y en desktop es un no-op completo. Y el bloqueo
+      // de scroll del fondo NO depende de él: lo da el `RemoveScroll` de Radix Dialog
+      // (@radix-ui/react-dialog, el Overlay envuelve en react-remove-scroll) más `usePositionFixed`
+      // (:770, `position: fixed` en el body), ninguno de los dos gateado por esta prop. Lo que sí se
+      // pierde, y sólo en iPhone/iPad, son los refinamientos de `preventScrollMobileSafari`
+      // (overscroll del contenedor y centrado del input al enfocar). Queda DECLARADO como no medido:
+      // no hay iOS en el banco de pruebas.
+      //
+      // Va ANTES del spread a propósito: es un default nuestro, no una imposición. Si algún día hay
+      // que volver a prenderla (plan B = parchear vaul), un caller puede pasar `repositionInputs` y
+      // el backstop de acá arriba vuelve a tener trabajo.
+      repositionInputs={false}
       onOpenChange={onOpenChange}
       {...props}
     />
