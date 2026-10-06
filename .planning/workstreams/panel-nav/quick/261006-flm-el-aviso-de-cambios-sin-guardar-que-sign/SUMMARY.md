@@ -195,7 +195,7 @@ dos puntas.
 estaba trabajando en el mismo árbol, así que sus cambios (ya sin commitear a las 11:27) entraron en
 las dos corridas. La cuenta igual cierra exacta —1544 + 58 = 1602, y el único archivo nuevo es el
 mío— porque sus 306 líneas de tests ya estaban en el baseline. Sus commits (75394c0, 3d966a8,
-536b5c8, sobre  y ) quedaron intercalados en el
+536b5c8, sobre `nuevo-turno-form.tsx` y `test/overlay-history.test.ts`) quedaron intercalados en el
 log antes de los míos y no se solapan con ningún archivo de este quick.
 
 **`./node_modules/.bin/eslint`** sobre los 8 archivos tocados: **0 problemas**. Aparte queda **un
