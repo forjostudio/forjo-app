@@ -18,32 +18,60 @@
 // la página con cambios no se pierde), URLs externas, y links con `download`. Un `onClick` a mano
 // dispararía en los tres casos y habría que filtrarlos.
 //
-// LÍMITE CONOCIDO, declarado en vez de hackeado: el BOTÓN ATRÁS/ADELANTE del navegador no está
-// interceptado. El App Router de Next 16 no expone ninguna API de bloqueo de navegación para
-// `popstate`, y el truco habitual (empujar una entrada falsa al history con `pushState` y revertirla)
-// desincroniza el historial del router. `beforeunload` tampoco lo cubre: atrás es navegación
-// client-side. Es un diferido a propósito, no un olvido.
+// EL BOTÓN ATRÁS **SÍ** ESTÁ CUBIERTO desde el quick 261006-flm (NAV-10), y la mitad de este
+// docblock que decía lo contrario era mitad verdadera y mitad caduca:
+//   · VERDADERO y medido: no hay ninguna API para CANCELAR el atrás. Next 16.2.7 no expone bloqueo
+//     de navegación para `popstate`, el evento llega `cancelable: false`, y la Navigation API tampoco
+//     sirve (el atrás del usuario llega `cancelable: false, userInitiated: true`).
+//   · CADUCO: que el truco de la entrada falsa "desincronice el historial del router" es FALSO en
+//     este repo. Next PRESERVA a propósito el custom history state en el back/forward
+//     (`preserveCustomHistoryState: true` en su camino de traverse) y su `pushState` parcheado
+//     despacha la sincronización del router. Y `lib/overlay-history.ts` corre exactamente ese truco
+//     en producción sobre 39 overlays, verificado en celular real.
+// ⇒ El atrás no se cancela: SE ABSORBE con una entrada propia. La mecánica vive en
+// `lib/dirty-history.ts`, se engancha abajo en `useUnsavedChanges`, y su docblock tiene el detalle.
+//
+// ⚠ POR QUÉ EL DIÁLOGO DE ACÁ NO USA EL WRAPPER `Dialog` DE `components/ui/dialog.tsx` Y ES EL ÚNICO
+// DEL PANEL QUE NO LO USA. Ese wrapper engancha `useOverlayHistory`, o sea que cada diálogo del panel
+// EMPUJA SU PROPIA ENTRADA de historial para que el atrás lo cierre. Este diálogo es el que existe
+// PRECISAMENTE porque el atrás ya fue absorbido por el sentinel de cambios sin guardar: si además
+// empujara una entrada, habría DOS absorbentes apilados y los dos competirían por escribir y
+// consumir el mismo lugar —su `back()` de limpieza y nuestro re-empuje corren en el MISMO commit— y
+// la continuación de "Salir sin guardar" tendría que contar entradas que no controla. Con el sentinel
+// como único absorbente, el atrás apretado con este diálogo abierto se absorbe otra vez y el diálogo
+// SIGUE preguntando, que es lo correcto cuando hay cambios para perder. Cero diferencia visual: el
+// `Root` de Base UI no renderiza ningún nodo, y el contenido, las clases y la copy son los mismos.
 //
 // MOBILE: el drawer del sidebar se cierra en el `onClick` del link, o sea ANTES de que este guard
 // cancele la navegación. El diálogo aparece con el drawer ya cerrado. Aceptado.
 //
-// ALCANCE: el guard sólo se arma cuando una página llama `useUnsavedChanges`. Hoy lo hace SÓLO
-// Agenda. Extenderlo a /web, /servicios, /negocio o /settings es una línea por pantalla, pero es
-// una decisión aparte.
+// ALCANCE: el guard sólo se arma cuando una página llama `useUnsavedChanges`, y hoy lo hacen DOS:
+// Agenda (`app/(dashboard)/agenda/agenda-client.tsx`) y el editor de la web
+// (`app/(dashboard)/web/web-client.tsx`). O sea que el atrás frena en `/agenda` **y** en `/web` —
+// deseable y declarado: las dos pantallas pierden trabajo real si se sale sin guardar, y las dos
+// derivan su bandera de una comparación contra lo guardado. Extenderlo a /servicios, /negocio o
+// /settings sigue siendo una línea por pantalla y una decisión aparte.
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { decideNavigation } from '@/lib/unsaved-changes'
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
+import { decideNavigation, leaveNavigationMode } from '@/lib/unsaved-changes'
+import { isDirtyOwnedEntry, useDirtyHistory } from '@/lib/dirty-history'
+import { panelNavMode } from '@/lib/panel-history'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-type PendingNavigation = { href: string; proceed?: () => void }
+// `href: null` = "sin destino conocido": es el atrás del navegador, que no lo trae (NAV-10). Esa
+// variante SIEMPRE viaja con `proceed`, porque el único que sabe completar el gesto es quien absorbió
+// la entrada del historial.
+type PendingNavigation = { href: string | null; proceed?: () => void }
 
 type GuardApi = {
   // La llama la PÁGINA (vía useUnsavedChanges) para sincronizar su bandera sucia.
   setDirty: (dirty: boolean) => void
-  // La llama el NAV. Devuelve true si BLOQUEÓ (el call-site tiene que cancelar su navegación).
-  requestNavigation: (href: string, proceed?: () => void) => boolean
+  // La llama el NAV, y también el sentinel del atrás con `href: null`. Devuelve true si BLOQUEÓ (el
+  // call-site tiene que cancelar su navegación).
+  requestNavigation: (href: string | null, proceed?: () => void) => boolean
 }
 
 // Default no-op: fuera del provider el guard NUNCA bloquea. Mismo criterio que el DEFAULT de
@@ -67,9 +95,13 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
   }, [])
 
   const requestNavigation = useCallback(
-    (href: string, proceed?: () => void) => {
-      // El "qué decidir" NO se reimplementa acá: vive en el helper puro y testeado.
+    (href: string | null, proceed?: () => void) => {
+      // El "qué decidir" NO se reimplementa acá: vive en el helper puro y testeado, incluida la regla
+      // del destino desconocido (`href: null` = el atrás del navegador).
       if (decideNavigation({ dirty: dirtyRef.current, href, currentPath: pathname }) === 'allow') return false
+      // Un pedido nuevo PISA al anterior, y es lo correcto: si el dueño tocó "Finanzas" en el menú y
+      // después apretó atrás, el gesto vigente es el atrás. Las dos lecturas coinciden en lo único
+      // que importa — la navegación del link queda cancelada igual.
       setPending({ href, proceed })
       return true
     },
@@ -79,15 +111,36 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
   // POR QUÉ `proceed` y no sólo el href: el logout no es un push. Es desloguear y DESPUÉS navegar.
   // Un guard que al confirmar empujara `/login` sin haber llamado a signOut() dejaría la sesión viva
   // y el proxy rebotaría al dashboard — falsa impresión de haber cerrado sesión. Con la continuación,
-  // cada call-site declara qué significa "seguir" para él. Sin `proceed`, el default es router.push
-  // (NUNCA redirect(): lanza NEXT_REDIRECT y dispara un toast espurio, precedente del CRM).
+  // cada call-site declara qué significa "seguir" para él. El atrás del navegador usa ese mismo
+  // mecanismo por otro motivo: su `popstate` no trae destino, así que no hay href que empujar y la
+  // continuación la aporta quien absorbió la entrada (`lib/dirty-history.ts`).
+  //
+  // Sin `proceed` el destino se navega acá, y CÓMO entra en el historial no se decide en este
+  // archivo: lo decide `leaveNavigationMode` sobre la regla de secciones del panel (`panelNavMode`,
+  // la MISMA que consume el sidebar en su `<Link replace>`) más la pregunta de si hay un sentinel
+  // arriba del stack. Las dos mitades están justificadas en el docblock de `leaveNavigationMode`;
+  // acá alcanza con no re-decidir nada. NUNCA `redirect()`: lanza NEXT_REDIRECT y dispara un toast
+  // espurio (precedente del CRM).
   function confirmLeave() {
     const nav = pending
     if (!nav) return
-    // Apagar la bandera ANTES de ejecutar la continuación: si no, el push volvería a pasar por acá.
+    // Apagar la bandera ANTES de ejecutar la continuación: si no, la navegación volvería a pasar por
+    // acá.
     dirtyRef.current = false
     setPending(null)
-    if (nav.proceed) nav.proceed()
+    if (nav.proceed) { nav.proceed(); return }
+    // Defensa de forma: la variante sin destino siempre trae `proceed`, así que esto no debería
+    // ocurrir — y si ocurriera, no hay nada honesto que navegar.
+    if (nav.href === null) return
+    const mode = leaveNavigationMode({
+      // Se re-verifica la marca EN EL MOMENTO del click y no al abrir el diálogo: entre las dos cosas
+      // pudo haber una escritura ajena (el `replace` del sidebar, el `replaceState` crudo de Agenda)
+      // que se llevó el sentinel. Es la misma guarda que `lib/overlay-history.ts` pone antes de cada
+      // `back()`, por la misma razón: operar sobre una entrada que ya no es nuestra expulsa al dueño.
+      holdsSentinel: isDirtyOwnedEntry(window.history.state),
+      sectionMode: panelNavMode({ from: pathname, to: nav.href.split(/[?#]/)[0] }),
+    })
+    if (mode === 'replace') router.replace(nav.href)
     else router.push(nav.href)
   }
 
@@ -101,7 +154,7 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
           `onOpenChange(false)` — Escape, click afuera y el botón × — CANCELA la navegación, o sea
           equivale a "Seguir editando". Que la salida por descarte del modal sea la opción SEGURA y
           nunca la destructiva es una decisión, no una casualidad. */}
-      <Dialog open={pending !== null} onOpenChange={(open) => { if (!open) setPending(null) }}>
+      <DialogPrimitive.Root open={pending !== null} onOpenChange={(open) => { if (!open) setPending(null) }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>¿Salir sin guardar?</DialogTitle>
@@ -118,20 +171,38 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </DialogPrimitive.Root>
     </UnsavedChangesContext.Provider>
   )
 }
 
-// Lo llama la PÁGINA. Sincroniza su bandera sucia con el provider y la APAGA al desmontarse: ese
-// cleanup no es un detalle, es lo que garantiza que al salir de Agenda el panel entero vuelva a
-// navegar sin fricción y que ninguna bandera quede prendida para siempre.
+// Lo llama la PÁGINA. Hace DOS cosas con la misma bandera:
+//
+//   1) La sincroniza con el provider y la APAGA al desmontarse. Ese cleanup no es un detalle: es lo
+//      que garantiza que al salir de la pantalla el panel entero vuelva a navegar sin fricción y que
+//      ninguna bandera quede prendida para siempre.
+//   2) Engancha el sentinel de historial que absorbe el botón ATRÁS (NAV-10). Va acá y no en cada
+//      pantalla por el mismo criterio que el punto 1: las pantallas ya declaran su bandera en un solo
+//      lugar, así que las TRES vías de pérdida (navegación interna, recarga, atrás) se cubren desde
+//      la misma línea y no puede quedar una pantalla con dos de las tres.
+//
+// ⚠ EL EMPUJE OCURRE EN LA TRANSICIÓN LIMPIO→SUCIO, y con `dirty` derivado de una COMPARACIÓN contra
+// lo guardado (NAV-09) eso pasa UNA vez y por un cambio real. Con el latch por gesto que había antes
+// —ocho mutadores prendiéndolo, uno de ellos abrir o cerrar un día— cada gesto reflejo habría pedido
+// confirmación: ahí el arreglo era peor que el bug, y por eso NAV-09 fue primero.
 export function useUnsavedChanges(dirty: boolean) {
-  const { setDirty } = useContext(UnsavedChangesContext)
+  const { setDirty, requestNavigation } = useContext(UnsavedChangesContext)
   useEffect(() => {
     setDirty(dirty)
     return () => setDirty(false)
   }, [dirty, setDirty])
+  // `requestNavigation` devuelve si BLOQUEÓ; el sentinel lo usa para saber si alguien va a mostrar el
+  // aviso (fuera del provider nadie lo hace, y ahí el atrás tiene que completarse en vez de quedar
+  // muerto). `null` como destino es la variante del atrás: no hay href que ofrecer.
+  useDirtyHistory({
+    dirty,
+    confirm: (leave) => requestNavigation(null, leave),
+  })
 }
 
 // Lo llama el NAV. Devuelve `requestNavigation(href, proceed?)` → true si bloqueó.

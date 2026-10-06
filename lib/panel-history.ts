@@ -72,31 +72,32 @@ export type PanelViewCause =
  * (`lib/unsaved-changes.ts`).
  *
  * @param holding ¿La entrada de arriba del stack la empujamos nosotros? (guarda de la cicatriz 2)
- * @param overlayOwnsTop ¿La entrada de arriba lleva la marca de un overlay? (regla 0, cicatriz 3)
+ * @param foreignOwnsTop ¿La entrada de arriba lleva la marca de OTRO dueño? (regla 0, cicatriz 3)
  */
 export function panelHistoryAction({
   cause,
   from,
   to,
   holding,
-  overlayOwnsTop,
+  foreignOwnsTop,
 }: {
   cause: PanelViewCause
   from: string | null
   to: string | null
   holding: boolean
-  overlayOwnsTop: boolean
+  foreignOwnsTop: boolean
 }): PanelHistoryAction {
-  // ── REGLA 0 — mientras un overlay sea dueño de la entrada de arriba, no se escribe. ────────────
-  // ⚠ ES LA REGLA QUE CIERRA C-1, Y ES ABSOLUTA A PROPÓSITO. `lib/overlay-history.ts` marca su
-  // entrada con un hash propio y una clave en el state; escribir encima le borra las dos, así que al
-  // cerrarse el overlay ya no reconoce su entrada, no hace su `back()`, y queda basura en la pila
-  // más un atrás muerto. Debilitarla "para dejar pasar sólo el replace de la fusión" cambia una
-  // regresión por un defecto: el `replaceState` caería justo sobre la entrada del modal de fusión,
-  // que es el que la tiene arriba mientras su botón corre.
+  // ── REGLA 0 — mientras la entrada de arriba tenga OTRO dueño, no se escribe. ───────────────────
+  // ⚠ ES LA REGLA QUE CIERRA C-1, Y ES ABSOLUTA A PROPÓSITO. Los otros dos módulos que escriben
+  // historial —`lib/overlay-history.ts` y `lib/dirty-history.ts`— marcan su entrada con un hash
+  // propio y una clave en el state; escribir encima le borra las dos, así que su dueño ya no
+  // reconoce su entrada, no hace su `back()`, y queda basura en la pila más un atrás muerto.
+  // Debilitarla "para dejar pasar sólo el replace de la fusión" cambia una regresión por un defecto:
+  // el `replaceState` caería justo sobre la entrada del modal de fusión, que es el que la tiene
+  // arriba mientras su botón corre.
   // LA ESCRITURA NO SE PIERDE: queda PENDIENTE, y la aplica el efecto de reconciliación del
-  // componente en cuanto el overlay suelta la entrada.
-  if (overlayOwnsTop) return 'none'
+  // componente en cuanto el otro dueño suelta la entrada.
+  if (foreignOwnsTop) return 'none'
 
   // ── REGLA 1 — el commit concurrente nunca toca el historial. ───────────────────────────────────
   // Es la declaración del call site del borrado, y es un candado INDEPENDIENTE de la regla 0: si
@@ -216,6 +217,44 @@ export function isOverlayOwnedEntry(state: unknown): boolean {
     'frjOverlay' in state &&
     typeof (state as { frjOverlay?: unknown }).frjOverlay === 'number'
   )
+}
+
+/**
+ * ¿La entrada de arriba es el sentinel de cambios sin guardar de `lib/dirty-history.ts`? Es la
+ * segunda mitad del predicado de la regla 0.
+ *
+ * ⚠ **El literal `frjDirty` se duplica a propósito, por el mismo motivo que `frjOverlay`**: este
+ * módulo no declara frontera de cliente (ver su encabezado) y `lib/dirty-history.ts` exporta además
+ * un hook de React, así que importar de allá arrastraría React adentro del grafo de este módulo —y
+ * de su suite— sin ninguna necesidad. El candado contra la deriva no es la disciplina: es el test
+ * que LEE los dos archivos y exige que el literal siga siendo el mismo.
+ *
+ * ⚠ **POR QUÉ HACE FALTA, Y POR QUÉ AHORA.** `applyPanelView` escribe con `pushState`/`replaceState`
+ * y hoy sólo se abstiene ante un overlay, así que escribiría ENCIMA del sentinel: el guard dejaría
+ * de reconocer su entrada, no la consumiría al guardar y el atrás quedaría muerto. Hoy no pasa
+ * —Agenda no llama a `applyPanelView`— pero la Phase 2 planea cablear su `activeLoc` con la causa
+ * `'filter'` (⇒ `replace`), y ese día el reemplazo cae justo sobre el sentinel. Se cierra antes de
+ * que exista el call site, no después.
+ */
+export function isDirtyGuardOwnedEntry(state: unknown): boolean {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    'frjDirty' in state &&
+    typeof (state as { frjDirty?: unknown }).frjDirty === 'number'
+  )
+}
+
+/**
+ * ¿La entrada de arriba pertenece a ALGÚN otro dueño de historial? Es el predicado completo de la
+ * regla 0: un overlay o el sentinel de cambios sin guardar.
+ *
+ * Existe como una sola función para que el OR se escriba una vez: los dos consumidores
+ * ({@link applyPanelView} y {@link consumeOwnedPanelEntry}) tienen que hacerse la misma pregunta, y
+ * el día que aparezca un tercer módulo que escriba historial sólo se suma acá.
+ */
+export function isForeignOwnedEntry(state: unknown): boolean {
+  return isOverlayOwnedEntry(state) || isDirtyGuardOwnedEntry(state)
 }
 
 // ── El armado de URL ─────────────────────────────────────────────────────────────────────────────
@@ -453,7 +492,7 @@ export function applyPanelView({
     from,
     to,
     holding: isPanelViewEntry(actual, param),
-    overlayOwnsTop: isOverlayOwnedEntry(actual),
+    foreignOwnsTop: isForeignOwnedEntry(actual),
   })
 
   if (action === 'none') return action
@@ -495,11 +534,11 @@ export function applyPanelView({
  * ⚠ **NUNCA un `back()` sobre una entrada ajena** (cicatriz 2): consumir lo que no empujamos expulsa
  * al dueño del sitio. Por eso son DOS guardas independientes y no una:
  *   · la marca propia tiene que estar arriba ({@link panelViewEntryParam} con valor no nulo), y
- *   · la entrada no puede ser de un overlay ({@link isOverlayOwnedEntry}) — hoy las dos formas de
- *     state son disjuntas y la segunda guarda es redundante, pero es justo la cicatriz que
- *     `lib/overlay-history.ts:362-366` documenta ("si el desmontaje fue por una navegación… llamar
- *     `back()` DESHARÍA la navegación del usuario"), así que se escribe explícita en vez de
- *     depender de que dos formas de state nunca se solapen.
+ *   · la entrada no puede ser de otro dueño de historial ({@link isForeignOwnedEntry}: un overlay o
+ *     el sentinel de cambios sin guardar) — hoy las tres formas de state son disjuntas y la segunda
+ *     guarda es redundante, pero es justo la cicatriz que `lib/overlay-history.ts` documenta ("si el
+ *     desmontaje fue por una navegación… llamar `back()` DESHARÍA la navegación del usuario"), así
+ *     que se escribe explícita en vez de depender de que las formas de state nunca se solapen.
  *
  * ⚠ **`history.back()` es ASÍNCRONO.** El call site tiene que PREVENIR la navegación (`true` ⇒
  * `e.preventDefault()`), nunca encadenarla: si dejara navegar, el router empujaría su entrada antes
@@ -511,7 +550,7 @@ export function applyPanelView({
  */
 export function consumeOwnedPanelEntry(): boolean {
   const actual: unknown = window.history.state
-  if (isOverlayOwnedEntry(actual)) return false
+  if (isForeignOwnedEntry(actual)) return false
   if (panelViewEntryParam(actual) === null) return false
   window.history.back()
   return true

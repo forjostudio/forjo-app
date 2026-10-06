@@ -39,7 +39,7 @@ describe('panelHistoryAction — regla 0: mientras un overlay sea dueño de la e
   for (const cause of TODAS_LAS_CAUSAS) {
     it(`con la causa '${cause}' devuelve 'none' aunque el cambio de vista sea real`, () => {
       expect(
-        panelHistoryAction({ cause, from: 'a', to: 'b', holding: true, overlayOwnsTop: true }),
+        panelHistoryAction({ cause, from: 'a', to: 'b', holding: true, foreignOwnsTop: true }),
       ).toBe('none')
     })
   }
@@ -47,10 +47,10 @@ describe('panelHistoryAction — regla 0: mientras un overlay sea dueño de la e
   it('la escritura queda DIFERIDA, no perdida: la misma entrada sin overlay arriba sí se escribe', () => {
     // El contraste es el punto: lo único que cambió es quién tiene la entrada de arriba.
     expect(
-      panelHistoryAction({ cause: 'programmatic', from: 'dup', to: 'keep', holding: true, overlayOwnsTop: true }),
+      panelHistoryAction({ cause: 'programmatic', from: 'dup', to: 'keep', holding: true, foreignOwnsTop: true }),
     ).toBe('none')
     expect(
-      panelHistoryAction({ cause: 'programmatic', from: 'dup', to: 'keep', holding: true, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'programmatic', from: 'dup', to: 'keep', holding: true, foreignOwnsTop: false }),
     ).toBe('replace')
   })
 })
@@ -60,7 +60,7 @@ describe('panelHistoryAction — regla 1: el commit concurrente nunca toca el hi
     // Es la declaración del call site del borrado. Sobrevive aunque el marcador del overlay cambie
     // de nombre y la regla 0 deje de reconocerlo: dos candados independientes, no uno.
     expect(
-      panelHistoryAction({ cause: 'concurrent', from: 'x', to: null, holding: true, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'concurrent', from: 'x', to: null, holding: true, foreignOwnsTop: false }),
     ).toBe('none')
   })
 })
@@ -69,7 +69,7 @@ describe('panelHistoryAction — regla 2: empujar la misma URL colapsa la entrad
   for (const cause of TODAS_LAS_CAUSAS) {
     it(`con la causa '${cause}' y origen igual a destino devuelve 'none'`, () => {
       expect(
-        panelHistoryAction({ cause, from: 'abc', to: 'abc', holding: true, overlayOwnsTop: false }),
+        panelHistoryAction({ cause, from: 'abc', to: 'abc', holding: true, foreignOwnsTop: false }),
       ).toBe('none')
     })
   }
@@ -78,7 +78,7 @@ describe('panelHistoryAction — regla 2: empujar la misma URL colapsa la entrad
     // El caso del saneo pedido dos veces sobre una URL que ya está limpia: escribir ahí dejaría dos
     // entradas idénticas y el atrás se llevaría la página.
     expect(
-      panelHistoryAction({ cause: 'stale', from: null, to: null, holding: false, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'stale', from: null, to: null, holding: false, foreignOwnsTop: false }),
     ).toBe('none')
   })
 })
@@ -86,7 +86,7 @@ describe('panelHistoryAction — regla 2: empujar la misma URL colapsa la entrad
 describe('panelHistoryAction — la tabla de decisiones', () => {
   it('abrir un cliente desde el listado empuja una entrada', () => {
     expect(
-      panelHistoryAction({ cause: 'user-open', from: null, to: 'abc', holding: false, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'user-open', from: null, to: 'abc', holding: false, foreignOwnsTop: false }),
     ).toBe('push')
   })
 
@@ -94,13 +94,13 @@ describe('panelHistoryAction — la tabla de decisiones', () => {
     // Decisión ① del plan. En mobile A→B sin pasar por el listado es imposible (el listado se oculta
     // con el detalle abierto), y en desktop que el atrás vuelva a la ficha anterior es lo honesto.
     expect(
-      panelHistoryAction({ cause: 'user-open', from: 'a', to: 'b', holding: true, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'user-open', from: 'a', to: 'b', holding: true, foreignOwnsTop: false }),
     ).toBe('push')
   })
 
   it('el "Volver" consume la entrada cuando la entrada de arriba es NUESTRA', () => {
     expect(
-      panelHistoryAction({ cause: 'user-close', from: 'a', to: null, holding: true, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'user-close', from: 'a', to: null, holding: true, foreignOwnsTop: false }),
     ).toBe('consume')
   })
 
@@ -108,19 +108,19 @@ describe('panelHistoryAction — la tabla de decisiones', () => {
     // Cicatriz 2 de `lib/overlay-history.ts:22-24`. Es el caso "el dueño entró pegando la URL":
     // arriba del stack está la página desde la que llegó, no una entrada nuestra.
     expect(
-      panelHistoryAction({ cause: 'user-close', from: 'a', to: null, holding: false, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'user-close', from: 'a', to: null, holding: false, foreignOwnsTop: false }),
     ).toBe('replace')
   })
 
   it('la fusión, ya con el modal cerrado, reemplaza en vez de empujar', () => {
     expect(
-      panelHistoryAction({ cause: 'programmatic', from: 'dup', to: 'keep', holding: false, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'programmatic', from: 'dup', to: 'keep', holding: false, foreignOwnsTop: false }),
     ).toBe('replace')
   })
 
   it('un FILTRO reemplaza (T-3, el activeLoc de Agenda: expresable aunque esta fase no lo cablee)', () => {
     expect(
-      panelHistoryAction({ cause: 'filter', from: 'loc1', to: 'loc2', holding: true, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'filter', from: 'loc1', to: 'loc2', holding: true, foreignOwnsTop: false }),
     ).toBe('replace')
   })
 
@@ -129,13 +129,13 @@ describe('panelHistoryAction — la tabla de decisiones', () => {
     // entradas idénticas, y el dueño tendría que apretar atrás dos veces para que pase algo visible
     // — la "entrada basura" que el criterio 3 prohíbe. Consumir BORRA nuestra entrada.
     expect(
-      panelHistoryAction({ cause: 'stale', from: 'x', to: null, holding: true, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'stale', from: 'x', to: null, holding: true, foreignOwnsTop: false }),
     ).toBe('consume')
   })
 
   it('el saneo REEMPLAZA cuando la entrada no es nuestra (URL pegada con un id que no resuelve)', () => {
     expect(
-      panelHistoryAction({ cause: 'stale', from: 'x', to: null, holding: false, overlayOwnsTop: false }),
+      panelHistoryAction({ cause: 'stale', from: 'x', to: null, holding: false, foreignOwnsTop: false }),
     ).toBe('replace')
   })
 })
@@ -250,7 +250,7 @@ describe('la ACCIÓN EFECTIVA — lo que termina haciendo cada escenario real', 
     param: string | null
     resolvedTo: string | null
     holding: boolean
-    overlayOwnsTop: boolean
+    foreignOwnsTop: boolean
   }) {
     const view = resolveViewParam({ param: input.param, resolvedTo: input.resolvedTo })
     if (!view.reconcile || view.cause === null) return 'none'
@@ -259,37 +259,37 @@ describe('la ACCIÓN EFECTIVA — lo que termina haciendo cada escenario real', 
       from: input.param,
       to: view.to,
       holding: input.holding,
-      overlayOwnsTop: input.overlayOwnsTop,
+      foreignOwnsTop: input.foreignOwnsTop,
     })
   }
 
   it('fusión con el modal de fusión ABIERTO: no escribe nada — es DIFERIDO, no perdido', () => {
     expect(
-      accionEfectiva({ param: 'dup', resolvedTo: 'keep', holding: true, overlayOwnsTop: true }),
+      accionEfectiva({ param: 'dup', resolvedTo: 'keep', holding: true, foreignOwnsTop: true }),
     ).toBe('none')
   })
 
   it('fusión con el modal ya cerrado: REEMPLAZA — es el criterio 3 del ROADMAP, literal', () => {
     expect(
-      accionEfectiva({ param: 'dup', resolvedTo: 'keep', holding: true, overlayOwnsTop: false }),
+      accionEfectiva({ param: 'dup', resolvedTo: 'keep', holding: true, foreignOwnsTop: false }),
     ).toBe('replace')
   })
 
   it('post-borrado, con el diálogo todavía consumiendo su entrada: no escribe nada (C-1)', () => {
     expect(
-      accionEfectiva({ param: 'X', resolvedTo: null, holding: false, overlayOwnsTop: true }),
+      accionEfectiva({ param: 'X', resolvedTo: null, holding: false, foreignOwnsTop: true }),
     ).toBe('none')
   })
 
   it('post-borrado ya asentado: CONSUME — es el arreglo del atrás muerto', () => {
     expect(
-      accionEfectiva({ param: 'X', resolvedTo: null, holding: true, overlayOwnsTop: false }),
+      accionEfectiva({ param: 'X', resolvedTo: null, holding: true, foreignOwnsTop: false }),
     ).toBe('consume')
   })
 
   it('URL pegada con un id que no resuelve: REEMPLAZA, nunca consume', () => {
     expect(
-      accionEfectiva({ param: 'X', resolvedTo: null, holding: false, overlayOwnsTop: false }),
+      accionEfectiva({ param: 'X', resolvedTo: null, holding: false, foreignOwnsTop: false }),
     ).toBe('replace')
   })
 })
