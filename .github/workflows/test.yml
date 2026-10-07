@@ -1,13 +1,40 @@
 # CI: corre toda la suite de Vitest en cada push y PR (D-04).
 #
-# La suite cubre los dos pilares de TEST-01: webhooks de MercadoPago (mockeados, sin DB ni red →
-# corren SIEMPRE) y aislamiento multi-tenant RLS (necesita las creds del proyecto Supabase dev).
+# ── POR QUÉ EL CI LEVANTA SU PROPIA BASE Y NO LE PEGA A STAGING ───────────────────────────────────
 #
-# ⚠ SKIP GRACEFUL (D-03): si los secrets de Supabase NO estan cargados en el repo (ej. un PR
-# desde un fork, donde GitHub no expone los secrets), los tests de aislamiento se SKIPEAN via
-# `describe.skipIf(!hasSupabaseCreds)` y solo corren los de webhook → el job pasa IGUAL. El
-# workflow NO se marca como fallido por falta de creds. Para que el aislamiento corra en CI, el
-# usuario debe cargar los 4 repo secrets (ver abajo) en Settings → Secrets and variables → Actions.
+# Hasta el 2026-10-06 el carril `db` corría contra el proyecto Supabase de **staging**. Eso falló de
+# las dos maneras posibles, y las dos costaron caro:
+#
+#   1. **Staging se pausa solo** (plan gratis, por inactividad) ⇒ el CI quedó **rojo una semana**
+#      con 34 archivos fallando por `seed: createUser falló: fetch failed`. Nadie lo miró porque
+#      "siempre está rojo".
+#   2. Despausado y con las migraciones al día, **seguía rojo**: 5 archivos de 105. Se descartaron
+#      DOS hipótesis de esquema midiendo contra staging (la función `book_slot_atomic` tenía el
+#      marcador `invalid_duration` de la migr. 077; `businesses.abono_window_weeks` existía con su
+#      default 8 y su constraint). La causa estaba en el log, no en el esquema:
+#
+#           40 tests → Test timed out in 5000ms
+#            2 tests → Test timed out in 180000ms   ← TRES MINUTOS
+#           job completo: 14 min (el mismo carril, local, tarda ~3,5)
+#
+#      El carril `db` usa el `testTimeout` por defecto de 5s y corre EN SERIE
+#      (`fileParallelism: false`, vitest.config.mts). Contra una base remota eso no alcanza: las
+#      fechas se generaban a medias, los contadores quedaban en 0 y el cleanup fallaba limpiando
+#      tests cortados por la mitad.
+#
+# ⚠ Subir los timeouts habría dejado el CI en 14 minutos, frágil, y ACOPLADO a una instancia externa
+# que se pausa sola. Se eligió sacar la dependencia: Supabase corre DENTRO del runner.
+#
+# Lo que se gana además de velocidad:
+#   · **Las migraciones se validan en cada push.** `supabase start` las aplica TODAS sobre una base
+#     vacía. Antes nadie verificaba que aplicaran limpias desde cero.
+#   · **Los PRs desde forks corren la suite completa.** Antes se salteaban los tests de aislamiento
+#     porque GitHub no expone secrets a los forks; con la base local no hacen falta.
+#   · **Staging queda para lo que sirve**: probar con datos parecidos a producción antes de deployar,
+#     no ser el motor de los tests.
+#
+# ⚠ Los dos canarios de reloj de la suite fallan A PROPÓSITO fuera de [01:00, 23:30] hora AR y lo
+# anuncian en su propio mensaje. El runner corre en UTC: tenelo en cuenta al leer un rojo.
 name: Tests
 
 on:
@@ -25,14 +52,57 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+
+      # El CLI de Supabase: levanta el stack completo (Postgres + PostgREST + GoTrue) en el runner.
+      # Hace falta el stack entero y no un Postgres pelado porque los fixtures crean usuarios con la
+      # API de administración de auth (`test/helpers/booking-fixtures.ts`), no con SQL.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Aplica las 41 migraciones sobre una base vacía y corre `supabase/seed.sql`.
+      # `config.toml` ya tiene studio, storage y analytics APAGADOS, así que el arranque es liviano.
+      - name: Levantar Supabase local
+        run: supabase start
+
+      # Las claves del stack local son deterministas pero NO se hardcodean: se leen de la salida del
+      # CLI. Se usa `-o json` + jq (ambos están en el runner) en vez de `-o env`, porque el formato
+      # JSON tiene nombres de clave estables y no hay que adivinar comillas ni escapes.
+      #
+      # ⚠ La guarda del final NO es decorativa: si el CLI cambia los nombres, jq devuelve `null`, los
+      # tests apuntarían a la nada y el rojo sería incomprensible. Acá falla con un mensaje que dice
+      # exactamente qué pasó.
+      - name: Exportar las credenciales del stack local
+        run: |
+          supabase status -o json > /tmp/sb.json
+          API=$(jq -r '.API_URL // empty' /tmp/sb.json)
+          ANON=$(jq -r '.ANON_KEY // empty' /tmp/sb.json)
+          SROLE=$(jq -r '.SERVICE_ROLE_KEY // empty' /tmp/sb.json)
+          if [ -z "$API" ] || [ -z "$ANON" ] || [ -z "$SROLE" ]; then
+            echo "::error::'supabase status -o json' no devolvió API_URL/ANON_KEY/SERVICE_ROLE_KEY. Claves recibidas:"
+            jq -r 'keys[]' /tmp/sb.json
+            exit 1
+          fi
+          # Se exportan con los nombres que lee la app, no con los del CLI: así el step de los tests
+          # no necesita mapearlos y no queda una indirección que mantener.
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SROLE"
+          } >> "$GITHUB_ENV"
+
       - run: npx tsc --noEmit # typecheck (strict) — falla rápido ante errores de tipos
       - run: npm test # = vitest run
         env:
-          # Secrets del proyecto Supabase dev: si faltan, los tests de aislamiento se skipean (D-03).
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # Secret del webhook MP: los webhook tests stubean su propio secret, pero se inyecta por
+          # Las tres de Supabase ya vienen del step anterior vía $GITHUB_ENV, apuntando al stack del
+          # runner y no a staging. Acá sólo va lo que NO sale de la base.
+          # Los webhook tests stubean su propio secret, pero se inyecta por
           # consistencia con el entorno de produccion (MP_MODE production → lee MP_WEBHOOK_SECRET).
           MP_WEBHOOK_SECRET: ${{ secrets.MP_WEBHOOK_SECRET }}
           MP_MODE: production
+
+      # Diagnóstico sólo cuando algo falló: si el rojo fue del stack y no de un test, los logs de
+      # Supabase son lo único que lo distingue.
+      - name: Logs de Supabase (sólo si falló)
+        if: failure()
+        run: supabase status || true
