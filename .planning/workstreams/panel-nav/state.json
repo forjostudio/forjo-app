@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.31 — La navegación mobile del panel",
+  "milestone": "v0.31 — La navegación mobile del panel (workstream `panel-nav`)",
   "phases": [
     {
       "number": "2",
@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-execute-phase 2 --ws panel-nav",
-    "label": "Ejecutar la barra inferior y Más",
-    "reason": "Phase 2 planificada: 4 planes en 4 waves secuenciales, VERIFICATION PASSED"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 02 of 3 · 0% · executing"
   },
-  "updated_at": "2026-10-08T21:51:13.566Z"
+  "updated_at": "2026-10-08T22:56:07.929Z"
 }
