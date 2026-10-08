@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 8
 waived_count: 0
-fixed_count: 0
-total_count: 8
-last_updated: 2026-10-08T23:26:17.647Z
+fixed_count: 1
+total_count: 9
+last_updated: 2026-10-08T23:57:00.625Z
 ---
 
 # Broken Windows Ledger
@@ -21,8 +21,9 @@ last_updated: 2026-10-08T23:26:17.647Z
 | 4 | quick | unrun-verify | app/(dashboard)/settings/settings-client.tsx |  | el vaciado y la normalizacion onBlur de los cuatro campos de Ajustes > Servicios quedo como human-check sin correr: sin DOM en el runner | open |  | 2026-09-12T23:26:55.683Z |  |
 | 5 | quick | unrun-verify | app/(dashboard)/web/web-client.tsx |  | quick 260913-3tv: los 4 human-check del preview (servicio sin franja deshabilitado, staff filtrado, wizard de canchas, widget que no se reinicia al tipear) NO se corrieron — el runner es environment:node y auto_advance los auto-aprobo | open |  | 2026-09-13T06:14:15.130Z |  |
 | 6 | 24 | unrun-verify | app/[slug]/booking-client.tsx |  | UAT visual de los 10 puntos del plan 24-01 sin correr (human_verify_mode: end-of-phase); cubre el backstop de CAT-10 (nombre largo a ~432px) y el control negativo de cero categorias en pantalla real | open |  | 2026-09-23T04:05:46.228Z |  |
-| 7 | 02 | stub | components/dashboard/panel-bottom-nav.tsx |  | El 5o destino de la barra apunta a /mas, ruta que todavia no existe: 404 hasta el plan 02-02 (estado intermedio declarado de la fase) | open |  | 2026-10-08T23:26:16.870Z |  |
+| 7 | 02 | stub | components/dashboard/panel-bottom-nav.tsx |  | El 5o destino de la barra apunta a /mas, ruta que todavia no existe: 404 hasta el plan 02-02 (estado intermedio declarado de la fase) | fixed |  | 2026-10-08T23:26:16.870Z | 2026-10-08T23:56:52.800Z |
 | 8 | 02 | lint-warning | app/(dashboard)/layout.tsx | 62 | react-hooks/purity preexistente (Date.now en render) — eslint rc 1 sobre el layout; diferido por alcance, ver deferred-items.md | open |  | 2026-10-08T23:26:17.647Z |  |
+| 9 | 02 | unrun-verify | app/(dashboard)/mas/mas-client.tsx |  | UAT visual de los 9 puntos del plan 02-02 sin correr (inventario rubro por rubro en 4 cuentas, nombre de >=40 caracteres, scroll hasta la firma, logout fallando, 2 pasadas de contraste y los 5 aria-labelledby con lector de pantalla): el runner es environment:node, sin jsdom ni Playwright | open |  | 2026-10-08T23:57:00.625Z |  |
 
 ````json
 [
@@ -105,10 +106,10 @@ last_updated: 2026-10-08T23:26:17.647Z
     "file": "components/dashboard/panel-bottom-nav.tsx",
     "line": null,
     "description": "El 5o destino de la barra apunta a /mas, ruta que todavia no existe: 404 hasta el plan 02-02 (estado intermedio declarado de la fase)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-10-08T23:26:16.870Z",
-    "resolved_at": null
+    "resolved_at": "2026-10-08T23:56:52.800Z"
   },
   {
     "id": 8,
@@ -120,6 +121,18 @@ last_updated: 2026-10-08T23:26:17.647Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-08T23:26:17.647Z",
+    "resolved_at": null
+  },
+  {
+    "id": 9,
+    "kind": "unrun-verify",
+    "phase": "02",
+    "file": "app/(dashboard)/mas/mas-client.tsx",
+    "line": null,
+    "description": "UAT visual de los 9 puntos del plan 02-02 sin correr (inventario rubro por rubro en 4 cuentas, nombre de >=40 caracteres, scroll hasta la firma, logout fallando, 2 pasadas de contraste y los 5 aria-labelledby con lector de pantalla): el runner es environment:node, sin jsdom ni Playwright",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-08T23:57:00.625Z",
     "resolved_at": null
   }
 ]
