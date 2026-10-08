@@ -69,6 +69,17 @@
 [data-theme='forjo'] {
   --radius: 0.4rem;
 
+  /* BARRA INFERIOR DEL PANEL (MOB-01/MOB-02) — dos tokens, nuevos, que nadie más lee.
+     --panel-nav-h: el alto de la barra declarado en UN SOLO lugar. La barra lo consume con
+     h-[var(--panel-nav-h)] y el <main> de (dashboard)/layout.tsx reserva con la MISMA var, así que
+     si el alto cambia, cambia acá y la reserva lo sigue sola (sin eso se desincronizan y la barra
+     tapa el último elemento de cada pantalla).
+     --panel-nav-muted: el color del destino INACTIVO. Existe aparte de --muted-foreground porque ese
+     token a secas falla AA sobre --card en los temas claros de spa y modern (ver app/themes.css);
+     en forjo el default alcanza y mide 5.44:1 sobre --card y 5.02:1 sobre --background. */
+  --panel-nav-h: 3.5rem;                      /* 56px */
+  --panel-nav-muted: var(--muted-foreground); /* forjo: 5.44:1 sobre --card · 5.02:1 sobre --background */
+
   /* Tipografía Forjo (default). next/font setea --font-grotesk/--font-archivo en <html>.
      Los themes alternativos (app/themes.css) sobreescriben --font-sans/--font-heading. */
   --font-sans: var(--font-grotesk), system-ui, sans-serif;

@@ -29,6 +29,10 @@
   --secondary-foreground:#1d2433;
   --muted:color-mix(in oklab,#eef1f7 93%,var(--tint));
   --muted-foreground:#69748c;
+  /* El inactivo de la barra inferior del panel. --muted-foreground acá da 4.15:1 sobre --background
+     y NO pasa AA; el valor de abajo sube el peor caso a 5.02:1, tomado CON margen a propósito (los
+     candidatos de 4.62 y 4.66 se descartaron por quedar al filo). Sólo el modo claro lo necesita. */
+  --panel-nav-muted:#5c6578;
   --border:color-mix(in oklab,#e2e8f2 89%,var(--tint));
   --input:color-mix(in oklab,#dbe2ee 89%,var(--tint));
   --destructive:#e5484d;
@@ -67,6 +71,9 @@
   --secondary-foreground:#e7ecf5;
   --muted:color-mix(in oklab,#1e2738 89%,var(--tint));
   --muted-foreground:#8b96ac;
+  /* En oscuro --muted-foreground ya pasa AA: el inactivo de la barra vuelve al default. Se declara
+     igual para no depender de que el bloque claro no se herede acá por descuido. */
+  --panel-nav-muted:var(--muted-foreground);
   --border:rgba(255,255,255,.08);
   --input:rgba(255,255,255,.12);
   --sidebar:color-mix(in oklab,#0b101a 90%,var(--tint));
@@ -100,6 +107,10 @@
   --secondary-foreground:#4c443d;
   --muted:color-mix(in oklab,#ece4da 90%,var(--tint));
   --muted-foreground:#90847a;
+  /* El peor caso de toda la superficie: --muted-foreground acá da 3.41:1 sobre --card y 3.02:1
+     sobre --background, o sea falla AA en las 5 paletas de spa claro. El valor de abajo sube el
+     peor caso a 5.02:1, con margen. */
+  --panel-nav-muted:#6b6055;
   --border:color-mix(in oklab,#e2d6c8 87%,var(--tint));
   --input:color-mix(in oklab,#e2d6c8 87%,var(--tint));
   --destructive:#c0876b;
@@ -134,6 +145,8 @@
   --secondary-foreground:#ece3da;
   --muted:color-mix(in oklab,#322d36 87%,var(--tint));
   --muted-foreground:#a99fa6;
+  /* Ídem modern oscuro: acá --muted-foreground ya pasa AA y el inactivo vuelve al default. */
+  --panel-nav-muted:var(--muted-foreground);
   --border:rgba(236,227,218,.12);
   --input:rgba(236,227,218,.14);
   --sidebar:color-mix(in oklab,#1b181f 88%,var(--tint));
