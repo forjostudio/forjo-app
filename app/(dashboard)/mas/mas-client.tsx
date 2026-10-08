@@ -1,7 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { ExternalLink, HelpCircle, LogOut } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { Business } from '@/lib/types'
 import { getPlanLimits } from '@/lib/plans'
 import { buildNavGroups } from '@/components/dashboard/nav-groups'
@@ -81,10 +84,29 @@ function slugDeGrupo(section: string): string {
 
 export function MasClient({ business }: { business: Business }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClient()
   // Guard de salida del panel: si la pantalla actual tiene cambios sin guardar, cada fila de acá
   // pregunta antes de navegar en vez de descartarlos en silencio. Sin provider devuelve siempre
   // false ⇒ nunca bloquea. Ver components/dashboard/unsaved-changes-guard.tsx.
   const requestNavigation = useNavigationGuard()
+
+  // El cierre de sesión espeja el del sidebar y le SUMA la rama que el análogo no tiene: si falla, se
+  // avisa. En el sidebar el silencio es tolerable porque hay otras salidas; acá, en mobile, esta es
+  // la ÚNICA forma de salir, y un fallo mudo deja al dueño creyendo que cerró sesión mientras la
+  // sesión sigue viva — en un teléfono que puede estar compartido. Si falla NO se navega: mandar a
+  // /login sin haber cerrado la sesión haría que el proxy rebote al dashboard.
+  async function handleLogout() {
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    } catch {
+      toast.error('No pudimos cerrar la sesión. Probá de nuevo.')
+      return
+    }
+    router.push('/login')
+    router.refresh()
+  }
 
   // El inventario del rubro MENOS lo que ya está en la barra. El `.filter` final mantiene la
   // invariante después de restar; el que ya trae `buildNavGroups` es el que hace desaparecer el
@@ -186,7 +208,99 @@ export function MasClient({ business }: { business: Business }) {
             </div>
           </div>
         ))}
+
+        {/* ── El grupo CUENTA ──────────────────────────────────────────────────────
+            Header NUEVO (el único de la pantalla que no sale de `NAV_GROUPS`), con el mismo estilo
+            verbatim que los otros y su `id` escrito inline en los dos extremos del vínculo, igual
+            que los derivados. Va al final, después del último grupo del menú.
+            Sus tres filas viven hoy en DOS lugares del sidebar, no en su footer: "Ver mi página" es
+            un `<a>` dentro del `<nav>`. El que copia sólo el footer se la olvida.
+            Y las tres son obligatorias: el drawer hamburguesa que las tiene desaparece en el plan
+            siguiente ⇒ sin ellas el dueño se queda sin manera de cerrar sesión desde el celular. */}
+        <div role="group" aria-labelledby="mas-grupo-cuenta">
+          <p
+            id="mas-grupo-cuenta"
+            className="px-2 pt-4 pb-1 font-[family-name:var(--font-geist-mono)] text-[11px] tracking-wider uppercase text-muted-foreground"
+          >
+            CUENTA
+          </p>
+          <div>
+            {/* La Ayuda es una ruta más del panel y entra por el MISMO menú, así que se rige por la
+                misma regla que las filas de arriba: si no compartiera la política, salir de Clientes
+                por Ayuda dejaría Clientes debajo y el atrás caería ahí en vez de en el dashboard.
+                El consumo de la entrada propia hoy es un no-op acá (Ayuda no tiene subsecciones) y
+                se deja igual para que no haya DOS formas de escribir esta fila. */}
+            <Link
+              href="/ayuda"
+              replace={panelNavMode({ from: pathname, to: '/ayuda' }) === 'replace'}
+              onNavigate={(e) => {
+                if (requestNavigation('/ayuda')) { e.preventDefault(); return }
+                if (pathname === '/ayuda' && consumeOwnedPanelEntry()) e.preventDefault()
+              }}
+              className={FILA}
+            >
+              <HelpCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="truncate">Ayuda</span>
+            </Link>
+
+            {/* La página pública del negocio, en pestaña nueva. Dos cosas la separan del resto:
+                es la ÚNICA fila sin cableado de historial (no navega dentro del panel), y es la
+                ÚNICA excepción a la regla de "sin chevron" — lleva un icono de 16px a la derecha
+                porque abrir una pestaña nueva es información que el usuario no puede inferir.
+                La variable de la URL pública ya existe y ya es pública: cero env vars nuevas. */}
+            <a
+              href={`${process.env.NEXT_PUBLIC_APP_URL}/${business.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={FILA}
+            >
+              <ExternalLink className="w-5 h-5 flex-shrink-0" />
+              <span className="truncate">Ver mi página</span>
+              <ExternalLink className="w-4 h-4 flex-shrink-0 ml-auto text-muted-foreground" aria-hidden="true" />
+            </a>
+
+            {/* El cierre de sesión pasa por el guard con su PROPIA continuación: acá "seguir"
+                significa desloguear y DESPUÉS navegar. Si el guard empujara /login sin haber cerrado
+                la sesión, la sesión quedaría viva y el proxy rebotaría al dashboard. Si el guard
+                bloquea, el diálogo se encarga; si no bloquea, se ejecuta el handler.
+                Sin rojo y sin confirmación propia: el sidebar no lo pinta de rojo, el token de
+                peligro del sistema no se usa en ninguna parte de esta superficie, y lo que
+                diferencia a esta fila es el grupo y su posición última, no el color. */}
+            <button
+              onClick={() => { if (!requestNavigation('/login', () => void handleLogout())) void handleLogout() }}
+              className={`${FILA} w-full text-left`}
+            >
+              <LogOut className="w-5 h-5 flex-shrink-0" />
+              <span className="truncate">Cerrar sesión</span>
+            </button>
+          </div>
+        </div>
       </nav>
+
+      {/* La firma, reusada verbatim del footer del sidebar, SVG incluido: la marca F de cuatro
+          formas, con el primer trazo en `currentColor` para adaptarse a claro/oscuro.
+          Va FUERA del `<nav>` por la misma razón que el bloque de identidad: no es un destino.
+          Queda alcanzable al final del scroll gracias a la reserva de alto del `<main>`, que ya
+          existe: esta pantalla NO agrega padding inferior propio. */}
+      <div className="flex items-center gap-2 px-3 pt-4 text-xs text-muted-foreground">
+        <svg viewBox="0 0 64 80" className="w-3 h-[0.95rem]" aria-hidden="true">
+          <rect x="6" y="6" width="14" height="68" fill="currentColor" />
+          <rect x="20" y="6" width="38" height="14" fill="#d94a2b" />
+          <path d="M20 34 L50 34 L36 48 L20 48 Z" fill="#2a5fa5" />
+          <circle cx="56" cy="13" r="6" fill="#f4c543" />
+        </svg>
+        <span>
+          hecho con{' '}
+          <a
+            href="https://www.forjo.studio"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-primary transition-colors"
+          >
+            <span className="font-semibold text-foreground font-[family-name:var(--font-heading)]">Forjo</span> Studio
+          </a>
+        </span>
+      </div>
     </div>
   )
 }
