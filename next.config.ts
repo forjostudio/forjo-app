@@ -46,9 +46,11 @@ const nextConfig: NextConfig = {
   // Next lo bloquea como cross-origin, la página no hidrata y los forms caen al submit nativo —
   // exactamente el mismo síntoma que ya documentaba el caso de 127.0.0.1 de arriba.
   // Ver `node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/allowedDevOrigins.md`.
-  // ⚠ La IP es por DHCP: si el router se la cambia, hay que actualizar esta línea.
+  // ⚠ Las IPs son por DHCP y el router YA cambió la asignación una vez (.7 → .3 tras un reinicio).
+  // Por eso van las dos listadas en vez de una: así el entorno sobrevive al vaivén sin editar nada.
+  // Si aparece una tercera, se agrega acá — `ipconfig` / `Get-NetIPAddress` la dicen.
   // No afecta el build de producción (`allowedDevOrigins` es solo-dev).
-  allowedDevOrigins: ["127.0.0.1", "192.168.0.7"],
+  allowedDevOrigins: ["127.0.0.1", "192.168.0.7", "192.168.0.3"],
 };
 
 export default nextConfig;
