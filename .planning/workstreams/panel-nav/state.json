@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-ui-phase 2 --ws panel-nav",
-    "label": "Contrato de diseño de la barra inferior",
-    "reason": "El dueño eligió diseñar primero; la Phase 2 necesita UI-SPEC"
+    "command": "/gsd-execute-phase 2 --ws panel-nav",
+    "label": "Ejecutar la barra inferior y Más",
+    "reason": "Phase 2 planificada: 4 planes en 4 waves secuenciales, VERIFICATION PASSED"
   },
-  "updated_at": "2026-10-06T23:30:00.000Z"
+  "updated_at": "2026-10-08T21:51:13.566Z"
 }

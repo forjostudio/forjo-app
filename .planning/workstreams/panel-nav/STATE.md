@@ -1,38 +1,39 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.30
-milestone_name: La navegación del panel
-current_phase: 1 — El detalle de cliente, con la regla de historial que lo gobierna
-current_plan: 4 of 4 (los cuatro planes de la Phase 1 completos)
-status: Phase 1 ejecutada — los 4 planes completos; UAT en celular PENDIENTE (la corre el dueño)
+milestone: v0.31
+current_phase: 2 — La barra inferior y Más
+current_plan: 0 of 4 (los 4 planes de la Phase 2 escritos y verificados, sin ejecutar)
+status: Ready to execute — Phase 2 planificada (4 planes, 4 waves secuenciales, VERIFICATION PASSED); UAT en celular de la Phase 1 PENDIENTE (la corre el dueño)
 stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-29T21:04:58.740Z"
-last_activity: 2026-09-29
-last_activity_desc: "Plan 01-04 ejecutado (cierre de gaps A y B de la UAT en celular, solo app/(dashboard)/clients/clients-client.tsx): el modal de fusionar duplicados pasa a TRES FILAS con el mail entero (desborde medido a 375px +36.4px -> -13.0px, min-w-0 + break-all) y la accion de fusionar existe con la ficha abierta en mobile, espejada del control del listado y solo si el cliente abierto es duplicado (lg:hidden en la FILA => desktop display:none, intacto). vitest 1486/101 verde, tsc 0, eslint 0, migraciones 41, 0 paquetes. UAT en celular PENDIENTE (la corre el dueno)."
-state_head: 6db682df4335a458a856d37a2cc8764c88d277fa
+last_updated: "2026-10-08T21:51:13.500Z"
+last_activity: 2026-10-08
+last_activity_desc: Phase 02 planning complete — 4 plans ready
+state_head: 9475a9e156496b283ed43de24a281da64b1b79fa
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 0
   total_plans: 4
-  completed_plans: 4
+  completed_plans: 0
   percent: 0
+milestone_name: La navegación mobile del panel
 workstream: panel-nav
 created: 2026-09-28
+current_phase_name: La barra inferior y Más
 ---
 
 # Project State
 
 ## Current Position
 
-**Status:** Phase 1 en ejecución — planes 01-01, 01-02 y 01-03 completos
-**Current Phase:** 1 — El detalle de cliente, con la regla de historial que lo gobierna
-**Last Activity:** 2026-09-29
-**Last Activity Description:** Plan 01-03 ejecutado (cierre de gaps NAV-07 + NAV-08): panelNavMode (push-vs-replace del menu, pura y sobre rutas) + consumeOwnedPanelEntry (generico, 2 guardas) en lib/panel-history.ts; el sidebar las CONSUME en una prop y una guarda del onNavigate que ya existia. 5 mutaciones corridas. UAT en celular PENDIENTE (la corre el dueno).
+**Status:** Ready to execute — Phase 2 planificada (4 planes, 4 waves secuenciales)
+**Current Phase:** 2 — La barra inferior y Más
+**Last Activity:** 2026-10-08 — Phase 02 planning complete
+**Last Activity Description:** Phase 02 planning complete — 4 plans ready
 
 ## Progress
 
-**Phases Complete:** 0/2
-**Current Plan:** 4 of 4 (los cuatro planes de la Phase 1 completos)
+**Phases Complete:** 0/3
+**Current Plan:** 0 of 4 (los 4 planes de la Phase 2 escritos y verificados, sin ejecutar)
 
 ## Session Continuity
 

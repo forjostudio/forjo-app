@@ -256,13 +256,13 @@ y el gating por rubro se preserva **por construcción** sólo si el filtrado sig
 ver "Equipo", que es una ruta que no le corresponde. No es una fuga de datos cross-tenant (el panel
 resuelve `business` por `owner_id` en el layout), es coherencia de producto. Riesgo bajo.
 
-**Plans:** 4 plans (3 waves · 8 tareas · 11 archivos: 7 nuevos, 4 editados)
+**Plans:** 4 plans (**4 waves secuenciales** · 8 tareas · 11 archivos: 7 nuevos, 4 editados)
 
 Plans:
 - [ ] `02-01-PLAN.md` — wave 1 · El prerequisito compartido (`nav-groups.ts`, bloqueante C-2) y el slice: los dos tokens, el export `viewport` acotado al route group, la reserva de alto en el `<main>` y la barra inferior de 5 destinos, montada y navegando
 - [ ] `02-02-PLAN.md` — wave 2 · La ruta `/mas`: inventario del rubro derivado de `buildNavGroups` **restando por `href`** (8/8/8/7), bloque de identidad con los 4 valores del contrato, grupo `CUENTA` con sus 3 filas y la semántica de headings/landmarks
-- [ ] `02-03-PLAN.md` — wave 2 · El header de dos líneas extraído a `panel-top-bar.tsx` (nombre del negocio + título de sección con la terminología del rubro) y el fin del segundo menú: ☰, overlay y drawer fuera del markup, desktop intacto
-- [ ] `02-04-PLAN.md` — wave 3 · Los dos candados de lo invisible (el inventario puro de los 4 verticales y el barrido estático de los 8 invariantes) más el guion de la UAT en celular real, con los 5 ítems irreducibles y los 2 recorridos que no son bugs
+- [ ] `02-03-PLAN.md` — wave 3 · El header de dos líneas extraído a `panel-top-bar.tsx` (nombre del negocio + título de sección con la terminología del rubro) y el fin del segundo menú: ☰, overlay y drawer fuera del markup, desktop intacto
+- [ ] `02-04-PLAN.md` — wave 4 · Los dos candados de lo invisible (el inventario puro de los 4 verticales y el barrido estático de los 8 invariantes) más el guion de la UAT en celular real, con los 5 ítems irreducibles y los 2 recorridos que no son bugs
 
 **Correcciones medidas que los planes obedecen por encima de este documento:** **C-1** el repo **sí**
 usa `env(safe-area-inset-*)` (T-2 es falso; precedente que ya compila en `whatsapp-float.tsx:36`, y en
