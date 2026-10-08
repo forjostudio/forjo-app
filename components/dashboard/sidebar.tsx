@@ -5,85 +5,21 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Business } from '@/lib/types'
 import { getPlanLimits } from '@/lib/plans'
-import { resolveVertical } from '@/lib/verticals'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard,
-  Calendar,
-  CalendarClock,
-  Users,
-  UserCog,
-  Store,
-  Globe,
-  Tag,
-  Repeat,
-  MapPin,
-  BarChart3,
-  Settings,
   ExternalLink,
   HelpCircle,
   LogOut,
   Menu,
   X,
-  LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+// El inventario del menú vive en un módulo compartido (sin directiva de cliente) para que la barra
+// inferior y la pantalla Más lean el MISMO gateo por rubro en vez de reimplementarlo.
+import { buildNavGroups } from '@/components/dashboard/nav-groups'
 import { useNavigationGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { consumeOwnedPanelEntry, panelNavMode } from '@/lib/panel-history'
 import { useState } from 'react'
-
-type NavItem = { href: string; label: string; icon: LucideIcon }
-
-// Grupos LOCKED del sidebar agrupado (D-02 / UI-SPEC §A). Cada grupo declara las keys de menú
-// que le pertenecen, en este orden. El grupo de mensajería del brief queda EXCLUIDO (depende del
-// add-on, fuera del milestone). El agrupado se hace acá y NO en lib/verticals.ts: cada key se filtra contra
-// resolveVertical(business).menu, así el gating por rubro se preserva automáticamente (ej. canchas no
-// tiene 'equipo' en su menu → la fila no aparece bajo GESTIÓN) sin tocar verticals.ts. Un grupo sin
-// items sobrevivientes no renderiza nada, ni su header.
-const NAV_GROUPS: { section: string; keys: string[] }[] = [
-  { section: 'PANEL', keys: ['dashboard'] },
-  { section: 'AGENDA', keys: ['appointments', 'agenda', 'abonos', 'clients', 'patients'] },
-  { section: 'GESTIÓN', keys: ['servicios', 'equipo', 'consultorios', 'negocio', 'web'] },
-  { section: 'REPORTES', keys: ['finances'] },
-  { section: 'AJUSTES', keys: ['settings'] },
-]
-
-// Maps each menu key (from the vertical config) to its route + icon. Labels for
-// client/patient items come from the vertical terminology so they read correctly
-// per rubro ("Pacientes" en salud, "Clientes" en belleza/general).
-// Construye el mapa key→item y agrupa contra v.menu: por cada grupo, resuelve sus keys a items
-// y descarta las que el vertical no expone (mismo .filter(Boolean) que la lista plana original,
-// aplicado por grupo). Devuelve solo los grupos con al menos un item sobreviviente.
-function buildNavGroups(business: Business): { section: string; items: NavItem[] }[] {
-  const v = resolveVertical(business)
-  const t = v.terminology
-  const ITEMS: Record<string, NavItem> = {
-    dashboard: { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    appointments: { href: '/appointments', label: t.appointments, icon: Calendar },
-    agenda: { href: '/agenda', label: 'Agenda', icon: CalendarClock },
-    abonos: { href: '/abonos', label: 'Abonos', icon: Repeat },
-    negocio: { href: '/negocio', label: 'Negocio', icon: Store },
-    // "Mi web" (→ editor /web, gate has_web_custom decide editor vs upsell). Visible a TODOS los
-    // verticales a propósito: es superficie de venta del add-on (D-01), NO se gatea por has_web_custom.
-    // Distinto del link flotante "Ver mi página" (ese va al público /[slug] en pestaña nueva).
-    web: { href: '/web', label: 'Mi web', icon: Globe },
-    servicios: { href: '/servicios', label: t.services, icon: Tag },
-    equipo: { href: '/equipo', label: 'Equipo', icon: UserCog },
-    consultorios: { href: '/consultorios', label: t.locations, icon: MapPin },
-    clients: { href: '/clients', label: t.clients, icon: Users },
-    patients: { href: '/clients', label: t.clients, icon: Users },
-    finances: { href: '/finances', label: 'Finanzas', icon: BarChart3 },
-    settings: { href: '/settings', label: 'Configuración', icon: Settings },
-  }
-  const menu = new Set(v.menu)
-  return NAV_GROUPS
-    .map(g => ({
-      section: g.section,
-      // Solo las keys presentes en el menu del vertical (gating por rubro) y con item definido.
-      items: g.keys.filter(k => menu.has(k)).map(k => ITEMS[k]).filter(Boolean),
-    }))
-    .filter(g => g.items.length > 0)
-}
 
 export function Sidebar({ business }: { business: Business }) {
   const NAV_GROUPS_RESOLVED = buildNavGroups(business)
