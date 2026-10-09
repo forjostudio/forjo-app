@@ -8,15 +8,14 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 7
-name: A.4 — Tres pasadas de contraste
+number: 8
+name: A.5 — La UAT de v0.30 repetida DESDE LA BARRA
 expected: |
-  En forjo claro, en spa claro con paleta `clay` y en modern claro con paleta
-  `amber`: el destino activo de la barra se distingue del inactivo, el foco se ve,
-  y los títulos de grupo de Más (AGENDA, GESTIÓN, REPORTES, AJUSTES, CUENTA) se
-  leen sin esfuerzo. La pasada de `modern` + `amber` es la que más importa: ahí el
-  color de acento mide 2.15:1 y es donde se confirma que el indicador NO depende
-  del acento.
+  Entrá a una sección desde la barra y tocá el atrás del sistema: tiene que
+  volver a Inicio. El atrás tiene que cerrar primero lo que esté abierto —un
+  modal, un selector, el calendario, el teclado— antes de navegar. Con cambios
+  sin guardar, tiene que preguntar antes de descartar. Y tocar el destino en el
+  que ya estás, con una subsección abierta, tiene que cerrarla en vez de apilar.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -117,6 +116,12 @@ why_human: El `<main>` pasó de contenedor de bloque a contenedor **flex** y su 
 result: [pending]
 
 ### 7. A.4 — Tres pasadas de contraste
+result: pass
+notes: |
+  Las tres pasadas en celular real, incluida `modern` + `amber`, que es la que
+  confirma que el indicador del activo NO depende del color de acento (ahí el
+  acento mide 2.15:1). Los títulos de grupo de Más se leen bien con el token
+  `--panel-nav-muted` que se corrigió hoy (CR-02).
 expected: **forjo claro**, **spa claro con paleta `clay`** y **modern claro con paleta `amber`**. En las tres: foco visible, activo distinguible del inactivo, y el eyebrow de grupo de Más legible (5.02:1 el peor caso medido). Mirar también la línea de plan del bloque de identidad (WR-05, sigue en `--muted-foreground`: 3.41:1 en spa claro).
 why_human: Los números salen de cálculo y spa/modern usan `color-mix` (aproximado); el criterio de diseño es visual.
 result: [pending]
@@ -160,9 +165,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 5
+passed: 6
 issues: 0
-pending: 8
+pending: 7
 skipped: 0
 blocked: 0
 
