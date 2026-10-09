@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 9
 waived_count: 0
 fixed_count: 1
-total_count: 9
-last_updated: 2026-10-08T23:57:00.625Z
+total_count: 10
+last_updated: 2026-10-09T00:15:38.795Z
 ---
 
 # Broken Windows Ledger
@@ -24,6 +24,7 @@ last_updated: 2026-10-08T23:57:00.625Z
 | 7 | 02 | stub | components/dashboard/panel-bottom-nav.tsx |  | El 5o destino de la barra apunta a /mas, ruta que todavia no existe: 404 hasta el plan 02-02 (estado intermedio declarado de la fase) | fixed |  | 2026-10-08T23:26:16.870Z | 2026-10-08T23:56:52.800Z |
 | 8 | 02 | lint-warning | app/(dashboard)/layout.tsx | 62 | react-hooks/purity preexistente (Date.now en render) — eslint rc 1 sobre el layout; diferido por alcance, ver deferred-items.md | open |  | 2026-10-08T23:26:17.647Z |  |
 | 9 | 02 | unrun-verify | app/(dashboard)/mas/mas-client.tsx |  | UAT visual de los 9 puntos del plan 02-02 sin correr (inventario rubro por rubro en 4 cuentas, nombre de >=40 caracteres, scroll hasta la firma, logout fallando, 2 pasadas de contraste y los 5 aria-labelledby con lector de pantalla): el runner es environment:node, sin jsdom ni Playwright | open |  | 2026-10-08T23:57:00.625Z |  |
+| 10 | 02 | unrun-verify | components/dashboard/panel-top-bar.tsx |  | UAT visual de los 9 puntos del human-check del plan 02-03 sin correr (no hay boton de menu en mobile, el header de 2 lineas cambiando con la terminologia del rubro, Inicio en la raiz, el detalle de cliente diciendo Clientes/Pacientes, nombre de >=40 caracteres truncando, el header orientando a mitad de un formulario largo, la UAT de v0.30 repetida DESDE LA BARRA con los dos recorridos que no son bugs, el sidebar de desktop identico con su logout, y la banda de 900px): el runner es environment:node, sin jsdom ni Playwright | open |  | 2026-10-09T00:15:38.795Z |  |
 
 ````json
 [
@@ -133,6 +134,18 @@ last_updated: 2026-10-08T23:57:00.625Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-08T23:57:00.625Z",
+    "resolved_at": null
+  },
+  {
+    "id": 10,
+    "kind": "unrun-verify",
+    "phase": "02",
+    "file": "components/dashboard/panel-top-bar.tsx",
+    "line": null,
+    "description": "UAT visual de los 9 puntos del human-check del plan 02-03 sin correr (no hay boton de menu en mobile, el header de 2 lineas cambiando con la terminologia del rubro, Inicio en la raiz, el detalle de cliente diciendo Clientes/Pacientes, nombre de >=40 caracteres truncando, el header orientando a mitad de un formulario largo, la UAT de v0.30 repetida DESDE LA BARRA con los dos recorridos que no son bugs, el sidebar de desktop identico con su logout, y la banda de 900px): el runner es environment:node, sin jsdom ni Playwright",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-09T00:15:38.795Z",
     "resolved_at": null
   }
 ]

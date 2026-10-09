@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 02
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: Completado 02-02-PLAN.md (UAT visual de /mas pendiente)
-last_updated: "2026-10-09T00:00:19.210Z"
+stopped_at: Completado 02-03-PLAN.md (UAT visual del header y del borrado pendiente)
+last_updated: "2026-10-09T00:19:32.193Z"
 last_activity: 2026-10-08
 last_activity_desc: Phase 02 execution started
-state_head: 16e68f2b56dd75c8e33677c875d930cda484dc6f
+state_head: 02ea69fd09cb3dbbcc90d9ded3e94cef6fdbd9cd
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
@@ -25,7 +25,7 @@ current_phase_name: La barra inferior y Más
 
 ## Current Position
 
-**Current Plan:** 3
+**Current Plan:** 4
 **Total Plans in Phase:** 4
 **Status:** Ready to execute
 **Current Phase:** 02
@@ -35,14 +35,14 @@ current_phase_name: La barra inferior y Más
 ## Progress
 
 **Phases Complete:** 0/3
-**Plans Complete:** 2/4
-**Current Plan:** 3
+**Plans Complete:** 3/4
+**Current Plan:** 4
 
 ## Session Continuity
 
-**Last session:** 2026-10-08T23:59:31.260Z
+**Last session:** 2026-10-09T00:19:32.157Z
 
-**Stopped At:** Completado 02-02-PLAN.md (UAT visual de /mas pendiente)
+**Stopped At:** Completado 02-03-PLAN.md (UAT visual del header y del borrado pendiente)
 **Resume File:** None
 
 ## Performance Metrics
@@ -55,6 +55,7 @@ current_phase_name: La barra inferior y Más
 | Phase 1 P04 | 40 | 2 tasks | 1 files |
 | Phase 02 P01 | 22 min | 2 tasks | 6 files |
 | Phase 02 P02 | 35 min | 2 tasks | 2 files |
+| Phase 02 P03 | 18 min | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -76,3 +77,8 @@ current_phase_name: La barra inferior y Más
 - [Phase 02]: La expresion del id de grupo se escribe INLINE en los dos extremos (id del eyebrow + aria-labelledby) y NO se centraliza: con el prefijo en un solo sitio, el id puesto en un extremo y no en el otro se vuelve invisible para un barrido estatico
 - [Phase 02]: Los grupos de /mas son role=group y no <section>: un section con nombre accesible se vuelve landmark y cinco landmarks nuevos son ruido para quien navega por landmarks
 - [Phase 02]: El logout de /mas NO navega si signOut() falla: avisa con toast.error y se queda; mandar a /login con la sesion viva haria que el proxy rebote al dashboard
+- [Phase 02]: El header de mobile se EXTRAJO a su propio componente en vez de editarse in-place: asi sidebar.tsx queda siendo el sidebar de desktop y nada mas, y el header nuevo puede usar usePathname() y useTerminology(), que el sidebar no usa
+- [Phase 02]: El mapa de titulos del header es LOCAL y se construye con useTerminology(), no se deriva de buildNavGroups: ese devuelve solo lo que el rubro expone, no tiene /ayuda ni /mas, y para la raiz trae el label de desktop cuando el header tiene que decir Inicio
+- [Phase 02]: El nombre del negocio es la linea DOMINANTE del header y el titulo de seccion la subordinada: al revés habria dos titulos iguales a 56px de distancia y el h1 de la pantalla competiria con el chrome fijo
+- [Phase 02]: Las dos lineas del header son parrafos y ninguna es heading: un heading en el chrome fijo dejaria a las 13 pantallas con dos h1 cada una
+- [Phase 02]: El fragmento del return del sidebar se deja con un unico hijo en vez de simplificarlo: desenvolverlo re-indentaria el bloque de desktop y el gate de byte-identidad lo leeria como una linea eliminada

@@ -256,13 +256,13 @@ y el gating por rubro se preserva **por construcción** sólo si el filtrado sig
 ver "Equipo", que es una ruta que no le corresponde. No es una fuga de datos cross-tenant (el panel
 resuelve `business` por `owner_id` en el layout), es coherencia de producto. Riesgo bajo.
 
-**Plans:** 2/4 plans executed (**4 waves secuenciales** · 8 tareas · 11 archivos: 7 nuevos, 4 editados)
+**Plans:** 3/4 plans executed (**4 waves secuenciales** · 8 tareas · 11 archivos: 7 nuevos, 4 editados)
 
 Plans:
 
 - [x] 02-01-PLAN.md
 - [x] 02-02-PLAN.md
-- [ ] 02-03-PLAN.md
+- [x] 02-03-PLAN.md
 - [ ] 02-04-PLAN.md
 - [ ] `02-01-PLAN.md` — wave 1 · El prerequisito compartido (`nav-groups.ts`, bloqueante C-2) y el slice: los dos tokens, el export `viewport` acotado al route group, la reserva de alto en el `<main>` y la barra inferior de 5 destinos, montada y navegando
 - [ ] `02-02-PLAN.md` — wave 2 · La ruta `/mas`: inventario del rubro derivado de `buildNavGroups` **restando por `href`** (8/8/8/7), bloque de identidad con los 4 valores del contrato, grupo `CUENTA` con sus 3 filas y la semántica de headings/landmarks
@@ -556,6 +556,6 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 2. La barra inferior y Más | 2/4 | In Progress|  |
+| 2. La barra inferior y Más | 3/4 | In Progress|  |
 | 3. La política de atrás, de un nivel a dos | 0/? | Not started | - |
 | 4. Los tabs profundos sobre la política ya fijada | 0/? | Not started | - |
