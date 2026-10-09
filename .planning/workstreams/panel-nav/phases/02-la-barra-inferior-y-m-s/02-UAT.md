@@ -143,6 +143,16 @@ why_human: Criterio 6 en su parte conductual. El modo de falla del historial es 
 result: [pending]
 
 ### 9. C — Inventario de Más, rubro por rubro, en pantalla
+result: pass
+notes: |
+  Contado contra el contrato en celular real: AGENDA 1 (Abonos) + GESTIÓN 5
+  (Servicios, Equipo, Sucursales, Negocio, Mi web) + REPORTES 1 (Finanzas) +
+  AJUSTES 1 (Configuración) = **8 filas**, más CUENTA 3 (Ayuda, Ver mi página con
+  su ícono de pestaña nueva, Cerrar sesión) = 11. Exacto. Los 4 destinos de la
+  barra no se repiten (la resta por href funcionando) y el grupo PANEL desaparece
+  solo. Firma al pie presente, Más activo en la barra, ningún label cortado.
+  REVISIÓN DE DISEÑO pedida por el dueño en esta pasada (2026-10-09), registrada
+  aparte: el orden del pie de Más no coincide con el del sidebar de desktop.
 expected: salud 8 · belleza 8 · general 8 · canchas 7, más `CUENTA` (Ayuda, "Ver mi página" en pestaña nueva, Cerrar sesión) y el bloque de identidad (nombre de ≥40 caracteres truncando, firma alcanzable, logout con su rama de error). La barra dice **Pacientes** en salud y **Reservas** en canchas. Ningún label truncado, con el eje de las 5 familias tipográficas (mínimo `geometrica` y `bauhaus` con el ítem activo).
 why_human: El inventario está probado puro contra los 4 verticales, pero que el `VerticalProvider` entregue el rubro correcto en runtime y que los labels se lean bien sólo se ve abriendo las cuentas en un teléfono.
 result: [pending]
@@ -176,9 +186,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 7
+passed: 8
 issues: 0
-pending: 6
+pending: 5
 skipped: 0
 blocked: 0
 
