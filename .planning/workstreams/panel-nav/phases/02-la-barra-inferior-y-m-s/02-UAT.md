@@ -8,15 +8,14 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 11
-name: E.1 — Banda de 900px y desktop ≥1024px
+number: 12
+name: E.2 — El <meta viewport> servido en /dashboard
 expected: |
-  Esto va en la computadora (`http://localhost/`), achicando la ventana.
-  A ~900px de ancho: la barra inferior y el header de dos líneas están, y NO hay
-  botón de menú (es la banda que antes tenía hamburguesa y no sidebar).
-  A ≥1024px: cero barra, cero header de mobile, el sidebar igual al de siempre,
-  sin hueco extra abajo, /clients y /clinical-history a pantalla completa sin
-  franja de 56px, y "Cerrar sesión" del sidebar funcionando.
+  En la computadora, ya logueado, abrí `view-source:http://127.0.0.1/dashboard`
+  y buscá (Ctrl+F) la palabra `viewport`. La etiqueta tiene que decir:
+  `width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual`
+  (el orden de las claves puede variar; lo que importa es que estén las dos
+  últimas).
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -169,6 +168,16 @@ why_human: Terminología en runtime, lector de pantalla y orientación a mitad d
 result: [pending]
 
 ### 11. E.1 — Banda de 900px y desktop ≥1024px
+result: pass
+notes: |
+  Verificado en la computadora. Incluye las dos cosas que podía haber roto el
+  cambio estructural: /clients a ≥1024px sin franja vacía de 56px abajo, y
+  "Cerrar sesión" del sidebar, que es el único camino de código que ningún test
+  ejecuta.
+  ⚠ Trampa de entorno: `localhost` resuelve a `::1` (IPv6) en esta máquina y el
+  dev server bindea `0.0.0.0` (sólo IPv4), así que el navegador no conecta. Hay
+  que entrar por `http://127.0.0.1/`, que además es la que está en
+  `allowedDevOrigins` (`localhost` no está).
 expected: A **900px**: barra y header presentes, sin botón de menú. A **≥1024px**: cero barra, cero header mobile, sidebar idéntico al de hoy, sin padding inferior extra, `/clients` y `/clinical-history` a pantalla completa **sin hueco de 56px abajo** (conservan `lg:h-screen`), y **"Cerrar sesión" del sidebar funcionando** — es el único camino de código que ningún test ejecuta.
 result: [pending]
 
@@ -192,9 +201,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 9
+passed: 10
 issues: 0
-pending: 4
+pending: 3
 skipped: 0
 blocked: 0
 
