@@ -8,12 +8,25 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 1
-name: A.1 — Franja de gestos en un iPhone con notch
+number: 2
+name: A.2 — Teclado abierto (pasada de ANDROID; la de iOS queda para el final)
 expected: |
-  El `bg-card` de la barra cubre la zona de gestos y el último label no queda
-  debajo. En Android no hay hueco ni doble reserva.
+  Con el formulario largo de Finanzas, el drawer de alta de turno (enfocando el
+  último campo) y el buscador de /clients: la barra no se ve ni tapa el campo ni
+  el submit, y al cerrar el teclado el contenido vuelve sin saltar.
 awaiting: user response
+
+## Orden de ejecución (decisión del dueño, 2026-10-09)
+
+El dueño tiene **Android** a mano; el iPhone llega después. Los tests que dependen de iOS se
+ejecutan **al final**, en una segunda tanda:
+
+- **Test 1 (A.1)** — diferido entero: `env(safe-area-inset-bottom)` vale **0 en Android**, así que
+  sólo un iPhone prueba el cálculo del inset.
+- **Test 2 (A.2)** y **Test 5 (A.3c)** — se parten: la pasada de **Android Chrome** va ahora, la de
+  **iOS Safari** queda para la segunda tanda. Ninguno de los dos se marca `pass` hasta tener las dos.
+
+El resto (3, 4, 6, 7, 8, 9, 10, 11, 12, 13) se hace entero en Android.
 
 ## Preparación (antes de empezar)
 
