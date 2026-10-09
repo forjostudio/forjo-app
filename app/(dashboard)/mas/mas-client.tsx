@@ -73,6 +73,21 @@ const EN_LA_BARRA = new Set(['/dashboard', '/appointments', '/agenda', '/clients
 const FILA =
   'flex items-center gap-3 min-h-12 px-3 py-3 rounded-lg text-sm font-medium text-foreground transition-colors duration-150 [-webkit-tap-highlight-color:transparent] [@media(hover:hover)]:hover:bg-secondary active:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground'
 
+// ── El eyebrow de grupo ─────────────────────────────────────────────────────────
+// Se declara UNA sola vez porque la pantalla lo usa en sus DOS extremos (los grupos derivados de
+// `NAV_GROUPS` y el grupo `CUENTA` escrito a mano): con el string duplicado literal, un arreglo a
+// medias —uno de los dos extremos con el color viejo— es posible y no se ve en ningún diff.
+// El color es `--panel-nav-muted` y NO `--muted-foreground`: el eyebrow se lee sobre `--background`
+// (vive en la página, no en la barra) y ese par mide 3.02:1 en spa claro y 4.15:1 en modern claro
+// ⇒ falla AA en 10 de las 40 combinaciones de tema × modo × paleta que el panel puede renderizar.
+// El token nuevo lo sube a 5.02:1 en el peor caso de las 40, que es justo el número que la tabla de
+// contraste del contrato publica para este elemento. El sidebar de desktop NO se toca: su defecto
+// es deuda preexistente declarada aparte.
+// ⚠ En el valor arbitrario no puede haber NI UN espacio: con un espacio adentro la clase no se
+// genera, Tailwind no avisa y el color simplemente no se aplica.
+const EYEBROW =
+  'px-2 pt-4 pb-1 font-[family-name:var(--font-geist-mono)] text-[11px] tracking-wider uppercase text-[var(--panel-nav-muted)]'
+
 // El `id` del grupo se DERIVA del `section` de `NAV_GROUPS` (minúsculas, sin tilde: `GESTIÓN` →
 // `gestion`), nunca se inventa ni se numera: así un grupo nuevo en el inventario trae su `id` solo.
 function slugDeGrupo(section: string): string {
@@ -161,7 +176,8 @@ export function MasClient({ business }: { business: Business }) {
       <nav aria-label="Secciones" className="mt-4 space-y-2">
         {grupos.map(group => (
           <div key={group.section} role="group" aria-labelledby={`mas-grupo-${slugDeGrupo(group.section)}`}>
-            {/* Eyebrow verbatim del sidebar, con UN solo cambio: el `id`. Sigue siendo `<p>` y no
+            {/* Eyebrow del sidebar con DOS cambios: el `id` y el token de color (ver `EYEBROW`, que
+                explica por qué acá no puede ser `--muted-foreground`). Sigue siendo `<p>` y no
                 un encabezado — así Más y el sidebar se ven y se leen igual, y la agrupación se
                 expresa por `aria-labelledby` en vez de por nivel de heading.
                 ⚠ La expresión del `id` se escribe inline en los DOS extremos del vínculo (acá y en
@@ -170,7 +186,7 @@ export function MasClient({ business }: { business: Business }) {
                 extremo y no en el otro— se vuelve invisible para cualquier barrido estático. */}
             <p
               id={`mas-grupo-${slugDeGrupo(group.section)}`}
-              className="px-2 pt-4 pb-1 font-[family-name:var(--font-geist-mono)] text-[11px] tracking-wider uppercase text-muted-foreground"
+              className={EYEBROW}
             >
               {group.section}
             </p>
@@ -220,7 +236,7 @@ export function MasClient({ business }: { business: Business }) {
         <div role="group" aria-labelledby="mas-grupo-cuenta">
           <p
             id="mas-grupo-cuenta"
-            className="px-2 pt-4 pb-1 font-[family-name:var(--font-geist-mono)] text-[11px] tracking-wider uppercase text-muted-foreground"
+            className={EYEBROW}
           >
             CUENTA
           </p>
