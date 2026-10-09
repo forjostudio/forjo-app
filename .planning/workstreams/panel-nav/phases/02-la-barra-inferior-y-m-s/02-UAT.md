@@ -1,5 +1,5 @@
 ---
-status: partial
+status: testing
 phase: 02-la-barra-inferior-y-m-s
 source: [02-VERIFICATION.md, 02-04-SUMMARY.md]
 started: 2026-10-09T15:10:00Z
@@ -8,17 +8,18 @@ updated: 2026-10-09T22:10:00Z
 
 ## Current Test
 
-[tanda de Android completa — la segunda tanda espera un iPhone]
-
-Al retomar con el iPhone quedan TRES cosas, todas de la misma superficie:
-  1. **Test 1 (A.1)** entero — que el `bg-card` de la barra cubra el *home
-     indicator* y que ningún label quede debajo. Sólo la mitad de ABAJO: en una
-     pestaña del navegador la app nunca pinta bajo el notch.
-  2. **Test 2 (A.2)**, mitad de iOS Safari — el teclado abierto. Es la que más
-     pesa: iOS desplaza el layout viewport por su cuenta y este repo ya pagó
-     cuatro quicks de teclado.
-  3. **Test 5 (A.3c)**, mitad de iOS Safari — con la barra de URL visible, que
-     confirma `dvh` en el motor donde más podía fallar.
+number: 2
+name: A.2 — Teclado abierto, mitad de iOS SAFARI
+expected: |
+  En el iPhone, el mismo recorrido que ya pasó en Android: el buscador de
+  /clients, el drawer de alta de turno enfocando el último campo, y el diálogo
+  largo "Nueva venta" de Finanzas (Ventas → Nueva venta → bajar hasta "Asociar
+  a cliente" y tocar el buscador).
+  Con el teclado abierto: que no tape el campo ni el botón de guardar. Y al
+  cerrarlo, que el contenido vuelva sin saltar.
+  Es la pasada que más pesa de las tres que quedan: iOS desplaza el layout
+  viewport por su cuenta y este repo ya pagó cuatro quicks de teclado.
+awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
 
@@ -47,9 +48,29 @@ El resto (3, 4, 6, 7, 8, 9, 10, 11, 12, 13) se hace entero en Android.
 ## Tests
 
 ### 1. A.1 — Franja de gestos en un iPhone (SÓLO la mitad de abajo)
-result: blocked
-blocked_by: physical-device
-reason: "El dueño tiene Android a mano; el iPhone llega después. En Android env(safe-area-inset-bottom) vale 0, así que este ítem no se puede sustituir."
+result: skipped
+reason: |
+  NO APLICA en una pestaña del navegador, verificado en un iPhone real
+  (2026-10-09). En iOS la barra de direcciones de Safari vive **abajo**, así que
+  entre la app y la barrita del home está el chrome de Safari: no hay franja de
+  gestos que nuestra barra pueda pintar, ese espacio ya es del navegador.
+  Es EXACTAMENTE el mismo argumento que el dueño aplicó al notch, en el otro
+  borde. En Android sí aplicaba, y ahí pasó: Chrome pone la barra de URL arriba,
+  así que el borde inferior de la app sí es el borde de la pantalla.
+  Recién tiene sentido el día que esto corra como app de pantalla completa (PWA
+  en modo standalone o nativa), sin chrome del navegador en ningún borde.
+hallazgo: |
+  En el mismo pase, el dueño observó que en iOS la barra de 5 destinos **se
+  mueve** mientras scrollea, porque la toolbar de Safari se colapsa y expande.
+  Confirmado con él: **sólo se mueve la barra, el contenido NO salta ni se
+  reacomoda**. Eso es inherente a iOS — todo elemento `fixed bottom-0` se ancla
+  al viewport VISIBLE, que cambia de alto con la toolbar — y le pasa a cualquier
+  app con barra inferior en Safari. Queda como limitación conocida de la
+  plataforma, no como defecto.
+  ⚠ Si alguna vez el contenido SÍ empieza a saltar, el sospechoso es `min-h-dvh`:
+  `dvh` es dinámica y se recalcula con la toolbar. La alternativa es `svh`
+  (estable, pero deja ~60px de banda muerta con la toolbar escondida). Se eligió
+  `dvh` midiendo contra Android, donde ese trade-off no se ve.
 
 expected: El `bg-card` de la barra cubre la zona de gestos (el *home indicator*) y el último label no queda debajo; en Android no hay hueco ni doble reserva.
 scope: |
@@ -224,8 +245,8 @@ total: 13
 passed: 12
 issues: 0
 pending: 0
-skipped: 0
-blocked: 1
+skipped: 1
+blocked: 0
 
 parciales: 2 — los tests 2 y 5 pasaron su mitad de Android; les falta la de iOS Safari, que va con el iPhone junto al test 1
 
