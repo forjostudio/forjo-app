@@ -142,13 +142,36 @@ describe('1 · el breakpoint de la barra es lg, no el de 768px', () => {
 })
 
 describe('2 · la resta de la barra en Más es por href y es de cuatro valores', () => {
-  it('los cuatro hrefs están, y el de clientes aparece UNA sola vez', () => {
+  it('el conjunto restado es EXACTAMENTE los destinos de la barra menos /mas', () => {
+    // POR QUÉ ESTE CASO SE ESCRIBE ASÍ Y NO CON LOS CUATRO STRINGS A MANO: la versión anterior sólo
+    // exigía que los cuatro hrefs APARECIERAN en el archivo y que `'/clients'` apareciera una vez.
+    // Con esas dos cuentas, un QUINTO href en `EN_LA_BARRA` ("para que Más tenga menos filas") pasa
+    // en verde: los cuatro siguen apareciendo y el de clientes sigue siendo uno ⇒ Más pierde una
+    // fila entera con el pipeline completo verde. Medido antes de reescribirlo.
+    // La única aserción que muerde es la IGUALDAD de conjuntos contra la otra punta del contrato: lo
+    // que Más resta tiene que ser, exactamente, lo que la barra renderiza sin su quinto destino
+    // (`/mas`, que es la pantalla misma y no se resta de sí misma). Así el rojo aparece por los dos
+    // lados: un href de más en `EN_LA_BARRA`, y un destino nuevo en la barra que nadie restó en Más.
+    // Y NO se deduplica a propósito: un href escrito dos veces en la declaración tiene que dar rojo,
+    // no colapsar en silencio.
+    const declaracionMas = bloque(mas, 'const EN_LA_BARRA', '])')
+    expect(declaracionMas).not.toBe('')
+    const restados = (declaracionMas.match(/'\/[a-z-]+'/g) ?? []).sort()
+
+    const declaracionBarra = bloque(barra, 'const DESTINOS', '\n]')
+    expect(declaracionBarra).not.toBe('')
+    const destinos = [...declaracionBarra.matchAll(/href: ('\/[a-z-]+')/g)].map(m => m[1])
+    expect(destinos.length).toBeGreaterThan(1)
+    expect(destinos).toContain("'/mas'")
+
+    expect(restados).toEqual(destinos.filter(h => h !== "'/mas'").sort())
+    expect(restados).toHaveLength(destinos.length - 1)
+  })
+
+  it('el href de clientes aparece UNA sola vez en toda la pantalla', () => {
     // Dos ocurrencias significarían que se enumeraron las dos keys que apuntan al mismo destino, y
     // ahí vuelve el bug: 9 filas con "Pacientes" duplicado, y SOLAMENTE en el rubro `salud`.
     expect(mas.length).toBeGreaterThan(0)
-    for (const href of ["'/dashboard'", "'/appointments'", "'/agenda'", "'/clients'"]) {
-      expect(mas).toContain(href)
-    }
     expect(cuenta(mas, /'\/clients'/g)).toBe(1)
   })
 

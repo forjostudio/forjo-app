@@ -31,10 +31,16 @@ import type { Business } from '@/lib/types'
 
 // ── Los cuatro hrefs que la barra inferior ya ocupa ──────────────────────────────────────────────
 // Duplicación DELIBERADA y acotada a cuatro strings: tiene que coincidir con el `EN_LA_BARRA` de
-// `app/(dashboard)/mas/mas-client.tsx`. No se importa a propósito — el valor del candado está en
-// que si alguien cambia el conjunto del componente (p. ej. suma un quinto href "para que Más tenga
-// menos filas") sin cambiar el de acá, los conteos de abajo se rompen y el test lo dice. Importarlo
-// convertiría el candado en un espejo que siempre se da la razón.
+// `app/(dashboard)/mas/mas-client.tsx`. No se importa a propósito — importarlo convertiría el
+// candado en un espejo que siempre se da la razón: los conteos de rubro de abajo se medirían contra
+// el mismo conjunto que cambió, y un quinto href bajaría las filas esperadas y las reales a la vez.
+//
+// ⚠ ESTA COPIA NO VIGILA AL COMPONENTE, Y ANTES DECÍA QUE SÍ. Un quinto href agregado SÓLO en el
+// componente no rompe nada de acá (este archivo nunca lee el componente) y tampoco lo veía el
+// barrido de fuente: Más perdía una fila con las dos suites en verde — medido. Quien ata las dos
+// puntas es el caso "el conjunto restado es EXACTAMENTE los destinos de la barra menos /mas" de
+// `test/panel-nav-chrome.test.ts`, que lee la declaración de la PRODUCCIÓN y la compara con los
+// destinos que la barra renderiza. Lo de acá es la tabla de rubros; lo de allá, el vínculo.
 //
 // Y son CUATRO HREFS y no cinco keys por una razón estructural: las keys `clients` y `patients`
 // apuntan al MISMO destino, así que restar por href deduplica por construcción y el bug de las
