@@ -728,4 +728,31 @@ describe('10 · los controles de durabilidad que antes eran gate de plan', () =>
     // lo que el borrado del drawer podría haberse llevado puesto".
     expect(cuenta(sidebar, /aria-current/g), 'el sidebar perdió su `aria-current`').toBeGreaterThan(0)
   })
+
+  it('el repliegue del header de /clients está acotado a mobile', () => {
+    // MOB-07 y criterio 5 de la fase dicen lo mismo: "en desktop NO cambia nada". La primera
+    // versión del modo búsqueda —el repliegue del header de /clients al enfocar el buscador—
+    // DESMONTABA las tres filas en todos los anchos, así que en la computadora enfocar el buscador
+    // encogía el header y, mientras quedara texto, dejaba "Nuevo cliente" inalcanzable.
+    // Lo encontró el VERIFICADOR de la fase, no esta suite: borrar o ampliar el repliegue dejaba
+    // los 1687 casos en verde. Por eso existe este caso.
+    // En desktop el repliegue además no resuelve nada: hay `lg:h-screen` y no hay teclado en
+    // pantalla, que es el problema que el modo búsqueda viene a aliviar.
+    const clients = sinComentarios(read('app/(dashboard)/clients/clients-client.tsx'))
+    const repliegues = [...clients.matchAll(/modoBusqueda\s*&&\s*'([^']*)'/g)].map(m => m[1])
+
+    // Guarda de honestidad: si el modo búsqueda se renombra o desaparece, el caso no puede pasar
+    // por vacío fingiendo que está todo acotado.
+    expect(repliegues.length, 'no se encontró ningún repliegue por `modoBusqueda`: ¿se renombró?').toBeGreaterThan(0)
+
+    for (const clase of repliegues) {
+      expect(clase, `el repliegue "${clase}" no tiene variante de desktop: en la computadora también se esconde`).toMatch(/\blg:/)
+      expect(clase, `el repliegue "${clase}" esconde pero no declara con qué display vuelve en desktop`).toMatch(/\bhidden\b/)
+    }
+
+    // Y la otra forma de romperlo, que la regla de arriba NO ve: volver a desmontar
+    // condicionalmente en vez de ocultar por CSS. Un `{!modoBusqueda && …}` no deja ninguna clase
+    // que inspeccionar, así que pasaría el bucle sin que nadie lo note.
+    expect(clients, 'el header volvió a DESMONTARSE por `modoBusqueda` en vez de ocultarse por CSS, así que desktop vuelve a cambiar').not.toMatch(/\{\s*!modoBusqueda\s*&&/)
+  })
 })

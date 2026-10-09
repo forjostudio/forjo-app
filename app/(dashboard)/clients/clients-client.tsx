@@ -758,10 +758,19 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
         <div className="flex-shrink-0 p-4 border-b border-border space-y-3">
           {/* Las tres filas de abajo se repliegan en modo búsqueda (ver `modoBusqueda`): ninguna se
               puede accionar mientras se escribe, y entre las tres se llevan la mayor parte del alto
-              del header, que es alto que la lista no tiene. */}
-          {!modoBusqueda && <>
+              del header, que es alto que la lista no tiene.
+              ⚠ SE REPLIEGAN SÓLO EN MOBILE, y por CSS (`hidden lg:*`) en vez de desmontando. La
+              primera versión de este cambio las desmontaba en TODOS los anchos y eso rompía MOB-07
+              ("en desktop no cambia nada") y el criterio 5 de la fase ("desktop idéntico"): en la
+              computadora, hacer foco en el buscador encogía el header y, mientras hubiera texto,
+              dejaba "Nuevo cliente" inalcanzable. Lo detectó el verificador de la fase.
+              En desktop el repliegue además no resuelve NADA: hay `lg:h-screen` y no hay teclado en
+              pantalla, que es el problema que esto viene a aliviar.
+              ⚠ Cada fila lleva su propio `hidden lg:<display>` en vez de ir las tres dentro de un
+              envoltorio: el padre usa `space-y-3`, y meterlas en un solo hijo colapsaría la
+              separación entre ellas. */}
           {/* Fila 1: título + (opcional) fusionar duplicados. */}
-          <div className="flex items-center justify-between gap-2">
+          <div className={cn('flex items-center justify-between gap-2', modoBusqueda && 'hidden lg:flex')}>
             <h1 className="text-lg font-bold">
               {term.clients} <span className="text-muted-foreground font-normal text-sm">({clients.length})</span>
             </h1>
@@ -778,7 +787,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               Exportar entra en el lote aunque no sea un <Button>: usa buttonVariants y es hermano
               directo del de Importar en el mismo grid, así que dejarlo estirado partiría el par en
               dos anchos distintos — un bug visual peor que el que POLISH-04 viene a cerrar. */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn('grid grid-cols-2 gap-2', modoBusqueda && 'hidden lg:grid')}>
             <a
               href="/api/export/clients"
               download
@@ -794,10 +803,12 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
           </div>
           {/* Fila 3 (primaria, full-width): el CTA primario "Nuevo cliente" en su propia fila para que
               quede dominante y no se apriete en el grid 2-col junto a los dos secundarios (CLIENT-01). */}
-          <Button onClick={() => setNewClientOpen(true)} className="w-full gap-1.5 sm:w-auto">
+          <Button
+            onClick={() => setNewClientOpen(true)}
+            className={cn('w-full gap-1.5 sm:w-auto', modoBusqueda && 'hidden lg:inline-flex')}
+          >
             <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
           </Button>
-          </>}
 
           {/* Filter tabs */}
           <div className="flex gap-1 flex-wrap">
