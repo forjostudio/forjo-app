@@ -8,12 +8,14 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 2
-name: A.2 — Teclado abierto (pasada de ANDROID; la de iOS queda para el final)
+number: 3
+name: A.3 — Nada tapado
 expected: |
-  Con el formulario largo de Finanzas, el drawer de alta de turno (enfocando el
-  último campo) y el buscador de /clients: la barra no se ve ni tapa el campo ni
-  el submit, y al cerrar el teclado el contenido vuelve sin saltar.
+  Botones de alta de Finanzas, footers de Negocio y Configuración, final de Más
+  (la firma), y final de la lista y de la ficha en /clients y /clinical-history
+  —scrolleando DENTRO de la lista y DENTRO de la ficha, no arrastrando la página—.
+  Todo completamente visible y alcanzable con el pulgar con la barra presente.
+  Si hace falta arrastrar la página para ver la última fila, el arreglo no tomó efecto.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -48,6 +50,16 @@ why_human: `env(safe-area-inset-bottom)` vale 0 en Android y en todo emulador he
 result: [pending]
 
 ### 2. A.2 — Teclado abierto en Android Chrome **y** iOS Safari
+result: pass (Android) — pendiente la pasada de iOS Safari
+notes: |
+  Probado en Android: buscador de /clients, drawer de alta de turno y el diálogo
+  "Nueva venta" de Finanzas (el largo, con el buscador de cliente anidado al pie).
+  Buen funcionamiento en los tres: la barra no tapa el campo ni el submit y el
+  contenido no salta al cerrar el teclado.
+  HALLAZGO LATERAL, fuera del alcance de la fase: el diálogo de Finanzas pierde el
+  borrador al tocar afuera. Registrado como todo propio
+  (`.planning/todos/pending/2026-10-09-guarda-de-borrador-en-los-dialogos-de-finanzas.md`);
+  el arreglo es reusar `guardDraftOnDismiss`, que ya usan el alta de turno y el de abono.
 expected: Con el formulario largo de Finanzas, el drawer de alta de turno (enfocando el último campo) y el buscador de `/clients` (que ahora vive dentro de un `absolute inset-0`): la barra no se ve ni tapa el campo ni el submit, y al cerrar el teclado el contenido vuelve sin saltar.
 why_human: Lo exige el criterio 3 del ROADMAP ("lo prueba en el teléfono"). `interactiveWidget='resizes-visual'` es el default y está declarado, pero iOS Safari desplaza el layout viewport por su cuenta, y este repo ya pagó 4 quicks de teclado. El cambio estructural suma una variable que ningún headless ve: cómo se comporta `dvh` con el teclado abierto en cada motor.
 result: [pending]
@@ -115,9 +127,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 0
+passed: 1
 issues: 0
-pending: 13
+pending: 12
 skipped: 0
 blocked: 0
 
