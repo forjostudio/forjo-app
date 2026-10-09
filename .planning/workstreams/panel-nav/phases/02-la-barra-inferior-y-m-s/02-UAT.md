@@ -8,14 +8,13 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 3
-name: A.3 — Nada tapado
+number: 4
+name: A.3b — /clients con el banner de período de prueba visible
 expected: |
-  Botones de alta de Finanzas, footers de Negocio y Configuración, final de Más
-  (la firma), y final de la lista y de la ficha en /clients y /clinical-history
-  —scrolleando DENTRO de la lista y DENTRO de la ficha, no arrastrando la página—.
-  Todo completamente visible y alcanzable con el pulgar con la barra presente.
-  Si hace falta arrastrar la página para ver la última fila, el arreglo no tomó efecto.
+  Con el banner ámbar de prueba arriba (la cuenta del seed está en `trial`), a
+  375px: el último cliente de la lista queda visible y tocable por encima de la
+  barra. Y la página NO se puede arrastrar: si arrastrás hacia arriba y el
+  contenido se mueve como un todo, hay doble scroll y el arreglo no tomó efecto.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -44,8 +43,17 @@ El resto (3, 4, 6, 7, 8, 9, 10, 11, 12, 13) se hace entero en Android.
 
 ## Tests
 
-### 1. A.1 — Franja de gestos en un iPhone con notch
-expected: El `bg-card` de la barra cubre la zona de gestos y el último label no queda debajo; en Android no hay hueco ni doble reserva.
+### 1. A.1 — Franja de gestos en un iPhone (SÓLO la mitad de abajo)
+expected: El `bg-card` de la barra cubre la zona de gestos (el *home indicator*) y el último label no queda debajo; en Android no hay hueco ni doble reserva.
+scope: |
+  ⚠ ACOTADO por el dueño durante la UAT (2026-10-09), y es correcto: **la mitad de
+  ARRIBA no aplica**. En una pestaña del navegador la app nunca pinta debajo del
+  notch — arriba está el chrome del browser. Coincide con lo que la fase ya declaró:
+  el plan 02-03 dice que NO pone los insets laterales y acepta por escrito que "en un
+  iPhone con notch, en landscape, el contenido puede quedar a ras del notch". Esta
+  fase reserva ÚNICAMENTE `env(safe-area-inset-bottom)`.
+  El notch recién importa el día que esto corra como app de pantalla completa (PWA en
+  modo standalone, o nativa), donde la app sí ocupa de borde a borde.
 why_human: `env(safe-area-inset-bottom)` vale 0 en Android y en todo emulador headless; sólo un iPhone real lo ve. La wave 1 lo confirmó en UN teléfono Android con captura del dueño; falta el iPhone.
 result: [pending]
 
@@ -65,6 +73,10 @@ why_human: Lo exige el criterio 3 del ROADMAP ("lo prueba en el teléfono"). `in
 result: [pending]
 
 ### 3. A.3 — Nada tapado
+result: pass
+notes: |
+  Probado en celular real (Android), incluido el scroll DENTRO de la lista de
+  /clients, que es lo que valida el arreglo estructural del alto. Nada tapado.
 expected: Botones de alta de Finanzas, footers de Negocio y Configuración, final de Más (la firma), y final de la lista y de la ficha en `/clients` y `/clinical-history` — scrolleando **DENTRO** de la lista y **DENTRO** de la ficha, no arrastrando la página. Todo completamente visible y alcanzable con el pulgar con la barra presente. **Si hace falta arrastrar la página para ver la última fila, el arreglo no tomó efecto.**
 result: [pending]
 
@@ -127,9 +139,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 1
+passed: 2
 issues: 0
-pending: 12
+pending: 11
 skipped: 0
 blocked: 0
 
