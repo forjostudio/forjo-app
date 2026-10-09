@@ -697,6 +697,29 @@ describe('10 · los controles de durabilidad que antes eran gate de plan', () =>
     }
   })
 
+  it('las tres filas de cuenta siguen en Más, aunque ya no formen un grupo', () => {
+    // EL AGUJERO QUE ESTE CASO CIERRA, medido: sacar "Ver mi página" entera de `mas-client.tsx`
+    // dejaba las dos suites en 67/67 VERDE. Nada vigilaba su presencia.
+    //
+    // Es justo el modo de falla que el UI-SPEC temía (T-6): esas tres filas viven en DOS lugares
+    // distintos del sidebar —"Ver mi página" es un `<a>` dentro del `<nav>`, Ayuda y Cerrar sesión
+    // están en el footer— así que quien copia sólo el footer se olvida de la primera. El contrato
+    // lo resolvía agrupando las tres bajo un header `CUENTA` propio; la revisión de UAT del
+    // 2026-10-09 disolvió ese grupo para copiar el orden del sidebar, y al disolverlo se perdió la
+    // única cosa que hacía evidente el olvido. Esto lo repone como candado en vez de como forma.
+    //
+    // Por qué importa de verdad y no es cosmético: el drawer hamburguesa que tenía estas tres
+    // filas YA NO EXISTE (bloque 7). Si "Cerrar sesión" o "Ayuda" se caen de Más, en mobile no
+    // quedan en ningún otro lado — el dueño se queda sin forma de cerrar sesión desde el teléfono.
+    for (const fila of ['Ayuda', 'Ver mi página', 'Cerrar sesión']) {
+      expect(mas, `Más perdió la fila "${fila}", que en mobile no existe en ningún otro lado`).toContain(`>${fila}<`)
+    }
+    // La de la página pública es la única que sale del panel: sin `target="_blank"` se la llevaría
+    // puesta la pestaña del dueño, y sin el `rel` quedaría expuesto `window.opener` (T-02-09).
+    expect(mas).toContain('target="_blank"')
+    expect(mas).toContain('rel="noopener noreferrer"')
+  })
+
   it('el sidebar de desktop sigue señalando la ruta activa de forma accesible', () => {
     // T-02-15 (high, Tampering): `aria-current` es la mitad ACCESIBLE del señalado del menú de
     // desktop; la otra mitad es color, que un lector de pantalla no ve. Era un conteo del gate de
