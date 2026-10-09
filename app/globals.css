@@ -2,6 +2,18 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* `.planning/` FUERA del escaneo de Tailwind. La detección automática de v4 lee TODOS los archivos
+   del repo que no estén en .gitignore, incluidos los `.md`, así que cada clase citada en un plan, un
+   research o un informe de verificación entra al CSS aunque no exista en el código. Eso ya costó tres
+   cosas distintas: reglas muertas que inflan el bundle, un falso negativo al verificar un cambio de
+   clases (el string VIEJO seguía en el CSS, lo mantenía vivo el propio informe), y —lo que motivó
+   esta línea— el dev server devolviendo 500 en TODAS las páginas: un informe citaba
+   `env(...)` con los tres puntos literales, Tailwind generó `padding-bottom: calc(... + env(...))`,
+   que es CSS inválido, y el parser de Turbopack abortó `globals.css` entero.
+   `.planning/` es documentación: ninguna clase real nace ahí.
+   ⚠ La ruta es relativa a ESTE archivo, que vive en `app/` — de ahí el `../`. */
+@source not "../.planning";
+
 @custom-variant dark (&:is(.dark *));
 
 /* =========================================================================
