@@ -8,15 +8,15 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 9
-name: C — El inventario de Más, rubro por rubro
+number: 11
+name: E.1 — Banda de 900px y desktop ≥1024px
 expected: |
-  En Más: el menú del rubro completo, sin que falte ni sobre ninguna fila contra
-  lo que mostraba el menú hamburguesa viejo. Para `general` (el seed) son 8 filas
-  —Abonos, Servicios, Equipo, Sucursales, Negocio, Mi web, Finanzas,
-  Configuración— más el grupo CUENTA con sus 3: Ayuda, "Ver mi página" (que abre
-  pestaña nueva) y Cerrar sesión. Y el bloque de identidad arriba: avatar,
-  nombre del negocio y el plan debajo. Ningún label cortado.
+  Esto va en la computadora (`http://localhost/`), achicando la ventana.
+  A ~900px de ancho: la barra inferior y el header de dos líneas están, y NO hay
+  botón de menú (es la banda que antes tenía hamburguesa y no sidebar).
+  A ≥1024px: cero barra, cero header de mobile, el sidebar igual al de siempre,
+  sin hueco extra abajo, /clients y /clinical-history a pantalla completa sin
+  franja de 56px, y "Cerrar sesión" del sidebar funcionando.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -158,6 +158,12 @@ why_human: El inventario está probado puro contra los 4 verticales, pero que el
 result: [pending]
 
 ### 10. D — Header de dos líneas y menú único
+result: pass
+notes: |
+  Verificado en celular real. En la misma pasada el dueño confirmó visualmente el
+  reordenamiento del pie de Más que pidió en el test 9 (commits `17b918e` y
+  `f76416b`): "Ver mi página" debajo de Configuración, línea divisoria, Ayuda y
+  Cerrar sesión abajo.
 expected: La línea 2 cambia por sección y por terminología; dice **"Inicio"** en la raíz (el sidebar de desktop sigue diciendo "Dashboard" **a propósito**, §14, no es bug); un nombre largo trunca; **no hay botón de menú en ninguna pantalla mobile**; y con el lector de pantalla cada fila se anuncia bajo el nombre de su grupo, con los dos landmarks con nombres distintos.
 why_human: Terminología en runtime, lector de pantalla y orientación a mitad de scroll no se ven con `grep`.
 result: [pending]
@@ -186,9 +192,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 8
+passed: 9
 issues: 0
-pending: 5
+pending: 4
 skipped: 0
 blocked: 0
 
