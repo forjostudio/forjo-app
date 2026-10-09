@@ -8,14 +8,15 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 6
-name: A.3d — Las 12 pantallas que FLUYEN
+number: 7
+name: A.4 — Tres pasadas de contraste
 expected: |
-  Recorré: /abonos, /agenda, /appointments, /ayuda, /consultorios, /dashboard,
-  /equipo, /finances, /mas, /negocio, /servicios, /settings (y /web). Cada una
-  se ve igual que antes en ancho y padding; la última fila queda por encima de
-  la barra; el banner de prueba sigue pegado bajo el header; y no aparece ningún
-  scroll horizontal nuevo (que nada se vaya para el costado).
+  En forjo claro, en spa claro con paleta `clay` y en modern claro con paleta
+  `amber`: el destino activo de la barra se distingue del inactivo, el foco se ve,
+  y los títulos de grupo de Más (AGENDA, GESTIÓN, REPORTES, AJUSTES, CUENTA) se
+  leen sin esfuerzo. La pasada de `modern` + `amber` es la que más importa: ahí el
+  color de acento mide 2.15:1 y es donde se confirma que el indicador NO depende
+  del acento.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -105,6 +106,12 @@ why_human: Ningún headless tiene barra de URL; los 60px son una simulación. Ha
 result: [pending]
 
 ### 6. A.3d — Las 12 pantallas que FLUYEN (ítem nuevo de la tercera pasada)
+result: pass
+notes: |
+  Recorridas en celular real. Es el ítem que cubría el riesgo más ancho de la
+  fase: el `<main>` pasó de contenedor de bloque a contenedor flex y su envoltorio
+  a `relative grow`, para las 15 pantallas, y ninguna de las dos sondas había
+  renderizado una pantalla real (midieron cajas con CSS real y contenido sintético).
 expected: `/abonos`, `/agenda`, `/appointments`, `/ayuda`, `/consultorios`, `/dashboard`, `/equipo`, `/finances`, `/mas`, `/negocio`, `/servicios`, `/settings` (y `/web`): cada una se ve igual que antes de la fase en ancho, padding y sticky; la última fila queda por encima de la barra; los banners y el `TestModeBanner` (sticky) siguen pegados bajo el header; ningún scroll horizontal nuevo.
 why_human: El `<main>` pasó de contenedor de bloque a contenedor **flex** y su envoltorio a `relative grow`. Es el ancestro común de las 15 pantallas y lo más ancho que tocó la fase. Las dos sondas midieron cajas con CSS real pero contenido sintético: **ninguna renderizó una pantalla real** (el dev server estaba colgado).
 result: [pending]
@@ -153,9 +160,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 4
+passed: 5
 issues: 0
-pending: 9
+pending: 8
 skipped: 0
 blocked: 0
 
