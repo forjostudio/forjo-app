@@ -29,7 +29,7 @@ export function ClinicalHistoryClient({ initialClients, businessId }: Props) {
   const showDetail = selectedId !== null
 
   return (
-    <div className="-m-4 sm:-m-6 lg:-m-8 flex h-[calc(100vh-56px)] lg:h-screen overflow-hidden bg-background">
+    <div className="-m-4 sm:-m-6 lg:-m-8 flex h-[calc(100vh-56px-var(--panel-nav-h)-env(safe-area-inset-bottom,0px))] lg:h-screen overflow-hidden bg-background">
 
       {/* ═══════════ PATIENT LIST ═══════════ */}
       <div className={cn(

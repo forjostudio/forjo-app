@@ -728,7 +728,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="-m-4 sm:-m-6 lg:-m-8 flex h-[calc(100vh-56px)] lg:h-screen overflow-hidden bg-background">
+    <div className="-m-4 sm:-m-6 lg:-m-8 flex h-[calc(100vh-56px-var(--panel-nav-h)-env(safe-area-inset-bottom,0px))] lg:h-screen overflow-hidden bg-background">
 
       {/* ═══════════════ LEFT PANEL ═══════════════ */}
       <div className={cn(
