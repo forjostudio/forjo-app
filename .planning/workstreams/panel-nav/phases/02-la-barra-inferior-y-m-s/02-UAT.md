@@ -8,13 +8,14 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 5
-name: A.3c — /clients con la barra de URL visible (pasada de ANDROID CHROME)
+number: 6
+name: A.3d — Las 12 pantallas que FLUYEN
 expected: |
-  Abrí /clients de cero (o recargá) para que la barra de URL de Chrome esté
-  VISIBLE, y SIN scrollear la página antes: el final de la lista tiene que quedar
-  por encima de la barra inferior. Es lo que prueba que `dvh` hace su trabajo:
-  con `vh` el solape medido por proxy era de 60px, con `dvh` es 0.
+  Recorré: /abonos, /agenda, /appointments, /ayuda, /consultorios, /dashboard,
+  /equipo, /finances, /mas, /negocio, /servicios, /settings (y /web). Cada una
+  se ve igual que antes en ancho y padding; la última fila queda por encima de
+  la barra; el banner de prueba sigue pegado bajo el header; y no aparece ningún
+  scroll horizontal nuevo (que nada se vaya para el costado).
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -92,6 +93,13 @@ why_human: Es el estado por defecto de todo negocio nuevo, y la altura real del 
 result: [pending]
 
 ### 5. A.3c — `/clients` con la barra de URL visible
+result: pass (Android Chrome) — pendiente la pasada de iOS Safari
+notes: |
+  Probado con la barra de URL visible y sin scrollear antes. La zona de scroll de
+  la lista termina exactamente donde empieza la barra, con barra de scroll interna
+  visible (confirma que scrollea la LISTA y no el documento, o sea el
+  `absolute inset-0`), y el final de la lista queda por encima de la barra.
+  Confirma en pantalla la decisión `vh` → `dvh`.
 expected: En Android Chrome e iOS Safari, sin haber scrolleado la página antes: el final de la lista queda por encima de la barra. El mecanismo usa `dvh` a propósito (con `vh` el solape medido por proxy era de 60px; con `dvh`, 0).
 why_human: Ningún headless tiene barra de URL; los 60px son una simulación. Hay que ver que `dvh` se comporta como dice la especificación, en particular en iOS Safari.
 result: [pending]
@@ -145,9 +153,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 3
+passed: 4
 issues: 0
-pending: 10
+pending: 9
 skipped: 0
 blocked: 0
 
