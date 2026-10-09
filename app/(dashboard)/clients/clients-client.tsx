@@ -243,6 +243,17 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   const [mergedInto, setMergedInto] = useState<Record<string, string>>({})
   const searchParams = useSearchParams()
   const [search, setSearch] = useState('')
+  // MODO BÚSQUEDA (UAT de la Phase 2 de v0.31, 2026-10-09). El header de este panel es
+  // `flex-shrink-0`: no scrollea, así que su alto se le resta SIEMPRE a la lista. Son siete bloques
+  // —título, Exportar/Importar, Nuevo cliente, tabs, selects, buscador y el índice A-Z— y con el
+  // teclado abierto en un teléfono quedaban dos nombres visibles. El dueño lo vio en un iPhone.
+  // Mientras se busca se esconde lo que NO se puede accionar (las tres filas de arriba) y se
+  // conserva lo que ACOTA la búsqueda (tabs y selects): así no quedan filtros activos ocultos sin
+  // que el dueño lo sepa, que sería cambiar un problema por otro peor.
+  // Sigue activo mientras haya texto, no sólo mientras haya foco: tocar un cliente de la lista
+  // quita el foco, y volver al header de golpe sería un salto de layout en medio del gesto.
+  const [searchFocused, setSearchFocused] = useState(false)
+  const modoBusqueda = searchFocused || search.trim() !== ''
   const [filter, setFilter] = useState<FilterKey>('all')
   const [filterPro, setFilterPro] = useState('all')
   const [filterInsurance, setFilterInsurance] = useState('all')
@@ -745,6 +756,10 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       )}>
         {/* Header */}
         <div className="flex-shrink-0 p-4 border-b border-border space-y-3">
+          {/* Las tres filas de abajo se repliegan en modo búsqueda (ver `modoBusqueda`): ninguna se
+              puede accionar mientras se escribe, y entre las tres se llevan la mayor parte del alto
+              del header, que es alto que la lista no tiene. */}
+          {!modoBusqueda && <>
           {/* Fila 1: título + (opcional) fusionar duplicados. */}
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-lg font-bold">
@@ -782,6 +797,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
           <Button onClick={() => setNewClientOpen(true)} className="w-full gap-1.5 sm:w-auto">
             <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
           </Button>
+          </>}
 
           {/* Filter tabs */}
           <div className="flex gap-1 flex-wrap">
@@ -832,7 +848,17 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Nombre, teléfono, email..." className="pl-8 h-8 text-sm" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              // Los dos extremos del modo búsqueda. El `onBlur` NO lo apaga solo: `modoBusqueda`
+              // sigue en true mientras quede texto (ver su declaración), así que tocar un cliente
+              // no devuelve el header de golpe debajo del dedo.
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              placeholder="Nombre, teléfono, email..."
+              className="pl-8 h-8 text-sm"
+            />
           </div>
 
           {/* Alphabet index */}
