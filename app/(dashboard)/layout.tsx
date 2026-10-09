@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { PanelBottomNav } from '@/components/dashboard/panel-bottom-nav'
+import { PanelTopBar } from '@/components/dashboard/panel-top-bar'
 import { PlanBanner } from '@/components/dashboard/plan-banner'
 import { TestModeBanner } from '@/components/dashboard/test-mode-banner'
 import { MpConnectionBanner } from '@/components/dashboard/mp-connection-banner'
@@ -77,6 +78,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {/* La barra inferior es HERMANA del sidebar y va sin props: los labels salen de
               useTerminology() y el VerticalProvider ya envuelve desde acá arriba. */}
           <PanelBottomNav />
+          {/* El header de mobile es el TERCER hermano, y va con el negocio ya resuelto porque
+              necesita su nombre (el título de sección sale de useTerminology(), igual que los
+              labels de la barra). Reemplaza al header que vivía dentro del sidebar: misma
+              visibilidad, misma posición, misma capa y mismo alto, sin el botón del menú y con una
+              segunda línea. */}
+          <PanelTopBar business={business} />
           {/* La reserva de alto de la barra se hace en UN SOLO lugar: el `pb` de acá abajo, en el
               mismo elemento que ya reserva el header con `pt-14`. Así ninguna de las 13 pantallas
               agrega padding inferior propio. El `lg:pb-0` es obligatorio y simétrico al `lg:pt-0`: a
