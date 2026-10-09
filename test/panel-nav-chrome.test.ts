@@ -1,0 +1,415 @@
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+// ── Phase 02 / plan 02-04 — los invariantes INVISIBLES del chrome del panel ──────────────────────
+// Suite PURA: sin base, sin fixtures y sin gate de entorno → cae sola en el carril paralelo `pure`
+// (test/suite-split.ts clasifica por los IMPORTS del archivo).
+//
+// POR QUÉ ESTA SUITE LEE CÓDIGO FUENTE EN VEZ DE RENDERIZAR: el entorno de Vitest de este repo es
+// `node` (vitest.config.mts) — no hay DOM, no hay Testing Library, no hay Playwright, y el milestone
+// prohíbe agregar paquetes. Los tres componentes de esta fase llaman hooks de router en su cuerpo,
+// así que no se pueden montar. Leer la fuente es la única herramienta que este repo tiene, y para
+// estos invariantes alcanza porque todos son propiedades del CÓDIGO ESCRITO, no del render.
+//
+// QUÉ CUBRE QUE NINGÚN OTRO GATE PUEDE VER. Ninguno de los ocho invariantes de abajo lo ve `tsc`
+// (son strings, no tipos), ni `npm run build` (Tailwind no avisa por una clase que no existe), ni la
+// suite existente, ni la UAT visual —que no tiene con qué comparar—. Tres son especialmente
+// traicioneros:
+//   1. los cuatro valores del bloque de identidad: el markup que se reusa de desktop trae los VIEJOS
+//      (36px, radio chico, 14px y 12px) y un ejecutor que obedezca la palabra "verbatim" entrega
+//      ésos sin que nadie se entere;
+//   2. la resta de la barra por href y no por key: el síntoma aparece SÓLO en el rubro `salud`;
+//   3. el breakpoint `lg` y no el de 768px: a 375px y a 1280px se ve igual, el agujero está sólo
+//      entre 768 y 1023px — la banda que hoy ya no tiene boton de menú.
+//
+// POR QUÉ ESTE ARCHIVO Y EL CANDADO DEL INVENTARIO SON DOS Y NO UNO: es la lección que la Phase 1
+// pagó y dejó escrita. Un test de decisiones puras no puede ver si el componente las consume, y un
+// barrido de fuente no puede computar un inventario. `test/panel-nav-groups.test.ts` fija QUÉ filas
+// corresponden a cada rubro; esto fija que los componentes lo consuman así y respeten la forma.
+//
+// LA REGLA DE HONESTIDAD: cada barrido descuenta los comentarios ANTES de afirmar, y afirma PRIMERO
+// que encontró algo. Un recorte vacío —porque la función se renombró o el archivo se movió— haría
+// pasar todas sus aserciones de conteo-cero, y el candado creería estar mirando algo que no mira.
+// Descontar comentarios no es cosmética: los cinco archivos vigilados están LLENOS de comentarios
+// que nombran el breakpoint prohibido, las mutaciones crudas y los valores viejos, justamente para
+// explicar por qué no se usan.
+//
+// ⚠ POR QUÉ ESTE ARCHIVO CONTIENE LITERALES QUE EN OTROS LADOS ESTÁN PROHIBIDOS: su trabajo es
+// negarlos. Todos los barridos corren sobre `app/` y `components/`, NUNCA sobre `test/`, así que un
+// literal que viva acá no puede auto-invalidar ningún gate.
+//
+// ⚠ SI UN INVARIANTE SE PONE ROJO, EL ARREGLO VA EN EL COMPONENTE, NO ACÁ. Y si el rojo es un
+// recorte vacío, el arreglo es actualizar el marcador del recorte — nunca borrar el caso.
+
+// ── Los tres helpers ────────────────────────────────────────────────────────────────────────────
+// Copiados TAL CUAL de test/panel-history-sidebar.test.ts (que a su vez los tomó de
+// test/panel-history-clients.test.ts, y ése de test/catalog-public.test.ts). No se reinventan: que
+// el molde sea el mismo es lo que hace que un rojo de acá se lea igual que un rojo de allá.
+
+const read = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
+
+/** Borra comentarios JSX, de bloque y de línea, en ese orden. Preserva el `//` de las URLs. */
+function sinComentarios(src: string): string {
+  return src
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+}
+
+/**
+ * Recorta LA REGIÓN que arranca en `marcador`, balanceando llaves desde su primer `{`.
+ *
+ * POR QUÉ RECORTAR Y NO AFIRMAR SOBRE EL ARCHIVO: los archivos vigilados tienen cientos de líneas y
+ * varios bloques que navegan. "En algún lado del archivo aparece `panelNavMode`" no prueba que el
+ * link del menú lo use.
+ *
+ * ⚠ Devuelve string VACÍO si no encuentra la región, y cada `it` lo afirma no vacío antes de seguir.
+ */
+function recorte(fuente: string, marcador: string): string {
+  const at = fuente.indexOf(marcador)
+  if (at === -1) return ''
+  const abre = fuente.indexOf('{', at)
+  if (abre === -1) return ''
+  let profundidad = 0
+  for (let i = abre; i < fuente.length; i++) {
+    const ch = fuente[i]
+    if (ch === '{') profundidad++
+    else if (ch === '}') {
+      profundidad--
+      if (profundidad === 0) return fuente.slice(at, i + 1)
+    }
+  }
+  return ''
+}
+
+/**
+ * Cuarto helper, propio de este archivo: recorta la región ENTRE dos marcadores.
+ *
+ * Hace falta porque dos de los ocho invariantes viven en regiones que `recorte` no puede delimitar:
+ * el bloque de identidad de Más (su primera llave es la del ternario del logo, así que balancear
+ * desde ahí se quedaría corto y dejaría afuera justo las dos líneas de texto que hay que medir) y
+ * la etiqueta de apertura del elemento principal del layout (que no tiene ninguna llave).
+ *
+ * ⚠ Misma regla que `recorte`: devuelve string VACÍO si falta cualquiera de los dos marcadores o si
+ * aparecen en orden invertido, y cada `it` lo afirma no vacío antes de seguir.
+ */
+function bloque(fuente: string, desde: string, hasta: string): string {
+  const a = fuente.indexOf(desde)
+  if (a === -1) return ''
+  const b = fuente.indexOf(hasta, a + desde.length)
+  if (b === -1) return ''
+  return fuente.slice(a, b + hasta.length)
+}
+
+const cuenta = (src: string, patron: RegExp) => (src.match(patron) ?? []).length
+
+// ── Los cinco archivos vigilados, con los comentarios ya descontados ────────────────────────────
+const RUTA_BARRA = 'components/dashboard/panel-bottom-nav.tsx'
+const RUTA_HEADER = 'components/dashboard/panel-top-bar.tsx'
+const RUTA_MAS = 'app/(dashboard)/mas/mas-client.tsx'
+const RUTA_MAS_PAGE = 'app/(dashboard)/mas/page.tsx'
+const RUTA_SIDEBAR = 'components/dashboard/sidebar.tsx'
+const RUTA_LAYOUT = 'app/(dashboard)/layout.tsx'
+
+const barra = sinComentarios(read(RUTA_BARRA))
+const header = sinComentarios(read(RUTA_HEADER))
+const mas = sinComentarios(read(RUTA_MAS))
+const masPage = sinComentarios(read(RUTA_MAS_PAGE))
+const sidebar = sinComentarios(read(RUTA_SIDEBAR))
+const layout = sinComentarios(read(RUTA_LAYOUT))
+
+describe('1 · el breakpoint de la barra es lg, no el de 768px', () => {
+  it('la barra se esconde en lg y NO en el breakpoint intermedio', () => {
+    // Con un prefijo de 768px la banda 768-1023px se quedaría sin NINGÚN menú: no tiene sidebar
+    // (que entra en 1024px) y ya no tiene botón de menú. El agujero no se ve ni a 375px ni a 1280px.
+    expect(barra.length).toBeGreaterThan(0)
+    expect(barra).toContain('lg:hidden')
+    expect(cuenta(barra, /md:hidden/g)).toBe(0)
+  })
+
+  it('el header de mobile usa el MISMO breakpoint que la barra', () => {
+    // Si los dos no coincidieran, habría una banda con header y sin barra (o al revés) y el alto
+    // reservado del contenido quedaría mal justo ahí.
+    expect(header.length).toBeGreaterThan(0)
+    expect(header).toContain('lg:hidden')
+    expect(cuenta(header, /md:hidden/g)).toBe(0)
+  })
+
+  it('el sidebar de desktop sigue siendo el simétrico exacto, y no se movió', () => {
+    expect(sidebar).toContain('hidden lg:flex lg:flex-col lg:fixed')
+  })
+})
+
+describe('2 · la resta de la barra en Más es por href y es de cuatro valores', () => {
+  it('los cuatro hrefs están, y el de clientes aparece UNA sola vez', () => {
+    // Dos ocurrencias significarían que se enumeraron las dos keys que apuntan al mismo destino, y
+    // ahí vuelve el bug: 9 filas con "Pacientes" duplicado, y SOLAMENTE en el rubro `salud`.
+    expect(mas.length).toBeGreaterThan(0)
+    for (const href of ["'/dashboard'", "'/appointments'", "'/agenda'", "'/clients'"]) {
+      expect(mas).toContain(href)
+    }
+    expect(cuenta(mas, /'\/clients'/g)).toBe(1)
+  })
+
+  it('Más NO reimplementa el filtro por rubro: lo deriva del inventario', () => {
+    // Dos copias del filtro divergen en silencio y el síntoma sale en un solo rubro. El gateo se
+    // preserva por construcción o no se preserva.
+    expect(mas).toContain('buildNavGroups')
+    expect(cuenta(mas, /resolveVertical/g)).toBe(0)
+  })
+
+  it('el reparto resta por href y VUELVE a descartar los grupos que quedaron vacíos', () => {
+    // ⚠ Éste es el hermano de cableado de un caso que el candado puro del inventario NO puede ver:
+    // allá el helper del test aplica su propio descarte, así que una mutación que borre este
+    // `.filter` de la producción no lo pone rojo (se midió). Acá sí. Sin él, el grupo del inicio del
+    // panel —cuyo único destino está en la barra— renderizaría su header sin una sola fila debajo.
+    // ⚠ Se delimita con `bloque` y NO con `recorte`: la primera llave después del marcador es la
+    // del objeto que devuelve el `.map`, así que balancear desde ahí corta la cadena justo antes
+    // del `.filter` que este caso tiene que leer. Se midió: daba un rojo cuyo arreglo tentador era
+    // borrar la aserción, con el código de producción perfectamente correcto.
+    const reparto = bloque(mas, 'const grupos =', 'return (')
+    expect(reparto).not.toBe('')
+    expect(reparto).toContain('buildNavGroups')
+    expect(reparto).toContain('EN_LA_BARRA.has')
+    expect(reparto).toMatch(/\.filter\(g => g\.items\.length > 0\)/)
+    // Y el descarte va DESPUÉS de restar: antes no haría nada, porque ningún grupo está vacío todavía.
+    expect(reparto.indexOf('EN_LA_BARRA.has')).toBeLessThan(reparto.indexOf('.filter(g => g.items.length > 0)'))
+  })
+})
+
+describe('3 · el orden del guard y del consumo es contrato, en los tres componentes que navegan', () => {
+  // No es un detalle de orden: si el consumo corriera antes, el retroceso ya habría salido de la
+  // subsección cuando el diálogo pregunta "¿salir sin guardar?", y cancelar dejaría al dueño en otro
+  // lado del que estaba.
+  const casos: { nombre: string; fuente: string; marcador: string }[] = [
+    { nombre: 'la barra inferior', fuente: barra, marcador: 'DESTINOS.map(destino =>' },
+    { nombre: 'la pantalla Más', fuente: mas, marcador: 'group.items.map(item =>' },
+    { nombre: 'el sidebar de desktop', fuente: sidebar, marcador: 'group.items.map(item =>' },
+  ]
+
+  for (const caso of casos) {
+    it(`${caso.nombre}: el guard de cambios sin guardar se evalúa PRIMERO`, () => {
+      // Recortar es obligatorio: Más y el sidebar tienen varios bloques que navegan, y "en algún
+      // lado del archivo aparece la política" no prueba que el link del menú la use.
+      const fila = recorte(caso.fuente, caso.marcador)
+      expect(fila).not.toBe('')
+      const nav = recorte(fila, 'onNavigate=')
+      expect(nav).not.toBe('')
+      expect(nav).toContain('requestNavigation')
+      expect(nav).toContain('consumeOwnedPanelEntry')
+      expect(nav.indexOf('requestNavigation')).toBeLessThan(nav.indexOf('consumeOwnedPanelEntry'))
+    })
+
+    it(`${caso.nombre}: el consumo PREVIENE la navegación en vez de encadenarla`, () => {
+      // El retroceso del navegador es ASÍNCRONO: si se dejara navegar, el router empujaría su
+      // entrada antes de que el browser procese el pop y la subsección volvería a quedar enterrada.
+      const nav = recorte(recorte(caso.fuente, caso.marcador), 'onNavigate=')
+      expect(nav).not.toBe('')
+      expect(nav).toMatch(/consumeOwnedPanelEntry\(\)\)\s*e\.preventDefault\(\)/)
+      expect(nav).not.toContain('await consumeOwnedPanelEntry')
+      expect(nav).not.toContain('consumeOwnedPanelEntry().then')
+    })
+
+    it(`${caso.nombre}: declara su modo de historial con la ruta actual y el destino`, () => {
+      const fila = recorte(caso.fuente, caso.marcador)
+      expect(fila).not.toBe('')
+      expect(fila).toContain('replace={panelNavMode(')
+      expect(fila).toContain('from: pathname')
+    })
+  }
+})
+
+describe('4 · cero mutaciones crudas de historial en los tres componentes nuevos', () => {
+  // Son tres módulos los que ya escriben en la pila y conviven sólo porque cada uno re-verifica su
+  // propia marca antes de retroceder. Un cuarto escritor sin esa disciplina saca al dueño del panel
+  // con un gesto que él cree inofensivo.
+  const nuevos: { ruta: string; fuente: string; navega: boolean }[] = [
+    { ruta: RUTA_BARRA, fuente: barra, navega: true },
+    { ruta: RUTA_HEADER, fuente: header, navega: false },
+    { ruta: RUTA_MAS, fuente: mas, navega: true },
+  ]
+
+  for (const archivo of nuevos) {
+    it(`${archivo.ruta}: ninguna escritura directa en la pila del navegador`, () => {
+      // La guarda de honestidad: sin ella, un archivo vacío o movido pasaría este caso solo.
+      expect(archivo.fuente.length).toBeGreaterThan(500)
+      expect(cuenta(archivo.fuente, /pushState|replaceState|history\.back|history\.forward|history\.go/g)).toBe(0)
+    })
+
+    it(`${archivo.ruta}: ${archivo.navega ? 'consume los helpers del módulo único' : 'no navega, así que no consume nada'}`, () => {
+      const consumos = cuenta(archivo.fuente, /consumeOwnedPanelEntry|panelNavMode/g)
+      if (archivo.navega) {
+        expect(consumos).toBeGreaterThan(0)
+        expect(archivo.fuente).toContain("from '@/lib/panel-history'")
+      } else {
+        // El header es chrome de lectura: no tiene un solo destino, así que tampoco tiene política.
+        expect(consumos).toBe(0)
+      }
+    })
+  }
+})
+
+describe('5 · los cuatro valores del bloque de identidad de Más', () => {
+  // EL INVARIANTE MÁS INVISIBLE DE LA FASE. El markup de origen (el header del sidebar) trae 36px,
+  // radio chico, 14px y 12px; el contrato de esta pantalla pide 40px, radio grande, 16px y 14px
+  // porque acá el bloque es el elemento dominante y allá es chrome. Nada más en todo el pipeline
+  // distingue una cosa de la otra.
+  const identidad = bloque(mas, 'bg-card border border-border rounded-lg p-4', 'aria-label="Secciones"')
+
+  it('la región del bloque de identidad existe (si no, todo lo de abajo pasaría por vacío)', () => {
+    expect(identidad).not.toBe('')
+    expect(identidad.length).toBeGreaterThan(300)
+  })
+
+  it('el avatar mide 40 y no 36, y lleva el radio grande en los DOS caminos', () => {
+    // Los dos caminos son el logo cargado y el fallback con la inicial: si sólo uno de los dos se
+    // actualizara, la pantalla cambiaría de forma según el negocio tenga logo o no.
+    expect(identidad).not.toBe('')
+    expect(cuenta(identidad, /w-10 h-10/g)).toBe(2)
+    expect(cuenta(identidad, /w-9 h-9/g)).toBe(0)
+    expect(cuenta(identidad, /rounded-lg/g)).toBeGreaterThanOrEqual(2)
+    expect(cuenta(identidad, /rounded-md/g)).toBe(0)
+  })
+
+  it('el nombre va a 16px y la línea de plan a 14px', () => {
+    // ⚠ Las dos negaciones se afirman POR REGIÓN y nunca sobre el archivo entero: el tamaño chico
+    // existe legítimamente en la firma del pie, que se copia verbatim del sidebar, así que una
+    // negación global sería insatisfacible.
+    expect(identidad).not.toBe('')
+    expect(identidad).toContain('text-base')
+    expect(identidad).toContain('text-sm')
+    expect(cuenta(identidad, /text-xs/g)).toBe(0)
+  })
+
+  it('el fallback CONSERVA el acento de marca y la fuente de títulos', () => {
+    // Es el único uso del acento de toda la superficie y tiene que verse idéntico al de desktop.
+    expect(identidad).not.toBe('')
+    expect(identidad).toContain('bg-primary')
+    expect(identidad).toContain('var(--font-heading)')
+  })
+})
+
+describe('6 · la jerarquía de encabezados y los nombres de los landmarks', () => {
+  it('Más tiene UN encabezado de nivel 1, está oculto, y no hay salto de nivel', () => {
+    // El header fijo ya nombra la pantalla EN PANTALLA: un título visible sería el mismo texto dos
+    // veces a 56px de distancia. Pero la jerarquía necesita su nivel 1 igual.
+    const fuentes = mas + masPage
+    expect(fuentes.length).toBeGreaterThan(0)
+    expect(cuenta(fuentes, /<h1/g)).toBe(1)
+    const linea = fuentes.split('\n').find(l => l.includes('<h1')) ?? ''
+    expect(linea).not.toBe('')
+    expect(linea).toContain('sr-only')
+    expect(cuenta(fuentes, /<h2/g)).toBe(0)
+    expect(cuenta(fuentes, /<h3/g)).toBe(0)
+  })
+
+  it('los dos landmarks de navegación tienen nombres DISTINTOS', () => {
+    // Estando en Más coexisten la barra y la lista. Con el mismo nombre el lector de pantalla
+    // anuncia "navegación" dos veces y no se sabe cuál es cuál.
+    expect(mas).toContain('aria-label="Secciones"')
+    expect(barra).toContain('aria-label="Navegación principal"')
+    expect(cuenta(mas, /aria-label="Navegación principal"/g)).toBe(0)
+  })
+
+  it('el vínculo del nombre de grupo está escrito en los DOS extremos', () => {
+    // Un vínculo roto no tira error de consola, no rompe el build y no se ve en la UAT visual: deja
+    // el grupo sin nombre, en silencio. Por eso se cuenta el prefijo y se exige que aparezca al
+    // menos dos veces por grupo (el identificador y la referencia).
+    expect(cuenta(mas, /mas-grupo-/g)).toBeGreaterThanOrEqual(2)
+    expect(cuenta(mas, /aria-labelledby/g)).toBeGreaterThan(0)
+  })
+
+  it('el header fijo NO lleva encabezados: sus dos líneas son párrafos', () => {
+    // Las 13 pantallas conservan el suyo. Un encabezado en el chrome fijo rompería la jerarquía de
+    // todas a la vez y las dejaría con dos títulos de nivel 1.
+    expect(header.length).toBeGreaterThan(0)
+    expect(cuenta(header, /<h1/g)).toBe(0)
+    expect(cuenta(header, /<h2/g)).toBe(0)
+    expect(cuenta(header, /<h3/g)).toBe(0)
+    expect(cuenta(header, /<p/g)).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('7 · un solo menú en mobile', () => {
+  it('el sidebar ya no tiene estado de drawer, ni botón, ni overlay, ni capas de modal', () => {
+    // ⚠ Se descuentan comentarios ANTES de contar, a propósito: un drawer COMENTADO "para después"
+    // es un inventario muerto que el próximo que agregue una sección va a actualizar a medias.
+    expect(sidebar.length).toBeGreaterThan(1000)
+    expect(cuenta(sidebar, /mobileOpen/g)).toBe(0)
+    expect(cuenta(sidebar, /\bMenu\b/g)).toBe(0)
+    expect(cuenta(sidebar, /bg-black\/60/g)).toBe(0)
+    expect(cuenta(sidebar, /z-40/g)).toBe(0)
+    expect(cuenta(sidebar, /z-50/g)).toBe(0)
+    expect(cuenta(sidebar, /translate-x-/g)).toBe(0)
+  })
+
+  it('tampoco sobrevive COMENTADO: el barrido se repite sobre la fuente cruda', () => {
+    // La otra mitad del caso de arriba, y la que ése no puede ver: con los comentarios descontados,
+    // un drawer entero comentado "para después" es INVISIBLE. Y un inventario muerto es peor que
+    // ninguno — el próximo que agregue una sección lo va a actualizar a medias, o lo va a
+    // descomentar creyendo que sigue cableado. Esta pasada corre sobre el archivo SIN descontar
+    // nada, y hoy pasa limpia porque el plan 02-03 borró el drawer en vez de comentarlo.
+    const crudo = read(RUTA_SIDEBAR)
+    expect(crudo.length).toBeGreaterThan(1000)
+    for (const resto of [/mobileOpen/g, /bg-black\/60/g, /z-40/g, /z-50/g, /translate-x-/g]) {
+      expect(cuenta(crudo, resto)).toBe(0)
+    }
+  })
+
+  it('el sidebar sigue siendo el sidebar: el bloque de desktop está intacto', () => {
+    // La mitad positiva del caso de arriba. Sin ella, un sidebar BORRADO entero pasaría el conteo-cero.
+    expect(sidebar).toContain('hidden lg:flex lg:flex-col lg:fixed')
+    expect(sidebar).toContain('buildNavGroups')
+    expect(cuenta(sidebar, /<Link/g)).toBeGreaterThan(0)
+  })
+})
+
+describe('8 · el alto reservado para el chrome fijo es coherente', () => {
+  const principal = bloque(layout, '<main', '>')
+
+  it('la etiqueta del elemento principal existe (si no, lo de abajo pasaría por vacío)', () => {
+    expect(principal).not.toBe('')
+    expect(principal).toContain('className')
+  })
+
+  it('reserva el alto del header arriba y el de la barra abajo, y los suelta en desktop', () => {
+    // La reserva se hace en UN SOLO lugar para que ninguna de las 13 pantallas agregue padding
+    // propio. Los dos `lg:` a cero son obligatorios: a ≥1024px no hay chrome de mobile y reservar
+    // ahí dejaría un hueco arriba y otro abajo.
+    expect(principal).not.toBe('')
+    expect(principal).toContain('pt-14')
+    expect(principal).toContain('lg:pt-0')
+    expect(principal).toContain('var(--panel-nav-h)')
+    expect(principal).toContain('env(safe-area-inset-bottom,0px)')
+    expect(principal).toContain('lg:pb-0')
+  })
+
+  it('ningún valor arbitrario de los tres archivos del chrome lleva un espacio', () => {
+    // EL MODO DE FALLA SILENCIOSO: con un espacio adentro la clase no se genera, Tailwind no avisa,
+    // el compilador no lo ve, el build pasa, y el padding simplemente no existe ⇒ la barra tapa el
+    // último elemento de cada pantalla.
+    const arbitrarios = /\[[^[\]]*(?:calc|env|var)\([^[\]]*\]/g
+    let total = 0
+    for (const fuente of [layout, barra, header]) {
+      const hallados = fuente.match(arbitrarios) ?? []
+      total += hallados.length
+      for (const valor of hallados) expect(valor).not.toContain(' ')
+    }
+    // Guarda de honestidad: si el recorte no encontró ninguno, el caso no midió nada.
+    expect(total).toBeGreaterThan(0)
+  })
+})
+
+describe('9 · los tres módulos de historial no se tocan desde el chrome nuevo', () => {
+  it('ninguno de los tres componentes nuevos importa los otros dos módulos de pila', () => {
+    // Criterio 6 de la fase: el mecanismo que el dueño ya verificó sigue siendo exactamente el
+    // mismo. El guard de cambios sin guardar SÍ se usa, pero sólo por su hook público.
+    for (const fuente of [barra, header, mas]) {
+      expect(fuente).not.toContain('@/lib/overlay-history')
+      expect(fuente).not.toContain('@/lib/dirty-history')
+    }
+    expect(barra).toContain('useNavigationGuard')
+    expect(mas).toContain('useNavigationGuard')
+  })
+})
