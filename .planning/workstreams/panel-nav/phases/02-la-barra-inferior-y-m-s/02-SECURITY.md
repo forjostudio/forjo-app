@@ -1,9 +1,9 @@
 ---
 phase: "02"
 slug: "la-barra-inferior-y-m-s"
-status: draft
+status: verified
 # threats_open = cantidad de amenazas OPEN con severidad >= workflow.security_block_on (high)
-threats_open: 1
+threats_open: 0
 asvs_level: 1
 created: "2026-10-09"
 ---
@@ -53,7 +53,7 @@ created: "2026-10-09"
 | T-02-18 | Repudiation | — | low | **accept** | Ídem T-02-06 | closed |
 | T-02-19 | Elevation of Privilege | gateo por rubro degradándose en un refactor futuro | medium | mitigate | `test/panel-nav-groups.test.ts`, 25 casos: 12/12/12/11 → 8/8/8/7, `canchas` sin "Equipo" y con "Canchas", guardas de honestidad por caso | closed |
 | T-02-20 | Tampering | cuarto escritor del historial introducido después de la fase | high | mitigate | `test/panel-nav-chrome.test.ts` bloques 3 y 4, por región recortada y con comentarios descontados, con guardas de recorte no vacío | closed |
-| **T-02-21** | **Repudiation (de la verificación misma)** | **la fase marcada como verificada sin que nadie abra el teléfono** | **high** | **mitigate** | **El control declarado existe como archivo pero es INERTE — ver abajo** | **open** |
+| T-02-21 | Repudiation (de la verificación misma) | la fase marcada como verificada sin que nadie abra el teléfono | high | mitigate | **Re-declarada** sobre los controles que sí son estructurales — ver abajo. El override de `auto_advance` del workstream queda registrado como limitación conocida del tooling, no como mitigación | closed |
 | T-02-22 | Denial of Service (pipeline) | gate de inmutabilidad escrito como test de vitest | medium | mitigate | Los dos archivos nuevos: 0 ocurrencias de `git log`/`execSync`/`child_process` | closed |
 | T-02-23 | Tampering | un candado rojo "arreglado" aflojando el candado | high | mitigate | Auditado con **13 mutaciones**, 11 muerden. El candado 8 ya no bendice la forma frágil. Ver abajo | closed |
 | T-02-SC | Tampering (supply chain) | dependencias npm | low | **accept** | Cero archivos de paquetes en `git diff --name-only 49fa195..HEAD`. Cero endpoints, cero migraciones | closed |
@@ -87,11 +87,34 @@ naveguen), **después** de que ese SUMMARY se escribiera. No cambia el veredicto
 exactamente una fase que **sólo se puede verificar en un teléfono**. Con un plan `autonomous: false`,
 el flag inerte muerde.
 
-**Cómo se cierra** (cualquiera de las tres; re-medir `check auto-mode --pick active` → `false`):
+### Resolución: re-declarada sobre lo que sí es estructural (decisión del dueño, 2026-10-09)
 
-- **(a)** poner `auto_advance: false` en el **global** `.planning/config.json` mientras dure el workstream. ⚠ Afecta a los otros workstreams, que hoy lo tienen en `true` a propósito.
-- **(b)** arreglar/reportar el resolver para que el `workflow.auto_advance` del workstream sobreescriba al global. Es el arreglo correcto de raíz, pero es tooling de GSD, no código del repo.
-- **(c)** re-declarar T-02-21 sobre las patas que **sí** son estructurales (el carve-out de `blocking-human` + el cierre en `human_needed`), registrar el override inerte como limitación conocida, y **declarar `gate="blocking-human"` en todo task con `<human-check>`** de la Phase 3 en adelante.
+Se evaluaron tres caminos. **(a)** poner `auto_advance: false` en el global cerraba la medición en una
+línea, pero afecta a los otros workstreams —que lo tienen en `true` a propósito— y depende de que
+alguien se acuerde de revertirlo. **(b)** arreglar el resolver es el arreglo de raíz, pero es tooling
+de GSD, no código de este repo. Se eligió **(c)**.
+
+**T-02-21 queda CLOSED apoyada en los controles que son estructurales, no en el flag:**
+
+1. **El carve-out de `blocking-human`** existe en el workflow y no depende de ninguna config:
+   `execute-phase.md:1144` y `execute-plan.md:227` (*"`gate="blocking-human"` → STOP … every mode,
+   auto included"*). Es más fuerte que un flag porque no se puede apagar por configuración.
+2. **El cierre de la fase en `human_needed`**, con los 13 ítems guionados en `02-UAT.md` y
+   **MOB-01/02/03/07 revertidos a `Pending`** (`REQUIREMENTS.md:111-117`). La fase no puede marcarse
+   completa mientras la UAT no pase: eso es exactamente lo que la amenaza protege.
+3. **El registro honesto en los artefactos**: los cuatro SUMMARY escriben "UAT visual pendiente" y
+   nunca "verificado", y `02-VERIFICATION.md` acota por escrito qué fue lo único mirado en pantalla.
+
+**Limitación conocida, registrada y NO mitigada:** el `workflow.auto_advance` de un workstream **es
+inerte** — `check auto-mode` lee el global incluso pasando `--ws`. Es un bug del tooling de GSD.
+Mientras no se arregle, **un `config.json` de workstream no protege nada** y no debe citarse como
+mitigación en ningún plan futuro.
+
+**Regla dura que esta resolución deja escrita, obligatoria de la Phase 3 en adelante:**
+**todo task con `<human-check>` declara `gate="blocking-human"` explícitamente.** Es la pata que
+faltaba: el tracer de 02-01 no lo declaraba (`grep -cE 'gate="' 02-01-PLAN.md` → 0), y su checkpoint
+apareció porque el ejecutor eligió devolverlo, no porque algo lo forzara. La Phase 3 ("La política de
+atrás") sólo se puede verificar en un teléfono, así que ahí la regla es load-bearing.
 
 ---
 
@@ -124,17 +147,26 @@ cota, con el modo de falla viejo documentado en el archivo.
 
 ---
 
-## Residuos de durabilidad
+## Residuos de durabilidad — los tres CERRADOS (2026-10-09)
 
-No son amenazas abiertas —la mitigación declarada **está presente y el estado final es correcto**—
-pero en los tres casos el control fue un **gate de plan en bash** que corrió una vez y **no dejó
-candado permanente**, así que un refactor futuro pasa el pipeline entero en verde.
+Nunca fueron amenazas abiertas —la mitigación declarada estaba presente y el estado final era
+correcto— pero en los tres el control había sido un **gate de plan en bash** que corrió una vez y
+**no dejó candado permanente**, así que un refactor futuro pasaba el pipeline entero en verde. Se
+promovieron a controles durables.
 
-| ID | Amenaza | Qué pasa hoy si se rompe | Medición |
-|----|---------|--------------------------|----------|
-| **R-1** | T-02-13 (high) | Desmontar `<PanelTopBar>` o `<PanelBottomNav>` del layout deja mobile sin header o sin menú | **Medido por el orquestador: comentar `<PanelTopBar />` → 65/65 tests en verde.** Candidato a caso nuevo en `panel-nav-chrome.test.ts` que afirme los tres hermanos montados |
-| **R-2** | T-02-15 (high) | Borrar `aria-current` de `sidebar.tsx:107` deja el menú de desktop sin señalar la ruta activa | 131/131 verde sobre 4 suites. El conteo era gate de plan de 02-03, no candado |
-| **R-3** | T-02-10 (high) | La pata humana de T-02-10 (forzar la falla del logout para ver el `toast.error`) **no está entre los 12 ítems de `02-UAT.md`**: no está agendada. La pata de código sí está presente y verificada. T-02-12 (low) tiene el mismo problema con la pasada de lector de pantalla |
+| ID | Amenaza | Qué pasaba | Cómo quedó cerrado |
+|----|---------|-----------|--------------------|
+| **R-1** | T-02-13 (high) | Desmontar `<PanelTopBar>` o `<PanelBottomNav>` del layout dejaba mobile sin header o sin menú — y como el drawer ya no existe, sin **ninguna** forma de navegar el panel desde el teléfono | **Candado nuevo**, `panel-nav-chrome.test.ts` bloque 10: el layout tiene que montar los **tres** hermanos. Probado con 3 mutaciones: borrar `<PanelBottomNav />` → rojo; comentar y borrar `<PanelTopBar business={business} />` → rojo las dos |
+| **R-2** | T-02-15 (high) | Borrar `aria-current` de `sidebar.tsx` dejaba el menú de desktop sin señalar la ruta activa para un lector de pantalla; 131/131 en verde sobre 4 suites | **Candado nuevo**, mismo bloque 10. Mutación: `aria-current` → `data-noop` ⇒ rojo (`expected 0 to be greater than 0`) |
+| **R-3** | T-02-10 (high) | La pata humana (forzar la falla del logout para ver el `toast.error`) no estaba agendada en ningún lado. Más es la **única** salida de sesión en mobile | **Agendada** como ítem **13** de `02-UAT.md`, con el paso concreto (cortar la red antes de tocar "Cerrar sesión") y el criterio: aparece el toast **y la app NO navega**. La pasada de lector de pantalla de T-02-12 ya estaba cubierta por el ítem 10 |
+
+⚠ **Corrección de una medición propia del orquestador.** La primera confirmación de R-1 que se
+registró —*"comentar `<PanelTopBar />` → 65/65 en verde"*— **no era válida**: el `sed` buscaba
+`<PanelTopBar />` y el JSX real es `<PanelTopBar business={business} />`, así que la mutación
+**nunca mutó nada** y el verde no medía la ausencia del componente. El residuo igual era real (lo
+había medido el auditor con una mutación que sí aplicaba), y la mutación corregida se usó para
+validar el candado nuevo. Es el mismo modo de falla que T-02-23 persigue, esta vez en el
+instrumento de medición y no en el candado: **una mutación que no muta da un verde que no vale**.
 
 ---
 
@@ -153,6 +185,7 @@ autenticada, con el guard estándar y `.eq('owner_id', user.id)`: el invariante 
 | Fecha | Amenazas | Cerradas | Abiertas | Corrida por |
 |-------|----------|----------|----------|-------------|
 | 2026-10-09 | 24 | 23 | 1 | `gsd-security-auditor` (opus) + verificación independiente del orquestador |
+| 2026-10-09 | 24 | **24** | **0** | Orquestador — T-02-21 re-declarada sobre controles estructurales (opción (c), decisión del dueño); R-1 y R-2 promovidos a candados permanentes y probados con mutación; R-3 agendado como ítem 13 de la UAT |
 
 ---
 
@@ -160,7 +193,12 @@ autenticada, con el guard estándar y `.eq('owner_id', user.id)`: el invariante 
 
 - [x] Todas las amenazas tienen disposición (mitigate / accept / transfer)
 - [x] Riesgos aceptados documentados en el Accepted Risks Log
-- [ ] `threats_open: 0` confirmado — **NO: queda 1 abierta (T-02-21, high)**
-- [ ] `status: verified` en el frontmatter
+- [x] `threats_open: 0` confirmado
+- [x] `status: verified` en el frontmatter
 
-**Aprobación:** pendiente — bloqueada por T-02-21
+**Aprobación:** verificada 2026-10-09.
+
+⚠ **Lo que esta firma NO dice.** `threats_open: 0` cubre el registro de amenazas de la fase, no la
+fase entera: los **13 ítems de `02-UAT.md` siguen pendientes** y la verificación de la fase está en
+`human_needed`. La seguridad deja de bloquear el avance; la UAT en teléfono sigue siendo el único
+criterio que cierra la fase.

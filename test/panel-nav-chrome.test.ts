@@ -659,3 +659,32 @@ describe('9 · los tres módulos de historial no se tocan desde el chrome nuevo'
     expect(mas).toContain('useNavigationGuard')
   })
 })
+
+// ── Décimo bloque: los dos controles que eran gate de plan y no candado ────────────────────────
+// Los dos casos de abajo cubren amenazas `high` del registro de la fase (T-02-13 y T-02-15) cuya
+// mitigación se verificó UNA sola vez, con un gate en bash dentro del plan, y después no dejó nada
+// que la sostuviera. La auditoría de seguridad lo midió sobre el estado correcto en disco: romper
+// cualquiera de las dos dejaba el pipeline ENTERO en verde. Un control que sólo corrió el día que
+// se escribió no es un control, es una foto.
+describe('10 · los controles de durabilidad que antes eran gate de plan', () => {
+  it('el layout monta los TRES hermanos del chrome, no dos', () => {
+    // T-02-13 (high, Denial of Service de acceso): desmontar `<PanelTopBar>` deja mobile sin header
+    // y `<PanelBottomNav>` lo deja sin menú — y como el drawer hamburguesa ya no existe (bloque 7),
+    // en los dos casos el dueño se queda SIN forma de navegar el panel desde el teléfono.
+    // Medido antes de escribir este caso: comentar `<PanelTopBar />` dejaba 65/65 tests en verde.
+    // Funciona contra el comentado además del borrado porque `sinComentarios` barre los `{/* */}`
+    // de JSX antes de buscar, igual que el bloque 7 con el drawer.
+    for (const hermano of ['<Sidebar', '<PanelBottomNav', '<PanelTopBar']) {
+      expect(layout, `el layout del panel dejó de montar ${hermano}`).toContain(hermano)
+    }
+  })
+
+  it('el sidebar de desktop sigue señalando la ruta activa de forma accesible', () => {
+    // T-02-15 (high, Tampering): `aria-current` es la mitad ACCESIBLE del señalado del menú de
+    // desktop; la otra mitad es color, que un lector de pantalla no ve. Era un conteo del gate de
+    // plan de 02-03 Task 2, no un candado: borrarlo dejaba 131/131 en verde sobre cuatro suites.
+    // Va acá y no en el bloque 7 porque no es "el sidebar sigue existiendo" sino "sigue haciendo
+    // lo que el borrado del drawer podría haberse llevado puesto".
+    expect(cuenta(sidebar, /aria-current/g), 'el sidebar perdió su `aria-current`').toBeGreaterThan(0)
+  })
+})

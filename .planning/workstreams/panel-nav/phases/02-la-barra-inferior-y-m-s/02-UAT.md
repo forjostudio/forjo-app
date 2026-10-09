@@ -87,6 +87,11 @@ expected: `/dashboard` trae `viewport-fit=cover, interactive-widget=resizes-visu
 why_human: El plan 02-04 sólo pudo medir 4 de las 6 rutas servidas; `/dashboard` y `/admin` devolvieron 307 sin sesión. Evidencia estática que lo acompaña sin sustituirlo: un único `export const viewport` en todo `app/`, en `app/(dashboard)/layout.tsx`.
 result: [pending]
 
+### 13. R-3 — El logout fallando: que el aviso de error aparezca
+expected: Forzando la falla de `signOut()` (por ejemplo cortando la red del teléfono justo antes de tocar "Cerrar sesión" en Más): aparece el toast **"No pudimos cerrar la sesión. Probá de nuevo."** y **la app NO navega a `/login`** — seguís dentro del panel, con la sesión viva.
+why_human: Es la pata humana de **T-02-10** (`high`, Repudiation: "una sesión que el dueño cree cerrada y no lo está"). La pata de código está presente y verificada (`mas-client.tsx:114-124`: el `toast.error` y el `return` que no navega), pero **ningún test ejecuta esa rama** y la auditoría de seguridad detectó que tampoco estaba agendada acá. Más es la **única** salida de sesión en mobile: si falla en silencio y navega igual, el dueño deja la sesión abierta creyendo que la cerró.
+result: [pending]
+
 ## Los DOS recorridos que NO son bugs
 
 Están declarados por escrito para que no se reporten como fallas:
@@ -96,10 +101,10 @@ Están declarados por escrito para que no se reporten como fallas:
 
 ## Summary
 
-total: 12
+total: 13
 passed: 0
 issues: 0
-pending: 12
+pending: 13
 skipped: 0
 blocked: 0
 
