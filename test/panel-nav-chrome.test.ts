@@ -435,6 +435,26 @@ function literales(src: string): string[] {
   return src.match(/(['"`])(?:\\.|(?!\1)[\s\S])*\1/g) ?? []
 }
 
+/**
+ * Igual que `literales`, pero con el índice de cada literal dentro de la fuente. Hace falta para
+ * poder mirar a qué etiqueta JSX está pegada la cadena de clases: el mismo valor arbitrario es
+ * legítimo o no según si el elemento vive en el flujo del documento o en un portal por encima de la
+ * barra. Sin `matchAll` a propósito (el `target` del repo es ES2017).
+ */
+function literalesConPosicion(src: string): { texto: string; indice: number }[] {
+  const salida: { texto: string; indice: number }[] = []
+  const re = /(['"`])(?:\\.|(?!\1)[\s\S])*\1/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(src)) !== null) salida.push({ texto: m[0], indice: m.index })
+  return salida
+}
+
+/** El nombre de la última etiqueta JSX abierta antes de `indice` (`''` si no hay ninguna). */
+function etiquetaAnterior(src: string, indice: number): string {
+  const abiertas = src.slice(0, indice).match(/<[A-Za-z][A-Za-z0-9_.]*/g)
+  return abiertas ? abiertas[abiertas.length - 1].slice(1) : ''
+}
+
 describe('8 · el alto reservado para el chrome fijo es coherente', () => {
   const principal = bloque(layout, '<main', '>')
 
@@ -502,6 +522,62 @@ describe('8 · el alto reservado para el chrome fijo es coherente', () => {
     // Guarda de honestidad: si el barrido no encontró ni un solo elemento anclado abajo, el caso no
     // midió nada (archivo movido, regex roto) y pasaría por vacío.
     expect(anclados).toBeGreaterThan(0)
+  })
+
+  it('ninguna pantalla del panel fija su alto al viewport sin descontar el alto de la barra', () => {
+    // EL OTRO MODO DE FALLA, EL QUE EL CASO DE ARRIBA NO PODÍA VER: acá no hay ANCLAJE al borde
+    // inferior, hay un ALTO calculado contra el viewport. Una pantalla que hace
+    // `h-[calc(100vh-56px)] overflow-hidden` con scrollers internos NO fluye con el documento, así
+    // que el `pb` del `<main>` le queda POR DEBAJO y no la empuja: su último renglón nace tapado por
+    // la barra y sólo se alcanza encadenando el scroll al documento, que es exactamente el doble
+    // scroll torpe que el criterio 3 existe para evitar. Les pasó a `/clients` (uno de los cinco
+    // destinos de la barra, y la pantalla de uso diario) y a `/clinical-history`, y se escapó de los
+    // 17 hallazgos del code review, del caso de arriba (que barre `sticky|fixed bottom-*`) y del
+    // guion de UAT.
+    //
+    // LA REGLA: bajo `app/(dashboard)`, todo alto arbitrario (`h-`, `min-h-`, `max-h-`) calculado
+    // contra `100vh`/`100dvh`/`100svh` tiene que referenciar `var(--panel-nav-h)`. Dos exenciones,
+    // las dos por un hecho medido y ninguna por comodidad:
+    //   · variante `lg:` / `xl:` / `2xl:` ⇒ la clase sólo aplica a ≥1024px, donde no hay chrome de
+    //     mobile y descontarlo dejaría un hueco (es el caso de la columna del editor de `/web`,
+    //     `lg:max-h-[calc(100vh-8rem)]`). `sm:` y `md:` NO eximen: a 768px la barra SÍ está, porque
+    //     entra por `lg:hidden` y no por `md:hidden` (M-5, caso 1 de este archivo).
+    //   · primitivas de overlay (`Dialog*`, `Sheet*`, `Drawer*`, `Popover*`, …) ⇒ montan en un
+    //     portal con `fixed … z-50` (`components/ui/dialog.tsx:102`) y la barra es `z-30`
+    //     (`panel-bottom-nav.tsx:90`): el overlay va ENCIMA de la barra, no debajo, así que
+    //     descontarla le encogería el alto sin motivo y le rompería el centrado (es el caso del
+    //     diálogo de servicio de `/settings`, `max-h-[calc(100svh-2rem)]`).
+    const SOLO_DESKTOP = /^(?:lg|xl|2xl)$/
+    const OVERLAY = /Dialog|Sheet|Drawer|Popover|Tooltip|Command|Modal/
+    const ALTO_DE_VIEWPORT = /^((?:[a-z0-9@._-]+:)*)(?:min-|max-)?h-\[[^\]]*100[dsl]?vh[^\]]*\]$/
+
+    const archivos = tsxDe('app/(dashboard)')
+    expect(archivos.length).toBeGreaterThan(10)
+
+    let hallados = 0
+    let exigidos = 0
+    for (const archivo of archivos) {
+      const fuente = sinComentarios(read(archivo))
+      for (const { texto, indice } of literalesConPosicion(fuente)) {
+        for (const token of texto.slice(1, -1).split(/\s+/)) {
+          const m = token.match(ALTO_DE_VIEWPORT)
+          if (!m) continue
+          hallados++
+          if (m[1].split(':').filter(Boolean).some(v => SOLO_DESKTOP.test(v))) continue
+          if (OVERLAY.test(etiquetaAnterior(fuente, indice))) continue
+          exigidos++
+          expect(
+            token,
+            `${archivo}: ${token} fija el alto al viewport sin descontar el alto de la barra`,
+          ).toContain('var(--panel-nav-h)')
+        }
+      }
+    }
+    // DOS guardas de honestidad, no una: que el barrido haya encontrado alturas de viewport, y que
+    // al menos una haya quedado EXIGIDA. Sin la segunda, una exención que se ensanchara de más (o un
+    // `lg:` puesto donde no va) dejaría el caso pasando por vacío sin medir nada.
+    expect(hallados).toBeGreaterThan(0)
+    expect(exigidos).toBeGreaterThan(0)
   })
 })
 
