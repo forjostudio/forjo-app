@@ -122,7 +122,7 @@ Esto salió de leer el código hoy, y corrige o completa lo que dicen los requis
 
 ### Milestone v0.31 — La navegación mobile del panel
 
-- [ ] **Phase 2: La barra inferior y Más** - En mobile el panel se navega desde una barra fija de 5 destinos que respeta la zona segura del teléfono y un "Más" que guarda el resto del menú del rubro sin perder ninguna fila; el mecanismo de historial no se toca y desktop queda idéntico
+- [x] **Phase 2: La barra inferior y Más** - En mobile el panel se navega desde una barra fija de 5 destinos que respeta la zona segura del teléfono y un "Más" que guarda el resto del menú del rubro sin perder ninguna fila; el mecanismo de historial no se toca y desktop queda idéntico (completed 2026-10-09)
 - [ ] **Phase 3: La política de atrás, de un nivel a dos** - El atrás pasa a tener dos niveles (sección → Más → Inicio) sin romper nada de lo que el dueño ya verificó en celular, y la guarda de salida en Inicio se decide con los números a la vista en vez de asumirse
 - [ ] **Phase 4: Los tabs profundos sobre la política ya fijada** - Los tabs de `/negocio`, `/settings` y `/finances` viven en la URL contra la política definitiva, sin tocar las otras tres rutas que comparten esa pantalla ni romper el retorno del OAuth de MercadoPago
 
@@ -256,7 +256,7 @@ y el gating por rubro se preserva **por construcción** sólo si el filtrado sig
 ver "Equipo", que es una ruta que no le corresponde. No es una fuga de datos cross-tenant (el panel
 resuelve `business` por `owner_id` en el layout), es coherencia de producto. Riesgo bajo.
 
-**Plans:** 4/4 plans executed (**4 waves secuenciales** · 8 tareas · 11 archivos: 7 nuevos, 4 editados)
+**Plans:** 4/4 plans complete
 
 Plans:
 
@@ -556,6 +556,6 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 2. La barra inferior y Más | 4/4 | In Progress|  |
+| 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 0/? | Not started | - |
 | 4. Los tabs profundos sobre la política ya fijada | 0/? | Not started | - |

@@ -45,11 +45,11 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 
 ### La barra
 
-- [ ] **MOB-01**: En mobile hay una barra inferior fija con `Inicio · Turnos · Agenda · Clientes · Más`,
+- [x] **MOB-01**: En mobile hay una barra inferior fija con `Inicio · Turnos · Agenda · Clientes · Más`,
       visible en todas las pantallas del panel, con el destino actual señalado.
-- [ ] **MOB-02**: La barra respeta la **zona segura** del dispositivo (T-2) y sus destinos cumplen el
+- [x] **MOB-02**: La barra respeta la **zona segura** del dispositivo (T-2) y sus destinos cumplen el
       área táctil mínima de 44×44. No tapa contenido: las pantallas reservan su alto.
-- [ ] **MOB-03**: **Más** muestra el resto del menú del negocio —el menú resuelto por vertical menos lo
+- [x] **MOB-03**: **Más** muestra el resto del menú del negocio —el menú resuelto por vertical menos lo
       que ya está en la barra (T-1)— agrupado como hoy, sin perder ningún destino.
 
 ### La política de atrás, redefinida
@@ -64,7 +64,7 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 
 ### Lo que no se toca
 
-- [ ] **MOB-07**: En desktop **no cambia nada** (D-02).
+- [x] **MOB-07**: En desktop **no cambia nada** (D-02).
 
 ### Heredado de v0.30
 
@@ -108,13 +108,13 @@ explícitamente**, no asumirlo.
 
 | Requisito | Fase | Estado |
 |---|---|---|
-| MOB-01 | Phase 2 — La barra inferior y Más | Pending |
-| MOB-02 | Phase 2 — La barra inferior y Más | Pending |
-| MOB-03 | Phase 2 — La barra inferior y Más | Pending |
+| MOB-01 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
+| MOB-02 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
+| MOB-03 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
 | MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — decisión abierta |
 | MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
-| MOB-07 | Phase 2 — La barra inferior y Más | Pending |
+| MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
 | MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
 
