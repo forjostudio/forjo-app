@@ -8,13 +8,13 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 4
-name: A.3b — /clients con el banner de período de prueba visible
+number: 5
+name: A.3c — /clients con la barra de URL visible (pasada de ANDROID CHROME)
 expected: |
-  Con el banner ámbar de prueba arriba (la cuenta del seed está en `trial`), a
-  375px: el último cliente de la lista queda visible y tocable por encima de la
-  barra. Y la página NO se puede arrastrar: si arrastrás hacia arriba y el
-  contenido se mueve como un todo, hay doble scroll y el arreglo no tomó efecto.
+  Abrí /clients de cero (o recargá) para que la barra de URL de Chrome esté
+  VISIBLE, y SIN scrollear la página antes: el final de la lista tiene que quedar
+  por encima de la barra inferior. Es lo que prueba que `dvh` hace su trabajo:
+  con `vh` el solape medido por proxy era de 60px, con `dvh` es 0.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -81,6 +81,12 @@ expected: Botones de alta de Finanzas, footers de Negocio y Configuración, fina
 result: [pending]
 
 ### 4. A.3b — `/clients` con banners visibles
+result: pass
+notes: |
+  Probado en celular real con el banner ámbar de `trial` visible. El último
+  cliente queda sobre la barra y la página no se arrastra (sin doble scroll).
+  Confirma en pantalla la medición del cierre de raíz del residuo (solape 1px
+  con 0, 1, 2 y 3 banners; `docScr` 0).
 expected: Con el banner de período de prueba (`plan_status='trial'`) a 375px, y después sumando el de MercadoPago caído: el último cliente de la lista queda visible y tocable por encima de la barra con uno y con dos banners, y la página **no se puede arrastrar** (sin doble scroll). El solape medido en la sonda es 1px con 0, 1, 2 y 3 banners.
 why_human: Es el estado por defecto de todo negocio nuevo, y la altura real del banner depende de la fuente y del ancho. Las dos sondas usaron bloques de altura fija, no el banner real.
 result: [pending]
@@ -139,9 +145,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 2
+passed: 3
 issues: 0
-pending: 11
+pending: 10
 skipped: 0
 blocked: 0
 
