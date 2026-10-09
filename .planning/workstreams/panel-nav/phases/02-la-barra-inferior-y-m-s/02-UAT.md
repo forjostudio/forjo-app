@@ -8,17 +8,16 @@ updated: 2026-10-09T22:10:00Z
 
 ## Current Test
 
-number: 2
-name: A.2 — Teclado abierto, mitad de iOS SAFARI
+number: 5
+name: A.3c — /clients con la barra de URL visible, mitad de iOS SAFARI
 expected: |
-  En el iPhone, el mismo recorrido que ya pasó en Android: el buscador de
-  /clients, el drawer de alta de turno enfocando el último campo, y el diálogo
-  largo "Nueva venta" de Finanzas (Ventas → Nueva venta → bajar hasta "Asociar
-  a cliente" y tocar el buscador).
-  Con el teclado abierto: que no tape el campo ni el botón de guardar. Y al
-  cerrarlo, que el contenido vuelva sin saltar.
-  Es la pasada que más pesa de las tres que quedan: iOS desplaza el layout
-  viewport por su cuenta y este repo ya pagó cuatro quicks de teclado.
+  Último de la UAT. En el iPhone, abrí /clients de cero con la toolbar de Safari
+  visible (o sea, sin scrollear antes): el final de la lista tiene que quedar por
+  encima de la barra de 5 destinos, sin que haya que arrastrar la página entera.
+  Es la confirmación de `dvh` en el motor donde más podía fallar.
+  De paso, probá el MODO BÚSQUEDA nuevo: al tocar el buscador tienen que
+  esconderse el título, Exportar/Importar y Nuevo cliente, y quedar más lista a
+  la vista. Al borrar el texto y salir del campo, vuelven.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -86,8 +85,19 @@ why_human: `env(safe-area-inset-bottom)` vale 0 en Android y en todo emulador he
 result: [pending]
 
 ### 2. A.2 — Teclado abierto en Android Chrome **y** iOS Safari
-result: pass (Android) — pendiente la pasada de iOS Safari
+result: pass
 notes: |
+  Las DOS pasadas hechas en dispositivo real. iOS Safari verificado el 2026-10-09:
+  el funcionamiento del teclado está bien — no tapa el campo ni el submit.
+  Salieron TRES hallazgos laterales, todos fuera del alcance de la fase:
+    · El zoom automático de iOS al enfocar un input de <16px, y el descentrado
+      que deja al volver (son UNO solo: el segundo es secuela del primero).
+      16 de 88 inputs del panel lo disparan. Todo propio:
+      `2026-10-09-el-zoom-automatico-de-ios-en-los-inputs-del-panel.md`.
+    · Con el teclado abierto en iOS la página entera se vuelve arrastrable y la
+      barra se va con ella — inherente a iOS, ya registrado en el test 1.
+    · Poca lista visible con el teclado abierto ⇒ se implementó el MODO BÚSQUEDA
+      de /clients (commit `4850a62`), que repliega el header al buscar.
   Probado en Android: buscador de /clients, drawer de alta de turno y el diálogo
   "Nueva venta" de Finanzas (el largo, con el buscador de cliente anidado al pie).
   Buen funcionamiento en los tres: la barra no tapa el campo ni el submit y el
