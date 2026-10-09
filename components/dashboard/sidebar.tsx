@@ -10,23 +10,30 @@ import {
   ExternalLink,
   HelpCircle,
   LogOut,
-  Menu,
-  X,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 // El inventario del menú vive en un módulo compartido (sin directiva de cliente) para que la barra
 // inferior y la pantalla Más lean el MISMO gateo por rubro en vez de reimplementarlo.
 import { buildNavGroups } from '@/components/dashboard/nav-groups'
 import { useNavigationGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { consumeOwnedPanelEntry, panelNavMode } from '@/lib/panel-history'
-import { useState } from 'react'
 
+// ── El sidebar de DESKTOP, y nada más ───────────────────────────────────────────
+// Hasta la Phase 2 de v0.31 este archivo era dueño de TRES superficies: el sidebar de desktop, el
+// header de mobile y el drawer que abría el botón de las tres líneas. Las dos de mobile se fueron:
+// el header vive ahora en components/dashboard/panel-top-bar.tsx y el menú de mobile es la barra
+// inferior + la pantalla Más. Acá queda sólo lo que se ve a 1024px o más.
+//
+// ⚠ POR QUÉ EL DRAWER SE BORRÓ Y NO SE DEJÓ OCULTO "POR SI ACASO": con dos menús en mobile hay DOS
+// inventarios de destinos, y divergen en cuanto alguien agrega una sección — el destino nuevo
+// aparece en uno y no en el otro, y el que use el menú viejo no se entera de que existe. Y hay un
+// motivo medido: ese drawer era el único inventario del panel que NO participaba del historial
+// (estado local pelado, sin marca, sin registro en overlay-history), así que mientras existiera la
+// política de dos niveles del atrás era imposible.
 export function Sidebar({ business }: { business: Business }) {
   const NAV_GROUPS_RESOLVED = buildNavGroups(business)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const [mobileOpen, setMobileOpen] = useState(false)
   // Guard de salida del panel: si la pantalla actual tiene cambios sin guardar, cada link de acá
   // pregunta antes de navegar en vez de descartarlos en silencio. Sin provider devuelve siempre
   // false ⇒ nunca bloquea. Ver components/dashboard/unsaved-changes-guard.tsx.
@@ -86,7 +93,6 @@ export function Sidebar({ business }: { business: Business }) {
                     // historial, testeable sin jsdom). Ojo: NO es `replace` a secas, que reemplazaría
                     // también la entrada del dashboard y el primer atrás sacaría del panel.
                     replace={panelNavMode({ from: pathname, to: item.href }) === 'replace'}
-                    onClick={() => setMobileOpen(false)}
                     // El guard de cambios sin guardar se evalúa PRIMERO y no se toca: si bloquea, él
                     // se hace cargo del diálogo y acá no pasa nada más.
                     // NAV-08 — tocar la sección en la que YA estás cierra la subsección en vez de
@@ -128,8 +134,8 @@ export function Sidebar({ business }: { business: Business }) {
 
       <div className="p-3 border-t border-border space-y-1">
         {/* Acceso a la ayuda estática desde el footer (HELP-01 / D-07): HELP-01 pide un acceso
-            desde el footer del sidebar además del de Configuración. Misma fila que los links de nav
-            y cierra el drawer en mobile igual que ellos. */}
+            desde el footer del sidebar además del de Configuración. Misma fila que los links de
+            nav. */}
         {/* La Ayuda es una ruta más del panel y entra por el MISMO menú, así que se rige por la misma
             regla que los items de arriba: si no compartiera la política, salir de Clientes por Ayuda
             dejaría Clientes debajo y el atrás caería ahí en vez del dashboard — el dialecto que
@@ -138,7 +144,6 @@ export function Sidebar({ business }: { business: Business }) {
         <Link
           href="/ayuda"
           replace={panelNavMode({ from: pathname, to: '/ayuda' }) === 'replace'}
-          onClick={() => setMobileOpen(false)}
           onNavigate={(e) => {
             if (requestNavigation('/ayuda')) { e.preventDefault(); return }
             if (pathname === '/ayuda' && consumeOwnedPanelEntry()) e.preventDefault()
@@ -185,32 +190,6 @@ export function Sidebar({ business }: { business: Business }) {
 
   return (
     <>
-      {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-card border-b border-border h-14 flex items-center px-4 gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
-          <Menu className="w-5 h-5" />
-        </Button>
-        <span className="font-semibold">{business.name}</span>
-      </div>
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setMobileOpen(false)} />
-      )}
-
-      {/* Mobile drawer */}
-      <div className={cn(
-        'lg:hidden fixed top-0 left-0 bottom-0 z-50 w-64 bg-card border-r border-border transition-transform duration-200',
-        mobileOpen ? 'translate-x-0' : '-translate-x-full'
-      )}>
-        <div className="absolute top-3 right-3">
-          <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}>
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-        {sidebarContent}
-      </div>
-
       {/* Desktop sidebar */}
       <div className="hidden lg:flex lg:flex-col lg:fixed lg:top-0 lg:left-0 lg:bottom-0 lg:w-60 bg-card border-r border-border z-20">
         {sidebarContent}
