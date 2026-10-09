@@ -1,19 +1,24 @@
 ---
-status: testing
+status: partial
 phase: 02-la-barra-inferior-y-m-s
 source: [02-VERIFICATION.md, 02-04-SUMMARY.md]
 started: 2026-10-09T15:10:00Z
-updated: 2026-10-09T15:10:00Z
+updated: 2026-10-09T22:10:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: A.1 — Franja de gestos en un iPhone (segunda tanda, bloqueado por dispositivo)
-expected: |
-  Pendiente de tener un iPhone a mano. Junto con él van las dos medias pasadas
-  de iOS Safari que quedaron abiertas (tests 2 y 5).
-awaiting: iPhone
+[tanda de Android completa — la segunda tanda espera un iPhone]
+
+Al retomar con el iPhone quedan TRES cosas, todas de la misma superficie:
+  1. **Test 1 (A.1)** entero — que el `bg-card` de la barra cubra el *home
+     indicator* y que ningún label quede debajo. Sólo la mitad de ABAJO: en una
+     pestaña del navegador la app nunca pinta bajo el notch.
+  2. **Test 2 (A.2)**, mitad de iOS Safari — el teclado abierto. Es la que más
+     pesa: iOS desplaza el layout viewport por su cuenta y este repo ya pagó
+     cuatro quicks de teclado.
+  3. **Test 5 (A.3c)**, mitad de iOS Safari — con la barra de URL visible, que
+     confirma `dvh` en el motor donde más podía fallar.
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
 
