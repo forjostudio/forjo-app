@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // ── Phase 02 / plan 02-04 — los invariantes INVISIBLES del chrome del panel ──────────────────────
@@ -365,6 +365,33 @@ describe('7 · un solo menú en mobile', () => {
   })
 })
 
+// ── Quinto y sexto helper: el barrido de TODO el route group ────────────────────────────────────
+// Los cuatro helpers de arriba miran archivos nombrados. Este par mira el route group COMPLETO,
+// porque el modo de falla que cierra (una pantalla que estrena su propia barra de acciones pegada
+// al borde inferior) puede aparecer en cualquiera de las 15 pantallas, incluidas las que todavía no
+// existen. Recorre `app/(dashboard)` entero en vez de una lista: una lista habría que mantenerla, y
+// la próxima pantalla llegaría sin entrada.
+
+/** Todos los `.tsx` bajo `rel`, recursivo. Puro: sólo `readdirSync`, sin reloj, sin base. */
+function tsxDe(rel: string): string[] {
+  const salida: string[] = []
+  for (const entrada of readdirSync(join(process.cwd(), rel), { withFileTypes: true })) {
+    const hijo = `${rel}/${entrada.name}`
+    if (entrada.isDirectory()) salida.push(...tsxDe(hijo))
+    else if (entrada.name.endsWith('.tsx')) salida.push(hijo)
+  }
+  return salida
+}
+
+/**
+ * Las cadenas de clases candidatas de un archivo: cada literal de string (comillas simples, dobles
+ * o template) de la fuente ya sin comentarios. Se tokeniza por espacios, que es exactamente como
+ * las lee Tailwind.
+ */
+function literales(src: string): string[] {
+  return src.match(/(['"`])(?:\\.|(?!\1)[\s\S])*\1/g) ?? []
+}
+
 describe('8 · el alto reservado para el chrome fijo es coherente', () => {
   const principal = bloque(layout, '<main', '>')
 
@@ -398,6 +425,40 @@ describe('8 · el alto reservado para el chrome fijo es coherente', () => {
     }
     // Guarda de honestidad: si el recorte no encontró ninguno, el caso no midió nada.
     expect(total).toBeGreaterThan(0)
+  })
+
+  it('ninguna pantalla del panel ancla algo al borde inferior sin descontar el alto de la barra', () => {
+    // EL MODO DE FALLA QUE ESTE CASO CIERRA, y que el `pb` del `<main>` NO puede cerrar: un elemento
+    // `sticky bottom-0` / `fixed bottom-0` se fija al borde del SCROLLPORT, no al del `<main>`, así
+    // que el padding inferior del layout está POR DEBAJO suyo y no lo empuja. La barra es
+    // `fixed bottom-0`, `z-30` y `bg-card` OPACO ⇒ le tapa la banda inferior entera. Le pasó a la
+    // fila de Guardar/Publicar del editor de `/web`, que es hoy la única barra de acciones pegada
+    // del panel; la próxima pantalla que estrene una tiene que descontar el alto o ponerse roja acá.
+    //
+    // LA REGLA: dentro de una cadena de clases que posiciona con `sticky` o `fixed`, todo
+    // `bottom-*` SIN prefijo de breakpoint tiene que referenciar `var(--panel-nav-h)`. Los
+    // prefijados (`lg:bottom-0`) quedan exentos a propósito: a ≥1024px no hay chrome de mobile y
+    // descontarlo ahí dejaría un hueco. Y `absolute bottom-0` queda afuera por construcción: se
+    // ancla a su contenedor `relative`, no al viewport (las tres barritas de color de las tarjetas
+    // de Finanzas son exactamente ese caso, y son legítimas).
+    const archivos = tsxDe('app/(dashboard)')
+    expect(archivos.length).toBeGreaterThan(10)
+
+    let anclados = 0
+    for (const archivo of archivos) {
+      for (const literal of literales(sinComentarios(read(archivo)))) {
+        const tokens = literal.slice(1, -1).split(/\s+/)
+        const posiciona = tokens.some(t => /(?:^|:)(?:sticky|fixed)$/.test(t))
+        if (!posiciona) continue
+        for (const token of tokens.filter(t => t.startsWith('bottom-'))) {
+          anclados++
+          expect(token, `${archivo}: ${token} no descuenta el alto de la barra`).toContain('var(--panel-nav-h)')
+        }
+      }
+    }
+    // Guarda de honestidad: si el barrido no encontró ni un solo elemento anclado abajo, el caso no
+    // midió nada (archivo movido, regex roto) y pasaría por vacío.
+    expect(anclados).toBeGreaterThan(0)
   })
 })
 

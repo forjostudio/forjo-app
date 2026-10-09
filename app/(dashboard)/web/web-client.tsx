@@ -557,7 +557,7 @@ export function WebEditorClient({
               desktop). Mobile (<sm): 2 filas — [estado · Ver mi web] / [Descartar · Guardar ·
               Publicar]. Desktop: una fila. Las 3 acciones son min-h-11 (44px) en TODOS los viewports:
               publicar es la acción más cara del editor, no se toca de casualidad. */}
-          <div className="sticky bottom-0 flex flex-col gap-2 border-t bg-background/95 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="sticky bottom-[calc(var(--panel-nav-h)+env(safe-area-inset-bottom,0px))] lg:bottom-0 flex flex-col gap-2 border-t bg-background/95 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="flex items-center justify-between gap-3">
               {/* Indicador de 3 estados EXCLUYENTES (D-06 / §5). Los 4 estados en vuelo (uploads,
                   guardando, publicando, descartando) son overlays transitorios, no un 4º estado. El
