@@ -343,6 +343,18 @@ ya estaba en la lista y el dev server escucha en el puerto 80.)
 3. **Nada tapado.** Los botones de alta de Finanzas ("Nueva venta" / "Nuevo egreso") y el footer de
    los formularios de **Negocio** y **Configuración**, completamente visibles y alcanzables con el
    pulgar, con la barra presente. Y el final de **Más** (la firma) alcanzable con scroll.
+   - **Y `/clients`** — añadido por la verificación de la fase, porque es de otra familia y el resto
+     de la lista no lo cubría: esta pantalla **no fluye con el documento**, es un alto bloqueado al
+     viewport con scrollers **internos**, así que el `pb` del `<main>` no la empuja y el arreglo
+     tuvo que ir en su propia clase (`h-[calc(100vh-56px-var(--panel-nav-h)-env(safe-area-inset-bottom,0px))]`).
+     El paso concreto: **abrir Clientes**, scrollear hasta el final **DENTRO de la lista** (no
+     arrastrando la página), y confirmar que el **último cliente** queda **completamente visible y
+     tocable** por encima de la barra, sin tener que encadenar el scroll al documento. Después
+     **abrir una ficha** y repetir en el panel de detalle, que es el segundo scroller interno. ⚠ Si
+     hace falta arrastrar la página para ver la última fila, el arreglo no tomó efecto.
+   - **Y `/clinical-history` si el rubro es `salud`** (es el mismo patrón de alto bloqueado, y la
+     ruta se alcanza **por URL**: no tiene entrada en el menú ni título en el header — WR-08): mismo
+     paso sobre la lista de pacientes y sobre el final de la ficha.
 4. **Las tres pasadas de contraste, obligatorias** — cada una con su motivo medido:
    - **forjo claro** — donde cae el peor caso absoluto de la superficie (**5.02:1** en el eyebrow de
      grupo de Más) y el único tema **sin `color-mix`**, o sea el único cuyo número es **exacto**;
