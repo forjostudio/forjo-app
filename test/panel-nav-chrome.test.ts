@@ -524,7 +524,7 @@ describe('8 · el alto reservado para el chrome fijo es coherente', () => {
     expect(anclados).toBeGreaterThan(0)
   })
 
-  it('ninguna pantalla del panel fija su alto al viewport sin descontar el alto de la barra', () => {
+  it('ninguna pantalla del panel fija su alto al viewport en mobile', () => {
     // EL OTRO MODO DE FALLA, EL QUE EL CASO DE ARRIBA NO PODÍA VER: acá no hay ANCLAJE al borde
     // inferior, hay un ALTO calculado contra el viewport. Una pantalla que hace
     // `h-[calc(100vh-56px)] overflow-hidden` con scrollers internos NO fluye con el documento, así
@@ -535,21 +535,37 @@ describe('8 · el alto reservado para el chrome fijo es coherente', () => {
     // 17 hallazgos del code review, del caso de arriba (que barre `sticky|fixed bottom-*`) y del
     // guion de UAT.
     //
-    // LA REGLA: bajo `app/(dashboard)`, todo alto arbitrario (`h-`, `min-h-`, `max-h-`) calculado
-    // contra `100vh`/`100dvh`/`100svh` tiene que referenciar `var(--panel-nav-h)`. Dos exenciones,
-    // las dos por un hecho medido y ninguna por comodidad:
+    // ⚠ LA REGLA CAMBIÓ, Y ES MÁS DURA QUE LA ANTERIOR. La primera versión pedía que esos altos
+    // DESCONTARAN `var(--panel-nav-h)`. Eso convirtió el alto en una cuenta de constantes que se
+    // rompió DOS veces: la primera por no restar la barra, la segunda porque los tres banners del
+    // `<main>` entran EN FLUJO antes del contenido y la cuenta no los veía. Un candado que exige
+    // enumerar el chrome bendice la forma frágil: cada chrome nuevo la vuelve a romper en silencio y
+    // el candado sigue verde. Así que ahora la regla es que en mobile NO SE NOMBRA el viewport:
+    //
+    //   bajo `app/(dashboard)`, todo `h-` o `max-h-` atado al viewport (valor arbitrario con
+    //   `100vh`/`100dvh`/`100svh`, o las palabras `h-screen`/`h-dvh`/`h-svh`/`h-lvh`) tiene que
+    //   venir prefijado por una variante de DESKTOP. El alto disponible en mobile lo da el contrato
+    //   del layout (`<main>` en `flex flex-col` + envoltorio `relative grow` + pantalla en
+    //   `absolute inset-0`), que lo DERIVA del espacio que de verdad quedó.
+    //
+    // Tres exenciones, las tres con un hecho medido detrás y ninguna por comodidad:
     //   · variante `lg:` / `xl:` / `2xl:` ⇒ la clase sólo aplica a ≥1024px, donde no hay chrome de
-    //     mobile y descontarlo dejaría un hueco (es el caso de la columna del editor de `/web`,
-    //     `lg:max-h-[calc(100vh-8rem)]`). `sm:` y `md:` NO eximen: a 768px la barra SÍ está, porque
-    //     entra por `lg:hidden` y no por `md:hidden` (M-5, caso 1 de este archivo).
+    //     mobile (es el caso de la columna del editor de `/web`, `lg:max-h-[calc(100vh-8rem)]`, y de
+    //     la mitad de desktop de las dos pantallas bloqueadas, `lg:h-screen`). `sm:` y `md:` NO
+    //     eximen: a 768px la barra SÍ está, porque entra por `lg:hidden` y no por `md:hidden`
+    //     (M-5, y es el caso 1 de este mismo archivo).
     //   · primitivas de overlay (`Dialog*`, `Sheet*`, `Drawer*`, `Popover*`, …) ⇒ montan en un
     //     portal con `fixed … z-50` (`components/ui/dialog.tsx:102`) y la barra es `z-30`
     //     (`panel-bottom-nav.tsx:90`): el overlay va ENCIMA de la barra, no debajo, así que
     //     descontarla le encogería el alto sin motivo y le rompería el centrado (es el caso del
     //     diálogo de servicio de `/settings`, `max-h-[calc(100svh-2rem)]`).
+    //   · `min-h-*` queda FUERA del barrido: es un piso, no un techo. Un mínimo no puede esconder
+    //     contenido bajo la barra —el elemento crece con su contenido y el `pb` del `<main>` lo
+    //     empuja— y es la forma que usa el propio contrato (`min-h-dvh`) y el upsell de `/web`
+    //     (`min-h-[70vh]`).
     const SOLO_DESKTOP = /^(?:lg|xl|2xl)$/
     const OVERLAY = /Dialog|Sheet|Drawer|Popover|Tooltip|Command|Modal/
-    const ALTO_DE_VIEWPORT = /^((?:[a-z0-9@._-]+:)*)(?:min-|max-)?h-\[[^\]]*100[dsl]?vh[^\]]*\]$/
+    const ALTO_DE_VIEWPORT = /^((?:[a-z0-9@._-]+:)*)(?:max-)?h-(?:\[[^\]]*100[dsl]?vh[^\]]*\]|screen|dvh|svh|lvh)$/
 
     const archivos = tsxDe('app/(dashboard)')
     expect(archivos.length).toBeGreaterThan(10)
@@ -563,21 +579,71 @@ describe('8 · el alto reservado para el chrome fijo es coherente', () => {
           const m = token.match(ALTO_DE_VIEWPORT)
           if (!m) continue
           hallados++
-          if (m[1].split(':').filter(Boolean).some(v => SOLO_DESKTOP.test(v))) continue
           if (OVERLAY.test(etiquetaAnterior(fuente, indice))) continue
           exigidos++
           expect(
-            token,
-            `${archivo}: ${token} fija el alto al viewport sin descontar el alto de la barra`,
-          ).toContain('var(--panel-nav-h)')
+            m[1].split(':').filter(Boolean).some(v => SOLO_DESKTOP.test(v)),
+            `${archivo}: ${token} ata el alto al viewport en mobile. El alto disponible lo da el `
+            + 'contrato del layout (flex flex-col + relative grow + absolute inset-0), no un calc '
+            + 'que enumere el chrome: esa cuenta ya se rompió dos veces en esta fase',
+          ).toBe(true)
         }
       }
     }
     // DOS guardas de honestidad, no una: que el barrido haya encontrado alturas de viewport, y que
-    // al menos una haya quedado EXIGIDA. Sin la segunda, una exención que se ensanchara de más (o un
-    // `lg:` puesto donde no va) dejaría el caso pasando por vacío sin medir nada.
+    // al menos una haya quedado EXIGIDA. Sin la segunda, una exención que se ensanchara de más
+    // (p. ej. `OVERLAY` cazando `div`) dejaría el caso pasando por vacío sin medir nada.
     expect(hallados).toBeGreaterThan(0)
     expect(exigidos).toBeGreaterThan(0)
+  })
+
+  it('el contrato del alto disponible sigue cableado en los dos extremos', () => {
+    // LA CONTRACARA DEL CASO DE ARRIBA. Ése PROHÍBE la forma frágil; éste exige que la buena siga
+    // en su lugar. Sin este caso, borrar `grow` del envoltorio dejaría a las dos pantallas
+    // bloqueadas con el alto de su contenido (medido: 2017px en vez de 453) y el barrido de arriba
+    // seguiría verde, porque ya no habría ningún alto de viewport que señalar.
+    //
+    // Las tres piezas del contrato, y por qué cada una:
+    //   · `<main>` en `flex flex-col` ⇒ es lo que permite repartir el sobrante.
+    //   · envoltorio `relative grow` ⇒ `grow` se queda con el sobrante DESPUÉS de los banners en
+    //     flujo (que es el residuo que este contrato cierra), y `relative` lo vuelve el bloque
+    //     contenedor del `absolute inset-0`. `grow` y no `flex-1`: `flex-1` pone `flex-basis: 0` y
+    //     el contenido de las 12 pantallas que fluyen dejaría de contar para el alto intrínseco del
+    //     `<main>`, o sea que la reserva del `pb` pasaría a depender de un detalle del navegador.
+    //   · `min-h-dvh` y no `min-h-screen` ⇒ `100vh` es el viewport GRANDE (barra de URL escondida)
+    //     y la barra es `fixed` sobre el VISIBLE. Medido con el viewport visible en 667 y la unidad
+    //     resolviendo a 727: `vh` da 60px de solape, `dvh` da 0.
+    expect(principal).not.toBe('')
+    expect(principal, 'el <main> perdió `flex flex-col`: sin él el envoltorio no recibe el sobrante').toContain('flex flex-col')
+    expect(principal, 'el <main> volvió a `vh`: con la barra de URL visible el borde cae 60px por debajo de la barra').toContain('min-h-dvh')
+    expect(principal).not.toContain('min-h-screen')
+
+    const envoltorio = bloque(layout, '<div className="relative grow', '>')
+    expect(envoltorio, 'el envoltorio del contenido perdió `relative grow` (o le cambiaron el orden de las clases)').not.toBe('')
+    expect(envoltorio, 'el envoltorio perdió el padding de contenido de las 15 pantallas').toContain('p-4')
+
+    // La otra punta, SIN lista de archivos (una lista habría que mantenerla y la próxima pantalla
+    // de la familia llegaría sin entrada): toda pantalla que fije su alto a la pantalla en desktop
+    // con `lg:h-screen` es, por construcción, de la familia bloqueada ⇒ en mobile no tiene alto
+    // propio y tiene que montarse con `absolute inset-0`, más el `lg:static` que la devuelve al
+    // flujo en desktop.
+    let bloqueadas = 0
+    for (const archivo of tsxDe('app/(dashboard)')) {
+      for (const literal of literales(sinComentarios(read(archivo)))) {
+        const tokens = literal.slice(1, -1).split(/\s+/)
+        if (!tokens.includes('lg:h-screen')) continue
+        bloqueadas++
+        for (const exigido of ['absolute', 'inset-0', 'lg:static']) {
+          expect(
+            tokens,
+            `${archivo}: fija el alto a la pantalla en desktop pero en mobile le falta \`${exigido}\``,
+          ).toContain(exigido)
+        }
+      }
+    }
+    // Guarda de honestidad: si el barrido no encontrara ninguna pantalla de la familia (archivo
+    // movido, clase renombrada), el caso pasaría por vacío sin medir nada.
+    expect(bloqueadas).toBeGreaterThan(0)
   })
 })
 
