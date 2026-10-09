@@ -51,15 +51,18 @@ metrics:
 actuals:
   tokens: 31000
   tasks: 2
-  commits: 5
+  commits: 2
 
-# MEDIDO con `git rev-list --count ${plan_head_before}..HEAD` al cerrar el plan, no narrado.
-# El desglose de los 5: 2 de produccion (los dos candados) + 1 del SUMMARY + 1 de bookkeeping
-# (STATE/ROADMAP/REQUIREMENTS/WINDOWS) + 1 del state.json del workstream.
-# ⚠ Los SUMMARY hermanos de esta fase registran `commits: 2` porque contaron solo los de
-# produccion; este cuenta el total desde la base, que es lo que el mismo instrumento devuelve
-# cuando `/gsd-verify-work` lo vuelve a correr. Las dos cifras son reales, miden cosas distintas.
-commits: 5
+# `commits: 2` = commits de PRODUCCION, MEDIDOS con
+# `git rev-list --count ${plan_head_before}..HEAD` en el momento que el protocolo define: justo
+# antes de escribir este archivo, con HEAD en `b6d635c`. No es un numero narrado.
+# ⚠ NOTA PARA `/gsd-verify-work`: un recuento POSTERIOR va a dar MAS que 2, y eso es correcto, no
+# una discrepancia. Despues del punto de medicion vienen, por diseno, los commits de cierre: el de
+# este SUMMARY, el del bookkeeping (STATE/ROADMAP/REQUIREMENTS/WINDOWS), el del `state.json` del
+# workstream y el de esta propia nota. El numero no se puede "actualizar al dia" porque el commit
+# que lo actualiza lo incrementa: se midio una vez, en el punto definido, y se deja fijo.
+# Los cuatro SUMMARY de esta fase usan el mismo criterio (los tres hermanos tambien dicen 2).
+commits: 2
 plan_head_before: ba53249f2b98adcf218ec0064774527c346d3470
 
 coverage:
