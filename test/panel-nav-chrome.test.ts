@@ -335,12 +335,32 @@ describe('6 · la jerarquía de encabezados y los nombres de los landmarks', () 
     expect(cuenta(mas, /aria-label="Navegación principal"/g)).toBe(0)
   })
 
-  it('el vínculo del nombre de grupo está escrito en los DOS extremos', () => {
+  it('cada aria-labelledby de la pantalla tiene su id escrito, el derivado incluido', () => {
     // Un vínculo roto no tira error de consola, no rompe el build y no se ve en la UAT visual: deja
-    // el grupo sin nombre, en silencio. Por eso se cuenta el prefijo y se exige que aparezca al
-    // menos dos veces por grupo (el identificador y la referencia).
-    expect(cuenta(mas, /mas-grupo-/g)).toBeGreaterThanOrEqual(2)
-    expect(cuenta(mas, /aria-labelledby/g)).toBeGreaterThan(0)
+    // el grupo sin nombre, en silencio.
+    //
+    // POR QUÉ NO ALCANZA CONTAR OCURRENCIAS, que es como estaba escrito antes: la cota era "el
+    // prefijo `mas-grupo-` aparece al menos 2 veces". Borrando el `id` del `<p>` DERIVADO —o sea
+    // dejando los CUATRO grupos del menú sin nombre accesible— quedaban 3 apariciones (la
+    // referencia del `.map` más el par completo de CUENTA) y el caso pasaba en verde: el par
+    // hardcodeado satisfacía la cota solo, y el extremo derivado quedaba sin vigilar. Medido.
+    //
+    // La forma que muerde es la IGUALDAD, no la cota: cada referencia tiene que encontrar su
+    // identificador escrito, y cada grupo tiene que tener su referencia. Se compara la EXPRESIÓN
+    // literal de los dos extremos (con los espacios colapsados), que es justo lo que el contrato
+    // pide escribir inline en los dos lados.
+    const expresion = (s: string) => s.replace(/\s+/g, '')
+    const atributo = /(\{`[^`]*`\}|"[^"]*")/
+    const refs = [...mas.matchAll(new RegExp(`aria-labelledby=${atributo.source}`, 'g'))].map(m => expresion(m[1]))
+    const ids = [...mas.matchAll(new RegExp(`\\bid=${atributo.source}`, 'g'))].map(m => expresion(m[1]))
+
+    // Guarda de honestidad: los DOS extremos tienen que estar (el derivado y el de CUENTA). Sin
+    // esto, un archivo sin un solo `aria-labelledby` pasaría por vacío.
+    expect(new Set(refs).size).toBe(2)
+    // Ningún grupo sin referencia: tantas referencias como grupos.
+    expect(refs).toHaveLength(cuenta(mas, /role="group"/g))
+    // Y ninguna referencia sin su identificador.
+    for (const ref of refs) expect(ids).toContain(ref)
   })
 
   it('el header fijo NO lleva encabezados: sus dos líneas son párrafos', () => {
