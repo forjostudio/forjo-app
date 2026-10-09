@@ -225,71 +225,73 @@ export function MasClient({ business }: { business: Business }) {
           </div>
         ))}
 
-        {/* ── El grupo CUENTA ──────────────────────────────────────────────────────
-            Header NUEVO (el único de la pantalla que no sale de `NAV_GROUPS`), con el mismo estilo
-            verbatim que los otros y su `id` escrito inline en los dos extremos del vínculo, igual
-            que los derivados. Va al final, después del último grupo del menú.
-            Sus tres filas viven hoy en DOS lugares del sidebar, no en su footer: "Ver mi página" es
-            un `<a>` dentro del `<nav>`. El que copia sólo el footer se la olvida.
-            Y las tres son obligatorias: el drawer hamburguesa que las tiene desaparece en el plan
-            siguiente ⇒ sin ellas el dueño se queda sin manera de cerrar sesión desde el celular. */}
-        <div role="group" aria-labelledby="mas-grupo-cuenta">
-          <p
-            id="mas-grupo-cuenta"
-            className={EYEBROW}
+        {/* ── "Ver mi página", suelta y pegada a AJUSTES ───────────────────────────
+            ESPEJA el sidebar de desktop, donde es un `<a>` suelto después del `.map()` y dentro del
+            `<nav>` (`sidebar.tsx:123-131`). Como AJUSTES es el último grupo del menú, queda
+            visualmente debajo de Configuración, que es exactamente como se lee en desktop.
+            ⚠ REVISIÓN DE DISEÑO DE LA UAT (2026-10-09). Antes las tres filas de abajo vivían juntas
+            en un grupo `CUENTA` inventado por el UI-SPEC (T-6), que resolvía "no perder ninguna
+            fila" agrupando —porque en el sidebar viven en DOS lugares y quien copia sólo el footer
+            se olvida de ésta—. El dueño vio en el teléfono que ese remedio costó CONSISTENCIA:
+            mobile no se leía igual que desktop. Se conserva el motivo original (la fila sigue
+            presente, no se pierde) y se adopta el orden del sidebar.
+            Dos cosas la separan del resto: es la ÚNICA fila sin cableado de historial (no navega
+            dentro del panel), y es la ÚNICA excepción a la regla de "sin chevron" — lleva un icono
+            de 16px a la derecha porque abrir una pestaña nueva es información que el usuario no
+            puede inferir. La variable de la URL pública ya existe y ya es pública. */}
+        <a
+          href={`${process.env.NEXT_PUBLIC_APP_URL}/${business.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={FILA}
+        >
+          <ExternalLink className="w-5 h-5 flex-shrink-0" />
+          <span className="truncate">Ver mi página</span>
+          <ExternalLink className="w-4 h-4 flex-shrink-0 ml-auto text-muted-foreground" aria-hidden="true" />
+        </a>
+
+        {/* ── El par de cuenta, detrás de la línea divisoria ───────────────────────
+            Misma separación que el footer del sidebar (`sidebar.tsx:135`, `border-t border-border`).
+            ⚠ `aria-label` y NO `aria-labelledby`: el grupo ya no tiene eyebrow visible que lo
+            nombre, pero SÍ conserva nombre accesible. Desktop deja este par en un `<div>` pelado,
+            sin nombre; acá se decidió explícitamente NO copiar esa parte (UAT 2026-10-09): la
+            paridad visual que pidió el dueño no exige empeorar lo que un lector de pantalla
+            anuncia. Es el único lugar donde mobile se aparta de desktop, y es a favor.
+            Las dos filas son obligatorias: el drawer hamburguesa que las tenía ya no existe ⇒ sin
+            ellas el dueño se queda sin manera de cerrar sesión desde el celular. */}
+        <div role="group" aria-label="Cuenta" className="mt-2 pt-2 border-t border-border">
+          {/* La Ayuda es una ruta más del panel y entra por el MISMO menú, así que se rige por la
+              misma regla que las filas de arriba: si no compartiera la política, salir de Clientes
+              por Ayuda dejaría Clientes debajo y el atrás caería ahí en vez de en el dashboard.
+              El consumo de la entrada propia hoy es un no-op acá (Ayuda no tiene subsecciones) y
+              se deja igual para que no haya DOS formas de escribir esta fila. */}
+          <Link
+            href="/ayuda"
+            replace={panelNavMode({ from: pathname, to: '/ayuda' }) === 'replace'}
+            onNavigate={(e) => {
+              if (requestNavigation('/ayuda')) { e.preventDefault(); return }
+              if (pathname === '/ayuda' && consumeOwnedPanelEntry()) e.preventDefault()
+            }}
+            className={FILA}
           >
-            CUENTA
-          </p>
-          <div>
-            {/* La Ayuda es una ruta más del panel y entra por el MISMO menú, así que se rige por la
-                misma regla que las filas de arriba: si no compartiera la política, salir de Clientes
-                por Ayuda dejaría Clientes debajo y el atrás caería ahí en vez de en el dashboard.
-                El consumo de la entrada propia hoy es un no-op acá (Ayuda no tiene subsecciones) y
-                se deja igual para que no haya DOS formas de escribir esta fila. */}
-            <Link
-              href="/ayuda"
-              replace={panelNavMode({ from: pathname, to: '/ayuda' }) === 'replace'}
-              onNavigate={(e) => {
-                if (requestNavigation('/ayuda')) { e.preventDefault(); return }
-                if (pathname === '/ayuda' && consumeOwnedPanelEntry()) e.preventDefault()
-              }}
-              className={FILA}
-            >
-              <HelpCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="truncate">Ayuda</span>
-            </Link>
+            <HelpCircle className="w-5 h-5 flex-shrink-0" />
+            <span className="truncate">Ayuda</span>
+          </Link>
 
-            {/* La página pública del negocio, en pestaña nueva. Dos cosas la separan del resto:
-                es la ÚNICA fila sin cableado de historial (no navega dentro del panel), y es la
-                ÚNICA excepción a la regla de "sin chevron" — lleva un icono de 16px a la derecha
-                porque abrir una pestaña nueva es información que el usuario no puede inferir.
-                La variable de la URL pública ya existe y ya es pública: cero env vars nuevas. */}
-            <a
-              href={`${process.env.NEXT_PUBLIC_APP_URL}/${business.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={FILA}
-            >
-              <ExternalLink className="w-5 h-5 flex-shrink-0" />
-              <span className="truncate">Ver mi página</span>
-              <ExternalLink className="w-4 h-4 flex-shrink-0 ml-auto text-muted-foreground" aria-hidden="true" />
-            </a>
-
-            {/* El cierre de sesión pasa por el guard con su PROPIA continuación: acá "seguir"
-                significa desloguear y DESPUÉS navegar. Si el guard empujara /login sin haber cerrado
-                la sesión, la sesión quedaría viva y el proxy rebotaría al dashboard. Si el guard
-                bloquea, el diálogo se encarga; si no bloquea, se ejecuta el handler.
-                Sin rojo y sin confirmación propia: el sidebar no lo pinta de rojo, el token de
-                peligro del sistema no se usa en ninguna parte de esta superficie, y lo que
-                diferencia a esta fila es el grupo y su posición última, no el color. */}
-            <button
-              onClick={() => { if (!requestNavigation('/login', () => void handleLogout())) void handleLogout() }}
-              className={`${FILA} w-full text-left`}
-            >
-              <LogOut className="w-5 h-5 flex-shrink-0" />
-              <span className="truncate">Cerrar sesión</span>
-            </button>
-          </div>
+          {/* El cierre de sesión pasa por el guard con su PROPIA continuación: acá "seguir"
+              significa desloguear y DESPUÉS navegar. Si el guard empujara /login sin haber cerrado
+              la sesión, la sesión quedaría viva y el proxy rebotaría al dashboard. Si el guard
+              bloquea, el diálogo se encarga; si no bloquea, se ejecuta el handler.
+              Sin rojo y sin confirmación propia: el sidebar no lo pinta de rojo, el token de
+              peligro del sistema no se usa en ninguna parte de esta superficie, y lo que
+              diferencia a esta fila es su posición última detrás de la divisoria, no el color. */}
+          <button
+            onClick={() => { if (!requestNavigation('/login', () => void handleLogout())) void handleLogout() }}
+            className={`${FILA} w-full text-left`}
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            <span className="truncate">Cerrar sesión</span>
+          </button>
         </div>
       </nav>
 

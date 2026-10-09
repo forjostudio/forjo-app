@@ -354,12 +354,30 @@ describe('6 · la jerarquía de encabezados y los nombres de los landmarks', () 
     const refs = [...mas.matchAll(new RegExp(`aria-labelledby=${atributo.source}`, 'g'))].map(m => expresion(m[1]))
     const ids = [...mas.matchAll(new RegExp(`\\bid=${atributo.source}`, 'g'))].map(m => expresion(m[1]))
 
-    // Guarda de honestidad: los DOS extremos tienen que estar (el derivado y el de CUENTA). Sin
-    // esto, un archivo sin un solo `aria-labelledby` pasaría por vacío.
-    expect(new Set(refs).size).toBe(2)
-    // Ningún grupo sin referencia: tantas referencias como grupos.
-    expect(refs).toHaveLength(cuenta(mas, /role="group"/g))
-    // Y ninguna referencia sin su identificador.
+    // ⚠ REVISIÓN DE LA UAT (2026-10-09): el grupo `CUENTA` dejó de existir como tal. "Ver mi
+    // página" subió junto a AJUSTES y el par Ayuda/Cerrar sesión quedó detrás de una divisoria,
+    // espejando el sidebar de desktop. Ese par conserva nombre accesible, pero por `aria-label`
+    // (no tiene eyebrow visible que lo nombre), así que la aserción pasa de "dos expresiones
+    // `aria-labelledby` distintas" a la forma MÁS FUERTE: **ningún `role="group"` sin nombre**,
+    // sea cual sea el mecanismo. Así el caso sigue mordiendo si alguien borra el `id` derivado Y
+    // además cubre el grupo nuevo, que antes no existía.
+    // ⚠ El `aria-label` se cuenta ANCLADO a su `role="group"`, no suelto: los dos landmarks
+    // `<nav>` de la pantalla también llevan `aria-label` y lo inflarían (medido: daba 3 contra 2
+    // grupos). Acá el atributo del nombre va siempre pegado al `role`, que es como lo escribe el
+    // contrato en los dos casos.
+    const porLabel = cuenta(mas, /role="group" aria-label="/g)
+    const grupos = cuenta(mas, /role="group"/g)
+
+    // Guardas de honestidad, DOS: que haya grupos, y que los dos mecanismos de nombrado estén
+    // presentes. Sin la segunda, pasar todos los grupos a `aria-label` dejaría el extremo derivado
+    // —el que vigila los cuatro grupos del menú— sin nadie mirándolo.
+    expect(grupos).toBeGreaterThan(0)
+    expect(refs.length).toBeGreaterThan(0)
+    expect(porLabel).toBeGreaterThan(0)
+
+    // Ningún grupo sin nombre: cada `role="group"` aporta su `aria-labelledby` o su `aria-label`.
+    expect(refs.length + porLabel).toBe(grupos)
+    // Y ninguna referencia sin su identificador escrito.
     for (const ref of refs) expect(ids).toContain(ref)
   })
 
