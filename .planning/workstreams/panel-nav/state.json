@@ -6,7 +6,7 @@
     {
       "number": "2",
       "name": "La barra inferior y Más",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
@@ -24,5 +24,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 02 of 3 · 0% · executing"
   },
-  "updated_at": "2026-10-08T22:56:07.929Z"
+  "updated_at": "2026-10-09T00:00:19.283Z"
 }
