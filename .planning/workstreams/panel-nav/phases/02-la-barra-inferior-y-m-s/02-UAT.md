@@ -8,14 +8,15 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 8
-name: A.5 — La UAT de v0.30 repetida DESDE LA BARRA
+number: 9
+name: C — El inventario de Más, rubro por rubro
 expected: |
-  Entrá a una sección desde la barra y tocá el atrás del sistema: tiene que
-  volver a Inicio. El atrás tiene que cerrar primero lo que esté abierto —un
-  modal, un selector, el calendario, el teclado— antes de navegar. Con cambios
-  sin guardar, tiene que preguntar antes de descartar. Y tocar el destino en el
-  que ya estás, con una subsección abierta, tiene que cerrarla en vez de apilar.
+  En Más: el menú del rubro completo, sin que falte ni sobre ninguna fila contra
+  lo que mostraba el menú hamburguesa viejo. Para `general` (el seed) son 8 filas
+  —Abonos, Servicios, Equipo, Sucursales, Negocio, Mi web, Finanzas,
+  Configuración— más el grupo CUENTA con sus 3: Ayuda, "Ver mi página" (que abre
+  pestaña nueva) y Cerrar sesión. Y el bloque de identidad arriba: avatar,
+  nombre del negocio y el plan debajo. Ningún label cortado.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -127,6 +128,16 @@ why_human: Los números salen de cálculo y spa/modern usan `color-mix` (aproxim
 result: [pending]
 
 ### 8. A.5 — La UAT de v0.30 repetida DESDE LA BARRA
+result: pass
+notes: |
+  El comportamiento previsto pasa bien desde el origen nuevo (la barra y /mas).
+  HALLAZGO LATERAL, fuera del alcance de la fase: "Nuevo cliente" tampoco tiene
+  guarda de borrador. Sumado al todo
+  (`.planning/todos/pending/2026-10-09-guarda-de-borrador-en-los-dialogos-del-panel.md`),
+  que se amplió de "los diálogos de Finanzas" a toda la familia: el barrido mostró
+  que `guardDraftOnDismiss` sólo está aplicada en `settings` y en los dos
+  formularios de alta; clients (5), finances (6), agenda (1), appointments (2) y
+  web (2) no la usan.
 expected: sección → atrás del sistema → **Inicio**; el atrás cierra overlay, selector, calendario y teclado antes de navegar; los cambios sin guardar preguntan antes de descartar; tocar el destino actual con una subsección abierta la cierra en vez de apilar.
 why_human: Criterio 6 en su parte conductual. El modo de falla del historial es silencioso y el repo ya tuvo 7 bugs que sólo aparecieron en un teléfono. El mecanismo está intacto por diff vacío, pero la conducta **desde el origen nuevo** (la barra y `/mas`) no se miró.
 result: [pending]
@@ -165,9 +176,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 6
+passed: 7
 issues: 0
-pending: 7
+pending: 6
 skipped: 0
 blocked: 0
 
