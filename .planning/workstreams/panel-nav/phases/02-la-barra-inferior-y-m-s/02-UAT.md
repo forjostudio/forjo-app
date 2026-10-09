@@ -8,14 +8,13 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 12
-name: E.2 — El <meta viewport> servido en /dashboard
+number: 13
+name: R-3 — El logout fallando: que aparezca el aviso de error
 expected: |
-  En la computadora, ya logueado, abrí `view-source:http://127.0.0.1/dashboard`
-  y buscá (Ctrl+F) la palabra `viewport`. La etiqueta tiene que decir:
-  `width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual`
-  (el orden de las claves puede variar; lo que importa es que estén las dos
-  últimas).
+  En el teléfono, con /mas ya cargado: apagá el WiFi y recién ahí tocá
+  "Cerrar sesión". Tiene que aparecer el aviso
+  "No pudimos cerrar la sesión. Probá de nuevo." y la app **NO** tiene que
+  navegar a /login: seguís dentro del panel, con la sesión viva.
 awaiting: user response
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
@@ -182,6 +181,15 @@ expected: A **900px**: barra y header presentes, sin botón de menú. A **≥102
 result: [pending]
 
 ### 12. E.2 — `<meta name="viewport">` servido en `/dashboard` y `/admin`
+result: pass
+notes: |
+  `/dashboard` verificado por el dueño sobre el HTML servido, con sesión (sin
+  cookie responde 307 y no sirve HTML — eso fue lo que frenó la medición
+  automática en 02-04).
+  `/admin` cerrado por evidencia ESTRUCTURAL, sin necesidad de sesión: hay un
+  único `export const viewport` en todo `app/` y está en
+  `app/(dashboard)/layout.tsx`; `/admin` vive en `app/(crm)/`, otro route group,
+  así que no puede heredarlo.
 expected: `/dashboard` trae `viewport-fit=cover, interactive-widget=resizes-visual`; `/admin` sigue con `width=device-width, initial-scale=1` y **nada más**.
 why_human: El plan 02-04 sólo pudo medir 4 de las 6 rutas servidas; `/dashboard` y `/admin` devolvieron 307 sin sesión. Evidencia estática que lo acompaña sin sustituirlo: un único `export const viewport` en todo `app/`, en `app/(dashboard)/layout.tsx`.
 result: [pending]
@@ -201,9 +209,9 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 10
+passed: 11
 issues: 0
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
