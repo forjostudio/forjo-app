@@ -51,9 +51,15 @@ metrics:
 actuals:
   tokens: 31000
   tasks: 2
-  commits: 2
+  commits: 5
 
-commits: 2
+# MEDIDO con `git rev-list --count ${plan_head_before}..HEAD` al cerrar el plan, no narrado.
+# El desglose de los 5: 2 de produccion (los dos candados) + 1 del SUMMARY + 1 de bookkeeping
+# (STATE/ROADMAP/REQUIREMENTS/WINDOWS) + 1 del state.json del workstream.
+# ⚠ Los SUMMARY hermanos de esta fase registran `commits: 2` porque contaron solo los de
+# produccion; este cuenta el total desde la base, que es lo que el mismo instrumento devuelve
+# cuando `/gsd-verify-work` lo vuelve a correr. Las dos cifras son reales, miden cosas distintas.
+commits: 5
 plan_head_before: ba53249f2b98adcf218ec0064774527c346d3470
 
 coverage:
