@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 02-la-barra-inferior-y-m-s
 source: [02-VERIFICATION.md, 02-04-SUMMARY.md]
 started: 2026-10-09T15:10:00Z
@@ -8,17 +8,7 @@ updated: 2026-10-09T22:10:00Z
 
 ## Current Test
 
-number: 5
-name: A.3c — /clients con la barra de URL visible, mitad de iOS SAFARI
-expected: |
-  Último de la UAT. En el iPhone, abrí /clients de cero con la toolbar de Safari
-  visible (o sea, sin scrollear antes): el final de la lista tiene que quedar por
-  encima de la barra de 5 destinos, sin que haya que arrastrar la página entera.
-  Es la confirmación de `dvh` en el motor donde más podía fallar.
-  De paso, probá el MODO BÚSQUEDA nuevo: al tocar el buscador tienen que
-  esconderse el título, Exportar/Importar y Nuevo cliente, y quedar más lista a
-  la vista. Al borrar el texto y salir del campo, vuelven.
-awaiting: user response
+[testing complete]
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
 
@@ -130,8 +120,18 @@ why_human: Es el estado por defecto de todo negocio nuevo, y la altura real del 
 result: [pending]
 
 ### 5. A.3c — `/clients` con la barra de URL visible
-result: pass (Android Chrome) — pendiente la pasada de iOS Safari
+result: pass
 notes: |
+  Las DOS pasadas hechas en dispositivo real. iOS Safari verificado el 2026-10-09:
+  el último cliente de la lista (Zoe Bustos) se ve entero y por encima de la barra
+  con la toolbar de Safari visible. El criterio de `dvh` se cumple en el motor
+  donde más podía fallar.
+  HALLAZGO LATERAL del mismo pase, fuera del alcance de la fase: el resultado
+  PRÁCTICO sigue siendo malo porque el header de /clients tiene NUEVE filas antes
+  del primer nombre y no scrollea (`flex-shrink-0`). No es el mecanismo del alto
+  —ése funciona— sino la densidad. Todo propio con las dos compactaciones que
+  propuso el dueño, medidas:
+  `2026-10-09-compactar-el-header-de-clients-y-el-banner-de-plan.md`.
   Probado con la barra de URL visible y sin scrollear antes. La zona de scroll de
   la lista termina exactamente donde empieza la barra, con barra de scroll interna
   visible (confirma que scrollea la LISTA y no el documento, o sea el
@@ -258,6 +258,23 @@ pending: 0
 skipped: 1
 blocked: 0
 
-parciales: 2 — los tests 2 y 5 pasaron su mitad de Android; les falta la de iOS Safari, que va con el iPhone junto al test 1
+parciales: 0 — los tests 2 y 5 completaron sus dos mitades (Android + iOS Safari) el 2026-10-09
+
+El único no ejecutado es el **test 1 (A.1)**, marcado `skipped` con motivo: NO APLICA en una
+pestaña del navegador. En iOS la toolbar de Safari vive abajo y ocupa el borde; en Android la app
+sí llega al borde y ahí el ítem pasó dentro del test de la wave 1. Recién tendría sentido con la
+app en modo pantalla completa (PWA standalone o nativa).
+
+**Hallazgos laterales, todos FUERA del alcance de la fase, los tres con todo propio:**
+  1. La guarda de borrador falta en casi todos los diálogos del panel (sólo `settings` y los dos
+     formularios de alta la usan) — `2026-10-09-guarda-de-borrador-en-los-dialogos-del-panel.md`
+  2. iOS hace zoom al enfocar 16 de los 88 inputs del panel (font-size < 16px), y deja el layout
+     descentrado al volver — `2026-10-09-el-zoom-automatico-de-ios-en-los-inputs-del-panel.md`
+  3. El header de `/clients` se come media pantalla en reposo (nueve filas, no scrollea) —
+     `2026-10-09-compactar-el-header-de-clients-y-el-banner-de-plan.md`
+
+**Cambios que la UAT SÍ produjo y ya están en el código:** el reordenamiento del pie de Más para
+copiar al sidebar (`17b918e`), el candado que impide perder sus tres filas (`f76416b`), y el modo
+búsqueda de `/clients` (`4850a62`).
 
 ## Gaps
