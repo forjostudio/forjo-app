@@ -8,14 +8,12 @@ updated: 2026-10-09T15:10:00Z
 
 ## Current Test
 
-number: 13
-name: R-3 — El logout fallando: que aparezca el aviso de error
+number: 1
+name: A.1 — Franja de gestos en un iPhone (segunda tanda, bloqueado por dispositivo)
 expected: |
-  En el teléfono, con /mas ya cargado: apagá el WiFi y recién ahí tocá
-  "Cerrar sesión". Tiene que aparecer el aviso
-  "No pudimos cerrar la sesión. Probá de nuevo." y la app **NO** tiene que
-  navegar a /login: seguís dentro del panel, con la sesión viva.
-awaiting: user response
+  Pendiente de tener un iPhone a mano. Junto con él van las dos medias pasadas
+  de iOS Safari que quedaron abiertas (tests 2 y 5).
+awaiting: iPhone
 
 ## Orden de ejecución (decisión del dueño, 2026-10-09)
 
@@ -44,6 +42,10 @@ El resto (3, 4, 6, 7, 8, 9, 10, 11, 12, 13) se hace entero en Android.
 ## Tests
 
 ### 1. A.1 — Franja de gestos en un iPhone (SÓLO la mitad de abajo)
+result: blocked
+blocked_by: physical-device
+reason: "El dueño tiene Android a mano; el iPhone llega después. En Android env(safe-area-inset-bottom) vale 0, así que este ítem no se puede sustituir."
+
 expected: El `bg-card` de la barra cubre la zona de gestos (el *home indicator*) y el último label no queda debajo; en Android no hay hueco ni doble reserva.
 scope: |
   ⚠ ACOTADO por el dueño durante la UAT (2026-10-09), y es correcto: **la mitad de
@@ -195,6 +197,11 @@ why_human: El plan 02-04 sólo pudo medir 4 de las 6 rutas servidas; `/dashboard
 result: [pending]
 
 ### 13. R-3 — El logout fallando: que el aviso de error aparezca
+result: pass
+notes: |
+  Forzado en el teléfono apagando el WiFi con /mas ya cargado. Aparece el aviso y
+  la app NO navega. Cierra la pata humana de T-02-10 (high), que la auditoría de
+  seguridad había detectado como no agendada en ningún lado.
 expected: Forzando la falla de `signOut()` (por ejemplo cortando la red del teléfono justo antes de tocar "Cerrar sesión" en Más): aparece el toast **"No pudimos cerrar la sesión. Probá de nuevo."** y **la app NO navega a `/login`** — seguís dentro del panel, con la sesión viva.
 why_human: Es la pata humana de **T-02-10** (`high`, Repudiation: "una sesión que el dueño cree cerrada y no lo está"). La pata de código está presente y verificada (`mas-client.tsx:114-124`: el `toast.error` y el `return` que no navega), pero **ningún test ejecuta esa rama** y la auditoría de seguridad detectó que tampoco estaba agendada acá. Más es la **única** salida de sesión en mobile: si falla en silencio y navega igual, el dueño deja la sesión abierta creyendo que la cerró.
 result: [pending]
@@ -209,10 +216,12 @@ Están declarados por escrito para que no se reporten como fallas:
 ## Summary
 
 total: 13
-passed: 11
+passed: 12
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
-blocked: 0
+blocked: 1
+
+parciales: 2 — los tests 2 y 5 pasaron su mitad de Android; les falta la de iOS Safari, que va con el iPhone junto al test 1
 
 ## Gaps
