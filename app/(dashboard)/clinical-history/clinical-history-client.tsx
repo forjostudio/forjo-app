@@ -29,7 +29,10 @@ export function ClinicalHistoryClient({ initialClients, businessId }: Props) {
   const showDetail = selectedId !== null
 
   return (
-    <div className="-m-4 sm:-m-6 lg:-m-8 flex h-[calc(100vh-56px-var(--panel-nav-h)-env(safe-area-inset-bottom,0px))] lg:h-screen overflow-hidden bg-background">
+    // Misma familia que `/clients`: el alto se HEREDA del envoltorio `relative grow` del <main>
+    // de `(dashboard)/layout.tsx` vía `absolute inset-0`, en vez de enumerar el chrome en un
+    // `calc`. Ver el bloque de comentario del layout para el por qué y los números medidos.
+    <div className="absolute inset-0 lg:static lg:-m-8 lg:h-screen flex overflow-hidden bg-background">
 
       {/* ═══════════ PATIENT LIST ═══════════ */}
       <div className={cn(

@@ -73,7 +73,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
           único punto en común es acá. Un provider client envolviendo children renderizados en el
           server es legal y ya es el patrón de este archivo (VerticalProvider). */}
       <UnsavedChangesProvider>
-        <div className="min-h-screen">
+        {/* `min-h-dvh` y NO `min-h-screen`: ver el bloque del <main> de abajo. Los dos tienen que
+            usar la MISMA unidad, porque si el envoltorio se queda en `100vh` (= viewport GRANDE, con
+            la barra de URL escondida) el documento mide más que el viewport visible, se puede
+            arrastrar, y ese arrastre colapsa la barra de URL ⇒ el alto disponible cambia debajo de
+            los pies del contenido. Con las dos en `dvh` el documento mide exactamente el viewport
+            visible y no hay nada que arrastrar. */}
+        <div className="min-h-dvh">
           <Sidebar business={business} />
           {/* La barra inferior es HERMANA del sidebar y va sin props: los labels salen de
               useTerminology() y el VerticalProvider ya envuelve desde acá arriba. */}
@@ -84,20 +90,56 @@ export default async function DashboardLayout({ children }: { children: React.Re
               visibilidad, misma posición, misma capa y mismo alto, sin el botón del menú y con una
               segunda línea. */}
           <PanelTopBar business={business} />
-          {/* La reserva de alto de la barra se hace en UN SOLO lugar: el `pb` de acá abajo, en el
-              mismo elemento que ya reserva el header con `pt-14`. Así ninguna de las 13 pantallas
-              agrega padding inferior propio. El `lg:pb-0` es obligatorio y simétrico al `lg:pt-0`: a
-              ≥1024px no hay barra y reservar alto ahí dejaría un hueco.
+          {/* ── EL CONTRATO DEL ALTO DISPONIBLE ──────────────────────────────────────────────
+              Dos familias de pantallas conviven acá y necesitan cosas distintas:
+
+              (a) Las que FLUYEN con el documento (Finanzas, Negocio, Configuración, Más…): les
+                  alcanza el `pb` de este mismo elemento, en el gemelo del `pt-14` que ya reserva el
+                  header. Ninguna agrega padding inferior propio. El `lg:pb-0` es obligatorio y
+                  simétrico al `lg:pt-0`: a ≥1024px no hay barra y reservar alto dejaría un hueco.
+
+              (b) Las que se BLOQUEAN al alto de la pantalla con scrollers internos (`/clients`,
+                  `/clinical-history`): el `pb` les queda POR DEBAJO y no las empuja, así que tienen
+                  que saber cuánto espacio hay. Antes lo calculaban enumerando el chrome
+                  (`100vh - 56px - barra - inset`) y esa cuenta se rompió DOS veces: la primera por
+                  no restar la barra, la segunda porque los tres banners de acá abajo entran EN
+                  FLUJO antes del contenido y la cuenta no los veía. Cada chrome nuevo la volvía a
+                  romper, en silencio.
+                  La forma nueva no enumera nada: este <main> es `flex flex-col`, el envoltorio del
+                  contenido se queda con el sobrante (`grow`) y es `relative`, y esas pantallas se
+                  montan con `absolute inset-0` dentro suyo. El alto les llega DERIVADO del espacio
+                  que de verdad quedó. Sumar un banner cuarto le resta solo al envoltorio y las dos
+                  pantallas lo siguen sin tocar una línea. Medido a 375px: solape contra la barra
+                  = 1px (el `border-t` de la barra) con cero, uno y dos banners.
+                  ⚠ `grow` y no `flex-1`: `flex-1` pone `flex-basis: 0`, o sea que el contenido de
+                  las pantallas de la familia (a) deja de contar para el alto intrínseco del <main>
+                  y la reserva del `pb` depende de un detalle de implementación del navegador.
+                  Con `grow` la base sigue siendo `auto` y las pantallas largas se comportan igual
+                  que siempre (medido: 2579px de scroll y el último bloque 27px ARRIBA de la barra,
+                  idéntico a antes del cambio).
+
+              `min-h-dvh` y no `min-h-screen`: `100vh` es el viewport GRANDE (barra de URL
+              escondida), pero la barra inferior es `fixed` y se dibuja en el borde del viewport
+              VISIBLE. Con la barra de URL a la vista las dos referencias se separan y el borde
+              calculado cae por debajo de la barra. Medido con el viewport visible en 667 y la
+              unidad resolviendo a 727: `vh` ⇒ 60px de solape, `dvh` ⇒ 0. En las pantallas largas
+              el `min-height` ni ata (manda el contenido), así que el cambio sale gratis.
+
               ⚠ En el valor arbitrario NO puede haber ni un espacio: con espacios la clase no se
               genera, Tailwind no avisa, y el padding desaparece ⇒ la barra tapa el último elemento
               de cada pantalla. */}
-          <main className="lg:pl-60 pt-14 lg:pt-0 min-h-screen pb-[calc(var(--panel-nav-h)+env(safe-area-inset-bottom,0px))] lg:pb-0">
+          <main className="lg:pl-60 pt-14 lg:pt-0 min-h-dvh flex flex-col pb-[calc(var(--panel-nav-h)+env(safe-area-inset-bottom,0px))] lg:pb-0">
             <TestModeBanner />
             <MpConnectionBanner connectionError={business.mp_connection_status === 'error' && !!business.mp_user_id} />
             <Suspense fallback={null}>
               <PlanBanner planStatus={planStatus} daysLeft={daysLeft} />
             </Suspense>
-            <div className="p-4 sm:p-6 lg:p-8">
+            {/* `grow` = se queda con el sobrante del <main> después de los banners.
+                `relative` = es el bloque contenedor de las pantallas que se montan con
+                `absolute inset-0`. No cambia nada para los 14 `absolute` que ya existen en el route
+                group: los 14 viven dentro de un `relative` más cercano (verificado archivo por
+                archivo), así que ninguno resolvía contra el viewport. */}
+            <div className="relative grow p-4 sm:p-6 lg:p-8">
               {children}
             </div>
           </main>

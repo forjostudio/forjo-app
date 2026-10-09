@@ -728,7 +728,15 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="-m-4 sm:-m-6 lg:-m-8 flex h-[calc(100vh-56px-var(--panel-nav-h)-env(safe-area-inset-bottom,0px))] lg:h-screen overflow-hidden bg-background">
+    // El alto NO se calcula: se HEREDA. En mobile esta pantalla se monta con `absolute inset-0`
+    // dentro del envoltorio `relative grow` del <main> de `(dashboard)/layout.tsx`, así que ocupa
+    // exactamente el espacio que quedó después del header, de la barra, del inset de gestos y de
+    // los banners que haya en flujo. Enumerar ese chrome en un `calc` es lo que se rompió dos veces
+    // en esta fase (la segunda, por los banners). El `absolute` también saca la pantalla del flujo,
+    // que es lo que elimina el doble scroll: el documento vuelve a medir exactamente el viewport.
+    // A ≥1024px vuelve al comportamiento de siempre (`lg:static` + `lg:-m-8` para sangrar el `p-8`
+    // del envoltorio + `lg:h-screen`), porque ahí no hay barra ni header de mobile.
+    <div className="absolute inset-0 lg:static lg:-m-8 lg:h-screen flex overflow-hidden bg-background">
 
       {/* ═══════════════ LEFT PANEL ═══════════════ */}
       <div className={cn(
