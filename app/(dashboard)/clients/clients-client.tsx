@@ -29,7 +29,7 @@ import {
   sanitizeAction,
   reconciledMemo,
 } from '@/lib/panel-history'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -95,6 +95,24 @@ const FILTER_TABS: { key: FilterKey; label: string }[] = [
   { key: 'paused', label: 'Pausa' },
 ]
 const ALL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('')
+
+// ── La clase de las acciones secundarias del header ────────────────────────────────────────────
+// Las TRES acciones secundarias del header (fusionar, exportar, importar) comparten esta clase para
+// que se vean como un solo grupo y no como tres controles distintos que cayeron juntos.
+// Copiada TAL CUAL del icono de fusionar de la vista de detalle (más abajo en este archivo): mismo
+// tamaño táctil, mismo hover de color sin fondo, mismo anillo de foco. No se inventó un patrón.
+//   · `h-11 w-11` = 44×44 de área táctil, el mínimo del CLAUDE.md para mobile.
+//   · `-my-3` le devuelve 12px arriba y abajo, así que la caja mide 44×44 pero APORTA 20px de alto:
+//     la fila la sigue fijando el `<h1>` (28px) y poner tres botones de 44px NO la engorda.
+//     Los 8px que sobresalen por abajo caben en los 12px del `space-y-3`, así que no le roban el
+//     toque al CTA "Nuevo cliente" de la fila siguiente (medido: solape = −4px).
+//   · `focus-visible:ring-3` es el estado de foco visible, obligatorio y que el `<button>` crudo
+//     anterior no tenía.
+// ⚠ Al ser SÓLO-ICONO, cada una necesita `aria-label` propio: el `title` es un tooltip de hover y en
+// touch no hay hover, así que no cuenta como nombre accesible (misma regla que el slot de acciones
+// de panel-top-bar.tsx). El `title` va además, para el mouse.
+const ACCION_ICONO =
+  '-my-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50'
 
 // Badge de origen del cliente (SC-2). Mapeo LOCKED del UI-SPEC §Color: reserva=outline (quieto,
 // el más común), manual=default/accent (la acción que introduce esta fase, único gasto de --primary
@@ -849,9 +867,18 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       )}>
         {/* Header */}
         <div className="flex-shrink-0 p-4 border-b border-border space-y-3">
-          {/* Las tres filas de abajo se repliegan en modo búsqueda (ver `modoBusqueda`): ninguna se
-              puede accionar mientras se escribe, y entre las tres se llevan la mayor parte del alto
+          {/* Las DOS filas de abajo se repliegan en modo búsqueda (ver `modoBusqueda`): ninguna se
+              puede accionar mientras se escribe, y entre las dos se llevan la mayor parte del alto
               del header, que es alto que la lista no tiene.
+              ⚠ ERAN TRES. La fila del grid CSV desapareció al subir Exportar/Importar a la fila del
+              título, y su `hidden lg:grid` se fue con ella. LA FILA DEL TÍTULO SIGUE REPLEGÁNDOSE,
+              aunque ahora se lleve puestas las tres acciones secundarias, y es a propósito: esas
+              tres YA se escondían en modo búsqueda (estaban las dos en la fila del grid y la de
+              fusionar en la del título), así que el comportamiento mientras se busca es EXACTAMENTE
+              el de hoy — no se pierde ningún acceso que antes existiera. Y el motivo original
+              sigue en pie: ninguna de las tres se acciona mientras se escribe un nombre, y
+              replegarla devuelve 40px (28 del título + 12 del `space-y-3`) justo cuando el teclado
+              se come la pantalla.
               ⚠ SE REPLIEGAN SÓLO EN MOBILE, y por CSS (`hidden lg:*`) en vez de desmontando. La
               primera versión de este cambio las desmontaba en TODOS los anchos y eso rompía MOB-07
               ("en desktop no cambia nada") y el criterio 5 de la fase ("desktop idéntico"): en la
@@ -859,43 +886,62 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               dejaba "Nuevo cliente" inalcanzable. Lo detectó el verificador de la fase.
               En desktop el repliegue además no resuelve NADA: hay `lg:h-screen` y no hay teclado en
               pantalla, que es el problema que esto viene a aliviar.
-              ⚠ Cada fila lleva su propio `hidden lg:<display>` en vez de ir las tres dentro de un
+              ⚠ Cada fila lleva su propio `hidden lg:<display>` en vez de ir las dos dentro de un
               envoltorio: el padre usa `space-y-3`, y meterlas en un solo hijo colapsaría la
               separación entre ellas. */}
-          {/* Fila 1: título + (opcional) fusionar duplicados. */}
+          {/* Fila 1: título + LAS TRES acciones secundarias, como iconos.
+              ANTES eran dos filas: el título con el icono de fusionar, y debajo un grid 2-col de
+              ancho completo con "Exportar CSV" + "Importar CSV". Las tres son acciones SECUNDARIAS:
+              como iconos ocupan una fracción y la segunda fila desaparece entera.
+              MEDIDO a 375px con la fuente real: el header pasa de 327px a 283px — una fila completa
+              (32px del grid + 12px del `space-y-3`) y el título NO se engorda, porque los 44px de
+              área táctil van con `-my-3` (ver ACCION_ICONO).
+              ⚠ Lo que NO se hizo: abreviar a "Imp"/"Exp". El CLAUDE.md pide "verbo de acción +
+              contexto" y "Imp" no se entiende; el icono con `aria-label` compacta lo mismo sin
+              romper ni la regla ni el lector de pantalla.
+              El CTA primario "Nuevo cliente" NO entra acá: conserva su fila y su etiqueta porque es
+              el único primario de la sección (CLAUDE.md: un solo CTA primario por sección).
+              `min-w-0 truncate` en el `<h1>`: el grupo de iconos ahora mide 132px del ancho del
+              panel (que es angosto, lg:w-80), así que un término largo del vertical trunca en vez de
+              empujar los iconos fuera del `overflow-hidden`. */}
           <div className={cn('flex items-center justify-between gap-2', modoBusqueda && 'hidden lg:flex')}>
-            <h1 className="text-lg font-bold">
+            <h1 className="min-w-0 truncate text-lg font-bold">
               {term.clients} <span className="text-muted-foreground font-normal text-sm">({clients.length})</span>
             </h1>
-            {duplicates.length > 0 && (
-              <button onClick={() => setMergeModal(true)} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Fusionar duplicados">
-                <GitMerge className="w-4 h-4" />
+            {/* `-mr-2` recupera el padding que los 44px del último icono le agregan al borde: sin
+                eso el icono queda 30px adentro y el título arranca a 16px. */}
+            <div className="flex shrink-0 items-center -mr-2">
+              {duplicates.length > 0 && (
+                <button onClick={() => setMergeModal(true)} className={ACCION_ICONO} aria-label="Fusionar duplicados" title="Fusionar duplicados">
+                  <GitMerge className="w-4 h-4" />
+                </button>
+              )}
+              {/* ⚠ SIGUE SIENDO UN <a href download>, no un <Button>: la descarga del CSV la hace el
+                  navegador contra el route handler. Pasarlo a botón obligaría a un fetch + blob por
+                  nada. Lo único que cambió es que ya no lleva texto. */}
+              <a
+                href="/api/export/clients"
+                download
+                className={ACCION_ICONO}
+                aria-label={`Exportar ${term.clients.toLowerCase()} a CSV`}
+                title="Exportar CSV"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+              <button
+                onClick={() => { clearDismissBlocked(); setImportOpen(true) }}
+                className={ACCION_ICONO}
+                aria-label={`Importar ${term.clients.toLowerCase()} desde CSV`}
+                title="Importar CSV"
+              >
+                <Upload className="w-4 h-4" />
               </button>
-            )}
+            </div>
           </div>
-          {/* Fila 2 (secundaria, grid 2-col): las dos acciones de round-trip CSV emparejadas —
-              Exportar + Importar, ambas peso secundario (outline). El panel es angosto (lg:w-80),
-              así los botones no compiten con el título ni se clipean por el overflow-hidden.
-              D-01 (POLISH-04): las tres acciones de este header pasan a `w-full sm:w-auto`. El <a> de
-              Exportar entra en el lote aunque no sea un <Button>: usa buttonVariants y es hermano
-              directo del de Importar en el mismo grid, así que dejarlo estirado partiría el par en
-              dos anchos distintos — un bug visual peor que el que POLISH-04 viene a cerrar. */}
-          <div className={cn('grid grid-cols-2 gap-2', modoBusqueda && 'hidden lg:grid')}>
-            <a
-              href="/api/export/clients"
-              download
-              className={cn(buttonVariants({ variant: 'outline' }), 'w-full gap-1.5 sm:w-auto')}
-              title="Exportar CSV"
-            >
-              <Download className="w-4 h-4" /> Exportar CSV
-            </a>
-            {/* Importar CSV: variant outline, icono Upload, SIN gap manual (el Button trae su gap). */}
-            <Button variant="outline" onClick={() => { clearDismissBlocked(); setImportOpen(true) }} className="w-full sm:w-auto">
-              <Upload className="w-4 h-4" /> Importar CSV
-            </Button>
-          </div>
-          {/* Fila 3 (primaria, full-width): el CTA primario "Nuevo cliente" en su propia fila para que
-              quede dominante y no se apriete en el grid 2-col junto a los dos secundarios (CLIENT-01). */}
+          {/* Fila 2 (primaria, full-width): el CTA primario "Nuevo cliente" en su propia fila para que
+              quede dominante y no se apriete junto a los secundarios (CLIENT-01). Es el ÚNICO
+              control de ancho completo que queda en el header — los otros dos que lo eran (el grid
+              CSV) pasaron a iconos en la fila del título. */}
           <Button
             onClick={() => { clearDismissBlocked(); setNewClientOpen(true) }}
             className={cn('w-full gap-1.5 sm:w-auto', modoBusqueda && 'hidden lg:inline-flex')}
