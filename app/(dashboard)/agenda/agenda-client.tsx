@@ -1308,7 +1308,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             disabled={savingHours}
                             onValueChange={v => updateBlock(day, idx, 'start_time', v)}
                             aria-label={`Hora de inicio del bloque ${idx + 1} de ${DAYS[day]}`}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
+                            className="min-w-0 flex-1 px-1.5 text-center text-base sm:text-sm"
                           />
                           <span className="shrink-0 text-xs text-muted-foreground">→</span>
                           <TimeField
@@ -1316,7 +1316,7 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
                             disabled={savingHours}
                             onValueChange={v => updateBlock(day, idx, 'end_time', v)}
                             aria-label={`Hora de fin del bloque ${idx + 1} de ${DAYS[day]}`}
-                            className="min-w-0 flex-1 px-1.5 text-center text-sm"
+                            className="min-w-0 flex-1 px-1.5 text-center text-base sm:text-sm"
                           />
                           {/* Único botón de la fila: se le suma nombre accesible (hasta ahora sólo
                               tenía `title`, que un lector de pantalla puede no anunciar) y foco
@@ -1586,9 +1586,9 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
             <div className="border-t border-border pt-3 space-y-2">
               <p className="text-xs font-medium">Horario especial</p>
               <div className="flex items-center gap-2">
-                <TimeField value={excBulk.start} onValueChange={v => setExcBulk(s => ({ ...s, start: v }))} aria-label="Hora de inicio del horario especial" className="w-full text-sm h-8" />
+                <TimeField value={excBulk.start} onValueChange={v => setExcBulk(s => ({ ...s, start: v }))} aria-label="Hora de inicio del horario especial" className="w-full text-base sm:text-sm h-8" />
                 <span className="text-muted-foreground text-sm">→</span>
-                <TimeField value={excBulk.end} onValueChange={v => setExcBulk(s => ({ ...s, end: v }))} aria-label="Hora de fin del horario especial" className="w-full text-sm h-8" />
+                <TimeField value={excBulk.end} onValueChange={v => setExcBulk(s => ({ ...s, end: v }))} aria-label="Hora de fin del horario especial" className="w-full text-base sm:text-sm h-8" />
               </div>
               <Button size="sm" className="w-full sm:w-auto" onClick={() => bulkSpecialDays([...excSel], excBulk.start, excBulk.end)}>Aplicar horario especial</Button>
             </div>
