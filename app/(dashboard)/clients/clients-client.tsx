@@ -38,6 +38,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // La guarda del descarte accidental y su copy, en el módulo que ya las comparten Ajustes y las dos
 // altas (quick 261009-tzd). No se reescriben acá: la copy escrita dos veces se renombra a medias.
+// Sólo el TIPO del detalle de cierre (`import type`: se borra al compilar): la unión incluye la rama
+// que sintetiza el "atrás" del celular, así que un motivo nuevo queda tipado sin tocar nada.
+import type { OverlayDismissDetails } from '@/lib/overlay-history'
 import {
   UNSAVED_CHANGES_ANNOUNCE,
   UNSAVED_CHANGES_HINT,
@@ -420,6 +423,22 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
    */
   function isImportDirty() {
     return !!importFile && (importStage === 'upload' || importStage === 'preview')
+  }
+
+  /**
+   * El cierre ACCIDENTAL del importador, armado ADENTRO del handler y no en el render.
+   *
+   * POR QUÉ ESTA VUELTA, y no `guardDraftOnDismiss(…)` suelto en el JSX como en los otros cuatro
+   * diálogos de esta pasada: el cierre de acá termina en `resetImport()`, que LEE
+   * `importInputRef.current` para vaciar el `<input type="file">`. Pasarle a una función, durante el
+   * render, un closure que puede leer `ref.current` es error de `react-hooks/refs` —medido, no
+   * supuesto— y tiene razón como regla general. Construyendo la guarda adentro del handler, la ref se
+   * lee recién cuando el dueño intenta cerrar, que es exactamente cuando tenía que leerse: el
+   * contrato de la guarda es que la respuesta a "¿hay cambios?" se calcule en el intento de cierre.
+   * Es el mismo remedio que ya usan `nuevo-turno-form` y `nuevo-abono-form`.
+   */
+  function onImportDismiss(nextOpen: boolean, details: OverlayDismissDetails) {
+    guardDraftOnDismiss(isImportDirty, () => onImportOpenChange(false), noticeImportBlocked)(nextOpen, details)
   }
 
   // Selección de archivo: valida extensión .csv + tamaño ≤2MB client-side (feedback inmediato; el
@@ -1221,7 +1240,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       {/* El cierre ACCIDENTAL pasa por la guarda; `onImportOpenChange` sigue siendo el cierre
           deliberado (lo llaman "Cancelar" y la ✕) y conserva su bloqueo propio de la etapa
           `confirming`, que es más fuerte que la guarda: ahí no pasa ningún cierre. */}
-      <Dialog open={importOpen} onOpenChange={guardDraftOnDismiss(isImportDirty, () => onImportOpenChange(false), noticeImportBlocked)}>
+      <Dialog open={importOpen} onOpenChange={onImportDismiss}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader><DialogTitle>Importar {term.clients.toLowerCase()}</DialogTitle></DialogHeader>
           <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_NEW_ANNOUNCE : ''}</p>
