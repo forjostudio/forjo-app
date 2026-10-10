@@ -9,6 +9,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SUBSCRIPTION_PLANS } from '@/lib/subscription-plans'
 import { PLANS } from '@/lib/plans'
+// La guarda del descarte accidental y su copy, del módulo que ya comparten Ajustes, Finanzas,
+// Clientes, Canchas y las dos altas (quick 261009-tzd).
+// La pista es la de las ALTAS y no la de Ajustes: acá no hay ningún botón "Guardar" —el flujo
+// termina en "Continuar al pago"—, y mandar al dueño a apretar un botón que no está en pantalla es
+// peor que no avisar (es la razón por la que `UNSAVED_NEW_HINT` existe).
+import {
+  UNSAVED_CHANGES_MESSAGE,
+  UNSAVED_CHANGES_TOAST_ID,
+  UNSAVED_NEW_ANNOUNCE,
+  UNSAVED_NEW_HINT,
+  guardDraftOnDismiss,
+} from '@/lib/panel-draft'
 import { cn } from '@/lib/utils'
 import { Check } from 'lucide-react'
 
@@ -17,6 +29,15 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState('')
+  // ⚠ EL MAIL VIENE PRECARGADO, y por eso el "sucio" NO puede ser "el campo tiene algo"
+  // (quick 261009-tzd). El efecto de abajo rellena el mail de la cuenta, así que un `!!email` a secas
+  // marcaría sucio un modal que el dueño NUNCA tocó y lo dejaría ENCERRADO en un diálogo que ya no
+  // cierra con un toque afuera — el modo de falla grave de esta guarda (code-review WR-09 de la
+  // Phase 23). Lo que se compara es contra el valor con el que el campo NACIÓ.
+  const [emailBaseline, setEmailBaseline] = useState('')
+  // El aviso del cierre bloqueado, TAMBIÉN adentro del popup: la región aria-live del toast vive fuera
+  // del portal y el modal la marca `inert` (code-review WR-08; el porqué largo, en `lib/panel-draft.ts`).
+  const [dismissBlocked, setDismissBlocked] = useState(false)
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -29,19 +50,47 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
       const accountEmail = data.user?.email
-      if (active && accountEmail) setEmail((prev) => prev || accountEmail)
+      if (active && accountEmail) {
+        setEmail((prev) => prev || accountEmail)
+        // La línea base se mueve con el prefill, y con el MISMO `prev ||` que el campo: si el dueño
+        // alcanzó a tipear antes de que resolviera el getUser, el campo conserva lo tipeado y la
+        // línea base queda en el mail de la cuenta ⇒ el borrador queda sucio, que es lo correcto.
+        setEmailBaseline((prev) => prev || accountEmail)
+      }
     })
     return () => { active = false }
   }, [open])
 
+  // El cierre DELIBERADO: resetea y cierra. Lo usan la ✕ del diálogo (vía la guarda, que la deja
+  // pasar) y el cierre que pide el padre.
   function handleClose(v: boolean) {
     if (!v) {
       setSelectedPlan(null)
       setEmail('')
+      setEmailBaseline('')
       setEmailError('')
       setLoadingPlan(null)
+      // El único lugar donde se apaga el aviso: una región viva que nace con el texto ya puesto no
+      // anuncia nada, así que reabrir con el aviso viejo colgado sería un anuncio perdido.
+      setDismissBlocked(false)
     }
     onOpenChange(v)
+  }
+
+  /**
+   * ¿Hay algo que perder? (quick 261009-tzd)
+   *
+   * Dos cosas: el plan elegido (que es el paso 2 del flujo) y el mail tipeado, medido contra el que
+   * el prefill puso. Con el modal recién abierto —ningún plan elegido y el mail tal como vino— esto
+   * da `false` y el toque afuera cierra igual que siempre.
+   */
+  function isPlanDirty() {
+    return !!selectedPlan || email.trim() !== emailBaseline.trim()
+  }
+
+  function noticeDismissBlocked() {
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_NEW_HINT })
+    setDismissBlocked(true)
   }
 
   async function startCheckout() {
@@ -72,11 +121,15 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    // El cierre accidental (toque afuera · Escape · atrás del celular) pasa por la guarda; la ✕ del
+    // DialogContent es la salida deliberada y descarta siempre (quick 261009-tzd).
+    <Dialog open={open} onOpenChange={guardDraftOnDismiss(isPlanDirty, () => handleClose(false), noticeDismissBlocked)}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{selectedPlan ? 'Confirmá tu pago' : 'Elegí tu plan'}</DialogTitle>
         </DialogHeader>
+        {/* `sr-only` es `position: absolute`: no reclama espacio ni mueve nada del layout. */}
+        <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_NEW_ANNOUNCE : ''}</p>
 
         {!selectedPlan && (
         <>
