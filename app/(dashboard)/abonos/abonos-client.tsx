@@ -455,7 +455,7 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                   Math.min(WINDOW_MAX_WEEKS, Math.max(WINDOW_MIN_WEEKS, Math.floor(Number(e.target.value) || WINDOW_MIN_WEEKS))),
                 )
               }
-              className="h-9 w-14 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="h-9 w-14 border-x border-border bg-transparent text-center text-base sm:text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               aria-label="Semanas hacia adelante"
             />
             <button

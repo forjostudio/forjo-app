@@ -424,7 +424,7 @@ function CapacityStepper({ value, text, min, max, groupLabel, onStep, onTextChan
         min={min}
         max={max}
         step={1}
-        className="h-11 w-14 sm:h-8 sm:w-10 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus-visible:bg-secondary/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-11 w-14 sm:h-8 sm:w-10 border-x border-border bg-transparent text-center text-base sm:text-sm tabular-nums outline-none focus-visible:bg-secondary/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <button
         type="button"

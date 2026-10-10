@@ -673,7 +673,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
                   value={sessions}
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => setSessions(clampSessions(Number(e.target.value)))}
-                  className="h-9 w-14 border-x border-border bg-transparent text-center text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  className="h-9 w-14 border-x border-border bg-transparent text-center text-base sm:text-sm tabular-nums outline-none focus:bg-secondary/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <button
                   type="button"
