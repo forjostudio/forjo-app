@@ -26,6 +26,15 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
 import { useActiveTabs, ActiveTabs, ActiveTabsEmptyState } from '@/components/dashboard/active-tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+// La guarda del descarte accidental y su copy, del módulo que ya comparten Ajustes, Finanzas, Clientes
+// y las dos altas (quick 261009-tzd).
+import {
+  UNSAVED_CHANGES_ANNOUNCE,
+  UNSAVED_CHANGES_HINT,
+  UNSAVED_CHANGES_MESSAGE,
+  UNSAVED_CHANGES_TOAST_ID,
+  guardDraftOnDismiss,
+} from '@/lib/panel-draft'
 import { Plus, Trash2, Clock, DollarSign, Pencil, MapPin, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -118,13 +127,47 @@ export function CanchasManager({
   const [editName, setEditName] = useState('')
   const [editPrice, setEditPrice] = useState('') // string → permite celda vacía; se parsea al guardar
   const [editDuration, setEditDuration] = useState('60') // string → permite celda vacía; se parsea al guardar
+  // La huella del borrador al ABRIR (quick 261009-tzd). Es el punto de comparación de la guarda del
+  // descarte accidental: mientras la huella viva sea igual a ésta el diálogo está LIMPIO y el toque
+  // afuera cierra como siempre.
+  //
+  // CRUDA, sin normalizar, y a diferencia de las huellas de Ajustes eso acá es gratis: este formulario
+  // NO normaliza al salir del campo —el `trim`/`parseFloat`/`parseInt` vive sólo adentro de `saveEdit`,
+  // como dicen los comentarios de los dos estados de arriba—, así que no hay ningún espejo que pueda
+  // divergir y marcar sucio un formulario que nadie tocó (el encierro de WR-09).
+  const [editBaselineFp, setEditBaselineFp] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  // El aviso del cierre bloqueado, TAMBIÉN adentro del popup: la región aria-live del toast vive fuera
+  // del portal y el modal la marca `inert`, así que el toast se ve pero no se anuncia (code-review
+  // WR-08; el porqué largo está en `lib/panel-draft.ts`). Los dos canales son necesarios.
+  const [dismissBlocked, setDismissBlocked] = useState(false)
+
+  function editFingerprint(name: string, price: string, duration: string): string {
+    return JSON.stringify({ name, price, duration })
+  }
 
   function openEdit(c: Cancha) {
     setEditCancha(c)
-    setEditName(c.service.name)
-    setEditPrice(String(c.service.price))
-    setEditDuration(String(c.service.duration_minutes))
+    const name = c.service.name
+    const price = String(c.service.price)
+    const duration = String(c.service.duration_minutes)
+    setEditName(name)
+    setEditPrice(price)
+    setEditDuration(duration)
+    setEditBaselineFp(editFingerprint(name, price, duration))
+    // El único lugar donde se apaga el aviso: una región viva que nace con el texto ya puesto no
+    // anuncia nada, así que reabrir con el aviso viejo colgado sería un anuncio perdido.
+    setDismissBlocked(false)
+  }
+
+  /** ¿El borrador de la cancha tiene cambios? (quick 261009-tzd) */
+  function isEditDirty() {
+    return editFingerprint(editName, editPrice, editDuration) !== editBaselineFp
+  }
+
+  function noticeDismissBlocked() {
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_CHANGES_HINT })
+    setDismissBlocked(true)
   }
 
   async function saveEdit() {
@@ -387,12 +430,17 @@ export function CanchasManager({
         </div>
       </Card>
 
-      {/* Editar cancha (nombre + duración + precio; cada cancha conserva su propia duración). */}
-      <Dialog open={!!editCancha} onOpenChange={open => { if (!open) setEditCancha(null) }}>
+      {/* Editar cancha (nombre + duración + precio; cada cancha conserva su propia duración).
+          El cierre pasa por `guardDraftOnDismiss` (quick 261009-tzd): con cambios cargados, el toque
+          afuera / Escape / atrás del celular NO cierran, avisan. La ✕ del DialogContent (`close-press`)
+          es la salida deliberada y descarta siempre; con el formulario sin tocar la guarda no muerde. */}
+      <Dialog open={!!editCancha} onOpenChange={guardDraftOnDismiss(isEditDirty, () => setEditCancha(null), noticeDismissBlocked)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Editar cancha</DialogTitle>
           </DialogHeader>
+          {/* `sr-only` es `position: absolute`: no reclama espacio ni mueve nada del layout. */}
+          <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_CHANGES_ANNOUNCE : ''}</p>
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Nombre</Label>
