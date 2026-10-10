@@ -84,6 +84,14 @@ export function PlanBanner({ planStatus, daysLeft }: Props) {
   const isTrial = planStatus === 'trial'
 
   // ── Post-checkout confirmation states (take priority over the normal banner) ──
+  // ⚠ LAS TRES RAMAS DE `confirmState` NO SE COMPACTARON, a propósito. El achique de este banner
+  // (una fila en vez de dos) se aplicó SÓLO a la rama normal de abajo. Las tres de acá:
+  //   · son transitorias — viven segundos ('active' se auto-apaga a los 5s, 'confirming' hasta 36s)
+  //     y sólo después de volver del checkout de MercadoPago, no en el día a día;
+  //   · ya son UNA fila de layout: un icono + un `<p>`, sin botón ni segunda acción que subir;
+  //   · así que no hay fila que eliminar. Lo único que quedaría por recortar es el TEXTO, y
+  //     acortar "no reintentes el pago — ya lo recibimos" para ganar una línea en una pantalla que
+  //     se ve una vez es cambiar claridad por píxeles en el peor momento posible para confundir.
   if (confirmState === 'active') {
     return (
       <div className="px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
@@ -126,22 +134,46 @@ export function PlanBanner({ planStatus, daysLeft }: Props) {
 
   if (!isExpired && !isTrial) return null
 
+  // ── Las dos líneas del banner ──────────────────────────────────────────────────────────────────
+  // Eran UNA sola línea con las dos mitades pegadas por un "·", y a 375px la línea medía 250px: con
+  // el botón al lado no entraba en los 311px útiles, así que `flex-wrap` lo mandaba a una SEGUNDA
+  // FILA. Partirla en título + detalle deja al botón en la misma fila que el texto.
+  // MEDIDO con la fuente real (Space Grotesk self-hosteada, no la fallback del sistema, que da
+  // otro ancho y no envuelve): el banner pasa de 102px a 76px a 375px.
+  // Por qué importa más que los 26px: `plan_status` tiene DEFAULT 'trial' en el schema, así que este
+  // banner está puesto en las 15 pantallas del panel de TODO negocio nuevo.
+  const titulo = isExpired ? 'Tu período de prueba venció' : 'Período de prueba'
+  const detalle = isExpired
+    ? 'Activá tu plan para seguir usando Forjo Gestión'
+    : `${daysLeft} día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}`
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
-      <div className={`rounded-lg px-4 py-3 flex items-center justify-between gap-3 flex-wrap ${
+      {/* Sin `flex-wrap`: el botón ya no se va a una fila propia. Lo que absorbe el texto largo es el
+          `min-w-0` del bloque de la izquierda — la segunda línea ENVUELVE (la rama expired la
+          necesita: su detalle mide ~300px) en vez de truncarse, porque truncar justo la instrucción
+          de "cómo seguir usando la app" sería peor que una línea más. */}
+      <div className={`rounded-lg px-4 py-3 flex items-center justify-between gap-3 ${
         isExpired ? 'bg-red-500/10 border border-red-500/30' : 'bg-amber-500/10 border border-amber-500/30'
       }`}>
-        <p className={`text-sm font-medium ${isExpired ? 'text-red-400' : 'text-amber-400'}`}>
-          {isExpired
-            ? 'Tu período de prueba venció · Activá tu plan para seguir usando Forjo Gestión'
-            : `Período de prueba · ${daysLeft} día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}`}
-        </p>
+        <div className="min-w-0">
+          {/* Jerarquía de dos líneas en el mismo espíritu que el header del panel (panel-top-bar):
+              línea dominante arriba, dato secundario abajo más chico y atenuado. Acá la segunda va
+              en 12px y no en los 11px del header: ahí es chrome de navegación de una palabra, acá es
+              un dato que el dueño lee ("3 días restantes"). */}
+          <p className={`text-sm font-medium leading-tight ${isExpired ? 'text-red-400' : 'text-amber-400'}`}>
+            {titulo}
+          </p>
+          <p className={`text-xs leading-[1.3] ${isExpired ? 'text-red-400/80' : 'text-amber-400/80'}`}>
+            {detalle}
+          </p>
+        </div>
         {isExpired ? (
           <a
             href={UPGRADE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-semibold px-3 py-1.5 rounded-md whitespace-nowrap bg-red-500 text-white hover:opacity-80 transition-opacity"
+            className="text-xs font-semibold px-3 py-1.5 rounded-md whitespace-nowrap flex-shrink-0 bg-red-500 text-white hover:opacity-80 transition-opacity"
           >
             Ver planes
           </a>
