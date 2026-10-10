@@ -14,6 +14,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  UNSAVED_CHANGES_ANNOUNCE,
+  UNSAVED_CHANGES_HINT,
+  UNSAVED_CHANGES_MESSAGE,
+  UNSAVED_CHANGES_TOAST_ID,
+  guardDraftOnDismiss,
+} from '@/lib/panel-draft'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import {
@@ -25,6 +32,61 @@ import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, R
 
 type ClientMode = 'none' | 'search' | 'new'
 const EXPENSE_CATEGORIES = ['Insumos', 'Alquiler', 'Servicios', 'Personal', 'Marketing', 'Impuestos', 'Otro']
+
+// ── Las huellas de los tres borradores de Finanzas (quick 261009-tzd) ─────────────────────────────
+//
+// POR QUÉ EXISTEN. `guardDraftOnDismiss` (`lib/panel-draft.ts`) necesita una respuesta a "¿hay
+// cambios?" y acá no había NINGUNA señal de sucio: los tres diálogos nacían con `onOpenChange` pelado
+// (`setSaleModal`), así que un toque afuera descartaba la carga entera sin avisar. Es el caso que el
+// dueño encontró en el celular durante la UAT de la Phase 2 de v0.31 — "Nueva venta" es el más caro de
+// perder de todo el panel: descripción, cantidad, monto, fecha, tipo y un alta de cliente anidada.
+//
+// POR QUÉ SIN NORMALIZAR, a diferencia de las huellas de Ajustes (`serviceFormFingerprint`). El modo
+// de falla GRAVE de este arreglo es la huella DESINCRONIZADA: una que normaliza distinto que el
+// guardado marca sucio un formulario que nadie tocó y encierra al dueño en un diálogo que ya no cierra
+// con un toque afuera (code-review WR-09 de la Phase 23). Acá ese riesgo se elimina de raíz en vez de
+// administrarse: estos tres formularios NO normalizan al salir del campo —cada `onChange` ya guarda el
+// valor saneado y el `trim`/`parseFloat` vive sólo adentro del guardado—, así que la huella puede
+// comparar el borrador CRUDO contra el snapshot que se tomó al abrir. Dos strings idénticos ⇒ limpio,
+// por construcción y sin ningún espejo que pueda divergir.
+//
+// Los campos van ENUMERADOS y no por spread: así reordenar la declaración del estado (o sumarle un
+// campo) no cambia la huella en silencio. Un campo nuevo que haya que vigilar se suma ACÁ, a mano.
+type SaleForm = { description: string; quantity: string; amount: string; date: string; type: string }
+type NewClientDraft = { name: string; phone: string; email: string }
+
+/**
+ * Huella del borrador de venta: el formulario MÁS la asociación de cliente, que es parte del trabajo
+ * cargado (elegir un cliente o empezar a crear uno ahí mismo).
+ *
+ * El texto del buscador queda AFUERA a propósito: es un filtro en memoria, no un dato que se vaya a
+ * guardar, y el cliente que sí importa viaja en `clientId`. Lo que entra es el MODO —tocar "Buscar" o
+ * "Nuevo" ya es haber empezado— y el alta inline.
+ */
+function saleFingerprint(f: SaleForm, mode: ClientMode, clientId: string | null, nc: NewClientDraft): string {
+  return JSON.stringify({
+    description: f.description,
+    quantity: f.quantity,
+    amount: f.amount,
+    date: f.date,
+    type: f.type,
+    mode,
+    clientId,
+    ncName: nc.name,
+    ncPhone: nc.phone,
+    ncEmail: nc.email,
+  })
+}
+
+type ExpenseForm = { category: string; concepto: string; amount: string; date: string }
+function expenseFingerprint(f: ExpenseForm): string {
+  return JSON.stringify({ category: f.category, concepto: f.concepto, amount: f.amount, date: f.date })
+}
+
+type FixedForm = { name: string; amount: string; frequency: string; due_day: string }
+function fixedFingerprint(f: FixedForm): string {
+  return JSON.stringify({ name: f.name, amount: f.amount, frequency: f.frequency, due_day: f.due_day })
+}
 
 // Variación % vs período anterior. invert=true para gastos (bajar es bueno → verde).
 // Sin base previa (prev=0) no muestra nada para no inventar "∞%".
@@ -145,10 +207,39 @@ export function FinancesClient({ businessId }: Props) {
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>([])
   const [chartData, setChartData] = useState<{ name: string; ingresos: number; egresos: number }[]>([])
 
+  // ── El aviso del cierre bloqueado, también ADENTRO del popup (quick 261009-tzd) ───────────────
+  //
+  // El toast de sonner se ve, pero su región aria-live queda marcada `inert` por el modal mientras el
+  // diálogo está abierto (code-review WR-08 de la Phase 23; el porqué completo, en el comentario de
+  // `guardDraftOnDismiss`). Este estado alimenta una región viva `sr-only` que vive DENTRO de cada uno
+  // de los tres popups, que es lo único que el modal no marca. Los dos canales son necesarios, no
+  // redundantes. Un nodo por diálogo: NO agrega un modal anidado (CLAUDE.md los prohíbe).
+  //
+  // Se apaga al ABRIR cualquiera de los tres diálogos, y ése es el único lugar donde se apaga: una
+  // región viva que nace con el texto ya puesto no anuncia nada, así que reabrir con el aviso viejo
+  // colgado sería un anuncio perdido.
+  const [dismissBlocked, setDismissBlocked] = useState(false)
+  function clearDismissBlocked() {
+    setDismissBlocked(false)
+  }
+  function noticeDismissBlocked() {
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_CHANGES_HINT })
+    setDismissBlocked(true)
+  }
+  // La región viva, idéntica en los tres diálogos. `sr-only` es `position: absolute`: no reclama una
+  // fila del layout ni mueve nada.
+  const dismissBlockedNotice = (
+    <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_CHANGES_ANNOUNCE : ''}</p>
+  )
+
   // Fixed expense modal
   const [fixedModal, setFixedModal] = useState(false)
   const [editFixed, setEditFixed] = useState<FixedExpense | null>(null)
   const [fixedForm, setFixedForm] = useState({ name: '', amount: '', frequency: 'monthly', due_day: '' })
+  // La huella del borrador al ABRIR. Es el punto de comparación de la guarda: mientras la huella viva
+  // sea igual a ésta, el formulario está LIMPIO y el toque afuera cierra como siempre (requisito del
+  // dueño: descartar un form vacío con un gesto tiene que seguir funcionando).
+  const [fixedBaselineFp, setFixedBaselineFp] = useState('')
   const [savingFixed, setSavingFixed] = useState(false)
   const [confirmDeleteFixed, setConfirmDeleteFixed] = useState<string | null>(null)
 
@@ -160,6 +251,7 @@ export function FinancesClient({ businessId }: Props) {
   const [saleModal, setSaleModal] = useState(false)
   const [editSale, setEditSale] = useState<ManualSale | null>(null)
   const [saleForm, setSaleForm] = useState({ description: '', quantity: '1', amount: '', date: format(new Date(), 'yyyy-MM-dd'), type: 'venta' })
+  const [saleBaselineFp, setSaleBaselineFp] = useState('')
   const [savingSale, setSavingSale] = useState(false)
   const [askSaveSale, setAskSaveSale] = useState(false)
 
@@ -173,6 +265,7 @@ export function FinancesClient({ businessId }: Props) {
   const [expenseModal, setExpenseModal] = useState(false)
   const [editExpense, setEditExpense] = useState<Expense | null>(null)
   const [expenseForm, setExpenseForm] = useState({ category: 'Insumos', concepto: '', amount: '', date: format(new Date(), 'yyyy-MM-dd') })
+  const [expenseBaselineFp, setExpenseBaselineFp] = useState('')
   const [savingExpense, setSavingExpense] = useState(false)
   const [askSaveExpense, setAskSaveExpense] = useState(false)
 
@@ -379,19 +472,38 @@ export function FinancesClient({ businessId }: Props) {
 
   function openNewSale() {
     setEditSale(null)
-    setSaleForm({ description: '', quantity: '1', amount: '', date: format(new Date(), 'yyyy-MM-dd'), type: 'venta' })
+    // Sin anotación de tipo a propósito: la forma la imponen sus DOS consumidores (el setter del
+    // borrador y la huella), que es lo que garantiza que los dos vean el mismo objeto.
+    const inicial = { description: '', quantity: '1', amount: '', date: format(new Date(), 'yyyy-MM-dd'), type: 'venta' }
+    setSaleForm(inicial)
     resetSaleClientState()
+    setSaleBaselineFp(saleFingerprint(inicial, 'none', null, { name: '', phone: '', email: '' }))
+    clearDismissBlocked()
     setSaleModal(true)
   }
   function openEditSale(s: ManualSale) {
     setEditSale(s)
-    setSaleForm({ description: s.description, quantity: String(s.quantity), amount: String(s.amount), date: s.sale_date, type: s.type })
+    const inicial = { description: s.description, quantity: String(s.quantity), amount: String(s.amount), date: s.sale_date, type: s.type }
+    setSaleForm(inicial)
     resetSaleClientState()
-    if (s.client_id) {
-      const existing = clients.find(c => c.id === s.client_id)
-      if (existing) { setSaleClientMode('search'); setSaleClientSelected(existing) }
-    }
+    // El cliente ya asociado se resuelve ANTES de la huella y entra en ella: si no, abrir una venta
+    // que ya tiene cliente nacería "sucia" y el toque afuera dejaría de cerrar sin que nadie tocara
+    // nada — exactamente el encierro que este arreglo tiene que evitar.
+    const existing = s.client_id ? clients.find(c => c.id === s.client_id) ?? null : null
+    if (existing) { setSaleClientMode('search'); setSaleClientSelected(existing) }
+    setSaleBaselineFp(saleFingerprint(
+      inicial,
+      existing ? 'search' : 'none',
+      existing ? existing.id : null,
+      { name: '', phone: '', email: '' },
+    ))
+    clearDismissBlocked()
     setSaleModal(true)
+  }
+
+  /** ¿El borrador de venta tiene cambios? (quick 261009-tzd) */
+  function isSaleDirty() {
+    return saleFingerprint(saleForm, saleClientMode, saleClientSelected?.id ?? null, saleNewClient) !== saleBaselineFp
   }
 
   async function saveSale() {
@@ -457,13 +569,24 @@ export function FinancesClient({ businessId }: Props) {
   // ── Expenses CRUD ─────────────────────────────────────────────────────────────
   function openNewExpense() {
     setEditExpense(null)
-    setExpenseForm({ category: 'Insumos', concepto: '', amount: '', date: format(new Date(), 'yyyy-MM-dd') })
+    const inicial = { category: 'Insumos', concepto: '', amount: '', date: format(new Date(), 'yyyy-MM-dd') }
+    setExpenseForm(inicial)
+    setExpenseBaselineFp(expenseFingerprint(inicial))
+    clearDismissBlocked()
     setExpenseModal(true)
   }
   function openEditExpense(e: Expense) {
     setEditExpense(e)
-    setExpenseForm({ category: e.category, concepto: e.notes || '', amount: String(e.amount), date: e.expense_date })
+    const inicial = { category: e.category, concepto: e.notes || '', amount: String(e.amount), date: e.expense_date }
+    setExpenseForm(inicial)
+    setExpenseBaselineFp(expenseFingerprint(inicial))
+    clearDismissBlocked()
     setExpenseModal(true)
+  }
+
+  /** ¿El borrador de egreso tiene cambios? (quick 261009-tzd) */
+  function isExpenseDirty() {
+    return expenseFingerprint(expenseForm) !== expenseBaselineFp
   }
   async function saveExpense() {
     if (!expenseForm.amount) { toast.error('Ingresá un monto'); return }
@@ -542,13 +665,26 @@ export function FinancesClient({ businessId }: Props) {
   // ── Fixed expenses CRUD ───────────────────────────────────────────────────────
   function openNewFixed(presetName = '') {
     setEditFixed(null)
-    setFixedForm({ name: presetName, amount: '', frequency: 'monthly', due_day: '' })
+    // El preset ("Alquiler", "Luz"…) entra en la huella: es el valor con el que el diálogo NACE, no
+    // algo que el dueño tipeó, así que abrir desde un preset y tocar afuera tiene que cerrar.
+    const inicial = { name: presetName, amount: '', frequency: 'monthly', due_day: '' }
+    setFixedForm(inicial)
+    setFixedBaselineFp(fixedFingerprint(inicial))
+    clearDismissBlocked()
     setFixedModal(true)
   }
   function openEditFixed(f: FixedExpense) {
     setEditFixed(f)
-    setFixedForm({ name: f.name, amount: String(f.amount), frequency: f.frequency, due_day: f.due_day ? String(f.due_day) : '' })
+    const inicial = { name: f.name, amount: String(f.amount), frequency: f.frequency, due_day: f.due_day ? String(f.due_day) : '' }
+    setFixedForm(inicial)
+    setFixedBaselineFp(fixedFingerprint(inicial))
+    clearDismissBlocked()
     setFixedModal(true)
+  }
+
+  /** ¿El borrador de gasto fijo tiene cambios? (quick 261009-tzd) */
+  function isFixedDirty() {
+    return fixedFingerprint(fixedForm) !== fixedBaselineFp
   }
   async function saveFixed() {
     if (!fixedForm.name.trim()) { toast.error('Ingresá un nombre'); return }
@@ -959,9 +1095,13 @@ export function FinancesClient({ businessId }: Props) {
       </Tabs>
 
       {/* ── Sale modal ──────────────────────────────────────────────────────────── */}
-      <Dialog open={saleModal} onOpenChange={setSaleModal}>
+      {/* El `onOpenChange` pasa por `guardDraftOnDismiss` (quick 261009-tzd): con datos cargados, el
+          toque afuera / Escape / atrás del celular NO cierran, avisan. La ✕ y "Cancelar" son la salida
+          deliberada y cierran siempre; con el formulario limpio la guarda no muerde. */}
+      <Dialog open={saleModal} onOpenChange={guardDraftOnDismiss(isSaleDirty, () => setSaleModal(false), noticeDismissBlocked)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>{editSale ? 'Editar venta' : 'Nueva venta'}</DialogTitle></DialogHeader>
+          {dismissBlockedNotice}
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs">Descripción *</Label>
@@ -1098,9 +1238,10 @@ export function FinancesClient({ businessId }: Props) {
       </Dialog>
 
       {/* ── Expense modal ───────────────────────────────────────────────────────── */}
-      <Dialog open={expenseModal} onOpenChange={setExpenseModal}>
+      <Dialog open={expenseModal} onOpenChange={guardDraftOnDismiss(isExpenseDirty, () => setExpenseModal(false), noticeDismissBlocked)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>{editExpense ? 'Editar egreso' : 'Nuevo egreso'}</DialogTitle></DialogHeader>
+          {dismissBlockedNotice}
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs">Concepto <span className="text-muted-foreground">(opcional)</span></Label>
@@ -1138,9 +1279,10 @@ export function FinancesClient({ businessId }: Props) {
       </Dialog>
 
       {/* ── Fixed expense modal ──────────────────────────────────────────────────── */}
-      <Dialog open={fixedModal} onOpenChange={setFixedModal}>
+      <Dialog open={fixedModal} onOpenChange={guardDraftOnDismiss(isFixedDirty, () => setFixedModal(false), noticeDismissBlocked)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>{editFixed ? 'Editar gasto fijo' : 'Nuevo gasto fijo'}</DialogTitle></DialogHeader>
+          {dismissBlockedNotice}
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs">Nombre *</Label>
