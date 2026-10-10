@@ -252,13 +252,16 @@ describe('1 · el barrido mira algo de verdad (guardas de honestidad)', () => {
     expect(conTamaño.length).toBeGreaterThan(10)
   })
 
-  it('encuentra los 24 campos que este arreglo prefijó', () => {
+  it('encuentra los campos que este arreglo prefijó', () => {
     // LA guarda más importante del bloque. Los 24 campos arreglados quedaron con un `sm:text-sm`
-    // (o `sm:text-xs`), que es una clase que `clasesDe` tiene que ver Y que `esChicaEnMobile` tiene
-    // que NO acusar. Si cualquiera de las dos se rompe, esta cuenta se desploma y el candado se
-    // delata en vez de quedar verde mirando el vacío. Medido: 24.
+    // (o `sm:text-xs`), que es una clase que `clasesDe` tiene que VER y que `esChicaEnMobile` tiene
+    // que NO acusar. Si cualquiera de las dos se rompe, esta cuenta se desploma a 0 y el candado se
+    // delata en vez de quedar verde mirando el vacío. Medido el 2026-10-09: 24.
+    // El piso es holgado a propósito y NO 24 exactos: esto es un detector de recorte vacío, no un
+    // inventario. Con el número exacto, borrar un campo del panel por un motivo legítimo pondría
+    // rojo un candado que no tiene nada que ver con el borrado.
     const arreglados = CAMPOS.filter(c => c.prefijadas.length > 0)
-    expect(arreglados.length).toBeGreaterThanOrEqual(24)
+    expect(arreglados.length).toBeGreaterThan(15)
   })
 
   it('el detector NO se corta en el `>` de una arrow function', () => {
