@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "batch_id": "261009-tzc",
+  "created_at": "2026-10-10T00:35:12.500Z",
+  "options": {},
+  "base_revision": null,
+  "items": [
+    {
+      "quick_id": "261009-tzd",
+      "client_id": null,
+      "description": "Aplicar guardDraftOnDismiss a los dialogos de edicion del panel que no la tienen (clients, finances, agenda, appointments, web), segun .planning/todos/pending/2026-10-09-guarda-de-borrador-en-los-dialogos-del-panel.md",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261009-tze",
+      "client_id": null,
+      "description": "Subir a 16px en mobile los 16 inputs del panel con font-size menor a 16px para que iOS deje de hacer zoom, segun .planning/todos/pending/2026-10-09-el-zoom-automatico-de-ios-en-los-inputs-del-panel.md",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261009-tzf",
+      "client_id": null,
+      "description": "Compactar el banner de plan a una fila y subir Exportar e Importar a la fila del titulo de /clients, segun .planning/todos/pending/2026-10-09-compactar-el-header-de-clients-y-el-banner-de-plan.md",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    }
+  ]
+}

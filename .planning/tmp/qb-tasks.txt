@@ -1,0 +1,3 @@
+- Aplicar guardDraftOnDismiss a los dialogos de edicion del panel que no la tienen (clients, finances, agenda, appointments, web), segun .planning/todos/pending/2026-10-09-guarda-de-borrador-en-los-dialogos-del-panel.md
+- Subir a 16px en mobile los 16 inputs del panel con font-size menor a 16px para que iOS deje de hacer zoom, segun .planning/todos/pending/2026-10-09-el-zoom-automatico-de-ios-en-los-inputs-del-panel.md
+- Compactar el banner de plan a una fila y subir Exportar e Importar a la fila del titulo de /clients, segun .planning/todos/pending/2026-10-09-compactar-el-header-de-clients-y-el-banner-de-plan.md
