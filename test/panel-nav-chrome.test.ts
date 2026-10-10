@@ -755,4 +755,56 @@ describe('10 · los controles de durabilidad que antes eran gate de plan', () =>
     // que inspeccionar, así que pasaría el bucle sin que nadie lo note.
     expect(clients, 'el header volvió a DESMONTARSE por `modoBusqueda` en vez de ocultarse por CSS, así que desktop vuelve a cambiar').not.toMatch(/\{\s*!modoBusqueda\s*&&/)
   })
+
+  it('las acciones secundarias de /clients no vuelven a ocupar una fila propia', () => {
+    // QUÉ PROTEGE, y por qué es alto y no cosmética: el header del panel izquierdo de /clients es
+    // `flex-shrink-0` — NO scrollea, así que cada fila que tiene se le resta SIEMPRE a la lista. El
+    // dueño midió el síntoma en la UAT del 2026-10-09: en un iPhone se veía UN SOLO nombre antes de
+    // que empezara la lista. Exportar CSV + Importar CSV vivían en un grid 2-col de ancho completo
+    // que se llevaba una fila entera; pasaron a iconos en la fila del título, junto al de fusionar.
+    // MEDIDO con sonda CDP a 375px (fuente real self-hosteada): header 327px → 283px, y la lista
+    // arranca 71px más arriba (y=485 → y=414.1) sumando el banner de plan.
+    //
+    // EL AGUJERO QUE CIERRA: revertir la fila a mano dejaba las dos suites en VERDE. Nada medía el
+    // alto del header, y las tres filas que la fase ya vigila (el repliegue por `modoBusqueda`, el
+    // caso de arriba) siguen verdes con el grid de vuelta, porque el grid TAMBIÉN se replegaba.
+    const clients = sinComentarios(read('app/(dashboard)/clients/clients-client.tsx'))
+    const header = bloque(clients, 'flex-shrink-0 p-4 border-b border-border space-y-3', 'ref={listRef}')
+
+    // Guarda de honestidad: si el header se reestructura y el recorte sale vacío, el caso NO puede
+    // pasar por conteos de cero fingiendo que mide algo.
+    expect(header, 'no se pudo recortar el header de /clients: ¿cambiaron sus clases o el `ref={listRef}` de la lista?').not.toBe('')
+    for (const control of ['/api/export/clients', 'setImportOpen(true)', 'setMergeModal(true)', 'setNewClientOpen(true)']) {
+      expect(header, `el header de /clients perdió el control \`${control}\``).toContain(control)
+    }
+
+    // ── El candado ──────────────────────────────────────────────────────────────────────────────
+    // Lo que define "fila propia" acá es el ancho completo: los dos botones CSV eran `w-full` dentro
+    // de un `grid grid-cols-2`. Después del cambio, el ÚNICO control de ancho completo del header es
+    // el CTA primario "Nuevo cliente" — que SÍ conserva su fila y su etiqueta a propósito
+    // (CLAUDE.md: un solo CTA primario por sección). Tres, en cambio, significa que Exportar e
+    // Importar volvieron a estirarse y a comerse una fila.
+    expect(cuenta(header, /w-full/g), 'el header de /clients tiene más de un control de ancho completo: las acciones secundarias volvieron a ocupar su propia fila').toBe(1)
+    expect(header, 'volvió el grid de ancho completo de Exportar/Importar al header de /clients').not.toMatch(/grid-cols-/)
+
+    // Y que sean sólo-icono de verdad: las tres comparten la clase, y la clase trae el área táctil
+    // de 44×44 del CLAUDE.md (con `-my-3`, para que la caja mida 44 y la fila la siga fijando el
+    // `<h1>`) más el foco visible. Sin esto, "compactar" podría degenerar en tres botones de 24px
+    // imposibles de tocar en un teléfono.
+    expect(cuenta(header, /ACCION_ICONO/g), 'las tres acciones secundarias del header de /clients ya no comparten la clase de icono').toBe(3)
+    const claseIcono = clients.match(/const ACCION_ICONO\s*=\s*'([^']*)'/)?.[1] ?? ''
+    expect(claseIcono, 'desapareció la clase ACCION_ICONO de /clients').not.toBe('')
+    for (const token of ['h-11', 'w-11', 'focus-visible:']) {
+      expect(claseIcono, `ACCION_ICONO perdió \`${token}\`: sin eso el icono no llega a 44×44 o no muestra el foco`).toContain(token)
+    }
+
+    // El nombre accesible de un sólo-icono es el `aria-label`, NUNCA el `title`: en touch no hay
+    // hover y la regla del proyecto prohíbe tooltips en mobile (contrato del slot de acciones de
+    // panel-top-bar.tsx). Un icono sin etiqueta se anuncia como "botón" a secas.
+    expect(cuenta(header, /aria-label/g), 'alguna de las tres acciones sólo-icono del header de /clients se quedó sin nombre accesible').toBeGreaterThanOrEqual(3)
+
+    // Exportar sigue siendo una DESCARGA del navegador contra el route handler, no un botón con
+    // fetch + blob: perder el `download` del `<a>` cambia la descarga por una navegación.
+    expect(header, 'el Exportar CSV de /clients dejó de ser un `<a href download>`').toMatch(/href="\/api\/export\/clients"\s*\n?\s*download/)
+  })
 })
