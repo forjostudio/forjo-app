@@ -1007,7 +1007,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
               placeholder="Nombre, teléfono, email..."
-              className="pl-8 h-8 text-sm"
+              className="pl-8 h-8 text-base sm:text-sm"
             />
           </div>
 
@@ -1635,16 +1635,16 @@ function ClientDetail({
               className="text-2xl font-bold h-auto py-1" />
             <div className="flex gap-2">
               <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="Teléfono" className="h-8 text-sm" />
+                placeholder="Teléfono" className="h-8 text-base sm:text-sm" />
               <Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="Email" className="h-8 text-sm" />
+                placeholder="Email" className="h-8 text-base sm:text-sm" />
             </div>
             {isSalud && (
               <div className="flex gap-2">
                 <Input value={editForm.insurance_name} onChange={e => setEditForm(f => ({ ...f, insurance_name: e.target.value }))}
-                  placeholder="Obra social" className="h-8 text-sm" />
+                  placeholder="Obra social" className="h-8 text-base sm:text-sm" />
                 <Input value={editForm.insurance_number} onChange={e => setEditForm(f => ({ ...f, insurance_number: e.target.value }))}
-                  placeholder="N° de afiliado" className="h-8 text-sm" />
+                  placeholder="N° de afiliado" className="h-8 text-base sm:text-sm" />
               </div>
             )}
             <div className="flex gap-2">
@@ -1787,7 +1787,7 @@ function ClientDetail({
           onChange={e => handleNotesChange(e.target.value)}
           placeholder="Preferencias, alergias, observaciones..."
           rows={6}
-          className="bg-card resize-none text-sm"
+          className="bg-card resize-none text-base sm:text-sm"
         />
         <p className="text-[10px] text-muted-foreground">Guarda automáticamente</p>
       </div>

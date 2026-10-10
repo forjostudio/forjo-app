@@ -1183,7 +1183,7 @@ export function FinancesClient({ businessId }: Props) {
                           value={saleClientSearch}
                           onChange={e => setSaleClientSearch(e.target.value)}
                           placeholder="Nombre o teléfono..."
-                          className="h-8 text-sm pl-8"
+                          className="h-8 text-base sm:text-sm pl-8"
                           autoComplete="off"
                         />
                       </div>
@@ -1218,12 +1218,12 @@ export function FinancesClient({ businessId }: Props) {
               {saleClientMode === 'new' && (
                 <div className="space-y-1.5">
                   <Input value={saleNewClient.name} onChange={e => setSaleNewClient(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Nombre *" className="h-8 text-sm" />
+                    placeholder="Nombre *" className="h-8 text-base sm:text-sm" />
                   <div className="grid grid-cols-2 gap-1.5">
                     <Input value={saleNewClient.phone} onChange={e => setSaleNewClient(f => ({ ...f, phone: e.target.value }))}
-                      placeholder="Teléfono" className="h-8 text-sm" />
+                      placeholder="Teléfono" className="h-8 text-base sm:text-sm" />
                     <Input type="email" value={saleNewClient.email} onChange={e => setSaleNewClient(f => ({ ...f, email: e.target.value }))}
-                      placeholder="Email" className="h-8 text-sm" />
+                      placeholder="Email" className="h-8 text-base sm:text-sm" />
                   </div>
                 </div>
               )}

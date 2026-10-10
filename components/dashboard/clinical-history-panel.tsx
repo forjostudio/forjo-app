@@ -156,11 +156,11 @@ export function ClinicalHistoryPanel({
         <div className="bg-card border border-border rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Obra social</Label>
-            <Input value={insurance.name} onChange={e => setInsurance(f => ({ ...f, name: e.target.value }))} placeholder="Ej: OSDE, Swiss Medical" className="h-8 text-sm" />
+            <Input value={insurance.name} onChange={e => setInsurance(f => ({ ...f, name: e.target.value }))} placeholder="Ej: OSDE, Swiss Medical" className="h-8 text-base sm:text-sm" />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">N° de afiliado</Label>
-            <Input value={insurance.number} onChange={e => setInsurance(f => ({ ...f, number: e.target.value }))} placeholder="N° de afiliado" className="h-8 text-sm" />
+            <Input value={insurance.number} onChange={e => setInsurance(f => ({ ...f, number: e.target.value }))} placeholder="N° de afiliado" className="h-8 text-base sm:text-sm" />
           </div>
           <div className="sm:col-span-2">
             <Button size="sm" onClick={saveInsurance} disabled={savingInsurance}>
@@ -176,14 +176,14 @@ export function ClinicalHistoryPanel({
         <div className="bg-card border border-border rounded-lg p-4 space-y-3">
           <div className="space-y-1 max-w-[180px]">
             <Label className="text-xs">Fecha</Label>
-            <Input type="date" value={noteDate} onChange={e => setNoteDate(e.target.value)} className="h-8 text-sm" />
+            <Input type="date" value={noteDate} onChange={e => setNoteDate(e.target.value)} className="h-8 text-base sm:text-sm" />
           </div>
           <Textarea
             value={noteText}
             onChange={e => setNoteText(e.target.value)}
             placeholder="Evolución, diagnóstico, indicaciones..."
             rows={4}
-            className="resize-none text-sm"
+            className="resize-none text-base sm:text-sm"
           />
           <Button size="sm" onClick={addNote} disabled={savingNote || !noteText.trim()} className="gap-1.5">
             <Plus className="w-3.5 h-3.5" /> {savingNote ? 'Guardando...' : 'Agregar nota'}

@@ -853,7 +853,7 @@ export function CategoriasManager({ business, supabase, services, setServices, c
                           aria-label={`Nombre de “${c.name}”`}
                           aria-invalid={renameError ? true : undefined}
                           aria-describedby={renameError ? renameErrorId : undefined}
-                          className="h-8 text-sm"
+                          className="h-8 text-base sm:text-sm"
                         />
                       ) : (
                         <button

@@ -46,7 +46,7 @@ export function ClinicalHistoryClient({ initialClients, businessId }: Props) {
           </h1>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar paciente..." className="pl-8 h-8 text-sm" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar paciente..." className="pl-8 h-8 text-base sm:text-sm" />
           </div>
         </div>
 
