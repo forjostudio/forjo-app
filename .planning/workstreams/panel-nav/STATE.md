@@ -59,6 +59,14 @@ current_phase_name: La política de atrás, de un nivel a dos
 | Phase 02 P03 | 18 min | 2 tasks | 3 files |
 | Phase 02 P04 | 85 min | 2 tasks | 2 files |
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261009-tzd | Guarda de borrador en los dialogos del panel | 2026-10-10 | 8714de0 | — |
+| 261009-tzf | Compactar el banner de plan y el header de /clients | 2026-10-10 | 3093dd0 | — |
+| 261009-tze | Los campos editables del panel no disparan el zoom de iOS | 2026-10-10 | 2881ee3 | — |
+
 ## Decisions
 
 - [Phase 1 — El detalle de cliente, con la regla de historial que lo gobierna]: ① A→B empuja (no reemplaza): el helper es agnóstico del viewport y una política replace obligaría a una séptima causa
