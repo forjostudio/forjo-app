@@ -36,6 +36,17 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+// La guarda del descarte accidental y su copy, en el módulo que ya las comparten Ajustes y las dos
+// altas (quick 261009-tzd). No se reescriben acá: la copy escrita dos veces se renombra a medias.
+import {
+  UNSAVED_CHANGES_ANNOUNCE,
+  UNSAVED_CHANGES_HINT,
+  UNSAVED_CHANGES_MESSAGE,
+  UNSAVED_CHANGES_TOAST_ID,
+  UNSAVED_NEW_ANNOUNCE,
+  UNSAVED_NEW_HINT,
+  guardDraftOnDismiss,
+} from '@/lib/panel-draft'
 import { cn } from '@/lib/utils'
 import {
   Search, Phone, Mail, Trash2, GitMerge, MessageCircle,
@@ -285,12 +296,60 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
     register: registerNew,
     handleSubmit: handleSubmitNew,
     reset: resetNew,
+    getValues: getValuesNew,
     formState: { errors: newErrors },
   } = useForm<NewClientForm>({
     resolver: zodResolver(newClientSchema),
     mode: 'onBlur', // validación inline al salir del campo (UI-SPEC §A)
     reValidateMode: 'onChange', // una vez que hay error, se limpia al corregir (no queda "pegado")
   })
+
+  // ── El aviso del cierre bloqueado, también ADENTRO del popup (quick 261009-tzd) ───────────────
+  //
+  // El toast de sonner se ve, pero su región aria-live queda marcada `inert` por el modal mientras el
+  // diálogo está abierto (code-review WR-08 de la Phase 23; el porqué completo está escrito en
+  // `lib/panel-draft.ts`). Los dos canales son necesarios, no redundantes: el toast lo ve quien mira
+  // la pantalla, la región `sr-only` de adentro del popup es la única que el lector de pantalla puede
+  // anunciar. Un nodo por diálogo, sin modal anidado (CLAUDE.md los prohíbe).
+  //
+  // UN SOLO estado para los dos diálogos: el alta y el importador no pueden estar abiertos a la vez.
+  // Se apaga al ABRIR cualquiera de los dos, que es lo que garantiza que la región nunca nazca con el
+  // texto ya puesto (una región viva que nace con contenido no anuncia nada).
+  const [dismissBlocked, setDismissBlocked] = useState(false)
+  function clearDismissBlocked() {
+    setDismissBlocked(false)
+  }
+  // Dos avisos y no uno porque la SALIDA que ofrecen es distinta, y un aviso que manda a apretar un
+  // botón que no está en pantalla es peor que no avisar: el alta tiene un botón "Guardar" literal
+  // (de ahí `UNSAVED_CHANGES_HINT`, el mismo que Ajustes), el importador no —tiene "Continuar" e
+  // "Importar"—, así que usa la pista de las altas.
+  function noticeNewClientBlocked() {
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_CHANGES_HINT })
+    setDismissBlocked(true)
+  }
+  function noticeImportBlocked() {
+    toast.warning(UNSAVED_CHANGES_MESSAGE, { id: UNSAVED_CHANGES_TOAST_ID, description: UNSAVED_NEW_HINT })
+    setDismissBlocked(true)
+  }
+
+  /**
+   * ¿El alta de cliente tiene algo cargado? (quick 261009-tzd)
+   *
+   * Es un ALTA: los seis campos nacen vacíos, así que "algún campo con contenido" ES la definición de
+   * sucio — el mismo molde que usan `nuevo-turno-form` y `nuevo-abono-form`, y no el `isDirty` de
+   * react-hook-form, que sin `defaultValues` compara contra `{}` y deja marcado como sucio un campo
+   * que se tipeó y se volvió a vaciar.
+   *
+   * `getValues()` y no `watch()`: la respuesta se calcula recién en el intento de cierre (el contrato
+   * de la guarda), no en cada tecleo.
+   */
+  function isNewClientDirty() {
+    const v = getValuesNew()
+    return !!(
+      v.name?.trim() || v.phone?.trim() || v.email?.trim() || v.notes?.trim() ||
+      v.insurance_name?.trim() || v.insurance_number?.trim()
+    )
+  }
 
   // Escribe SIEMPRE vía el endpoint server-side (aislamiento por tenant). En éxito, prepend al estado
   // local para que el cliente aparezca al instante (SC-1) con su badge "Manual".
@@ -346,6 +405,21 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
     if (!open && importStage === 'confirming') return
     setImportOpen(open)
     if (!open) resetImport()
+  }
+
+  /**
+   * ¿El importador tiene algo que perder? (quick 261009-tzd)
+   *
+   * El "borrador" acá es el archivo elegido —y, en `preview`, el análisis que el server ya devolvió
+   * sobre él—: cerrar sin querer obliga a volver a buscarlo en el teléfono y a re-subirlo.
+   *
+   * Las otras dos etapas quedan afuera, cada una por su motivo: `confirming` ya tiene un bloqueo
+   * propio y MÁS fuerte arriba (ningún cierre pasa mientras la escritura está en vuelo), y `resumen`
+   * es el informe de un import que YA ocurrió — no hay nada que perder, así que ahí el toque afuera
+   * tiene que cerrar como siempre.
+   */
+  function isImportDirty() {
+    return !!importFile && (importStage === 'upload' || importStage === 'preview')
   }
 
   // Selección de archivo: valida extensión .csv + tamaño ≤2MB client-side (feedback inmediato; el
@@ -797,14 +871,14 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               <Download className="w-4 h-4" /> Exportar CSV
             </a>
             {/* Importar CSV: variant outline, icono Upload, SIN gap manual (el Button trae su gap). */}
-            <Button variant="outline" onClick={() => setImportOpen(true)} className="w-full sm:w-auto">
+            <Button variant="outline" onClick={() => { clearDismissBlocked(); setImportOpen(true) }} className="w-full sm:w-auto">
               <Upload className="w-4 h-4" /> Importar CSV
             </Button>
           </div>
           {/* Fila 3 (primaria, full-width): el CTA primario "Nuevo cliente" en su propia fila para que
               quede dominante y no se apriete en el grid 2-col junto a los dos secundarios (CLIENT-01). */}
           <Button
-            onClick={() => setNewClientOpen(true)}
+            onClick={() => { clearDismissBlocked(); setNewClientOpen(true) }}
             className={cn('w-full gap-1.5 sm:w-auto', modoBusqueda && 'hidden lg:inline-flex')}
           >
             <UserPlus className="w-4 h-4" /> Nuevo {term.client.toLowerCase()}
@@ -1072,9 +1146,24 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       </Dialog>
 
       {/* ── Nuevo cliente (alta manual, CLIENT-01) ── */}
-      <Dialog open={newClientOpen} onOpenChange={(o) => { setNewClientOpen(o); if (!o) resetNew() }}>
+      {/* ⚠ EL `onOpenChange` DE ACÁ ERA EL CASO MÁS LITERAL DEL BUG (quick 261009-tzd): reseteaba el
+          formulario en CUALQUIER cierre, incluido el toque afuera, así que el nombre, el teléfono y el
+          mail recién tipeados se iban sin aviso. Lo encontró el dueño en el celular durante la UAT de
+          la Phase 2 de v0.31. Ahora el cierre pasa por `guardDraftOnDismiss`: el toque afuera, el
+          Escape y el atrás del celular quedan vetados mientras haya algo cargado; la ✕ y "Cancelar"
+          son la salida deliberada y siguen descartando. Con el formulario vacío la guarda no muerde,
+          así que el gesto de tocar afuera para cerrar un alta que no se empezó sigue igual. */}
+      <Dialog
+        open={newClientOpen}
+        onOpenChange={guardDraftOnDismiss(
+          isNewClientDirty,
+          () => { setNewClientOpen(false); resetNew() },
+          noticeNewClientBlocked,
+        )}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Nuevo {term.client.toLowerCase()}</DialogTitle></DialogHeader>
+          <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_CHANGES_ANNOUNCE : ''}</p>
           {/* `method="post"` NO lo usa el camino normal: el submit lo maneja `onSubmit`, que sólo
               existe DESPUÉS de que React hidrata. En la ventana previa a la hidratación, un tap en el
               botón dispara el submit NATIVO del navegador y, sin `method`, el default del HTML es GET
@@ -1129,9 +1218,13 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       </Dialog>
 
       {/* ── Importar CSV (DATA-03) — un Dialog ancho, 4 etapas (upload→preview→confirming→resumen) ── */}
-      <Dialog open={importOpen} onOpenChange={onImportOpenChange}>
+      {/* El cierre ACCIDENTAL pasa por la guarda; `onImportOpenChange` sigue siendo el cierre
+          deliberado (lo llaman "Cancelar" y la ✕) y conserva su bloqueo propio de la etapa
+          `confirming`, que es más fuerte que la guarda: ahí no pasa ningún cierre. */}
+      <Dialog open={importOpen} onOpenChange={guardDraftOnDismiss(isImportDirty, () => onImportOpenChange(false), noticeImportBlocked)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader><DialogTitle>Importar {term.clients.toLowerCase()}</DialogTitle></DialogHeader>
+          <p role="status" aria-live="assertive" className="sr-only">{dismissBlocked ? UNSAVED_NEW_ANNOUNCE : ''}</p>
 
           {/* ETAPA 1 — Upload */}
           {importStage === 'upload' && (
