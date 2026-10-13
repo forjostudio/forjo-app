@@ -11,7 +11,7 @@
     {
       "number": "3",
       "name": "La política de atrás, de un nivel a dos",
-      "status": "pending"
+      "status": "planned"
     },
     {
       "number": "4",
@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 3)",
-    "reason": "Phase 3 of 3 — needs a plan"
+    "command": "/gsd-execute-phase 3 --ws panel-nav",
+    "label": "Ejecutar la Phase 3 (4 planes, waves 1-4)",
+    "reason": "Phase 3 of 3 — planificada y verificada, lista para ejecutar"
   },
-  "updated_at": "2026-10-09T23:33:53.365Z"
+  "updated_at": "2026-10-13T20:49:22.883Z"
 }
