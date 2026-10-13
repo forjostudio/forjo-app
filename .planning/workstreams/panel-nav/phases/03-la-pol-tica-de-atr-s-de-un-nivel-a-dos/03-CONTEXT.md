@@ -71,6 +71,33 @@ aceptado y documentado en v0.30) · extender `useUnsavedChanges` a pantallas nue
     de la sección por `/mas`, porque dejaría `/mas` encima de `/mas` ⇒ dos entradas idénticas ⇒ atrás
     muerto. Es la cicatriz 1 que los tres módulos documentan.
 
+### El alcance de MOB-05 por dispositivo (decisión posterior al research)
+
+- **D-05: el aviso de salida vale TAMBIÉN en desktop.** Sin gate de viewport: salir del panel cuesta
+  dos gestos en celular **y** en computadora. — **Reversibility:** reversible — agregar el gate
+  después es envolver el mecanismo en el `useMediaQuery` que el repo ya tiene copiado en 4 lugares.
+  - **Por qué apareció esta decisión recién acá:** el research midió que `panel-bottom-nav.tsx` se
+    oculta con **`lg:hidden`, que es una clase CSS** — el componente **se monta igual en desktop y
+    sus efectos corren**. O sea que el sentinel de MOB-05 correría en escritorio **quiera o no**; la
+    pregunta no era si agregarlo sino si gatearlo.
+  - El dueño eligió **no gatearlo**, sabiendo que la alternativa recomendada era acotarlo a mobile.
+  - ⚠ **CONSECUENCIA QUE EL PLANNER TIENE QUE TRATAR EXPLÍCITAMENTE, no esquivar: esto modifica
+    MOB-07**, que hoy dice *"En desktop **no cambia nada**"* y está marcado **Complete** desde la
+    Phase 2. El plan tiene que **enmendar el texto de MOB-07 en `REQUIREMENTS.md`** dejando escrito
+    que la Phase 3 lo acota a propósito —la política de navegación no cambia en desktop; **sí** cambia
+    el costo de salir del panel— y por qué. No puede quedar como contradicción silenciosa entre un
+    requisito Complete y el comportamiento nuevo.
+  - ⚠ **NO confundir con el criterio 6 del ROADMAP**, que sigue vigente y **no** se toca: ése habla de
+    que *la política de dos niveles* se exprese sobre rutas y caiga en las mismas ramas en desktop
+    **por construcción**. Eso se cumple igual: lo que cambia en escritorio es el **mecanismo de
+    MOB-05**, que es otra cosa. El plan-checker necesita ver esta distinción escrita o va a leer D-05
+    como una violación del criterio 6.
+  - ⚠ **Lo que sí sigue prohibido, porque sería lo peor de los dos mundos:** absorber el atrás en
+    desktop **sin** mostrar el aviso. Eso deja un botón muerto —el atrás no hace nada y no dice por
+    qué—. Si el aviso vale en desktop, **se muestra en desktop**, con la posición que el UI-SPEC §13
+    define relativa a la barra ⇒ el plan tiene que resolver **dónde se ancla cuando la barra está
+    oculta**, que es un caso que §13 no contempla.
+
 ### La superficie visible
 
 - **D-04: la fase NO agrega ningún affordance visible.** No se ilumina Más en la barra cuando se está
