@@ -301,11 +301,24 @@ sobre qué escribe esta fase)
      **Inicio**. En paralelo, `Inicio → un destino de la barra → atrás` cae en **Inicio** sin pasar por
      Más. Los dos recorridos son distintos y los dos son correctos: ésa es toda la fase (MOB-04).
   2. **El cruce entre los dos niveles no deja basura ni atrás muertos.** Estando en una sección que se
-     abrió por Más, tocar un destino **de la barra** deja la pila en **un** nivel ⇒ el atrás cae en
-     Inicio, no en Más. Tocar en la barra el destino en el que ya estás **no apila** nada y sigue
+     abrió por Más, tocar un destino **de la barra** deja la pila sin `/mas` **inmediatamente debajo** ⇒
+     el atrás no cae en Más. Tocar en la barra el destino en el que ya estás **no apila** nada y sigue
      cerrando la subsección abierta (la regla NAV-08 de v0.30 sigue viva). Y en ningún recorrido hace
      falta apretar atrás dos veces para que pase **algo visible** — la "entrada basura" que v0.30
      prohíbe explícitamente (MOB-04).
+
+     > ⚠ **PRECISADO el 2026-10-13, al planificar la fase.** La frase original decía *"deja la pila en
+     > **un** nivel ⇒ el atrás cae en Inicio"*, y eso **colisiona con D-02**, que es una decisión
+     > cerrada del dueño: si Más apila sobre lo que haya abierto, `Inicio → Turnos → Más → Finanzas` es
+     > una pila de **tres** escalones y colapsar hacia Inicio dejaría **dos entradas idénticas
+     > adyacentes** (`[…, Turnos, Turnos]`), que es exactamente el atrás muerto que este mismo criterio
+     > prohíbe. El invariante verificable es el de arriba más su gemelo: **`/mas` no queda
+     > inmediatamente debajo del destino, y no hay dos entradas idénticas adyacentes.** En la pila de
+     > dos escalones produce **literalmente** lo que decía la frase original (el atrás cae en Inicio);
+     > en la de tres produce *el atrás devuelve a la sección de la barra desde la que se abrió Más*, que
+     > es el mismo principio con el que el dueño resolvió D-02 (**el atrás deshace el último
+     > movimiento**). Se cambió la **frase**, no la decisión. Lo implementa el plan `03-02` y lo deja
+     > escrito en `REQUIREMENTS.md` el plan `03-04`.
   3. **MOB-05 queda resuelto por una decisión, no por una suposición.** La fase arranca cerrando la
      decisión y la deja escrita en `REQUIREMENTS-v031.md` con su motivo. Si se implementa, el criterio
      observable es: en Inicio el primer atrás **no saca** del panel y avisa; el segundo sale de verdad;
