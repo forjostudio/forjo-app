@@ -332,7 +332,7 @@ sobre qué escribe esta fase)
      con cambios sin guardar en Agenda el atrás **sigue avisando** (`lib/dirty-history.ts`) y
      "Salir sin guardar" aterriza donde manda la política **nueva**, no la vieja (el defecto que el
      quick `261006-iey` ya tuvo que arreglar una vez); y las suites `test/overlay-history.test.ts`,
-     `test/dirty-history.test.ts`, `test/panel-history.test.ts`, `test/panel-history-sidebar.test.ts`
+     `test/dirty-history.test.ts`, `lib/panel-history.test.ts`, `test/panel-history-sidebar.test.ts`
      y `test/panel-history-clients.test.ts` siguen **verdes** (MOB-06).
   5. **Una sola forma, y los tres dueños de historial se siguen reconociendo.** La política nueva vive
      en `lib/panel-history.ts` como funciones **puras** testeadas en vitest (`environment: 'node'`, sin
