@@ -679,3 +679,288 @@ describe('panelNavMode — el invariante, simulado sobre la pila del navegador',
     expect(pila).toEqual([PANEL_ROOT, MAS, '/finances', MAS])
   })
 })
+
+// ── Plan 03-02 — la marca de la rama, la decisión con el hecho y el retroceso guardado ───────────
+//
+// ⚠ TODO LO NUEVO SE AFIRMA POR NAMESPACE (`PH.algo`) Y NO POR IMPORT NOMBRADO, por el mismo motivo
+// que `PH.PANEL_MORE` en el plan 03-01: un import nombrado que todavía no existe revienta al CARGAR
+// el módulo, y ese rojo es del loader —no de la política—, así que no distingue "falta la rama" de
+// "el archivo no compila". Con el namespace, el único rojo posible es el de la aserción.
+
+/** Las 9 secciones que en mobile SÓLO se alcanzan por Más (el inventario de su rama). */
+const RAMA_DE_MAS = [
+  '/abonos', '/negocio', '/web', '/servicios', '/equipo', '/consultorios',
+  '/finances', '/settings', '/ayuda',
+]
+
+/** Los 5 destinos de la barra, Más incluido. */
+const DESTINOS_BARRA_5 = [PANEL_ROOT, '/appointments', '/agenda', '/clients', MAS]
+
+/** Los 4 destinos de la barra que NO son Más. */
+const DESTINOS_BARRA_4 = [PANEL_ROOT, '/appointments', '/agenda', '/clients']
+
+describe('la marca de la rama — una clave NUEVA, que guarda la RUTA que quedó debajo', () => {
+  it('devuelve un objeto con exactamente una clave, y es la ruta de abajo', () => {
+    const marca = PH.panelUnderState(MAS)
+    expect(Object.keys(marca)).toEqual(['frjUnder'])
+    expect(marca).toEqual({ frjUnder: MAS })
+  })
+
+  it('un objeto LITERAL FRESCO cada vez: dos llamadas no comparten referencia', () => {
+    // La trampa que falla en silencio: propagar el state actual arrastra los internos del router, el
+    // parche de Next toma su rama temprana y la URL cambia sin que el router se entere.
+    expect(PH.panelUnderState(MAS)).not.toBe(PH.panelUnderState(MAS))
+    expect(PH.panelUnderState(MAS)).not.toHaveProperty('__NA')
+  })
+
+  it('el lector devuelve la ruta, y null para todo lo que no sea nuestra marca', () => {
+    expect(PH.panelUnderRoute({ frjUnder: MAS })).toBe(MAS)
+    expect(PH.panelUnderRoute({ frjUnder: PANEL_ROOT })).toBe(PANEL_ROOT)
+    for (const ajeno of [null, undefined, {}, { frjUnder: 7 }, { frjUnder: null }, 'cualquier cosa', 42]) {
+      expect(PH.panelUnderRoute(ajeno)).toBeNull()
+    }
+  })
+
+  it('isForeignOwnedEntry NO la reconoce — si lo hiciera, el detalle de cliente dejaría de empujar', () => {
+    // EL CASO CONTRAPUESTO, y el más grave de todo el plan: con la marca de la rama adentro del
+    // predicado de la regla 0, `applyPanelView` se abstendría de escribir sobre CUALQUIER entrada
+    // marcada y `/clients` perdería su entrada de subsección — una regresión silenciosa de v0.30.
+    expect(PH.isForeignOwnedEntry({ frjUnder: MAS })).toBe(false)
+    // Y las dos ajenas de verdad siguen reconocidas.
+    expect(PH.isForeignOwnedEntry({ frjOverlay: 1 })).toBe(true)
+    expect(PH.isForeignOwnedEntry({ frjDirty: 1 })).toBe(true)
+  })
+
+  it('la marca de la rama NO es una marca de subsección: NAV-08 no la toca', () => {
+    // Son dos preguntas distintas que conviven en el mismo onNavigate. Si la de subsección
+    // reconociera la de la rama, tocar la sección en la que ya estás retrocedería de más.
+    expect(panelViewEntryParam({ frjUnder: MAS })).toBeNull()
+    const back = vi.fn()
+    vi.stubGlobal('window', { history: { state: { frjUnder: MAS }, back } })
+    expect(consumeOwnedPanelEntry()).toBe(false)
+    expect(back).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('applyPanelUnder — la escritura de la marca, después del commit y sin cambiar la URL', () => {
+  function montarPila(state: unknown) {
+    const replaceState = vi.fn()
+    const pushState = vi.fn()
+    const back = vi.fn()
+    vi.stubGlobal('window', { history: { state, replaceState, pushState, back } })
+    return { replaceState, pushState, back }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('saliendo de Más hacia una sección: escribe UNA vez, con DOS argumentos y sin retroceder', () => {
+    const { replaceState, pushState, back } = montarPila({ __NA: true })
+    expect(PH.applyPanelUnder({ from: MAS, to: '/finances' })).toBe(true)
+    expect(replaceState).toHaveBeenCalledTimes(1)
+    expect(replaceState).toHaveBeenCalledWith({ frjUnder: MAS }, '')
+    // Sin el tercer argumento: con la URL, el parche de Next despacha la restauración y cada
+    // navegación cuesta un commit.
+    expect(replaceState.mock.calls[0]).toHaveLength(2)
+    expect(pushState).not.toHaveBeenCalled()
+    expect(back).not.toHaveBeenCalled()
+  })
+
+  it('cuando la política dice REEMPLAZAR no escribe nada: no hay nada nuevo debajo', () => {
+    const { replaceState } = montarPila({ __NA: true })
+    expect(PH.applyPanelUnder({ from: '/finances', to: '/clients' })).toBe(false)
+    expect(replaceState).not.toHaveBeenCalled()
+  })
+
+  it('con una entrada de OTRO DUEÑO arriba no escribe nada (regla 0)', () => {
+    for (const ajena of [{ frjOverlay: 1 }, { frjDirty: 1 }]) {
+      const { replaceState } = montarPila(ajena)
+      expect(PH.applyPanelUnder({ from: MAS, to: '/finances' })).toBe(false)
+      expect(replaceState).not.toHaveBeenCalled()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('la marca se escribe en TODA navegación que empuje, no sólo en las que salen de Más', () => {
+    // El caso degenerado necesita la marca de la entrada de Más, y ésa se escribe cuando Más se
+    // empuja DESDE una sección de la barra (o desde Inicio).
+    const { replaceState } = montarPila({ __NA: true })
+    expect(PH.applyPanelUnder({ from: PANEL_ROOT, to: '/clients' })).toBe(true)
+    expect(replaceState).toHaveBeenCalledWith({ frjUnder: PANEL_ROOT }, '')
+  })
+})
+
+describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', () => {
+  it('REGLA 0 — sin el hecho devuelve lo de siempre y NUNCA un retroceso (la cicatriz 2)', () => {
+    // El barrido que cierra T-03-05: 9 secciones de la rama de Más × los 5 destinos de la barra.
+    for (const from of RAMA_DE_MAS) {
+      for (const to of DESTINOS_BARRA_5) {
+        const plan = PH.panelBranchPlan({ from, to, masDebajo: false })
+        expect(plan).toBe(panelNavMode({ from, to }))
+        expect(plan).not.toBe('up')
+        expect(plan).not.toBe('collapse-then-replace')
+      }
+    }
+  })
+
+  it('con el hecho y destino MÁS ⇒ SUBIR un nivel (D-03), nunca reemplazar', () => {
+    for (const from of RAMA_DE_MAS) {
+      expect(PH.panelBranchPlan({ from, to: MAS, masDebajo: true })).toBe('up')
+    }
+  })
+
+  it('con el hecho y un destino de la barra ⇒ COLAPSAR Y REEMPLAZAR (criterio 2)', () => {
+    for (const from of RAMA_DE_MAS) {
+      for (const to of DESTINOS_BARRA_4) {
+        expect(PH.panelBranchPlan({ from, to, masDebajo: true })).toBe('collapse-then-replace')
+      }
+    }
+  })
+
+  it('from === to REEMPLAZA siempre, con marca y sin marca: la rama 1 sigue ganando', () => {
+    // La cicatriz 1. Con el hecho, si la rama de Más se evaluara primero, `/mas → /mas` devolvería
+    // SUBIR y el dueño se iría un escalón para abajo tocando la pantalla en la que ya está.
+    for (const masDebajo of [true, false]) {
+      expect(PH.panelBranchPlan({ from: MAS, to: MAS, masDebajo })).toBe('replace')
+      expect(PH.panelBranchPlan({ from: '/finances', to: '/finances', masDebajo })).toBe('replace')
+    }
+  })
+
+  it('ENTRADA DIRECTA — sin marca, /finances → /mas EMPUJA: es el candado de la cicatriz 2', () => {
+    // El par de rutas es IDÉNTICO al de la pila `[Inicio, Más, Finanzas]`, donde subir es correcto.
+    // Es el caso exacto que la marca existe para distinguir: sin ella, el retroceso expulsaría al
+    // dueño del sitio (entró pegando la URL, F5, o el rebote del proxy después del login).
+    expect(PH.panelBranchPlan({ from: '/finances', to: MAS, masDebajo: false })).toBe('push')
+  })
+
+  it('la ruta de Más y la raíz siguen siendo PARÁMETROS en la firma nueva', () => {
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/y', masDebajo: true })).toBe('up')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/z', masDebajo: true })).toBe('collapse-then-replace')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', masDebajo: false })).toBe('push')
+  })
+
+  it('el tipo del plan tiene CINCO miembros, y el quinto lo produce el plan 03-03', () => {
+    // *Nada* se declara en el tipo aunque esta función todavía no lo devuelva: si un resultado
+    // posible de la decisión de navegación viviera fuera del tipo, el chequeo de exhaustividad del
+    // plan 03-04 no lo vería — la clase de hueco silencioso que esta fase cierra.
+    const MIEMBROS: PH.PanelBranchPlan[] = ['push', 'replace', 'up', 'collapse-then-replace', 'none']
+    expect(new Set(MIEMBROS).size).toBe(5)
+    // Y los dos primeros son, literalmente, los de `PanelNavMode`: la decisión EXTIENDE la política
+    // en vez de reemplazarla.
+    expect(MIEMBROS.slice(0, 2).sort()).toEqual(
+      [panelNavMode({ from: PANEL_ROOT, to: '/clients' }), panelNavMode({ from: '/finances', to: '/clients' })].sort()
+    )
+  })
+})
+
+describe('panelBranchPlan — el invariante, simulado sobre la pila del navegador', () => {
+  /**
+   * La pila que produce la política CON la marca. El último es el actual.
+   *
+   * `masDebajo` sale de comparar la entrada inmediatamente inferior contra la ruta de Más, que es
+   * exactamente lo que la marca guarda (el `from` de la navegación que empujó esta entrada).
+   *
+   * Los dos modos nuevos: SUBIR quita la entrada de arriba; COLAPSAR quita la de arriba y después
+   * decide el segundo paso contra lo que quedó debajo de Más — si coincide con el destino, retrocede
+   * una segunda vez SIN navegar (el degenerado, medido en E-5); si no, reemplaza.
+   */
+  function navegarRama(pila: string[], to: string): string[] {
+    const from = pila[pila.length - 1]
+    const debajo = pila.length > 1 ? pila[pila.length - 2] : null
+    const plan = PH.panelBranchPlan({ from, to, masDebajo: debajo === MAS })
+    if (plan === 'push') return [...pila, to]
+    if (plan === 'replace') return [...pila.slice(0, -1), to]
+    if (plan === 'none') return pila
+    if (plan === 'up') return pila.slice(0, -1)
+    const sobreMas = pila.slice(0, -1)
+    const debajoDeMas = sobreMas.length > 1 ? sobreMas[sobreMas.length - 2] : null
+    if (debajoDeMas === to) return sobreMas.slice(0, -1)
+    return [...sobreMas.slice(0, -1), to]
+  }
+
+  function atras(pila: string[]): string | null {
+    return pila.length > 1 ? pila[pila.length - 2] : null
+  }
+
+  /** ¿Hay dos entradas idénticas pegadas? Eso es un atrás que no hace nada visible (cicatriz 1). */
+  function hayIdenticasAdyacentes(pila: string[]): boolean {
+    return pila.some((ruta, i) => i > 0 && pila[i - 1] === ruta)
+  }
+
+  it('Inicio → Más → Finanzas → Más deja la pila en [Inicio, Más] (D-03)', () => {
+    let pila = navegarRama(navegarRama([PANEL_ROOT], MAS), '/finances')
+    expect(pila).toEqual([PANEL_ROOT, MAS, '/finances'])
+    pila = navegarRama(pila, MAS)
+    expect(pila).toEqual([PANEL_ROOT, MAS])
+    expect(hayIdenticasAdyacentes(pila)).toBe(false)
+    expect(atras(pila)).toBe(PANEL_ROOT)
+  })
+
+  it('Inicio → Más → Finanzas → Clientes: la pila queda [Inicio, Clientes] y el atrás cae en Inicio', () => {
+    let pila = navegarRama(navegarRama([PANEL_ROOT], MAS), '/finances')
+    pila = navegarRama(pila, '/clients')
+    expect(pila).toEqual([PANEL_ROOT, '/clients'])
+    expect(atras(pila)).toBe(PANEL_ROOT)
+  })
+
+  it('Inicio → Turnos → Más → Finanzas → Clientes: /mas NO queda debajo y el atrás cae en Turnos', () => {
+    // El invariante REFORMULADO que D-02 permite: en la pila de tres escalones el atrás devuelve la
+    // sección de la barra desde la que se abrió Más, que es el mismo principio con el que el dueño
+    // resolvió D-02 (el atrás deshace el último movimiento).
+    let pila = navegarRama(navegarRama([PANEL_ROOT], '/appointments'), MAS)
+    pila = navegarRama(pila, '/finances')
+    expect(pila).toEqual([PANEL_ROOT, '/appointments', MAS, '/finances'])
+    pila = navegarRama(pila, '/clients')
+    expect(pila).toEqual([PANEL_ROOT, '/appointments', '/clients'])
+    expect(atras(pila)).toBe('/appointments')
+    expect(atras(pila)).not.toBe(MAS)
+  })
+
+  it('EL DEGENERADO — Inicio → Turnos → Más → Finanzas → Turnos no deja dos entradas idénticas', () => {
+    // Reemplazar acá dejaría `[…, Turnos, Turnos]`, que es literalmente lo que el criterio 2
+    // prohíbe. Se consume DOS VECES y no se navega (medido en E-5).
+    let pila = navegarRama(navegarRama([PANEL_ROOT], '/appointments'), MAS)
+    pila = navegarRama(pila, '/finances')
+    pila = navegarRama(pila, '/appointments')
+    expect(hayIdenticasAdyacentes(pila)).toBe(false)
+    expect(pila[pila.length - 1]).toBe('/appointments')
+    expect(pila).toEqual([PANEL_ROOT, '/appointments'])
+  })
+
+  it('INVARIANTE BARRIDO — 9 secciones × 4 destinos, en las pilas de dos y de tres escalones', () => {
+    for (const seccion of RAMA_DE_MAS) {
+      const pilas = [
+        navegarRama(navegarRama([PANEL_ROOT], MAS), seccion),
+        navegarRama(navegarRama(navegarRama([PANEL_ROOT], '/appointments'), MAS), seccion),
+      ]
+      for (const inicial of pilas) {
+        for (const destino of DESTINOS_BARRA_4) {
+          const pila = navegarRama(inicial, destino)
+          // (a) `/mas` NO queda inmediatamente debajo del destino.
+          expect(atras(pila)).not.toBe(MAS)
+          // (b) y nunca hay dos entradas idénticas adyacentes.
+          expect(hayIdenticasAdyacentes(pila)).toBe(false)
+        }
+      }
+    }
+  })
+
+  it('criterio 6 — con los 14 destinos del sidebar la decisión devuelve lo MISMO que panelNavMode', () => {
+    // Desktop no se entera POR CONSTRUCCIÓN: `masDebajo` se computa comparando la marca contra la
+    // ruta de Más, y en desktop nada navega a Más ⇒ la marca nunca dice Más ⇒ `masDebajo` es
+    // siempre falso. Sin un chequeo de viewport en el medio.
+    const DESTINOS_SIDEBAR = [
+      '/dashboard', '/appointments', '/agenda', '/abonos', '/negocio', '/web', '/servicios',
+      '/equipo', '/consultorios', '/clients', '/clients', '/finances', '/settings', '/ayuda',
+    ]
+    expect(DESTINOS_SIDEBAR).toHaveLength(14)
+    for (const from of DESTINOS_SIDEBAR) {
+      expect(from).not.toBe(PH.PANEL_MORE)
+      for (const to of DESTINOS_SIDEBAR) {
+        expect(PH.panelBranchPlan({ from, to, masDebajo: false })).toBe(panelNavMode({ from, to }))
+      }
+    }
+  })
+})
