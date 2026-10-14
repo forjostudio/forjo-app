@@ -292,12 +292,40 @@ export function isDirtyGuardOwnedEntry(state: unknown): boolean {
 }
 
 /**
+ * ¿La entrada de arriba es el **sentinel de salida** de `lib/panel-branch.ts` (MOB-05)? Es la
+ * tercera parte del predicado de la regla 0.
+ *
+ * ⚠ **El literal `frjExit` se duplica a propósito, por el mismo motivo que `frjDirty`**: este módulo
+ * no declara frontera de cliente (ver su encabezado) y `lib/panel-branch.ts` exporta además un hook
+ * de React, así que importar de allá arrastraría React adentro del grafo de este módulo —y de su
+ * suite— sin ninguna necesidad. El candado contra la deriva no es la disciplina: es el test que LEE
+ * los dos archivos y exige que el literal siga siendo el mismo.
+ *
+ * ⚠ **POR QUÉ HACE FALTA.** El sentinel es una entrada **absorbente**: existe para comerse el primer
+ * atrás en la raíz del panel y que el aviso de salida alcance a mostrarse. {@link applyPanelView}
+ * escribiéndole encima le **borra la marca**, su dueño ya no la reconoce, no la consume al expirar la
+ * ventana del aviso, y queda **basura en la pila más un atrás muerto**. Es el mismo argumento con el
+ * que se agregó {@link isDirtyGuardOwnedEntry}, palabra por palabra — y acá el call site **ya
+ * existe**: en Inicio el sentinel está arriba justo cuando el detalle de cliente de `/clients`
+ * podría escribir.
+ */
+export function isExitSentinelOwnedEntry(state: unknown): boolean {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    'frjExit' in state &&
+    typeof (state as { frjExit?: unknown }).frjExit === 'number'
+  )
+}
+
+/**
  * ¿La entrada de arriba pertenece a ALGÚN otro dueño de historial? Es el predicado completo de la
- * regla 0: un overlay o el sentinel de cambios sin guardar.
+ * regla 0, y hoy reconoce **TRES** dueños: un overlay, el sentinel de cambios sin guardar y el
+ * sentinel de salida del panel.
  *
  * Existe como una sola función para que el OR se escriba una vez: los dos consumidores
  * ({@link applyPanelView} y {@link consumeOwnedPanelEntry}) tienen que hacerse la misma pregunta, y
- * el día que aparezca un tercer módulo que escriba historial sólo se suma acá.
+ * el día que aparezca un cuarto módulo que escriba historial sólo se suma acá.
  *
  * ⚠ **POR QUÉ LA MARCA DE LA RAMA (`panelUnderRoute`) NO ESTÁ ACÁ, Y NO ES UN OLVIDO.** Es una marca
  * NUESTRA, de este mismo módulo: "otro dueño" significa otro módulo que retrocede sobre su propia
@@ -306,9 +334,22 @@ export function isDirtyGuardOwnedEntry(state: unknown): boolean {
  * TODA navegación del panel que empuje, el detalle de cliente dejaría de empujar su entrada en
  * `/clients`: una regresión de v0.30 que ningún otro gate ve. Hay un caso de test contrapuesto que
  * lo fija, y un gate de región que cuenta la clave adentro de este predicado y exige **cero**.
+ *
+ * ⚠ **Y POR QUÉ EL SENTINEL DE SALIDA (`frjExit`) SÍ ESTÁ, siendo también una marca de la fase.** Son
+ * dos clases distintas de marca y confundirlas rompe cosas **opuestas**:
+ *   · la marca de la **rama** es **propia-informativa**: anota un dato (qué quedó debajo) sobre una
+ *     entrada que empujó el router. Nadie retrocede "sobre" ella por tenerla, así que meterla acá
+ *     sólo lograría que {@link applyPanelView} se abstenga de escribir en toda entrada marcada ⇒
+ *     rompe el **detalle de cliente**;
+ *   · el sentinel de salida es **ajeno-absorbente**: es una entrada que su dueño **empujó para
+ *     consumirla**, exactamente como la de un overlay o la del guard de cambios sin guardar. Dejarlo
+ *     afuera hace que una escritura le borre la marca ⇒ rompe el **sentinel** (basura en la pila más
+ *     un atrás muerto).
+ * Los dos casos de test están escritos **adyacentes y contrapuestos** para que la diferencia no se
+ * pierda en un refactor.
  */
 export function isForeignOwnedEntry(state: unknown): boolean {
-  return isOverlayOwnedEntry(state) || isDirtyGuardOwnedEntry(state)
+  return isOverlayOwnedEntry(state) || isDirtyGuardOwnedEntry(state) || isExitSentinelOwnedEntry(state)
 }
 
 // ── El armado de URL ─────────────────────────────────────────────────────────────────────────────
