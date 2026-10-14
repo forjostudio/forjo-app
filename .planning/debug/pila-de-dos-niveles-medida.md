@@ -1,13 +1,13 @@
 ---
 status: measured
-trigger: "Phase 3 del workstream panel-nav, plan 03-01, Task 2: medir la pila REAL del navegador para los siete recorridos de la política de dos niveles, antes de que 03-02 y 03-03 escriban su mitad difícil."
+trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04."
 created: 2026-10-13T00:00:00Z
-updated: 2026-10-13T00:00:00Z
+updated: 2026-10-14T00:00:00Z
 ---
 
 ## Current Focus
 
-veredicto: **LAS SIETE PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (7/7, la sonda sale 0)
+veredicto: **LAS OCHO PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (8/8, la sonda sale 0)
 
 La sonda es `.planning/debug/probes/panel-back-stack.mjs`, es **re-ejecutable** y **falla con código
 distinto de cero** si cualquier pila medida difiere de la esperada. Esto no es un informe de una
@@ -49,7 +49,7 @@ mide tres cantidades por escenario y las compara por separado:
   (están adelante, no debajo) y el dueño estuvo ahí de verdad. Se **declaran** en la expectativa en
   vez de ignorarse, igual que el caso de entrada directa que v0.30 declaró y aceptó.
 
-## Las siete mediciones
+## Las ocho mediciones
 
 ### E-1 · MOB-04 nivel 1 — `Inicio → Más → Finanzas`
 
@@ -174,6 +174,51 @@ sigue_parado_en:                   "/finances"
 "entrar directo" está aceptado y documentado desde v0.30; un retroceso sin marca lo **expulsaría del
 sitio**, que es la cicatriz 2.
 
+### E-8 · la cadena de TRES pasos (criterio 4 — lo que implementa el plan 03-04)
+
+Cierra **A5 + A6 compuestos**: el disparador real del colapso no es la barra, es el **guard de salida
+de cambios sin guardar**. Veredicto: **OK**. Pila `[/dashboard, /mas, /web, /web#sin-guardar]` —una
+sección de la rama de Más con el sentinel de cambios sin guardar arriba, que es la pila EXACTA del
+caso vivo— y destino `/clients` (un destino de la barra).
+
+```
+armada:                                         ["/dashboard","/mas","/web","/web#sin-guardar"]
+marca_de_la_entrada_de_arriba_al_armar:         {"frjDirty":1}
+la_marca_de_la_rama_con_el_sentinel_arriba:     null
+la_marca_de_la_rama_tras_consumir_el_sentinel:  "/mas"
+rama_tomada:                                    "dos-consumos-y-reemplazo"
+marca_leida_en_la_entrada_de_mas:               "/dashboard"
+abajo:                                          ["/dashboard","/clients"]
+actual:                                         "/clients"
+adelante:                                       ["/web","/web#sin-guardar"]
+atras_cae_en:                                   "/dashboard"
+dos_entradas_identicas_adyacentes:              false
+mas_quedo_inmediatamente_debajo:                false
+```
+
+⇒ **LA MEDICIÓN QUE REHIZO EL DISEÑO DEL PROVIDER, y es el motivo por el que esta sonda se corre
+ANTES de codear.** Las dos líneas del medio son el hallazgo: con el sentinel de cambios sin guardar
+arriba la marca de la rama **no es legible** (`null`), y **tras consumirlo vuelve a ser legible**
+(`/mas`). El motivo es mecánico y está en el código de los dos módulos: `dirtyHistoryState(id)`
+devuelve `{ frjDirty: id }` **y nada más**, así que el `pushState` del sentinel crea una entrada
+nueva **sin** la marca de la rama — que sigue viva, intacta, en la entrada de la sección de abajo.
+
+⇒ **La consecuencia de diseño, escrita en vez de descubierta en la UAT.** El plan 03-04 pedía
+calcular el plan de la rama **en el momento del click** y pasárselo al plan de salida. Medido, eso
+daría `masDebajo: false` ⇒ la regla 0 ⇒ `panelNavMode('/web' → '/mas')` ⇒ **`push`**: "Salir sin
+guardar" desde `/web` hacia Más aterrizaría en Más con **la política de UN nivel** —el atrás volvería
+a `/web`— que es **exactamente el defecto que el criterio 4 prohíbe** y que el quick `261006-iey` ya
+tuvo que arreglar una vez. Así que el provider **re-deriva** el plan de la rama en el `popstate` del
+consumo, con la entrada de la sección a la vista. No es un mecanismo nuevo: es la forma que
+`branchSecondStep` (`lib/panel-branch.ts`) ya tiene **por el mismo motivo** —"esa ruta sólo se puede
+leer estando parado sobre la entrada de Más, o sea después del primer consumo"—, medida en E-5.
+
+⇒ **Y la aritmética de la cadena queda medida entera:** dos consumos encadenados —cada uno desde el
+evento del anterior— más un reemplazo **diferido fuera del evento**, dejan `[Inicio, Clientes]`. El
+atrás cae en **Inicio**, `/mas` **no** quedó inmediatamente debajo, no hay dos entradas idénticas
+adyacentes, y lo que queda **adelante** (`/web`, `/web#sin-guardar`) no es basura en el camino del
+atrás: está arriba, y el dueño estuvo ahí de verdad.
+
 ## Lo que esta sonda NO puede cerrar
 
 Tres supuestos del `## Assumptions Log` del research **siguen abiertos a propósito**, y van **ruteados
@@ -195,6 +240,9 @@ suite, ni el build**. El único criterio que cierra la fase es la UAT en un tel�
 - **Plan 03-02** — E-3 (subir un nivel), E-4 (el colapso normal) y **E-5** (el degenerado, que es el
   que le fija la forma: doble retroceso sin navegar, y la marca guardando **la ruta**).
 - **Plan 03-03** — E-6 (el sentinel de salida: no hace falta pisarlo con un reemplazo).
-- **Plan 03-04** — A1, A2 y A11, que esta sonda **no** cierra.
+- **Plan 03-04** — **E-8**, que es el que le fijó la forma al provider del guard de salida: con el
+  sentinel de cambios sin guardar arriba la marca de la rama **no es legible**, así que el plan de la
+  rama se **re-deriva** después del consumo y no en el click. Y A1, A2 y A11, que esta sonda **no**
+  cierra.
 - **Cualquiera de los tres** puede re-correr la sonda: si una pila deja de coincidir, el arreglo **no
   es ajustar la expectativa** — es rehacer el diseño contra lo medido y actualizar este documento.

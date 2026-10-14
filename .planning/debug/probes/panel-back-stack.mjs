@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ── La sonda de la pila del atrás del panel ──────────────────────────────────────────────────────
 //
-// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los siete
+// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los ocho
 // recorridos de la Phase 3 del workstream `panel-nav`. No deriva las pilas de leer el código: las
 // MIDE en un Chrome de verdad y FALLA con código distinto de cero si alguna no coincide con la
 // esperada. Es un instrumento con gate, no un script que imprime y se va.
@@ -228,7 +228,86 @@ function colapsar(cdp, destino) {
   `, { esperarPromesa: true }).then((s) => JSON.parse(s))
 }
 
-// ── Los siete escenarios ─────────────────────────────────────────────────────────────────────────
+/**
+ * Empuja el **sentinel de CAMBIOS SIN GUARDAR** (`lib/dirty-history.ts`) encima de la entrada actual.
+ *
+ * ⚠ **Su state lleva SÓLO su propia marca (`{ frjDirty }`), igual que en la app** (`dirtyHistoryState`
+ * devuelve exactamente eso): **no** copia la marca de la rama de la entrada de abajo. Esa asimetría
+ * no es un detalle del helper — es **el hecho que E-8 mide**, y es el que decide el diseño del
+ * provider del guard de salida.
+ */
+function empujarSentinelDeCambios(cdp, ruta) {
+  return evaluar(cdp, `history.pushState({ frjDirty: 1 }, '', ${JSON.stringify(ruta)})`)
+}
+
+/**
+ * LA CADENA DE TRES PASOS, tal como la tiene que correr el provider del guard de cambios sin guardar
+ * cuando el dueño toca "Salir sin guardar" desde una **sección de la rama de Más**: consumir el
+ * sentinel de cambios sin guardar → consumir la entrada de la sección → recién entonces navegar.
+ *
+ * ⚠ LAS TRES LECCIONES MEDIDAS QUE ESTÁN ESCRITAS ACÁ ADENTRO, y que el provider tiene que copiar:
+ *   1. **cada paso sale del EVENTO del anterior**, nunca dos en el mismo tick: `history.back()` es
+ *      asíncrono y encadenarlo a mano está medido como roto (la navegación se pierde);
+ *   2. el listener se engancha **en el gesto** y con `{ once: true }` — en un efecto se perdería el
+ *      evento, y sin `once` sobreviviría al paso y el próximo atrás del dueño dispararía una
+ *      navegación que nadie pidió;
+ *   3. **la navegación va DIFERIDA fuera del evento** (acá con un `setTimeout(0)`, en la app con un
+ *      pedido en estado que ejecuta un efecto): pedida adentro del `popstate`, el router de Next está
+ *      procesando SU traverse y la escritura **no ocurre**.
+ *
+ * Y la medición que de verdad importa: `marcaConElSentinelArriba` se lee **antes** del primer
+ * consumo y `marcaTrasElConsumo` **después**. Si la primera es nula y la segunda no, entonces el
+ * plan de la rama **no se puede decidir en el momento del click** y hay que re-derivarlo con la
+ * entrada de la sección a la vista — que es exactamente la forma que `branchSecondStep` ya tiene en
+ * `lib/panel-branch.ts` por el mismo motivo.
+ */
+function cadenaDeTresPasos(cdp, destino) {
+  return evaluar(cdp, `
+    new Promise((res, rej) => {
+      const DESTINO = ${JSON.stringify(destino)}
+      // ── PASO 1 · consumir el sentinel de cambios sin guardar, con SU guarda de marca ──────────
+      if (!history.state || typeof history.state.frjDirty !== 'number') {
+        rej(new Error('la entrada de arriba no es el sentinel de cambios sin guardar: no se consume a ciegas'))
+        return
+      }
+      // La marca de la rama, LEÍDA CON EL SENTINEL ARRIBA. Es el momento del click.
+      const marcaConElSentinelArriba = typeof history.state.frjUnder === 'string' ? history.state.frjUnder : null
+      window.addEventListener('popstate', (e1) => {
+        // Parados sobre la entrada de la SECCIÓN: acá la marca de la rama vuelve a ser legible.
+        const marcaTrasElConsumo = e1.state && typeof e1.state.frjUnder === 'string' ? e1.state.frjUnder : null
+        if (marcaTrasElConsumo === null) {
+          // Sin marca no se retrocede: es la regla 0, y la degradación segura es navegar.
+          setTimeout(() => {
+            history.replaceState(null, '', DESTINO)
+            res(JSON.stringify({ rama: 'sin-marca-tras-el-consumo', marcaConElSentinelArriba, marcaTrasElConsumo, marcaDebajo: null, aterrizo: history.state }))
+          }, 0)
+          return
+        }
+        // ── PASO 2 · consumir la entrada de la sección, desde adentro del evento del paso 1 ─────
+        window.addEventListener('popstate', (e2) => {
+          const marcaDebajo = e2.state && typeof e2.state.frjUnder === 'string' ? e2.state.frjUnder : null
+          setTimeout(() => {
+            // ── PASO 3 · el degenerado: si el destino ya está debajo, un tercer retroceso ───────
+            if (marcaDebajo === DESTINO) {
+              window.addEventListener('popstate', (e3) => {
+                res(JSON.stringify({ rama: 'triple-retroceso', marcaConElSentinelArriba, marcaTrasElConsumo, marcaDebajo, aterrizo: e3.state ?? null }))
+              }, { once: true })
+              history.back()
+              return
+            }
+            // ── PASO 3 · el normal: la navegación, DIFERIDA fuera del evento ────────────────────
+            history.replaceState({ frjUnder: marcaDebajo }, '', DESTINO)
+            res(JSON.stringify({ rama: 'dos-consumos-y-reemplazo', marcaConElSentinelArriba, marcaTrasElConsumo, marcaDebajo, aterrizo: history.state }))
+          }, 0)
+        }, { once: true })
+        history.back()
+      }, { once: true })
+      history.back()
+    })
+  `, { esperarPromesa: true }).then((s) => JSON.parse(s))
+}
+
+// ── Los ocho escenarios ──────────────────────────────────────────────────────────────────────────
 // Cada uno declara su expectativa ACÁ, en código que se ejecuta. La sonda es la fuente de verdad: si
 // una medición no coincide, el arreglo NO es bajar la expectativa — es rehacer el diseño del plan
 // correspondiente contra lo medido y dejarlo escrito en el documento de debug.
@@ -444,6 +523,57 @@ const ESCENARIOS = [
       }
     },
   },
+  {
+    id: 'E-8',
+    titulo: 'la cadena de TRES pasos (criterio 4, lo que implementa 03-04) — /web con cambios sin guardar hacia un destino de la barra',
+    cierra: 'A5 + A6 COMPUESTOS: el disparador real del colapso es el guard de salida, no la barra',
+    async correr(cdp) {
+      // `[Inicio, Más, /web, /web#sin-guardar]`: una sección de la rama de Más con el sentinel de
+      // cambios sin guardar arriba. Es la pila EXACTA del caso vivo — `/web` es una de las dos
+      // únicas pantallas con guarda, y la única que es sección de la rama de Más.
+      await reiniciarEn(cdp, ROOT)
+      await empujar(cdp, MORE, ROOT)
+      await empujar(cdp, '/web', MORE)
+      await empujarSentinelDeCambios(cdp, '/web#sin-guardar')
+      const armada = await medir(cdp)
+      const cadena = await cadenaDeTresPasos(cdp, '/clients')
+      const m = await medir(cdp)
+      const hayIdenticasAdyacentes = m.abajo.some((r, i) => i > 0 && r === m.abajo[i - 1])
+      return {
+        medido: {
+          armada: armada.abajo,
+          marca_de_la_entrada_de_arriba_al_armar: armada.marca,
+          // ⚠ LAS DOS MEDICIONES QUE DECIDEN EL DISEÑO DEL PROVIDER.
+          la_marca_de_la_rama_con_el_sentinel_arriba: cadena.marcaConElSentinelArriba,
+          la_marca_de_la_rama_tras_consumir_el_sentinel: cadena.marcaTrasElConsumo,
+          rama_tomada: cadena.rama,
+          marca_leida_en_la_entrada_de_mas: cadena.marcaDebajo,
+          abajo: m.abajo,
+          actual: m.actual,
+          adelante: m.adelante,
+          atras_cae_en: m.abajo[m.abajo.length - 2] ?? null,
+          dos_entradas_identicas_adyacentes: hayIdenticasAdyacentes,
+          mas_quedo_inmediatamente_debajo: m.abajo[m.abajo.length - 2] === MORE,
+        },
+        esperado: {
+          armada: [ROOT, MORE, '/web', '/web#sin-guardar'],
+          marca_de_la_entrada_de_arriba_al_armar: { frjDirty: 1 },
+          // El sentinel de cambios sin guardar lleva SÓLO su marca ⇒ con él arriba la marca de la
+          // rama NO es legible. Es el hecho que obliga a re-derivar el plan tras el consumo.
+          la_marca_de_la_rama_con_el_sentinel_arriba: null,
+          la_marca_de_la_rama_tras_consumir_el_sentinel: MORE,
+          rama_tomada: 'dos-consumos-y-reemplazo',
+          marca_leida_en_la_entrada_de_mas: ROOT,
+          abajo: [ROOT, '/clients'],
+          actual: '/clients',
+          adelante: ['/web', '/web#sin-guardar'],
+          atras_cae_en: ROOT,
+          dos_entradas_identicas_adyacentes: false,
+          mas_quedo_inmediatamente_debajo: false,
+        },
+      }
+    },
+  },
 ]
 
 // ── El arnés ─────────────────────────────────────────────────────────────────────────────────────
@@ -499,7 +629,8 @@ async function main() {
 
     console.log('── veredicto ─────────────────────────────────────────────────────────────────')
     console.log(`escenarios medidos: ${ESCENARIOS.length} · coinciden con lo esperado: ${ESCENARIOS.length - fallados} · no coinciden: ${fallados}`)
-    console.log('supuestos CERRADOS por esta medicion: A4 (E-1/E-2/E-3/E-7), A5 (E-4), A6 (E-5), A7 (E-6)')
+    console.log('supuestos CERRADOS por esta medicion: A4 (E-1/E-2/E-3/E-7), A5 (E-4), A6 (E-5), A7 (E-6),')
+    console.log('                                      A5+A6 compuestos y el disparador real del colapso (E-8)')
     console.log('supuestos que esta sonda NO puede cerrar, y van a la UAT del plan 03-04:')
     console.log('  A1  — el orden del efecto que escribe la marca contra la escritura del router de Next')
     console.log('  A2  — que no haya otro commit del router en vuelo cuando se escribe la marca')
@@ -509,8 +640,8 @@ async function main() {
       console.error('')
       console.error(`una pila MEDIDA no coincide con la esperada en ${fallados} escenario(s).`)
       console.error('el arreglo NO es ajustar la expectativa: es rehacer el diseno del plan correspondiente')
-      console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6) y dejarlo escrito en')
-      console.error('.planning/debug/pila-de-dos-niveles-medida.md. Para eso existe esta sonda.')
+      console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6, 03-04 para E-8) y dejarlo')
+      console.error('escrito en .planning/debug/pila-de-dos-niveles-medida.md. Para eso existe esta sonda.')
       process.exitCode = 1
     }
   } catch (e) {
