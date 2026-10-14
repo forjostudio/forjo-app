@@ -743,6 +743,94 @@ describe('la marca de la rama — una clave NUEVA, que guarda la RUTA que quedó
   })
 })
 
+describe('el sentinel de salida — la CUARTA marca de la pila, y la ÚNICA nueva que es absorbente', () => {
+  // ⚠ LAS DOS DIRECCIONES ROMPEN COSAS OPUESTAS, y por eso los casos de este bloque viven PEGADOS a
+  // los de la marca de la rama (el bloque de arriba):
+  //   · la marca de la RAMA adentro de la regla 0 ⇒ `applyPanelView` se abstiene sobre cualquier
+  //     entrada marcada y el detalle de cliente deja de empujar su entrada en `/clients`;
+  //   · el SENTINEL fuera de la regla 0 ⇒ `applyPanelView` le escribe encima, le borra la marca, su
+  //     dueño no la reconoce, no la consume al expirar la ventana, y queda basura en la pila más un
+  //     atrás muerto.
+  // Una es ajena-absorbente y la otra es propia-informativa. Confundirlas es el error más fácil de
+  // cometer en toda la fase.
+
+  function montarPila(state: unknown) {
+    const replaceState = vi.fn()
+    const pushState = vi.fn()
+    const back = vi.fn()
+    vi.stubGlobal('window', {
+      history: { state, replaceState, pushState, back },
+      location: { pathname: '/clients', search: '' },
+    })
+    return { replaceState, pushState, back }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('el predicado reconoce la marca del sentinel, y SÓLO con el tipo que corresponde', () => {
+    // El molde de los otros dos predicados: narrowing manual, sin `any`. `history.state` es
+    // `unknown` de verdad — puede traer el state del router de Next, el de un overlay, el del
+    // sentinel de cambios sin guardar, o `null`.
+    expect(PH.isExitSentinelOwnedEntry({ frjExit: 1 })).toBe(true)
+    expect(PH.isExitSentinelOwnedEntry({ frjExit: 7 })).toBe(true)
+    for (const ajeno of [null, undefined, {}, 42, 'cualquier cosa', { frjExit: 'uno' }, { frjExit: null }]) {
+      expect(PH.isExitSentinelOwnedEntry(ajeno)).toBe(false)
+    }
+  })
+
+  it('las CUATRO formas de state siguen siendo disjuntas', () => {
+    // Si el sentinel reusara cualquiera de las tres marcas que ya viven en la pila, el otro módulo
+    // reconocería ESTA entrada como propia, haría su retroceso sobre ella y el dueño terminaría
+    // fuera del sitio. Es el peor error posible del plan, y se niega acá en los cuatro sentidos.
+    expect(PH.isExitSentinelOwnedEntry({ frjOverlay: 1 })).toBe(false)
+    expect(PH.isExitSentinelOwnedEntry({ frjDirty: 1 })).toBe(false)
+    expect(PH.isExitSentinelOwnedEntry({ frjView: 'c' })).toBe(false)
+    expect(PH.isExitSentinelOwnedEntry({ frjUnder: MAS })).toBe(false)
+    expect(isOverlayOwnedEntry({ frjExit: 1 })).toBe(false)
+    expect(panelViewEntryParam({ frjExit: 1 })).toBeNull()
+    expect(PH.panelUnderRoute({ frjExit: 1 })).toBeNull()
+  })
+
+  it('isForeignOwnedEntry SÍ reconoce el sentinel — y sigue NO reconociendo la marca de la rama', () => {
+    // EL CASO CONTRAPUESTO, escrito en una sola aserción doble a propósito: la diferencia entre las
+    // dos marcas tiene que quedar explícita y no perderse en un refactor.
+    expect(PH.isForeignOwnedEntry({ frjExit: 1 })).toBe(true)
+    expect(PH.isForeignOwnedEntry({ frjUnder: MAS })).toBe(false)
+    // Y los dos dueños de siempre siguen reconocidos: se SUMÓ un dueño, no se reescribió el predicado.
+    expect(PH.isForeignOwnedEntry({ frjOverlay: 1 })).toBe(true)
+    expect(PH.isForeignOwnedEntry({ frjDirty: 1 })).toBe(true)
+  })
+
+  it('applyPanelView con el sentinel arriba NO HACE NADA (regla 0) y no escribe', () => {
+    // Es lo que impide que la escritura del detalle de cliente le borre la marca al sentinel. La
+    // escritura no se pierde: queda PENDIENTE y la aplica el efecto de reconciliación del
+    // componente en cuanto el otro dueño suelta la entrada.
+    const { pushState, replaceState, back } = montarPila({ frjExit: 1 })
+    expect(PH.applyPanelView({ cause: 'user-open', param: 'c', from: null, to: 'abc' })).toBe('none')
+    expect(pushState).not.toHaveBeenCalled()
+    expect(replaceState).not.toHaveBeenCalled()
+    expect(back).not.toHaveBeenCalled()
+  })
+
+  it('applyPanelUnder con el sentinel arriba tampoco escribe (la misma regla 0, repetida)', () => {
+    const { replaceState } = montarPila({ frjExit: 1 })
+    expect(PH.applyPanelUnder({ from: MAS, to: '/finances' })).toBe(false)
+    expect(replaceState).not.toHaveBeenCalled()
+  })
+
+  it('los DOS retrocesos guardados se niegan SIN retroceder con el sentinel arriba', () => {
+    // La guarda se repite en CADA punto de retroceso y no se confía en que ya se chequeó arriba
+    // (cicatriz 2, ya sufrida tres veces en este repo): un retroceso sobre una entrada que no
+    // empujamos nosotros expulsa al dueño del sitio.
+    const { back } = montarPila({ frjExit: 1 })
+    expect(consumeOwnedPanelEntry()).toBe(false)
+    expect(PH.consumeOwnedBranchEntry()).toBe(false)
+    expect(back).not.toHaveBeenCalled()
+  })
+})
+
 describe('applyPanelUnder — la escritura de la marca, después del commit y sin cambiar la URL', () => {
   function montarPila(state: unknown) {
     const replaceState = vi.fn()
