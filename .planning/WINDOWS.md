@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 12
 waived_count: 0
 fixed_count: 1
-total_count: 12
-last_updated: 2026-10-14T04:06:47.600Z
+total_count: 13
+last_updated: 2026-10-14T04:34:23.581Z
 ---
 
 # Broken Windows Ledger
@@ -27,6 +27,7 @@ last_updated: 2026-10-14T04:06:47.600Z
 | 10 | 02 | unrun-verify | components/dashboard/panel-top-bar.tsx |  | UAT visual de los 9 puntos del human-check del plan 02-03 sin correr (no hay boton de menu en mobile, el header de 2 lineas cambiando con la terminologia del rubro, Inicio en la raiz, el detalle de cliente diciendo Clientes/Pacientes, nombre de >=40 caracteres truncando, el header orientando a mitad de un formulario largo, la UAT de v0.30 repetida DESDE LA BARRA con los dos recorridos que no son bugs, el sidebar de desktop identico con su logout, y la banda de 900px): el runner es environment:node, sin jsdom ni Playwright | open |  | 2026-10-09T00:15:38.795Z |  |
 | 11 | 02 | unrun-verify | app/(dashboard)/mas/mas-client.tsx |  | GUION CONSOLIDADO de la UAT de la Phase 2 en celular real (reemplaza como lista unica a las entradas 9 y 10): bloques A a E de 02-04-SUMMARY.md — los 5 items irreducibles (franja de gestos en iPhone con notch, teclado en Android Chrome E iOS Safari, botones de alta de Finanzas y footers de Negocio/Configuracion alcanzables, las 3 pasadas de contraste forjo-claro/spa-clay/modern-amber, y la UAT de v0.30 repetida DESDE LA BARRA), el inventario rubro por rubro con el eje de las 5 familias tipograficas, el header de 2 lineas con la terminologia del rubro, cero boton de menu en mobile, la banda de 900px y el desktop >=1024px con su logout, el lector de pantalla, los DOS recorridos que NO son bugs, y el meta viewport de /dashboard y /admin que este plan no pudo medir sin sesion | open |  | 2026-10-09T00:56:56.376Z |  |
 | 12 | 3 | unmet-truth | lib/panel-branch.ts |  | El sentinel de salida se arma estando en la raiz haya o no haya historia debajo: con una seccion debajo de Inicio el segundo atras vuelve a esa seccion en vez de salir, y el copy del aviso queda optimista (declarado, sin API confiable para preguntar si hay algo debajo) | open |  | 2026-10-14T04:06:47.600Z |  |
+| 13 | 3 | unrun-verify | .planning/workstreams/panel-nav/phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-04-SUMMARY.md |  | GUION DE LA UAT DE LA PHASE 3 EN CELULAR REAL, PENDIENTE: los 21 recorridos de 03-04-SUMMARY.md (bloques A a I) en Android Chrome Y en iPhone Safari, con pestana nueva y recarga. Cierra los tres supuestos que ninguna sonda puede cerrar: A1 (el orden del efecto que escribe la marca contra la escritura del router; si esta mal, D-03 y el criterio 2 degradan a apilar EN SILENCIO), A2 (que no haya otro commit del router en vuelo) y A11 (Safari/iOS y Chrome Android reales: todo lo medido fue Chrome de escritorio headless). Es el unico criterio que cierra la fase: su modo de falla es silencioso y no lo ve tsc, ni la suite, ni el build. Las casillas de MOB-04, MOB-05 y MOB-06 en REQUIREMENTS.md siguen SIN marcar hasta que esto se verifique | open |  | 2026-10-14T04:34:23.581Z |  |
 
 ````json
 [
@@ -172,6 +173,18 @@ last_updated: 2026-10-14T04:06:47.600Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-14T04:06:47.600Z",
+    "resolved_at": null
+  },
+  {
+    "id": 13,
+    "kind": "unrun-verify",
+    "phase": "3",
+    "file": ".planning/workstreams/panel-nav/phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-04-SUMMARY.md",
+    "line": null,
+    "description": "GUION DE LA UAT DE LA PHASE 3 EN CELULAR REAL, PENDIENTE: los 21 recorridos de 03-04-SUMMARY.md (bloques A a I) en Android Chrome Y en iPhone Safari, con pestana nueva y recarga. Cierra los tres supuestos que ninguna sonda puede cerrar: A1 (el orden del efecto que escribe la marca contra la escritura del router; si esta mal, D-03 y el criterio 2 degradan a apilar EN SILENCIO), A2 (que no haya otro commit del router en vuelo) y A11 (Safari/iOS y Chrome Android reales: todo lo medido fue Chrome de escritorio headless). Es el unico criterio que cierra la fase: su modo de falla es silencioso y no lo ve tsc, ni la suite, ni el build. Las casillas de MOB-04, MOB-05 y MOB-06 en REQUIREMENTS.md siguen SIN marcar hasta que esto se verifique",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-14T04:34:23.581Z",
     "resolved_at": null
   }
 ]
