@@ -14,6 +14,15 @@ import {
   reconciledMemo,
   type PanelViewCause,
 } from '@/lib/panel-history'
+// ⚠ El namespace se importa A PROPÓSITO, además de los nombrados de arriba, y es por el ciclo
+// RED-GREEN: `PANEL_MORE` se afirma como VALOR (`PH.PANEL_MORE`) y no como import nombrado porque un
+// import nombrado que no existe todavía revienta al CARGAR el módulo — el rojo sería del loader y no
+// de la política, y un rojo así no autoriza a implementar nada (no distingue "falta la rama" de
+// "el archivo no compila"). Con el namespace, el único rojo posible es el de la aserción.
+import * as PH from '@/lib/panel-history'
+
+/** La ruta de la pantalla Más, sin tilde — la misma que usan la barra y `EN_LA_BARRA`. */
+const MAS = '/mas'
 
 // Las decisiones de historial del panel viven en una función pura porque el runner corre con
 // `environment: 'node'` y sin jsdom: el componente no se puede renderizar en un test, pero el
@@ -482,6 +491,72 @@ describe('panelNavMode — la regla de push-vs-replace del menú', () => {
     expect(panelNavMode({ from: '/a', to: '/b', root: '/a' })).toBe('push')
     expect(panelNavMode({ from: '/x', to: '/b', root: '/a' })).toBe('replace')
   })
+
+  // ── MOB-04 nivel 1 y D-02: las dos ramas de la pantalla Más ──────────────────────────────────
+
+  it('Más → sección EMPUJA: la sección queda ENCIMA de Más (MOB-04 nivel 1)', () => {
+    // Antes de esta fase devolvía `replace`: la sección PISABA a Más y el atrás salteaba un nivel
+    // —comportamiento declarado "correcto en esa fase" en la UAT de la Phase 2 y que acá cambia a
+    // propósito—. Con `push`, el primer atrás cae en Más y el segundo en Inicio: los dos niveles.
+    expect(panelNavMode({ from: MAS, to: '/finances' })).toBe('push')
+    expect(panelNavMode({ from: MAS, to: '/settings' })).toBe('push')
+    expect(panelNavMode({ from: MAS, to: '/ayuda' })).toBe('push')
+  })
+
+  it('sección → Más EMPUJA: Más apila sobre lo que haya abierto (D-02)', () => {
+    // La decisión del dueño: el atrás deshace el último movimiento. Si abrió Más de un toque
+    // reflejo estando en Turnos, el atrás lo devuelve a Turnos y no a Inicio.
+    expect(panelNavMode({ from: '/appointments', to: MAS })).toBe('push')
+    expect(panelNavMode({ from: '/agenda', to: MAS })).toBe('push')
+    expect(panelNavMode({ from: '/clients', to: MAS })).toBe('push')
+  })
+
+  it('Más → Más REEMPLAZA: la rama 1 sigue ganando sobre las dos nuevas (cicatriz 1)', () => {
+    // El candado del ORDEN. Si `to === more` o `from === more` se escribieran ANTES de `from === to`,
+    // este caso devolvería `push` y quedarían dos entradas `/mas` idénticas = un atrás muerto.
+    expect(panelNavMode({ from: MAS, to: MAS })).toBe('replace')
+  })
+
+  it('Inicio ↔ Más: las ramas 2 y 3 siguen ganando, y las dos ya cumplían', () => {
+    // No cambian de valor, pero sí de rama: son las que hacen que Inicio quede debajo de Más y que
+    // volver a Inicio desde Más no deje `/dashboard` sobre `/dashboard`.
+    expect(panelNavMode({ from: PANEL_ROOT, to: MAS })).toBe('push')
+    expect(panelNavMode({ from: MAS, to: PANEL_ROOT })).toBe('push')
+  })
+
+  it('la ruta de Más es un parámetro, no un literal escondido en la regla', () => {
+    // Mismo molde que `root`: sin parámetro, la rama no se puede ejercitar sin montar nada.
+    expect(panelNavMode({ from: '/x', to: '/y', more: '/y' })).toBe('push')
+    expect(panelNavMode({ from: '/x', to: '/y', more: '/z' })).toBe('replace')
+  })
+
+  it('PANEL_MORE está exportado y es la ruta de Más SIN TILDE', () => {
+    // La tilde vive en el label, no en la URL (panel-bottom-nav.tsx) — y `EN_LA_BARRA` de
+    // mas-client.tsx compara contra esta misma ruta. Un valor distinto acá rompería las dos.
+    expect(PH.PANEL_MORE).toBe(MAS)
+  })
+
+  it('criterio 6 — ninguno de los 14 destinos del sidebar es PANEL_MORE, así que desktop no se entera', () => {
+    // Los 13 `href` de `buildNavGroups` (las dos keys clients/patients van al MISMO href y se
+    // enumeran igual, porque lo que se afirma es el inventario de valores que el sidebar puede
+    // pasar) más el `/ayuda` del pie. Desktop cae en las ramas de SIEMPRE **por construcción**:
+    // ni `from` ni `to` pueden valer `/mas` desde el sidebar, así que no hace falta —ni existe—
+    // ningún chequeo de viewport en el medio. Eso es exactamente lo que el criterio 6 pide.
+    const DESTINOS_SIDEBAR = [
+      '/dashboard', '/appointments', '/agenda', '/abonos', '/negocio', '/web', '/servicios',
+      '/equipo', '/consultorios', '/clients', '/clients', '/finances', '/settings', '/ayuda',
+    ]
+    expect(DESTINOS_SIDEBAR).toHaveLength(14)
+    /** La regla TAL CUAL era antes de esta fase: tres ramas y el replace final. */
+    const antesDeEstaFase = (from: string, to: string) =>
+      from === to ? 'replace' : from === PANEL_ROOT ? 'push' : to === PANEL_ROOT ? 'push' : 'replace'
+    for (const from of DESTINOS_SIDEBAR) {
+      expect(from).not.toBe(PH.PANEL_MORE)
+      for (const to of DESTINOS_SIDEBAR) {
+        expect(panelNavMode({ from, to })).toBe(antesDeEstaFase(from, to))
+      }
+    }
+  })
 })
 
 describe('panelNavMode — el invariante, simulado sobre la pila del navegador', () => {
@@ -525,5 +600,82 @@ describe('panelNavMode — el invariante, simulado sobre la pila del navegador',
     // URL pegada o F5: no hay ningún dashboard debajo. Empujar uno falso sería inventar una entrada
     // que el dueño nunca visitó (D-01, historia honesta). Se declara y se vive con eso.
     expect(atras(['/clients'])).toBeNull()
+  })
+
+  // ── Los dos niveles, recorrido por recorrido ──────────────────────────────────────────────────
+
+  it('Inicio → Más → Finanzas: el primer atrás cae en MÁS y el segundo en INICIO (criterio 1)', () => {
+    let pila = [PANEL_ROOT]
+    pila = navegar(pila, MAS)
+    pila = navegar(pila, '/finances')
+    expect(pila).toEqual([PANEL_ROOT, MAS, '/finances'])
+    expect(atras(pila)).toBe(MAS)
+    // Y desde Más, un atrás más cae en Inicio: el segundo nivel.
+    expect(atras(pila.slice(0, -1))).toBe(PANEL_ROOT)
+  })
+
+  it('Inicio → Turnos → Más: el atrás cae en TURNOS, con TRES escalones (D-02)', () => {
+    // ⚠ La consecuencia que el CONTEXT ordena NO esconder: "dos niveles" es la profundidad de Más y
+    // sus secciones, NO un techo de la pila. Acá la pila tiene tres escalones a propósito.
+    let pila = [PANEL_ROOT]
+    pila = navegar(pila, '/appointments')
+    pila = navegar(pila, MAS)
+    expect(pila).toEqual([PANEL_ROOT, '/appointments', MAS])
+    expect(atras(pila)).toBe('/appointments')
+  })
+
+  it('las 9 secciones que en mobile SÓLO se alcanzan por Más: atrás → Más, atrás → Inicio', () => {
+    // El inventario de la rama de Más en mobile = los ítems del menú que no están en la barra.
+    const SOLO_POR_MAS = [
+      '/abonos', '/negocio', '/web', '/servicios', '/equipo', '/consultorios',
+      '/finances', '/settings', '/ayuda',
+    ]
+    expect(SOLO_POR_MAS).toHaveLength(9)
+    for (const seccion of SOLO_POR_MAS) {
+      const pila = navegar(navegar([PANEL_ROOT], MAS), seccion)
+      expect(pila).toEqual([PANEL_ROOT, MAS, seccion])
+      expect(atras(pila)).toBe(MAS)
+      expect(atras(pila.slice(0, -1))).toBe(PANEL_ROOT)
+    }
+  })
+
+  it('los 4 destinos de la barra → Más: el atrás devuelve el destino (D-02)', () => {
+    // Los cuatro destinos de la barra que no son Más. El de Inicio se trata aparte y no por descuido:
+    // `Inicio → Inicio` es la MISMA ruta (rama 1, `replace`), así que ahí la pila queda en dos
+    // escalones y el atrás cae igual en Inicio — que es MOB-04 nivel 2, el que ya cumplía.
+    const DESTINOS_BARRA = [PANEL_ROOT, '/appointments', '/agenda', '/clients']
+    expect(DESTINOS_BARRA).toHaveLength(4)
+    for (const destino of DESTINOS_BARRA) {
+      const pila = navegar(navegar([PANEL_ROOT], destino), MAS)
+      if (destino === PANEL_ROOT) {
+        expect(pila).toEqual([PANEL_ROOT, MAS])
+      } else {
+        expect(pila).toEqual([PANEL_ROOT, destino, MAS])
+      }
+      expect(atras(pila)).toBe(destino)
+    }
+  })
+
+  it('entrada directa + tocar Más EMPUJA: nunca un retroceso (cicatriz 2)', () => {
+    // Con la pila `['/finances']` no hay Inicio debajo. Si la política resolviera esto con un
+    // `back()`, el dueño quedaría FUERA del sitio. Las dos ramas nuevas devuelven `push`, que es la
+    // degradación segura: el peor caso es una pila un escalón más larga.
+    expect(panelNavMode({ from: '/finances', to: MAS })).toBe('push')
+    const pila = navegar(['/finances'], MAS)
+    expect(pila).toEqual(['/finances', MAS])
+    expect(atras(pila)).toBe('/finances')
+  })
+
+  it('tocar Más estando DENTRO de su rama todavía APILA — declarado acá, lo arregla 03-02', () => {
+    // ⚠ NO es un olvido ni una regresión de este plan: con sólo las dos ramas de ruta, el gesto de
+    // D-03 ("subir un nivel") todavía no existe, porque subir necesita la marca de la rama y un
+    // retroceso guardado, que son trabajo del plan 03-02. Mientras tanto la pila queda un escalón
+    // más larga —no peligrosa—. Este caso lo deja escrito para que la UAT no lo lea como un defecto
+    // nuevo, y es el caso que 03-02 tiene que venir a cambiar.
+    let pila = [PANEL_ROOT]
+    pila = navegar(pila, MAS)
+    pila = navegar(pila, '/finances')
+    pila = navegar(pila, MAS)
+    expect(pila).toEqual([PANEL_ROOT, MAS, '/finances', MAS])
   })
 })
