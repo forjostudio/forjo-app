@@ -289,6 +289,20 @@ export function panelViewUrl({
 /** La raíz del panel: la única ruta que tiene que quedar SIEMPRE debajo de la sección abierta. */
 export const PANEL_ROOT = '/dashboard'
 
+/**
+ * La ruta de la pantalla **Más**, SIN tilde: la tilde vive en el label, no en la URL.
+ *
+ * ⚠ **Por qué es una constante exportada y entra en `panelNavMode` como PARÁMETRO con default, y no
+ * como un literal `'/mas'` escondido en el cuerpo de la regla:** es exactamente el motivo por el que
+ * `root` ya es un parámetro. Una rama que compara contra un literal no se puede ejercitar sin montar
+ * la pantalla, y las dos ramas que la usan son justamente las que redefinen el atrás del celular.
+ *
+ * Es la MISMA ruta que el quinto destino de `components/dashboard/panel-bottom-nav.tsx` y que el
+ * conjunto `EN_LA_BARRA` de `app/(dashboard)/mas/mas-client.tsx`: un valor distinto acá rompería las
+ * dos cosas a la vez (el activo de la barra se decide por igualdad literal de pathname).
+ */
+export const PANEL_MORE = '/mas'
+
 /** Cómo entra en el historial una navegación del menú. */
 export type PanelNavMode = 'push' | 'replace'
 
@@ -299,9 +313,14 @@ export type PanelNavMode = 'push' | 'replace'
  * **dashboard**, no en Finanzas. El invariante que lo consigue es: *entre la sección abierta y el
  * dashboard que tiene debajo no hay nunca otra sección*.
  *
+ * **El pedido nuevo (MOB-04 / D-02, octubre):** en el celular el atrás tiene **dos niveles hacia
+ * abajo**. Desde una sección abierta por **Más** vuelve a **Más**, y desde Más vuelve a **Inicio**.
+ * Y Más **apila sobre lo que haya abierto**: `Inicio → Turnos → Más → atrás` cae en **Turnos**,
+ * porque el atrás deshace el último movimiento — el único invariante que nadie encuentra sorprendente.
+ *
  * ⚠ **NO es `replace` a secas, y por eso la regla vive acá y no en el JSX.** Reemplazar en TODOS los
  * links reemplazaría también la entrada del dashboard, y entonces el primer atrás sacaría al dueño
- * del panel. Hacen falta las cuatro ramas, en este orden:
+ * del panel. Hacen falta las seis ramas, en este orden:
  *
  *   1. **misma ruta → `replace`.** Empujar la misma URL es la cicatriz 1 (dos entradas idénticas = un
  *      atrás muerto, la "entrada basura" que el criterio 3 prohíbe). Reemplazar además LIMPIA la
@@ -314,8 +333,31 @@ export type PanelNavMode = 'push' | 'replace'
  *      `push`, el atrás desde el dashboard devuelve la sección de la que se venía — un atrás que
  *      SIEMPRE hace algo visible, y coherente con el invariante, que habla de la sección abierta y
  *      del dashboard que tiene inmediatamente debajo, no de la pila entera.
- *   4. **sección → sección → `replace`.** La sección nueva PISA a la anterior, así que encima del
+ *   4. **cualquiera → Más → `push`** (D-02). Más apila **sobre lo que haya abierto**, no lo pisa.
+ *      El motivo es el criterio con el que el dueño resolvió la decisión: el atrás deshace el último
+ *      movimiento. Si abrió Más de un toque reflejo estando en Turnos, el atrás lo devuelve a Turnos.
+ *      ⚠ **La consecuencia se declara, no se esconde:** en `Inicio → Turnos → Más` la pila tiene
+ *      **TRES** escalones. "Dos niveles" es la profundidad de **Más y sus secciones**, **no** un
+ *      techo de la pila. Con `replace` acá, el atrás desde Más saltearía Turnos y caería en Inicio.
+ *   5. **Más → sección → `push`** (MOB-04 nivel 1). La sección queda **ENCIMA** de Más, así que el
+ *      primer atrás cae en Más y el segundo en Inicio: los dos niveles. Sin esta rama la sección
+ *      **PISA** a Más y el atrás saltea un nivel — que es lo que hacía la rama 6 hasta octubre, y
+ *      está declarado "correcto en esa fase" en la UAT de la Phase 2 porque ahí Más todavía no tenía
+ *      sección propia debajo.
+ *      ⚠ **Van en este orden y es a propósito.** Las dos son mutuamente excluyentes salvo
+ *      `from === to === more`, que ya atajó la rama 1; escribirlo explícito evita que mañana alguien
+ *      meta una tercera rama en el medio y cambie el significado de ese caso.
+ *   6. **sección → sección → `replace`.** La sección nueva PISA a la anterior, así que encima del
  *      dashboard hay siempre una sola. Es literalmente el pedido de julio.
+ *
+ * ⚠ **LO QUE ESTA FUNCIÓN TODAVÍA NO HACE, y no es un olvido:** D-03 pide que tocar Más estando
+ * **dentro** de su rama **SUBA** un nivel en vez de apilar (desde Finanzas, tocar Más devuelve a Más).
+ * Eso **no se puede decidir sobre rutas**: el par `(from: '/finances', to: '/mas')` es idéntico con la
+ * pila `[/dashboard, /mas, /finances]` —donde subir es un retroceso correcto— y con la pila
+ * `[/finances]` —entrada directa, donde ese mismo retroceso **saca al dueño del sitio**, la cicatriz 2—.
+ * Necesita una marca en `history.state` que diga qué hay debajo, y eso es trabajo del plan 03-02.
+ * Mientras tanto ese gesto **apila** (`[/dashboard, /mas, /finances, /mas]`): una pila un escalón más
+ * larga, nunca una expulsión. La degradación de toda la política cae de este lado a propósito.
  *
  * ⚠ **CASO ACEPTADO Y DOCUMENTADO, no hackeado:** si se entra **directo** a una sección (URL pegada,
  * F5, el rebote del proxy después del login) no hay ningún dashboard debajo, y el atrás sale del
@@ -337,14 +379,18 @@ export function panelNavMode({
   from,
   to,
   root = PANEL_ROOT,
+  more = PANEL_MORE,
 }: {
   from: string
   to: string
   root?: string
+  more?: string
 }): PanelNavMode {
   if (from === to) return 'replace'
   if (from === root) return 'push'
   if (to === root) return 'push'
+  if (to === more) return 'push'
+  if (from === more) return 'push'
   return 'replace'
 }
 
