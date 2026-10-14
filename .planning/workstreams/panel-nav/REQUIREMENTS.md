@@ -56,8 +56,40 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 
 - [ ] **MOB-04**: El atrás tiene **dos niveles**: desde una sección abierta por Más vuelve a **Más**, y
       desde Más vuelve a **Inicio**. Desde una sección de la barra vuelve a **Inicio**.
+      ⚠ **PRECISADO el 2026-10-14 (D-02 de la Phase 3), no contradicho.** *Dos niveles* es la
+      **profundidad de Más y sus secciones**, **no es un techo de la pila**: Más **apila sobre lo que
+      haya abierto**, así que `Inicio → Turnos → Más` tiene **tres** escalones **a propósito** y su
+      atrás cae en **Turnos**. El motivo es el criterio con el que el dueño resolvió D-02: *el atrás
+      deshace el último movimiento*, que es el único invariante que nadie encuentra sorprendente.
+      ⚠ **Y el criterio verificable del cruce entre los dos niveles, escrito como invariante** (en
+      lugar de *"la pila queda en un nivel"*, que colisionaba con D-02): **después de tocar un destino
+      de la barra, `/mas` NO queda inmediatamente debajo, y no hay dos entradas idénticas
+      adyacentes.** En la pila de dos escalones eso produce **literalmente** lo que dice la frase de
+      arriba (el atrás cae en Inicio); en la de tres produce *el atrás devuelve a la sección de la
+      barra desde la que se abrió Más* — el mismo principio, no una excepción. Lo implementa el plan
+      `03-02` (`panelBranchPlan` + `runBranchNavigation`) y está medido en los escenarios E-4, E-5 y
+      E-8 de `.planning/debug/pila-de-dos-niveles-medida.md`.
 - [ ] **MOB-05**: En **Inicio**, el atrás pide confirmación antes de salir del panel.
-      ⚠ Ver la advertencia de abajo: tiene condiciones.
+      ✅ **RESUELTO el 2026-10-14 — la decisión está TOMADA: SE IMPLEMENTA** (D-01 de la Phase 3, ver
+      `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-CONTEXT.md`). El primer atrás en Inicio
+      **no sale** y avisa; el segundo **sale de verdad**. La advertencia de abajo **no se borra**: su
+      razonamiento sigue siendo válido y la resolución está escrita debajo de ella.
+      - **Qué forma tiene** (cerrada por el UI-SPEC de la Phase 2, §13 y O-3 — no se reabre): un
+        **aviso efímero**, elemento **propio del componente de la barra** anclado 8px arriba de ella,
+        **sin modal y sin botones**. No es un toast de `sonner`: se descartó midiendo que el
+        `<Toaster>` del proyecto es `top-center` y global (lejos del pulgar, y no se puede mover sin
+        afectar al landing y a `/[slug]`).
+      - **La regla de la constante única**, que §13 exige y la implementación cumple por estructura:
+        la **duración visible** del aviso y la **ventana lógica** en la que el segundo atrás sale son
+        el **mismo valor**, desde **un solo lugar** (`PANEL_EXIT_HINT_MS = 2000`, `lib/panel-branch.ts`)
+        y consumido por **un solo temporizador** que al expirar hace las dos cosas. Dos números
+        producen un bug **invisible** en los dos sentidos (sale sin avisar, o el dueño aprieta y no
+        pasa nada) y ni `tsc` ni la suite lo ven.
+      - **El costo que el dueño aceptó con los ojos abiertos:** **dos toques de atrás siempre** para
+        salir del panel desde Inicio, y que la condición que haría natural este patrón —una app
+        instalada— **no existe hoy** (T-10: cero `manifest`, cero usos de `display-mode`).
+      - **Alcance (D-05):** vale **también en escritorio**, **sin gate de viewport**. Ver la enmienda
+        de MOB-07.
 - [ ] **MOB-06**: Nada de esto rompe lo que ya está verificado en celular: el atrás sigue cerrando
       overlays, selectores y el calendario antes que navegar, y el aviso de cambios sin guardar sigue
       frenando la salida.
@@ -65,6 +97,29 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 ### Lo que no se toca
 
 - [x] **MOB-07**: En desktop **no cambia nada** (D-02).
+
+      ⚠ **ENMENDADO el 2026-10-14 por D-05 de la Phase 3.** Este requisito está marcado **Complete**
+      desde la Phase 2 y **la Phase 3 lo acota a propósito**. La enmienda, en tres frases:
+
+      1. **La política de navegación NO cambia en escritorio.** El sidebar cae en las mismas ramas de
+         siempre, **por construcción** y sin ningún chequeo de viewport: la decisión de la rama
+         pregunta *"¿la marca dice Más?"*, y en escritorio nada navega a `/mas`, así que el hecho es
+         siempre falso. Verificado: el recorrido del sidebar da exactamente lo de hoy.
+      2. **SÍ cambia el costo de salir del panel**, porque el aviso de MOB-05 vale también ahí: el
+         primer atrás en Inicio avisa en vez de salir, en celular **y** en computadora.
+      3. **Por qué no se gateó:** el componente de la barra se oculta por **CSS** (`lg:hidden`), así
+         que **se monta y sus efectos corren igual** en escritorio — la pregunta nunca fue si agregarlo
+         sino si gatearlo. Y la alternativa de ocultar sólo el aviso dejando la absorción viva sería un
+         **atrás muerto** (el gesto no hace nada y no dice por qué), que es el peor resultado posible y
+         que los propios módulos de historial del repo declaran *peor que el bug*. El aviso se ancla
+         **centrado sobre la columna de contenido** cuando la barra no está, que es el caso que §13 no
+         contemplaba.
+
+      ⚠ **Esto NO toca el criterio 6 del ROADMAP, y la distinción queda escrita para que el revisor no
+      lea D-05 como una violación.** El **criterio 6** dice que *la política de dos niveles* se exprese
+      sobre rutas (o sobre la marca de la entrada) y caiga en las mismas ramas en escritorio **por
+      construcción** — y eso **se cumple igual**, es el punto 1 de arriba. Lo que cambia en escritorio
+      es el **mecanismo de MOB-05**, que es otra cosa.
 
 ### Heredado de v0.30
 
@@ -91,6 +146,29 @@ Donde este patrón es natural y esperado es en una **app instalada (PWA)**. Si e
 MOB-05 puede terminar molestando más de lo que ayuda. **El diseño tiene que resolver esto
 explícitamente**, no asumirlo.
 
+### ✅ Cómo se resolvió (2026-10-14)
+
+La advertencia de arriba **queda en su lugar a propósito**: su razonamiento es correcto y es lo que
+obligó a decidir en vez de asumir. Lo que faltaba era la conclusión, y es ésta.
+
+**El dueño decidió implementarlo** (D-01 de la Phase 3), sabiendo las dos cosas que la advertencia
+nombra: que el patrón **no** tiene hoy su condición habilitante —el panel no es instalable— y que el
+costo es **dos toques de atrás siempre** para salir desde Inicio. No se gateó por `display-mode:
+standalone` porque eso daría **siempre false** (T-10 / M-8), o sea un requisito que no hace nada.
+
+Lo que **sí** acota el costo es la forma, y por eso §13 la cerró así: el aviso es **efímero** —aparece
+y se va solo— y la ventana en la que el segundo atrás vale es **el mismo valor** que su duración
+visible, así que el dueño nunca queda frente a un modal ni tiene que apretar un botón para salir.
+Salir cuesta exactamente **un** atrás más, y nunca aparecen dos avisos encadenados.
+
+**Lo que esto NO resuelve, y queda declarado** (registrado como imprecisión aceptada #12 en
+`.planning/WINDOWS.md`): el sentinel se arma estando en la raíz **haya o no haya historia debajo**. Si
+debajo de Inicio quedó una sección (`Inicio → Turnos → Inicio`, que la política empuja en los dos
+sentidos), el segundo atrás **no sale del panel**: vuelve a Turnos, y el copy del aviso queda
+optimista. No se arregla porque no hay forma confiable de preguntarle al navegador *"¿hay algo
+debajo?"* (`history.length` cuenta también el forward). El gesto **sigue haciendo algo visible** en los
+dos casos, que es el invariante que importa. **La UAT tiene que poder distinguir esto de un bug.**
+
 ## Fuera de alcance
 
 | Qué | Por qué |
@@ -112,9 +190,9 @@ explícitamente**, no asumirlo.
 | MOB-02 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-03 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
-| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — decisión abierta |
+| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. Pendiente **sólo** la verificación en celular real |
 | MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
-| MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
+| MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) — ⚠ **con enmienda** del 2026-10-14 por D-05: ver la nota debajo del requisito. La política de navegación no cambia en escritorio (criterio 6 intacto); **sí** cambia el costo de salir del panel |
 | MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
 | MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
 
