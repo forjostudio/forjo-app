@@ -90,8 +90,13 @@ export function PanelBottomNav() {
   // depende de qué quedó debajo en la pila. El hook se consume UNA sola vez acá —es la única
   // instancia, y eso es lo que impide que haya dos dueños por entrada—. El router se le pasa como
   // callback: el módulo no lo importa, así que puede vivir en `lib/` sin arrastrarlo a su grafo.
+  // `drawsExitHint` es la declaración de "este consumidor DIBUJA el aviso de salida", y sin ella el
+  // hook no arma nada: un sentinel que absorbe el atrás y después no muestra el cartel convierte el
+  // gesto en un botón MUERTO, que es peor que el bug. Acá vale `true` y se cumple por construcción —
+  // el aviso se dibuja abajo, en este mismo componente.
   const { handleNavigate } = usePanelBranch({
     pathname,
+    drawsExitHint: true,
     navigate: (href, mode) => {
       if (mode === 'replace') router.replace(href)
       else router.push(href)

@@ -505,11 +505,11 @@ export function panelNavMode({
  *     ruta de Más encima de sí misma ⇒ dos entradas idénticas ⇒ atrás muerto (la cicatriz 1).
  *   · `collapse-then-replace` — **colapsar y reemplazar** (criterio 2): consumir la entrada de la
  *     sección y recién entonces reemplazar, para que `/mas` no quede inmediatamente debajo.
- *   · `none` — **no hacer nada**. ⚠ **Esta función todavía NO lo devuelve: lo produce el plan
- *     03-03**, cuando el sentinel de salida está arriba y el destino es la ruta actual. Está en el
- *     tipo **a propósito**: si *nada* es un resultado posible de la decisión de navegación y vive
- *     fuera del tipo, el chequeo de exhaustividad del plan 03-04 **no lo ve** — que es exactamente la
- *     clase de hueco silencioso que esta fase viene a cerrar.
+ *   · `none` — **no hacer nada**: el sentinel de salida está arriba y el destino es la ruta actual
+ *     (plan 03-03). Está en el tipo **a propósito** y se **produce desde esta misma función**: si
+ *     *nada* es un resultado posible de la decisión de navegación y vive fuera del tipo, el chequeo
+ *     de exhaustividad del plan 03-04 **no lo ve** — que es exactamente la clase de hueco silencioso
+ *     que esta fase viene a cerrar.
  */
 export type PanelBranchPlan = PanelNavMode | 'up' | 'collapse-then-replace' | 'none'
 
@@ -531,6 +531,18 @@ export type PanelBranchPlan = PanelNavMode | 'up' | 'collapse-then-replace' | 'n
  *
  * Las reglas, **en orden**:
  *
+ *   -1. **El sentinel de salida arriba y el destino es la ruta actual ⇒ NADA** (MOB-05, plan 03-03).
+ *      Va **primera**, incluso antes de la regla 0, y es a propósito: en Inicio con el sentinel
+ *      armado el hecho de la rama es **falso**, así que la regla 0 devolvería `replace` — y ese
+ *      reemplazo caería **sobre el sentinel**, dejando dos entradas idénticas con el sentinel
+ *      re-armado encima: un **atrás muerto enterrado**. No navegar, no apilar y no reemplazar es la
+ *      única respuesta que no rompe nada: el dueño ya está en la pantalla que tocó.
+ *      ⚠ `holdsExitSentinel` lo lee **el ejecutor** del estado de la entrada de arriba
+ *      (`window.history.state` → `isPanelExitEntry`, `lib/panel-branch.ts`) y lo **re-verifica en el
+ *      momento del click**, igual que `masDebajo`. Con el sentinel arriba y un destino **distinto**
+ *      el plan **no cambia**: la navegación empuja y el sentinel queda debajo, que es la forma
+ *      medida en **E-6** y la que **no** deja un atrás muerto (estar parado sobre él cuenta como
+ *      armado).
  *   0. **Sin el hecho NO SE RETROCEDE NUNCA**, y es la regla más importante del plan: devuelve lo
  *      que diga {@link panelNavMode}. Es la cicatriz 2 (entrada directa, F5, el rebote del proxy
  *      después del login) y la degradación segura de toda la fase — el peor caso de una marca
@@ -554,14 +566,27 @@ export function panelBranchPlan({
   root = PANEL_ROOT,
   more = PANEL_MORE,
   masDebajo,
+  holdsExitSentinel,
 }: {
   from: string
   to: string
   root?: string
   more?: string
   masDebajo: boolean
+  /**
+   * ¿La entrada de arriba es el sentinel de salida de MOB-05? Va **sin default**, igual que
+   * `masDebajo`: es un HECHO de la pila, no una configuración, y un call site que lo olvide no
+   * compila — que es justo la disciplina que esta fase viene a instalar.
+   */
+  holdsExitSentinel: boolean
 }): PanelBranchPlan {
   const modo = panelNavMode({ from, to, root, more })
+
+  // ── REGLA -1 — el sentinel arriba y el destino es la ruta actual: NADA. ────────────────────────
+  // Antes de la regla 0 a propósito: ahí el hecho de la rama es falso y la decisión caería en
+  // reemplazar, justo SOBRE el sentinel ⇒ dos entradas idénticas con el sentinel re-armado encima,
+  // o sea un atrás muerto enterrado.
+  if (holdsExitSentinel && from === to) return 'none'
 
   // ── REGLA 0 — sin el hecho, jamás un retroceso. ────────────────────────────────────────────────
   if (!masDebajo) return modo

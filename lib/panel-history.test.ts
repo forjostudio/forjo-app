@@ -885,7 +885,7 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
     // El barrido que cierra T-03-05: 9 secciones de la rama de Más × los 5 destinos de la barra.
     for (const from of RAMA_DE_MAS) {
       for (const to of DESTINOS_BARRA_5) {
-        const plan = PH.panelBranchPlan({ from, to, masDebajo: false })
+        const plan = PH.panelBranchPlan({ from, to, masDebajo: false, holdsExitSentinel: false })
         expect(plan).toBe(panelNavMode({ from, to }))
         expect(plan).not.toBe('up')
         expect(plan).not.toBe('collapse-then-replace')
@@ -895,14 +895,14 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
 
   it('con el hecho y destino MÁS ⇒ SUBIR un nivel (D-03), nunca reemplazar', () => {
     for (const from of RAMA_DE_MAS) {
-      expect(PH.panelBranchPlan({ from, to: MAS, masDebajo: true })).toBe('up')
+      expect(PH.panelBranchPlan({ from, to: MAS, masDebajo: true, holdsExitSentinel: false })).toBe('up')
     }
   })
 
   it('con el hecho y un destino de la barra ⇒ COLAPSAR Y REEMPLAZAR (criterio 2)', () => {
     for (const from of RAMA_DE_MAS) {
       for (const to of DESTINOS_BARRA_4) {
-        expect(PH.panelBranchPlan({ from, to, masDebajo: true })).toBe('collapse-then-replace')
+        expect(PH.panelBranchPlan({ from, to, masDebajo: true, holdsExitSentinel: false })).toBe('collapse-then-replace')
       }
     }
   })
@@ -911,8 +911,8 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
     // La cicatriz 1. Con el hecho, si la rama de Más se evaluara primero, `/mas → /mas` devolvería
     // SUBIR y el dueño se iría un escalón para abajo tocando la pantalla en la que ya está.
     for (const masDebajo of [true, false]) {
-      expect(PH.panelBranchPlan({ from: MAS, to: MAS, masDebajo })).toBe('replace')
-      expect(PH.panelBranchPlan({ from: '/finances', to: '/finances', masDebajo })).toBe('replace')
+      expect(PH.panelBranchPlan({ from: MAS, to: MAS, masDebajo, holdsExitSentinel: false })).toBe('replace')
+      expect(PH.panelBranchPlan({ from: '/finances', to: '/finances', masDebajo, holdsExitSentinel: false })).toBe('replace')
     }
   })
 
@@ -920,13 +920,13 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
     // El par de rutas es IDÉNTICO al de la pila `[Inicio, Más, Finanzas]`, donde subir es correcto.
     // Es el caso exacto que la marca existe para distinguir: sin ella, el retroceso expulsaría al
     // dueño del sitio (entró pegando la URL, F5, o el rebote del proxy después del login).
-    expect(PH.panelBranchPlan({ from: '/finances', to: MAS, masDebajo: false })).toBe('push')
+    expect(PH.panelBranchPlan({ from: '/finances', to: MAS, masDebajo: false, holdsExitSentinel: false })).toBe('push')
   })
 
   it('la ruta de Más y la raíz siguen siendo PARÁMETROS en la firma nueva', () => {
-    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/y', masDebajo: true })).toBe('up')
-    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/z', masDebajo: true })).toBe('collapse-then-replace')
-    expect(PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', masDebajo: false })).toBe('push')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/y', masDebajo: true, holdsExitSentinel: false })).toBe('up')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/z', masDebajo: true, holdsExitSentinel: false })).toBe('collapse-then-replace')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', masDebajo: false, holdsExitSentinel: false })).toBe('push')
   })
 
   it('el tipo del plan tiene CINCO miembros, y el quinto lo produce el plan 03-03', () => {
@@ -957,7 +957,7 @@ describe('panelBranchPlan — el invariante, simulado sobre la pila del navegado
   function navegarRama(pila: string[], to: string): string[] {
     const from = pila[pila.length - 1]
     const debajo = pila.length > 1 ? pila[pila.length - 2] : null
-    const plan = PH.panelBranchPlan({ from, to, masDebajo: debajo === MAS })
+    const plan = PH.panelBranchPlan({ from, to, masDebajo: debajo === MAS, holdsExitSentinel: false })
     if (plan === 'push') return [...pila, to]
     if (plan === 'replace') return [...pila.slice(0, -1), to]
     if (plan === 'none') return pila
@@ -1047,7 +1047,7 @@ describe('panelBranchPlan — el invariante, simulado sobre la pila del navegado
     for (const from of DESTINOS_SIDEBAR) {
       expect(from).not.toBe(PH.PANEL_MORE)
       for (const to of DESTINOS_SIDEBAR) {
-        expect(PH.panelBranchPlan({ from, to, masDebajo: false })).toBe(panelNavMode({ from, to }))
+        expect(PH.panelBranchPlan({ from, to, masDebajo: false, holdsExitSentinel: false })).toBe(panelNavMode({ from, to }))
       }
     }
   })

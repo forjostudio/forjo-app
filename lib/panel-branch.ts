@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, panelBranchPlan, panelNavMode, panelUnderRoute, type PanelBranchPlan } from '@/lib/panel-history'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, type PanelBranchPlan } from '@/lib/panel-history'
+// Los dos helpers del teclado, PUROS y ya exportados, y el hash base de los overlays. Se IMPORTAN:
+// esos dos módulos no se tocan (son intocables de la fase), y reusar sus helpers medidos es lo
+// contrario de copiarlos.
+import { OVERLAY_HASH_BASE, isSoftKeyboardInset, softKeyboardGuardsBack } from '@/lib/overlay-history'
+import { DIRTY_HASH_BASE } from '@/lib/dirty-history'
 
 // ── El toqueteo de la pila de la RAMA DE MÁS, y el hook que lo cablea (D-03 / criterio 2) ────────
 //
@@ -38,8 +43,12 @@ import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, panel
 //     frontera.
 //   · NO decide la política: la consume de `lib/panel-history.ts`. Un segundo dialecto de la regla
 //     es exactamente lo que NAV-05 viene a evitar.
-//   · NO agrega nada visible (D-04): ni ilumina Más estando en su rama, ni pone un volver-a-Más, ni
-//     un breadcrumb.
+//   · NO agrega ningún affordance visible de la RAMA (D-04): ni ilumina Más estando en su rama, ni
+//     pone un volver-a-Más, ni un breadcrumb. La única superficie visible que la fase agrega es el
+//     **aviso de salida** de MOB-05, y este módulo tampoco lo dibuja: expone `hintVisible` y lo
+//     dibuja el componente (que es lo que mantiene el candado de cero mutaciones crudas de historial
+//     en la barra, y lo que hace que el aviso pueda ser HERMANO de la barra — necesario para D-05,
+//     porque la barra está oculta por CSS en escritorio).
 
 /** Los dos modos con los que el router puede ejecutar una navegación. */
 export type BranchNavMode = 'push' | 'replace'
@@ -161,6 +170,303 @@ export function runBranchNavigation({
   return false
 }
 
+// ── El SENTINEL DE SALIDA: el primer atrás en Inicio avisa, el segundo sale (MOB-05 / D-01) ─────
+//
+// EL MECANISMO, Y POR QUÉ ES ÉSTE Y NO OTRO
+// El atrás del dueño **no se puede cancelar**: `popstate` llega con `cancelable: false` y su
+// `preventDefault()` es un no-op (medido en
+// `.planning/debug/interceptar-atras-aviso-sin-guardar.md`). Así que no se cancela: **se absorbe**.
+// Se empuja una entrada propia —el sentinel— mientras el dueño está en la raíz del panel, y su atrás
+// consume ESA entrada en vez de la de la página. El `popstate` que llega es el aviso de que el gesto
+// ocurrió, y ahí se muestra el cartel. Es exactamente el ciclo que `lib/dirty-history.ts` ya corre en
+// producción, reducido a *absorber una vez y no re-armar durante la ventana del aviso*.
+//
+// LA REGLA QUE §13 PIDE Y QUE ACÁ SE CUMPLE POR ESTRUCTURA
+// La **duración visible** del aviso y la **ventana lógica** en la que el segundo atrás sale son el
+// MISMO valor, desde UN solo lugar ({@link PANEL_EXIT_HINT_MS}), y lo consume UN solo temporizador
+// que hace LAS DOS cosas al expirar: ocultar el aviso y re-armar. No hay dos efectos, así que no hay
+// dos números que puedan desincronizarse — y los dos síntomas de la desincronización son
+// **silenciosos** (ni `tsc` ni la suite los ven).
+//
+// ⚠ SIN GATE DE VIEWPORT (D-05), y las dos mitades del argumento quedan escritas acá:
+//   · el dueño eligió que salir del panel cueste **dos gestos** en celular **y** en escritorio,
+//     sabiendo el costo; y
+//   · la alternativa —ocultar sólo el aviso y dejar la absorción viva— sería un **botón muerto**: el
+//     atrás no hace nada y no dice por qué. El propio módulo del sentinel de cambios sin guardar lo
+//     declara **peor que el bug**.
+// Y la aclaración que el revisor necesita: esto **NO** contradice el criterio 6 del ROADMAP, que
+// habla de **la política de dos niveles** —ésa sigue expresándose sobre rutas y sobre la marca de la
+// rama, y cae en las mismas ramas en escritorio por construcción—. Lo que D-05 cambia en escritorio
+// es el **mecanismo de MOB-05**, que es otra cosa.
+//
+// ⚠ LA CONSECUENCIA VISIBLE QUE SE DECLARA EN VEZ DE DESCUBRIRSE: con el sentinel armado, la URL de
+// Inicio muestra el hash (`/dashboard#salir`). Es inherente al mecanismo —el hash es la condición de
+// existencia de la entrada, cicatriz 1— y es la forma MEDIDA en el escenario **E-6** de
+// `.planning/debug/pila-de-dos-niveles-medida.md`. Queda como ítem de la UAT del plan 03-04.
+//
+// ⚠ Y LA IMPRECISIÓN ACEPTADA, también declarada: el sentinel se arma estando en la raíz, **haya o no
+// haya** historia debajo. Si debajo de Inicio quedó una sección (`Inicio → Turnos → Inicio`, que la
+// política empuja en los dos sentidos), el segundo atrás no sale del panel: vuelve a Turnos. El copy
+// del aviso queda entonces optimista. No se arregla acá porque no hay forma confiable de preguntarle
+// al navegador "¿hay algo debajo?" (`history.length` cuenta también el forward) — es la misma razón
+// por la que el caso de **entrada directa** está aceptado y documentado desde v0.30 (E-7). El gesto
+// sigue haciendo algo visible en los dos casos, que es el invariante que importa.
+
+/**
+ * La ventana del aviso de salida, en milisegundos.
+ *
+ * **Es las DOS cosas a la vez, y por eso es UNA sola:** la duración **visible** del aviso y la
+ * ventana **lógica** en la que el segundo atrás sale. El valor lo fija el UI-SPEC §13.
+ *
+ * ⚠ **POR QUÉ NO PUEDE HABER DOS NÚMEROS.** Con dos, lo que el dueño **ve** y lo que el código
+ * **acepta** se desincronizan, y los dos síntomas son silenciosos: o el aviso desaparece y el segundo
+ * atrás todavía sale (sale sin avisar), o el aviso sigue en pantalla y el segundo atrás ya no vale
+ * (el dueño aprieta y no pasa nada). Ni la comprobación de tipos ni la suite ven ninguno de los dos.
+ * Un solo número los hace **imposibles** — y el único temporizador del módulo es lo que lo garantiza
+ * por estructura, no por disciplina.
+ */
+export const PANEL_EXIT_HINT_MS = 2000
+
+/**
+ * Hash base del sentinel.
+ *
+ * **POR QUÉ CON HASH (cicatriz 1):** empujar la MISMA URL hace que el router colapse la entrada. No
+ * se crea ninguna, el atrás no tiene nada que deshacer y **saca al dueño de la página** — justo lo
+ * contrario de lo que el sentinel viene a hacer. El hash es **la condición de existencia** de la
+ * entrada, no decoración.
+ *
+ * ⚠ **POR QUÉ ESTE TEXTO Y NO OTRO.** Los dos criterios están **medidos**, no supuestos:
+ *   (a) no puede ser interpretado por los otros dos módulos que escriben historial ⇒ no empieza con
+ *       sus prefijos, y eso se afirma contra sus constantes **importadas**
+ *       ({@link exitHashCollidesWithOtherOwners}), no contra literales copiados;
+ *   (b) no puede coincidir con el `id` de ningún elemento del panel, o el navegador **scrollearía
+ *       hasta él** al armar. Barrido hecho sobre `app/` y `components/` (`.tsx` y `.ts`): **cero**
+ *       coincidencias de `salir`.
+ * Si alguna vez hiciera falta otro texto, se cambia **esta constante** y se re-corre el barrido: el
+ * gate lo **deriva** de acá, así que sigue barriendo el hash real.
+ */
+export const PANEL_EXIT_HASH = '#salir'
+
+/** El state que se empuja: sólo nuestra marca, con el id de la instancia dueña de la entrada. */
+export type PanelExitState = { frjExit: number }
+
+/**
+ * State de la entrada del sentinel.
+ *
+ * ⚠ **CLAVE NUEVA, Y NO SE REUSA NINGUNA DE LAS TRES QUE YA VIVEN EN LA PILA** (`frjView`,
+ * `frjOverlay`, `frjDirty`) **ni la de la rama** (`frjUnder`). Reusar cualquiera es el peor error
+ * posible: el otro módulo reconocería ESTA entrada como propia, haría su retroceso sobre ella y el
+ * dueño terminaría **fuera del sitio**. Y al revés de la marca de la rama, esta marca **SÍ** entra en
+ * `isForeignOwnedEntry` (`lib/panel-history.ts`): es una entrada **absorbente**, y una escritura
+ * encima le borraría la marca, su dueño no la reconocería, no la consumiría al expirar la ventana, y
+ * quedaría basura en la pila más un atrás muerto.
+ *
+ * ⚠ **OBJETO LITERAL FRESCO, SIEMPRE**, y nunca propagando `window.history.state`: propagarlo
+ * arrastra `__NA`, el parche de `pushState` de Next toma entonces su rama temprana y **no despacha**
+ * la sincronización del router — la URL cambia y el router no se entera, sin un error en consola.
+ * Next igual COPIA sus internos adentro de este objeto al escribir, que es lo que mantiene la entrada
+ * sana (y por eso tampoco hay que guardarse una referencia al método original del historial).
+ */
+export function panelExitState(id: number): PanelExitState {
+  return { frjExit: id }
+}
+
+/**
+ * ¿La entrada de arriba del historial es el sentinel que empujó ESTA instancia?
+ *
+ * Es la guarda de la cicatriz 2 y el discriminador de tres situaciones, igual que en el módulo de
+ * referencia:
+ *   · al decidir si armar: si ya estamos parados sobre el nuestro, un segundo empuje costaría dos
+ *     atrás (y estar parado sobre él **cuenta como armado**, medido en E-6);
+ *   · en el `popstate`: si después del pop seguimos parados sobre él, el pop se comió una entrada
+ *     AJENA de arriba (un overlay del anidado LIFO, o la sección que teníamos encima) y no es asunto
+ *     nuestro;
+ *   · al desmontar: hace falta saber si queda un sentinel que consumir o si ya lo pisó una escritura
+ *     ajena.
+ *
+ * Narrowing manual, sin `any` (tsconfig `strict`): `history.state` es `unknown` de verdad — puede
+ * traer el state del router de Next, el de un overlay, el de otra librería, o `null`.
+ */
+export function isPanelExitEntry(state: unknown, id: number): boolean {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    'frjExit' in state &&
+    (state as { frjExit?: unknown }).frjExit === id
+  )
+}
+
+/**
+ * El criterio (a) de elección del hash, escrito como **función** y no como comentario: ¿este texto lo
+ * interpretaría alguno de los otros dos dueños de la pila?
+ *
+ * Compara contra las constantes **importadas** de sus módulos, así que el día que uno de ellos cambie
+ * su hash base, el candado lo ve. Con un literal copiado acá, no.
+ */
+export function exitHashCollidesWithOtherOwners(hash: string = PANEL_EXIT_HASH): boolean {
+  return hash.startsWith(OVERLAY_HASH_BASE) || hash.startsWith(DIRTY_HASH_BASE)
+}
+
+/**
+ * El hash a empujar, calculado a partir del que ya está en la URL.
+ *
+ * **POR QUÉ DEPENDE DEL ACTUAL Y NO ES LA CONSTANTE A SECAS:** dos entradas consecutivas con la MISMA
+ * URL son la cicatriz 1. Pasa de verdad si el dueño llega con la URL ya pegada con nuestro hash. Un
+ * hash ajeno (`#seccion`, `#modal`) se respeta: se empuja el base y al volver atrás el navegador
+ * restaura el de la página. Molde exacto de `nextDirtyHash`.
+ */
+export function nextPanelExitHash(currentHash: string): string {
+  if (currentHash === PANEL_EXIT_HASH) return `${PANEL_EXIT_HASH}-2`
+  const prefijo = `${PANEL_EXIT_HASH}-`
+  if (currentHash.startsWith(prefijo)) {
+    const profundidad = Number(currentHash.slice(prefijo.length))
+    // `Number('')` da 0 y `Number('abc')` da NaN: los dos caen al base, nunca a `#salir-NaN`.
+    if (Number.isInteger(profundidad) && profundidad >= 2) return `${prefijo}${profundidad + 1}`
+  }
+  return PANEL_EXIT_HASH
+}
+
+/** Qué hacerle a la pila en un commit dado. */
+export type PanelExitArmAction = 'arm' | 'none'
+
+/**
+ * Cuándo se arma el sentinel. Pura, con las reglas **EN ORDEN**.
+ *
+ *   1. `participates` — **nadie va a dibujar el aviso ⇒ no armar.** Va primera porque ninguna otra
+ *      condición puede autorizar a absorber sin avisar: un sentinel que se come el atrás y después no
+ *      muestra nada convierte el gesto en un botón **MUERTO**, que es peor que el bug. Es la lección
+ *      literal de `participates` en `lib/dirty-history.ts`.
+ *   2. `atRoot` — **no estamos en la raíz del panel ⇒ no armar.** MOB-05 es de Inicio y sólo de
+ *      Inicio: en una sección el atrás tiene a dónde volver.
+ *   3. `hintOpen` — **la ventana del aviso está abierta ⇒ NO armar.** Es la mitad lógica de la
+ *      constante única, y es lo que hace que el **segundo** atrás salga: si acá se re-armara, el
+ *      segundo atrás se comería el sentinel nuevo y el dueño nunca saldría ⇒ dos avisos encadenados,
+ *      justo lo que §13 prohíbe.
+ *   4. `topIsOurs` — **ya estamos parados sobre nuestro sentinel ⇒ no armar** (E-6). Un segundo
+ *      empuje costaría dos atrás.
+ *   5. `foreignOwnsTop` — **la entrada de arriba es de otro dueño ⇒ no armar** (regla 0). Un overlay
+ *      abierto gana siempre: el atrás lo cierra primero, que es la política vigente e intacta.
+ *   6. El resto ⇒ **armar**.
+ */
+export function panelExitArmAction({
+  participates,
+  atRoot,
+  hintOpen,
+  topIsOurs,
+  foreignOwnsTop,
+}: {
+  participates: boolean
+  atRoot: boolean
+  hintOpen: boolean
+  topIsOurs: boolean
+  foreignOwnsTop: boolean
+}): PanelExitArmAction {
+  if (!participates) return 'none'
+  if (!atRoot) return 'none'
+  if (hintOpen) return 'none'
+  if (topIsOurs) return 'none'
+  if (foreignOwnsTop) return 'none'
+  return 'arm'
+}
+
+/** Qué significa un `popstate` para el sentinel de salida. */
+export type PanelExitPopAction = 'hint' | 'rearm' | 'ignore'
+
+/**
+ * La decisión al recibir un `popstate`. Pura, con las reglas **EN ORDEN** y el molde de
+ * `dirtyPopstateAction`.
+ *
+ *   1. `topIsOurs` — **seguimos parados sobre nuestro sentinel ⇒ ignorar.** El navegador consumió una
+ *      entrada AJENA de arriba: el overlay del anidado LIFO, o la sección que teníamos encima (E-6).
+ *      El atrás hizo algo visible y no es nuestro. Va primera porque mientras eso sea cierto ninguna
+ *      otra regla puede reinterpretar el evento.
+ *   2. `participates` — **nadie va a dibujar el aviso ⇒ ignorar.**
+ *   3. `atRoot` — **el retroceso nos dejó fuera de la raíz ⇒ ignorar:** no es nuestro asunto.
+ *   4. `holding` — **no éramos dueños de un sentinel vivo ⇒ ignorar.** Nos pisó una escritura ajena,
+ *      o nunca armamos; un aviso ahí sería sobre un gesto que no es nuestro.
+ *   5. `keyboardGuards` — **el atrás en realidad bajaba el teclado ⇒ RE-ARMAR** sin gastar el aviso
+ *      (C-7). Si el aviso se gastara acá, el segundo atrás sacaría del sitio a un dueño que sólo
+ *      quiso cerrar el teclado. Inicio no tiene campos de texto (barrido medido: cero), así que es
+ *      **improbable, no imposible**: el teclado puede venir de otra pantalla y la gracia es de 300ms.
+ *   6. El resto ⇒ **avisar**.
+ */
+export function panelExitPopAction({
+  topIsOurs,
+  participates,
+  atRoot,
+  holding,
+  keyboardGuards,
+}: {
+  topIsOurs: boolean
+  participates: boolean
+  atRoot: boolean
+  holding: boolean
+  keyboardGuards: boolean
+}): PanelExitPopAction {
+  if (topIsOurs) return 'ignore'
+  if (!participates) return 'ignore'
+  if (!atRoot) return 'ignore'
+  if (!holding) return 'ignore'
+  if (keyboardGuards) return 'rearm'
+  return 'hint'
+}
+
+// ── El rastreador del teclado: UNO por documento ─────────────────────────────────────────────────
+//
+// Reusa los DOS helpers puros y ya medidos de `lib/overlay-history.ts` (el umbral de inset y la
+// ventana de gracia) y sólo aporta lo que no es puro: el listener del viewport visual. Lo que se
+// guarda es la TRANSICIÓN DE BAJADA y no cada resize con teclado, y eso es un bug ya medido: el
+// teclado abierto NO emite resizes mientras está quieto, así que un timestamp tomado en cada resize
+// con inset se queda con el momento en que se ABRIÓ, y la gracia estaría vencida antes del atrás.
+//
+// ⚠ Por qué el rastreador se repite acá en vez de importarse: el de `lib/overlay-history.ts` es
+// estado privado del módulo (no está exportado) y ese módulo es **intocable** en esta fase. Lo que sí
+// se reusa es lo que importa: los dos umbrales y la decisión, que son los que están medidos.
+let tecladoArriba = false
+let tecladoBajoEn: number | null = null
+let rastreadorInstalado = false
+
+/**
+ * Engancha una sola vez el listener que anota el momento en que el teclado BAJA.
+ *
+ * SIN TEARDOWN a propósito, igual que el de los overlays: es un único listener por documento que
+ * escribe un timestamp y sale. Refcontarlo para poder desengancharlo agregaría un camino de falla
+ * —desenganchar de más y perder la ventana de gracia— a cambio de nada medible. Idempotente por la
+ * bandera.
+ */
+function instalarRastreadorDeTeclado(): void {
+  if (rastreadorInstalado) return
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  if (!vv) return
+  rastreadorInstalado = true
+  vv.addEventListener('resize', () => {
+    if (isSoftKeyboardInset({ viewportHeight: vv.height, innerHeight: window.innerHeight })) {
+      tecladoArriba = true
+      return
+    }
+    // Primer resize sin teclado después de haberlo tenido: ACÁ empieza la ventana de gracia.
+    if (tecladoArriba) {
+      tecladoArriba = false
+      tecladoBajoEn = Date.now()
+    }
+  })
+}
+
+/**
+ * ¿El atrás que acaba de llegar se lo tiene que comer el teclado?
+ *
+ * Lee el viewport EN EL INSTANTE del `popstate` (no un estado cacheado): si el teclado todavía está
+ * arriba la respuesta sale de ahí. El rastreador sólo aporta la ventana de gracia, para el caso en que
+ * el resize del cierre del teclado le ganó la carrera al `popstate`.
+ */
+function elTecladoSeComeElAtras(): boolean {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  if (!vv) return false
+  const inset = isSoftKeyboardInset({ viewportHeight: vv.height, innerHeight: window.innerHeight })
+  if (inset) tecladoArriba = true
+  return softKeyboardGuardsBack({ inset, leftInsetAt: tecladoBajoEn, now: Date.now() })
+}
+
 // ── La mecánica de React ─────────────────────────────────────────────────────────────────────────
 
 // Id monotónico por instancia, molde de `lib/dirty-history.ts` y `lib/overlay-history.ts`. Acá es lo
@@ -210,21 +516,35 @@ export function branchMarkDecision({
  * Cablea la rama de Más a un menú: marca cada entrada con lo que quedó debajo, y resuelve los gestos
  * que la política de rutas sola no puede resolver.
  *
+ * Y cablea también el **sentinel de salida** de MOB-05: en la raíz del panel absorbe el primer atrás,
+ * expone que hay que mostrar el aviso, y re-arma cuando la ventana expira.
+ *
  * @param pathname La ruta actual, que ENTRA como parámetro (este módulo no importa el router).
  * @param navigate Cómo navegar, también como parámetro. El call site la arma con el router.
+ * @param drawsExitHint **¿Este consumidor DIBUJA el aviso de salida?** Va sin default y es
+ *   obligatorio a propósito: es la declaración de "hay alguien a quien pedirle el aviso", el molde
+ *   exacto de `participates` en `lib/dirty-history.ts`. Con `false` no se arma **nada** — porque un
+ *   sentinel que absorbe el atrás y después no muestra el cartel convierte el gesto en un botón
+ *   MUERTO, que es peor que el bug. Hoy se cumple además **por construcción**: el único consumidor es
+ *   la barra, que tiene este hook y dibuja el aviso en el mismo componente.
  *
- * Devuelve `handleNavigate(href)`: `true` si se hizo cargo del gesto (⇒ prevenir la navegación) y
- * `false` si no (⇒ dejar que el `<Link>` navegue como siempre).
+ * Devuelve `handleNavigate(href)` —`true` si se hizo cargo del gesto (⇒ prevenir la navegación) y
+ * `false` si no (⇒ dejar que el `<Link>` navegue como siempre)— y `hintVisible`, que es lo que el
+ * componente usa para dibujar el aviso.
  */
 export function usePanelBranch({
   pathname,
   navigate,
   more = PANEL_MORE,
+  root = PANEL_ROOT,
+  drawsExitHint,
 }: {
   pathname: string
   navigate: BranchNavigate
   more?: string
-}): { handleNavigate: (href: string) => boolean } {
+  root?: string
+  drawsExitHint: boolean
+}): { handleNavigate: (href: string) => boolean; hintVisible: boolean } {
   // El id va en `useState` con inicializador LAZY —no en una ref escrita durante el render— porque
   // `react-hooks/refs` prohíbe tocar `ref.current` en el render, y tiene razón: un render descartado
   // dejaría la ref escrita. `useState(fn)` corre `fn` una sola vez por instancia.
@@ -240,6 +560,14 @@ export function usePanelBranch({
   // procesando su propio recorrido, así que se deja pedida y la ejecuta el efecto de abajo, desde un
   // commit de React.
   const [pedida, setPedida] = useState<{ href: string; mode: BranchNavMode } | null>(null)
+
+  // ── El sentinel de salida (MOB-05) ────────────────────────────────────────────────────────────
+  // `hintVisible` va en ESTADO porque pinta; las otras tres van en REFERENCIAS porque las lee el
+  // handler del `popstate`, que necesita el valor FRESCO del tick anterior y no el del render.
+  const [hintVisible, setHintVisible] = useState(false)
+  const avisoAbiertoRef = useRef(false)
+  const sentinelVivoRef = useRef(false)
+  const temporizadorRef = useRef<number | null>(null)
 
   // ── Quién es la dueña ─────────────────────────────────────────────────────────────────────────
   // Declarado ANTES del efecto de marcado a propósito: React corre los efectos de un commit en orden
@@ -277,16 +605,115 @@ export function usePanelBranch({
     navigate(pedida.href, pedida.mode)
   }, [pedida, navigate])
 
+  // ── Armar el sentinel cuando corresponde ──────────────────────────────────────────────────────
+  // ⚠ EL ESTADO DE "TENGO UN SENTINEL VIVO" SE RE-DERIVA DEL ESTADO DE LA ENTRADA DE ARRIBA, acá y en
+  // el handler del retroceso, en vez de confiar en la referencia: es la lección de E-6 —al volver de
+  // una sección estamos PARADOS SOBRE el sentinel, y eso cuenta como armado— y es lo que deja la
+  // referencia honesta aunque algo la haya desincronizado. La referencia sigue existiendo porque en
+  // el `popstate` la entrada YA FUE CONSUMIDA y no hay nada de donde derivar.
+  const armarSentinel = useCallback(() => {
+    // El candado de UN SOLO DUEÑO POR ENTRADA, mecánico y fuera de la decisión, igual que en el
+    // efecto de marcado: dos empujes costarían dos atrás y dos consumos se comerían una entrada
+    // ajena. Cae del lado seguro: la instancia que no es la dueña simplemente no arma.
+    if (instanciaDuena !== null && instanciaDuena !== id) return
+    const estado: unknown = window.history.state
+    const paradoSobreElNuestro = isPanelExitEntry(estado, id)
+    const accion = panelExitArmAction({
+      participates: drawsExitHint,
+      // La ruta se re-lee de `location` y no del render: la decisión se toma con el estado REAL.
+      atRoot: window.location.pathname === root,
+      hintOpen: avisoAbiertoRef.current,
+      topIsOurs: paradoSobreElNuestro,
+      foreignOwnsTop: isForeignOwnedEntry(estado),
+    })
+    if (accion === 'none') {
+      // E-6: si estamos parados sobre el nuestro, seguimos siendo dueños de un sentinel vivo.
+      if (paradoSobreElNuestro) sentinelVivoRef.current = true
+      return
+    }
+    window.history.pushState(panelExitState(id), '', nextPanelExitHash(window.location.hash))
+    sentinelVivoRef.current = true
+  }, [drawsExitHint, id, root])
+
+  useEffect(() => {
+    armarSentinel()
+  }, [armarSentinel, pathname])
+
+  // ── El atrás del dueño en la raíz: absorber UNA vez, avisar, y re-armar al expirar ────────────
+  useEffect(() => {
+    if (!drawsExitHint) return
+    instalarRastreadorDeTeclado()
+
+    const alRetroceder = () => {
+      if (instanciaDuena !== null && instanciaDuena !== id) return
+      const estado: unknown = window.history.state
+      const accion = panelExitPopAction({
+        topIsOurs: isPanelExitEntry(estado, id),
+        participates: drawsExitHint,
+        atRoot: window.location.pathname === root,
+        holding: sentinelVivoRef.current,
+        keyboardGuards: elTecladoSeComeElAtras(),
+      })
+      if (accion === 'ignore') return
+
+      if (accion === 'rearm') {
+        // C-7: el atrás en realidad bajaba el teclado. Se re-arma EN EL ACTO y el aviso NO se gasta.
+        sentinelVivoRef.current = false
+        armarSentinel()
+        return
+      }
+
+      // 'hint': el navegador YA consumió nuestro sentinel. Dejamos de ser dueños ANTES de mostrar el
+      // aviso, para que ningún otro camino intente un retroceso sobre una entrada que ya no es
+      // nuestra. Y NO se re-arma hasta que la ventana expire: eso es lo que hace que el segundo
+      // atrás salga.
+      sentinelVivoRef.current = false
+      avisoAbiertoRef.current = true
+      setHintVisible(true)
+      // ⚠ EL ÚNICO TEMPORIZADOR DEL MÓDULO, Y HACE LAS DOS COSAS: oculta el aviso y re-arma. No hay
+      // un segundo efecto, así que no hay dos números que puedan desincronizarse (§13).
+      temporizadorRef.current = window.setTimeout(() => {
+        temporizadorRef.current = null
+        avisoAbiertoRef.current = false
+        setHintVisible(false)
+        armarSentinel()
+      }, PANEL_EXIT_HINT_MS)
+    }
+
+    window.addEventListener('popstate', alRetroceder)
+    return () => window.removeEventListener('popstate', alRetroceder)
+  }, [drawsExitHint, id, root, armarSentinel])
+
+  // ── El desmontaje, con la guarda REPETIDA ─────────────────────────────────────────────────────
+  // La barra vive en el layout del route group y no se re-monta, así que en la práctica esto corre
+  // una sola vez (al salir del panel). Existe igual porque un sentinel huérfano deja un atrás que no
+  // hace nada visible. Las deps son `[id]` y no `[]` porque el id se lee adentro; al ser constante
+  // por instancia, la limpieza corre SÓLO al desmontar.
+  useEffect(() => {
+    return () => {
+      if (temporizadorRef.current !== null) window.clearTimeout(temporizadorRef.current)
+      if (!sentinelVivoRef.current) return
+      sentinelVivoRef.current = false
+      // La guarda de la cicatriz 2, otra vez y no "ya la chequeé arriba": si el desmontaje fue por
+      // una navegación, arriba está la entrada del router y este retroceso la desharía.
+      if (isPanelExitEntry(window.history.state, id)) window.history.back()
+    }
+  }, [id])
+
   function handleNavigate(href: string): boolean {
+    const estado: unknown = window.history.state
     const plan = panelBranchPlan({
       from: pathname,
       to: href,
       more,
+      // El segundo hecho, leído del MISMO estado y re-verificado en el momento del click, igual que
+      // el de la rama: tocar el destino actual con el sentinel arriba no tiene que hacer NADA.
+      holdsExitSentinel: isPanelExitEntry(estado, id),
       // ⚠ EL HECHO SE COMPUTA COMPARANDO LA MARCA CONTRA LA RUTA DE MÁS, y no preguntando "¿hay
       // marca?". Es lo que hace que desktop no se entere POR CONSTRUCCIÓN (criterio 6): en escritorio
       // nada navega a Más ⇒ la marca nunca dice Más ⇒ el hecho es siempre falso ⇒ la decisión cae en
       // las ramas de siempre. Sin un chequeo de viewport en el medio.
-      masDebajo: panelUnderRoute(window.history.state) === more,
+      masDebajo: panelUnderRoute(estado) === more,
     })
     if (plan === 'push' || plan === 'replace') return false
     return runBranchNavigation({
@@ -297,5 +724,5 @@ export function usePanelBranch({
     })
   }
 
-  return { handleNavigate }
+  return { handleNavigate, hintVisible }
 }
