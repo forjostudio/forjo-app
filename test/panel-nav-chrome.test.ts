@@ -243,6 +243,71 @@ describe('3 · el orden del guard y del consumo es contrato, en los tres compone
   }
 })
 
+describe('3b · el paso 3 de la rama de Más: el cableado, el criterio 6 y D-04 (plan 03-02)', () => {
+  // POR QUÉ ESTE BLOQUE EXISTE SEPARADO DEL 3: el bloque 3 afirma lo que es COMÚN a los tres menús
+  // (el guard primero, NAV-08 después). El paso 3 es lo contrario: existe en UNO y tiene que NO
+  // existir en los otros dos. Mezclarlo en el bucle de los tres casos invertiría el significado.
+
+  it('la barra: el paso 3 va DESPUÉS del guard y de NAV-08, y PREVIENE la navegación', () => {
+    // EL ORDEN ES CONTRATO, y los dos modos de romperlo tienen síntoma distinto y ninguno es una
+    // excepción en consola: con el paso 3 antes del guard, el dueño pierde lo que estaba escribiendo
+    // sin que nada se lo diga; antes de NAV-08, el retroceso ya salió de la subsección cuando el
+    // diálogo pregunta, así que cancelar lo deja en otro lado del que estaba.
+    const fila = recorte(barra, 'DESTINOS.map(destino =>')
+    expect(fila).not.toBe('')
+    const nav = recorte(fila, 'onNavigate=')
+    expect(nav).not.toBe('')
+    expect(nav).toContain('handleNavigate')
+    expect(nav.indexOf('requestNavigation')).toBeLessThan(nav.indexOf('consumeOwnedPanelEntry'))
+    expect(nav.indexOf('consumeOwnedPanelEntry')).toBeLessThan(nav.indexOf('handleNavigate'))
+    // Y PREVIENE en vez de encadenar: el retroceso del hook es asíncrono, y encadenarlo con la
+    // navegación en el mismo tick está MEDIDO COMO ROTO dos veces en este repo.
+    expect(nav).toMatch(/handleNavigate\(destino\.href\)\)\s*e\.preventDefault\(\)/)
+    expect(nav).not.toContain('await handleNavigate')
+    expect(nav).not.toContain('handleNavigate(destino.href).then')
+  })
+
+  it('la barra consume el hook de la rama y le pasa el router como callback', () => {
+    // La guarda positiva del caso de arriba: si el hook no estuviera cableado, el `onNavigate`
+    // podría nombrar `handleNavigate` sin que exista nada que lo provea.
+    expect(barra).toContain("from '@/lib/panel-branch'")
+    expect(cuenta(barra, /usePanelBranch\(/g)).toBe(1)
+    expect(cuenta(barra, /useRouter\(\)/g)).toBe(1)
+  })
+
+  const sinRama: { nombre: string; fuente: string }[] = [
+    { nombre: 'la pantalla Más', fuente: mas },
+    { nombre: 'el sidebar de desktop', fuente: sidebar },
+  ]
+
+  for (const caso of sinRama) {
+    it(`${caso.nombre}: el paso 3 NO existe (criterio 6, y cero segundo dialecto)`, () => {
+      // Dos invariantes en un conteo. (1) Desktop no se entera: el sidebar no navega nunca a Más, así
+      // que la política nueva no tiene nada que hacer ahí — y si alguien la cableara, aparecería un
+      // chequeo de viewport, que es justo lo que el criterio 6 evita por construcción. (2) La pantalla
+      // Más ya consume la política con el pathname actual: las ramas nuevas la alcanzan por CONSUMO, y
+      // una segunda copia del paso 3 divergiría en silencio.
+      expect(caso.fuente.length).toBeGreaterThan(500)
+      expect(cuenta(caso.fuente, /usePanelBranch|handleNavigate|panel-branch/g)).toBe(0)
+    })
+  }
+
+  it('D-04 · la barra no gana ningún affordance visible condicionado a la rama', () => {
+    // Si mañana alguien ilumina Más estando en su rama, este caso se pone rojo y la discusión vuelve
+    // al gate de diseño — que es exactamente lo que D-04 decidió. El activo se sigue decidiendo por
+    // igualdad literal de pathname, en los mismos lugares de hoy: tres ternarios (el `aria-current`,
+    // el color del texto y el peso del label) y UN bloque condicional, el del indicador.
+    const fila = recorte(barra, 'DESTINOS.map(destino =>')
+    expect(fila).not.toBe('')
+    expect(fila).toContain('const active = pathname === destino.href')
+    expect(cuenta(fila, /active \?/g)).toBe(3)
+    expect(cuenta(fila, /\{active && \(/g)).toBe(1)
+    // Y nada visible se condiciona al hecho de estar dentro de la rama.
+    expect(cuenta(fila, /masDebajo|enLaRama|panelUnderRoute|frjUnder/g)).toBe(0)
+    expect(cuenta(barra, /breadcrumb/gi)).toBe(0)
+  })
+})
+
 describe('4 · cero mutaciones crudas de historial en los tres componentes nuevos', () => {
   // Son tres módulos los que ya escriben en la pila y conviven sólo porque cada uno re-verifica su
   // propia marca antes de retroceder. Un cuarto escritor sin esa disciplina saca al dueño del panel

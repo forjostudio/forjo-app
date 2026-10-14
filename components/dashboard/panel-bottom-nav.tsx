@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { LayoutDashboard, Calendar, CalendarClock, Users, MoreHorizontal, LucideIcon } from 'lucide-react'
 import { useTerminology } from '@/lib/use-terminology'
 import { useNavigationGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { consumeOwnedPanelEntry, panelNavMode } from '@/lib/panel-history'
+import { usePanelBranch } from '@/lib/panel-branch'
 
 // ── La barra inferior del panel (MOB-01 / MOB-02 / MOB-07) ──────────────────────
 // En mobile el panel no tiene mapa: el dueño tiene que abrir la hamburguesa para saber dónde está y
@@ -41,6 +42,23 @@ import { consumeOwnedPanelEntry, panelNavMode } from '@/lib/panel-history'
 // helpers de `lib/panel-history.ts`, que esta fase NO toca. Son tres módulos los que ya escriben
 // ahí y conviven sólo porque cada uno re-verifica su propia marca antes de retroceder; un cuarto
 // escritor sin esa disciplina saca al dueño del panel con un gesto que él cree inofensivo.
+//
+// ── Por qué el toqueteo de la pila de la rama de Más NO vive acá ────────────────
+// Por lo de arriba, y no por gusto: `lib/panel-branch.ts` es un hook de `lib/` justamente porque
+// este archivo no puede tener ni una escritura directa en la pila —hay un candado estático que lo
+// mide en cero—. La barra consume ese hook, le pasa el pathname y una navegación armada con el
+// router, y él decide. Y la razón de fondo es la de arriba: son TRES los módulos que ya escriben en
+// la misma pila (`panel-history`, `overlay-history`, `dirty-history`) y conviven sólo porque cada
+// uno re-verifica su propia marca antes de retroceder. El cuarto escritor entra con esa misma
+// disciplina o no entra.
+//
+// ── Por qué nada cambia visualmente (D-04) ──────────────────────────────────────
+// Más NO se ilumina al estar dentro de su rama, no hay un volver-a-Más en el header y no hay
+// breadcrumb. El activo se sigue decidiendo por igualdad literal de pathname, en los mismos tres
+// lugares de siempre. El riesgo queda declarado, no negado: dos pantallas que se ven igual se
+// comportan distinto (en Turnos el atrás cae en Inicio; en Finanzas cae en Más) y nada en pantalla
+// lo dice — es un ítem explícito de la UAT, y si el dueño se pierde se agrega después sabiendo que
+// hacía falta.
 
 // ── Los 5 destinos ──────────────────────────────────────────────────────────────
 // El orden es LITERAL acá y a propósito NO se deriva de `buildNavGroups`: la barra es fija e igual
@@ -67,6 +85,18 @@ export function PanelBottomNav() {
   // pregunta antes de navegar en vez de descartarlos en silencio. Sin provider devuelve siempre
   // false ⇒ nunca bloquea. Ver components/dashboard/unsaved-changes-guard.tsx.
   const requestNavigation = useNavigationGuard()
+  const router = useRouter()
+  // La rama de Más (D-03 / criterio 2): lo que la política de rutas sola NO puede decidir, porque
+  // depende de qué quedó debajo en la pila. El hook se consume UNA sola vez acá —es la única
+  // instancia, y eso es lo que impide que haya dos dueños por entrada—. El router se le pasa como
+  // callback: el módulo no lo importa, así que puede vivir en `lib/` sin arrastrarlo a su grafo.
+  const { handleNavigate } = usePanelBranch({
+    pathname,
+    navigate: (href, mode) => {
+      if (mode === 'replace') router.replace(href)
+      else router.push(href)
+    },
+  })
 
   // Los labels de las posiciones 2 y 4 salen de la terminología del vertical, no de literales:
   // un negocio de canchas lee "Reservas" y uno de salud lee "Pacientes". Se consume del provider ya
@@ -111,9 +141,13 @@ export function PanelBottomNav() {
               //    apilarla encima. `history.back()` es ASÍNCRONO: hay que PREVENIR la navegación,
               //    no encadenarla — si dejáramos navegar, el router empujaría su entrada antes de
               //    que el browser procese el pop y volveríamos a enterrar la ficha.
+              // 3º la rama de Más: si el paso 2 no se hizo cargo, decide el hook. NUNCA compite con
+              //    el 2 — el 2 pide que el destino sea el activo y el 3 que no lo sea (con
+              //    `from === to` la política devuelve reemplazar, así que el hook no se hace cargo).
               onNavigate={(e) => {
                 if (requestNavigation(destino.href)) { e.preventDefault(); return }
                 if (active && consumeOwnedPanelEntry()) e.preventDefault()
+                else if (handleNavigate(destino.href)) e.preventDefault()
               }}
               aria-current={active ? 'page' : undefined}
               className={cn(
