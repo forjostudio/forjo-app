@@ -200,6 +200,52 @@ export function isPanelViewEntry(state: unknown, param: string): boolean {
   return panelViewEntryParam(state) === param
 }
 
+// ── La marca de LA RAMA: qué ruta quedó debajo de esta entrada (D-03 / criterio 2) ───────────────
+
+/**
+ * El state que se escribe sobre la entrada actual: sólo la RUTA que quedó inmediatamente debajo.
+ *
+ * ⚠ **CLAVE NUEVA, Y NO SE REUSA NINGUNA DE LAS TRES QUE YA VIVEN EN LA PILA.** Reusar `frjView`,
+ * `frjOverlay` o `frjDirty` sería el peor error posible de este plan: el otro módulo reconocería
+ * esta entrada como PROPIA, haría su retroceso sobre ella y el dueño terminaría fuera del sitio.
+ * Por lo mismo esta marca **NO** entra en {@link isForeignOwnedEntry} — ver su docblock.
+ */
+export type PanelUnderState = { frjUnder: string }
+
+/**
+ * El state a escribir. **Objeto literal FRESCO, siempre**, igual que {@link panelViewState}.
+ *
+ * ⚠ **LA MISMA TRAMPA QUE FALLA EN SILENCIO.** La forma "cuidadosa" —propagar el state actual y
+ * agregarle la marca— arrastra `__NA`, el parche de Next toma entonces su rama temprana
+ * (`next/dist/client/components/app-router.js:253-255`) y **no despacha la restauración**: la URL en
+ * la barra cambia, el router NO se entera, y **no hay ni un error en consola**. Es el modo de falla
+ * más caro de este repo y está documentado arriba, en {@link panelViewState}.
+ */
+export function panelUnderState(route: string): PanelUnderState {
+  return { frjUnder: route }
+}
+
+/**
+ * ¿Qué ruta quedó debajo de la entrada de arriba? Devuelve la ruta, o `null` si la entrada no lleva
+ * nuestra marca de rama.
+ *
+ * Narrowing manual, sin `any` (tsconfig `strict`), copiando la forma de {@link panelViewEntryParam}:
+ * `history.state` es `unknown` de verdad — puede traer el state del router de Next, el de un
+ * overlay, el del sentinel de cambios sin guardar, o `null`.
+ *
+ * ⚠ **POR QUÉ LA MARCA GUARDA LA RUTA Y NO UN BOOLEANO.** Es una decisión MEDIDA, no de gusto: el
+ * caso degenerado del criterio 2 —el destino de la barra es justo la ruta que quedaría debajo—
+ * necesita saber **cuál** es esa ruta, y leerla **después** del primer retroceso (o sea estando
+ * parado sobre la entrada de Más). Con un booleano esa rama no se puede detectar, y reemplazar ahí
+ * dejaría dos entradas idénticas adyacentes: un atrás que no hace nada visible, la cicatriz 1.
+ * Medido en el escenario **E-5** de `.planning/debug/pila-de-dos-niveles-medida.md`.
+ */
+export function panelUnderRoute(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('frjUnder' in state)) return null
+  const marca: unknown = (state as { frjUnder?: unknown }).frjUnder
+  return typeof marca === 'string' ? marca : null
+}
+
 /**
  * ¿La entrada de arriba pertenece a un overlay de `lib/overlay-history.ts`? Es el predicado de la
  * regla 0.
@@ -252,6 +298,14 @@ export function isDirtyGuardOwnedEntry(state: unknown): boolean {
  * Existe como una sola función para que el OR se escriba una vez: los dos consumidores
  * ({@link applyPanelView} y {@link consumeOwnedPanelEntry}) tienen que hacerse la misma pregunta, y
  * el día que aparezca un tercer módulo que escriba historial sólo se suma acá.
+ *
+ * ⚠ **POR QUÉ LA MARCA DE LA RAMA (`panelUnderRoute`) NO ESTÁ ACÁ, Y NO ES UN OLVIDO.** Es una marca
+ * NUESTRA, de este mismo módulo: "otro dueño" significa otro módulo que retrocede sobre su propia
+ * entrada, y la rama no es eso. Si entrara, la regla 0 haría que {@link applyPanelView} **se
+ * abstenga de escribir sobre cualquier entrada marcada** — y como la marca de la rama se escribe en
+ * TODA navegación del panel que empuje, el detalle de cliente dejaría de empujar su entrada en
+ * `/clients`: una regresión de v0.30 que ningún otro gate ve. Hay un caso de test contrapuesto que
+ * lo fija, y un gate de región que cuenta la clave adentro de este predicado y exige **cero**.
  */
 export function isForeignOwnedEntry(state: unknown): boolean {
   return isOverlayOwnedEntry(state) || isDirtyGuardOwnedEntry(state)
@@ -350,14 +404,17 @@ export type PanelNavMode = 'push' | 'replace'
  *   6. **sección → sección → `replace`.** La sección nueva PISA a la anterior, así que encima del
  *      dashboard hay siempre una sola. Es literalmente el pedido de julio.
  *
- * ⚠ **LO QUE ESTA FUNCIÓN TODAVÍA NO HACE, y no es un olvido:** D-03 pide que tocar Más estando
- * **dentro** de su rama **SUBA** un nivel en vez de apilar (desde Finanzas, tocar Más devuelve a Más).
- * Eso **no se puede decidir sobre rutas**: el par `(from: '/finances', to: '/mas')` es idéntico con la
+ * ⚠ **LO QUE ESTA FUNCIÓN NO HACE, Y NO ES UN OLVIDO:** D-03 pide que tocar Más estando **dentro**
+ * de su rama **SUBA** un nivel en vez de apilar (desde Finanzas, tocar Más devuelve a Más). Eso
+ * **no se puede decidir sobre rutas**: el par `(from: '/finances', to: '/mas')` es idéntico con la
  * pila `[/dashboard, /mas, /finances]` —donde subir es un retroceso correcto— y con la pila
  * `[/finances]` —entrada directa, donde ese mismo retroceso **saca al dueño del sitio**, la cicatriz 2—.
- * Necesita una marca en `history.state` que diga qué hay debajo, y eso es trabajo del plan 03-02.
- * Mientras tanto ese gesto **apila** (`[/dashboard, /mas, /finances, /mas]`): una pila un escalón más
- * larga, nunca una expulsión. La degradación de toda la política cae de este lado a propósito.
+ * Necesita un HECHO que diga qué quedó debajo, y ese hecho lo aporta la marca de la rama
+ * ({@link panelUnderRoute}). Quien decide con el hecho es {@link panelBranchPlan}, que **extiende**
+ * esta regla en vez de reemplazarla: sin el hecho devuelve exactamente lo que devuelve ésta.
+ * Por eso esta función se queda como está, y su valor sigue siendo la **degradación segura** de toda
+ * la fase: sin la marca el gesto **apila** (`[/dashboard, /mas, /finances, /mas]`), o sea una pila un
+ * escalón más larga, nunca una expulsión.
  *
  * ⚠ **CASO ACEPTADO Y DOCUMENTADO, no hackeado:** si se entra **directo** a una sección (URL pegada,
  * F5, el rebote del proxy después del login) no hay ningún dashboard debajo, y el atrás sale del
@@ -392,6 +449,90 @@ export function panelNavMode({
   if (to === more) return 'push'
   if (from === more) return 'push'
   return 'replace'
+}
+
+// ── La política CON el hecho: la rama de Más (D-03 / criterio 2) ─────────────────────────────────
+
+/**
+ * Qué hacer con la pila cuando la navegación del menú ocurre **dentro de la rama de Más**.
+ *
+ * **CINCO miembros**, y los dos primeros son literalmente los de {@link PanelNavMode}: esta decisión
+ * **extiende** la política de rutas, no la reemplaza.
+ *
+ *   · `push` / `replace` — lo de siempre, y los ejecuta el `<Link>` con su prefetch y su transición.
+ *   · `up` — **subir un nivel** (D-03): un retroceso guardado. Nunca un `replace`, que dejaría la
+ *     ruta de Más encima de sí misma ⇒ dos entradas idénticas ⇒ atrás muerto (la cicatriz 1).
+ *   · `collapse-then-replace` — **colapsar y reemplazar** (criterio 2): consumir la entrada de la
+ *     sección y recién entonces reemplazar, para que `/mas` no quede inmediatamente debajo.
+ *   · `none` — **no hacer nada**. ⚠ **Esta función todavía NO lo devuelve: lo produce el plan
+ *     03-03**, cuando el sentinel de salida está arriba y el destino es la ruta actual. Está en el
+ *     tipo **a propósito**: si *nada* es un resultado posible de la decisión de navegación y vive
+ *     fuera del tipo, el chequeo de exhaustividad del plan 03-04 **no lo ve** — que es exactamente la
+ *     clase de hueco silencioso que esta fase viene a cerrar.
+ */
+export type PanelBranchPlan = PanelNavMode | 'up' | 'collapse-then-replace' | 'none'
+
+/**
+ * La decisión de la rama, **pura y sobre rutas**, con el hecho recibido como booleano.
+ *
+ * **Por qué el hecho entra como parámetro y no se lee acá:** es la misma frontera que
+ * {@link panelHistoryAction} ya tiene con `holding` y `foreignOwnsTop`. Esta función no toca
+ * `window`; `masDebajo` lo lee **el ejecutor** del estado de la entrada de arriba
+ * (`window.history.state` → {@link panelUnderRoute}, comparado contra la ruta de Más) y lo
+ * **re-verifica en el momento del click**, no al renderizar: el estado de una entrada sobrevive al
+ * retroceso y a nuestras propias escrituras, pero lo **borra** un reemplazo blando sobre la entrada
+ * donde vive (ver la lista completa en {@link applyPanelUnder}).
+ *
+ * **Por qué `masDebajo` es "la marca DICE MÁS" y no "hay marca":** es lo que hace que desktop no se
+ * entere **por construcción** (criterio 6). En escritorio nada navega a `/mas`, así que la marca
+ * nunca dice Más, `masDebajo` es siempre falso y la decisión cae en las ramas de siempre. Sin ningún
+ * chequeo de viewport en el medio.
+ *
+ * Las reglas, **en orden**:
+ *
+ *   0. **Sin el hecho NO SE RETROCEDE NUNCA**, y es la regla más importante del plan: devuelve lo
+ *      que diga {@link panelNavMode}. Es la cicatriz 2 (entrada directa, F5, el rebote del proxy
+ *      después del login) y la degradación segura de toda la fase — el peor caso de una marca
+ *      perdida es una pila un escalón más larga, **no** el dueño fuera del sitio.
+ *   1. **La misma ruta sigue ganando** (cicatriz 1). Va antes que las dos ramas nuevas y es a
+ *      propósito: si la rama de Más se evaluara primero, `/mas → /mas` devolvería `up` y el dueño se
+ *      iría un escalón para abajo tocando la pantalla en la que ya está.
+ *   2. **Con el hecho y destino Más ⇒ subir** (D-03).
+ *   3. **Con el hecho y cualquier otro destino ⇒ colapsar y reemplazar** (criterio 2).
+ *
+ * ⚠ **EL CASO DEGENERADO NO SE DECIDE ACÁ, y no es un hueco:** si el destino de la barra coincide con
+ * la ruta que quedaría debajo, reemplazar dejaría `[…, X, X]` —justo lo que el criterio 2 prohíbe— y
+ * hay que retroceder **dos veces sin navegar**. Pero esa ruta **sólo se puede leer estando parado
+ * sobre la entrada de Más**, o sea **después** del primer consumo, así que la decide el segundo paso
+ * del ejecutor (`branchSecondStep`, `lib/panel-branch.ts`). Medido en el escenario **E-5** de
+ * `.planning/debug/pila-de-dos-niveles-medida.md`.
+ */
+export function panelBranchPlan({
+  from,
+  to,
+  root = PANEL_ROOT,
+  more = PANEL_MORE,
+  masDebajo,
+}: {
+  from: string
+  to: string
+  root?: string
+  more?: string
+  masDebajo: boolean
+}): PanelBranchPlan {
+  const modo = panelNavMode({ from, to, root, more })
+
+  // ── REGLA 0 — sin el hecho, jamás un retroceso. ────────────────────────────────────────────────
+  if (!masDebajo) return modo
+
+  // ── REGLA 1 — la misma ruta: la cicatriz 1 gana sobre las dos ramas nuevas. ────────────────────
+  if (from === to) return modo
+
+  // ── REGLA 2 — con el hecho y destino Más: SUBIR (D-03). ───────────────────────────────────────
+  if (to === more) return 'up'
+
+  // ── REGLA 3 — con el hecho y cualquier otro destino: COLAPSAR Y REEMPLAZAR (criterio 2). ──────
+  return 'collapse-then-replace'
 }
 
 // ── La reconciliación entre la URL y lo que se está mostrando ────────────────────────────────────
@@ -562,6 +703,56 @@ export function applyPanelView({
 }
 
 /**
+ * Escribe la marca de la rama sobre la entrada actual: **qué ruta quedó inmediatamente debajo**.
+ * Devuelve `true` si escribió, `false` si se abstuvo. Hermana de {@link applyPanelView}.
+ *
+ * **Cuándo la llama su consumidor:** desde un efecto que observa el pathname, o sea **DESPUÉS del
+ * commit** del router (`usePanelBranch`, `lib/panel-branch.ts`). `from` es la ruta de la que se
+ * venía y `to` la ruta en la que estamos ahora.
+ *
+ * **Por qué el reemplazo de estado va con DOS argumentos y SIN el tercero** (la URL). Con la URL, el
+ * parche de Next despacha la restauración y la navegación cuesta un commit extra; sin ella, el parche
+ * no despacha nada, la URL **no cambia**, el router no se desincroniza — y el parche **igual** copia
+ * sus internos adentro del objeto nuevo, que es lo que mantiene la entrada sana y evita que el
+ * próximo retroceso recargue la página entera (por eso tampoco hay que guardarse una referencia al
+ * método original del historial).
+ *
+ * **Las dos guardas, en orden:** la política tiene que decir que esta navegación **empuja** —si
+ * reemplaza, la entrada de abajo es la misma de antes y no hay nada nuevo que anotar— y la entrada de
+ * arriba **no** puede ser de otro dueño (regla 0): escribirle encima le borra su marca, su dueño deja
+ * de reconocer su entrada y queda un atrás muerto.
+ *
+ * ⚠ **LA DEGRADACIÓN SE DECLARA, NO SE DESCUBRE. Quién borra esta marca:** un reemplazo blando sobre
+ * la entrada donde vive, o sea (i) el `replace` de los tres menús cuando la política lo dice,
+ * (ii) {@link applyPanelView} con las causas `programmatic`, `filter` y `stale` sin tener la entrada,
+ * y (iii) el reemplazo crudo con el que Agenda limpia su query de retorno de Google. **Se acepta en
+ * esta fase**: sin la marca, {@link panelBranchPlan} cae en `push`/`replace` y **nunca** en un
+ * retroceso. Preservar la clave en `applyPanelView` sería una línea, pero toca el ejecutor que v0.30
+ * dejó auditado con un gate de código y abre la pregunta de si un estado propio conservado
+ * reintroduce la trampa de la rama temprana del parche; si la Phase 4 lo necesita para los tabs,
+ * entra ahí con su propia medición.
+ */
+export function applyPanelUnder({
+  from,
+  to,
+  root = PANEL_ROOT,
+  more = PANEL_MORE,
+}: {
+  from: string
+  to: string
+  root?: string
+  more?: string
+}): boolean {
+  const actual: unknown = window.history.state
+  // Regla 0, primero: la entrada de arriba no puede tener otro dueño.
+  if (isForeignOwnedEntry(actual)) return false
+  // Y la política, después: sólo una navegación que EMPUJA deja algo nuevo debajo.
+  if (panelNavMode({ from, to, root, more }) !== 'push') return false
+  window.history.replaceState(panelUnderState(from), '')
+  return true
+}
+
+/**
  * Deshace la entrada de subsección que tengamos arriba, **sea cual sea la subsección** (NAV-08).
  * Devuelve `true` si consumió algo, `false` si no tocó nada.
  *
@@ -598,6 +789,42 @@ export function consumeOwnedPanelEntry(): boolean {
   const actual: unknown = window.history.state
   if (isForeignOwnedEntry(actual)) return false
   if (panelViewEntryParam(actual) === null) return false
+  window.history.back()
+  return true
+}
+
+/**
+ * Deshace la entrada de **sección de la rama de Más** que tengamos arriba. Devuelve `true` si
+ * consumió algo, `false` si no tocó nada. Es el retroceso guardado de `up` y del colapso.
+ *
+ * ⚠ **POR QUÉ ES UNA FUNCIÓN HERMANA Y NO UNA EXTENSIÓN DE {@link consumeOwnedPanelEntry}.** Dos
+ * motivos, y el primero es un candado:
+ *   (a) el candado estático de la Phase 2 exige el literal `consumeOwnedPanelEntry` adentro del
+ *       `onNavigate` de los **tres** menús y en ese orden, así que cambiarle la semántica cambiaría
+ *       NAV-08 en los tres a la vez **sin que ningún gate lo vea**; y
+ *   (b) las dos preguntas son distintas y conviven en el mismo `onNavigate`: NAV-08 pregunta por una
+ *       **subsección** propia arriba (`?c=`, un tab) y esto pregunta por una **sección de la rama**.
+ *       Son mutuamente excluyentes —NAV-08 pide `from === to` y la rama pide `from ≠ to`—, así que no
+ *       compiten.
+ *
+ * **Y por qué la función vieja no sirve tal cual:** su segunda guarda exige la marca de subsección
+ * como cadena, y la entrada de una **sección** la empujó el **router** de Next con su propio estado,
+ * sobre el que después escribimos la marca de la rama. Preguntada por la de subsección devolvería
+ * `false` siempre.
+ *
+ * ⚠ **LAS DOS GUARDAS SE REPITEN ACÁ, y no se confía en que ya se chequearon arriba** (cicatriz 2,
+ * ya sufrida tres veces en este repo): entrada de otro dueño primero, marca propia después. Es la
+ * misma disciplina que los otros dos módulos de historial declaran en **cada** punto de retroceso,
+ * porque un retroceso sobre una entrada que no empujamos nosotros **expulsa al dueño del sitio** — y
+ * en una pantalla con cambios sin guardar, es pérdida de trabajo silenciosa.
+ *
+ * ⚠ **`history.back()` es ASÍNCRONO.** El call site tiene que PREVENIR la navegación, nunca
+ * encadenarla; y el segundo paso del colapso sale del evento del retroceso, nunca del mismo tick.
+ */
+export function consumeOwnedBranchEntry(): boolean {
+  const actual: unknown = window.history.state
+  if (isForeignOwnedEntry(actual)) return false
+  if (panelUnderRoute(actual) === null) return false
   window.history.back()
   return true
 }
