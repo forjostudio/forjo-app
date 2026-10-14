@@ -94,7 +94,7 @@ export function PanelBottomNav() {
   // hook no arma nada: un sentinel que absorbe el atrás y después no muestra el cartel convierte el
   // gesto en un botón MUERTO, que es peor que el bug. Acá vale `true` y se cumple por construcción —
   // el aviso se dibuja abajo, en este mismo componente.
-  const { handleNavigate } = usePanelBranch({
+  const { handleNavigate, hintVisible } = usePanelBranch({
     pathname,
     drawsExitHint: true,
     navigate: (href, mode) => {
@@ -111,95 +111,148 @@ export function PanelBottomNav() {
     '/clients': t.clients,
   }
 
+  // ── El aviso de salida de MOB-05, y por qué es HERMANO de la barra y no hijo ──────────────────
+  // El elemento de navegación lleva `lg:hidden`, o sea que en escritorio NO SE DIBUJA. Y D-05 pide
+  // que el aviso se vea igual en escritorio: salir del panel cuesta dos gestos en los dos. Si el
+  // aviso viviera adentro del elemento de navegación, en escritorio quedaría la absorción SIN aviso
+  // —el botón muerto que el propio módulo del sentinel declara peor que el bug— y nadie lo vería
+  // fallar. Por eso el componente devuelve un fragmento con dos hermanos.
+  //
+  // ── Y por qué NO es un toast del sistema de notificaciones (§13, decisión O-3) ─────────────────
+  // El componente de notificaciones del proyecto es UNO SOLO y GLOBAL, su posición es una sola prop
+  // evaluada en el render (no es responsiva) y nace ARRIBA: a 700px del dedo que acaba de apretar.
+  // Moverlo movería también los avisos del landing y los de la página pública de reservas. El patrón
+  // que el dueño nombró es una barrita abajo, al alcance del pulgar, no una notificación arriba.
+  //
+  // ── El ancla de escritorio (D-05), derivada del layout y sin inventar un patrón ────────────────
+  // A ≥1024px no hay barra, así que el aviso se centra sobre la COLUMNA DE CONTENIDO: corrido a la
+  // derecha por la mitad del ancho del sidebar (7.5rem = la mitad del `lg:pl-60` que el <main> ya
+  // usa), y separado del borde inferior por un valor de la escala de espaciados del proyecto (24px).
+  // Los dos valores salen de lo que el layout YA tiene: cero token nuevo, cero patrón nuevo.
+  //
+  // ⚠ El token del alto de la barra vive en `:root` (app/globals.css), así que la expresión del ancla
+  // de mobile RESUELVE EN CUALQUIER ANCHO, también a ≥1024px donde la barra no se dibuja. Y los tres
+  // `env()` llevan su fallback `0px` explícito: en Android el inset vale 0 y sin fallback la
+  // expresión no resuelve.
+  // ⚠ EN UN VALOR ARBITRARIO DE TAILWIND NO PUEDE HABER NI UN ESPACIO: con espacios la clase no se
+  // genera, nadie avisa, y el aviso termina pegado al borde inferior o directamente tapado por la
+  // barra. Es la misma trampa que el <main> del layout ya documenta.
+  //
+  // ⚠ El contenedor anunciable se queda MONTADO y el contenido es el que aparece y desaparece: una
+  // región viva cuyo contenido nunca cambia no anuncia nada. Y la ventana del aviso NO se re-declara
+  // acá: ese número vive en el módulo del ciclo, en un solo lugar (§13). Lo único temporal que este
+  // componente conoce son las dos duraciones del movimiento.
   return (
-    <nav
-      aria-label="Navegación principal"
-      // Zona segura en los TRES ejes. El inset inferior va como padding del elemento fijo y por
-      // DEBAJO de la caja de 56px, para que el `bg-card` PINTE la franja de gestos en vez de dejar
-      // un hueco del color del fondo. El lateral es por el landscape con notch, donde el inset vale
-      // 44px y sin él el primer y el último ítem quedarían debajo del notch.
-      // ⚠ Los tres `env()` llevan el fallback `0px` explícito: en Android el inset vale 0 y sin
-      // fallback la expresión no resuelve.
-      // z-30 = exactamente la del header de hoy: los overlays (z-40) y los drawers (z-50) la tapan,
-      // y así tiene que ser — el atrás cierra el overlay antes de navegar.
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]"
-    >
-      <div className="flex h-[var(--panel-nav-h)]">
-        {DESTINOS.map(destino => {
-          const Icon = destino.icon
-          const label = destino.label ?? LABELS[destino.href] ?? ''
-          const active = pathname === destino.href
-          return (
-            <Link
-              key={destino.href}
-              href={destino.href}
-              // La política de historial del panel (NAV-05/NAV-07): el atrás desde cualquier
-              // sección cae en el DASHBOARD, nunca en otra sección abierta antes. La barra no
-              // decide nada, CONSUME la regla pura de lib/panel-history.ts. Ojo: NO es `replace` a
-              // secas, que reemplazaría también la entrada del dashboard y el primer atrás sacaría
-              // del panel.
-              replace={panelNavMode({ from: pathname, to: destino.href }) === 'replace'}
-              // EL ORDEN ES CONTRATO (T-5), y es el mismo del sidebar:
-              // 1º el guard de cambios sin guardar. Si bloquea, él se hace cargo del diálogo y acá
-              //    no pasa nada más — por eso corta con `return`.
-              // 2º NAV-08: tocar la sección en la que YA estás cierra la subsección en vez de
-              //    apilarla encima. `history.back()` es ASÍNCRONO: hay que PREVENIR la navegación,
-              //    no encadenarla — si dejáramos navegar, el router empujaría su entrada antes de
-              //    que el browser procese el pop y volveríamos a enterrar la ficha.
-              // 3º la rama de Más: si el paso 2 no se hizo cargo, decide el hook. NUNCA compite con
-              //    el 2 — el 2 pide que el destino sea el activo y el 3 que no lo sea (con
-              //    `from === to` la política devuelve reemplazar, así que el hook no se hace cargo).
-              onNavigate={(e) => {
-                if (requestNavigation(destino.href)) { e.preventDefault(); return }
-                if (active && consumeOwnedPanelEntry()) e.preventDefault()
-                else if (handleNavigate(destino.href)) e.preventDefault()
-              }}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                // Sin padding vertical: el justify-center centra los 40px de contenido en los 56px
-                // de la barra, y así el área táctil es de 75×56 a 375px y 64×56 a 320px (ambas
-                // ≥44×44). El tap-highlight del navegador se apaga para que no compita con el
-                // active:bg-secondary, que es el feedback táctil real.
-                'relative flex flex-1 min-w-0 flex-col items-center justify-center gap-1 px-1',
-                'transition-[color,background-color] duration-150 ease-out',
-                '[-webkit-tap-highlight-color:transparent]',
-                // El hover va envuelto en la media query: en touch un :hover queda pegajoso y deja
-                // el ítem resaltado después del toque, como si siguiera siendo el activo.
-                '[@media(hover:hover)]:hover:bg-secondary active:bg-secondary',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground',
-                active ? 'text-foreground' : 'text-[var(--panel-nav-muted)]'
-              )}
-            >
-              {/* El indicador del activo. No se anima entre ítems: aparece y desaparece con el
-                  cambio de ruta (animarlo pediría medir posiciones y no agrega información). */}
-              {active && (
-                <span
-                  aria-hidden="true"
-                  className="absolute top-0 left-1/2 -translate-x-1/2 h-1 w-6 rounded-b-full bg-foreground"
-                />
-              )}
-              <Icon className="w-6 h-6 flex-shrink-0" />
-              {/* 11px es una excepción declarada a la regla de no bajar de 16px en mobile: no es
-                  texto de cuerpo, es chrome de navegación de una palabra con el icono de 24px como
-                  portador primario del significado, y ya hay precedente en el sidebar. Es también el
-                  tamaño más grande que NO rompe: a 12px el peor label del sistema ("Pacientes") mide
-                  hasta 56.9px según la familia y a 320px el espacio disponible es 56.0px.
-                  No se declara familia a propósito: hereda --font-sans, que el negocio elige entre 5
-                  familias. Clavarla pondría dos sans distintas a 3px de distancia en la misma
-                  pantalla. El truncate se queda aunque hoy nunca se dispare: `business.font` es un
-                  string sin tipar, así que un valor nuevo puede entrar sin error de compilación. */}
-              <span
+    <>
+      <nav
+        aria-label="Navegación principal"
+        // Zona segura en los TRES ejes. El inset inferior va como padding del elemento fijo y por
+        // DEBAJO de la caja de 56px, para que el `bg-card` PINTE la franja de gestos en vez de dejar
+        // un hueco del color del fondo. El lateral es por el landscape con notch, donde el inset vale
+        // 44px y sin él el primer y el último ítem quedarían debajo del notch.
+        // ⚠ Los tres `env()` llevan el fallback `0px` explícito: en Android el inset vale 0 y sin
+        // fallback la expresión no resuelve.
+        // z-30 = exactamente la del header de hoy: los overlays (z-40) y los drawers (z-50) la tapan,
+        // y así tiene que ser — el atrás cierra el overlay antes de navegar.
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]"
+      >
+        <div className="flex h-[var(--panel-nav-h)]">
+          {DESTINOS.map(destino => {
+            const Icon = destino.icon
+            const label = destino.label ?? LABELS[destino.href] ?? ''
+            const active = pathname === destino.href
+            return (
+              <Link
+                key={destino.href}
+                href={destino.href}
+                // La política de historial del panel (NAV-05/NAV-07): el atrás desde cualquier
+                // sección cae en el DASHBOARD, nunca en otra sección abierta antes. La barra no
+                // decide nada, CONSUME la regla pura de lib/panel-history.ts. Ojo: NO es `replace` a
+                // secas, que reemplazaría también la entrada del dashboard y el primer atrás sacaría
+                // del panel.
+                replace={panelNavMode({ from: pathname, to: destino.href }) === 'replace'}
+                // EL ORDEN ES CONTRATO (T-5), y es el mismo del sidebar:
+                // 1º el guard de cambios sin guardar. Si bloquea, él se hace cargo del diálogo y acá
+                //    no pasa nada más — por eso corta con `return`.
+                // 2º NAV-08: tocar la sección en la que YA estás cierra la subsección en vez de
+                //    apilarla encima. `history.back()` es ASÍNCRONO: hay que PREVENIR la navegación,
+                //    no encadenarla — si dejáramos navegar, el router empujaría su entrada antes de
+                //    que el browser procese el pop y volveríamos a enterrar la ficha.
+                // 3º la rama de Más: si el paso 2 no se hizo cargo, decide el hook. NUNCA compite con
+                //    el 2 — el 2 pide que el destino sea el activo y el 3 que no lo sea (con
+                //    `from === to` la política devuelve reemplazar, así que el hook no se hace cargo).
+                onNavigate={(e) => {
+                  if (requestNavigation(destino.href)) { e.preventDefault(); return }
+                  if (active && consumeOwnedPanelEntry()) e.preventDefault()
+                  else if (handleNavigate(destino.href)) e.preventDefault()
+                }}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'max-w-full truncate text-[11px] leading-[1.1]',
-                  active ? 'font-semibold' : 'font-medium'
+                  // Sin padding vertical: el justify-center centra los 40px de contenido en los 56px
+                  // de la barra, y así el área táctil es de 75×56 a 375px y 64×56 a 320px (ambas
+                  // ≥44×44). El tap-highlight del navegador se apaga para que no compita con el
+                  // active:bg-secondary, que es el feedback táctil real.
+                  'relative flex flex-1 min-w-0 flex-col items-center justify-center gap-1 px-1',
+                  'transition-[color,background-color] duration-150 ease-out',
+                  '[-webkit-tap-highlight-color:transparent]',
+                  // El hover va envuelto en la media query: en touch un :hover queda pegajoso y deja
+                  // el ítem resaltado después del toque, como si siguiera siendo el activo.
+                  '[@media(hover:hover)]:hover:bg-secondary active:bg-secondary',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground',
+                  active ? 'text-foreground' : 'text-[var(--panel-nav-muted)]'
                 )}
               >
-                {label}
-              </span>
-            </Link>
-          )
-        })}
+                {/* El indicador del activo. No se anima entre ítems: aparece y desaparece con el
+                    cambio de ruta (animarlo pediría medir posiciones y no agrega información). */}
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-0 left-1/2 -translate-x-1/2 h-1 w-6 rounded-b-full bg-foreground"
+                  />
+                )}
+                <Icon className="w-6 h-6 flex-shrink-0" />
+                {/* 11px es una excepción declarada a la regla de no bajar de 16px en mobile: no es
+                    texto de cuerpo, es chrome de navegación de una palabra con el icono de 24px como
+                    portador primario del significado, y ya hay precedente en el sidebar. Es también el
+                    tamaño más grande que NO rompe: a 12px el peor label del sistema ("Pacientes") mide
+                    hasta 56.9px según la familia y a 320px el espacio disponible es 56.0px.
+                    No se declara familia a propósito: hereda --font-sans, que el negocio elige entre 5
+                    familias. Clavarla pondría dos sans distintas a 3px de distancia en la misma
+                    pantalla. El truncate se queda aunque hoy nunca se dispare: `business.font` es un
+                    string sin tipar, así que un valor nuevo puede entrar sin error de compilación. */}
+                <span
+                  className={cn(
+                    'max-w-full truncate text-[11px] leading-[1.1]',
+                    active ? 'font-semibold' : 'font-medium'
+                  )}
+                >
+                  {label}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      </nav>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="pointer-events-none fixed left-1/2 z-40 -translate-x-1/2 bottom-[calc(var(--panel-nav-h)+env(safe-area-inset-bottom,0px)+0.5rem)] lg:bottom-6 lg:left-[calc(50%+7.5rem)]"
+      >
+        <span
+          className={cn(
+            'block whitespace-nowrap rounded-lg bg-foreground text-background px-4 py-2',
+            'text-[14px] font-medium leading-[1.4]',
+            'transition-[opacity,transform]',
+            hintVisible
+              ? 'opacity-100 translate-y-0 duration-150 ease-out'
+              : 'opacity-0 translate-y-2 duration-200 ease-in',
+            'motion-reduce:translate-y-0'
+          )}
+        >
+          {hintVisible ? 'Tocá atrás otra vez para salir' : null}
+        </span>
       </div>
-    </nav>
+    </>
   )
 }

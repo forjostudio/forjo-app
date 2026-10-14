@@ -873,3 +873,134 @@ describe('10 · los controles de durabilidad que antes eran gate de plan', () =>
     expect(header, 'el Exportar CSV de /clients dejó de ser un `<a href download>`').toMatch(/href="\/api\/export\/clients"\s*\n?\s*download/)
   })
 })
+
+describe('11 · el aviso efímero de salida (§13 / MOB-05 / D-05, plan 03-03)', () => {
+  // POR QUÉ ESTE BLOQUE EXISTE. El aviso es la ÚNICA superficie visible que la Phase 3 agrega, y
+  // TODO lo que lo define son propiedades del código escrito: strings de clases y atributos. Nada de
+  // eso lo ve `tsc` (son strings, no tipos), ni `npm run build` (Tailwind no avisa por una clase que
+  // no existe), ni la suite de decisiones puras, ni una UAT visual que no tenga con qué comparar.
+  //
+  // Y DOS DE LOS INVARIANTES FALLAN EN SILENCIO, que es por lo que son casos y no notas:
+  //   1. el aviso adentro del elemento de navegación: ése lleva `lg:hidden`, así que en escritorio no
+  //      se vería y quedaría la absorción SIN aviso ⇒ el botón muerto que D-05 decidió evitar. A
+  //      375px se ve perfecto, y nadie se enteraría;
+  //   2. un espacio adentro de un valor arbitrario de Tailwind: la clase NO SE GENERA, Tailwind no
+  //      avisa, y el aviso termina pegado al borde inferior o directamente tapado por la barra.
+
+  /** La región del aviso: desde la propiedad de rol hasta el cierre de su contenedor. */
+  const aviso = bloque(barra, 'role="status"', '</div>')
+  /** El elemento de navegación entero, para afirmar que el aviso NO está adentro. */
+  const nav = bloque(barra, '<nav', '</nav>')
+
+  it('la región del aviso existe y tiene el COPY EXACTO de §13', () => {
+    // El copy está medido en las 5 familias tipográficas: 193.3px de texto a 14px/500 en el peor caso
+    // + 32px de padding = 225.3px de pill, contra 343px disponibles a 375px y 288px a 320px. Entra en
+    // UNA línea en los dos anchos y en las cinco familias.
+    expect(aviso, 'no se encontró la región del aviso: el candado no estaría midiendo nada').not.toBe('')
+    expect(aviso).toContain('Tocá atrás otra vez para salir')
+    expect(aviso).toContain('whitespace-nowrap')
+  })
+
+  it('el ancla vertical de mobile es UNA sola expresión SIN ESPACIOS, con el token y el inset con fallback', () => {
+    // 8px arriba de la barra, siempre, con o sin inset. El token del alto vive en `:root`, así que la
+    // expresión resuelve en CUALQUIER ancho. El fallback `0px` del `env()` es obligatorio: en Android
+    // el inset vale 0 y sin fallback la expresión no resuelve.
+    expect(aviso).not.toBe('')
+    expect(aviso).toContain('bottom-[calc(var(--panel-nav-h)+env(safe-area-inset-bottom,0px)+0.5rem)]')
+    // EL ROJO MÁS TRAICIONERO: con un espacio adentro del valor arbitrario, la clase no se genera.
+    const arbitrarios = [...aviso.matchAll(/\[[^\]]*\]/g)].map(m => m[0])
+    expect(arbitrarios.length, 'no se encontró ningún valor arbitrario en el aviso').toBeGreaterThan(0)
+    for (const valor of arbitrarios) {
+      expect(valor, `el valor arbitrario ${valor} tiene un espacio: Tailwind NO genera la clase`).not.toMatch(/\s/)
+    }
+  })
+
+  it('la superficie es el par INVERTIDO de §13, con el radio, el padding y la tipografía de la tabla', () => {
+    // El par invertido es el ÚNICO con contraste garantizado en los 40 temas × paletas (≥8.94:1
+    // medido, §5): se lee como chrome del sistema y no como contenido de la pantalla. Un color suelto
+    // —`--primary`, por ejemplo— desaparecería justo en los negocios que eligieron ese acento.
+    expect(aviso).not.toBe('')
+    expect(aviso).toContain('bg-foreground text-background')
+    expect(aviso).toContain('rounded-lg')
+    expect(aviso).toContain('px-4')
+    expect(aviso).toContain('py-2')
+    expect(aviso).toContain('text-[14px]')
+    expect(aviso).toContain('font-medium')
+    expect(aviso).toContain('leading-[1.4]')
+    // Y NO usa un token de acento ni uno de tarjeta: son los dos que fallan contraste en los 40.
+    expect(cuenta(aviso, /bg-primary|bg-card|bg-accent/g)).toBe(0)
+  })
+
+  it('la capa es la de §13: arriba de la barra, abajo de drawers y modales', () => {
+    // La barra es z-30 y los drawers/modales z-50. El aviso NO puede coexistir con un overlay
+    // abierto: el atrás cierra el overlay primero (política vigente, intacta).
+    expect(aviso).not.toBe('')
+    expect(aviso).toContain('z-40')
+    expect(cuenta(aviso, /z-50|z-30/g)).toBe(0)
+  })
+
+  it('las TRES propiedades de accesibilidad están, y el aviso NO es interactivo', () => {
+    // El trío es lo que lo hace anunciable SIN robar el foco. Y no es interactivo a propósito: no
+    // tiene acción, ni botón de cerrar, ni se descarta con swipe — es una pista transitoria atada a
+    // un gesto de navegación, no un toast.
+    expect(aviso).not.toBe('')
+    expect(aviso).toContain('role="status"')
+    expect(aviso).toContain('aria-live="polite"')
+    expect(aviso).toContain('aria-atomic="true"')
+    expect(aviso).toContain('pointer-events-none')
+    expect(cuenta(aviso, /onClick|onPointerDown|tabIndex|<button|aria-label="Cerrar"/g)).toBe(0)
+  })
+
+  it('el movimiento es el de §13, y hay variante de MOVIMIENTO REDUCIDO sin desplazamiento', () => {
+    // Entrada 150ms con salida suave, salida 200ms con entrada suave, y SÓLO opacidad y
+    // transformación: nunca propiedades que disparen layout (ancho, alto, márgenes).
+    expect(aviso).not.toBe('')
+    expect(aviso).toContain('duration-150')
+    expect(aviso).toContain('duration-200')
+    expect(aviso).toContain('ease-out')
+    expect(aviso).toContain('ease-in')
+    expect(aviso).toContain('transition-[opacity,transform]')
+    // Con movimiento reducido se quita el desplazamiento y queda sólo el cambio de opacidad.
+    expect(aviso).toContain('motion-reduce:translate-y-0')
+    // Y nada que dispare layout: una transición de ancho/alto/margen acá sería un jank garantizado.
+    expect(cuenta(aviso, /transition-all|transition-\[width|transition-\[height|transition-\[margin/g)).toBe(0)
+  })
+
+  it('el aviso es HERMANO del elemento de navegación, no hijo (D-05), y tiene su ancla de escritorio', () => {
+    // EL INVARIANTE QUE ROMPE D-05 EN SILENCIO. Adentro del elemento que lleva `lg:hidden`, en
+    // escritorio el aviso no se dibuja y queda la absorción sin aviso: el botón MUERTO que el propio
+    // módulo del sentinel declara peor que el bug.
+    expect(nav, 'no se encontró el elemento de navegación: el candado no estaría midiendo nada').not.toBe('')
+    expect(nav).toContain('lg:hidden')
+    expect(nav).not.toContain('Tocá atrás otra vez para salir')
+    expect(nav).not.toContain('role="status"')
+    // Hermano: el aviso aparece DESPUÉS del cierre del elemento de navegación, y el componente
+    // devuelve un fragmento con los dos.
+    expect(barra.indexOf('role="status"')).toBeGreaterThan(barra.indexOf('</nav>'))
+    expect(barra).toContain('<>')
+    // Y su propio par de clases de escritorio, las dos derivadas del layout: la mitad del ancho del
+    // sidebar (el mismo valor del `lg:pl-60` del <main>) y un valor de la escala de espaciados.
+    expect(aviso).toContain('lg:left-[calc(50%+7.5rem)]')
+    expect(aviso).toContain('lg:bottom-6')
+    expect(layout, 'el <main> dejó de reservar el ancho del sidebar: el ancla del aviso se derivó de ahí').toContain('lg:pl-60')
+  })
+
+  it('el aviso NO es un toast: cero uso del sistema global de notificaciones (decisión O-3)', () => {
+    // Ya se descartó MIDIENDO: su posición es una sola prop evaluada en el render, no es responsiva,
+    // y el componente es uno solo y global ⇒ moverlo movería el landing y la página pública de
+    // reservas. Montar un segundo viewport también está descartado (quick 261005-vuy).
+    expect(barra.length).toBeGreaterThan(500)
+    expect(cuenta(barra, /from 'sonner'|toast\(|<Toaster/g)).toBe(0)
+  })
+
+  it('la ventana del aviso NO se re-declara en el componente: ese número vive en el módulo del ciclo', () => {
+    // La regla de la constante única de §13, vista desde el otro lado. El componente sólo conoce las
+    // DOS duraciones del movimiento; la ventana —que es a la vez la duración visible y la ventana
+    // lógica en la que el segundo atrás sale— vive en un solo lugar, en `lib/panel-branch.ts`.
+    expect(barra.length).toBeGreaterThan(500)
+    expect(cuenta(barra, /PANEL_EXIT_HINT_MS|2000/g)).toBe(0)
+    expect(barra).toContain('hintVisible')
+    const ciclo = sinComentarios(read('lib/panel-branch.ts'))
+    expect(cuenta(ciclo, /PANEL_EXIT_HINT_MS/g), 'la ventana dejó de estar en DOS lugares del módulo del ciclo (su declaración y el único temporizador)').toBe(2)
+  })
+})
