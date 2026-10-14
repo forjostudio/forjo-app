@@ -46,11 +46,14 @@ const nextConfig: NextConfig = {
   // Next lo bloquea como cross-origin, la página no hidrata y los forms caen al submit nativo —
   // exactamente el mismo síntoma que ya documentaba el caso de 127.0.0.1 de arriba.
   // Ver `node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/allowedDevOrigins.md`.
-  // ⚠ Las IPs son por DHCP y el router YA cambió la asignación una vez (.7 → .3 tras un reinicio).
-  // Por eso van las dos listadas en vez de una: así el entorno sobrevive al vaivén sin editar nada.
-  // Si aparece una tercera, se agrega acá — `ipconfig` / `Get-NetIPAddress` la dicen.
+  // ⚠ Las IPs son por DHCP y el router YA cambió la asignación DOS veces (.7 → .3 → .10). Por eso
+  // van las tres listadas en vez de una: así el entorno sobrevive al vaivén sin editar nada.
+  // `.10` se midió el 2026-10-14 preparando la UAT del plan 03-04 (`Get-NetIPAddress`, interfaz
+  // Ethernet): sin ella el teléfono pide `_next/*` desde un origin que Next bloquea, la página NO
+  // HIDRATA, y nada de la política de atrás funciona — y no sería un bug de la fase.
+  // Si aparece una cuarta, se agrega acá — `ipconfig` / `Get-NetIPAddress` la dicen.
   // No afecta el build de producción (`allowedDevOrigins` es solo-dev).
-  allowedDevOrigins: ["127.0.0.1", "192.168.0.7", "192.168.0.3"],
+  allowedDevOrigins: ["127.0.0.1", "192.168.0.7", "192.168.0.3", "192.168.0.10"],
 };
 
 export default nextConfig;
