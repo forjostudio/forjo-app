@@ -436,19 +436,26 @@ Plans:
 - [ ] `03-03-PLAN.md` — wave 3 · MOB-05: el **ciclo del sentinel** de salida (absorber una vez, avisar, re-armar) con **una** constante y **un** temporizador para las dos cosas, el predicado del sentinel sumado a la regla 0 con su candado anti-deriva, el aviso efímero de **UI-SPEC §13 tal cual**, y su ancla de escritorio (D-05, sin gate de viewport)
 - [ ] `03-04-PLAN.md` — wave 4 · El cierre por donde se rompe en silencio: `leaveNavigationPlan` **aprende los modos nuevos** (el caso vivo es `/web`, sección de la rama de Más), `REQUIREMENTS.md` enmendado (MOB-04 precisado por D-02, MOB-05 resuelto con su forma, **MOB-07 enmendado** por D-05 sin tocar el criterio 6) y el guion de la **UAT en celular real** con 21 recorridos y checkpoint de bloqueo humano explícito
 
-> ⚠ **CIERRE DE GAPS, 2026-10-15.** La UAT en Android dio **6 fallos sobre 14 ítems corridos** y dejó
-> **7 ítems sin correr** (ver `03-UAT.md`). La causa estructural está medida: **la sonda daba 8/8 porque
-> ningún escenario cruzaba el sentinel de salida con la marca de la rama** —E-6 probaba el sentinel
-> aislado y E-8 lo cruzaba con la marca de *cambios sin guardar*, que es otra—, así que G-1, G-2, G-3 y
-> G-4 caen todos en una intersección que no se medía. Los cuatro planes de abajo cierran los gaps **y**
-> agregan los **cinco escenarios de sonda que cruzan las dos marcas** (E-9 a E-13), porque un arreglo sin
-> eso devuelve el verde sin la cobertura. El orden no es negociable: la marca tiene que decir la verdad
-> **antes** de que la decisión (a) del dueño la lea, o el arreglo fabrica un G-5 nuevo.
+> ⚠ **CIERRE DE GAPS, 2026-10-15.** La UAT en Android corrió **los 21 ítems**: **16 pasaron** y **5
+> fallaron** (7, 8, 15, 19, 20), más la **colisión de diseño** del bloque H que el dueño resolvió con la
+> opción **(a)**. Sin medir quedaron sólo dos cosas: la **parte de overlay del ítem 20** y **todo el pase
+> de iPhone** (A11). Ver `03-UAT.md`, **con su nota de corrección**: una primera lectura dio nueve ítems
+> por no corridos porque el reporte verbal sólo cubrió lo que falló — el dueño los había marcado a mano
+> en el guion mientras probaba. **Consecuencia práctica: *cero regresión* (MOB-06) ya está afirmado en
+> Android** (el bloque E, los cuatro quicks de octubre, pasó), así que a MOB-06 le falta **iPhone**.
+>
+> La causa estructural de los cinco fallos está medida: **la sonda daba 8/8 porque ningún escenario
+> cruzaba el sentinel de salida con la marca de la rama** —E-6 probaba el sentinel aislado y E-8 lo
+> cruzaba con la marca de *cambios sin guardar*, que es otra—, así que G-1, G-2, G-3 y G-4 caen todos en
+> una intersección que no se medía. Los cuatro planes de abajo cierran los gaps **y** agregan los **cinco
+> escenarios de sonda que cruzan las dos marcas** (E-9 a E-13), porque un arreglo sin eso devuelve el
+> verde sin la cobertura. El orden no es negociable: la marca tiene que decir la verdad **antes** de que
+> la decisión (a) la lea, o el arreglo fabrica un G-5 nuevo.
 
 - [ ] `03-05-PLAN.md` — wave 5 · **La marca de la rama deja de mentir** (G-3, y la mitad de G-1/G-2): regla de **dirección** (ningún retroceso la escribe), de **idempotencia** (una entrada que ya la tiene no se re-marca) y de **propagación** (el reemplazo del colapso anota la ruta **real** de abajo, que la sonda ya medía y la app no hacía); un solo escritor con sus dos guardas; escenario **E-11**
 - [ ] `03-06-PLAN.md` — wave 6 · **El sentinel ni se entierra ni se arma de más** (G-4 y la otra mitad de G-1/G-2): la **decisión (a)** del dueño como sexta regla de armado con su límite escrito, y el **sexto miembro** del plan de rama —consumir el sentinel y recién entonces navegar— con su ejecutor de dos pasos; escenarios **E-9**, **E-10** y **E-12**
 - [ ] `03-07-PLAN.md` — wave 7 · **El armado que no falla en silencio** (G-5 y G-6): la decisión de dominio **pura y exportada** que sana contando instancias vivas, la **séptima** regla (si la URL ya lleva nuestro hash, no armar — el origen medido de la tercera entrada de salida), **cuatro** momentos de reintento incluido el del retroceso ignorado, y el **observable del hash** para la UAT; escenario **E-13**
-- [ ] `03-08-PLAN.md` — wave 8 · **La UAT de la ronda 2**, con **bloqueo humano explícito**: los **6 gaps** más los **7 ítems no corridos**, en **Android y iPhone** (A11 sigue abierto); y los tres documentos que hoy se contradicen puestos consistentes (la decisión (a) en el requisito con su límite, el registro de imprecisiones, y el guion de la ronda 1 sin casillas marcadas sin evidencia)
+- [ ] `03-08-PLAN.md` — wave 8 · **La UAT de la ronda 2**, con **bloqueo humano explícito**, y **acotada a lo que falta**: los **5 fallos** (7, 8, 15, 19, 20), la **colisión H** bajo la decisión (a), la **parte de overlay del ítem 20** (lo único que nunca se midió), una **regresión dirigida** de 11 ítems que ya pasaron pero cuyo camino de código cambió —cada uno con su motivo medido, y los tres excluidos (9, 14, 17) con el suyo—, y el **pase completo de iPhone** (A11, los 21). Más los tres documentos puestos consistentes con el estado real (la decisión (a) en el requisito con su límite; MOB-06 debiéndole sólo iPhone; el registro de imprecisiones; y el guion de la ronda 1 **completado**, con las 14 marcas del dueño intactas)
 
 ### Phase 4: Los tabs profundos sobre la política ya fijada
 
