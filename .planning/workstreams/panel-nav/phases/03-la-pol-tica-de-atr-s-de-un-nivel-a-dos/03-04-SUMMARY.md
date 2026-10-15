@@ -297,21 +297,21 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
 
 ### A · Los dos niveles (MOB-04) — los dos recorridos son distintos y los dos son correctos
 
-- [ ] **1.** `Inicio → Más → Finanzas → atrás` ⇒ queda **Más abierto** (no Inicio, y no una pantalla
+- [ok] **1.** `Inicio → Más → Finanzas → atrás` ⇒ queda **Más abierto** (no Inicio, y no una pantalla
       intermedia vacía). Un atrás más ⇒ **Inicio**.
-- [ ] **2.** `Inicio → Turnos → atrás` ⇒ **Inicio**, sin pasar por Más.
+- [ok] **2.** `Inicio → Turnos → atrás` ⇒ **Inicio**, sin pasar por Más.
 
 ### B · Más apila sobre lo que haya abierto (D-02)
 
-- [ ] **3.** `Inicio → Turnos → Más → atrás` ⇒ **Turnos**.
+- [ok] **3.** `Inicio → Turnos → Más → atrás` ⇒ **Turnos**.
       *(La pila tiene tres escalones **a propósito**: "dos niveles" es la profundidad de Más y sus
       secciones, **no un techo**.)*
 
 ### C · Tocar Más dentro de su rama sube un nivel (D-03)
 
-- [ ] **4.** `Inicio → Más → Finanzas → tocar Más` ⇒ **Más** (no una segunda entrada de Más). Y
+- [ok] **4.** `Inicio → Más → Finanzas → tocar Más` ⇒ **Más** (no una segunda entrada de Más). Y
       `atrás` ⇒ **Inicio**: salir cuesta lo mismo sin importar por cuántas secciones de Más se pasó.
-- [ ] **5.** Pasar por **tres** secciones de Más seguidas (Finanzas → Configuración → Negocio, cada una
+- [ok] **5.** Pasar por **tres** secciones de Más seguidas (Finanzas → Configuración → Negocio, cada una
       tocando Más en el medio) y después `atrás` ⇒ **Inicio**. Nunca hay que desandar pantallas ya
       dejadas.
 
@@ -322,20 +322,20 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
       Más, y **no** hace falta apretar atrás dos veces para que pase algo visible).
 - [ ] **8.** **El degenerado:** `Inicio → Turnos → Más → Finanzas → tocar Turnos en la barra` ⇒ queda
       en Turnos, y el `atrás` ⇒ **Inicio**, haciendo algo visible la primera vez.
-- [ ] **9.** **NAV-08 sigue vivo:** en Clientes con una ficha abierta, tocar **Clientes** en la barra
+- [OK] **9.** **NAV-08 sigue vivo:** en Clientes con una ficha abierta, tocar **Clientes** en la barra
       ⇒ **cierra la ficha** en vez de apilar.
 
 ### E · Cero regresión sobre lo ya verificado (criterio 4) — los cuatro overlays
 
-- [ ] **10.** Con un **overlay** abierto (el alta de turno), el atrás **cierra el overlay** y no navega.
-- [ ] **11.** Con el **selector de hora** propio abierto, el atrás lo cierra y no navega.
-- [ ] **12.** Con el **campo de fecha / calendario** abierto, el atrás lo cierra y no navega.
-- [ ] **13.** Con el **teclado** arriba, el atrás baja el teclado y no navega (**ni aparece el aviso de
+- [OK] **10.** Con un **overlay** abierto (el alta de turno), el atrás **cierra el overlay** y no navega.
+- [OK] **11.** Con el **selector de hora** propio abierto, el atrás lo cierra y no navega.
+- [OK] **12.** Con el **campo de fecha / calendario** abierto, el atrás lo cierra y no navega.
+- [OK] **13.** Con el **teclado** arriba, el atrás baja el teclado y no navega (**ni aparece el aviso de
       salida**).
 
 ### F · Cambios sin guardar — el caso que hoy caería mal
 
-- [ ] **14.** En **`/agenda`** (destino de la barra) con cambios sin guardar, tocar otro destino ⇒
+- [OK] **14.** En **`/agenda`** (destino de la barra) con cambios sin guardar, tocar otro destino ⇒
       pregunta antes de descartar; **"Salir sin guardar"** ⇒ aterriza en el destino y el `atrás` cae en
       **Inicio**.
 - [ ] **15.** En **`/web`** (sección de la **rama de Más**) con cambios sin guardar, **tocar Más** ⇒
@@ -344,9 +344,9 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
       ⚠ **Es el recorrido que el research encontró vivo**, el defecto que el quick `261006-iey` ya tuvo
       que arreglar una vez, y el que esta wave rediseñó contra lo medido en E-8. **Si algo de esta fase
       va a fallar, es acá.**
-- [ ] **16.** En **`/web`** con cambios sin guardar, tocar un **destino de la barra** ⇒ "Salir sin
+- [OK] **16.** En **`/web`** con cambios sin guardar, tocar un **destino de la barra** ⇒ "Salir sin
       guardar" ⇒ aterriza en el destino y el `atrás` cae en **Inicio** (es **la cadena de tres pasos**).
-- [ ] **17.** En `/agenda` con cambios sin guardar, **el atrás del sistema** ⇒ sigue avisando, y
+- [OK] **17.** En `/agenda` con cambios sin guardar, **el atrás del sistema** ⇒ sigue avisando, y
       **"Seguir editando"** deja todo como estaba.
 
 ### G · El aviso de salida (MOB-05 / D-01) — repetido tres veces
@@ -358,7 +358,7 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
 - [ ] **20.** **Esperar** a que el aviso desaparezca y apretar atrás otra vez ⇒ **vuelve a avisar** (no
       sale sin avisar). Y con un **overlay abierto** en Inicio, el atrás **cierra el overlay** y el
       aviso **no** aparece.
-- [ ] **21.** **En escritorio (D-05):** el mismo ciclo, con el aviso **centrado sobre la columna de
+- [OK] **21.** **En escritorio (D-05):** el mismo ciclo, con el aviso **centrado sobre la columna de
       contenido** (no debajo de donde estaría una barra que ahí no existe), legible y sin tapar nada. Y
       el recorrido del **sidebar** da exactamente lo de hoy (**criterio 6**).
 

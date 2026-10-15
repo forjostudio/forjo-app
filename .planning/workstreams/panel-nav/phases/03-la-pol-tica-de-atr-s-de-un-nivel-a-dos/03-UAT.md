@@ -7,7 +7,12 @@
 
 ## Resultado
 
-**6 fallos** sobre 14 ítems corridos. **7 ítems no corridos.**
+**5 fallos numerados + 1 colisión de diseño (H)** sobre **21 ítems corridos**.
+
+⚠ **CORREGIDO el 2026-10-15:** una primera versión de este documento dio por **no corridos** los
+ítems 9, 10-14, 16, 17 y 21. **Estaba mal.** El dueño los corrió y los marcó `[OK]` a mano en el
+guion de `03-04-SUMMARY.md` mientras probaba; no los mencionó verbalmente porque **pasaron**.
+La autoridad de qué se corrió es ese guion marcado, no el reporte verbal.
 
 | Bloque | Ítems | Resultado |
 |---|---|---|
@@ -16,12 +21,12 @@
 | C · Tocar Más dentro de la rama sube (D-03) | 4, 5 | ✅ pasa |
 | D · El cruce (criterio 2) | 6, 9 | ✅ pasa |
 | D · El cruce | **7, 8** | ❌ **falla** |
-| E · Cero regresión | 10, 11, 12, 13 | ⚠ **no corrido** |
-| F · Cambios sin guardar | 14, 16, 17 | ⚠ **no corrido** |
+| E · Cero regresión | 10, 11, 12, 13 | ✅ **pasa** (marcados `[OK]` por el dueño) |
+| F · Cambios sin guardar | 14, 16, 17 | ✅ **pasa** (marcados `[OK]`) |
 | F · Cambios sin guardar | **15** | ❌ **falla** |
 | G · El aviso de salida | 18 | ✅ pasa (aparece y funciona) |
 | G · El aviso de salida | **19, 20** | ❌ **falla** |
-| G · El aviso en escritorio (D-05) | 21 | ⚠ **no corrido** |
+| G · El aviso en escritorio (D-05) | 21 | ✅ **pasa** (marcado `[OK]`) |
 | H · Lo que esta fase cambia | `Más→sección→atrás` | ✅ pasa |
 | H · Lo que esta fase cambia | **`Más→Inicio→atrás`** | ❌ **falla** (colisión de diseño, ver G-4) |
 | I · Declarados que no son bugs | — | ✅ todo ok |
@@ -104,16 +109,18 @@ las dos marcas**, o volvemos a tener verde sin cobertura.
 
 ---
 
-## Ítems NO corridos (no asumir que pasan)
+## Lo que sigue sin medirse
 
-- **E · 10-13** — overlay, selector de hora, calendario y **teclado**. Son la red de seguridad de
-  MOB-06 (los 4 quicks de octubre). Sin esto **no se puede afirmar "cero regresión"**.
-- **F · 14, 16, 17** — el resto de cambios sin guardar (`/agenda` por dos caminos y el atrás del sistema).
-- **G · 21** — el aviso en **escritorio** (D-05) y el criterio 6 (sidebar sin cambios).
-- **G · 20 (parte de overlay)** — no se pudo probar: *"no tengo overlays en inicio como para probar eso"*.
-- **Todo el pase de iPhone / Safari** — A11 sigue **abierto**.
+- **La parte de overlay del ítem 20** — no se pudo probar: *"no tengo overlays en inicio como para
+  probar eso"*. Queda para la ronda 2.
+- **Todo el pase de iPhone / Safari** — **A11 sigue abierto**. Diferido a propósito: los 5 fallos son
+  de lógica de pila y reproducirían igual en Safari, ensuciando la señal de lo único que el iPhone
+  aporta (gesto de swipe-back, barra de direcciones abajo, zona de gestos).
+
+**"Cero regresión" (MOB-06) SÍ se puede afirmar en Android:** el bloque E (10-13) —overlay, selector
+de hora, calendario y teclado, los 4 quicks de octubre— se corrió y pasó.
 
 ## Estado de los requisitos
 
 **MOB-04, MOB-05 y MOB-06 siguen SIN marcar.** La fase no cierra hasta que los 6 gaps estén cerrados
-y los ítems no corridos se corran.
+y la ronda 2 cubra la parte de overlay del ítem 20 y el pase completo de iPhone (A11).
