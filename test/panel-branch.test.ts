@@ -945,3 +945,225 @@ describe('la DECISIÓN (a) — el sentinel se arma SÓLO si no hay nada nuestro 
     expect(mod).toMatch(/entrada \*\*ajena\*\*|entrada ajena/i)
   })
 })
+
+// ── Plan 03-06 / Task 3 — EL SENTINEL NO SE QUEDA ENTERRADO (cierre de G-1 / G-2) ────────────────
+//
+// La decisión (a) decide **cuándo** se arma. Esto decide **qué pasa con la entrada ya armada** cuando
+// el dueño toca un destino. Sin lo segundo, (a) **no alcanza**: armado en Inicio —legítimamente,
+// porque no había nada debajo— el toque siguiente lo deja **debajo** de la entrada nueva, el atrás
+// aterriza en una entrada de la raíz **con hash** que se ve igual que Inicio, y el atrás siguiente no
+// hace **nada visible**. Medido en **E-9** (las dos formas) y **E-12** (el degenerado).
+
+const MOD_PROVIDER = 'components/dashboard/unsaved-changes-guard.tsx'
+
+describe('consumeOwnedExitSentinel — el consumo guardado de NUESTRA entrada del sentinel', () => {
+  it('SE NIEGA si la entrada de arriba no lleva la marca del sentinel', () => {
+    // Sin la marca no se retrocede: un `back()` sobre una entrada que no empujamos nosotros
+    // EXPULSA AL DUEÑO DEL SITIO (cicatriz 2, ya sufrida tres veces en este repo).
+    const ctx = montarPila({ state: { __NA: true }, pathname: PANEL_ROOT })
+    expect(PB.consumeOwnedExitSentinel({ id: 7 })).toBe(false)
+    expect(ctx.back).not.toHaveBeenCalled()
+  })
+
+  it('SE NIEGA con la marca de OTRA instancia: pregunta por ESTA, no sólo por el dueño', () => {
+    // ⚠ ES LA DIFERENCIA CON SUS DOS HERMANAS, y no es cosmética: dos dueños por la misma entrada
+    // DESCUADRAN el conteo de retrocesos y dejan un atrás muerto o uno de más.
+    const ctx = montarPila({ state: PB.panelExitState(9), pathname: PANEL_ROOT })
+    expect(PB.consumeOwnedExitSentinel({ id: 7 })).toBe(false)
+    expect(ctx.back).not.toHaveBeenCalled()
+  })
+
+  it('consume con la marca PROPIA: retrocede una vez y devuelve que consumió', () => {
+    const ctx = montarPila({ state: PB.panelExitState(7), pathname: PANEL_ROOT })
+    expect(PB.consumeOwnedExitSentinel({ id: 7 })).toBe(true)
+    expect(ctx.back).toHaveBeenCalledTimes(1)
+  })
+
+  it('tampoco consume la marca de la RAMA: son entradas y dueños distintos', () => {
+    const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: PANEL_ROOT })
+    expect(PB.consumeOwnedExitSentinel({ id: 7 })).toBe(false)
+    expect(ctx.back).not.toHaveBeenCalled()
+  })
+})
+
+describe('runBranchNavigation — CONSUMIR EL SENTINEL y recién entonces navegar (dos pasos)', () => {
+  it('con identificador de dueño engancha UN listener de DISPARO ÚNICO antes de retroceder, y retrocede una vez', () => {
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: PB.panelExitState(7), pathname: PANEL_ROOT })
+    expect(
+      PB.runBranchNavigation({
+        plan: 'consume-exit-then-navigate',
+        to: '/appointments',
+        navigate: navegar,
+        exitId: 7,
+      })
+    ).toBe(true)
+    expect(ctx.enganchados).toHaveLength(1)
+    expect(ctx.enganchados[0].tipo).toBe('popstate')
+    // Sin disparo único el listener sobrevive al paso y el PRÓXIMO atrás del dueño dispara una
+    // navegación que nadie pidió.
+    expect(ctx.enganchados[0].opciones).toEqual({ once: true })
+    expect(ctx.back).toHaveBeenCalledTimes(1)
+    expect(ctx.desenganchados).toHaveLength(0)
+  })
+
+  it('NUNCA navega en el mismo tick del retroceso: la navegación sale del EVENTO', () => {
+    // Pedida en el mismo tick, el retroceso todavía no ocurrió; y ejecutada adentro del evento, el
+    // router de Next está procesando su traverse y la escritura NO ocurre. Medido como roto.
+    const navegar = vi.fn()
+    montarPila({ state: PB.panelExitState(7), pathname: PANEL_ROOT })
+    PB.runBranchNavigation({
+      plan: 'consume-exit-then-navigate',
+      to: '/appointments',
+      navigate: navegar,
+      exitId: 7,
+    })
+    expect(navegar).not.toHaveBeenCalled()
+  })
+
+  it('desde el evento deja la navegación PEDIDA con el modo que da la política para raíz → destino (un EMPUJE)', () => {
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: PB.panelExitState(7), pathname: PANEL_ROOT })
+    PB.runBranchNavigation({
+      plan: 'consume-exit-then-navigate',
+      to: '/appointments',
+      navigate: navegar,
+      exitId: 7,
+    })
+    dispararRetroceso(ctx, { pathname: PANEL_ROOT, state: null })
+    expect(navegar).toHaveBeenCalledTimes(1)
+    // El modo sale de la POLÍTICA de rutas para el tramo raíz → destino, no de un literal.
+    expect(navegar).toHaveBeenCalledWith(
+      '/appointments',
+      PH.panelNavMode({ from: PANEL_ROOT, to: '/appointments' })
+    )
+    expect(navegar).toHaveBeenCalledWith('/appointments', 'push')
+    // Un solo retroceso: este plan consume UNA entrada, no dos.
+    expect(ctx.back).toHaveBeenCalledTimes(1)
+  })
+
+  it('SIN identificador de dueño SE NIEGA: no retrocede, no engancha, y devuelve que no se hizo cargo', () => {
+    // ⚠ ES LO QUE HACE QUE EL OTRO CONSUMIDOR DEGRADE. El provider del guard de cambios sin guardar
+    // ejecuta el MISMO plan y NO es dueño del sentinel: si el ejecutor retrocediera igual, estaría
+    // retrocediendo sobre una entrada ajena y dejaría al dueño FUERA DEL SITIO con cambios sin
+    // guardar en pantalla — el peor resultado de todo ese archivo (cicatriz 2 / T-03-30).
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: PB.panelExitState(7), pathname: PANEL_ROOT })
+    expect(
+      PB.runBranchNavigation({ plan: 'consume-exit-then-navigate', to: '/appointments', navigate: navegar })
+    ).toBe(false)
+    expect(ctx.back).not.toHaveBeenCalled()
+    expect(ctx.enganchados).toHaveLength(0)
+    expect(navegar).not.toHaveBeenCalled()
+  })
+
+  it('si el consumo SE NIEGA, el listener queda DESENGANCHADO a mano', () => {
+    // La guarda se re-verifica en el momento del gesto, así que el listener se engancha ANTES de
+    // intentar el consumo. Si el consumo se niega no va a llegar ningún evento: dejarlo vivo lo deja
+    // armado para el PRÓXIMO atrás del dueño.
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: { __NA: true }, pathname: PANEL_ROOT })
+    expect(
+      PB.runBranchNavigation({
+        plan: 'consume-exit-then-navigate',
+        to: '/appointments',
+        navigate: navegar,
+        exitId: 7,
+      })
+    ).toBe(false)
+    expect(ctx.back).not.toHaveBeenCalled()
+    expect(ctx.desenganchados).toHaveLength(ctx.enganchados.length)
+    expect(ctx.desenganchados[0]).toBe(ctx.enganchados[0].fn)
+  })
+
+  it('EL CASO DE G-1 (el sentinel ENTERRADO) — con el sentinel arriba en la raíz, tocar un destino lo CONSUME primero', () => {
+    // Lo que el dueño midió: *recarga y vuelve a `dashboard#salir-3`*, y *a la primera que toco
+    // atrás no hace nada*. El plan de la rama produce el miembro nuevo y el ejecutor retrocede ANTES
+    // de navegar, así que la entrada del sentinel NO queda en el camino del atrás. Medido en E-9.
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: PB.panelExitState(7), pathname: PANEL_ROOT })
+    const plan = PH.panelBranchPlan({
+      from: PANEL_ROOT,
+      to: '/appointments',
+      masDebajo: false,
+      holdsExitSentinel: true,
+    })
+    expect(plan).toBe('consume-exit-then-navigate')
+    expect(PB.runBranchNavigation({ plan, to: '/appointments', navigate: navegar, exitId: 7 })).toBe(true)
+    // El retroceso va PRIMERO y la navegación DESPUÉS: ése es el orden que evita el entierro.
+    expect(ctx.back).toHaveBeenCalledTimes(1)
+    expect(navegar).not.toHaveBeenCalled()
+    dispararRetroceso(ctx, { pathname: PANEL_ROOT, state: null })
+    expect(navegar).toHaveBeenCalledWith('/appointments', 'push')
+  })
+
+  it('las ramas de HOY del ejecutor dan exactamente lo mismo, miembro por miembro', () => {
+    // No regresión: el miembro nuevo no cambió ninguna de las cuatro ramas que ya estaban.
+    const ctxNada = montarPila({ state: panelUnderState(PANEL_MORE), pathname: PANEL_ROOT })
+    expect(PB.runBranchNavigation({ plan: 'none', to: PANEL_ROOT, navigate: vi.fn() })).toBe(true)
+    expect(ctxNada.back).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+    for (const plan of ['push', 'replace'] as const) {
+      const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/finances' })
+      expect(PB.runBranchNavigation({ plan, to: '/clients', navigate: vi.fn() })).toBe(false)
+      expect(ctx.back).not.toHaveBeenCalled()
+      vi.unstubAllGlobals()
+    }
+    const ctxUp = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/finances' })
+    expect(PB.runBranchNavigation({ plan: 'up', to: PANEL_MORE, navigate: vi.fn() })).toBe(true)
+    expect(ctxUp.back).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('el DOMINIO se suelta ANTES del retroceso deliberado, y el otro consumidor DEGRADA', () => {
+  it('el hecho de *sentinel vivo* se apaga antes de delegar al ejecutor (si no, el aviso salta al tocar la barra)', () => {
+    // ⚠ T-03-29. Sin esto, el retroceso deliberado llega a la decisión del retroceso con el hecho
+    // encendido, se lee como el atrás del dueño, y APARECE EL AVISO DE SALIDA al tocar un destino de
+    // la barra: un bug nuevo fabricado por el arreglo. Se afirma leyendo el fuente porque el punto
+    // de delegación vive en el hook, y el runner no monta componentes.
+    const handle = sinComentarios(leer(MOD_DUENO)).match(
+      /function handleNavigate\(href: string\): boolean \{[\s\S]*?\n {2}\}/,
+    )
+    expect(handle).not.toBeNull()
+    const cuerpo = handle?.[0] ?? ''
+    expect(cuerpo).toContain('consume-exit-then-navigate')
+    expect(cuerpo).toContain('sentinelVivoRef.current = false')
+    // Y el apagado va ANTES de la llamada al ejecutor, no después.
+    expect(cuerpo.indexOf('sentinelVivoRef.current = false')).toBeLessThan(
+      cuerpo.indexOf('runBranchNavigation')
+    )
+  })
+
+  it('la decisión del retroceso devuelve IGNORAR sin el hecho: tocar la barra no puede mostrar el aviso', () => {
+    // Cae del lado seguro: sin el hecho, el peor caso es que el aviso NO aparezca sobre una entrada
+    // que ya no es nuestra — nunca un retroceso sobre entrada ajena. Y el efecto de armado RE-DERIVA
+    // el hecho del estado de la entrada de arriba en el commit siguiente (la lección de E-6).
+    expect(
+      PB.panelExitPopAction({
+        topIsOurs: false,
+        participates: true,
+        atRoot: true,
+        holding: false,
+        keyboardGuards: false,
+      })
+    ).toBe('ignore')
+  })
+
+  it('el provider del guard DECLARA el miembro nuevo en su ejecutor exhaustivo, y su respuesta es DEGRADAR', () => {
+    // No es dueño del sentinel, así que no puede consumirlo: el ejecutor se niega sin identificador
+    // de dueño y la salida navega con la regla de rutas. Tiene que estar DECLARADO igual, porque el
+    // chequeo de exhaustividad es el candado contra el camino por defecto que nadie eligió.
+    const provider = leer(MOD_PROVIDER)
+    expect(provider).toContain("case 'consume-exit-then-navigate':")
+    expect(provider).toContain('_exhaustivo: never')
+  })
+
+  it('y el provider sigue con CERO mutaciones crudas de historial', () => {
+    // El invariante más viejo de ese archivo: NUNCA retrocede por su cuenta — apaga su bandera y
+    // deja que cada dueño consuma SU entrada con SU guarda. Un retroceso sin guarda ahí es pérdida
+    // de trabajo SILENCIOSA en una pantalla con cambios sin guardar.
+    const provider = sinComentarios(leer(MOD_PROVIDER))
+    expect(provider.length).toBeGreaterThan(500)
+    expect(cuenta(provider, /history\.back|pushState|replaceState/g)).toBe(0)
+  })
+})

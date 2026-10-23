@@ -1172,3 +1172,115 @@ describe('panelBranchPlan — el invariante, simulado sobre la pila del navegado
     }
   })
 })
+
+// ── Plan 03-06 / Task 3 — EL SEXTO MIEMBRO: consumir el sentinel y recién entonces navegar ───────
+//
+// ⚠ POR QUÉ ESTE MIEMBRO EXISTE, y es la causa MEDIDA de G-1 y G-2. La entrada del sentinel de
+// salida es **absorbente**: se empujó para consumirla. Si el dueño navega con ella arriba —la forma
+// vieja, que empuja el destino encima— queda **ENTERRADA** en el camino del atrás, y entonces el
+// atrás aterriza en una entrada de la raíz **con hash** (`/dashboard#salir`) que en pantalla se ve
+// **igual que Inicio**, con un atrás siguiente que no hace **nada visible**: el atrás muerto que el
+// criterio 2 prohíbe explícitamente. La UAT lo midió literalmente —*recarga y vuelve a
+// `dashboard#salir-3`*, *a la primera que toco atrás no hace nada*— y está medido en los escenarios
+// **E-9** y **E-12** de `.planning/debug/pila-de-dos-niveles-medida.md`.
+//
+// ⚠ Y POR QUÉ VA ANTES DE LA REGLA 0: ahí el hecho de la rama es **falso**, así que la decisión
+// caería en **empujar** y el sentinel quedaría enterrado — que es justo el bug.
+
+describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (G-1 / G-2)', () => {
+  it('LOS TRES HECHOS JUNTOS — sentinel arriba, en la RAÍZ, y un destino DISTINTO ⇒ consumir y navegar', () => {
+    for (const to of DESTINOS_BARRA_4.filter((r) => r !== PANEL_ROOT).concat([MAS])) {
+      expect(
+        PH.panelBranchPlan({ from: PANEL_ROOT, to, masDebajo: false, holdsExitSentinel: true })
+      ).toBe('consume-exit-then-navigate')
+    }
+  })
+
+  it('VA ANTES DE LA REGLA 0: se produce con el hecho de la rama en falso Y en verdadero', () => {
+    // Si viviera DESPUÉS de la regla 0, con el hecho de la rama falso la decisión caería en empujar
+    // y el sentinel quedaría enterrado: el bug exacto.
+    for (const masDebajo of [false, true]) {
+      expect(
+        PH.panelBranchPlan({ from: PANEL_ROOT, to: '/clients', masDebajo, holdsExitSentinel: true })
+      ).toBe('consume-exit-then-navigate')
+    }
+  })
+
+  it('NEGATIVO 1 — sin el sentinel arriba NO se produce, para ningún par', () => {
+    for (const from of [...RAMA_DE_MAS, PANEL_ROOT]) {
+      for (const to of DESTINOS_BARRA_5) {
+        for (const masDebajo of [false, true]) {
+          expect(
+            PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: false })
+          ).not.toBe('consume-exit-then-navigate')
+        }
+      }
+    }
+  })
+
+  it('NEGATIVO 2 — FUERA de la raíz no se produce, aunque el sentinel esté arriba', () => {
+    // Consumir el sentinel estando en una sección sería retroceder sobre una entrada que no es la
+    // que creemos: el sentinel es de la raíz y sólo de la raíz.
+    for (const from of RAMA_DE_MAS) {
+      for (const to of DESTINOS_BARRA_5) {
+        for (const masDebajo of [false, true]) {
+          expect(
+            PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: true })
+          ).not.toBe('consume-exit-then-navigate')
+        }
+      }
+    }
+  })
+
+  it('NEGATIVO 3 — destino IGUAL a la ruta actual sigue dando NADA: la regla -1 gana', () => {
+    // La regla que ya existía va primero y no cambia: el dueño ya está en la pantalla que tocó.
+    for (const masDebajo of [false, true]) {
+      expect(
+        PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, masDebajo, holdsExitSentinel: true })
+      ).toBe('none')
+    }
+  })
+
+  it('NO REGRESIÓN — sin el sentinel arriba, o fuera de la raíz, cada par da EXACTAMENTE lo de antes', () => {
+    // El barrido que fija que el miembro nuevo no se cuela en ninguna rama vieja.
+    for (const from of [...RAMA_DE_MAS, PANEL_ROOT]) {
+      for (const to of DESTINOS_BARRA_5) {
+        for (const masDebajo of [false, true]) {
+          const sinSentinel = PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: false })
+          const conSentinel = PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: true })
+          if (from === to) {
+            expect(conSentinel).toBe('none')
+          } else if (from === PANEL_ROOT) {
+            expect(conSentinel).toBe('consume-exit-then-navigate')
+          } else {
+            expect(conSentinel).toBe(sinSentinel)
+          }
+        }
+      }
+    }
+  })
+
+  it('la RAÍZ sigue siendo un PARÁMETRO: la regla nueva se mide contra `root`, no contra un literal', () => {
+    expect(
+      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', masDebajo: false, holdsExitSentinel: true })
+    ).toBe('consume-exit-then-navigate')
+    expect(
+      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/z', masDebajo: false, holdsExitSentinel: true })
+    ).not.toBe('consume-exit-then-navigate')
+  })
+
+  it('el tipo del plan tiene SEIS miembros, y el sexto lo produce el plan 03-06', () => {
+    // El miembro nuevo entra EN EL TIPO, no al lado: si viviera afuera, el chequeo de exhaustividad
+    // del provider del guard de cambios sin guardar NO LO VERÍA y la salida caería por un camino por
+    // defecto que nadie eligió — exactamente la clase de hueco silencioso que esta fase vino a cerrar.
+    const MIEMBROS: PH.PanelBranchPlan[] = [
+      'push',
+      'replace',
+      'up',
+      'collapse-then-replace',
+      'consume-exit-then-navigate',
+      'none',
+    ]
+    expect(new Set(MIEMBROS).size).toBe(6)
+  })
+})
