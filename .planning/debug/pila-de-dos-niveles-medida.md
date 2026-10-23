@@ -22,7 +22,7 @@ node scripts/con-turno.mjs node .planning/debug/probes/panel-back-stack.mjs
 
 | Pieza | Valor medido |
 |---|---|
-| Navegador | **Chrome/154.0.8037.98** para E-1..E-8 (2026-10-13/14) y **Chrome/155** para E-11 (2026-10-23, plan 03-05) y para **E-9 / E-10 / E-12** (2026-10-23, plan 03-06), `--headless=new`, perfil temporal propio. Las **ocho** primeras coinciden en **las dos** versiones (las corridas del 2026-10-23 las volvieron a medir en verde sobre 155), así que la pila del atrás no cambió de una a la otra. Los **cuatro** escenarios de la tanda de cierre de gaps están medidos **sólo** sobre 155 |
+| Navegador | **Chrome/154.0.8037.98** para E-1..E-8 (2026-10-13/14), **Chrome/155.0.8059.86** para E-11 (2026-10-23, plan 03-05) y **Chrome/155.0.8059.85** para **E-9 / E-10 / E-12** (2026-10-23, plan 03-06 — el binario instalado, leído por CDP en la corrida), `--headless=new`, perfil temporal propio. Las **ocho** primeras coinciden en **las dos** versiones (las corridas del 2026-10-23 las volvieron a medir en verde sobre 155), así que la pila del atrás no cambió de una a la otra. Los **cuatro** escenarios de la tanda de cierre de gaps están medidos **sólo** sobre 155 |
 | Node | `v24.15.0` — el `WebSocket` global alcanza para CDP, **cero paquetes nuevos** |
 | Servidor | `node:http` propio en `http://127.0.0.1:8731`, responde el mismo HTML a cualquier path |
 | Puerto de depuración | `9334` |

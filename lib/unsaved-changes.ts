@@ -11,7 +11,7 @@
 // provider como cualquier test.
 //
 // ⚠ EL ÚNICO IMPORT ES DE TIPO Y SE BORRA AL COMPILAR, y está acá por una razón concreta: el plan de
-// salida se compone sobre `PanelBranchPlan`, que es la política de la rama. Duplicar sus cinco
+// salida se compone sobre `PanelBranchPlan`, que es la política de la rama. Duplicar sus seis
 // valores acá crearía un segundo dialecto —el agujero que `panelNavMode` documenta como "la clase de
 // hueco silencioso que esta fase viene a cerrar"—; con el tipo importado, un plan nuevo aparece solo
 // en la plantilla de abajo y en el `switch` exhaustivo del provider.
@@ -87,8 +87,9 @@ export function decideNavigation(input: { dirty: boolean; href: string | null; c
  * ── Y LA TERCERA MITAD: LA RAMA DE MÁS (criterio 4, plan 03-04) ─────────────────────────────────
  *
  * **Por qué el modo de sección ya no alcanza.** Con Más en el medio, la política de navegación tiene
- * **cinco** planes y no dos ({@link PanelBranchPlan}): además de empujar y reemplazar puede **subir
- * un nivel** (D-03), **colapsar y reemplazar** (criterio 2) o **no hacer nada** (MOB-05). Decidir
+ * **seis** planes y no dos ({@link PanelBranchPlan}): además de empujar y reemplazar puede **subir
+ * un nivel** (D-03), **colapsar y reemplazar** (criterio 2), **consumir el sentinel de salida y
+ * recién entonces navegar** (plan 03-06) o **no hacer nada** (MOB-05). Decidir
  * acá con el modo de rutas a secas significa que "Salir sin guardar" aterriza con la política de
  * **un** nivel: es exactamente el defecto que el criterio 4 prohíbe, y el que el quick `261006-iey`
  * ya tuvo que arreglar una vez.
@@ -114,7 +115,7 @@ export function decideNavigation(input: { dirty: boolean; href: string | null; c
  * justo lo que este diseño existe para evitar. El tipo dice la verdad; el nombre quedó corto.
  *
  * ⚠ **Y LO QUE ESTA FUNCIÓN NO PUEDE DECIDIR, medido en el escenario E-8 de
- * `.planning/debug/pila-de-dos-niveles-medida.md`:** *cuál* de los cinco planes corresponde. El plan
+ * `.planning/debug/pila-de-dos-niveles-medida.md`:** *cuál* de los seis planes corresponde. El plan
  * de la rama necesita la marca de la entrada de la sección, y con el sentinel de cambios sin guardar
  * arriba esa marca **no es legible** (`dirtyHistoryState` devuelve `{ frjDirty }` y nada más, así que
  * la entrada nueva no la lleva; la marca sigue viva en la entrada de abajo). Medido: `null` con el
