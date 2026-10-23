@@ -76,8 +76,8 @@ afterEach(() => {
   // ⚠ LOS DOS DATOS A NIVEL DE MÓDULO SE DRENAN ANTES DE SOLTAR EL `window`, y en este orden: son
   // estado del módulo, así que sobreviven al test, y un pedido o un aterrizaje colgado del test
   // anterior envenenaría el siguiente — que es, literalmente, el bug que el plan 03-05 cierra.
-  PB.takeBackLanding?.()
-  PB.applyBranchMarkRequest?.('__drenaje__')
+  PB.takeBackLanding()
+  PB.applyBranchMarkRequest('__drenaje__')
   vi.unstubAllGlobals()
 })
 

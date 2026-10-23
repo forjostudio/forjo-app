@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, type PanelBranchPlan } from '@/lib/panel-history'
+import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, writePanelUnder, type PanelBranchPlan } from '@/lib/panel-history'
 // Los dos helpers del teclado, PUROS y ya exportados, y el hash base de los overlays. Se IMPORTAN:
 // esos dos módulos no se tocan (son intocables de la fase), y reusar sus helpers medidos es lo
 // contrario de copiarlos.
@@ -102,6 +102,91 @@ export function branchSecondStep({
   return 'navigate'
 }
 
+// ── El RASTREO del retroceso y el CANAL de propagación: dos datos a nivel de módulo ─────────────
+//
+// Los dos usan el molde de estado mutable de módulo que el repo ya aplica para el serial y la
+// instancia dueña (más abajo) y para los dos rastreadores del teclado: nada nuevo, y nada que haga
+// falta un temporizador — el diferimiento de esta fase va por estado y un efecto (lección 3).
+
+/**
+ * La ruta en la que aterrizó el último retroceso. **Es LA RUTA y no un booleano**, y el motivo está
+ * medido, no supuesto.
+ *
+ * ⚠ **POR QUÉ UN BOOLEANO ESTÁ PROHIBIDO ACÁ.** Un retroceso que **no cambia** la ruta —el que el
+ * sentinel de salida absorbe en Inicio— dejaría la bandera encendida; el efecto de marcado **no
+ * vuelve a correr** (sus dependencias no cambiaron) y el **próximo empuje de verdad** quedaría
+ * suprimido **en silencio**: la política degradaría a un nivel sin que nada se ponga rojo. Guardando
+ * la ruta, la supresión aplica **sólo** si la ruta actual coincide con la del aterrizaje.
+ */
+let rutaDelUltimoRetroceso: string | null = null
+
+/**
+ * Anota el aterrizaje de un retroceso. Lo llama el oyente del `popstate` del hook, con la ruta leída
+ * de la **ubicación real** y no del render: cuando el evento llega, el commit todavía no ocurrió.
+ *
+ * Exportado **sólo** para poder cubrir el rastreo sin montar React, igual que {@link nextBranchId}.
+ */
+export function recordBackLanding(route: string): void {
+  rutaDelUltimoRetroceso = route
+}
+
+/**
+ * Lee el aterrizaje anotado **y lo descarta**. Se llama en **toda** corrida del efecto de marcado,
+ * haya suprimido o no: un dato que sobrevive a una corrida suprimiría un empuje que nadie pidió
+ * suprimir.
+ */
+export function takeBackLanding(): string | null {
+  const ruta = rutaDelUltimoRetroceso
+  rutaDelUltimoRetroceso = null
+  return ruta
+}
+
+/** El pedido de propagación: el destino que lo pidió, y la ruta REAL que quedó debajo. */
+export type BranchMarkRequest = { destino: string; rutaDebajo: string | null }
+
+/**
+ * El canal de propagación. **Es UNO**, lo llena **sólo** el ejecutor del colapso —que es el único
+ * que conoce la ruta real de abajo, porque la **leyó**— y lo consume **sólo**
+ * {@link applyBranchMarkRequest} desde el efecto de marcado, que es el único lugar que observa la
+ * ruta en todo commit del panel.
+ *
+ * ⚠ **Y por eso el provider del guard de cambios sin guardar NO SE TOCA:** ejecuta el MISMO colapso
+ * para el caso vivo de `/web` llamando a {@link runBranchNavigation}, así que su propagación sale
+ * gratis por este mismo canal. Cablearla allá también serían **dos** consumidores y un segundo
+ * dialecto de la misma regla.
+ */
+let marcaPedida: BranchMarkRequest | null = null
+
+/** Deja pedida la propagación. Privada a propósito: el único productor es el colapso. */
+function pedirMarcaPropagada(destino: string, rutaDebajo: string | null): void {
+  marcaPedida = { destino, rutaDebajo }
+}
+
+/**
+ * **EL ÚNICO CONSUMIDOR DEL CANAL.** Devuelve `true` si había un pedido **para esta ruta** —en cuyo
+ * caso la decisión de marcado **no se consulta**, porque el dato es más preciso que cualquier
+ * derivación: viene de haber **leído** la entrada de abajo— y `false` si no.
+ *
+ * **El pedido se descarta SIEMPRE**, coincida o no. Un pedido que sobrevive a una navegación que
+ * **no ocurrió** escribiría una marca rancia en una entrada **ajena**: el mismo bug, del otro lado.
+ *
+ * **Y sin ruta de abajo no se deriva ninguna.** Si la marca de la entrada de Más se había perdido, lo
+ * que quedó debajo del destino es desconocido, y escribir la ruta de Más sería la mentira que esta
+ * función existe para no decir. Quedarse sin marca deja una pila un escalón más larga —la
+ * degradación segura de toda la fase—; una marca falsa deja al dueño **fuera del sitio**.
+ */
+export function applyBranchMarkRequest(current: string): boolean {
+  const pedido = marcaPedida
+  marcaPedida = null
+  if (pedido === null) return false
+  if (pedido.destino !== current) return false
+  // La escritura va por el ESCRITOR ÚNICO, así que hereda sus dos guardas (la regla 0 y la
+  // idempotencia). Este canal no tiene guardas propias a propósito: dos juegos de guardas es cómo se
+  // pierde uno de los dos sin que ningún gate lo vea.
+  if (pedido.rutaDebajo !== null) writePanelUnder(pedido.rutaDebajo)
+  return true
+}
+
 /**
  * El ejecutor. Devuelve `true` si **se hizo cargo** del gesto (⇒ el call site tiene que PREVENIR la
  * navegación) y `false` si no (⇒ el call site deja navegar, y la pila queda un escalón más larga:
@@ -139,11 +224,14 @@ export function runBranchNavigation({
 
   // ── El colapso: dos pasos, y el segundo sale del EVENTO del primero ──────────────────────────
   const segundoPaso = () => {
+    // La marca de la entrada de Más, leída recién ahora: es el único momento en que se puede. Y es
+    // también el ÚNICO dato fiable de qué queda debajo del destino después del reemplazo, porque el
+    // reemplazo PISA la entrada de Más (ver abajo).
+    const rutaDebajo = panelUnderRoute(window.history.state)
     const paso = branchSecondStep({
       parado: window.location.pathname,
       more,
-      // La marca de la entrada de Más, leída recién ahora: es el único momento en que se puede.
-      rutaDebajo: panelUnderRoute(window.history.state),
+      rutaDebajo,
       to,
     })
     if (paso === 'abort') return
@@ -153,9 +241,17 @@ export function runBranchNavigation({
       // `lib/dirty-history.ts`, y está medido en E-5). Y pasa igual por las dos guardas: si la marca
       // se perdió en el medio, no se retrocede y se navega, que es la degradación segura.
       if (consumeOwnedBranchEntry()) return
+      pedirMarcaPropagada(to, rutaDebajo)
       navigate(to, 'replace')
       return
     }
+    // ⚠ LA PROPAGACIÓN, Y POR QUÉ NO PUEDE DERIVARSE DEL PAR DE RUTAS. El reemplazo que viene
+    // **pisa** la entrada de Más: lo que queda debajo del destino es **lo que había debajo de Más**,
+    // que es justo el valor que se acaba de leer. El efecto de marcado, en cambio, sólo vería el
+    // tramo (ruta de Más → destino), que la política declara EMPUJE —`from === more`— y del que
+    // derivaría la **ruta de Más**: o sea la entrada que acaba de desaparecer. Es la causa medida de
+    // G-3 en la UAT, y está medida como número en el escenario E-11 de la sonda.
+    pedirMarcaPropagada(to, rutaDebajo)
     navigate(to, 'replace')
   }
 
@@ -489,7 +585,19 @@ let instanciaDuena: number | null = null
 /**
  * Cuándo hay que marcar la entrada actual, y con qué ruta. Pura.
  *
- * Devuelve la ruta que quedó debajo, o `null` si no hay nada que anotar. Las cuatro ramas:
+ * Devuelve la ruta que quedó debajo, o `null` si no hay nada que anotar.
+ *
+ * ⚠ **LA REGLA DE DIRECCIÓN VA PRIMERA, Y NO ES OPCIONAL.** Un retroceso **no CREA** una entrada:
+ * **revela** una que ya existe y que ya trae **su propia** marca. Escribir ahí hace las dos cosas
+ * malas a la vez:
+ *   (a) **miente** — la ruta de la que venimos estaba **ARRIBA**, no debajo; y
+ *   (b) **destruye la verdad** que esa entrada ya tenía, que es justo la que el caso degenerado del
+ *       criterio 2 necesita leer.
+ * Y los **tres** retrocesos del sistema caen acá —el atrás del dueño, el *subir un nivel* de D-03 y
+ * los dos pasos del colapso—, que es **por qué el síntoma de la UAT apareció en tres gaps distintos**
+ * (G-1, G-2 y G-3). El par de rutas no puede distinguirlos: con un retroceso dice `push` igual.
+ *
+ * Después, y **sin el hecho del retroceso**, las cuatro ramas de siempre, idénticas:
  *   · sin ruta anterior (primer commit de la instancia) ⇒ no marcar: no sabemos qué quedó debajo;
  *   · ruta anterior igual a la actual ⇒ no marcar: no hubo navegación;
  *   · la política dice **reemplazar** ⇒ no marcar: la entrada de abajo es la misma de antes;
@@ -498,14 +606,27 @@ let instanciaDuena: number | null = null
 export function branchMarkDecision({
   previous,
   current,
+  /**
+   * ¿Este commit viene de un **retroceso**? Va **sin valor por omisión**, igual que `masDebajo` y
+   * `holdsExitSentinel` de `panelBranchPlan`: es un **hecho de la pila**, no una configuración, y un
+   * call site que lo olvide **no compila** — que es justo la disciplina que esta fase vino a
+   * instalar. Lo aporta el rastreo de {@link takeBackLanding}, comparando la ruta del aterrizaje
+   * contra la ruta actual.
+   */
+  vieneDeUnRetroceso,
   root = PANEL_ROOT,
   more = PANEL_MORE,
 }: {
   previous: string | null
   current: string
+  vieneDeUnRetroceso: boolean
   root?: string
   more?: string
 }): string | null {
+  // ── LA REGLA DE DIRECCIÓN — ningún retroceso escribe la marca. ────────────────────────────────
+  // Va primera porque ninguna otra condición puede autorizar a escribir sobre una entrada que YA
+  // EXISTÍA y que ya sabe qué tiene debajo.
+  if (vieneDeUnRetroceso) return null
   if (previous === null) return null
   if (previous === current) return null
   if (panelNavMode({ from: previous, to: current, root, more }) !== 'push') return null
@@ -579,6 +700,22 @@ export function usePanelBranch({
     }
   }, [id])
 
+  // ── El RASTREO del retroceso ──────────────────────────────────────────────────────────────────
+  // ⚠ INDEPENDIENTE DE `drawsExitHint` A PROPÓSITO, al revés del efecto del sentinel: la supresión
+  // de la marca tiene que valer igual en un consumidor que no dibuje el aviso de salida. El aviso es
+  // de MOB-05; la dirección es de la POLÍTICA, y la política no se negocia por consumidor.
+  //
+  // Lo único que hace es anotar **la ruta** del aterrizaje (nunca una bandera: ver
+  // {@link rutaDelUltimoRetroceso}), leída de la ubicación REAL y no del render — cuando el evento
+  // llega, el commit todavía no ocurrió. Se desengancha en la limpieza, como los dos que ya hay.
+  useEffect(() => {
+    const anotarElAterrizaje = () => {
+      recordBackLanding(window.location.pathname)
+    }
+    window.addEventListener('popstate', anotarElAterrizaje)
+    return () => window.removeEventListener('popstate', anotarElAterrizaje)
+  }, [])
+
   // ── La marca, escrita DESPUÉS del commit del router ───────────────────────────────────────────
   // ⚠ EL ÚNICO SUPUESTO ABIERTO QUE QUEDA EN TODA LA FASE, y está declarado en vez de escondido: este
   // efecto tiene que correr DESPUÉS de la escritura del router de Next, o el router pisa la marca. El
@@ -590,10 +727,27 @@ export function usePanelBranch({
   useEffect(() => {
     const anterior = anteriorRef.current
     anteriorRef.current = pathname
+    // El candado de un solo dueño por entrada va ANTES de tocar cualquiera de los dos canales: una
+    // instancia que no es la dueña no escribe NI se come el dato de la que sí lo es.
     if (instanciaDuena !== null && instanciaDuena !== id) return
-    const debajo = branchMarkDecision({ previous: anterior, current: pathname, more })
+    // ⚠ LOS DOS DATOS DEL MÓDULO SE LEEN Y SE DESCARTAN EN ESTA CORRIDA, haya suprimido o escrito o
+    // no: un dato que sobrevive a una corrida suprimiría —o escribiría— en una entrada que no es la
+    // que lo pidió.
+    const aterrizajeDelRetroceso = takeBackLanding()
+    // El canal de propagación del colapso, PRIMERO y sin consultar la decisión: el dato es más
+    // preciso que cualquier derivación, porque viene de haber LEÍDO la entrada de abajo.
+    if (applyBranchMarkRequest(pathname)) return
+    const debajo = branchMarkDecision({
+      previous: anterior,
+      current: pathname,
+      // La supresión aplica SÓLO si el aterrizaje del retroceso es la ruta en la que estamos: por
+      // eso el rastreo guarda la ruta y no una bandera.
+      vieneDeUnRetroceso: aterrizajeDelRetroceso !== null && aterrizajeDelRetroceso === pathname,
+      more,
+    })
     if (debajo === null) return
-    // La regla 0 y la política las vuelve a chequear la escritura, con el estado REAL de la entrada.
+    // La regla 0, la idempotencia y la política las vuelve a chequear la escritura, con el estado
+    // REAL de la entrada.
     applyPanelUnder({ from: debajo, to: pathname, more })
   }, [pathname, id, more])
 
