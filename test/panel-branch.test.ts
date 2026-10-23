@@ -399,6 +399,10 @@ describe('cuándo se arma el sentinel — las reglas EN ORDEN', () => {
     atRoot: true,
     hintOpen: false,
     topIsOurs: false,
+    // El SÉPTIMO hecho, de la regla que el plan 03-07 agrega: si la URL ya lleva nuestro hash, la
+    // entrada ya es nuestra y no hay que armar. En falso acá porque éste es el objeto de "sí se
+    // arma"; su propia suite está más abajo.
+    urlYaLlevaNuestroHash: false,
     foreignOwnsTop: false,
     // El SEXTO hecho, de la decisión (a) del plan 03-06: con algo nuestro debajo no se arma. En
     // falso acá porque éste es el objeto de "sí se arma"; su propia suite está más abajo.
@@ -447,6 +451,7 @@ describe('cuándo se arma el sentinel — las reglas EN ORDEN', () => {
         atRoot: true,
         hintOpen: false,
         topIsOurs: false,
+        urlYaLlevaNuestroHash: true,
         foreignOwnsTop: false,
         algoNuestroDebajo: true,
       })
@@ -510,6 +515,7 @@ describe('qué significa un retroceso — las reglas EN ORDEN', () => {
         atRoot: true,
         hintOpen: false,
         topIsOurs: false,
+        urlYaLlevaNuestroHash: false,
         foreignOwnsTop: true,
         algoNuestroDebajo: false,
       })
@@ -861,6 +867,7 @@ describe('la DECISIÓN (a) — el sentinel se arma SÓLO si no hay nada nuestro 
     atRoot: true,
     hintOpen: false,
     topIsOurs: false,
+    urlYaLlevaNuestroHash: false,
     foreignOwnsTop: false,
     algoNuestroDebajo: false,
   }
@@ -1171,5 +1178,288 @@ describe('el DOMINIO se suelta ANTES del retroceso deliberado, y el otro consumi
     const provider = sinComentarios(leer(MOD_PROVIDER))
     expect(provider.length).toBeGreaterThan(500)
     expect(cuenta(provider, /history\.back|pushState|replaceState/g)).toBe(0)
+  })
+})
+
+// ── Plan 03-07 — EL ARMADO SIN RETORNOS SILENCIOSOS (cierre de G-5 / G-6) ────────────────────────
+//
+// Los dos gaps son **el mismo defecto visto de dos lados**: el armado **se intenta y se niega sin
+// dejar rastro**. G-5 es *"para que funcione tengo que entrar a alguna sección y volver a inicio,
+// sino sale de una sin aviso"*; G-6 es *"si toco atrás una vez, pasan 30 segundos, y toco el segundo
+// atrás, sale de una"*. Esta tanda cubre las tres piezas que el plan 03-07 agrega:
+//   · la decisión de dominio, que deja de ser el retorno temprano más silencioso del módulo;
+//   · la SÉPTIMA regla de armado, decidida midiendo en E-13 (el origen del `dashboard#salir-3`);
+//   · los CUATRO momentos de reintento, con el del retroceso IGNORADO y SIN el del aviso.
+
+describe('branchOwnerDecision — la decisión de dominio, PURA y con casos', () => {
+  it('existe y está exportada: deja de ser un retorno temprano sin cobertura', () => {
+    // Era el camino de falla MÁS SILENCIOSO del módulo: no lo ve `tsc`, ni la suite, ni el build, y
+    // su efecto es que toda instancia nueva SE ABSTIENE DE ARMAR — o sea G-5, literal.
+    expect(typeof PB.branchOwnerDecision).toBe('function')
+  })
+
+  it('SIN dueña figurando ⇒ puede operar: nadie reclamó la pila', () => {
+    expect(PB.branchOwnerDecision({ duenaFigurando: null, preguntaId: 7, instanciasVivas: 0 })).toBe('operar')
+    expect(PB.branchOwnerDecision({ duenaFigurando: null, preguntaId: 7, instanciasVivas: 3 })).toBe('operar')
+  })
+
+  it('con la dueña siendo ÉSTA ⇒ puede operar', () => {
+    expect(PB.branchOwnerDecision({ duenaFigurando: 7, preguntaId: 7, instanciasVivas: 1 })).toBe('operar')
+  })
+
+  it('con OTRA instancia VIVA ⇒ se abstiene: es el comportamiento de hoy y es el seguro', () => {
+    // Dos dueños por la MISMA entrada descuadran el conteo de retrocesos y dejan un atrás muerto o
+    // uno de más. Con una viva que no es ésta, la nueva no toca la pila.
+    expect(PB.branchOwnerDecision({ duenaFigurando: 3, preguntaId: 7, instanciasVivas: 1 })).toBe('abstenerse')
+    expect(PB.branchOwnerDecision({ duenaFigurando: 3, preguntaId: 7, instanciasVivas: 5 })).toBe('abstenerse')
+  })
+
+  it('EL QUE SANA — con otra figurando pero CERO instancias vivas ⇒ puede operar', () => {
+    // Si la limpieza no corrió (un árbol descartado, un doble montaje de desarrollo), la variable
+    // queda apuntando a una INSTANCIA MUERTA. Con cero vivas, nadie vivo podía tenerlo: la que
+    // pregunta TOMA el dominio. Sin esto, el módulo entero deja de armar sin decir nada.
+    expect(PB.branchOwnerDecision({ duenaFigurando: 3, preguntaId: 7, instanciasVivas: 0 })).toBe('operar')
+  })
+
+  it('el ORDEN: ser la dueña le gana al conteo, y el conteo sólo decide cuando la dueña es otra', () => {
+    expect(PB.branchOwnerDecision({ duenaFigurando: 7, preguntaId: 7, instanciasVivas: 9 })).toBe('operar')
+    expect(PB.branchOwnerDecision({ duenaFigurando: 8, preguntaId: 7, instanciasVivas: 9 })).toBe('abstenerse')
+  })
+
+  it('el hook la CONSUME en vez de repetir el `if` a mano, y en sus tres guardas', () => {
+    // El punto de extraerla no es la elegancia: es que las tres guardas del hook dejen de ser tres
+    // copias de la misma condición, donde una puede divergir de las otras sin que nada se ponga rojo.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod.length).toBeGreaterThan(500)
+    expect(cuenta(mod, /branchOwnerDecision\(/g)).toBeGreaterThanOrEqual(3)
+    // Y el conteo de vivas sube y baja en el MISMO efecto: uno sin el otro deja el candado mintiendo.
+    expect(cuenta(mod, /instanciasVivas \+= 1/g)).toBe(1)
+    expect(cuenta(mod, /instanciasVivas = Math\.max\(0, instanciasVivas - 1\)/g)).toBe(1)
+  })
+})
+
+describe('EL PAR QUE NO HAY QUE CONFUNDIR — la negativa CORRECTA contra la negativa SILENCIOSA', () => {
+  // ⚠ ES EL CANDADO CONTRA EL PEOR REFACTOR POSIBLE DE ESTE PLAN. Las dos son negativas del armado y
+  // se parecen; una es la decisión del dueño FUNCIONANDO y la otra es el bug. "Arreglar" la primera
+  // reintroduce exactamente la colisión que la decisión (a) resolvió, y el síntoma es el aviso
+  // apareciendo cuando el dueño NO iba a salir (el ítem H de la UAT, otra vez).
+  const LIBRE = {
+    participates: true,
+    atRoot: true,
+    hintOpen: false,
+    topIsOurs: false,
+    urlYaLlevaNuestroHash: false,
+    foreignOwnsTop: false,
+    algoNuestroDebajo: false,
+  }
+
+  it('la negativa CORRECTA: con la marca de la rama en la entrada de la raíz NO se arma, y está BIEN', () => {
+    // Hay una sección NUESTRA debajo: el atrás va a ir ahí, que es MOB-04. Es la decisión (a) del
+    // dueño funcionando, no un defecto. NO SE TOCA.
+    expect(PB.panelExitArmAction({ ...LIBRE, algoNuestroDebajo: true })).toBe('none')
+  })
+
+  it('la negativa SILENCIOSA: el dominio apuntando a una INSTANCIA MUERTA — antes no armaba, ahora sí', () => {
+    // Misma negativa en pantalla (el atrás sale sin avisar) y causa OPUESTA: acá nadie decidió nada,
+    // el módulo se abstuvo porque una variable quedó colgada. Es G-5, y es lo que este plan elimina.
+    expect(PB.branchOwnerDecision({ duenaFigurando: 99, preguntaId: 7, instanciasVivas: 0 })).toBe('operar')
+    // Y con el dominio sano, la decisión de armado sí llega a correr y arma.
+    expect(PB.panelExitArmAction(LIBRE)).toBe('arm')
+  })
+})
+
+describe('la SÉPTIMA regla — si la URL ya lleva nuestro hash, NO armar (medido en E-13)', () => {
+  const LIBRE = {
+    participates: true,
+    atRoot: true,
+    hintOpen: false,
+    topIsOurs: false,
+    urlYaLlevaNuestroHash: false,
+    foreignOwnsTop: false,
+    algoNuestroDebajo: false,
+  }
+
+  it('con la URL llevando nuestro hash ⇒ NO armar: la entrada YA es nuestra', () => {
+    // Aunque su estado lo haya pisado una escritura ajena. Empujar otra escalaría el hash y costaría
+    // DOS atrás: es el origen medido de `dashboard#salir-3` que el dueño reportó (E-13, mitad B).
+    expect(PB.panelExitArmAction({ ...LIBRE, urlYaLlevaNuestroHash: true })).toBe('none')
+  })
+
+  it('GANA sobre la regla de política: con la URL nuestra, no arma con el hecho en cualquier valor', () => {
+    expect(PB.panelExitArmAction({ ...LIBRE, urlYaLlevaNuestroHash: true, algoNuestroDebajo: false })).toBe('none')
+    expect(PB.panelExitArmAction({ ...LIBRE, urlYaLlevaNuestroHash: true, algoNuestroDebajo: true })).toBe('none')
+  })
+
+  it('PIERDE contra *ya estoy armado*: parados sobre el nuestro, devuelve la CUARTA', () => {
+    // ⚠ ADYACENTE AL DE ARRIBA A PROPÓSITO: los dos juntos fijan el ORDEN. Las dos reglas hablan de
+    // la entrada de arriba y las dos devuelven `none`, así que el orden no se puede afirmar con el
+    // valor de retorno — se afirma leyendo el fuente (el caso de abajo), y acá queda el de
+    // comportamiento.
+    expect(PB.panelExitArmAction({ ...LIBRE, topIsOurs: true, urlYaLlevaNuestroHash: true })).toBe('none')
+  })
+
+  it('el ORDEN en el fuente: la séptima va DESPUÉS de *ya estoy armado* y ANTES de la de política', () => {
+    // ⚠ EL RECORTE CIERRA EN LA LLAVE SOLA AL FINAL DE LÍNEA (`/m` con `\}$`) y NO en `\n\}` a secas:
+    // con eso se trunca en el `}: {` que separa el objeto desestructurado de su tipo, y el caso
+    // quedaría midiendo CERO sobre una región vacía. Es la trampa que esta fase ya pisó cuatro veces.
+    const cuerpo = sinComentarios(leer(MOD_DUENO)).match(
+      /export function panelExitArmAction\([\s\S]*?\n\}$/m,
+    )
+    expect(cuerpo).not.toBeNull()
+    const src = cuerpo?.[0] ?? ''
+    const iArmado = src.indexOf("if (topIsOurs) return 'none'")
+    const iHash = src.indexOf("if (urlYaLlevaNuestroHash) return 'none'")
+    const iPolitica = src.indexOf("if (algoNuestroDebajo) return 'none'")
+    expect(iArmado).toBeGreaterThan(-1)
+    expect(iHash).toBeGreaterThan(-1)
+    expect(iPolitica).toBeGreaterThan(-1)
+    expect(iArmado).toBeLessThan(iHash)
+    expect(iHash).toBeLessThan(iPolitica)
+  })
+
+  it('el hecho va SIN VALOR POR OMISIÓN: un call site que lo olvide NO COMPILA', () => {
+    const firma = sinComentarios(leer(MOD_DUENO)).match(
+      /export function panelExitArmAction\(\{[\s\S]*?\): PanelExitArmAction \{/,
+    )
+    expect(firma).not.toBeNull()
+    expect(firma?.[0]).toContain('urlYaLlevaNuestroHash: boolean')
+    expect(firma?.[0]).not.toContain('urlYaLlevaNuestroHash?')
+    expect(firma?.[0]).not.toMatch(/urlYaLlevaNuestroHash\s*=/)
+  })
+
+  it('SIETE reglas que no arman, y UNA sola salida que arma', () => {
+    // El número es el candado: con SEIS la séptima no se implementó y el hash sigue escalando y
+    // acumulando entradas de salida; con OCHO se agregó una regla que nadie decidió.
+    const cuerpo = sinComentarios(leer(MOD_DUENO)).match(
+      /export function panelExitArmAction\([\s\S]*?\n\}$/m,
+    )
+    expect(cuerpo).not.toBeNull()
+    // Y el candado del candado: la región recortada tiene que ser LARGA. Una región vacía o truncada
+    // en la firma contaría cero, y `toBe(7)` fallaría — pero con otro número de regla también, así
+    // que el largo distingue "la regla falta" de "el recorte no mide nada".
+    expect((cuerpo?.[0] ?? '').length).toBeGreaterThan(400)
+    expect(cuenta(cuerpo?.[0] ?? '', /return 'none'/g)).toBe(7)
+    expect(cuenta(cuerpo?.[0] ?? '', /return 'arm'/g)).toBe(1)
+  })
+
+  it('las SEIS reglas anteriores siguen dando lo mismo, una por una', () => {
+    expect(PB.panelExitArmAction(LIBRE)).toBe('arm')
+    expect(PB.panelExitArmAction({ ...LIBRE, participates: false })).toBe('none')
+    expect(PB.panelExitArmAction({ ...LIBRE, atRoot: false })).toBe('none')
+    expect(PB.panelExitArmAction({ ...LIBRE, hintOpen: true })).toBe('none')
+    expect(PB.panelExitArmAction({ ...LIBRE, topIsOurs: true })).toBe('none')
+    expect(PB.panelExitArmAction({ ...LIBRE, foreignOwnsTop: true })).toBe('none')
+    expect(PB.panelExitArmAction({ ...LIBRE, algoNuestroDebajo: true })).toBe('none')
+  })
+
+  it('el hecho se contesta con un predicado PURO sobre el hash, no con un `startsWith` a secas', () => {
+    // `#salirXYZ` NO es nuestro: un `startsWith` lo tomaría como propio y el sentinel nunca se
+    // armaría en una pantalla con un hash ajeno que empieza igual. Las formas que reconoce son
+    // EXACTAMENTE las que `nextPanelExitHash` puede producir.
+    expect(PB.urlAlreadyHoldsExitHash(PB.PANEL_EXIT_HASH)).toBe(true)
+    expect(PB.urlAlreadyHoldsExitHash(PB.PANEL_EXIT_HASH + '-2')).toBe(true)
+    expect(PB.urlAlreadyHoldsExitHash(PB.PANEL_EXIT_HASH + '-7')).toBe(true)
+    expect(PB.urlAlreadyHoldsExitHash('')).toBe(false)
+    expect(PB.urlAlreadyHoldsExitHash('#seccion')).toBe(false)
+    expect(PB.urlAlreadyHoldsExitHash(PB.PANEL_EXIT_HASH + 'XYZ')).toBe(false)
+    expect(PB.urlAlreadyHoldsExitHash(PB.PANEL_EXIT_HASH + '-')).toBe(false)
+    expect(PB.urlAlreadyHoldsExitHash(PB.PANEL_EXIT_HASH + '-abc')).toBe(false)
+    // Y el candado de ida y vuelta: todo lo que el derivador produce, el predicado lo reconoce.
+    for (const actual of ['', '#seccion', PB.PANEL_EXIT_HASH, PB.PANEL_EXIT_HASH + '-2']) {
+      expect(PB.urlAlreadyHoldsExitHash(PB.nextPanelExitHash(actual))).toBe(true)
+    }
+  })
+
+  it('el armado lo alimenta leyendo el hash REAL de `location`, nunca un valor de render', () => {
+    const armado = sinComentarios(leer(MOD_DUENO)).match(
+      /const armarSentinel = useCallback[\s\S]*?\n {2}\}, \[/,
+    )
+    expect(armado).not.toBeNull()
+    expect(armado?.[0]).toContain('urlYaLlevaNuestroHash')
+    expect(armado?.[0]).toContain('urlAlreadyHoldsExitHash(window.location.hash)')
+  })
+})
+
+describe('los CUATRO momentos de reintento — y el que NO re-arma', () => {
+  /** El manejador del retroceso, recortado del fuente sin comentarios. */
+  function manejadorDelRetroceso(): string {
+    const m = sinComentarios(leer(MOD_DUENO)).match(/const alRetroceder = \(\) => \{[\s\S]*?\n {4}\}\n/)
+    expect(m).not.toBeNull()
+    return m?.[0] ?? ''
+  }
+
+  it('G-5 — el reintento NO depende de que cambie la ruta: hay CUATRO momentos, no uno', () => {
+    // El sospechoso que el dueño midió con palabras exactas: el armado vivía en un efecto con deps
+    // `[armarSentinel, pathname]`, así que si no armó al entrar, parado en Inicio NO VOLVÍA A
+    // INTENTARLO NUNCA. Los cuatro momentos son: al montar, al cambiar la ruta, al expirar la
+    // ventana del aviso, y en todo retroceso resuelto como IGNORAR.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod.length).toBeGreaterThan(500)
+    expect(cuenta(mod, /armarSentinel\(\)/g)).toBeGreaterThanOrEqual(4)
+  })
+
+  it('el retroceso resuelto como IGNORAR reintenta el armado, DENTRO del manejador', () => {
+    // Un retroceso ignorado significa que el atrás hizo algo que NO ERA NUESTRO —cerrar un overlay,
+    // consumir una sección que teníamos encima— y después de eso podemos estar parados en la raíz
+    // SIN sentinel, con la ruta SIN cambiar: el efecto del armado no vuelve a correr y el atrás
+    // siguiente sale sin avisar. Es el ítem 20 de la UAT visto desde el otro lado.
+    const handler = manejadorDelRetroceso()
+    const ramaIgnorar = handler.match(/accion === 'ignore'\) \{[\s\S]*?\n {6}\}/)
+    expect(ramaIgnorar).not.toBeNull()
+    expect(ramaIgnorar?.[0]).toContain('armarSentinel()')
+    // Y los tres reintentos del manejador: el del teclado, el del retroceso ignorado y el del
+    // temporizador. Con dos, el del retroceso ignorado no está.
+    expect(cuenta(handler, /armarSentinel\(\)/g)).toBe(3)
+  })
+
+  it('G-6 — en el retroceso resuelto como AVISO no se re-arma: eso se lo comería el segundo atrás', () => {
+    // ⚠ EL ROJO TENTADOR DE ESTE PLAN: poner el reintento en la rama del aviso también sube el
+    // contador, y es PEOR QUE EL BUG — dos avisos encadenados y el dueño nunca sale del panel. El
+    // único re-armado de ese camino es el del temporizador AL EXPIRAR la ventana.
+    const handler = manejadorDelRetroceso()
+    const iAviso = handler.indexOf('setHintVisible(true)')
+    const iTemporizador = handler.indexOf('setTimeout')
+    expect(iAviso).toBeGreaterThan(-1)
+    expect(iTemporizador).toBeGreaterThan(iAviso)
+    // Entre "mostrá el aviso" y "armá el temporizador" NO puede haber un re-armado.
+    expect(handler.slice(iAviso, iTemporizador)).not.toContain('armarSentinel()')
+  })
+
+  it('G-6 — al expirar la ventana se reintenta el armado, y sin marca de rama ARMA', () => {
+    // El temporizador es UNO y hace LAS DOS cosas: oculta el aviso y re-arma. Lo que el dueño midió
+    // (*"pasan 30 segundos y el segundo atrás sale de una"*) es el armado negándose después; con el
+    // dominio sano y sin nada nuestro debajo, la decisión devuelve ARMAR.
+    const handler = manejadorDelRetroceso()
+    const temporizador = handler.match(/setTimeout\(\(\) => \{[\s\S]*?\n {6}\}/)
+    expect(temporizador).not.toBeNull()
+    expect(temporizador?.[0]).toContain('setHintVisible(false)')
+    expect(temporizador?.[0]).toContain('armarSentinel()')
+    expect(
+      PB.panelExitArmAction({
+        participates: true,
+        atRoot: true,
+        hintOpen: false,
+        topIsOurs: false,
+        urlYaLlevaNuestroHash: false,
+        foreignOwnsTop: false,
+        algoNuestroDebajo: false,
+      })
+    ).toBe('arm')
+  })
+
+  it('UN SOLO temporizador en todo el módulo, y la constante sigue siendo una (§13)', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /setTimeout/g)).toBe(1)
+    expect(cuenta(mod, /setInterval|requestAnimationFrame/g)).toBe(0)
+    expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(2)
+  })
+
+  it('EL OBSERVABLE queda escrito en el módulo: si la URL no muestra el hash, no está armado', () => {
+    // Es lo que convierte G-5 y G-6 de un misterio en un chequeo de un vistazo, y es el primer ítem
+    // de cada ciclo del guion de la UAT del plan 03-08. El hash es la CONDICIÓN DE EXISTENCIA de la
+    // entrada, así que la implicación vale en los dos sentidos.
+    const mod = leer(MOD_DUENO)
+    expect(mod).toMatch(/si la URL no muestra/i)
+    expect(mod).toContain('03-08')
   })
 })
