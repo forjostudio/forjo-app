@@ -370,6 +370,14 @@ export function runBranchNavigation({
 // existencia de la entrada, cicatriz 1— y es la forma MEDIDA en el escenario **E-6** de
 // `.planning/debug/pila-de-dos-niveles-medida.md`. Queda como ítem de la UAT del plan 03-04.
 //
+// ⚠ Y LA MISMA COSA LEÍDA AL REVÉS ES **EL ÚNICO OBSERVABLE QUE ESTE MECANISMO TIENE**: el hash es la
+// **condición de existencia** de la entrada, así que la implicación vale en los dos sentidos —
+// **si la URL no muestra el hash, el sentinel NO está armado y el atrás va a salir de una.** Eso
+// convierte G-5 y G-6 de un misterio en un chequeo de **un vistazo**, sin herramientas y sin consola:
+// el guion de la UAT del plan **03-08** abre **cada ciclo** mirando la barra de direcciones. Sin este
+// observable, los dos gaps sólo se pueden verificar por su efecto —el dueño sale o no sale— y un
+// falso verde es indistinguible de un verde (T-03-39).
+//
 // ⚠ CUÁNDO SE ARMA, Y LA IMPRECISIÓN QUE QUEDA — la DECISIÓN (a) del dueño y su límite.
 // El sentinel **ya no** se arma estando en la raíz "haya o no haya" historia debajo: eso era la
 // imprecisión que este módulo declaraba, la UAT la destapó como el ítem **H** (el aviso se comía el
@@ -497,6 +505,27 @@ export function nextPanelExitHash(currentHash: string): string {
   return PANEL_EXIT_HASH
 }
 
+/**
+ * ¿El hash que ya está en la URL es **uno de los nuestros**?
+ *
+ * Es el hecho de la **séptima regla** de armado, y existe como función pura —en vez de un
+ * `startsWith` en el call site— por un motivo medido: `#salirXYZ` **no** es nuestro, y un
+ * `startsWith('#salir')` lo tomaría como propio ⇒ el sentinel **nunca se armaría** en una pantalla
+ * con un hash ajeno que empieza igual, otra vez sin que nada se ponga rojo.
+ *
+ * Reconoce **exactamente** las formas que {@link nextPanelExitHash} puede producir —el base y la
+ * profundidad `>= 2`— y nada más: el candado de ida y vuelta está en la suite.
+ */
+export function urlAlreadyHoldsExitHash(hash: string): boolean {
+  if (hash === PANEL_EXIT_HASH) return true
+  const prefijo = `${PANEL_EXIT_HASH}-`
+  if (!hash.startsWith(prefijo)) return false
+  const profundidad = Number(hash.slice(prefijo.length))
+  // Mismo criterio que el derivador: `Number('')` da 0 y `Number('abc')` da NaN, y ninguno es
+  // nuestro. Así `#salir-` y `#salir-abc` quedan afuera, igual que allá caen al base.
+  return Number.isInteger(profundidad) && profundidad >= 2
+}
+
 /** Qué hacerle a la pila en un commit dado. */
 export type PanelExitArmAction = 'arm' | 'none'
 
@@ -515,11 +544,26 @@ export type PanelExitArmAction = 'arm' | 'none'
  *      justo lo que §13 prohíbe.
  *   4. `topIsOurs` — **ya estamos parados sobre nuestro sentinel ⇒ no armar** (E-6). Un segundo
  *      empuje costaría dos atrás.
- *   5. `foreignOwnsTop` — **la entrada de arriba es de otro dueño ⇒ no armar** (regla 0). Un overlay
+ *   5. `urlYaLlevaNuestroHash` — **la URL ya lleva nuestro hash ⇒ no armar.** Es la **SÉPTIMA regla**
+ *      del módulo (la que agregó el plan `03-07`), y es la **quinta** en el orden de evaluación: el
+ *      orden de llegada y el orden de evaluación no son lo mismo. Va acá porque habla de **la entrada
+ *      de arriba**, igual que la cuarta y la sexta, y la de política es la única que no.
+ *   6. `foreignOwnsTop` — **la entrada de arriba es de otro dueño ⇒ no armar** (regla 0). Un overlay
  *      abierto gana siempre: el atrás lo cierra primero, que es la política vigente e intacta.
- *   6. `algoNuestroDebajo` — **hay una entrada NUESTRA debajo ⇒ no armar.** Es la **decisión (a)** del
+ *   7. `algoNuestroDebajo` — **hay una entrada NUESTRA debajo ⇒ no armar.** Es la **decisión (a)** del
  *      dueño, y lo que resuelve está abajo.
- *   7. El resto ⇒ **armar**.
+ *   8. El resto ⇒ **armar**.
+ *
+ * ⚠ **QUÉ RESUELVE LA SÉPTIMA REGLA, Y POR QUÉ SUPERA LA IGUALDAD DE SEIS QUE FIJÓ EL PLAN `03-06`.**
+ * Se decidió **midiendo** (escenario **E-13**), no de onda. Con la URL llevando nuestro hash pero el
+ * estado de la entrada **PISADO** por una escritura ajena —un `replaceState` sin url, que es
+ * literalmente lo que hace el router al sincronizar su propio estado— las **cinco** reglas anteriores
+ * **no detectan nada**: *ya estoy armado* pregunta por el **estado** y da falso, *la entrada de arriba
+ * es de otro dueño* da falso (el state ajeno no lleva ninguna marca conocida) y *hay algo nuestro
+ * debajo* da falso. Entonces el armado sigue adelante y, como el hash se **deriva del actual**
+ * (cicatriz 1), empuja `#salir-2` y **acumula** una entrada más — cada una con un atrás que no hace
+ * **nada visible**. Repetido, eso es el `dashboard#salir-3` que el dueño reportó. La entrada **ya es
+ * nuestra** aunque su estado se haya perdido, así que lo correcto es **no armar**.
  *
  * ⚠ **QUÉ RESUELVE LA SEXTA REGLA: la colisión que la UAT destapó (ítem H / G-4).** Parado en la raíz
  * **con historia debajo**, MOB-04 (`Más → Inicio → atrás` vuelve a Más) y MOB-05 (en Inicio el atrás
@@ -554,6 +598,15 @@ export function panelExitArmAction({
   atRoot,
   hintOpen,
   topIsOurs,
+  /**
+   * ¿La URL **ya lleva uno de nuestros hashes**? Va **sin valor por omisión**, igual que los otros
+   * hechos de la pila: un call site que lo olvide **no compila**.
+   *
+   * Lo contesta {@link urlAlreadyHoldsExitHash} sobre el hash **real** de `location` en el momento de
+   * decidir, y **no** sobre el estado: el punto entero de la regla es que el estado puede haberse
+   * perdido mientras la URL sigue siendo nuestra (medido en **E-13**, mitad B).
+   */
+  urlYaLlevaNuestroHash,
   foreignOwnsTop,
   /**
    * ¿Hay una entrada **nuestra** debajo de la actual? Va **sin valor por omisión**, igual que
@@ -572,6 +625,7 @@ export function panelExitArmAction({
   atRoot: boolean
   hintOpen: boolean
   topIsOurs: boolean
+  urlYaLlevaNuestroHash: boolean
   foreignOwnsTop: boolean
   algoNuestroDebajo: boolean
 }): PanelExitArmAction {
@@ -579,6 +633,11 @@ export function panelExitArmAction({
   if (!atRoot) return 'none'
   if (hintOpen) return 'none'
   if (topIsOurs) return 'none'
+  // ── LA SÉPTIMA — la URL ya es nuestra, aunque su estado lo haya pisado una escritura ajena. ────
+  // Va DESPUÉS de *ya estoy armado* (que es la misma pregunta hecha al estado, más precisa cuando el
+  // estado está sano) y ANTES de las dos que siguen. Sin ella el hash ESCALA y las entradas de salida
+  // se ACUMULAN: medido en E-13, mitad B.
+  if (urlYaLlevaNuestroHash) return 'none'
   if (foreignOwnsTop) return 'none'
   // ── LA SEXTA — la decisión (a): con algo nuestro debajo, el atrás tiene a dónde volver. ───────
   // Última a propósito (ver el ⚠ de arriba): las cinco de antes son de seguridad y ésta es de
@@ -705,6 +764,63 @@ export function nextBranchId(): number {
 let instanciaDuena: number | null = null
 
 /**
+ * Cuántas instancias del hook están **VIVAS**. Sube en el efecto que toma el dominio y baja en su
+ * limpieza, en el mismo molde que el serial de arriba.
+ *
+ * ⚠ **PARA QUÉ EXISTE, y es el modo de falla más caro de este módulo.** El candado de arriba es una
+ * variable de módulo que se libera en la **limpieza** del efecto. Si esa limpieza **no corre** —un
+ * árbol descartado, un doble montaje de desarrollo, un desmontaje que no pasó por React—, la variable
+ * queda apuntando a una instancia **MUERTA**, y entonces toda instancia nueva **se abstiene de armar
+ * EN SILENCIO**: no lo ve `tsc`, ni la suite, ni el build, y lo único que el dueño nota es que el
+ * atrás lo saca del panel **sin aviso**. Eso es literalmente **G-5**.
+ *
+ * Con el conteo, el candado puede **SANAR**: si no hay **ninguna** instancia viva, quien figura como
+ * dueña **no puede** ser una instancia viva, así que la que pregunta **toma** el dominio.
+ */
+let instanciasVivas = 0
+
+/** Si esta instancia puede operar sobre la pila, o se abstiene. */
+export type BranchOwnerDecision = 'operar' | 'abstenerse'
+
+/**
+ * **¿Puede ESTA instancia operar sobre la pila?** Pura, con las reglas **EN ORDEN**.
+ *
+ * ⚠ **POR QUÉ DEJA DE SER UN RETORNO TEMPRANO.** Esta pregunta vivía repetida tres veces en el hook
+ * como `if (instanciaDuena !== null && instanciaDuena !== id) return`, y era **el camino de falla más
+ * silencioso de todo el módulo**: tres copias de la misma condición que pueden divergir, en un `if`
+ * sin un solo caso de test, cuyo efecto —cuando se equivoca— es que **nadie arma nada** y el atrás
+ * saca del panel sin avisar. Nada de eso lo ve `tsc`, ni la suite, ni el build. Extraída, la decisión
+ * tiene casos y las tres guardas tienen **un** dialecto.
+ *
+ * Las reglas:
+ *   1. **Nadie figura como dueña ⇒ operar.** Nadie reclamó la pila: tomarla es lo correcto.
+ *   2. **La dueña es ésta ⇒ operar.**
+ *   3. **Figura otra, pero no hay NINGUNA instancia viva ⇒ operar.** Es la que **SANA**: con cero
+ *      vivas, quien figura **no puede** estar vivo, así que el candado está colgado de una instancia
+ *      muerta y mantenerlo sólo garantiza que nadie arme nunca. Y es segura por construcción: sin
+ *      competidor vivo, el invariante de **un dueño por entrada** no puede romperse.
+ *   4. **Figura otra y hay alguna viva ⇒ abstenerse.** Es el comportamiento de hoy, y es el seguro:
+ *      dos dueños por la misma entrada descuadran el conteo de retrocesos.
+ */
+export function branchOwnerDecision({
+  duenaFigurando,
+  preguntaId,
+  instanciasVivas: vivas,
+}: {
+  /** Qué id figura hoy como dueño en el estado del módulo, o `null` si ninguno. */
+  duenaFigurando: number | null
+  /** El id de la instancia que pregunta. */
+  preguntaId: number
+  /** Cuántas instancias están **vivas** en este momento. Es el dato que permite sanar. */
+  instanciasVivas: number
+}): BranchOwnerDecision {
+  if (duenaFigurando === null) return 'operar'
+  if (duenaFigurando === preguntaId) return 'operar'
+  if (vivas === 0) return 'operar'
+  return 'abstenerse'
+}
+
+/**
  * Cuándo hay que marcar la entrada actual, y con qué ruta. Pura.
  *
  * Devuelve la ruta que quedó debajo, o `null` si no hay nada que anotar.
@@ -815,9 +931,19 @@ export function usePanelBranch({
   // ── Quién es la dueña ─────────────────────────────────────────────────────────────────────────
   // Declarado ANTES del efecto de marcado a propósito: React corre los efectos de un commit en orden
   // de declaración, así que en el primer montaje la dueña ya está tomada cuando el marcado corre.
+  // ⚠ EL CONTEO DE VIVAS SE PREGUNTA **ANTES** DE SUMAR LA PROPIA, y el orden es el mecanismo: en ese
+  // instante el conteo es el de las **otras** instancias, así que un cero significa literalmente
+  // *nadie vivo podía tener el dominio* — y es el único momento en que la decisión puede sanar. Sube
+  // acá y baja en la limpieza: uno sin el otro deja el candado mintiendo.
   useEffect(() => {
-    if (instanciaDuena === null) instanciaDuena = id
+    if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'operar') {
+      instanciaDuena = id
+    }
+    instanciasVivas += 1
     return () => {
+      // Con piso en cero a propósito: un conteo NEGATIVO haría que la rama que sana **nunca** se
+      // active, y volveríamos al silencio por otro camino.
+      instanciasVivas = Math.max(0, instanciasVivas - 1)
       if (instanciaDuena === id) instanciaDuena = null
     }
   }, [id])
@@ -891,7 +1017,7 @@ export function usePanelBranch({
     // El candado de UN SOLO DUEÑO POR ENTRADA, mecánico y fuera de la decisión, igual que en el
     // efecto de marcado: dos empujes costarían dos atrás y dos consumos se comerían una entrada
     // ajena. Cae del lado seguro: la instancia que no es la dueña simplemente no arma.
-    if (instanciaDuena !== null && instanciaDuena !== id) return
+    if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
     const estado: unknown = window.history.state
     const paradoSobreElNuestro = isPanelExitEntry(estado, id)
     const accion = panelExitArmAction({
@@ -900,6 +1026,10 @@ export function usePanelBranch({
       atRoot: window.location.pathname === root,
       hintOpen: avisoAbiertoRef.current,
       topIsOurs: paradoSobreElNuestro,
+      // ⚠ EL HECHO DE LA SÉPTIMA REGLA, leído del hash REAL de `location` y no del estado: el punto
+      // entero de la regla es que el estado puede estar pisado mientras la URL sigue siendo nuestra
+      // (E-13, mitad B). Con un `startsWith` a secas, `#salirXYZ` contaría como nuestro.
+      urlYaLlevaNuestroHash: urlAlreadyHoldsExitHash(window.location.hash),
       foreignOwnsTop: isForeignOwnedEntry(estado),
       // ⚠ EL HECHO DE LA DECISIÓN (a), LEÍDO DEL ESTADO REAL DE LA ENTRADA DE ARRIBA EN EL MOMENTO
       // DE DECIDIR, nunca de un valor de render: entre un render y el gesto pudo haber una escritura
@@ -927,7 +1057,7 @@ export function usePanelBranch({
     instalarRastreadorDeTeclado()
 
     const alRetroceder = () => {
-      if (instanciaDuena !== null && instanciaDuena !== id) return
+      if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
       const estado: unknown = window.history.state
       const accion = panelExitPopAction({
         topIsOurs: isPanelExitEntry(estado, id),
@@ -936,7 +1066,23 @@ export function usePanelBranch({
         holding: sentinelVivoRef.current,
         keyboardGuards: elTecladoSeComeElAtras(),
       })
-      if (accion === 'ignore') return
+      if (accion === 'ignore') {
+        // ⚠ EL CUARTO MOMENTO DE REINTENTO, y el único que cubre los gestos que NO CAMBIAN LA RUTA.
+        // Un retroceso ignorado significa que el atrás hizo algo que **no era nuestro** —cerrar un
+        // overlay, consumir una sección que teníamos encima— y después de eso podemos estar parados
+        // en la raíz **sin sentinel**, con la ruta **sin cambiar**: el efecto del armado tiene deps
+        // `[armarSentinel, pathname]`, así que **no vuelve a correr**, y el atrás siguiente sale del
+        // panel sin avisar. Es el ítem **20** de la UAT visto desde el otro lado, y es la mitad que
+        // nunca se midió en Android (*"no tengo overlays en inicio como para probar eso"*).
+        // Molde exacto de la rama del teclado de abajo: un `pushState` desde adentro del `popstate`
+        // es lo que este módulo ya hace en producción (lo que NO se puede pedir desde el evento es
+        // una navegación del router — lección 3 del encabezado).
+        // Y es inofensivo en los otros cuatro motivos de *ignorar*: parados sobre el nuestro la
+        // cuarta regla devuelve `none` (y re-deriva que seguimos teniendo un sentinel vivo, E-6),
+        // fuera de la raíz devuelve la segunda, y sin nadie que dibuje el aviso la primera.
+        armarSentinel()
+        return
+      }
 
       if (accion === 'rearm') {
         // C-7: el atrás en realidad bajaba el teclado. Se re-arma EN EL ACTO y el aviso NO se gasta.
