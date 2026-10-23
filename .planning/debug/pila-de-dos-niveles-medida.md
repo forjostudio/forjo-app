@@ -1,13 +1,13 @@
 ---
 status: measured
-trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04; E-11 —la INTERSECCIÓN del sentinel de salida con la marca de la rama, que es el hueco que la UAT destapó— el plan 03-05."
+trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04; E-11 —la INTERSECCIÓN del sentinel de salida con la marca de la rama, que es el hueco que la UAT destapó— el plan 03-05; E-9, E-10 y E-12 —el sentinel enterrado contra el consumido, la decisión (a) del dueño y el degenerado con el sentinel al fondo— el plan 03-06."
 created: 2026-10-13T00:00:00Z
 updated: 2026-10-23T00:00:00Z
 ---
 
 ## Current Focus
 
-veredicto: **LAS NUEVE PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (9/9, la sonda sale 0)
+veredicto: **LAS DOCE PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (12/12, la sonda sale 0)
 
 La sonda es `.planning/debug/probes/panel-back-stack.mjs`, es **re-ejecutable** y **falla con código
 distinto de cero** si cualquier pila medida difiere de la esperada. Esto no es un informe de una
@@ -22,7 +22,7 @@ node scripts/con-turno.mjs node .planning/debug/probes/panel-back-stack.mjs
 
 | Pieza | Valor medido |
 |---|---|
-| Navegador | **Chrome/154.0.8037.98** para E-1..E-8 (2026-10-13/14) y **Chrome/155.0.8059.86** para E-11 (2026-10-23), `--headless=new`, perfil temporal propio. Las **ocho** primeras coinciden en **las dos** versiones (la corrida del 2026-10-23 las volvió a medir en verde sobre 155), así que la pila del atrás no cambió de una a la otra. E-11 está medido **sólo** sobre 155 |
+| Navegador | **Chrome/154.0.8037.98** para E-1..E-8 (2026-10-13/14) y **Chrome/155** para E-11 (2026-10-23, plan 03-05) y para **E-9 / E-10 / E-12** (2026-10-23, plan 03-06), `--headless=new`, perfil temporal propio. Las **ocho** primeras coinciden en **las dos** versiones (las corridas del 2026-10-23 las volvieron a medir en verde sobre 155), así que la pila del atrás no cambió de una a la otra. Los **cuatro** escenarios de la tanda de cierre de gaps están medidos **sólo** sobre 155 |
 | Node | `v24.15.0` — el `WebSocket` global alcanza para CDP, **cero paquetes nuevos** |
 | Servidor | `node:http` propio en `http://127.0.0.1:8731`, responde el mismo HTML a cualquier path |
 | Puerto de depuración | `9334` |
@@ -49,7 +49,7 @@ mide tres cantidades por escenario y las compara por separado:
   (están adelante, no debajo) y el dueño estuvo ahí de verdad. Se **declaran** en la expectativa en
   vez de ignorarse, igual que el caso de entrada directa que v0.30 declaró y aceptó.
 
-## Las nueve mediciones
+## Las doce mediciones
 
 ### E-1 · MOB-04 nivel 1 — `Inicio → Más → Finanzas`
 
@@ -219,6 +219,118 @@ atrás cae en **Inicio**, `/mas` **no** quedó inmediatamente debajo, no hay dos
 adyacentes, y lo que queda **adelante** (`/web`, `/web#sin-guardar`) no es basura en el camino del
 atrás: está arriba, y el dueño estuvo ahí de verdad.
 
+### E-9 · el sentinel NO se queda enterrado — la forma VIEJA contra la NUEVA, en la misma medición
+
+Cierra **la causa medida de G-1 y G-2**. Veredicto: **OK**. Lo agregó el plan **03-06**.
+
+Las **dos formas** van en el mismo escenario a propósito: es lo que lo vuelve una **medición** y no
+una afirmación. La booleana de la forma vieja se declara en **verdadero**, porque ese valor **es el
+bug** y tiene que quedar en el instrumento y no en un comentario.
+
+**La forma VIEJA** — el destino se empuja **encima** del sentinel, que es lo que la app hacía:
+
+```
+vieja_abajo:                                            ["/dashboard","/dashboard#salir","/appointments"]
+vieja_pathnames_del_camino_del_atras:                   ["/dashboard","/dashboard","/appointments"]
+vieja_pares_de_pathnames_repetidos:                     ["/dashboard | /dashboard#salir"]
+vieja_el_sentinel_quedo_enterrado:                      true
+vieja_hay_dos_entradas_adyacentes_de_la_misma_pantalla: true
+```
+
+**La forma NUEVA** — se **consume** el sentinel y recién entonces se navega, en dos pasos:
+
+```
+nueva_consumio_el_sentinel_de_esta_instancia:          1
+nueva_parado_tras_el_consumo:                          "/dashboard"
+nueva_abajo:                                           ["/dashboard","/appointments"]
+nueva_escalones:                                       2
+nueva_el_sentinel_sobrevive_en_el_camino_del_atras:    []
+nueva_marca_del_destino:                               {"frjUnder":"/dashboard"}
+nueva_pathnames_del_camino_del_atras:                  ["/dashboard","/appointments"]
+nueva_pares_de_pathnames_repetidos:                    []
+nueva_atras_cae_en:                                    "/dashboard"
+nueva_actual_tras_un_atras:                            "/dashboard"
+```
+
+⇒ **El atrás muerto de G-1 y G-2, medido.** La entrada del sentinel es **absorbente**: se empujó para
+consumirla. Empujando el destino encima queda **enterrada**, y entonces el atrás aterriza en
+`/dashboard#salir` —que en pantalla se ve **igual que Inicio**— con un atrás siguiente que no hace
+**nada visible**. Es literalmente lo que el dueño midió: *recarga y vuelve a `dashboard#salir-3`*, y
+*a la primera que toco atrás no hace nada*.
+
+⇒ **Y por qué este par de pathnames repetidos NO está admitido y el de E-11 sí.** En E-11 el sentinel
+es la entrada de **arriba** del par y su "nada visible" lo **cubre el aviso de MOB-05**: pararse sobre
+él es el primer intento de salida. **Enterrado**, no lo cubre nada: el dueño ya pasó por arriba y el
+aviso no va a aparecer. Mismo par de rutas, significado opuesto — y es por eso que el candado se
+compara por **pathname** y la excepción se declara por **posición**, no por forma.
+
+⇒ **Lo que la forma nueva deja:** dos escalones, el sentinel **fuera** del camino del atrás, el
+destino marcado con la **ruta de la raíz** (que es lo que de verdad quedó debajo), el atrás cayendo en
+la raíz, y **cero** pares de pathnames repetidos.
+
+### E-10 · la DECISIÓN (a) del dueño — el sentinel se arma SÓLO si no hay nada nuestro debajo
+
+Cierra **la colisión que la UAT destapó** (ítem **H** / **G-4**). Veredicto: **OK**. Lo agregó el plan
+**03-06**.
+
+Parado en Inicio **con historia debajo**, MOB-04 (`Más → Inicio → atrás` vuelve a Más) y MOB-05 (en
+Inicio el atrás avisa antes de salir) **no pueden ser verdad a la vez**. El dueño eligió **(a)**: el
+sentinel se arma **sólo si no hay nada nuestro debajo**. El escenario escribe **las seis condiciones
+en orden** —como lo hacen los otros— y compara la acción contra el valor esperado.
+
+```
+mitad_1_abajo:                                       ["/dashboard"]
+mitad_1_marca_de_la_rama_de_la_entrada_de_arriba:    null
+mitad_1_hay_algo_nuestro_debajo:                     false
+mitad_1_accion_de_armado:                            "armar"
+mitad_2_abajo:                                       ["/dashboard","/appointments","/dashboard"]
+mitad_2_marca_de_la_rama_de_la_entrada_de_arriba:    "/appointments"
+mitad_2_hay_algo_nuestro_debajo:                     true
+mitad_2_accion_de_armado:                            "no-armar"
+mitad_2_el_atras_cae_en:                             "/appointments"
+parados_sobre_el_nuestro_con_marca_de_rama_presente: "no-armar"
+```
+
+⇒ **La pregunta "¿hay algo nuestro debajo?" se contesta con lo que YA existe.** `frjUnder` guarda **la
+ruta** que quedó debajo —no un booleano—, justamente para el caso degenerado; así que estando en la
+raíz la respuesta es *la entrada de arriba lleva nuestra marca de rama*. Una cuarta clave en la pila
+sería un cuarto dueño sin necesidad, y la regla 0 tiene **tres** a propósito.
+
+⇒ **Los dos tramos de la mitad 2 son EMPUJES**, que es lo que la política dice para ellos
+(`from === root` ⇒ push, `to === root` ⇒ push). Con un reemplazo la marca no queda donde la mitad
+necesita y la medición no mediría la decisión.
+
+⇒ **Y la respuesta sólo vale porque la marca ya dice la verdad** (plan `03-05`, medido en E-11). Con
+la marca escribiéndose tras cada retroceso, después de `Inicio → Turnos → atrás` la entrada de Inicio
+quedaría marcada **sin tener nada debajo**, (a) decidiría *no armar* y el atrás saldría del panel
+**sin avisar** — un G-5 nuevo fabricado por el arreglo. Por eso `03-05` va antes.
+
+⇒ **El orden de las seis reglas es el argumento, y la última línea lo mide.** Las cinco anteriores son
+de **seguridad** (nadie a quien avisar, lugar equivocado, ventana abierta, ya armado, la entrada de
+arriba es de otro dueño) y la de (a) es de **política**. Parados **sobre nuestro propio sentinel** la
+cuarta devuelve antes, así que la de (a) **nunca** lee la marca de la rama ahí — donde ese dato no
+significa nada, porque el state del sentinel lleva **sólo su propia clave**.
+
+### ⚠ EL LÍMITE ACEPTADO DE LA DECISIÓN (a), escrito en vez de descubierto en la próxima UAT
+
+La decisión (a) cierra el caso en que lo que quedó debajo es una entrada **nuestra**. **No cierra —y
+no puede cerrar— el caso en que sea una entrada AJENA** (otro sitio, o la pestaña recién abierta en
+otra página). Ahí el aviso de salida **va a aparecer igual** aunque el atrás sí saque del panel, o
+peor: no se va a armar cuando tendría que armarse.
+
+**Por qué no se puede:** no hay API confiable para preguntarle al navegador "¿hay algo debajo?".
+`history.length` cuenta **también las entradas de adelante** (el *forward*), así que un historial de
+largo 3 puede ser una entrada debajo y una arriba, o dos arriba y ninguna debajo — y la sonda ya lo
+dejó medido en la definición misma de *abajo* / *actual* / *adelante* de este documento. Lo único que
+la app puede saber con certeza es lo que **ella misma empujó**, que es exactamente lo que `frjUnder`
+registra.
+
+**Esto queda ACEPTADO por el dueño**, y es la misma razón por la que el caso de **entrada directa**
+está aceptado y documentado desde v0.30 (**E-7** de este mismo documento: con una sola entrada no hay
+nada debajo y la política no puede retroceder). Lo que **no** estaba permitido era dejarlo sin
+escribir: va declarado acá, en el docblock del sentinel de `lib/panel-branch.ts`, y en el registro de
+imprecisiones de `.planning/WINDOWS.md` (plan `03-08`).
+
 ### E-11 · la INTERSECCIÓN que faltaba — el sentinel de salida al fondo × la marca de la rama (el recorrido D7 de la UAT)
 
 Cierra **el hueco que la UAT nombró**, y no uno de los supuestos del research: la intersección de la
@@ -276,6 +388,52 @@ lo que D7 esperaba. El sentinel sigue **al fondo** con su clave viva (`{frjExit:
 atrás **no** aterriza en una entrada del sentinel en medio del colapso: el `dashboard#salir-3` de la
 UAT era el síntoma, no el diseño.
 
+### E-12 · el DEGENERADO con el sentinel al fondo — el primer atrás CAMBIA DE PANTALLA
+
+Cierra **G-2** (*"a la primera que toco atrás no hace nada"*). Veredicto: **OK**. Lo agregó el plan
+**03-06**.
+
+Es el caso degenerado del criterio 2 —el destino de la barra coincide con la ruta que quedaría
+debajo— pero con el sentinel de salida en el recorrido. **E-5** medía el degenerado **sin** sentinel;
+éste, **con** él. Y la pila se arma **con el helper nuevo** (saliendo de la raíz **consumiendo** el
+sentinel), que es el punto: así nunca queda enterrado.
+
+Pila armada: `Inicio` **con el sentinel armado** → `Turnos` → `Más` → `Finanzas`, y destino
+`/appointments` —o sea justo la ruta que quedaría debajo—.
+
+```
+armada:                              ["/dashboard","/appointments","/mas","/finances"]
+el_sentinel_quedo_enterrado_al_armar: []
+rama_tomada:                         "doble-retroceso"
+marca_leida_en_la_entrada_de_mas:    "/appointments"
+abajo:                               ["/dashboard","/appointments"]
+actual:                              "/appointments"
+adelante:                            ["/mas","/finances"]
+marca_de_la_entrada_actual:          {"frjUnder":"/dashboard"}
+pathnames_del_camino_del_atras:      ["/dashboard","/appointments"]
+pares_de_pathnames_repetidos:        []
+atras_cae_en:                        "/dashboard"
+pathname_antes_del_atras:            "/appointments"
+pathname_tras_el_atras:              "/dashboard"
+el_primer_atras_cambia_de_pathname:  true
+actual_tras_un_atras:                "/dashboard"
+```
+
+⇒ **La clave de G-2 es la antepenúltima línea, y no la pila.** Lo que el dueño midió no fue una pila
+mal armada: fue un **gesto que no produjo nada visible**. Por eso el escenario mide el `pathname`
+**antes y después** del atrás y afirma que son **distintos**. Un atrás que no cambia de pantalla es
+exactamente la entrada basura que el **criterio 2** prohíbe.
+
+⇒ **El sentinel no aparece en `armada`**, y ésa es la prueba de que el helper hizo su trabajo: la
+primera línea del escenario lo empuja y la segunda lo **consume** al salir de la raíz. Comparado con
+E-11 —donde la salida fue un empuje encima y `armada` arranca con `["/dashboard","/dashboard#salir",…]`—
+se ve el cambio exacto que el plan `03-06` introduce.
+
+⇒ **La rama tomada es la de doble retroceso**, no la de retroceso-y-reemplazo: el destino coincidía
+con la ruta de abajo, así que reemplazar habría dejado `[…, /appointments, /appointments]`. Con los dos
+retrocesos la pila queda en dos escalones, `adelante` conserva `/mas` y `/finances` —el dueño estuvo
+ahí de verdad— y la entrada actual queda marcada con la **ruta de la raíz**.
+
 ### ⚠ POR QUÉ EL 8/8 ERA VERDAD Y NO ALCANZABA (la lección de método de esta tanda)
 
 Esta sonda dio **8/8** y la UAT en el teléfono del dueño falló en **5 ítems más una colisión de
@@ -325,6 +483,11 @@ suite, ni el build**. El único criterio que cierra la fase es la UAT en un tel�
   par de rutas** medida como número. Es la base de los otros tres planes de la tanda de cierre de
   gaps: la decisión (a) del dueño se contesta **leyendo** esta marca, así que la marca tenía que
   dejar de mentir primero.
-- **Cualquiera de los cuatro** puede re-correr la sonda: si una pila deja de coincidir, el arreglo
+- **Plan 03-06** — **E-9** (el sentinel enterrado contra el consumido, las **dos** formas en la misma
+  medición, que es la causa de G-1 y G-2), **E-10** (las dos mitades de la **decisión (a)** del dueño,
+  más el candado del orden entre *ya estoy armado* y (a)) y **E-12** (el **degenerado** con el
+  sentinel al fondo, y la clave de G-2: que el **primer** atrás cambia de pathname). Y el **límite
+  aceptado de (a)** —la entrada **ajena**—, escrito en su propia sección de arriba.
+- **Cualquiera de los cinco** puede re-correr la sonda: si una pila deja de coincidir, el arreglo
   **no es ajustar la expectativa** — es rehacer el diseño contra lo medido y actualizar este
   documento.

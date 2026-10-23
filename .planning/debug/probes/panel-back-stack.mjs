@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ── La sonda de la pila del atrás del panel ──────────────────────────────────────────────────────
 //
-// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los nueve
+// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los doce
 // recorridos de la Phase 3 del workstream `panel-nav`. No deriva las pilas de leer el código: las
 // MIDE en un Chrome de verdad y FALLA con código distinto de cero si alguna no coincide con la
 // esperada. Es un instrumento con gate, no un script que imprime y se va.
@@ -229,6 +229,63 @@ function colapsar(cdp, destino) {
 }
 
 /**
+ * SALIR DE LA RAIZ CONSUMIENDO EL SENTINEL DE SALIDA, en DOS PASOS. Es lo que el plan 03-06
+ * implementa en la app (el sexto miembro del plan de rama y su ejecutor).
+ *
+ * ⚠ **PARA QUE EXISTE, y es la causa MEDIDA de G-1 y G-2.** La entrada del sentinel es
+ * **ABSORBENTE**: se empujo para consumirla. Si el dueno navega con ella arriba —la forma **vieja**,
+ * que empuja el destino **ENCIMA**— queda **enterrada** en el camino del atras, y entonces el atras
+ * aterriza en una entrada de la raiz **con hash** (`/dashboard#salir`) que en pantalla se ve **igual
+ * que Inicio**, con un atras siguiente que no hace **nada visible**. Es literalmente lo que el dueno
+ * midio en el telefono: *recarga y vuelve a `dashboard#salir-3`*, y *a la primera que toco atras no
+ * hace nada*. Las dos formas quedan medidas una al lado de la otra en **E-9**.
+ *
+ * ⚠ LAS TRES LECCIONES MEDIDAS QUE ESTAN ESCRITAS ACA ADENTRO, las mismas de `colapsar` y de
+ * `cadenaDeTresPasos`:
+ *   1. **la guarda se re-verifica EN EL GESTO**, y pregunta por la marca del sentinel **de esta
+ *      instancia** (`frjExit` con nuestro id) y no solo por "algun dueno de salida": un `back()`
+ *      sobre una entrada que no empujamos nosotros **expulsa al dueno del sitio** (cicatriz 2);
+ *   2. el listener se engancha **en el gesto** y con `{ once: true }` — en un efecto se perderia el
+ *      evento, y sin `once` sobreviviria al paso y el proximo atras del dueno disparia una
+ *      navegacion que nadie pidio;
+ *   3. **el empuje del destino va DIFERIDO fuera del evento** (aca con un `setTimeout(0)`, en la app
+ *      con un pedido en estado que ejecuta un efecto): pedido adentro del `popstate`, el router de
+ *      Next esta procesando SU traverse y la escritura **no ocurre**.
+ *
+ * Lo que cambia respecto de `colapsar` es **qué entrada se consume**: alla la de la seccion de la
+ * rama (`frjUnder`), aca la del sentinel de salida (`frjExit`).
+ */
+function salirDeLaRaizConsumiendoElSentinel(cdp, destino, debajo) {
+  return evaluar(cdp, `
+    new Promise((res, rej) => {
+      const DESTINO = ${JSON.stringify(destino)}
+      const DEBAJO = ${JSON.stringify(debajo)}
+      // ── PASO 1 · la guarda: la entrada de arriba tiene que ser NUESTRO sentinel de salida ─────
+      if (!history.state || typeof history.state.frjExit === 'undefined') {
+        rej(new Error('la entrada de arriba NO lleva la marca del sentinel de salida: un back() aca seria sobre entrada ajena'))
+        return
+      }
+      const idDelSentinel = history.state.frjExit
+      window.addEventListener('popstate', (e) => {
+        const paradoTrasElConsumo = location.pathname + location.hash
+        const aterrizo = e.state ?? null
+        // ── PASO 2 · el empuje del destino, DIFERIDO fuera del evento ───────────────────────────
+        setTimeout(() => {
+          history.pushState({ frjUnder: DEBAJO }, '', DESTINO)
+          res(JSON.stringify({
+            idDelSentinelConsumido: idDelSentinel,
+            aterrizo,
+            paradoTrasElConsumo,
+            marcaDelDestino: history.state,
+          }))
+        }, 0)
+      }, { once: true })
+      history.back()
+    })
+  `, { esperarPromesa: true }).then((s) => JSON.parse(s))
+}
+
+/**
  * Empuja el **sentinel de CAMBIOS SIN GUARDAR** (`lib/dirty-history.ts`) encima de la entrada actual.
  *
  * ⚠ **Su state lleva SÓLO su propia marca (`{ frjDirty }`), igual que en la app** (`dirtyHistoryState`
@@ -307,7 +364,7 @@ function cadenaDeTresPasos(cdp, destino) {
   `, { esperarPromesa: true }).then((s) => JSON.parse(s))
 }
 
-// ── Los nueve escenarios ─────────────────────────────────────────────────────────────────────────
+// ── Los doce escenarios ─────────────────────────────────────────────────────────────────────────
 // Cada uno declara su expectativa ACÁ, en código que se ejecuta. La sonda es la fuente de verdad: si
 // una medición no coincide, el arreglo NO es bajar la expectativa — es rehacer el diseño del plan
 // correspondiente contra lo medido y dejarlo escrito en el documento de debug.
@@ -575,9 +632,180 @@ const ESCENARIOS = [
     },
   },
   {
-    // ⚠ EL ID SALTA A E-11 A PROPÓSITO: E-9 y E-10 los reservan los otros planes de esta misma tanda
-    // de cierre de gaps. Un id reusado haría que dos escenarios distintos se llamen igual en el
-    // veredicto, y el veredicto es el único lugar donde se lee qué se midió.
+    id: 'E-9',
+    titulo: 'el sentinel NO se queda enterrado (G-1 / G-2) — la forma VIEJA (empujar ENCIMA) contra la NUEVA (consumirlo primero)',
+    cierra:
+      'la causa MEDIDA de G-1 y G-2: con el destino empujado ENCIMA, la entrada del sentinel queda ' +
+      'ENTERRADA en el camino del atras y deja dos entradas adyacentes de la MISMA PANTALLA — el ' +
+      'atras muerto que el criterio 2 prohibe explicitamente. Consumiendola primero, no',
+    async correr(cdp) {
+      // ⚠ LAS DOS FORMAS VAN EN EL MISMO ESCENARIO A PROPOSITO: es lo que lo vuelve una MEDICION y no
+      // una afirmacion. La booleana de la forma vieja se declara en VERDADERO porque ese valor ES el
+      // bug medido, y tiene que quedar en el instrumento y no en un comentario.
+
+      // ── LA FORMA VIEJA · el destino se empuja ENCIMA del sentinel ──────────────────────────────
+      await reiniciarEn(cdp, ROOT)
+      await evaluar(cdp, `history.pushState({ frjExit: 1 }, '', '${ROOT}#salir')`)
+      // La seccion de la barra se marca con el PATHNAME de la raiz y no con la ruta completa que la
+      // entrada de abajo tiene en la URL (`/dashboard#salir`): la marca la escribe un efecto que
+      // observa `usePathname()`, y el pathname NO ve el hash. Esa asimetria es justo la razon por la
+      // que el candado de abajo compara por PATHNAME y no por ruta completa.
+      await empujar(cdp, '/appointments', ROOT)
+      const vieja = await medir(cdp)
+      const pathnamesVieja = vieja.abajo.map((ruta) => ruta.split('#')[0])
+      const paresVieja = vieja.abajo
+        .map((ruta, i) =>
+          i > 0 && pathnamesVieja[i] === pathnamesVieja[i - 1] ? `${vieja.abajo[i - 1]} | ${ruta}` : null,
+        )
+        .filter((par) => par !== null)
+      // "Enterrada" = hay al menos una entrada ARRIBA del sentinel dentro del camino del atras.
+      const indiceDelSentinelVieja = vieja.abajo.findIndex((ruta) => ruta.includes('#salir'))
+      const sentinelEnterradoVieja =
+        indiceDelSentinelVieja !== -1 && indiceDelSentinelVieja < vieja.abajo.length - 1
+
+      // ── LA FORMA NUEVA · se consume el sentinel y RECIEN ENTONCES se navega ────────────────────
+      await reiniciarEn(cdp, ROOT)
+      await evaluar(cdp, `history.pushState({ frjExit: 1 }, '', '${ROOT}#salir')`)
+      const salida = await salirDeLaRaizConsumiendoElSentinel(cdp, '/appointments', ROOT)
+      const nueva = await medir(cdp)
+      const pathnamesNueva = nueva.abajo.map((ruta) => ruta.split('#')[0])
+      const paresNueva = nueva.abajo
+        .map((ruta, i) =>
+          i > 0 && pathnamesNueva[i] === pathnamesNueva[i - 1] ? `${nueva.abajo[i - 1]} | ${ruta}` : null,
+        )
+        .filter((par) => par !== null)
+      await retrocederGuardado(cdp)
+      const unAtras = await medir(cdp)
+
+      return {
+        medido: {
+          // (1) LA FORMA VIEJA, con el bug medido como numero y como booleana.
+          vieja_abajo: vieja.abajo,
+          vieja_pathnames_del_camino_del_atras: pathnamesVieja,
+          vieja_pares_de_pathnames_repetidos: paresVieja,
+          vieja_el_sentinel_quedo_enterrado: sentinelEnterradoVieja,
+          vieja_hay_dos_entradas_adyacentes_de_la_misma_pantalla: paresVieja.length > 0,
+          // (2) LA FORMA NUEVA: dos escalones, sin el sentinel en el camino del atras.
+          nueva_consumio_el_sentinel_de_esta_instancia: salida.idDelSentinelConsumido,
+          nueva_parado_tras_el_consumo: salida.paradoTrasElConsumo,
+          nueva_abajo: nueva.abajo,
+          nueva_escalones: nueva.abajo.length,
+          nueva_el_sentinel_sobrevive_en_el_camino_del_atras: nueva.abajo.filter((r) => r.includes('#salir')),
+          nueva_marca_del_destino: salida.marcaDelDestino,
+          nueva_pathnames_del_camino_del_atras: pathnamesNueva,
+          nueva_pares_de_pathnames_repetidos: paresNueva,
+          nueva_atras_cae_en: nueva.abajo[nueva.abajo.length - 2] ?? null,
+          nueva_actual_tras_un_atras: unAtras.actual,
+        },
+        esperado: {
+          vieja_abajo: [ROOT, `${ROOT}#salir`, '/appointments'],
+          vieja_pathnames_del_camino_del_atras: [ROOT, ROOT, '/appointments'],
+          vieja_pares_de_pathnames_repetidos: [`${ROOT} | ${ROOT}#salir`],
+          // ⚠ LAS DOS EN VERDADERO: es el bug, medido. Con el sentinel enterrado el atras aterriza
+          // en `/dashboard#salir` —que se ve igual que Inicio— y el atras siguiente no hace nada
+          // visible. (En E-11 ese mismo par esta ADMITIDO porque alla el sentinel es la entrada de
+          // ARRIBA y su "nada visible" lo cubre el aviso de MOB-05; enterrado, no lo cubre nada.)
+          vieja_el_sentinel_quedo_enterrado: true,
+          vieja_hay_dos_entradas_adyacentes_de_la_misma_pantalla: true,
+          nueva_consumio_el_sentinel_de_esta_instancia: 1,
+          nueva_parado_tras_el_consumo: ROOT,
+          nueva_abajo: [ROOT, '/appointments'],
+          nueva_escalones: 2,
+          nueva_el_sentinel_sobrevive_en_el_camino_del_atras: [],
+          nueva_marca_del_destino: { frjUnder: ROOT },
+          nueva_pathnames_del_camino_del_atras: [ROOT, '/appointments'],
+          nueva_pares_de_pathnames_repetidos: [],
+          nueva_atras_cae_en: ROOT,
+          nueva_actual_tras_un_atras: ROOT,
+        },
+      }
+    },
+  },
+  {
+    id: 'E-10',
+    titulo: 'la DECISION (a) del dueno (item H / G-4) — el sentinel se arma SOLO si no hay nada nuestro debajo',
+    cierra:
+      'la colision que la UAT destapo: parado en Inicio CON historia debajo, MOB-04 y MOB-05 no ' +
+      'pueden ser verdad a la vez. El dueno eligio (a), y aca quedan medidas sus dos mitades',
+    async correr(cdp) {
+      // ⚠ LAS SEIS CONDICIONES EN ORDEN, escritas aca como las va a tener la app, igual que los otros
+      // escenarios escriben la decision que miden. La de la decision (a) va **ULTIMA** y el orden es
+      // el argumento: las cinco anteriores son de SEGURIDAD (nadie a quien avisar, lugar equivocado,
+      // ventana abierta, ya armado, la entrada de arriba es de otro dueno) y esta es de POLITICA. Asi
+      // nunca lee la marca de la rama estando parados sobre el sentinel, donde ese dato no significa
+      // nada porque el state del sentinel lleva solo su propia clave.
+      const accionDeArmado = ({ participates, atRoot, hintOpen, topIsOurs, foreignOwnsTop, algoNuestroDebajo }) => {
+        if (!participates) return 'no-armar'
+        if (!atRoot) return 'no-armar'
+        if (hintOpen) return 'no-armar'
+        if (topIsOurs) return 'no-armar'
+        if (foreignOwnsTop) return 'no-armar'
+        if (algoNuestroDebajo) return 'no-armar'
+        return 'armar'
+      }
+      const LIBRE = { participates: true, atRoot: true, hintOpen: false, topIsOurs: false, foreignOwnsTop: false }
+
+      // ── MITAD 1 · SIN NADA NUESTRO DEBAJO ⇒ ARMAR (MOB-05) ────────────────────────────────────
+      // Una sola entrada en la raiz: la marca de la rama de la entrada de arriba es NULA.
+      await reiniciarEn(cdp, ROOT)
+      const sola = await medir(cdp)
+      const marcaSinNadaDebajo = typeof sola.marca?.frjUnder === 'string' ? sola.marca.frjUnder : null
+      const accionSinNadaDebajo = accionDeArmado({ ...LIBRE, algoNuestroDebajo: marcaSinNadaDebajo !== null })
+
+      // ── MITAD 2 · CON UNA SECCION DEBAJO ⇒ NO ARMAR (MOB-04 / item H) ─────────────────────────
+      // ⚠ LOS DOS TRAMOS SON **EMPUJES**, que es lo que la politica dice para ellos
+      // (`from === root` ⇒ push, `to === root` ⇒ push). Con un reemplazo la marca no queda donde esta
+      // mitad necesita y la medicion no mediria la decision.
+      await reiniciarEn(cdp, ROOT)
+      await empujar(cdp, '/appointments', ROOT)
+      await empujar(cdp, ROOT, '/appointments')
+      const conSeccion = await medir(cdp)
+      const marcaConSeccionDebajo = typeof conSeccion.marca?.frjUnder === 'string' ? conSeccion.marca.frjUnder : null
+      const accionConSeccionDebajo = accionDeArmado({ ...LIBRE, algoNuestroDebajo: marcaConSeccionDebajo !== null })
+      // Y el atras: con (a) el sentinel NO se armo, asi que el retroceso guardado aterriza en LA
+      // SECCION. Es MOB-04 y el item H de la UAT, que es lo que la decision del dueno recupera.
+      await retrocederGuardado(cdp)
+      const unAtras = await medir(cdp)
+
+      return {
+        medido: {
+          mitad_1_abajo: sola.abajo,
+          mitad_1_marca_de_la_rama_de_la_entrada_de_arriba: marcaSinNadaDebajo,
+          mitad_1_hay_algo_nuestro_debajo: marcaSinNadaDebajo !== null,
+          mitad_1_accion_de_armado: accionSinNadaDebajo,
+          mitad_2_abajo: conSeccion.abajo,
+          mitad_2_marca_de_la_rama_de_la_entrada_de_arriba: marcaConSeccionDebajo,
+          mitad_2_hay_algo_nuestro_debajo: marcaConSeccionDebajo !== null,
+          mitad_2_accion_de_armado: accionConSeccionDebajo,
+          mitad_2_el_atras_cae_en: unAtras.actual,
+          // El candado del ORDEN: parados SOBRE nuestro propio sentinel, la cuarta regla devuelve
+          // antes y la de (a) NO se evalua — aunque la marca de la rama este presente.
+          parados_sobre_el_nuestro_con_marca_de_rama_presente: accionDeArmado({
+            ...LIBRE,
+            topIsOurs: true,
+            algoNuestroDebajo: true,
+          }),
+        },
+        esperado: {
+          mitad_1_abajo: [ROOT],
+          mitad_1_marca_de_la_rama_de_la_entrada_de_arriba: null,
+          mitad_1_hay_algo_nuestro_debajo: false,
+          mitad_1_accion_de_armado: 'armar',
+          mitad_2_abajo: [ROOT, '/appointments', ROOT],
+          mitad_2_marca_de_la_rama_de_la_entrada_de_arriba: '/appointments',
+          mitad_2_hay_algo_nuestro_debajo: true,
+          mitad_2_accion_de_armado: 'no-armar',
+          mitad_2_el_atras_cae_en: '/appointments',
+          parados_sobre_el_nuestro_con_marca_de_rama_presente: 'no-armar',
+        },
+      }
+    },
+  },
+  {
+    // ⚠ EL ID SALTA DE E-10 A E-11 A PROPÓSITO: el plan 03-05 lo escribió reservando E-9 y E-10 para
+    // los otros planes de esta misma tanda de cierre de gaps —el 03-06 los agrega arriba— y E-12 es
+    // del mismo plan, más abajo. Un id reusado haría que dos escenarios distintos se llamen igual en
+    // el veredicto, y el veredicto es el único lugar donde se lee qué se midió.
     id: 'E-11',
     titulo: 'LA INTERSECCION que faltaba (G-1 / G-3) — el sentinel de salida al fondo + la rama de Mas + el colapso, en la MISMA pila (el recorrido D7 de la UAT)',
     cierra:
@@ -684,6 +912,89 @@ const ESCENARIOS = [
       }
     },
   },
+  {
+    id: 'E-12',
+    titulo: 'el DEGENERADO con el sentinel al fondo (G-2) — el primer atras CAMBIA DE PANTALLA',
+    cierra:
+      'G-2 (*"a la primera que toco atras no hace nada"*): el caso degenerado del criterio 2 armado ' +
+      'con el consumo del sentinel al salir de la raiz, asi que el sentinel nunca queda enterrado y ' +
+      'el primer atras hace algo VISIBLE. E-5 medía el degenerado SIN sentinel; este, con el',
+    async correr(cdp) {
+      // ── La pila armada CON EL HELPER NUEVO ─────────────────────────────────────────────────────
+      // `Inicio (con el sentinel armado) → Turnos → Mas → Finanzas`, igual que la de E-11, pero
+      // saliendo de la raiz CONSUMIENDO el sentinel en vez de empujando encima. Ese es el punto: el
+      // sentinel no queda enterrado, y por eso el camino del atras no tiene dos entradas de la misma
+      // pantalla cuando el colapso termina.
+      await reiniciarEn(cdp, ROOT)
+      await evaluar(cdp, `history.pushState({ frjExit: 1 }, '', '${ROOT}#salir')`)
+      await salirDeLaRaizConsumiendoElSentinel(cdp, '/appointments', ROOT)
+      await empujar(cdp, MORE, '/appointments')
+      await empujar(cdp, '/finances', MORE)
+      const armada = await medir(cdp)
+
+      // El colapso hacia LA SECCION DE LA BARRA, que es el caso DEGENERADO: el destino coincide con
+      // la ruta que quedaria debajo ⇒ rama de DOBLE RETROCESO, sin navegar.
+      const plan = await colapsar(cdp, '/appointments')
+      const m = await medir(cdp)
+
+      // El candado del atras muerto, comparado por PATHNAME (no por ruta completa: `/dashboard` y
+      // `/dashboard#salir` son rutas distintas y pantallas iguales).
+      const pathnamesDelCaminoDelAtras = m.abajo.map((ruta) => ruta.split('#')[0])
+      const paresDePathnamesRepetidos = m.abajo
+        .map((ruta, i) =>
+          i > 0 && pathnamesDelCaminoDelAtras[i] === pathnamesDelCaminoDelAtras[i - 1]
+            ? `${m.abajo[i - 1]} | ${ruta}`
+            : null,
+        )
+        .filter((par) => par !== null)
+
+      // ── LA CLAVE DE G-2: que el atras SIGUIENTE cambie de pathname ────────────────────────────
+      // Lo que el dueno midio no fue una pila mal armada: fue un gesto que no produjo NADA VISIBLE.
+      // Asi que se mide el pathname antes y despues del atras, y se afirma que son distintos.
+      const pathnameAntesDelAtras = await evaluar(cdp, 'location.pathname')
+      await retrocederGuardado(cdp)
+      const unAtras = await medir(cdp)
+      const pathnameTrasElAtras = await evaluar(cdp, 'location.pathname')
+
+      return {
+        medido: {
+          armada: armada.abajo,
+          el_sentinel_quedo_enterrado_al_armar: armada.abajo.filter((r) => r.includes('#salir')),
+          rama_tomada: plan.rama,
+          marca_leida_en_la_entrada_de_mas: plan.marcaLeida,
+          abajo: m.abajo,
+          actual: m.actual,
+          adelante: m.adelante,
+          marca_de_la_entrada_actual: m.marca,
+          pathnames_del_camino_del_atras: pathnamesDelCaminoDelAtras,
+          pares_de_pathnames_repetidos: paresDePathnamesRepetidos,
+          atras_cae_en: m.abajo[m.abajo.length - 2] ?? null,
+          pathname_antes_del_atras: pathnameAntesDelAtras,
+          pathname_tras_el_atras: pathnameTrasElAtras,
+          el_primer_atras_cambia_de_pathname: pathnameAntesDelAtras !== pathnameTrasElAtras,
+          actual_tras_un_atras: unAtras.actual,
+        },
+        esperado: {
+          armada: [ROOT, '/appointments', MORE, '/finances'],
+          // La prueba de que el helper hizo su trabajo: el sentinel NO esta en el camino del atras.
+          el_sentinel_quedo_enterrado_al_armar: [],
+          rama_tomada: 'doble-retroceso',
+          marca_leida_en_la_entrada_de_mas: '/appointments',
+          abajo: [ROOT, '/appointments'],
+          actual: '/appointments',
+          adelante: [MORE, '/finances'],
+          marca_de_la_entrada_actual: { frjUnder: ROOT },
+          pathnames_del_camino_del_atras: [ROOT, '/appointments'],
+          pares_de_pathnames_repetidos: [],
+          atras_cae_en: ROOT,
+          pathname_antes_del_atras: '/appointments',
+          pathname_tras_el_atras: ROOT,
+          el_primer_atras_cambia_de_pathname: true,
+          actual_tras_un_atras: ROOT,
+        },
+      }
+    },
+  },
 ]
 
 // ── El arnés ─────────────────────────────────────────────────────────────────────────────────────
@@ -746,7 +1057,10 @@ async function main() {
     console.log(`escenarios medidos: ${ESCENARIOS.length} · coinciden con lo esperado: ${ESCENARIOS.length - fallados} · no coinciden: ${fallados}`)
     console.log('supuestos CERRADOS por esta medicion: A4 (E-1/E-2/E-3/E-7), A5 (E-4), A6 (E-5), A7 (E-6),')
     console.log('                                      A5+A6 compuestos y el disparador real del colapso (E-8),')
-    console.log('                                      la INTERSECCION sentinel-de-salida x marca-de-la-rama (E-11)')
+    console.log('                                      la INTERSECCION sentinel-de-salida x marca-de-la-rama (E-11),')
+    console.log('                                      el sentinel ENTERRADO contra el consumido, las dos formas (E-9),')
+    console.log('                                      la DECISION (a) del dueno y sus dos mitades (E-10),')
+    console.log('                                      el DEGENERADO con el sentinel al fondo y el primer atras visible (E-12)')
     console.log('supuestos que esta sonda NO puede cerrar, y van a la UAT del plan 03-04:')
     console.log('  A1  — el orden del efecto que escribe la marca contra la escritura del router de Next')
     console.log('  A2  — que no haya otro commit del router en vuelo cuando se escribe la marca')
@@ -756,7 +1070,8 @@ async function main() {
       console.error('')
       console.error(`una pila MEDIDA no coincide con la esperada en ${fallados} escenario(s).`)
       console.error('el arreglo NO es ajustar la expectativa: es rehacer el diseno del plan correspondiente')
-      console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6, 03-04 para E-8, 03-05 para E-11) y dejarlo')
+      console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6, 03-04 para E-8, 03-05 para E-11,')
+    console.error('03-06 para E-9/E-10/E-12) y dejarlo')
       console.error('escrito en .planning/debug/pila-de-dos-niveles-medida.md. Para eso existe esta sonda.')
       process.exitCode = 1
     }
