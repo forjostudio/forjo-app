@@ -43,10 +43,13 @@ import { DIRTY_HASH_BASE } from '@/lib/dirty-history'
 /** Un `window` mínimo: lo único que el ejecutor toca, y contando cada cosa. */
 function montarPila({ state, pathname }: { state: unknown; pathname: string }) {
   const back = vi.fn()
+  // `replaceState` hace falta desde el plan 03-05: el consumidor del canal de propagación escribe la
+  // marca con el escritor único de `lib/panel-history.ts`, y ése reemplaza el state de la entrada.
+  const replaceState = vi.fn()
   const enganchados: { tipo: string; fn: () => void; opciones: unknown }[] = []
   const desenganchados: (() => void)[] = []
   const win = {
-    history: { state, back },
+    history: { state, back, replaceState },
     location: { pathname },
     addEventListener: vi.fn((tipo: string, fn: () => void, opciones: unknown) => {
       enganchados.push({ tipo, fn, opciones })
@@ -56,7 +59,7 @@ function montarPila({ state, pathname }: { state: unknown; pathname: string }) {
     }),
   }
   vi.stubGlobal('window', win)
-  return { back, enganchados, desenganchados, win }
+  return { back, replaceState, enganchados, desenganchados, win }
 }
 
 /** Dispara el `popstate` que el ejecutor enganchó, después de mover la pila a donde aterrizó. */
@@ -70,6 +73,11 @@ function dispararRetroceso(
 }
 
 afterEach(() => {
+  // ⚠ LOS DOS DATOS A NIVEL DE MÓDULO SE DRENAN ANTES DE SOLTAR EL `window`, y en este orden: son
+  // estado del módulo, así que sobreviven al test, y un pedido o un aterrizaje colgado del test
+  // anterior envenenaría el siguiente — que es, literalmente, el bug que el plan 03-05 cierra.
+  PB.takeBackLanding?.()
+  PB.applyBranchMarkRequest?.('__drenaje__')
   vi.unstubAllGlobals()
 })
 
@@ -251,16 +259,18 @@ describe('la mecánica del hook, en lo que es cubrible sin montar React', () => 
   })
 
   it('branchMarkDecision: las cuatro ramas de cuándo marcar la entrada', () => {
+    // SIN el hecho del retroceso, las cuatro ramas de siempre dan EXACTAMENTE lo de antes.
+    const EMPUJE = { vieneDeUnRetroceso: false }
     // (i) primera vez, sin ruta anterior ⇒ no marcar: no sabemos qué quedó debajo.
-    expect(branchMarkDecision({ previous: null, current: PANEL_MORE })).toBeNull()
+    expect(branchMarkDecision({ previous: null, current: PANEL_MORE, ...EMPUJE })).toBeNull()
     // (ii) la ruta anterior es la misma que la actual ⇒ no marcar (no hubo navegación).
-    expect(branchMarkDecision({ previous: '/finances', current: '/finances' })).toBeNull()
+    expect(branchMarkDecision({ previous: '/finances', current: '/finances', ...EMPUJE })).toBeNull()
     // (iii) la política dice REEMPLAZAR ⇒ no marcar: no hay nada nuevo debajo.
-    expect(branchMarkDecision({ previous: '/finances', current: '/clients' })).toBeNull()
+    expect(branchMarkDecision({ previous: '/finances', current: '/clients', ...EMPUJE })).toBeNull()
     // (iv) la política dice EMPUJAR ⇒ marcar con la ruta ANTERIOR, que es la que quedó debajo.
-    expect(branchMarkDecision({ previous: PANEL_MORE, current: '/finances' })).toBe(PANEL_MORE)
-    expect(branchMarkDecision({ previous: PANEL_ROOT, current: '/clients' })).toBe(PANEL_ROOT)
-    expect(branchMarkDecision({ previous: '/appointments', current: PANEL_MORE })).toBe('/appointments')
+    expect(branchMarkDecision({ previous: PANEL_MORE, current: '/finances', ...EMPUJE })).toBe(PANEL_MORE)
+    expect(branchMarkDecision({ previous: PANEL_ROOT, current: '/clients', ...EMPUJE })).toBe(PANEL_ROOT)
+    expect(branchMarkDecision({ previous: '/appointments', current: PANEL_MORE, ...EMPUJE })).toBe('/appointments')
   })
 
   it('el tipo del callback de navegación es la unión de los DOS modos, no una cadena cualquiera', () => {
@@ -552,6 +562,249 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
         }
       }
     }
+  })
+})
+
+// ── Plan 03-05 — LA DIRECCIÓN y LA PROPAGACIÓN (cierre de G-1 / G-2 / G-3) ───────────────────────
+//
+// La marca de la rama **dice la verdad o no dice nada**. Hoy se derivaba del PAR DE RUTAS, y el par
+// de rutas no sabe qué pasó de verdad: con un retroceso, con el reemplazo del colapso y con el de la
+// política, el par dice `push` igual. La UAT en el teléfono midió las tres consecuencias: una marca
+// RANCIA leída cuando no correspondía, un colapso que aborta en silencio, y un atrás que aterriza en
+// una sección de UNA PRUEBA ANTERIOR.
+
+describe('la REGLA DE DIRECCIÓN — ningún retroceso escribe la marca, y va PRIMERA', () => {
+  it('con el hecho del retroceso NO marca, aunque la política diga empujar (la rama donde CAMBIA)', () => {
+    // Un retroceso **no crea** una entrada: **revela** una que ya existe y que ya trae su propia
+    // marca. Escribir ahí hace las dos cosas malas a la vez: MIENTE (la ruta de la que venimos
+    // estaba ARRIBA, no debajo) y DESTRUYE la verdad que esa entrada ya tenía.
+    expect(
+      branchMarkDecision({ previous: '/finances', current: PANEL_MORE, vieneDeUnRetroceso: true }),
+    ).toBeNull()
+    // Y el contrapuesto, adyacente: el MISMO par sin el hecho sí marca.
+    expect(
+      branchMarkDecision({ previous: '/finances', current: PANEL_MORE, vieneDeUnRetroceso: false }),
+    ).toBe('/finances')
+  })
+
+  it('gana a cada una de las cuatro ramas de hoy, una por una', () => {
+    const CASOS: { previous: string | null; current: string }[] = [
+      { previous: null, current: PANEL_MORE },
+      { previous: '/finances', current: '/finances' },
+      { previous: '/finances', current: '/clients' },
+      { previous: PANEL_MORE, current: '/finances' },
+    ]
+    for (const caso of CASOS) {
+      expect(branchMarkDecision({ ...caso, vieneDeUnRetroceso: true })).toBeNull()
+    }
+  })
+
+  it('LOS TRES RETROCESOS DEL SISTEMA caen acá: el atrás del dueño, el subir de D-03 y el colapso', () => {
+    // Es por qué el síntoma apareció en TRES gaps distintos de la UAT. Los tres pares son los que
+    // produce cada uno de los tres retrocesos, y los tres habrían marcado con la política de hoy.
+    // El atrás del dueño desde Más cae en Inicio; el *subir un nivel* de D-03 y el primer paso del
+    // colapso aterrizan en Más desde una sección de la rama. Los tres pares la política de rutas los
+    // declara EMPUJE, así que los tres habrían escrito una marca que MIENTE.
+    const ATRAS_DEL_DUENO = { previous: PANEL_MORE, current: PANEL_ROOT }
+    const SUBIR_D03 = { previous: '/finances', current: PANEL_MORE }
+    const COLAPSO_PRIMER_PASO = { previous: '/web', current: PANEL_MORE }
+    for (const caso of [ATRAS_DEL_DUENO, SUBIR_D03, COLAPSO_PRIMER_PASO]) {
+      expect(branchMarkDecision({ ...caso, vieneDeUnRetroceso: false })).not.toBeNull()
+      expect(branchMarkDecision({ ...caso, vieneDeUnRetroceso: true })).toBeNull()
+    }
+  })
+
+  it('BARRIDO de no-regresión: sin el hecho, cada par da lo de antes; con el hecho, null', () => {
+    const RUTAS = [PANEL_ROOT, PANEL_MORE, '/appointments', '/agenda', '/clients', '/finances', '/web']
+    for (const previous of RUTAS) {
+      for (const current of RUTAS) {
+        const sinElHecho = branchMarkDecision({ previous, current, vieneDeUnRetroceso: false })
+        const esperado =
+          previous === current || PH.panelNavMode({ from: previous, to: current }) !== 'push'
+            ? null
+            : previous
+        expect(sinElHecho).toBe(esperado)
+        expect(branchMarkDecision({ previous, current, vieneDeUnRetroceso: true })).toBeNull()
+      }
+    }
+  })
+
+  it('el hecho va SIN VALOR POR OMISIÓN: un call site que lo olvide NO COMPILA', () => {
+    // Igual que `masDebajo` y `holdsExitSentinel`: es un HECHO de la pila, no una configuración. Se
+    // afirma LEYENDO el fuente porque la propiedad es del TIPO y no de un valor de retorno — un
+    // default o un `?` no los ve ninguna aserción de runtime.
+    const firma = sinComentarios(leer(MOD_DUENO)).match(
+      /export function branchMarkDecision\(\{[\s\S]*?\): string \| null \{/,
+    )
+    expect(firma).not.toBeNull()
+    expect(firma?.[0]).toContain('vieneDeUnRetroceso: boolean')
+    expect(firma?.[0]).not.toContain('vieneDeUnRetroceso?')
+    expect(firma?.[0]).not.toMatch(/vieneDeUnRetroceso\s*=/)
+  })
+})
+
+describe('el RASTREO del retroceso — la RUTA del aterrizaje, no un booleano', () => {
+  it('guarda la ruta en la que el retroceso aterrizó, y la devuelve', () => {
+    PB.recordBackLanding(PANEL_MORE)
+    expect(PB.takeBackLanding()).toBe(PANEL_MORE)
+  })
+
+  it('se DESCARTA al leerlo: la segunda lectura de la misma corrida ya no lo encuentra', () => {
+    // El dato se lee y se descarta en TODA corrida del efecto de marcado, haya suprimido o no. Un
+    // dato que sobrevive a una corrida suprimiría un empuje que nadie pidió suprimir.
+    PB.recordBackLanding('/appointments')
+    expect(PB.takeBackLanding()).toBe('/appointments')
+    expect(PB.takeBackLanding()).toBeNull()
+  })
+
+  it('la supresión aplica SÓLO con ruta coincidente', () => {
+    PB.recordBackLanding(PANEL_MORE)
+    const aterrizaje = PB.takeBackLanding()
+    // Coincide ⇒ el commit viene del retroceso ⇒ no marcar.
+    expect(
+      branchMarkDecision({ previous: '/finances', current: PANEL_MORE, vieneDeUnRetroceso: aterrizaje === PANEL_MORE }),
+    ).toBeNull()
+    // No coincide ⇒ el commit NO viene de ese retroceso ⇒ la política decide como siempre.
+    expect(
+      branchMarkDecision({ previous: PANEL_ROOT, current: '/clients', vieneDeUnRetroceso: aterrizaje === '/clients' }),
+    ).toBe(PANEL_ROOT)
+  })
+
+  it('EL CASO QUE PROHÍBE EL BOOLEANO — un retroceso que NO cambia de ruta, y después un empuje que SÍ marca', () => {
+    // El retroceso que el sentinel de salida absorbe en Inicio **no cambia** la ruta, así que el
+    // efecto de marcado NO vuelve a correr —sus dependencias no cambiaron— y una BANDERA quedaría
+    // encendida. El próximo empuje de verdad quedaría suprimido EN SILENCIO: la política degradaría
+    // a un nivel sin que nada se pusiera rojo.
+    PB.recordBackLanding(PANEL_ROOT)
+    // El efecto no corre. Llega el empuje de verdad: Inicio → Turnos.
+    const aterrizaje = PB.takeBackLanding()
+    expect(aterrizaje).toBe(PANEL_ROOT)
+    expect(
+      branchMarkDecision({
+        previous: PANEL_ROOT,
+        current: '/appointments',
+        vieneDeUnRetroceso: aterrizaje === '/appointments',
+      }),
+    ).toBe(PANEL_ROOT)
+    // Y el dato ya se descartó: el empuje siguiente tampoco queda suprimido.
+    expect(PB.takeBackLanding()).toBeNull()
+  })
+})
+
+describe('la PROPAGACIÓN del colapso — un canal, un consumidor, y la ruta REAL de abajo', () => {
+  /** El colapso completo: gesto, retroceso y el evento en el que el segundo paso decide. */
+  function colapsarHasta({ debajoDeMas, to }: { debajoDeMas: unknown; to: string }) {
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/finances' })
+    runBranchNavigation({ plan: 'collapse-then-replace', to, navigate: navegar })
+    dispararRetroceso(ctx, { pathname: PANEL_MORE, state: debajoDeMas })
+    return { ctx, navegar }
+  }
+
+  it('el colapso que navega deja pedida la ruta LEÍDA en la entrada de Más, y no la ruta de Más', () => {
+    // ⚠ EL CORAZÓN DEL ARREGLO. El reemplazo PISA la entrada de Más: lo que queda debajo es lo que
+    // había debajo de Más. El par de rutas (`/mas` → destino) diría EMPUJE y derivaría `/mas`, que
+    // es justo la entrada que acaba de desaparecer.
+    const { ctx, navegar } = colapsarHasta({ debajoDeMas: panelUnderState('/appointments'), to: '/clients' })
+    expect(navegar).toHaveBeenCalledWith('/clients', 'replace')
+    // Ahora el router reemplazó y estamos parados en el destino, con una entrada FRESCA.
+    ctx.win.history.state = { __NA: true }
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).toHaveBeenCalledTimes(1)
+    expect(ctx.replaceState).toHaveBeenCalledWith({ frjUnder: '/appointments' }, '')
+    expect(ctx.replaceState).not.toHaveBeenCalledWith({ frjUnder: PANEL_MORE }, '')
+  })
+
+  it('el pedido se consume SÓLO en el destino que lo pidió', () => {
+    const { ctx } = colapsarHasta({ debajoDeMas: panelUnderState('/appointments'), to: '/clients' })
+    ctx.win.history.state = { __NA: true }
+    // Llegó OTRA ruta: un pedido que sobrevive a una navegación que no ocurrió escribiría una marca
+    // rancia en una entrada AJENA — el mismo bug, del otro lado.
+    expect(PB.applyBranchMarkRequest('/agenda')).toBe(false)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('y se DESCARTA igual: después de la ruta equivocada, el destino verdadero tampoco lo encuentra', () => {
+    const { ctx } = colapsarHasta({ debajoDeMas: panelUnderState('/appointments'), to: '/clients' })
+    ctx.win.history.state = { __NA: true }
+    expect(PB.applyBranchMarkRequest('/agenda')).toBe(false)
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(false)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('consumido una vez, no se vuelve a consumir', () => {
+    const { ctx } = colapsarHasta({ debajoDeMas: panelUnderState('/appointments'), to: '/clients' })
+    ctx.win.history.state = { __NA: true }
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(false)
+    expect(ctx.replaceState).toHaveBeenCalledTimes(1)
+  })
+
+  it('con la marca PERDIDA en la entrada de Más no escribe NADA, y nunca la ruta de Más', () => {
+    // La degradación segura: sin la ruta real no se deriva ninguna. Quedarse sin marca deja una pila
+    // un escalón más larga; escribir `/mas` dejaría al dueño fuera del sitio en el gesto siguiente.
+    const { ctx, navegar } = colapsarHasta({ debajoDeMas: { __NA: true }, to: '/clients' })
+    expect(navegar).toHaveBeenCalledWith('/clients', 'replace')
+    ctx.win.history.state = { __NA: true }
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('la caída del SEGUNDO CONSUMO que termina navegando también deja el pedido', () => {
+    // El degenerado al que se le perdió la marca en el medio: no hay segundo retroceso, se navega, y
+    // la ruta real de abajo es la que el segundo paso leyó (que acá coincide con el destino).
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/finances' })
+    runBranchNavigation({ plan: 'collapse-then-replace', to: '/appointments', navigate: navegar })
+    // La entrada de Más dice que debajo está justo el destino ⇒ segundo consumo… que se niega porque
+    // la entrada resultó de otro dueño.
+    dispararRetroceso(ctx, { pathname: PANEL_MORE, state: { frjUnder: '/appointments', frjExit: 1 } })
+    expect(navegar).toHaveBeenCalledWith('/appointments', 'replace')
+    ctx.win.history.state = { __NA: true }
+    expect(PB.applyBranchMarkRequest('/appointments')).toBe(true)
+    expect(ctx.replaceState).toHaveBeenCalledWith({ frjUnder: '/appointments' }, '')
+  })
+
+  it('escribe con el ESCRITOR ÚNICO, así que hereda sus dos guardas (entrada ajena ⇒ no escribe)', () => {
+    // El canal no tiene guardas propias: las tiene el escritor. Dos juegos de guardas es cómo se
+    // pierde uno de los dos sin que ningún gate lo vea.
+    const { ctx } = colapsarHasta({ debajoDeMas: panelUnderState('/appointments'), to: '/clients' })
+    ctx.win.history.state = { frjOverlay: 1 }
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('EL CASO DE LA UAT (G-3 / D7) — la pila de D7 marca la SECCIÓN DE LA BARRA, no Más', () => {
+    // El recorrido que el dueño midió en el teléfono: `Inicio → Turnos → Más → Finanzas → tocar
+    // Clientes en la barra`. Medido: *"recarga y queda en clientes, le tuve que hacer dos atrás y
+    // volvió a dashboard#salir-3"*. La marca RANCIA es la causa: el par de rutas derivaba `/mas`, y
+    // lo que queda debajo del destino es **Turnos**. Medido en el escenario E-11 de la sonda.
+    const { ctx, navegar } = colapsarHasta({ debajoDeMas: panelUnderState('/appointments'), to: '/clients' })
+    expect(navegar).toHaveBeenCalledWith('/clients', 'replace')
+    ctx.win.history.state = { __NA: true }
+    // La derivación del par de rutas —lo que el código hacía— habría escrito `/mas`.
+    expect(branchMarkDecision({ previous: PANEL_MORE, current: '/clients', vieneDeUnRetroceso: false })).toBe(PANEL_MORE)
+    // El canal escribe la ruta REAL, y con el pedido a la vista la decisión NO se consulta.
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).toHaveBeenCalledWith({ frjUnder: '/appointments' }, '')
+  })
+})
+
+describe('el canal es UNO y el consumidor es UNO', () => {
+  it('el provider del guard de cambios sin guardar NO se toca: hereda el arreglo por el ejecutor', () => {
+    // Ejecuta el MISMO colapso para el caso vivo de `/web` llamando a `runBranchNavigation`, así que
+    // su propagación sale gratis por el mismo canal. Si apareciera cableada ahí, habría DOS
+    // consumidores y un segundo dialecto de la misma regla.
+    const guard = sinComentarios(leer('components/dashboard/unsaved-changes-guard.tsx'))
+    expect(guard.length).toBeGreaterThan(500)
+    expect(guard).toContain('runBranchNavigation')
+    expect(cuenta(guard, /applyBranchMarkRequest|recordBackLanding|takeBackLanding/g)).toBe(0)
+  })
+
+  it('la barra tampoco lo cablea: el consumidor vive en el hook', () => {
+    const barra = sinComentarios(leer('components/dashboard/panel-bottom-nav.tsx'))
+    expect(barra.length).toBeGreaterThan(500)
+    expect(cuenta(barra, /applyBranchMarkRequest|recordBackLanding|takeBackLanding/g)).toBe(0)
   })
 })
 
