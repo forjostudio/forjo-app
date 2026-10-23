@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ── La sonda de la pila del atrás del panel ──────────────────────────────────────────────────────
 //
-// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los ocho
+// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los nueve
 // recorridos de la Phase 3 del workstream `panel-nav`. No deriva las pilas de leer el código: las
 // MIDE en un Chrome de verdad y FALLA con código distinto de cero si alguna no coincide con la
 // esperada. Es un instrumento con gate, no un script que imprime y se va.
@@ -307,7 +307,7 @@ function cadenaDeTresPasos(cdp, destino) {
   `, { esperarPromesa: true }).then((s) => JSON.parse(s))
 }
 
-// ── Los ocho escenarios ──────────────────────────────────────────────────────────────────────────
+// ── Los nueve escenarios ─────────────────────────────────────────────────────────────────────────
 // Cada uno declara su expectativa ACÁ, en código que se ejecuta. La sonda es la fuente de verdad: si
 // una medición no coincide, el arreglo NO es bajar la expectativa — es rehacer el diseño del plan
 // correspondiente contra lo medido y dejarlo escrito en el documento de debug.
@@ -574,6 +574,116 @@ const ESCENARIOS = [
       }
     },
   },
+  {
+    // ⚠ EL ID SALTA A E-11 A PROPÓSITO: E-9 y E-10 los reservan los otros planes de esta misma tanda
+    // de cierre de gaps. Un id reusado haría que dos escenarios distintos se llamen igual en el
+    // veredicto, y el veredicto es el único lugar donde se lee qué se midió.
+    id: 'E-11',
+    titulo: 'LA INTERSECCION que faltaba (G-1 / G-3) — el sentinel de salida al fondo + la rama de Mas + el colapso, en la MISMA pila (el recorrido D7 de la UAT)',
+    cierra:
+      'el hueco que la UAT nombro: la interseccion de la marca de la rama con el SENTINEL DE SALIDA. ' +
+      'Ningun escenario anterior la tocaba — E-6 probaba el sentinel AISLADO sobre una pila limpia, y ' +
+      'E-8 lo cruzaba con el sentinel de CAMBIOS SIN GUARDAR, que es otra marca. Por eso la sonda dio ' +
+      '8/8 con el telefono fallando en 5 items mas una colision de diseno',
+    async correr(cdp) {
+      // ── La pila de D7, con el sentinel al FONDO ────────────────────────────────────────────────
+      // `Inicio (con el sentinel armado) → Turnos → Mas → Finanzas`. Es la pila que el dueno midio
+      // en el telefono: recargo, quedo en Clientes, y dos atras lo dejaron en `dashboard#salir-3`.
+      await reiniciarEn(cdp, ROOT)
+      // El sentinel de salida: `{ frjExit }` y nada mas, igual que `panelExitState(id)` en la app.
+      await evaluar(cdp, `history.pushState({ frjExit: 1 }, '', '${ROOT}#salir')`)
+      // ⚠ LA SECCION DE LA BARRA SE MARCA CON EL **PATHNAME** DE LA RAIZ, no con la ruta completa que
+      // la entrada de abajo tiene en la URL (`/dashboard#salir`). Es lo que hace la app: la marca la
+      // escribe un efecto que observa `usePathname()`, y el pathname NO ve el hash. Esa asimetria es
+      // justo la razon por la que el candado del atras muerto de mas abajo compara por **pathname** y
+      // no por ruta completa.
+      await empujar(cdp, '/appointments', ROOT)
+      await empujar(cdp, MORE, '/appointments')
+      await empujar(cdp, '/finances', MORE)
+      const armada = await medir(cdp)
+
+      // El colapso hacia un destino de la barra que NO es la ruta de abajo ⇒ rama de
+      // retroceso-y-reemplazo. (La degenerada la mide el plan 03-06.)
+      const plan = await colapsar(cdp, '/clients')
+      const m = await medir(cdp)
+
+      // ── EL CANDADO DEL ATRAS MUERTO, COMPARADO POR PATHNAME ────────────────────────────────────
+      // E-5 compara por ruta completa, y aca eso pasaria EN FALSO: `/dashboard` y `/dashboard#salir`
+      // son rutas DISTINTAS y pantallas IGUALES, o sea exactamente el atras que no hace nada visible.
+      const pathnamesDelCaminoDelAtras = m.abajo.map((ruta) => ruta.split('#')[0])
+      const paresDePathnamesRepetidos = m.abajo
+        .map((ruta, i) =>
+          i > 0 && pathnamesDelCaminoDelAtras[i] === pathnamesDelCaminoDelAtras[i - 1]
+            ? `${m.abajo[i - 1]} | ${ruta}`
+            : null,
+        )
+        .filter((par) => par !== null)
+      // El unico par de pathnames repetidos ADMITIDO es el del sentinel: es una entrada ABSORBENTE
+      // —existe para comerse el primer atras en la raiz— y su "nada visible" lo cubre el aviso de
+      // MOB-05. Cualquier otro par es el defecto.
+      const paresQueNoSonElDelSentinel = paresDePathnamesRepetidos.filter(
+        (par) => !par.split(' | ')[1].includes('#salir'),
+      )
+
+      // ── Los dos atras, para ver que el sentinel sigue al fondo y sigue siendo suyo ─────────────
+      await retrocederGuardado(cdp)
+      const unAtras = await medir(cdp)
+      await retrocederGuardado(cdp)
+      const dosAtras = await medir(cdp)
+
+      return {
+        medido: {
+          armada: armada.abajo,
+          abajo: m.abajo,
+          actual: m.actual,
+          adelante: m.adelante,
+          // (1) LA PROPAGACION: el reemplazo del colapso deja la RUTA REAL DE ABAJO.
+          marca_de_la_entrada_actual: m.marca,
+          // (2) de donde sale ese dato: lo leyo el segundo paso en la entrada de Mas.
+          ruta_que_leyo_el_segundo_paso_en_la_entrada_de_mas: plan.marcaLeida,
+          rama_tomada: plan.rama,
+          // (3) ⚠ LA MENTIRA DEL PAR DE RUTAS, MEDIDA COMO NUMERO. El tramo que el efecto de marcado
+          // ve es (ruta de Mas → destino), y la politica lo declara EMPUJE (`from === more`), asi que
+          // derivaria la ruta de Mas. Pero el reemplazo PISO la entrada de Mas: lo que quedo debajo
+          // es lo que habia debajo de Mas. Las dos claves y la afirmacion de que NO coinciden quedan
+          // medidas para que el dia que alguien "simplifique" la propagacion el candado lo diga.
+          marca_que_DERIVARIA_el_par_de_rutas: MORE,
+          ruta_real_de_abajo: plan.marcaLeida,
+          la_derivada_y_la_real_coinciden: plan.marcaLeida === MORE,
+          // (4) el candado del atras muerto, por pathname.
+          pathnames_del_camino_del_atras: pathnamesDelCaminoDelAtras,
+          pares_de_pathnames_repetidos: paresDePathnamesRepetidos,
+          pares_de_pathnames_repetidos_que_no_son_el_del_sentinel: paresQueNoSonElDelSentinel,
+          // (5) donde cae el atras, y el sentinel al fondo con su clave viva.
+          atras_cae_en: m.abajo[m.abajo.length - 2] ?? null,
+          actual_tras_un_atras: unAtras.actual,
+          actual_tras_dos_atras: dosAtras.actual,
+          marca_de_la_entrada_del_sentinel: dosAtras.marca,
+          el_sentinel_sigue_al_fondo: m.abajo.filter((ruta) => ruta.includes('#salir')),
+        },
+        esperado: {
+          armada: [ROOT, `${ROOT}#salir`, '/appointments', MORE, '/finances'],
+          abajo: [ROOT, `${ROOT}#salir`, '/appointments', '/clients'],
+          actual: '/clients',
+          adelante: ['/finances'],
+          marca_de_la_entrada_actual: { frjUnder: '/appointments' },
+          ruta_que_leyo_el_segundo_paso_en_la_entrada_de_mas: '/appointments',
+          rama_tomada: 'retroceso-y-reemplazo',
+          marca_que_DERIVARIA_el_par_de_rutas: MORE,
+          ruta_real_de_abajo: '/appointments',
+          la_derivada_y_la_real_coinciden: false,
+          pathnames_del_camino_del_atras: [ROOT, ROOT, '/appointments', '/clients'],
+          pares_de_pathnames_repetidos: [`${ROOT} | ${ROOT}#salir`],
+          pares_de_pathnames_repetidos_que_no_son_el_del_sentinel: [],
+          atras_cae_en: '/appointments',
+          actual_tras_un_atras: '/appointments',
+          actual_tras_dos_atras: `${ROOT}#salir`,
+          marca_de_la_entrada_del_sentinel: { frjExit: 1 },
+          el_sentinel_sigue_al_fondo: [`${ROOT}#salir`],
+        },
+      }
+    },
+  },
 ]
 
 // ── El arnés ─────────────────────────────────────────────────────────────────────────────────────
@@ -617,7 +727,12 @@ async function main() {
       const malas = claves.filter((k) => !iguales(medido[k], esperado[k]))
       const ok = malas.length === 0
       if (!ok) fallados++
-      console.log(`${ok ? 'OK  ' : 'FALLA'} ${esc.id} · ${esc.titulo}`)
+      // ⚠ EL PREFIJO ES `OK ` (UNA sola sangría) Y NO `OK  `, Y NO ES COSMÉTICO: los gates de los
+      // cuatro planes de cierre de gaps (03-05..03-08) cuentan las líneas con `grep -cE '^OK  E-n'`,
+      // o sea `OK` + DOS espacios + el id. Con dos espacios acá, el espacio de la plantilla hacía
+      // TRES y los cuatro gates medían **cero** con la sonda en verde — un gate que no mide es peor
+      // que no tenerlo.
+      console.log(`${ok ? 'OK ' : 'FALLA'} ${esc.id} · ${esc.titulo}`)
       console.log(`      cierra el supuesto ${esc.cierra}`)
       for (const k of claves) {
         const marca = malas.includes(k) ? '  <-- NO COINCIDE' : ''
@@ -630,7 +745,8 @@ async function main() {
     console.log('── veredicto ─────────────────────────────────────────────────────────────────')
     console.log(`escenarios medidos: ${ESCENARIOS.length} · coinciden con lo esperado: ${ESCENARIOS.length - fallados} · no coinciden: ${fallados}`)
     console.log('supuestos CERRADOS por esta medicion: A4 (E-1/E-2/E-3/E-7), A5 (E-4), A6 (E-5), A7 (E-6),')
-    console.log('                                      A5+A6 compuestos y el disparador real del colapso (E-8)')
+    console.log('                                      A5+A6 compuestos y el disparador real del colapso (E-8),')
+    console.log('                                      la INTERSECCION sentinel-de-salida x marca-de-la-rama (E-11)')
     console.log('supuestos que esta sonda NO puede cerrar, y van a la UAT del plan 03-04:')
     console.log('  A1  — el orden del efecto que escribe la marca contra la escritura del router de Next')
     console.log('  A2  — que no haya otro commit del router en vuelo cuando se escribe la marca')
@@ -640,7 +756,7 @@ async function main() {
       console.error('')
       console.error(`una pila MEDIDA no coincide con la esperada en ${fallados} escenario(s).`)
       console.error('el arreglo NO es ajustar la expectativa: es rehacer el diseno del plan correspondiente')
-      console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6, 03-04 para E-8) y dejarlo')
+      console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6, 03-04 para E-8, 03-05 para E-11) y dejarlo')
       console.error('escrito en .planning/debug/pila-de-dos-niveles-medida.md. Para eso existe esta sonda.')
       process.exitCode = 1
     }

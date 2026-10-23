@@ -1,13 +1,13 @@
 ---
 status: measured
-trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04."
+trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04; E-11 —la INTERSECCIÓN del sentinel de salida con la marca de la rama, que es el hueco que la UAT destapó— el plan 03-05."
 created: 2026-10-13T00:00:00Z
-updated: 2026-10-14T00:00:00Z
+updated: 2026-10-23T00:00:00Z
 ---
 
 ## Current Focus
 
-veredicto: **LAS OCHO PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (8/8, la sonda sale 0)
+veredicto: **LAS NUEVE PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (9/9, la sonda sale 0)
 
 La sonda es `.planning/debug/probes/panel-back-stack.mjs`, es **re-ejecutable** y **falla con código
 distinto de cero** si cualquier pila medida difiere de la esperada. Esto no es un informe de una
@@ -22,7 +22,7 @@ node scripts/con-turno.mjs node .planning/debug/probes/panel-back-stack.mjs
 
 | Pieza | Valor medido |
 |---|---|
-| Navegador | **Chrome/154.0.8037.98**, `--headless=new`, perfil temporal propio |
+| Navegador | **Chrome/154.0.8037.98** para E-1..E-8 (2026-10-13/14) y **Chrome/155.0.8059.86** para E-11 (2026-10-23), `--headless=new`, perfil temporal propio. Las **ocho** primeras coinciden en **las dos** versiones (la corrida del 2026-10-23 las volvió a medir en verde sobre 155), así que la pila del atrás no cambió de una a la otra. E-11 está medido **sólo** sobre 155 |
 | Node | `v24.15.0` — el `WebSocket` global alcanza para CDP, **cero paquetes nuevos** |
 | Servidor | `node:http` propio en `http://127.0.0.1:8731`, responde el mismo HTML a cualquier path |
 | Puerto de depuración | `9334` |
@@ -49,7 +49,7 @@ mide tres cantidades por escenario y las compara por separado:
   (están adelante, no debajo) y el dueño estuvo ahí de verdad. Se **declaran** en la expectativa en
   vez de ignorarse, igual que el caso de entrada directa que v0.30 declaró y aceptó.
 
-## Las ocho mediciones
+## Las nueve mediciones
 
 ### E-1 · MOB-04 nivel 1 — `Inicio → Más → Finanzas`
 
@@ -219,6 +219,82 @@ atrás cae en **Inicio**, `/mas` **no** quedó inmediatamente debajo, no hay dos
 adyacentes, y lo que queda **adelante** (`/web`, `/web#sin-guardar`) no es basura en el camino del
 atrás: está arriba, y el dueño estuvo ahí de verdad.
 
+### E-11 · la INTERSECCIÓN que faltaba — el sentinel de salida al fondo × la marca de la rama (el recorrido D7 de la UAT)
+
+Cierra **el hueco que la UAT nombró**, y no uno de los supuestos del research: la intersección de la
+**marca de la rama** (`frjUnder`) con el **sentinel de salida** (`frjExit`) en la **misma** pila.
+Veredicto: **OK**. Lo agregó el plan **03-05**.
+
+Pila armada: `Inicio` **con el sentinel armado** → `Turnos` → `Más` → `Finanzas`, y destino `/clients`
+—o sea un destino de la barra que **no** es la ruta de abajo, para tomar la rama de
+retroceso-y-reemplazo y no la degenerada—.
+
+```
+armada:                                              ["/dashboard","/dashboard#salir","/appointments","/mas","/finances"]
+abajo:                                               ["/dashboard","/dashboard#salir","/appointments","/clients"]
+actual:                                              "/clients"
+adelante:                                            ["/finances"]
+marca_de_la_entrada_actual:                          {"frjUnder":"/appointments"}
+ruta_que_leyo_el_segundo_paso_en_la_entrada_de_mas:  "/appointments"
+rama_tomada:                                         "retroceso-y-reemplazo"
+marca_que_DERIVARIA_el_par_de_rutas:                 "/mas"
+ruta_real_de_abajo:                                  "/appointments"
+la_derivada_y_la_real_coinciden:                     false
+pathnames_del_camino_del_atras:                      ["/dashboard","/dashboard","/appointments","/clients"]
+pares_de_pathnames_repetidos:                        ["/dashboard | /dashboard#salir"]
+pares_..._que_no_son_el_del_sentinel:                []
+atras_cae_en:                                        "/appointments"
+actual_tras_un_atras:                                "/appointments"
+actual_tras_dos_atras:                               "/dashboard#salir"
+marca_de_la_entrada_del_sentinel:                    {"frjExit":1}
+el_sentinel_sigue_al_fondo:                          ["/dashboard#salir"]
+```
+
+⇒ **LA MENTIRA DEL PAR DE RUTAS, MEDIDA COMO NÚMERO.** Son las tres líneas del medio, y son el
+corazón de G-3. El efecto de marcado ve el tramo *(`/mas` → `/clients`)*, y la política de rutas lo
+declara **empuje** (`from === more`), así que **derivaría `/mas`**. Pero el reemplazo del colapso
+**pisó** la entrada de Más: lo que queda debajo es **lo que había debajo de Más** —`/appointments`—,
+un dato que el segundo paso **ya leyó**. Las dos rutas **no coinciden**, y eso queda afirmado como
+valor esperado literal: el día que alguien "simplifique" la propagación, el candado lo dice en vez de
+dar verde.
+
+⇒ **El candado del atrás muerto se compara por PATHNAME, no por ruta completa**, y acá se ve por qué:
+`/dashboard` y `/dashboard#salir` son rutas **distintas** y pantallas **iguales**. Comparadas como lo
+hace E-5 —por ruta completa— el candado **pasaría en falso** sobre exactamente el atrás que no hace
+nada visible. El único par de pathnames repetidos admitido es el del **sentinel**, que es una entrada
+**absorbente** (existe para comerse el primer atrás en la raíz) y cuyo "nada visible" lo cubre el
+aviso de MOB-05; cualquier otro par es el defecto, y la clave que los cuenta fuera del sentinel está
+medida en `[]`.
+
+⇒ **Y la asimetría que hace falta para que todo esto sea honesto:** la sección de la barra se marca
+con el **pathname** de la raíz (`/dashboard`) y **no** con la ruta completa de la entrada de abajo
+(`/dashboard#salir`). Es lo que hace la app: la marca la escribe un efecto que observa
+`usePathname()`, y el pathname **no ve el hash**.
+
+⇒ **Dónde cae el atrás, que es el síntoma que el dueño midió:** `/appointments` —**Turnos**—, que es
+lo que D7 esperaba. El sentinel sigue **al fondo** con su clave viva (`{frjExit: 1}`), así que el
+atrás **no** aterriza en una entrada del sentinel en medio del colapso: el `dashboard#salir-3` de la
+UAT era el síntoma, no el diseño.
+
+### ⚠ POR QUÉ EL 8/8 ERA VERDAD Y NO ALCANZABA (la lección de método de esta tanda)
+
+Esta sonda dio **8/8** y la UAT en el teléfono del dueño falló en **5 ítems más una colisión de
+diseño**. Las dos cosas son ciertas a la vez, y la explicación no es que la medición estuviera mal:
+**el 8/8 medía un espacio que no incluía lo que la UAT probó.**
+
+Ningún escenario de los ocho cruzaba el **sentinel de salida** con la **rama**:
+
+- **E-6** probaba el sentinel **aislado**, sobre una pila limpia de tres entradas.
+- **E-8** cruzaba la rama con el sentinel de **cambios sin guardar** (`frjDirty`), que es **otra**
+  marca y **otro** dueño.
+
+G-1, G-2, G-3 y G-4 caen **todos** en esa intersección. Un instrumento con gate no certifica "el
+código está bien": certifica **"estos nueve recorridos son éstos"**. Cuando un gate verde convive con
+un teléfono rojo, la pregunta correcta no es "¿el gate miente?" sino **"¿qué no está midiendo?"** — y
+la respuesta, acá, se escribió como escenario nuevo en vez de como nota al pie. Es la misma lección
+que la memoria *medir-antes-de-aceptar-un-fix-propuesto* ya tiene **cinco** veces en este mismo
+workstream, vista desde el otro lado: **medir no alcanza si lo medido no es lo que falla.**
+
 ## Lo que esta sonda NO puede cerrar
 
 Tres supuestos del `## Assumptions Log` del research **siguen abiertos a propósito**, y van **ruteados
@@ -244,5 +320,11 @@ suite, ni el build**. El único criterio que cierra la fase es la UAT en un tel�
   sentinel de cambios sin guardar arriba la marca de la rama **no es legible**, así que el plan de la
   rama se **re-deriva** después del consumo y no en el click. Y A1, A2 y A11, que esta sonda **no**
   cierra.
-- **Cualquiera de los tres** puede re-correr la sonda: si una pila deja de coincidir, el arreglo **no
-  es ajustar la expectativa** — es rehacer el diseño contra lo medido y actualizar este documento.
+- **Plan 03-05** — **E-11**, que es el que mide la **intersección** que los ocho anteriores no
+  tocaban (el sentinel de salida al fondo × la marca de la rama × el colapso) y deja la **mentira del
+  par de rutas** medida como número. Es la base de los otros tres planes de la tanda de cierre de
+  gaps: la decisión (a) del dueño se contesta **leyendo** esta marca, así que la marca tenía que
+  dejar de mentir primero.
+- **Cualquiera de los cuatro** puede re-correr la sonda: si una pila deja de coincidir, el arreglo
+  **no es ajustar la expectativa** — es rehacer el diseño contra lo medido y actualizar este
+  documento.
