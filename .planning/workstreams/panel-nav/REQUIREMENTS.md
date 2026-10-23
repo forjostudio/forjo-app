@@ -90,9 +90,69 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
         instalada— **no existe hoy** (T-10: cero `manifest`, cero usos de `display-mode`).
       - **Alcance (D-05):** vale **también en escritorio**, **sin gate de viewport**. Ver la enmienda
         de MOB-07.
+
+      ⚠ **DECIDIDO el 2026-10-15 por el dueño, durante la ronda 1 de la UAT de la Phase 3 — la
+      `decision (a)`** (registrada en
+      `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-DECISION-UAT.md`; gobierna los gaps G-4, G-5
+      y G-6):
+
+      - **Qué se decidió:** el sentinel de salida se arma **sólo si no hay nada nuestro debajo**, así
+        que el aviso aparece **únicamente cuando el atrás de verdad saca del panel**. Implementado en el
+        plan `03-06` como la **sexta** regla del armado —y va **última** de las seis a propósito: las
+        cinco anteriores son de **seguridad** y ésta es de **política**, así que puesta última nunca lee
+        la marca de la rama estando parados sobre el sentinel, donde ese dato no significa nada. Medido
+        en el escenario **E-10** de la sonda (las dos mitades de (a)).
+      - **Qué resuelve:** parado en **Inicio con historia debajo**, MOB-04 (`Más → Inicio → atrás`
+        vuelve a **Más**) y MOB-05 (en Inicio el atrás avisa antes de salir) **no pueden ser verdad a la
+        vez**. Es el **bloque H** de la ronda 1, el único recorrido que falló por diseño y no por
+        defecto (**G-4**: *"salta el aviso para salir"*). La decisión los **reconcilia respetando
+        MOB-04**.
+      - **La alternativa que quedó afuera, y por qué se desechó:** la **(b)** — que el sentinel
+        **mandara siempre en Inicio**. Era más simple y más predecible, pero **cambiaba lo que MOB-04
+        prometía** y dejaba el aviso **apareciendo cuando el dueño no iba a salir**.
+      - **El límite aceptado:** si lo que quedó debajo de Inicio es una **entrada ajena** —otro sitio,
+        no una pantalla nuestra— **no hay forma confiable de saberlo** (`history.length` cuenta también
+        las entradas de **adelante**), así que el aviso **va a aparecer igual** y el segundo atrás va a
+        salir sin más. Queda **declarado y aceptado**, con el mismo criterio con el que v0.30 aceptó el
+        caso de **entrada directa** (medido en **E-7**). Anotado en `.planning/WINDOWS.md`.
+      - ⚠ **La etiqueta `decision (a)` va sin tilde a propósito** (igual que `cero regresion` debajo de
+        MOB-06): los gates de esta fase **cuentan esos dos literales**, y en este entorno las clases de
+        caracteres de `grep` son de **bytes** —`LANG` viene vacío—, así que sobre texto acentuado miden
+        **cero**. Acentuarlas deja los gates verdes **sin medir nada**.
 - [ ] **MOB-06**: Nada de esto rompe lo que ya está verificado en celular: el atrás sigue cerrando
       overlays, selectores y el calendario antes que navegar, y el aviso de cambios sin guardar sigue
       frenando la salida.
+
+      ✅ **HECHO NUEVO, medido el 2026-10-15 en la ronda 1 de la UAT: `cero regresion` YA ESTÁ
+      VERIFICADO EN ANDROID.** El **bloque E** del guion —los ítems **10, 11, 12 y 13**: overlay,
+      selector de hora, calendario y **teclado**, o sea los **cuatro quicks de octubre**— **se corrió y
+      pasó**, marcado `[OK]` a mano por el dueño mientras probaba
+      (`phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-04-SUMMARY.md`, commit `7c756a5`). El bloque
+      **F** (cambios sin guardar: 14, 16, 17) también pasó.
+
+      ⚠ **Por eso lo que le falta a MOB-06 NO es Android: es iPhone (A11).** Está escrito con estas
+      palabras a propósito, porque es lo que explica que la **ronda 2 no re-corra ese bloque en
+      Android**: pedirle al dueño repetir 21 recorridos para encontrar cinco arreglos es cómo una UAT
+      deja de correrse. En Safari **nada** de esta fase se verificó —todo lo medido en este repo sobre el
+      retroceso fue Chrome sin pantalla— y el atrás de iOS es un **gesto de borde**, no un botón.
+      Los ítems 10-13 **sí vuelven** en la ronda 2, pero por otro motivo y medido: el plan `03-07` les
+      cambió el camino (cerrar un overlay produce ahora un **retroceso ignorado**, que es justo donde
+      entra el cuarto momento de reintento).
+
+#### Por qué los tres siguen SIN marcar, y el motivo de cada uno es distinto
+
+**La evidencia que marca estos tres es la ronda 2 de la UAT en celular real** —no el código escrito, ni
+la suite verde, ni la sonda en cero—. El guion está en
+`phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-UAT-GUION-2.md`.
+
+| Requisito | Qué le falta | Se marca si |
+|---|---|---|
+| **MOB-04** | Los **5 fallos** de la ronda 1 (ítems 7, 8, 15, 19, 20 — gaps G-1, G-2, G-3, G-5, G-6) arreglados en los planes `03-05`/`03-06`/`03-07` pero **sin verificar en el teléfono**, más la **colisión H** (G-4) bajo la decisión (a) | pasan los bloques 1 a 4 del guion de la ronda 2 |
+| **MOB-05** | Lo mismo: los fallos **19** y **20** son suyos (el aviso que no se armaba entrando directo, y el que no se re-armaba al expirar la ventana), y la colisión **H** es la que su decisión reconcilia | pasan los bloques 1 a 4 del guion de la ronda 2 |
+| **MOB-06** | **Sólo iPhone (A11)** — su parte de Android ya está afirmada (arriba) — más la **parte de overlay del ítem 20**, que nunca se midió (*"no tengo overlays en inicio como para probar eso"*) | pasan los bloques 3, 4 y **6** del guion de la ronda 2 |
+
+Si la ronda 2 falla, los tres **vuelven a quedar sin marcar** y los fallos nuevos entran como gaps de
+una tanda nueva.
 
 ### Lo que no se toca
 
@@ -189,9 +249,9 @@ dos casos, que es el invariante que importa. **La UAT tiene que poder distinguir
 | MOB-01 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-02 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-03 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
-| MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
-| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. Pendiente **sólo** la verificación en celular real |
-| MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending |
+| MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending — la **ronda 1** de la UAT **se corrió** (2026-10-15, Android/Chrome): **16 pasados, 5 fallados** (7, 8, 15, 19, 20) y **una colisión de diseño** (bloque H, G-4). Los seis gaps están arreglados en `03-05`/`03-06`/`03-07`; lo que lo marca es la **ronda 2** (`03-UAT-GUION-2.md`, bloques 1 a 4) |
+| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. ✅ Y la **`decision (a)`** del dueño el 2026-10-15 reconcilia la colisión con MOB-04, con su límite aceptado escrito. Pendiente **sólo** la verificación en celular real: los fallos 19 y 20 y la colisión H, en la **ronda 2** (bloques 1 a 4) |
+| MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending — ⚠ **`cero regresion` ya verificado en ANDROID** en la ronda 1 (el bloque E, ítems 10-13, pasó; marcado a mano por el dueño). Le falta **sólo iPhone / Safari (A11)** más la **parte de overlay del ítem 20**, que nunca se midió: lo cierra la **ronda 2**, bloques 3, 4 y 6 |
 | MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) — ⚠ **con enmienda** del 2026-10-14 por D-05: ver la nota debajo del requisito. La política de navegación no cambia en escritorio (criterio 6 intacto); **sí** cambia el costo de salir del panel |
 | MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
 | MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |

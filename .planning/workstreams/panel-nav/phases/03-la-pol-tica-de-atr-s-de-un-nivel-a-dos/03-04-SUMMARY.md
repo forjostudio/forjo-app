@@ -295,6 +295,16 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
 
 ## Los 21 recorridos, listos para marcar
 
+**Qué es esto:** el guion de la ronda 1 y su registro — las **14** casillas `[ok]`/`[OK]` de los ítems
+1-5, 9, 10-14, 16, 17 y 21 las marcó **el dueño a mano mientras probaba** (commit `7c756a5`) y son
+evidencia de primera mano; las de los ítems **6** y **18** las completó el plan `03-08` desde su reporte
+verbal, y las **5** de `[FALLA]` salen de los gaps que ese mismo reporte midió.
+**Resultado de la ronda 1 (2026-10-15, Android / Chrome):** **16 pasan · 5 fallan** (7, 8, 15, 19, 20) ·
+**una colisión de diseño** (bloque H, G-4) · y **dos mitades sin medir**: la parte de overlay del ítem 20
+y todo el pase de iPhone.
+**El detalle, textual, está en `03-UAT.md`** (con su nota de corrección); el guion de la **ronda 2** es
+otro archivo: `03-UAT-GUION-2.md`. Este documento **no se re-marca**: es el registro de la ronda 1.
+
 ### A · Los dos niveles (MOB-04) — los dos recorridos son distintos y los dos son correctos
 
 - [ok] **1.** `Inicio → Más → Finanzas → atrás` ⇒ queda **Más abierto** (no Inicio, y no una pantalla
@@ -317,11 +327,16 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
 
 ### D · El cruce entre los dos niveles (criterio 2) — donde más fácil queda basura
 
-- [ ] **6.** `Inicio → Más → Finanzas → tocar Clientes en la barra → atrás` ⇒ **Inicio** (no Más).
-- [ ] **7.** `Inicio → Turnos → Más → Finanzas → tocar Clientes en la barra → atrás` ⇒ **Turnos** (no
+- [OK] **6.** `Inicio → Más → Finanzas → tocar Clientes en la barra → atrás` ⇒ **Inicio** (no Más).
+      *(Pasó. El dueño no alcanzó a marcarla; la resuelve la tabla de `03-UAT.md` por su reporte verbal.)*
+- [FALLA] **7. (G-1)** `Inicio → Turnos → Más → Finanzas → tocar Clientes en la barra → atrás` ⇒ **Turnos** (no
       Más, y **no** hace falta apretar atrás dos veces para que pase algo visible).
-- [ ] **8.** **El degenerado:** `Inicio → Turnos → Más → Finanzas → tocar Turnos en la barra` ⇒ queda
+      *(Medido: "recarga y queda en clientes, le tuve que hacer dos atrás y volvió a `dashboard#salir-3`".
+      Arreglado en los planes `03-05` y `03-06`; vuelve en el bloque 1 de la ronda 2.)*
+- [FALLA] **8. (G-2)** **El degenerado:** `Inicio → Turnos → Más → Finanzas → tocar Turnos en la barra` ⇒ queda
       en Turnos, y el `atrás` ⇒ **Inicio**, haciendo algo visible la primera vez.
+      *(Medido: "a la primera que toco atrás no hace nada" — el atrás muerto que el criterio 2 prohíbe.
+      Arreglado en `03-06` y medido en E-12; vuelve en el bloque 1 de la ronda 2.)*
 - [OK] **9.** **NAV-08 sigue vivo:** en Clientes con una ficha abierta, tocar **Clientes** en la barra
       ⇒ **cierra la ficha** en vez de apilar.
 
@@ -338,12 +353,16 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
 - [OK] **14.** En **`/agenda`** (destino de la barra) con cambios sin guardar, tocar otro destino ⇒
       pregunta antes de descartar; **"Salir sin guardar"** ⇒ aterriza en el destino y el `atrás` cae en
       **Inicio**.
-- [ ] **15.** En **`/web`** (sección de la **rama de Más**) con cambios sin guardar, **tocar Más** ⇒
+- [FALLA] **15. (G-3)** En **`/web`** (sección de la **rama de Más**) con cambios sin guardar, **tocar Más** ⇒
       pregunta; **"Salir sin guardar"** ⇒ aterriza en **Más** (política **nueva**, no la vieja) y el
       `atrás` cae en **Inicio**.
       ⚠ **Es el recorrido que el research encontró vivo**, el defecto que el quick `261006-iey` ya tuvo
       que arreglar una vez, y el que esta wave rediseñó contra lo medido en E-8. **Si algo de esta fase
       va a fallar, es acá.**
+      *(Y falló. Medido: "cayó en agenda (que es donde estaba antes haciendo la otra prueba) y toqué Más
+      ahí dentro de agenda y me llevó a inicio en vez de más" — una marca de rama rancia leída cuando no
+      correspondía. Arreglado en `03-05` (escritor único + regla de dirección); vuelve en el bloque 1 de
+      la ronda 2, y hay que correrlo **dos veces**: con la pila limpia y arrastrando otra prueba.)*
 - [OK] **16.** En **`/web`** con cambios sin guardar, tocar un **destino de la barra** ⇒ "Salir sin
       guardar" ⇒ aterriza en el destino y el `atrás` cae en **Inicio** (es **la cadena de tres pasos**).
 - [OK] **17.** En `/agenda` con cambios sin guardar, **el atrás del sistema** ⇒ sigue avisando, y
@@ -351,13 +370,22 @@ encontraron los **7 bugs** de la UAT de v0.30 con el pipeline entero en verde, y
 
 ### G · El aviso de salida (MOB-05 / D-01) — repetido tres veces
 
-- [ ] **18.** En **Inicio**, `atrás` ⇒ **no sale** y aparece el aviso **abajo, 8px arriba de la
+- [OK] **18.** En **Inicio**, `atrás` ⇒ **no sale** y aparece el aviso **abajo, 8px arriba de la
       barra**, en **una sola línea** y legible. `atrás` otra vez ⇒ **sale de verdad**. Salir cuesta
       exactamente **un** atrás más y **nunca** aparecen dos avisos encadenados.
-- [ ] **19.** Repetir el ciclo **tres veces seguidas**: sigue funcionando igual las tres.
-- [ ] **20.** **Esperar** a que el aviso desaparezca y apretar atrás otra vez ⇒ **vuelve a avisar** (no
+      *(Pasó: el aviso aparece y funciona. El dueño no alcanzó a marcarla; la resuelve la tabla de
+      `03-UAT.md` por su reporte verbal.)*
+- [FALLA] **19. (G-5)** Repetir el ciclo **tres veces seguidas**: sigue funcionando igual las tres.
+      *(Medido: "para que funcione tengo que entrar a alguna sección y volver a inicio, sino sale de una
+      sin aviso" — el armado sólo reintentaba al cambiar el pathname. Resuelto por la decisión del dueño
+      y arreglado en `03-06` y `03-07` (séptima regla + cuarto momento de reintento); vuelve en el
+      bloque 1 de la ronda 2, **abriendo cada ciclo con el observable del hash en la URL**.)*
+- [FALLA] **20. (G-6)** **Esperar** a que el aviso desaparezca y apretar atrás otra vez ⇒ **vuelve a avisar** (no
       sale sin avisar). Y con un **overlay abierto** en Inicio, el atrás **cierra el overlay** y el
       aviso **no** aparece.
+      *(Medido: "si toco atrás una vez, pasan 30 segundos, y toco el segundo atrás, sale de una" — misma
+      raíz que G-5. ⚠ Su **segunda mitad, la del overlay, NUNCA se midió**: "no tengo overlays en inicio
+      como para probar eso". Las dos mitades vuelven en la ronda 2, en los bloques 1 y 3.)*
 - [OK] **21.** **En escritorio (D-05):** el mismo ciclo, con el aviso **centrado sobre la columna de
       contenido** (no debajo de donde estaría una barra que ahí no existe), legible y sin tapar nada. Y
       el recorrido del **sidebar** da exactamente lo de hoy (**criterio 6**).
@@ -369,8 +397,16 @@ como el cambio**:
 
 - **`Más → Inicio → atrás` ⇒ sigue cayendo en Más.** Es la rama de v0.30 (volver a la raíz **empuja**,
   porque reemplazar dejaría dos entradas idénticas). **NO cambió.**
+  ⚠ **NO PASÓ en la ronda 1 — y no es un defecto de implementación: es la colisión de diseño que la UAT
+  destapó** (gap **G-4**). Medido: *"salta el aviso para salir"*. Parado en Inicio **con historia
+  debajo**, MOB-04 (volver a Más) y MOB-05 (avisar antes de salir) **no pueden ser verdad a la vez**; es
+  la imprecisión declarada #12 tocada desde el otro lado. **Resuelta por decisión del dueño — la
+  opcion (a)**, registrada en `03-DECISION-UAT.md` y ahora también debajo de MOB-05 en
+  `REQUIREMENTS.md`: el sentinel de salida se arma **sólo si no hay nada nuestro debajo**. Implementada
+  en `03-06` (sexta regla, última de las seis) y medida en E-10. **Vuelve en el bloque 2 de la ronda 2**,
+  con su gemelo que prueba que (a) no rompió MOB-05 (entrando directo a Inicio, el aviso **sí** aparece).
 - **`Más → sección → atrás` ⇒ AHORA cae en Más.** En la Phase 2 caía en Inicio y estaba declarado
-  correcto *en esa fase*. **Éste es el cambio**, y es MOB-04.
+  correcto *en esa fase*. **Éste es el cambio**, y es MOB-04. **Pasó.**
 
 ### I · Casos declarados que NO son bugs
 
@@ -384,14 +420,19 @@ como el cambio**:
   su atrás es igual en todas partes.
 - **La URL de Inicio muestra el hash** (`/dashboard#salir`) con el sentinel armado. Es inherente al
   mecanismo —el hash es la condición de existencia de la entrada— y es la forma medida en **E-6**.
-- ⚠ **La imprecisión declarada #12, que hay que poder distinguir de un bug.** El sentinel de salida se
-  arma estando en la raíz **haya o no haya historia debajo**. Si debajo de Inicio quedó una sección
-  —`Inicio → Turnos → Inicio`, que la política empuja en los dos sentidos— el **segundo atrás no sale
-  del panel: vuelve a Turnos**, y el copy del aviso queda optimista. **Eso es la imprecisión aceptada,
-  no un bug**: no hay forma confiable de preguntarle al navegador *"¿hay algo debajo?"*
-  (`history.length` cuenta también el forward). **Sería un bug** si el segundo atrás **no hiciera nada
-  visible**, o si **no avisara** y saliera de una. Para probar el ítem 18 **limpio**, entrar a Inicio
-  en una pestaña nueva **sin pasar por otra sección antes**.
+- ⚠ **El residuo aceptado de la decisión (a) — lo que queda en pie, y hay que poder distinguirlo de un
+  bug.** *(Este párrafo **reemplaza** al de la imprecisión declarada #12, que decía que el sentinel se
+  arma estando en la raíz **haya o no haya historia debajo**. Eso **ya no es cierto**: la decisión (a) del
+  dueño lo cerró en el plan `03-06` —el sentinel se arma **sólo si no hay nada nuestro debajo**— y la
+  entrada 12 del registro de imprecisiones quedó **arreglada**. La decisión vive en `03-DECISION-UAT.md`
+  y debajo de MOB-05 en `REQUIREMENTS.md`.)*
+  **Lo que sigue aceptado es el otro caso:** si lo que quedó debajo de Inicio es una **entrada ajena**
+  —otro sitio, no una pantalla nuestra— **no hay forma confiable de saberlo** (`history.length` cuenta
+  también las entradas de **adelante**), así que el aviso **va a aparecer igual** y el segundo atrás va a
+  salir del panel sin más. Es exactamente el mismo criterio con el que v0.30 aceptó el caso de **entrada
+  directa** (medido en **E-7**). **Sería un bug** si el segundo atrás **no hiciera nada visible**, o si
+  **no avisara** y saliera de una. Para probar el ítem 18 **limpio**, entrar a Inicio en una pestaña
+  nueva **sin pasar por otra sección antes**.
 
 ## Si algo del guion falla
 
