@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ── La sonda de la pila del atrás del panel ──────────────────────────────────────────────────────
 //
-// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los doce
+// QUÉ MIDE: la pila REAL del navegador (`Page.getNavigationHistory` por CDP) para los trece
 // recorridos de la Phase 3 del workstream `panel-nav`. No deriva las pilas de leer el código: las
 // MIDE en un Chrome de verdad y FALLA con código distinto de cero si alguna no coincide con la
 // esperada. Es un instrumento con gate, no un script que imprime y se va.
@@ -286,6 +286,52 @@ function salirDeLaRaizConsumiendoElSentinel(cdp, destino, debajo) {
 }
 
 /**
+ * ARMA el sentinel de salida: empuja una entrada propia con su estado y el hash **DERIVADO del hash
+ * actual**, igual que `nextPanelExitHash` en la app.
+ *
+ * ⚠ **POR QUE EL HASH SE DERIVA Y NO ES LA CONSTANTE A SECAS** (cicatriz 1): dos entradas
+ * consecutivas con la **misma** URL hacen que el router **colapse** la entrada — no se crea ninguna,
+ * el atras no tiene nada que deshacer y **saca al dueno de la pagina**, justo lo contrario de lo que
+ * el sentinel viene a hacer. Devuelve el hash que empujo, que es el dato que **E-13** mide vuelta por
+ * vuelta: con el ciclo sano tiene que ser **siempre el base**, y el **escalado** aparece solo en el
+ * caso del estado pisado.
+ */
+function armarElSentinel(cdp, id) {
+  return evaluar(cdp, `
+    (() => {
+      const BASE = '#salir'
+      const actual = location.hash
+      let hash = BASE
+      if (actual === BASE) hash = BASE + '-2'
+      else if (actual.startsWith(BASE + '-')) {
+        const profundidad = Number(actual.slice(BASE.length + 1))
+        if (Number.isInteger(profundidad) && profundidad >= 2) hash = BASE + '-' + (profundidad + 1)
+      }
+      history.pushState({ frjExit: ${id} }, '', location.pathname + hash)
+      return hash
+    })()
+  `)
+}
+
+/**
+ * CONSUME nuestra entrada del sentinel, con **su** guarda re-verificada en el gesto: si la entrada de
+ * arriba no lleva la marca del sentinel, se **niega** en vez de retroceder (cicatriz 2 — un `back()`
+ * sobre una entrada ajena expulsa al dueno del sitio). Devuelve el state con el que aterrizo.
+ */
+function consumirElSentinel(cdp) {
+  return evaluar(cdp, `
+    new Promise((res, rej) => {
+      if (!history.state || typeof history.state.frjExit === 'undefined') {
+        rej(new Error('la entrada de arriba NO lleva la marca del sentinel: un back() aca seria sobre entrada ajena'))
+        return
+      }
+      window.addEventListener('popstate', (e) => res(JSON.stringify(e.state ?? null)), { once: true })
+      history.back()
+    })
+  `, { esperarPromesa: true }).then((s) => JSON.parse(s))
+}
+
+/**
  * Empuja el **sentinel de CAMBIOS SIN GUARDAR** (`lib/dirty-history.ts`) encima de la entrada actual.
  *
  * ⚠ **Su state lleva SÓLO su propia marca (`{ frjDirty }`), igual que en la app** (`dirtyHistoryState`
@@ -364,7 +410,7 @@ function cadenaDeTresPasos(cdp, destino) {
   `, { esperarPromesa: true }).then((s) => JSON.parse(s))
 }
 
-// ── Los doce escenarios ─────────────────────────────────────────────────────────────────────────
+// ── Los trece escenarios ────────────────────────────────────────────────────────────────────────
 // Cada uno declara su expectativa ACÁ, en código que se ejecuta. La sonda es la fuente de verdad: si
 // una medición no coincide, el arreglo NO es bajar la expectativa — es rehacer el diseño del plan
 // correspondiente contra lo medido y dejarlo escrito en el documento de debug.
@@ -995,6 +1041,155 @@ const ESCENARIOS = [
       }
     },
   },
+  {
+    id: 'E-13',
+    titulo: 'el CICLO de re-armado x3 sin acumular (G-5 / G-6) — y de donde sale el hash ESCALADO',
+    cierra:
+      'la SEMANTICA DE LA PILA del re-armado: el ciclo armar-consumir-rearmar repetido TRES veces no ' +
+      'hace crecer el camino del atras ni produce entradas con el hash escalado (mitad A); y con el ' +
+      'estado de la entrada PISADO por una escritura ajena, la URL sigue llevando nuestro hash, las ' +
+      'cinco reglas viejas no detectan nada y el armado ESCALA el hash y suma una entrada mas — que ' +
+      'es el origen MEDIDO de `dashboard#salir-3` y el argumento de la SEPTIMA regla (mitad B). ' +
+      'NO cierra el cableado de React: esta sonda monta su propio servidor estatico y no corre el ' +
+      'codigo de la app, asi que A1, A2 y A11 siguen abiertos y los cierra la UAT del plan 03-08',
+    async correr(cdp) {
+      // ⚠ LAS CINCO REGLAS VIEJAS, escritas aca como las tiene la app HOY —sin la septima—, igual que
+      // E-10 escribe las seis. Son las que la mitad B afirma que NO detectan nada con el estado
+      // pisado: ese es todo el argumento de la regla nueva.
+      const accionDeArmadoVieja = ({ participates, atRoot, hintOpen, topIsOurs, foreignOwnsTop, algoNuestroDebajo }) => {
+        if (!participates) return 'no-armar'
+        if (!atRoot) return 'no-armar'
+        if (hintOpen) return 'no-armar'
+        if (topIsOurs) return 'no-armar'
+        if (foreignOwnsTop) return 'no-armar'
+        if (algoNuestroDebajo) return 'no-armar'
+        return 'armar'
+      }
+      // Y la SEPTIMA, en el lugar exacto en el que va: DESPUES de *ya estoy armado* y ANTES de la de
+      // politica. Las dos primeras hablan de la entrada de arriba; la de politica es la unica que no.
+      const accionDeArmadoConLaSeptima = ({ participates, atRoot, hintOpen, topIsOurs, foreignOwnsTop, urlYaLlevaNuestroHash, algoNuestroDebajo }) => {
+        if (!participates) return 'no-armar'
+        if (!atRoot) return 'no-armar'
+        if (hintOpen) return 'no-armar'
+        if (topIsOurs) return 'no-armar'
+        if (urlYaLlevaNuestroHash) return 'no-armar'
+        if (foreignOwnsTop) return 'no-armar'
+        if (algoNuestroDebajo) return 'no-armar'
+        return 'armar'
+      }
+      const LIBRE = { participates: true, atRoot: true, hintOpen: false, topIsOurs: false, foreignOwnsTop: false, urlYaLlevaNuestroHash: false, algoNuestroDebajo: false }
+
+      // ── MITAD A · EL CICLO DE RE-ARMADO, TRES VECES, SIN ACUMULAR ─────────────────────────────
+      // Es el candado de `dashboard#salir-3`: lo que el dueno midio era que las entradas de salida se
+      // **acumulaban**. Se parte de la raiz con UNA sola entrada y se repite el ciclo completo
+      // (armar → consumir → re-armar) tres veces seguidas, midiendo cada vuelta.
+      await reiniciarEn(cdp, ROOT)
+      const hashesEmpujados = []
+      const caminosAlArmar = []
+      const actualesAlArmar = []
+      const sentinelesVivos = []
+      const caminosTrasConsumir = []
+      const actualesTrasConsumir = []
+      for (let vuelta = 1; vuelta <= 3; vuelta++) {
+        hashesEmpujados.push(await armarElSentinel(cdp, 1))
+        const armado = await medir(cdp)
+        caminosAlArmar.push(armado.abajo)
+        actualesAlArmar.push(armado.actual)
+        sentinelesVivos.push(armado.marca?.frjExit ?? null)
+        await consumirElSentinel(cdp)
+        const consumido = await medir(cdp)
+        caminosTrasConsumir.push(consumido.abajo)
+        actualesTrasConsumir.push(consumido.actual)
+      }
+      // El candado que de verdad importa: ninguna entrada del camino del atras, en ninguna vuelta,
+      // llego a tener el hash ESCALADO.
+      const entradasConHashEscalado = [...caminosAlArmar, ...caminosTrasConsumir]
+        .flat()
+        .filter((ruta) => ruta.includes('#salir-'))
+      const largosAlArmar = caminosAlArmar.map((camino) => camino.length)
+
+      // ── MITAD B · DE DONDE SALE EL HASH ESCALADO ──────────────────────────────────────────────
+      // El estado de la entrada del sentinel PISADO por una escritura ajena: un `replaceState` con un
+      // state que NO lleva nuestra clave y SIN url, que es exactamente lo que hace el router al
+      // sincronizar su propio estado. La URL se queda con nuestro hash; el estado, no.
+      await reiniciarEn(cdp, ROOT)
+      await armarElSentinel(cdp, 1)
+      await evaluar(cdp, `history.replaceState({ router: 'ajeno' }, '')`)
+      const pisado = await medir(cdp)
+      const hashEnLaUrl = await evaluar(cdp, 'location.hash')
+      const laUrlLlevaNuestroHash = hashEnLaUrl.startsWith('#salir')
+      const elEstadoLlevaNuestraMarca = typeof pisado.marca?.frjExit !== 'undefined'
+      // Las cinco viejas con los hechos REALES de este momento: la entrada de arriba ya no es nuestra
+      // (su estado se perdio) y no lleva marca de rama, asi que ninguna devuelve antes y el armado
+      // sigue adelante. Es el bug, medido.
+      const veredictoDeLasViejas = accionDeArmadoVieja({
+        ...LIBRE,
+        topIsOurs: elEstadoLlevaNuestraMarca,
+        algoNuestroDebajo: typeof pisado.marca?.frjUnder === 'string',
+      })
+      const veredictoConLaSeptima = accionDeArmadoConLaSeptima({
+        ...LIBRE,
+        topIsOurs: elEstadoLlevaNuestraMarca,
+        urlYaLlevaNuestroHash: laUrlLlevaNuestroHash,
+        algoNuestroDebajo: typeof pisado.marca?.frjUnder === 'string',
+      })
+      // Y lo que PASARIA si se armara igual: el hash escalado y una entrada mas en el camino del
+      // atras, cada una con un atras que no hace nada visible.
+      const hashEscalado = await armarElSentinel(cdp, 1)
+      const trasArmarSobreElPisado = await medir(cdp)
+
+      return {
+        medido: {
+          mitad_A_hashes_empujados_en_las_tres_vueltas: hashesEmpujados,
+          mitad_A_camino_del_atras_al_armar_en_cada_vuelta: caminosAlArmar,
+          mitad_A_largos_del_camino_del_atras_al_armar: largosAlArmar,
+          mitad_A_el_camino_del_atras_crecio: largosAlArmar.some((largo) => largo !== largosAlArmar[0]),
+          mitad_A_actual_al_armar_en_cada_vuelta: actualesAlArmar,
+          mitad_A_sentinel_vivo_en_cada_vuelta: sentinelesVivos,
+          mitad_A_camino_del_atras_tras_consumir_en_cada_vuelta: caminosTrasConsumir,
+          mitad_A_actual_tras_consumir_en_cada_vuelta: actualesTrasConsumir,
+          mitad_A_entradas_con_el_hash_escalado: entradasConHashEscalado,
+          mitad_B_hash_en_la_url_con_el_estado_pisado: hashEnLaUrl,
+          mitad_B_la_url_lleva_nuestro_hash: laUrlLlevaNuestroHash,
+          mitad_B_el_estado_lleva_nuestra_marca: elEstadoLlevaNuestraMarca,
+          mitad_B_camino_del_atras_con_el_estado_pisado: pisado.abajo,
+          mitad_B_las_cinco_reglas_viejas_dicen: veredictoDeLasViejas,
+          mitad_B_la_septima_regla_dice: veredictoConLaSeptima,
+          mitad_B_hash_que_produce_armar_sobre_el_estado_pisado: hashEscalado,
+          mitad_B_camino_del_atras_tras_armar_sobre_el_estado_pisado: trasArmarSobreElPisado.abajo,
+          mitad_B_el_camino_del_atras_crecio_un_escalon: trasArmarSobreElPisado.abajo.length === pisado.abajo.length + 1,
+        },
+        esperado: {
+          // El ciclo sano: el hash es SIEMPRE el base, porque tras consumir la entrada el navegador
+          // restaura la URL de abajo (que no tiene hash). Si aqui saliera el escalado, el escenario
+          // estaria re-armando PARADO SOBRE la entrada vieja en vez de despues de consumirla.
+          mitad_A_hashes_empujados_en_las_tres_vueltas: ['#salir', '#salir', '#salir'],
+          mitad_A_camino_del_atras_al_armar_en_cada_vuelta: [
+            [ROOT, `${ROOT}#salir`],
+            [ROOT, `${ROOT}#salir`],
+            [ROOT, `${ROOT}#salir`],
+          ],
+          mitad_A_largos_del_camino_del_atras_al_armar: [2, 2, 2],
+          mitad_A_el_camino_del_atras_crecio: false,
+          mitad_A_actual_al_armar_en_cada_vuelta: [`${ROOT}#salir`, `${ROOT}#salir`, `${ROOT}#salir`],
+          mitad_A_sentinel_vivo_en_cada_vuelta: [1, 1, 1],
+          mitad_A_camino_del_atras_tras_consumir_en_cada_vuelta: [[ROOT], [ROOT], [ROOT]],
+          mitad_A_actual_tras_consumir_en_cada_vuelta: [ROOT, ROOT, ROOT],
+          mitad_A_entradas_con_el_hash_escalado: [],
+          // La mitad B es EL BUG MEDIDO, con sus valores literales: la URL nuestra, el estado ajeno.
+          mitad_B_hash_en_la_url_con_el_estado_pisado: '#salir',
+          mitad_B_la_url_lleva_nuestro_hash: true,
+          mitad_B_el_estado_lleva_nuestra_marca: false,
+          mitad_B_camino_del_atras_con_el_estado_pisado: [ROOT, `${ROOT}#salir`],
+          mitad_B_las_cinco_reglas_viejas_dicen: 'armar',
+          mitad_B_la_septima_regla_dice: 'no-armar',
+          mitad_B_hash_que_produce_armar_sobre_el_estado_pisado: '#salir-2',
+          mitad_B_camino_del_atras_tras_armar_sobre_el_estado_pisado: [ROOT, `${ROOT}#salir`, `${ROOT}#salir-2`],
+          mitad_B_el_camino_del_atras_crecio_un_escalon: true,
+        },
+      }
+    },
+  },
 ]
 
 // ── El arnés ─────────────────────────────────────────────────────────────────────────────────────
@@ -1060,8 +1255,14 @@ async function main() {
     console.log('                                      la INTERSECCION sentinel-de-salida x marca-de-la-rama (E-11),')
     console.log('                                      el sentinel ENTERRADO contra el consumido, las dos formas (E-9),')
     console.log('                                      la DECISION (a) del dueno y sus dos mitades (E-10),')
-    console.log('                                      el DEGENERADO con el sentinel al fondo y el primer atras visible (E-12)')
-    console.log('supuestos que esta sonda NO puede cerrar, y van a la UAT del plan 03-04:')
+    console.log('                                      el DEGENERADO con el sentinel al fondo y el primer atras visible (E-12),')
+    console.log('                                      el CICLO de re-armado x3 sin acumular y el origen del hash ESCALADO (E-13)')
+    console.log('⚠ LO QUE ESTA SONDA NO CIERRA, y va declarado en vez de insinuado: el CABLEADO DE REACT.')
+    console.log('  Esta sonda monta su propio servidor estatico y NO CORRE EL CODIGO DE LA APP: mide la')
+    console.log('  SEMANTICA DE LA PILA del navegador, que es lo que las decisiones puras necesitan. Confundir')
+    console.log('  un verde de aca con un cierre del cableado es el error exacto que llevo esta fase a la UAT')
+    console.log('  con la sonda en 8/8 y cinco fallos mas una colision de diseno en el telefono.')
+    console.log('supuestos que esta sonda NO puede cerrar, y van a la UAT (del plan 03-04, y ahora del 03-08):')
     console.log('  A1  — el orden del efecto que escribe la marca contra la escritura del router de Next')
     console.log('  A2  — que no haya otro commit del router en vuelo cuando se escribe la marca')
     console.log('  A11 — Safari/iOS y Chrome Android REALES (todo lo medido aca fue Chrome de escritorio headless)')
@@ -1071,7 +1272,7 @@ async function main() {
       console.error(`una pila MEDIDA no coincide con la esperada en ${fallados} escenario(s).`)
       console.error('el arreglo NO es ajustar la expectativa: es rehacer el diseno del plan correspondiente')
       console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6, 03-04 para E-8, 03-05 para E-11,')
-    console.error('03-06 para E-9/E-10/E-12) y dejarlo')
+    console.error('03-06 para E-9/E-10/E-12, 03-07 para E-13) y dejarlo')
       console.error('escrito en .planning/debug/pila-de-dos-niveles-medida.md. Para eso existe esta sonda.')
       process.exitCode = 1
     }

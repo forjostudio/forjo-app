@@ -1,13 +1,13 @@
 ---
 status: measured
-trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04; E-11 —la INTERSECCIÓN del sentinel de salida con la marca de la rama, que es el hueco que la UAT destapó— el plan 03-05; E-9, E-10 y E-12 —el sentinel enterrado contra el consumido, la decisión (a) del dueño y el degenerado con el sentinel al fondo— el plan 03-06."
+trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04; E-11 —la INTERSECCIÓN del sentinel de salida con la marca de la rama, que es el hueco que la UAT destapó— el plan 03-05; E-9, E-10 y E-12 —el sentinel enterrado contra el consumido, la decisión (a) del dueño y el degenerado con el sentinel al fondo— el plan 03-06; E-13 —el ciclo de re-armado ×3 sin acumular y el origen medido del hash escalado— el plan 03-07."
 created: 2026-10-13T00:00:00Z
 updated: 2026-10-23T00:00:00Z
 ---
 
 ## Current Focus
 
-veredicto: **LAS DOCE PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (12/12, la sonda sale 0)
+veredicto: **LAS TRECE PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (13/13, la sonda sale 0)
 
 La sonda es `.planning/debug/probes/panel-back-stack.mjs`, es **re-ejecutable** y **falla con código
 distinto de cero** si cualquier pila medida difiere de la esperada. Esto no es un informe de una
@@ -22,7 +22,7 @@ node scripts/con-turno.mjs node .planning/debug/probes/panel-back-stack.mjs
 
 | Pieza | Valor medido |
 |---|---|
-| Navegador | **Chrome/154.0.8037.98** para E-1..E-8 (2026-10-13/14), **Chrome/155.0.8059.86** para E-11 (2026-10-23, plan 03-05) y **Chrome/155.0.8059.85** para **E-9 / E-10 / E-12** (2026-10-23, plan 03-06 — el binario instalado, leído por CDP en la corrida), `--headless=new`, perfil temporal propio. Las **ocho** primeras coinciden en **las dos** versiones (las corridas del 2026-10-23 las volvieron a medir en verde sobre 155), así que la pila del atrás no cambió de una a la otra. Los **cuatro** escenarios de la tanda de cierre de gaps están medidos **sólo** sobre 155 |
+| Navegador | **Chrome/154.0.8037.98** para E-1..E-8 (2026-10-13/14), **Chrome/155.0.8059.86** para E-11 (2026-10-23, plan 03-05) y **Chrome/155.0.8059.85** para **E-9 / E-10 / E-12** (2026-10-23, plan 03-06 — el binario instalado, leído por CDP en la corrida), `--headless=new`, perfil temporal propio. Las **ocho** primeras coinciden en **las dos** versiones (las corridas del 2026-10-23 las volvieron a medir en verde sobre 155), así que la pila del atrás no cambió de una a la otra. Los **cinco** escenarios de la tanda de cierre de gaps están medidos **sólo** sobre 155 — **E-13** (2026-10-23, plan 03-07) también sobre `Chrome/155.0.8059.85` |
 | Node | `v24.15.0` — el `WebSocket` global alcanza para CDP, **cero paquetes nuevos** |
 | Servidor | `node:http` propio en `http://127.0.0.1:8731`, responde el mismo HTML a cualquier path |
 | Puerto de depuración | `9334` |
@@ -49,7 +49,7 @@ mide tres cantidades por escenario y las compara por separado:
   (están adelante, no debajo) y el dueño estuvo ahí de verdad. Se **declaran** en la expectativa en
   vez de ignorarse, igual que el caso de entrada directa que v0.30 declaró y aceptó.
 
-## Las doce mediciones
+## Las trece mediciones
 
 ### E-1 · MOB-04 nivel 1 — `Inicio → Más → Finanzas`
 
@@ -434,6 +434,75 @@ con la ruta de abajo, así que reemplazar habría dejado `[…, /appointments, /
 retrocesos la pila queda en dos escalones, `adelante` conserva `/mas` y `/finances` —el dueño estuvo
 ahí de verdad— y la entrada actual queda marcada con la **ruta de la raíz**.
 
+### E-13 · el CICLO de re-armado ×3 sin acumular, y de dónde sale el hash ESCALADO
+
+Veredicto: **OK**. Lo agregó el plan **03-07**, y es el escenario de los gaps **G-5** y **G-6**.
+
+Tiene **dos mitades** que son las dos caras del mismo mecanismo: la **A** mide que el ciclo sano
+funciona repetido, y la **B** mide **el bug** —de dónde sale la tercera entrada de salida
+(`dashboard#salir-3`) que el dueño reportó—.
+
+**Mitad A — armar → consumir → re-armar, tres veces seguidas:**
+
+```
+mitad_A_hashes_empujados_en_las_tres_vueltas:            ["#salir","#salir","#salir"]
+mitad_A_camino_del_atras_al_armar_en_cada_vuelta:        [["/dashboard","/dashboard#salir"],["/dashboard","/dashboard#salir"],["/dashboard","/dashboard#salir"]]
+mitad_A_largos_del_camino_del_atras_al_armar:            [2,2,2]
+mitad_A_el_camino_del_atras_crecio:                      false
+mitad_A_sentinel_vivo_en_cada_vuelta:                    [1,1,1]
+mitad_A_camino_del_atras_tras_consumir_en_cada_vuelta:   [["/dashboard"],["/dashboard"],["/dashboard"]]
+mitad_A_actual_tras_consumir_en_cada_vuelta:             ["/dashboard","/dashboard","/dashboard"]
+mitad_A_entradas_con_el_hash_escalado:                   []
+```
+
+⇒ **El hash empujado es SIEMPRE el base, las tres veces.** Al consumir la entrada, el navegador
+restaura la URL de abajo —que no tiene hash—, así que el re-armado siguiente vuelve a derivar `#salir`
+y no `#salir-2`. Es el dato que distingue *re-armar después de consumir* de *re-armar parado sobre la
+entrada vieja*: lo segundo produciría el escalado.
+
+⇒ **El camino del atrás NO crece** (dos escalones en las tres vueltas) y **ninguna** entrada llegó a
+tener el hash escalado. O sea: el ciclo repetido **no acumula entradas de salida**, que es exactamente
+lo que el dueño midió que sí pasaba.
+
+**Mitad B — el estado de la entrada PISADO por una escritura ajena:**
+
+Se arma el sentinel y después se hace un `replaceState` con un state que **no** lleva nuestra clave y
+**sin** url, que es literalmente lo que hace el router al sincronizar su propio estado. La URL se
+queda con nuestro hash; el estado, no.
+
+```
+mitad_B_hash_en_la_url_con_el_estado_pisado:                   "#salir"
+mitad_B_la_url_lleva_nuestro_hash:                             true
+mitad_B_el_estado_lleva_nuestra_marca:                         false
+mitad_B_camino_del_atras_con_el_estado_pisado:                 ["/dashboard","/dashboard#salir"]
+mitad_B_las_cinco_reglas_viejas_dicen:                         "armar"
+mitad_B_la_septima_regla_dice:                                 "no-armar"
+mitad_B_hash_que_produce_armar_sobre_el_estado_pisado:         "#salir-2"
+mitad_B_camino_del_atras_tras_armar_sobre_el_estado_pisado:    ["/dashboard","/dashboard#salir","/dashboard#salir-2"]
+mitad_B_el_camino_del_atras_crecio_un_escalon:                 true
+```
+
+⇒ **ÉSTE ES EL ORIGEN MEDIDO DEL `#salir-3`.** Con la URL llevando nuestro hash pero el estado
+perdido, *ya estoy armado* da **falso** (pregunta por el **estado**, no por la URL), *la entrada de
+arriba es de otro dueño* da **falso** (el state ajeno no lleva ninguna de las marcas conocidas) y *hay
+algo nuestro debajo* da **falso**: las **cinco** reglas viejas no detectan nada y el armado sigue
+adelante. Y como el hash se **deriva del actual** (cicatriz 1), lo que empuja es `#salir-2` y una
+entrada **más** en el camino del atrás — cada una con un atrás que no hace nada visible. Repetido, da
+`#salir-3`.
+
+⇒ **Y es el argumento de la SÉPTIMA regla, decidida midiendo:** *si la URL ya lleva nuestro hash, no
+armar*. La entrada **ya es nuestra** aunque su estado lo haya pisado una escritura ajena; empujar otra
+cuesta **dos** atrás. La medición muestra las dos respuestas una al lado de la otra: las cinco viejas
+dicen `armar`, la séptima dice `no-armar`.
+
+⇒ **QUÉ NO CIERRA E-13, y va declarado en vez de insinuado.** Mide la **semántica de la pila** del
+re-armado, **no el cableado de React**. Esta sonda monta su **propio servidor estático** y **no corre
+el código de la app**: no hay router de Next ni efectos en el medio. Así que **A1** (el orden del
+efecto contra la escritura del router), **A2** (que no haya otro commit en vuelo) y **A11** (los dos
+motores reales) siguen **abiertos** — E-13 **no puede cerrar** ninguno de los tres, y los cierra la
+UAT del plan `03-08`. Un verde de acá **no** es un cierre de G-5 ni de G-6: es el piso sobre el que
+las decisiones puras del plan `03-07` se pueden escribir sin adivinar.
+
 ### ⚠ POR QUÉ EL 8/8 ERA VERDAD Y NO ALCANZABA (la lección de método de esta tanda)
 
 Esta sonda dio **8/8** y la UAT en el teléfono del dueño falló en **5 ítems más una colisión de
@@ -488,6 +557,11 @@ suite, ni el build**. El único criterio que cierra la fase es la UAT en un tel�
   más el candado del orden entre *ya estoy armado* y (a)) y **E-12** (el **degenerado** con el
   sentinel al fondo, y la clave de G-2: que el **primer** atrás cambia de pathname). Y el **límite
   aceptado de (a)** —la entrada **ajena**—, escrito en su propia sección de arriba.
-- **Cualquiera de los cinco** puede re-correr la sonda: si una pila deja de coincidir, el arreglo
+- **Plan 03-07** — **E-13**, que es el que mide el **ciclo** de re-armado repetido ×3 sin acumular
+  entradas (mitad A) y el **origen medido del hash escalado** (mitad B): con el estado de la entrada
+  **pisado** por una escritura ajena, las **cinco** reglas viejas dicen `armar` y la **séptima** dice
+  `no-armar`. Esa medición **es** el argumento de la séptima regla. Y lo que E-13 **no puede cerrar**
+  —el cableado de React, o sea A1, A2 y A11— va a la UAT del plan `03-08`.
+- **Cualquiera de los seis** puede re-correr la sonda: si una pila deja de coincidir, el arreglo
   **no es ajustar la expectativa** — es rehacer el diseño contra lo medido y actualizar este
   documento.
