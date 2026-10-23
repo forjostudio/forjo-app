@@ -511,6 +511,7 @@ describe('qué significa un retroceso — las reglas EN ORDEN', () => {
         hintOpen: false,
         topIsOurs: false,
         foreignOwnsTop: true,
+        algoNuestroDebajo: false,
       })
     ).toBe('none')
     // Y cuando el browser consume la entrada del overlay, nosotros seguimos parados sobre el nuestro.

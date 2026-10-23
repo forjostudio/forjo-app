@@ -300,13 +300,18 @@ export function runBranchNavigation({
 // existencia de la entrada, cicatriz 1— y es la forma MEDIDA en el escenario **E-6** de
 // `.planning/debug/pila-de-dos-niveles-medida.md`. Queda como ítem de la UAT del plan 03-04.
 //
-// ⚠ Y LA IMPRECISIÓN ACEPTADA, también declarada: el sentinel se arma estando en la raíz, **haya o no
-// haya** historia debajo. Si debajo de Inicio quedó una sección (`Inicio → Turnos → Inicio`, que la
-// política empuja en los dos sentidos), el segundo atrás no sale del panel: vuelve a Turnos. El copy
-// del aviso queda entonces optimista. No se arregla acá porque no hay forma confiable de preguntarle
-// al navegador "¿hay algo debajo?" (`history.length` cuenta también el forward) — es la misma razón
-// por la que el caso de **entrada directa** está aceptado y documentado desde v0.30 (E-7). El gesto
-// sigue haciendo algo visible en los dos casos, que es el invariante que importa.
+// ⚠ CUÁNDO SE ARMA, Y LA IMPRECISIÓN QUE QUEDA — la DECISIÓN (a) del dueño y su límite.
+// El sentinel **ya no** se arma estando en la raíz "haya o no haya" historia debajo: eso era la
+// imprecisión que este módulo declaraba, la UAT la destapó como el ítem **H** (el aviso se comía el
+// atrás que MOB-04 prometía) y el dueño la resolvió con la **decisión (a)** — se arma **sólo si no hay
+// nada nuestro debajo—. La regla vive en {@link panelExitArmAction}, va **última** entre las seis, y
+// el por qué de cada cosa está en su docblock. Medida en el escenario **E-10** de
+// `.planning/debug/pila-de-dos-niveles-medida.md`.
+// Lo que **sigue aceptado** es sólo la mitad que el código no puede cerrar: si lo que quedó debajo es
+// una entrada **AJENA** (otro sitio), no hay forma confiable de saberlo —`history.length` cuenta
+// también las entradas de **adelante**— y el aviso va a aparecer igual. Es la misma razón por la que
+// el caso de **entrada directa** está aceptado y documentado desde v0.30 (E-7). El gesto sigue
+// haciendo algo visible en los dos casos, que es el invariante que importa.
 
 /**
  * La ventana del aviso de salida, en milisegundos.
@@ -442,7 +447,37 @@ export type PanelExitArmAction = 'arm' | 'none'
  *      empuje costaría dos atrás.
  *   5. `foreignOwnsTop` — **la entrada de arriba es de otro dueño ⇒ no armar** (regla 0). Un overlay
  *      abierto gana siempre: el atrás lo cierra primero, que es la política vigente e intacta.
- *   6. El resto ⇒ **armar**.
+ *   6. `algoNuestroDebajo` — **hay una entrada NUESTRA debajo ⇒ no armar.** Es la **decisión (a)** del
+ *      dueño, y lo que resuelve está abajo.
+ *   7. El resto ⇒ **armar**.
+ *
+ * ⚠ **QUÉ RESUELVE LA SEXTA REGLA: la colisión que la UAT destapó (ítem H / G-4).** Parado en la raíz
+ * **con historia debajo**, MOB-04 (`Más → Inicio → atrás` vuelve a Más) y MOB-05 (en Inicio el atrás
+ * avisa antes de salir) **no pueden ser verdad a la vez**. El dueño eligió la **decisión (a)** —el
+ * sentinel se arma **sólo si no hay nada nuestro debajo**— y descartó la alternativa (b), que el
+ * sentinel mandara **siempre** en la raíz: era más simple y más predecible, pero **cambiaba lo que
+ * MOB-04 prometía** y dejaba el aviso apareciendo cuando el dueño **no** iba a salir. Registrada en
+ * `.planning/workstreams/panel-nav/phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-DECISION-UAT.md`
+ * y medida en el escenario **E-10** de `.planning/debug/pila-de-dos-niveles-medida.md`.
+ *
+ * ⚠ **POR QUÉ VA ÚLTIMA, y el orden es el argumento.** Las **cinco** anteriores son de **seguridad**
+ * (nadie a quien avisar, lugar equivocado, ventana abierta, ya armado, la entrada de arriba es de otro
+ * dueño); ésta es de **política**. Seguridad primero, política después. Y además es lo que garantiza
+ * que la regla **nunca** lea la marca de la rama estando parados **sobre el sentinel**: ahí la cuarta
+ * ya devolvió, y ese dato no significa nada porque el state del sentinel lleva **sólo su propia
+ * clave** ({@link panelExitState}). El caso que fija ese orden está en la suite con nombre propio.
+ *
+ * ⚠ **EL LÍMITE ACEPTADO (reemplaza la imprecisión que este módulo declaraba antes).** (a) cierra el
+ * caso en que lo que quedó debajo es una entrada **nuestra** —la app lleva la cuenta de lo que empujó,
+ * en la marca de la rama—. **No cierra el caso en que sea una entrada AJENA** (otro sitio): ahí el
+ * aviso va a aparecer igual, o no se va a armar cuando correspondía. **No hay API confiable** para
+ * preguntarle al navegador "¿hay algo debajo?": `history.length` cuenta **también las entradas de
+ * adelante**, así que un largo de 3 puede ser una debajo y una arriba, o dos arriba y ninguna debajo.
+ * Es la **misma razón** por la que el caso de **entrada directa** está aceptado y documentado desde
+ * v0.30 (**E-7**), y **queda aceptado**, declarado acá en vez de descubierto en la próxima UAT.
+ *
+ * Referencias cortas, en ASCII a propósito —igual que los ids de la sonda— para que los gates de esta
+ * tanda las encuentren recortando por bytes: `decision (a)` · `E-10` · item **H** · gap **G-4**.
  */
 export function panelExitArmAction({
   participates,
@@ -450,18 +485,35 @@ export function panelExitArmAction({
   hintOpen,
   topIsOurs,
   foreignOwnsTop,
+  /**
+   * ¿Hay una entrada **nuestra** debajo de la actual? Va **sin valor por omisión**, igual que
+   * `masDebajo`, `holdsExitSentinel` y `vieneDeUnRetroceso`: es un **hecho de la pila**, no una
+   * configuración, y un call site que lo olvide **no compila**.
+   *
+   * Lo contesta {@link panelUnderRoute} sobre el estado **real** de la entrada de arriba —no una
+   * clave nueva—: la marca de la rama guarda **la ruta** que quedó debajo (no un booleano),
+   * justamente para el caso degenerado, así que estando en la raíz la pregunta ya tiene respuesta.
+   * Una cuarta clave en la pila sería un **cuarto dueño** sin necesidad, y la regla 0 tiene **tres** a
+   * propósito.
+   */
+  algoNuestroDebajo,
 }: {
   participates: boolean
   atRoot: boolean
   hintOpen: boolean
   topIsOurs: boolean
   foreignOwnsTop: boolean
+  algoNuestroDebajo: boolean
 }): PanelExitArmAction {
   if (!participates) return 'none'
   if (!atRoot) return 'none'
   if (hintOpen) return 'none'
   if (topIsOurs) return 'none'
   if (foreignOwnsTop) return 'none'
+  // ── LA SEXTA — la decisión (a): con algo nuestro debajo, el atrás tiene a dónde volver. ───────
+  // Última a propósito (ver el ⚠ de arriba): las cinco de antes son de seguridad y ésta es de
+  // política, y así nunca se lee la marca de la rama parados sobre el sentinel.
+  if (algoNuestroDebajo) return 'none'
   return 'arm'
 }
 
@@ -779,6 +831,12 @@ export function usePanelBranch({
       hintOpen: avisoAbiertoRef.current,
       topIsOurs: paradoSobreElNuestro,
       foreignOwnsTop: isForeignOwnedEntry(estado),
+      // ⚠ EL HECHO DE LA DECISIÓN (a), LEÍDO DEL ESTADO REAL DE LA ENTRADA DE ARRIBA EN EL MOMENTO
+      // DE DECIDIR, nunca de un valor de render: entre un render y el gesto pudo haber una escritura
+      // ajena que se llevó la marca. Es el mismo criterio con el que la ruta se re-lee de
+      // `location` dos líneas arriba. Y se contesta con la marca de la rama —que YA guarda la ruta
+      // que quedó debajo— en vez de con una clave nueva: la regla 0 tiene TRES dueños a propósito.
+      algoNuestroDebajo: panelUnderRoute(estado) !== null,
     })
     if (accion === 'none') {
       // E-6: si estamos parados sobre el nuestro, seguimos siendo dueños de un sentinel vivo.
