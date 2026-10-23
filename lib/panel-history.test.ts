@@ -831,6 +831,90 @@ describe('el sentinel de salida — la CUARTA marca de la pila, y la ÚNICA nuev
   })
 })
 
+describe('writePanelUnder — EL ÚNICO ESCRITOR de la marca, con la regla 0 y la idempotencia EN ORDEN', () => {
+  // ⚠ POR QUÉ EXISTE UN ESCRITOR ÚNICO Y NO DOS CAMINOS DE ESCRITURA. Dos escritores con dos juegos
+  // de guardas es cómo se pierde una de las dos sin que ningún gate lo vea: el día que aparezca un
+  // cuarto dueño de historial se suma en uno y no en el otro, y el síntoma no es un error sino
+  // BASURA EN LA PILA MÁS UN ATRÁS MUERTO. La UAT de la fase midió la otra mitad del mismo problema:
+  // una marca escrita encima de una entrada que ya sabía la verdad (G-3).
+  function montarPila(state: unknown) {
+    const replaceState = vi.fn()
+    const pushState = vi.fn()
+    const back = vi.fn()
+    vi.stubGlobal('window', { history: { state, replaceState, pushState, back } })
+    return { replaceState, pushState, back }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('sobre una entrada FRESCA escribe UNA vez, con DOS argumentos y objeto literal fresco', () => {
+    // El caso del empuje del router: la entrada que el router acaba de crear nace SIN nuestra clave.
+    // Sin el tercer argumento (la URL): con la URL, el parche de Next despacha la restauración y cada
+    // navegación cuesta un commit extra.
+    const { replaceState, pushState, back } = montarPila({ __NA: true })
+    expect(PH.writePanelUnder(MAS)).toBe(true)
+    expect(replaceState).toHaveBeenCalledTimes(1)
+    expect(replaceState).toHaveBeenCalledWith({ frjUnder: MAS }, '')
+    expect(replaceState.mock.calls[0]).toHaveLength(2)
+    expect(pushState).not.toHaveBeenCalled()
+    expect(back).not.toHaveBeenCalled()
+  })
+
+  it('con el state nulo también escribe: una entrada puede no tener state propio', () => {
+    const { replaceState } = montarPila(null)
+    expect(PH.writePanelUnder(PANEL_ROOT)).toBe(true)
+    expect(replaceState).toHaveBeenCalledWith({ frjUnder: PANEL_ROOT }, '')
+  })
+
+  it('IDEMPOTENCIA — sobre una entrada que YA LLEVA la marca no escribe, y devuelve false', () => {
+    // ⚠ LA ASIMETRÍA QUE HACE DE ESTO UN DISCRIMINADOR Y NO UNA OPTIMIZACIÓN: la entrada que el
+    // router EMPUJA nace SIN nuestra clave, y una entrada a la que VOLVEMOS ya la trae. O sea que
+    // "ya hay marca" significa, en la práctica, *estamos parados sobre una entrada que ya existía y
+    // que ya sabe qué tiene debajo* — y escribirle encima es exactamente cómo se perdió la verdad que
+    // el caso degenerado necesita (G-3 de la UAT).
+    const { replaceState } = montarPila({ frjUnder: PANEL_ROOT })
+    expect(PH.writePanelUnder(MAS)).toBe(false)
+    expect(replaceState).not.toHaveBeenCalled()
+  })
+
+  it('la idempotencia es "ya hay marca", no "la misma marca": con OTRA ruta tampoco escribe', () => {
+    // Si la guarda comparara rutas, un retroceso que revela una entrada marcada con una ruta DISTINTA
+    // seguiría sobrescribiéndola — que es el bug entero, apenas más difícil de reproducir.
+    const { replaceState } = montarPila({ frjUnder: '/appointments' })
+    expect(PH.writePanelUnder('/agenda')).toBe(false)
+    expect(replaceState).not.toHaveBeenCalled()
+  })
+
+  it('REGLA 0 — con una entrada de cada uno de los TRES otros dueños arriba no escribe', () => {
+    for (const ajena of [{ frjOverlay: 1 }, { frjDirty: 1 }, { frjExit: 1 }]) {
+      const { replaceState } = montarPila(ajena)
+      expect(PH.writePanelUnder(MAS)).toBe(false)
+      expect(replaceState).not.toHaveBeenCalled()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('EL ORDEN — una entrada ajena que ADEMÁS lleva marca se niega igual (la regla 0 va primera)', () => {
+    // El par contrapuesto de los dos casos de arriba, escrito adyacente a propósito: las dos guardas
+    // devuelven lo mismo por motivos DISTINTOS, y un refactor que pierda una de las dos no puede
+    // esconderse detrás de la otra.
+    const { replaceState } = montarPila({ frjExit: 1, frjUnder: PANEL_ROOT })
+    expect(PH.writePanelUnder(MAS)).toBe(false)
+    expect(replaceState).not.toHaveBeenCalled()
+  })
+
+  it('escribe con la ruta QUE SE LE PASÓ, y no con ninguna derivada de nada', () => {
+    // No recibe un par de rutas ni consulta la política: recibe LA RUTA A ANOTAR. Es lo que permite
+    // que el colapso le pase la ruta que LEYÓ en la entrada de Más en vez de una derivación.
+    const { replaceState } = montarPila({ __NA: true })
+    expect(PH.writePanelUnder('/appointments')).toBe(true)
+    expect(replaceState).toHaveBeenCalledWith({ frjUnder: '/appointments' }, '')
+    expect(replaceState).not.toHaveBeenCalledWith({ frjUnder: MAS }, '')
+  })
+})
+
 describe('applyPanelUnder — la escritura de la marca, después del commit y sin cambiar la URL', () => {
   function montarPila(state: unknown) {
     const replaceState = vi.fn()
@@ -877,6 +961,42 @@ describe('applyPanelUnder — la escritura de la marca, después del commit y si
     const { replaceState } = montarPila({ __NA: true })
     expect(PH.applyPanelUnder({ from: PANEL_ROOT, to: '/clients' })).toBe(true)
     expect(replaceState).toHaveBeenCalledWith({ frjUnder: PANEL_ROOT }, '')
+  })
+
+  it('TAMPOCO escribe sobre una entrada que ya lleva marca: la idempotencia llega por DELEGACIÓN', () => {
+    // No se repite la guarda acá: `applyPanelUnder` se queda con lo único que es suyo —preguntarle a
+    // la política si la navegación EMPUJA— y delega la escritura y sus dos guardas en el escritor
+    // único. Este caso es lo que fija que la delegación llegue hasta el final.
+    const { replaceState } = montarPila({ frjUnder: PANEL_ROOT })
+    expect(PH.applyPanelUnder({ from: MAS, to: '/finances' })).toBe(false)
+    expect(replaceState).not.toHaveBeenCalled()
+  })
+
+  it('la política sigue siendo SUYA: con reemplazo no llama al escritor ni siquiera con entrada libre', () => {
+    // El contrapuesto de la delegación: si `applyPanelUnder` delegara TODO y perdiera la pregunta de
+    // política, una navegación que reemplaza anotaría una ruta de abajo que no cambió.
+    const { replaceState } = montarPila(null)
+    expect(PH.applyPanelUnder({ from: '/finances', to: '/clients' })).toBe(false)
+    expect(replaceState).not.toHaveBeenCalled()
+    // Y el mismo par de rutas, pero con la política diciendo empujar, SÍ escribe.
+    expect(PH.applyPanelUnder({ from: PANEL_ROOT, to: '/clients' })).toBe(true)
+  })
+
+  it('CONTRAPUESTO v0.30 — la marca de la rama NO es "entrada ajena", así que el detalle de cliente sigue empujando', () => {
+    // El error más fácil de cometer en toda la fase: meter la clave de la rama adentro del predicado
+    // de la regla 0. Si entrara, `applyPanelView` se abstendría de escribir sobre CUALQUIER entrada
+    // marcada — y como la marca se escribe en toda navegación del panel que empuje, el detalle de
+    // cliente dejaría de empujar su entrada en `/clients`: una regresión de v0.30 que ningún otro
+    // gate ve.
+    expect(PH.isForeignOwnedEntry({ frjUnder: MAS })).toBe(false)
+    // `applyPanelView` arma la URL, así que este caso necesita `location` además de `history`.
+    const pushState = vi.fn()
+    vi.stubGlobal('window', {
+      history: { state: { frjUnder: MAS }, replaceState: vi.fn(), pushState, back: vi.fn() },
+      location: { pathname: '/clients', search: '' },
+    })
+    expect(PH.applyPanelView({ cause: 'user-open', param: 'c', from: null, to: 'abc' })).toBe('push')
+    expect(pushState).toHaveBeenCalledTimes(1)
   })
 })
 
