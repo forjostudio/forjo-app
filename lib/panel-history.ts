@@ -220,10 +220,15 @@ export type PanelUnderState = { frjUnder: string }
  * (`next/dist/client/components/app-router.js:253-255`) y **no despacha la restauración**: la URL en
  * la barra cambia, el router NO se entera, y **no hay ni un error en consola**. Es el modo de falla
  * más caro de este repo y está documentado arriba, en {@link panelViewState}.
+ *
+ * ⚠ **POR QUÉ SE DECLARA COMO `const` Y NO COMO `export function`, siendo el único del módulo.** El
+ * candado de "un solo lugar arma la marca" se mide contando `panelUnderState(` en el archivo y
+ * exigiendo **exactamente uno**. Con `export function panelUnderState(`, la **declaración** entra en
+ * ese conteo y el candado no puede dar uno ni con un solo call site: mediría la forma de la
+ * declaración en vez del número de escritores. Declarado así, lo único que el conteo ve son los
+ * **call sites** — que es lo que el candado dice medir.
  */
-export function panelUnderState(route: string): PanelUnderState {
-  return { frjUnder: route }
-}
+export const panelUnderState = (route: string): PanelUnderState => ({ frjUnder: route })
 
 /**
  * ¿Qué ruta quedó debajo de la entrada de arriba? Devuelve la ruta, o `null` si la entrada no lleva
@@ -769,6 +774,49 @@ export function applyPanelView({
 }
 
 /**
+ * **EL ÚNICO ESCRITOR DE LA MARCA DE LA RAMA.** Recibe la **ruta a anotar** y nada más. Devuelve
+ * `true` si escribió y `false` si se abstuvo.
+ *
+ * **Tres pasos EN ORDEN, y el orden es su razón de ser y no un detalle de implementación:**
+ *
+ *   1. **La regla 0 primero.** Si la entrada de arriba es de otro dueño de historial, no se escribe:
+ *      escribirle encima le borra su marca, su dueño deja de reconocer su entrada, no la consume
+ *      cuando corresponde, y queda **basura en la pila más un atrás muerto**. Se consulta el
+ *      predicado completo ({@link isForeignOwnedEntry}); no se duplica el OR ni se copia ningún
+ *      literal de clave, así que el día que aparezca un cuarto dueño se suma **en un solo lugar**.
+ *   2. **La idempotencia después.** Si la entrada de arriba **ya lleva** nuestra marca, no se
+ *      escribe. ⚠ **No es una optimización: es un discriminador**, y la asimetría que lo hace posible
+ *      es ésta — la entrada que el router **empuja** nace **sin** nuestra clave, y una entrada a la
+ *      que **volvemos** ya la trae. O sea que "ya hay marca" significa, en la práctica, *estamos
+ *      parados sobre una entrada que ya existía y que ya sabe qué tiene debajo*, y escribirle encima
+ *      hace las dos cosas malas a la vez: **miente** (la ruta de la que venimos estaba ARRIBA, no
+ *      debajo) **y destruye** la verdad que esa entrada ya tenía, que es la que el caso degenerado
+ *      necesita. Es la causa medida de **G-3** en la UAT de la fase. Y es la **segunda red**: aun si
+ *      la regla de dirección de `lib/panel-branch.ts` se perdiera en un refactor, la verdad vieja no
+ *      se sobrescribe.
+ *   3. **La escritura**, con el estado armado por {@link panelUnderState} —**objeto literal fresco**,
+ *      nunca propagando el estado actual— y con **dos** argumentos y sin el tercero (la URL). Las dos
+ *      cosas son la misma trampa que el módulo ya documenta dos veces: propagar el state arrastra
+ *      `__NA` y el parche de Next toma su rama temprana y **no despacha** la sincronización (la URL
+ *      cambia, el router no se entera, y no hay ni un error en consola).
+ *
+ * **Por qué recibe la RUTA y no un par de rutas:** así puede anotar una ruta que se **leyó** de la
+ * pila —la que el segundo paso del colapso encuentra en la entrada de Más— y no sólo una **derivada**
+ * del par. El par de rutas no sabe qué pasó de verdad: con un retroceso y con el reemplazo del
+ * colapso dice `push` igual, y eso es justamente lo que la UAT midió como marca rancia.
+ */
+export function writePanelUnder(route: string): boolean {
+  const actual: unknown = window.history.state
+  // 1) Regla 0: la entrada de arriba no puede tener otro dueño.
+  if (isForeignOwnedEntry(actual)) return false
+  // 2) Idempotencia: una entrada que ya lleva la marca ya sabe qué tiene debajo.
+  if (panelUnderRoute(actual) !== null) return false
+  // 3) La escritura.
+  window.history.replaceState(panelUnderState(route), '')
+  return true
+}
+
+/**
  * Escribe la marca de la rama sobre la entrada actual: **qué ruta quedó inmediatamente debajo**.
  * Devuelve `true` si escribió, `false` si se abstuvo. Hermana de {@link applyPanelView}.
  *
@@ -783,20 +831,30 @@ export function applyPanelView({
  * próximo retroceso recargue la página entera (por eso tampoco hay que guardarse una referencia al
  * método original del historial).
  *
- * **Las dos guardas, en orden:** la política tiene que decir que esta navegación **empuja** —si
- * reemplaza, la entrada de abajo es la misma de antes y no hay nada nuevo que anotar— y la entrada de
- * arriba **no** puede ser de otro dueño (regla 0): escribirle encima le borra su marca, su dueño deja
- * de reconocer su entrada y queda un atrás muerto.
+ * **Lo único que es SUYO: la pregunta de política.** La navegación tiene que **empujar** — si
+ * reemplaza, la entrada de abajo es la misma de antes y no hay nada nuevo que anotar. La escritura y
+ * sus dos guardas las hace {@link writePanelUnder}.
+ *
+ * ⚠ **LAS GUARDAS NO SE REPITEN ACÁ, Y NO ES UN OLVIDO.** La regla 0 y la idempotencia viven en
+ * **un** solo lugar, adentro del escritor único. Duplicarlas sería tener dos escritores con dos
+ * juegos de guardas, que es exactamente cómo se pierde una de las dos **sin que ningún gate lo vea**:
+ * el día que aparezca un cuarto dueño de historial se suma en uno y no en el otro, y el síntoma no es
+ * un error sino **basura en la pila más un atrás muerto**.
  *
  * ⚠ **LA DEGRADACIÓN SE DECLARA, NO SE DESCUBRE. Quién borra esta marca:** un reemplazo blando sobre
  * la entrada donde vive, o sea (i) el `replace` de los tres menús cuando la política lo dice,
  * (ii) {@link applyPanelView} con las causas `programmatic`, `filter` y `stale` sin tener la entrada,
- * y (iii) el reemplazo crudo con el que Agenda limpia su query de retorno de Google. **Se acepta en
- * esta fase**: sin la marca, {@link panelBranchPlan} cae en `push`/`replace` y **nunca** en un
- * retroceso. Preservar la clave en `applyPanelView` sería una línea, pero toca el ejecutor que v0.30
- * dejó auditado con un gate de código y abre la pregunta de si un estado propio conservado
- * reintroduce la trampa de la rama temprana del parche; si la Phase 4 lo necesita para los tabs,
- * entra ahí con su propia medición.
+ * (iii) el reemplazo crudo con el que Agenda limpia su query de retorno de Google, y **(iv) —la
+ * entrada que la UAT de la fase 3 destapó— NOSOTROS MISMOS**, cuando el efecto de marcado escribía
+ * sobre una entrada que **ya sabía la verdad**: la derivaba del par de rutas, el par dice `push`
+ * también en un retroceso y en el reemplazo del colapso, y la marca verdadera se perdía. Esa cuarta
+ * causa es la que la guarda de idempotencia de {@link writePanelUnder} cierra, y queda listada acá
+ * como cicatriz en vez de borrada de la historia.
+ * **Las tres primeras se aceptan en esta fase**: sin la marca, {@link panelBranchPlan} cae en
+ * `push`/`replace` y **nunca** en un retroceso. Preservar la clave en `applyPanelView` sería una
+ * línea, pero toca el ejecutor que v0.30 dejó auditado con un gate de código y abre la pregunta de si
+ * un estado propio conservado reintroduce la trampa de la rama temprana del parche; si la Phase 4 lo
+ * necesita para los tabs, entra ahí con su propia medición.
  */
 export function applyPanelUnder({
   from,
@@ -809,13 +867,10 @@ export function applyPanelUnder({
   root?: string
   more?: string
 }): boolean {
-  const actual: unknown = window.history.state
-  // Regla 0, primero: la entrada de arriba no puede tener otro dueño.
-  if (isForeignOwnedEntry(actual)) return false
-  // Y la política, después: sólo una navegación que EMPUJA deja algo nuevo debajo.
+  // La política, que es lo único que esta función decide: sólo un EMPUJE deja algo nuevo debajo.
   if (panelNavMode({ from, to, root, more }) !== 'push') return false
-  window.history.replaceState(panelUnderState(from), '')
-  return true
+  // Y la escritura, con sus dos guardas, en el escritor único.
+  return writePanelUnder(from)
 }
 
 /**
