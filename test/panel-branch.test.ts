@@ -400,6 +400,9 @@ describe('cuándo se arma el sentinel — las reglas EN ORDEN', () => {
     hintOpen: false,
     topIsOurs: false,
     foreignOwnsTop: false,
+    // El SEXTO hecho, de la decisión (a) del plan 03-06: con algo nuestro debajo no se arma. En
+    // falso acá porque éste es el objeto de "sí se arma"; su propia suite está más abajo.
+    algoNuestroDebajo: false,
   }
 
   it('el caso base: parados en la raíz, sin aviso abierto y con la entrada libre ⇒ ARMAR', () => {
@@ -445,6 +448,7 @@ describe('cuándo se arma el sentinel — las reglas EN ORDEN', () => {
         hintOpen: false,
         topIsOurs: false,
         foreignOwnsTop: false,
+        algoNuestroDebajo: true,
       })
     ).toBe('none')
   })
@@ -827,5 +831,116 @@ describe('el candado anti-deriva del literal de la clave', () => {
     const dueno = sinComentarios(leer(MOD_DUENO))
     expect(dueno).toContain('window.history.pushState')
     expect(/\.\.\.\s*(window\.)?history\.state/.test(dueno)).toBe(false)
+  })
+})
+
+// ── Plan 03-06 / Task 2 — LA DECISIÓN (a) DEL DUEÑO (cierre del ítem H / G-4) ────────────────────
+//
+// Parado en Inicio **con historia debajo**, MOB-04 (`Más → Inicio → atrás` vuelve a Más) y MOB-05 (en
+// Inicio el atrás avisa antes de salir) **no pueden ser verdad a la vez**. Es la imprecisión declarada
+// #12 de `.planning/WINDOWS.md`, tocada desde el otro lado, y la UAT la destapó como el ítem **H**.
+//
+// El dueño eligió la opción **(a)**: el sentinel se arma **sólo si no hay nada nuestro debajo**. Se
+// respeta MOB-04, y el aviso aparece **únicamente** cuando el atrás de verdad saca del panel.
+// Descartada (b) —que el sentinel mandara siempre en Inicio—: más simple, pero cambiaba lo que MOB-04
+// prometía y dejaba el aviso apareciendo cuando el dueño no iba a salir.
+//
+// Medido en el escenario **E-10** de `.planning/debug/pila-de-dos-niveles-medida.md`.
+
+describe('la DECISIÓN (a) — el sentinel se arma SÓLO si no hay nada nuestro debajo', () => {
+  /** El objeto en el que SÍ se arma, con el hecho nuevo apagado. */
+  const LIBRE = {
+    participates: true,
+    atRoot: true,
+    hintOpen: false,
+    topIsOurs: false,
+    foreignOwnsTop: false,
+    algoNuestroDebajo: false,
+  }
+
+  it('en la raíz CON una entrada nuestra debajo ⇒ NO ARMAR (MOB-04 se respeta)', () => {
+    // La marca de la rama de la entrada de arriba dice una ruta ⇒ hay algo nuestro debajo ⇒ el atrás
+    // tiene a dónde volver y el aviso no tiene nada que avisar.
+    expect(PB.panelExitArmAction({ ...LIBRE, algoNuestroDebajo: true })).toBe('none')
+  })
+
+  it('en la raíz SIN nada nuestro debajo ⇒ ARMAR (MOB-05 se respeta)', () => {
+    // La marca es nula ⇒ el primer atrás saca del panel de verdad ⇒ hay que avisar.
+    expect(PB.panelExitArmAction({ ...LIBRE, algoNuestroDebajo: false })).toBe('arm')
+  })
+
+  it('EL CASO DEL ÍTEM H (G-4) — la pila `raíz → sección → raíz`: no se arma, y el atrás vuelve a Más', () => {
+    // La pila que el dueño midió en el teléfono: `Más → Inicio → atrás` esperaba volver a **Más** y
+    // le saltó el aviso de salida. Con (a) el sentinel no se arma, así que el atrás vuelve a Más.
+    // Medido en E-10, mitad 2: la marca de la entrada de arriba dice la ruta de la sección y el
+    // retroceso guardado aterriza ahí.
+    const marcaDeLaEntradaDeArriba = panelUnderState(PANEL_MORE)
+    const hayAlgoNuestroDebajo = PH.panelUnderRoute(marcaDeLaEntradaDeArriba) !== null
+    expect(hayAlgoNuestroDebajo).toBe(true)
+    expect(PB.panelExitArmAction({ ...LIBRE, algoNuestroDebajo: hayAlgoNuestroDebajo })).toBe('none')
+  })
+
+  it('LA REGLA VA ÚLTIMA: las cinco de seguridad siguen ganando una por una, con el hecho encendido', () => {
+    // Las cinco anteriores son de SEGURIDAD (nadie a quien avisar, lugar equivocado, ventana
+    // abierta, ya armado, la entrada de arriba es de otro dueño) y la de (a) es de POLÍTICA.
+    // Seguridad primero: con el hecho de (a) encendido, cada una de las cinco devuelve igual.
+    const CINCO = [
+      { ...LIBRE, participates: false },
+      { ...LIBRE, atRoot: false },
+      { ...LIBRE, hintOpen: true },
+      { ...LIBRE, topIsOurs: true },
+      { ...LIBRE, foreignOwnsTop: true },
+    ]
+    for (const caso of CINCO) {
+      expect(PB.panelExitArmAction(caso)).toBe('none')
+      expect(PB.panelExitArmAction({ ...caso, algoNuestroDebajo: true })).toBe('none')
+    }
+  })
+
+  it('EL ORDEN entre *ya estoy armado* y (a): con el sentinel arriba Y la marca presente, gana la CUARTA', () => {
+    // ⚠ ES EL CASO QUE FIJA EL ORDEN, y el que hay que mirar primero si esta suite se pone roja.
+    // Parados sobre NUESTRO propio sentinel, el state de la entrada de arriba lleva SÓLO su propia
+    // clave (`{ frjExit }`), así que la marca de la rama ahí NO SIGNIFICA NADA. Si la regla de (a)
+    // se evaluara antes, leería ese dato parada sobre el sentinel — y las dos reglas quedarían al
+    // revés. La cuarta tiene que devolver antes.
+    expect(PH.panelUnderRoute(PB.panelExitState(7))).toBeNull()
+    expect(PB.panelExitArmAction({ ...LIBRE, topIsOurs: true, algoNuestroDebajo: true })).toBe('none')
+  })
+
+  it('el hecho va SIN VALOR POR OMISIÓN: un call site que lo olvide NO COMPILA', () => {
+    // Igual que `vieneDeUnRetroceso`, `masDebajo` y `holdsExitSentinel`: es un HECHO de la pila, no
+    // una configuración. Se afirma LEYENDO el fuente porque la propiedad es del TIPO y no de un
+    // valor de retorno — un default o un `?` no los ve ninguna aserción de runtime.
+    const firma = sinComentarios(leer(MOD_DUENO)).match(
+      /export function panelExitArmAction\(\{[\s\S]*?\): PanelExitArmAction \{/,
+    )
+    expect(firma).not.toBeNull()
+    expect(firma?.[0]).toContain('algoNuestroDebajo: boolean')
+    expect(firma?.[0]).not.toContain('algoNuestroDebajo?')
+    expect(firma?.[0]).not.toMatch(/algoNuestroDebajo\s*=/)
+  })
+
+  it('el hecho se LEE DEL ESTADO REAL de la entrada de arriba, nunca de un valor de render', () => {
+    // Entre un render y el gesto pudo haber una escritura ajena que se llevó la marca. Es el mismo
+    // criterio con el que la ruta actual ya se re-lee de `location` y no del render, y se afirma
+    // leyendo el fuente del armado: ahí adentro tiene que estar la lectura de la marca.
+    const armado = sinComentarios(leer(MOD_DUENO)).match(
+      /const armarSentinel = useCallback[\s\S]*?\n {2}\}, \[/,
+    )
+    expect(armado).not.toBeNull()
+    expect(armado?.[0]).toContain('panelUnderRoute')
+    expect(armado?.[0]).toContain('algoNuestroDebajo')
+  })
+
+  it('EL LÍMITE ACEPTADO de (a) queda ESCRITO en el módulo, y nombra la decisión y el escenario', () => {
+    // Si lo que quedó debajo es una entrada AJENA (otro sitio) no hay forma confiable de saberlo —el
+    // largo del historial cuenta también las entradas de ADELANTE— y el aviso va a aparecer igual.
+    // Queda ACEPTADO (misma razón que el caso de entrada directa desde v0.30, E-7), y lo que NO está
+    // permitido es dejarlo sin escribir: el párrafo de la imprecisión vieja se REEMPLAZA, no se
+    // borra. Si no, el caso vuelve en la próxima UAT disfrazado de bug nuevo.
+    const mod = leer(MOD_DUENO)
+    expect(mod).toMatch(/decisi[oó]n \(a\)/i)
+    expect(mod).toContain('E-10')
+    expect(mod).toMatch(/entrada \*\*ajena\*\*|entrada ajena/i)
   })
 })
