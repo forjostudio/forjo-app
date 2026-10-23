@@ -540,30 +540,36 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
     }
   })
 
-  it('destino DISTINTO con el sentinel arriba ⇒ el plan NO cambia respecto del plan 03-02 (E-6)', () => {
-    // La navegación empuja y el sentinel queda DEBAJO, que es la forma medida en E-6 y NO deja un
-    // atrás muerto: estar parado sobre el sentinel cuenta como armado, así que el retroceso desde la
-    // sección cae en Inicio con el sentinel vivo y el siguiente —el que lo consume— es el primer
-    // intento de salida. Pasa algo visible en los dos.
+  it('destino DISTINTO con el sentinel arriba ⇒ CONSUMIRLO Y NAVEGAR (lo que el plan 03-06 cambió)', () => {
+    // ⚠ ESTE CASO CAMBIÓ A PROPÓSITO, y queda escrito el por qué. El plan 03-03 afirmaba acá que la
+    // navegación empujaba y el sentinel quedaba DEBAJO, "la forma medida en E-6 que NO deja un atrás
+    // muerto". **La UAT midió que sí lo deja**: enterrado, el atrás aterriza en una entrada de la
+    // raíz CON HASH (`/dashboard#salir`) que en pantalla se ve igual que Inicio, y el atrás siguiente
+    // no hace nada visible — *recarga y vuelve a `dashboard#salir-3`*, *a la primera que toco atrás
+    // no hace nada* (G-1 / G-2). E-6 medía el sentinel AISLADO y no cubría este recorrido; E-9 lo
+    // mide con las dos formas al lado.
     for (const to of DESTINOS) {
       if (to === PANEL_ROOT) continue
-      expect(PH.panelBranchPlan({ from: PANEL_ROOT, to, masDebajo: false, holdsExitSentinel: true })).toBe(
-        PH.panelBranchPlan({ from: PANEL_ROOT, to, masDebajo: false, holdsExitSentinel: false })
-      )
+      expect(
+        PH.panelBranchPlan({ from: PANEL_ROOT, to, masDebajo: false, holdsExitSentinel: true })
+      ).toBe('consume-exit-then-navigate')
     }
   })
 
   it('la regla nueva no cambia NINGUNA de las ramas que ya estaban (barrido de 10 × 5 × 2)', () => {
     // El barrido de no-regresión: sin el sentinel arriba el plan es EXACTAMENTE el del plan 03-02
-    // para cada par, y con el sentinel arriba lo único que cambia es el par degenerado.
+    // para cada par. Con el sentinel arriba cambian SÓLO dos cosas, y las dos están decididas: el
+    // par degenerado (⇒ nada, plan 03-03) y la salida DESDE LA RAÍZ (⇒ consumir y navegar, 03-06).
+    // Fuera de la raíz, todo queda idéntico.
     for (const from of [...RAMA, PANEL_ROOT]) {
       for (const to of DESTINOS) {
         for (const masDebajo of [false, true]) {
           const antes = PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: false })
           expect(antes).not.toBe('none')
-          expect(PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: true })).toBe(
-            from === to ? 'none' : antes
-          )
+          expect(antes).not.toBe('consume-exit-then-navigate')
+          const esperado =
+            from === to ? 'none' : from === PANEL_ROOT ? 'consume-exit-then-navigate' : antes
+          expect(PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: true })).toBe(esperado)
         }
       }
     }

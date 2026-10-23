@@ -1049,12 +1049,20 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
     expect(PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', masDebajo: false, holdsExitSentinel: false })).toBe('push')
   })
 
-  it('el tipo del plan tiene CINCO miembros, y el quinto lo produce el plan 03-03', () => {
+  it('el tipo del plan tiene SEIS miembros: el quinto lo produce 03-03 y el sexto 03-06', () => {
     // *Nada* se declara en el tipo aunque esta función todavía no lo devuelva: si un resultado
     // posible de la decisión de navegación viviera fuera del tipo, el chequeo de exhaustividad del
-    // plan 03-04 no lo vería — la clase de hueco silencioso que esta fase cierra.
-    const MIEMBROS: PH.PanelBranchPlan[] = ['push', 'replace', 'up', 'collapse-then-replace', 'none']
-    expect(new Set(MIEMBROS).size).toBe(5)
+    // plan 03-04 no lo vería — la clase de hueco silencioso que esta fase cierra. Lo mismo vale para
+    // el sexto, `consume-exit-then-navigate`, que el plan 03-06 agregó.
+    const MIEMBROS: PH.PanelBranchPlan[] = [
+      'push',
+      'replace',
+      'up',
+      'collapse-then-replace',
+      'consume-exit-then-navigate',
+      'none',
+    ]
+    expect(new Set(MIEMBROS).size).toBe(6)
     // Y los dos primeros son, literalmente, los de `PanelNavMode`: la decisión EXTIENDE la política
     // en vez de reemplazarla.
     expect(MIEMBROS.slice(0, 2).sort()).toEqual(
@@ -1269,18 +1277,18 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
     ).not.toBe('consume-exit-then-navigate')
   })
 
-  it('el tipo del plan tiene SEIS miembros, y el sexto lo produce el plan 03-06', () => {
-    // El miembro nuevo entra EN EL TIPO, no al lado: si viviera afuera, el chequeo de exhaustividad
-    // del provider del guard de cambios sin guardar NO LO VERÍA y la salida caería por un camino por
-    // defecto que nadie eligió — exactamente la clase de hueco silencioso que esta fase vino a cerrar.
-    const MIEMBROS: PH.PanelBranchPlan[] = [
-      'push',
-      'replace',
-      'up',
-      'collapse-then-replace',
-      'consume-exit-then-navigate',
-      'none',
-    ]
-    expect(new Set(MIEMBROS).size).toBe(6)
+  it('el sexto miembro ENTRA EN EL TIPO y NO es un modo de rutas: la decisión EXTIENDE la política', () => {
+    // Entra EN EL TIPO, no al lado: si viviera afuera, el chequeo de exhaustividad del provider del
+    // guard de cambios sin guardar NO LO VERÍA y la salida caería por un camino por defecto que
+    // nadie eligió — exactamente la clase de hueco silencioso que esta fase vino a cerrar.
+    const sexto: PH.PanelBranchPlan = 'consume-exit-then-navigate'
+    // Y no es uno de los dos modos de rutas: ningún par de rutas lo puede producir, sólo la decisión
+    // de la rama con sus tres hechos.
+    for (const from of [...RAMA_DE_MAS, PANEL_ROOT]) {
+      for (const to of DESTINOS_BARRA_5) {
+        expect(panelNavMode({ from, to })).not.toBe(sexto)
+      }
+    }
+    expect(['push', 'replace', 'up', 'collapse-then-replace', 'none']).not.toContain(sexto)
   })
 })

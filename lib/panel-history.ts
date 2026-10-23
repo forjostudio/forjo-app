@@ -502,7 +502,7 @@ export function panelNavMode({
 /**
  * Qué hacer con la pila cuando la navegación del menú ocurre **dentro de la rama de Más**.
  *
- * **CINCO miembros**, y los dos primeros son literalmente los de {@link PanelNavMode}: esta decisión
+ * **SEIS miembros**, y los dos primeros son literalmente los de {@link PanelNavMode}: esta decisión
  * **extiende** la política de rutas, no la reemplaza.
  *
  *   · `push` / `replace` — lo de siempre, y los ejecuta el `<Link>` con su prefetch y su transición.
@@ -510,13 +510,21 @@ export function panelNavMode({
  *     ruta de Más encima de sí misma ⇒ dos entradas idénticas ⇒ atrás muerto (la cicatriz 1).
  *   · `collapse-then-replace` — **colapsar y reemplazar** (criterio 2): consumir la entrada de la
  *     sección y recién entonces reemplazar, para que `/mas` no quede inmediatamente debajo.
+ *   · `consume-exit-then-navigate` — **consumir el sentinel de salida y recién entonces navegar**
+ *     (plan 03-06): con el sentinel arriba, parados en la raíz y un destino distinto. Su regla, y el
+ *     por qué de su lugar, están abajo en {@link panelBranchPlan}.
  *   · `none` — **no hacer nada**: el sentinel de salida está arriba y el destino es la ruta actual
  *     (plan 03-03). Está en el tipo **a propósito** y se **produce desde esta misma función**: si
  *     *nada* es un resultado posible de la decisión de navegación y vive fuera del tipo, el chequeo
  *     de exhaustividad del plan 03-04 **no lo ve** — que es exactamente la clase de hueco silencioso
- *     que esta fase viene a cerrar.
+ *     que esta fase viene a cerrar. Lo mismo vale, palabra por palabra, para el miembro de arriba.
  */
-export type PanelBranchPlan = PanelNavMode | 'up' | 'collapse-then-replace' | 'none'
+export type PanelBranchPlan =
+  | PanelNavMode
+  | 'up'
+  | 'collapse-then-replace'
+  | 'consume-exit-then-navigate'
+  | 'none'
 
 /**
  * La decisión de la rama, **pura y sobre rutas**, con el hecho recibido como booleano.
@@ -547,7 +555,24 @@ export type PanelBranchPlan = PanelNavMode | 'up' | 'collapse-then-replace' | 'n
  *      momento del click**, igual que `masDebajo`. Con el sentinel arriba y un destino **distinto**
  *      el plan **no cambia**: la navegación empuja y el sentinel queda debajo, que es la forma
  *      medida en **E-6** y la que **no** deja un atrás muerto (estar parado sobre él cuenta como
- *      armado).
+ *      armado). **Eso cambió en el plan 03-06**: ver la regla siguiente.
+ *   -1b. **El sentinel arriba, parados en la RAÍZ, y un destino DISTINTO ⇒ CONSUMIR EL SENTINEL Y
+ *      RECIÉN ENTONCES NAVEGAR** (plan 03-06). Son **tres** hechos juntos, y el tercero ya lo atajó
+ *      la regla anterior pero se escribe explícito para que una regla metida en el medio no le cambie
+ *      el significado.
+ *      ⚠ **POR QUÉ EXISTE.** La entrada del sentinel es **absorbente** —se empujó para consumirla—,
+ *      así que si el dueño navega con ella arriba queda **ENTERRADA** en el camino del atrás: el
+ *      atrás aterriza en una entrada de la raíz **con hash** (`/dashboard#salir`) que en pantalla se
+ *      ve **igual que Inicio**, con un atrás siguiente que no hace **nada visible** — el **atrás
+ *      muerto** que el criterio 2 prohíbe explícitamente. Es la causa **medida** de **G-1** y **G-2**
+ *      (*recarga y vuelve a `dashboard#salir-3`*, *a la primera que toco atrás no hace nada*), y está
+ *      medida en los escenarios **E-9** y **E-12** de
+ *      `.planning/debug/pila-de-dos-niveles-medida.md`.
+ *      ⚠ **POR QUÉ ANTES DE LA REGLA 0.** Ahí el hecho de la rama es **falso**, así que la decisión
+ *      caería en **empujar** y el sentinel quedaría enterrado: exactamente el bug. Y **después** de la
+ *      regla -1, porque con el destino igual a la ruta actual no hay nada que navegar.
+ *      ⚠ **Y por qué sólo en la raíz:** el sentinel es de la raíz y sólo de la raíz. Consumirlo
+ *      estando en una sección sería retroceder sobre una entrada que **no es la que creemos**.
  *   0. **Sin el hecho NO SE RETROCEDE NUNCA**, y es la regla más importante del plan: devuelve lo
  *      que diga {@link panelNavMode}. Es la cicatriz 2 (entrada directa, F5, el rebote del proxy
  *      después del login) y la degradación segura de toda la fase — el peor caso de una marca
@@ -592,6 +617,11 @@ export function panelBranchPlan({
   // reemplazar, justo SOBRE el sentinel ⇒ dos entradas idénticas con el sentinel re-armado encima,
   // o sea un atrás muerto enterrado.
   if (holdsExitSentinel && from === to) return 'none'
+
+  // ── REGLA -1b — el sentinel arriba, en la RAÍZ, y un destino DISTINTO: consumirlo y navegar. ───
+  // Los TRES hechos juntos. El tercero (`to !== from`) ya lo atajó la regla de arriba, pero se
+  // escribe explícito para que mañana nadie meta una regla en el medio y le cambie el significado.
+  if (holdsExitSentinel && from === root && to !== from) return 'consume-exit-then-navigate'
 
   // ── REGLA 0 — sin el hecho, jamás un retroceso. ────────────────────────────────────────────────
   if (!masDebajo) return modo

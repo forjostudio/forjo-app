@@ -218,11 +218,21 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
         case 'replace':
           navegar(href, plan)
           return
-        // Subir, colapsar y no hacer nada. Van con la RUTA y no con el href, porque el segundo paso
-        // del colapso compara el destino contra la marca de la entrada de abajo, que es una ruta —
-        // es el mismo valor que la barra le pasa al ejecutor.
+        // Subir, colapsar, consumir el sentinel de salida y no hacer nada. Van con la RUTA y no con
+        // el href, porque el segundo paso del colapso compara el destino contra la marca de la
+        // entrada de abajo, que es una ruta — es el mismo valor que la barra le pasa al ejecutor.
+        //
+        // ⚠ `consume-exit-then-navigate` VA EN ESTE GRUPO Y SU RESPUESTA CORRECTA ES **DEGRADAR**.
+        // Este archivo **no es dueño** del sentinel de salida —lo empuja `usePanelBranch` en la
+        // barra, con su propio id— así que no puede consumirlo: un retroceso sobre una entrada que
+        // no empujamos nosotros expulsa al dueño del sitio, y acá eso es pérdida de trabajo
+        // SILENCIOSA. La llamada de abajo va **sin** `exitId`, así que esa rama del ejecutor **se
+        // niega** y la salida cae en el `navegar` de la regla de rutas. Y tiene que estar
+        // **declarado** igual: el chequeo de exhaustividad de más abajo es el candado contra que la
+        // salida caiga por un camino por defecto que nadie eligió.
         case 'up':
         case 'collapse-then-replace':
+        case 'consume-exit-then-navigate':
         case 'none':
           if (runBranchNavigation({ plan, to, navigate: navegar })) return
           // Se negó (marca perdida, o entrada de otro dueño): la degradación segura es navegar con

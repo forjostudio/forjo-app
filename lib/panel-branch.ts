@@ -188,30 +188,75 @@ export function applyBranchMarkRequest(current: string): boolean {
 }
 
 /**
+ * Deshace **nuestra** entrada del sentinel de salida. Devuelve `true` si consumió algo, `false` si no
+ * tocó nada. Es el primero de los dos pasos de `consume-exit-then-navigate`.
+ *
+ * ⚠ **POR QUÉ ES UNA TERCERA FUNCIÓN HERMANA** de `consumeOwnedPanelEntry` y
+ * {@link consumeOwnedBranchEntry}, y no una extensión de ninguna: cada una pregunta por **su** marca,
+ * y ésa es toda la disciplina que hace que cuatro módulos puedan convivir sobre **una** pila. La
+ * entrada del sentinel la empujó este módulo con {@link panelExitState}, no el router: preguntada por
+ * la marca de subsección o por la de la rama, las dos devolverían `false` siempre.
+ *
+ * ⚠ **Y LA DIFERENCIA QUE HAY QUE ESCRIBIR: ésta pregunta por la marca de ESTA INSTANCIA**, no sólo
+ * por "algún dueño de salida". Es {@link isPanelExitEntry} con nuestro `id`, no `isForeignOwnedEntry`:
+ * dos dueños por la misma entrada **descuadran el conteo de retrocesos** y dejan un atrás muerto o uno
+ * de más. Es también lo que deja que el **otro** consumidor del ejecutor —el provider del guard de
+ * cambios sin guardar, que **no es** dueño del sentinel— pueda negarse en vez de retroceder.
+ *
+ * ⚠ **LA GUARDA SE REPITE ACÁ, y no se confía en que ya se chequeó arriba** (cicatriz 2, ya sufrida
+ * tres veces en este repo): un retroceso sobre una entrada que no empujamos nosotros **expulsa al
+ * dueño del sitio**. Es la misma disciplina que los otros tres dueños declaran en **cada** punto de
+ * retroceso.
+ *
+ * ⚠ **`history.back()` es ASÍNCRONO.** El call site tiene que PREVENIR la navegación y pedir la suya
+ * **desde el evento** del retroceso, nunca en el mismo tick.
+ */
+export function consumeOwnedExitSentinel({ id }: { id: number }): boolean {
+  if (!isPanelExitEntry(window.history.state, id)) return false
+  window.history.back()
+  return true
+}
+
+/**
  * El ejecutor. Devuelve `true` si **se hizo cargo** del gesto (⇒ el call site tiene que PREVENIR la
  * navegación) y `false` si no (⇒ el call site deja navegar, y la pila queda un escalón más larga:
  * la degradación segura).
  *
- * **De los cinco miembros del plan le llegan tres**: subir, colapsar y nada. Empujar y reemplazar los
- * ejecuta el `<Link>`, con su prefetch y su transición — por eso devuelve `false` para los dos, en
- * vez de reimplementar una navegación peor. *Nada* no toca nada y se hace cargo; hoy todavía no lo
- * produce nadie, lo produce el plan 03-03.
+ * **De los seis miembros del plan le llegan cuatro**: subir, colapsar, consumir-el-sentinel-y-navegar
+ * y nada. Empujar y reemplazar los ejecuta el `<Link>`, con su prefetch y su transición — por eso
+ * devuelve `false` para los dos, en vez de reimplementar una navegación peor. *Nada* no toca nada y se
+ * hace cargo.
  *
  * ⚠ **El diferimiento de la navegación es responsabilidad del CALL SITE, no de esta función** (ver
  * la lección 3 del encabezado): acá la navegación se recibe como callback y se **llama** desde el
  * evento. Quien la convierte en "pedida en estado y ejecutada por un efecto" es
  * {@link usePanelBranch}. Separarlo así es lo que deja cubrir el ejecutor entero en una suite pura.
+ *
+ * ⚠ **`exitId` es OPCIONAL, y esa opcionalidad ES el mecanismo de degradación** (T-03-30). Sin él, la
+ * rama del sentinel **se niega** y devuelve `false` ⇒ el call site navega con la regla de rutas. Es lo
+ * que recibe el provider del guard de cambios sin guardar, que ejecuta el **mismo** plan pero **no es
+ * dueño** del sentinel: si retrocediera igual, estaría retrocediendo sobre una entrada **ajena** y
+ * dejaría al dueño **fuera del sitio** con cambios sin guardar en pantalla — el peor resultado de todo
+ * ese archivo.
  */
 export function runBranchNavigation({
   plan,
   to,
   more = PANEL_MORE,
+  root = PANEL_ROOT,
   navigate,
+  exitId,
 }: {
   plan: PanelBranchPlan
   to: string
   more?: string
+  root?: string
   navigate: BranchNavigate
+  /**
+   * El id de la instancia **dueña** del sentinel de salida. **Opcional a propósito:** sin él la rama
+   * del sentinel se niega, que es la degradación segura del consumidor que no es su dueño.
+   */
+  exitId?: number
 }): boolean {
   // *Nada*: se hace cargo sin tocar la pila. Lo produce el plan 03-03.
   if (plan === 'none') return true
@@ -221,6 +266,31 @@ export function runBranchNavigation({
   // Subir es un paso solo: un retroceso guardado y listo. La guarda de la marca se re-verifica
   // adentro del consumo (lección 1), así que sin marca esto devuelve `false` y nadie retrocede.
   if (plan === 'up') return consumeOwnedBranchEntry()
+
+  // ── Consumir el sentinel de salida y navegar: dos pasos, mismo molde que el colapso ───────────
+  if (plan === 'consume-exit-then-navigate') {
+    // Sin identificador de dueño NO se retrocede: es la degradación segura del consumidor que no es
+    // dueño del sentinel (ver el ⚠ del docblock). Y va ANTES de enganchar nada, para no dejar un
+    // listener vivo que nadie va a desenganchar.
+    if (exitId === undefined) return false
+    // El modo lo decide LA POLÍTICA DE RUTAS para el tramo raíz → destino (que es un empuje), no un
+    // literal: un segundo dialecto de la regla es exactamente lo que NAV-05 viene a evitar.
+    const modo = panelNavMode({ from: root, to, root, more })
+    const segundoPaso = () => {
+      // La navegación se deja PEDIDA desde el evento y la ejecuta un commit (lección 3): acá adentro
+      // el router de Next está procesando su propio recorrido y una navegación pedida en este
+      // momento SE LLAMA, NO ESCRIBE NADA y el dueño se queda donde estaba.
+      navigate(to, modo)
+    }
+    // ⚠ ENGANCHADO ACÁ, EN EL GESTO, Y CON DISPARO ÚNICO (lección 2), igual que el colapso.
+    window.addEventListener('popstate', segundoPaso, { once: true })
+    if (consumeOwnedExitSentinel({ id: exitId })) return true
+    // El consumo se negó (la entrada de arriba ya no lleva NUESTRA marca): no va a llegar ningún
+    // evento, así que el listener hay que sacarlo a mano o queda armado para el próximo retroceso
+    // del dueño y dispara una navegación que nadie pidió.
+    window.removeEventListener('popstate', segundoPaso)
+    return false
+  }
 
   // ── El colapso: dos pasos, y el segundo sale del EVENTO del primero ──────────────────────────
   const segundoPaso = () => {
@@ -928,11 +998,25 @@ export function usePanelBranch({
       masDebajo: panelUnderRoute(estado) === more,
     })
     if (plan === 'push' || plan === 'replace') return false
+    // ⚠ EL DOMINIO SE SUELTA ANTES DE DELEGAR, y es obligatorio (T-03-29). El retroceso que viene
+    // es DELIBERADO —lo pedimos nosotros—, así que si llega a `panelExitPopAction` con el hecho de
+    // *éramos dueños de un sentinel vivo* encendido, se lee como el atrás del dueño y devuelve
+    // *avisar*: APARECERÍA EL AVISO DE SALIDA al tocar un destino de la barra. Un bug nuevo
+    // fabricado por el arreglo.
+    // Y cae del lado seguro: sin el hecho, el peor caso es que el aviso NO aparezca sobre una
+    // entrada que ya no es nuestra —nunca un retroceso sobre entrada ajena—, y el efecto de armado
+    // RE-DERIVA el hecho del estado de la entrada de arriba en el commit siguiente, que es la
+    // lección de E-6.
+    if (plan === 'consume-exit-then-navigate') sentinelVivoRef.current = false
     return runBranchNavigation({
       plan,
       to: href,
       more,
+      root,
       navigate: (destino, modo) => setPedida({ href: destino, mode: modo }),
+      // El identificador de dueño: esta instancia SÍ es la dueña del sentinel (lo empujó con este
+      // mismo id en `armarSentinel`), así que la rama del consumo puede correr.
+      exitId: id,
     })
   }
 

@@ -84,18 +84,20 @@ describe('leaveNavigationPlan', () => {
 // el quick `261006-iey` ya tuvo que arreglar una vez.
 
 /**
- * Los cinco planes de la rama, como un mapa TOTAL sobre el tipo.
+ * Los **seis** planes de la rama, como un mapa TOTAL sobre el tipo.
  *
  * ⚠ **Es el candado, y no es decorativo:** `Record<PanelBranchPlan, true>` **no compila** si mañana
  * aparece un plan nuevo y nadie lo agrega acá. Una lista de literales sueltos no haría nada: se
- * quedaría corta en silencio y el caso de exhaustividad de abajo seguiría dando verde sobre los
- * cinco de hoy.
+ * quedaría corta en silencio y el caso de exhaustividad de abajo seguiría dando verde sobre los de
+ * hoy. **Y ya mordió:** el sexto —`consume-exit-then-navigate`, del plan 03-06— entró al tipo y este
+ * archivo dejó de compilar hasta que se agregó acá, que es exactamente para lo que existe.
  */
 const TODOS_LOS_PLANES: Record<PanelBranchPlan, true> = {
   push: true,
   replace: true,
   up: true,
   'collapse-then-replace': true,
+  'consume-exit-then-navigate': true,
   none: true,
 }
 
@@ -135,11 +137,11 @@ describe('leaveNavigationPlan · los planes de la rama de Más', () => {
     expect(leaveNavigationPlan({ holdsSentinel: true, sectionMode: 'none' })).toBe('consume-then-none')
   })
 
-  it('EXHAUSTIVIDAD: para los CINCO planes, con sentinel es el prefijo de consumo y sin sentinel es el plan pelado', () => {
+  it('EXHAUSTIVIDAD: para los SEIS planes, con sentinel es el prefijo de consumo y sin sentinel es el plan pelado', () => {
     // El candado contra agregar un plan nuevo a la rama y olvidarse de esta composición. El tipo
     // obliga a sumarlo a `TODOS_LOS_PLANES`, y este caso obliga a que la composición valga para él.
     const planes = Object.keys(TODOS_LOS_PLANES) as PanelBranchPlan[]
-    expect(planes).toHaveLength(5)
+    expect(planes).toHaveLength(6)
     for (const plan of planes) {
       expect(leaveNavigationPlan({ holdsSentinel: false, sectionMode: plan })).toBe(plan)
       expect(leaveNavigationPlan({ holdsSentinel: true, sectionMode: plan })).toBe(`consume-then-${plan}`)
