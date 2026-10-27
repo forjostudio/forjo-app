@@ -182,6 +182,28 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
   // `usePanelBranch` en la barra, con una sola diferencia deliberada: el sentinel de salida se
   // pregunta por **dueño** y no por id, porque este archivo **no es** su dueño — sólo necesita saber
   // si la entrada de arriba es una absorbente de salida.
+  //
+  // ⚠ **EL RESIDUO DE ESCRITORIO DE G2-1 SE PRODUCE ACÁ, Y POR ESO SE DECLARA ACÁ. Aceptado el
+  // 2026-10-27 como revisión ACOTADA del criterio 6, no como renuncia.**
+  //
+  // El hecho nuevo (`raizDebajo`) pregunta si la marca **dice la raíz**, y en escritorio la marca
+  // **sí** puede decirlo: a diferencia de `masDebajo`, este hecho **no** mantiene el criterio 6
+  // *por construcción*. Lo que lo mantiene son **dos hechos del cableado**:
+  //   · la **barra inferior se oculta a ≥1024px**, así que sus links no se pueden tocar y su
+  //     `handleNavigate` **nunca corre** en escritorio ⇒ **este archivo es el ÚNICO camino** por el
+  //     que la regla nueva puede correr ahí;
+  //   · y este camino pide la pantalla **SUCIA**: sin cambios sin guardar no se computa ningún plan
+  //     de rama (ver `confirmLeave` más abajo).
+  //
+  // ⇒ **El residuo es UN SOLO CASO:** salir de una pantalla **con cambios sin guardar** hacia
+  // **Inicio** **desde el sidebar**, donde el atrás queda **un escalón más corto**. Se **acepta**.
+  //
+  // ⚠ **Y lo que NO se hace para taparlo: preguntarle el ancho a la pantalla.** Gatear esta política
+  // por tamaño es exactamente lo que NAV-05 y el criterio 6 existen para prohibir. Hay una auditoría
+  // de fuente que cuenta **cero** consultas de ancho en los dos consumidores y en los dos módulos de
+  // política, y el residuo queda escrito en los **tres** lugares donde se puede leer: acá, en el
+  // docblock de la regla (`lib/panel-history.ts`) y en
+  // `.planning/debug/pila-de-dos-niveles-medida.md`.
   const calcularPlanDeRama = useCallback(
     (estado: unknown, from: string, to: string): PanelBranchPlan =>
       panelBranchPlan({

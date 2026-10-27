@@ -825,6 +825,104 @@ describe('el canal es UNO y el consumidor es UNO', () => {
   })
 })
 
+// ── Plan 03-09 — UN dialecto para el hecho de G2-1, y CERO consultas del ancho de pantalla ───────
+//
+// ⚠ POR QUÉ ESTAS AUDITORÍAS SON DE FUENTE Y NO DE VALOR DE RETORNO. Lo que afirman es una propiedad
+// de la ESTRUCTURA de los dos consumidores —que computan el mismo hecho con la MISMA forma, una vez
+// cada uno, y que ninguno le pregunta el tamaño a la pantalla—, y eso ningún valor de retorno lo
+// muestra. El compilador ya garantiza que el hecho se pase (va sin valor por omisión); lo que no
+// puede exigir es que los dos lo computen IGUAL y que el residuo esté declarado.
+
+describe('G2-1 — UN dialecto del hecho nuevo en los DOS consumidores', () => {
+  const GUARD = 'components/dashboard/unsaved-changes-guard.tsx'
+  const MOD_POLITICA = 'lib/panel-history.ts'
+  const BARRA = 'components/dashboard/panel-bottom-nav.tsx'
+
+  it('los dos consumidores computan el hecho con la MISMA forma, y UNA vez cada uno', () => {
+    // La forma es *la marca DICE la raíz* —`panelUnderRoute(estado) === <la raíz>`— y no *¿hay
+    // marca?*: es la misma con la que se computa el hecho de la rama, por el mismo motivo. Dos formas
+    // distintas para el mismo hecho serían dos dialectos de la misma regla, que es exactamente lo que
+    // NAV-05 viene a evitar. Y UNA vez cada uno: dos lecturas del estado en el mismo gesto son dos
+    // verdades que pueden diferir.
+    const barra = sinComentarios(leer(MOD_DUENO))
+    const guard = sinComentarios(leer(GUARD))
+    expect(barra.length).toBeGreaterThan(500)
+    expect(guard.length).toBeGreaterThan(500)
+    expect(cuenta(barra, /raizDebajo: panelUnderRoute\(estado\) === root/g)).toBe(1)
+    expect(cuenta(guard, /raizDebajo: panelUnderRoute\(estado\) === PANEL_ROOT/g)).toBe(1)
+    // Y ninguno de los dos computa el hecho de otra forma: cero `raizDebajo` por otro camino.
+    expect(cuenta(barra, /raizDebajo/g)).toBe(1)
+    expect(cuenta(guard, /raizDebajo/g)).toBe(1)
+  })
+
+  it('el guard usa la CONSTANTE de la raíz, importada, y no el literal de la ruta', () => {
+    // El literal de la raíz vive en UN solo lugar a propósito (`PANEL_ROOT`). Con el literal copiado
+    // acá, el día que la raíz cambie el guard se queda mirando otra pila **en silencio** — ni `tsc`
+    // ni la suite lo verían.
+    const guard = sinComentarios(leer(GUARD))
+    expect(guard).toMatch(/^ {2}PANEL_ROOT,$/m)
+    expect(cuenta(guard, /panelUnderRoute\(estado\) === '\/dashboard'/g)).toBe(0)
+  })
+
+  it('CERO consultas del ancho de la pantalla en los dos consumidores y los dos módulos de política', () => {
+    // El residuo de escritorio se ACEPTA y se declara (2026-10-27); no se gatea. Un chequeo de
+    // viewport en el medio de esta política es exactamente lo que NAV-05 y el criterio 6 prohíben, y
+    // lo que la fase sostuvo *por construcción* hasta el plan 03-09.
+    for (const archivo of [MOD_DUENO, MOD_POLITICA, GUARD, BARRA]) {
+      const src = sinComentarios(leer(archivo))
+      expect(src.length).toBeGreaterThan(500)
+      expect(cuenta(src, /matchMedia|innerWidth|clientWidth|outerWidth/g)).toBe(0)
+    }
+  })
+
+  it('el residuo de escritorio está DECLARADO con su fecha en los tres lugares donde se lee', () => {
+    // El docblock de la regla, el guard DONDE SE PRODUCE y el documento de debug. Acá se afirman los
+    // dos de código; el tercero lo vigila el gate de bash del plan.
+    expect(cuenta(leer(MOD_POLITICA), /2026-10-27/g)).toBeGreaterThanOrEqual(1)
+    expect(cuenta(leer(GUARD), /2026-10-27/g)).toBeGreaterThanOrEqual(1)
+  })
+
+  it('el `switch` del guard sigue en SEIS casos con su chequeo de exhaustividad, y `up` delega', () => {
+    // No hay miembro nuevo: `up` ya ES el retroceso guardado de un paso. Un séptimo miembro para el
+    // mismo mecanismo obligaría a tocar este `switch` y sería el segundo dialecto.
+    const guard = sinComentarios(leer(GUARD))
+    const ejecutor = guard.slice(guard.indexOf('const ejecutarPlanDeRama'))
+    expect(ejecutor.length).toBeGreaterThan(400)
+    expect(cuenta(ejecutor, /case '/g)).toBe(6)
+    expect(cuenta(ejecutor, /_exhaustivo/g)).toBeGreaterThanOrEqual(1)
+    // `up` sigue agrupado con los que delegan al ejecutor COMPARTIDO, no reimplementado acá.
+    expect(ejecutor).toContain("case 'up':")
+    expect(ejecutor).toContain('runBranchNavigation')
+  })
+
+  it('G2-1 — el hecho que la barra pasa sale de la MARCA DE LA RAMA, no de un dato nuevo en la pila', () => {
+    // Una cuarta clave en la pila sería un cuarto dueño sin necesidad, y la regla 0 reconoce TRES a
+    // propósito. La marca de la rama YA guarda la ruta que quedó debajo —justamente para esto, que es
+    // el motivo por el que E-5 pidió que guardara la RUTA y no un booleano—, así que el hecho nuevo se
+    // deriva de ella y no de un canal nuevo.
+    const barra = sinComentarios(leer(MOD_DUENO))
+    const guard = sinComentarios(leer(GUARD))
+    for (const src of [barra, guard]) {
+      // El hecho se lee SIEMPRE por `panelUnderRoute`, que es el lector de la marca de la rama.
+      expect(src).toMatch(/raizDebajo: panelUnderRoute\(/)
+      // Y no hay ninguna clave nueva de estado inventada para esto.
+      expect(cuenta(src, /frjRoot|frjRaiz|frjAtRoot/g)).toBe(0)
+    }
+    // El predicado de la regla 0 sigue reconociendo TRES dueños, ni uno más.
+    // ⚠ La región se RECORTA hasta la llave de cierre a principio de línea. Sin ese tope, el `slice`
+    // llega hasta el final del archivo y el contador mide otras funciones: el gate quedaría leyendo
+    // 2 donde el predicado tiene 0 — la variante "verde/rojo midiendo otra cosa" de esta fase.
+    const politica = sinComentarios(leer(MOD_POLITICA))
+    const desde = politica.indexOf('export function isForeignOwnedEntry')
+    expect(desde).toBeGreaterThan(0)
+    const regla0 = politica.slice(desde, politica.indexOf('\n}', desde) + 2)
+    expect(regla0.length).toBeGreaterThan(80)
+    expect(regla0.length).toBeLessThan(400)
+    expect(cuenta(regla0, /isOverlayOwnedEntry|isDirtyGuardOwnedEntry|isExitSentinelOwnedEntry/g)).toBe(3)
+    expect(cuenta(regla0, /panelUnderRoute/g)).toBe(0)
+  })
+})
+
 describe('el candado anti-deriva del literal de la clave', () => {
   it('la clave del sentinel no derivó entre el módulo DUEÑO y el predicado de la regla 0', () => {
     // El literal está DUPLICADO a propósito (ver el docblock de `isExitSentinelOwnedEntry`): este

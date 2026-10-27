@@ -1207,6 +1207,13 @@ export function usePanelBranch({
       // nada navega a Más ⇒ la marca nunca dice Más ⇒ el hecho es siempre falso ⇒ la decisión cae en
       // las ramas de siempre. Sin un chequeo de viewport en el medio.
       masDebajo: panelUnderRoute(estado) === more,
+      // ⚠ EL TERCER HECHO (G2-1), Y SE RE-VERIFICA EN EL MOMENTO DEL CLICK, sobre el MISMO `estado`
+      // que ya se leyó para los otros dos. Dos lecturas del estado en el mismo gesto serían dos
+      // verdades que pueden diferir: entre un render y el click pudo haber una escritura blanda que
+      // se llevó la marca (la lección 1 del encabezado de este módulo).
+      // Y se computa con la forma *la marca DICE la raíz* —no *¿hay marca?*—, que es exactamente la
+      // misma forma que usa `masDebajo` justo arriba y por el mismo motivo: así el hecho no se
+      // dispara donde no corresponde, y la política no necesita preguntarle nada a la pantalla.
       raizDebajo: panelUnderRoute(estado) === root,
     })
     if (plan === 'push' || plan === 'replace') return false
