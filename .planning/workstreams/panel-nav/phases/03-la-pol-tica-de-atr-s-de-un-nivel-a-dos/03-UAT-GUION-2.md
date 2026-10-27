@@ -83,6 +83,10 @@ de ser comparables entre rondas.
 - ⚠ **Acá se pliega el ítem 6**, que pasó: es el mismo cruce con un escalón menos, y lo que el arreglo
   cambió —la marca que el reemplazo del colapso deja— se ve en el **atrás siguiente**, así que correr 7
   cubre a 6 con el recorrido más largo.
+- ✅ **Resultado ronda 2:** pasa (2026-10-27, Android/Chrome). Cayó en **Turnos** sin recargar y el
+  primer atrás hizo algo visible; ninguna URL del camino quedó con el hash del sentinel. Era **G-1**,
+  y queda cerrado. **No vuelve** en la ronda 3: la regla del plan `03-09` no toca su camino (la marca
+  dice Más ⇒ el hecho nuevo es falso por construcción, y su cobertura nueva está en **E-15** mitad B).
 
 ### 8 (G-2) — el degenerado, y el atrás muerto
 
@@ -94,6 +98,12 @@ de ser comparables entre rondas.
   criterio 2 prohíbe.
 - *Motivo del arreglo:* `03-06`. Medido en **E-12** (el degenerado con el primer atrás cambiando de
   pantalla).
+- ✅ **Resultado ronda 2:** pasa (2026-10-27, Android/Chrome). Quedó en Turnos y el atrás cayó en
+  **Inicio** cambiando de pantalla al primer toque. Era **G-2**. ⚠ **Con una consecuencia declarada,
+  no un defecto:** *«por ahí hace como una pasadita rápida por la pantalla Más y cae en inicio»* — el
+  colapso son **dos pasos** y el primero es un `history.back()` de verdad que aterriza en Más, así que
+  el navegador la pinta (está escrito en `03-UAT-2.md`). **No vuelve** en la ronda 3, mismo motivo que
+  el 7.
 
 ### 15 (G-3) — "Salir sin guardar" desde la rama de Más
 
@@ -108,6 +118,10 @@ de ser comparables entre rondas.
 - ⚠ **Correrlo DOS veces:** primero **con la pila limpia** (pestaña nueva), y **después** repetirlo
   viniendo de otra prueba. El fallo de la ronda 1 apareció justamente **arrastrando estado** de un
   recorrido anterior, así que la pasada limpia sola no lo hubiera encontrado.
+- ✅ **Resultado ronda 2:** pasa (2026-10-27, Android/Chrome). Aterrizó en **Más** —no en la sección de
+  la prueba anterior— y tocar Más desde una sección apiló en vez de llevar a Inicio. Era **G-3**. **No
+  vuelve** en la ronda 3, mismo motivo que el 7 y el 8: cruza desde la rama de Más y la regla nueva no
+  participa.
 
 ### 19 (G-5) — el aviso entrando directo a Inicio, tres veces
 
@@ -122,6 +136,14 @@ Entrando **directo** a Inicio: **pestaña nueva** y **recarga**, las dos formas.
   armar) y el **cuarto momento de reintento**. Medido en **E-13** (el ciclo ×3 sin acumular).
 - ⚠ **Acá se pliega el ítem 18**, que pasó: es el mismo ciclo sin la condición de entrada directa, y 19
   lo contiene.
+- ❌ **Resultado ronda 2:** falla (2026-10-27, Android/Chrome) ⇒ **gap `G2-1`**. Lo que se vio,
+  **textual del dueño**: *«al tocar inicio después de haber hecho otras cosas cae a /dashboard y la
+  guarda de salir no está. Tengo que empezar a hacer atrás por todo lo que estuve tocando hasta que
+  llega a la primer vez que toqué inicio y aparece #salir»*. La cadena de cuatro pasos está en
+  `03-UAT-2.md` (gap **`G2-1`**); la arregló el plan `03-09` haciendo que **sección → raíz** sea un
+  **retroceso**. ⚠ **Acá se interrumpió la ronda a propósito:** los ítems de abajo quedaron sin correr
+  porque la regla nueva **cambia la pila**. **Vuelve tal cual** en el guion de la **ronda 3**
+  (`03-UAT-GUION-3.md`, bloque 1).
 
 ### 20 (G-6) — el re-armado al expirar la ventana
 
@@ -132,6 +154,9 @@ Apretar atrás una vez, **esperar a que el aviso desaparezca**, apretar atrás o
 - *Motivo del arreglo:* misma raíz que G-5 (`03-07`); el re-armado del temporizador al expirar ahora queda
   efectivo.
 - ⚠ Su **segunda mitad** —la del overlay— **nunca se midió** y va en el **bloque 3**.
+- ⏸ **Resultado ronda 2:** sin correr — **motivo:** la regla del plan `03-09` **cambia la pila**, así
+  que correrlo antes habría medido el **comportamiento viejo**. **Vuelve** en el guion de la **ronda
+  3** (`03-UAT-GUION-3.md`, bloque 3), junto con su mitad de overlay.
 
 ---
 
@@ -204,12 +229,24 @@ Agrupados por **el camino de código que cambió**, no por bloque de la ronda 1.
 | **4** | `Inicio → Más → Finanzas → tocar Más` | **Más** (no una segunda entrada de Más); y `atrás` ⇒ **Inicio** |
 | **5** | tres secciones de Más seguidas (Finanzas → Configuración → Negocio, tocando Más en el medio) → `atrás` | **Inicio**, sin desandar pantallas ya dejadas |
 
+- ⏸ **Resultado ronda 2:** sin correr — **motivo:** la regla del plan `03-09` **cambia la pila**, así
+  que correrlos antes habría medido el **comportamiento viejo**. ⚠ Son justamente los ítems **de
+  regresión de la pila**, así que medirlos con la regla vieja no decía nada de la nueva. **Su mitad que
+  cambió —el regreso a Inicio— vuelve** en el guion de la **ronda 3**
+  (`03-UAT-GUION-3.md`, bloque 1, con el recorrido del dueño); el toque **desde** Inicio no vuelve
+  (bloque 5 del guion nuevo: lo resuelve el mismo camino de dos pasos, que va antes en el orden de
+  reglas).
+
 ### 4 y 5, además — tocar Más dentro de su rama
 
 - *Motivo:* son los **únicos dos** que ejecutan *tocar Más dentro de su rama* (subir un nivel), y el plan
   `03-05` cambia **qué queda escrito** en la entrada a la que ese gesto aterriza. Si la regla de dirección
   **suprimiera de más**, el síntoma es **visible** y es exactamente el de estos ítems: tocar Más desde
   Finanzas abriría una **segunda** entrada de Más y el atrás volvería a Finanzas en vez de a Inicio.
+- ⏸ **Resultado ronda 2:** sin correr — **motivo:** la regla del plan `03-09` **cambia la pila**, así
+  que correrlos antes habría medido el **comportamiento viejo**. **Vuelve** en el guion de la **ronda
+  3** (`03-UAT-GUION-3.md`, bloque 2) el recorrido de *subir un nivel* que la regla nueva **sí** toca:
+  `Más → una sección de Más → tocar Inicio`, donde la regla no participa y lo resuelve el colapso.
 
 ### 10, 11, 12, 13 — los cuatro quicks de octubre
 
@@ -225,6 +262,11 @@ Agrupados por **el camino de código que cambió**, no por bloque de la ronda 1.
 | **12** | el **campo de fecha / calendario** | el atrás lo cierra y no navega |
 | **13** | el **teclado** arriba | el atrás **baja el teclado** y no navega, **ni aparece el aviso de salida** |
 
+- ⏸ **Resultado ronda 2:** sin correr — **motivo:** la regla del plan `03-09` **cambia la pila**, así
+  que correrlos antes habría medido el **comportamiento viejo**. **No vuelven** en Android en la
+  **ronda 3** (`03-UAT-GUION-3.md`, bloque 5): ya pasaron en la ronda 1 y la regla nueva no toca el
+  armado ni el retroceso **ignorado**. Lo que les queda es **iPhone**, en el bloque 6.
+
 ### 16 — la cadena de tres pasos
 
 `/web` con cambios sin guardar → tocar un **destino de la barra** → *Salir sin guardar* ⇒ aterriza en el
@@ -233,6 +275,11 @@ destino y el `atrás` cae en **Inicio**.
 - *Motivo:* es la **cadena de tres pasos** que termina en el **reemplazo del colapso**, y el plan `03-05`
   cambia **la marca que ese reemplazo deja**; además el provider del guard usa el **mismo** ejecutor que
   la barra. Su síntoma si está mal es **visible**: el atrás volvería a `/web`.
+- ⏸ **Resultado ronda 2:** sin correr — **motivo:** la regla del plan `03-09` **cambia la pila**, así
+  que correrlo antes habría medido el **comportamiento viejo**. **No vuelve** tal cual en la **ronda 3**
+  (`03-UAT-GUION-3.md`, bloque 5): su destino es **Más**, no la raíz, así que el hecho nuevo es falso.
+  Lo que **sí** vuelve del guard es el caso que la regla **cambia** —hacia **Inicio desde el
+  sidebar**—, en el bloque 4 del guion nuevo.
 
 ### 21 — el aviso en escritorio (D-05)
 
@@ -241,6 +288,11 @@ destino y el `atrás` cae en **Inicio**.
 - **Alcanza con la mitad que (a) cambia:** que el aviso **no** aparezca con una sección debajo, y **sí**
   entrando directo, con su ancla **centrada sobre la columna de contenido**.
 - **Y que el recorrido del sidebar siga dando exactamente lo de hoy** (criterio 6).
+- ⏸ **Resultado ronda 2:** sin correr — **motivo:** la regla del plan `03-09` **cambia la pila**, así
+  que correrlo antes habría medido el **comportamiento viejo**. ⚠ Y acá el cambio es **del criterio**:
+  el 6 quedó con una **revisión acotada** fechada el 2026-10-27 y un **residuo aceptado** de un solo
+  caso. **Vuelve** en el guion de la **ronda 3** (`03-UAT-GUION-3.md`, bloque 4) con su forma nueva:
+  el residuo se corre para **verlo**, no para arreglarlo, más su gemelo sin cambios sin guardar.
 
 ---
 

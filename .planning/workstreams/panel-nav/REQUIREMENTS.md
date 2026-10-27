@@ -69,6 +69,36 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
       barra desde la que se abrió Más* — el mismo principio, no una excepción. Lo implementa el plan
       `03-02` (`panelBranchPlan` + `runBranchNavigation`) y está medido en los escenarios E-4, E-5 y
       E-8 de `.planning/debug/pila-de-dos-niveles-medida.md`.
+
+      ⚠ **PRECISADO el 2026-10-27 al cerrar el gap `G2-1` (plan `03-09`), no contradicho: sección →
+      raíz es un RETROCESO, no un empuje.** Tocar Inicio desde una sección **consume** la entrada de
+      la sección y deja al dueño parado en la entrada **original** de Inicio, en vez de apilar una
+      tercera entrada.
+
+      - **Por qué:** con `to === root` empujando, el ciclo Inicio↔sección hacía crecer la pila **dos
+        entradas por vuelta, sin techo** — medido como número en el escenario **E-14** de la sonda:
+        profundidades `3 → 5 → 7` con la regla vieja contra `1, 1, 1` con la nueva. Y esa tercera
+        entrada quedaba marcada con la sección que quedó debajo, así que la séptima regla del armado
+        decía *no armar* y **el aviso de salida nunca aparecía**. Textual del dueño: *«al tocar inicio
+        después de haber hecho otras cosas cae a /dashboard y la guarda de salir no está. Tengo que
+        empezar a hacer atrás por todo lo que estuve tocando hasta que llega a la primer vez que toqué
+        inicio y aparece #salir»*.
+      - **El invariante que queda:** la pila de la barra se mantiene en **dos** niveles — el ciclo
+        Inicio↔sección repetido tres veces deja **la misma profundidad**, y el aviso se re-arma solo
+        sin tocar ninguna de las siete reglas del armado (lo que cambió es la **pila** que esas reglas
+        leen).
+      - ⚠ **Su LÍMITE DECLARADO, para no confundirlo con un bug:** en la pila de **tres** escalones
+        que **D-02 acepta a propósito** (`Inicio → Turnos → Más`), la raíz **no** es la entrada
+        inmediatamente de abajo, así que el hecho es **falso** y el gesto **sigue empujando**: el
+        atrás desde ahí vuelve a **Más**, que es **algo visible** y es el mismo principio con el que el
+        dueño resolvió D-02 (*el atrás deshace el último movimiento*). El aviso **no** aparece ahí
+        porque hay algo nuestro debajo. Medido en **E-16** mitad B. Lo que la fase promete es que **el
+        ciclo no crece sin techo**, no que la pila nunca pase de dos escalones.
+      - **Dónde vive la regla:** en la decisión de la **rama** (`panelBranchPlan`), **no** en la
+        política de rutas (`panelNavMode`, que quedó intacta en sus seis ramas). El motivo, en una
+        línea: en la política de rutas la regla cambiaría el atrás de **escritorio entero**, que es lo
+        que el criterio 6 del ROADMAP protege — ahí quedó su **revisión acotada** del 2026-10-27 con el
+        residuo de un solo caso.
 - [ ] **MOB-05**: En **Inicio**, el atrás pide confirmación antes de salir del panel.
       ✅ **RESUELTO el 2026-10-14 — la decisión está TOMADA: SE IMPLEMENTA** (D-01 de la Phase 3, ver
       `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-CONTEXT.md`). El primer atrás en Inicio
@@ -119,6 +149,27 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
         MOB-06): los gates de esta fase **cuentan esos dos literales**, y en este entorno las clases de
         caracteres de `grep` son de **bytes** —`LANG` viene vacío—, así que sobre texto acentuado miden
         **cero**. Acentuarlas deja los gates verdes **sin medir nada**.
+
+      ⚠ **LO QUE LA REGLA DE `G2-1` LE CAMBIA A ESTE RECORRIDO, DECLARADO EL 2026-10-27 — ANTES de que
+      aparezca en el teléfono** (decisión del dueño en
+      `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-DECISION-UAT-2.md`):
+
+      - **`Más → tocar Inicio → atrás` YA NO VUELVE A MÁS.** Tocar Inicio desde Más es ahora el
+        **retroceso** que **consume** la entrada de Más ⇒ el dueño queda en Inicio **sin nada nuestro
+        debajo** ⇒ el sentinel **se arma** y el atrás **avisa para salir**. Medido en **E-15** mitad A
+        (la marca dice la raíz ⇒ `up`, aterrizaje sin marca, armado en `armar`).
+      - **La `decision (a)` NO cambió:** sigue siendo *el sentinel se arma sólo si no hay nada nuestro
+        debajo*, con sus siete reglas intactas. Lo que cambió es la **pila** que esa regla lee.
+      - **MOB-04 por el lado del GESTO DE ATRÁS tampoco cambió:** desde Más el atrás sigue cayendo en
+        **Inicio**. Lo que se retira es que ese atrás vuelva a **Más** cuando se llegó a Inicio
+        tocándolo.
+      - **Es, además, exactamente lo que el dueño pidió en `G2-1`:** *«parado en Inicio, el primer
+        atrás avisa y no sale»*. El costo quedó declarado por él mismo el 2026-10-27, eligiendo
+        **avisar para salir** y aceptando que ese recorrido pierde lo que MOB-04 prometía.
+
+      ⚠ **PROHIBIDO tratarlo como bug o como regresión de MOB-04 cuando aparezca en la ronda 3.** Es
+      una consecuencia **declarada** de la regla nueva, no un defecto: está escrita acá con fecha y
+      re-expresada en el guion de la ronda 3 (`03-UAT-GUION-3.md`, bloque 2).
 - [ ] **MOB-06**: Nada de esto rompe lo que ya está verificado en celular: el atrás sigue cerrando
       overlays, selectores y el calendario antes que navegar, y el aviso de cambios sin guardar sigue
       frenando la salida.
@@ -141,17 +192,24 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 
 #### Por qué los tres siguen SIN marcar, y el motivo de cada uno es distinto
 
-**La evidencia que marca estos tres es la ronda 2 de la UAT en celular real** —no el código escrito, ni
-la suite verde, ni la sonda en cero—. El guion está en
-`phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-UAT-GUION-2.md`.
+**La evidencia que marca estos tres es la UAT en celular real** —no el código escrito, ni la suite
+verde, ni la sonda en cero—. ⚠ **Actualizado el 2026-10-27: lo que los marca ahora es la ronda 3**
+(`phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-UAT-GUION-3.md`), no la ronda 2.
+
+**Qué pasó con la ronda 2, porque es el motivo del cambio:** se corrió el 2026-10-27 en Android y
+quedó **interrumpida a propósito** en el ítem 19. Corrieron **cuatro** recorridos —**7**, **8** y
+**15** pasaron (eran G-1, G-2 y G-3) y **19 falló** ⇒ gap **`G2-1`**—. Los otros **seis** ítems del
+guion quedaron **sin correr** porque la regla del plan `03-09` **cambia la pila**: correrlos antes
+habría medido el comportamiento viejo. Cada uno de los diez ítems quedó con su resultado anotado en
+`03-UAT-GUION-2.md`.
 
 | Requisito | Qué le falta | Se marca si |
 |---|---|---|
-| **MOB-04** | Los **5 fallos** de la ronda 1 (ítems 7, 8, 15, 19, 20 — gaps G-1, G-2, G-3, G-5, G-6) arreglados en los planes `03-05`/`03-06`/`03-07` pero **sin verificar en el teléfono**, más la **colisión H** (G-4) bajo la decisión (a) | pasan los bloques 1 a 4 del guion de la ronda 2 |
-| **MOB-05** | Lo mismo: los fallos **19** y **20** son suyos (el aviso que no se armaba entrando directo, y el que no se re-armaba al expirar la ventana), y la colisión **H** es la que su decisión reconcilia | pasan los bloques 1 a 4 del guion de la ronda 2 |
-| **MOB-06** | **Sólo iPhone (A11)** — su parte de Android ya está afirmada (arriba) — más la **parte de overlay del ítem 20**, que nunca se midió (*"no tengo overlays en inicio como para probar eso"*) | pasan los bloques 3, 4 y **6** del guion de la ronda 2 |
+| **MOB-04** | El gap **`G2-1`** (el ítem 19, que falló) arreglado en el plan `03-09` pero **sin verificar en el teléfono**, los **seis** ítems de la ronda 2 cuya **expectativa cambió** con la regla nueva, y el **pase de iPhone (A11)** | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3 |
+| **MOB-05** | Lo mismo, y es **suyo** por los dos lados: el fallo **19** es del aviso que no se armaba llegando a Inicio desde una sección, y la **consecuencia declarada** (`Más → tocar Inicio → atrás` ahora avisa) es de su decisión | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3 |
+| **MOB-06** | **Sólo iPhone (A11)** — su parte de Android ya está afirmada arriba (`cero regresion`, bloque E de la ronda 1) — más la **parte de overlay del ítem 20**, que nunca se midió en ninguna ronda (*"no tengo overlays en inicio como para probar eso"*) | pasa el bloque **6**, más la parte de overlay del bloque 3 |
 
-Si la ronda 2 falla, los tres **vuelven a quedar sin marcar** y los fallos nuevos entran como gaps de
+Si la ronda 3 falla, los tres **vuelven a quedar sin marcar** y los fallos nuevos entran como gaps de
 una tanda nueva.
 
 ### Lo que no se toca
@@ -249,9 +307,9 @@ dos casos, que es el invariante que importa. **La UAT tiene que poder distinguir
 | MOB-01 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-02 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-03 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
-| MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending — la **ronda 1** de la UAT **se corrió** (2026-10-15, Android/Chrome): **16 pasados, 5 fallados** (7, 8, 15, 19, 20) y **una colisión de diseño** (bloque H, G-4). Los seis gaps están arreglados en `03-05`/`03-06`/`03-07`; lo que lo marca es la **ronda 2** (`03-UAT-GUION-2.md`, bloques 1 a 4) |
-| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. ✅ Y la **`decision (a)`** del dueño el 2026-10-15 reconcilia la colisión con MOB-04, con su límite aceptado escrito. Pendiente **sólo** la verificación en celular real: los fallos 19 y 20 y la colisión H, en la **ronda 2** (bloques 1 a 4) |
-| MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending — ⚠ **`cero regresion` ya verificado en ANDROID** en la ronda 1 (el bloque E, ítems 10-13, pasó; marcado a mano por el dueño). Le falta **sólo iPhone / Safari (A11)** más la **parte de overlay del ítem 20**, que nunca se midió: lo cierra la **ronda 2**, bloques 3, 4 y 6 |
+| MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending — la **ronda 1** se corrió (2026-10-15, Android/Chrome): **16 pasados, 5 fallados** (7, 8, 15, 19, 20) y **una colisión de diseño** (bloque H, G-4). La **ronda 2** se corrió el 2026-10-27 y quedó **interrumpida a propósito**: 7, 8 y 15 **pasaron**, **19 falló** ⇒ gap **`G2-1`** (arreglado en `03-09`), y los otros seis ítems quedaron **sin correr** porque la regla nueva les cambia la expectativa. ⚠ **PRECISADO el 2026-10-27:** sección → raíz es un **retroceso**, con su límite declarado (la pila de tres escalones de D-02 sigue empujando). Lo que lo marca es la **ronda 3** (`03-UAT-GUION-3.md`, bloques 1 a 4 **y** 6) |
+| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. ✅ Y la **`decision (a)`** del dueño el 2026-10-15 reconcilia la colisión con MOB-04, con su límite aceptado escrito. ⚠ **Y el 2026-10-27 el dueño declaró la consecuencia de la regla de `G2-1`:** `Más → tocar Inicio → atrás` **ya no vuelve a Más, avisa para salir** — está escrito debajo del requisito con prohibición de tratarlo como regresión. Pendiente **sólo** la verificación en celular real, en la **ronda 3** (bloques 1 a 4 **y** 6) |
+| MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending — ⚠ **`cero regresion` ya verificado en ANDROID** en la ronda 1 (el bloque E, ítems 10-13, pasó; marcado a mano por el dueño). Le falta **sólo iPhone / Safari (A11)** más la **parte de overlay del ítem 20**, que nunca se midió: lo cierra la **ronda 3**, el bloque **6** más la parte de overlay del bloque 3 |
 | MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) — ⚠ **con enmienda** del 2026-10-14 por D-05: ver la nota debajo del requisito. La política de navegación no cambia en escritorio (criterio 6 intacto); **sí** cambia el costo de salir del panel |
 | MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
 | MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |

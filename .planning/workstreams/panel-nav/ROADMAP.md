@@ -346,6 +346,32 @@ sobre qué escribe esta fase)
      ahí— cae en las mismas ramas de siempre **por construcción**, sin un chequeo de viewport en el
      medio. Verificado: el recorrido del sidebar en desktop da exactamente lo de hoy.
 
+     > ⚠ **REVISADO el 2026-10-27, al cerrar el gap G2-1 (plan `03-09`). Es una revisión ACOTADA del
+     > criterio, no una renuncia a él.**
+     >
+     > **Qué se mantiene:** el mecanismo **no consulta el ancho de la pantalla en ningún punto** —hay
+     > una auditoría de fuente que cuenta **cero** consultas en los cuatro archivos de la política y
+     > sus consumidores— y la política se sigue expresando sobre **rutas** y sobre la **marca** de la
+     > entrada.
+     >
+     > **Qué dejó de ser verdad:** que escritorio no se entere *por construcción* **a través del
+     > hecho de la pila**. Hasta este plan el hecho preguntaba si la marca **dice Más**, y en
+     > escritorio nada navega a `/mas` ⇒ el hecho era **siempre falso**. La regla nueva de G2-1
+     > pregunta si la marca **dice la raíz**, y en escritorio la marca **sí** puede decir la raíz.
+     >
+     > **De qué sale ahora la protección**, y las dos cosas están medidas: la **barra inferior está
+     > oculta a ≥1024px**, así que sus links no se pueden tocar y su `handleNavigate` **nunca corre**
+     > en escritorio; y el **guard de cambios sin guardar** sólo computa un plan de rama cuando la
+     > pantalla está **sucia** (sin cambios sin guardar no se calcula ningún plan).
+     >
+     > **⇒ El residuo es UN SOLO CASO:** salir de una pantalla **con cambios sin guardar** hacia
+     > **Inicio desde el sidebar**, donde el atrás queda **un escalón más corto** que antes. Se
+     > **acepta** y queda declarado acá, en `.planning/debug/pila-de-dos-niveles-medida.md` y en el
+     > registro de imprecisiones, en vez de descubierto en la próxima UAT.
+     >
+     > **Y lo que NO se hace para taparlo:** meter un **chequeo de ancho de pantalla** es exactamente
+     > lo que **NAV-05** y este mismo criterio existen para prohibir.
+
 **Fuera de alcance de esta fase** (explícito):
 
 - Rediseñar la barra o Más: su forma la fijó la Phase 2.
