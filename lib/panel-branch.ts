@@ -1207,6 +1207,7 @@ export function usePanelBranch({
       // nada navega a Más ⇒ la marca nunca dice Más ⇒ el hecho es siempre falso ⇒ la decisión cae en
       // las ramas de siempre. Sin un chequeo de viewport en el medio.
       masDebajo: panelUnderRoute(estado) === more,
+      raizDebajo: panelUnderRoute(estado) === root,
     })
     if (plan === 'push' || plan === 'replace') return false
     // ⚠ EL DOMINIO SE SUELTA ANTES DE DELEGAR, y es obligatorio (T-03-29). El retroceso que viene

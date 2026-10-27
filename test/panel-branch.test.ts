@@ -542,7 +542,7 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
     // 0 (sin el hecho de la rama), porque en Inicio con el sentinel armado el hecho de la rama es
     // falso y la decisión caería en reemplazar.
     for (const masDebajo of [false, true]) {
-      expect(PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, masDebajo, holdsExitSentinel: true })).toBe('none')
+      expect(PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, raizDebajo: false, masDebajo, holdsExitSentinel: true })).toBe('none')
     }
   })
 
@@ -557,7 +557,7 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
     for (const to of DESTINOS) {
       if (to === PANEL_ROOT) continue
       expect(
-        PH.panelBranchPlan({ from: PANEL_ROOT, to, masDebajo: false, holdsExitSentinel: true })
+        PH.panelBranchPlan({ from: PANEL_ROOT, to, raizDebajo: false, masDebajo: false, holdsExitSentinel: true })
       ).toBe('consume-exit-then-navigate')
     }
   })
@@ -570,12 +570,12 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
     for (const from of [...RAMA, PANEL_ROOT]) {
       for (const to of DESTINOS) {
         for (const masDebajo of [false, true]) {
-          const antes = PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: false })
+          const antes = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: false })
           expect(antes).not.toBe('none')
           expect(antes).not.toBe('consume-exit-then-navigate')
           const esperado =
             from === to ? 'none' : from === PANEL_ROOT ? 'consume-exit-then-navigate' : antes
-          expect(PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: true })).toBe(esperado)
+          expect(PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: true })).toBe(esperado)
         }
       }
     }
@@ -1098,6 +1098,7 @@ describe('runBranchNavigation — CONSUMIR EL SENTINEL y recién entonces navega
     const plan = PH.panelBranchPlan({
       from: PANEL_ROOT,
       to: '/appointments',
+      raizDebajo: false,
       masDebajo: false,
       holdsExitSentinel: true,
     })

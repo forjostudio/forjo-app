@@ -573,6 +573,48 @@ export type PanelBranchPlan =
  *      regla -1, porque con el destino igual a la ruta actual no hay nada que navegar.
  *      ⚠ **Y por qué sólo en la raíz:** el sentinel es de la raíz y sólo de la raíz. Consumirlo
  *      estando en una sección sería retroceder sobre una entrada que **no es la que creemos**.
+ *   -1c. **La marca dice LA RAÍZ, el destino es LA RAÍZ y venimos de otra ruta ⇒ EL RETROCESO
+ *      GUARDADO DE UN PASO** (`G2-1`, plan 03-09). Son **tres** hechos juntos, igual que la regla de
+ *      arriba, y el tercero (`from !== to`) ya lo atajaría la regla 1 pero se escribe explícito para
+ *      que una regla metida en el medio no le cambie el significado.
+ *      ⚠ **QUÉ RESUELVE, y son DOS MITADES DE UNA.** Con el empuje de la rama 3 de
+ *      {@link panelNavMode}, el ciclo Inicio↔sección hace crecer la pila **dos entradas por ciclo
+ *      SIN TECHO** —medido: profundidades `3 → 5 → 7`— y, de paso, cada entrada de Inicio alcanzada
+ *      por ese empuje queda marcada con la **sección** que quedó debajo ⇒ la **séptima** regla del
+ *      armado (`algoNuestroDebajo`, `lib/panel-branch.ts`) dice *no armar* ⇒ **el aviso de salida
+ *      nunca aparece**. Textual del dueño: *"al tocar inicio después de haber hecho otras cosas cae
+ *      a /dashboard y la guarda de salir no está"*. Con el retroceso, el dueño aterriza en la
+ *      entrada **ORIGINAL** de Inicio, que **no** tiene nada nuestro debajo, y el aviso **se arma
+ *      solo** (estar parado sobre el sentinel cuenta como armado). Medido en el escenario `E-14` de
+ *      `.planning/debug/pila-de-dos-niveles-medida.md`, con la forma vieja y la nueva en la misma
+ *      medición.
+ *      ⚠ **POR QUÉ VA ANTES DE LA REGLA 0.** Ahí el hecho de la rama es **falso**, así que la
+ *      decisión caería en **empujar** y el sentinel quedaría enterrado otra vez — que es literalmente
+ *      el bug de `G2-1`.
+ *      ⚠ **POR QUÉ VA DESPUÉS DE LA -1b.** Con el sentinel arriba y un destino distinto el gesto ya
+ *      tiene dueño: consumir el sentinel **primero** es lo que evita el atrás muerto enterrado.
+ *      ⚠ **POR QUÉ NO HAY UN MIEMBRO NUEVO.** `up` **ya es** el retroceso guardado de un paso, con
+ *      sus dos guardas en {@link consumeOwnedBranchEntry}, y los **dos** consumidores de esta
+ *      decisión (el hook de la barra y el guard de cambios sin guardar) tienen que quedar en **un**
+ *      dialecto: un miembro nuevo para el mismo mecanismo obligaría a tocar el `switch` exhaustivo
+ *      del guard y sería el segundo dialecto que NAV-05 viene a evitar.
+ *      ⚠ **Y NO COMPITE CON EL COLAPSO, medido en vez de supuesto:** dentro de la rama de Más la
+ *      marca dice **Más**, así que este hecho es **falso** por construcción y la decisión sigue
+ *      cayendo en la regla 3 — incluido su caso degenerado. Medido en `E-15`.
+ *      ⚠ **EL RESIDUO DE ESCRITORIO, ACEPTADO Y DECLARADO ACÁ EL 2026-10-27: es una revisión
+ *      ACOTADA del criterio 6, no una renuncia.** Hasta este plan el criterio 6 se sostenía *por
+ *      construcción* a través del hecho: `masDebajo` pregunta si la marca **dice Más**, y en
+ *      escritorio nada navega a `/mas`. Con este hecho eso **ya no alcanza**: en escritorio la marca
+ *      **sí** puede decir la raíz. Lo que sostiene el criterio 6 ahora son **dos hechos del
+ *      cableado**: la **barra inferior se oculta a ≥1024px** —sus links no se pueden tocar, así que
+ *      su `handleNavigate` **nunca corre**— y el **guard** sólo computa un plan de rama cuando la
+ *      pantalla está **sucia**. ⇒ el residuo es **UN SOLO CASO**: salir de una pantalla con cambios
+ *      sin guardar hacia Inicio **desde el sidebar**, donde el atrás queda un escalón más corto.
+ *      ⚠ **Y lo que NO se hace para taparlo: preguntarle el ancho a la pantalla.** Gatear esta
+ *      política por tamaño es exactamente lo que NAV-05 y el criterio 6 existen para prohibir, y lo
+ *      que la fase sostuvo *por construcción* hasta hoy. El residuo se **declara** —acá, en el guard
+ *      donde se produce y en el documento de debug— y no se esconde detrás de una consulta a la
+ *      pantalla.
  *   0. **Sin el hecho NO SE RETROCEDE NUNCA**, y es la regla más importante del plan: devuelve lo
  *      que diga {@link panelNavMode}. Es la cicatriz 2 (entrada directa, F5, el rebote del proxy
  *      después del login) y la degradación segura de toda la fase — el peor caso de una marca
@@ -595,6 +637,7 @@ export function panelBranchPlan({
   to,
   root = PANEL_ROOT,
   more = PANEL_MORE,
+  raizDebajo,
   masDebajo,
   holdsExitSentinel,
 }: {
@@ -602,6 +645,28 @@ export function panelBranchPlan({
   to: string
   root?: string
   more?: string
+  /**
+   * ¿La marca de la entrada de arriba **DICE que la ruta que quedó inmediatamente debajo es la
+   * RAÍZ**? (`G2-1`, plan 03-09.) Va **sin default**, igual que los otros dos hechos de la pila, y
+   * las tres cosas que lo justifican:
+   *
+   *   1. es un **HECHO DE LA PILA y no una configuración**: un call site que lo olvide **no
+   *      compila**, que es la disciplina que esta fase instaló con `masDebajo`, `holdsExitSentinel`,
+   *      `vieneDeUnRetroceso` y `algoNuestroDebajo`;
+   *   2. lo contesta **el ejecutor** leyendo el estado real de la entrada de arriba
+   *      (`window.history.state` → {@link panelUnderRoute}, comparado contra `root`) y lo
+   *      **re-verifica en el momento del click**, no al renderizar: entre un render y el gesto pudo
+   *      haber una escritura blanda que se llevó la marca (la lista completa está en
+   *      {@link applyPanelUnder});
+   *   3. se computa como *la marca **DICE** la raíz* y **no** como *hay marca* — es la misma forma
+   *      con la que `masDebajo` evita dispararse donde no corresponde.
+   *
+   * ⚠ **Su límite, medido y declarado:** si la raíz **no** es la entrada inmediatamente de abajo (la
+   * pila de tres escalones que D-02 acepta a propósito), este hecho es **falso** y el gesto sigue
+   * empujando — un retroceso de un paso aterrizaría en la sección del medio y no en Inicio. Medido
+   * en `E-16` mitad B.
+   */
+  raizDebajo: boolean
   masDebajo: boolean
   /**
    * ¿La entrada de arriba es el sentinel de salida de MOB-05? Va **sin default**, igual que
@@ -622,6 +687,16 @@ export function panelBranchPlan({
   // Los TRES hechos juntos. El tercero (`to !== from`) ya lo atajó la regla de arriba, pero se
   // escribe explícito para que mañana nadie meta una regla en el medio y le cambie el significado.
   if (holdsExitSentinel && from === root && to !== from) return 'consume-exit-then-navigate'
+
+  // ── REGLA -1c — G2-1: la marca dice la RAÍZ y el destino es la RAÍZ: RETROCEDER, no empujar. ───
+  // Los TRES hechos juntos. Va ANTES de la regla de abajo a propósito: ahí el hecho de la rama es
+  // falso y la decisión caería en EMPUJAR, que es literalmente el bug — el ciclo Inicio↔sección
+  // creciendo dos entradas por vuelta sin techo (3 → 5 → 7) y el aviso de salida que nunca se arma
+  // porque la entrada de Inicio apilada queda marcada con la sección. Y DESPUÉS de la -1b, porque
+  // con el sentinel arriba y un destino distinto el gesto ya tiene dueño.
+  // El tercer hecho (`from !== to`) ya lo atajaría la regla 1, pero se escribe explícito para que
+  // mañana nadie meta una regla en el medio y le cambie el significado.
+  if (raizDebajo && to === root && from !== to) return 'up'
 
   // ── REGLA 0 — sin el hecho, jamás un retroceso. ────────────────────────────────────────────────
   if (!masDebajo) return modo

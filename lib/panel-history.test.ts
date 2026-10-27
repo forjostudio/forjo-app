@@ -1005,7 +1005,7 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
     // El barrido que cierra T-03-05: 9 secciones de la rama de Más × los 5 destinos de la barra.
     for (const from of RAMA_DE_MAS) {
       for (const to of DESTINOS_BARRA_5) {
-        const plan = PH.panelBranchPlan({ from, to, masDebajo: false, holdsExitSentinel: false })
+        const plan = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo: false, holdsExitSentinel: false })
         expect(plan).toBe(panelNavMode({ from, to }))
         expect(plan).not.toBe('up')
         expect(plan).not.toBe('collapse-then-replace')
@@ -1015,14 +1015,14 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
 
   it('con el hecho y destino MÁS ⇒ SUBIR un nivel (D-03), nunca reemplazar', () => {
     for (const from of RAMA_DE_MAS) {
-      expect(PH.panelBranchPlan({ from, to: MAS, masDebajo: true, holdsExitSentinel: false })).toBe('up')
+      expect(PH.panelBranchPlan({ from, to: MAS, raizDebajo: false, masDebajo: true, holdsExitSentinel: false })).toBe('up')
     }
   })
 
   it('con el hecho y un destino de la barra ⇒ COLAPSAR Y REEMPLAZAR (criterio 2)', () => {
     for (const from of RAMA_DE_MAS) {
       for (const to of DESTINOS_BARRA_4) {
-        expect(PH.panelBranchPlan({ from, to, masDebajo: true, holdsExitSentinel: false })).toBe('collapse-then-replace')
+        expect(PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo: true, holdsExitSentinel: false })).toBe('collapse-then-replace')
       }
     }
   })
@@ -1031,8 +1031,8 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
     // La cicatriz 1. Con el hecho, si la rama de Más se evaluara primero, `/mas → /mas` devolvería
     // SUBIR y el dueño se iría un escalón para abajo tocando la pantalla en la que ya está.
     for (const masDebajo of [true, false]) {
-      expect(PH.panelBranchPlan({ from: MAS, to: MAS, masDebajo, holdsExitSentinel: false })).toBe('replace')
-      expect(PH.panelBranchPlan({ from: '/finances', to: '/finances', masDebajo, holdsExitSentinel: false })).toBe('replace')
+      expect(PH.panelBranchPlan({ from: MAS, to: MAS, raizDebajo: false, masDebajo, holdsExitSentinel: false })).toBe('replace')
+      expect(PH.panelBranchPlan({ from: '/finances', to: '/finances', raizDebajo: false, masDebajo, holdsExitSentinel: false })).toBe('replace')
     }
   })
 
@@ -1040,13 +1040,13 @@ describe('panelBranchPlan — la decisión con el hecho, pura y sobre rutas', ()
     // El par de rutas es IDÉNTICO al de la pila `[Inicio, Más, Finanzas]`, donde subir es correcto.
     // Es el caso exacto que la marca existe para distinguir: sin ella, el retroceso expulsaría al
     // dueño del sitio (entró pegando la URL, F5, o el rebote del proxy después del login).
-    expect(PH.panelBranchPlan({ from: '/finances', to: MAS, masDebajo: false, holdsExitSentinel: false })).toBe('push')
+    expect(PH.panelBranchPlan({ from: '/finances', to: MAS, raizDebajo: false, masDebajo: false, holdsExitSentinel: false })).toBe('push')
   })
 
   it('la ruta de Más y la raíz siguen siendo PARÁMETROS en la firma nueva', () => {
-    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/y', masDebajo: true, holdsExitSentinel: false })).toBe('up')
-    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/z', masDebajo: true, holdsExitSentinel: false })).toBe('collapse-then-replace')
-    expect(PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', masDebajo: false, holdsExitSentinel: false })).toBe('push')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/y', raizDebajo: false, masDebajo: true, holdsExitSentinel: false })).toBe('up')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', more: '/z', raizDebajo: false, masDebajo: true, holdsExitSentinel: false })).toBe('collapse-then-replace')
+    expect(PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', raizDebajo: false, masDebajo: false, holdsExitSentinel: false })).toBe('push')
   })
 
   it('el tipo del plan tiene SEIS miembros: el quinto lo produce 03-03 y el sexto 03-06', () => {
@@ -1075,7 +1075,8 @@ describe('panelBranchPlan — el invariante, simulado sobre la pila del navegado
   /**
    * La pila que produce la política CON la marca. El último es el actual.
    *
-   * `masDebajo` sale de comparar la entrada inmediatamente inferior contra la ruta de Más, que es
+   * Los DOS hechos salen de comparar la entrada inmediatamente inferior contra la ruta de Más y
+   * contra la raíz, que es
    * exactamente lo que la marca guarda (el `from` de la navegación que empujó esta entrada).
    *
    * Los dos modos nuevos: SUBIR quita la entrada de arriba; COLAPSAR quita la de arriba y después
@@ -1325,7 +1326,7 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
   it('LOS TRES HECHOS JUNTOS — sentinel arriba, en la RAÍZ, y un destino DISTINTO ⇒ consumir y navegar', () => {
     for (const to of DESTINOS_BARRA_4.filter((r) => r !== PANEL_ROOT).concat([MAS])) {
       expect(
-        PH.panelBranchPlan({ from: PANEL_ROOT, to, masDebajo: false, holdsExitSentinel: true })
+        PH.panelBranchPlan({ from: PANEL_ROOT, to, raizDebajo: false, masDebajo: false, holdsExitSentinel: true })
       ).toBe('consume-exit-then-navigate')
     }
   })
@@ -1335,7 +1336,7 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
     // y el sentinel quedaría enterrado: el bug exacto.
     for (const masDebajo of [false, true]) {
       expect(
-        PH.panelBranchPlan({ from: PANEL_ROOT, to: '/clients', masDebajo, holdsExitSentinel: true })
+        PH.panelBranchPlan({ from: PANEL_ROOT, to: '/clients', raizDebajo: false, masDebajo, holdsExitSentinel: true })
       ).toBe('consume-exit-then-navigate')
     }
   })
@@ -1345,7 +1346,7 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
       for (const to of DESTINOS_BARRA_5) {
         for (const masDebajo of [false, true]) {
           expect(
-            PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: false })
+            PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: false })
           ).not.toBe('consume-exit-then-navigate')
         }
       }
@@ -1359,7 +1360,7 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
       for (const to of DESTINOS_BARRA_5) {
         for (const masDebajo of [false, true]) {
           expect(
-            PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: true })
+            PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: true })
           ).not.toBe('consume-exit-then-navigate')
         }
       }
@@ -1370,7 +1371,7 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
     // La regla que ya existía va primero y no cambia: el dueño ya está en la pantalla que tocó.
     for (const masDebajo of [false, true]) {
       expect(
-        PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, masDebajo, holdsExitSentinel: true })
+        PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, raizDebajo: false, masDebajo, holdsExitSentinel: true })
       ).toBe('none')
     }
   })
@@ -1380,8 +1381,8 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
     for (const from of [...RAMA_DE_MAS, PANEL_ROOT]) {
       for (const to of DESTINOS_BARRA_5) {
         for (const masDebajo of [false, true]) {
-          const sinSentinel = PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: false })
-          const conSentinel = PH.panelBranchPlan({ from, to, masDebajo, holdsExitSentinel: true })
+          const sinSentinel = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: false })
+          const conSentinel = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: true })
           if (from === to) {
             expect(conSentinel).toBe('none')
           } else if (from === PANEL_ROOT) {
@@ -1396,10 +1397,10 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
 
   it('la RAÍZ sigue siendo un PARÁMETRO: la regla nueva se mide contra `root`, no contra un literal', () => {
     expect(
-      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', masDebajo: false, holdsExitSentinel: true })
+      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/x', raizDebajo: false, masDebajo: false, holdsExitSentinel: true })
     ).toBe('consume-exit-then-navigate')
     expect(
-      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/z', masDebajo: false, holdsExitSentinel: true })
+      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/z', raizDebajo: false, masDebajo: false, holdsExitSentinel: true })
     ).not.toBe('consume-exit-then-navigate')
   })
 

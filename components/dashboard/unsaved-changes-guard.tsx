@@ -59,6 +59,7 @@ import { decideNavigation, leaveNavigationPlan, type LeaveNavMode } from '@/lib/
 import { isDirtyOwnedEntry, useDirtyHistory } from '@/lib/dirty-history'
 import {
   PANEL_MORE,
+  PANEL_ROOT,
   isExitSentinelOwnedEntry,
   panelBranchPlan,
   panelNavMode,
@@ -187,6 +188,7 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
         from,
         to,
         masDebajo: panelUnderRoute(estado) === PANEL_MORE,
+        raizDebajo: panelUnderRoute(estado) === PANEL_ROOT,
         holdsExitSentinel: isExitSentinelOwnedEntry(estado),
       }),
     [],
