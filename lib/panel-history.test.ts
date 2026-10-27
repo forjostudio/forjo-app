@@ -1085,7 +1085,40 @@ describe('panelBranchPlan — el invariante, simulado sobre la pila del navegado
   function navegarRama(pila: string[], to: string): string[] {
     const from = pila[pila.length - 1]
     const debajo = pila.length > 1 ? pila[pila.length - 2] : null
-    const plan = PH.panelBranchPlan({ from, to, masDebajo: debajo === MAS, holdsExitSentinel: false })
+    // ⚠ Los DOS hechos salen de la MISMA entrada inmediatamente inferior, que es exactamente lo que
+    // la marca guarda. El nuevo se computa como *la marca DICE la raíz*, igual que el de la rama se
+    // computa como *la marca DICE Más*: la misma forma, por el mismo motivo.
+    const plan = PH.panelBranchPlan({
+      from,
+      to,
+      raizDebajo: debajo === PANEL_ROOT,
+      masDebajo: debajo === MAS,
+      holdsExitSentinel: false,
+    })
+    if (plan === 'push') return [...pila, to]
+    if (plan === 'replace') return [...pila.slice(0, -1), to]
+    if (plan === 'none') return pila
+    if (plan === 'up') return pila.slice(0, -1)
+    const sobreMas = pila.slice(0, -1)
+    const debajoDeMas = sobreMas.length > 1 ? sobreMas[sobreMas.length - 2] : null
+    if (debajoDeMas === to) return sobreMas.slice(0, -1)
+    return [...sobreMas.slice(0, -1), to]
+  }
+
+  /**
+   * La pila que producía la política **ANTES** de la regla de G2-1: el hecho nuevo siempre en falso.
+   * Existe para que el **número del bug** quede en la suite y nadie lo "simplifique" de vuelta.
+   */
+  function navegarRamaVieja(pila: string[], to: string): string[] {
+    const from = pila[pila.length - 1]
+    const debajo = pila.length > 1 ? pila[pila.length - 2] : null
+    const plan = PH.panelBranchPlan({
+      from,
+      to,
+      raizDebajo: false,
+      masDebajo: debajo === MAS,
+      holdsExitSentinel: false,
+    })
     if (plan === 'push') return [...pila, to]
     if (plan === 'replace') return [...pila.slice(0, -1), to]
     if (plan === 'none') return pila
@@ -1163,6 +1196,66 @@ describe('panelBranchPlan — el invariante, simulado sobre la pila del navegado
     }
   })
 
+  it('G2-1 — el ciclo Inicio↔sección repetido TRES veces deja la MISMA profundidad', () => {
+    // El caso con el nombre propio del gap. Lo que el dueño midió en el teléfono: el ciclo hacía
+    // crecer la pila y, de paso, cada entrada de Inicio alcanzada por el empuje quedaba marcada con
+    // la sección que quedó debajo ⇒ la séptima regla del armado decía *no armar* ⇒ el aviso de
+    // salida nunca aparecía. Medido como número en E-14.
+    let pila = [PANEL_ROOT]
+    const profundidades: number[] = []
+    for (let vuelta = 1; vuelta <= 3; vuelta++) {
+      pila = navegarRama(pila, '/clients')
+      expect(pila).toEqual([PANEL_ROOT, '/clients'])
+      pila = navegarRama(pila, PANEL_ROOT)
+      profundidades.push(pila.length)
+    }
+    // La corrección: tocar Inicio CONSUME la entrada de la sección, así que el dueño vuelve a la
+    // entrada ORIGINAL de Inicio y la pila se queda en UN escalón, las tres vueltas.
+    expect(profundidades).toEqual([1, 1, 1])
+    expect(pila).toEqual([PANEL_ROOT])
+    expect(hayIdenticasAdyacentes(pila)).toBe(false)
+  })
+
+  it('G2-1 — su GEMELO: con la regla vieja la pila crecía DOS entradas por vuelta, SIN TECHO', () => {
+    // El número del bug, en la suite, para que nadie "simplifique" esto de vuelta. Con el hecho
+    // nuevo en falso el gesto EMPUJA, y el ciclo suma dos entradas por vuelta: 3 → 5 → 7.
+    let pila = [PANEL_ROOT]
+    const profundidades: number[] = []
+    for (let vuelta = 1; vuelta <= 3; vuelta++) {
+      pila = navegarRamaVieja(pila, '/clients')
+      pila = navegarRamaVieja(pila, PANEL_ROOT)
+      profundidades.push(pila.length)
+    }
+    expect(profundidades).toEqual([3, 5, 7])
+    expect(profundidades[1] - profundidades[0]).toBe(2)
+    expect(profundidades[2] - profundidades[1]).toBe(2)
+  })
+
+  it('Más → Inicio deja la pila en UN escalón (la consecuencia DECLARADA de G2-1)', () => {
+    // ⚠ LA CONSECUENCIA BUSCADA, y hay que declararla porque ningún gate la puede avisar: tocar
+    // Inicio desde Más es ahora el retroceso que CONSUME la entrada de Más, así que el dueño queda
+    // en Inicio sin nada nuestro debajo ⇒ el sentinel se arma y el atrás AVISA en vez de volver a
+    // Más. Es lo que el dueño pidió en G2-1 y decidió el 2026-10-27 (`03-DECISION-UAT-2.md`): no
+    // contradice la decisión (a) —sigue siendo *armar sólo si no hay nada nuestro debajo*—, lo que
+    // cambió es la PILA que esa regla lee.
+    const pila = navegarRama(navegarRama([PANEL_ROOT], MAS), PANEL_ROOT)
+    expect(pila).toEqual([PANEL_ROOT])
+    expect(atras(pila)).toBeNull()
+  })
+
+  it('EL LÍMITE DECLARADO — en la pila de TRES escalones de D-02 tocar Inicio SIGUE empujando', () => {
+    // Si la raíz NO es la entrada inmediatamente de abajo (la pila de tres escalones que D-02 acepta
+    // a propósito), un retroceso de un paso aterrizaría en TURNOS y no en Inicio ⇒ la regla no se
+    // dispara y el gesto sigue empujando. El atrás desde ahí hace algo VISIBLE (vuelve a Más), que
+    // es el invariante del criterio 2. Medido en E-16 mitad B.
+    let pila = navegarRama(navegarRama([PANEL_ROOT], '/appointments'), MAS)
+    expect(pila).toEqual([PANEL_ROOT, '/appointments', MAS])
+    pila = navegarRama(pila, PANEL_ROOT)
+    expect(pila).toEqual([PANEL_ROOT, '/appointments', MAS, PANEL_ROOT])
+    expect(atras(pila)).toBe(MAS)
+    expect(hayIdenticasAdyacentes(pila)).toBe(false)
+  })
+
   it('criterio 6 — con los 14 destinos del sidebar la decisión devuelve lo MISMO que panelNavMode', () => {
     // Desktop no se entera POR CONSTRUCCIÓN: `masDebajo` se computa comparando la marca contra la
     // ruta de Más, y en desktop nada navega a Más ⇒ la marca nunca dice Más ⇒ `masDebajo` es
@@ -1175,9 +1268,42 @@ describe('panelBranchPlan — el invariante, simulado sobre la pila del navegado
     for (const from of DESTINOS_SIDEBAR) {
       expect(from).not.toBe(PH.PANEL_MORE)
       for (const to of DESTINOS_SIDEBAR) {
-        expect(PH.panelBranchPlan({ from, to, masDebajo: false, holdsExitSentinel: false })).toBe(panelNavMode({ from, to }))
+        expect(PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo: false, holdsExitSentinel: false })).toBe(panelNavMode({ from, to }))
       }
     }
+  })
+
+  it('criterio 6 ENMENDADO (2026-10-27) — con el hecho nuevo el ÚNICO par que difiere es el de la raíz', () => {
+    // ⚠ EL RESIDUO DE ESCRITORIO, DECLARADO ACÁ EN VEZ DE DESCUBIERTO EN LA PRÓXIMA UAT. Es una
+    // revisión ACOTADA del criterio 6 con fecha 2026-10-27, no una renuncia. El criterio 6 ya no se
+    // sostiene *por construcción* a través del hecho —en escritorio la marca SÍ puede decir la
+    // raíz—: se sostiene porque la barra inferior se oculta a ≥1024px (sus links no se pueden tocar,
+    // así que su `handleNavigate` nunca corre) y porque el guard sólo computa un plan cuando la
+    // pantalla está SUCIA. ⇒ el residuo es UN SOLO CASO: salir de una pantalla con cambios sin
+    // guardar hacia Inicio desde el sidebar, donde el atrás queda un escalón más corto.
+    // Y la frase que cierra la puerta: eso NO se tapa preguntándole el ancho a la pantalla, porque
+    // gatear esta política por tamaño es exactamente lo que NAV-05 y el criterio 6 prohíben.
+    const DESTINOS_SIDEBAR = [
+      '/dashboard', '/appointments', '/agenda', '/abonos', '/negocio', '/web', '/servicios',
+      '/equipo', '/consultorios', '/clients', '/clients', '/finances', '/settings', '/ayuda',
+    ]
+    let difieren = 0
+    for (const from of DESTINOS_SIDEBAR) {
+      for (const to of DESTINOS_SIDEBAR) {
+        const conElHecho = PH.panelBranchPlan({ from, to, raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+        const deLaPolitica = panelNavMode({ from, to })
+        if (to === PANEL_ROOT && from !== to) {
+          expect(conElHecho).toBe('up')
+          expect(conElHecho).not.toBe(deLaPolitica)
+          difieren++
+        } else {
+          expect(conElHecho).toBe(deLaPolitica)
+        }
+      }
+    }
+    // 13 pares: los 13 `from` distintos de la raíz (con `/clients` contado dos veces, porque son dos
+    // entradas del sidebar que apuntan a la misma ruta en salud y en el resto).
+    expect(difieren).toBe(13)
   })
 })
 
@@ -1290,5 +1416,150 @@ describe('panelBranchPlan — el SEXTO miembro: consumir el sentinel y navegar (
       }
     }
     expect(['push', 'replace', 'up', 'collapse-then-replace', 'none']).not.toContain(sexto)
+  })
+})
+
+// ── Plan 03-09 — LA REGLA DE G2-1: sección → raíz es un RETROCESO, no un empuje ──────────────────
+//
+// ⚠ POR QUÉ ESTA REGLA EXISTE, y es la cadena MEDIDA de cuatro pasos de `03-UAT-2.md`. Con el
+// empuje de hoy (`panelNavMode` dice `to === root ⇒ push`) el ciclo Inicio↔sección hace crecer la
+// pila DOS entradas por ciclo SIN TECHO, y cada entrada de Inicio alcanzada así queda marcada con la
+// sección que quedó debajo ⇒ la SÉPTIMA regla del armado (`algoNuestroDebajo`) dice *no armar* ⇒ el
+// aviso de salida NUNCA aparece. Textual del dueño: *"al tocar inicio después de haber hecho otras
+// cosas cae a /dashboard y la guarda de salir no está"*. Medido en E-14.
+//
+// ⚠ Y POR QUÉ CIERRA LAS DOS MITADES DE UNA: con el retroceso el dueño aterriza en la entrada
+// ORIGINAL de Inicio, que no tiene nada nuestro debajo, así que el aviso SE ARMA SOLO — sin tocar
+// ninguna de las siete reglas del armado. Lo que cambió es la PILA que esas reglas leen.
+
+describe('panelBranchPlan — LA REGLA DE G2-1: sección → raíz es un RETROCESO', () => {
+  /** Las cuatro secciones de la barra que no son Más, más las nueve de la rama. */
+  const DESDE = [...RAMA_DE_MAS, '/appointments', '/agenda', '/clients']
+
+  it('CON EL HECHO y destino la RAÍZ viniendo de otra ruta ⇒ el RETROCESO guardado de un paso', () => {
+    // La corrección de G2-1. Devuelve el miembro que YA existe (`up` es el retroceso guardado de un
+    // paso, con sus dos guardas en `consumeOwnedBranchEntry`): NO hay miembro nuevo.
+    for (const from of DESDE) {
+      expect(
+        PH.panelBranchPlan({ from, to: PANEL_ROOT, raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+      ).toBe('up')
+    }
+  })
+
+  it('SIN EL HECHO ⇒ exactamente lo de hoy, destino por destino, y JAMÁS un retroceso', () => {
+    // La cicatriz 2 y la degradación segura de toda la fase: sin la marca no se sabe qué hay debajo,
+    // y un retroceso sobre una entrada que no empujamos nosotros EXPULSA AL DUEÑO DEL SITIO. El peor
+    // caso de una marca perdida es una pila un escalón más larga. Medido en E-16 mitad A.
+    for (const from of [...DESDE, PANEL_ROOT]) {
+      for (const to of DESTINOS_BARRA_5) {
+        const plan = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo: false, holdsExitSentinel: false })
+        expect(plan).toBe(panelNavMode({ from, to }))
+        expect(plan).not.toBe('up')
+      }
+    }
+  })
+
+  it('CON EL HECHO pero el destino NO es la raíz ⇒ lo de hoy, intacto', () => {
+    for (const from of DESDE) {
+      for (const to of DESTINOS_BARRA_5.filter((r) => r !== PANEL_ROOT)) {
+        expect(
+          PH.panelBranchPlan({ from, to, raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+        ).toBe(panelNavMode({ from, to }))
+      }
+    }
+  })
+
+  it('CON EL HECHO pero VINIENDO de la raíz (destino = la ruta actual) ⇒ lo de hoy: la cicatriz 1 gana', () => {
+    // La regla se escribe con `from !== to` EXPLÍCITO aunque la regla 1 ya lo ataje, igual que la del
+    // sentinel en la raíz, para que una regla metida en el medio no le cambie el significado.
+    for (const masDebajo of [true, false]) {
+      expect(
+        PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, raizDebajo: true, masDebajo, holdsExitSentinel: false })
+      ).toBe('replace')
+    }
+  })
+
+  it('CONTRAPUESTO — la marca que dice MÁS no dispara la regla nueva: el COLAPSO sigue ganando', () => {
+    // Dentro de la rama de Más el hecho nuevo es falso POR CONSTRUCCIÓN (la marca dice Más, no la
+    // raíz), así que el cruce lo sigue resolviendo el colapso — incluido su caso degenerado, que lo
+    // decide el segundo paso del ejecutor. Medido en E-15 mitad B.
+    for (const from of RAMA_DE_MAS) {
+      expect(
+        PH.panelBranchPlan({ from, to: PANEL_ROOT, raizDebajo: false, masDebajo: true, holdsExitSentinel: false })
+      ).toBe('collapse-then-replace')
+      // Y el par contrapuesto, ADYACENTE para que un refactor no pierda la diferencia.
+      expect(
+        PH.panelBranchPlan({ from, to: PANEL_ROOT, raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+      ).toBe('up')
+    }
+  })
+
+  it('CONTRAPUESTO — el SENTINEL sigue mandando primero, aunque el hecho nuevo sea verdadero', () => {
+    // Con el sentinel arriba y un destino distinto el gesto YA tiene dueño: consumir el sentinel y
+    // recién entonces navegar. Por eso la regla nueva va DESPUÉS de la -1b.
+    expect(
+      PH.panelBranchPlan({ from: PANEL_ROOT, to: '/clients', raizDebajo: true, masDebajo: false, holdsExitSentinel: true })
+    ).toBe('consume-exit-then-navigate')
+    // Y con el destino igual a la ruta actual sigue siendo NADA (la regla -1).
+    expect(
+      PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, raizDebajo: true, masDebajo: false, holdsExitSentinel: true })
+    ).toBe('none')
+    // El par contrapuesto, adyacente: sin el sentinel arriba, el mismo gesto es el retroceso.
+    expect(
+      PH.panelBranchPlan({ from: '/clients', to: PANEL_ROOT, raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+    ).toBe('up')
+  })
+
+  it('EL ORDEN — la regla va ANTES de la que dice *sin el hecho de la rama no se retrocede*', () => {
+    // El caso que SÓLO puede pasar si el orden es ése: hecho de la rama FALSO, hecho nuevo
+    // VERDADERO, destino la raíz. Con el orden invertido la decisión caería en la regla 0 y
+    // devolvería EMPUJAR — que es literalmente el bug de G2-1.
+    const plan = PH.panelBranchPlan({ from: '/clients', to: PANEL_ROOT, raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+    expect(plan).toBe('up')
+    expect(plan).not.toBe(panelNavMode({ from: '/clients', to: PANEL_ROOT }))
+    expect(panelNavMode({ from: '/clients', to: PANEL_ROOT })).toBe('push')
+  })
+
+  it('la RAÍZ sigue siendo un PARÁMETRO: la regla se mide contra `root`, no contra un literal', () => {
+    expect(
+      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/y', raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+    ).toBe('up')
+    expect(
+      PH.panelBranchPlan({ from: '/x', to: '/y', root: '/z', raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+    ).not.toBe('up')
+  })
+
+  it('NO REGRESIÓN — barrido 13 × 5 × 2: con el hecho nuevo cambia SÓLO el destino raíz', () => {
+    for (const from of [...DESDE, PANEL_ROOT]) {
+      for (const to of DESTINOS_BARRA_5) {
+        for (const masDebajo of [false, true]) {
+          const sinElHecho = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: false })
+          const conElHecho = PH.panelBranchPlan({ from, to, raizDebajo: true, masDebajo, holdsExitSentinel: false })
+          if (to === PANEL_ROOT && from !== to) {
+            expect(conElHecho).toBe('up')
+          } else {
+            expect(conElHecho).toBe(sinElHecho)
+          }
+        }
+      }
+    }
+  })
+
+  it('NO hay miembro nuevo: el conjunto del plan de rama sigue siendo de SEIS', () => {
+    // `up` YA ES el retroceso guardado de un paso, con sus dos guardas. Un séptimo miembro para el
+    // mismo mecanismo obligaría a tocar el `switch` exhaustivo del guard y dejaría a los DOS
+    // consumidores en dos dialectos del mismo mecanismo — el segundo dialecto que NAV-05 evita.
+    const MIEMBROS: PH.PanelBranchPlan[] = [
+      'push',
+      'replace',
+      'up',
+      'collapse-then-replace',
+      'consume-exit-then-navigate',
+      'none',
+    ]
+    expect(new Set(MIEMBROS).size).toBe(6)
+    expect(MIEMBROS).toContain(
+      PH.panelBranchPlan({ from: '/clients', to: PANEL_ROOT, raizDebajo: true, masDebajo: false, holdsExitSentinel: false })
+    )
   })
 })
