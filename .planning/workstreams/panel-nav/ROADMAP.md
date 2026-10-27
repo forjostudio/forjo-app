@@ -427,9 +427,20 @@ sesión del usuario**, no de tenant: un `back()` sobre una entrada ajena **expul
 mitigan, y es lo que un `/gsd-secure-phase` tendría que mirar acá. Riesgo bajo en términos de datos,
 medio en términos de pérdida de trabajo del dueño.
 
-**Plans:** 10 plans (4 ejecutados + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27)
+**Plans:** 9/10 plans executed (4 ejecutados + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27)
 
 Plans:
+
+- [x] 03-01-PLAN.md
+- [x] 03-02-PLAN.md
+- [x] 03-03-PLAN.md
+- [x] 03-04-PLAN.md
+- [x] 03-05-PLAN.md
+- [x] 03-06-PLAN.md
+- [x] 03-07-PLAN.md
+- [x] 03-08-PLAN.md
+- [x] 03-09-PLAN.md
+- [ ] 03-10-PLAN.md
 
 - [ ] `03-01-PLAN.md` — wave 1 · El tracer: las **dos ramas de ruta** en `panelNavMode` (D-02 `to === '/mas' ⇒ push` y MOB-04 nivel 1 `from === '/mas' ⇒ push`), con **cero** cambios en componentes porque los tres menús ya la consumen; más la **sonda CDP** re-ejecutable que mide la pila real de los siete recorridos sin levantar Supabase ni el dev server
 - [ ] `03-02-PLAN.md` — wave 2 · La mitad difícil: la **marca nueva** en la entrada (`frjUnder`, guarda la **ruta** de abajo), `panelBranchPlan` pura con la degradación segura primero, la **hermana** de `consumeOwnedPanelEntry`, el ejecutor de dos pasos con el molde medido de `leaveNavigationPlan`, y el **paso 3** del `onNavigate` de la barra (D-03 subir · criterio 2 colapsar · el caso degenerado medido)
@@ -631,5 +642,5 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
-| 3. La política de atrás, de un nivel a dos | 0/4 | Planned | - |
+| 3. La política de atrás, de un nivel a dos | 9/10 | In Progress|  |
 | 4. Los tabs profundos sobre la política ya fijada | 0/? | Not started | - |
