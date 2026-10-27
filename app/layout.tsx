@@ -43,7 +43,7 @@ const fontVars = [grotesk, archivo, jakarta, cormorant, mulish, orbitron, chakra
 
 export const metadata: Metadata = {
   title: "Forjo Studio — Turnos para tu negocio",
-  description: "Gestioná tus turnos, clientes y finanzas desde un solo lugar.",
+  description: "Gestioná tus turnos, clientes y finanzas con tu negocio ordenado.",
 };
 
 export default function RootLayout({

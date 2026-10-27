@@ -43,9 +43,9 @@ export default function SplitAuthLayout({ children }: { children: React.ReactNod
           </span>
         </div>
 
-        {/* Headline con acento rojo en "un solo lugar." (D-08: mismo copy en las 3 pantallas). */}
+        {/* Headline con acento rojo en "ordenado." (D-08: mismo copy en las 3 pantallas). */}
         <h1 className="relative max-w-[12ch] font-[family-name:var(--font-archivo)] text-[clamp(40px,4.5vw,64px)] font-black uppercase leading-[1.02] tracking-[-.03em]">
-          Tu agenda, clientes y finanzas en <span className="text-[#d94a2b]">un solo lugar.</span>
+          Tu negocio <span className="text-[#d94a2b]">ordenado.</span>
         </h1>
 
         {/* Pie del panel: crédito a la izquierda, redes a la derecha, en la MISMA fila.

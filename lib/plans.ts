@@ -2,17 +2,17 @@ export const PLANS = {
   basic: {
     name: 'Básico',
     max_agendas: 1,
-    features: ['Reservas online', 'Panel de admin', 'Soporte 24hs'],
+    features: ['Reservas online', 'Panel de admin', 'Soporte diario'],
   },
   studio: {
     name: 'Estudio',
     max_agendas: 5,
-    features: ['Todo lo del Básico', 'Soporte 12hs', 'Dominio propio opcional'],
+    features: ['Todo lo del Básico', 'Soporte diario', 'Web a medida incluida'],
   },
   pro: {
     name: 'Pro',
     max_agendas: 15,
-    features: ['Todo lo del Estudio', 'Setup incluido', 'Dominio propio incluido'],
+    features: ['Todo lo del Estudio', 'Setup incluido'],
   },
 } as const
 
@@ -31,3 +31,10 @@ export function getPlanLimits(plan: string) {
 }
 
 export const UPGRADE_URL = 'https://forjo.studio/#servicios'
+
+// Add-on "Web a medida": en el Básico se vende aparte; en Estudio y Pro viene incluida. En los dos
+// casos la activa el admin desde el CRM (has_web_custom) — todavía no hay cobro automático.
+export const WEB_CUSTOM_ADDON = {
+  price_ars: 5000,
+  demo_url: 'https://gestion.forjo.studio/estudio-test',
+} as const

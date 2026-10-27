@@ -201,6 +201,27 @@ describe.skipIf(!hasSupabaseCreds)('aislamiento multi-tenant (RLS owner-level)',
     expect(after?.has_web_custom).toBe(false)
   })
 
+  // ── Facturación (migr. 080): el dueño NO puede escribir las columnas con las que el webhook lo
+  // reconoce. Si pudiera, pondría en su fila el plan o la suscripción de MP de OTRO negocio y se
+  // quedaría con sus cobros. Mismo falso verde que arriba: el trigger revierte en silencio.
+  it('facturación: A NO puede escribir mp_plan_id_active / mp_subscription_id (trigger lo revierte)', async () => {
+    const cols = 'mp_plan_id_active, mp_subscription_id, subscription_ends_at'
+    const { data: before } = await seeded.admin.from('businesses').select(cols).eq('id', seeded.bizA).single()
+
+    await anonA
+      .from('businesses')
+      .update({
+        mp_plan_id_active: 'plan-de-otro-negocio',
+        mp_subscription_id: 'suscripcion-de-otro-negocio',
+        subscription_ends_at: '2099-01-01T00:00:00Z',
+      })
+      .eq('id', seeded.bizA)
+      .select('id')
+
+    const { data: after } = await seeded.admin.from('businesses').select(cols).eq('id', seeded.bizA).single()
+    expect(after).toEqual(before)
+  })
+
   // ── Upload-gate del CMS: un no-entitled NO puede subir a landing-assets (RLS bucket, migr. 051) ──
   // El upload de imágenes del editor va DIRECTO browser→Storage con el session client (no pasa por
   // Server Action), así que su único gate no-bypasseable es la RLS del bucket. La migr. 051 le agrega
