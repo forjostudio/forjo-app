@@ -427,7 +427,7 @@ sesión del usuario**, no de tenant: un `back()` sobre una entrada ajena **expul
 mitigan, y es lo que un `/gsd-secure-phase` tendría que mirar acá. Riesgo bajo en términos de datos,
 medio en términos de pérdida de trabajo del dueño.
 
-**Plans:** 8 plans (4 ejecutados + 4 de cierre de gaps, tras la UAT del 2026-10-15)
+**Plans:** 10 plans (4 ejecutados + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27)
 
 Plans:
 
@@ -456,6 +456,39 @@ Plans:
 - [ ] `03-06-PLAN.md` — wave 6 · **El sentinel ni se entierra ni se arma de más** (G-4 y la otra mitad de G-1/G-2): la **decisión (a)** del dueño como sexta regla de armado con su límite escrito, y el **sexto miembro** del plan de rama —consumir el sentinel y recién entonces navegar— con su ejecutor de dos pasos; escenarios **E-9**, **E-10** y **E-12**
 - [ ] `03-07-PLAN.md` — wave 7 · **El armado que no falla en silencio** (G-5 y G-6): la decisión de dominio **pura y exportada** que sana contando instancias vivas, la **séptima** regla (si la URL ya lleva nuestro hash, no armar — el origen medido de la tercera entrada de salida), **cuatro** momentos de reintento incluido el del retroceso ignorado, y el **observable del hash** para la UAT; escenario **E-13**
 - [ ] `03-08-PLAN.md` — wave 8 · **La UAT de la ronda 2**, con **bloqueo humano explícito**, y **acotada a lo que falta**: los **5 fallos** (7, 8, 15, 19, 20), la **colisión H** bajo la decisión (a), la **parte de overlay del ítem 20** (lo único que nunca se midió), una **regresión dirigida** de 11 ítems que ya pasaron pero cuyo camino de código cambió —cada uno con su motivo medido, y los tres excluidos (9, 14, 17) con el suyo—, y el **pase completo de iPhone** (A11, los 21). Más los tres documentos puestos consistentes con el estado real (la decisión (a) en el requisito con su límite; MOB-06 debiéndole sólo iPhone; el registro de imprecisiones; y el guion de la ronda 1 **completado**, con las 14 marcas del dueño intactas)
+
+> ⚠ **CIERRE DE G2-1, 2026-10-27.** La **ronda 2** corrió **cuatro** recorridos y se **interrumpió a
+> propósito**: **7**, **8** y **15** pasaron (eran G-1, G-2 y G-3) y **19 falló** ⇒ un gap, **G2-1**. Los
+> otros seis ítems quedaron **sin correr** porque el arreglo **cambia la pila** y correrlos antes habría
+> medido el comportamiento viejo. Ver `03-UAT-2.md`.
+>
+> **La causa está medida y es de una línea:** `panelNavMode` dice `to === root ⇒ push`, así que **sección
+> → raíz apila**; el ciclo Inicio↔sección hace crecer la pila **2 entradas por ciclo sin techo**, y cada
+> entrada de Inicio alcanzada así queda marcada con la sección que quedó debajo ⇒ la regla 7 del armado
+> dice *no armar* ⇒ **el aviso de salida nunca aparece**. La corrección es que ese gesto sea un
+> **retroceso**, decidido en `panelBranchPlan` —**no** en `panelNavMode`, donde cambiaría el atrás de
+> escritorio entero—, y cierra las dos mitades de una: la pila se queda en ≤2 niveles y el dueño aterriza
+> en la entrada **original** de Inicio, que re-arma el aviso sola.
+>
+> El **residuo de escritorio** (salir de una pantalla con cambios sin guardar hacia Inicio desde el
+> sidebar, con el atrás un escalón más corto) queda **aceptado y declarado** como **revisión acotada del
+> criterio 6** con fecha 2026-10-27 — no se tapa con un chequeo de ancho de pantalla, que es lo que
+> NAV-05 existe para evitar.
+
+- [ ] `03-09-PLAN.md` — wave 9 · **La regla: sección → raíz es un RETROCESO** (G2-1), con el hecho nuevo
+  de la pila **sin valor por omisión** y su lugar **entre** la regla del sentinel y la que prohíbe
+  retroceder sin el hecho; `panelNavMode` **intacta**, **sin** miembro nuevo (`up` ya es el retroceso
+  guardado) y los **dos** consumidores en **un** dialecto; el **residuo de escritorio** declarado con su
+  fecha; y los tres escenarios de sonda que **cruzan** la regla con el sentinel de salida (**E-14**), con
+  la rama de Más donde el colapso ya compite (**E-15**) y con la marca perdida (**E-16**) — porque el
+  13/13 de la ronda 2 era verdad y no alcanzaba
+- [ ] `03-10-PLAN.md` — wave 10 · **Los documentos al día y la UAT de la ronda 3**, con **bloqueo humano
+  explícito** y **acotada**: el criterio 6 **revisado** con su residuo fechado (y el criterio 2 intacto),
+  MOB-04 con la regla nueva y su **límite declarado** (la pila de tres escalones de D-02 sigue apilando),
+  MOB-05 con la consecuencia que **ningún gate puede avisar** —`Más → tocar Inicio → atrás` ya no vuelve a
+  Más—, el registro de imprecisiones por el CLI, el guion de la ronda 2 **cerrado con resultados**, y el
+  guion de la ronda 3: **ocho** recorridos en Android con el motivo medido por ítem y los **21** en iPhone
+  (A11 sigue abierto entero)
 
 ### Phase 4: Los tabs profundos sobre la política ya fijada
 
