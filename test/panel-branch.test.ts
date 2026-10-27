@@ -1463,3 +1463,95 @@ describe('los CUATRO momentos de reintento — y el que NO re-arma', () => {
     expect(mod).toContain('03-08')
   })
 })
+
+// ── El DISPARO ÚNICO de la navegación diferida (bug de la ronda 2 de la UAT) ─────────────────────
+//
+// POR QUÉ ESTE BLOQUE EXISTE. El efecto que ejecuta la navegación pedida llevaba la decisión adentro,
+// en dos `if`, y un comentario que afirmaba: "no hace falta limpiar `pedida`: con las mismas deps el
+// efecto no vuelve a correr". Es FALSO en cuanto el call site pasa una `navigate` que no es estable,
+// y la barra la pasaba como flecha INLINE ⇒ identidad nueva en cada render ⇒ el efecto re-navegaba en
+// CADA commit. Medido en el teléfono: tocar Turnos una vez y quedar clavado ahí, con cualquier otro
+// destino devolviendo a Turnos. Y medido en el log del dev server: una pared de `GET /appointments`,
+// y un `GET /clients` seguido inmediatamente de `/appointments`.
+//
+// LO VIERON CERO GATES: ni `tsc`, ni el lint, ni esta suite, ni el build, ni la sonda CDP —que maneja
+// una página estática y no la app—. Por eso la decisión se EXTRAJO: el hook no tiene cobertura y se
+// decidió que no la tenga acá (un renderer de React + `jsdom` mediría el historial de forma
+// aproximada justo donde esta fase mide contra el navegador real, y un verde ahí con el teléfono rojo
+// es el patrón *verde midiendo cero* otra vez). Extraída, entra en la suite pura sin una dependencia.
+
+describe('branchPendingNav — el disparo único de la navegación diferida', () => {
+  const pedido = (href: string, mode: BranchNavMode = 'push') => ({ href, mode })
+
+  it('existe y está exportada: la decisión dejó de ser dos `if` sin cobertura adentro del efecto', () => {
+    expect(typeof PB.branchPendingNav).toBe('function')
+  })
+
+  it('SIN pedido ⇒ null: no hay nada que ejecutar', () => {
+    expect(PB.branchPendingNav({ pedida: null, yaEjecutada: null })).toBeNull()
+    expect(PB.branchPendingNav({ pedida: null, yaEjecutada: pedido('/appointments') })).toBeNull()
+  })
+
+  it('un pedido NUEVO ⇒ lo devuelve, y devuelve EL MISMO objeto', () => {
+    // La identidad importa: es lo que el call site guarda en la referencia del *ya ejecutado*.
+    const p = pedido('/appointments')
+    expect(PB.branchPendingNav({ pedida: p, yaEjecutada: null })).toBe(p)
+  })
+
+  it('EL CANDADO DEL BUCLE — el pedido YA EJECUTADO ⇒ null, corra el efecto las veces que corra', () => {
+    // Es el bug entero, en una línea: con `navigate` inestable el efecto se re-corre en cada commit,
+    // y lo único que impide que re-navegue es esta regla.
+    const p = pedido('/appointments')
+    expect(PB.branchPendingNav({ pedida: p, yaEjecutada: p })).toBeNull()
+  })
+
+  it('el bucle medido: UNA ejecución sobre VEINTE corridas del efecto con el mismo pedido', () => {
+    // Simula lo que pasaba de verdad: el efecto re-corriendo porque `navigate` cambió de identidad,
+    // con el pedido todavía vivo en el estado. Antes de la regla, acá habría 20 navegaciones.
+    const p = pedido('/appointments')
+    let yaEjecutada: PB.PendingNav | null = null
+    const navegaciones: string[] = []
+    for (let i = 0; i < 20; i += 1) {
+      const aEjecutar = PB.branchPendingNav({ pedida: p, yaEjecutada })
+      if (aEjecutar === null) continue
+      yaEjecutada = aEjecutar
+      navegaciones.push(aEjecutar.href)
+    }
+    expect(navegaciones).toEqual(['/appointments'])
+  })
+
+  it('LA COMPARACIÓN ES POR IDENTIDAD Y NO POR VALOR — dos gestos al MISMO destino corren los dos', () => {
+    // El mismo bug del otro lado, y tan silencioso como el primero: tocar Turnos, volver a Inicio y
+    // tocar Turnos otra vez son DOS pedidos, con los mismos campos y distinta identidad. Comparando
+    // `href` y `mode` el segundo quedaría suprimido y el gesto moriría sin que nada se ponga rojo.
+    // Este caso es el candado contra "simplificar" la regla a una comparación de campos.
+    const primero = pedido('/appointments')
+    const segundo = pedido('/appointments')
+    expect(primero).toEqual(segundo)
+    expect(PB.branchPendingNav({ pedida: segundo, yaEjecutada: primero })).toBe(segundo)
+  })
+
+  it('un pedido nuevo DESPUÉS de uno ejecutado ⇒ corre: el gesto siguiente no queda suprimido', () => {
+    const primero = pedido('/appointments')
+    const segundo = pedido('/clients', 'replace')
+    expect(PB.branchPendingNav({ pedida: segundo, yaEjecutada: primero })).toBe(segundo)
+  })
+
+  it('el efecto la CONSUME en vez de repetir los dos `if`, y NO limpia el estado', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /branchPendingNav\(/g)).toBeGreaterThanOrEqual(2)
+    // `setPedida(null)` es lo que `react-hooks/set-state-in-effect` prohíbe: renders en cascada. El
+    // dato del *ya ejecutado* vive en una referencia, y el único `setPedida` del módulo es el del
+    // ejecutor, que DEJA el pedido.
+    expect(cuenta(mod, /setPedida\(null\)/g)).toBe(0)
+    expect(cuenta(mod, /setPedida\(/g)).toBe(1)
+  })
+
+  it('EL CALL SITE memoiza la navegación: la otra mitad, la del consumidor', () => {
+    // El invariante lo sostiene la regla de arriba, no esto. Pero una `navigate` inline deja el
+    // efecto re-corriendo en cada commit para nada, y es lo que destapó el bug.
+    const barra = sinComentarios(leer('components/dashboard/panel-bottom-nav.tsx'))
+    expect(cuenta(barra, /useCallback<BranchNavigate>\(/g)).toBe(1)
+    expect(cuenta(barra, /navigate: navegar/g)).toBe(1)
+  })
+})

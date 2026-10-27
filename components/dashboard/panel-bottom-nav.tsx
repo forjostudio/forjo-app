@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -7,7 +8,7 @@ import { LayoutDashboard, Calendar, CalendarClock, Users, MoreHorizontal, Lucide
 import { useTerminology } from '@/lib/use-terminology'
 import { useNavigationGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { consumeOwnedPanelEntry, panelNavMode } from '@/lib/panel-history'
-import { usePanelBranch } from '@/lib/panel-branch'
+import { usePanelBranch, type BranchNavigate } from '@/lib/panel-branch'
 
 // ── La barra inferior del panel (MOB-01 / MOB-02 / MOB-07) ──────────────────────
 // En mobile el panel no tiene mapa: el dueño tiene que abrir la hamburguesa para saber dónde está y
@@ -94,13 +95,20 @@ export function PanelBottomNav() {
   // hook no arma nada: un sentinel que absorbe el atrás y después no muestra el cartel convierte el
   // gesto en un botón MUERTO, que es peor que el bug. Acá vale `true` y se cumple por construcción —
   // el aviso se dibuja abajo, en este mismo componente.
+  // ⚠ MEMOIZADA, y no es gusto: el hook deja la navegación PEDIDA en estado y la ejecuta un efecto
+  // que lleva esta función en sus dependencias. Pasada como flecha inline, su identidad cambia en
+  // CADA render ⇒ ese efecto vuelve a correr en cada commit y re-navega al mismo destino: el dueño
+  // toca Turnos una vez y queda clavado ahí. Medido en la ronda 2 de la UAT (Android). El hook ya
+  // descarta el pedido al ejecutarlo —ése es el invariante—; esto es la mitad del consumidor.
+  const navegar = useCallback<BranchNavigate>((href, mode) => {
+    if (mode === 'replace') router.replace(href)
+    else router.push(href)
+  }, [router])
+
   const { handleNavigate, hintVisible } = usePanelBranch({
     pathname,
     drawsExitHint: true,
-    navigate: (href, mode) => {
-      if (mode === 'replace') router.replace(href)
-      else router.push(href)
-    },
+    navigate: navegar,
   })
 
   // Los labels de las posiciones 2 y 4 salen de la terminología del vertical, no de literales:

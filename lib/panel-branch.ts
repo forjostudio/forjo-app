@@ -871,6 +871,63 @@ export function branchMarkDecision({
   return previous
 }
 
+/** El pedido de navegación diferida: lo deja el ejecutor y lo ejecuta un commit. */
+export type PendingNav = { href: string; mode: BranchNavMode }
+
+/**
+ * **Qué pedido de navegación diferida hay que ejecutar en esta corrida del efecto.** Devuelve el
+ * pedido a ejecutar, o `null` si no hay nada que hacer. Pura.
+ *
+ * ⚠ **POR QUÉ ESTA DECISIÓN ES UNA FUNCIÓN Y NO DOS `if` ADENTRO DEL EFECTO: porque los dos `if`
+ * ya estuvieron, y COSTARON UN BUG DE PANTALLA** (ronda 2 de la UAT, Android). El efecto decía, en un
+ * comentario: *"no hace falta limpiar `pedida`: con las mismas deps el efecto no vuelve a correr"*.
+ * Es **falso en cuanto el call site pasa una `navigate` que no es estable**, y la barra la pasaba como
+ * flecha **inline** ⇒ identidad nueva en CADA render ⇒ con un pedido vivo el efecto **re-navegaba en
+ * cada commit**. Síntoma medido: el dueño tocaba Turnos una vez y quedaba **clavado** ahí; cualquier
+ * otro destino de la barra lo devolvía a Turnos. Lo vieron **cero** gates — ni `tsc`, ni el lint, ni la
+ * suite, ni el build, ni la sonda CDP (que maneja una página estática, no la app).
+ *
+ * ⚠ **Y POR QUÉ SE EXTRAE EN VEZ DE CUBRIR EL HOOK: el hook NO TIENE COBERTURA Y SE DECIDIÓ QUE NO LA
+ * TENGA ACÁ.** Montarlo pediría un renderer de React y un DOM simulado, y el historial de `jsdom` es
+ * una **aproximación** de justo lo que esta fase mide contra el navegador real (`history.back()`
+ * asíncrono, el parche de `pushState` de Next, el router pisando el state de la entrada). Un test
+ * verde ahí mientras el teléfono falla es **exactamente** el patrón *verde midiendo cero* que ya
+ * apareció cinco veces en esta fase: una segunda fuente de verdad más débil que la primera es un
+ * pasivo. Extraída, la decisión entra en la suite **pura** sin una dependencia nueva, que es el mismo
+ * molde que `lib/dirty-history.ts` y `lib/overlay-history.ts` ya aplican.
+ *
+ * Las reglas, **en orden**:
+ *   1. **Sin pedido ⇒ `null`.**
+ *   2. **El pedido ya se ejecutó ⇒ `null`.** Es lo que lo vuelve de **un solo disparo**, y lo vuelve
+ *      así **por construcción**: no depende de qué identidad de `navigate` pase el consumidor, ni de
+ *      por qué motivo se re-corrió el efecto.
+ *   3. **El resto ⇒ ejecutarlo.**
+ *
+ * ⚠ **LA COMPARACIÓN DE LA REGLA 2 ES POR IDENTIDAD, NO POR VALOR, Y ESO ES CARGA ESTRUCTURAL.** Dos
+ * gestos al **mismo** destino son **dos pedidos distintos** y los dos tienen que correr (tocar Turnos,
+ * volver a Inicio, tocar Turnos otra vez). Comparando los **campos** —`href` y `mode`— el segundo
+ * quedaría suprimido: el mismo bug del otro lado, y **igual de silencioso**. El caso está en la suite
+ * con nombre propio, justamente para que nadie "simplifique" esto a una comparación de campos.
+ *
+ * ⚠ **Y POR QUÉ NO SE LIMPIA EL ESTADO:** `setPedida(null)` adentro del efecto es lo que la regla
+ * `react-hooks/set-state-in-effect` prohíbe —renders en cascada—, y la prohíbe con razón. El dato del
+ * *ya ejecutado* vive en una **referencia**, que desde un efecto sí se puede escribir; lo que está
+ * prohibido es tocarla **en el render**.
+ */
+export function branchPendingNav({
+  pedida,
+  yaEjecutada,
+}: {
+  /** El pedido vigente, tal como lo dejó el ejecutor. */
+  pedida: PendingNav | null
+  /** El pedido que **esta instancia ya ejecutó**, o `null` si todavía no ejecutó ninguno. */
+  yaEjecutada: PendingNav | null
+}): PendingNav | null {
+  if (pedida === null) return null
+  if (yaEjecutada === pedida) return null
+  return pedida
+}
+
 /**
  * Cablea la rama de Más a un menú: marca cada entrada con lo que quedó debajo, y resuelve los gestos
  * que la política de rutas sola no puede resolver.
@@ -918,7 +975,12 @@ export function usePanelBranch({
   // La navegación PEDIDA. Es la lección 3: adentro del evento del retroceso el router está
   // procesando su propio recorrido, así que se deja pedida y la ejecuta el efecto de abajo, desde un
   // commit de React.
-  const [pedida, setPedida] = useState<{ href: string; mode: BranchNavMode } | null>(null)
+  const [pedida, setPedida] = useState<PendingNav | null>(null)
+
+  // El pedido YA EJECUTADO. Es el segundo hecho de {@link branchPendingNav}, y lo que vuelve la
+  // ejecución de un solo disparo POR CONSTRUCCIÓN. En una referencia y no en estado: limpiarlo con
+  // `setPedida(null)` desde el efecto es lo que `react-hooks/set-state-in-effect` prohíbe.
+  const pedidaEjecutadaRef = useRef<PendingNav | null>(null)
 
   // ── El sentinel de salida (MOB-05) ────────────────────────────────────────────────────────────
   // `hintVisible` va en ESTADO porque pinta; las otras tres van en REFERENCIAS porque las lee el
@@ -1000,11 +1062,14 @@ export function usePanelBranch({
   }, [pathname, id, more])
 
   // ── El segundo paso, ejecutado desde un COMMIT ────────────────────────────────────────────────
-  // No hace falta limpiar `pedida`: con las mismas deps el efecto no vuelve a correr, y un gesto
-  // nuevo trae un objeto nuevo.
+  // La decisión NO vive acá: vive en {@link branchPendingNav}, con sus reglas en orden, su docblock y
+  // sus casos. Lo que vive acá es sólo lo que no es puro — leer la referencia, escribirla y navegar.
+  // El motivo de esa extracción es el bug que este efecto tuvo, y está escrito allá.
   useEffect(() => {
-    if (!pedida) return
-    navigate(pedida.href, pedida.mode)
+    const aEjecutar = branchPendingNav({ pedida, yaEjecutada: pedidaEjecutadaRef.current })
+    if (aEjecutar === null) return
+    pedidaEjecutadaRef.current = aEjecutar
+    navigate(aEjecutar.href, aEjecutar.mode)
   }, [pedida, navigate])
 
   // ── Armar el sentinel cuando corresponde ──────────────────────────────────────────────────────
