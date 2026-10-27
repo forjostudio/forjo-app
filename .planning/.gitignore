@@ -14,3 +14,6 @@ active-workstream
 
 # Jobs asincrónicos en vuelo: estado de runtime, no artefacto de planning.
 async-jobs/
+
+# Lock de la fase en curso: PID y sesión de la terminal que la está corriendo. Estado local.
+**/milestone.lock

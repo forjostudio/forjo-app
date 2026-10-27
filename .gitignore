@@ -78,3 +78,7 @@ supabase/.temp/
 
 # Caché local del hook de impeccable (herramienta de dev, no versionar)
 .impeccable/
+
+# Estado de runtime y parches locales del GSD (herramienta de dev, no código de la app)
+.gsd/
+.claude/gsd-local-patches/
