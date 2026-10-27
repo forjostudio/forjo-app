@@ -25,9 +25,9 @@ affects:
   - "Phase 4 (MOB-08/09, los tabs profundos): heredan la política con su límite ya declarado por escrito"
 
 actuals:
-  tokens: 13252
+  tokens: 21054
   tasks: 2
-  commits: 2
+  commits: 4
 plan_head_before: 3c222752bf1403753f12f33f459fe70b9492e559
 
 tech-stack:
@@ -125,7 +125,7 @@ status: complete
 
 Los cuatro documentos quedaron diciendo lo que la regla de `G2-1` realmente hizo —incluido su límite y la consecuencia que el dueño va a ver en el teléfono— y la ronda 3 quedó escrita en ocho recorridos con el motivo medido de cada uno, esperando a la persona.
 
-**Duración:** 35 min · **Tasks:** 2/2 · **Archivos:** 6 · **Commits:** 2 (+1 de cierre)
+**Duración:** 35 min · **Tasks:** 2/2 · **Archivos:** 6 · **Commits:** 4 medidos desde `3c22275` (2 de task + el del resumen + el de cierre)
 
 ## Qué se hizo
 
@@ -210,6 +210,16 @@ Ninguno. Cero código tocado, cero `TODO`/`FIXME`/placeholders agregados, cero t
 **La fase no se cierra acá.** Lo que falta es la **ronda 3** en los dos motores, y es lo único que puede cerrar **A1**, **A2** y **A11**. Hoy la sonda da 16/16 y la suite 1631 casos; las dos cosas siguen midiendo un espacio que **no incluye** lo que el teléfono prueba — la ronda 1 llegó con 8/8 y encontró cinco fallos más una colisión, y la ronda 2 llegó con 13/13 y encontró `G2-1`.
 
 **Y el límite honesto de la regla, que es lo que el dueño va a ver:** la regla de `G2-1` **acota** el crecimiento, **no** lo elimina en todos los caminos. En la pila de tres escalones que D-02 acepta (`Inicio → Turnos → Más`) la raíz no es la entrada de abajo, así que ese gesto **sigue apilando**: el atrás vuelve a **Más** —algo visible— y el aviso **no** se arma porque hay algo nuestro debajo. Está escrito como **límite declarado** en MOB-04 y como ítem **2.3** del guion de la ronda 3.
+
+## Self-Check: PASSED
+
+- `…/03-UAT-GUION-3.md` — FOUND (264 líneas, ocho bloques)
+- `…/03-10-SUMMARY.md` — FOUND
+- `…/03-UAT-GUION-2.md` — FOUND (13 encabezados intactos, diez resultados anotados)
+- `.planning/workstreams/panel-nav/ROADMAP.md` — FOUND (criterio 6 revisado, tres fases en pie)
+- `.planning/workstreams/panel-nav/REQUIREMENTS.md` — FOUND (MOB-04/05/06 en `[ ]`)
+- `.planning/WINDOWS.md` — FOUND (17 entradas, tabla y JSON coincidiendo)
+- `66445e2` — FOUND · `2f45d3c` — FOUND · `9dd85ac` — FOUND
 
 ## Next
 

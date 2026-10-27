@@ -11,7 +11,7 @@
     {
       "number": "3",
       "name": "La política de atrás, de un nivel a dos",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "4",
@@ -21,8 +21,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 03 of 3 · 0% · executing"
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 03 of 3 · 0% · ready to verify"
   },
-  "updated_at": "2026-10-27T18:41:28.819Z"
+  "updated_at": "2026-10-27T19:19:59.850Z"
 }
