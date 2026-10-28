@@ -947,7 +947,17 @@ export function writePanelUnder(route: string): boolean {
  * un error sino **basura en la pila más un atrás muerto**.
  *
  * ⚠ **LA DEGRADACIÓN SE DECLARA, NO SE DESCUBRE. Quién borra esta marca:** un reemplazo blando sobre
- * la entrada donde vive, o sea (i) el `replace` de los tres menús cuando la política lo dice,
+ * la entrada donde vive, o sea (i) el `replace` de los tres menús cuando la política lo dice
+ * —**enmendado el 2026-10-28 (plan 03-11, `G3-1`): esa causa se sigue aceptando en el sidebar y en la
+ * pantalla Más, y DEJA DE ACEPTARSE EN EL CAMINO DE LA BARRA**, donde la marca ahora **viaja** por
+ * encima del reemplazo (`branchCarryMark`, `lib/panel-branch.ts`): el gesto lee la marca antes de que
+ * el `<Link>` reemplace y la propaga por el canal, porque un `replace` **no cambia** lo que quedó
+ * debajo. Lo que lo destapó: la regla `-1c` era correcta y estaba desplegada, pero en una **cadena**
+ * de reemplazos el hecho que lee ya no existía, así que el gesto hacia Inicio volvía a empujar. ⚠ Y
+ * **por qué no se arregló preservando la clave en {@link applyPanelView}** —la alternativa de una
+ * línea que este mismo párrafo nombra abajo—: toca el ejecutor de vistas que v0.30 dejó auditado con
+ * un gate de código y abre la pregunta de si un estado propio conservado reintroduce la trampa de la
+ * rama temprana del parche de Next (la URL cambia, el router no se entera, cero errores en consola)—,
  * (ii) {@link applyPanelView} con las causas `programmatic`, `filter` y `stale` sin tener la entrada,
  * (iii) el reemplazo crudo con el que Agenda limpia su query de retorno de Google, y **(iv) —la
  * entrada que la UAT de la fase 3 destapó— NOSOTROS MISMOS**, cuando el efecto de marcado escribía
@@ -955,7 +965,8 @@ export function writePanelUnder(route: string): boolean {
  * también en un retroceso y en el reemplazo del colapso, y la marca verdadera se perdía. Esa cuarta
  * causa es la que la guarda de idempotencia de {@link writePanelUnder} cierra, y queda listada acá
  * como cicatriz en vez de borrada de la historia.
- * **Las tres primeras se aceptan en esta fase**: sin la marca, {@link panelBranchPlan} cae en
+ * **Las tres primeras se aceptan en esta fase** —la (i) **salvo en el camino de la barra**, ver la
+ * enmienda del 2026-10-28 de arriba—: sin la marca, {@link panelBranchPlan} cae en
  * `push`/`replace` y **nunca** en un retroceso. Preservar la clave en `applyPanelView` sería una
  * línea, pero toca el ejecutor que v0.30 dejó auditado con un gate de código y abre la pregunta de si
  * un estado propio conservado reintroduce la trampa de la rama temprana del parche; si la Phase 4 lo

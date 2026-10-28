@@ -1698,4 +1698,239 @@ describe('G3-1 — la marca VIAJA por encima del `replace` (el camino entero, un
       })
     ).toBe('up')
   })
+
+  it('la CADENA de DOS reemplazos: la marca sigue diciendo la raíz después de los dos, no de uno', () => {
+    // El recorrido completo del dueño: `Inicio → Turnos → Clientes → Agenda`. Lo que ningún caso
+    // medía antes es la CADENA: con un reemplazo solo, el bug no se ve.
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/appointments' })
+    // Primer reemplazo: Turnos → Clientes.
+    expect(
+      PB.branchCarryMark({
+        plan: 'replace',
+        from: '/appointments',
+        to: '/clients',
+        rutaDebajo: PH.panelUnderRoute(ctx.win.history.state),
+      })
+    ).toBe(true)
+    ctx.win.history.state = { __NA: true }
+    ctx.win.location.pathname = '/clients'
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).toHaveBeenNthCalledWith(1, { frjUnder: PANEL_ROOT }, '')
+    // La entrada queda como la dejó el escritor único, y de ahí sale el valor del gesto siguiente.
+    ctx.win.history.state = panelUnderState(PANEL_ROOT)
+    // Segundo reemplazo: Clientes → Agenda.
+    expect(
+      PB.branchCarryMark({
+        plan: 'replace',
+        from: '/clients',
+        to: '/agenda',
+        rutaDebajo: PH.panelUnderRoute(ctx.win.history.state),
+      })
+    ).toBe(true)
+    ctx.win.history.state = { __NA: true }
+    ctx.win.location.pathname = '/agenda'
+    expect(PB.applyBranchMarkRequest('/agenda')).toBe(true)
+    expect(ctx.replaceState).toHaveBeenNthCalledWith(2, { frjUnder: PANEL_ROOT }, '')
+    // Y nunca escribió la ruta de la que veníamos, que es lo que la derivación del par daría.
+    expect(ctx.replaceState).not.toHaveBeenCalledWith({ frjUnder: '/clients' }, '')
+  })
+
+  it('el pedido se DESCARTA igual si la navegación no fue a donde decía', () => {
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/appointments' })
+    expect(
+      PB.branchCarryMark({ plan: 'replace', from: '/appointments', to: '/clients', rutaDebajo: PANEL_ROOT })
+    ).toBe(true)
+    ctx.win.history.state = { __NA: true }
+    expect(PB.applyBranchMarkRequest('/agenda')).toBe(false)
+    // Y ya no está: un pedido que sobrevive a una navegación que no ocurrió escribiría una marca
+    // rancia en una entrada AJENA, el mismo bug del otro lado.
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(false)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('la entrada de destino que YA lleva marca no se re-escribe: la idempotencia del escritor único', () => {
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/appointments' })
+    expect(
+      PB.branchCarryMark({ plan: 'replace', from: '/appointments', to: '/clients', rutaDebajo: PANEL_ROOT })
+    ).toBe(true)
+    // La entrada de destino ya sabe qué tiene debajo: escribir encima destruiría esa verdad.
+    ctx.win.history.state = panelUnderState('/finances')
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('la entrada de OTRO DUEÑO tampoco se escribe: la regla 0, en el mismo escritor único', () => {
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/appointments' })
+    expect(
+      PB.branchCarryMark({ plan: 'replace', from: '/appointments', to: '/clients', rutaDebajo: PANEL_ROOT })
+    ).toBe(true)
+    ctx.win.history.state = { frjOverlay: 1 }
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('el productor está CABLEADO EN EL GESTO, sobre el mismo estado y antes de devolver para el `<Link>`', () => {
+    // ⚠ EL CANDADO QUE MIDE EL CAMINO Y NO LA FUNCIÓN AISLADA. El hook no se puede montar acá (el
+    // runner no monta componentes, y un historial de `jsdom` es una aproximación de justo lo que esta
+    // fase mide contra el navegador real), así que el cableado se audita en la FUENTE, recortando la
+    // región del gesto por su firma exacta. Con la llamada comentada, este caso se pone ROJO.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf('function handleNavigate(href: string): boolean {')
+    expect(desde).toBeGreaterThan(0)
+    const gesto = mod.slice(desde, mod.indexOf('\n  }', desde) + 4)
+    expect(gesto.length).toBeGreaterThan(300)
+    // UNA llamada al productor, y el valor sale del MISMO `estado` que se leyó para los tres hechos.
+    expect(cuenta(gesto, /branchCarryMark\(/g)).toBe(1)
+    expect(gesto).toContain('rutaDebajo: panelUnderRoute(estado)')
+    expect(cuenta(gesto, /window\.history\.state/g)).toBe(1)
+    // Y va ANTES de la salida para los dos modos del `<Link>`: después, no se ejecutaría nunca.
+    expect(gesto.indexOf('branchCarryMark(')).toBeLessThan(gesto.indexOf("if (plan === 'push'"))
+  })
+
+  it('el canal tiene DOS productores y UN consumidor, y los dos productores están nombrados', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod.length).toBeGreaterThan(5000)
+    // 1 declaración + 2 del colapso + 1 del gesto.
+    expect(cuenta(mod, /pedirMarcaPropagada\(/g)).toBe(4)
+    // El consumidor sigue siendo UNO: 1 declaración + 1 llamada en el efecto de marcado.
+    expect(cuenta(mod, /applyBranchMarkRequest\(/g)).toBe(2)
+    // Y la disciplina compartida está ESCRITA, que es la mitad del argumento del segundo productor.
+    const crudo = leer(MOD_DUENO)
+    expect(cuenta(crudo, /DOS PRODUCTORES/g)).toBeGreaterThanOrEqual(1)
+    expect(cuenta(crudo, /LLENA ESTE CANAL QUIEN/g)).toBeGreaterThanOrEqual(1)
+    // Los dos componentes siguen con CERO menciones del canal, del rastreo y del productor nuevo.
+    for (const comp of ['components/dashboard/panel-bottom-nav.tsx', 'components/dashboard/unsaved-changes-guard.tsx']) {
+      const src = sinComentarios(leer(comp))
+      expect(src.length).toBeGreaterThan(500)
+      expect(cuenta(src, /branchCarryMark|applyBranchMarkRequest|recordBackLanding|takeBackLanding/g)).toBe(0)
+    }
+  })
+
+  it('`panelNavMode` y `panelBranchPlan` quedan INTACTAS: el arreglo es aditivo y vive fuera de las dos', () => {
+    // El criterio 6 del ROADMAP protege el atrás de ESCRITORIO ENTERO, y el orden de las reglas de la
+    // decisión de rama está medido en siete escenarios de sonda. Las dos se recortan y se cuentan.
+    const pol = sinComentarios(leer(MOD_REGLA0))
+    const d1 = pol.indexOf('export function panelNavMode({')
+    const d2 = pol.indexOf('export function panelBranchPlan({')
+    expect(d1).toBeGreaterThan(0)
+    expect(d2).toBeGreaterThan(d1)
+    // ⚠ EL ANCLA DE CIERRE ES LA LLAVE SOLA EN SU LÍNEA (`\n}\n`): con `\n}` el recorte se trunca en
+    // el `}: {` del cierre de la firma con parámetro-objeto y el contador mide CERO estando en verde.
+    const nav = pol.slice(d1, pol.indexOf('\n}\n', d1) + 3)
+    const plan = pol.slice(d2, pol.indexOf('\n}\n', d2) + 3)
+    expect(nav.length).toBeGreaterThan(200)
+    expect(plan.length).toBeGreaterThan(400)
+    expect(cuenta(nav, /return '/g)).toBe(6)
+    expect(cuenta(nav, /if \(/g)).toBe(5)
+    expect(cuenta(plan, /if \(/g)).toBe(6)
+    expect(cuenta(plan, /return 'up'/g)).toBe(2)
+    expect(cuenta(plan, /return modo/g)).toBe(2)
+    // Y el productor nuevo no vive en el módulo de política: la propagación necesita el `window`.
+    expect(cuenta(pol, /branchCarryMark/g)).toBe(0)
+  })
+
+  it('G3-1 — el arreglo no agregó una clave nueva a la pila ni un miembro nuevo al plan de rama', () => {
+    // Una cuarta clave sería un cuarto dueño sin necesidad (la regla 0 reconoce TRES a propósito), y
+    // un séptimo miembro obligaría a tocar el `switch` del guard: el segundo dialecto otra vez.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /frjCarry|frjPropag|frjUnderFrom|frjReplace/g)).toBe(0)
+    const pol = sinComentarios(leer(MOD_REGLA0))
+    const tipo = pol.slice(pol.indexOf('export type PanelBranchPlan'), pol.indexOf('export function panelBranchPlan'))
+    expect(tipo.length).toBeGreaterThan(60)
+    // Dos de `PanelNavMode` más cuatro propios: SEIS.
+    expect(cuenta(tipo, /\| '/g)).toBe(4)
+    expect(tipo).toContain('| PanelNavMode')
+    // Y el predicado de la regla 0 sigue reconociendo TRES dueños.
+    const desde = pol.indexOf('export function isForeignOwnedEntry')
+    const regla0 = pol.slice(desde, pol.indexOf('\n}', desde) + 2)
+    expect(cuenta(regla0, /isOverlayOwnedEntry|isDirtyGuardOwnedEntry|isExitSentinelOwnedEntry/g)).toBe(3)
+  })
+})
+
+describe('branchCarryMark — las reglas EN ORDEN, y la del valor leído va ÚLTIMA', () => {
+  it('`replace` de una ruta a otra con una ruta LEÍDA ⇒ el pedido queda hecho con ESA ruta', () => {
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/appointments' })
+    expect(
+      PB.branchCarryMark({ plan: 'replace', from: '/appointments', to: '/clients', rutaDebajo: PANEL_ROOT })
+    ).toBe(true)
+    ctx.win.history.state = { __NA: true }
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).toHaveBeenCalledWith({ frjUnder: PANEL_ROOT }, '')
+  })
+
+  it('`replace` con la MISMA ruta ⇒ NO se pide nada: ahí el efecto de marcado no vuelve a correr', () => {
+    // El reemplazo cae SOBRE LA MISMA ENTRADA y el pathname no cambia, así que el pedido sobreviviría
+    // a una navegación que no es la que lo pidió: una marca rancia sobre una entrada ajena.
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/clients' })
+    expect(
+      PB.branchCarryMark({ plan: 'replace', from: '/clients', to: '/clients', rutaDebajo: PANEL_ROOT })
+    ).toBe(false)
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(false)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+  })
+
+  it('`push` ⇒ NO se pide nada: la decisión de marcado ya sabe qué quedó debajo de una entrada nueva', () => {
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: PANEL_ROOT })
+    expect(
+      PB.branchCarryMark({ plan: 'push', from: PANEL_ROOT, to: '/appointments', rutaDebajo: PANEL_ROOT })
+    ).toBe(false)
+    expect(PB.applyBranchMarkRequest('/appointments')).toBe(false)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+    // Y ahí la derivación del par de rutas es CORRECTA, que es por qué no hace falta pedir nada.
+    expect(branchMarkDecision({ previous: PANEL_ROOT, current: '/appointments', vieneDeUnRetroceso: false })).toBe(PANEL_ROOT)
+  })
+
+  it('los OTROS CUATRO miembros del plan ⇒ no se pide nada: cada uno tiene su propio camino', () => {
+    montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/finances' })
+    for (const plan of ['up', 'collapse-then-replace', 'consume-exit-then-navigate', 'none'] as const) {
+      expect(PB.branchCarryMark({ plan, from: '/finances', to: '/clients', rutaDebajo: PANEL_ROOT })).toBe(false)
+      expect(PB.applyBranchMarkRequest('/clients')).toBe(false)
+    }
+  })
+
+  it('SIN RUTA LEÍDA no se inventa ninguna: se abstiene, y la pila queda un escalón más larga', () => {
+    // ⚠ LA REGLA QUE NO SE NEGOCIA. Con la marca ya perdida antes del reemplazo, lo que queda debajo
+    // del destino es DESCONOCIDO: escribir la ruta de la que venimos mandaría el gesto de atrás a una
+    // entrada que no empujamos nosotros, o sea al dueño FUERA DEL SITIO.
+    const ctx = montarPila({ state: { __NA: true }, pathname: '/appointments' })
+    expect(
+      PB.branchCarryMark({
+        plan: 'replace',
+        from: '/appointments',
+        to: '/clients',
+        rutaDebajo: PH.panelUnderRoute(ctx.win.history.state),
+      })
+    ).toBe(false)
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(false)
+    expect(ctx.replaceState).not.toHaveBeenCalled()
+    // La degradación segura, medida: sin marca el hecho de la regla -1c es falso y el gesto EMPUJA.
+    expect(
+      PH.panelBranchPlan({
+        from: '/clients',
+        to: PANEL_ROOT,
+        raizDebajo: false,
+        masDebajo: false,
+        holdsExitSentinel: false,
+      })
+    ).toBe('push')
+  })
+
+  it('las TRES reglas van en orden, y la del valor leído va ÚLTIMA (auditoría de fuente)', () => {
+    // El orden es lo que hace que el caso *destino igual* y el caso *no es un reemplazo* se resuelvan
+    // por SU propio motivo y no por casualidad de que la marca estuviera ausente.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf('export function branchCarryMark({')
+    expect(desde).toBeGreaterThan(0)
+    // El ancla de cierre es la llave SOLA en su línea, por el mismo motivo de siempre.
+    const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+    expect(region.length).toBeGreaterThan(150)
+    expect(cuenta(region, /if \(/g)).toBe(3)
+    expect(region.indexOf("plan !== 'replace'")).toBeLessThan(region.indexOf('from === to'))
+    expect(region.indexOf('from === to')).toBeLessThan(region.indexOf('rutaDebajo === null'))
+    // Escribe por la productora privada del canal y por nadie más, y no toca `window`: el valor ENTRA.
+    expect(cuenta(region, /pedirMarcaPropagada\(/g)).toBe(1)
+    expect(cuenta(region, /window\./g)).toBe(0)
+    // Y el identificador del hecho de la regla -1c no aparece en su código: un solo dialecto.
+    expect(cuenta(region, /raizDebajo/g)).toBe(0)
+  })
 })

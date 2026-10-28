@@ -145,19 +145,45 @@ export function takeBackLanding(): string | null {
 export type BranchMarkRequest = { destino: string; rutaDebajo: string | null }
 
 /**
- * El canal de propagación. **Es UNO**, lo llena **sólo** el ejecutor del colapso —que es el único
- * que conoce la ruta real de abajo, porque la **leyó**— y lo consume **sólo**
- * {@link applyBranchMarkRequest} desde el efecto de marcado, que es el único lugar que observa la
- * ruta en todo commit del panel.
+ * El canal de propagación. **Es UNO**, y lo consume **sólo** {@link applyBranchMarkRequest} desde el
+ * efecto de marcado, que es el único lugar que observa la ruta en todo commit del panel.
+ *
+ * **Tiene DOS PRODUCTORES (2026-10-28, plan 03-11), y los dos cumplen la MISMA condición**, que es
+ * la que de verdad importa y por eso se escribe como invariante:
+ *
+ *   ⚠ **SÓLO LLENA ESTE CANAL QUIEN *LEYÓ* LA ENTRADA DE ABAJO.**
+ *
+ *   1. **el segundo paso del colapso** — parado sobre la entrada de Más, lee su marca justo antes de
+ *      que el reemplazo la pise; y
+ *   2. **el gesto que reemplaza** ({@link branchCarryMark}, llamado desde `handleNavigate`) — lee la
+ *      marca de la entrada de arriba antes de que el `<Link>` haga su `replace`, que es el único
+ *      momento en que ese valor existe.
+ *
+ * Los dos producen el mismo dato —*qué quedó debajo*, **leído**— y por eso son un **segundo
+ * productor del MISMO canal** y no un mecanismo nuevo: escriben por el **escritor único**, se
+ * **descartan siempre** y **no inventan** rutas. Un segundo *dialecto* de la misma regla es lo que
+ * NAV-05 viene a evitar; un segundo productor con la **misma** disciplina, no.
+ *
+ * **Y el consumidor sigue siendo UNO, que es lo que no cambia.** Dos consumidores serían dos lugares
+ * donde descartar el pedido —y el día que uno se olvide, una marca rancia cae sobre una entrada
+ * ajena—. Agregar un productor no agrega un consumidor: el pedido se sigue drenando en el mismo
+ * efecto, en todo commit del panel.
  *
  * ⚠ **Y por eso el provider del guard de cambios sin guardar NO SE TOCA:** ejecuta el MISMO colapso
  * para el caso vivo de `/web` llamando a {@link runBranchNavigation}, así que su propagación sale
  * gratis por este mismo canal. Cablearla allá también serían **dos** consumidores y un segundo
- * dialecto de la misma regla.
+ * dialecto de la misma regla. ⚠ **Su residuo, declarado (2026-10-28):** el `case 'replace'` del
+ * guard navega por su cuenta y **no** pasa por `handleNavigate`, así que en una pantalla **sucia** la
+ * marca se sigue perdiendo y el gesto siguiente hacia Inicio queda **un escalón más largo** — nunca
+ * una expulsión. Se **acepta** con el mismo criterio que el residuo de escritorio del plan 03-09:
+ * cablearlo allá exigiría una **segunda** lectura del estado en el mismo gesto (dos verdades que
+ * pueden diferir) más un parámetro nuevo en el ejecutor compartido. Queda escrito en los cuatro
+ * lugares donde se puede leer: acá, el documento de debug, la precisión de MOB-04 y la entrada 18 de
+ * `.planning/WINDOWS.md`.
  */
 let marcaPedida: BranchMarkRequest | null = null
 
-/** Deja pedida la propagación. Privada a propósito: el único productor es el colapso. */
+/** Deja pedida la propagación. Privada a propósito: los productores son los DOS de acá arriba. */
 function pedirMarcaPropagada(destino: string, rutaDebajo: string | null): void {
   marcaPedida = { destino, rutaDebajo }
 }
@@ -184,6 +210,71 @@ export function applyBranchMarkRequest(current: string): boolean {
   // idempotencia). Este canal no tiene guardas propias a propósito: dos juegos de guardas es cómo se
   // pierde uno de los dos sin que ningún gate lo vea.
   if (pedido.rutaDebajo !== null) writePanelUnder(pedido.rutaDebajo)
+  return true
+}
+
+/**
+ * **EL SEGUNDO PRODUCTOR DEL CANAL: la marca de la rama VIAJA por encima del `replace`** (`G3-1`,
+ * plan 03-11, medido en el escenario `E-17`). Devuelve `true` si dejó el pedido y `false` si se
+ * abstuvo.
+ *
+ * **QUÉ RESUELVE.** La marca se escribe **sólo cuando la política dice empujar**
+ * ({@link applyPanelUnder}), y el reemplazo de sección a sección deja que el router escriba su propio
+ * state encima — la *escritura blanda* que la lista de *quién borra esta marca* ya nombraba—. Así que
+ * en una **cadena** de reemplazos (`Inicio → Turnos → Clientes → Agenda`) la marca se escribe una vez
+ * y **nadie la vuelve a escribir**: parado en Agenda la entrada no tiene marca, el hecho de la regla
+ * `-1c` es **falso** y el gesto hacia Inicio **empuja**. Medido por contraste en el mismo motor y el
+ * mismo día: una sola sección **pasa**, cuatro **fallan**, y la única diferencia es **un** reemplazo.
+ *
+ * **EL ENUNCIADO ES DE LA PILA Y NO DEL SÍNTOMA: un `replace` NO CAMBIA lo que quedó debajo.** Lo que
+ * había debajo del origen es, por definición, lo que queda debajo del destino. Por eso la marca no se
+ * **deriva** del par de rutas —el par dice `replace` y la derivación daría `null`, que es justo el
+ * bug— sino que se **propaga**: viaja el valor que se **leyó**.
+ *
+ * ⚠ **POR QUÉ EL VALOR ENTRA COMO PARÁMETRO Y NO SE LEE ACÁ.** Es la misma frontera que el resto del
+ * módulo ya tiene con los hechos de la pila: la lectura de `window.history.state` ya está hecha **una
+ * vez por gesto** en `handleNavigate`. Dos lecturas del estado en el mismo gesto son **dos verdades
+ * que pueden diferir** — entre una y otra pudo haber una escritura blanda que se llevó la marca
+ * (lección 1). Y acá es el **único** momento en que el valor existe: para cuando el efecto de marcado
+ * corre, el `<Link>` ya reemplazó.
+ *
+ * ⚠ **POR QUÉ RECIBE EL PLAN Y NO EL MODO DE RUTAS.** El plan es el **único** resultado del gesto, así
+ * que un miembro nuevo mañana no se puede colar por el costado: los cuatro miembros que no son los dos
+ * del `<Link>` tienen su propio camino, y el colapso **ya** produce sobre este canal.
+ *
+ * ⚠ **LA FRONTERA DEL ARREGLO:** {@link panelNavMode} y {@link panelBranchPlan} **no se tocan**. La
+ * regla `-1c` ya era correcta; lo que faltaba era que el hecho que lee **estuviera ahí**.
+ *
+ * Las reglas, **en orden**, y la del valor leído **va última** para que los dos casos de arriba se
+ * resuelvan por **su** propio motivo y no por casualidad de que la marca estuviera ausente:
+ *   1. **no es un reemplazo ⇒ no se pide nada.** Un empuje **crea** una entrada y la decisión de
+ *      marcado ya sabe qué quedó debajo; pedirlo además sería un segundo camino de escritura para el
+ *      mismo hecho. Los otros cuatro miembros tienen su propio camino.
+ *   2. **el destino es la MISMA ruta ⇒ no se pide nada.** Ahí el reemplazo cae **sobre la misma
+ *      entrada** y el pathname **no cambia**, así que el efecto de marcado **no vuelve a correr** y el
+ *      pedido sobreviviría a una navegación que **no es la que lo pidió**: una marca rancia sobre una
+ *      entrada ajena, el mismo bug del otro lado.
+ *   3. **sin ruta leída NO SE INVENTA NINGUNA.** Con la marca ya perdida antes del reemplazo, lo que
+ *      queda debajo del destino es **desconocido**: escribir la ruta de la que venimos sería la
+ *      mentira que {@link applyBranchMarkRequest} existe para no decir. Se abstiene, y la pila queda
+ *      un escalón más larga — la **degradación segura** de toda la fase, nunca una expulsión.
+ */
+export function branchCarryMark({
+  plan,
+  from,
+  to,
+  rutaDebajo,
+}: {
+  plan: PanelBranchPlan
+  from: string
+  to: string
+  /** La ruta que se **LEYÓ** de la entrada de arriba, o `null` si esa entrada no llevaba marca. */
+  rutaDebajo: string | null
+}): boolean {
+  if (plan !== 'replace') return false
+  if (from === to) return false
+  if (rutaDebajo === null) return false
+  pedirMarcaPropagada(to, rutaDebajo)
   return true
 }
 
@@ -1216,6 +1307,13 @@ export function usePanelBranch({
       // dispara donde no corresponde, y la política no necesita preguntarle nada a la pantalla.
       raizDebajo: panelUnderRoute(estado) === root,
     })
+    // ⚠ LA PROPAGACIÓN (G3-1, plan 03-11), Y VA ACÁ PORQUE ACÁ ES EL ÚNICO MOMENTO EN QUE EL VALOR
+    // EXISTE. El `<Link>` reemplaza con su prefetch y su transición, y el router escribe su propio
+    // state encima: para cuando el efecto de marcado corre, la marca de esta entrada ya no está. El
+    // valor sale del MISMO `estado` que se leyó arriba para los tres hechos —una sola lectura por
+    // gesto, nunca dos verdades que puedan diferir— y la decisión de propagarlo o no vive en el
+    // productor, con sus reglas en orden.
+    branchCarryMark({ plan, from: pathname, to: href, rutaDebajo: panelUnderRoute(estado) })
     if (plan === 'push' || plan === 'replace') return false
     // ⚠ EL DOMINIO SE SUELTA ANTES DE DELEGAR, y es obligatorio (T-03-29). El retroceso que viene
     // es DELIBERADO —lo pedimos nosotros—, así que si llega a `panelExitPopAction` con el hecho de
