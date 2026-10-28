@@ -2,12 +2,18 @@
 status: measured
 trigger: "Phase 3 del workstream panel-nav: medir la pila REAL del navegador para los recorridos de la política de dos niveles, antes de que 03-02, 03-03 y 03-04 escriban su mitad difícil. E-1..E-7 los agregó el plan 03-01 (Task 2); E-8 —la cadena de tres pasos del guard de salida— el plan 03-04; E-11 —la INTERSECCIÓN del sentinel de salida con la marca de la rama, que es el hueco que la UAT destapó— el plan 03-05; E-9, E-10 y E-12 —el sentinel enterrado contra el consumido, la decisión (a) del dueño y el degenerado con el sentinel al fondo— el plan 03-06; E-13 —el ciclo de re-armado ×3 sin acumular y el origen medido del hash escalado— el plan 03-07."
 created: 2026-10-13T00:00:00Z
-updated: 2026-10-23T00:00:00Z
+updated: 2026-10-28T00:00:00Z
 ---
 
 ## Current Focus
 
-veredicto: **LAS TRECE PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (13/13, la sonda sale 0)
+veredicto: **LAS DIECIOCHO PILAS MEDIDAS COINCIDEN CON LAS ESPERADAS** (18/18, la sonda sale 0 —
+medido el 2026-10-28, con `E-17` y `E-18` del plan 03-11 adentro)
+
+⚠ **Y UN PIPELINE VERDE NO ES EVIDENCIA, con tres ocurrencias para probarlo:** la ronda 1 de la UAT
+llegó con la sonda en **8/8** y encontró cinco fallos; la 2 con **13/13** y encontró `G2-1`; la 3 con
+**16/16** y encontró `G3-1` **en el primer recorrido**. Este 18/18 sigue midiendo un espacio que **no
+incluye** lo que el teléfono prueba.
 
 La sonda es `.planning/debug/probes/panel-back-stack.mjs`, es **re-ejecutable** y **falla con código
 distinto de cero** si cualquier pila medida difiere de la esperada. Esto no es un informe de una
@@ -49,7 +55,7 @@ mide tres cantidades por escenario y las compara por separado:
   (están adelante, no debajo) y el dueño estuvo ahí de verdad. Se **declaran** en la expectativa en
   vez de ignorarse, igual que el caso de entrada directa que v0.30 declaró y aceptó.
 
-## Las dieciséis mediciones
+## Las dieciocho mediciones
 
 ### E-1 · MOB-04 nivel 1 — `Inicio → Más → Finanzas`
 
@@ -667,6 +673,190 @@ paso aterrizaría en **Turnos** y no en Inicio. Y lo que ve el dueño desde ahí
 frentes: el atrás **hace algo visible** (vuelve a **Más**), que es el invariante del criterio 2, y el
 armado dice **no armar** porque hay algo nuestro debajo — la **decisión (a)** funcionando, no un
 agujero.
+
+### E-17 · G3-1 — la CADENA de `replace` cruzada con la regla `-1c` y con el sentinel de salida
+
+Veredicto: **OK** (2026-10-28). Lo agregó el plan **03-11**. Es `G3-1` entero medido como números, con
+**tres mitades en la misma corrida** — y la pieza que lo hizo visible es nueva: el **reemplazo del
+`<Link>` tal como es** (`reemplazarComoElRouter`), o sea un reemplazo que cambia la ruta **y escribe
+el state del router encima**. Los dieciséis escenarios anteriores medían marcas **por separado** y
+**ninguno** tenía dos reemplazos seguidos: por eso ninguno podía ver este gap.
+
+**Mitad A — la forma de hoy** (`Inicio → Turnos → Clientes → Agenda → tocar Inicio`, sin propagar):
+
+```
+mitad_A_hash_al_entrar_a_inicio:                  "#salir"
+mitad_A_marca_en_la_primera_seccion:              {"frjUnder":"/dashboard"}
+mitad_A_marca_tras_el_primer_reemplazo:           {"router":"ajeno"}
+mitad_A_marca_tras_los_dos_reemplazos:            {"router":"ajeno"}
+mitad_A_hecho_nuevo_la_marca_dice_la_raiz:        false
+mitad_A_hecho_de_la_rama_la_marca_dice_mas:       false
+mitad_A_plan:                                     "push"
+mitad_A_profundidades_antes_y_despues:            [2,3]
+mitad_A_camino_del_atras_despues:                 ["/dashboard","/agenda","/dashboard"]
+mitad_A_marca_de_la_entrada_de_inicio:            {"frjUnder":"/agenda"}
+mitad_A_accion_de_armado:                         "no-armar"
+mitad_A_el_sentinel_en_el_camino_del_atras:       []
+```
+
+⇒ **EL GAP, EN DOS LÍNEAS.** La primera sección **sí** tiene la marca (la escribió el empuje del
+segundo paso del sentinel) y **después del primer reemplazo ya no está**: el router escribió su propio
+state encima y **nadie la vuelve a escribir**. Parado en Agenda el hecho de la regla `-1c` es **falso**
+⇒ el gesto **empuja** ⇒ la entrada nueva de Inicio queda marcada con `/agenda` ⇒ la séptima regla dice
+**no armar** ⇒ **cero** entradas con el hash en el camino del atrás. Es textual lo que el dueño
+reportó: *«toqué inicio y sale sin el hash, y atrás me lleva a donde estaba antes»*.
+
+**Mitad B — la marca VIAJANDO** (el mismo recorrido, leyendo antes de cada reemplazo y propagando
+después):
+
+```
+mitad_B_hash_al_entrar_a_inicio:                          "#salir"
+mitad_B_la_propagacion_escribio_en_cada_tramo:            [true,true]
+mitad_B_marca_tras_el_primer_reemplazo:                   {"frjUnder":"/dashboard"}
+mitad_B_marca_tras_los_dos_reemplazos:                    {"frjUnder":"/dashboard"}
+mitad_B_hecho_nuevo_la_marca_dice_la_raiz:                true
+mitad_B_hecho_de_la_rama_la_marca_dice_mas:               false
+mitad_B_plan:                                             "up"
+mitad_B_profundidades_antes_y_despues:                    [2,1]
+mitad_B_parado_tras_el_retroceso:                         "/dashboard"
+mitad_B_marca_del_aterrizaje:                             null
+mitad_B_accion_de_armado:                                 "armar"
+mitad_B_hash_empujado_por_el_armado:                      "#salir"
+mitad_B_pares_adyacentes_con_el_mismo_pathname_al_armar:  1
+```
+
+⇒ **LO QUE SE PERDIÓ, VOLVIÓ.** La marca sobrevive la **cadena entera** —dice la raíz después de los
+**dos** reemplazos, no después de uno—, el plan pasa a ser el **retroceso**, el dueño aterriza en la
+entrada **original** de Inicio (sin nada nuestro debajo), el armado **procede** y el hash empujado es
+el **base** y nunca el escalado. El **único** par adyacente con el mismo pathname es el par
+raíz / raíz-con-el-hash, que es la **condición de existencia** de la entrada del sentinel y **no** un
+atrás muerto.
+
+**Mitad C — la marca que NUNCA se leyó** (ya pisada antes del primer reemplazo):
+
+```
+mitad_C_valor_leido:                          null
+mitad_C_la_propagacion_escribio:              false
+mitad_C_marca_tras_el_reemplazo:              {"router":"ajeno"}
+mitad_C_hecho_nuevo_la_marca_dice_la_raiz:    false
+mitad_C_plan:                                 "push"
+mitad_C_profundidades_antes_y_despues:        [2,3]
+```
+
+⇒ **SIN VALOR LEÍDO NO SE INVENTA NINGUNO**, y la abstención queda **medida** en vez de prometida: la
+propagación devuelve *no escribió*, el hecho queda falso, el gesto empuja y la pila queda **un escalón
+más larga**. La degradación segura de toda la fase: un escalón más, **nunca** el dueño fuera del sitio.
+
+**El contraste, en la misma corrida y como números** —que es lo que el gap pedía—:
+
+```
+contraste_plan_A_contra_B:                        ["push","up"]
+contraste_profundidad_final_A_contra_B:           [3,1]
+contraste_la_marca_sobrevivio_la_cadena_A_B_C:    [false,true,false]
+```
+
+⇒ **La única diferencia entre los dos recorridos del dueño es UN REEMPLAZO.** Medido por contraste en
+el mismo motor y el mismo día: `Inicio → Clientes → tocar Inicio` (una sola sección) **pasa**, y
+`Inicio → Turnos → Clientes → Agenda → tocar Inicio` **falla**. Acá eso queda como `[3,1]` de
+profundidad final y `["push","up"]` de plan.
+
+**Probado en rojo, y con el rojo que salió escrito:** con la propagación mutada a un no-op, la sonda
+**no puede completar la medición** y sale **1** — `la entrada de arriba NO lleva nuestra marca: un
+back() acá seria sobre entrada ajena`, que es el retroceso guardado **negándose**. O sea que el verde
+de la mitad B **depende** de que la marca haya viajado, y el modo de falla sin ella es la **negativa**
+y no una expulsión.
+
+### E-18 · G3-1 dentro de la rama de Más: la propagación no le roba el gesto al colapso
+
+Veredicto: **OK** (2026-10-28). Lo agregó el plan **03-11**. La propagación se escribió **general**
+—viaja cualquier ruta leída, porque *un reemplazo no cambia lo que hay debajo* es cierto para
+cualquier valor—, así que el costo de esa generalidad se **mide** acá en vez de suponerse.
+
+**Mitad A — D-03 por encima del reemplazo** (raíz, Más y una sección de Más por **empuje**, y de ahí
+**dos** secciones más de Más por **reemplazo**, propagando):
+
+```
+mitad_A_valores_leidos_antes_de_cada_reemplazo:   ["/mas","/mas"]
+mitad_A_la_propagacion_escribio_en_cada_tramo:    [true,true]
+mitad_A_marca_tras_los_dos_reemplazos:            {"frjUnder":"/mas"}
+mitad_A_hecho_de_la_rama_la_marca_dice_mas:       true
+mitad_A_hecho_nuevo_la_marca_dice_la_raiz:        false
+mitad_A_plan_con_la_propagacion:                  "up"
+mitad_A_plan_sin_la_propagacion:                  "push"
+mitad_A_parado_tras_el_retroceso:                 "/mas"
+mitad_A_marca_del_aterrizaje:                     {"frjUnder":"/dashboard"}
+mitad_A_camino_del_atras_tras_el_retroceso:       ["/dashboard","/mas"]
+mitad_A_accion_de_armado:                         "no-armar"
+```
+
+⇒ **D-03 SE SOSTIENE POR ENCIMA DEL REEMPLAZO, y eso es una mejora medida y no un efecto colateral.**
+Dentro de la rama la marca sigue diciendo **Más** después de los dos reemplazos, así que tocar Más
+desde ahí **sube** — que es literalmente lo que D-03 pide — y **sin** la propagación el mismo gesto
+habría **apilado**. El armado dice *no armar* porque no estamos en la raíz: el aviso es de MOB-05 y
+vive en Inicio.
+
+**Mitad B — la propagación no le roba el gesto al colapso** (desde esa misma pila, un destino **de la
+barra**):
+
+```
+mitad_B_la_propagacion_escribio_en_cada_tramo:        [true,true]
+mitad_B_hecho_de_la_rama_la_marca_dice_mas:           true
+mitad_B_hecho_nuevo_la_marca_dice_la_raiz:            false
+mitad_B_plan:                                         "collapse-then-replace"
+mitad_B_rama_del_colapso:                             "retroceso-y-reemplazo"
+mitad_B_marca_leida_en_la_entrada_de_mas:             "/dashboard"
+mitad_B_camino_del_atras:                             ["/dashboard","/clients"]
+mitad_B_marca_del_destino:                            {"frjUnder":"/dashboard"}
+mitad_B_pares_adyacentes_con_el_mismo_pathname:       0
+```
+
+⇒ **EL COLAPSO SIGUE SIENDO EL DUEÑO DE ESE GESTO.** El hecho nuevo sigue **falso** (la marca dice
+Más, no la raíz) ⇒ la decisión sigue siendo **colapsar y reemplazar**, y no quedan dos entradas con el
+mismo pathname pegadas: **cero** pares adyacentes, o sea ningún atrás muerto (criterio 2).
+
+**El límite declarado de D-02, re-afirmado acá** (pila de **tres** escalones, **todo por empuje y sin
+ningún reemplazo en el camino**):
+
+```
+limite_marca_de_la_entrada_de_arriba:         {"frjUnder":"/appointments"}
+limite_hecho_nuevo_la_marca_dice_la_raiz:     false
+limite_plan:                                  "push"
+limite_camino_del_atras:                      ["/dashboard","/appointments","/mas","/dashboard"]
+limite_atras_cae_en:                          "/mas"
+limite_accion_de_armado:                      "no-armar"
+```
+
+⇒ **NO ES UN DEFECTO Y SE MIDE PARA QUE NADIE LO "ARREGLE" DE PASO.** Sin ningún reemplazo en el
+camino la propagación **no participa**: la marca de arriba dice la **sección** y no la raíz, el hecho
+es **falso**, el gesto **sigue empujando** y el atrás desde ahí **sigue cayendo en Más**. MOB-04 lo
+registra con fecha y el bloque **2.3** del guion de la ronda 3 le avisa al dueño que es lo esperado.
+
+### ⚠ EL RESIDUO DEL CAMINO DEL GUARD, declarado acá con su fecha (2026-10-28) en vez de descubierto en la ronda 4
+
+**El alcance exacto, y es chico a propósito:** el **guard de cambios sin guardar** ejecuta su propio
+reemplazo (`case 'replace': navegar(href, plan)`) y **no** pasa por el gesto de la barra, así que en
+una pantalla **sucia** que sale por el guard la marca **se sigue perdiendo** y el gesto siguiente hacia
+Inicio queda **un escalón más largo** — **nunca** una expulsión. Es exactamente la forma de la mitad C
+de **E-17**, que es donde queda medida.
+
+**Por qué no se cableó allá:** exigiría una **segunda** lectura del estado en el mismo gesto —dos
+verdades que pueden diferir, que es la lección 1 de este módulo— más un **parámetro nuevo** en el
+ejecutor compartido. Se **acepta** con el mismo criterio con el que se aceptó el residuo de escritorio
+del plan 03-09: es la **degradación segura** de toda la fase, no una expulsión.
+
+**Queda escrito en los CUATRO lugares donde se puede leer**, los cuatro con esta fecha: el docblock
+del canal en `lib/panel-branch.ts`, este documento, la precisión de **MOB-04** en
+`REQUIREMENTS.md` y la entrada **18** de `.planning/WINDOWS.md`.
+
+**Y los TRES no-defectos de la fase siguen intactos, uno por uno:**
+
+- la **pila de tres escalones** de D-02 —`Inicio → Turnos → Más → tocar Inicio`— **sigue empujando** y
+  su atrás **sigue volviendo a Más**: ahí no hay ningún reemplazo en el camino y la propagación no
+  participa. Medido arriba, en el bloque del límite de **E-18**;
+- `Más → tocar Inicio → atrás` **sigue avisando para salir** (decisión del dueño del 2026-10-27): ese
+  recorrido tampoco tiene un reemplazo en el camino;
+- el **residuo de escritorio** de la revisión acotada del criterio 6 queda **tal como está**, ni
+  ampliado ni tapado.
 
 ### ⚠ EL RESIDUO DE ESCRITORIO DE G2-1, declarado acá con su fecha en vez de descubierto en la próxima UAT
 

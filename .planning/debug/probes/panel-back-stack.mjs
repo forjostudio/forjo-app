@@ -249,6 +249,46 @@ function colapsar(cdp, destino) {
 }
 
 /**
+ * EL REEMPLAZO DEL `<Link>`, TAL COMO ES: cambia la **ruta** y escribe el state del router **encima**,
+ * o sea **se lleva nuestra marca**. Es el reemplazo blando ajeno de la mitad A de **E-16**
+ * (`{ router: 'ajeno' }`) con la **url** puesta.
+ *
+ * ⚠ **ES LA PIEZA QUE LOS DIECISEIS ESCENARIOS DE ANTES NO TENIAN, y por eso ninguno podia ver
+ * `G3-1`.** Todos median marcas **por separado**: una marca escrita, una marca pisada. Ninguno medía
+ * una **CADENA** de reemplazos, que es la causa medida del gap — la marca se escribe una vez y nadie
+ * la vuelve a escribir.
+ */
+function reemplazarComoElRouter(cdp, ruta) {
+  return evaluar(cdp, `history.replaceState({ router: 'ajeno' }, '', ${JSON.stringify(ruta)})`)
+}
+
+/**
+ * LA PROPAGACION: escribe la marca **LEIDA** sobre la entrada actual, con las **dos guardas del
+ * escritor unico** (entrada de otro dueno primero, idempotencia despues) y devolviendo **si
+ * escribio** — asi el escenario puede afirmar la **ABSTENCION** y no solo la escritura.
+ *
+ * ⚠ **SIN VALOR LEIDO NO SE INVENTA NINGUNO.** Es la regla que no se negocia: una marca falsa manda
+ * el gesto de atras a una entrada que no empujamos nosotros y deja al dueno **fuera del sitio**;
+ * quedarse sin marca deja una pila **un escalon mas larga**. El molde es el segundo paso de
+ * {@link colapsar}, que propaga exactamente igual.
+ */
+function propagarLaMarca(cdp, rutaLeida) {
+  return evaluar(cdp, `
+    (() => {
+      const LEIDA = ${JSON.stringify(rutaLeida ?? null)}
+      if (LEIDA === null) return false
+      const st = history.state
+      // Guarda 1 — la regla 0: la entrada de arriba no puede tener otro dueno.
+      if (st && (typeof st.frjOverlay !== 'undefined' || typeof st.frjDirty !== 'undefined' || typeof st.frjExit !== 'undefined')) return false
+      // Guarda 2 — idempotencia: una entrada que ya lleva la marca ya sabe que tiene debajo.
+      if (st && typeof st.frjUnder === 'string') return false
+      history.replaceState({ frjUnder: LEIDA }, '')
+      return true
+    })()
+  `)
+}
+
+/**
  * SALIR DE LA RAIZ CONSUMIENDO EL SENTINEL DE SALIDA, en DOS PASOS. Es lo que el plan 03-06
  * implementa en la app (el sexto miembro del plan de rama y su ejecutor).
  *
@@ -1626,6 +1666,392 @@ const ESCENARIOS = [
       }
     },
   },
+  {
+    id: 'E-17',
+    titulo: 'G3-1 — la CADENA de replace cruzada con la regla -1c y con el sentinel: la marca perdida contra la marca que VIAJA',
+    cierra:
+      'el CRUCE que faltaba: la regla de seccion->raiz contra una CADENA de reemplazos. Los dieciseis escenarios ' +
+      'de antes median marcas POR SEPARADO y ninguno tenia dos reemplazos seguidos, que es la causa MEDIDA de ' +
+      'G3-1: la marca se escribe solo cuando la politica dice empujar, el reemplazo deja que el router escriba su ' +
+      'propio state encima y NADIE la vuelve a escribir. Tres mitades en la MISMA corrida: la A es la forma de hoy ' +
+      '(la marca perdida, el hecho falso, el plan EMPUJAR, la profundidad creciendo y cero entradas con el hash en ' +
+      'el camino del atras — o sea *sale sin el hash y atras me lleva a donde estaba antes*), la B es la marca ' +
+      'VIAJANDO (sobrevive la cadena ENTERA, el plan es el retroceso, el aterrizaje no lleva nuestra marca, el ' +
+      'armado procede y el hash es el BASE) y la C es la marca que NUNCA SE LEYO (la propagacion se ABSTIENE, el ' +
+      'plan empuja y la pila queda un escalon mas larga: la degradacion segura, medida en vez de prometida). ' +
+      'NO cierra el cableado de React: esta sonda monta su propio servidor estatico y no corre el codigo de la ' +
+      'app, asi que A1, A2 y A11 siguen abiertos y los cierra la ronda 3 de la UAT en el telefono',
+    async correr(cdp) {
+      // ⚠ LA MISMA DECISION DE RAMA, en codigo ejecutable adentro del escenario y con sus reglas en el
+      // MISMO orden que E-14, E-15 y E-16. El arreglo de este gap NO toca ninguna de las dos funciones
+      // de politica: lo que cambia es que el hecho que la regla -1c lee AHORA ESTA AHI.
+      const planDeRama = ({ from, to, root, more, raizDebajo, masDebajo, holdsExitSentinel }) => {
+        const modo =
+          from === to ? 'replace'
+            : from === root ? 'push'
+              : to === root ? 'push'
+                : to === more ? 'push'
+                  : from === more ? 'push'
+                    : 'replace'
+        if (holdsExitSentinel && from === to) return 'none'
+        if (holdsExitSentinel && from === root && to !== from) return 'consume-exit-then-navigate'
+        if (raizDebajo && to === root && from !== to) return 'up'
+        if (!masDebajo) return modo
+        if (from === to) return modo
+        if (to === more) return 'up'
+        return 'collapse-then-replace'
+      }
+      // La accion de armado con las SIETE reglas, copiada de E-13/E-14.
+      const accionDeArmado = ({ participates, atRoot, hintOpen, topIsOurs, foreignOwnsTop, urlYaLlevaNuestroHash, algoNuestroDebajo }) => {
+        if (!participates) return 'no-armar'
+        if (!atRoot) return 'no-armar'
+        if (hintOpen) return 'no-armar'
+        if (topIsOurs) return 'no-armar'
+        if (urlYaLlevaNuestroHash) return 'no-armar'
+        if (foreignOwnsTop) return 'no-armar'
+        if (algoNuestroDebajo) return 'no-armar'
+        return 'armar'
+      }
+      const LIBRE = { participates: true, atRoot: true, hintOpen: false, topIsOurs: false, foreignOwnsTop: false, urlYaLlevaNuestroHash: false, algoNuestroDebajo: false }
+      // Las tres secciones de la barra del recorrido del dueno: Turnos -> Clientes -> Agenda.
+      const S1 = '/appointments'
+      const S2 = '/clients'
+      const S3 = '/agenda'
+      const soloPathname = (ruta) => ruta.split('#')[0]
+      const paresAdyacentes = (camino) => camino.filter((r, i) => i > 0 && soloPathname(camino[i - 1]) === soloPathname(r)).length
+      /** El lector de la marca: LA RUTA que quedo debajo, o null. Es `panelUnderRoute` de la app. */
+      const laRutaDeAbajo = (marca) => (marca && typeof marca.frjUnder === 'string' ? marca.frjUnder : null)
+      const hechosDe = (marca) => ({
+        raizDebajo: laRutaDeAbajo(marca) === ROOT,
+        masDebajo: laRutaDeAbajo(marca) === MORE,
+        holdsExitSentinel: typeof marca?.frjExit !== 'undefined',
+      })
+
+      // ── MITAD A · LA FORMA DE HOY: la marca se pierde en la CADENA ────────────────────────────
+      // Se entra a Inicio EN LIMPIO, se arma el sentinel y se sale de la raiz CONSUMIENDOLO hacia la
+      // primera seccion de la barra. De ahi dos secciones mas con el reemplazo del <Link>, SIN
+      // propagar nada: es literalmente el recorrido que el dueno midio en el telefono.
+      await reiniciarEnLimpio(cdp, ROOT)
+      const hashAlEntrarA = await armarElSentinel(cdp, 1)
+      await salirDeLaRaizConsumiendoElSentinel(cdp, S1, ROOT)
+      const marcaEnLaPrimeraSeccionA = (await medir(cdp)).marca
+      await reemplazarComoElRouter(cdp, S2)
+      const marcaTrasElPrimerReemplazoA = (await medir(cdp)).marca
+      await reemplazarComoElRouter(cdp, S3)
+      const arribaA = await medir(cdp)
+      const hechosA = hechosDe(arribaA.marca)
+      const planA = planDeRama({ from: S3, to: ROOT, root: ROOT, more: MORE, ...hechosA })
+      const profundidadAntesA = arribaA.abajo.length
+      await empujar(cdp, ROOT, S3)
+      const despuesA = await medir(cdp)
+      const armadoA = accionDeArmado({ ...LIBRE, algoNuestroDebajo: typeof despuesA.marca?.frjUnder === 'string' })
+
+      // ── MITAD B · LA MARCA VIAJANDO: se LEE antes de cada reemplazo y se PROPAGA despues ──────
+      await reiniciarEnLimpio(cdp, ROOT)
+      const hashAlEntrarB = await armarElSentinel(cdp, 1)
+      await salirDeLaRaizConsumiendoElSentinel(cdp, S1, ROOT)
+      const escribioEnCadaTramoB = []
+      const leida1B = laRutaDeAbajo((await medir(cdp)).marca)
+      await reemplazarComoElRouter(cdp, S2)
+      escribioEnCadaTramoB.push(await propagarLaMarca(cdp, leida1B))
+      const marcaTrasElPrimerReemplazoB = (await medir(cdp)).marca
+      const leida2B = laRutaDeAbajo((await medir(cdp)).marca)
+      await reemplazarComoElRouter(cdp, S3)
+      escribioEnCadaTramoB.push(await propagarLaMarca(cdp, leida2B))
+      const arribaB = await medir(cdp)
+      const hechosB = hechosDe(arribaB.marca)
+      const planB = planDeRama({ from: S3, to: ROOT, root: ROOT, more: MORE, ...hechosB })
+      const profundidadAntesB = arribaB.abajo.length
+      // El gesto lo resuelve el RETROCESO GUARDADO, con su guarda re-verificada en el momento.
+      await retrocederGuardado(cdp)
+      const aterrizajeB = await medir(cdp)
+      const armadoB = accionDeArmado({ ...LIBRE, algoNuestroDebajo: typeof aterrizajeB.marca?.frjUnder === 'string' })
+      const hashEmpujadoB = await armarElSentinel(cdp, 1)
+      const paresTrasArmarB = paresAdyacentes((await medir(cdp)).abajo)
+
+      // ── MITAD C · LA MARCA QUE NUNCA SE LEYO: la propagacion se ABSTIENE ─────────────────────
+      // La marca ya estaba pisada ANTES del primer reemplazo (una escritura blanda ajena, o el camino
+      // del guard de cambios sin guardar, que es el residuo declarado de este plan).
+      await reiniciarEnLimpio(cdp, ROOT)
+      await armarElSentinel(cdp, 1)
+      await salirDeLaRaizConsumiendoElSentinel(cdp, S1, ROOT)
+      await evaluar(cdp, `history.replaceState({ router: 'ajeno' }, '')`)
+      const leidaC = laRutaDeAbajo((await medir(cdp)).marca)
+      await reemplazarComoElRouter(cdp, S2)
+      const escribioC = await propagarLaMarca(cdp, leidaC)
+      const arribaC = await medir(cdp)
+      const hechosC = hechosDe(arribaC.marca)
+      const planC = planDeRama({ from: S2, to: ROOT, root: ROOT, more: MORE, ...hechosC })
+      const profundidadAntesC = arribaC.abajo.length
+      await empujar(cdp, ROOT, S2)
+      const despuesC = await medir(cdp)
+
+      return {
+        medido: {
+          mitad_A_hash_al_entrar_a_inicio: hashAlEntrarA,
+          mitad_A_marca_en_la_primera_seccion: marcaEnLaPrimeraSeccionA,
+          mitad_A_marca_tras_el_primer_reemplazo: marcaTrasElPrimerReemplazoA,
+          mitad_A_marca_tras_los_dos_reemplazos: arribaA.marca,
+          mitad_A_hecho_nuevo_la_marca_dice_la_raiz: hechosA.raizDebajo,
+          mitad_A_hecho_de_la_rama_la_marca_dice_mas: hechosA.masDebajo,
+          mitad_A_plan: planA,
+          mitad_A_profundidades_antes_y_despues: [profundidadAntesA, despuesA.abajo.length],
+          mitad_A_camino_del_atras_despues: despuesA.abajo,
+          mitad_A_marca_de_la_entrada_de_inicio: despuesA.marca,
+          mitad_A_accion_de_armado: armadoA,
+          mitad_A_el_sentinel_en_el_camino_del_atras: despuesA.abajo.filter((r) => r.includes('#salir')),
+          mitad_B_hash_al_entrar_a_inicio: hashAlEntrarB,
+          mitad_B_la_propagacion_escribio_en_cada_tramo: escribioEnCadaTramoB,
+          mitad_B_marca_tras_el_primer_reemplazo: marcaTrasElPrimerReemplazoB,
+          mitad_B_marca_tras_los_dos_reemplazos: arribaB.marca,
+          mitad_B_hecho_nuevo_la_marca_dice_la_raiz: hechosB.raizDebajo,
+          mitad_B_hecho_de_la_rama_la_marca_dice_mas: hechosB.masDebajo,
+          mitad_B_plan: planB,
+          mitad_B_profundidades_antes_y_despues: [profundidadAntesB, aterrizajeB.abajo.length],
+          mitad_B_parado_tras_el_retroceso: aterrizajeB.actual,
+          mitad_B_marca_del_aterrizaje: aterrizajeB.marca,
+          mitad_B_accion_de_armado: armadoB,
+          mitad_B_hash_empujado_por_el_armado: hashEmpujadoB,
+          mitad_B_pares_adyacentes_con_el_mismo_pathname_al_armar: paresTrasArmarB,
+          mitad_C_valor_leido: leidaC,
+          mitad_C_la_propagacion_escribio: escribioC,
+          mitad_C_marca_tras_el_reemplazo: arribaC.marca,
+          mitad_C_hecho_nuevo_la_marca_dice_la_raiz: hechosC.raizDebajo,
+          mitad_C_plan: planC,
+          mitad_C_profundidades_antes_y_despues: [profundidadAntesC, despuesC.abajo.length],
+          contraste_plan_A_contra_B: [planA, planB],
+          contraste_profundidad_final_A_contra_B: [despuesA.abajo.length, aterrizajeB.abajo.length],
+          contraste_la_marca_sobrevivio_la_cadena_A_B_C: [hechosA.raizDebajo, hechosB.raizDebajo, hechosC.raizDebajo],
+        },
+        esperado: {
+          mitad_A_hash_al_entrar_a_inicio: '#salir',
+          // La primera seccion SI tiene la marca: la escribio el empuje del paso 2 del sentinel.
+          mitad_A_marca_en_la_primera_seccion: { frjUnder: ROOT },
+          // Y despues del PRIMER reemplazo ya no esta: el router escribio su propio state encima.
+          mitad_A_marca_tras_el_primer_reemplazo: { router: 'ajeno' },
+          mitad_A_marca_tras_los_dos_reemplazos: { router: 'ajeno' },
+          // EL GAP ENTERO, en una linea: el hecho de la regla -1c es FALSO ⇒ el gesto EMPUJA.
+          mitad_A_hecho_nuevo_la_marca_dice_la_raiz: false,
+          mitad_A_hecho_de_la_rama_la_marca_dice_mas: false,
+          mitad_A_plan: 'push',
+          mitad_A_profundidades_antes_y_despues: [2, 3],
+          mitad_A_camino_del_atras_despues: [ROOT, S3, ROOT],
+          mitad_A_marca_de_la_entrada_de_inicio: { frjUnder: S3 },
+          // *"toque inicio y sale sin el hash"*: la septima regla dice no armar, asi que el aviso no
+          // existe y el atras siguiente sale del panel sin avisar.
+          mitad_A_accion_de_armado: 'no-armar',
+          mitad_A_el_sentinel_en_el_camino_del_atras: [],
+          mitad_B_hash_al_entrar_a_inicio: '#salir',
+          mitad_B_la_propagacion_escribio_en_cada_tramo: [true, true],
+          mitad_B_marca_tras_el_primer_reemplazo: { frjUnder: ROOT },
+          // ⚠ EL CORAZON DEL CRUCE: la marca sobrevive la CADENA ENTERA, no un reemplazo solo.
+          mitad_B_marca_tras_los_dos_reemplazos: { frjUnder: ROOT },
+          mitad_B_hecho_nuevo_la_marca_dice_la_raiz: true,
+          mitad_B_hecho_de_la_rama_la_marca_dice_mas: false,
+          mitad_B_plan: 'up',
+          // La correccion, medida: la profundidad BAJA en vez de crecer.
+          mitad_B_profundidades_antes_y_despues: [2, 1],
+          mitad_B_parado_tras_el_retroceso: ROOT,
+          // El dueno aterriza en la entrada ORIGINAL de Inicio, sin nada nuestro debajo.
+          mitad_B_marca_del_aterrizaje: null,
+          mitad_B_accion_de_armado: 'armar',
+          mitad_B_hash_empujado_por_el_armado: '#salir',
+          // ⚠ EXACTAMENTE UN par adyacente: el par raiz / raiz-con-el-hash-del-sentinel, que es LA
+          // CONDICION DE EXISTENCIA de la entrada del sentinel y NO un atras muerto.
+          mitad_B_pares_adyacentes_con_el_mismo_pathname_al_armar: 1,
+          mitad_C_valor_leido: null,
+          // SIN VALOR LEIDO NO SE INVENTA NINGUNO: se abstiene. Es el candado de la marca falsa.
+          mitad_C_la_propagacion_escribio: false,
+          mitad_C_marca_tras_el_reemplazo: { router: 'ajeno' },
+          mitad_C_hecho_nuevo_la_marca_dice_la_raiz: false,
+          mitad_C_plan: 'push',
+          // La degradacion segura, medida: UN escalon mas largo, nunca el dueno fuera del sitio.
+          mitad_C_profundidades_antes_y_despues: [2, 3],
+          // ⚠ EL CONTRASTE QUE EL GAP PIDE, en la misma corrida: la unica diferencia entre los dos
+          // recorridos del dueno es UN REEMPLAZO, y aca queda como numero.
+          contraste_plan_A_contra_B: ['push', 'up'],
+          contraste_profundidad_final_A_contra_B: [3, 1],
+          contraste_la_marca_sobrevivio_la_cadena_A_B_C: [false, true, false],
+        },
+      }
+    },
+  },
+  {
+    id: 'E-18',
+    titulo: 'G3-1 dentro de la rama de Mas: la propagacion NO le roba el gesto al colapso, y el limite de D-02 sigue empujando',
+    cierra:
+      'el CRUCE de la CADENA de reemplazos con la MARCA DE LA RAMA diciendo Mas, que es donde el colapso ya ' +
+      'compite. Afirma, midiendo los DOS hechos como numeros, que la propagacion es GENERAL sin romper nada: ' +
+      'dentro de la rama la marca sigue diciendo Mas por encima del reemplazo, asi que D-03 se SOSTIENE (tocar ' +
+      'Mas desde dos secciones de Mas SUBE, y sin la propagacion habria EMPUJADO) y el gesto hacia un destino ' +
+      'de la barra sigue siendo COLAPSAR Y REEMPLAZAR, sin dejar dos entradas con el mismo pathname pegadas. Y ' +
+      're-afirma el LIMITE DECLARADO de D-02: con la pila de TRES escalones, todas por empuje y sin ningun ' +
+      'reemplazo en el camino, el hecho nuevo sigue FALSO, el gesto hacia la raiz sigue EMPUJANDO y el atras ' +
+      'desde ahi sigue cayendo en Mas — el no-defecto del bloque 2.3 del guion, medido para que nadie lo ' +
+      '"arregle" de paso. NO cierra el cableado de React: A1, A2 y A11 siguen abiertos y los cierra la ronda 3',
+    async correr(cdp) {
+      // La MISMA decision de rama, con sus reglas en el MISMO orden que E-14, E-15, E-16 y E-17.
+      const planDeRama = ({ from, to, root, more, raizDebajo, masDebajo, holdsExitSentinel }) => {
+        const modo =
+          from === to ? 'replace'
+            : from === root ? 'push'
+              : to === root ? 'push'
+                : to === more ? 'push'
+                  : from === more ? 'push'
+                    : 'replace'
+        if (holdsExitSentinel && from === to) return 'none'
+        if (holdsExitSentinel && from === root && to !== from) return 'consume-exit-then-navigate'
+        if (raizDebajo && to === root && from !== to) return 'up'
+        if (!masDebajo) return modo
+        if (from === to) return modo
+        if (to === more) return 'up'
+        return 'collapse-then-replace'
+      }
+      const accionDeArmado = ({ participates, atRoot, hintOpen, topIsOurs, foreignOwnsTop, urlYaLlevaNuestroHash, algoNuestroDebajo }) => {
+        if (!participates) return 'no-armar'
+        if (!atRoot) return 'no-armar'
+        if (hintOpen) return 'no-armar'
+        if (topIsOurs) return 'no-armar'
+        if (urlYaLlevaNuestroHash) return 'no-armar'
+        if (foreignOwnsTop) return 'no-armar'
+        if (algoNuestroDebajo) return 'no-armar'
+        return 'armar'
+      }
+      const LIBRE = { participates: true, atRoot: true, hintOpen: false, topIsOurs: false, foreignOwnsTop: false, urlYaLlevaNuestroHash: false, algoNuestroDebajo: false }
+      // TRES secciones que viven DENTRO de la rama de Mas, y una de la barra. Son tres y no dos a
+      // proposito: lo que este escenario tiene que medir es una CADENA de reemplazos, no uno solo —
+      // con uno se mide lo que E-16 mitad A ya medía (una marca pisada) y el gap se vuelve invisible.
+      const M1 = '/finances'
+      const M2 = '/web'
+      const M3 = '/ayuda'
+      const DE_LA_BARRA = '/clients'
+      const soloPathname = (ruta) => ruta.split('#')[0]
+      const paresAdyacentes = (camino) => camino.filter((r, i) => i > 0 && soloPathname(camino[i - 1]) === soloPathname(r)).length
+      const laRutaDeAbajo = (marca) => (marca && typeof marca.frjUnder === 'string' ? marca.frjUnder : null)
+      const hechosDe = (marca) => ({
+        raizDebajo: laRutaDeAbajo(marca) === ROOT,
+        masDebajo: laRutaDeAbajo(marca) === MORE,
+        holdsExitSentinel: typeof marca?.frjExit !== 'undefined',
+      })
+      /**
+       * Raiz, Mas y una seccion de Mas por EMPUJE, y de ahi DOS secciones mas de Mas por REEMPLAZO,
+       * leyendo la marca antes de cada uno y propagandola despues. Es la CADENA, adentro de la rama.
+       */
+      const armarLaRamaConUnaCadenaDeReemplazos = async () => {
+        await reiniciarEnLimpio(cdp, ROOT)
+        await empujar(cdp, MORE, ROOT)
+        await empujar(cdp, M1, MORE)
+        const leidas = []
+        const escribio = []
+        leidas.push(laRutaDeAbajo((await medir(cdp)).marca))
+        await reemplazarComoElRouter(cdp, M2)
+        escribio.push(await propagarLaMarca(cdp, leidas[0]))
+        leidas.push(laRutaDeAbajo((await medir(cdp)).marca))
+        await reemplazarComoElRouter(cdp, M3)
+        escribio.push(await propagarLaMarca(cdp, leidas[1]))
+        return { leidas, escribio }
+      }
+
+      // ── MITAD A · D-03 POR ENCIMA DEL REEMPLAZO: tocar Mas desde ahi SUBE ────────────────────
+      const propagacionA = await armarLaRamaConUnaCadenaDeReemplazos()
+      const arribaA = await medir(cdp)
+      const hechosA = hechosDe(arribaA.marca)
+      const planConPropagacionA = planDeRama({ from: M3, to: MORE, root: ROOT, more: MORE, ...hechosA })
+      // Y el MISMO gesto sin la propagacion, que es lo que pasaba antes de este plan: con la marca
+      // pisada los dos hechos son falsos y la politica de rutas dice EMPUJAR (destino Mas).
+      const planSinPropagacionA = planDeRama({ from: M3, to: MORE, root: ROOT, more: MORE, raizDebajo: false, masDebajo: false, holdsExitSentinel: false })
+      await retrocederGuardado(cdp)
+      const aterrizajeA = await medir(cdp)
+      const armadoA = accionDeArmado({ ...LIBRE, atRoot: aterrizajeA.actual === ROOT, algoNuestroDebajo: typeof aterrizajeA.marca?.frjUnder === 'string' })
+
+      // ── MITAD B · LA PROPAGACION NO LE ROBA EL GESTO AL COLAPSO ─────────────────────────────
+      const propagacionB = await armarLaRamaConUnaCadenaDeReemplazos()
+      const arribaB = await medir(cdp)
+      const hechosB = hechosDe(arribaB.marca)
+      const planB = planDeRama({ from: M3, to: DE_LA_BARRA, root: ROOT, more: MORE, ...hechosB })
+      const colapsoB = await colapsar(cdp, DE_LA_BARRA)
+      const despuesB = await medir(cdp)
+
+      // ── EL LIMITE DECLARADO DE D-02, re-afirmado: TODO por empuje, ningun reemplazo ─────────
+      await reiniciarEnLimpio(cdp, ROOT)
+      await empujar(cdp, '/appointments', ROOT)
+      await empujar(cdp, MORE, '/appointments')
+      const arribaL = await medir(cdp)
+      const hechosL = hechosDe(arribaL.marca)
+      const planL = planDeRama({ from: MORE, to: ROOT, root: ROOT, more: MORE, ...hechosL })
+      await empujar(cdp, ROOT, MORE)
+      const despuesL = await medir(cdp)
+      const armadoL = accionDeArmado({ ...LIBRE, algoNuestroDebajo: typeof despuesL.marca?.frjUnder === 'string' })
+
+      return {
+        medido: {
+          mitad_A_valores_leidos_antes_de_cada_reemplazo: propagacionA.leidas,
+          mitad_A_la_propagacion_escribio_en_cada_tramo: propagacionA.escribio,
+          mitad_A_marca_tras_los_dos_reemplazos: arribaA.marca,
+          mitad_A_hecho_de_la_rama_la_marca_dice_mas: hechosA.masDebajo,
+          mitad_A_hecho_nuevo_la_marca_dice_la_raiz: hechosA.raizDebajo,
+          mitad_A_plan_con_la_propagacion: planConPropagacionA,
+          mitad_A_plan_sin_la_propagacion: planSinPropagacionA,
+          mitad_A_parado_tras_el_retroceso: aterrizajeA.actual,
+          mitad_A_marca_del_aterrizaje: aterrizajeA.marca,
+          mitad_A_camino_del_atras_tras_el_retroceso: aterrizajeA.abajo,
+          mitad_A_accion_de_armado: armadoA,
+          mitad_B_la_propagacion_escribio_en_cada_tramo: propagacionB.escribio,
+          mitad_B_hecho_de_la_rama_la_marca_dice_mas: hechosB.masDebajo,
+          mitad_B_hecho_nuevo_la_marca_dice_la_raiz: hechosB.raizDebajo,
+          mitad_B_plan: planB,
+          mitad_B_rama_del_colapso: colapsoB.rama,
+          mitad_B_marca_leida_en_la_entrada_de_mas: colapsoB.marcaLeida,
+          mitad_B_camino_del_atras: despuesB.abajo,
+          mitad_B_marca_del_destino: despuesB.marca,
+          mitad_B_pares_adyacentes_con_el_mismo_pathname: paresAdyacentes(despuesB.abajo),
+          limite_marca_de_la_entrada_de_arriba: arribaL.marca,
+          limite_hecho_nuevo_la_marca_dice_la_raiz: hechosL.raizDebajo,
+          limite_plan: planL,
+          limite_camino_del_atras: despuesL.abajo,
+          limite_atras_cae_en: despuesL.abajo[despuesL.abajo.length - 2] ?? null,
+          limite_accion_de_armado: armadoL,
+        },
+        esperado: {
+          mitad_A_valores_leidos_antes_de_cada_reemplazo: [MORE, MORE],
+          mitad_A_la_propagacion_escribio_en_cada_tramo: [true, true],
+          // La marca sigue diciendo Mas POR ENCIMA del reemplazo: un reemplazo no cambia lo de abajo.
+          mitad_A_marca_tras_los_dos_reemplazos: { frjUnder: MORE },
+          mitad_A_hecho_de_la_rama_la_marca_dice_mas: true,
+          mitad_A_hecho_nuevo_la_marca_dice_la_raiz: false,
+          // D-03 sosteniendose: SUBIR. Y sin la propagacion el mismo gesto habria APILADO.
+          mitad_A_plan_con_la_propagacion: 'up',
+          mitad_A_plan_sin_la_propagacion: 'push',
+          mitad_A_parado_tras_el_retroceso: MORE,
+          mitad_A_marca_del_aterrizaje: { frjUnder: ROOT },
+          mitad_A_camino_del_atras_tras_el_retroceso: [ROOT, MORE],
+          // No estamos en la raiz, asi que el aviso no se arma: es de MOB-05 y vive en Inicio.
+          mitad_A_accion_de_armado: 'no-armar',
+          mitad_B_la_propagacion_escribio_en_cada_tramo: [true, true],
+          mitad_B_hecho_de_la_rama_la_marca_dice_mas: true,
+          mitad_B_hecho_nuevo_la_marca_dice_la_raiz: false,
+          // El colapso sigue siendo el dueno del gesto hacia un destino de la barra.
+          mitad_B_plan: 'collapse-then-replace',
+          mitad_B_rama_del_colapso: 'retroceso-y-reemplazo',
+          mitad_B_marca_leida_en_la_entrada_de_mas: ROOT,
+          mitad_B_camino_del_atras: [ROOT, DE_LA_BARRA],
+          mitad_B_marca_del_destino: { frjUnder: ROOT },
+          // El criterio 2: ningun par adyacente con el mismo pathname, o sea ningun atras muerto.
+          mitad_B_pares_adyacentes_con_el_mismo_pathname: 0,
+          // ⚠ EL LIMITE DECLARADO DE D-02, Y NO ES UN DEFECTO: sin ningun reemplazo en el camino la
+          // propagacion NO PARTICIPA, la marca de arriba dice la SECCION y no la raiz ⇒ el hecho es
+          // falso ⇒ el gesto sigue empujando y el atras vuelve a Mas. MOB-04 lo registra con fecha y
+          // el bloque 2.3 del guion le avisa al dueno que es lo esperado.
+          limite_marca_de_la_entrada_de_arriba: { frjUnder: '/appointments' },
+          limite_hecho_nuevo_la_marca_dice_la_raiz: false,
+          limite_plan: 'push',
+          limite_camino_del_atras: [ROOT, '/appointments', MORE, ROOT],
+          limite_atras_cae_en: MORE,
+          limite_accion_de_armado: 'no-armar',
+        },
+      }
+    },
+  },
 ]
 
 // ── El arnés ─────────────────────────────────────────────────────────────────────────────────────
@@ -1697,7 +2123,12 @@ async function main() {
     console.log('                                      contra la nueva (profundidad fija, el aviso se arma) (E-14),')
     console.log('                                      que la regla nueva NO le roba el gesto al COLAPSO dentro de la rama (E-15),')
     console.log('                                      y las DOS formas en las que la regla NO se dispara: la marca')
-    console.log('                                      PERDIDA y la raiz que no esta inmediatamente debajo (E-16)')
+    console.log('                                      PERDIDA y la raiz que no esta inmediatamente debajo (E-16),')
+    console.log('                                      la CADENA de replace cruzada con la regla -1c y con el sentinel:')
+    console.log('                                      la marca perdida contra la que VIAJA, mas la abstencion sin')
+    console.log('                                      valor leido (E-17), y la misma cadena DENTRO de la rama de Mas,')
+    console.log('                                      donde D-03 se sostiene por encima del reemplazo y el limite de')
+    console.log('                                      D-02 sigue empujando (E-18)')
     console.log('⚠ LO QUE ESTA SONDA NO CIERRA, y va declarado en vez de insinuado: el CABLEADO DE REACT.')
     console.log('  Esta sonda monta su propio servidor estatico y NO CORRE EL CODIGO DE LA APP: mide la')
     console.log('  SEMANTICA DE LA PILA del navegador, que es lo que las decisiones puras necesitan. Confundir')
@@ -1713,7 +2144,7 @@ async function main() {
       console.error(`una pila MEDIDA no coincide con la esperada en ${fallados} escenario(s).`)
       console.error('el arreglo NO es ajustar la expectativa: es rehacer el diseno del plan correspondiente')
       console.error('contra lo medido (03-02 para E-3/E-4/E-5, 03-03 para E-6, 03-04 para E-8, 03-05 para E-11,')
-    console.error('03-06 para E-9/E-10/E-12, 03-07 para E-13, 03-09 para E-14/E-15/E-16) y dejarlo')
+    console.error('03-06 para E-9/E-10/E-12, 03-07 para E-13, 03-09 para E-14/E-15/E-16, 03-11 para E-17/E-18) y dejarlo')
       console.error('escrito en .planning/debug/pila-de-dos-niveles-medida.md. Para eso existe esta sonda.')
       process.exitCode = 1
     }
