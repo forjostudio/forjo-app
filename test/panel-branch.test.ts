@@ -78,6 +78,10 @@ afterEach(() => {
   // anterior envenenaría el siguiente — que es, literalmente, el bug que el plan 03-05 cierra.
   PB.takeBackLanding()
   PB.applyBranchMarkRequest('__drenaje__')
+  // El TERCER dato que sobrevive al test (plan 03-12): el canal de diagnóstico vive en `globalThis`,
+  // así que un canal abierto por un caso dejaría grabando al siguiente. Se cierra igual que los dos
+  // de arriba, antes de soltar el `window`.
+  delete (globalThis as { __forjoPanelDiag?: unknown }).__forjoPanelDiag
   vi.unstubAllGlobals()
 })
 
@@ -1932,5 +1936,129 @@ describe('branchCarryMark — las reglas EN ORDEN, y la del valor leído va ÚLT
     expect(cuenta(region, /window\./g)).toBe(0)
     // Y el identificador del hecho de la regla -1c no aparece en su código: un solo dialecto.
     expect(cuenta(region, /raizDebajo/g)).toBe(0)
+  })
+})
+
+// ── Plan 03-12 — EL CANAL DE DIAGNÓSTICO: inerte, total, acotado, y DESPUÉS de la decisión ───────
+//
+// POR QUÉ EXISTE. Los dos fallos de la re-corrida de la ronda 3 (`G3-2`, `G3-3`) comparten una firma
+// —el hash está en la URL y el atrás no se absorbe—, y la sonda puede VER eso desde afuera pero no
+// puede NOMBRAR cuál de las siete reglas declinó ni qué valía *seguimos absorbiendo*. El canal graba
+// la decisión desde adentro, y sólo si algo externo (la sonda, antes del JS de la app) lo abrió.
+//
+// Lo que se afirma acá es lo que lo vuelve aceptable en producción: sin canal no hace nada (INERTE),
+// ninguna excepción sale (TOTAL), no crece sin techo (ACOTADO), y no puede cambiar una decisión
+// porque se llama DESPUÉS de computarla y nunca adentro de las dos decisiones puras.
+
+type CanalAbierto = { __forjoPanelDiag?: unknown }
+
+/** Un registro de armado mínimo y plano, como el que graba el hook. */
+function registroDeArmado(ruta = PANEL_ROOT) {
+  return {
+    tipo: 'armado' as const,
+    ruta,
+    hash: '#salir',
+    estado: { frjExit: 1 },
+    id: 1,
+    duenaFigurando: 1,
+    instanciasVivas: 1,
+    hechos: { participates: true, atRoot: true },
+    accion: 'none',
+    vivoAntes: false,
+    vivoDespues: false,
+  }
+}
+
+describe('recordExitDiag — el canal de diagnóstico del sentinel de salida (plan 03-12)', () => {
+  it('INERTE: sin el canal abierto NO graba, no tira, y devuelve que no grabó', () => {
+    // Es el estado de producción: nadie abre el canal, así que el instrumento no existe.
+    expect((globalThis as CanalAbierto).__forjoPanelDiag).toBeUndefined()
+    expect(PB.recordExitDiag(registroDeArmado())).toBe(false)
+    expect((globalThis as CanalAbierto).__forjoPanelDiag).toBeUndefined()
+  })
+
+  it('INERTE también con un canal que NO es un arreglo: se abstiene, no lo pisa', () => {
+    ;(globalThis as CanalAbierto).__forjoPanelDiag = { no: 'soy un arreglo' }
+    expect(PB.recordExitDiag(registroDeArmado())).toBe(false)
+    expect((globalThis as CanalAbierto).__forjoPanelDiag).toEqual({ no: 'soy un arreglo' })
+  })
+
+  it('con el canal abierto GRABA al final y devuelve que grabó: el orden de llegada es el dato', () => {
+    const canal: unknown[] = [{ previo: true }]
+    ;(globalThis as CanalAbierto).__forjoPanelDiag = canal
+    expect(PB.recordExitDiag(registroDeArmado('/primero'))).toBe(true)
+    expect(PB.recordExitDiag({ ...registroDeArmado('/segundo'), tipo: 'retroceso' })).toBe(true)
+    expect(canal).toHaveLength(3)
+    const ultimo = canal[2] as { tipo: string; ruta: string; estado: unknown; vivoAntes: boolean }
+    expect(ultimo.tipo).toBe('retroceso')
+    expect(ultimo.ruta).toBe('/segundo')
+    // El estado de la entrada se graba YA PASADO A TEXTO: plano y serializable, sin referencias.
+    expect(typeof ultimo.estado).toBe('string')
+    expect(ultimo.estado).toContain('frjExit')
+  })
+
+  it('ACOTADO: con más registros que la cota nunca queda por encima, y descarta lo MÁS VIEJO', () => {
+    expect(PB.PANEL_EXIT_DIAG_MAX).toBeGreaterThan(0)
+    const canal: unknown[] = []
+    ;(globalThis as CanalAbierto).__forjoPanelDiag = canal
+    const total = PB.PANEL_EXIT_DIAG_MAX + 25
+    for (let i = 0; i < total; i++) PB.recordExitDiag(registroDeArmado(`/r${i}`))
+    expect(canal).toHaveLength(PB.PANEL_EXIT_DIAG_MAX)
+    expect((canal[0] as { ruta: string }).ruta).toBe('/r25')
+    expect((canal[canal.length - 1] as { ruta: string }).ruta).toBe(`/r${total - 1}`)
+  })
+
+  it('TOTAL frente a un canal HOSTIL: un `push` que tira no sale del instrumento', () => {
+    // El segundo call site vive DENTRO del oyente del `popstate`: una excepción ahí deja el gesto a
+    // medias y al dueño con un atrás roto. Un instrumento que puede romper el panel es peor que no
+    // medir.
+    const hostil: unknown[] = []
+    hostil.push = () => {
+      throw new Error('canal hostil')
+    }
+    ;(globalThis as CanalAbierto).__forjoPanelDiag = hostil
+    expect(() => PB.recordExitDiag(registroDeArmado())).not.toThrow()
+    expect(PB.recordExitDiag(registroDeArmado())).toBe(false)
+  })
+
+  it('TOTAL frente a un estado que no se puede pasar a texto (circular): graba igual, sin tirar', () => {
+    const canal: unknown[] = []
+    ;(globalThis as CanalAbierto).__forjoPanelDiag = canal
+    const circular: Record<string, unknown> = { frjExit: 2 }
+    circular.yo = circular
+    expect(() => PB.recordExitDiag({ ...registroDeArmado(), estado: circular })).not.toThrow()
+    expect(canal).toHaveLength(1)
+    expect(typeof (canal[0] as { estado: unknown }).estado).toBe('string')
+  })
+
+  it('NO CAMBIA NINGUNA DECISIÓN: cero menciones adentro de las dos decisiones puras (auditoría de fuente)', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    for (const firma of ['export function panelExitArmAction({', 'export function panelExitPopAction({']) {
+      const desde = mod.indexOf(firma)
+      expect(desde).toBeGreaterThan(0)
+      // El ancla de cierre es la llave SOLA en su línea: con una genérica el recorte se trunca en el
+      // `}: {` de la firma con parámetro-objeto y el caso mide CERO.
+      const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+      expect(region.length).toBeGreaterThan(300)
+      expect(cuenta(region, /recordExitDiag|__forjoPanelDiag/g)).toBe(0)
+    }
+  })
+
+  it('se graba DESPUÉS de computar la acción, en los DOS call sites y en ninguno más', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    // 1 declaración + 2 call sites.
+    expect(cuenta(mod, /recordExitDiag\(/g)).toBe(3)
+    const armado = mod.match(/const armarSentinel = useCallback[\s\S]*?\n {2}\}, \[/)?.[0] ?? ''
+    expect(armado.length).toBeGreaterThan(300)
+    expect(armado.indexOf('recordExitDiag(')).toBeGreaterThan(armado.indexOf('panelExitArmAction('))
+    // Y en el armado graba el *seguimos absorbiendo* de ANTES y de DESPUÉS de la rama.
+    expect(armado).toContain('vivoAntes')
+    expect(armado).toContain('vivoDespues')
+    const retroceso = mod.match(/const alRetroceder = \(\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
+    expect(retroceso.length).toBeGreaterThan(300)
+    expect(retroceso.indexOf('recordExitDiag(')).toBeGreaterThan(retroceso.indexOf('panelExitPopAction('))
+    // El temporizador y la constante única, intactos (§13).
+    expect(cuenta(mod, /setTimeout/g)).toBe(1)
+    expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(2)
   })
 })
