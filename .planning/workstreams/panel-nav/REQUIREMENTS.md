@@ -99,6 +99,48 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
         línea: en la política de rutas la regla cambiaría el atrás de **escritorio entero**, que es lo
         que el criterio 6 del ROADMAP protege — ahí quedó su **revisión acotada** del 2026-10-27 con el
         residuo de un solo caso.
+
+      ⚠ **PRECISADO el 2026-10-28 al cerrar el gap `G3-1` (plan `03-11`), no contradicho: la marca de
+      la rama VIAJA por encima del `replace`.** Un reemplazo **no cambia** lo que quedó debajo, así que
+      lo que había debajo del origen es lo que queda debajo del destino: el gesto **lee** la marca antes
+      de que el `<Link>` reemplace y la **propaga** a la entrada nueva.
+
+      - **El hecho medido que lo justifica, que es un contraste y no una teoría:** en el **mismo motor
+        y el mismo día**, `Inicio → Clientes → tocar Inicio` (**una** sola sección) **pasa**, y
+        `Inicio → Turnos → Clientes → Agenda → tocar Inicio` **falla**. La única diferencia entre los
+        dos recorridos es **un reemplazo**. Textual del dueño: *«Hice ese recorrido y toqué inicio y
+        sale sin el hash, y atrás me lleva a donde estaba antes»*. Medido como números en el escenario
+        **E-17** de la sonda (mitad A contra mitad B, en la misma corrida: plan `push` contra `up`,
+        profundidad final `3` contra `1`).
+      - **La causa, en una línea:** la marca se escribía **sólo cuando la política dice empujar**, y el
+        reemplazo de sección a sección deja que el router escriba su propio state encima. La regla
+        `-1c` era **correcta y estaba desplegada** —el recorrido de una sola sección pasó, que es lo
+        que descartó la hipótesis rival—, pero en una **cadena** de reemplazos el hecho que lee ya no
+        existía.
+      - **El invariante que queda:** la regla de `G2-1` dispara **también después de un paseo por
+        varias secciones**, así que el ciclo sigue sin crecer **sin importar cuántas secciones se
+        recorran antes** de tocar Inicio.
+      - ⚠ **LOS TRES NO-DEFECTOS, RE-AFIRMADOS, uno por uno:** (1) la **pila de tres escalones** de
+        D-02 —`Inicio → Turnos → Más → tocar Inicio`— **sigue empujando** y su atrás **sigue volviendo
+        a Más**, porque ahí no hay ningún reemplazo en el camino y la propagación **no participa**
+        (medido en **E-18**); (2) `Más → tocar Inicio → atrás` **sigue avisando para salir** (decisión
+        del dueño del 2026-10-27, debajo de MOB-05, **prohibido** leerla como regresión); y (3) el
+        **residuo de escritorio** de la revisión acotada del criterio 6 queda **tal como está**, ni
+        ampliado ni tapado.
+      - ⚠ **EL RESIDUO NUEVO, DECLARADO ACÁ en vez de descubierto en la ronda 4:** el camino del
+        **guard de cambios sin guardar** ejecuta su propio reemplazo y **no** propaga, así que en una
+        pantalla **sucia** que sale por el guard la marca se sigue perdiendo y el gesto siguiente hacia
+        Inicio queda **un escalón más largo** — **nunca** una expulsión. **Por qué no se cableó allá:**
+        exigiría una **segunda** lectura del estado en el mismo gesto (dos verdades que pueden diferir)
+        más un **parámetro nuevo** en el ejecutor compartido. Se **acepta** con el mismo criterio con
+        el que se aceptaron los otros dos residuos de la fase: es la **degradación segura** —un escalón
+        más, nunca el dueño fuera del sitio—. Queda escrito en **cuatro** lugares, los cuatro con esta
+        fecha: el docblock del canal en `lib/panel-branch.ts`, `.planning/debug/pila-de-dos-niveles-medida.md`,
+        esta precisión y la entrada **18** de `.planning/WINDOWS.md`. Medido en **E-17** mitad C.
+      - **Dónde vive el arreglo, y qué NO toca:** un **segundo productor** (`branchCarryMark`) sobre el
+        canal de propagación que **ya existía**, con el **mismo** consumidor, el **mismo** escritor
+        único y la **misma** negativa a inventar una ruta. `panelNavMode` y `panelBranchPlan` quedan
+        **intactas**, medidas por recorte: el arreglo es **aditivo**.
 - [ ] **MOB-05**: En **Inicio**, el atrás pide confirmación antes de salir del panel.
       ✅ **RESUELTO el 2026-10-14 — la decisión está TOMADA: SE IMPLEMENTA** (D-01 de la Phase 3, ver
       `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-CONTEXT.md`). El primer atrás en Inicio
@@ -203,10 +245,16 @@ guion quedaron **sin correr** porque la regla del plan `03-09` **cambia la pila*
 habría medido el comportamiento viejo. Cada uno de los diez ítems quedó con su resultado anotado en
 `03-UAT-GUION-2.md`.
 
+⚠ **Actualizado el 2026-10-28:** la **ronda 3 se re-corre DESDE EL PRINCIPIO** y no desde el recorrido
+1.2. El motivo es el mismo por el que la ronda 2 quedó interrumpida a propósito: el arreglo del gap
+**`G3-1`** (plan `03-11`) **cambia la forma de la pila**, así que un recorrido medido contra la forma
+vieja mide otra cosa. Son los **ocho** recorridos de Android (bloques 1 a 4) más los **21** de iPhone
+(bloque 6), tal como el guion ya los tiene.
+
 | Requisito | Qué le falta | Se marca si |
 |---|---|---|
-| **MOB-04** | El gap **`G2-1`** (el ítem 19, que falló) arreglado en el plan `03-09` pero **sin verificar en el teléfono**, los **seis** ítems de la ronda 2 cuya **expectativa cambió** con la regla nueva, y el **pase de iPhone (A11)** | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3 |
-| **MOB-05** | Lo mismo, y es **suyo** por los dos lados: el fallo **19** es del aviso que no se armaba llegando a Inicio desde una sección, y la **consecuencia declarada** (`Más → tocar Inicio → atrás` ahora avisa) es de su decisión | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3 |
+| **MOB-04** | El gap **`G2-1`** (el ítem 19, que falló) arreglado en el plan `03-09` y el gap **`G3-1`** (el recorrido **1.1** de la ronda 3, que falló) arreglado en el plan `03-11`, los dos **sin verificar en el teléfono**; los ítems cuya **expectativa cambió** con las dos reglas nuevas; y el **pase de iPhone (A11)** | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3, **re-corrida desde el principio** |
+| **MOB-05** | Lo mismo, y es **suyo** por los dos lados: los fallos **19** y **1.1** son del aviso que no se armaba llegando a Inicio desde una sección, y la **consecuencia declarada** (`Más → tocar Inicio → atrás` ahora avisa) es de su decisión | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3, **re-corrida desde el principio** |
 | **MOB-06** | **Sólo iPhone (A11)** — su parte de Android ya está afirmada arriba (`cero regresion`, bloque E de la ronda 1) — más la **parte de overlay del ítem 20**, que nunca se midió en ninguna ronda (*"no tengo overlays en inicio como para probar eso"*) | pasa el bloque **6**, más la parte de overlay del bloque 3 |
 
 Si la ronda 3 falla, los tres **vuelven a quedar sin marcar** y los fallos nuevos entran como gaps de

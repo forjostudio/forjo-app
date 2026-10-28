@@ -79,9 +79,15 @@ Entrar a Inicio, hacer **varias cosas** (Turnos, Clientes, Agenda) y **tocar Ini
 - *Antes (medido, textual del dueño):* *«al tocar inicio después de haber hecho otras cosas cae a
   /dashboard y la guarda de salir no está. Tengo que empezar a hacer atrás por todo lo que estuve
   tocando hasta que llega a la primer vez que toqué inicio y aparece #salir»*.
-- *Motivo:* la regla del plan `03-09` hace que **sección → raíz** sea un **retroceso** y no un empuje,
-  así que el dueño aterriza en la entrada **original** de Inicio, que no tiene nada nuestro debajo ⇒ el
-  aviso se arma solo. Medido en **E-14**.
+- *Motivo (**corregido el 2026-10-28**: la regla del plan `03-09` sola **no alcanzaba**, y este
+  recorrido es el que lo destapó — gap `G3-1`):* esa regla hace que **sección → raíz** sea un
+  **retroceso**, y es correcta; pero el hecho que lee —*la marca dice la raíz*— **se perdía en la
+  cadena de `replace`** de sección a sección: la marca se escribía sólo cuando la política dice
+  empujar, y el reemplazo deja que el router escriba su propio state encima. Con un paseo por **varias**
+  secciones la entrada ya no tenía marca ⇒ el hecho era falso ⇒ el gesto **empujaba**. El plan `03-11`
+  lo cierra haciendo que la marca **viaje** por encima del reemplazo. Medido en **E-17** (la forma
+  vieja contra la nueva, en la misma corrida: plan `push` contra `up`, profundidad final `3` contra
+  `1`), y la regla de un solo escalón sigue medida en **E-14**.
 
 ### 1.2 — Su mitad de pila, que es la otra cara del mismo gap
 
@@ -91,6 +97,12 @@ Repetir **tres veces** el ciclo `Inicio → Clientes → tocar Inicio`.
   salir del aviso, **no** tiene que recorrer una por una las secciones que el dueño tocó.
 - *Antes (medido como número):* la pila crecía **dos entradas por vuelta sin techo**, `3 → 5 → 7`.
   Ahora son `1, 1, 1`. Medido en **E-14**, las dos mitades en la misma corrida.
+- ⚠ **ESTE ES EL RECORRIDO QUE SEPARÓ LAS HIPÓTESIS, el 2026-10-28, y PASÓ** (*«salió con el hash»*).
+  Por eso vuelve: con **una sola** sección la marca estaba y el aviso se armó, lo que probó que el
+  teléfono corría el bundle **nuevo** y que la regla `-1c` **sí** dispara — descartó la hipótesis de
+  *la regla no está en el bundle* y confirmó que el defecto era la **cadena** de reemplazos (`G3-1`).
+  Se re-corre igual, porque el arreglo del plan `03-11` **cambia la forma de la pila** y lo medido
+  antes midió otra cosa.
 
 ### 1.3 — El ítem 19, tal cual
 
