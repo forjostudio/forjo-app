@@ -19,21 +19,29 @@
 // QUE NO CIERRA, declarado en vez de insinuado:
 //   · A11 — Chrome de Android y Safari de iOS. Esto es Chrome de ESCRITORIO headless. Los dos motores
 //     reales siguen siendo del telefono del dueno.
-//   · EL GESTO DE ATRAS DE LA INTERFAZ DEL NAVEGADOR. El atras de esta sonda es una navegacion de
-//     historial iniciada por el navegador (`Page.navigateToHistoryEntry`, la entrada anterior).
-//     ⚠ MEDIDO el 2026-10-28 contra una pagina de calibracion: en Chrome de escritorio por CDP NINGUNO
-//     de los cuatro metodos disponibles (Alt+Izquierda: no navega; boton atras del mouse,
-//     `navigateToHistoryEntry` y `history.back()`: aterrizan en la entrada inmediata anterior) SALTEA
-//     una entrada empujada sin activacion del usuario, con o sin activacion previa. O sea que la
-//     INTERVENCION DE HISTORIAL de Chrome (el atras de la interfaz saltea entradas agregadas sin gesto
-//     del usuario) NO SE PUEDE REPRODUCIR con este instrumento. Si el fallo del telefono viene de ahi,
-//     esta sonda va a dar VERDE en ese punto, y ese verde no lo descarta.
 //   · Y no reemplaza a la UAT del dueno.
+//
+// ⚠ EL GESTO DE ATRAS, Y POR QUE HAY DOS — la pieza que decide si la medicion vale. Medido el
+// 2026-10-28 contra una pagina de calibracion (/a → /b → pushState('#x'), sin y con activacion):
+//   · `entrada` — una navegacion de historial iniciada por el navegador a la entrada inmediata
+//     anterior (`Page.navigateToHistoryEntry`). Es lo que tambien hacen el boton atras del mouse y
+//     `history.back()` por CDP, y los tres aterrizan SIEMPRE en la entrada inmediata anterior.
+//     Alt+Izquierda por CDP no navega (ni headless ni con ventana).
+//   · `interfaz` (el DEFAULT) — EL ATRAS DE LA INTERFAZ DEL NAVEGADOR (NavigationController::GoBack),
+//     invocado con `chrome.tabs.goBack` desde una extension de prueba que la sonda escribe en un
+//     directorio temporal y carga por CDP (`Extensions.loadUnpacked`, que exige el canal por TUBERIA y
+//     `--enable-unsafe-extension-debugging`). Es el UNICO de los cinco que respeta la INTERVENCION DE
+//     HISTORIAL de Chrome: sin activacion del usuario en el documento, el atras desde /b#x SALTEA /b y
+//     aterriza en /a; con una activacion antes del empuje aterriza en /b; y con una activacion y DOS
+//     empujes, el segundo NO vuelve salteable al primero (aterriza en /b#x).
+// El gesto del dueno en el telefono es el de la interfaz. Con `entrada` esta sonda mide la LOGICA
+// del modulo sin la intervencion; con `interfaz`, la logica MAS la intervencion.
 //
 // COMO SE CORRE (siempre por el turno de pantalla: levanta servidor y navegador):
 //
 //   node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev
 //   node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev-sin-estricto
+//   (segundo argumento opcional: el gesto, `interfaz` por omision o `entrada`)
 //
 // EL SERVIDOR: la sonda levanta el suyo en el 3031 y lo mata al salir (verificando el puerto libre).
 // ⚠ SALVO que ya haya un `next dev` de ESTE repo vivo: Next 16 toma un candado en `.next/dev/lock` y
@@ -63,7 +71,7 @@
 // produccion: el servidor lo levanta esta sonda y lee el archivo de entorno de desarrollo.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, readFileSync, createWriteStream } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, createWriteStream } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -313,12 +321,82 @@ async function foto(cdp) {
   return { ...pag, largo: h.entradas.length, indice: h.indice, entradas: h.entradas }
 }
 
+// ── El ATRAS DE LA INTERFAZ: una extension de prueba por el canal de TUBERIA ────────────────────────
+// `Extensions.loadUnpacked` solo existe por la tuberia de depuracion (no por el WebSocket del puerto),
+// asi que Chrome se levanta con los dos: el puerto para la pagina (el mismo cliente de siempre) y la
+// tuberia para cargar la extension y hablar con su service worker.
+function conectarTuberia(hijo) {
+  const salida = hijo.stdio[3]
+  const entrada = hijo.stdio[4]
+  let buffer = ''
+  let siguienteId = 1
+  const pendientes = new Map()
+  entrada.on('data', (d) => {
+    buffer += d.toString()
+    let i
+    while ((i = buffer.indexOf('\0')) >= 0) {
+      const msg = JSON.parse(buffer.slice(0, i))
+      buffer = buffer.slice(i + 1)
+      if (msg.id && pendientes.has(msg.id)) {
+        const { ok, fail } = pendientes.get(msg.id)
+        pendientes.delete(msg.id)
+        if (msg.error) fail(new Error(`${msg.error.message} (${JSON.stringify(msg.error)})`))
+        else ok(msg.result)
+      }
+    }
+  })
+  return {
+    enviar(metodo, params = {}, sessionId) {
+      const id = siguienteId++
+      salida.write(JSON.stringify({ id, method: metodo, params, ...(sessionId ? { sessionId } : {}) }) + '\0')
+      return new Promise((ok, fail) => pendientes.set(id, { ok, fail }))
+    },
+  }
+}
+
 /**
- * EL GESTO DE ATRAS: una navegacion de historial iniciada por el NAVEGADOR a la entrada anterior
- * (`Page.navigateToHistoryEntry`), que es lo que hace el boton atras del mouse —medido en la
- * calibracion de la cabecera: los dos aterrizan en la entrada inmediata anterior—. NO es un
- * `history.back()` desde la pagina. Despues espera a que el gesto se asiente: si fue de otro documento,
- * el evento de carga; si no, 700 ms (el aviso dura la ventana entera, asi que se lee adentro).
+ * Escribe la extension de prueba en un directorio temporal, la carga, y devuelve la funcion que hace
+ * el atras de la interfaz sobre LA pestana. Si algo falla, TIRA: un gesto que cae en silencio a otro
+ * metodo mediria otra cosa.
+ */
+async function prepararAtrasDeLaInterfaz(tuberia, dirExt) {
+  writeFileSync(join(dirExt, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: 'sonda-atras', version: '1.0', permissions: ['tabs'], background: { service_worker: 'sw.js' } }))
+  writeFileSync(join(dirExt, 'sw.js'), "self.addEventListener('install', () => {})\n")
+  const { id: extId } = await tuberia.enviar('Extensions.loadUnpacked', { path: dirExt })
+  let sw = null
+  for (let i = 0; i < 40 && !sw; i++) {
+    const { targetInfos } = await tuberia.enviar('Target.getTargets')
+    sw = targetInfos.find((t) => t.type === 'service_worker' && t.url.includes(extId))
+    if (!sw) await dormir(150)
+  }
+  if (!sw) throw new Error('la extension del atras de la interfaz no levanto su service worker')
+  const { sessionId } = await tuberia.enviar('Target.attachToTarget', { targetId: sw.targetId, flatten: true })
+  const enElSw = async (expr) => {
+    const r = await tuberia.enviar('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }, sessionId)
+    if (r.exceptionDetails) throw new Error(`el service worker tiro: ${r.exceptionDetails.text} ${r.exceptionDetails.exception?.description ?? ''}`)
+    return r.result.value
+  }
+  // El service worker tarda en tener la API lista: se reintenta, con tope.
+  let pestanas = null
+  let ultimoError = null
+  for (let i = 0; i < 40 && pestanas === null; i++) {
+    try { pestanas = await enElSw('chrome.tabs.query({}).then((t) => t.map((x) => x.id))') } catch (e) { ultimoError = e; await dormir(250) }
+  }
+  if (pestanas === null) throw ultimoError
+  if (!Array.isArray(pestanas) || pestanas.length !== 1) throw new Error(`se esperaba UNA pestana y hay ${JSON.stringify(pestanas)}`)
+  const tabId = pestanas[0]
+  return () => enElSw(`chrome.tabs.goBack(${tabId}).then(() => 'ok', (e) => 'rechazo: ' + e)`)
+}
+
+/** El gesto elegido. Lo fija `main` antes de medir. */
+let gestoDeAtras = null
+
+/**
+ * EL GESTO DE ATRAS. Con `interfaz` (el default) es el atras de la interfaz del navegador; con
+ * `entrada`, una navegacion de historial a la entrada inmediata anterior. Ver la cabecera: el primero
+ * respeta la intervencion de historial y el segundo no. NUNCA es un `history.back()` desde la pagina.
+ * Despues espera a que el gesto se asiente: si fue de otro documento, el evento de carga; si no, 700 ms
+ * (el aviso dura la ventana entera, asi que se lee adentro).
  */
 async function atras(cdp) {
   const h = await cdp.enviar('Page.getNavigationHistory')
@@ -327,7 +405,12 @@ async function atras(cdp) {
     const t = setTimeout(() => ok(false), 700)
     cdp.en('Page.loadEventFired', () => { clearTimeout(t); ok(true) })
   })
-  await cdp.enviar('Page.navigateToHistoryEntry', { entryId: h.entries[h.currentIndex - 1].id })
+  if (gestoDeAtras.nombre === 'interfaz') {
+    const r = await gestoDeAtras.hacer()
+    if (r !== 'ok') throw new Error(`el atras de la interfaz fallo: ${r}`)
+  } else {
+    await cdp.enviar('Page.navigateToHistoryEntry', { entryId: h.entries[h.currentIndex - 1].id })
+  }
   const recargo = await otroDocumento
   if (recargo) await dormir(1200)
   return { hubo: true, recargo }
@@ -392,6 +475,8 @@ async function gestoMedido(cdp) {
       estado_antes: antes.estado,
       largo_antes: antes.largo,
       largo_despues: despues.largo,
+      // Cuantas entradas SALTEO el gesto: 0 es el atras de siempre; mas de 0 es la intervencion.
+      entradas_salteadas: Math.max(0, antes.indice - despues.indice - 1),
       ruta_despues: despues.url,
       documento_nuevo: documentoNuevo ? 'si' : 'no',
       aviso_visible: despues.aviso ? 'si' : 'no',
@@ -407,7 +492,7 @@ async function gestoMedido(cdp) {
 
 function imprimirTupla(prefijo, m) {
   const t = m.tupla
-  console.log(`${prefijo}tupla: hash_antes=${t.hash_antes || '(ninguno)'} es_nuestro=${t.es_nuestro} estado_antes=${t.estado_antes} largo_antes=${t.largo_antes} largo_despues=${t.largo_despues} ruta_despues=${t.ruta_despues} documento_nuevo=${t.documento_nuevo} aviso_visible=${t.aviso_visible} absorbido=${t.absorbido}`)
+  console.log(`${prefijo}tupla: hash_antes=${t.hash_antes || '(ninguno)'} es_nuestro=${t.es_nuestro} estado_antes=${t.estado_antes} largo_antes=${t.largo_antes} largo_despues=${t.largo_despues} entradas_salteadas=${t.entradas_salteadas} ruta_despues=${t.ruta_despues} documento_nuevo=${t.documento_nuevo} aviso_visible=${t.aviso_visible} absorbido=${t.absorbido}`)
   console.log(`${prefijo}gesto: accion=${m.accion_del_retroceso} regla=${m.regla_del_retroceso}`)
   console.log(`${prefijo}pila antes:   [${m.antes.entradas.join(', ')}] actual=${m.antes.indice}`)
   console.log(`${prefijo}pila despues: [${m.despues.entradas.join(', ')}] actual=${m.despues.indice}`)
@@ -455,6 +540,28 @@ async function loguearse(cdp) {
   console.log(`llegada a Inicio AFIRMADA: ruta=${f.ruta} contenedor_del_aviso=${f.contenedorDelAviso}`)
 }
 
+/**
+ * Un toque REAL (eventos de entrada de CDP: el documento recibe activacion del usuario) sobre el
+ * destino de la barra de abajo, el VISIBLE (el sidebar de escritorio tiene los mismos destinos, oculto).
+ */
+async function tocarEnLaBarra(cdp, href) {
+  const desde = registros.length
+  const rect = await evaluar(cdp, `(() => { const a = [...document.querySelectorAll('a[href=' + JSON.stringify(${JSON.stringify(href)}) + ']')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && b.bottom > innerHeight / 2 }); if (!a) return null; const b = a.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`)
+  if (!rect) throw new Error(`no hay un destino visible de la barra para ${href}`)
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await cdp.enviar('Input.dispatchMouseEvent', { type, x: rect.x, y: rect.y, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1 })
+  }
+  // ⚠ PRIMERO LA RUTA, DESPUES EL ASENTADO: el primer pedido a una seccion compila en el servidor de
+  // desarrollo, y un registro de armado intermedio (el de la raiz) dejaria asentar antes de llegar.
+  // Medido: sin esto el toque siguiente caia todavia en Inicio y el recorrido media otro camino.
+  const tope = Date.now() + 90_000
+  while (Date.now() < tope && (await evaluar(cdp, 'location.pathname')) !== href) await dormir(200)
+  if ((await evaluar(cdp, 'location.pathname')) !== href) throw new Error(`el toque en ${href} no llego a ${href}`)
+  const llegada = registros.length
+  await asentar(desde, 60_000)
+  if (registros.slice(llegada).every((r) => r.tipo !== 'armado')) await asentar(llegada, 5_000)
+}
+
 /** Entrada DIRECTA a la raiz: una pagina de afuera debajo, historial limpio, documento nuevo. */
 async function entrarDirecto(cdp) {
   await navegar(cdp, AFUERA)
@@ -493,6 +600,103 @@ const RECORRIDOS = [
       }
     },
   },
+  {
+    id: 'R-1.3-recarga',
+    titulo: 'la otra forma del 1.3: RECARGA parado en Inicio armado, UN atras — tres vueltas',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      const vueltas = []
+      for (let vuelta = 1; vuelta <= 3; vuelta++) {
+        // Antes de recargar: parado en Inicio con el sentinel armado (si la vuelta anterior avisó, se
+        // espera a que la ventana expire y re-arme; si salio, se vuelve a entrar).
+        let previo = await foto(cdp)
+        if (previo.ruta !== ROOT) { await entrarDirecto(cdp); previo = await foto(cdp) }
+        if (!/^#salir/.test(previo.hash)) { await dormir(VENTANA_MS + MARGEN_MS); previo = await foto(cdp) }
+        const desde = registros.length
+        const cargo = new Promise((ok) => { const t = setTimeout(ok, 150_000); cdp.en('Page.loadEventFired', () => { clearTimeout(t); ok() }) })
+        await cdp.enviar('Page.reload', {})
+        await cargo
+        await asentar(desde)
+        const alRecargar = registros.slice(desde)
+        const nacido = alRecargar.find((r) => r.tipo === 'sonda-documento-nuevo')
+        const primerArmado = alRecargar.find((r) => r.tipo === 'armado')
+        const ultimoArmado = alRecargar.filter((r) => r.tipo === 'armado').at(-1)
+        // El `frjExit` que la entrada PRESERVADA traia al nacer el documento (una recarga preserva el
+        // estado), contra el `id` que la instancia nueva se asigno.
+        const frjExitPreservado = nacido ? (JSON.parse(nacido.estado || 'null') ?? {}).frjExit ?? null : null
+        const m = await gestoMedido(cdp)
+        vueltas.push({ vuelta, previo, alRecargar, frjExitPreservado, primerArmado, ultimoArmado, m })
+      }
+      return {
+        detalle: (p) => {
+          for (const v of vueltas) {
+            console.log(`${p}Vuelta ${v.vuelta}: url antes de recargar=${v.previo.url}`)
+            console.log(`${p}  frjExit de la entrada preservada=${v.frjExitPreservado} id de la instancia nueva=${v.ultimoArmado?.id ?? 'sin-registro'} coinciden=${v.frjExitPreservado === (v.ultimoArmado?.id ?? NaN) ? 'si' : 'no'}`)
+            console.log(`${p}  primer armado: accion=${v.primerArmado?.accion ?? 'sin-registro'} regla=${reglaDelArmado(v.primerArmado?.hechos)} · ultimo armado: accion=${v.ultimoArmado?.accion ?? 'sin-registro'} regla=${reglaDelArmado(v.ultimoArmado?.hechos)} vivo_despues=${v.ultimoArmado?.vivoDespues}`)
+            for (const r of v.alRecargar) console.log(`${p}    diag ${lineaDeRegistro(r)}`)
+            console.log(`${p}  ${firmaDelMontaje(v.alRecargar)}`)
+            imprimirTupla(`${p}  `, v.m)
+          }
+        },
+        medido: Object.fromEntries(vueltas.map((v) => [`vuelta_${v.vuelta}_absorbido`, v.m.tupla.absorbido])),
+        esperado: { vuelta_1_absorbido: 'si', vuelta_2_absorbido: 'si', vuelta_3_absorbido: 'si' },
+      }
+    },
+  },
+  {
+    id: 'R-3.1',
+    titulo: 'el re-armado al EXPIRAR la ventana: atras, esperar la ventana entera, atras otra vez',
+    async correr(cdp) {
+      // ⚠ EL PUNTO DE PARTIDA ES EL DEL 1.2 (Inicio → tocar Clientes → tocar Inicio, con toques
+      // REALES), no la entrada directa: el 3.1 interroga el RE-armado, y para eso el PRIMER atras tiene
+      // que haber avisado — en el telefono aviso. Desde la entrada directa el primer atras es el 1.3.
+      await entrarDirecto(cdp)
+      const desdeElCamino = registros.length
+      await tocarEnLaBarra(cdp, '/clients')
+      await tocarEnLaBarra(cdp, ROOT)
+      const camino = registros.slice(desdeElCamino)
+      const alLlegar = await foto(cdp)
+      const primero = await gestoMedido(cdp)
+      // EL PISO DEL TIEMPO TRANSCURRIDO, medido DENTRO de la pagina y no supuesto: un escenario que
+      // dice medir el temporizador y solo prueba que hizo una llamada mide CERO.
+      const t0 = await evaluar(cdp, 'Date.now()')
+      const desde = registros.length
+      await dormir(VENTANA_MS + MARGEN_MS)
+      const t1 = await evaluar(cdp, 'Date.now()')
+      const transcurrido = t1 - t0
+      const alExpirar = registros.slice(desde)
+      const trasLaVentana = await foto(cdp)
+      const segundo = await gestoMedido(cdp)
+      return {
+        detalle: (p) => {
+          console.log(`${p}camino (Inicio → tocar Clientes → tocar Inicio): pila=[${alLlegar.entradas.join(', ')}] actual=${alLlegar.indice} url=${alLlegar.url}`)
+          for (const r of camino) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+          console.log(`${p}primer atras:`)
+          imprimirTupla(`${p}  `, primero)
+          console.log(`${p}transcurrido=${transcurrido} ms dentro de la pagina (ventana=${VENTANA_MS} ms, margen=${MARGEN_MS} ms)`)
+          console.log(`${p}al expirar la ventana:`)
+          for (const r of alExpirar) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+          console.log(`${p}tras la ventana: url=${trasLaVentana.url} aviso=${trasLaVentana.aviso ? 'visible' : 'oculto'}`)
+          console.log(`${p}segundo atras:`)
+          imprimirTupla(`${p}  `, segundo)
+        },
+        medido: {
+          primer_atras_absorbido: primero.tupla.absorbido,
+          transcurrido_supera_la_ventana: transcurrido > VENTANA_MS ? 'si' : 'no',
+          aviso_desaparecio: trasLaVentana.aviso ? 'no' : 'si',
+          hash_volvio: /^#salir/.test(trasLaVentana.hash) ? 'si' : 'no',
+          segundo_atras_absorbido: segundo.tupla.absorbido,
+        },
+        esperado: {
+          primer_atras_absorbido: 'si',
+          transcurrido_supera_la_ventana: 'si',
+          aviso_desaparecio: 'si',
+          hash_volvio: 'si',
+          segundo_atras_absorbido: 'si',
+        },
+      }
+    },
+  },
 ]
 
 // ── El arnes ─────────────────────────────────────────────────────────────────────────────────────
@@ -501,7 +705,9 @@ function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
 
 async function main() {
   const modo = process.argv[2] ?? 'dev'
+  const gesto = process.argv[3] ?? 'interfaz'
   const perfil = mkdtempSync(join(tmpdir(), 'forjo-sonda-app-'))
+  const dirExt = mkdtempSync(join(tmpdir(), 'forjo-sonda-ext-'))
   const logNext = join(perfil, '..', `forjo-sonda-app-next-${process.pid}.log`)
   let next = null
   let chrome = null
@@ -510,7 +716,9 @@ async function main() {
 
   try {
     if (!Number.isInteger(VENTANA_MS)) throw new Error('no se pudo leer PANEL_EXIT_HINT_MS de lib/panel-branch.ts')
+    if (gesto !== 'interfaz' && gesto !== 'entrada') throw new Error(`gesto desconocido "${gesto}" (validos: interfaz, entrada)`)
     const m = verificarModo(modo)
+    console.log(`gesto=${gesto} · ${gesto === 'interfaz' ? 'el ATRAS DE LA INTERFAZ (chrome.tabs.goBack: respeta la intervencion de historial)' : 'navegacion a la entrada inmediata anterior (NO respeta la intervencion)'}`)
     console.log(`modo=${modo} · modo estricto ${m.estricto ? 'ACTIVO' : 'APAGADO'} · reactStrictMode en next.config.ts: ${m.reactStrictModeEnElArchivo}`)
     if (!(await puertoLibre(PUERTO_CDP))) throw new Error(`el puerto ${PUERTO_CDP} esta ocupado: la sonda usa puertos PROPIOS`)
     const existente = await servidorExistente()
@@ -528,15 +736,21 @@ async function main() {
     chrome = spawn(CHROME, [
       '--headless=new',
       `--remote-debugging-port=${PUERTO_CDP}`,
+      // La tuberia, ademas del puerto: `Extensions.loadUnpacked` solo existe por la tuberia.
+      '--remote-debugging-pipe',
+      '--enable-unsafe-extension-debugging',
       `--user-data-dir=${perfil}`,
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-gpu',
       'about:blank',
-    ], { stdio: 'ignore' })
+    ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] })
     chrome.on('error', (e) => { console.error(`no se pudo arrancar Chrome: ${e.message}`); process.exitCode = 1 })
 
     const target = await descubrirTarget()
+    gestoDeAtras = gesto === 'interfaz'
+      ? { nombre: 'interfaz', hacer: await prepararAtrasDeLaInterfaz(conectarTuberia(chrome), dirExt) }
+      : { nombre: 'entrada' }
     cdp = await conectar(target.webSocketDebuggerUrl)
     await cdp.enviar('Page.enable')
     await cdp.enviar('Runtime.enable')
@@ -575,9 +789,8 @@ async function main() {
     }
 
     console.log('── veredicto ─────────────────────────────────────────────────────────────────')
-    console.log(`modo=${modo} · recorridos medidos: ${RECORRIDOS.length} · coinciden con el guion: ${RECORRIDOS.length - fallados} · no coinciden: ${fallados}`)
-    console.log('⚠ LO QUE ESTA SONDA NO CIERRA: A11 (Chrome Android / Safari iOS reales) y el atras de la INTERFAZ')
-    console.log('  del navegador (la intervencion de historial de Chrome no se reproduce por CDP: calibrado).')
+    console.log(`gesto=${gesto} · modo=${modo} · recorridos medidos: ${RECORRIDOS.length} · coinciden con el guion: ${RECORRIDOS.length - fallados} · no coinciden: ${fallados}`)
+    console.log('⚠ LO QUE ESTA SONDA NO CIERRA: A11 (Chrome Android / Safari iOS reales). Esto es Chrome de escritorio.')
     if (fallados > 0) {
       console.error('')
       console.error(`${fallados} recorrido(s) no coinciden con lo que el guion pide. Este instrumento MIDE: el arreglo`)
@@ -602,6 +815,7 @@ async function main() {
     const cdpLibre = await puertoLibre(PUERTO_CDP)
     console.log(`puerto de depuracion ${PUERTO_CDP} libre al salir: ${cdpLibre ? 'si' : 'NO'}`)
     try { rmSync(perfil, { recursive: true, force: true }) } catch { /* lo limpia el sistema */ }
+    try { rmSync(dirExt, { recursive: true, force: true }) } catch { /* lo limpia el sistema */ }
   }
 }
 
