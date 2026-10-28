@@ -835,6 +835,103 @@ function elTecladoSeComeElAtras(): boolean {
   return softKeyboardGuardsBack({ inset, leftInsetAt: tecladoBajoEn, now: Date.now() })
 }
 
+// ── El CANAL DE DIAGNÓSTICO del sentinel de salida (plan 03-12): inerte salvo que lo abran ──────
+//
+// POR QUÉ EXISTE, en una línea: sin él, una sonda ve *el hash está y el atrás no se absorbe* (la firma
+// que comparten `G3-2` y `G3-3`) pero **no puede nombrar** cuál de las siete reglas declinó ni qué
+// valía *seguimos absorbiendo* en ese momento — que es exactamente la pregunta que hay que contestar
+// con números antes de escribir un arreglo.
+//
+// LAS CUATRO COSAS QUE LO VUELVEN ACEPTABLE EN PRODUCCIÓN:
+//   · **INERTE.** Escribe sólo si `globalThis.__forjoPanelDiag` **ya es un arreglo**, y nadie en la
+//     app lo crea. Lo abre algo EXTERNO: la sonda de la app real, con
+//     `Page.addScriptToEvaluateOnNewDocument`, **antes** del JS de la app — así sobrevive a las
+//     recargas y a las navegaciones. Sin eso, la función se abstiene y no hace nada.
+//   · **TOTAL.** Ninguna excepción sale: el segundo call site vive adentro del oyente del `popstate`,
+//     donde una excepción dejaría el gesto a medias. Un canal hostil no puede romper el panel.
+//   · **ACOTADO.** El arreglo nunca pasa de {@link PANEL_EXIT_DIAG_MAX}: el dueño deja el panel
+//     abierto todo el día.
+//   · **GRABA LA DECISIÓN, NO LOS DATOS.** Ruta, hash, las marcas de la entrada, el `id` de la
+//     instancia, los hechos booleanos de la decisión y la acción. **Cero** datos de negocio, cero
+//     identificadores de tenant, cero contenido de pantalla: el panel es multi-tenant, y el invariante
+//     en riesgo en esta fase es la integridad de la sesión y del trabajo del dueño, no el aislamiento.
+// Y NO CAMBIA NINGUNA DECISIÓN: se llama **después** de que la acción está computada, y nunca adentro
+// de las dos decisiones puras.
+
+/**
+ * Un registro del canal. Campos **planos y serializables**: nada de referencias a nodos ni a funciones.
+ *
+ * `vivoAntes` / `vivoDespues` son el valor de *seguimos absorbiendo* (la referencia del sentinel vivo)
+ * antes y después de la rama. En el armado se graba **después** de la rama, así que los dos son
+ * reales; en el retroceso se graba **antes** de la rama y los dos valen lo mismo (la rama que sigue es
+ * determinista: *avisar* y *re-armar* la apagan, *ignorar* re-arma y deja su propio registro).
+ */
+export type PanelExitDiagRecord = {
+  tipo: 'armado' | 'retroceso'
+  /** El instante del registro (`Date.now()`), para ordenar y medir ventanas desde afuera. */
+  ts: number
+  ruta: string
+  hash: string
+  /** Las marcas de la entrada (claves `frj*`) más la lista de claves, ya pasadas a texto. */
+  estado: string
+  /** El `id` de ESTA instancia: el dato que la sonda no puede derivar desde afuera. */
+  id: number
+  duenaFigurando: number | null
+  instanciasVivas: number
+  /** Los siete hechos del armado, o los cinco del retroceso. */
+  hechos: Record<string, boolean>
+  accion: string
+  vivoAntes: boolean
+  vivoDespues: boolean
+}
+
+/** Lo que entrega un call site: el estado va CRUDO y lo pasa a texto el instrumento, adentro del `try`. */
+export type PanelExitDiagInput = Omit<PanelExitDiagRecord, 'ts' | 'estado'> & { estado: unknown }
+
+/** La cota del canal. El dueño deja el panel abierto: un arreglo sin techo es una fuga. */
+export const PANEL_EXIT_DIAG_MAX = 200
+
+/**
+ * Pasa el estado de la entrada a texto quedándose **sólo con lo nuestro**: las marcas `frj*` y la lista
+ * de claves. El estado del router de Next (`__PRIVATE_NEXTJS_INTERNALS_TREE`) se nombra pero no se
+ * copia: es grande y no aporta a la decisión. Total por su cuenta: un valor que no se puede pasar a
+ * texto no tira, deja una marca.
+ */
+function estadoComoTexto(estado: unknown): string {
+  try {
+    if (estado === null || typeof estado !== 'object') return String(JSON.stringify(estado) ?? estado)
+    const claves = Object.keys(estado).sort()
+    const marcas: Record<string, unknown> = {}
+    for (const k of claves) if (k.startsWith('frj')) marcas[k] = (estado as Record<string, unknown>)[k]
+    return JSON.stringify({ claves, ...marcas })
+  } catch {
+    return '[estado no serializable]'
+  }
+}
+
+/**
+ * Graba un registro en el canal de diagnóstico **si y sólo si** algo externo lo abrió. Devuelve si
+ * grabó. **Total:** ninguna excepción sale, ni de un canal hostil ni de un estado raro.
+ */
+export function recordExitDiag(entrada: PanelExitDiagInput): boolean {
+  try {
+    const canal = (globalThis as { __forjoPanelDiag?: unknown }).__forjoPanelDiag
+    if (!Array.isArray(canal)) return false
+    const registro: PanelExitDiagRecord = {
+      ...entrada,
+      ts: Date.now(),
+      estado: estadoComoTexto(entrada.estado),
+      hechos: { ...entrada.hechos },
+    }
+    canal.push(registro)
+    // Se descarta lo MÁS VIEJO: lo que importa es lo último que pasó.
+    if (canal.length > PANEL_EXIT_DIAG_MAX) canal.splice(0, canal.length - PANEL_EXIT_DIAG_MAX)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ── La mecánica de React ─────────────────────────────────────────────────────────────────────────
 
 // Id monotónico por instancia, molde de `lib/dirty-history.ts` y `lib/overlay-history.ts`. Acá es lo
@@ -1176,31 +1273,54 @@ export function usePanelBranch({
     if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
     const estado: unknown = window.history.state
     const paradoSobreElNuestro = isPanelExitEntry(estado, id)
-    const accion = panelExitArmAction({
+    // ⚠ LOS HECHOS SE IZAN A CONSTANTES (plan 03-12) para que la decisión y el canal de diagnóstico
+    // lean el MISMO valor: dos lecturas del mismo dato en el mismo gesto son dos verdades que pueden
+    // diferir (lección 1 del encabezado). El izado no cambia ningún valor ni ningún orden.
+    // ⚠ EL HECHO DE LA SÉPTIMA REGLA, leído del hash REAL de `location` y no del estado: el punto
+    // entero de la regla es que el estado puede estar pisado mientras la URL sigue siendo nuestra
+    // (E-13, mitad B). Con un `startsWith` a secas, `#salirXYZ` contaría como nuestro.
+    const urlNuestra = urlAlreadyHoldsExitHash(window.location.hash)
+    const ajenaArriba = isForeignOwnedEntry(estado)
+    // ⚠ EL HECHO DE LA DECISIÓN (a), LEÍDO DEL ESTADO REAL DE LA ENTRADA DE ARRIBA EN EL MOMENTO
+    // DE DECIDIR, nunca de un valor de render: entre un render y el gesto pudo haber una escritura
+    // ajena que se llevó la marca. Es el mismo criterio con el que la ruta se re-lee de `location`.
+    // Y se contesta con la marca de la rama —que YA guarda la ruta que quedó debajo— en vez de con
+    // una clave nueva: la regla 0 tiene TRES dueños a propósito.
+    const marcaDebajo = panelUnderRoute(estado)
+    const hechos = {
       participates: drawsExitHint,
       // La ruta se re-lee de `location` y no del render: la decisión se toma con el estado REAL.
       atRoot: window.location.pathname === root,
       hintOpen: avisoAbiertoRef.current,
       topIsOurs: paradoSobreElNuestro,
-      // ⚠ EL HECHO DE LA SÉPTIMA REGLA, leído del hash REAL de `location` y no del estado: el punto
-      // entero de la regla es que el estado puede estar pisado mientras la URL sigue siendo nuestra
-      // (E-13, mitad B). Con un `startsWith` a secas, `#salirXYZ` contaría como nuestro.
-      urlYaLlevaNuestroHash: urlAlreadyHoldsExitHash(window.location.hash),
-      foreignOwnsTop: isForeignOwnedEntry(estado),
-      // ⚠ EL HECHO DE LA DECISIÓN (a), LEÍDO DEL ESTADO REAL DE LA ENTRADA DE ARRIBA EN EL MOMENTO
-      // DE DECIDIR, nunca de un valor de render: entre un render y el gesto pudo haber una escritura
-      // ajena que se llevó la marca. Es el mismo criterio con el que la ruta se re-lee de
-      // `location` dos líneas arriba. Y se contesta con la marca de la rama —que YA guarda la ruta
-      // que quedó debajo— en vez de con una clave nueva: la regla 0 tiene TRES dueños a propósito.
-      algoNuestroDebajo: panelUnderRoute(estado) !== null,
-    })
+      urlYaLlevaNuestroHash: urlNuestra,
+      foreignOwnsTop: ajenaArriba,
+      algoNuestroDebajo: marcaDebajo !== null,
+    }
+    const accion = panelExitArmAction(hechos)
+    const vivoAntes = sentinelVivoRef.current
     if (accion === 'none') {
       // E-6: si estamos parados sobre el nuestro, seguimos siendo dueños de un sentinel vivo.
       if (paradoSobreElNuestro) sentinelVivoRef.current = true
-      return
+    } else {
+      window.history.pushState(panelExitState(id), '', nextPanelExitHash(window.location.hash))
+      sentinelVivoRef.current = true
     }
-    window.history.pushState(panelExitState(id), '', nextPanelExitHash(window.location.hash))
-    sentinelVivoRef.current = true
+    // El canal de diagnóstico, DESPUÉS de la decisión y de la rama: graba el valor de *seguimos
+    // absorbiendo* de antes y de después, que es lo que la medición del plan 03-12 pregunta.
+    recordExitDiag({
+      tipo: 'armado',
+      ruta: window.location.pathname,
+      hash: window.location.hash,
+      estado,
+      id,
+      duenaFigurando: instanciaDuena,
+      instanciasVivas,
+      hechos,
+      accion,
+      vivoAntes,
+      vivoDespues: sentinelVivoRef.current,
+    })
   }, [drawsExitHint, id, root])
 
   useEffect(() => {
@@ -1215,12 +1335,30 @@ export function usePanelBranch({
     const alRetroceder = () => {
       if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
       const estado: unknown = window.history.state
-      const accion = panelExitPopAction({
+      // Los cinco hechos, izados para que la decisión y el canal de diagnóstico lean el MISMO valor
+      // (el del teclado, además, escribe estado del rastreador: leerlo dos veces no es inocuo).
+      const vivoAntes = sentinelVivoRef.current
+      const hechos = {
         topIsOurs: isPanelExitEntry(estado, id),
         participates: drawsExitHint,
         atRoot: window.location.pathname === root,
-        holding: sentinelVivoRef.current,
+        holding: vivoAntes,
         keyboardGuards: elTecladoSeComeElAtras(),
+      }
+      const accion = panelExitPopAction(hechos)
+      // El canal de diagnóstico, DESPUÉS de la decisión y ANTES de las ramas, que son deterministas.
+      recordExitDiag({
+        tipo: 'retroceso',
+        ruta: window.location.pathname,
+        hash: window.location.hash,
+        estado,
+        id,
+        duenaFigurando: instanciaDuena,
+        instanciasVivas,
+        hechos,
+        accion,
+        vivoAntes,
+        vivoDespues: vivoAntes,
       })
       if (accion === 'ignore') {
         // ⚠ EL CUARTO MOMENTO DE REINTENTO, y el único que cubre los gestos que NO CAMBIAN LA RUTA.
