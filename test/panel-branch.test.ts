@@ -1654,3 +1654,48 @@ describe('branchPendingNav — el disparo único de la navegación diferida', ()
     expect(cuenta(barra, /navigate: navegar/g)).toBe(1)
   })
 })
+
+// ── Plan 03-11 — G3-1: la marca de la rama VIAJA por encima del `replace` ────────────────────────
+//
+// EL CASO DE PUNTA A PUNTA, Y POR QUÉ ES UNA SOLA CORRIDA. Lo que `G3-1` reportó roto no es una
+// decisión: es una propiedad de la PILA que cruza un commit del router. El paso de la **pérdida** —el
+// reemplazo ajeno con el que el router escribe su propio state encima— tiene que estar ADENTRO del
+// mismo caso, o lo que se mide es la función aislada y no el camino.
+
+describe('G3-1 — la marca VIAJA por encima del `replace` (el camino entero, una sola corrida)', () => {
+  it('un gesto de `replace` deja el pedido con la ruta LEÍDA, el router pisa la entrada, y la marca VUELVE', () => {
+    // El recorrido del dueño: `Inicio → Turnos → Clientes`. Parado en Turnos, la entrada de arriba
+    // dice que debajo está la RAÍZ. El reemplazo de sección a sección deja que el router escriba su
+    // propio state encima, y hoy NADIE la vuelve a escribir: parado en Clientes la entrada no tiene
+    // marca ⇒ el hecho de la regla -1c es falso ⇒ el gesto siguiente EMPUJA.
+    const ctx = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/appointments' })
+    // El gesto, con el valor leído del MISMO estado que la decisión ya leyó.
+    expect(typeof PB.branchCarryMark).toBe('function')
+    expect(
+      PB.branchCarryMark({
+        plan: 'replace',
+        from: '/appointments',
+        to: '/clients',
+        rutaDebajo: PH.panelUnderRoute(ctx.win.history.state),
+      })
+    ).toBe(true)
+    // El `<Link>` reemplaza: el router escribe SU state sobre la entrada y se lleva nuestra marca.
+    ctx.win.history.state = { __NA: true }
+    ctx.win.location.pathname = '/clients'
+    // El efecto de marcado corre en el commit nuevo y consume el canal ANTES de la decisión.
+    expect(PB.applyBranchMarkRequest('/clients')).toBe(true)
+    expect(ctx.replaceState).toHaveBeenCalledTimes(1)
+    expect(ctx.replaceState).toHaveBeenCalledWith({ frjUnder: PANEL_ROOT }, '')
+    // Y la afirmación que cierra el gap: parado en Clientes el hecho de la regla -1c es VERDADERO, así
+    // que tocar Inicio RETROCEDE en vez de empujar.
+    expect(
+      PH.panelBranchPlan({
+        from: '/clients',
+        to: PANEL_ROOT,
+        raizDebajo: PH.panelUnderRoute(panelUnderState(PANEL_ROOT)) === PANEL_ROOT,
+        masDebajo: false,
+        holdsExitSentinel: false,
+      })
+    ).toBe('up')
+  })
+})
