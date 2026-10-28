@@ -453,7 +453,7 @@ sesión del usuario**, no de tenant: un `back()` sobre una entrada ajena **expul
 mitigan, y es lo que un `/gsd-secure-phase` tendría que mirar acá. Riesgo bajo en términos de datos,
 medio en términos de pérdida de trabajo del dueño.
 
-**Plans:** 11/11 plans executed (4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, ejecutado el 2026-10-28). ⚠ **La fase NO esta cerrada:** el plan 03-11 paro en su checkpoint de **bloqueo humano** y la ronda 3 de la UAT se re-corre **desde el principio** en los dos motores.
+**Plans:** 11/13 plans executed (4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, ejecutado el 2026-10-28 + **2 de cierre de `G3-2` y `G3-3`** tras la re-corrida de la ronda 3 del 2026-10-28, **sin ejecutar**). ⚠ **La fase NO esta cerrada:** el plan 03-11 paro en su checkpoint de **bloqueo humano**, la re-corrida de la ronda 3 encontro **dos fallos mas** —`G3-2` (el aviso no se re-arma al expirar la ventana) y `G3-3` (entrando directo a Inicio el hash esta y el primer atras sale igual)—, y los planes **03-12** (medir el mecanismo) y **03-13** (el arreglo) los cierran. La ronda 3 se re-corre **desde el principio** en los dos motores, y esta vez con el **bloque 4** (escritorio) y el **bloque 6** (iPhone), que nunca se corrieron.
 
 Plans:
 
@@ -468,6 +468,8 @@ Plans:
 - [x] 03-09-PLAN.md
 - [x] 03-10-PLAN.md
 - [x] 03-11-PLAN.md
+- [ ] 03-12-PLAN.md
+- [ ] 03-13-PLAN.md
 
 - [ ] `03-01-PLAN.md` — wave 1 · El tracer: las **dos ramas de ruta** en `panelNavMode` (D-02 `to === '/mas' ⇒ push` y MOB-04 nivel 1 `from === '/mas' ⇒ push`), con **cero** cambios en componentes porque los tres menús ya la consumen; más la **sonda CDP** re-ejecutable que mide la pila real de los siete recorridos sin levantar Supabase ni el dev server
 - [ ] `03-02-PLAN.md` — wave 2 · La mitad difícil: la **marca nueva** en la entrada (`frjUnder`, guarda la **ruta** de abajo), `panelBranchPlan` pura con la degradación segura primero, la **hermana** de `consumeOwnedPanelEntry`, el ejecutor de dos pasos con el molde medido de `leaveNavigationPlan`, y el **paso 3** del `onNavigate` de la barra (D-03 subir · criterio 2 colapsar · el caso degenerado medido)
@@ -560,6 +562,28 @@ Plans:
   rama de Más donde el colapso ya compite (**E-18**) —porque el 16/16 de la ronda 3 era verdad y falló en
   el primer recorrido—; el residuo nuevo declarado en los cuatro lugares; y la **ronda 3 re-corrida desde
   el principio** por el dueño, con un checkpoint que el avance automático **no puede saltear**
+- [ ] `03-12-PLAN.md` — wave 12 · **La medición, antes de cualquier arreglo** (`G3-2` + `G3-3`): los dos
+  fallos comparten una firma —**el hash está en la URL y el atrás no se absorbe**—, así que la evidencia
+  apunta a la **absorción** y no al armado, pero **de dónde sale la divergencia entre la referencia en
+  memoria y la URL es una hipótesis** y este workstream tiene cinco casos de un fix confiado que se cayó al
+  medirlo. Trae: un **canal de diagnóstico inerte** (graba sólo si algo externo lo abre, total y acotado) y
+  la **sonda de la APP REAL por CDP** —la opción B diferida al cierre de fase, traída acá con su motivo
+  escrito: la firma es cableado de React y el sospechoso del **doble montaje** del servidor de desarrollo
+  sólo existe en la app—, los tres recorridos medidos con el gesto de atrás de verdad y con el tiempo
+  **probado** transcurrido, el discriminador del doble montaje con **una** sola variable movida, y un
+  veredicto que dice si son **una causa o dos** y deja escrita la **decisión de diseño con sus cuatro
+  alternativas y su costo**. **Cero arreglos**
+- [ ] `03-13-PLAN.md` — wave 13 · **La absorción aprende lo que el armado ya sabía** (`G3-2` + `G3-3`):
+  una **función pura** con tres reglas en orden —y el caso que fija ese orden, porque la regla 0 reconoce
+  también la marca del sentinel— cableada en **una** línea de la rama `none` del armado, con la **regla de
+  la constante única de MOB-05 preservada por estructura** y medida por **igualdad** (1 temporizador, 2
+  usos del valor, 1 sola fuente de *estamos absorbiendo*); el riesgo nuevo **acotado y escrito** (sólo las
+  formas exactas del hash, sólo entradas que no son de otro dueño, y *avisar* **no navega**, así que el
+  peor caso es un cartel de más y nunca una expulsión); los **tres** escenarios que la fase nunca tuvo
+  —**E-19** hace **pasar el tiempo** de verdad, **E-20** cubre la **entrada directa** y su recarga, **E-21**
+  mide la deriva con una instancia **fresca** sobre una entrada que sobrevive—, la sonda en **21** y la de
+  la app en **verde**; y la **ronda 3 re-corrida desde el principio** con el **bloque 4** y el **bloque 6**,
+  en un checkpoint bloqueante cuyo recibo **no puede quedar verde con lo que ya está en disco**
 
 ### Phase 4: Los tabs profundos sobre la política ya fijada
 
