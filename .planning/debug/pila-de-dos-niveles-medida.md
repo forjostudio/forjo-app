@@ -901,6 +901,33 @@ la respuesta, acá, se escribió como escenario nuevo en vez de como nota al pie
 que la memoria *medir-antes-de-aceptar-un-fix-propuesto* ya tiene **cinco** veces en este mismo
 workstream, vista desde el otro lado: **medir no alcanza si lo medido no es lo que falla.**
 
+## La sonda de la app real (plan 03-12, 2026-10-28) — lo que cierra y lo que no
+
+**El veredicto vive en `.planning/debug/la-absorcion-que-no-absorbe-medida.md`**, medido con
+`.planning/debug/probes/panel-exit-en-la-app.mjs`: la app **real** en Chrome **real** por CDP, con el
+canal de diagnóstico del módulo abierto antes del JS de la app. En una línea: `G3-2` y `G3-3` son
+**una** causa —la **intervención de historial** de Chrome saltea la entrada de Inicio porque el
+sentinel se empuja **sin activación del usuario**— y **no** la divergencia entre la referencia y la
+URL; la recarga del 1.3 suma una segunda causa, de lógica (la séptima regla declina sin acreditar con
+el `frjExit` de una instancia muerta); el doble montaje queda descartado.
+
+⚠ **ESTA SONDA NO PUEDE MODELAR UN RE-MONTAJE DE REACT, y se dice con todas las letras en vez de
+insinuarse.** Esta sonda no corre el código de la app: no hay React, no hay router, no hay efectos ni
+temporizador. Lo que **sí** puede modelar es la **consecuencia de pila y de estado** de un re-montaje
+—una instancia con `id` nuevo y referencias en `false` sobre una entrada empujada que **sobrevive**,
+que es exactamente lo que las decisiones puras leen y lo que la recarga del 1.3 produce—, y por eso los
+escenarios que **hacen pasar el tiempo**, los de **entrada directa** y el de **instancia fresca sobre
+una entrada que sobrevive** entran en el plan `03-13`, acá. Lo que **sólo** se ve en la app —el orden
+de los efectos, la limpieza del doble montaje, el temporizador real y, medido el 2026-10-28, **la
+intervención de historial del atrás de la interfaz**— lo mide la sonda de la app, con el gesto
+`interfaz`.
+
+⚠ **Y la lección de método, que es la misma de `## POR QUÉ EL 8/8 ERA VERDAD Y NO ALCANZABA` un nivel
+más abajo:** esta sonda retrocede con `history.back()`, que **nunca** saltea entradas. Medido contra
+una página de calibración: de los cinco gestos disponibles por CDP, sólo el atrás de la interfaz
+(`chrome.tabs.goBack`) respeta la intervención. Ningún verde de acá puede descartar un fallo que
+dependa de ella — y los dos de la re-corrida de la ronda 3 dependían.
+
 ## Lo que esta sonda NO puede cerrar
 
 Tres supuestos del `## Assumptions Log` del research **siguen abiertos a propósito**, y van **ruteados
