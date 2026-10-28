@@ -453,7 +453,7 @@ sesión del usuario**, no de tenant: un `back()` sobre una entrada ajena **expul
 mitigan, y es lo que un `/gsd-secure-phase` tendría que mirar acá. Riesgo bajo en términos de datos,
 medio en términos de pérdida de trabajo del dueño.
 
-**Plans:** 10/10 plans executed (4 ejecutados + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27)
+**Plans:** 11 plans (10/11 ejecutados: 4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, sin ejecutar)
 
 Plans:
 
@@ -526,6 +526,39 @@ Plans:
   Más—, el registro de imprecisiones por el CLI, el guion de la ronda 2 **cerrado con resultados**, y el
   guion de la ronda 3: **ocho** recorridos en Android con el motivo medido por ítem y los **21** en iPhone
   (A11 sigue abierto entero)
+
+> ⚠ **CIERRE DE G3-1, 2026-10-28.** La **ronda 3** se **interrumpió en el primer recorrido**: `Inicio →
+> Turnos → Clientes → Agenda → tocar Inicio` **falló** —*«sale sin el hash, y atrás me lleva a donde
+> estaba antes»*— ⇒ un gap, **G3-1**. Ver `03-UAT-2.md`, sus **dos últimas** secciones.
+>
+> **La hipótesis rival se descartó a mano antes de planificar:** el recorrido de **una sola sección**
+> (`Inicio → Clientes → tocar Inicio`) **pasó** en el mismo motor y el mismo día ⇒ el teléfono corrió el
+> bundle **nuevo** y la regla del plan `03-09` **sí** dispara. La única diferencia entre los dos
+> recorridos es **un `replace`**.
+>
+> **La causa está medida y es de una línea:** la marca de la rama se escribe **sólo cuando la política
+> dice `push`**, así que el `replace` de sección a sección deja que el router escriba su propio state
+> encima y **nadie la vuelve a escribir** ⇒ parado en la última sección el hecho de la regla es **falso**
+> ⇒ el gesto **empuja**. La corrección es de la **pila** y no del síntoma: un `replace` **no cambia** lo
+> que quedó debajo, así que la marca tiene que **viajar** por encima de él, propagando el valor que se
+> **leyó** por el canal que el colapso ya usa. `panelNavMode` y `panelBranchPlan` quedan **intactas**: el
+> arreglo es aditivo.
+>
+> El **residuo nuevo** —el camino del **guard de cambios sin guardar** ejecuta su propio reemplazo y
+> **no** propaga, así que en una pantalla sucia el gesto siguiente queda un escalón más largo— queda
+> **aceptado y declarado** con fecha 2026-10-28, con el mismo criterio que los otros dos residuos de la
+> fase: es la degradación segura (un escalón más, **nunca** una expulsión).
+
+- [ ] `03-11-PLAN.md` — wave 11 · **La marca viaja por encima del `replace`** (G3-1): **un** productor
+  nuevo sobre el canal de propagación que ya existe —mismo consumidor, mismo escritor único, misma
+  negativa a inventar una ruta—, con `panelNavMode` y `panelBranchPlan` **intactas** y medidas por
+  recorte, el camino cubierto de **punta a punta en una sola corrida** y **probado en rojo** comentando
+  el cableado; los **tres** no-defectos declarados re-afirmados (la pila de tres escalones de D-02 sigue
+  apilando, `Más → tocar Inicio → atrás` sigue avisando para salir, el residuo de escritorio queda igual);
+  los dos escenarios de sonda que cruzan la regla con una **cadena** de reemplazos (**E-17**) y con la
+  rama de Más donde el colapso ya compite (**E-18**) —porque el 16/16 de la ronda 3 era verdad y falló en
+  el primer recorrido—; el residuo nuevo declarado en los cuatro lugares; y la **ronda 3 re-corrida desde
+  el principio** por el dueño, con un checkpoint que el avance automático **no puede saltear**
 
 ### Phase 4: Los tabs profundos sobre la política ya fijada
 
