@@ -13,6 +13,7 @@ import { UnsavedChangesProvider } from '@/components/dashboard/unsaved-changes-g
 import { VerticalProvider } from '@/lib/use-terminology'
 import { resolveVertical } from '@/lib/verticals'
 import { PaletteScript } from '@/components/palette-script'
+import { ThemeSync } from '@/components/theme-sync'
 
 
 // Ninguna pantalla de esta superficie va a buscadores. Ver `lib/noindex.ts` para por qué el meta
@@ -68,6 +69,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <VerticalProvider vertical={vertical}>
       <PaletteScript palette={business.palette} theme={business.theme} font={business.font} />
+      {/* PaletteScript solo corre en carga en frío; ThemeSync cubre la entrada sin recarga (login,
+          onboarding) y al salir del panel devuelve el tema Forjo. Ver components/theme-sync.tsx. */}
+      <ThemeSync palette={business.palette} theme={business.theme} font={business.font} />
       {/* El guard de salida tiene que envolver al SIDEBAR y a la PÁGINA a la vez: la bandera de
           cambios sin guardar nace en la página y se consulta en el sidebar, que son hermanos ⇒ el
           único punto en común es acá. Un provider client envolviendo children renderizados en el

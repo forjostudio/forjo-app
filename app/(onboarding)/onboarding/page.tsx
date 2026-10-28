@@ -216,11 +216,10 @@ export default function OnboardingPage() {
 
   // Salida del wizard (ONB-02, D-04): un usuario autenticado sin negocio queda atrapado en el
   // onboarding (ej. entró con la cuenta de Google equivocada en el UAT de Phase 5). Cierra sesión y
-  // vuelve a /login. Mismo patrón canónico que sidebar.tsx (signOut + push + refresh).
+  // vuelve a /login. Mismo patrón canónico que sidebar.tsx (signOut + recarga completa).
   async function handleLogout() {
     await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+    window.location.assign('/login')
   }
 
   // Services

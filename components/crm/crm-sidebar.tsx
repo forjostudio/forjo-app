@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -135,14 +135,13 @@ function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: stri
 
 export function CrmSidebar({ operatorName = 'Operador' }: { operatorName?: string }) {
   const pathname = usePathname()
-  const router = useRouter()
   const supabase = createClient()
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  // Recarga completa: mismo criterio que components/dashboard/sidebar.tsx.
   async function handleLogout() {
     await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+    window.location.assign('/login')
   }
 
   const initials = operatorName

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import { ExternalLink, HelpCircle, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -99,7 +99,6 @@ function slugDeGrupo(section: string): string {
 
 export function MasClient({ business }: { business: Business }) {
   const pathname = usePathname()
-  const router = useRouter()
   const supabase = createClient()
   // Guard de salida del panel: si la pantalla actual tiene cambios sin guardar, cada fila de acá
   // pregunta antes de navegar en vez de descartarlos en silencio. Sin provider devuelve siempre
@@ -119,8 +118,8 @@ export function MasClient({ business }: { business: Business }) {
       toast.error('No pudimos cerrar la sesión. Probá de nuevo.')
       return
     }
-    router.push('/login')
-    router.refresh()
+    // Recarga completa: mismo criterio que components/dashboard/sidebar.tsx.
+    window.location.assign('/login')
   }
 
   // El inventario del rubro MENOS lo que ya está en la barra. El `.filter` final mantiene la

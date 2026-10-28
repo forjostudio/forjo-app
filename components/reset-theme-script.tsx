@@ -2,9 +2,10 @@
 //   data-palette = 'red'         → default del root layout (app/layout.tsx:59) = "tema Forjo base"
 //   delete data-theme/data-font  → los defaults Forjo son la AUSENCIA del atributo
 //   removeProperty('--primary')  → limpia el override de acento que un /[slug] (landing) pudo dejar inline
-// Script INLINE (no useEffect): React lo ejecuta sincrónicamente en el commit, ANTES del paint del
-// nuevo route → sin flash de la paleta del tenant en el soft-nav de logout. Un useEffect correría
-// post-paint = se vería un frame con la paleta del negocio.
+// Script INLINE: corre mientras el navegador parsea el HTML del server, antes de pintar → cubre la
+// carga en frío de /login. NO cubre el soft-nav del logout: React monta los <script> del cliente
+// sin ejecutarlos (se suponía lo contrario y en prod la fuente del negocio quedaba pegada). Ese caso
+// lo cubre ThemeSync (components/theme-sync.tsx), al lado de este en app/(auth)/layout.tsx.
 // Todos los valores son literales estáticos (no interpola input del usuario, la DB ni la URL) → a
 // diferencia de PaletteScript no hace falta JSON.stringify: cero superficie de inyección.
 // NUNCA toca classList ni la clase .dark: ese eje (claro/oscuro) es de next-themes (ortogonal, D-03).

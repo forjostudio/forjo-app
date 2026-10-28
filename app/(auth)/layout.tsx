@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { NOINDEX } from '@/lib/noindex'
 import { ResetThemeScript } from '@/components/reset-theme-script'
+import { ThemeSync } from '@/components/theme-sync'
 
 // Layout del route group (auth): padre común de (auth)/(split)/{login,forgot-password,reset-password}
 // y (auth)/register → inyecta el reset del tema del tenant en las 4 pantallas de auth con un solo
@@ -11,6 +12,10 @@ import { ResetThemeScript } from '@/components/reset-theme-script'
 // Bauhaus vive en (auth)/(split)/layout.tsx a propósito: ponerlo acá arrastraría /register al split y
 // violaría el diseño de Phase 4. Este layout es solo el vehículo del reset (D-04: no toca otros layouts).
 // ResetThemeScript va ANTES de {children} para correr antes de pintarlos.
+//
+// OJO: ResetThemeScript solo corre en carga en frío. En el logout (router.push, sin recarga) React
+// monta el <script> sin ejecutarlo, y /login quedaba con la fuente del negocio (visto en prod
+// 2026-10-28). Ese caso lo cubre ThemeSync (useLayoutEffect, también pre-paint).
 
 // Ninguna pantalla de esta superficie va a buscadores. Ver `lib/noindex.ts` para por qué el meta
 // va ADEMÁS del `app/robots.ts` (robots.txt pide no rastrear; el noindex es el que des-indexa).
@@ -20,6 +25,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <>
       <ResetThemeScript />
+      <ThemeSync />
       {children}
     </>
   )
