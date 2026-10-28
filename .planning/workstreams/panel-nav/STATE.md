@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
-current_plan: 11
+current_plan: 12
 status: executing
-stopped_at: "Completado 03-11-PLAN.md — tasks 1-3 hechos; CHECKPOINT de bloqueo humano del task 4 pendiente: la ronda 3 se re-corre DESDE EL PRINCIPIO en los dos motores"
-last_updated: "2026-10-28T16:08:46.248Z"
+stopped_at: Completado 03-12-PLAN.md — la causa de G3-2/G3-3 es la intervencion de historial de Chrome; el 03-13 espera la decision del dueno sobre cuando se arma el sentinel
+last_updated: "2026-10-28T21:01:38.754Z"
 last_activity: 2026-10-28
-last_activity_desc: 03-11 ejecutado (G3-1 cerrado en codigo); checkpoint humano del task 4 pendiente
-state_head: 74841a41990e6bff975cfc978745de15e3ae6e54
+last_activity_desc: "03-12 completado: G3-2/G3-3 medidos (intervencion de historial), 03-13 espera decision del dueno"
+state_head: 18b9c4fd380b0e41ab15cc2317d2f6997314e38c
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 17
+  completed_plans: 16
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
@@ -25,25 +25,25 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Current Position
 
-**Current Plan:** 11
-**Total Plans in Phase:** 11
-**Status:** 11/11 planes ejecutados en la fase 03 — CHECKPOINT de bloqueo humano pendiente (ronda 3 de la UAT, los dos motores)
+**Current Plan:** 12
+**Total Plans in Phase:** 13
+**Status:** Executing Phase 03 — 03-12 completado; 03-13 bloqueado por una decision del dueno (cuando se arma el sentinel)
 **Current Phase:** 03
-**Last Activity:** 2026-10-28 — 03-11 ejecutado: la marca de la rama viaja por encima del `replace` (G3-1)
-**Last Activity Description:** Tasks 1-3 hechos y commiteados; el task 4 es el checkpoint de bloqueo humano y paro ahi
+**Last Activity:** 2026-10-28 — 03-12 completado (medicion de G3-2/G3-3)
+**Last Activity Description:** la causa de G3-2/G3-3 es la intervencion de historial de Chrome; doble montaje descartado
 
 ## Progress
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 11/11 (en la fase 03)
-**Current Plan:** 11
+**Plans Complete:** 12/13 (en la fase 03)
+**Current Plan:** 12
 
 ## Session Continuity
 
-**Last session:** 2026-10-28T16:07:43.296Z
+**Last session:** 2026-10-28T21:01:08.535Z
 
-**Stopped At:** Completado 03-11-PLAN.md — tasks 1-3 hechos; CHECKPOINT de bloqueo humano del task 4 pendiente: la ronda 3 se re-corre DESDE EL PRINCIPIO en los dos motores
+**Stopped At:** Completado 03-12-PLAN.md — la causa de G3-2/G3-3 es la intervencion de historial de Chrome; el 03-13 espera la decision del dueno sobre cuando se arma el sentinel
 **Resume File:** None
 
 ## Performance Metrics
@@ -61,6 +61,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | Phase 03 P09 | 95 min | 3 tasks | 7 files |
 | Phase 03 P10 | 35 min | 2 tasks | 6 files |
 | Phase 03 P11 | 28 min | 3 tasks tasks | 9 files files |
+| Phase 03 P12 | 60 min | 3 tasks | 7 files |
 
 ### Quick Tasks Completed
 
@@ -110,3 +111,5 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 - [Phase 03]: Sin valor leido NO se inventa ninguno, y la abstencion se mide en vez de prometerse (E-17 mitad C): quedarse sin marca deja la pila un escalon mas larga, una marca falsa deja al dueno fuera del sitio
 - [Phase 03]: El residuo del camino del guard de cambios sin guardar se DECLARA en los cuatro lugares donde se puede leer (2026-10-28) en vez de cablearse: el guard no pasa por handleNavigate, asi que en pantalla sucia la marca se sigue perdiendo y el gesto queda un escalon mas largo, nunca una expulsion
 - [Phase 03]: MOB-04/05/06 siguen SIN marcar y requirements.mark-complete NO se corrio: los marca el telefono, no la suite verde ni la sonda en 18/18. La ronda 3 se re-corre DESDE EL PRINCIPIO porque el arreglo cambia la forma de la pila
+- [Phase 03]: G3-2 y G3-3 son UNA causa y no es la divergencia referencia/URL: la intervencion de historial de Chrome saltea la entrada de Inicio porque el sentinel se empuja sin activacion del usuario (al montar y desde el temporizador); holding=true en los dos — Medido en la app real por CDP con el atras de la INTERFAZ (chrome.tabs.goBack): mismo servidor y mismo modo estricto, solo cambiando el gesto, los dos recorridos pasan con la navegacion a la entrada anterior y fallan con el de la interfaz (entradas_salteadas=1, sin popstate)
+- [Phase 03]: El 03-13 NO puede implementar A-D para G3-2/G3-3: cuando se arma el sentinel (tras un toque del dueno, o aceptar el limite) es decision del dueno; (A) queda elegida solo para el defecto de logica de la recarga (septima regla sin acreditar con frjExit de instancia muerta) y el doble montaje queda descartado — Ninguna de las cuatro opciones toca una entrada que el navegador nunca visita; el doble montaje midio cero popstate sin gesto y un armado al montar con el estricto activo y apagado

@@ -453,7 +453,7 @@ sesión del usuario**, no de tenant: un `back()` sobre una entrada ajena **expul
 mitigan, y es lo que un `/gsd-secure-phase` tendría que mirar acá. Riesgo bajo en términos de datos,
 medio en términos de pérdida de trabajo del dueño.
 
-**Plans:** 11/13 plans executed (4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, ejecutado el 2026-10-28 + **2 de cierre de `G3-2` y `G3-3`** tras la re-corrida de la ronda 3 del 2026-10-28, **sin ejecutar**). ⚠ **La fase NO esta cerrada:** el plan 03-11 paro en su checkpoint de **bloqueo humano**, la re-corrida de la ronda 3 encontro **dos fallos mas** —`G3-2` (el aviso no se re-arma al expirar la ventana) y `G3-3` (entrando directo a Inicio el hash esta y el primer atras sale igual)—, y los planes **03-12** (medir el mecanismo) y **03-13** (el arreglo) los cierran. La ronda 3 se re-corre **desde el principio** en los dos motores, y esta vez con el **bloque 4** (escritorio) y el **bloque 6** (iPhone), que nunca se corrieron.
+**Plans:** 12/13 plans executed (4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, ejecutado el 2026-10-28 + **2 de cierre de `G3-2` y `G3-3`** tras la re-corrida de la ronda 3 del 2026-10-28: el **03-12** ejecutado el 2026-10-28 —midio que la causa es la **intervencion de historial** de Chrome y no la referencia, ver `.planning/debug/la-absorcion-que-no-absorbe-medida.md`— y el **03-13** **sin ejecutar**, a la espera de una **decision del dueno** sobre cuando se arma el sentinel). ⚠ **La fase NO esta cerrada:** el plan 03-11 paro en su checkpoint de **bloqueo humano**, la re-corrida de la ronda 3 encontro **dos fallos mas** —`G3-2` (el aviso no se re-arma al expirar la ventana) y `G3-3` (entrando directo a Inicio el hash esta y el primer atras sale igual)—, y los planes **03-12** (medir el mecanismo) y **03-13** (el arreglo) los cierran. La ronda 3 se re-corre **desde el principio** en los dos motores, y esta vez con el **bloque 4** (escritorio) y el **bloque 6** (iPhone), que nunca se corrieron.
 
 Plans:
 
@@ -468,7 +468,7 @@ Plans:
 - [x] 03-09-PLAN.md
 - [x] 03-10-PLAN.md
 - [x] 03-11-PLAN.md
-- [ ] 03-12-PLAN.md
+- [x] 03-12-PLAN.md
 - [ ] 03-13-PLAN.md
 
 - [ ] `03-01-PLAN.md` — wave 1 · El tracer: las **dos ramas de ruta** en `panelNavMode` (D-02 `to === '/mas' ⇒ push` y MOB-04 nivel 1 `from === '/mas' ⇒ push`), con **cero** cambios en componentes porque los tres menús ya la consumen; más la **sonda CDP** re-ejecutable que mide la pila real de los siete recorridos sin levantar Supabase ni el dev server
@@ -562,7 +562,7 @@ Plans:
   rama de Más donde el colapso ya compite (**E-18**) —porque el 16/16 de la ronda 3 era verdad y falló en
   el primer recorrido—; el residuo nuevo declarado en los cuatro lugares; y la **ronda 3 re-corrida desde
   el principio** por el dueño, con un checkpoint que el avance automático **no puede saltear**
-- [ ] `03-12-PLAN.md` — wave 12 · **La medición, antes de cualquier arreglo** (`G3-2` + `G3-3`): los dos
+- [x] `03-12-PLAN.md` — wave 12 · **La medición, antes de cualquier arreglo** (`G3-2` + `G3-3`): los dos
   fallos comparten una firma —**el hash está en la URL y el atrás no se absorbe**—, así que la evidencia
   apunta a la **absorción** y no al armado, pero **de dónde sale la divergencia entre la referencia en
   memoria y la URL es una hipótesis** y este workstream tiene cinco casos de un fix confiado que se cayó al
@@ -726,5 +726,5 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
-| 3. La política de atrás, de un nivel a dos | 11/11 | In Progress|  |
+| 3. La política de atrás, de un nivel a dos | 12/13 | In Progress|  |
 | 4. Los tabs profundos sobre la política ya fijada | 0/? | Not started | - |
