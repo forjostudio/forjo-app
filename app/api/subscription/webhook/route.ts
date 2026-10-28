@@ -94,6 +94,11 @@ async function processWebhook(type: string, dataId?: string) {
     return
   }
 
+  // El alta/edición del plan (subscription_preapproval_plan) llega por el mismo evento del panel
+  // ("Planes y suscripciones") y no dice nada de pagos: su id es de /preapproval_plan, no de
+  // /preapproval. Se ignora para que no caiga en el caso de abajo.
+  if (type.includes('preapproval_plan')) return
+
   // ── Subscription status changes ──────────────────────────────────────────
   if (type.includes('subscription_preapproval') || type === 'preapproval') {
     const sub: MPSubscription = await mpFetch(`/preapproval/${dataId}`)
