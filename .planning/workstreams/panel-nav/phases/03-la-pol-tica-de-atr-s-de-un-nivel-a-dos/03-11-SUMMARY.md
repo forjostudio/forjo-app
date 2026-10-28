@@ -27,7 +27,7 @@ affects:
 actuals:
   tokens: 132217
   tasks: 3
-  commits: 4
+  commits: 6
 plan_head_before: 8460f793346ff28cc782608fedd3d62799dce5a4
 
 tech-stack:
@@ -182,7 +182,9 @@ status: complete
 
 **REFACTOR:** no hubo commit — no había nada que limpiar (el productor son tres `if` y una llamada).
 
-_`commits: 4` está **MEDIDO** con `git rev-list --count 8460f79..HEAD`, no narrado._
+**Cierre del plan:** `74841a4` (el resumen) y `1348b8c` (estado + roadmap).
+
+_`commits: 6` está **MEDIDO** con `git rev-list --count 8460f79..HEAD` al cerrar —4 de task + el del resumen + el de cierre—, no narrado._
 
 ## Files Created/Modified
 

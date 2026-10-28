@@ -3,47 +3,47 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
-current_plan: 10
-status: verifying
-stopped_at: Completado 03-10-PLAN.md — ronda 3 de UAT PEDIDA, checkpoint humano pendiente
-last_updated: "2026-10-27T19:21:03.969Z"
-last_activity: 2026-10-27
-last_activity_desc: Plan 03-10 ejecutado — documentos al dia y la ronda 3 de UAT pedida (checkpoint humano pendiente)
-state_head: 9dd85ac7f2cd53f677befe09bc73e3552806041f
+current_plan: 11
+status: executing
+stopped_at: "Completado 03-11-PLAN.md — tasks 1-3 hechos; CHECKPOINT de bloqueo humano del task 4 pendiente: la ronda 3 se re-corre DESDE EL PRINCIPIO en los dos motores"
+last_updated: "2026-10-28T16:08:46.248Z"
+last_activity: 2026-10-28
+last_activity_desc: 03-11 ejecutado (G3-1 cerrado en codigo); checkpoint humano del task 4 pendiente
+state_head: 74841a41990e6bff975cfc978745de15e3ae6e54
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 15
+  completed_plans: 15
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
-current_phase_name: La política de atrás, de un nivel a dos
+current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 ---
 
 # Project State
 
 ## Current Position
 
-**Current Plan:** 10
-**Total Plans in Phase:** 10
-**Status:** Phase complete — ready for verification
+**Current Plan:** 11
+**Total Plans in Phase:** 11
+**Status:** 11/11 planes ejecutados en la fase 03 — CHECKPOINT de bloqueo humano pendiente (ronda 3 de la UAT, los dos motores)
 **Current Phase:** 03
-**Last Activity:** 2026-10-27 — Plan 03-10 ejecutado (la ronda 3 de UAT, pedida)
-**Last Activity Description:** Plan 03-10 ejecutado — documentos al dia y la ronda 3 de UAT pedida; MOB-04/05/06 siguen SIN marcar
+**Last Activity:** 2026-10-28 — 03-11 ejecutado: la marca de la rama viaja por encima del `replace` (G3-1)
+**Last Activity Description:** Tasks 1-3 hechos y commiteados; el task 4 es el checkpoint de bloqueo humano y paro ahi
 
 ## Progress
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 9/10 (en la fase 03)
-**Current Plan:** 10
+**Plans Complete:** 11/11 (en la fase 03)
+**Current Plan:** 11
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T19:20:09.982Z
+**Last session:** 2026-10-28T16:07:43.296Z
 
-**Stopped At:** Completado 03-10-PLAN.md — ronda 3 de UAT PEDIDA, checkpoint humano pendiente
+**Stopped At:** Completado 03-11-PLAN.md — tasks 1-3 hechos; CHECKPOINT de bloqueo humano del task 4 pendiente: la ronda 3 se re-corre DESDE EL PRINCIPIO en los dos motores
 **Resume File:** None
 
 ## Performance Metrics
@@ -60,6 +60,7 @@ current_phase_name: La política de atrás, de un nivel a dos
 | Phase 02 P04 | 85 min | 2 tasks | 2 files |
 | Phase 03 P09 | 95 min | 3 tasks | 7 files |
 | Phase 03 P10 | 35 min | 2 tasks | 6 files |
+| Phase 03 P11 | 28 min | 3 tasks tasks | 9 files files |
 
 ### Quick Tasks Completed
 
@@ -103,3 +104,9 @@ current_phase_name: La política de atrás, de un nivel a dos
 - [Phase 03]: MOB-04 se PRECISA con su limite declarado: el ciclo Inicio-seccion deja de crecer, pero en la pila de tres escalones de D-02 la regla NO se dispara y el gesto sigue apilando. La fase promete que el ciclo no crece sin techo, no que la pila nunca pase de dos
 - [Phase 03]: La consecuencia de la regla sobre Mas - tocar Inicio - atras se declara debajo de MOB-05 con fecha y con prohibicion de leerla como regresion: la decision (a) no cambio, cambio la PILA que lee
 - [Phase 03]: La ronda 3 se ACOTA a ocho recorridos en Android mas los 21 en iPhone, con el motivo medido por item; y NO se corrio requirements.mark-complete: MOB-04/05/06 se marcan con el telefono, no con la suite verde
+- [Phase 03]: G3-1 se cierra con un SEGUNDO PRODUCTOR del canal de propagacion (branchCarryMark) y NO tocando la politica: panelNavMode (6 retornos / 5 ramas) y panelBranchPlan (6 reglas / 2 retrocesos / 2 caidas) quedaron intactas y medidas por recorte. La regla -1c ya era correcta y estaba desplegada; lo que faltaba era que el hecho que lee ESTUVIERA AHI
+- [Phase 03]: El valor se lee en el GESTO y no en el efecto, sobre el mismo window.history.state que ya se leia para los tres hechos: despues del replace del <Link> el valor no existe mas, y dos lecturas en el mismo gesto son dos verdades que pueden diferir
+- [Phase 03]: La propagacion se escribio GENERAL (viaja cualquier ruta leida) y no acotada a la marca dice la raiz: la acotada dejaria la misma regla significando dos cosas segun el valor. El costo quedo MEDIDO en E-18 y resulto ser lo que D-03 pide (tocar Mas desde dos secciones de Mas sube en vez de apilar)
+- [Phase 03]: Sin valor leido NO se inventa ninguno, y la abstencion se mide en vez de prometerse (E-17 mitad C): quedarse sin marca deja la pila un escalon mas larga, una marca falsa deja al dueno fuera del sitio
+- [Phase 03]: El residuo del camino del guard de cambios sin guardar se DECLARA en los cuatro lugares donde se puede leer (2026-10-28) en vez de cablearse: el guard no pasa por handleNavigate, asi que en pantalla sucia la marca se sigue perdiendo y el gesto queda un escalon mas largo, nunca una expulsion
+- [Phase 03]: MOB-04/05/06 siguen SIN marcar y requirements.mark-complete NO se corrio: los marca el telefono, no la suite verde ni la sonda en 18/18. La ronda 3 se re-corre DESDE EL PRINCIPIO porque el arreglo cambia la forma de la pila
