@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
-current_plan: 12
+current_plan: 13
 status: executing
-stopped_at: 03-13 re-planificado sobre la decision del dueno (el aviso de salida se arma solo con activacion del usuario); listo para ejecutar
-last_updated: "2026-10-29T00:35:41.167Z"
-last_activity: 2026-10-28
-last_activity_desc: "03-13 re-planificado (camino 1 del dueno), verificado por el plan-checker sin bloqueantes"
-state_head: 18b9c4fd380b0e41ab15cc2317d2f6997314e38c
+stopped_at: "03-13 en el checkpoint bloqueante: la ronda 3 del dueno en los dos motores"
+last_updated: "2026-10-29T13:12:39.881Z"
+last_activity: 2026-10-29
+last_activity_desc: "03-13 ejecutado hasta su checkpoint blocking-human: el sentinel se empuja solo con un toque, la ronda 3 espera al dueno"
+state_head: b09c90c34169b9bf912027cc9b2ed5759960e41c
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
@@ -25,25 +25,25 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Current Position
 
-**Current Plan:** 12
+**Current Plan:** 13
 **Total Plans in Phase:** 13
-**Status:** Executing Phase 03 — 03-12 completado; 03-13 re-planificado sobre la decision del dueno, listo para ejecutar
+**Status:** 13/13 planes ejecutados en la fase 03 — el 03-13 en su CHECKPOINT blocking-human: espera la ronda 3 del dueno desde el principio en Android Chrome y iPhone Safari (la fase NO esta completa)
 **Current Phase:** 03
-**Last Activity:** 2026-10-28 — 03-13 re-planificado (decision del dueno 03-DECISION-UAT-3.md)
-**Last Activity Description:** el sentinel se arma solo con activacion del usuario; el aviso queda hasta el proximo toque
+**Last Activity:** 2026-10-29 — 03-13 ejecutado: el sentinel de salida se empuja solo con activacion del usuario, el aviso no vence, la recarga por (A)
+**Last Activity Description:** Tasks 1-4 hechos y commiteados (sonda de la app 11/11, estatica 18/18, suite 1984); el task 5 es el checkpoint blocking-human y paro ahi. MOB-04/05/06 sin marcar
 
 ## Progress
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 12/13 (en la fase 03)
-**Current Plan:** 12
+**Plans Complete:** 13/13 (en la fase 03)
+**Current Plan:** 13
 
 ## Session Continuity
 
-**Last session:** 2026-10-28T21:01:08.535Z
+**Last session:** 2026-10-29T13:12:30.330Z
 
-**Stopped At:** 03-13 re-planificado sobre la decision del dueno (el aviso de salida se arma solo con activacion del usuario); listo para ejecutar
+**Stopped At:** 03-13 en el checkpoint bloqueante: la ronda 3 del dueno en los dos motores
 **Resume File:** None
 
 ## Performance Metrics
@@ -62,6 +62,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | Phase 03 P10 | 35 min | 2 tasks | 6 files |
 | Phase 03 P11 | 28 min | 3 tasks tasks | 9 files files |
 | Phase 03 P12 | 60 min | 3 tasks | 7 files |
+| Phase 03 P13 | 47min | 4 tasks | 9 files |
 
 ### Quick Tasks Completed
 
@@ -113,3 +114,5 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 - [Phase 03]: MOB-04/05/06 siguen SIN marcar y requirements.mark-complete NO se corrio: los marca el telefono, no la suite verde ni la sonda en 18/18. La ronda 3 se re-corre DESDE EL PRINCIPIO porque el arreglo cambia la forma de la pila
 - [Phase 03]: G3-2 y G3-3 son UNA causa y no es la divergencia referencia/URL: la intervencion de historial de Chrome saltea la entrada de Inicio porque el sentinel se empuja sin activacion del usuario (al montar y desde el temporizador); holding=true en los dos — Medido en la app real por CDP con el atras de la INTERFAZ (chrome.tabs.goBack): mismo servidor y mismo modo estricto, solo cambiando el gesto, los dos recorridos pasan con la navegacion a la entrada anterior y fallan con el de la interfaz (entradas_salteadas=1, sin popstate)
 - [Phase 03]: El 03-13 NO puede implementar A-D para G3-2/G3-3: cuando se arma el sentinel (tras un toque del dueno, o aceptar el limite) es decision del dueno; (A) queda elegida solo para el defecto de logica de la recarga (septima regla sin acreditar con frjExit de instancia muerta) y el doble montaje queda descartado — Ninguna de las cuatro opciones toca una entrada que el navegador nunca visita; el doble montaje midio cero popstate sin gesto y un armado al montar con el estricto activo y apagado
+- [Phase 03]: El sentinel de salida se empuja SOLO con activacion del usuario (camino 1): armarSentinel recibe puedeEmpujar sin default, efecto y toque lo leen con panelExitActivationNow, los dos reintentos del popstate lo pasan en falso; el aviso no vence (constante y temporizador borrados) y lo baja el toque que re-arma — Medido en el plan 03-12: un empuje sin activacion es salteable por la intervencion de historial; la calibracion del 03-13 dio la rama (b) (isActive mas estricto que el navegador, la direccion segura) y la sonda de la app dio 11/11 con el atras de la interfaz
+- [Phase 03]: Otro dueno para la acreditacion de (A) es ajena Y sin marca de salida, no isForeignOwnedEntry a secas, y la rama none ASIGNA la referencia — isForeignOwnedEntry reconoce el frjExit de cualquier id y habria rechazado justo la entrada de la recarga; asignar re-deriva en los dos sentidos y saca el cartel que mentia sobre una marca muerta. Medido en la app: pares 1->25, 59->301 por la septima, absorbidos

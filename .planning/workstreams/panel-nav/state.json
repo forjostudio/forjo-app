@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
-    "label": "Ejecutar el 03-13 re-planificado",
-    "reason": "Phase 03 · 12/13 · 03-13 listo para ejecutar"
+    "command": "/gsd-verify-work 3 --ws panel-nav",
+    "label": "La ronda 3 del dueno, desde el principio, en Android Chrome y iPhone Safari",
+    "reason": "Phase 03 · 13/13 · el 03-13 en su checkpoint blocking-human"
   },
-  "updated_at": "2026-10-29T00:35:41.170Z"
+  "updated_at": "2026-10-29T13:12:14.674Z"
 }
