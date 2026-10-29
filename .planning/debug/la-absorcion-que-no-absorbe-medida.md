@@ -567,6 +567,44 @@ nuestroArriba })`), leyendo en ese instante si la instancia sigue montada y si n
 arriba. React desconecta y reconecta en la misma llamada síncrona, así que el microtask corre después
 del remontaje — y eso se MIDE con un registro `desmontaje` del canal, no se supone.
 
+### El cierre (plan 03-14)
+
+**El arreglo** (commit `feat(03-14)`, `lib/panel-branch.ts`): `panelExitUnmountAction` pura (`keep` si la
+instancia sigue montada; `consume` sólo con la instancia desmontada de verdad y nuestra entrada arriba;
+si no, `keep`), la referencia `montadaRef`, y la limpieza del desmontaje que agenda **un**
+`queueMicrotask` que lee en ese instante `history.state`, la marca y `montadaRef`, decide, graba un
+registro `desmontaje` y retrocede sólo con `consume`. Las reglas bloqueadas, intactas por recorte: 7
+`none` / 4 `ignore`, `panelNavMode` 6/5, `panelBranchPlan` 6/2, `branchCarryMark` 4, `history.back()` en
+2, un `pushState`, cero tiempo, cero ancho. El login no se tocó.
+
+**La sonda de la app después del arreglo** (corrida completa del 2026-10-29 18:18-18:24, rc 0):
+**12/12 en `OK`** —los once de antes más `R-login-con-activacion`—. El aterrizaje, con el tiempo
+relativo al click:
+
+```text
+intento 1: ms del click al primer armado=1133 acciones=[arm,none] ids=[1,1] · VALE (armado con empuje)
+armado     t=+1133ms id=1 accion=arm  regla=ninguna-ARMA          vivo_despues=true
+armado     t=+1138ms id=1 accion=none regla=regla-4-topIsOurs(E-6) vivo_despues=true
+desmontaje t=+1140ms id=1 accion=keep sigue_montada=true nuestro_arriba=true vivo_despues=true
+llegada_con_activacion=si · popstates_al_aterrizar=0 · aviso_al_aterrizar=no · hash_al_aterrizar=#salir
+atras_tras_un_toque_absorbido=si · accion_del_desmontaje=keep · desmontaje_despues_del_remontaje=si
+```
+
+**El orden medido del registro `desmontaje`:** llega **después** del `armado` `none` del remontaje (+1140
+contra +1138 ms) y con `sigue_montada=true`: el microtask corre después de que React reconecta, como
+decía la lectura. **P-5 no aplica.** Ningún `back` en el aterrizaje, ningún `popstate`. Una corrida
+aislada del mismo recorrido antes de la completa dio lo mismo (3414 ms del click al armado, justo después
+de la recarga en caliente del `next dev` del dueño, igual dentro de la ventana).
+
+**La sonda estática** (`panel-back-stack.mjs`, sin tocar): 18/18, rc 0. **La suite completa**: 110
+archivos, 1994 pasados + 4 expected-fail + 1 salteado (base 1984 + los 10 casos nuevos), 0 fallados.
+
+**Lo que sigue abierto:** todo esto es Chrome de escritorio. Que el teléfono aterrice igual es el
+recorrido **1.6** de la ronda 3, que corre el dueño. ⚠ Y una precisión de alcance: el doble montaje es
+**sólo de desarrollo**. En producción React no lo hace, así que el defecto era del entorno donde el dueño
+prueba con el teléfono (su `next dev`); el arreglo es correcto en los dos (en producción la limpieza
+sólo corre en un desmontaje real, y ahí decide igual que antes).
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la

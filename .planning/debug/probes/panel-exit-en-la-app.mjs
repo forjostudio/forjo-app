@@ -523,6 +523,7 @@ function lineaDeRegistro(r, t0 = null) {
   if (t0 !== null) return `${lineaDeRegistro(r)}${t}`
   if (r.tipo === 'armado') return `armado    doc=${r.doc} id=${r.id} duena=${r.duenaFigurando} vivas=${r.instanciasVivas} url=${r.ruta}${r.hash} estado=${r.estado} accion=${r.accion} regla=${reglaDelArmado(r.hechos)} vivo_antes=${r.vivoAntes} vivo_despues=${r.vivoDespues}`
   if (r.tipo === 'retroceso') return `retroceso doc=${r.doc} id=${r.id} duena=${r.duenaFigurando} vivas=${r.instanciasVivas} url=${r.ruta}${r.hash} estado=${r.estado} accion=${r.accion} regla=${reglaDelRetroceso(r.hechos)} holding=${r.hechos?.holding}`
+  if (r.tipo === 'desmontaje') return `desmontaje doc=${r.doc} id=${r.id} url=${r.ruta}${r.hash} accion=${r.accion} sigue_montada=${r.hechos?.sigueMontada} nuestro_arriba=${r.hechos?.nuestroArriba} vivo_despues=${r.vivoDespues}`
   if (r.tipo === 'toque') return `toque     doc=${r.doc} id=${r.id} url=${r.ruta}${r.hash} accion=${r.accion} hechos=${JSON.stringify(r.hechos)} vivo_antes=${r.vivoAntes} vivo_despues=${r.vivoDespues}`
   if (r.tipo === 'sonda-click') return `sonda-click doc=${r.doc} url=${r.ruta}${r.hash} defaultPrevented=${r.defaultPrevented} isActive=${r.isActive}`
   return `${r.tipo.padEnd(9)} doc=${r.doc} url=${r.ruta}${r.hash} estado=${r.estado}`
@@ -1351,6 +1352,20 @@ const RECORRIDOS = [
           marcos: delDesmontaje ? `arriba=[${nombres(delDesmontaje.pila, MARCOS_DEL_DESMONTAJE)}] base=[${nombres(delDesmontaje.base, MARCOS_DEL_ESTRICTO)}] (marcos totales=${delDesmontaje.marcos})` : '(ninguno)',
         }
       }
+      // EL ORDEN DEL CONSUMO DIFERIDO (plan 03-14, rama H1): el registro `desmontaje` tiene que llegar
+      // DESPUES del `armado` `none` del remontaje (el microtask corre despues de que React reconecta) y
+      // decir `keep`. Si aterriza antes, o con `sigueMontada` en falso dentro del ciclo del modo
+      // estricto, es la regla P-5 y se para: no se escala a un temporizador.
+      const ordenDelDesmontaje = (v) => {
+        if (!v) return { accion: 'sin-medir', despues: 'sin-medir' }
+        const iDes = v.regs.findIndex((r) => r.tipo === 'desmontaje')
+        const iNone = v.regs.findIndex((r) => r.tipo === 'armado' && r.accion === 'none')
+        return {
+          accion: iDes >= 0 ? v.regs[iDes].accion : 'sin-registro',
+          despues: iDes >= 0 && iNone >= 0 && iDes > iNone ? 'si' : 'no',
+        }
+      }
+      const orden = ordenDelDesmontaje(vale)
       return {
         detalle: (p) => {
           for (const x of intentos) console.log(`${p}intento ${x.n}: ${x.valio ? 'VALE' : 'no vale'}`)
@@ -1378,6 +1393,8 @@ const RECORRIDOS = [
           aviso_al_aterrizar: vale ? (vale.foto.aviso ? 'si' : 'no') : 'sin-medir',
           hash_al_aterrizar: vale ? vale.foto.hash : 'sin-medir',
           atras_tras_un_toque_absorbido: m ? m.tupla.absorbido : 'sin-medir',
+          accion_del_desmontaje: orden.accion,
+          desmontaje_despues_del_remontaje: orden.despues,
         },
         // LA PROPIEDAD DESPUES DEL ARREGLO (MOB-05 con el camino 1 intacto): con la activacion vigente al
         // aterrizar, Inicio arma CON el hash, sin ningun `popstate` que nadie pidio y sin aviso; y el
@@ -1388,6 +1405,9 @@ const RECORRIDOS = [
           aviso_al_aterrizar: 'no',
           hash_al_aterrizar: '#salir',
           atras_tras_un_toque_absorbido: 'si',
+          // Rama H1 del plan 03-14: el consumo diferido conserva el sentinel y aterriza DESPUES del remontaje.
+          accion_del_desmontaje: 'keep',
+          desmontaje_despues_del_remontaje: 'si',
         },
       }
     },
