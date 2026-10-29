@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, writePanelUnder, type PanelBranchPlan } from '@/lib/panel-history'
+import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, isExitSentinelOwnedEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, writePanelUnder, type PanelBranchPlan } from '@/lib/panel-history'
 // Los dos helpers del teclado, PUROS y ya exportados, y el hash base de los overlays. Se IMPORTAN:
 // esos dos módulos no se tocan (son intocables de la fase), y reusar sus helpers medidos es lo
 // contrario de copiarlos.
@@ -805,6 +805,58 @@ export function panelExitActivationNow(userActivation: unknown): boolean {
   return activa
 }
 
+/**
+ * ¿Seguimos **absorbiendo** cuando el armado decide no armar? La acreditación de la **opción (A)** del
+ * veredicto del plan 03-12, **pura**, con las reglas **EN ORDEN**.
+ *
+ * **QUÉ RESUELVE (la recarga del 1.3, `G3-3`).** Una recarga parado en Inicio con el hash **preserva**
+ * el estado de la entrada —el `frjExit` de la instancia del documento anterior, ya **muerta**— y el
+ * módulo nace con **otro** `id` (pares medidos: `1→21`, `21→1`, `1→5`, `1→157`, `37→108`). Sin
+ * coincidencia, la séptima regla de {@link panelExitArmAction} declinaba **sin acreditar**, la
+ * referencia quedaba en falso y el `popstate` siguiente se **ignoraba**: el primer atrás no hacía nada
+ * visible. Referencias en ASCII: `G3-3` · `E-6` · `E-13` · `opcion (A)`.
+ *
+ *   1. `paradoSobreElNuestro` — **parados sobre nuestro sentinel ⇒ sí** (E-6). Va primera.
+ *   2. **La entrada de arriba es de OTRO dueño ⇒ no**, aunque la URL lleve nuestro hash: un overlay o
+ *      el guard de cambios sin guardar. ⚠ **LA CORRECCIÓN DE LA PREMISA:** otro dueño es *ajena **y
+ *      sin** marca de salida*. El predicado de la regla 0 (`isForeignOwnedEntry`) **incluye** la marca
+ *      de salida de **cualquier** instancia (`isExitSentinelOwnedEntry` no mira el `id`), así que usado a
+ *      secas rechazaría **justo** la entrada de la recarga y el defecto medido quedaría abierto. Una
+ *      marca de salida, de la instancia que sea, **es de este módulo**.
+ *   3. `urlNuestra` — **la URL lleva una de nuestras formas EXACTAS** ({@link urlAlreadyHoldsExitHash})
+ *      **⇒ sí**: la entrada es nuestra aunque su estado se haya perdido (E-13, mitad B).
+ *   4. El resto ⇒ **no**.
+ *
+ * **EL RIESGO, acotado y asimétrico:** acreditar de más hace que el `popstate` siguiente devuelva
+ * *avisar*, y *avisar* **no navega** —el navegador ya hizo el pop—: el peor caso es un cartel que el
+ * dueño no se ganó, **nunca** una expulsión. Lo acotan las formas exactas del hash y la regla 2.
+ *
+ * **POR QUÉ EL CALL SITE ASIGNA EN VEZ DE ENCENDER:** con la forma vieja (encender y nunca apagar), una
+ * referencia acreditada sobre una marca muerta **sobrevivía** a dejar Inicio, y al volver con el atrás a
+ * esa entrada el `popstate` avisaba parado sobre una entrada que no es la de salir: un cartel que
+ * miente. Re-derivar es la doctrina del módulo aplicada en el único lugar que todavía no la cumplía.
+ *
+ * **Y LA REGLA DE MOB-05 EN SU FORMA NUEVA, intacta:** esto no agrega un número, ni un temporizador, ni
+ * una segunda fuente de *estamos absorbiendo* — cambia **quién escribe** la única referencia que ya
+ * existe.
+ */
+export function panelExitStillHolding({
+  paradoSobreElNuestro,
+  ajenaArriba,
+  salidaArriba,
+  urlNuestra,
+}: {
+  paradoSobreElNuestro: boolean
+  ajenaArriba: boolean
+  salidaArriba: boolean
+  urlNuestra: boolean
+}): boolean {
+  if (paradoSobreElNuestro) return true
+  if (ajenaArriba && !salidaArriba) return false
+  if (urlNuestra) return true
+  return false
+}
+
 /** Qué hace un toque del dueño con el sentinel de salida. */
 export type PanelExitTouchAction = 'none' | 'drop' | 'arm' | 'drop-and-arm'
 
@@ -1373,6 +1425,9 @@ export function usePanelBranch({
     // (E-13, mitad B). Con un `startsWith` a secas, `#salirXYZ` contaría como nuestro.
     const urlNuestra = urlAlreadyHoldsExitHash(window.location.hash)
     const ajenaArriba = isForeignOwnedEntry(estado)
+    // La marca de salida de CUALQUIER instancia, sobre el MISMO `estado`: con ella la acreditación de
+    // (A) distingue *otro dueño* (un overlay, el guard) de una marca nuestra de una instancia muerta.
+    const salidaArriba = isExitSentinelOwnedEntry(estado)
     // ⚠ EL HECHO DE LA DECISIÓN (a), LEÍDO DEL ESTADO REAL DE LA ENTRADA DE ARRIBA EN EL MOMENTO
     // DE DECIDIR, nunca de un valor de render: entre un render y el gesto pudo haber una escritura
     // ajena que se llevó la marca. Es el mismo criterio con el que la ruta se re-lee de `location`.
@@ -1403,8 +1458,9 @@ export function usePanelBranch({
       sentinelVivoRef.current = false
       registrada = 'pendiente'
     } else {
-      // E-6: si estamos parados sobre el nuestro, seguimos siendo dueños de un sentinel vivo.
-      if (paradoSobreElNuestro) sentinelVivoRef.current = true
+      // (A), G3-3: parados sobre el nuestro (E-6) o con la URL nuestra sin otro dueño arriba (la recarga),
+      // seguimos absorbiendo. ASIGNA en vez de encender: re-deriva en los dos sentidos.
+      sentinelVivoRef.current = panelExitStillHolding({ paradoSobreElNuestro, ajenaArriba, salidaArriba, urlNuestra })
     }
     // El canal de diagnóstico, DESPUÉS de la decisión y de la rama: graba el valor de *seguimos
     // absorbiendo* de antes y de después, que es lo que la medición del plan 03-12 pregunta.
