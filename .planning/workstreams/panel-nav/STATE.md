@@ -5,10 +5,10 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 12
 status: executing
-stopped_at: Completado 03-12-PLAN.md — la causa de G3-2/G3-3 es la intervencion de historial de Chrome; el 03-13 espera la decision del dueno sobre cuando se arma el sentinel
-last_updated: "2026-10-28T21:01:38.754Z"
+stopped_at: 03-13 re-planificado sobre la decision del dueno (el aviso de salida se arma solo con activacion del usuario); listo para ejecutar
+last_updated: "2026-10-29T00:35:41.167Z"
 last_activity: 2026-10-28
-last_activity_desc: "03-12 completado: G3-2/G3-3 medidos (intervencion de historial), 03-13 espera decision del dueno"
+last_activity_desc: "03-13 re-planificado (camino 1 del dueno), verificado por el plan-checker sin bloqueantes"
 state_head: 18b9c4fd380b0e41ab15cc2317d2f6997314e38c
 progress:
   total_phases: 3
@@ -27,10 +27,10 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 12
 **Total Plans in Phase:** 13
-**Status:** Executing Phase 03 — 03-12 completado; 03-13 bloqueado por una decision del dueno (cuando se arma el sentinel)
+**Status:** Executing Phase 03 — 03-12 completado; 03-13 re-planificado sobre la decision del dueno, listo para ejecutar
 **Current Phase:** 03
-**Last Activity:** 2026-10-28 — 03-12 completado (medicion de G3-2/G3-3)
-**Last Activity Description:** la causa de G3-2/G3-3 es la intervencion de historial de Chrome; doble montaje descartado
+**Last Activity:** 2026-10-28 — 03-13 re-planificado (decision del dueno 03-DECISION-UAT-3.md)
+**Last Activity Description:** el sentinel se arma solo con activacion del usuario; el aviso queda hasta el proximo toque
 
 ## Progress
 
@@ -43,7 +43,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Last session:** 2026-10-28T21:01:08.535Z
 
-**Stopped At:** Completado 03-12-PLAN.md — la causa de G3-2/G3-3 es la intervencion de historial de Chrome; el 03-13 espera la decision del dueno sobre cuando se arma el sentinel
+**Stopped At:** 03-13 re-planificado sobre la decision del dueno (el aviso de salida se arma solo con activacion del usuario); listo para ejecutar
 **Resume File:** None
 
 ## Performance Metrics

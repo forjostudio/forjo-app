@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 03 of 3 · 0% · executing"
+    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
+    "label": "Ejecutar el 03-13 re-planificado",
+    "reason": "Phase 03 · 12/13 · 03-13 listo para ejecutar"
   },
-  "updated_at": "2026-10-28T21:01:05.103Z"
+  "updated_at": "2026-10-29T00:35:41.170Z"
 }

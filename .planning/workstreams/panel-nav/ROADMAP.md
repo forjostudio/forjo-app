@@ -453,7 +453,7 @@ sesión del usuario**, no de tenant: un `back()` sobre una entrada ajena **expul
 mitigan, y es lo que un `/gsd-secure-phase` tendría que mirar acá. Riesgo bajo en términos de datos,
 medio en términos de pérdida de trabajo del dueño.
 
-**Plans:** 12/13 plans executed (4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, ejecutado el 2026-10-28 + **2 de cierre de `G3-2` y `G3-3`** tras la re-corrida de la ronda 3 del 2026-10-28: el **03-12** ejecutado el 2026-10-28 —midio que la causa es la **intervencion de historial** de Chrome y no la referencia, ver `.planning/debug/la-absorcion-que-no-absorbe-medida.md`— y el **03-13** **sin ejecutar**, a la espera de una **decision del dueno** sobre cuando se arma el sentinel). ⚠ **La fase NO esta cerrada:** el plan 03-11 paro en su checkpoint de **bloqueo humano**, la re-corrida de la ronda 3 encontro **dos fallos mas** —`G3-2` (el aviso no se re-arma al expirar la ventana) y `G3-3` (entrando directo a Inicio el hash esta y el primer atras sale igual)—, y los planes **03-12** (medir el mecanismo) y **03-13** (el arreglo) los cierran. La ronda 3 se re-corre **desde el principio** en los dos motores, y esta vez con el **bloque 4** (escritorio) y el **bloque 6** (iPhone), que nunca se corrieron.
+**Plans:** 12/13 plans executed (4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, ejecutado el 2026-10-28 + **2 de cierre de `G3-2` y `G3-3`** tras la re-corrida de la ronda 3 del 2026-10-28: el **03-12** ejecutado el 2026-10-28 —midio que la causa es la **intervencion de historial** de Chrome y no la referencia, ver `.planning/debug/la-absorcion-que-no-absorbe-medida.md`— y el **03-13** **re-planificado** el 2026-10-28 sobre la **decision del dueno** —el sentinel se arma solo con activacion del usuario y el aviso no vence solo, ver `03-DECISION-UAT-3.md`—, **sin ejecutar**). ⚠ **La fase NO esta cerrada:** el plan 03-11 paro en su checkpoint de **bloqueo humano**, la re-corrida de la ronda 3 encontro **dos fallos mas** —`G3-2` (el aviso no se re-arma al expirar la ventana) y `G3-3` (entrando directo a Inicio el hash esta y el primer atras sale igual)—, y los planes **03-12** (medir el mecanismo) y **03-13** (el arreglo) los cierran. La ronda 3 se re-corre **desde el principio** en los dos motores, y esta vez con el **bloque 4** (escritorio) y el **bloque 6** (iPhone), que nunca se corrieron.
 
 Plans:
 
@@ -573,17 +573,7 @@ Plans:
   **probado** transcurrido, el discriminador del doble montaje con **una** sola variable movida, y un
   veredicto que dice si son **una causa o dos** y deja escrita la **decisión de diseño con sus cuatro
   alternativas y su costo**. **Cero arreglos**
-- [ ] `03-13-PLAN.md` — wave 13 · **La absorción aprende lo que el armado ya sabía** (`G3-2` + `G3-3`):
-  una **función pura** con tres reglas en orden —y el caso que fija ese orden, porque la regla 0 reconoce
-  también la marca del sentinel— cableada en **una** línea de la rama `none` del armado, con la **regla de
-  la constante única de MOB-05 preservada por estructura** y medida por **igualdad** (1 temporizador, 2
-  usos del valor, 1 sola fuente de *estamos absorbiendo*); el riesgo nuevo **acotado y escrito** (sólo las
-  formas exactas del hash, sólo entradas que no son de otro dueño, y *avisar* **no navega**, así que el
-  peor caso es un cartel de más y nunca una expulsión); los **tres** escenarios que la fase nunca tuvo
-  —**E-19** hace **pasar el tiempo** de verdad, **E-20** cubre la **entrada directa** y su recarga, **E-21**
-  mide la deriva con una instancia **fresca** sobre una entrada que sobrevive—, la sonda en **21** y la de
-  la app en **verde**; y la **ronda 3 re-corrida desde el principio** con el **bloque 4** y el **bloque 6**,
-  en un checkpoint bloqueante cuyo recibo **no puede quedar verde con lo que ya está en disco**
+- [ ] `03-13-PLAN.md` — wave 13 · **El aviso de salida se arma sólo con un toque** (`G3-2` + `G3-3`, re-planificado el 2026-10-28 tras la **decisión del dueño** `03-DECISION-UAT-3.md`, camino 1): primero el **instrumento** (la calibración de la activación en Chrome y el arnés de la sonda de la app con el atrás de la **interfaz**, en rojo contra el código de hoy, con rama de **parar** si un empuje tras un toque real igual queda salteable); después el **tracer**: el sentinel se empuja **sólo** con `navigator.userActivation.isActive` tras un `click`/`keyup` que nadie se llevó, **cero** temporizadores y `PANEL_EXIT_HINT_MS` retirado (el aviso queda hasta el próximo toque: *aviso visible ⇔ el próximo atrás sale*), ningún empuje desde un `popstate` (cierra el hallazgo lateral); la **recarga** con la opción **(A)** del veredicto; recorridos nuevos de la sonda (barra con aviso, barra pendiente, lateral, 1.4); MOB-05 y el guion con las **expectativas nuevas** (entrar directo y apretar atrás sin tocar sale, declarado); y la **ronda 3 desde el principio** en Android **y** iPhone en un checkpoint bloqueante
 
 ### Phase 4: Los tabs profundos sobre la política ya fijada
 
