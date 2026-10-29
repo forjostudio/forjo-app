@@ -309,24 +309,48 @@ const cuenta = (src: string, patron: RegExp) => (src.match(patron) ?? []).length
 const MOD_DUENO = 'lib/panel-branch.ts'
 const MOD_REGLA0 = 'lib/panel-history.ts'
 
-describe('la ventana del aviso — UNA constante, UN temporizador (§13, la regla de la constante única)', () => {
-  it('la constante existe, está exportada y vale lo que §13 fija', () => {
-    // La duración VISIBLE del aviso y la ventana LÓGICA en la que el segundo atrás sale son el mismo
-    // número. Con dos, lo que el dueño ve y lo que el código acepta se desincronizan y los dos
-    // síntomas son silenciosos: ni `tsc` ni la suite los ven.
-    expect(PB.PANEL_EXIT_HINT_MS).toBe(2000)
-  })
+describe('el aviso que NO vence — cero tiempo en el ciclo (la regla de MOB-05 en su forma del 2026-10-28)', () => {
+  // ⚠ LA REGLA CAMBIÓ DE FORMA, NO DE ESPÍRITU. Su espíritu es que lo que el dueño VE y lo que el
+  // código ACEPTA no se puedan separar. Hasta el 2026-10-28 eso era UNA constante de ventana y UN
+  // temporizador que hacía las dos cosas; desde la decisión del dueño (camino 1, 03-DECISION-UAT-3.md)
+  // el aviso se queda hasta el próximo toque, así que no hay ventana que sincronizar: la constante y el
+  // temporizador se BORRARON, y el invariante es UN lugar que levanta el aviso, UN lugar que lo baja y
+  // CERO temporizadores. Estos casos REEMPLAZAN uno por uno a los de la ventana.
 
-  it('el módulo la usa en UN SOLO temporizador, y no hay un segundo número', () => {
-    // Se afirma LEYENDO EL FUENTE porque la propiedad es de la estructura del módulo y no de un valor
-    // de retorno: dos temporizadores con el mismo número también serían dos lugares que pueden
-    // divergir. Con los comentarios descontados, la constante aparece exactamente DOS veces: su
-    // declaración y el único temporizador que la consume.
+  it('la constante de la ventana NO existe: ni exportada, ni mencionada en el módulo', () => {
+    // Reemplaza a *la constante existe y vale 2000*. Dejarla sin consumidor sería un número muerto que
+    // alguien vuelve a cablear a un temporizador.
+    expect('PANEL_EXIT_HINT_MS' in PB).toBe(false)
     const mod = sinComentarios(leer(MOD_DUENO))
     expect(mod.length).toBeGreaterThan(500)
-    expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(2)
-    expect(cuenta(mod, /setTimeout/g)).toBe(1)
-    expect(cuenta(mod, /setInterval|requestAnimationFrame/g)).toBe(0)
+    expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(0)
+  })
+
+  it('CERO tiempo en el ciclo: ni temporizadores, ni intervalos, ni cuadros de animación, ni su limpieza', () => {
+    // Reemplaza a *2 usos de la constante, 1 temporizador*. Un temporizador en el ciclo re-arma SIN
+    // activación, y un empuje sin activación es salteable (la intervención de historial medida en el
+    // plan 03-12): es exactamente G3-2.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod.length).toBeGreaterThan(500)
+    expect(cuenta(mod, /setTimeout|setInterval|requestAnimationFrame|clearTimeout/g)).toBe(0)
+  })
+
+  it('UN lugar levanta el aviso y UN lugar lo baja — el retroceso absorbido y el toque', () => {
+    // Un segundo escritor de lo visible (o de lo lógico) re-crea el bug de los dos números por otro
+    // camino, y es invisible en los dos sentidos.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /setHintVisible\(true\)/g)).toBe(1)
+    expect(cuenta(mod, /setHintVisible\(false\)/g)).toBe(1)
+    expect(cuenta(mod, /avisoAbiertoRef\.current = true/g)).toBe(1)
+    expect(cuenta(mod, /avisoAbiertoRef\.current = false/g)).toBe(1)
+    const retroceso = mod.match(/const alRetroceder = \(\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
+    const toque = mod.match(/const alTocar = \(evento: Event\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
+    expect(retroceso.length).toBeGreaterThan(300)
+    expect(toque.length).toBeGreaterThan(300)
+    expect(retroceso).toContain('setHintVisible(true)')
+    expect(retroceso).toContain('avisoAbiertoRef.current = true')
+    expect(toque).toContain('setHintVisible(false)')
+    expect(toque).toContain('avisoAbiertoRef.current = false')
   })
 
   it('CERO gate de viewport en el mecanismo (D-05): el ciclo corre igual en celular y en escritorio', () => {
@@ -1491,52 +1515,65 @@ describe('los CUATRO momentos de reintento — y el que NO re-arma', () => {
     return m?.[0] ?? ''
   }
 
-  it('G-5 — el reintento NO depende de que cambie la ruta: hay CUATRO momentos, no uno', () => {
+  it('G-5 — el reintento NO depende de que cambie la ruta: hay CUATRO llamadas al armado, y las del retroceso NO empujan', () => {
     // El sospechoso que el dueño midió con palabras exactas: el armado vivía en un efecto con deps
     // `[armarSentinel, pathname]`, así que si no armó al entrar, parado en Inicio NO VOLVÍA A
-    // INTENTARLO NUNCA. Los cuatro momentos son: al montar, al cambiar la ruta, al expirar la
-    // ventana del aviso, y en todo retroceso resuelto como IGNORAR.
+    // INTENTARLO NUNCA. Desde la decisión del 2026-10-28 los cuatro momentos son: al montar y al cambiar
+    // la ruta (el efecto), en todo retroceso resuelto como IGNORAR, en el del teclado, y en el TOQUE del
+    // dueño —el que reemplaza al temporizador—. Las dos del retroceso pasan el hecho en FALSO: un atrás
+    // no es una activación.
     const mod = sinComentarios(leer(MOD_DUENO))
     expect(mod.length).toBeGreaterThan(500)
-    expect(cuenta(mod, /armarSentinel\(\)/g)).toBeGreaterThanOrEqual(4)
+    expect(cuenta(mod, /armarSentinel\(\{/g)).toBe(4)
+    expect(cuenta(manejadorDelRetroceso(), /armarSentinel\(\{ puedeEmpujar: false \}\)/g)).toBe(2)
   })
 
-  it('el retroceso resuelto como IGNORAR reintenta el armado, DENTRO del manejador', () => {
+  it('el retroceso resuelto como IGNORAR reintenta el armado SIN PODER EMPUJAR, y el manejador no empuja nunca', () => {
     // Un retroceso ignorado significa que el atrás hizo algo que NO ERA NUESTRO —cerrar un overlay,
-    // consumir una sección que teníamos encima— y después de eso podemos estar parados en la raíz
-    // SIN sentinel, con la ruta SIN cambiar: el efecto del armado no vuelve a correr y el atrás
-    // siguiente sale sin avisar. Es el ítem 20 de la UAT visto desde el otro lado.
+    // consumir una sección que teníamos encima—. Re-derivar el armado sigue haciendo falta (E-6), pero
+    // EMPUJAR ahí es empujar sin activación (salteable) y, en el consumo de la barra, enterrar el
+    // sentinel bajo la navegación diferida: el hallazgo lateral del plan 03-12. Cerrado por estructura.
     const handler = manejadorDelRetroceso()
     const ramaIgnorar = handler.match(/accion === 'ignore'\) \{[\s\S]*?\n {6}\}/)
     expect(ramaIgnorar).not.toBeNull()
-    expect(ramaIgnorar?.[0]).toContain('armarSentinel()')
-    // Y los tres reintentos del manejador: el del teclado, el del retroceso ignorado y el del
-    // temporizador. Con dos, el del retroceso ignorado no está.
-    expect(cuenta(handler, /armarSentinel\(\)/g)).toBe(3)
+    expect(ramaIgnorar?.[0]).toContain('armarSentinel({ puedeEmpujar: false })')
+    expect(cuenta(handler, /armarSentinel\(/g)).toBe(2)
+    expect(cuenta(handler, /pushState/g)).toBe(0)
+    expect(cuenta(handler, /panelExitActivationNow/g)).toBe(0)
   })
 
-  it('G-6 — en el retroceso resuelto como AVISO no se re-arma: eso se lo comería el segundo atrás', () => {
-    // ⚠ EL ROJO TENTADOR DE ESTE PLAN: poner el reintento en la rama del aviso también sube el
-    // contador, y es PEOR QUE EL BUG — dos avisos encadenados y el dueño nunca sale del panel. El
-    // único re-armado de ese camino es el del temporizador AL EXPIRAR la ventana.
+  it('G-6 — después de levantar el aviso no hay re-armado ni empuje hasta el final del manejador', () => {
+    // ⚠ EL ROJO TENTADOR: re-armar en la rama del aviso es PEOR QUE EL BUG — dos avisos encadenados y el
+    // dueño nunca sale del panel. Y sin temporizador, la rama del aviso TERMINA ahí: el re-armado es del
+    // próximo toque del dueño.
     const handler = manejadorDelRetroceso()
     const iAviso = handler.indexOf('setHintVisible(true)')
-    const iTemporizador = handler.indexOf('setTimeout')
     expect(iAviso).toBeGreaterThan(-1)
-    expect(iTemporizador).toBeGreaterThan(iAviso)
-    // Entre "mostrá el aviso" y "armá el temporizador" NO puede haber un re-armado.
-    expect(handler.slice(iAviso, iTemporizador)).not.toContain('armarSentinel()')
+    const cola = handler.slice(iAviso)
+    expect(cola).not.toMatch(/armarSentinel\(/)
+    expect(cola).not.toMatch(/pushState/)
   })
 
-  it('G-6 — al expirar la ventana se reintenta el armado, y sin marca de rama ARMA', () => {
-    // El temporizador es UNO y hace LAS DOS cosas: oculta el aviso y re-arma. Lo que el dueño midió
-    // (*"pasan 30 segundos y el segundo atrás sale de una"*) es el armado negándose después; con el
-    // dominio sano y sin nada nuestro debajo, la decisión devuelve ARMAR.
-    const handler = manejadorDelRetroceso()
-    const temporizador = handler.match(/setTimeout\(\(\) => \{[\s\S]*?\n {6}\}/)
-    expect(temporizador).not.toBeNull()
-    expect(temporizador?.[0]).toContain('setHintVisible(false)')
-    expect(temporizador?.[0]).toContain('armarSentinel()')
+  it('el TOQUE baja el aviso y re-arma con la activación que leyó, y sin marca de rama ARMA', () => {
+    // Reemplaza a *al expirar la ventana se oculta el aviso y se re-arma*. El orden es carga: si se
+    // armara antes de bajar, la tercera regla de `panelExitArmAction` (el aviso abierto) declinaría y el
+    // toque bajaría el aviso SIN re-armar — el bug del 3.1 por otro camino.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const toque = mod.match(/const alTocar = \(evento: Event\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
+    expect(toque.length).toBeGreaterThan(300)
+    const iDecision = toque.indexOf('panelExitTouchAction(')
+    const iCanal = toque.indexOf('recordExitDiag(')
+    const iBaja = toque.indexOf('setHintVisible(false)')
+    const iCierra = toque.indexOf('avisoAbiertoRef.current = false')
+    const iArma = toque.indexOf('armarSentinel({ puedeEmpujar: activacion })')
+    expect(iDecision).toBeGreaterThan(-1)
+    expect(iCanal).toBeGreaterThan(iDecision)
+    expect(iBaja).toBeGreaterThan(iCanal)
+    expect(iCierra).toBeGreaterThan(iCanal)
+    expect(iArma).toBeGreaterThan(iBaja)
+    expect(iArma).toBeGreaterThan(iCierra)
+    // UNA sola lectura de la activación en el toque, y el MISMO valor viaja al armado.
+    expect(cuenta(toque, /panelExitActivationNow\(navigator\.userActivation\)/g)).toBe(1)
     expect(
       PB.panelExitArmAction({
         participates: true,
@@ -1550,11 +1587,25 @@ describe('los CUATRO momentos de reintento — y el que NO re-arma', () => {
     ).toBe('arm')
   })
 
-  it('UN SOLO temporizador en todo el módulo, y la constante sigue siendo una (§13)', () => {
+  it('el ÚNICO empuje del módulo vive adentro de un `if (` que nombra el hecho, y ningún call site pasa un literal verdadero', () => {
+    // Reemplaza a *un solo temporizador, la constante en 2* (eso lo cubre ahora *cero tiempo en el
+    // ciclo*). Es el candado central del camino 1: un empuje sin activación es la causa medida de G3-2
+    // y G3-3.
     const mod = sinComentarios(leer(MOD_DUENO))
-    expect(cuenta(mod, /setTimeout/g)).toBe(1)
-    expect(cuenta(mod, /setInterval|requestAnimationFrame/g)).toBe(0)
-    expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(2)
+    expect(cuenta(mod, /window\.history\.pushState/g)).toBe(1)
+    expect(cuenta(mod, /puedeEmpujar: *true/g)).toBe(0)
+    const lineas = mod.split('\n')
+    const iEmpuje = lineas.findIndex((l) => /window\.history\.pushState/.test(l))
+    let guarda = ''
+    for (let k = iEmpuje; k >= 0; k--) {
+      if (/if \(/.test(lineas[k])) {
+        guarda = lineas[k]
+        break
+      }
+    }
+    expect(guarda).toContain('puedeEmpujar')
+    // Y el efecto del armado lee la activación del navegador en el momento de decidir.
+    expect(mod).toContain('armarSentinel({ puedeEmpujar: panelExitActivationNow(navigator.userActivation) })')
   })
 
   it('EL OBSERVABLE queda escrito en el módulo: si la URL no muestra el hash, no está armado', () => {
@@ -2044,10 +2095,14 @@ describe('recordExitDiag — el canal de diagnóstico del sentinel de salida (pl
     }
   })
 
-  it('se graba DESPUÉS de computar la acción, en los DOS call sites y en ninguno más', () => {
+  it('se graba DESPUÉS de computar la acción, en los TRES call sites (armado, retroceso, toque) y en ninguno más', () => {
     const mod = sinComentarios(leer(MOD_DUENO))
-    // 1 declaración + 2 call sites.
-    expect(cuenta(mod, /recordExitDiag\(/g)).toBe(3)
+    // 1 declaración + 3 call sites: el del toque se sumó en el plan 03-13 (es lo que deja a la sonda
+    // distinguir un armado PENDIENTE de uno EMPUJADO, y nombrar la acción de cada toque).
+    expect(cuenta(mod, /recordExitDiag\(/g)).toBe(4)
+    const toque = mod.match(/const alTocar = \(evento: Event\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
+    expect(toque.length).toBeGreaterThan(300)
+    expect(toque.indexOf('recordExitDiag(')).toBeGreaterThan(toque.indexOf('panelExitTouchAction('))
     const armado = mod.match(/const armarSentinel = useCallback[\s\S]*?\n {2}\}, \[/)?.[0] ?? ''
     expect(armado.length).toBeGreaterThan(300)
     expect(armado.indexOf('recordExitDiag(')).toBeGreaterThan(armado.indexOf('panelExitArmAction('))
@@ -2057,8 +2112,121 @@ describe('recordExitDiag — el canal de diagnóstico del sentinel de salida (pl
     const retroceso = mod.match(/const alRetroceder = \(\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
     expect(retroceso.length).toBeGreaterThan(300)
     expect(retroceso.indexOf('recordExitDiag(')).toBeGreaterThan(retroceso.indexOf('panelExitPopAction('))
-    // El temporizador y la constante única, intactos (§13).
-    expect(cuenta(mod, /setTimeout/g)).toBe(1)
-    expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(2)
+    // Cero tiempo en el ciclo: ni el temporizador ni la constante de la ventana (decisión del 2026-10-28).
+    expect(cuenta(mod, /setTimeout/g)).toBe(0)
+    expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(0)
+  })
+})
+
+// ── El camino 1 del dueño (2026-10-28): el sentinel se empuja SÓLO con activación del usuario ────
+//
+// POR QUÉ, medido y no supuesto: el plan 03-12 midió en la app real que la intervención de historial
+// de Chrome SALTEA una entrada empujada sin activación del usuario (G3-2, G3-3), y el dueño decidió
+// (03-DECISION-UAT-3.md) que el sentinel se empuje sólo con activación y que el aviso se quede hasta el
+// próximo toque. Lo que sigue son las dos decisiones PURAS nuevas, con sus reglas en orden y sus
+// contrapuestos adyacentes, y las auditorías del cableado que ninguna otra suite puede ver.
+
+describe('panelExitActivationNow — el lector de la activación, puro', () => {
+  it('con `isActive` en verdadero ⇒ verdadero', () => {
+    expect(PB.panelExitActivationNow({ isActive: true })).toBe(true)
+  })
+
+  it('con `isActive` en falso ⇒ FALSO (contrapuesto adyacente: es el que deja el armado pendiente)', () => {
+    expect(PB.panelExitActivationNow({ isActive: false })).toBe(false)
+  })
+
+  it('sin la API (`undefined`) ⇒ verdadero: el comportamiento de hoy, declarado', () => {
+    // Con falso, un motor sin la API no armaría NUNCA —ni con un toque, porque el oyente del toque
+    // pregunta lo mismo— y MOB-05 quedaría muerto ahí.
+    expect(PB.panelExitActivationNow(undefined)).toBe(true)
+  })
+
+  it('con un objeto sin `isActive` booleano ⇒ verdadero, por el mismo motivo', () => {
+    expect(PB.panelExitActivationNow({})).toBe(true)
+    expect(PB.panelExitActivationNow({ isActive: 'si' })).toBe(true)
+  })
+})
+
+describe('panelExitTouchAction — qué hace un toque, puro, con las reglas en orden', () => {
+  const LIBRE = { participates: true, activacion: true, atRoot: true, gestoTomado: false, hintOpen: false }
+  const ABIERTO = { ...LIBRE, hintOpen: true }
+
+  it('regla 1 — nadie dibuja el aviso ⇒ nada', () => {
+    expect(PB.panelExitTouchAction({ ...ABIERTO, participates: false })).toBe('none')
+  })
+
+  it('regla 2 — el evento NO trae activación (un click de script, Escape) ⇒ nada, aunque el aviso esté abierto', () => {
+    expect(PB.panelExitTouchAction({ ...ABIERTO, activacion: false })).toBe('none')
+  })
+
+  it('regla 3 — fuera de la raíz con el aviso abierto ⇒ BAJARLO (un aviso rancio se baja)', () => {
+    expect(PB.panelExitTouchAction({ ...ABIERTO, atRoot: false })).toBe('drop')
+  })
+
+  it('regla 4 — fuera de la raíz sin aviso ⇒ nada', () => {
+    expect(PB.panelExitTouchAction({ ...LIBRE, atRoot: false })).toBe('none')
+  })
+
+  it('regla 5 — un gesto TOMADO (un link se lo llevó) con el aviso abierto ⇒ bajarlo y NO armar', () => {
+    // ⚠ EL CASO QUE FIJA LA ELECCIÓN DEL EVENTO: empujar y navegar en el mismo gesto enterraría el
+    // sentinel bajo la sección nueva, o lo pisaría el reemplazo del router (P-4). Arma el SIGUIENTE
+    // toque que nadie se lleve.
+    expect(PB.panelExitTouchAction({ ...ABIERTO, gestoTomado: true })).toBe('drop')
+  })
+
+  it('regla 6 — un gesto tomado SIN aviso ⇒ nada: TAMPOCO arma (contrapuesto adyacente del 5)', () => {
+    expect(PB.panelExitTouchAction({ ...LIBRE, gestoTomado: true })).toBe('none')
+  })
+
+  it('regla 7 — en la raíz, con activación, sin gesto tomado y el aviso abierto ⇒ bajar y armar', () => {
+    expect(PB.panelExitTouchAction(ABIERTO)).toBe('drop-and-arm')
+  })
+
+  it('regla 8 — lo mismo sin aviso ⇒ armar', () => {
+    expect(PB.panelExitTouchAction(LIBRE)).toBe('arm')
+  })
+})
+
+describe('el cableado del camino 1 — auditorías de fuente', () => {
+  it('`armarSentinel` recibe el hecho SIN valor por omisión', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod).toContain('const armarSentinel = useCallback(({ puedeEmpujar }: { puedeEmpujar: boolean }) => {')
+    expect(mod).not.toMatch(/puedeEmpujar\s*=/)
+  })
+
+  it('los oyentes del toque (`click` y `keyup` sobre window) viven en el MISMO efecto que el del retroceso, y `keyup` ignora Enter y la barra', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /(add|remove)EventListener\('(click|keyup)'/g)).toBe(4)
+    const desde = mod.indexOf('const alRetroceder = () => {')
+    const efecto = mod.slice(desde, mod.indexOf('}, [drawsExitHint, id, root, armarSentinel])', desde))
+    expect(efecto.length).toBeGreaterThan(500)
+    for (const linea of [
+      "window.addEventListener('click', alTocar)",
+      "window.addEventListener('keyup', alTocar)",
+      "window.removeEventListener('click', alTocar)",
+      "window.removeEventListener('keyup', alTocar)",
+    ]) {
+      expect(efecto).toContain(linea)
+    }
+    const toque = mod.match(/const alTocar = \(evento: Event\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
+    expect(toque).toContain("'Enter'")
+    expect(toque).toContain("' '")
+    expect(toque).toContain('defaultPrevented')
+  })
+
+  it('el aviso devuelto se DERIVA de la raíz: nunca se dibuja donde el próximo atrás no sale', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod).toContain('hintVisible: hintVisible && pathname === root')
+  })
+
+  it('las dos decisiones nuevas son PURAS: no leen el navegador', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    for (const firma of ['export function panelExitTouchAction({', 'export function panelExitActivationNow(']) {
+      const desde = mod.indexOf(firma)
+      expect(desde).toBeGreaterThan(0)
+      const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+      expect(region.length).toBeGreaterThan(80)
+      expect(cuenta(region, /window|navigator|document|history/g)).toBe(0)
+    }
   })
 })

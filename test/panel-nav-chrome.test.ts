@@ -993,14 +993,17 @@ describe('11 · el aviso efímero de salida (§13 / MOB-05 / D-05, plan 03-03)',
     expect(cuenta(barra, /from 'sonner'|toast\(|<Toaster/g)).toBe(0)
   })
 
-  it('la ventana del aviso NO se re-declara en el componente: ese número vive en el módulo del ciclo', () => {
-    // La regla de la constante única de §13, vista desde el otro lado. El componente sólo conoce las
-    // DOS duraciones del movimiento; la ventana —que es a la vez la duración visible y la ventana
-    // lógica en la que el segundo atrás sale— vive en un solo lugar, en `lib/panel-branch.ts`.
+  it('el componente NO trae tiempo, y el módulo del ciclo TAMPOCO: el aviso se queda hasta el próximo toque', () => {
+    // La regla de MOB-05 en su forma del 2026-10-28 (decisión del dueño, camino 1), vista desde el otro
+    // lado. El componente sólo conoce las DOS duraciones del movimiento y dibuja lo que el hook le da;
+    // ni él ni el módulo del ciclo tienen una ventana de tiempo: el aviso lo levanta el atrás absorbido
+    // y lo baja el toque del dueño.
     expect(barra.length).toBeGreaterThan(500)
-    expect(cuenta(barra, /PANEL_EXIT_HINT_MS|2000/g)).toBe(0)
+    expect(cuenta(barra, /PANEL_EXIT_HINT_MS|2000|setTimeout|setInterval/g)).toBe(0)
     expect(barra).toContain('hintVisible')
     const ciclo = sinComentarios(read('lib/panel-branch.ts'))
-    expect(cuenta(ciclo, /PANEL_EXIT_HINT_MS/g), 'la ventana dejó de estar en DOS lugares del módulo del ciclo (su declaración y el único temporizador)').toBe(2)
+    expect(ciclo.length).toBeGreaterThan(500)
+    expect(cuenta(ciclo, /PANEL_EXIT_HINT_MS/g), 'la constante de la ventana volvió al módulo del ciclo').toBe(0)
+    expect(cuenta(ciclo, /setTimeout|setInterval|requestAnimationFrame|clearTimeout/g), 'volvió tiempo al ciclo del aviso').toBe(0)
   })
 })
