@@ -41,9 +41,20 @@ const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subset
 const fontVars = [grotesk, archivo, jakarta, cormorant, mulish, orbitron, chakra, sora, manrope, jetbrainsMono]
   .map(f => f.variable).join(" ");
 
+// metadataBase absolutiza la og:image que inyecta app/opengraph-image.png (mismo base que
+// app/[slug]/layout.tsx). openGraph/twitter llevan el texto de la tarjeta; la imagen NO se lista
+// acá: la convención de archivo la agrega sola, y /[slug] la pisa con la suya.
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://gestion.forjo.studio"),
   title: "Forjo Studio — Turnos para tu negocio",
   description: "Gestioná tus turnos, clientes y finanzas con tu negocio ordenado.",
+  openGraph: {
+    title: "Forjo Gestión — Tu negocio ordenado",
+    description: "Gestioná tus turnos, clientes y finanzas con tu negocio ordenado.",
+    siteName: "Forjo Gestión",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({

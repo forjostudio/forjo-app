@@ -14,6 +14,17 @@
 //
 // Es Server Component (sin 'use client'): no tiene interactividad. Las páginas hijas siguen 'use client'.
 import { ForjoSocials } from '@/components/auth/forjo-socials'
+import { DEMO_URL } from '@/lib/plans'
+
+// Los chips del hero. El color no significa nada por chip: es la paleta de la marca repartida, para
+// que el bloque se lea como mosaico y no como lista (mismo criterio que CHIPS en forjo-tiendas).
+const CHIPS = [
+  { texto: 'Turnos', color: '#d94a2b' },
+  { texto: 'Clientes', color: '#7aa6d6' },
+  { texto: 'Caja', color: '#f4c543' },
+  { texto: 'Recordatorios', color: '#f3ead8' },
+  { texto: 'Seña automática', color: '#d94a2b' },
+] as const
 
 export default function SplitAuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -43,30 +54,65 @@ export default function SplitAuthLayout({ children }: { children: React.ReactNod
           </span>
         </div>
 
-        {/* Headline con acento rojo en "ordenado." (D-08: mismo copy en las 3 pantallas). */}
-        <h1 className="relative max-w-[12ch] font-[family-name:var(--font-archivo)] text-[clamp(40px,4.5vw,64px)] font-black uppercase leading-[1.02] tracking-[-.03em]">
-          Tu negocio <span className="text-[#d94a2b]">ordenado.</span>
-        </h1>
+        {/* El cuerpo del hero, armado como el de forjo-tiendas (app/(sitio)/Inicio.tsx): bajada en
+            mono, headline, chips de lo que hace el producto y la salida a la demo. Es UN hijo del
+            flex-col justify-between — ver la nota del pie. */}
+        <div className="relative flex flex-col gap-[22px]">
+          <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-[0.2em] text-[#a39989]">
+            Agenda · Clientes · Finanzas
+          </p>
 
-        {/* Pie del panel: crédito a la izquierda, redes a la derecha, en la MISMA fila.
+          {/* Headline con acento rojo en "ordenado." (D-08: mismo copy en las 3 pantallas). */}
+          <h1 className="max-w-[12ch] font-[family-name:var(--font-archivo)] text-[clamp(40px,4.5vw,64px)] font-black uppercase leading-[1.02] tracking-[-.03em]">
+            Tu negocio <span className="text-[#d94a2b]">ordenado.</span>
+          </h1>
+
+          {/* Tres arriba y el resto abajo, como en tiendas: los tres primeros son los de la imagen de
+              compartir. "Cupones" entra cuando exista la función (milestone propio), no antes. */}
+          <div className="flex flex-col gap-2.5">
+            {[CHIPS.slice(0, 3), CHIPS.slice(3)].map((fila, i) => (
+              <ul key={i} className="flex list-none flex-wrap gap-2.5 p-0">
+                {fila.map((c) => (
+                  <li key={c.texto} className="flex items-center gap-2 rounded-full border border-[#332d24] px-3.5 py-[7px] text-sm">
+                    <span aria-hidden="true" className="block h-2 w-2" style={{ backgroundColor: c.color }} />
+                    {c.texto}
+                  </li>
+                ))}
+              </ul>
+            ))}
+          </div>
+
+          {/* Una sola acción acá: la principal de la pantalla es el form de la derecha. Pestaña nueva
+              para que quien está por entrar no pierda el login. */}
+          <a
+            href={DEMO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1.5 flex min-h-11 w-fit items-center justify-center rounded-[10px] border border-[rgba(243,234,216,.35)] px-5 text-[15px] font-semibold transition-colors duration-150 hover:bg-[rgba(243,234,216,.08)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d94a2b]"
+          >
+            Ver demo →
+          </a>
+        </div>
+
+        {/* Pie del panel, copia del de forjo-tiendas (app/(sitio)/Pie.tsx): línea arriba, copyright
+            a la izquierda y las redes en caja a la derecha, en la MISMA fila.
             ⚠ Tiene que ser UN SOLO hijo del flex-col justify-between de arriba. Como dos hijos
             separados, el reparto pasaba de 3 a 4 elementos y empujaba el crédito hacia el medio del
-            panel en vez de dejarlo abajo. El -mr-3 compensa el padding del área táctil de 44px para
-            que el último glifo quede a ras del margen, alineado con el resto del panel. */}
-        <div className="relative flex items-end justify-between gap-4">
-          {/* Crédito "hecho con Forjo Studio" — mismo copy/link que el footer de la página de reservas. */}
-          <p className="text-[13px] text-[#a39989]">
-            hecho con{' '}
+            panel en vez de dejarlo abajo. */}
+        <div className="relative flex flex-wrap items-center justify-between gap-6 border-t border-[#332d24] pt-[26px]">
+          <p className="text-sm text-[#a39989]">
+            © 2026 Forjo Gestión es un producto de{' '}
             <a
               href="https://www.forjo.studio"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-[family-name:var(--font-archivo)] transition-opacity hover:opacity-80"
+              className="font-semibold text-[#f3ead8] transition-colors duration-150 hover:text-[#d94a2b]"
             >
-              <span className="font-bold text-[#f3ead8]">Forjo</span> Studio
+              Forjo Studio
             </a>
+            . Todos los derechos reservados.
           </p>
-          <ForjoSocials className="-mr-3" />
+          <ForjoSocials variant="caja" />
         </div>
       </div>
 
