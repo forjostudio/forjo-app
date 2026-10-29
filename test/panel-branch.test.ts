@@ -2206,11 +2206,13 @@ describe('recordExitDiag — el canal de diagnóstico del sentinel de salida (pl
     }
   })
 
-  it('se graba DESPUÉS de computar la acción, en los TRES call sites (armado, retroceso, toque) y en ninguno más', () => {
+  it('se graba DESPUÉS de computar la acción, en los CUATRO call sites (armado, retroceso, toque, desmontaje) y en ninguno más', () => {
     const mod = sinComentarios(leer(MOD_DUENO))
-    // 1 declaración + 3 call sites: el del toque se sumó en el plan 03-13 (es lo que deja a la sonda
-    // distinguir un armado PENDIENTE de uno EMPUJADO, y nombrar la acción de cada toque).
-    expect(cuenta(mod, /recordExitDiag\(/g)).toBe(4)
+    // 1 declaración + 4 call sites: el del toque se sumó en el plan 03-13 (es lo que deja a la sonda
+    // distinguir un armado PENDIENTE de uno EMPUJADO, y nombrar la acción de cada toque), y el QUINTO
+    // —el del desmontaje— en el plan 03-14: es el que MIDE que el consumo diferido aterriza después del
+    // remontaje del modo estricto (G3-4), en vez de suponerlo.
+    expect(cuenta(mod, /recordExitDiag\(/g)).toBe(5)
     const toque = mod.match(/const alTocar = \(evento: Event\) => \{[\s\S]*?\n {4}\}\n/)?.[0] ?? ''
     expect(toque.length).toBeGreaterThan(300)
     expect(toque.indexOf('recordExitDiag(')).toBeGreaterThan(toque.indexOf('panelExitTouchAction('))
@@ -2339,5 +2341,102 @@ describe('el cableado del camino 1 — auditorías de fuente', () => {
       expect(region.length).toBeGreaterThan(80)
       expect(cuenta(region, /window|navigator|document|history/g)).toBe(0)
     }
+  })
+})
+
+// ── G3-4 (plan 03-14): el desmontaje SIMULADO del modo estricto no consume el sentinel ─────────────
+//
+// POR QUÉ, medido y no supuesto (`## (g)` de `.planning/debug/la-absorcion-que-no-absorbe-medida.md`):
+// loguearse por el formulario monta el panel EN EL CLIENTE con la activación del click todavía vigente,
+// así que el armado EMPUJA. En desarrollo React 19 desconecta y reconecta los efectos de esa fibra en la
+// misma llamada (el doble montaje del modo estricto): la limpieza del desmontaje hacía `history.back()`
+// sobre el sentinel recién empujado, el remontaje re-derivaba *seguimos absorbiendo* parado todavía
+// sobre él, y el `popstate` que llegaba después encendía el aviso sin que el dueño apretara nada — y se
+// llevaba el hash. El arreglo difiere el consumo a UN microtask y lo decide con una función pura nueva,
+// que lee si la instancia SIGUE montada y si NUESTRA entrada está arriba EN ESE INSTANTE.
+
+describe('panelExitUnmountAction — qué hace el desmontaje con el sentinel, puro y con las reglas en orden', () => {
+  it('regla 1 — la instancia SIGUE montada (el remontaje del modo estricto) con nuestra entrada arriba ⇒ keep: consumir acá es el atrás que nadie pidió (G3-4)', () => {
+    expect(PB.panelExitUnmountAction({ sigueMontada: true, nuestroArriba: true })).toBe('keep')
+  })
+
+  it('regla 1, contrapuesto adyacente — sigue montada SIN nuestra entrada arriba ⇒ keep', () => {
+    expect(PB.panelExitUnmountAction({ sigueMontada: true, nuestroArriba: false })).toBe('keep')
+  })
+
+  it('regla 2 — desmontaje REAL con nuestra entrada arriba ⇒ consume: un sentinel huérfano deja un atrás que no hace nada visible', () => {
+    expect(PB.panelExitUnmountAction({ sigueMontada: false, nuestroArriba: true })).toBe('consume')
+  })
+
+  it('regla 3 — desmontaje real con la entrada del ROUTER arriba ⇒ keep (la cicatriz 2: retroceder ahí expulsa al dueño)', () => {
+    expect(PB.panelExitUnmountAction({ sigueMontada: false, nuestroArriba: false })).toBe('keep')
+  })
+
+  it('la decisión es PURA: no lee el navegador ni graba en el canal', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf('export function panelExitUnmountAction({')
+    expect(desde).toBeGreaterThan(0)
+    // El ancla de cierre es la llave SOLA en su línea (la firma con parámetro-objeto tiene un `}: {`).
+    const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+    expect(region.length).toBeGreaterThan(80)
+    expect(cuenta(region, /window|navigator|document|history|recordExitDiag/g)).toBe(0)
+    expect(cuenta(region, /return 'consume'/g)).toBe(1)
+  })
+})
+
+describe('el cableado del desmontaje (G3-4) — auditorías de fuente', () => {
+  /** La región del efecto del desmontaje, del ancla al cierre `}, [id])`, sin comentarios. */
+  const regionDelDesmontaje = () => {
+    const mod = leer(MOD_DUENO)
+    const desde = mod.indexOf('// ── El desmontaje, con la guarda REPETIDA')
+    expect(desde).toBeGreaterThan(0)
+    const hasta = mod.indexOf('\n  }, [id])\n', desde)
+    expect(hasta).toBeGreaterThan(desde)
+    return sinComentarios(mod.slice(desde, hasta + 11))
+  }
+
+  it('difiere el consumo a UN microtask, y no lee el estado de la entrada ANTES de diferir', () => {
+    const r = regionDelDesmontaje()
+    expect(r.length).toBeGreaterThan(300)
+    expect(cuenta(r, /queueMicrotask\(/g)).toBe(1)
+    const iQ = r.indexOf('queueMicrotask(')
+    // La marca se RE-LEE en el instante del retroceso (la cicatriz 2), nunca antes de diferir.
+    expect(r.indexOf('window.history.state')).toBeGreaterThan(iQ)
+    expect(r.indexOf('isPanelExitEntry(')).toBeGreaterThan(iQ)
+    expect(r.indexOf('panelExitUnmountAction(')).toBeGreaterThan(r.indexOf('isPanelExitEntry('))
+    expect(r.indexOf('window.history.back()')).toBeGreaterThan(r.indexOf('panelExitUnmountAction('))
+  })
+
+  it('retrocede SÓLO con consume, y conserva la guarda de la referencia y su apagado', () => {
+    const r = regionDelDesmontaje()
+    expect(r).toContain("if (accion === 'consume') window.history.back()")
+    expect(r).toContain('if (!sentinelVivoRef.current) return')
+    expect(r).toContain('sentinelVivoRef.current = false')
+  })
+
+  it('la instancia sabe si sigue montada: UNA escritura en verdadero al montar y UNA en falso al desmontar, y la falsa va antes de diferir', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod).toContain('const montadaRef = useRef(false)')
+    expect(cuenta(mod, /montadaRef\.current = true/g)).toBe(1)
+    expect(cuenta(mod, /montadaRef\.current = false/g)).toBe(1)
+    const r = regionDelDesmontaje()
+    expect(r.indexOf('montadaRef.current = true')).toBeGreaterThan(0)
+    expect(r.indexOf('montadaRef.current = false')).toBeGreaterThan(r.indexOf('montadaRef.current = true'))
+    expect(r.indexOf('montadaRef.current = false')).toBeLessThan(r.indexOf('queueMicrotask('))
+    // El hecho se lee ADENTRO del microtask, después del remontaje.
+    expect(r.indexOf('sigueMontada: montadaRef.current')).toBeGreaterThan(r.indexOf('queueMicrotask('))
+  })
+
+  it('el canal suma `desmontaje`, y el desmontaje graba DESPUÉS de decidir', () => {
+    expect(leer(MOD_DUENO)).toContain("tipo: 'armado' | 'retroceso' | 'toque' | 'desmontaje'")
+    const r = regionDelDesmontaje()
+    expect(r).toContain("tipo: 'desmontaje'")
+    expect(r.indexOf('recordExitDiag(')).toBeGreaterThan(r.indexOf('panelExitUnmountAction('))
+  })
+
+  it('ningún camino NUEVO que retroceda: `history.back()` sigue en DOS call sites del módulo, y cero tiempo', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /history\.back\(\)/g)).toBe(2)
+    expect(cuenta(mod, /setTimeout|setInterval|requestAnimationFrame|clearTimeout/g)).toBe(0)
   })
 })
