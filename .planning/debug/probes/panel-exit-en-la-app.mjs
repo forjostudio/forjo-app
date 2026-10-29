@@ -42,6 +42,15 @@
 //   node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev
 //   node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev-sin-estricto
 //   (segundo argumento opcional: el gesto, `interfaz` por omision o `entrada`)
+//   (tercer argumento opcional, plan 03-13: una lista de ids separados por coma que corre SOLO esos,
+//   `C-activacion` incluido si se lo nombra — para las pruebas en rojo; sin el corre todo)
+//
+// PLAN 03-13 — LA CALIBRACION VA PRIMERO. Antes del login, sobre `/login` (una pagina de la app SIN el
+// hook del panel), `C-activacion` mide con numeros si la premisa de la decision del dueno del
+// 2026-10-28 (`camino 1`: empujar el sentinel SOLO con activacion del usuario) vale en este motor: un
+// empuje a los <=200 ms de un click real NO tiene que quedar salteable. Si queda, el plan PARA.
+// Y el toque: `tocarLaPantalla` toca un punto NEUTRO de `main` y lo AFIRMA con el registro
+// `sonda-click` del canal (un toque que no llega no mide nada).
 //
 // EL SERVIDOR: la sonda levanta el suyo en el 3031 y lo mata al salir (verificando el puerto libre).
 // ⚠ SALVO que ya haya un `next dev` de ESTE repo vivo: Next 16 toma un candado en `.next/dev/lock` y
@@ -92,13 +101,18 @@ const AFUERA = 'data:text/html,<title>afuera</title>afuera'
 // afirmacion de llegada (plan 03-12, task 2), y se restauran verificando por huella.
 const EMAIL = 'test@forjo.local'
 const CLAVE = 'Forjo1234!'
-// La ventana del aviso, la MISMA constante del modulo (`PANEL_EXIT_HINT_MS`), leida del fuente y no
-// copiada: si alguien la cambia alla, la espera de R-3.1 la sigue.
-const VENTANA_MS = Number(
-  /export const PANEL_EXIT_HINT_MS = (\d+)/.exec(readFileSync(join(REPO, 'lib/panel-branch.ts'), 'utf8'))?.[1] ?? NaN,
-)
-// El margen por encima de la ventana. Se baja A PROPOSITO por debajo de cero para probar en rojo el
-// piso del tiempo transcurrido, y se restaura verificando por huella.
+// LAS ESPERAS PROPIAS (plan 03-13). Desde la decision del dueno del 2026-10-28 el aviso NO vence y el
+// modulo ya no tiene una ventana que leer: la sonda deja de leer la constante del fuente (el plan la
+// borra) y usa sus propias esperas.
+//   · ESPERA_CORTA_MS / ESPERA_LARGA_MS — cuanto se espera con el aviso visible para afirmar que SIGUE.
+//   · LAPSO_SIN_ACTIVACION_MS — mas que la activacion transitoria de Chromium (~5 s): pasado esto, un
+//     empuje ya no lleva la activacion del ultimo toque.
+const ESPERA_CORTA_MS = 2500
+const ESPERA_LARGA_MS = 10000
+const LAPSO_SIN_ACTIVACION_MS = 7000
+// El margen por encima de cada espera. Toda espera que alimente un piso de tiempo es la espera MAS el
+// margen, mientras el piso compara contra la espera SOLA: bajar el margen por debajo de cero A
+// PROPOSITO prueba en rojo el piso, y se restaura verificando por huella.
 const MARGEN_MS = 900
 
 const MODOS = {
@@ -263,6 +277,10 @@ const SCRIPT_DEL_CANAL = `(() => {
   if (location.protocol.startsWith('http')) {
     canal.push({ tipo: 'sonda-documento-nuevo', ts: Date.now(), ruta: location.pathname, hash: location.hash, estado: estadoTexto() })
     addEventListener('popstate', () => canal.push({ tipo: 'sonda-popstate', ts: Date.now(), ruta: location.pathname, hash: location.hash, estado: estadoTexto() }))
+    // plan 03-13: cada click en la BURBUJA de window, registrado al nacer el documento — corre despues
+    // de los manejadores de React (la raiz de Next 16 es el documento) y ANTES del oyente del hook, asi
+    // que dice si un link se llevo el gesto y si el navegador lo conto como activacion.
+    addEventListener('click', (e) => canal.push({ tipo: 'sonda-click', ts: Date.now(), ruta: location.pathname, hash: location.hash, estado: estadoTexto(), defaultPrevented: e.defaultPrevented, isActive: navigator.userActivation ? navigator.userActivation.isActive : null }))
   }
 })()`
 
@@ -442,6 +460,8 @@ function reglaDelRetroceso(h) {
 function lineaDeRegistro(r) {
   if (r.tipo === 'armado') return `armado    doc=${r.doc} id=${r.id} duena=${r.duenaFigurando} vivas=${r.instanciasVivas} url=${r.ruta}${r.hash} estado=${r.estado} accion=${r.accion} regla=${reglaDelArmado(r.hechos)} vivo_antes=${r.vivoAntes} vivo_despues=${r.vivoDespues}`
   if (r.tipo === 'retroceso') return `retroceso doc=${r.doc} id=${r.id} duena=${r.duenaFigurando} vivas=${r.instanciasVivas} url=${r.ruta}${r.hash} estado=${r.estado} accion=${r.accion} regla=${reglaDelRetroceso(r.hechos)} holding=${r.hechos?.holding}`
+  if (r.tipo === 'toque') return `toque     doc=${r.doc} id=${r.id} url=${r.ruta}${r.hash} accion=${r.accion} hechos=${JSON.stringify(r.hechos)} vivo_antes=${r.vivoAntes} vivo_despues=${r.vivoDespues}`
+  if (r.tipo === 'sonda-click') return `sonda-click doc=${r.doc} url=${r.ruta}${r.hash} defaultPrevented=${r.defaultPrevented} isActive=${r.isActive}`
   return `${r.tipo.padEnd(9)} doc=${r.doc} url=${r.ruta}${r.hash} estado=${r.estado}`
 }
 
@@ -503,9 +523,75 @@ function imprimirTupla(prefijo, m) {
 
 async function clickReal(cdp, selector) {
   const rect = await evaluar(cdp, `(() => { const b = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`)
+  await clickEnPunto(cdp, rect)
+}
+
+/** Un click de mouse REAL (eventos de entrada de CDP: dan activacion) sobre un punto. */
+async function clickEnPunto(cdp, punto) {
   for (const type of ['mousePressed', 'mouseReleased']) {
-    await cdp.enviar('Input.dispatchMouseEvent', { type, x: rect.x, y: rect.y, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1 })
+    await cdp.enviar('Input.dispatchMouseEvent', { type, x: punto.x, y: punto.y, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1 })
   }
+}
+
+/**
+ * Un punto NEUTRO adentro de `selector`: su `elementFromPoint` es descendiente del contenedor y NO
+ * tiene como ancestro nada interactivo. Barre una grilla del area visible del contenedor.
+ */
+async function puntoNeutro(cdp, selector) {
+  return evaluar(cdp, `(() => {
+    const raiz = document.querySelector(${JSON.stringify(selector)})
+    if (!raiz) return null
+    const b = raiz.getBoundingClientRect()
+    const x0 = Math.max(b.left, 0) + 4, x1 = Math.min(b.right, innerWidth) - 4
+    const y0 = Math.max(b.top, 0) + 4, y1 = Math.min(b.bottom, innerHeight) - 4
+    const INTERACTIVO = 'a, button, input, label, select, textarea, [role=button], [tabindex]'
+    for (let y = y0; y <= y1; y += 12) {
+      for (let x = x0; x <= x1; x += 12) {
+        const el = document.elementFromPoint(x, y)
+        if (!el || !raiz.contains(el) || el.closest(INTERACTIVO)) continue
+        return { x, y, etiqueta: el.tagName.toLowerCase() }
+      }
+    }
+    return null
+  })()`)
+}
+
+/** Espera, con tope, el primer registro de `tipo` desde el indice `desde`. */
+async function esperarRegistro(desde, tipo, tope) {
+  const fin = Date.now() + tope
+  while (Date.now() < fin) {
+    const r = registros.slice(desde).find((x) => x.tipo === tipo)
+    if (r) return r
+    await dormir(50)
+  }
+  return null
+}
+
+/**
+ * EL TOQUE DEL DUENO sobre un punto NEUTRO de `main` (plan 03-13): primero con la forma del dedo
+ * (`Input.synthesizeTapGesture`) y, si en 1 s no llego ningun `sonda-click`, con un click de mouse.
+ * IMPRIME la forma usada y TIRA si no llega un `sonda-click` sin `defaultPrevented` y con `isActive` en
+ * verdadero: un toque que no llega, o que no cuenta como activacion, no mide nada.
+ */
+async function tocarLaPantalla(cdp) {
+  const punto = await puntoNeutro(cdp, 'main')
+  if (!punto) throw new Error('el toque no llego como click: no hay un punto neutro en main')
+  const desde = registros.length
+  let forma = 'dedo'
+  await cdp.enviar('Input.synthesizeTapGesture', { x: punto.x, y: punto.y, duration: 40, tapCount: 1, gestureSourceType: 'touch' })
+  let click = await esperarRegistro(desde, 'sonda-click', 1000)
+  if (!click) {
+    forma = 'raton'
+    await clickEnPunto(cdp, punto)
+    click = await esperarRegistro(desde, 'sonda-click', 1000)
+  }
+  console.log(`      forma del toque=${forma} punto=(${Math.round(punto.x)},${Math.round(punto.y)}) sobre <${punto.etiqueta}>`)
+  if (!click || click.defaultPrevented || click.isActive !== true) {
+    throw new Error(`el toque no llego como click (forma=${forma} sonda-click=${click ? `defaultPrevented=${click.defaultPrevented} isActive=${click.isActive}` : 'ninguno'})`)
+  }
+  // Lo que el toque haya disparado (un armado, bajar el aviso) se asienta antes de seguir.
+  await asentar(desde, 3_000)
+  return click
 }
 
 async function loguearse(cdp) {
@@ -572,12 +658,121 @@ async function entrarDirecto(cdp) {
   return desde
 }
 
+// ── La calibracion del navegador (plan 03-13): corre ANTES del login ─────────────────────────────
+//
+// ⚠ DECIDE SI LA PREMISA DE LA DECISION VALE EN ESTE MOTOR. Sobre `/login` —una pagina de la app SIN
+// el hook del panel, con el perfil desechable todavia sin sesion (despues del login el guard de rutas
+// la redirigiria)—, con historial limpio en cada fila (la pagina de afuera, el historial reseteado,
+// `/login`), un empuje de hash propio y el atras del gesto elegido. Las filas:
+//   1. un click real sobre un punto neutro y el empuje a los <=200 ms ⇒ ¿salteada?
+//   2. lo mismo con el empuje a los LAPSO_SIN_ACTIVACION_MS ⇒ ¿salteada? (dice si `isActive` es
+//      EXACTO —salteada— o MAS ESTRICTO que el navegador —no salteada—)
+//   3. un empuje SIN ninguna activacion, despues un click real, y el atras ⇒ ¿una activacion
+//      posterior vuelve visitable la entrada?
+//   4. `navigator.userActivation.isActive` leido adentro de un `pointerdown` de un toque emulado (solo
+//      el inicio del toque) y adentro de un `click` real.
+// El `esperado` lleva SOLO dos claves: la fila 1 NO salteada y `isActive` en verdadero adentro del
+// `click`. Las filas 2, 3 y la parte tactil de la 4 se IMPRIMEN como medicion.
+// Las ramas, escritas antes de medir: (a) fila 1 salteada ⇒ PARAR, la premisa no vale y no se escribe
+// arreglo; (b) fila 2 NO salteada ⇒ el gate queda mas estricto que el navegador (la direccion segura);
+// (c) fila 2 salteada ⇒ el gate es exacto.
+
+const INSTALAR_CALIBRACION = `(() => {
+  window.__cal = { pointerdowns: [], clicks: [] }
+  addEventListener('pointerdown', (e) => __cal.pointerdowns.push({ tipo: e.pointerType, activa: navigator.userActivation ? navigator.userActivation.isActive : null, t: performance.now() }))
+  addEventListener('click', () => __cal.clicks.push({ activa: navigator.userActivation ? navigator.userActivation.isActive : null, t: performance.now() }))
+  return true
+})()`
+
+const EMPUJAR_CALIBRACION = `(() => {
+  history.pushState(history.state, '', location.pathname + '#cal')
+  return { t: performance.now(), activa: navigator.userActivation ? navigator.userActivation.isActive : null, alguna_vez: navigator.userActivation ? navigator.userActivation.hasBeenActive : null }
+})()`
+
+/** Historial limpio: la pagina de afuera, el historial reseteado, `/login` con los oyentes de la calibracion. */
+async function documentoDeCalibracion(cdp) {
+  await navegar(cdp, AFUERA)
+  await cdp.enviar('Page.resetNavigationHistory')
+  await navegar(cdp, `${ORIGEN}/login`)
+  await evaluar(cdp, INSTALAR_CALIBRACION)
+  const punto = await puntoNeutro(cdp, 'body')
+  if (!punto) throw new Error('la calibracion no encontro un punto neutro en /login')
+  return punto
+}
+
+/** Una fila de empuje: devuelve si el atras salteo la entrada de `/login` y los tiempos medidos en la pagina. */
+async function filaDeEmpuje(cdp, { clickAntes, esperaMs, clickDespues }) {
+  const punto = await documentoDeCalibracion(cdp)
+  if (clickAntes) await clickEnPunto(cdp, punto)
+  if (esperaMs) await dormir(esperaMs)
+  const empuje = await evaluar(cdp, EMPUJAR_CALIBRACION)
+  if (clickDespues) await clickEnPunto(cdp, punto)
+  const cal = await evaluar(cdp, 'window.__cal')
+  const m = await gestoMedido(cdp)
+  const click = cal.clicks[0] ?? null
+  return {
+    salteada: m.despues.ruta === '/login' ? 'no' : 'si',
+    entradasSalteadas: m.tupla.entradas_salteadas,
+    rutaDespues: m.tupla.ruta_despues,
+    msDelClickAlEmpuje: click ? Math.round(empuje.t - click.t) : null,
+    activaAlEmpujar: empuje.activa,
+    algunaVezActiva: empuje.alguna_vez,
+    activaEnElClick: click ? click.activa : null,
+  }
+}
+
+const CALIBRACION = {
+  id: 'C-activacion',
+  titulo: 'la calibracion del navegador sobre /login, antes del login: ¿un empuje con activacion es salteable?',
+  async correr(cdp) {
+    const f1 = await filaDeEmpuje(cdp, { clickAntes: true, esperaMs: 0, clickDespues: false })
+    const f2 = await filaDeEmpuje(cdp, { clickAntes: true, esperaMs: LAPSO_SIN_ACTIVACION_MS, clickDespues: false })
+    const f3 = await filaDeEmpuje(cdp, { clickAntes: false, esperaMs: 0, clickDespues: true })
+    // Fila 4: PRIMERO el toque (documento sin ninguna activacion todavia) y despues el click; al reves
+    // el `pointerdown` del toque leeria la activacion del click.
+    const punto = await documentoDeCalibracion(cdp)
+    await cdp.enviar('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+    await cdp.enviar('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: punto.x, y: punto.y }] })
+    await dormir(300)
+    const trasElToque = await evaluar(cdp, 'window.__cal')
+    await cdp.enviar('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] })
+    await cdp.enviar('Emulation.setTouchEmulationEnabled', { enabled: false })
+    await dormir(200)
+    await clickEnPunto(cdp, punto)
+    await dormir(200)
+    const trasElClick = await evaluar(cdp, 'window.__cal')
+    const pdTactil = trasElToque.pointerdowns.find((p) => p.tipo === 'touch') ?? null
+    const clickReal4 = trasElClick.clicks.at(-1) ?? null
+    const fila = (n, f) => `fila ${n}: salteada=${f.salteada} entradas_salteadas=${f.entradasSalteadas} ruta_despues=${f.rutaDespues} ms_del_click_al_empuje=${f.msDelClickAlEmpuje} isActive_al_empujar=${f.activaAlEmpujar} hasBeenActive_al_empujar=${f.algunaVezActiva} isActive_en_el_click=${f.activaEnElClick}`
+    return {
+      detalle: (p) => {
+        console.log(`${p}${fila(1, f1)}  (click real y empuje a los <=200 ms)`)
+        console.log(`${p}${fila(2, f2)}  (click real y empuje a los ${LAPSO_SIN_ACTIVACION_MS} ms)`)
+        console.log(`${p}${fila(3, f3)}  (empuje SIN activacion y despues un click real)`)
+        console.log(`${p}fila 4: isActive_en_pointerdown_tactil=${pdTactil ? pdTactil.activa : 'sin-pointerdown'} (pointerdowns=${JSON.stringify(trasElToque.pointerdowns.map((x) => x.tipo + ':' + x.activa))}) · isActive_en_el_click_real=${clickReal4 ? clickReal4.activa : 'sin-click'}`)
+        const rama = f1.salteada === 'si' ? '(a) PARAR: un empuje con activacion es salteable en este motor' : f2.salteada === 'no' ? '(b) el gate es MAS ESTRICTO que el navegador (pendientes donde un empuje habria servido: la direccion segura)' : '(c) el gate es EXACTO (la activacion transitoria de Chromium)'
+        console.log(`${p}rama de la calibracion: ${rama}`)
+      },
+      medido: {
+        fila_1_salteada: f1.salteada,
+        isActive_en_el_click: clickReal4 && clickReal4.activa === true ? 'si' : 'no',
+      },
+      esperado: { fila_1_salteada: 'no', isActive_en_el_click: 'si' },
+    }
+  },
+}
+
 // ── Los recorridos ───────────────────────────────────────────────────────────────────────────────
+
+/** El ultimo registro de armado desde `desde`, o null. */
+function ultimoArmado(desde) {
+  return registros.slice(desde).filter((r) => r.tipo === 'armado').at(-1) ?? null
+}
 
 const RECORRIDOS = [
   {
-    id: 'R-1.3-nueva',
-    titulo: 'entrada DIRECTA a Inicio en una pestana limpia, sentinel armado, UN atras',
+    id: 'R-1.3-sin-toque',
+    titulo: 'entrada DIRECTA a Inicio, SIN tocar nada, UN atras: el costo declarado de la decision (sale sin aviso)',
     async correr(cdp) {
       const desde = await entrarDirecto(cdp)
       const armado = registros.slice(desde)
@@ -591,109 +786,42 @@ const RECORRIDOS = [
         },
         medido: {
           hash_al_entrar: m.tupla.hash_antes,
+          accion_del_armado: armado.filter((r) => r.tipo === 'armado').at(-1)?.accion ?? 'sin-registro',
+          absorbido: m.tupla.absorbido,
+          ruta_despues: m.tupla.ruta_despues,
+        },
+        // La decision del dueno del 2026-10-28 (camino 1): sin activacion no se empuja (pendiente, sin
+        // hash), y el atras SALE sin aviso. Es el COSTO DECLARADO, afirmado como tal.
+        esperado: { hash_al_entrar: '', accion_del_armado: 'pendiente', absorbido: 'no', ruta_despues: '(afuera)' },
+      }
+    },
+  },
+  {
+    id: 'R-1.3-con-toque',
+    titulo: 'entrada DIRECTA a Inicio, UN toque neutro, UN atras: el hash aparece y el atras avisa y no sale',
+    async correr(cdp) {
+      const desde = await entrarDirecto(cdp)
+      const alEntrar = await foto(cdp)
+      const desdeElToque = registros.length
+      await tocarLaPantalla(cdp)
+      const trasElToque = await foto(cdp)
+      const delToque = registros.slice(desdeElToque)
+      const m = await gestoMedido(cdp)
+      return {
+        detalle: (p) => {
+          console.log(`${p}al entrar: url=${alEntrar.url} armado=${ultimoArmado(desde)?.accion ?? 'sin-registro'}`)
+          console.log(`${p}el toque:`)
+          for (const r of delToque) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+          console.log(`${p}tras el toque: url=${trasElToque.url}`)
+          imprimirTupla(p, m)
+        },
+        medido: {
+          hash_tras_el_toque: trasElToque.hash,
           absorbido: m.tupla.absorbido,
           ruta_despues: m.tupla.ruta_despues,
           aviso_visible: m.tupla.aviso_visible,
         },
-        // Lo que el guion pide (1.3): el primer atras NO sale y avisa.
-        esperado: { hash_al_entrar: '#salir', absorbido: 'si', ruta_despues: ROOT, aviso_visible: 'si' },
-      }
-    },
-  },
-  {
-    id: 'R-1.3-recarga',
-    titulo: 'la otra forma del 1.3: RECARGA parado en Inicio armado, UN atras — tres vueltas',
-    async correr(cdp) {
-      await entrarDirecto(cdp)
-      const vueltas = []
-      for (let vuelta = 1; vuelta <= 3; vuelta++) {
-        // Antes de recargar: parado en Inicio con el sentinel armado (si la vuelta anterior avisó, se
-        // espera a que la ventana expire y re-arme; si salio, se vuelve a entrar).
-        let previo = await foto(cdp)
-        if (previo.ruta !== ROOT) { await entrarDirecto(cdp); previo = await foto(cdp) }
-        if (!/^#salir/.test(previo.hash)) { await dormir(VENTANA_MS + MARGEN_MS); previo = await foto(cdp) }
-        const desde = registros.length
-        const cargo = new Promise((ok) => { const t = setTimeout(ok, 150_000); cdp.en('Page.loadEventFired', () => { clearTimeout(t); ok() }) })
-        await cdp.enviar('Page.reload', {})
-        await cargo
-        await asentar(desde)
-        const alRecargar = registros.slice(desde)
-        const nacido = alRecargar.find((r) => r.tipo === 'sonda-documento-nuevo')
-        const primerArmado = alRecargar.find((r) => r.tipo === 'armado')
-        const ultimoArmado = alRecargar.filter((r) => r.tipo === 'armado').at(-1)
-        // El `frjExit` que la entrada PRESERVADA traia al nacer el documento (una recarga preserva el
-        // estado), contra el `id` que la instancia nueva se asigno.
-        const frjExitPreservado = nacido ? (JSON.parse(nacido.estado || 'null') ?? {}).frjExit ?? null : null
-        const m = await gestoMedido(cdp)
-        vueltas.push({ vuelta, previo, alRecargar, frjExitPreservado, primerArmado, ultimoArmado, m })
-      }
-      return {
-        detalle: (p) => {
-          for (const v of vueltas) {
-            console.log(`${p}Vuelta ${v.vuelta}: url antes de recargar=${v.previo.url}`)
-            console.log(`${p}  frjExit de la entrada preservada=${v.frjExitPreservado} id de la instancia nueva=${v.ultimoArmado?.id ?? 'sin-registro'} coinciden=${v.frjExitPreservado === (v.ultimoArmado?.id ?? NaN) ? 'si' : 'no'}`)
-            console.log(`${p}  primer armado: accion=${v.primerArmado?.accion ?? 'sin-registro'} regla=${reglaDelArmado(v.primerArmado?.hechos)} · ultimo armado: accion=${v.ultimoArmado?.accion ?? 'sin-registro'} regla=${reglaDelArmado(v.ultimoArmado?.hechos)} vivo_despues=${v.ultimoArmado?.vivoDespues}`)
-            for (const r of v.alRecargar) console.log(`${p}    diag ${lineaDeRegistro(r)}`)
-            console.log(`${p}  ${firmaDelMontaje(v.alRecargar)}`)
-            imprimirTupla(`${p}  `, v.m)
-          }
-        },
-        medido: Object.fromEntries(vueltas.map((v) => [`vuelta_${v.vuelta}_absorbido`, v.m.tupla.absorbido])),
-        esperado: { vuelta_1_absorbido: 'si', vuelta_2_absorbido: 'si', vuelta_3_absorbido: 'si' },
-      }
-    },
-  },
-  {
-    id: 'R-3.1',
-    titulo: 'el re-armado al EXPIRAR la ventana: atras, esperar la ventana entera, atras otra vez',
-    async correr(cdp) {
-      // ⚠ EL PUNTO DE PARTIDA ES EL DEL 1.2 (Inicio → tocar Clientes → tocar Inicio, con toques
-      // REALES), no la entrada directa: el 3.1 interroga el RE-armado, y para eso el PRIMER atras tiene
-      // que haber avisado — en el telefono aviso. Desde la entrada directa el primer atras es el 1.3.
-      await entrarDirecto(cdp)
-      const desdeElCamino = registros.length
-      await tocarEnLaBarra(cdp, '/clients')
-      await tocarEnLaBarra(cdp, ROOT)
-      const camino = registros.slice(desdeElCamino)
-      const alLlegar = await foto(cdp)
-      const primero = await gestoMedido(cdp)
-      // EL PISO DEL TIEMPO TRANSCURRIDO, medido DENTRO de la pagina y no supuesto: un escenario que
-      // dice medir el temporizador y solo prueba que hizo una llamada mide CERO.
-      const t0 = await evaluar(cdp, 'Date.now()')
-      const desde = registros.length
-      await dormir(VENTANA_MS + MARGEN_MS)
-      const t1 = await evaluar(cdp, 'Date.now()')
-      const transcurrido = t1 - t0
-      const alExpirar = registros.slice(desde)
-      const trasLaVentana = await foto(cdp)
-      const segundo = await gestoMedido(cdp)
-      return {
-        detalle: (p) => {
-          console.log(`${p}camino (Inicio → tocar Clientes → tocar Inicio): pila=[${alLlegar.entradas.join(', ')}] actual=${alLlegar.indice} url=${alLlegar.url}`)
-          for (const r of camino) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
-          console.log(`${p}primer atras:`)
-          imprimirTupla(`${p}  `, primero)
-          console.log(`${p}transcurrido=${transcurrido} ms dentro de la pagina (ventana=${VENTANA_MS} ms, margen=${MARGEN_MS} ms)`)
-          console.log(`${p}al expirar la ventana:`)
-          for (const r of alExpirar) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
-          console.log(`${p}tras la ventana: url=${trasLaVentana.url} aviso=${trasLaVentana.aviso ? 'visible' : 'oculto'}`)
-          console.log(`${p}segundo atras:`)
-          imprimirTupla(`${p}  `, segundo)
-        },
-        medido: {
-          primer_atras_absorbido: primero.tupla.absorbido,
-          transcurrido_supera_la_ventana: transcurrido > VENTANA_MS ? 'si' : 'no',
-          aviso_desaparecio: trasLaVentana.aviso ? 'no' : 'si',
-          hash_volvio: /^#salir/.test(trasLaVentana.hash) ? 'si' : 'no',
-          segundo_atras_absorbido: segundo.tupla.absorbido,
-        },
-        esperado: {
-          primer_atras_absorbido: 'si',
-          transcurrido_supera_la_ventana: 'si',
-          aviso_desaparecio: 'si',
-          hash_volvio: 'si',
-          segundo_atras_absorbido: 'si',
-        },
+        esperado: { hash_tras_el_toque: '#salir', absorbido: 'si', ruta_despues: ROOT, aviso_visible: 'si' },
       }
     },
   },
@@ -703,9 +831,31 @@ const RECORRIDOS = [
 
 function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
 
+/** Corre un recorrido, imprime su linea `OK `/`FALLA` con sus claves y devuelve si coincidio. */
+async function correrYReportar(cdp, rec) {
+  const r = await rec.correr(cdp)
+  const claves = Object.keys(r.esperado)
+  const malas = claves.filter((k) => !iguales(r.medido[k], r.esperado[k]))
+  const ok = malas.length === 0
+  // ⚠ EL PREFIJO ES `OK ` (UNA sangria) y la plantilla agrega el espacio: los gates cuentan
+  // `OK` + DOS espacios + el id, igual que en la sonda estatica.
+  console.log(`${ok ? 'OK ' : 'FALLA'} ${rec.id} · ${rec.titulo}`)
+  for (const k of claves) {
+    const marca = malas.includes(k) ? '  <-- NO COINCIDE' : ''
+    console.log(`      ${k}: medido=${JSON.stringify(r.medido[k])}${marca}`)
+    if (malas.includes(k)) console.log(`      ${' '.repeat(k.length)}  esperado=${JSON.stringify(r.esperado[k])}`)
+  }
+  r.detalle('      ')
+  console.log('')
+  return ok
+}
+
 async function main() {
   const modo = process.argv[2] ?? 'dev'
   const gesto = process.argv[3] ?? 'interfaz'
+  // El tercer argumento opcional (plan 03-13): ids separados por coma; sin el, corre todo.
+  const seleccion = process.argv[4] ? new Set(process.argv[4].split(',').map((s) => s.trim()).filter(Boolean)) : null
+  const elegido = (id) => !seleccion || seleccion.has(id)
   const perfil = mkdtempSync(join(tmpdir(), 'forjo-sonda-app-'))
   const dirExt = mkdtempSync(join(tmpdir(), 'forjo-sonda-ext-'))
   const logNext = join(perfil, '..', `forjo-sonda-app-next-${process.pid}.log`)
@@ -715,7 +865,12 @@ async function main() {
   let fallados = 0
 
   try {
-    if (!Number.isInteger(VENTANA_MS)) throw new Error('no se pudo leer PANEL_EXIT_HINT_MS de lib/panel-branch.ts')
+    if (seleccion) {
+      const conocidos = new Set([CALIBRACION.id, ...RECORRIDOS.map((r) => r.id)])
+      const desconocidos = [...seleccion].filter((id) => !conocidos.has(id))
+      if (desconocidos.length > 0) throw new Error(`ids desconocidos en la seleccion: ${desconocidos.join(', ')}`)
+      console.log(`seleccion por id: ${[...seleccion].join(', ')}`)
+    }
     if (gesto !== 'interfaz' && gesto !== 'entrada') throw new Error(`gesto desconocido "${gesto}" (validos: interfaz, entrada)`)
     const m = verificarModo(modo)
     console.log(`gesto=${gesto} · ${gesto === 'interfaz' ? 'el ATRAS DE LA INTERFAZ (chrome.tabs.goBack: respeta la intervencion de historial)' : 'navegacion a la entrada inmediata anterior (NO respeta la intervencion)'}`)
@@ -764,37 +919,36 @@ async function main() {
     const version = await (await fetch(`http://127.0.0.1:${PUERTO_CDP}/json/version`)).json()
     console.log(`navegador: ${version.Browser} · node ${process.version}`)
 
-    await loguearse(cdp)
-    // El ancho del telefono, DESPUES del login: en mobile el formulario vive en una hoja que hay que
-    // abrir, y el login no es lo que se mide. La barra de abajo es la del celular (oculta a >= 1024px).
-    await cdp.enviar('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
-    console.log('')
+    // LA CALIBRACION VA PRIMERO, antes del login (el unico recorrido que corre antes de `loguearse`),
+    // con la misma linea `OK `/`FALLA` y contada igual en el veredicto.
+    let medidos = 0
+    if (elegido(CALIBRACION.id)) {
+      console.log('')
+      medidos++
+      if (!(await correrYReportar(cdp, CALIBRACION))) fallados++
+    }
 
-    for (const rec of RECORRIDOS) {
-      const r = await rec.correr(cdp)
-      const claves = Object.keys(r.esperado)
-      const malas = claves.filter((k) => !iguales(r.medido[k], r.esperado[k]))
-      const ok = malas.length === 0
-      if (!ok) fallados++
-      // ⚠ EL PREFIJO ES `OK ` (UNA sangria) y la plantilla agrega el espacio: los gates cuentan
-      // `OK` + DOS espacios + el id, igual que en la sonda estatica.
-      console.log(`${ok ? 'OK ' : 'FALLA'} ${rec.id} · ${rec.titulo}`)
-      for (const k of claves) {
-        const marca = malas.includes(k) ? '  <-- NO COINCIDE' : ''
-        console.log(`      ${k}: medido=${JSON.stringify(r.medido[k])}${marca}`)
-        if (malas.includes(k)) console.log(`      ${' '.repeat(k.length)}  esperado=${JSON.stringify(r.esperado[k])}`)
-      }
-      r.detalle('      ')
+    const aCorrer = RECORRIDOS.filter((r) => elegido(r.id))
+    if (aCorrer.length > 0) {
+      await loguearse(cdp)
+      // El ancho del telefono, DESPUES del login: en mobile el formulario vive en una hoja que hay que
+      // abrir, y el login no es lo que se mide. La barra de abajo es la del celular (oculta a >= 1024px).
+      await cdp.enviar('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
       console.log('')
     }
 
+    for (const rec of aCorrer) {
+      medidos++
+      if (!(await correrYReportar(cdp, rec))) fallados++
+    }
+
     console.log('── veredicto ─────────────────────────────────────────────────────────────────')
-    console.log(`gesto=${gesto} · modo=${modo} · recorridos medidos: ${RECORRIDOS.length} · coinciden con el guion: ${RECORRIDOS.length - fallados} · no coinciden: ${fallados}`)
+    console.log(`gesto=${gesto} · modo=${modo} · recorridos medidos: ${medidos} · coinciden con lo esperado: ${medidos - fallados} · no coinciden: ${fallados}`)
     console.log('⚠ LO QUE ESTA SONDA NO CIERRA: A11 (Chrome Android / Safari iOS reales). Esto es Chrome de escritorio.')
     if (fallados > 0) {
       console.error('')
-      console.error(`${fallados} recorrido(s) no coinciden con lo que el guion pide. Este instrumento MIDE: el arreglo`)
-      console.error('lo escribe el plan 03-13 contra .planning/debug/la-absorcion-que-no-absorbe-medida.md.')
+      console.error(`${fallados} recorrido(s) no coinciden con lo esperado. Este instrumento MIDE: el esperado de cada`)
+      console.error('recorrido es el de la decision del dueno del 2026-10-28 (camino 1); ver 03-DECISION-UAT-3.md.')
       process.exitCode = 1
     }
   } catch (e) {
