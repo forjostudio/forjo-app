@@ -4,17 +4,17 @@ milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 14
-status: executing
-stopped_at: "03-14 en el checkpoint bloqueante: el dueno corre el 1.6, el 3.2 y el bloque 4"
-last_updated: "2026-10-29T21:29:59.100Z"
+status: verifying
+stopped_at: "Completado 03-14-PLAN.md — checkpoint aprobado por el dueno (1.6, 3.2, 4.1, 4.2); fase 03 con 14/14 planes ejecutados, lista para el cierre"
+last_updated: "2026-10-29T22:54:36.000Z"
 last_activity: 2026-10-29
-last_activity_desc: "03-14 tasks 1-3 commiteados (G3-4 medido H1 y arreglado, sonda 12/12); en el checkpoint blocking-human"
+last_activity_desc: "03-14 completo: el dueno aprobo el checkpoint («Todo perfecto»: 1.6, 3.2, 4.1, 4.2); la fase 03 queda 14/14, lista para security gate, code review y verificacion"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 18
-  completed_plans: 17
+  completed_plans: 18
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
@@ -27,23 +27,23 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 14
 **Total Plans in Phase:** 14
-**Status:** Executing Phase 03 — el 03-14 en el checkpoint bloqueante (G3-4 medido como doble montaje del modo estricto y arreglado; la sonda de la app 12/12); falta el dueno: 1.6, 3.2 y bloque 4 (la fase NO esta completa)
+**Status:** Phase complete — ready for verification (fase 03: 14/14 planes ejecutados; el 03-14 cerro G3-4 y su checkpoint lo aprobo el dueno el 2026-10-29. Falta el cierre: security gate, code review y `/gsd-verify-work 3 --ws panel-nav`, que marca MOB-04/05/06)
 **Current Phase:** 03
-**Last Activity:** 2026-10-29 — 03-14 en el checkpoint bloqueante
-**Last Activity Description:** veredicto H1 medido en (g); la limpieza del desmontaje difiere el consumo a un microtask (panelExitUnmountAction); 1.6 en el guion; espera la re-prueba del dueno
+**Last Activity:** 2026-10-29 — 03-14 completo (checkpoint aprobado por el dueno)
+**Last Activity Description:** el dueno corrio el 1.6, el 3.2 y el bloque 4 y respondio «Todo perfecto» (registrado en 03-UAT-2.md § «Re-prueba tras el 03-14 — 2026-10-29»); la ronda 3 queda cerrada en Android, iPhone y escritorio
 
 ## Progress
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 13/13 (en la fase 03)
-**Current Plan:** 13
+**Plans Complete:** 14/14 (en la fase 03)
+**Current Plan:** 14
 
 ## Session Continuity
 
-**Last session:** 2026-10-29T21:29:59.100Z
+**Last session:** 2026-10-29T22:54:36.000Z
 
-**Stopped At:** 03-14 en el checkpoint bloqueante: el 1.6 en Android (iPhone si es comodo), el 3.2 y el bloque 4, anotados en 03-UAT-2.md
+**Stopped At:** Completado 03-14-PLAN.md — fase 03 con 14/14 planes ejecutados; proximo: security gate, code review y `/gsd-verify-work 3 --ws panel-nav` (marca MOB-04/05/06)
 **Resume File:** None
 
 ## Performance Metrics
@@ -63,7 +63,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | Phase 03 P11 | 28 min | 3 tasks tasks | 9 files files |
 | Phase 03 P12 | 60 min | 3 tasks | 7 files |
 | Phase 03 P13 | 47min | 4 tasks | 9 files |
-| Phase 03 P14 | 25min | 3 tasks (+1 checkpoint) | 6 files |
+| Phase 03 P14 | 25min | 4 tasks (incl. checkpoint aprobado) | 6 files |
 
 ### Quick Tasks Completed
 

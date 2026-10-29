@@ -2,8 +2,8 @@
 phase: "03-la-pol-tica-de-atr-s-de-un-nivel-a-dos"
 plan: "14"
 subsystem: panel-nav / sentinel de salida (MOB-05)
-status: halted
-halt_reason: "checkpoint blocking-human del task 4 (diseñado): el dueño corre el 1.6, el 3.2 y el bloque 4 en el teléfono y los anota en 03-UAT-2.md"
+status: complete
+checkpoint_resolution: "task 4 (checkpoint:human-verify, blocking-human) APROBADO por el dueño el 2026-10-29 — «Todo perfecto»: 1.6 ✅, 3.2 ✅, 4.1 ✅, 4.2 ✅; registrado en 03-UAT-2.md § «Re-prueba tras el 03-14 — 2026-10-29» (commit 11842d5)"
 tags: [sentinel, g3-4, login, modo-estricto, doble-montaje, microtask, cdp]
 requires: ["03-13"]
 provides:
@@ -37,8 +37,11 @@ completed: 2026-10-29
 plan_head_before: be363ec3e062488ecb9c1182ac00ba28152b404b
 actuals:
   tokens: 13600
-  tasks: 3
-  commits: 5
+  tasks: 4
+  # MEDIDO: git rev-list --count be363ec..HEAD = 10 al escribir este cierre (HEAD 11842d5), sin contar el
+  # commit de cierre. 2 de esos 10 NO son del plan: 76f98f3 y e6915d1 (el /gsd-fast del autoscroll de /web,
+  # entró entre el checkpoint y el cierre). Del plan: 8 (5 de los tasks 1-3 + 3 de documentos/estado).
+  commits: 10
 coverage:
   - deliverable: "G3-4 reproducido en la app real con la activación vigente y la causa nombrada (veredicto H1)"
     verification: { kind: probe, ref: ".planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz — 11 OK + R-login-con-activacion FALLA (llegada si, popstate 1, aviso si, hash vacío), rc 1 esperado", status: pass }
@@ -56,18 +59,20 @@ coverage:
     verification: { kind: command, ref: "panel-back-stack.mjs 18/18; npx vitest run 110 archivos, 1994 pasados + 4 xfail + 1 salteado; tsc --noEmit 0 errores; eslint rc 0", status: pass }
     human_judgment: false
   - deliverable: "el login aterriza bien en el teléfono (1.6), el overlay del 3.2 y el bloque 4 de escritorio"
+    verification: { kind: human, ref: "03-UAT-2.md § «Re-prueba tras el 03-14 — 2026-10-29» — respuesta del dueño «Todo perfecto»: 1.6 ✅, 3.2 ✅, 4.1 ✅ (residuo ya aceptado), 4.2 ✅ (commit 11842d5)", status: pass }
     human_judgment: true
-    rationale: "Todo lo medido es Chrome de escritorio headless contra el next dev del dueño. Sólo el teléfono (Android Chrome; iPhone Safari si lo corre) y el escritorio del dueño cierran el 1.6, el 3.2 y el bloque 4. Checkpoint blocking-human PENDIENTE DE LA PERSONA"
+    rationale: "Todo lo medido es Chrome de escritorio headless contra el next dev del dueño. Sólo el teléfono y el escritorio del dueño cierran el 1.6, el 3.2 y el bloque 4. Checkpoint blocking-human APROBADO por la persona el 2026-10-29 (reporte en bloque, sin fila por fila ni motor nombrado)"
 ---
 
 # Phase 3 Plan 14: el aterrizaje del login (G3-4) — medido como doble montaje del modo estricto y arreglado difiriendo el consumo del desmontaje a un microtask Summary
 
 **Loguearse por el formulario ya no enciende el aviso solo ni se lleva el hash: la limpieza del desmontaje
 dejaba de retroceder sobre el sentinel recién empujado en el remontaje del modo estricto. Medido 12/12 en la
-app real con el atrás de la interfaz; falta el teléfono (checkpoint bloqueante del dueño).**
+app real con el atrás de la interfaz, y aprobado por el dueño en el teléfono y el escritorio («Todo perfecto»).**
 
 - **Inicio:** 2026-10-29T21:03:41Z · **Corte en el checkpoint:** 2026-10-29T21:28Z · **Duración:** ~25 min
-- **Tasks:** 3 de 4 (el 4 es `checkpoint:human-verify` con `gate="blocking-human"`, pendiente)
+  (de ejecución; la espera del dueño no cuenta)
+- **Tasks:** 4 de 4 (el 4 es `checkpoint:human-verify` con `gate="blocking-human"`: **aprobado** el 2026-10-29)
 - **Archivos:** 6 modificados (1 de producción: `lib/panel-branch.ts`)
 
 ## Accomplishments
@@ -138,11 +143,28 @@ app real con el atrás de la interfaz; falta el teléfono (checkpoint bloqueante
 - `03-UAT-2.md`: la sección `G3-4 — MEDIDO y ARREGLADO, SIN VERIFICAR EN EL TELEFONO`, sin filas de recibo.
   Gate: 22 secciones, 0 filas 1.6/4.1/4.2, 1 fila 3.2, MOB-04/05/06 sin marcar.
 
-### Task 4 — El checkpoint del dueño: PENDIENTE
+### Task 4 — El checkpoint del dueño: APROBADO (2026-10-29)
 
-`checkpoint:human-verify`, `gate="blocking-human"`: el 1.6 en Android (iPhone si le queda cómodo), el 3.2 y el
-bloque 4, anotados en `03-UAT-2.md` con fecha y motor. El recibo automático está en **rojo** contra el disco
-(secciones 22, filas 1.6/4.1/4.2 en 0, 3.2 en 1), como se diseñó.
+`checkpoint:human-verify`, `gate="blocking-human"`: el 1.6, el 3.2 y el bloque 4. Al cortar, el recibo
+automático estaba en **rojo** contra el disco (secciones 22, filas 1.6/4.1/4.2 en 0, 3.2 en 1), como se diseñó.
+
+**La respuesta del dueño: «Todo perfecto».** Reportado en bloque, sin fila por fila ni motor nombrado, y
+anotado así —sin agregarle detalle que no dio— en `03-UAT-2.md`, sección **«Re-prueba tras el 03-14 —
+2026-10-29»** (commit `11842d5`):
+
+| Recorrido | Resultado |
+|-----------|-----------|
+| 1.6 — entrar por el login | ✅ |
+| 3.2 — el atrás cierra el overlay sin navegar | ✅ |
+| 4.1 — escritorio, `/web` con cambios → Inicio por el sidebar → «Salir sin guardar» | ✅ (residuo ya aceptado) |
+| 4.2 — escritorio, lo mismo sin cambios | ✅ |
+
+Con eso la ronda 3 queda cerrada en Android (bloques 1-3 + 1.6), iPhone (bloque 6) y escritorio (bloque 4).
+
+**En la misma pasada, fuera del alcance de este plan:** el autoscroll al entrar a `/web` (mismo mecanismo que
+`G3-4` —el flag de montaje de los widgets de reserva contra la re-ejecución de efectos del modo estricto— en
+otro componente) se arregló aparte como `/gsd-fast` (commit `76f98f3`, registrado en Quick Tasks del STATE en
+`e6915d1`). No es parte del 03-14 y este cierre no lo toca.
 
 ## Deviations from Plan
 
@@ -186,10 +208,13 @@ Ninguno. MOB-04, MOB-05 y MOB-06 siguen **SIN marcar** y `requirements.mark-comp
 
 ## Next
 
-El dueño corre el 1.6, el 3.2 y el bloque 4 y responde *"aprobado"* (o describe el fallo). Si todo pasa, los
-tres requisitos se marcan en `/gsd-verify-work --ws panel-nav`; si algo falla, entra como gap nuevo.
+La fase 3 queda con **14/14 planes ejecutados** y lista para su cierre: security gate (`/gsd-secure-phase 3
+--ws panel-nav`), code review y verificación. **`/gsd-verify-work 3 --ws panel-nav`** es el paso que marca
+MOB-04, MOB-05 y MOB-06 después de los gates; este plan no los marca.
 
 ## Self-Check: PASSED
 
 - Archivos: los 6 modificados existen; este SUMMARY existe.
-- Commits: `e1c2edf`, `4ae77dd`, `1200308`, `4c9ac4b`, `1c8d911` en `git log`.
+- Commits: `e1c2edf`, `4ae77dd`, `1200308`, `4c9ac4b`, `1c8d911`, `1f2ab3a`, `1e7729a` y el registro del
+  checkpoint `11842d5` en `git log`.
+- La aprobación del dueño está en disco: `03-UAT-2.md`, sección «Re-prueba tras el 03-14 — 2026-10-29».
