@@ -72,6 +72,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | 261009-tzd | Guarda de borrador en los dialogos del panel | 2026-10-10 | 8714de0 | — |
 | 261009-tzf | Compactar el banner de plan y el header de /clients | 2026-10-10 | 3093dd0 | — |
 | 261009-tze | Los campos editables del panel no disparan el zoom de iOS | 2026-10-10 | 2881ee3 | — |
+| fast-261029 | Sin autoscroll al entrar a /web (el flag de montaje de los widgets de reserva vs Strict Mode) | 2026-10-29 | 76f98f3 | — |
 
 ## Decisions
 
