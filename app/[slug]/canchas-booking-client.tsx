@@ -71,7 +71,9 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
   const stepTopRef = useRef<HTMLDivElement>(null)
   const calRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLDivElement>(null)
-  const didMountRef = useRef(false)
+  // El paso con que se scrolleó por última vez; no un flag de montaje (Strict Mode re-ejecuta el
+  // efecto al montar del lado del cliente y un flag ya está en true). Ver BookingClient.
+  const scrolledForStepRef = useRef(step)
   const smoothScrollTo = (el: HTMLElement | null, block: ScrollLogicalPosition = 'start') => {
     if (!el || typeof window === 'undefined') return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -81,7 +83,8 @@ export function CanchasBookingClient({ business, canchas, timeBlocks, exceptions
   }
   // En el paso de día/hora centramos el calendario; en los demás vamos al inicio del paso.
   useEffect(() => {
-    if (!didMountRef.current) { didMountRef.current = true; return }
+    if (scrolledForStepRef.current === step) return
+    scrolledForStepRef.current = step
     if (step === 2 && calRef.current) smoothScrollTo(calRef.current, 'center')
     else smoothScrollTo(stepTopRef.current)
   }, [step])

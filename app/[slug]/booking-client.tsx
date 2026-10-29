@@ -117,7 +117,12 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
   const stepTopRef = useRef<HTMLDivElement>(null)
   const calRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLDivElement>(null)
-  const didMountRef = useRef(false)
+  // El paso (y el consultorio) con que se scrolleó por última vez. NO es un flag de "ya monté": en
+  // dev, Strict Mode re-ejecuta los efectos cuando el componente se monta del lado del cliente (p.
+  // ej. el preview de /web al entrar por el sidebar), y un flag ya está en true en esa segunda
+  // corrida → scrolleaba la página hasta el widget sin que nadie tocara nada. Comparar contra el
+  // valor previo hace que la re-ejecución, con los mismos valores, sea un no-op.
+  const scrolledForRef = useRef({ step, bookingLoc })
   const smoothScrollTo = (el: HTMLElement | null, block: ScrollLogicalPosition = 'start') => {
     if (!el || typeof window === 'undefined') return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -133,12 +138,14 @@ export function BookingClient({ business, services, professionals, timeBlocks, e
       })
     )
   }
-  // Cada cambio de paso (menos el montaje inicial) reposiciona el scroll. En el paso de día/hora,
+  // Cada cambio de paso (nunca el montaje) reposiciona el scroll. En el paso de día/hora,
   // si el calendario ya está visible lo CENTRAMOS (calRef.current existe solo cuando se renderiza);
   // en los demás pasos vamos al inicio del paso. bookingLoc en deps: al elegir consultorio aparece
   // el calendario sin cambiar de paso, y ahí también queremos centrarlo.
   useEffect(() => {
-    if (!didMountRef.current) { didMountRef.current = true; return }
+    const prev = scrolledForRef.current
+    if (prev.step === step && prev.bookingLoc === bookingLoc) return
+    scrolledForRef.current = { step, bookingLoc }
     if (step === 3 && calRef.current) smoothScrollTo(calRef.current, 'center')
     else smoothScrollTo(stepTopRef.current)
   }, [step, bookingLoc])
