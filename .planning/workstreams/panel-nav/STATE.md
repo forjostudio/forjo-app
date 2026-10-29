@@ -5,15 +5,15 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 13
 status: executing
-stopped_at: "03-13 en el checkpoint bloqueante: la ronda 3 del dueno en los dos motores"
-last_updated: "2026-10-29T13:12:39.881Z"
+stopped_at: "03-14 planificado (G3-4, el aterrizaje del login): listo para ejecutar con --gaps-only"
+last_updated: "2026-10-29T19:56:17.906Z"
 last_activity: 2026-10-29
-last_activity_desc: "03-13 ejecutado hasta su checkpoint blocking-human: el sentinel se empuja solo con un toque, la ronda 3 espera al dueno"
+last_activity_desc: "ronda 3: Android pasa salvo G3-4 (login) e iPhone pasa el bloque 6; 03-14 planificado y verificado por el plan-checker (0 blockers)"
 state_head: b09c90c34169b9bf912027cc9b2ed5759960e41c
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 17
+  total_plans: 18
   completed_plans: 17
   percent: 0
 workstream: panel-nav
@@ -26,8 +26,8 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 ## Current Position
 
 **Current Plan:** 13
-**Total Plans in Phase:** 13
-**Status:** 13/13 planes ejecutados en la fase 03 — el 03-13 en su CHECKPOINT blocking-human: espera la ronda 3 del dueno desde el principio en Android Chrome y iPhone Safari (la fase NO esta completa)
+**Total Plans in Phase:** 14
+**Status:** 13/14 planes ejecutados en la fase 03 — el 03-14 (G3-4, el aterrizaje del login) planificado y listo para ejecutar; la ronda 3 pasó en Android salvo G3-4 y el bloque 6 de iPhone pasó; faltan 3.2 y el bloque 4 (la fase NO esta completa)
 **Current Phase:** 03
 **Last Activity:** 2026-10-29 — 03-13 ejecutado: el sentinel de salida se empuja solo con activacion del usuario, el aviso no vence, la recarga por (A)
 **Last Activity Description:** Tasks 1-4 hechos y commiteados (sonda de la app 11/11, estatica 18/18, suite 1984); el task 5 es el checkpoint blocking-human y paro ahi. MOB-04/05/06 sin marcar

@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-verify-work 3 --ws panel-nav",
-    "label": "La ronda 3 del dueno, desde el principio, en Android Chrome y iPhone Safari",
-    "reason": "Phase 03 · 13/13 · el 03-13 en su checkpoint blocking-human"
+    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
+    "label": "Ejecutar el 03-14: medir el aterrizaje del login (G3-4), arreglarlo por la causa medida, y la re-prueba del dueno",
+    "reason": "Phase 03 · 13/14 · el 03-14 planificado y verificado"
   },
-  "updated_at": "2026-10-29T13:12:14.674Z"
+  "updated_at": "2026-10-29T19:56:17.906Z"
 }
