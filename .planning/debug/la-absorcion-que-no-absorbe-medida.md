@@ -457,6 +457,116 @@ MOB-05, en el guion de la ronda 3 y en la entrada 20 de `.planning/WINDOWS.md`. 
 diagnóstico (`recordExitDiag`, ahora con un tercer call site, el del toque) **se queda** hasta el
 cierre de la fase, que es donde se decide si sigue en producción.
 
+## (g) G3-4 — el aterrizaje del login, medido (plan 03-14, 2026-10-29)
+
+**Qué se midió.** El recorrido nuevo `R-login-con-activacion` de la sonda de la app real (último de la
+lista): cierra la sesión del perfil desechable, entra por `/login` con historial limpio, tipea y hace un
+**click real** en *Ingresar*, y mide el montaje del panel con la activación de ese click **todavía
+vigente**. Lo acompaña el instrumento `SCRIPT_DE_LA_HISTORIA`, que envuelve en `History.prototype`
+`pushState`, `replaceState`, `back`, `go` y `forward` y graba cada llamada con su **pila de JS** (los 16
+marcos de arriba y los 8 de la base). Mismo servidor que todo el resto: el `next dev` del dueño en el
+puerto 80, **modo estricto ACTIVO** (`reactStrictMode` ausente en `next.config.ts`, huella
+`8ceb99ae…`), Chrome 155 headless, gesto `interfaz` (`chrome.tabs.goBack`). Corrida completa del
+2026-10-29 18:08-18:13 (hora local), rc 1 con **los once de antes en `OK`** y este en `FALLA`.
+
+**La guarda de llegada, cumplida al primer intento:** `intento 1: ms del click al primer armado=673
+acciones=[arm,none] ids=[1,1] · VALE (armado con empuje)`. Con `/dashboard` ya compilado el aterrizaje
+entra holgado dentro de la ventana de activación (~5 s): es la condición del teléfono. (Una corrida
+aislada previa del mismo recorrido dio lo mismo con 791 ms.)
+
+**Lo medido contra lo esperado** (el esperado es la propiedad DESPUÉS del arreglo):
+
+| Clave | Medido | Esperado |
+|---|---|---|
+| `llegada_con_activacion` | `si` | `si` |
+| `popstates_al_aterrizar` | **1** | 0 |
+| `aviso_al_aterrizar` | **`si`** | `no` |
+| `hash_al_aterrizar` | **`""`** | `#salir` |
+| `atras_tras_un_toque_absorbido` | `si` | `si` |
+
+`G3-4` **reproducido en Chrome de escritorio**, tal cual lo describió el dueño: el aviso aparece solo y
+el hash se va. La pila al aterrizar: `[(afuera), /dashboard, /dashboard#salir] actual=1` — el sentinel
+sigue en la pila, **adelante**: el navegador retrocedió una entrada.
+
+**Los registros del aterrizaje, pegados**, con el tiempo relativo al click del login (`t0` = el
+`sonda-click`, `isActive=true`):
+
+```text
+sonda-historia t=+-217ms metodo=replaceState url=/login urlArg=/login            (la hidratación del login)
+sonda-click    t=+0ms    url=/login defaultPrevented=false isActive=true
+sonda-historia t=+629ms  metodo=replaceState url=/login urlArg=/dashboard        (el router: el push+refresh se commitea como REEMPLAZO)
+sonda-historia t=+671ms  metodo=pushState    url=/dashboard urlArg=#salir        (el sentinel)
+               pila: History.pushState ← usePanelBranch.useCallback[armarSentinel] ← usePanelBranch.useEffect
+                     ← commitHookEffectListMount ← commitHookPassiveMountEffects ← commitPassiveMountOnFiber …
+armado         t=+673ms  id=1 accion=arm regla=ninguna-ARMA vivo_antes=false vivo_despues=true
+sonda-historia t=+676ms  metodo=back         url=/dashboard#salir estado={frjExit:1}
+               pila: usePanelBranch.useEffect (la limpieza del desmontaje) ← commitHookEffectListUnmount
+                     ← commitHookPassiveUnmountEffects ← disconnectPassiveEffect
+                     ← recursivelyTraverseDisconnectPassiveEffects ← disconnectPassiveEffect …
+               base (92 marcos): … recursivelyTraverseAndDoubleInvokeEffectsInDEV (x4)
+                     ← commitDoubleInvokeEffectsInDEV ← flushPassiveEffects ← performWorkUntilDeadline
+armado         t=+677ms  id=1 accion=none regla=regla-4-topIsOurs(E-6) vivo_antes=false vivo_despues=true
+sonda-historia t=+707ms  metodo=replaceState url=/dashboard#salir urlArg=/dashboard#salir   (el router; CONSERVA el hash)
+sonda-popstate t=+710ms  url=/dashboard estado={__NA, __PRIVATE_NEXTJS_INTERNALS_TREE}
+sonda-historia t=+739ms  metodo=replaceState url=/dashboard urlArg=/dashboard    (el router, REACCIONANDO al popstate)
+retroceso      t=+744ms  id=1 accion=hint regla=ninguna-AVISA holding=true
+firma_doble_montaje: popstates_sin_gesto=1 retrocesos_sin_gesto=1 (acciones=[hint]) armados_al_entrar=2 (acciones=[arm,none]) ids=[1]
+```
+
+**El criterio H1, contra los números:**
+
+1. Los armados del aterrizaje son un `arm` seguido de un `none` por la **regla 4** (`topIsOurs`) con el
+   **mismo `id`** (1 y 1): la MISMA instancia, desmontada y re-montada, no un remontaje real (que traería
+   otro `id`).
+2. Entre ese `arm` y el `popstate` hay **un** `back` (+676 ms), y su pila pasa por la limpieza de efectos
+   pasivos de React (`commitHookEffectListUnmount`, `disconnectPassiveEffect`,
+   `recursivelyTraverseDisconnectPassiveEffects`) desde el efecto del desmontaje de `usePanelBranch` —
+   **no** por la sonda—; y la base de la pila nombra el doble montaje de desarrollo
+   (`recursivelyTraverseAndDoubleInvokeEffectsInDEV`, `commitDoubleInvokeEffectsInDEV`). Esto descarta
+   la otra lectura posible de `disconnectPassiveEffect` (ocultar un árbol).
+3. Un `retroceso` `hint` con `holding=true` y el mismo `id` (+744 ms).
+
+**El criterio H2, contra los números:** el único `replaceState` entre el empuje del sentinel (+671) y el
+`popstate` (+710) es el de +707 ms, y **conserva** `#salir` (`urlArg=/dashboard#salir`). El de +739 ms
+llega **después** del `popstate`: es la reacción del router a ese `popstate`, no su causa. El `popstate`
+queda atribuido, con su pila, al `back` del desmontaje. **H2 no se cumple.** El hash no lo pisa un
+reemplazo: se va porque el navegador retrocedió a la entrada de abajo (`/dashboard`, sin hash).
+
+**El contraste en la MISMA corrida (la hidratación):** `R-1.3-sin-toque`, la entrada directa, da
+`firma_doble_montaje: popstates_sin_gesto=0 retrocesos_sin_gesto=0 (acciones=[]) armados_al_entrar=1
+(acciones=[pendiente]) ids=[1]` — un solo armado, como en el `03-12`.
+
+**⚠ LA PRECISIÓN DE ALCANCE del *descartado* de `(a)`-`(c)`:** el `03-12` midió `armados_al_entrar=1` y
+`popstates_sin_gesto=0` con el modo estricto activo y concluyó *el doble montaje queda DESCARTADO*. Eso
+**vale para la hidratación** —la entrada directa y la recarga, todos los recorridos que midieron el `03-12`
+y el `03-13`— y **NO cubre el montaje en el cliente**. Lo explica la lectura de React 19.2.4 en desarrollo
+(`node_modules/react-dom/cjs/react-dom-client.development.js`): el doble montaje sólo recorre las fibras
+con la bandera `PlacementDEV`, que pone `placeSingleChild` con el reconciliador que rastrea efectos
+(L6216-6220; el recorrido en L18653-18716); una hidratación no la pone, el montaje del layout
+`(dashboard)` después de `router.push` sí. Y aun en el montaje en el cliente, la limpieza del desmontaje
+**sólo** retrocede si había un sentinel vivo: sin activación (el armado `pendiente` de siempre en el
+servidor de desarrollo, donde el login más la compilación tardaban más que la ventana) no había nada que
+consumir. Por eso ninguna sonda lo vio.
+
+**Una observación lateral, sin consecuencia para `G3-4`:** el `router.push('/dashboard')` seguido de
+`router.refresh()` se commitea como un **reemplazo** de la entrada de `/login` (+629 ms), no como un
+empuje: la pila queda `[(afuera), /dashboard, …]` sin `/login`. No es la causa (no hay `popstate` ahí) y
+no se toca: es el login, fuera de la rama H1.
+
+**Las reglas de PARAR, aplicadas:** P-1 no (armó al primer intento); P-2 no (el aviso y el hash se
+reproducen enteros); P-3 no (el veredicto encaja y ninguna regla bloqueada resulta mal: `panelExitArmAction`
+devolvió `arm` y después `none` por la regla 4, y `panelExitPopAction` `hint`, que es lo correcto **para
+los hechos que recibieron** — lo que estaba mal es que la limpieza retrocediera en un remontaje); P-4 no
+(el `id` y la pila coinciden: no hace falta mover `reactStrictMode`).
+
+veredicto: H1
+
+**La rama del arreglo que sale de acá:** el consumo del sentinel en la limpieza del desmontaje se difiere
+a un microtask y se decide con una función pura nueva (`panelExitUnmountAction({ sigueMontada,
+nuestroArriba })`), leyendo en ese instante si la instancia sigue montada y si nuestra entrada está
+arriba. React desconecta y reconecta en la misma llamada síncrona, así que el microtask corre después
+del remontaje — y eso se MIDE con un registro `desmontaje` del canal, no se supone.
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la

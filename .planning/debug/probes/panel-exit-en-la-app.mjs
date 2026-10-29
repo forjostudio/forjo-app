@@ -52,6 +52,14 @@
 // Y el toque: `tocarLaPantalla` toca un punto NEUTRO de `main` y lo AFIRMA con el registro
 // `sonda-click` del canal (un toque que no llega no mide nada).
 //
+// PLAN 03-14 — EL ATERRIZAJE DEL LOGIN (`G3-4`). `R-login-con-activacion`, el ULTIMO recorrido, entra
+// por el formulario con un click real y mide el montaje del panel con la activacion de ese click
+// TODAVIA VIGENTE: el unico camino que arma con empuje desde AFUERA del panel, y el unico que ninguna
+// sonda habia medido (en `loguearse` el login mas la compilacion tardaban mas que la ventana de
+// activacion y el armado quedaba `pendiente`). Lo acompana el instrumento `SCRIPT_DE_LA_HISTORIA`,
+// que graba cada `pushState`/`replaceState`/`back`/`go`/`forward` con su pila de JS: es lo que nombra
+// QUIEN hizo el retroceso que nadie pidio.
+//
 // EL SERVIDOR: la sonda levanta el suyo en el 3031 y lo mata al salir (verificando el puerto libre).
 // ⚠ SALVO que ya haya un `next dev` de ESTE repo vivo: Next 16 toma un candado en `.next/dev/lock` y
 // NO deja levantar un segundo sobre el mismo directorio (medido el 2026-10-28: sale con *"Another next
@@ -114,6 +122,13 @@ const LAPSO_SIN_ACTIVACION_MS = 7000
 // margen, mientras el piso compara contra la espera SOLA: bajar el margen por debajo de cero A
 // PROPOSITO prueba en rojo el piso, y se restaura verificando por huella.
 const MARGEN_MS = 900
+// EL ATERRIZAJE DEL LOGIN (plan 03-14, `R-login-con-activacion`):
+//   · INTENTOS_DEL_LOGIN — cuantas veces se intenta aterrizar CON la activacion del click vigente antes
+//     de declarar que la sonda no reprodujo las condiciones del telefono (P-1). Nunca verde sin ella.
+//   · VENTANA_DEL_ATERRIZAJE_MS — la espera quieta despues de llegar a la raiz, para que entren los
+//     eventos tardios: el retroceso asincrono, el reemplazo del `refresh` y el `popstate`.
+const INTENTOS_DEL_LOGIN = 3
+const VENTANA_DEL_ATERRIZAJE_MS = 4000
 
 const MODOS = {
   dev: { estricto: true },
@@ -283,6 +298,45 @@ const SCRIPT_DEL_CANAL = `(() => {
     // de los manejadores de React (la raiz de Next 16 es el documento) y ANTES del oyente del hook, asi
     // que dice si un link se llevo el gesto y si el navegador lo conto como activacion.
     addEventListener('click', (e) => canal.push({ tipo: 'sonda-click', ts: Date.now(), ruta: location.pathname, hash: location.hash, estado: estadoTexto(), defaultPrevented: e.defaultPrevented, isActive: navigator.userActivation ? navigator.userActivation.isActive : null }))
+  }
+})()`
+
+// ── El instrumento de la HISTORIA (plan 03-14): quien llama a la pila, con su pila de JS ─────────────
+// Envuelve en `History.prototype` los cinco metodos que mueven o reescriben la pila y graba en el canal
+// un registro `sonda-historia` por llamada, ANTES de llamar al original: el metodo, la ruta y el hash
+// de antes, el tercer argumento (la URL pedida; vacio en los tres retrocesos), el estado `frj*` y la
+// PILA DE JS sin el marco del envoltorio. Es lo que NOMBRA quien hizo un `back()` que nadie pidio.
+// ⚠ POR QUE EN EL PROTOTIPO y no en la instancia: Next parchea `pushState`/`replaceState` EN LA
+// INSTANCIA capturando el metodo que encuentra al iniciar, asi que el prototipo envuelto al nacer el
+// documento atrapa las llamadas del panel, las del router de Next y las de cualquiera.
+// ⚠ EL TOPE DE LA PILA se sube adentro del envoltorio y se restaura: el de V8 es de 10 marcos, y la
+// limpieza de efectos de React queda mas abajo que eso.
+// Se registra SOLO adentro de `R-login-con-activacion` y se quita al terminarlo: los once recorridos
+// de antes corren sin el.
+const SCRIPT_DE_LA_HISTORIA = `(() => {
+  const estadoTexto = () => { try { const s = history.state; if (!s || typeof s !== 'object') return JSON.stringify(s); const o = { claves: Object.keys(s).sort() }; for (const k of Object.keys(s)) if (k.startsWith('frj')) o[k] = s[k]; return JSON.stringify(o) } catch { return '?' } }
+  for (const metodo of ['pushState', 'replaceState', 'back', 'go', 'forward']) {
+    const original = History.prototype[metodo]
+    History.prototype[metodo] = function (...args) {
+      try {
+        const canal = globalThis.__forjoPanelDiag
+        if (Array.isArray(canal) && location.protocol.startsWith('http')) {
+          const tope = Error.stackTraceLimit
+          Error.stackTraceLimit = 400
+          const crudo = new Error().stack || ''
+          Error.stackTraceLimit = tope
+          const marcos = crudo.split('\\n').slice(2).map((l) => l.trim())
+          const pila = marcos.slice(0, 16).join(' | ')
+          // La BASE de la pila (los ultimos marcos): la recursion de React por el arbol es mas larga que
+          // los 16 de arriba, y lo que distingue el doble montaje del modo estricto de otro desmontaje
+          // (\`doubleInvokeEffectsOnFiber\` contra, p. ej., ocultar un arbol) vive abajo.
+          const base = marcos.length > 16 ? marcos.slice(-8).join(' | ') : ''
+          const urlArg = metodo === 'pushState' || metodo === 'replaceState' ? String(args[2] ?? '') : ''
+          canal.push({ tipo: 'sonda-historia', metodo, ts: Date.now(), ruta: location.pathname, hash: location.hash, urlArg, estado: estadoTexto(), pila, base, marcos: marcos.length })
+        }
+      } catch {}
+      return original.apply(this, args)
+    }
   }
 })()`
 
@@ -459,8 +513,14 @@ function reglaDelRetroceso(h) {
   return 'ninguna-AVISA'
 }
 
-/** Una linea ASCII por registro del canal: la accion y la regla que la decidio. */
-function lineaDeRegistro(r) {
+/**
+ * Una linea ASCII por registro del canal: la accion y la regla que la decidio. `t0` (opcional, plan
+ * 03-14) imprime el tiempo RELATIVO a un instante (el click del login) en vez del absoluto.
+ */
+function lineaDeRegistro(r, t0 = null) {
+  const t = t0 === null ? '' : ` t=+${r.ts - t0}ms`
+  if (r.tipo === 'sonda-historia') return `sonda-historia doc=${r.doc}${t} metodo=${r.metodo} url=${r.ruta}${r.hash} urlArg=${r.urlArg || '(vacio)'} estado=${r.estado}`
+  if (t0 !== null) return `${lineaDeRegistro(r)}${t}`
   if (r.tipo === 'armado') return `armado    doc=${r.doc} id=${r.id} duena=${r.duenaFigurando} vivas=${r.instanciasVivas} url=${r.ruta}${r.hash} estado=${r.estado} accion=${r.accion} regla=${reglaDelArmado(r.hechos)} vivo_antes=${r.vivoAntes} vivo_despues=${r.vivoDespues}`
   if (r.tipo === 'retroceso') return `retroceso doc=${r.doc} id=${r.id} duena=${r.duenaFigurando} vivas=${r.instanciasVivas} url=${r.ruta}${r.hash} estado=${r.estado} accion=${r.accion} regla=${reglaDelRetroceso(r.hechos)} holding=${r.hechos?.holding}`
   if (r.tipo === 'toque') return `toque     doc=${r.doc} id=${r.id} url=${r.ruta}${r.hash} accion=${r.accion} hechos=${JSON.stringify(r.hechos)} vivo_antes=${r.vivoAntes} vivo_despues=${r.vivoDespues}`
@@ -597,8 +657,13 @@ async function tocarLaPantalla(cdp) {
   return click
 }
 
-async function loguearse(cdp) {
-  await navegar(cdp, `${ORIGEN}/login`)
+/**
+ * El formulario del login, con la pagina YA parada en `/login`: la espera de la hidratacion, el tipeo de
+ * email y clave y el click REAL en el boton (plan 03-14: extraida de `loguearse` sin cambio de
+ * comportamiento, para que `R-login-con-activacion` entre por EXACTAMENTE el mismo camino; dos caminos
+ * de login pueden divergir sin que nadie lo vea).
+ */
+async function enviarElLogin(cdp) {
   // Hidratado: sin React el boton cae al submit nativo y la sonda mediria otra cosa.
   for (let i = 0; i < 400; i++) {
     const listo = await evaluar(cdp, `(() => { const e = document.getElementById('email'); return Boolean(e && Object.keys(e).some((k) => k.startsWith('__reactProps'))) })()`)
@@ -611,6 +676,11 @@ async function loguearse(cdp) {
     await cdp.enviar('Input.insertText', { text: valor })
   }
   await clickReal(cdp, 'button[type="submit"]')
+}
+
+async function loguearse(cdp) {
+  await navegar(cdp, `${ORIGEN}/login`)
+  await enviarElLogin(cdp)
   const tope = Date.now() + 120_000
   while (Date.now() < tope) {
     const r = await evaluar(cdp, 'location.pathname').catch(() => null)
@@ -1186,6 +1256,142 @@ const RECORRIDOS = [
       }
     },
   },
+  {
+    // ⚠ ULTIMO A PROPOSITO: cierra la sesion y vuelve a abrirla, y eso no puede ensuciar a los otros.
+    id: 'R-login-con-activacion',
+    titulo: 'G3-4: loguearse por el formulario con la activacion del click VIGENTE al aterrizar; sin aviso, sin popstate, con #salir, y el atras tras un toque avisa',
+    async correr(cdp) {
+      // (a) El ancho de escritorio por omision, como `loguearse`: en mobile el formulario vive en una
+      // hoja que hay que abrir. El hook monta y corre IGUAL en cualquier ancho (D-05: `lg:hidden` es
+      // CSS, no una consulta del mecanismo), y el formulario del TELEFONO
+      // (`components/auth/mobile-login-hero.tsx`) comparte la secuencia `router.push('/dashboard')` +
+      // `router.refresh()` del de escritorio.
+      await cdp.enviar('Emulation.clearDeviceMetricsOverride')
+      // (b) El instrumento de la historia, solo para este recorrido (se quita en el `finally`).
+      const { identifier } = await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', { source: SCRIPT_DE_LA_HISTORIA })
+      const intentos = []
+      let vale = null
+      let toque = null
+      let m = null
+      try {
+        // (c) Hasta INTENTOS_DEL_LOGIN intentos. LA GUARDA DE LLEGADA: un intento vale SOLO si algun
+        // armado del aterrizaje empujo (`accion === 'arm'`), o sea si la activacion del click del login
+        // seguia vigente al montar el panel — la condicion del telefono. Con `pendiente` la sonda NO
+        // reprodujo lo que el telefono hizo, y medir ahi seria el verde sobre nada.
+        for (let n = 1; n <= INTENTOS_DEL_LOGIN && !vale; n++) {
+          // Cerrar la sesion del PERFIL DESECHABLE de la sonda (nunca del navegador del dueno). El origen
+          // se normaliza con `URL`: Chrome omite el puerto 80.
+          await cdp.enviar('Network.clearBrowserCookies')
+          await cdp.enviar('Storage.clearDataForOrigin', { origin: new URL(ORIGEN).origin, storageTypes: 'local_storage,session_storage' })
+          await navegar(cdp, AFUERA)
+          await cdp.enviar('Page.resetNavigationHistory')
+          await navegar(cdp, `${ORIGEN}/login`)
+          // Si el guard la mando a la raiz, la sesion NO se borro: es un error del instrumento, no un veredicto.
+          const rutaDelLogin = await evaluar(cdp, 'location.pathname')
+          if (rutaDelLogin !== '/login') throw new Error(`el cierre de sesion del instrumento fallo: /login redirigio a ${rutaDelLogin}`)
+          const desde = registros.length
+          await enviarElLogin(cdp)
+          const click = await esperarRegistro(desde, 'sonda-click', 5_000)
+          if (!click || click.isActive !== true) throw new Error(`el click del login no llego con activacion (sonda-click=${click ? `isActive=${click.isActive}` : 'ninguno'})`)
+          const t0 = click.ts
+          const tope = Date.now() + 60_000
+          let ruta = null
+          while (Date.now() < tope) {
+            ruta = await evaluar(cdp, 'location.pathname').catch(() => null)
+            if (ruta === ROOT) break
+            await dormir(100)
+          }
+          if (ruta !== ROOT) throw new Error(`el login no aterrizo en ${ROOT} en 60 s (ruta=${ruta})`)
+          // `/dashboard` ya esta compilado (lo compilo `loguearse` al principio de `main`): la espera quieta
+          // es para los eventos tardios, no para el compilador.
+          await dormir(VENTANA_DEL_ATERRIZAJE_MS)
+          const regs = registros.slice(desde)
+          const armados = regs.filter((r) => r.tipo === 'armado')
+          const valio = armados.some((r) => r.accion === 'arm')
+          const primero = armados[0]
+          console.log(`      intento ${n}: ms del click al primer armado=${primero ? primero.ts - t0 : 'sin-armado'} acciones=[${armados.map((r) => r.accion).join(',')}] ids=[${armados.map((r) => r.id).join(',')}]${valio ? ' · VALE (armado con empuje)' : ' · no vale (sin empuje: la activacion vencio)'}`)
+          intentos.push({ n, valio })
+          if (valio) vale = { n, t0, regs, armados, foto: await foto(cdp) }
+        }
+        if (vale) {
+          // (e) El camino 1 despues del aterrizaje: un toque neutro y el atras de la interfaz.
+          toque = await tocarLaPantalla(cdp)
+          m = await gestoMedido(cdp)
+        } else {
+          console.log(`      NO REPRODUCE LAS CONDICIONES DEL TELEFONO: ninguno de ${INTENTOS_DEL_LOGIN} intentos armo con empuje (la activacion del click vencio antes de montar el panel)`)
+        }
+      } finally {
+        // (f) El instrumento se quita y vuelve el ancho del telefono.
+        await cdp.enviar('Page.removeScriptToEvaluateOnNewDocument', { identifier })
+        await cdp.enviar('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
+      }
+      // Las firmas de las dos hipotesis, CALCULADAS sobre los registros del aterrizaje e impresas para
+      // el veredicto. No deciden nada solas: el veredicto lo escribe la persona con estos numeros.
+      const firmas = (v) => {
+        const regs = v.regs
+        const iArm = regs.findIndex((r) => r.tipo === 'armado' && r.accion === 'arm')
+        const arm = iArm >= 0 ? regs[iArm] : null
+        const despues = (pred) => regs.findIndex((r, i) => i > iArm && pred(r))
+        const iNone = despues((r) => r.tipo === 'armado' && r.accion === 'none')
+        const none = iNone >= 0 ? regs[iNone] : null
+        const iPop = despues((r) => r.tipo === 'sonda-popstate')
+        const retrocesos = regs.filter((r, i) => i > iArm && (iPop < 0 || i < iPop) && r.tipo === 'sonda-historia' && (r.metodo === 'back' || r.metodo === 'go'))
+        const MARCOS_DEL_DESMONTAJE = /disconnectPassiveEffect|doubleInvokeEffectsOnFiber|commitHookEffectListUnmount|safelyCallDestroy|recursivelyTraverseDisconnectPassiveEffects/
+        const MARCOS_DEL_ESTRICTO = /doubleInvokeEffectsOnFiber|doubleInvokeEffectsInDEVIfNecessary|recursivelyTraverseAndDoubleInvokeEffectsInDEV|commitDoubleInvokeEffectsInDEV/
+        const delDesmontaje = retrocesos.find((r) => MARCOS_DEL_DESMONTAJE.test(r.pila))
+        const hint = regs.find((r, i) => i > iArm && r.tipo === 'retroceso' && r.accion === 'hint' && r.hechos?.holding === true) ?? null
+        const iPushSalir = regs.findIndex((r) => r.tipo === 'sonda-historia' && r.metodo === 'pushState' && /#salir/.test(r.urlArg))
+        // H2 exige que el reemplazo aterrice ENTRE el empuje del sentinel y el `popstate` (un reemplazo
+        // posterior al `popstate` es la REACCION del router a ese `popstate`, no su causa).
+        const reemplazoDeNext = iPushSalir < 0 ? null : regs.find((r, i) => i > iPushSalir && (iPop < 0 || i < iPop) && r.tipo === 'sonda-historia' && r.metodo === 'replaceState' && !/#salir/.test(r.urlArg) && !/panel-branch|usePanelBranch/.test(r.pila)) ?? null
+        const nombres = (texto, re) => [...new Set(texto.match(new RegExp(re.source, 'g')) ?? [])].join(',') || '(ninguno)'
+        return {
+          h1: `firma H1: arm->none mismo id=${arm && none && none.id === arm.id ? 'si' : 'no'} (arm id=${arm?.id ?? '-'} none id=${none?.id ?? '-'}) · back/go entre el arm y el popstate=${retrocesos.length} · con marcos del desmontaje de React=${delDesmontaje ? 'si' : 'no'} · con marcos del modo estricto en la base=${delDesmontaje && MARCOS_DEL_ESTRICTO.test(delDesmontaje.base) ? 'si' : 'no'} · retroceso hint con holding=true=${hint ? `si (id=${hint.id})` : 'no'}`,
+          h2: `firma H2: pushState del sentinel=${iPushSalir >= 0 ? 'si' : 'no'} · replaceState ENTRE el empuje y el popstate, sin #salir y sin el panel en la pila=${reemplazoDeNext ? `si (urlArg=${reemplazoDeNext.urlArg || '(vacio)'})` : 'no'} · el popstate atribuido a=${delDesmontaje ? 'el back del desmontaje' : retrocesos.length ? 'un back/go sin desmontaje' : 'ningun back/go registrado'}`,
+          marcos: delDesmontaje ? `arriba=[${nombres(delDesmontaje.pila, MARCOS_DEL_DESMONTAJE)}] base=[${nombres(delDesmontaje.base, MARCOS_DEL_ESTRICTO)}] (marcos totales=${delDesmontaje.marcos})` : '(ninguno)',
+        }
+      }
+      return {
+        detalle: (p) => {
+          for (const x of intentos) console.log(`${p}intento ${x.n}: ${x.valio ? 'VALE' : 'no vale'}`)
+          if (!vale) return
+          const f = firmas(vale)
+          console.log(`${p}intento que vale: ${vale.n} · al aterrizar (tras ${VENTANA_DEL_ATERRIZAJE_MS} ms quietos): url=${vale.foto.url} aviso=${vale.foto.aviso ? 'visible' : 'oculto'} pila=[${vale.foto.entradas.join(', ')}] actual=${vale.foto.indice}`)
+          console.log(`${p}los registros del aterrizaje, con el tiempo relativo al click del login:`)
+          for (const r of vale.regs) {
+            console.log(`${p}  diag ${lineaDeRegistro(r, vale.t0)}`)
+            if (r.tipo === 'sonda-historia') {
+              console.log(`${p}       pila: ${r.pila}`)
+              if (r.base) console.log(`${p}       base (${r.marcos} marcos): ${r.base}`)
+            }
+          }
+          console.log(`${p}${firmaDelMontaje(vale.regs)}`)
+          console.log(`${p}${f.h1}`)
+          console.log(`${p}  marcos del desmontaje nombrados en la pila del back: ${f.marcos}`)
+          console.log(`${p}${f.h2}`)
+          console.log(`${p}el toque despues del aterrizaje: ${toque ? `isActive=${toque.isActive}` : 'sin-toque'}`)
+          imprimirTupla(p, m)
+        },
+        medido: {
+          llegada_con_activacion: vale ? 'si' : 'no',
+          popstates_al_aterrizar: vale ? vale.regs.filter((r) => r.tipo === 'sonda-popstate').length : 'sin-medir',
+          aviso_al_aterrizar: vale ? (vale.foto.aviso ? 'si' : 'no') : 'sin-medir',
+          hash_al_aterrizar: vale ? vale.foto.hash : 'sin-medir',
+          atras_tras_un_toque_absorbido: m ? m.tupla.absorbido : 'sin-medir',
+        },
+        // LA PROPIEDAD DESPUES DEL ARREGLO (MOB-05 con el camino 1 intacto): con la activacion vigente al
+        // aterrizar, Inicio arma CON el hash, sin ningun `popstate` que nadie pidio y sin aviso; y el
+        // primer atras despues de un toque avisa y no sale.
+        esperado: {
+          llegada_con_activacion: 'si',
+          popstates_al_aterrizar: 0,
+          aviso_al_aterrizar: 'no',
+          hash_al_aterrizar: '#salir',
+          atras_tras_un_toque_absorbido: 'si',
+        },
+      }
+    },
+  },
 ]
 
 /** Lo que cierra cada recorrido, impreso en el veredicto. */
@@ -1201,6 +1407,7 @@ const QUE_CIERRA = {
   'R-barra-con-aviso': 'el toque que navega con el aviso visible: baja el aviso, no arma, pila sin #salir',
   'R-barra-pendiente': 'el toque que navega con el armado pendiente: no arma, pila sin #salir',
   'R-lateral': 'el hallazgo lateral del plan 03-12: el reintento del consumo queda pendiente, sin #salir enterrado',
+  'R-login-con-activacion': 'G3-4 (plan 03-14): el aterrizaje del login con la activacion vigente, sin aviso solo, sin popstate y con #salir',
 }
 
 // ── El arnes ─────────────────────────────────────────────────────────────────────────────────────
