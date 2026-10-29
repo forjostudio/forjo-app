@@ -31,6 +31,11 @@ import { DIRTY_HASH_BASE } from '@/lib/dirty-history'
 //      propio recorrido (su listener corre antes que el nuestro y escribe el reemplazo de la entrada
 //      a la que volvimos): una navegación pedida ahí mismo SE LLAMA, NO ESCRIBE NADA y el dueño se
 //      queda donde estaba. Se deja pedida en estado y la ejecuta un efecto, o sea desde un commit.
+//   4) Un empuje SIN ACTIVACIÓN DEL USUARIO es salteable (plan 03-12, medido en Chrome real con el
+//      atrás de la interfaz): la intervención de historial del navegador saltea la entrada de abajo y
+//      el atrás saca al dueño del sitio sin que llegue ningún `popstate`. Por eso, desde la decisión del
+//      dueño del 2026-10-28 (camino 1), el sentinel de salida se empuja SÓLO con activación: nunca
+//      desde un `popstate` (un atrás no es una activación) y nunca desde un temporizador.
 // El molde entero es `components/dashboard/unsaved-changes-guard.tsx:150-220`, que corre en
 // producción desde el quick 261006-iey.
 //
@@ -436,14 +441,17 @@ export function runBranchNavigation({
 // Se empuja una entrada propia —el sentinel— mientras el dueño está en la raíz del panel, y su atrás
 // consume ESA entrada en vez de la de la página. El `popstate` que llega es el aviso de que el gesto
 // ocurrió, y ahí se muestra el cartel. Es exactamente el ciclo que `lib/dirty-history.ts` ya corre en
-// producción, reducido a *absorber una vez y no re-armar durante la ventana del aviso*.
+// producción, reducido a *absorber una vez y no re-armar mientras el aviso está a la vista*.
 //
-// LA REGLA QUE §13 PIDE Y QUE ACÁ SE CUMPLE POR ESTRUCTURA
-// La **duración visible** del aviso y la **ventana lógica** en la que el segundo atrás sale son el
-// MISMO valor, desde UN solo lugar ({@link PANEL_EXIT_HINT_MS}), y lo consume UN solo temporizador
-// que hace LAS DOS cosas al expirar: ocultar el aviso y re-armar. No hay dos efectos, así que no hay
-// dos números que puedan desincronizarse — y los dos síntomas de la desincronización son
-// **silenciosos** (ni `tsc` ni la suite los ven).
+// LA REGLA DESDE EL 2026-10-28: AVISO VISIBLE ⇒ EL PRÓXIMO ATRÁS SALE
+// La decisión del dueño de esa fecha (`camino 1`, 03-DECISION-UAT-3.md) cambió la FORMA de la regla
+// que §13 pedía y no su espíritu: lo que el dueño **ve** y lo que el código **acepta** no se pueden
+// separar. Antes eso era una constante de ventana consumida por un temporizador que ocultaba el aviso
+// y re-armaba; ese re-armado empujaba SIN activación, el navegador lo salteaba y el atrás siguiente
+// salía directo (G3-2, medido en el plan 03-12). Ahora el aviso **no vence**: lo levanta UN solo lugar
+// (el atrás absorbido, en el manejador del retroceso) y lo baja UN solo lugar (el toque del dueño, que
+// en el mismo gesto re-arma CON activación). **Cero** temporizadores en el ciclo, así que no hay
+// números que desincronizar — los gates de la suite cuentan los dos escritores y el cero.
 //
 // ⚠ SIN GATE DE VIEWPORT (D-05), y las dos mitades del argumento quedan escritas acá:
 //   · el dueño eligió que salir del panel cueste **dos gestos** en celular **y** en escritorio,
@@ -481,21 +489,17 @@ export function runBranchNavigation({
 // también las entradas de **adelante**— y el aviso va a aparecer igual. Es la misma razón por la que
 // el caso de **entrada directa** está aceptado y documentado desde v0.30 (E-7). El gesto sigue
 // haciendo algo visible en los dos casos, que es el invariante que importa.
-
-/**
- * La ventana del aviso de salida, en milisegundos.
- *
- * **Es las DOS cosas a la vez, y por eso es UNA sola:** la duración **visible** del aviso y la
- * ventana **lógica** en la que el segundo atrás sale. El valor lo fija el UI-SPEC §13.
- *
- * ⚠ **POR QUÉ NO PUEDE HABER DOS NÚMEROS.** Con dos, lo que el dueño **ve** y lo que el código
- * **acepta** se desincronizan, y los dos síntomas son silenciosos: o el aviso desaparece y el segundo
- * atrás todavía sale (sale sin avisar), o el aviso sigue en pantalla y el segundo atrás ya no vale
- * (el dueño aprieta y no pasa nada). Ni la comprobación de tipos ni la suite ven ninguno de los dos.
- * Un solo número los hace **imposibles** — y el único temporizador del módulo es lo que lo garantiza
- * por estructura, no por disciplina.
- */
-export const PANEL_EXIT_HINT_MS = 2000
+//
+// ⚠ Y EL DISPARADOR, desde el 2026-10-28 (`camino 1`): las reglas de arriba dicen SI se arma; CUÁNDO
+// se empuja lo dice la activación del usuario. Al llegar a Inicio con la activación de un toque todavía
+// vigente (el 1.1: se llega tocando la barra) se empuja como siempre; sin ella, el armado queda
+// PENDIENTE —no es un estado: es lo que la decisión vuelve a contestar en el próximo toque— y lo
+// dispara el primer toque o tecla del dueño en Inicio ({@link panelExitTouchAction}).
+// EL COSTO, declarado: entrar directo a Inicio (pestaña nueva, recarga, link) y apretar atrás SIN tocar
+// nada sale sin aviso; lo mismo al llegar a Inicio con el atrás del navegador (tampoco es un toque), con
+// el atrás que sólo bajaba el teclado, y tras un toque que un link se llevó. No es una regresión en
+// Chrome: esos empujes ya se hacían sin activación, el navegador los salteaba igual y la URL mostraba un
+// hash que MENTÍA. La constante de la ventana y su temporizador se borraron en el plan 03-13.
 
 /**
  * Hash base del sentinel.
@@ -779,6 +783,84 @@ export function panelExitPopAction({
   return 'hint'
 }
 
+/**
+ * ¿El gesto que se está procesando trae **activación del usuario**? El lector, **puro**.
+ *
+ * Recibe `navigator.userActivation` **en el momento de decidir** —nunca un valor guardado: la lectura
+ * es del gesto, y dos lecturas del mismo dato en el mismo gesto son dos verdades (lección 1 del
+ * encabezado)— y contesta con su `isActive` (la activación **transitoria**: Chrome 72+, Safari 16.4+).
+ *
+ * ⚠ **POR QUÉ, SIN LA API, DEVUELVE VERDADERO Y NO FALSO.** Con *falso*, un motor sin la API no armaría
+ * **nunca** —ni con un toque, porque el oyente del toque pregunta lo mismo— y MOB-05 quedaría muerto
+ * ahí. *Verdadero* es **el comportamiento de antes del 2026-10-28**, declarado: los motores sin la API
+ * son los anteriores a Safari 16.4, y no hay evidencia medida de una intervención de historial en ellos.
+ *
+ * Narrowing manual, sin `any`: el argumento es `unknown` de verdad (un motor viejo no lo tiene).
+ * Referencias cortas en ASCII para los gates: `G3-2` · `G3-3` · `camino 1`.
+ */
+export function panelExitActivationNow(userActivation: unknown): boolean {
+  if (typeof userActivation !== 'object' || userActivation === null) return true
+  const activa = (userActivation as { isActive?: unknown }).isActive
+  if (typeof activa !== 'boolean') return true
+  return activa
+}
+
+/** Qué hace un toque del dueño con el sentinel de salida. */
+export type PanelExitTouchAction = 'none' | 'drop' | 'arm' | 'drop-and-arm'
+
+/**
+ * Qué hace un **toque** (un `click` o un `keyup`) con el sentinel de salida. Pura, con las reglas **EN
+ * ORDEN** y el molde de {@link panelExitArmAction}.
+ *
+ * **LA DECISIÓN DEL DUEÑO (2026-10-28, `camino 1`, `03-DECISION-UAT-3.md`):** el sentinel se empuja
+ * **sólo** con activación del usuario —un empuje sin ella es salteable, medido en el plan 03-12 como la
+ * causa de `G3-2` y `G3-3`—, y el aviso **no vence**: se queda hasta el próximo toque, que lo baja y
+ * re-arma. Este toque es ese disparador.
+ *
+ *   1. `participates` — **nadie dibuja el aviso ⇒ nada.**
+ *   2. `activacion` — **el evento no trae activación ⇒ nada**, aunque el aviso esté abierto: un `click`
+ *      de script (`el.click()`) llega sin activación, y la tecla Escape no la da. Ese evento no es un
+ *      toque del dueño.
+ *   3. `atRoot` en falso con el aviso abierto ⇒ **bajarlo**: un aviso rancio se baja, porque fuera de
+ *      Inicio el próximo atrás **no** sale. Sin aviso ⇒ nada.
+ *   4. `gestoTomado` — **un link o un manejador se llevó el gesto** (`defaultPrevented`) ⇒ bajar el aviso
+ *      si estaba, y **NO armar**. Empujar y navegar en el mismo gesto enterraría el sentinel bajo la
+ *      sección nueva (la misma clase que el hallazgo lateral del plan 03-12) o lo **pisaría** el
+ *      reemplazo del router en un `replace` a la misma ruta (P-4 del research). Arma el **siguiente**
+ *      toque que nadie se lleve.
+ *   5. En la raíz, con activación y sin gesto tomado ⇒ **armar**, y bajar el aviso si estaba.
+ *
+ * ⚠ **LOS EVENTOS, Y LOS TRES DESCARTADOS, con su motivo medido.** El oyente escucha `click` y `keyup`
+ * sobre `window`, en **burbuja**: ahí ya corrieron los manejadores de React —la raíz de Next 16 es el
+ * documento—, así que `defaultPrevented` dice si un `<Link>` o el `handleNavigate` de la barra se llevó
+ * el gesto. `keyup` ignora `Enter` y la barra espaciadora: los dos sintetizan un `click`, y ese camino ya
+ * los cubre. **No** `pointerdown` ni `touchstart`: en Chromium un toque **no** es activación hasta que
+ * el dedo se levanta (medido en la calibración `C-activacion`: `isActive` en falso adentro del
+ * `pointerdown` de un toque), así que armar ahí empujaría sin activación y fallaría como antes. **No**
+ * `pointerup`: sí es activación, pero llega **antes** del `click` que puede empezar una navegación, y
+ * armar ahí entierra el sentinel bajo el destino.
+ */
+export function panelExitTouchAction({
+  participates,
+  activacion,
+  atRoot,
+  gestoTomado,
+  hintOpen,
+}: {
+  participates: boolean
+  activacion: boolean
+  atRoot: boolean
+  gestoTomado: boolean
+  hintOpen: boolean
+}): PanelExitTouchAction {
+  if (!participates) return 'none'
+  if (!activacion) return 'none'
+  if (!atRoot) return hintOpen ? 'drop' : 'none'
+  if (gestoTomado) return hintOpen ? 'drop' : 'none'
+  if (hintOpen) return 'drop-and-arm'
+  return 'arm'
+}
+
 // ── El rastreador del teclado: UNO por documento ─────────────────────────────────────────────────
 //
 // Reusa los DOS helpers puros y ya medidos de `lib/overlay-history.ts` (el umbral de inset y la
@@ -867,7 +949,11 @@ function elTecladoSeComeElAtras(): boolean {
  * determinista: *avisar* y *re-armar* la apagan, *ignorar* re-arma y deja su propio registro).
  */
 export type PanelExitDiagRecord = {
-  tipo: 'armado' | 'retroceso'
+  /**
+   * `toque` se sumó en el plan 03-13: la acción de cada toque del dueño. Y en un `armado`, `accion`
+   * puede valer `pendiente` —la decisión dijo armar pero no había activación, así que no se empujó—.
+   */
+  tipo: 'armado' | 'retroceso' | 'toque'
   /** El instante del registro (`Date.now()`), para ordenar y medir ventanas desde afuera. */
   ts: number
   ruta: string
@@ -1120,8 +1206,10 @@ export function branchPendingNav({
  * Cablea la rama de Más a un menú: marca cada entrada con lo que quedó debajo, y resuelve los gestos
  * que la política de rutas sola no puede resolver.
  *
- * Y cablea también el **sentinel de salida** de MOB-05: en la raíz del panel absorbe el primer atrás,
- * expone que hay que mostrar el aviso, y re-arma cuando la ventana expira.
+ * Y cablea también el **sentinel de salida** de MOB-05: en la raíz del panel absorbe el primer atrás y
+ * expone que hay que mostrar el aviso. Desde la decisión del dueño del 2026-10-28 (`camino 1`) el
+ * sentinel se empuja **sólo con activación del usuario** —al llegar tocando, o en el primer toque o
+ * tecla en Inicio— y el aviso **no vence**: se queda hasta el próximo toque, que lo baja y re-arma.
  *
  * @param pathname La ruta actual, que ENTRA como parámetro (este módulo no importa el router).
  * @param navigate Cómo navegar, también como parámetro. El call site la arma con el router.
@@ -1171,12 +1259,12 @@ export function usePanelBranch({
   const pedidaEjecutadaRef = useRef<PendingNav | null>(null)
 
   // ── El sentinel de salida (MOB-05) ────────────────────────────────────────────────────────────
-  // `hintVisible` va en ESTADO porque pinta; las otras tres van en REFERENCIAS porque las lee el
-  // handler del `popstate`, que necesita el valor FRESCO del tick anterior y no el del render.
+  // `hintVisible` va en ESTADO porque pinta; las otras dos van en REFERENCIAS porque las leen los
+  // manejadores del `popstate` y del toque, que necesitan el valor FRESCO y no el del render.
+  // La referencia del temporizador se borró el 2026-10-28: el aviso ya no vence (camino 1).
   const [hintVisible, setHintVisible] = useState(false)
   const avisoAbiertoRef = useRef(false)
   const sentinelVivoRef = useRef(false)
-  const temporizadorRef = useRef<number | null>(null)
 
   // ── Quién es la dueña ─────────────────────────────────────────────────────────────────────────
   // Declarado ANTES del efecto de marcado a propósito: React corre los efectos de un commit en orden
@@ -1266,7 +1354,11 @@ export function usePanelBranch({
   // una sección estamos PARADOS SOBRE el sentinel, y eso cuenta como armado— y es lo que deja la
   // referencia honesta aunque algo la haya desincronizado. La referencia sigue existiendo porque en
   // el `popstate` la entrada YA FUE CONSUMIDA y no hay nada de donde derivar.
-  const armarSentinel = useCallback(() => {
+  // ⚠ `puedeEmpujar` VA SIN VALOR POR OMISIÓN (camino 1, 2026-10-28): es el hecho de *este gesto trae
+  // activación del usuario*, y un empuje sin ella es salteable (G3-2, G3-3). Lo contestan el efecto y
+  // el toque con `panelExitActivationNow`; los dos reintentos de adentro de un `popstate` lo pasan en
+  // FALSO a propósito, porque un atrás no es una activación.
+  const armarSentinel = useCallback(({ puedeEmpujar }: { puedeEmpujar: boolean }) => {
     // El candado de UN SOLO DUEÑO POR ENTRADA, mecánico y fuera de la decisión, igual que en el
     // efecto de marcado: dos empujes costarían dos atrás y dos consumos se comerían una entrada
     // ajena. Cae del lado seguro: la instancia que no es la dueña simplemente no arma.
@@ -1299,12 +1391,20 @@ export function usePanelBranch({
     }
     const accion = panelExitArmAction(hechos)
     const vivoAntes = sentinelVivoRef.current
-    if (accion === 'none') {
-      // E-6: si estamos parados sobre el nuestro, seguimos siendo dueños de un sentinel vivo.
-      if (paradoSobreElNuestro) sentinelVivoRef.current = true
-    } else {
+    // Lo que se graba en el canal: la acción, o `pendiente` si la decisión dijo armar y no se empujó.
+    let registrada: string = accion
+    if (accion === 'arm' && puedeEmpujar) {
       window.history.pushState(panelExitState(id), '', nextPanelExitHash(window.location.hash))
       sentinelVivoRef.current = true
+    } else if (accion === 'arm') {
+      // PENDIENTE: sin activación no se empuja nada —el navegador saltearía la entrada—. No es un estado
+      // nuevo: es lo que esta misma decisión vuelve a contestar en el próximo toque. Y no hay nada
+      // nuestro arriba que sostener, así que la referencia se apaga.
+      sentinelVivoRef.current = false
+      registrada = 'pendiente'
+    } else {
+      // E-6: si estamos parados sobre el nuestro, seguimos siendo dueños de un sentinel vivo.
+      if (paradoSobreElNuestro) sentinelVivoRef.current = true
     }
     // El canal de diagnóstico, DESPUÉS de la decisión y de la rama: graba el valor de *seguimos
     // absorbiendo* de antes y de después, que es lo que la medición del plan 03-12 pregunta.
@@ -1317,17 +1417,25 @@ export function usePanelBranch({
       duenaFigurando: instanciaDuena,
       instanciasVivas,
       hechos,
-      accion,
+      accion: registrada,
       vivoAntes,
       vivoDespues: sentinelVivoRef.current,
     })
   }, [drawsExitHint, id, root])
 
+  // El hecho se lee del navegador EN EL COMMIT: al llegar a Inicio tocando la barra (el 1.1), la
+  // activación de ese toque todavía está vigente y se arma como siempre; al entrar directo, no.
   useEffect(() => {
-    armarSentinel()
+    armarSentinel({ puedeEmpujar: panelExitActivationNow(navigator.userActivation) })
   }, [armarSentinel, pathname])
 
-  // ── El atrás del dueño en la raíz: absorber UNA vez, avisar, y re-armar al expirar ────────────
+  // ── El atrás del dueño en la raíz: absorber UNA vez y avisar; el toque baja el aviso y re-arma ──
+  // ⚠ NO HAY UN OYENTE PENDIENTE QUE LIMPIAR, y es a propósito: el armado pendiente no es un estado, es
+  // lo que `panelExitArmAction` vuelve a contestar en el próximo toque (ya armado, la cuarta o la
+  // séptima regla dicen `none`). Así que el oyente del toque vive lo que vive el hook y fuera de la raíz
+  // es inerte por su propia regla. NO se engancha y desengancha en cada navegación: entre el commit y
+  // el efecto quedaría una ventana en la que un toque en Inicio se pierde, y fuera de la raíz el oyente
+  // es el que baja un aviso rancio.
   useEffect(() => {
     if (!drawsExitHint) return
     instalarRastreadorDeTeclado()
@@ -1368,42 +1476,88 @@ export function usePanelBranch({
         // `[armarSentinel, pathname]`, así que **no vuelve a correr**, y el atrás siguiente sale del
         // panel sin avisar. Es el ítem **20** de la UAT visto desde el otro lado, y es la mitad que
         // nunca se midió en Android (*"no tengo overlays en inicio como para probar eso"*).
-        // Molde exacto de la rama del teclado de abajo: un `pushState` desde adentro del `popstate`
-        // es lo que este módulo ya hace en producción (lo que NO se puede pedir desde el evento es
-        // una navegación del router — lección 3 del encabezado).
+        // Molde exacto de la rama del teclado de abajo. Hasta el 2026-10-28 este reintento empujaba
+        // desde adentro del `popstate`; desde el camino 1 sólo RE-DERIVA (ver el ⚠ de abajo).
         // Y es inofensivo en los otros cuatro motivos de *ignorar*: parados sobre el nuestro la
         // cuarta regla devuelve `none` (y re-deriva que seguimos teniendo un sentinel vivo, E-6),
         // fuera de la raíz devuelve la segunda, y sin nadie que dibuje el aviso la primera.
-        armarSentinel()
+        // ⚠ SIN PODER EMPUJAR (camino 1): un atrás no es una activación, y empujar adentro del
+        // `popstate` del consumo de la barra entierra el sentinel bajo la navegación diferida (el
+        // hallazgo lateral del plan 03-12). Si la decisión dice armar, el armado queda PENDIENTE.
+        armarSentinel({ puedeEmpujar: false })
         return
       }
 
       if (accion === 'rearm') {
-        // C-7: el atrás en realidad bajaba el teclado. Se re-arma EN EL ACTO y el aviso NO se gasta.
+        // C-7: el atrás en realidad bajaba el teclado. El aviso NO se gasta, y el re-armado queda
+        // pendiente hasta el próximo toque: un atrás no es una activación (camino 1, costo declarado).
         sentinelVivoRef.current = false
-        armarSentinel()
+        armarSentinel({ puedeEmpujar: false })
         return
       }
 
       // 'hint': el navegador YA consumió nuestro sentinel. Dejamos de ser dueños ANTES de mostrar el
       // aviso, para que ningún otro camino intente un retroceso sobre una entrada que ya no es
-      // nuestra. Y NO se re-arma hasta que la ventana expire: eso es lo que hace que el segundo
-      // atrás salga.
+      // nuestra. Y la rama TERMINA ACÁ (G-6): sin temporizador y sin re-armado. Con el aviso visible
+      // el próximo atrás sale; el próximo toque lo baja y re-arma con activación.
       sentinelVivoRef.current = false
       avisoAbiertoRef.current = true
       setHintVisible(true)
-      // ⚠ EL ÚNICO TEMPORIZADOR DEL MÓDULO, Y HACE LAS DOS COSAS: oculta el aviso y re-arma. No hay
-      // un segundo efecto, así que no hay dos números que puedan desincronizarse (§13).
-      temporizadorRef.current = window.setTimeout(() => {
-        temporizadorRef.current = null
+    }
+
+    // ── El toque del dueño: el disparador del armado y el ÚNICO lugar que baja el aviso ───────────
+    // `click` y `keyup` sobre `window`, en BURBUJA: ya corrieron los manejadores de React (la raíz de
+    // Next 16 es el documento), así que `defaultPrevented` dice si un link se llevó el gesto. Los
+    // motivos de esos dos eventos y de los tres descartados están en {@link panelExitTouchAction}.
+    const alTocar = (evento: Event) => {
+      // Enter y la barra espaciadora sintetizan un `click`: ese camino ya los cubre, y armar en su
+      // `keyup` armaría ANTES del click que puede empezar una navegación.
+      if (evento instanceof KeyboardEvent && (evento.key === 'Enter' || evento.key === ' ')) return
+      if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
+      // Los hechos, leídos UNA sola vez: la activación del gesto viaja tal cual al armado.
+      const activacion = panelExitActivationNow(navigator.userActivation)
+      const vivoAntes = sentinelVivoRef.current
+      const hechos = {
+        participates: drawsExitHint,
+        activacion,
+        atRoot: window.location.pathname === root,
+        gestoTomado: evento.defaultPrevented,
+        hintOpen: avisoAbiertoRef.current,
+      }
+      const accion = panelExitTouchAction(hechos)
+      // El canal de diagnóstico, DESPUÉS de la decisión y ANTES de las ramas.
+      recordExitDiag({
+        tipo: 'toque',
+        ruta: window.location.pathname,
+        hash: window.location.hash,
+        estado: window.history.state,
+        id,
+        duenaFigurando: instanciaDuena,
+        instanciasVivas,
+        hechos,
+        accion,
+        vivoAntes,
+        vivoDespues: vivoAntes,
+      })
+      if (accion === 'drop' || accion === 'drop-and-arm') {
         avisoAbiertoRef.current = false
         setHintVisible(false)
-        armarSentinel()
-      }, PANEL_EXIT_HINT_MS)
+      }
+      // ⚠ EL ORDEN ES CARGA: se baja ANTES de armar. Al revés, la tercera regla de
+      // `panelExitArmAction` (el aviso abierto) declinaría y el toque bajaría el aviso SIN re-armar.
+      if (accion === 'arm' || accion === 'drop-and-arm') {
+        armarSentinel({ puedeEmpujar: activacion })
+      }
     }
 
     window.addEventListener('popstate', alRetroceder)
-    return () => window.removeEventListener('popstate', alRetroceder)
+    window.addEventListener('click', alTocar)
+    window.addEventListener('keyup', alTocar)
+    return () => {
+      window.removeEventListener('popstate', alRetroceder)
+      window.removeEventListener('click', alTocar)
+      window.removeEventListener('keyup', alTocar)
+    }
   }, [drawsExitHint, id, root, armarSentinel])
 
   // ── El desmontaje, con la guarda REPETIDA ─────────────────────────────────────────────────────
@@ -1413,7 +1567,6 @@ export function usePanelBranch({
   // por instancia, la limpieza corre SÓLO al desmontar.
   useEffect(() => {
     return () => {
-      if (temporizadorRef.current !== null) window.clearTimeout(temporizadorRef.current)
       if (!sentinelVivoRef.current) return
       sentinelVivoRef.current = false
       // La guarda de la cicatriz 2, otra vez y no "ya la chequeé arriba": si el desmontaje fue por
@@ -1475,5 +1628,7 @@ export function usePanelBranch({
     })
   }
 
-  return { handleNavigate, hintVisible }
+  // El aviso NUNCA se dibuja fuera de Inicio: ahí el próximo atrás no sale, así que sería mentira (y
+  // el caso existe: dejar Inicio con el botón adelante, que no es un toque).
+  return { handleNavigate, hintVisible: hintVisible && pathname === root }
 }
