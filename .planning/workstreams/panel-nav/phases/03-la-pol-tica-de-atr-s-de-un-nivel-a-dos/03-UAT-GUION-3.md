@@ -1,8 +1,29 @@
 # Phase 3 — UAT, RONDA 3: lo que la regla nueva cambió, y nada más
 
-**Fecha del guion:** 2026-10-27 · **Ronda:** 3 · **Plan:** `03-10`
+**Fecha del guion:** 2026-10-27 · **Ronda:** 3 · **Plan:** `03-10` · ⚠ **actualizado el 2026-10-28 por
+el plan `03-13`** (la decisión del dueño del `camino 1`, `03-DECISION-UAT-3.md`)
 **Dónde se anotan los resultados:** en `03-UAT-2.md`, como sección **Ronda 3**, con fecha y motor,
 **sin reinterpretar** lo que ya está anotado de las rondas 1 y 2.
+
+---
+
+## ⚠ Actualización del 2026-10-28 (plan `03-13`): la ronda se re-corre DESDE EL PRINCIPIO
+
+**Se re-corre desde el principio, en los DOS motores (Android Chrome y iPhone Safari), con pestaña
+nueva por recorrido.** El motivo: el arreglo de `G3-2` y `G3-3` cambia **cuándo se empuja** el sentinel
+—desde la decisión del dueño, **sólo con activación del usuario**: al llegar a Inicio tocando, o en el
+primer toque o tecla estando en Inicio— y el aviso **ya no se va solo**: se queda hasta el próximo
+toque, que lo baja y vuelve a armar. Eso es justo lo que los 21 de iPhone miden, y por eso se retuvieron
+hasta ahora.
+
+**La cuenta nueva:** **diez** recorridos de Android en los bloques 1 a 3 (los ocho de antes más **1.4** y
+**1.5**), los **dos** de escritorio del bloque 4 y los **21** de iPhone del bloque 6.
+
+**Las expectativas que cambiaron por la decisión del dueño, marcadas en cada recorrido como
+*expectativa nueva — no es regresión*:** el **1.3** (sin tocar nada, entrar directo y apretar atrás
+**sale sin aviso**; con un toque antes, **avisa y no sale**) y el **3.1** (el aviso **no** se va a los 2 s;
+se queda hasta un toque). Y dos recorridos **nuevos**: el **1.4** (llegar a Inicio con el atrás) y el
+**1.5** (tocar la barra con el aviso visible o recién entrado).
 
 ---
 
@@ -19,7 +40,8 @@ y las dos mitades que **nunca** se midieron. **Cada ítem que vuelve trae escrit
 cada uno que **no** vuelve también (bloque 5). Un ítem que vuelve sin motivo es tiempo del dueño
 gastado por las dudas; un ítem excluido sin motivo es un agujero.
 
-**Cuánto es:** **ocho recorridos en Android** (bloques 1 a 4) y **los 21 en iPhone** (bloque 6).
+**Cuánto es** (al día desde el 2026-10-28): **diez recorridos en Android** (bloques 1 a 3), **dos de
+escritorio** (bloque 4) y **los 21 en iPhone** (bloque 6).
 
 ---
 
@@ -27,11 +49,12 @@ gastado por las dudas; un ítem excluido sin motivo es un agujero.
 
 1. **Docker + Supabase local.** `npx supabase start`, y después `npx supabase status` tiene que
    responder. El seed del negocio de prueba vive ahí.
-2. **El dev server:** `npm run dev`. ⚠ Si el puerto quedó colgado de una sesión anterior (ya pasó:
-   acepta la conexión TCP y no responde), **matar el proceso** antes.
-3. **Desde el teléfono, en la misma red Wi-Fi:** `http://<IP-de-la-LAN>:3000/`.
+2. **El dev server:** `npm run dev` (al 2026-10-28 el del dueño corre en el **puerto 80**). ⚠ Si el
+   puerto quedó colgado de una sesión anterior (ya pasó: acepta la conexión TCP y no responde),
+   **matar el proceso** antes.
+3. **Desde el teléfono, en la misma red Wi-Fi:** `http://<IP-de-la-LAN>:<puerto>/`.
    ⚠ **Paso previo obligatorio, ya sufrido:** la IP tiene que estar en `allowedDevOrigins` de
-   `next.config.ts`. Hoy están listadas **`192.168.0.7`, `192.168.0.3` y `192.168.0.10`** (las IPs son
+   `next.config.ts`. Hoy están listadas **`127.0.0.1`, `192.168.0.7`, `192.168.0.3` y `192.168.0.10`** (las IPs son
    por DHCP y el router ya cambió la asignación **dos** veces). Si `Get-NetIPAddress` dice una cuarta,
    **hay que agregarla**: sin eso el teléfono pide `_next/*` desde otro origen, Next lo bloquea, **la
    página no hidrata** y nada de esta fase funciona — **y no es un bug de la fase.**
@@ -65,6 +88,17 @@ la URL de Inicio **muestra** su hash, así que *tocar Inicio y mirar la barra de
 verificación del gap `G2-1` entera. **Y al revés:** si después de tocar Inicio la URL **no** muestra el
 hash, el aviso **no** está armado y el atrás va a salir de una — eso ya es un **fallo**, y se anota
 **antes** de apretar atrás.
+
+⚠ **Al día desde el 2026-10-28 (plan `03-13`): el hash vuelve a ser fiel EN LOS DOS SENTIDOS**, porque
+ahora el sentinel **sólo** se empuja con activación del usuario. Antes, al entrar directo, la URL
+mostraba el hash y el atrás salía igual: el navegador salteaba esa entrada, empujada sin que el dueño
+tocara nada, y el hash **mentía**. Hoy: **sin hash, el atrás va a salir; con hash, el atrás tiene que
+avisar.** Y entrando directo a Inicio el hash **no** aparece hasta el primer toque en un lugar sin
+botones: eso es lo esperado.
+
+⚠ **Si el hash está y el atrás sale igual, es un FALLO, y es exactamente lo que A11 mide en el
+teléfono**: que Chrome de Android y Safari de iOS respeten un empuje hecho con activación como lo
+respeta Chrome de escritorio.
 
 ---
 
@@ -114,6 +148,49 @@ veces**.
   recorrido**, para que los resultados sigan siendo comparables entre rondas.
 - **Abrir cada ciclo con el bloque 0.**
 
+⚠ **Al día desde el 2026-10-28 (plan `03-13`, gap `G3-3`): el 1.3 se corre en DOS MITADES**, porque la
+decisión del dueño (`camino 1`) cambió lo que pasa **sin tocar nada**:
+
+- **(a) Sin tocar nada** — entrar directo (pestaña nueva) y apretar atrás: la URL **no** muestra el hash y
+  el atrás **sale sin aviso**. ⚠ **Expectativa nueva — no es regresión:** es el **costo que el dueño
+  eligió** (la regla del navegador: una entrada empujada sin que el usuario haya tocado la página se
+  saltea, y no tiene arreglo).
+- **(b) Con un toque** en un lugar **sin botones** (el fondo de Inicio, entre tarjetas) antes del atrás:
+  el hash **aparece** en la URL y el primer atrás **avisa y no sale**. Las tres veces igual.
+- **La recarga ×3**, parado en Inicio **con** el hash: el primer atrás **avisa y no sale**, sin tocar y
+  con un toque después de recargar. Así lo midió la sonda de la app el 2026-10-28 (las tres vueltas de
+  las dos variantes absorbidas): no aplicó ninguna rama de costo de la recarga.
+
+### 1.4 — Llegar a Inicio CON EL ATRÁS (nuevo, 2026-10-28)
+
+`Inicio → tocar Clientes → atrás → atrás`: volver a Inicio **con el atrás** desde una sección.
+
+- **Mirar la URL al llegar a Inicio.** **Sin hash** ⇒ el atrás siguiente **sale sin aviso**. ⚠
+  **Expectativa nueva — no es regresión:** es una **consecuencia de la regla de la decisión que la
+  decisión no lista** —volver con el atrás tampoco es un toque, así que no se puede armar—, y se le
+  muestra al dueño **antes** de la ronda. Con **un toque** en un lugar sin botones al llegar, el hash
+  aparece y el atrás **avisa**.
+- ⚠ Si se hace muy rápido (menos de **~5 s** entre tocar Clientes y apretar atrás), el hash **puede
+  aparecer solo**: es la ventana de activación del navegador, y está bien.
+- **Si esto le parece mal al dueño, NO es para arreglar en el momento:** es una decisión de producto
+  pendiente, con una alternativa escrita para que la elija (mostrar el aviso al volver a Inicio con el
+  atrás cuando no se puede armar). Se anota como **decisión pendiente**, no como fallo.
+- *Motivo:* medido en la sonda de la app (`R-1.4`, 2026-10-28): sin tocar, sin hash, armado
+  `pendiente`, el atrás siguiente sale; con un toque, avisa.
+
+### 1.5 — Tocar la barra con el aviso visible, o recién entrado (nuevo, 2026-10-28)
+
+**(a)** Con el **aviso visible** (después del primer atrás en Inicio), tocar **Clientes** en la barra.
+**(b)** Recién **entrado directo** a Inicio, **sin haber tocado nada**, tocar **Clientes** en la barra.
+
+- **Tiene que:** el aviso **desaparece** al tocar, la sección **abre**, y el atrás desde ahí vuelve a
+  Inicio **sin** hash —nunca a una entrada con `#salir`—; y el atrás **siguiente** se comporta como en el
+  **1.4** (sin tocar, sale; con un toque, avisa).
+- *Motivo:* un toque que un link se lleva **baja** el aviso pero **no** arma —empujar y navegar en el
+  mismo gesto enterraría el sentinel bajo la sección nueva—. Cubre además los ítems **1-5** de la ronda 1
+  (el toque desde Inicio hacia un destino). Medido en la sonda de la app (`R-barra-con-aviso`,
+  `R-barra-pendiente`, `R-lateral`): la pila queda `(afuera) → Inicio → Clientes`, sin `#salir`.
+
 ---
 
 ## Bloque 2 · Lo que la regla nueva cambia, y hay que mirarlo A PROPÓSITO (Android)
@@ -132,6 +209,8 @@ a reportar como bugs, y la ronda se traba en una discusión en vez de en un defe
   que cambió es la **pila** que esa regla lee. Y MOB-04 por el lado del **gesto de atrás** tampoco: el
   atrás desde Más sigue cayendo en **Inicio**.
 - **Qué sería un fallo acá:** que el atrás **salga sin avisar**, o que el **hash no aparezca**.
+- ⚠ **Al día desde el 2026-10-28:** a Inicio se llega **tocando**, así que el hash **tiene que estar**
+  (el toque da la activación con la que el sentinel se empuja). No es el caso del 1.4.
 - *Motivo:* medido en **E-15** mitad A (la marca dice la raíz ⇒ retroceso, aterrizaje sin marca, armado
   en `armar`).
 
@@ -163,6 +242,19 @@ Apretar atrás una vez, **esperar a que el aviso desaparezca**, apretar atrás o
 - **Tiene que:** **volver a avisar**. No salir de una.
 - *Antes (medido):* *«si toco atrás una vez, pasan 30 segundos, y toco el segundo atrás, sale de una»*.
 
+⚠ **Al día desde el 2026-10-28 (plan `03-13`, gap `G3-2`) — expectativa nueva — no es regresión:** el
+aviso **ya no se va solo**. Lo que hay que ver ahora:
+
+1. Apretar atrás en Inicio: aparece el aviso. **Esperar**: sigue ahí pasados **2 s** y pasados **10 s**.
+2. Con el aviso **visible**, el atrás **sale** (es lo que el aviso dice).
+3. Desde el principio otra vez hasta el aviso visible, y **tocar la pantalla** en un lugar sin botones:
+   el aviso **desaparece** y el hash **vuelve** a la URL.
+4. El atrás **siguiente** **vuelve a avisar**.
+
+- *Motivo:* antes el aviso se iba a los 2 s y el re-armado lo hacía un temporizador, **sin** toque del
+  dueño: el navegador salteaba esa entrada y el segundo atrás salía directo. Medido en la sonda de la
+  app (`R-3.1`, 2026-10-28): el aviso seguía a los 10,9 s medidos dentro de la página.
+
 ### 3.2 — La parte de overlay del 20, que NUNCA se midió en ninguna ronda
 
 Con un **overlay abierto**:
@@ -181,6 +273,14 @@ para probar eso»*:
   **declarada como no corrible**, no marcada.
 
 **Un ítem que no se puede correr se declara, no se marca.**
+
+⚠ **Al día desde el 2026-10-28 (plan `03-13`) — lo que se corre del 3.2 y lo que se declara:**
+
+- **La mitad corrible**, en una **sección que tenga overlay** (el **alta de turno**, el **selector de
+  hora** o el **campo de fecha / calendario**): el atrás **cierra el overlay** y **no** navega. Se anota
+  con ese motivo: Inicio no tiene overlays propios.
+- **La mitad de Inicio queda DECLARADA NO CORRIBLE**, no marcada: el aviso de salida vive en la raíz y
+  Inicio no tiene un overlay con el que probar el caso exacto.
 
 ---
 
@@ -206,6 +306,10 @@ El mismo recorrido del **sidebar** pero **sin** cambios sin guardar.
 
 - **Tiene que:** dar **exactamente lo de hoy** (criterio 6).
 
+⚠ **Al día desde el 2026-10-28:** en escritorio la regla del aviso es la misma —sin gate de pantalla
+(D-05)—, así que **entrando directo** a Inicio también hace falta **un click** en un lugar sin botones
+antes del atrás para que el aviso se arme. Sin el click, el atrás sale sin aviso, igual que en el 1.3 (a).
+
 ---
 
 ## Bloque 5 · Lo que NO vuelve en Android, y por qué
@@ -213,7 +317,7 @@ El mismo recorrido del **sidebar** pero **sin** cambios sin guardar.
 | # | Por qué no vuelve |
 |---|---|
 | **7**, **8** y **15** | **pasaron** en la ronda 2 y la regla nueva **no toca su camino**: los tres cruzan desde una sección **de la rama de Más** hacia un destino de la barra, donde el hecho nuevo es **falso por construcción** (la marca dice Más) y la decisión sigue siendo el colapso. Su cobertura nueva está en **E-15** mitad B |
-| **1-5** | el toque **desde** Inicio con el sentinel armado sigue resolviéndose por el **mismo** camino de dos pasos (consumir el sentinel y recién entonces navegar), que la regla nueva **no** modifica: va **antes** en el orden de reglas. Su mitad que sí cambió —el **regreso** a Inicio— está en el **bloque 1**, con el recorrido del dueño |
+| **1-5** | el toque **desde** Inicio con el sentinel armado sigue resolviéndose por el **mismo** camino de dos pasos (consumir el sentinel y recién entonces navegar), que la regla nueva **no** modifica: va **antes** en el orden de reglas. Su mitad que sí cambió —el **regreso** a Inicio— está en el **bloque 1**, con el recorrido del dueño. ⚠ **Al día desde el 2026-10-28:** se cubren ahora con el **1.5** (tocar la barra con el aviso visible o recién entrado), porque el toque que navega pasó a **bajar** el aviso y **no** armar |
 | **10-13** | los cuatro quicks de octubre (overlay, selector de hora, calendario y teclado) ya **pasaron** en Android, y la regla nueva no toca el armado ni el retroceso **ignorado**. Lo que les queda es **iPhone** (bloque 6) |
 | **16** | la cadena de tres pasos del guard hacia **Más**: su destino es Más, **no la raíz**, así que el hecho nuevo es falso y el camino es el de siempre. Lo que **sí** vuelve del guard es el **bloque 4**, que es el caso que la regla **sí** cambia |
 
@@ -242,6 +346,17 @@ Acá no hay regresión dirigida que valga: no hay ronda previa de la cual recort
 ⚠ **El bloque 0 vale igual en iPhone:** el **hash** en la URL es el mismo observable, y en Safari la
 barra de direcciones está abajo — hay que mirarla ahí.
 
+⚠ **Al día desde el 2026-10-28 (plan `03-13`):**
+
+- **El gesto de borde de iOS NO es una activación.** Igual que en Android, hay que **tocar la pantalla**
+  en Inicio antes del atrás para que el aviso se arme (el 1.3 (a) y el 1.4 valen igual en iPhone).
+- **La regla de Safari para las entradas empujadas sin activación NO está medida** (A11): todo lo
+  medido fue Chrome de escritorio. Si en iPhone el hash está y el atrás sale igual, es un **fallo** y es
+  justo lo que este bloque viene a encontrar.
+- **El formato de anotación:** cada ítem del pase de iPhone va como **fila** `| **N** | … |`, con el
+  número del guion de la ronda 1, bajo un **encabezado de sección** que nombre el motor (`iPhone` o
+  `Safari`) y la fecha.
+
 ---
 
 ## Bloque 7 · Qué cierra esto, y dónde se anota
@@ -257,6 +372,10 @@ barra de direcciones está abajo — hay que mirarla ahí.
 ⚠ **Un pipeline verde NO es evidencia.** La ronda 1 llegó con la sonda en **8/8** y encontró **cinco
 fallos más una colisión de diseño**; la ronda 2 llegó con **13/13** y encontró **`G2-1`**. Hoy la sonda
 da 16/16, y eso sigue midiendo un espacio que no incluye lo que el teléfono prueba.
+⚠ **Al día desde el 2026-10-28:** la ronda 3 llegó con **16/16** y encontró `G3-1`; la re-corrida con
+**18/18** y encontró `G3-2` y `G3-3`, que la sonda estática **no podía ver**. Hoy la estática da 18/18 y
+la sonda de la **app real** (Chrome de escritorio, con el atrás de la interfaz) da **11/11** — y nada de
+eso es evidencia de que ande en un teléfono.
 
 ### Dónde se anota
 

@@ -141,24 +141,31 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
         canal de propagación que **ya existía**, con el **mismo** consumidor, el **mismo** escritor
         único y la **misma** negativa a inventar una ruta. `panelNavMode` y `panelBranchPlan` quedan
         **intactas**, medidas por recorte: el arreglo es **aditivo**.
-- [ ] **MOB-05**: En **Inicio**, el atrás pide confirmación antes de salir del panel.
+- [ ] **MOB-05**: En **Inicio**, una vez que el dueño **tocó la pantalla** en esta visita, el atrás pide confirmación antes de salir del panel.
       ✅ **RESUELTO el 2026-10-14 — la decisión está TOMADA: SE IMPLEMENTA** (D-01 de la Phase 3, ver
       `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-CONTEXT.md`). El primer atrás en Inicio
-      **no sale** y avisa; el segundo **sale de verdad**. La advertencia de abajo **no se borra**: su
-      razonamiento sigue siendo válido y la resolución está escrita debajo de ella.
+      **no sale** y avisa; el segundo **sale de verdad** —con el sentinel armado, que desde el
+      2026-10-28 se arma sólo con un toque del dueño: ver la decisión de esa fecha más abajo—. La
+      advertencia de abajo **no se borra**: su razonamiento sigue siendo válido y la resolución está
+      escrita debajo de ella.
       - **Qué forma tiene** (cerrada por el UI-SPEC de la Phase 2, §13 y O-3 — no se reabre): un
-        **aviso efímero**, elemento **propio del componente de la barra** anclado 8px arriba de ella,
+        **aviso** —efímero hasta el 2026-10-28; desde la decisión del dueño de esa fecha se queda hasta
+        el próximo toque—, elemento **propio del componente de la barra** anclado 8px arriba de ella,
         **sin modal y sin botones**. No es un toast de `sonner`: se descartó midiendo que el
         `<Toaster>` del proyecto es `top-center` y global (lejos del pulgar, y no se puede mover sin
         afectar al landing y a `/[slug]`).
-      - **La regla de la constante única**, que §13 exige y la implementación cumple por estructura:
-        la **duración visible** del aviso y la **ventana lógica** en la que el segundo atrás sale son
-        el **mismo valor**, desde **un solo lugar** (`PANEL_EXIT_HINT_MS = 2000`, `lib/panel-branch.ts`)
-        y consumido por **un solo temporizador** que al expirar hace las dos cosas. Dos números
-        producen un bug **invisible** en los dos sentidos (sale sin avisar, o el dueño aprieta y no
-        pasa nada) y ni `tsc` ni la suite lo ven.
+      - **La regla de la constante única, en su forma del 2026-10-28.** El **espíritu no cambió**: lo
+        que el dueño **ve** y lo que el código **acepta** no se pueden separar —dos fuentes producen un
+        bug **invisible** en los dos sentidos (sale sin avisar, o el dueño aprieta y no pasa nada) y ni
+        `tsc` ni la suite lo ven—. La **forma sí**: ya no hay ventana de tiempo que sincronizar, porque
+        la constante de 2000 ms (`PANEL_EXIT_HINT_MS`) y su temporizador se **borraron** el 2026-10-28
+        (plan `03-13`). El invariante nuevo, con sus palabras: **aviso visible ⇒ el próximo atrás
+        sale**, con **un** lugar que lo levanta (el atrás absorbido), **un** lugar que lo baja (el toque
+        que re-arma) y **cero** temporizadores en el ciclo, medidos por gates de igualdad.
       - **El costo que el dueño aceptó con los ojos abiertos:** **dos toques de atrás siempre** para
-        salir del panel desde Inicio, y que la condición que haría natural este patrón —una app
+        salir del panel desde Inicio —y, desde el 2026-10-28, que entrar directo a Inicio (pestaña
+        nueva, recarga, abrir el link) y apretar atrás sin tocar nada sale sin aviso: es la regla del
+        navegador y no tiene arreglo—, y que la condición que haría natural este patrón —una app
         instalada— **no existe hoy** (T-10: cero `manifest`, cero usos de `display-mode`).
       - **Alcance (D-05):** vale **también en escritorio**, **sin gate de viewport**. Ver la enmienda
         de MOB-07.
@@ -212,6 +219,57 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
       ⚠ **PROHIBIDO tratarlo como bug o como regresión de MOB-04 cuando aparezca en la ronda 3.** Es
       una consecuencia **declarada** de la regla nueva, no un defecto: está escrita acá con fecha y
       re-expresada en el guion de la ronda 3 (`03-UAT-GUION-3.md`, bloque 2).
+
+      ⚠ **DECIDIDO el 2026-10-28 por el dueño, durante la ronda 3 — armar sólo con activación del
+      usuario (`camino 1`)** (registrada en
+      `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-DECISION-UAT-3.md`; implementada en el plan
+      `03-13`; gobierna los gaps `G3-2` y `G3-3`):
+
+      - **Qué se decidió:** (1) el sentinel de salida se empuja **sólo cuando hay activación del
+        usuario**: si al llegar a Inicio ya la hay (se llegó tocando la barra, el 1.1), se arma como
+        siempre; si no, el armado queda **pendiente** y lo dispara el primer toque o tecla del dueño en
+        Inicio. (2) El aviso **deja de vencer solo**: se queda visible **hasta que el dueño toca la
+        pantalla**, y ese toque lo baja y re-arma con activación. Así lo que se ve coincide siempre con
+        lo que pasa: **aviso visible ⇔ el próximo atrás sale.**
+      - **Por qué:** el plan `03-12` midió en la app real, con el atrás **de la interfaz** del
+        navegador, que la **intervención de historial** de Chrome **saltea** una entrada empujada **sin
+        activación del usuario** —con `holding=true` y sin que llegue ningún `popstate`—. El sentinel se
+        empujaba así al montar (`G3-3`) y desde el temporizador (`G3-2`). Ningún cambio en *cómo se
+        absorbe* alcanza a una entrada que el navegador nunca visita.
+      - **El costo, declarado ANTES de que el dueño lo vea en el teléfono:**
+        1. **Entrar directo a Inicio** —pestaña nueva, recarga, abrir el link— y apretar atrás **sin
+           tocar nada** sale sin aviso. Es la regla del navegador y no tiene arreglo.
+        2. ⚠ **Llegar a Inicio con el atrás del navegador** desde una sección tampoco es un toque, así
+           que el atrás siguiente sale sin aviso salvo que el dueño toque, o que haya tocado algo hace
+           menos de la ventana de activación del navegador (~5 s en Chromium). **Es una consecuencia de
+           la misma regla que la decisión no lista**: está acá para que no se descubra en la ronda.
+        3. Un toque que **un link se lleva** (tocar un destino de la barra, un `<Link>`) **no arma**:
+           empujar y navegar en el mismo gesto enterraría el sentinel bajo la sección nueva o lo
+           pisaría el reemplazo del router. Ese toque **sí** baja el aviso; arma el siguiente.
+        4. El atrás que **sólo bajaba el teclado** en Inicio deja el armado **pendiente** hasta el
+           próximo toque (un atrás no es una activación).
+        Ninguno es una regresión en Chrome: esos empujes ya se hacían sin activación, el navegador los
+        salteaba igual y la URL mostraba un hash que **mentía**. La recarga ×3 del 1.3 **pasó** en la
+        sonda de la app en sus dos variantes (sin tocar y con un toque después de recargar), así que no
+        aplicó ninguna rama de costo de la recarga.
+      - **El arreglo de la recarga**, por la **opción (A)** del veredicto y sin decisión nueva: la
+        recarga preserva el `frjExit` de una instancia **muerta**, la séptima regla declinaba sin
+        acreditar y el `popstate` siguiente se ignoraba. Ahora la rama `none` del armado **acredita**
+        con `panelExitStillHolding`, con la definición de **otro dueño corregida contra el código**:
+        otro dueño es *ajena **y sin** marca de salida* (un overlay o el guard de cambios sin guardar),
+        porque el predicado de la regla 0 (`isForeignOwnedEntry`) reconoce la marca de salida de
+        **cualquier** instancia y usado a secas habría rechazado justo la entrada de la recarga.
+      - **Lo que NO cambió:** las siete reglas de `panelExitArmAction` y las cinco de
+        `panelExitPopAction`; la `decision (a)` y su límite aceptado (la entrada ajena debajo, E-7);
+        Inicio como raíz (`03-DECISION-UAT-2.md`); y los tres no-defectos del bloque 2 del guion.
+      - **La calibración del navegador** (sonda de la app, `C-activacion`) dio la rama **(b)**: un
+        empuje a los 7 s de un click real **no** quedó salteable con `isActive` ya en falso, así que el
+        gate es **más estricto** que el navegador —deja pendientes donde un empuje habría servido—, que
+        es la dirección segura.
+
+      ⚠ **PROHIBIDO tratar como regresión** las expectativas nuevas de esta decisión: el **1.3** sin
+      tocar sale sin aviso (y sin hash); el **3.1** deja el aviso hasta un toque y el atrás siguiente
+      vuelve a avisar; y el **1.4** y el **1.5** se comportan como el guion de la ronda 3 los declara.
 - [ ] **MOB-06**: Nada de esto rompe lo que ya está verificado en celular: el atrás sigue cerrando
       overlays, selectores y el calendario antes que navegar, y el aviso de cambios sin guardar sigue
       frenando la salida.
@@ -254,7 +312,7 @@ vieja mide otra cosa. Son los **ocho** recorridos de Android (bloques 1 a 4) má
 | Requisito | Qué le falta | Se marca si |
 |---|---|---|
 | **MOB-04** | El gap **`G2-1`** (el ítem 19, que falló) arreglado en el plan `03-09` y el gap **`G3-1`** (el recorrido **1.1** de la ronda 3, que falló) arreglado en el plan `03-11`, los dos **sin verificar en el teléfono**; los ítems cuya **expectativa cambió** con las dos reglas nuevas; y el **pase de iPhone (A11)** | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3, **re-corrida desde el principio** |
-| **MOB-05** | Lo mismo, y es **suyo** por los dos lados: los fallos **19** y **1.1** son del aviso que no se armaba llegando a Inicio desde una sección, y la **consecuencia declarada** (`Más → tocar Inicio → atrás` ahora avisa) es de su decisión | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3, **re-corrida desde el principio** |
+| **MOB-05** | Lo mismo, y es **suyo** por los dos lados: los fallos **19** y **1.1** son del aviso que no se armaba llegando a Inicio desde una sección, y la **consecuencia declarada** (`Más → tocar Inicio → atrás` ahora avisa) es de su decisión; y `G3-2` y `G3-3` (2026-10-28) arreglados por la decisión del dueño (`camino 1`) y sin verificar en el teléfono | pasan los bloques 1 a 4 **y** el bloque 6 del guion de la ronda 3, **re-corrida desde el principio** |
 | **MOB-06** | **Sólo iPhone (A11)** — su parte de Android ya está afirmada arriba (`cero regresion`, bloque E de la ronda 1) — más la **parte de overlay del ítem 20**, que nunca se midió en ninguna ronda (*"no tengo overlays en inicio como para probar eso"*) | pasa el bloque **6**, más la parte de overlay del bloque 3 |
 
 Si la ronda 3 falla, los tres **vuelven a quedar sin marcar** y los fallos nuevos entran como gaps de
@@ -356,7 +414,7 @@ dos casos, que es el invariante que importa. **La UAT tiene que poder distinguir
 | MOB-02 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-03 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending — la **ronda 1** se corrió (2026-10-15, Android/Chrome): **16 pasados, 5 fallados** (7, 8, 15, 19, 20) y **una colisión de diseño** (bloque H, G-4). La **ronda 2** se corrió el 2026-10-27 y quedó **interrumpida a propósito**: 7, 8 y 15 **pasaron**, **19 falló** ⇒ gap **`G2-1`** (arreglado en `03-09`), y los otros seis ítems quedaron **sin correr** porque la regla nueva les cambia la expectativa. ⚠ **PRECISADO el 2026-10-27:** sección → raíz es un **retroceso**, con su límite declarado (la pila de tres escalones de D-02 sigue empujando). Lo que lo marca es la **ronda 3** (`03-UAT-GUION-3.md`, bloques 1 a 4 **y** 6) |
-| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. ✅ Y la **`decision (a)`** del dueño el 2026-10-15 reconcilia la colisión con MOB-04, con su límite aceptado escrito. ⚠ **Y el 2026-10-27 el dueño declaró la consecuencia de la regla de `G2-1`:** `Más → tocar Inicio → atrás` **ya no vuelve a Más, avisa para salir** — está escrito debajo del requisito con prohibición de tratarlo como regresión. Pendiente **sólo** la verificación en celular real, en la **ronda 3** (bloques 1 a 4 **y** 6) |
+| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. ✅ Y la **`decision (a)`** del dueño el 2026-10-15 reconcilia la colisión con MOB-04, con su límite aceptado escrito. ⚠ **Y el 2026-10-27 el dueño declaró la consecuencia de la regla de `G2-1`:** `Más → tocar Inicio → atrás` **ya no vuelve a Más, avisa para salir** — está escrito debajo del requisito con prohibición de tratarlo como regresión. ⚠ Y el 2026-10-28 el dueño decidió el `camino 1`: el sentinel se arma sólo con activación y el aviso se queda hasta un toque; la promesa pasa a ser el aviso una vez que el dueño tocó la pantalla en esta visita. Pendiente la ronda 3 en los dos motores. Pendiente **sólo** la verificación en celular real, en la **ronda 3** (bloques 1 a 4 **y** 6) |
 | MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending — ⚠ **`cero regresion` ya verificado en ANDROID** en la ronda 1 (el bloque E, ítems 10-13, pasó; marcado a mano por el dueño). Le falta **sólo iPhone / Safari (A11)** más la **parte de overlay del ítem 20**, que nunca se midió: lo cierra la **ronda 3**, el bloque **6** más la parte de overlay del bloque 3 |
 | MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) — ⚠ **con enmienda** del 2026-10-14 por D-05: ver la nota debajo del requisito. La política de navegación no cambia en escritorio (criterio 6 intacto); **sí** cambia el costo de salir del panel |
 | MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |

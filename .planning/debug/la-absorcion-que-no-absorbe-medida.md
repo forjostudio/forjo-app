@@ -385,6 +385,78 @@ Y la misma vara para el camino 1, si el dueño lo elige: el armado *pendiente* t
 callback— y el oyente del toque **no** puede traer un número propio ni un segundo temporizador. Un
 oyente que re-arme con su propio retardo re-crea, del otro lado, el bug de los dos números.
 
+## (f) El cierre (plan 03-13, 2026-10-28)
+
+**Qué se implementó.** El **camino 1** que el dueño eligió (`03-DECISION-UAT-3.md`) para `G3-2` y
+`G3-3`, y la **opción (A)** de (d) para la causa (ii) de la recarga:
+
+- El sentinel se empuja **sólo con activación del usuario**. `armarSentinel` recibe el hecho
+  `puedeEmpujar` **sin valor por omisión**; el efecto del armado y el oyente nuevo del toque lo
+  contestan con `panelExitActivationNow(navigator.userActivation)`; los **dos** reintentos de adentro
+  de un `popstate` (el retroceso ignorado y el del teclado) lo pasan en **falso**. Sin activación, la
+  decisión `arm` queda **pendiente** y no empuja nada.
+- El aviso **ya no vence**: la constante `PANEL_EXIT_HINT_MS` y su temporizador se **borraron**. Lo
+  levanta **un** lugar (el atrás absorbido) y lo baja **un** lugar (el toque, `alTocar`, sobre `click`
+  y `keyup` en la burbuja de `window`), que en el mismo gesto re-arma con la activación que leyó. Un
+  toque que un link se lleva (`defaultPrevented`) baja el aviso y **no** arma
+  (`panelExitTouchAction`).
+- La recarga: la rama `none` del armado **asigna** `sentinelVivoRef.current = panelExitStillHolding(...)`
+  —re-deriva en los dos sentidos— en vez de sólo encender.
+
+**La corrección de la premisa de (A).** (d) pedía acreditar *salvo que la entrada de arriba sea de
+otro dueño*. Leído contra el código, ese *otro dueño* **no** puede ser `isForeignOwnedEntry` a secas:
+el predicado de la regla 0 incluye `isExitSentinelOwnedEntry`, que reconoce el `frjExit` de
+**cualquier** `id` —justo la marca de la instancia muerta que la recarga preserva—. Con ese predicado,
+(A) habría rechazado la entrada que venía a cerrar. Otro dueño quedó definido como *ajena **y sin**
+marca de salida* (un overlay o el guard de cambios sin guardar); una marca de salida, de la instancia
+que sea, es de este módulo. El caso con nombre propio (*instancia MUERTA*) está en la suite.
+
+**La calibración** (`C-activacion`, sobre `/login` antes del login, Chrome/155 de escritorio, gesto
+`interfaz`), medida dos veces con los mismos resultados:
+
+| Fila | Qué | Resultado |
+|---|---|---|
+| 1 | click real y empuje a los 2-4 ms | **no salteada** (`entradas_salteadas=0`, `isActive=true` al empujar) |
+| 2 | click real y empuje a los ~7010 ms | **no salteada**, con `isActive=false` y `hasBeenActive=true` al empujar |
+| 3 | empuje SIN activación y un click real después | **no salteada**: una activación posterior **cura** la entrada |
+| 4 | `isActive` adentro del `pointerdown` de un toque emulado / del `click` real | `false` / `true` |
+
+⇒ La premisa vale (rama (a) descartada). **Rama (b):** el gate de `isActive` es **más estricto** que
+el navegador —Chrome parece mirar la activación *pegajosa* del documento—: deja pendientes donde un
+empuje habría servido, que es la dirección segura. La fila 3 explica por qué `R-1.3-con-toque` pasó
+**ya** contra el código de antes del arreglo (el toque curó el empuje sin activación del montaje); lo
+que el arreglo cambia ahí es que **sin** toque ya no hay un hash que mienta.
+
+**Los once recorridos**, con el atrás de la interfaz, contra el `next dev` del dueño (puerto 80):
+
+| Recorrido | Resultado | Lo medido |
+|---|---|---|
+| `C-activacion` | OK | las cuatro filas de arriba |
+| `R-1.3-sin-toque` | OK | sin hash al entrar, armado `pendiente`, el atrás sale `(afuera)` — el costo declarado |
+| `R-1.3-con-toque` | OK | toque ⇒ `arm` ⇒ `#salir` ⇒ el atrás `hint`, aviso visible |
+| `R-1.3-recarga-logica` | OK | 3/3 `none` con `vivo_despues=true`; en una corrida extra, el par `1→25` por la **séptima** |
+| `R-1.3-recarga-gesto` | OK | (i) y (ii) 3/3 absorbidos; pares `1→59`, `59→301`, `301→1` por la séptima |
+| `R-1.1` | OK | Turnos, Clientes, Agenda, Inicio ⇒ `/dashboard#salir`, avisa, el segundo atrás sale |
+| `R-3.1` | OK | el aviso sigue a 2,5 s y a 10 s (`transcurrido=10915 ms`), con el aviso el atrás sale; el toque lo baja, el hash vuelve y el atrás vuelve a avisar |
+| `R-1.4` | OK | llegar con el atrás: sin hash, `pendiente`, sin aviso, el atrás siguiente sale; con un toque, avisa |
+| `R-barra-con-aviso` | OK | el toque `drop` (gesto tomado), pila `[(afuera), /dashboard, /clients]` sin `#salir` |
+| `R-barra-pendiente` | OK | el toque `none` (gesto tomado), la misma pila |
+| `R-lateral` | OK | el retroceso del consumo `ignore` y el armado que le sigue `pendiente`, la misma pila |
+
+El piso del tiempo de `R-3.1` quedó **probado en rojo**: con `MARGEN_MS = -9000` la sonda midió
+`transcurrido=1007 ms` y salió `FALLA` sólo en `transcurrido_supera_la_espera` (rc 1).
+
+**El hallazgo lateral, cerrado por estructura.** Ningún empuje sale de adentro de un `popstate`, así
+que el cuarto momento de reintento ya no puede enterrar el sentinel bajo la navegación diferida: la
+pila medida en `R-lateral` es `[(afuera), /dashboard, /clients]`, sin el `/dashboard#salir` de (c).
+
+**Lo que sigue abierto.** **A11**: todo esto es Chrome de **escritorio**; Chrome de Android y Safari de
+iOS los cierra la ronda 3 en el teléfono. Y los **costos declarados** del camino 1 (la entrada directa
+sin tocar, la llegada con el atrás, el toque que un link se lleva, el atrás del teclado), escritos en
+MOB-05, en el guion de la ronda 3 y en la entrada 20 de `.planning/WINDOWS.md`. El canal de
+diagnóstico (`recordExitDiag`, ahora con un tercer call site, el del toque) **se queda** hasta el
+cierre de la fase, que es donde se decide si sigue en producción.
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la
