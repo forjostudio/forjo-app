@@ -1507,6 +1507,117 @@ describe('la SÉPTIMA regla — si la URL ya lleva nuestro hash, NO armar (medid
   })
 })
 
+// ── La opción (A) del veredicto del plan 03-12: la recarga del 1.3 (G3-3) ────────────────────────
+//
+// Una recarga PRESERVA el estado de la entrada (el `frjExit` de la instancia del documento anterior)
+// y el módulo nace con OTRO `id` (pares medidos: 1→21, 21→1, 1→5, 1→157, 37→108). La séptima regla
+// declinaba SIN acreditar *seguimos absorbiendo* y el `popstate` siguiente se ignoraba. (A) acredita en
+// la rama `none` del armado — con la definición de OTRO DUEÑO corregida contra el código: la regla 0
+// (`isForeignOwnedEntry`) reconoce la marca de salida de CUALQUIER instancia, y usada a secas
+// rechazaría justo la entrada de la recarga.
+
+describe('panelExitStillHolding — la acreditación de (A), pura, con las reglas en orden', () => {
+  const NADA = { paradoSobreElNuestro: false, ajenaArriba: false, salidaArriba: false, urlNuestra: false }
+
+  it('regla 1 — parados sobre NUESTRO sentinel ⇒ acredita (E-6, va primera)', () => {
+    expect(PB.panelExitStillHolding({ ...NADA, paradoSobreElNuestro: true })).toBe(true)
+  })
+
+  it('regla 2 — la entrada de arriba es de OTRO dueño (ajena y sin marca de salida: un overlay o el guard) ⇒ NO acredita, aunque la URL sea nuestra', () => {
+    // Contrapuesto adyacente del de abajo: la misma URL, un dueño distinto.
+    expect(PB.panelExitStillHolding({ ...NADA, ajenaArriba: true, salidaArriba: false, urlNuestra: true })).toBe(false)
+  })
+
+  it('regla 3 — la URL lleva una de NUESTRAS formas exactas ⇒ acredita', () => {
+    expect(PB.panelExitStillHolding({ ...NADA, urlNuestra: true })).toBe(true)
+  })
+
+  it('regla 4 — el resto ⇒ NO acredita', () => {
+    expect(PB.panelExitStillHolding(NADA)).toBe(false)
+  })
+
+  it('⚠ la marca de salida de una instancia MUERTA, con la URL nuestra ⇒ ACREDITA (la entrada medida de la recarga)', () => {
+    // EL CASO QUE CORRIGE LA PREMISA. Con `isForeignOwnedEntry` a secas como el hecho de otro dueño,
+    // esta entrada —`frjExit` de otro `id`— quedaría RECHAZADA y el defecto medido seguiría abierto.
+    const estado = { frjExit: 1 }
+    expect(PH.isForeignOwnedEntry(estado)).toBe(true)
+    expect(PH.isExitSentinelOwnedEntry(estado)).toBe(true)
+    expect(
+      PB.panelExitStillHolding({
+        paradoSobreElNuestro: PB.isPanelExitEntry(estado, 21),
+        ajenaArriba: PH.isForeignOwnedEntry(estado),
+        salidaArriba: PH.isExitSentinelOwnedEntry(estado),
+        urlNuestra: PB.urlAlreadyHoldsExitHash('#salir'),
+      }),
+    ).toBe(true)
+  })
+
+  it('la URL nuestra con el estado PISADO por el router (sin ninguna marca) ⇒ acredita (E-13 mitad B, del lado del popstate)', () => {
+    const pisado = { __NA: true }
+    expect(
+      PB.panelExitStillHolding({
+        paradoSobreElNuestro: PB.isPanelExitEntry(pisado, 21),
+        ajenaArriba: PH.isForeignOwnedEntry(pisado),
+        salidaArriba: PH.isExitSentinelOwnedEntry(pisado),
+        urlNuestra: PB.urlAlreadyHoldsExitHash('#salir-2'),
+      }),
+    ).toBe(true)
+  })
+
+  it('un hash AJENO que empieza igual (`#salirXYZ`) ⇒ NO acredita', () => {
+    expect(PB.panelExitStillHolding({ ...NADA, urlNuestra: PB.urlAlreadyHoldsExitHash('#salirXYZ') })).toBe(false)
+  })
+
+  it('la composición de punta a punta: la séptima declina, (A) acredita, y el retroceso AVISA', () => {
+    const estado = { frjExit: 1 }
+    const id = 21
+    const hash = '#salir'
+    expect(
+      PB.panelExitArmAction({
+        participates: true,
+        atRoot: true,
+        hintOpen: false,
+        topIsOurs: PB.isPanelExitEntry(estado, id),
+        urlYaLlevaNuestroHash: PB.urlAlreadyHoldsExitHash(hash),
+        foreignOwnsTop: PH.isForeignOwnedEntry(estado),
+        algoNuestroDebajo: PH.panelUnderRoute(estado) !== null,
+      }),
+    ).toBe('none')
+    const holding = PB.panelExitStillHolding({
+      paradoSobreElNuestro: PB.isPanelExitEntry(estado, id),
+      ajenaArriba: PH.isForeignOwnedEntry(estado),
+      salidaArriba: PH.isExitSentinelOwnedEntry(estado),
+      urlNuestra: PB.urlAlreadyHoldsExitHash(hash),
+    })
+    expect(holding).toBe(true)
+    expect(PB.panelExitPopAction({ topIsOurs: false, participates: true, atRoot: true, holding, keyboardGuards: false })).toBe('hint')
+  })
+
+  it('…y su contracara adyacente: con la acreditación VIEJA (sólo parados sobre el nuestro) el mismo retroceso se IGNORA', () => {
+    const estado = { frjExit: 1 }
+    const holdingViejo = PB.isPanelExitEntry(estado, 21)
+    expect(holdingViejo).toBe(false)
+    expect(PB.panelExitPopAction({ topIsOurs: false, participates: true, atRoot: true, holding: holdingViejo, keyboardGuards: false })).toBe('ignore')
+  })
+
+  it('el cableado: la rama `none` del armado ASIGNA la referencia con la función, y la marca de salida se lee UNA vez', () => {
+    // Asignar —y no sólo encender— es re-derivar en los dos sentidos: con la forma vieja, una
+    // referencia acreditada sobre una marca muerta sobrevivía a dejar Inicio y el `popstate` de la
+    // vuelta avisaba parado sobre una entrada que no es la de salir.
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /sentinelVivoRef\.current = panelExitStillHolding\(/g)).toBe(1)
+    expect(cuenta(mod, /if \(paradoSobreElNuestro\) sentinelVivoRef/g)).toBe(0)
+    const armado = mod.match(/const armarSentinel = useCallback[\s\S]*?\n {2}\}, \[/)?.[0] ?? ''
+    expect(armado.length).toBeGreaterThan(300)
+    expect(cuenta(armado, /isExitSentinelOwnedEntry\(estado\)/g)).toBe(1)
+    const desde = mod.indexOf('export function panelExitStillHolding({')
+    expect(desde).toBeGreaterThan(0)
+    const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+    expect(region.length).toBeGreaterThan(80)
+    expect(cuenta(region, /isForeignOwnedEntry|window|navigator|document|history/g)).toBe(0)
+  })
+})
+
 describe('los CUATRO momentos de reintento — y el que NO re-arma', () => {
   /** El manejador del retroceso, recortado del fuente sin comentarios. */
   function manejadorDelRetroceso(): string {
