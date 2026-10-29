@@ -857,6 +857,44 @@ export function panelExitStillHolding({
   return false
 }
 
+/** Qué hace el desmontaje del hook con el sentinel de salida. */
+export type PanelExitUnmountAction = 'consume' | 'keep'
+
+/**
+ * Qué hace la **limpieza del desmontaje** con un sentinel vivo. Pura, con las reglas **EN ORDEN** y los
+ * dos hechos **sin valor por omisión**, leídos por el call site **en el instante** del retroceso (adentro
+ * de un microtask, nunca antes de diferir).
+ *
+ *   1. `sigueMontada` — **la instancia sigue montada ⇒ conservar.** Es el remontaje del modo estricto:
+ *      React 19 en desarrollo desconecta y reconecta los efectos de la MISMA instancia en una misma
+ *      llamada síncrona, así que para cuando corre el microtask la instancia ya volvió y el sentinel es
+ *      suyo otra vez. Consumirlo acá es **el atrás que nadie pidió**.
+ *   2. `nuestroArriba` — **desmontaje REAL con NUESTRA entrada arriba ⇒ consumir**: un sentinel huérfano
+ *      deja un atrás que no hace nada visible.
+ *   3. El resto ⇒ **conservar**: con la entrada del router arriba (un desmontaje por una navegación que
+ *      sale del panel) un retroceso la desharía y expulsaría al dueño (la cicatriz 2).
+ *
+ * **POR QUÉ EXISTE (`G3-4`, medido en el plan 03-14, sección `(g)` de
+ * `.planning/debug/la-absorcion-que-no-absorbe-medida.md`):** loguearse por el formulario monta el panel
+ * EN EL CLIENTE con la activación del click todavía vigente, así que el armado empuja. El doble montaje
+ * de desarrollo corrió la limpieza vieja —que retrocedía en el acto—: `back()` sobre el sentinel recién
+ * empujado, el remontaje re-derivó *seguimos absorbiendo* parado todavía sobre él (la cuarta regla del
+ * armado), y el `popstate` que llegó después encendió el aviso sin que el dueño tocara nada y se llevó el
+ * hash. La pila de JS del `back()` medido nombra `commitDoubleInvokeEffectsInDEV`. Una hidratación (la
+ * entrada directa, la recarga) no recorre el doble montaje: por eso el plan 03-12 lo había descartado.
+ */
+export function panelExitUnmountAction({
+  sigueMontada,
+  nuestroArriba,
+}: {
+  sigueMontada: boolean
+  nuestroArriba: boolean
+}): PanelExitUnmountAction {
+  if (sigueMontada) return 'keep'
+  if (nuestroArriba) return 'consume'
+  return 'keep'
+}
+
 /** Qué hace un toque del dueño con el sentinel de salida. */
 export type PanelExitTouchAction = 'none' | 'drop' | 'arm' | 'drop-and-arm'
 
@@ -1004,8 +1042,10 @@ export type PanelExitDiagRecord = {
   /**
    * `toque` se sumó en el plan 03-13: la acción de cada toque del dueño. Y en un `armado`, `accion`
    * puede valer `pendiente` —la decisión dijo armar pero no había activación, así que no se empujó—.
+   * `desmontaje` se sumó en el plan 03-14 (`G3-4`): la acción del consumo diferido de la limpieza del
+   * desmontaje, grabada adentro del microtask — su ORDEN contra el `armado` del remontaje es la medición.
    */
-  tipo: 'armado' | 'retroceso' | 'toque'
+  tipo: 'armado' | 'retroceso' | 'toque' | 'desmontaje'
   /** El instante del registro (`Date.now()`), para ordenar y medir ventanas desde afuera. */
   ts: number
   ruta: string
@@ -1317,6 +1357,10 @@ export function usePanelBranch({
   const [hintVisible, setHintVisible] = useState(false)
   const avisoAbiertoRef = useRef(false)
   const sentinelVivoRef = useRef(false)
+  // ¿La instancia está MONTADA? (plan 03-14, `G3-4`). La escribe el efecto del desmontaje (verdadero al
+  // montar, falso en su limpieza) y la lee el consumo DIFERIDO de esa limpieza: es lo que distingue el
+  // remontaje del modo estricto de un desmontaje real. Ver {@link panelExitUnmountAction}.
+  const montadaRef = useRef(false)
 
   // ── Quién es la dueña ─────────────────────────────────────────────────────────────────────────
   // Declarado ANTES del efecto de marcado a propósito: React corre los efectos de un commit en orden
@@ -1621,13 +1665,47 @@ export function usePanelBranch({
   // una sola vez (al salir del panel). Existe igual porque un sentinel huérfano deja un atrás que no
   // hace nada visible. Las deps son `[id]` y no `[]` porque el id se lee adentro; al ser constante
   // por instancia, la limpieza corre SÓLO al desmontar.
+  //
+  // ⚠ EL CONSUMO SE DIFIERE A UN MICROTASK (plan 03-14, `G3-4`, medido en la sección `(g)` del veredicto).
+  // En desarrollo, React 19 desconecta y RECONECTA los efectos de una instancia recién montada en el
+  // cliente en la MISMA llamada síncrona (el doble montaje del modo estricto; leído en
+  // `react-dom-client.development.js`, `doubleInvokeEffectsOnFiber`). Con el retroceso en el acto, el
+  // login —que monta el panel con la activación del click vigente, así que el armado EMPUJA— hacía un
+  // `back()` sobre el sentinel recién empujado, y el `popstate` siguiente encendía el aviso solo. El
+  // microtask corre DESPUÉS del remontaje, y entonces `montadaRef` dice la verdad: la instancia volvió ⇒
+  // `keep`. Que aterriza después no se supone: lo MIDE el registro `desmontaje` del canal en la sonda.
+  // ⚠ UN MICROTASK Y NUNCA UN TEMPORIZADOR: la regla de MOB-05 es cero tiempo en el ciclo del aviso, y
+  // un número acá re-crea el bug invisible de los dos valores.
+  // Y un desmontaje REAL queda como antes: la marca se RE-LEE adentro del microtask —la guarda de la
+  // cicatriz 2 en el instante del retroceso—, así que con la entrada del router arriba (una navegación
+  // que sale del panel) la decisión dice `keep` y no se retrocede.
   useEffect(() => {
+    montadaRef.current = true
     return () => {
+      montadaRef.current = false
       if (!sentinelVivoRef.current) return
       sentinelVivoRef.current = false
-      // La guarda de la cicatriz 2, otra vez y no "ya la chequeé arriba": si el desmontaje fue por
-      // una navegación, arriba está la entrada del router y este retroceso la desharía.
-      if (isPanelExitEntry(window.history.state, id)) window.history.back()
+      queueMicrotask(() => {
+        // Los hechos, leídos UNA vez y EN ESTE INSTANTE (después del remontaje, si lo hubo).
+        const estado: unknown = window.history.state
+        const hechos = { sigueMontada: montadaRef.current, nuestroArriba: isPanelExitEntry(estado, id) }
+        const accion = panelExitUnmountAction(hechos)
+        // El canal de diagnóstico, DESPUÉS de la decisión y ANTES del retroceso.
+        recordExitDiag({
+          tipo: 'desmontaje',
+          ruta: window.location.pathname,
+          hash: window.location.hash,
+          estado,
+          id,
+          duenaFigurando: instanciaDuena,
+          instanciasVivas,
+          hechos,
+          accion,
+          vivoAntes: true,
+          vivoDespues: sentinelVivoRef.current,
+        })
+        if (accion === 'consume') window.history.back()
+      })
     }
   }, [id])
 
