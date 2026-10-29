@@ -7,6 +7,26 @@ el plan `03-13`** (la decisión del dueño del `camino 1`, `03-DECISION-UAT-3.md
 
 ---
 
+## ⚠ Actualización del 2026-10-29 (plan 03-14): lo que falta, y nada más
+
+**El defecto del aterrizaje del login (`G3-4`) quedó medido y arreglado.** La causa, en una línea, tal como
+la nombró la medición (sección `(g)` de `.planning/debug/la-absorcion-que-no-absorbe-medida.md`): al
+entrar por el login el panel se monta con la activación del toque en *Ingresar* todavía vigente, así que
+el sentinel se empuja; el **doble montaje del modo estricto** del servidor de desarrollo corría la
+limpieza del desmontaje, que hacía un `history.back()` sobre el sentinel recién empujado, y ese retroceso
+encendía el aviso solo y se llevaba el hash. El arreglo difiere ese consumo a un microtask y lo decide
+leyendo si el panel sigue montado: en un remontaje lo conserva.
+
+**No se re-corre la ronda.** Android ya pasó los bloques 1 a 3 y el iPhone el bloque 6 el 2026-10-29. El
+motivo, medido: el arreglo vive en la limpieza del desmontaje del panel, que en el uso normal corre una
+sola vez (la barra vive en el layout y no se re-monta entre secciones), así que no toca ningún camino de
+los recorridos que ya pasaron; y la sonda de la app re-midió los once recorridos de antes, en verde.
+
+**Lo que queda:** el **1.6** (nuevo, abajo, en el bloque 1) en **Android** —y en **iPhone** si le queda
+cómodo—, el **3.2** (la parte de overlay del ítem 20) y el **bloque 4** (escritorio).
+
+---
+
 ## ⚠ Actualización del 2026-10-28 (plan `03-13`): la ronda se re-corre DESDE EL PRINCIPIO
 
 **Se re-corre desde el principio, en los DOS motores (Android Chrome y iPhone Safari), con pestaña
@@ -190,6 +210,23 @@ decisión del dueño (`camino 1`) cambió lo que pasa **sin tocar nada**:
   mismo gesto enterraría el sentinel bajo la sección nueva—. Cubre además los ítems **1-5** de la ronda 1
   (el toque desde Inicio hacia un destino). Medido en la sonda de la app (`R-barra-con-aviso`,
   `R-barra-pendiente`, `R-lateral`): la pila queda `(afuera) → Inicio → Clientes`, sin `#salir`.
+
+### 1.6 — Entrar por el login (nuevo, 2026-10-29, G3-4)
+
+**Cómo:** una pestaña nueva **sin sesión** (cerrar sesión desde **Más**, o una pestaña de incógnito),
+loguearse con el usuario de prueba y **mirar la URL apenas aterriza en Inicio**.
+
+- **Tiene que:** **no aparecer ningún aviso solo**; la URL **con el hash** si el login fue rápido (dentro
+  de **~5 s** del toque en *Ingresar*); el primer atrás después de **un toque en un lugar sin botones**
+  (el fondo de Inicio, entre tarjetas) **avisa y no sale**; el segundo **sale**.
+- ⚠ **Si la URL llega sin hash** (el login tardó más que la ventana del navegador), **no es el defecto**:
+  es el mismo caso que el **1.3 (a)**, y con un toque el hash aparece.
+- **Lo que sí sería un fallo:** que el aviso aparezca **sin apretar atrás**, o que el hash **esté y se vaya
+  solo**.
+- *Motivo:* el recorrido `R-login-con-activacion` de la sonda de la app (2026-10-29). Antes del arreglo:
+  aterrizaje con empuje a los 673 ms del click, **un** `popstate` que nadie pidió, el aviso visible y la
+  URL sin hash —`G3-4` tal cual lo vio el dueño—. Después: cero `popstate`, sin aviso, `/dashboard#salir`,
+  y el atrás después de un toque avisa y no sale.
 
 ---
 
