@@ -5,10 +5,10 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 14
 status: executing
-stopped_at: "03-14 planificado (G3-4, el aterrizaje del login): listo para ejecutar con --gaps-only"
-last_updated: "2026-10-29T20:54:54.233Z"
+stopped_at: "03-14 en el checkpoint bloqueante: el dueno corre el 1.6, el 3.2 y el bloque 4"
+last_updated: "2026-10-29T21:29:59.100Z"
 last_activity: 2026-10-29
-last_activity_desc: "03-14 en ejecucion: medir el aterrizaje del login (G3-4) antes de arreglarlo"
+last_activity_desc: "03-14 tasks 1-3 commiteados (G3-4 medido H1 y arreglado, sonda 12/12); en el checkpoint blocking-human"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
@@ -27,10 +27,10 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 14
 **Total Plans in Phase:** 14
-**Status:** Executing Phase 03 — el 03-14 en ejecucion (G3-4, el aterrizaje del login); 13/14 ejecutados antes de este (la fase NO esta completa)
+**Status:** Executing Phase 03 — el 03-14 en el checkpoint bloqueante (G3-4 medido como doble montaje del modo estricto y arreglado; la sonda de la app 12/12); falta el dueno: 1.6, 3.2 y bloque 4 (la fase NO esta completa)
 **Current Phase:** 03
-**Last Activity:** 2026-10-29 — 03-14 en ejecucion
-**Last Activity Description:** el ejecutor mide primero el aterrizaje del login con la activacion vigente; arreglo por la causa medida; termina en el checkpoint blocking-human del dueno
+**Last Activity:** 2026-10-29 — 03-14 en el checkpoint bloqueante
+**Last Activity Description:** veredicto H1 medido en (g); la limpieza del desmontaje difiere el consumo a un microtask (panelExitUnmountAction); 1.6 en el guion; espera la re-prueba del dueno
 
 ## Progress
 
@@ -41,9 +41,9 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Session Continuity
 
-**Last session:** 2026-10-29T13:12:30.330Z
+**Last session:** 2026-10-29T21:29:59.100Z
 
-**Stopped At:** 03-13 en el checkpoint bloqueante: la ronda 3 del dueno en los dos motores
+**Stopped At:** 03-14 en el checkpoint bloqueante: el 1.6 en Android (iPhone si es comodo), el 3.2 y el bloque 4, anotados en 03-UAT-2.md
 **Resume File:** None
 
 ## Performance Metrics
@@ -63,6 +63,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | Phase 03 P11 | 28 min | 3 tasks tasks | 9 files files |
 | Phase 03 P12 | 60 min | 3 tasks | 7 files |
 | Phase 03 P13 | 47min | 4 tasks | 9 files |
+| Phase 03 P14 | 25min | 3 tasks (+1 checkpoint) | 6 files |
 
 ### Quick Tasks Completed
 
@@ -116,3 +117,5 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 - [Phase 03]: El 03-13 NO puede implementar A-D para G3-2/G3-3: cuando se arma el sentinel (tras un toque del dueno, o aceptar el limite) es decision del dueno; (A) queda elegida solo para el defecto de logica de la recarga (septima regla sin acreditar con frjExit de instancia muerta) y el doble montaje queda descartado — Ninguna de las cuatro opciones toca una entrada que el navegador nunca visita; el doble montaje midio cero popstate sin gesto y un armado al montar con el estricto activo y apagado
 - [Phase 03]: El sentinel de salida se empuja SOLO con activacion del usuario (camino 1): armarSentinel recibe puedeEmpujar sin default, efecto y toque lo leen con panelExitActivationNow, los dos reintentos del popstate lo pasan en falso; el aviso no vence (constante y temporizador borrados) y lo baja el toque que re-arma — Medido en el plan 03-12: un empuje sin activacion es salteable por la intervencion de historial; la calibracion del 03-13 dio la rama (b) (isActive mas estricto que el navegador, la direccion segura) y la sonda de la app dio 11/11 con el atras de la interfaz
 - [Phase 03]: Otro dueno para la acreditacion de (A) es ajena Y sin marca de salida, no isForeignOwnedEntry a secas, y la rama none ASIGNA la referencia — isForeignOwnedEntry reconoce el frjExit de cualquier id y habria rechazado justo la entrada de la recarga; asignar re-deriva en los dos sentidos y saca el cartel que mentia sobre una marca muerta. Medido en la app: pares 1->25, 59->301 por la septima, absorbidos
+- [Phase 03]: G3-4 es H1, medido en la app real: el back() que enciende el aviso al loguearse sale de la limpieza del desmontaje del panel en el doble montaje del modo estricto (commitDoubleInvokeEffectsInDEV en la base de la pila, arm->none con el mismo id); H2 (router.refresh) no se cumple. El descartado del 03-12 vale solo para la hidratacion
+- [Phase 03]: El arreglo de G3-4 vive solo en la limpieza del desmontaje: queueMicrotask + panelExitUnmountAction({ sigueMontada, nuestroArriba }) con la marca re-leida en el instante; nunca un temporizador; el login no se toco. Sonda de la app 12/12, estatica 18/18, suite 1994
