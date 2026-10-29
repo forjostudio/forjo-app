@@ -140,9 +140,11 @@ function verificarModo(modo) {
 // ── El servidor de Next, levantado por la sonda ──────────────────────────────────────────────────
 // Un solo comando envuelto por el turno es dueno de todo: el turno es un candado de UN comando y no se
 // puede sostener entre dos.
-async function puertoLibre(puerto) {
+// `tope` (plan 03-13): el chequeo del servidor EXISTENTE espera mas, porque justo despues de un recargado
+// en caliente el primer pedido compila y tarda mas de 1,5 s (medido: la sonda lo tomo por muerto).
+async function puertoLibre(puerto, tope = 1500) {
   try {
-    await fetch(`http://127.0.0.1:${puerto}/`, { signal: AbortSignal.timeout(1500) })
+    await fetch(`http://127.0.0.1:${puerto}/`, { signal: AbortSignal.timeout(tope) })
     return false
   } catch {
     return true
@@ -187,7 +189,7 @@ async function servidorExistente() {
     if (!Number.isInteger(lock.pid) || !Number.isInteger(lock.port)) return null
     try { process.kill(lock.pid, 0) } catch { return null }
     const origen = `http://127.0.0.1:${lock.port}`
-    if (await puertoLibre(lock.port)) return null
+    if (await puertoLibre(lock.port, 60_000)) return null
     return { pid: lock.pid, port: lock.port, origen }
   } catch {
     return null
@@ -293,7 +295,8 @@ async function historial(cdp) {
   const h = await cdp.enviar('Page.getNavigationHistory')
   return {
     indice: h.currentIndex,
-    entradas: h.entries.map((e) => (e.url.startsWith(ORIGEN) ? e.url.slice(ORIGEN.length) : e.url.startsWith('data:') ? '(afuera)' : e.url)),
+    // Normalizada a ruta+hash: Chrome guarda la URL sin el puerto 80, asi que comparar contra ORIGEN no alcanza.
+    entradas: h.entries.map((e) => (e.url.startsWith('data:') ? '(afuera)' : /^https?:/.test(e.url) && new URL(e.url).hostname === '127.0.0.1' ? new URL(e.url).pathname + new URL(e.url).hash : e.url)),
     ids: h.entries.map((e) => e.id),
   }
 }
@@ -769,6 +772,32 @@ function ultimoArmado(desde) {
   return registros.slice(desde).filter((r) => r.tipo === 'armado').at(-1) ?? null
 }
 
+/** Deja la pagina parada en Inicio CON el sentinel armado (el hash en la URL), o tira. */
+async function asegurarArmadoEnInicio(cdp) {
+  let f = await foto(cdp)
+  if (f.ruta !== ROOT) { await entrarDirecto(cdp); f = await foto(cdp) }
+  if (!/^#salir/.test(f.hash)) { await tocarLaPantalla(cdp); f = await foto(cdp) }
+  if (!/^#salir/.test(f.hash)) throw new Error(`no se pudo dejar Inicio armado antes de recargar: url=${f.url}`)
+  return f
+}
+
+/**
+ * Recarga y devuelve lo que la recarga PRESERVO (el `frjExit` del estado de la entrada al nacer el
+ * documento) contra el `id` que se asigno la instancia nueva, y el primer armado.
+ */
+async function recargar(cdp) {
+  const desde = registros.length
+  const cargo = new Promise((ok) => { const t = setTimeout(ok, 150_000); cdp.en('Page.loadEventFired', () => { clearTimeout(t); ok() }) })
+  await cdp.enviar('Page.reload', {})
+  await cargo
+  await asentar(desde)
+  const alRecargar = registros.slice(desde)
+  const nacido = alRecargar.find((r) => r.tipo === 'sonda-documento-nuevo')
+  const primerArmado = alRecargar.find((r) => r.tipo === 'armado') ?? null
+  const frjExitPreservado = nacido ? (JSON.parse(nacido.estado || 'null') ?? {}).frjExit ?? null : null
+  return { alRecargar, primerArmado, frjExitPreservado }
+}
+
 const RECORRIDOS = [
   {
     id: 'R-1.3-sin-toque',
@@ -802,6 +831,7 @@ const RECORRIDOS = [
     async correr(cdp) {
       const desde = await entrarDirecto(cdp)
       const alEntrar = await foto(cdp)
+      const armadoAlEntrar = ultimoArmado(desde)
       const desdeElToque = registros.length
       await tocarLaPantalla(cdp)
       const trasElToque = await foto(cdp)
@@ -809,7 +839,7 @@ const RECORRIDOS = [
       const m = await gestoMedido(cdp)
       return {
         detalle: (p) => {
-          console.log(`${p}al entrar: url=${alEntrar.url} armado=${ultimoArmado(desde)?.accion ?? 'sin-registro'}`)
+          console.log(`${p}al entrar: url=${alEntrar.url} armado=${armadoAlEntrar?.accion ?? 'sin-registro'}`)
           console.log(`${p}el toque:`)
           for (const r of delToque) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
           console.log(`${p}tras el toque: url=${trasElToque.url}`)
@@ -825,7 +855,353 @@ const RECORRIDOS = [
       }
     },
   },
+  {
+    id: 'R-1.3-recarga-logica',
+    titulo: 'la RECARGA del 1.3 por la opcion (A): tres recargas parado en Inicio armado; el armado acredita (none con vivo_despues)',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarLaPantalla(cdp)
+      const vueltas = []
+      for (let vuelta = 1; vuelta <= 3; vuelta++) {
+        await asegurarArmadoEnInicio(cdp)
+        const r = await recargar(cdp)
+        vueltas.push({ vuelta, ...r })
+      }
+      return {
+        detalle: (p) => {
+          for (const v of vueltas) {
+            console.log(`${p}Vuelta ${v.vuelta}: frjExit de la entrada preservada=${v.frjExitPreservado} id de la instancia nueva=${v.primerArmado?.id ?? 'sin-registro'} coinciden=${v.frjExitPreservado === (v.primerArmado?.id ?? NaN) ? 'si' : 'no'}`)
+            console.log(`${p}  primer armado tras recargar: accion=${v.primerArmado?.accion ?? 'sin-registro'} regla=${reglaDelArmado(v.primerArmado?.hechos)} vivo_despues=${v.primerArmado?.vivoDespues}`)
+            for (const r of v.alRecargar) console.log(`${p}    diag ${lineaDeRegistro(r)}`)
+          }
+        },
+        // (A), determinista: con o sin coincidencia de `id`, el primer armado dice `none` (por la
+        // septima o por la cuarta) y la referencia queda ACREDITADA.
+        medido: Object.fromEntries(vueltas.map((v) => [`vuelta_${v.vuelta}_none_y_acreditado`, v.primerArmado?.accion === 'none' && v.primerArmado?.vivoDespues === true ? 'si' : 'no'])),
+        esperado: { vuelta_1_none_y_acreditado: 'si', vuelta_2_none_y_acreditado: 'si', vuelta_3_none_y_acreditado: 'si' },
+      }
+    },
+  },
+  {
+    id: 'R-1.3-recarga-gesto',
+    titulo: 'la RECARGA del 1.3 con el atras de la interfaz: (i) sin tocar despues de recargar, (ii) con un toque — tres vueltas cada una',
+    async correr(cdp) {
+      const variantes = { i: [], ii: [] }
+      for (const variante of ['i', 'ii']) {
+        await entrarDirecto(cdp)
+        await tocarLaPantalla(cdp)
+        for (let vuelta = 1; vuelta <= 3; vuelta++) {
+          await asegurarArmadoEnInicio(cdp)
+          const r = await recargar(cdp)
+          if (variante === 'ii') await tocarLaPantalla(cdp)
+          const m = await gestoMedido(cdp)
+          variantes[variante].push({ vuelta, ...r, m })
+        }
+      }
+      return {
+        detalle: (p) => {
+          for (const variante of ['i', 'ii']) {
+            for (const v of variantes[variante]) {
+              console.log(`${p}(${variante}) vuelta ${v.vuelta}: frjExit preservado=${v.frjExitPreservado} id nuevo=${v.primerArmado?.id ?? 'sin-registro'} primer armado=${v.primerArmado?.accion ?? 'sin-registro'} vivo_despues=${v.primerArmado?.vivoDespues}`)
+              imprimirTupla(`${p}  `, v.m)
+            }
+          }
+        },
+        // Las ramas, escritas ANTES de medir (plan 03-13, task 3): si (i) sale salteado mientras
+        // R-1.3-recarga-logica pasa, es el COSTO declarado y el esperado de (i) se cambia CON LOS
+        // NUMEROS pegados aca; si (ii) sale salteado y (i) no, es un DEFECTO y se para.
+        medido: Object.fromEntries(['i', 'ii'].flatMap((variante) => variantes[variante].map((v) => [`${variante}_vuelta_${v.vuelta}_absorbido`, v.m.tupla.absorbido]))),
+        esperado: {
+          i_vuelta_1_absorbido: 'si', i_vuelta_2_absorbido: 'si', i_vuelta_3_absorbido: 'si',
+          ii_vuelta_1_absorbido: 'si', ii_vuelta_2_absorbido: 'si', ii_vuelta_3_absorbido: 'si',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-1.1',
+    titulo: 'el recorrido del dueno, textual: entrar, tocar Turnos, Clientes y Agenda, tocar Inicio; avisa y despues sale',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      for (const href of ['/appointments', '/clients', '/agenda', ROOT]) await tocarEnLaBarra(cdp, href)
+      const alLlegar = await foto(cdp)
+      const primero = await gestoMedido(cdp)
+      const segundo = await gestoMedido(cdp)
+      return {
+        detalle: (p) => {
+          console.log(`${p}al tocar Inicio: url=${alLlegar.url} pila=[${alLlegar.entradas.join(', ')}] actual=${alLlegar.indice}`)
+          console.log(`${p}primer atras:`)
+          imprimirTupla(`${p}  `, primero)
+          console.log(`${p}segundo atras:`)
+          imprimirTupla(`${p}  `, segundo)
+        },
+        medido: {
+          ruta_al_llegar: alLlegar.ruta,
+          hash_al_llegar: alLlegar.hash,
+          primer_atras_absorbido: primero.tupla.absorbido,
+          segundo_atras_ruta: segundo.tupla.ruta_despues,
+        },
+        esperado: { ruta_al_llegar: ROOT, hash_al_llegar: '#salir', primer_atras_absorbido: 'si', segundo_atras_ruta: '(afuera)' },
+      }
+    },
+  },
+  {
+    id: 'R-3.1',
+    titulo: 'el aviso que SE QUEDA: no vence a los 2,5 s ni a los 10 s, con el aviso el atras sale; un toque lo baja y re-arma',
+    async correr(cdp) {
+      // MITAD A — el punto de partida del 1.2 (entrar, tocar Clientes, tocar Inicio): armado tocando.
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/clients')
+      await tocarEnLaBarra(cdp, ROOT)
+      const primero = await gestoMedido(cdp)
+      // EL PISO DEL TIEMPO, medido DENTRO de la pagina: cada espera es la espera MAS el margen, y el
+      // piso compara contra la espera SOLA. Con el margen bajado a proposito, la espera real se acorta y
+      // el piso tiene que decir que no.
+      const t0 = await evaluar(cdp, 'Date.now()')
+      const arranque = Date.now()
+      await dormir(Math.max(0, ESPERA_CORTA_MS + MARGEN_MS))
+      const aLaCorta = await foto(cdp)
+      await dormir(Math.max(0, ESPERA_LARGA_MS + MARGEN_MS - (Date.now() - arranque)))
+      const aLaLarga = await foto(cdp)
+      const t1 = await evaluar(cdp, 'Date.now()')
+      const transcurrido = t1 - t0
+      const conElAviso = await gestoMedido(cdp)
+      // MITAD B — otra vez desde el principio hasta el aviso visible, y un toque.
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/clients')
+      await tocarEnLaBarra(cdp, ROOT)
+      const primeroB = await gestoMedido(cdp)
+      const desdeElToque = registros.length
+      await tocarLaPantalla(cdp)
+      const trasElToque = await foto(cdp)
+      const delToque = registros.slice(desdeElToque)
+      const otraVez = await gestoMedido(cdp)
+      return {
+        detalle: (p) => {
+          console.log(`${p}MITAD A · primer atras:`)
+          imprimirTupla(`${p}  `, primero)
+          console.log(`${p}transcurrido=${transcurrido} ms dentro de la pagina (espera corta=${ESPERA_CORTA_MS} ms, larga=${ESPERA_LARGA_MS} ms, margen=${MARGEN_MS} ms)`)
+          console.log(`${p}a la espera corta: url=${aLaCorta.url} aviso=${aLaCorta.aviso ? 'visible' : 'oculto'} · a la larga: url=${aLaLarga.url} aviso=${aLaLarga.aviso ? 'visible' : 'oculto'}`)
+          console.log(`${p}atras con el aviso visible:`)
+          imprimirTupla(`${p}  `, conElAviso)
+          console.log(`${p}MITAD B · primer atras:`)
+          imprimirTupla(`${p}  `, primeroB)
+          console.log(`${p}el toque:`)
+          for (const r of delToque) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+          console.log(`${p}tras el toque: url=${trasElToque.url} aviso=${trasElToque.aviso ? 'visible' : 'oculto'}`)
+          console.log(`${p}el atras siguiente:`)
+          imprimirTupla(`${p}  `, otraVez)
+        },
+        medido: {
+          primer_atras_absorbido: primero.tupla.absorbido,
+          aviso_sigue_a_la_espera_corta: aLaCorta.aviso ? 'si' : 'no',
+          hash_a_la_espera_corta: aLaCorta.hash,
+          aviso_sigue_a_la_espera_larga: aLaLarga.aviso ? 'si' : 'no',
+          transcurrido_supera_la_espera: transcurrido > ESPERA_LARGA_MS ? 'si' : 'no',
+          atras_con_el_aviso_ruta: conElAviso.tupla.ruta_despues,
+          b_primer_atras_absorbido: primeroB.tupla.absorbido,
+          b_el_toque_bajo_el_aviso: trasElToque.aviso ? 'no' : 'si',
+          b_el_hash_volvio: trasElToque.hash,
+          b_el_atras_vuelve_a_avisar: otraVez.tupla.absorbido,
+        },
+        esperado: {
+          primer_atras_absorbido: 'si',
+          aviso_sigue_a_la_espera_corta: 'si',
+          hash_a_la_espera_corta: '',
+          aviso_sigue_a_la_espera_larga: 'si',
+          transcurrido_supera_la_espera: 'si',
+          atras_con_el_aviso_ruta: '(afuera)',
+          b_primer_atras_absorbido: 'si',
+          b_el_toque_bajo_el_aviso: 'si',
+          b_el_hash_volvio: '#salir',
+          b_el_atras_vuelve_a_avisar: 'si',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-1.4',
+    titulo: 'llegar a Inicio CON EL ATRAS: sin hash, armado pendiente y el atras siguiente sale (la consecuencia declarada); con un toque, avisa',
+    async correr(cdp) {
+      const mitad = async (conToque) => {
+        await entrarDirecto(cdp)
+        await tocarEnLaBarra(cdp, '/clients')
+        await tocarEnLaBarra(cdp, ROOT)
+        await tocarEnLaBarra(cdp, '/clients')
+        // Para que la activacion del toque ya no este vigente y el resultado no dependa de la velocidad.
+        await dormir(LAPSO_SIN_ACTIVACION_MS)
+        const desde = registros.length
+        const vuelta = await gestoMedido(cdp)
+        await asentar(desde, 3_000)
+        const armadoAlVolver = registros.slice(desde).filter((r) => r.tipo === 'armado').at(-1) ?? null
+        const alVolver = await foto(cdp)
+        if (conToque) await tocarLaPantalla(cdp)
+        const trasElToque = await foto(cdp)
+        const siguiente = await gestoMedido(cdp)
+        return { vuelta, armadoAlVolver, alVolver, trasElToque, siguiente }
+      }
+      const a = await mitad(false)
+      const b = await mitad(true)
+      return {
+        detalle: (p) => {
+          for (const [nombre, x] of [['MITAD A (sin tocar)', a], ['MITAD B (con un toque)', b]]) {
+            console.log(`${p}${nombre} · el atras que vuelve a Inicio:`)
+            imprimirTupla(`${p}  `, x.vuelta)
+            console.log(`${p}  armado al volver: ${x.armadoAlVolver ? lineaDeRegistro(x.armadoAlVolver) : 'sin-registro'}`)
+            console.log(`${p}  al volver: url=${x.alVolver.url} aviso=${x.alVolver.aviso ? 'visible' : 'oculto'} · tras el toque: url=${x.trasElToque.url}`)
+            console.log(`${p}  el atras siguiente:`)
+            imprimirTupla(`${p}    `, x.siguiente)
+          }
+        },
+        medido: {
+          a_ruta_al_volver: a.alVolver.ruta,
+          a_hash_al_volver: a.alVolver.hash,
+          a_armado_al_volver: a.armadoAlVolver?.accion ?? 'sin-registro',
+          a_aviso_al_volver: a.alVolver.aviso ? 'si' : 'no',
+          a_el_atras_siguiente_ruta: a.siguiente.tupla.ruta_despues,
+          b_hash_tras_el_toque: b.trasElToque.hash,
+          b_el_atras_siguiente_absorbido: b.siguiente.tupla.absorbido,
+        },
+        esperado: {
+          a_ruta_al_volver: ROOT,
+          a_hash_al_volver: '',
+          a_armado_al_volver: 'pendiente',
+          a_aviso_al_volver: 'no',
+          a_el_atras_siguiente_ruta: '(afuera)',
+          b_hash_tras_el_toque: '#salir',
+          b_el_atras_siguiente_absorbido: 'si',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-barra-con-aviso',
+    titulo: 'tocar Clientes en la barra con el aviso VISIBLE: el aviso se va y la pila queda sin #salir enterrado',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/clients')
+      await tocarEnLaBarra(cdp, ROOT)
+      const atras = await gestoMedido(cdp)
+      const desde = registros.length
+      await tocarEnLaBarra(cdp, '/clients')
+      const toque = registros.slice(desde).find((r) => r.tipo === 'toque') ?? null
+      const f = await foto(cdp)
+      const camino = f.entradas.slice(0, f.indice + 1)
+      return {
+        detalle: (p) => {
+          console.log(`${p}el atras que levanta el aviso:`)
+          imprimirTupla(`${p}  `, atras)
+          console.log(`${p}el toque: ${toque ? lineaDeRegistro(toque) : 'sin-registro'}`)
+          console.log(`${p}pila=[${f.entradas.join(', ')}] actual=${f.indice}`)
+        },
+        medido: {
+          aviso_antes_del_toque: atras.tupla.aviso_visible,
+          ruta: f.ruta,
+          aviso_visible: f.aviso ? 'si' : 'no',
+          pila_hasta_la_actual: camino.join(','),
+          salir_en_el_camino_del_atras: camino.some((e) => e.includes('#salir')) ? 'si' : 'no',
+          accion_del_toque: toque?.accion ?? 'sin-registro',
+        },
+        esperado: {
+          aviso_antes_del_toque: 'si',
+          ruta: '/clients',
+          aviso_visible: 'no',
+          pila_hasta_la_actual: `(afuera),${ROOT},/clients`,
+          salir_en_el_camino_del_atras: 'no',
+          accion_del_toque: 'drop',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-barra-pendiente',
+    titulo: 'tocar Clientes en la barra recien entrado directo (armado pendiente): la sesion abre sin armar y la pila queda sin #salir',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      const desde = registros.length
+      await tocarEnLaBarra(cdp, '/clients')
+      const toque = registros.slice(desde).find((r) => r.tipo === 'toque') ?? null
+      const f = await foto(cdp)
+      const camino = f.entradas.slice(0, f.indice + 1)
+      return {
+        detalle: (p) => {
+          console.log(`${p}el toque: ${toque ? lineaDeRegistro(toque) : 'sin-registro'}`)
+          console.log(`${p}pila=[${f.entradas.join(', ')}] actual=${f.indice}`)
+          for (const r of registros.slice(desde)) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+        },
+        medido: {
+          ruta: f.ruta,
+          pila_hasta_la_actual: camino.join(','),
+          salir_en_el_camino_del_atras: camino.some((e) => e.includes('#salir')) ? 'si' : 'no',
+          gesto_tomado: toque?.hechos?.gestoTomado === true ? 'si' : 'no',
+          accion_del_toque: toque?.accion ?? 'sin-registro',
+        },
+        esperado: {
+          ruta: '/clients',
+          pila_hasta_la_actual: `(afuera),${ROOT},/clients`,
+          salir_en_el_camino_del_atras: 'no',
+          gesto_tomado: 'si',
+          accion_del_toque: 'none',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-lateral',
+    titulo: 'el hallazgo lateral del plan 03-12: tocar Clientes parado en Inicio ARMADO; el consumo se ignora y el armado queda pendiente, sin #salir enterrado',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarLaPantalla(cdp)
+      const armado = await foto(cdp)
+      const desde = registros.length
+      await tocarEnLaBarra(cdp, '/clients')
+      const regs = registros.slice(desde)
+      const iRetroceso = regs.findIndex((r) => r.tipo === 'retroceso')
+      const retroceso = iRetroceso >= 0 ? regs[iRetroceso] : null
+      const armadoTrasElConsumo = iRetroceso >= 0 ? regs.slice(iRetroceso + 1).find((r) => r.tipo === 'armado') ?? null : null
+      const f = await foto(cdp)
+      const camino = f.entradas.slice(0, f.indice + 1)
+      return {
+        detalle: (p) => {
+          console.log(`${p}armado tocando: url=${armado.url} pila=[${armado.entradas.join(', ')}] actual=${armado.indice}`)
+          for (const r of regs) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+          console.log(`${p}pila=[${f.entradas.join(', ')}] actual=${f.indice}`)
+        },
+        medido: {
+          hash_armado: armado.hash,
+          ruta: f.ruta,
+          pila_hasta_la_actual: camino.join(','),
+          salir_en_el_camino_del_atras: camino.some((e) => e.includes('#salir')) ? 'si' : 'no',
+          retroceso_del_consumo: retroceso?.accion ?? 'sin-registro',
+          armado_tras_el_consumo: armadoTrasElConsumo?.accion ?? 'sin-registro',
+        },
+        esperado: {
+          hash_armado: '#salir',
+          ruta: '/clients',
+          pila_hasta_la_actual: `(afuera),${ROOT},/clients`,
+          salir_en_el_camino_del_atras: 'no',
+          retroceso_del_consumo: 'ignore',
+          armado_tras_el_consumo: 'pendiente',
+        },
+      }
+    },
+  },
 ]
+
+/** Lo que cierra cada recorrido, impreso en el veredicto. */
+const QUE_CIERRA = {
+  'C-activacion': 'la premisa: un empuje con activacion NO es salteable en este motor (y si isActive es exacto o mas estricto)',
+  'R-1.3-sin-toque': 'G3-3, el costo declarado: sin tocar no se empuja (pendiente, sin hash) y el atras sale',
+  'R-1.3-con-toque': 'G3-3: con un toque el hash aparece y el primer atras avisa y no sale',
+  'R-1.3-recarga-logica': 'la recarga del 1.3 por (A): el armado acredita sobre la marca de una instancia muerta',
+  'R-1.3-recarga-gesto': 'la recarga del 1.3 con el atras de la interfaz, sin y con toque despues de recargar',
+  'R-1.1': 'G3-1 re-medido con el gate de activacion: llegar tocando Inicio arma y avisa',
+  'R-3.1': 'G3-2: el aviso se queda (piso del tiempo probado), con el aviso el atras sale, el toque re-arma',
+  'R-1.4': 'la consecuencia declarada: llegar a Inicio con el atras no arma; con un toque, si',
+  'R-barra-con-aviso': 'el toque que navega con el aviso visible: baja el aviso, no arma, pila sin #salir',
+  'R-barra-pendiente': 'el toque que navega con el armado pendiente: no arma, pila sin #salir',
+  'R-lateral': 'el hallazgo lateral del plan 03-12: el reintento del consumo queda pendiente, sin #salir enterrado',
+}
 
 // ── El arnes ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -944,6 +1320,8 @@ async function main() {
 
     console.log('── veredicto ─────────────────────────────────────────────────────────────────')
     console.log(`gesto=${gesto} · modo=${modo} · recorridos medidos: ${medidos} · coinciden con lo esperado: ${medidos - fallados} · no coinciden: ${fallados}`)
+    console.log('lo que cierra cada recorrido (plan 03-13, camino 1 del dueno + opcion (A)):')
+    for (const [id, que] of Object.entries(QUE_CIERRA)) if (elegido(id)) console.log(`  ${id.padEnd(22)} ${que}`)
     console.log('⚠ LO QUE ESTA SONDA NO CIERRA: A11 (Chrome Android / Safari iOS reales). Esto es Chrome de escritorio.')
     if (fallados > 0) {
       console.error('')
