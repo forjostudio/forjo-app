@@ -858,6 +858,76 @@ veredicto G3-8: descartado
   WR-05 (el canal sólo en desarrollo) ya quedó entregado en el task 1 (commits `ddf96f9` RED y `68cf232`
   GREEN) y no lo toca esta parada.
 
+### El cierre (plan 03-16)
+
+El dueño contestó las dos preguntas de la parada el 2026-10-30 (`03-UAT-2.md` § «Los veredictos del 03-15 —
+decisión del dueño»): **`G3-5` → que el aviso se quede**; **`G3-7` → arreglarlo**. Los arreglos salen de esa
+decisión, no de un veredicto nuevo: las cuatro líneas de veredicto de arriba quedan como están (`G3-5` sigue
+en `otro`).
+
+**`G3-5` — el arreglo** (`lib/panel-branch.ts`): `panelExitKeyStep` (pura) cuenta un keyup como toque sólo
+si su keydown llegó DESPUÉS del último `popstate` —el retroceso vacía el conjunto, la repetición no suma—;
+`panelExitKeyId` (pura) es la identidad de la tecla (`code`, o `key` si viene vacío) en un solo lugar; y el
+cableado: `teclasRef`, un oyente `keydown` en captura en el mismo efecto que el retroceso y el toque, el paso
+del `popstate` como primera sentencia de `alRetroceder` (antes del candado del dominio), y en `alTocar` el
+paso del keyup antes del filtro de Enter y `if (!paso.esToque) return` antes del canal y de la decisión. Lo
+bloqueado, intacto por recorte (7 `none` / 4 `ignore`, `panelNavMode` 6/5, `panelBranchPlan` 6/2,
+`branchCarryMark` 4, `panelExitTouchAction` 6, desmontaje 1/2, `history.back()` 2, un empuje, el canal en
+5, cuatro armados, cero tiempo, cero ancho).
+
+**El RED** (`npx vitest run --project pure` sobre los tres archivos): rc 1, **16 fallados / 400 pasados
+(416)** — los nueve de `panelExitKeyStep`, los tres de `panelExitKeyId` y las cuatro auditorías del cableado.
+GREEN: 416/416. Commits: `1ac48d8` (RED, `test(03-16)`), `d9e7962` (GREEN, `feat(03-16)`).
+
+**El tracer, de punta a punta** (2026-10-30, 07:51-07:57 hora local, una invocación por el turno contra el
+`next dev` del dueño, puerto 80; editar el módulo le disparó una recarga en caliente, sin reiniciarlo):
+rc 0, **10/10 en `OK`**, cero fallos del instrumento.
+
+```text
+OK  R-1.1 · el recorrido del dueno, textual: entrar, tocar Turnos, Clientes y Agenda, tocar Inicio; avisa y despues sale
+OK  R-3.1 · el aviso que SE QUEDA: no vence a los 2,5 s ni a los 10 s, con el aviso el atras sale; un toque lo baja y re-arma
+OK  R-1.4 · llegar a Inicio CON EL ATRAS: sin hash, armado pendiente y el atras siguiente sale (la consecuencia declarada); con un toque, avisa
+OK  R-barra-con-aviso · tocar Clientes en la barra con el aviso VISIBLE: el aviso se va y la pila queda sin #salir enterrado
+OK  R-barra-pendiente · tocar Clientes en la barra recien entrado directo (armado pendiente): la sesion abre sin armar y la pila queda sin #salir
+OK  R-lateral · el hallazgo lateral del plan 03-12: tocar Clientes parado en Inicio ARMADO; el consumo se ignora y el armado queda pendiente, sin #salir enterrado
+OK  R-G3-5-escritorio-control · G3-5, el control en ESCRITORIO: un toque arma, el atras de la interfaz avisa y el segundo sale
+OK  R-G3-5-teclado-flecha-primero · G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando la flecha antes que Alt: avisa, el aviso se queda y el segundo sale
+      toques_que_bajan_el_aviso: medido=0
+      aviso_tras_soltar: medido="si"
+      hash_tras_soltar: medido=""
+        diag sonda-tecla doc=9b5mep keyup key=ArrowLeft code=ArrowLeft repeat=false altKey=true metaKey=false isActive=true url=/dashboard
+        diag sonda-tecla doc=9b5mep keyup key=Alt code=AltLeft repeat=false altKey=false metaKey=false isActive=true url=/dashboard
+        (ningun registro toque ni armado despues de los dos keyup: en (h) cada uno traia toque drop-and-arm / arm)
+      tras soltar y 2500 ms quietos: url=/dashboard aviso=visible
+        tupla: hash_antes=(ninguno) es_nuestro=no estado_antes={} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=(afuera) documento_nuevo=no aviso_visible=no absorbido=no
+OK  R-G3-5-teclado-alt-primero · G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando Alt antes que la flecha: avisa, el aviso se queda y el segundo sale
+      toques_que_bajan_el_aviso: medido=0
+      aviso_tras_soltar: medido="si"
+      hash_tras_soltar: medido=""
+      tras soltar y 2500 ms quietos: url=/dashboard aviso=visible
+        tupla: hash_antes=(ninguno) es_nuestro=no estado_antes={} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=(afuera) documento_nuevo=no aviso_visible=no absorbido=no
+OK  R-G3-5-tecla-tras-el-aviso · G3-5, el camino 1 con teclado: con el aviso visible, una letra apretada y soltada lo baja y re-arma; el atras siguiente avisa
+      accion_de_la_tecla: medido="drop-and-arm"
+      hash_tras_la_tecla: medido="#salir"
+      atras_siguiente_absorbido: medido="si"
+        (keydown y keyup KeyA sobre /dashboard despues del popstate -> toque drop-and-arm -> armado arm; el atras
+         siguiente: entradas_salteadas=0 ruta_despues=/dashboard aviso_visible=si)
+```
+
+**El hecho de `(h)`, re-chequeado: el segundo atrás sale DESPUÉS de que el aviso estuvo a la vista.**
+
+| Recorrido de teclado | `aviso_tras_soltar` | `hash_antes` del segundo atrás | `entradas_salteadas` |
+|---|---|---|---|
+| antes (`(h)`, 03-15) | `no` | `#salir` | 1 (Chrome salteó Inicio) |
+| después (03-16), los dos órdenes | `si` | `(ninguno)` | 0 (de Inicio a la página de afuera) |
+
+Los dos controles (`R-G3-5-escritorio-control`, `R-G3-5-tecla-tras-el-aviso`) en `OK`: P-6 no aplica. P-1 y
+P-5 tampoco. Lo que esta medición no cierra de `G3-5` sigue igual que arriba: el acelerador real del
+navegador, macOS y el botón lateral del mouse (fuera por construcción: dispara `auxclick`, y el módulo
+escucha `click` y `keyup`) son el 4.3 del dueño.
+
+cierre G3-5: arreglado
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la
