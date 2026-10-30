@@ -1618,6 +1618,79 @@ describe('panelExitStillHolding — la acreditación de (A), pura, con las regla
   })
 })
 
+// ── G3-7 (plan 03-16): cerrar un diálogo de Inicio abierto ANTES del armado vuelve a armar ─────────
+//
+// POR QUÉ, medido (`## (h)`, `veredicto G3-7: confirmado`, la firma entera de WR-02 en los tres recorridos)
+// y DECIDIDO por el dueño el 2026-10-30 («arreglarlo»): el toque que cierra el diálogo con la X llega con la
+// entrada del overlay todavía arriba, el armado declina por la regla 0 (`foreignOwnsTop`), el retroceso del
+// cierre es `ignore` y su reintento —sin poder empujar— queda `pendiente`: el atrás siguiente sale sin
+// aviso. El contrafáctico pregunta «¿declinó SÓLO por la entrada ajena?» con la MISMA decisión bloqueada.
+
+describe('panelExitForeignRetry — ¿el armado de este toque declinó SÓLO por la entrada ajena? (plan 03-16, G3-7)', () => {
+  const PIDE = { puedeEmpujar: true, accion: 'none' as const, accionSinAjena: 'arm' as const, ajenaArriba: true }
+
+  it('regla 4 — con activación, la decisión en `none`, la entrada ajena arriba y el contrafáctico en `arm` ⇒ pide el reintento (G3-7)', () => {
+    expect(PB.panelExitForeignRetry(PIDE)).toBe(true)
+  })
+
+  it('regla 1 — sin activación ⇒ no pide (un atrás no es una activación: el camino 1)', () => {
+    expect(PB.panelExitForeignRetry({ ...PIDE, puedeEmpujar: false })).toBe(false)
+  })
+
+  it('regla 2 — la decisión ya es `arm` ⇒ no pide (ya armó: nada que reintentar)', () => {
+    expect(PB.panelExitForeignRetry({ ...PIDE, accion: 'arm' })).toBe(false)
+  })
+
+  it('regla 3 — sin entrada ajena arriba ⇒ no pide, aunque el contrafáctico diga `arm`', () => {
+    expect(PB.panelExitForeignRetry({ ...PIDE, ajenaArriba: false })).toBe(false)
+  })
+
+  it('regla 5 — el contrafáctico también declina (el aviso abierto, algo nuestro debajo) ⇒ no pide: no declinó SÓLO por la ajena', () => {
+    expect(PB.panelExitForeignRetry({ ...PIDE, accionSinAjena: 'none' })).toBe(false)
+  })
+
+  it('de punta a punta sobre la decisión bloqueada: los hechos del cierre medido en (h) ⇒ `none`, sin la ajena ⇒ `arm`, y el reintento se pide', () => {
+    const hechos = {
+      participates: true,
+      atRoot: true,
+      hintOpen: false,
+      topIsOurs: PB.isPanelExitEntry({ frjOverlay: 1 }, 1),
+      urlYaLlevaNuestroHash: PB.urlAlreadyHoldsExitHash('#modal'),
+      foreignOwnsTop: PH.isForeignOwnedEntry({ frjOverlay: 1 }),
+      algoNuestroDebajo: PH.panelUnderRoute({ frjOverlay: 1 }) !== null,
+    }
+    const accion = PB.panelExitArmAction(hechos)
+    const accionSinAjena = PB.panelExitArmAction({ ...hechos, foreignOwnsTop: false })
+    expect(accion).toBe('none')
+    expect(accionSinAjena).toBe('arm')
+    expect(PB.panelExitForeignRetry({ puedeEmpujar: true, accion, accionSinAjena, ajenaArriba: hechos.foreignOwnsTop })).toBe(true)
+  })
+
+  it('…y su contrapuesto adyacente: con el AVISO ABIERTO el contrafáctico también da `none` y no se pide', () => {
+    const hechos = {
+      participates: true,
+      atRoot: true,
+      hintOpen: true,
+      topIsOurs: false,
+      urlYaLlevaNuestroHash: false,
+      foreignOwnsTop: true,
+      algoNuestroDebajo: false,
+    }
+    const accionSinAjena = PB.panelExitArmAction({ ...hechos, foreignOwnsTop: false })
+    expect(accionSinAjena).toBe('none')
+    expect(PB.panelExitForeignRetry({ puedeEmpujar: true, accion: PB.panelExitArmAction(hechos), accionSinAjena, ajenaArriba: true })).toBe(false)
+  })
+
+  it('pureza: la región no lee el navegador', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf('export function panelExitForeignRetry({')
+    expect(desde).toBeGreaterThan(0)
+    const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+    expect(region.length).toBeGreaterThan(80)
+    expect(cuenta(region, /window|navigator|document|history/g)).toBe(0)
+  })
+})
+
 describe('los CUATRO momentos de reintento — y el que NO re-arma', () => {
   /** El manejador del retroceso, recortado del fuente sin comentarios. */
   function manejadorDelRetroceso(): string {
@@ -1726,6 +1799,66 @@ describe('los CUATRO momentos de reintento — y el que NO re-arma', () => {
     const mod = leer(MOD_DUENO)
     expect(mod).toMatch(/si la URL no muestra/i)
     expect(mod).toContain('03-08')
+  })
+})
+
+describe('el cableado del reintento de G3-7 — pedido en el toque, leído en el `ignore`, empujado desde el efecto del armado (plan 03-16)', () => {
+  const recortar = (firma: string, fin: RegExp) => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf(firma)
+    expect(desde).toBeGreaterThan(0)
+    const resto = mod.slice(desde)
+    const m = resto.match(fin)
+    expect(m).not.toBeNull()
+    return resto.slice(0, (m?.index ?? 0) + (m?.[0].length ?? 0))
+  }
+
+  it('el contrafáctico vive adentro de `armarSentinel`, DESPUÉS de la decisión y sobre los MISMOS hechos, y escribe la referencia', () => {
+    const armado = recortar('const armarSentinel = useCallback', /\n {2}\}, \[drawsExitHint, id, root\]\)/)
+    const iDecision = armado.indexOf('const accion = panelExitArmAction(hechos)')
+    const iContra = armado.indexOf('panelExitArmAction({ ...hechos, foreignOwnsTop: false })')
+    const iEscribe = armado.indexOf('reintentoTrasAjenaRef.current = panelExitForeignRetry(')
+    expect(iDecision).toBeGreaterThan(-1)
+    expect(iContra).toBeGreaterThan(iDecision)
+    expect(iEscribe).toBeGreaterThan(iDecision)
+    expect(cuenta(armado, /panelExitArmAction\(/g)).toBe(2)
+  })
+
+  it('el toque APAGA la referencia después de `esToque` y del candado, y ANTES de decidir (lo que mantiene R-lateral)', () => {
+    const toque = recortar('const alTocar = (evento: Event) => {', /\n {4}\}\n/)
+    const iEsToque = toque.indexOf('if (!paso.esToque) return')
+    const iCandado = toque.indexOf('branchOwnerDecision(')
+    const iApaga = toque.indexOf('reintentoTrasAjenaRef.current = false')
+    const iDecision = toque.indexOf('panelExitTouchAction(')
+    expect(iEsToque).toBeGreaterThan(-1)
+    expect(iApaga).toBeGreaterThan(iEsToque)
+    expect(iApaga).toBeGreaterThan(iCandado)
+    expect(iDecision).toBeGreaterThan(iApaga)
+  })
+
+  it('la rama `ignore` lee y apaga la referencia ANTES de su armado sin empuje y pide el reintento; el retroceso sigue sin empujar ni leer la activación', () => {
+    const retroceso = recortar('const alRetroceder = () => {', /\n {4}\}\n/)
+    const ignorar = retroceso.match(/accion === 'ignore'\) \{[\s\S]*?\n {6}\}/)?.[0] ?? ''
+    expect(ignorar.length).toBeGreaterThan(50)
+    const iLee = ignorar.indexOf('reintentoTrasAjenaRef.current')
+    const iArma = ignorar.indexOf('armarSentinel({ puedeEmpujar: false })')
+    expect(iLee).toBeGreaterThan(-1)
+    expect(iArma).toBeGreaterThan(iLee)
+    expect(ignorar).toContain('reintentoTrasAjenaRef.current = false')
+    expect(ignorar).toContain('setReintentoDelArmado((n) => n + 1)')
+    expect(cuenta(retroceso, /pushState/g)).toBe(0)
+    expect(cuenta(retroceso, /panelExitActivationNow/g)).toBe(0)
+    expect(cuenta(retroceso, /armarSentinel\(\{ puedeEmpujar: false \}\)/g)).toBe(2)
+  })
+
+  it('el empuje sale del EFECTO del armado: sus dependencias suman `reintentoDelArmado`, y el módulo sigue con cuatro armados y un empuje', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(mod).toContain('const reintentoTrasAjenaRef = useRef(false)')
+    expect(mod).toContain('const [reintentoDelArmado, setReintentoDelArmado] = useState(0)')
+    expect(cuenta(mod, /\}, \[armarSentinel, pathname, reintentoDelArmado\]\)/g)).toBe(1)
+    expect(cuenta(mod, /\}, \[armarSentinel, pathname\]\)/g)).toBe(0)
+    expect(cuenta(mod, /armarSentinel\(\{/g)).toBe(4)
+    expect(cuenta(mod, /window\.history\.pushState/g)).toBe(1)
   })
 })
 
