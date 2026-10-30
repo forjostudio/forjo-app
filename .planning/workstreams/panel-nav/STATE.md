@@ -5,10 +5,10 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 16
 status: executing
-stopped_at: "Planificado 03-16-PLAN.md (G3-5 y G3-7, decision del dueno del 2026-10-30); plan-checker PASSED; listo para ejecutar"
-last_updated: "2026-10-30T05:05:00.000Z"
+stopped_at: "03-16 en el checkpoint bloqueante: el dueno corre el 4.3, el 4.2, el 3.3 y el 1.5"
+last_updated: "2026-10-30T11:20:00.000Z"
 last_activity: 2026-10-30
-last_activity_desc: "03-15 medido y parado en P-4 (WR-05 entregado; G3-6 y G3-8 descartados); el dueno decidio G3-5 y G3-7; 03-16 planificado y verificado"
+last_activity_desc: "03-16 tasks 1-3 commiteados (G3-5 y G3-7 arreglados y medidos en la app, sonda 12/12 + 11/11, suite 2030); en el checkpoint blocking-human"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
@@ -27,10 +27,10 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 16
 **Total Plans in Phase:** 16
-**Status:** Ready to execute (fase 03: 03-16 planificado el 2026-10-30 — G3-5 y G3-7 por decision del dueno; plan-checker PASSED)
+**Status:** Executing Phase 03 — el 03-16 en el checkpoint bloqueante (G3-5 y G3-7 arreglados por decision del dueno y medidos en verde en la app real; P-8 no aparecio); falta el dueno: 4.3, 4.2, 3.3 y 1.5 (la fase NO esta completa)
 **Current Phase:** 03
-**Last Activity:** 2026-10-30 — 03-15 ejecutado hasta P-4 (los gaps del code review, medidos)
-**Last Activity Description:** el canal de diagnostico quedo solo en desarrollo (WR-05, commits ddf96f9/68cf232); la sonda de la app midio G3-5 otro (el atras de teclado SI sale, pero el aviso se va al soltar), G3-6 descartado, G3-7 confirmado, G3-8 descartado (seccion (h) de .planning/debug/la-absorcion-que-no-absorbe-medida.md, commit 2ed78db); MOB-04/05/06 siguen sin marcar
+**Last Activity:** 2026-10-30 — 03-16 en el checkpoint bloqueante
+**Last Activity Description:** G3-5: un keyup cuenta como toque solo si su tecla bajo despues del ultimo atras (panelExitKeyStep), el aviso se queda y el segundo atras sale; G3-7: el reintento tras cerrar un dialogo de Inicio desde el efecto del armado (panelExitForeignRetry); cierre en (h) de .planning/debug/la-absorcion-que-no-absorbe-medida.md; MOB-04/05/06 siguen sin marcar
 
 ## Progress
 
@@ -41,9 +41,9 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Session Continuity
 
-**Last session:** 2026-10-30T05:05:00.000Z
+**Last session:** 2026-10-30T11:20:00.000Z
 
-**Stopped At:** Planificado 03-16-PLAN.md — proximo: `/gsd-execute-phase 3 --ws panel-nav --gaps-only`
+**Stopped At:** 03-16 en el checkpoint bloqueante: el 4.3 y el 4.2 en el escritorio, el 3.3 y el 1.5 en Android, anotados en 03-UAT-2.md con fecha y motor
 **Resume File:** None
 
 ## Performance Metrics
@@ -65,6 +65,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | Phase 03 P13 | 47min | 4 tasks | 9 files |
 | Phase 03 P14 | 25min | 4 tasks (incl. checkpoint aprobado) | 6 files |
 | Phase 03 P15 | 40min | 2 de 6 tasks (parado en P-4) | 4 files |
+| Phase 03 P16 | 31min | 3 tasks (+1 checkpoint) | 5 files |
 
 ### Quick Tasks Completed
 
@@ -123,3 +124,5 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 - [Phase 03]: El arreglo de G3-4 vive solo en la limpieza del desmontaje: queueMicrotask + panelExitUnmountAction({ sigueMontada, nuestroArriba }) con la marca re-leida en el instante; nunca un temporizador; el login no se toco. Sonda de la app 12/12, estatica 18/18, suite 1994
 - [Phase 03]: El canal de diagnostico (recordExitDiag / __forjoPanelDiag) graba SOLO con NODE_ENV development o test (decision del dueno sobre WR-05, plan 03-15): panelExitDiagEnabled pura, gate como primera sentencia leido en cada llamada, sin bandera publica; en next dev las sondas lo siguen usando igual
 - [Phase 03]: Los cuatro gaps del code review MEDIDOS en la app real (03-15, seccion (h)): G3-5 otro (el keyup re-empuja #salir con isActive=true pero el segundo atras SALE salteando /dashboard; el aviso se va al soltar), G3-6 descartado (el router.replace pedido desde el popstate del colapso SI escribe), G3-7 confirmado (firma entera de WR-02 en los tres), G3-8 descartado (el login siempre aterriza en /dashboard). P-4: el plan para sin arreglos de gap
+- [Phase 03]: G3-5 se arreglo por la DECISION del dueno (que el aviso se quede), no por un veredicto: veredicto G3-5 sigue en otro. Un keyup cuenta como toque solo si su keydown llego despues del ultimo popstate (panelExitKeyStep, conjunto de teclas con keydown en captura; identidad = code o key, en un solo lugar). Medido: aviso_tras_soltar no->si, entradas_salteadas 1->0 en los dos ordenes de soltar
+- [Phase 03]: G3-7 se arreglo con el contrafactico de panelExitArmAction (foreignOwnsTop en falso) en panelExitForeignRetry y el empuje desde el efecto del armado (deps + reintentoDelArmado), nunca desde el popstate; la intervencion de historial temida (P-8) NO aparecio: los tres R-G3-7 en OK con entradas_salteadas=0 y R-lateral en verde
