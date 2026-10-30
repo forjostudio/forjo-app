@@ -129,6 +129,10 @@ const MARGEN_MS = 900
 //     eventos tardios: el retroceso asincrono, el reemplazo del `refresh` y el `popstate`.
 const INTENTOS_DEL_LOGIN = 3
 const VENTANA_DEL_ATERRIZAJE_MS = 4000
+// LA SALIDA SIN GUARDAR (plan 03-15, `G3-6`): la espera quieta despues de «Salir sin guardar», para que
+// entren el consumo del sentinel de cambios o el colapso de la rama (retrocesos asincronos), sus
+// `popstate` y la navegacion del segundo paso, desde un commit o desde el evento.
+const VENTANA_DE_LA_SALIDA_MS = 4000
 
 const MODOS = {
   dev: { estricto: true },
@@ -298,6 +302,10 @@ const SCRIPT_DEL_CANAL = `(() => {
     // de los manejadores de React (la raiz de Next 16 es el documento) y ANTES del oyente del hook, asi
     // que dice si un link se llevo el gesto y si el navegador lo conto como activacion.
     addEventListener('click', (e) => canal.push({ tipo: 'sonda-click', ts: Date.now(), ruta: location.pathname, hash: location.hash, estado: estadoTexto(), defaultPrevented: e.defaultPrevented, isActive: navigator.userActivation ? navigator.userActivation.isActive : null }))
+    // plan 03-15 (G3-5): cada keydown y keyup en la BURBUJA de window, registrado al nacer el documento
+    // y por eso ANTES que el oyente del hook. Es lo que AFIRMA el orden compuesto del atras de teclado
+    // (los dos keydown antes del popstate, los dos keyup despues) y la activacion de cada uno.
+    for (const evento of ['keydown', 'keyup']) addEventListener(evento, (e) => canal.push({ tipo: 'sonda-tecla', evento: e.type, key: e.key, code: e.code, repeat: e.repeat, altKey: e.altKey, metaKey: e.metaKey, ts: Date.now(), ruta: location.pathname, hash: location.hash, isActive: navigator.userActivation ? navigator.userActivation.isActive : null }))
   }
 })()`
 
@@ -311,13 +319,30 @@ const SCRIPT_DEL_CANAL = `(() => {
 // documento atrapa las llamadas del panel, las del router de Next y las de cualquiera.
 // ⚠ EL TOPE DE LA PILA se sube adentro del envoltorio y se restaura: el de V8 es de 10 marcos, y la
 // limpieza de efectos de React queda mas abajo que eso.
-// Se registra SOLO adentro de `R-login-con-activacion` y se quita al terminarlo: los once recorridos
-// de antes corren sin el.
+// Se registra SOLO adentro de `R-login-con-activacion` y de los tres recorridos de `G3-6` (plan 03-15),
+// y se quita al terminar cada uno: los otros recorridos corren sin el.
+// ⚠ LA PRECONDICION FORZADA DE `G3-6` (plan 03-15), declarada como tal: la bandera
+// `__forjoSondaDescartaSentinelDeCambios`, APAGADA por omision. Encendida, el PROXIMO empuje cuyo
+// estado trae la clave `frjDirty` (el sentinel de cambios sin guardar de `lib/dirty-history.ts`) NO
+// LLEGA al metodo original, se graba como `pushState-descartado` y la bandera se apaga sola. Es el
+// sentinel de cambios AUSENTE con la pantalla sucia, que ningun camino de la app se sabe que produzca:
+// por eso es forzada y nunca habilita un arreglo por si sola. Vive aca y no en la app porque Next
+// captura el metodo de la historia al iniciar: solo un envoltorio del prototipo instalado al nacer el
+// documento lo ve. Con la bandera apagada el script se comporta exactamente como en el plan 03-14.
 const SCRIPT_DE_LA_HISTORIA = `(() => {
   const estadoTexto = () => { try { const s = history.state; if (!s || typeof s !== 'object') return JSON.stringify(s); const o = { claves: Object.keys(s).sort() }; for (const k of Object.keys(s)) if (k.startsWith('frj')) o[k] = s[k]; return JSON.stringify(o) } catch { return '?' } }
+  globalThis.__forjoSondaDescartaSentinelDeCambios = false
   for (const metodo of ['pushState', 'replaceState', 'back', 'go', 'forward']) {
     const original = History.prototype[metodo]
     History.prototype[metodo] = function (...args) {
+      if (metodo === 'pushState' && globalThis.__forjoSondaDescartaSentinelDeCambios === true && args[0] && typeof args[0] === 'object' && 'frjDirty' in args[0]) {
+        globalThis.__forjoSondaDescartaSentinelDeCambios = false
+        try {
+          const canal = globalThis.__forjoPanelDiag
+          if (Array.isArray(canal)) canal.push({ tipo: 'sonda-historia', metodo: 'pushState-descartado', ts: Date.now(), ruta: location.pathname, hash: location.hash, urlArg: String(args[2] ?? ''), estado: estadoTexto(), pila: '', base: '', marcos: 0 })
+        } catch {}
+        return undefined
+      }
       try {
         const canal = globalThis.__forjoPanelDiag
         if (Array.isArray(canal) && location.protocol.startsWith('http')) {
@@ -526,6 +551,9 @@ function lineaDeRegistro(r, t0 = null) {
   if (r.tipo === 'desmontaje') return `desmontaje doc=${r.doc} id=${r.id} url=${r.ruta}${r.hash} accion=${r.accion} sigue_montada=${r.hechos?.sigueMontada} nuestro_arriba=${r.hechos?.nuestroArriba} vivo_despues=${r.vivoDespues}`
   if (r.tipo === 'toque') return `toque     doc=${r.doc} id=${r.id} url=${r.ruta}${r.hash} accion=${r.accion} hechos=${JSON.stringify(r.hechos)} vivo_antes=${r.vivoAntes} vivo_despues=${r.vivoDespues}`
   if (r.tipo === 'sonda-click') return `sonda-click doc=${r.doc} url=${r.ruta}${r.hash} defaultPrevented=${r.defaultPrevented} isActive=${r.isActive}`
+  // plan 03-15: las teclas (G3-5) y las llamadas al router de Next (G3-6).
+  if (r.tipo === 'sonda-tecla') return `sonda-tecla doc=${r.doc} ${r.evento} key=${r.key} code=${r.code} repeat=${r.repeat} altKey=${r.altKey} metaKey=${r.metaKey} isActive=${r.isActive} url=${r.ruta}${r.hash}`
+  if (r.tipo === 'sonda-router') return `sonda-router doc=${r.doc} metodo=${r.metodo} href=${r.href} url=${r.ruta}${r.hash}`
   return `${r.tipo.padEnd(9)} doc=${r.doc} url=${r.ruta}${r.hash} estado=${r.estado}`
 }
 
@@ -730,6 +758,419 @@ async function entrarDirecto(cdp) {
   await navegar(cdp, ORIGEN + ROOT)
   await asentar(desde)
   return desde
+}
+
+// ── Las primitivas del plan 03-15: los cuatro gaps del code review, medidos ───────────────────────
+//
+// Cada uno de `G3-5` a `G3-8` sale de LEER el codigo (03-REVIEW.md: CR-01, CR-02, WR-02, WR-04) y este
+// workstream tiene cinco arreglos confiados que se cayeron al medirlos: estas primitivas son las que
+// dejan medir cada hipotesis en la app real, con un control y una guarda de llegada por recorrido.
+
+/** El ancho de ESCRITORIO (D-05: el aviso vale tambien ahi). Sin `mobile`: la barra de abajo se oculta. */
+async function escritorio(cdp) {
+  await cdp.enviar('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false })
+}
+
+/** El ancho del telefono de siempre: el que `main` pone despues del login. */
+async function celular(cdp) {
+  await cdp.enviar('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
+}
+
+// Las teclas que usan los recorridos de `G3-5`, con su identidad FISICA (`code`) y su codigo virtual.
+const TECLAS = {
+  AltLeft: { key: 'Alt', code: 'AltLeft', windowsVirtualKeyCode: 18 },
+  ArrowLeft: { key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 },
+  KeyA: { key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, text: 'a' },
+}
+// El bit de Alt en `Input.dispatchKeyEvent` (Alt=1, Ctrl=2, Meta=4, Shift=8).
+const MOD_ALT = 1
+
+/** Un evento de tecla REAL por CDP (da activacion del usuario como la da un teclado). */
+async function tecla(cdp, tipo, code, modifiers = 0) {
+  const t = TECLAS[code]
+  if (!t) throw new Error(`tecla desconocida: ${code}`)
+  const { text, ...identidad } = t
+  await cdp.enviar('Input.dispatchKeyEvent', {
+    type: tipo,
+    modifiers,
+    ...identidad,
+    nativeVirtualKeyCode: t.windowsVirtualKeyCode,
+    ...(tipo === 'keyDown' && text ? { text, unmodifiedText: text } : {}),
+  })
+}
+
+/**
+ * EL ATRAS DE TECLADO, COMPUESTO (G3-5). La combinacion por CDP no navega (ver la cabecera: Alt+Izquierda
+ * por CDP no navega), asi que el retroceso es el de SIEMPRE —el de la interfaz, `atras(cdp)`— y lo que se
+ * compone es el ORDEN de los eventos que el teclado real produce alrededor de el: keydown de Alt y
+ * keydown de la flecha (con el modificador), el retroceso, la espera del registro `retroceso` del hook, y
+ * los dos keyup en el orden pedido (`flecha-primero` o `alt-primero`), con el modificador SOLO mientras
+ * Alt sigue apretado. La foto se toma entre el retroceso y los keyup: es lo que el dueno ve antes de soltar.
+ */
+async function atrasDeTeclado(cdp, { soltar }) {
+  if (soltar !== 'flecha-primero' && soltar !== 'alt-primero') throw new Error(`orden de soltar desconocido: ${soltar}`)
+  const desde = registros.length
+  await tecla(cdp, 'rawKeyDown', 'AltLeft', MOD_ALT)
+  await tecla(cdp, 'rawKeyDown', 'ArrowLeft', MOD_ALT)
+  const g = await atras(cdp)
+  if (!g.hubo) throw new Error('el atras de teclado no tenia una entrada a la que volver')
+  const retroceso = await esperarRegistro(desde, 'retroceso', 5_000)
+  const trasElAtras = await foto(cdp)
+  if (soltar === 'flecha-primero') {
+    await tecla(cdp, 'keyUp', 'ArrowLeft', MOD_ALT)
+    await tecla(cdp, 'keyUp', 'AltLeft', 0)
+  } else {
+    await tecla(cdp, 'keyUp', 'AltLeft', 0)
+    await tecla(cdp, 'keyUp', 'ArrowLeft', 0)
+  }
+  return { desde, retroceso, trasElAtras, recargo: g.recargo }
+}
+
+/** Una letra apretada y soltada (keydown y keyup): el camino 1 con teclado. */
+async function teclaCompleta(cdp, code) {
+  await tecla(cdp, 'keyDown', code)
+  await tecla(cdp, 'keyUp', code)
+}
+
+/**
+ * El toque REAL del destino VISIBLE de la barra de abajo, SIN esperar la ruta: el guard de cambios sin
+ * guardar lo puede frenar (con el dialogo), y la sesion vencida lo rebota a `/login`.
+ */
+async function tocarSinEsperar(cdp, href) {
+  const rect = await evaluar(cdp, `(() => { const a = [...document.querySelectorAll('a[href=' + JSON.stringify(${JSON.stringify(href)}) + ']')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && b.bottom > innerHeight / 2 }); if (!a) return null; const b = a.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`)
+  if (!rect) throw new Error(`no hay un destino visible de la barra para ${href}`)
+  await clickEnPunto(cdp, rect)
+}
+
+/**
+ * El toque REAL de un enlace VISIBLE que no es de la barra (el de `/web` en la pantalla Mas): se lo trae
+ * a la vista, se lo toca, y se espera la ruta y el asentado, en el mismo orden que `tocarEnLaBarra`.
+ */
+async function tocarEnlace(cdp, href) {
+  const desde = registros.length
+  const buscar = `(() => { const a = [...document.querySelectorAll('a[href=' + JSON.stringify(${JSON.stringify(href)}) + ']')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); if (!a) return null; a.scrollIntoView({ block: 'center' }); const b = a.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`
+  if (!(await evaluar(cdp, buscar))) throw new Error(`no hay un enlace visible a ${href}`)
+  await dormir(150)
+  const rect = await evaluar(cdp, buscar)
+  await clickEnPunto(cdp, rect)
+  const tope = Date.now() + 90_000
+  while (Date.now() < tope && (await evaluar(cdp, 'location.pathname')) !== href) await dormir(200)
+  if ((await evaluar(cdp, 'location.pathname')) !== href) throw new Error(`el toque en el enlace a ${href} no llego a ${href}`)
+  const llegada = registros.length
+  await asentar(desde, 60_000)
+  if (registros.slice(llegada).every((r) => r.tipo !== 'armado')) await asentar(llegada, 5_000)
+}
+
+/**
+ * Ensucia el editor de `/web`: foco y tipeo REAL (`Input.insertText`) en un campo de texto visible. Las
+ * secciones del editor arrancan cerradas, asi que si no hay ningun campo a la vista se abre la siguiente
+ * seccion cerrada con un click real, hasta encontrar uno. `dirty` es un DIFF real contra lo guardado
+ * (`web-client.tsx`): tipear un texto nuevo lo deja sucio.
+ */
+async function ensuciarLaWeb(cdp) {
+  const buscar = `(() => {
+    const sel = 'main input:not([type]), main input[type="text"], main input[type="url"], main input[type="email"], main input[type="tel"], main textarea'
+    const el = [...document.querySelectorAll(sel)].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && !x.disabled && !x.readOnly })
+    if (!el) return null
+    el.scrollIntoView({ block: 'center' })
+    el.focus()
+    return { etiqueta: el.tagName.toLowerCase(), id: el.id || null, enfocado: document.activeElement === el }
+  })()`
+  let campo = await evaluar(cdp, buscar)
+  const abiertas = []
+  for (let i = 0; !campo && i < 10; i++) {
+    const punto = await evaluar(cdp, `(() => { const b = [...document.querySelectorAll('main button[aria-expanded="false"]')].find((x) => { const r = x.getBoundingClientRect(); return r.width > 0 && r.height > 0 }); if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, texto: b.textContent.trim().slice(0, 40) } })()`)
+    if (!punto) break
+    abiertas.push(punto.texto)
+    await clickEnPunto(cdp, punto)
+    await dormir(400)
+    campo = await evaluar(cdp, buscar)
+  }
+  if (!campo || !campo.enfocado) throw new Error(`no se pudo ensuciar /web: campo=${JSON.stringify(campo)} secciones abiertas=${JSON.stringify(abiertas)}`)
+  await cdp.enviar('Input.insertText', { text: ' sonda' })
+  console.log(`      /web ensuciada: <${campo.etiqueta}${campo.id ? ` id=${campo.id}` : ''}> (secciones abiertas=${JSON.stringify(abiertas)})`)
+  return campo
+}
+
+/** Un click REAL sobre el boton VISIBLE cuyo texto es exactamente `texto`. */
+async function clickEnBoton(cdp, texto) {
+  const punto = await evaluar(cdp, `(() => { const b = [...document.querySelectorAll('button')].find((x) => { const r = x.getBoundingClientRect(); return r.width > 0 && r.height > 0 && x.textContent.trim() === ${JSON.stringify(texto)} }); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })()`)
+  if (!punto) throw new Error(`no hay un boton visible con el texto «${texto}»`)
+  await clickEnPunto(cdp, punto)
+}
+
+/** ¿Hay un `[role="dialog"]` VISIBLE (con `texto` adentro, si se pide)? Espera con tope. */
+async function esperarDialogo(cdp, texto, tope) {
+  const fin = Date.now() + tope
+  while (Date.now() < fin) {
+    const hay = await evaluar(cdp, `(() => [...document.querySelectorAll('[role="dialog"]')].some((d) => { const b = d.getBoundingClientRect(); return b.width > 0 && b.height > 0 && (${JSON.stringify(texto)} === null || d.textContent.includes(${JSON.stringify(texto)})) }))()`)
+    if (hay) return true
+    await dormir(150)
+  }
+  return false
+}
+
+/** Espera, con tope, a que no quede ningun `[role="dialog"]` visible. */
+async function esperarSinDialogo(cdp, tope) {
+  const fin = Date.now() + tope
+  while (Date.now() < fin) {
+    const hay = await evaluar(cdp, `(() => [...document.querySelectorAll('[role="dialog"]')].some((d) => { const b = d.getBoundingClientRect(); return b.width > 0 && b.height > 0 }))()`)
+    if (!hay) return true
+    await dormir(150)
+  }
+  return false
+}
+
+/** Lo que dice la entrada de ARRIBA ahora: si trae el sentinel de cambios, y la marca de la rama. */
+async function estadoDeArriba(cdp) {
+  return evaluar(cdp, `(() => { const s = history.state; const o = s && typeof s === 'object' ? s : {}; return { frjDirty: 'frjDirty' in o, frjUnder: typeof o.frjUnder === 'string' ? o.frjUnder : null, url: location.pathname + location.hash } })()`)
+}
+
+/**
+ * EL INSTRUMENTO DEL ROUTER (plan 03-15, `G3-6`). Envuelve `window.next.router.push` y `.replace` —la
+ * instancia publica del App Router (`app-router-instance.js`), la MISMA que `useRouter` entrega por
+ * contexto (`app-router.js`)— y graba un registro `sonda-router` por llamada con su pila de JS (16 marcos
+ * arriba, 8 de base; el tope de V8 se sube como en `SCRIPT_DE_LA_HISTORIA`). Se instala por
+ * `Runtime.evaluate` despues de cada documento nuevo, porque el router nace con el documento. Si la
+ * instancia no aparece, devuelve `sin-router` y la atribucion por el router queda NO MEDIDA.
+ */
+async function instalarSondaDelRouter(cdp) {
+  for (let i = 0; i < 100; i++) {
+    const r = await evaluar(cdp, `(() => {
+      const router = window.next && window.next.router
+      if (!router) return 'sin-router'
+      if (router.__forjoSondaEnvuelto) return 'ya-envuelto'
+      for (const metodo of ['push', 'replace']) {
+        const original = router[metodo]
+        if (typeof original !== 'function') continue
+        router[metodo] = function (...args) {
+          try {
+            const canal = globalThis.__forjoPanelDiag
+            if (Array.isArray(canal)) {
+              const tope = Error.stackTraceLimit
+              Error.stackTraceLimit = 400
+              const crudo = new Error().stack || ''
+              Error.stackTraceLimit = tope
+              const marcos = crudo.split('\\n').slice(2).map((l) => l.trim())
+              canal.push({ tipo: 'sonda-router', metodo, href: String(args[0] ?? ''), ts: Date.now(), ruta: location.pathname, hash: location.hash, pila: marcos.slice(0, 16).join(' | '), base: marcos.length > 16 ? marcos.slice(-8).join(' | ') : '', marcos: marcos.length })
+            }
+          } catch {}
+          return original.apply(this, args)
+        }
+      }
+      router.__forjoSondaEnvuelto = true
+      return 'envuelto'
+    })()`)
+    if (r !== 'sin-router') return r
+    await dormir(150)
+  }
+  return 'sin-router'
+}
+
+/** Los nombres de funcion de una pila grabada (`at f (url)` → `f`), en orden, para el detalle. */
+function nombresDeLaPila(pila) {
+  if (!pila) return '(sin pila)'
+  return pila.split(' | ').map((m) => m.replace(/^at /, '').split(' (')[0]).join(' <- ')
+}
+
+/**
+ * El camino comun de `G3-6`: entrar directo, tocar Mas, tocar el enlace a `/web`, y AFIRMAR la marca
+ * `frjUnder: '/mas'` en la entrada de arriba —sin ella la precondicion de CR-02 (el colapso de la rama)
+ * no existe y tira—. Con `forzarSinSentinel` enciende la bandera del descarte antes de ensuciar. Despues
+ * ensucia y AFIRMA en <=5 s el sentinel de cambios arriba (`frjDirty`), o con la bandera el registro
+ * `pushState-descartado`.
+ */
+async function hastaLaWebSucia(cdp, { forzarSinSentinel }) {
+  await entrarDirecto(cdp)
+  const router = await instalarSondaDelRouter(cdp)
+  await tocarEnLaBarra(cdp, '/mas')
+  await tocarEnlace(cdp, '/web')
+  const arriba = await estadoDeArriba(cdp)
+  if (arriba.frjUnder !== '/mas') throw new Error(`la precondicion de CR-02 no existe: /web sin la marca frjUnder '/mas' (arriba=${JSON.stringify(arriba)})`)
+  if (forzarSinSentinel) await evaluar(cdp, 'globalThis.__forjoSondaDescartaSentinelDeCambios = true')
+  const desde = registros.length
+  const campo = await ensuciarLaWeb(cdp)
+  const fin = Date.now() + 5_000
+  let sucia = null
+  while (Date.now() < fin && !sucia) {
+    if (forzarSinSentinel) sucia = registros.slice(desde).some((r) => r.tipo === 'sonda-historia' && r.metodo === 'pushState-descartado') ? 'pushState-descartado' : null
+    else sucia = (await estadoDeArriba(cdp)).frjDirty ? 'frjDirty arriba' : null
+    if (!sucia) await dormir(150)
+  }
+  if (!sucia) throw new Error(`la pantalla no quedo sucia en 5 s (forzado=${forzarSinSentinel}): ${forzarSinSentinel ? 'ningun pushState-descartado' : 'sin frjDirty arriba'}`)
+  return { router, campo, sucia, marcaDeLaWeb: arriba.frjUnder }
+}
+
+/**
+ * Desde `/web` SUCIA: tocar Turnos en la barra (sin esperar la ruta), AFIRMAR el dialogo «¿Salir sin
+ * guardar?» en <=10 s (si no aparece, la pantalla no estaba sucia: tira), leer la precondicion EN EL
+ * CLICK (`con-sentinel` con `frjDirty` arriba, `sin-sentinel` sin el), `antesDelClick` (la guarda del
+ * forzado), «Salir sin guardar», la ventana quieta, la foto y el atras siguiente.
+ */
+async function salirSinGuardarHaciaTurnos(cdp, { antesDelClick = null } = {}) {
+  await tocarSinEsperar(cdp, '/appointments')
+  if (!(await esperarDialogo(cdp, '¿Salir sin guardar?', 10_000))) throw new Error('el dialogo «¿Salir sin guardar?» no aparecio en 10 s: la pantalla no estaba sucia')
+  const arriba = await estadoDeArriba(cdp)
+  const precondicion = arriba.frjDirty ? 'con-sentinel' : 'sin-sentinel'
+  if (antesDelClick) antesDelClick({ arriba, precondicion })
+  const desdeElClick = registros.length
+  await clickEnBoton(cdp, 'Salir sin guardar')
+  await dormir(VENTANA_DE_LA_SALIDA_MS)
+  const final = await foto(cdp)
+  const tras = registros.slice(desdeElClick)
+  const m = await gestoMedido(cdp)
+  return { dialogo: 'si', arriba, precondicion, final, tras, m }
+}
+
+/** El detalle comun de `G3-6`: la precondicion, y cada registro de la historia, del router y de popstate. */
+function detalleDeLaSalida(p, x, router) {
+  console.log(`${p}precondicion_en_el_click: medido=${JSON.stringify(x.precondicion)} (arriba=${JSON.stringify(x.arriba)})`)
+  console.log(`${p}el envoltorio del router: ${router} · llamadas con /appointments despues del click=${x.tras.filter((r) => r.tipo === 'sonda-router' && r.href.split(/[?#]/)[0] === '/appointments').length}`)
+  console.log(`${p}entre el click y el final (${VENTANA_DE_LA_SALIDA_MS} ms quietos):`)
+  for (const r of x.tras) {
+    if (r.tipo !== 'sonda-historia' && r.tipo !== 'sonda-router' && r.tipo !== 'sonda-popstate') continue
+    console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+    if (r.tipo !== 'sonda-popstate') console.log(`${p}       funciones: ${nombresDeLaPila(r.pila)}`)
+  }
+  console.log(`${p}al final: url=${x.final.url} pila=[${x.final.entradas.join(', ')}] actual=${x.final.indice}`)
+  console.log(`${p}el atras siguiente:`)
+  imprimirTupla(`${p}  `, x.m)
+}
+
+/** Un punto del FONDO del dialogo (`data-slot="dialog-overlay"`) fuera del popup, afirmado con `elementFromPoint`. */
+async function puntoDelFondo(cdp) {
+  return evaluar(cdp, `(() => {
+    for (let y = 6; y < innerHeight - 6; y += 10) {
+      for (let x = 6; x < innerWidth - 6; x += 10) {
+        const el = document.elementFromPoint(x, y)
+        if (el && el.closest('[data-slot="dialog-overlay"]') && !el.closest('[role="dialog"]')) return { x, y }
+      }
+    }
+    return null
+  })()`)
+}
+
+/**
+ * El camino comun de `G3-7`: el dialogo del plan (el unico overlay de Inicio) abierto ANTES de armar —
+ * auto-abierto desde el CTA de la landing (`forjo_intended_plan` en `localStorage`, con el negocio en
+ * `trial`), o abierto por el PRIMER toque en Inicio (el boton del banner)— y cerrado con la X o con el
+ * fondo por un click real con activacion. Despues, la foto y el atras siguiente.
+ */
+async function cerrarElDialogoDelPlan(cdp, { abrir, como }) {
+  // El `localStorage` del ORIGEN se prepara parado en un documento ESTATICO del mismo origen
+  // (`public/file.svg`: sin el panel, sin el banner, sin el proxy de sesion), no por `DOMStorage` —
+  // MEDIDO el 2026-10-30: `DOMStorage.setDOMStorageItem` tira «Frame not found for the given storage
+  // id» cuando la pagina de turno es la de afuera (`data:`), que es como termina el recorrido anterior.
+  await navegar(cdp, `${ORIGEN}/file.svg`)
+  const preparado = await evaluar(cdp, abrir === 'auto'
+    ? "(() => { localStorage.setItem('forjo_intended_plan', 'pro'); return localStorage.getItem('forjo_intended_plan') })()"
+    : "(() => { localStorage.removeItem('forjo_intended_plan'); return localStorage.getItem('forjo_intended_plan') })()")
+  if ((abrir === 'auto') !== (preparado === 'pro')) throw new Error(`el localStorage del origen no quedo preparado (abrir=${abrir} valor=${preparado})`)
+  const desde = await entrarDirecto(cdp)
+  let toqueQueAbre = null
+  if (abrir === 'primer-toque') {
+    const desdeElToque = registros.length
+    await clickEnBoton(cdp, 'Activar plan')
+    toqueQueAbre = await esperarRegistro(desdeElToque, 'sonda-click', 3_000)
+  }
+  if (!(await esperarDialogo(cdp, null, 10_000))) throw new Error(`el dialogo del plan no se abrio en 10 s (abrir=${abrir})`)
+  await dormir(500)
+  const alAbrir = registros.slice(desde)
+  const desdeElCierre = registros.length
+  if (como === 'x') {
+    await clickReal(cdp, '[role="dialog"] [data-slot="dialog-close"]')
+  } else {
+    const punto = await puntoDelFondo(cdp)
+    if (!punto) throw new Error('no hay un punto del fondo del dialogo fuera del popup')
+    await clickEnPunto(cdp, punto)
+  }
+  const click = await esperarRegistro(desdeElCierre, 'sonda-click', 3_000)
+  if (!click || click.isActive !== true) throw new Error(`el cierre del dialogo no llego como click con activacion (sonda-click=${click ? `isActive=${click.isActive}` : 'ninguno'})`)
+  if (!(await esperarSinDialogo(cdp, 5_000))) throw new Error(`el dialogo del plan no se cerro en 5 s (como=${como})`)
+  await asentar(desdeElCierre, 3_000)
+  const trasCerrar = await foto(cdp)
+  const delCierre = registros.slice(desdeElCierre)
+  const m = await gestoMedido(cdp)
+  return { alAbrir, toqueQueAbre, delCierre, trasCerrar, m, click }
+}
+
+/** El veredicto comun de `G3-7`: lo que el dueno ve, y los registros que nombran la firma de WR-02. */
+function resultadoDelDialogo(x) {
+  return {
+    detalle: (p) => {
+      if (x.toqueQueAbre) console.log(`${p}el primer toque (abre el dialogo): isActive=${x.toqueQueAbre.isActive} defaultPrevented=${x.toqueQueAbre.defaultPrevented}`)
+      console.log(`${p}al entrar y abrir:`)
+      for (const r of x.alAbrir) if (r.tipo !== 'sonda-tecla') console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+      console.log(`${p}el cierre (click con isActive=${x.click.isActive}) y lo que siguio:`)
+      for (const r of x.delCierre) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+      console.log(`${p}tras cerrar: url=${x.trasCerrar.url} pila=[${x.trasCerrar.entradas.join(', ')}] actual=${x.trasCerrar.indice}`)
+      imprimirTupla(p, x.m)
+    },
+    medido: {
+      dialogo_abierto: 'si',
+      hash_tras_cerrar: x.trasCerrar.hash,
+      absorbido: x.m.tupla.absorbido,
+      aviso_visible: x.m.tupla.aviso_visible,
+    },
+    esperado: { dialogo_abierto: 'si', hash_tras_cerrar: '#salir', absorbido: 'si', aviso_visible: 'si' },
+  }
+}
+
+/**
+ * El camino comun de los dos recorridos de teclado de `G3-5`: en escritorio, entrar directo, tocar
+ * (arma), el atras de teclado COMPUESTO en el orden pedido, la espera corta quieta, la foto y el atras
+ * siguiente. LA GUARDA: dos `sonda-tecla` keydown ANTES del `sonda-popstate` y dos keyup DESPUES; si no,
+ * el orden compuesto no llego y TIRA (P-1).
+ */
+async function medirElAtrasDeTeclado(cdp, soltar) {
+  await escritorio(cdp)
+  try {
+    await entrarDirecto(cdp)
+    await tocarLaPantalla(cdp)
+    const armado = await foto(cdp)
+    const t = await atrasDeTeclado(cdp, { soltar })
+    await dormir(ESPERA_CORTA_MS)
+    const trasSoltar = await foto(cdp)
+    const regs = registros.slice(t.desde)
+    const segundo = await gestoMedido(cdp)
+    const iPop = regs.findIndex((r) => r.tipo === 'sonda-popstate')
+    const teclas = regs.map((r, i) => ({ r, i })).filter((x) => x.r.tipo === 'sonda-tecla')
+    const bajadasAntes = teclas.filter((x) => x.r.evento === 'keydown' && x.i < iPop).length
+    const subidasDespues = teclas.filter((x) => x.r.evento === 'keyup' && x.i > iPop).length
+    if (iPop < 0 || bajadasAntes !== 2 || subidasDespues !== 2) {
+      throw new Error(`el orden compuesto del teclado no llego (guarda de G3-5): popstate=${iPop >= 0 ? 'si' : 'no'} keydown antes=${bajadasAntes} keyup despues=${subidasDespues}`)
+    }
+    const toquesQueBajan = regs.filter((r, i) => i > iPop && r.tipo === 'toque' && (r.accion === 'drop' || r.accion === 'drop-and-arm')).length
+    return {
+      detalle: (p) => {
+        console.log(`${p}armado tocando: url=${armado.url} · soltar=${soltar}`)
+        console.log(`${p}tras el atras (antes de soltar): url=${t.trasElAtras.url} aviso=${t.trasElAtras.aviso ? 'visible' : 'oculto'} · retroceso=${t.retroceso ? `${t.retroceso.accion} (${reglaDelRetroceso(t.retroceso.hechos)})` : 'sin-registro'}`)
+        console.log(`${p}los registros del gesto, en orden (cada tecla con su isActive, cada toque con sus hechos, cada armado):`)
+        for (const r of regs) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+        console.log(`${p}tras soltar y ${ESPERA_CORTA_MS} ms quietos: url=${trasSoltar.url} aviso=${trasSoltar.aviso ? 'visible' : 'oculto'}`)
+        console.log(`${p}el segundo atras:`)
+        imprimirTupla(`${p}  `, segundo)
+      },
+      medido: {
+        aviso_tras_el_atras: t.trasElAtras.aviso ? 'si' : 'no',
+        toques_que_bajan_el_aviso: toquesQueBajan,
+        aviso_tras_soltar: trasSoltar.aviso ? 'si' : 'no',
+        hash_tras_soltar: trasSoltar.hash,
+        segundo_atras_ruta: segundo.tupla.ruta_despues,
+      },
+      // LA PROPIEDAD DESPUES DE UN ARREGLO (D-05: el aviso vale en escritorio, asi que el atras de
+      // teclado tiene que poder salir): avisa, soltar no lo baja ni re-empuja, y el segundo sale.
+      esperado: {
+        aviso_tras_el_atras: 'si',
+        toques_que_bajan_el_aviso: 0,
+        aviso_tras_soltar: 'si',
+        hash_tras_soltar: '',
+        segundo_atras_ruta: '(afuera)',
+      },
+    }
+  } finally {
+    await celular(cdp)
+  }
 }
 
 // ── La calibracion del navegador (plan 03-13): corre ANTES del login ─────────────────────────────
@@ -1258,7 +1699,9 @@ const RECORRIDOS = [
     },
   },
   {
-    // ⚠ ULTIMO A PROPOSITO: cierra la sesion y vuelve a abrirla, y eso no puede ensuciar a los otros.
+    // ⚠ Cierra la sesion y la vuelve a abrir, y eso no puede ensuciar a los otros: la DEJA ABIERTA al
+    // terminar (el login es lo que mide). Hasta el plan 03-14 era el ultimo; los del plan 03-15 corren
+    // despues, con la sesion que este deja, y el ultimo de todos es `R-G3-8-rebote`.
     id: 'R-login-con-activacion',
     titulo: 'G3-4: loguearse por el formulario con la activacion del click VIGENTE al aterrizar; sin aviso, sin popstate, con #salir, y el atras tras un toque avisa',
     async correr(cdp) {
@@ -1412,6 +1855,276 @@ const RECORRIDOS = [
       }
     },
   },
+  // ── Plan 03-15: los cuatro gaps del code review, MEDIDOS antes de arreglar ──────────────────────
+  // El `esperado` de cada uno es la PROPIEDAD despues de un arreglo, nunca lo que hoy da: un `FALLA` con
+  // la firma de su hipotesis es lo que la confirma, y un `OK` la descarta. Las reglas del veredicto
+  // estan escritas en el plan 03-15 (task 2) ANTES de medir.
+  {
+    // G3-5, el CONTROL: sin el, ningun veredicto de los dos de teclado vale.
+    id: 'R-G3-5-escritorio-control',
+    titulo: 'G3-5, el control en ESCRITORIO: un toque arma, el atras de la interfaz avisa y el segundo sale',
+    async correr(cdp) {
+      await escritorio(cdp)
+      try {
+        await entrarDirecto(cdp)
+        await tocarLaPantalla(cdp)
+        const armado = await foto(cdp)
+        const primero = await gestoMedido(cdp)
+        const segundo = await gestoMedido(cdp)
+        return {
+          detalle: (p) => {
+            console.log(`${p}armado tocando: url=${armado.url} pila=[${armado.entradas.join(', ')}] actual=${armado.indice}`)
+            console.log(`${p}primer atras:`)
+            imprimirTupla(`${p}  `, primero)
+            console.log(`${p}segundo atras:`)
+            imprimirTupla(`${p}  `, segundo)
+          },
+          medido: {
+            hash_armado: armado.hash,
+            aviso_tras_el_atras: primero.tupla.aviso_visible,
+            segundo_atras_ruta: segundo.tupla.ruta_despues,
+          },
+          esperado: { hash_armado: '#salir', aviso_tras_el_atras: 'si', segundo_atras_ruta: '(afuera)' },
+        }
+      } finally {
+        await celular(cdp)
+      }
+    },
+  },
+  {
+    id: 'R-G3-5-teclado-flecha-primero',
+    titulo: 'G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando la flecha antes que Alt: avisa, el aviso se queda y el segundo sale',
+    async correr(cdp) {
+      return medirElAtrasDeTeclado(cdp, 'flecha-primero')
+    },
+  },
+  {
+    id: 'R-G3-5-teclado-alt-primero',
+    titulo: 'G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando Alt antes que la flecha: avisa, el aviso se queda y el segundo sale',
+    async correr(cdp) {
+      return medirElAtrasDeTeclado(cdp, 'alt-primero')
+    },
+  },
+  {
+    // El CONTRAPUESTO que impide sobre-arreglar: el camino 1 con teclado (una tecla nueva baja y re-arma).
+    id: 'R-G3-5-tecla-tras-el-aviso',
+    titulo: 'G3-5, el camino 1 con teclado: con el aviso visible, una letra apretada y soltada lo baja y re-arma; el atras siguiente avisa',
+    async correr(cdp) {
+      await escritorio(cdp)
+      try {
+        await entrarDirecto(cdp)
+        await tocarLaPantalla(cdp)
+        const primero = await gestoMedido(cdp)
+        const desde = registros.length
+        await teclaCompleta(cdp, 'KeyA')
+        await asentar(desde, 3_000)
+        const trasLaTecla = await foto(cdp)
+        const regs = registros.slice(desde)
+        const toque = regs.find((r) => r.tipo === 'toque') ?? null
+        const siguiente = await gestoMedido(cdp)
+        return {
+          detalle: (p) => {
+            console.log(`${p}primer atras:`)
+            imprimirTupla(`${p}  `, primero)
+            console.log(`${p}la tecla:`)
+            for (const r of regs) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+            console.log(`${p}tras la tecla: url=${trasLaTecla.url} aviso=${trasLaTecla.aviso ? 'visible' : 'oculto'}`)
+            console.log(`${p}el atras siguiente:`)
+            imprimirTupla(`${p}  `, siguiente)
+          },
+          medido: {
+            aviso_tras_el_atras: primero.tupla.aviso_visible,
+            accion_de_la_tecla: toque?.accion ?? 'sin-registro',
+            hash_tras_la_tecla: trasLaTecla.hash,
+            atras_siguiente_absorbido: siguiente.tupla.absorbido,
+          },
+          esperado: { aviso_tras_el_atras: 'si', accion_de_la_tecla: 'drop-and-arm', hash_tras_la_tecla: '#salir', atras_siguiente_absorbido: 'si' },
+        }
+      } finally {
+        await celular(cdp)
+      }
+    },
+  },
+  {
+    // G3-6, el camino VERIFICADO: el sentinel de cambios arriba en el click.
+    id: 'R-G3-6-con-sentinel',
+    titulo: 'G3-6 (CR-02): «Salir sin guardar» desde /web (marca /mas) hacia Turnos con el sentinel de cambios: aterriza en Turnos y el atras vuelve a Inicio',
+    async correr(cdp) {
+      const { identifier } = await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', { source: SCRIPT_DE_LA_HISTORIA })
+      try {
+        const w = await hastaLaWebSucia(cdp, { forzarSinSentinel: false })
+        const x = await salirSinGuardarHaciaTurnos(cdp)
+        return {
+          detalle: (p) => detalleDeLaSalida(p, x, w.router),
+          medido: { dialogo_visible: x.dialogo, ruta_final: x.final.ruta, ruta_tras_un_atras: x.m.despues.ruta },
+          esperado: { dialogo_visible: 'si', ruta_final: '/appointments', ruta_tras_un_atras: ROOT },
+        }
+      } finally {
+        await cdp.enviar('Page.removeScriptToEvaluateOnNewDocument', { identifier })
+      }
+    },
+  },
+  {
+    // G3-6, el CANDIDATO a perder el sentinel por un camino real: el atras lo absorbe (el dialogo del
+    // atras), «Seguir editando» re-arma desde adentro del `popstate`, y desde ahi igual que el de arriba.
+    id: 'R-G3-6-camino-real',
+    titulo: 'G3-6 (CR-02): el atras desde /web sucia, «Seguir editando», y despues «Salir sin guardar» hacia Turnos: aterriza en Turnos y el atras vuelve a Inicio',
+    async correr(cdp) {
+      const { identifier } = await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', { source: SCRIPT_DE_LA_HISTORIA })
+      try {
+        const w = await hastaLaWebSucia(cdp, { forzarSinSentinel: false })
+        const desdeElAtras = registros.length
+        await atras(cdp)
+        if (!(await esperarDialogo(cdp, '¿Salir sin guardar?', 10_000))) throw new Error('el atras desde /web sucia no lo absorbio el sentinel de cambios: sin el dialogo del atras')
+        const delAtras = registros.slice(desdeElAtras)
+        await clickEnBoton(cdp, 'Seguir editando')
+        if (!(await esperarSinDialogo(cdp, 5_000))) throw new Error('el dialogo del atras no se cerro con «Seguir editando»')
+        await dormir(500)
+        const x = await salirSinGuardarHaciaTurnos(cdp)
+        return {
+          detalle: (p) => {
+            console.log(`${p}el atras absorbido por el sentinel de cambios:`)
+            for (const r of delAtras) if (r.tipo === 'sonda-historia' || r.tipo === 'sonda-popstate') console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+            detalleDeLaSalida(p, x, w.router)
+          },
+          medido: { dialogo_visible: x.dialogo, ruta_final: x.final.ruta, ruta_tras_un_atras: x.m.despues.ruta },
+          esperado: { dialogo_visible: 'si', ruta_final: '/appointments', ruta_tras_un_atras: ROOT },
+        }
+      } finally {
+        await cdp.enviar('Page.removeScriptToEvaluateOnNewDocument', { identifier })
+      }
+    },
+  },
+  {
+    // G3-6, la precondicion FORZADA (el descarte del empuje del sentinel de cambios, en la sonda): nunca
+    // habilita un arreglo por si sola; separa `latente` de `descartado`.
+    id: 'R-G3-6-sin-sentinel',
+    titulo: 'G3-6 (CR-02), la precondicion FORZADA: «Salir sin guardar» desde /web sucia SIN el sentinel de cambios hacia Turnos: ¿aterriza en Turnos?',
+    async correr(cdp) {
+      const { identifier } = await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', { source: SCRIPT_DE_LA_HISTORIA })
+      try {
+        const w = await hastaLaWebSucia(cdp, { forzarSinSentinel: true })
+        const x = await salirSinGuardarHaciaTurnos(cdp, {
+          antesDelClick: ({ arriba, precondicion }) => {
+            if (precondicion !== 'sin-sentinel' || arriba.frjUnder !== '/mas') throw new Error(`la precondicion forzada no llego al click: ${precondicion} arriba=${JSON.stringify(arriba)}`)
+          },
+        })
+        const backs = x.tras.filter((r) => r.tipo === 'sonda-historia' && r.metodo === 'back')
+        const atrasDelColapso = backs.filter((r) => /consumeOwnedBranchEntry|runBranchNavigation/.test(r.pila)).length
+        const atrasDelSentinelDeCambios = backs.filter((r) => /onPop|useDirtyHistory|dirty-history/.test(r.pila)).length
+        const reemplazos = x.tras.filter((r) => r.tipo === 'sonda-router' && r.metodo === 'replace' && r.href.split(/[?#]/)[0] === '/appointments')
+        const COMMIT_DE_REACT = /commitHookEffectListMount|commitPassiveMountOnFiber/
+        const replaceDelRouter = `n=${reemplazos.length} desde_un_commit=${reemplazos.length === 0 ? 'sin-llamada' : reemplazos.every((r) => COMMIT_DE_REACT.test(`${r.pila} | ${r.base}`)) ? 'si' : reemplazos.some((r) => COMMIT_DE_REACT.test(`${r.pila} | ${r.base}`)) ? 'algunas' : 'no'}`
+        const escritura = x.tras.some((r) => r.tipo === 'sonda-historia' && (r.metodo === 'pushState' || r.metodo === 'replaceState') && r.urlArg.includes('/appointments')) ? 'si' : 'no'
+        return {
+          detalle: (p) => {
+            // Las cuatro claves que deciden la firma de CR-02 en el forzado, con la MISMA forma que las del
+            // `esperado`: los gates de los tasks 4 y 5 leen `atras_del_sentinel_de_cambios` de aca.
+            console.log(`${p}atras_del_colapso: medido=${JSON.stringify(atrasDelColapso)}`)
+            console.log(`${p}atras_del_sentinel_de_cambios: medido=${JSON.stringify(atrasDelSentinelDeCambios)}`)
+            console.log(`${p}replace_del_router: medido=${JSON.stringify(replaceDelRouter)}`)
+            console.log(`${p}escritura_de_appointments: medido=${JSON.stringify(escritura)}`)
+            console.log(`${p}la precondicion forzada: ${w.sucia} (marca de /web=${w.marcaDeLaWeb})`)
+            for (const r of x.tras.filter((y) => y.tipo === 'sonda-router')) {
+              console.log(`${p}  router ${r.metodo} ${r.href} · pila: ${nombresDeLaPila(r.pila)}`)
+              if (r.base) console.log(`${p}         base: ${nombresDeLaPila(r.base)}`)
+            }
+            detalleDeLaSalida(p, x, w.router)
+          },
+          medido: { dialogo_visible: x.dialogo, ruta_final: x.final.ruta },
+          esperado: { dialogo_visible: 'si', ruta_final: '/appointments' },
+        }
+      } finally {
+        await cdp.enviar('Page.removeScriptToEvaluateOnNewDocument', { identifier })
+      }
+    },
+  },
+  {
+    id: 'R-G3-7-autoabierto-x',
+    titulo: 'G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar (CTA de la landing), cerrado con la X: el sentinel queda armado y el atras avisa',
+    async correr(cdp) {
+      return resultadoDelDialogo(await cerrarElDialogoDelPlan(cdp, { abrir: 'auto', como: 'x' }))
+    },
+  },
+  {
+    id: 'R-G3-7-autoabierto-fondo',
+    titulo: 'G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar, cerrado tocando el FONDO: el sentinel queda armado y el atras avisa',
+    async correr(cdp) {
+      return resultadoDelDialogo(await cerrarElDialogoDelPlan(cdp, { abrir: 'auto', como: 'fondo' }))
+    },
+  },
+  {
+    id: 'R-G3-7-primer-toque',
+    titulo: 'G3-7 (WR-02): el dialogo del plan abierto por el PRIMER toque en Inicio (el boton del banner), cerrado con la X: el atras avisa',
+    async correr(cdp) {
+      return resultadoDelDialogo(await cerrarElDialogoDelPlan(cdp, { abrir: 'primer-toque', como: 'x' }))
+    },
+  },
+  {
+    // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
+    id: 'R-G3-8-rebote',
+    titulo: 'G3-8 (WR-04): la sesion vencida en medio de un replace de la barra rebota a /login; al volver, ninguna marca miente sobre la entrada de abajo',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/clients')
+      const enClientes = await foto(cdp)
+      await cdp.enviar('Network.clearBrowserCookies')
+      const desde = registros.length
+      // Un `replace` con la marca leida: `branchCarryMark` deja el pedido (Clientes → Turnos, con la raiz debajo).
+      await tocarSinEsperar(cdp, '/appointments')
+      const tope = Date.now() + 60_000
+      let ruta = null
+      while (Date.now() < tope) {
+        ruta = await evaluar(cdp, 'location.pathname').catch(() => null)
+        if (ruta === '/login') break
+        await dormir(200)
+      }
+      if (ruta !== '/login') throw new Error(`el rebote con la sesion vencida no llego a /login en 60 s (ruta=${ruta})`)
+      const delRebote = registros.slice(desde)
+      const documentoNuevo = delRebote.some((r) => r.tipo === 'sonda-documento-nuevo') ? 'si' : 'no'
+      const desdeElLogin = registros.length
+      // El login se envia con el ancho de ESCRITORIO por omision, como `loguearse` y
+      // `R-login-con-activacion`: en mobile el formulario vive en una hoja que hay que abrir (MEDIDO el
+      // 2026-10-30: con 390 px el envio no salio de /login en 60 s). El panel no depende del ancho (D-05).
+      let rutaLogin = null
+      await cdp.enviar('Emulation.clearDeviceMetricsOverride')
+      try {
+        await enviarElLogin(cdp)
+        const topeLogin = Date.now() + 60_000
+        while (Date.now() < topeLogin) {
+          rutaLogin = await evaluar(cdp, 'location.pathname').catch(() => null)
+          if (rutaLogin === ROOT) break
+          await dormir(200)
+        }
+      } finally {
+        await celular(cdp)
+      }
+      if (rutaLogin !== ROOT) throw new Error(`no se pudo llegar a Inicio despues del rebote: ruta=${rutaLogin}`)
+      await asentar(desdeElLogin, 30_000)
+      const alVolver = await foto(cdp)
+      await tocarEnLaBarra(cdp, '/appointments')
+      const trasTurnos = await foto(cdp)
+      const marcaDe = (f) => { try { const m = JSON.parse(f.estado)?.frjUnder; return typeof m === 'string' ? m : null } catch { return null } }
+      const debajoReal = (f) => (f.indice > 0 ? f.entradas[f.indice - 1].split('#')[0] : null)
+      const miente = (f) => marcaDe(f) !== null && marcaDe(f) !== debajoReal(f)
+      return {
+        detalle: (p) => {
+          console.log(`${p}en Clientes: url=${enClientes.url} marca=${marcaDe(enClientes)} pila=[${enClientes.entradas.join(', ')}] actual=${enClientes.indice}`)
+          console.log(`${p}documento_nuevo_en_el_rebote: medido=${JSON.stringify(documentoNuevo)}`)
+          console.log(`${p}el rebote:`)
+          for (const r of delRebote) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+          for (const [nombre, f] of [['al volver', alVolver], ['tras tocar Turnos', trasTurnos]]) {
+            console.log(`${p}${nombre}: url=${f.url} marca=${marcaDe(f)} debajo_real=${debajoReal(f)} miente=${miente(f) ? 'si' : 'no'} pila=[${f.entradas.join(', ')}] actual=${f.indice}`)
+          }
+        },
+        medido: {
+          ruta_al_volver: alVolver.ruta,
+          marca_falsa_al_volver: miente(alVolver) || miente(trasTurnos) ? 'si' : 'no',
+        },
+        esperado: { ruta_al_volver: ROOT, marca_falsa_al_volver: 'no' },
+      }
+    },
+  },
 ]
 
 /** Lo que cierra cada recorrido, impreso en el veredicto. */
@@ -1428,6 +2141,17 @@ const QUE_CIERRA = {
   'R-barra-pendiente': 'el toque que navega con el armado pendiente: no arma, pila sin #salir',
   'R-lateral': 'el hallazgo lateral del plan 03-12: el reintento del consumo queda pendiente, sin #salir enterrado',
   'R-login-con-activacion': 'G3-4 (plan 03-14): el aterrizaje del login con la activacion vigente, sin aviso solo, sin popstate y con #salir',
+  'R-G3-5-escritorio-control': 'G3-5, el control: en escritorio un toque arma, el atras de la interfaz avisa y el segundo sale',
+  'R-G3-5-teclado-flecha-primero': 'G3-5 (CR-01): el atras de teclado compuesto, soltando la flecha primero; avisa, el aviso se queda y el segundo sale',
+  'R-G3-5-teclado-alt-primero': 'G3-5 (CR-01): el atras de teclado compuesto, soltando Alt primero; avisa, el aviso se queda y el segundo sale',
+  'R-G3-5-tecla-tras-el-aviso': 'G3-5, el camino 1 con teclado: una letra con el aviso visible lo baja y re-arma',
+  'R-G3-6-con-sentinel': 'G3-6 (CR-02): Salir sin guardar de /web hacia Turnos por el camino verificado (con el sentinel de cambios)',
+  'R-G3-6-camino-real': 'G3-6 (CR-02): el candidato real a perder el sentinel (el atras, Seguir editando) y despues Salir sin guardar',
+  'R-G3-6-sin-sentinel': 'G3-6 (CR-02): la precondicion FORZADA (sin el sentinel de cambios); separa latente de descartado',
+  'R-G3-7-autoabierto-x': 'G3-7 (WR-02): el dialogo del plan auto-abierto, cerrado con la X: el atras avisa',
+  'R-G3-7-autoabierto-fondo': 'G3-7 (WR-02): el dialogo del plan auto-abierto, cerrado con el fondo: el atras avisa',
+  'R-G3-7-primer-toque': 'G3-7 (WR-02): el dialogo del plan abierto por el primer toque, cerrado con la X: el atras avisa',
+  'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
 // ── El arnes ─────────────────────────────────────────────────────────────────────────────────────
@@ -1512,6 +2236,13 @@ async function main() {
     cdp = await conectar(target.webSocketDebuggerUrl)
     await cdp.enviar('Page.enable')
     await cdp.enviar('Runtime.enable')
+    // plan 03-15: el editor de `/web` registra un `beforeunload`, asi que una navegacion de la sonda desde
+    // una pantalla sucia (la entrada directa del recorrido siguiente) se colgaria esperando el dialogo.
+    // Se ACEPTA y se imprime una linea por cada uno: ninguno es parte de lo que se mide.
+    cdp.en('Page.javascriptDialogOpening', (d) => {
+      console.log(`      dialogo ${d.type} de la pagina aceptado por la sonda`)
+      cdp.enviar('Page.handleJavaScriptDialog', { accept: true }).catch((e) => console.log(`      el dialogo ${d.type} no se pudo aceptar: ${e instanceof Error ? e.message : e}`))
+    })
     cdp.en('Runtime.bindingCalled', (p) => {
       if (p.name !== '__forjoSondaReporta') return
       try { registros.push({ ...JSON.parse(p.payload), llegada: Date.now() }) } catch { /* registro ilegible */ }

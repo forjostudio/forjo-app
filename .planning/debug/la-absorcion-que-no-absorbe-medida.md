@@ -605,6 +605,259 @@ recorrido **1.6** de la ronda 3, que corre el dueño. ⚠ Y una precisión de al
 prueba con el teléfono (su `next dev`); el arreglo es correcto en los dos (en producción la limpieza
 sólo corre en un desmontaje real, y ahí decide igual que antes).
 
+## (h) Los gaps del code review, medidos (plan 03-15, 2026-10-30)
+
+**Qué se midió.** Los cuatro gaps del code review de la fase (`03-REVIEW.md`: CR-01 → `G3-5`, CR-02 →
+`G3-6`, WR-02 → `G3-7`, WR-04 → `G3-8`) salen de LEER el código; acá se miden en la app real con once
+recorridos nuevos de la sonda (`.planning/debug/probes/panel-exit-en-la-app.mjs`), cada uno con su control
+o su guarda de llegada. Mismo entorno que `(g)`: el `next dev` del dueño en el puerto 80 (pid 13260),
+**modo estricto ACTIVO** (`reactStrictMode` ausente, huella `8ceb99ae…`), Chrome 155.0.8059.86 headless,
+gesto `interfaz` (`chrome.tabs.goBack`), node v24.15.0. Los instrumentos nuevos: `sonda-tecla` (cada
+keydown/keyup en la burbuja de window, con `isActive`), `sonda-router` (envuelve
+`window.next.router.push`/`.replace` con su pila), la bandera `__forjoSondaDescartaSentinelDeCambios` en
+`SCRIPT_DE_LA_HISTORIA` (la precondición FORZADA de `G3-6`, apagada por omisión) y la aceptación de los
+diálogos `beforeunload` del editor de `/web`.
+
+**La corrida que vale** es la del 2026-10-30 01:50-01:52 (hora local, unos 2 min sin espera del turno), los once en una invocación por el
+turno: los once reportan, los dos controles de escritorio en `OK`, el login afirmado, cero fallos del
+instrumento. **Dos corridas anteriores pararon en P-1 y se arregló el INSTRUMENTO, nunca un `esperado`:**
+(1) `DOMStorage.setDOMStorageItem` tiraba *«Frame not found for the given storage id»* con la página de
+afuera (`data:`) de turno → el `localStorage` del origen se prepara ahora parado en `public/file.svg`; (2)
+en `R-G3-8-rebote` el login no salía de `/login` a 390 px (el formulario mobile vive en una hoja) → el
+envío va con el ancho de escritorio por omisión, como `loguearse` y `R-login-con-activacion`. Los
+recorridos que alcanzaron a correr en esas dos corridas dieron **las mismas líneas** que la que vale (y una corrida suelta de `R-G3-8-rebote`, para validar el segundo arreglo, dio `OK` con los mismos números).
+
+**Los doce de antes, con la sonda modificada** (los instrumentos nuevos no rompen nada), en una segunda
+invocación por el turno terminada a las 01:57: **12/12 en `OK`**, rc 0, cero `FALLA`, cero fallos del
+instrumento (`C-activacion`, `R-1.3-sin-toque`, `R-1.3-con-toque`, `R-1.3-recarga-logica`,
+`R-1.3-recarga-gesto`, `R-1.1`, `R-3.1`, `R-1.4`, `R-barra-con-aviso`, `R-barra-pendiente`, `R-lateral`,
+`R-login-con-activacion`).
+
+### `G3-5` (CR-01) — el atrás de teclado en escritorio
+
+```text
+OK  R-G3-5-escritorio-control · G3-5, el control en ESCRITORIO: un toque arma, el atras de la interfaz avisa y el segundo sale
+      hash_armado: medido="#salir"
+      aviso_tras_el_atras: medido="si"
+      segundo_atras_ruta: medido="(afuera)"
+FALLA R-G3-5-teclado-flecha-primero · G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando la flecha antes que Alt: avisa, el aviso se queda y el segundo sale
+      aviso_tras_el_atras: medido="si"
+      toques_que_bajan_el_aviso: medido=1  <-- NO COINCIDE
+      aviso_tras_soltar: medido="no"  <-- NO COINCIDE
+      hash_tras_soltar: medido="#salir"  <-- NO COINCIDE
+      segundo_atras_ruta: medido="(afuera)"
+        diag sonda-tecla keydown key=Alt code=AltLeft altKey=true isActive=true url=/dashboard#salir
+        diag sonda-tecla keydown key=ArrowLeft code=ArrowLeft altKey=true isActive=true url=/dashboard#salir
+        diag sonda-popstate url=/dashboard
+        diag retroceso id=1 accion=hint regla=ninguna-AVISA holding=true
+        diag sonda-tecla keyup key=ArrowLeft code=ArrowLeft altKey=true isActive=true url=/dashboard
+        diag toque     id=1 url=/dashboard accion=drop-and-arm hechos={"activacion":true,"atRoot":true,"gestoTomado":false,"hintOpen":true}
+        diag armado    id=1 url=/dashboard#salir accion=arm regla=ninguna-ARMA vivo_despues=true
+        diag sonda-tecla keyup key=Alt code=AltLeft altKey=false isActive=true url=/dashboard#salir
+        diag toque     id=1 url=/dashboard#salir accion=arm hechos={"activacion":true,"hintOpen":false}
+        diag armado    id=1 url=/dashboard#salir accion=none regla=regla-4-topIsOurs(E-6)
+      el segundo atras: hash_antes=#salir es_nuestro=si entradas_salteadas=1 ruta_despues=(afuera) aviso_visible=no absorbido=no
+        pila antes: [(afuera), /dashboard, /dashboard#salir] actual=2 · pila despues: actual=0
+FALLA R-G3-5-teclado-alt-primero · G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando Alt antes que la flecha: avisa, el aviso se queda y el segundo sale
+      aviso_tras_el_atras: medido="si"
+      toques_que_bajan_el_aviso: medido=1  <-- NO COINCIDE
+      aviso_tras_soltar: medido="no"  <-- NO COINCIDE
+      hash_tras_soltar: medido="#salir"  <-- NO COINCIDE
+      segundo_atras_ruta: medido="(afuera)"
+        (el mismo orden con los keyup invertidos: keyup Alt -> toque drop-and-arm -> armado arm; keyup ArrowLeft
+         altKey=false -> toque arm -> armado none regla-4; el segundo atras: entradas_salteadas=1 ruta_despues=(afuera))
+OK  R-G3-5-tecla-tras-el-aviso · G3-5, el camino 1 con teclado: con el aviso visible, una letra apretada y soltada lo baja y re-arma; el atras siguiente avisa
+      aviso_tras_el_atras: medido="si"
+      accion_de_la_tecla: medido="drop-and-arm"
+      hash_tras_la_tecla: medido="#salir"
+      atras_siguiente_absorbido: medido="si"
+        (keydown KeyA y keyup KeyA con isActive=true, los DOS sobre /dashboard despues del popstate; el atras
+         siguiente: entradas_salteadas=0 ruta_despues=/dashboard aviso_visible=si)
+```
+
+**La guarda, cumplida en los dos órdenes:** dos `sonda-tecla` keydown antes del `sonda-popstate` y dos
+keyup después. La activación de cada keyup: `isActive=true` en los cuatro. La acción de cada toque: el
+primer keyup `drop-and-arm` (baja el aviso y re-empuja `#salir` con activación), el segundo `arm` (ya
+armado: `none` por la regla 4).
+
+**La firma de CR-01, juzgada parte por parte:** (a) un `toque` posterior al `popstate` con `drop-and-arm`
+y la activación en verdadero — **SÍ**, en los dos; (b) seguido de un `armado` `arm` — **SÍ**; (c) **el
+segundo atrás que no sale — NO**: en los dos órdenes el segundo atrás **sale** del panel
+(`segundo_atras_ruta="(afuera)"`) y lo hace **salteando una entrada** (`entradas_salteadas=1`: desde
+`/dashboard#salir` aterriza en la página de afuera, pasando por arriba de `/dashboard`). La firma está
+incompleta en los dos recorridos que fallan, así que no encaja en la regla (1); tampoco en la (2) (los dos
+dan `FALLA`).
+
+**Lo que la medición sí muestra, dicho como hallazgo y no como veredicto:** el defecto medido NO es el
+«botón muerto» que describe CR-01 (el dueño nunca sale), sino **otro**: al soltar las teclas el aviso
+**se va** y el hash vuelve, y el segundo atrás sale **sin aviso visible** porque el navegador saltea
+`/dashboard`. El contraste está en la misma corrida: con la tecla `KeyA` apretada **después** del
+`popstate` (`R-G3-5-tecla-tras-el-aviso`) el `#salir` re-empujado **sí** absorbe (`entradas_salteadas=0`).
+La diferencia entre los dos es **dónde** cayó el keydown: en el atajo de teclado los dos keydown caen
+sobre la entrada `#salir` ANTES del retroceso, y sobre `/dashboard` —la entrada a la que el retroceso
+volvió— no llega ningún evento que dé activación (un keyup no la da) aunque `isActive` siga en verdadero.
+Leído contra la intervención de historial de Chrome (memoria `intervencion-historial-chrome-y-gestos-cdp`),
+encaja con que Chrome marca salteable la entrada desde la que se empuja cuando no recibió una activación
+**desde que quedó como actual**, que no es lo mismo que la activación transitoria que lee
+`panelExitActivationNow`. Eso es una pregunta NUEVA sobre la premisa del camino 1 (la calibración
+`C-activacion` midió un click y un empuje en la misma entrada, nunca una activación anterior a un
+retroceso de la misma página), y no tiene firma escrita: por eso es `otro` y no se arregla en este plan.
+
+veredicto G3-5: otro
+
+### `G3-6` (CR-02) — «Salir sin guardar» sin sentinel de cambios hacia otra sección
+
+```text
+OK  R-G3-6-con-sentinel · G3-6 (CR-02): «Salir sin guardar» desde /web (marca /mas) hacia Turnos con el sentinel de cambios: aterriza en Turnos y el atras vuelve a Inicio
+      dialogo_visible: medido="si"
+      ruta_final: medido="/appointments"
+      ruta_tras_un_atras: medido="/dashboard"
+      precondicion_en_el_click: medido="con-sentinel" (arriba={"frjDirty":true,"frjUnder":null,"url":"/web#sin-guardar"})
+OK  R-G3-6-camino-real · G3-6 (CR-02): el atras desde /web sucia, «Seguir editando», y despues «Salir sin guardar» hacia Turnos: aterriza en Turnos y el atras vuelve a Inicio
+      dialogo_visible: medido="si"
+      ruta_final: medido="/appointments"
+      ruta_tras_un_atras: medido="/dashboard"
+      precondicion_en_el_click: medido="con-sentinel" (arriba={"frjDirty":true,"frjUnder":null,"url":"/web#sin-guardar"})
+OK  R-G3-6-sin-sentinel · G3-6 (CR-02), la precondicion FORZADA: «Salir sin guardar» desde /web sucia SIN el sentinel de cambios hacia Turnos: ¿aterriza en Turnos?
+      dialogo_visible: medido="si"
+      ruta_final: medido="/appointments"
+      atras_del_colapso: medido=1
+      atras_del_sentinel_de_cambios: medido=0
+      replace_del_router: medido="n=1 desde_un_commit=no"
+      escritura_de_appointments: medido="si"
+      precondicion_en_el_click: medido="sin-sentinel" (arriba={"frjDirty":false,"frjUnder":"/mas","url":"/web#sin-guardar"})
+      el envoltorio del router: envuelto · llamadas con /appointments despues del click=1
+        diag sonda-historia metodo=back url=/web#sin-guardar
+             funciones: consumeOwnedBranchEntry <- runBranchNavigation <- UnsavedChangesProvider.useCallback[ejecutarPlanDeRama] <- confirmLeave <- onClick
+        diag sonda-popstate url=/mas estado={"frjUnder":"/dashboard"}
+        diag sonda-historia metodo=replaceState url=/mas urlArg=/mas            (el router, reaccionando al popstate)
+        diag sonda-router   metodo=replace href=/appointments url=/mas
+             funciones: UnsavedChangesProvider.useCallback[navegarYa] <- segundoPaso
+        diag sonda-historia metodo=replaceState url=/mas urlArg=/appointments   (desde commitHookEffectListMount: el replace SI escribe)
+        diag sonda-historia metodo=replaceState url=/appointments urlArg=(vacio) (writePanelUnder <- applyBranchMarkRequest: la marca)
+      al final: url=/appointments pila=[(afuera), /dashboard, /appointments, /web#sin-guardar] actual=2
+```
+
+**Las precondiciones:** los dos caminos reales llegan al click **`con-sentinel`** (el atrás de
+`R-G3-6-camino-real` lo absorbe el sentinel de cambios, «Seguir editando» lo re-empuja desde adentro del
+`popstate`, y en el click sigue arriba). Ningún camino real medido produjo el sentinel ausente.
+
+**La firma de CR-02 en el forzado, juzgada:** (a) el `replace` del router a `/appointments` llamado fuera
+de un commit de React — **SÍ** (`desde_un_commit=no`: la pila es `navegarYa <- segundoPaso`, adentro del
+`popstate` del colapso); (b) ninguna escritura de la historia con `/appointments` después — **NO**: hay
+una (`replaceState urlArg=/appointments`, desde un commit del router); (c) cero `back` del módulo del
+sentinel de cambios — sí (`0`). El envoltorio del router **no** está ciego (vio la llamada). Con la parte
+(b) en contra, la firma **no** se reproduce: el `replace` pedido desde adentro del `popstate` del colapso
+**sí escribe** y el dueño aterriza en Turnos. La lección 3 del encabezado de `lib/panel-branch.ts` (y el
+comentario del guard) siguen valiendo para el caso donde se midieron; para ESTE camino —el `popstate` del
+colapso de la rama, con el router en `/mas`— la medición dice que no se pierde.
+
+**Las reglas, en orden:** (1) no — ningún camino real `con-sentinel` en `FALLA`; (2), (3), (4) no — ningún
+camino real llegó `sin-sentinel`; (5) no — el forzado da `OK`; **(6) sí** — los dos caminos reales
+`con-sentinel` en `OK` y el forzado en `OK` (el `replace` desde el `popstate` del colapso sí escribe).
+
+veredicto G3-6: descartado
+
+### `G3-7` (WR-02) — cerrar el diálogo del plan de Inicio abierto antes de armar
+
+```text
+FALLA R-G3-7-autoabierto-x · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar (CTA de la landing), cerrado con la X: el sentinel queda armado y el atras avisa
+      dialogo_abierto: medido="si"
+      hash_tras_cerrar: medido=""  <-- NO COINCIDE
+      absorbido: medido="no"  <-- NO COINCIDE
+      aviso_visible: medido="no"  <-- NO COINCIDE
+        diag armado    id=1 url=/dashboard accion=pendiente regla=ninguna-ARMA            (al entrar: sin activacion)
+        diag sonda-click url=/dashboard#modal defaultPrevented=false isActive=true          (la X)
+        diag toque     id=1 url=/dashboard#modal accion=arm hechos={"activacion":true,"atRoot":true,"gestoTomado":false,"hintOpen":false}
+        diag armado    id=1 url=/dashboard#modal estado={"frjOverlay":1} accion=none regla=regla-0-foreignOwnsTop
+        diag sonda-popstate url=/dashboard                                                  (el back del overlay)
+        diag retroceso id=1 url=/dashboard accion=ignore regla=regla-4-holding-false holding=false
+        diag armado    id=1 url=/dashboard accion=pendiente regla=ninguna-ARMA            (el reintento sin poder empujar)
+      el atras siguiente: ruta_despues=(afuera) aviso_visible=no absorbido=no
+FALLA R-G3-7-autoabierto-fondo · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar, cerrado tocando el FONDO: el sentinel queda armado y el atras avisa
+      dialogo_abierto: medido="si"
+      hash_tras_cerrar: medido=""  <-- NO COINCIDE
+      absorbido: medido="no"  <-- NO COINCIDE
+      aviso_visible: medido="no"  <-- NO COINCIDE
+        (la misma secuencia: toque arm -> armado none regla-0-foreignOwnsTop -> retroceso ignore -> armado pendiente)
+FALLA R-G3-7-primer-toque · G3-7 (WR-02): el dialogo del plan abierto por el PRIMER toque en Inicio (el boton del banner), cerrado con la X: el atras avisa
+      dialogo_abierto: medido="si"
+      hash_tras_cerrar: medido=""  <-- NO COINCIDE
+      absorbido: medido="no"  <-- NO COINCIDE
+      aviso_visible: medido="no"  <-- NO COINCIDE
+        (el primer toque, en «Activar plan»: sonda-click isActive=true -> toque arm -> armado none regla-0-foreignOwnsTop,
+         con url=/dashboard#modal: el overlay ya habia empujado su entrada antes de que corriera el oyente del toque;
+         despues el cierre con la X da la misma secuencia de arriba)
+```
+
+**La firma de WR-02, juzgada en los tres:** el `armado` del toque que cierra declina por la **regla 0**
+(`foreignOwnsTop`, con `frjOverlay` arriba) — sí; el `retroceso` del cierre es `ignore` — sí (por la regla 4,
+`holding=false`); el `armado` siguiente queda `pendiente` — sí; y el atrás sale sin aviso — sí
+(`ruta_despues=(afuera)`, `aviso_visible=no`). Los tres `FALLA` traen la firma entera y **ninguno** falla
+sin ella: regla (1). Un dato que el code review no tenía: en `R-G3-7-primer-toque` el **primer** toque
+—el que abre el diálogo— ya declina por la regla 0, porque el empuje del overlay ocurre antes de que el
+oyente del toque del hook corra (la actualización de un evento discreto se commitea al final del
+despacho de React, que es anterior a la burbuja de `window`).
+
+veredicto G3-7: confirmado
+
+### `G3-8` (WR-04) — el estado de módulo que sobrevive a salir del panel
+
+```text
+OK  R-G3-8-rebote · G3-8 (WR-04): la sesion vencida en medio de un replace de la barra rebota a /login; al volver, ninguna marca miente sobre la entrada de abajo
+      ruta_al_volver: medido="/dashboard"
+      marca_falsa_al_volver: medido="no"
+      en Clientes: url=/clients marca=/dashboard pila=[(afuera), /dashboard, /clients] actual=2
+      documento_nuevo_en_el_rebote: medido="no"
+        diag sonda-click url=/clients defaultPrevented=true isActive=true      (Turnos en la barra, con la sesion borrada)
+        diag toque     id=1 url=/clients accion=none hechos={"atRoot":false,"gestoTomado":true}
+      al volver: url=/dashboard#salir marca=null debajo_real=/dashboard miente=no pila=[(afuera), /dashboard, /dashboard, /dashboard#salir] actual=3
+      tras tocar Turnos: url=/appointments marca=/dashboard debajo_real=/dashboard miente=no pila=[(afuera), /dashboard, /dashboard, /appointments] actual=3
+```
+
+**Los números que lo deciden:** el rebote **no** recargó el documento (`documento_nuevo_en_el_rebote=no`:
+la redirección a `/login` fue una navegación blanda, así que el estado de módulo SÍ sobrevivió, que es la
+precondición de WR-04); y el login **siempre** aterriza en `/dashboard` (`al volver: url=/dashboard#salir`),
+así que el primer commit del panel al volver corre `applyBranchMarkRequest('/dashboard')`, que descarta
+cualquier pedido vivo (el destino pedido era `/appointments`, y la función lo pone en `null` en toda
+corrida). Ninguna de las dos fotos tiene una marca que mienta: al volver no hay marca, y tras tocar Turnos
+la marca dice `/dashboard` con `/dashboard` debajo. Regla (2).
+
+veredicto G3-8: descartado
+
+### Lo que esta medición NO cierra
+
+- **El acelerador real del navegador.** La combinación de teclado por CDP no navega: el atrás de los
+  recorridos de `G3-5` es el de la interfaz (`chrome.tabs.goBack`) con el orden de los eventos de teclado
+  COMPUESTO alrededor. Que el atajo real (Alt+flecha izquierda en Windows) produzca el mismo orden y la
+  misma marca de entrada salteable es el recorrido 4.3 del dueño.
+- **macOS:** Cmd+[ y Cmd+flecha izquierda (esta máquina es Windows).
+- **El botón lateral «atrás» del mouse** (dispara `auxclick`, no `click`; no se midió).
+- **Android y Safari de iOS** (A11): todo esto es Chrome de escritorio headless.
+- **`G3-8`:** que el pedido de marca estuviera VIVO en el instante del rebote no lo muestra ningún
+  registro (el canal no graba `marcaPedida`); el descarte sale de la ruta de aterrizaje del login, medida,
+  y de la lectura de `applyBranchMarkRequest`. Un login que devolviera a la ruta pedida —el caso que
+  WR-04 imagina— no existe hoy en la app.
+- **`G3-6`:** el sentinel de cambios ausente con la pantalla sucia sólo se produjo FORZADO; ningún camino
+  real medido lo produjo (ni el atrás con «Seguir editando»). Los caminos que el comentario del guard
+  enumera (el `replace` del sidebar, el `replaceState` crudo de Agenda) no se recorrieron.
+
+### Las reglas de PARAR, aplicadas
+
+- **P-1** aplicó dos veces al instrumento (arriba) y se cerró arreglando la sonda; en la corrida que vale,
+  todas las guardas y los dos controles pasaron.
+- **P-2 no:** ninguna regla bloqueada resultó mal para los hechos que recibió (`panelExitTouchAction` dio
+  `drop-and-arm` con el aviso abierto y la activación en verdadero, que es su regla; `panelExitArmAction`
+  declinó por la regla 0 con el overlay arriba, que es la suya). Lo que la medición de `G3-5` pone en
+  duda es el **hecho** que se le pasa (`panelExitActivationNow`) en una secuencia que la calibración no
+  cubrió, no una regla.
+- **P-3 no evaluado:** `G3-7` es el único `confirmado` y su arreglo propuesto vive en `lib/panel-branch.ts`.
+- **⚠ P-4 SÍ: `veredicto G3-5: otro` ⇒ el plan 03-15 termina acá**, con esta sección escrita y el
+  reporte. Ningún arreglo de gap se escribe en este plan —tampoco el de `G3-7`, confirmado—: una medición
+  que no encaja en ninguna firma escrita es una pregunta nueva, y la contesta el dueño al re-planificar. El
+  WR-05 (el canal sólo en desarrollo) ya quedó entregado en el task 1 (commits `ddf96f9` RED y `68cf232`
+  GREEN) y no lo toca esta parada.
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la
