@@ -5,10 +5,10 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 15
 status: executing
-stopped_at: "Planificado 03-15-PLAN.md (gaps del code review G3-5..G3-8 + WR-05); plan-checker PASSED en la iteracion 2; listo para ejecutar"
-last_updated: "2026-10-29T22:54:36.000Z"
+stopped_at: "03-15 PARADO en P-4 tras el task 2: WR-05 entregado; G3-5 otro, G3-6 descartado, G3-7 confirmado (sin arreglar), G3-8 descartado; hay que re-planificar con el dueno"
+last_updated: "2026-10-30T05:05:00.000Z"
 last_activity: 2026-10-30
-last_activity_desc: "code review de la fase (2 BLOCKER, 5 WARNING, 7 INFO); el dueno decidio medir y arreglar + diagnostico solo en dev; 03-15 planificado y verificado"
+last_activity_desc: "03-15 ejecutado hasta P-4: el canal de diagnostico solo en desarrollo (WR-05) y los cuatro gaps del code review medidos en la app real (seccion (h) del veredicto); ningun arreglo de gap escrito"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
@@ -27,10 +27,10 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 15
 **Total Plans in Phase:** 15
-**Status:** Ready to execute (fase 03: 03-15 planificado el 2026-10-30 — los gaps del code review `G3-5`..`G3-8` + WR-05; plan-checker PASSED en la iteracion 2)
+**Status:** PARADO en P-4 (fase 03: el 03-15 se ejecuto hasta el task 2 el 2026-10-30 — WR-05 entregado y los cuatro gaps medidos; `veredicto G3-5: otro` termina el plan sin arreglos de gap; `G3-7` confirmado y sin arreglar; hay que re-planificar con el dueno)
 **Current Phase:** 03
-**Last Activity:** 2026-10-30 — 03-15 planificado (gaps del code review)
-**Last Activity Description:** el dueno corrio el 1.6, el 3.2 y el bloque 4 y respondio «Todo perfecto» (registrado en 03-UAT-2.md § «Re-prueba tras el 03-14 — 2026-10-29»); la ronda 3 queda cerrada en Android, iPhone y escritorio
+**Last Activity:** 2026-10-30 — 03-15 ejecutado hasta P-4 (los gaps del code review, medidos)
+**Last Activity Description:** el canal de diagnostico quedo solo en desarrollo (WR-05, commits ddf96f9/68cf232); la sonda de la app midio G3-5 otro (el atras de teclado SI sale, pero el aviso se va al soltar), G3-6 descartado, G3-7 confirmado, G3-8 descartado (seccion (h) de .planning/debug/la-absorcion-que-no-absorbe-medida.md, commit 2ed78db); MOB-04/05/06 siguen sin marcar
 
 ## Progress
 
@@ -41,9 +41,9 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Session Continuity
 
-**Last session:** 2026-10-29T22:54:36.000Z
+**Last session:** 2026-10-30T05:05:00.000Z
 
-**Stopped At:** Planificado 03-15-PLAN.md — proximo: `/gsd-execute-phase 3 --ws panel-nav --gaps-only`
+**Stopped At:** 03-15 PARADO en P-4 tras el task 2 (03-15-SUMMARY.md, status: halted) — proximo: decidir con el dueno G3-5 (otro: el aviso se va al soltar las teclas, la salida no es un boton muerto) y G3-7 (confirmado, arreglo escrito en el plan y no aplicado), y re-planificar: `/gsd-plan-phase 3 --ws panel-nav --gaps`
 **Resume File:** None
 
 ## Performance Metrics
@@ -64,6 +64,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | Phase 03 P12 | 60 min | 3 tasks | 7 files |
 | Phase 03 P13 | 47min | 4 tasks | 9 files |
 | Phase 03 P14 | 25min | 4 tasks (incl. checkpoint aprobado) | 6 files |
+| Phase 03 P15 | 40min | 2 de 6 tasks (parado en P-4) | 4 files |
 
 ### Quick Tasks Completed
 
@@ -120,3 +121,5 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 - [Phase 03]: Otro dueno para la acreditacion de (A) es ajena Y sin marca de salida, no isForeignOwnedEntry a secas, y la rama none ASIGNA la referencia — isForeignOwnedEntry reconoce el frjExit de cualquier id y habria rechazado justo la entrada de la recarga; asignar re-deriva en los dos sentidos y saca el cartel que mentia sobre una marca muerta. Medido en la app: pares 1->25, 59->301 por la septima, absorbidos
 - [Phase 03]: G3-4 es H1, medido en la app real: el back() que enciende el aviso al loguearse sale de la limpieza del desmontaje del panel en el doble montaje del modo estricto (commitDoubleInvokeEffectsInDEV en la base de la pila, arm->none con el mismo id); H2 (router.refresh) no se cumple. El descartado del 03-12 vale solo para la hidratacion
 - [Phase 03]: El arreglo de G3-4 vive solo en la limpieza del desmontaje: queueMicrotask + panelExitUnmountAction({ sigueMontada, nuestroArriba }) con la marca re-leida en el instante; nunca un temporizador; el login no se toco. Sonda de la app 12/12, estatica 18/18, suite 1994
+- [Phase 03]: El canal de diagnostico (recordExitDiag / __forjoPanelDiag) graba SOLO con NODE_ENV development o test (decision del dueno sobre WR-05, plan 03-15): panelExitDiagEnabled pura, gate como primera sentencia leido en cada llamada, sin bandera publica; en next dev las sondas lo siguen usando igual
+- [Phase 03]: Los cuatro gaps del code review MEDIDOS en la app real (03-15, seccion (h)): G3-5 otro (el keyup re-empuja #salir con isActive=true pero el segundo atras SALE salteando /dashboard; el aviso se va al soltar), G3-6 descartado (el router.replace pedido desde el popstate del colapso SI escribe), G3-7 confirmado (firma entera de WR-02 en los tres), G3-8 descartado (el login siempre aterriza en /dashboard). P-4: el plan para sin arreglos de gap
