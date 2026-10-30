@@ -928,6 +928,78 @@ escucha `click` y `keyup`) son el 4.3 del dueño.
 
 cierre G3-5: arreglado
 
+**`G3-7` — el arreglo** (`lib/panel-branch.ts`): `panelExitForeignRetry` (pura) pide el reintento sólo si el
+armado del toque declinó SÓLO por la entrada ajena —el contrafáctico es `panelExitArmAction` sobre los
+mismos hechos con `foreignOwnsTop` en falso, sin un segundo dialecto de sus siete reglas—; la referencia
+`reintentoTrasAjenaRef` (la escribe el armado, la apaga cada toque antes de decidir, la lee y apaga la rama
+`ignore` ANTES de su armado sin empuje) y el estado `reintentoDelArmado`, que la rama `ignore` sube y que
+entra en las dependencias del efecto del armado (`[armarSentinel, pathname, reintentoDelArmado]`): el
+empuje sale de ese commit con la activación leída ahí, nunca de adentro del `popstate`, sin temporizador.
+Los mismos candados que `G3-5`, intactos (el empuje sigue en 1, `armarSentinel({` en 4, `history.back()`
+en 2, el canal en 5, cero lecturas de la activación y cero empujes en `alRetroceder`).
+
+**El RED**: rc 1, **12 fallados / 416 pasados (428)** — los ocho de `panelExitForeignRetry` (la regla que pide,
+un contrapuesto por regla, el contrafáctico de punta a punta y su contrapuesto con el aviso abierto, la
+pureza) y las cuatro auditorías del cableado. GREEN: 428/428. Commits: `2ff59b3` (RED, `test(03-16)`),
+`7722984` (GREEN, `feat(03-16)`).
+
+**El tracer** (2026-10-30, 07:59-08:04 hora local, una invocación por el turno contra el mismo `next dev`,
+que recargó en caliente): rc 0, **10/10 en `OK`**, `R-lateral` incluido, cero fallos del instrumento, y
+**ningún `R-G3-7` con la firma de P-8** (la intervención que el plan declaró como riesgo NO apareció:
+`entradas_salteadas=0` en el atrás siguiente de los tres).
+
+```text
+OK  R-1.1 · el recorrido del dueno, textual: entrar, tocar Turnos, Clientes y Agenda, tocar Inicio; avisa y despues sale
+OK  R-3.1 · el aviso que SE QUEDA: no vence a los 2,5 s ni a los 10 s, con el aviso el atras sale; un toque lo baja y re-arma
+OK  R-1.4 · llegar a Inicio CON EL ATRAS: sin hash, armado pendiente y el atras siguiente sale (la consecuencia declarada); con un toque, avisa
+OK  R-barra-con-aviso · tocar Clientes en la barra con el aviso VISIBLE: el aviso se va y la pila queda sin #salir enterrado
+OK  R-barra-pendiente · tocar Clientes en la barra recien entrado directo (armado pendiente): la sesion abre sin armar y la pila queda sin #salir
+OK  R-lateral · el hallazgo lateral del plan 03-12: tocar Clientes parado en Inicio ARMADO; el consumo se ignora y el armado queda pendiente, sin #salir enterrado
+      retroceso_del_consumo: medido="ignore"
+      armado_tras_el_consumo: medido="pendiente"
+        (el toque que el link se lleva: toque none gestoTomado=true -> retroceso ignore -> armado pendiente -> armado none
+         regla-2-atRoot en /clients; sin armado arm: la referencia apagada, ningun #salir enterrado)
+OK  R-G3-5-tecla-tras-el-aviso · G3-5, el camino 1 con teclado: con el aviso visible, una letra apretada y soltada lo baja y re-arma; el atras siguiente avisa
+OK  R-G3-7-autoabierto-x · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar (CTA de la landing), cerrado con la X: el sentinel queda armado y el atras avisa
+      hash_tras_cerrar: medido="#salir"
+      absorbido: medido="si"
+      aviso_visible: medido="si"
+        diag toque     doc=af6mxx id=1 url=/dashboard#modal accion=arm hechos={"participates":true,"activacion":true,"atRoot":true,"gestoTomado":false,"hintOpen":false} vivo_antes=false vivo_despues=false
+        diag armado    doc=af6mxx id=1 duena=1 vivas=1 url=/dashboard#modal estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE","frjOverlay"],"frjOverlay":1} accion=none regla=regla-0-foreignOwnsTop vivo_antes=false vivo_despues=false
+        diag retroceso doc=af6mxx id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=ignore regla=regla-4-holding-false holding=false
+        diag armado    doc=af6mxx id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+        diag armado    doc=af6mxx id=1 duena=1 vivas=1 url=/dashboard#salir estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=arm regla=ninguna-ARMA vivo_antes=false vivo_despues=true
+      tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+OK  R-G3-7-autoabierto-fondo · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar, cerrado tocando el FONDO: el sentinel queda armado y el atras avisa
+      hash_tras_cerrar: medido="#salir"
+        (la misma secuencia: toque arm -> armado none regla-0-foreignOwnsTop -> retroceso ignore -> armado pendiente -> armado arm)
+      tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+OK  R-G3-7-primer-toque · G3-7 (WR-02): el dialogo del plan abierto por el PRIMER toque en Inicio (el boton del banner), cerrado con la X: el atras avisa
+      hash_tras_cerrar: medido="#salir"
+        (el primer toque, que abre el dialogo, sigue declinando por la regla 0; el cierre con la X da la misma secuencia
+         de arriba, terminando en armado arm con url=/dashboard#salir)
+      tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+```
+
+**El armado del reintento, en los tres:** `retroceso ignore` → `armado pendiente` (el de la rama `ignore`, sin
+poder empujar) → `armado arm` (el del efecto, disparado por `reintentoDelArmado`, con `url=/dashboard#salir`
+y `vivo_despues=true`). Antes del arreglo (`(h)`) la secuencia terminaba en el `pendiente`, con
+`hash_tras_cerrar=""` y el atrás siguiente afuera sin aviso. P-1, P-5, P-6 y P-8 no aplican.
+
+**Lo que esta medición NO cierra de `G3-7`:**
+
+- cerrar el diálogo con el **atrás del teléfono** en vez de la X o el fondo (ningún recorrido lo mide). Por
+  lectura: con el diálogo auto-abierto el último armado fue el de la entrada, sin activación, así que la
+  referencia está apagada y el armado queda pendiente como antes; con el diálogo abierto por el PRIMER toque,
+  ese toque dejó la referencia encendida, y el atrás que cierra pide el reintento: el efecto empuja sólo si la
+  activación de aquel toque sigue vigente al leerla (`isActive`), y si no queda pendiente. Sin medir;
+- **Android** (el 3.3 y el 1.5 del dueño) y **Safari de iOS**: todo esto es Chrome de escritorio headless;
+- que la ausencia de la intervención en este caso (la activación del click llegó ANTES del retroceso del
+  overlay, igual que en `G3-5`) sea propia de Chrome: el motivo exacto por el que acá Chrome no salteó
+  Inicio y en `(h)` sí no está medido, sólo el resultado.
+
+cierre G3-7: arreglado
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la
