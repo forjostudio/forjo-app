@@ -857,6 +857,54 @@ export function panelExitStillHolding({
   return false
 }
 
+/**
+ * ¿El armado de ESTE gesto declinó **SÓLO** por la entrada ajena de arriba? Si sí, se pide un reintento para
+ * cuando esa entrada se vaya. Pura, con las reglas **EN ORDEN** y los hechos **sin valor por omisión**.
+ *
+ *   1. `puedeEmpujar` en falso ⇒ **no**: sin activación no hay nada que reintentar (un atrás no es una
+ *      activación: el camino 1 de `03-DECISION-UAT-3.md`).
+ *   2. `accion` no es `none` ⇒ **no**: ya armó (o quedó pendiente por otra cosa), no declinó.
+ *   3. `ajenaArriba` en falso ⇒ **no**: no había una entrada ajena que estorbara.
+ *   4. `accionSinAjena` es `arm` ⇒ **sí**: la MISMA decisión, sin la entrada ajena, habría armado.
+ *   5. El resto ⇒ **no**: declinó también por otra regla (el aviso abierto, algo nuestro debajo, ya armado).
+ *
+ * ⚠ **EL CONTRAFÁCTICO, Y POR QUÉ NO ES UN SEGUNDO DIALECTO.** `accionSinAjena` es
+ * {@link panelExitArmAction} con los MISMOS hechos y `foreignOwnsTop` en falso: preguntarle a la decisión
+ * bloqueada qué habría hecho es la única forma de saber si declinó *sólo* por la regla 0 sin escribir una
+ * segunda copia del orden de sus siete reglas, que se desincronizaría en el primer cambio.
+ *
+ * **POR QUÉ EXISTE (`G3-7`, WR-02 de `03-REVIEW.md`, `veredicto G3-7: confirmado` en la sección `(h)` de
+ * `.planning/debug/la-absorcion-que-no-absorbe-medida.md`).** Un diálogo de Inicio abierto antes del armado
+ * (el del plan, auto-abierto desde el CTA de la landing, o abierto por el primer toque) empuja su entrada.
+ * El click que lo cierra llega con esa entrada todavía arriba —su retroceso es asíncrono—, así que el
+ * armado declina por la regla 0; el retroceso del cierre es `ignore` y su reintento, sin poder empujar,
+ * queda `pendiente`. Medido en los tres recorridos: el atrás siguiente salía sin aviso. Decisión del dueño
+ * del 2026-10-30: arreglarlo.
+ *
+ * ⚠ **EL RIESGO, DICHO COMO SUPUESTO Y NO COMO GARANTÍA (P-8 del plan 03-16).** El reintento empuja desde
+ * el efecto del armado, con la activación del click que cerró; pero esa activación llegó ANTES del
+ * retroceso del overlay, y en `G3-5` se midió que Chrome marca salteable la entrada desde la que se empuja
+ * en esa secuencia aunque `isActive` siga en verdadero. Lo mide la sonda (`R-G3-7-*`), no esta función.
+ * Referencias en ASCII para los gates: `G3-7` · `WR-02` · `P-8` · `camino 1`.
+ */
+export function panelExitForeignRetry({
+  puedeEmpujar,
+  accion,
+  accionSinAjena,
+  ajenaArriba,
+}: {
+  puedeEmpujar: boolean
+  accion: PanelExitArmAction
+  accionSinAjena: PanelExitArmAction
+  ajenaArriba: boolean
+}): boolean {
+  if (!puedeEmpujar) return false
+  if (accion !== 'none') return false
+  if (!ajenaArriba) return false
+  if (accionSinAjena === 'arm') return true
+  return false
+}
+
 /** Qué hace el desmontaje del hook con el sentinel de salida. */
 export type PanelExitUnmountAction = 'consume' | 'keep'
 
@@ -1473,6 +1521,12 @@ export function usePanelBranch({
   // y escriben los oyentes del teclado, del retroceso y del toque, que necesitan el valor fresco y no
   // pintan nada. Ver {@link panelExitKeyStep}.
   const teclasRef = useRef<ReadonlySet<string>>(SIN_TECLAS)
+  // El reintento de `G3-7` (plan 03-16): la REFERENCIA dice si el último toque declinó SÓLO por una entrada
+  // ajena (la escribe el armado, la apaga el toque, la lee y apaga la rama `ignore`); el ESTADO es el
+  // disparador del efecto del armado, que es quien empuja —desde un commit, nunca desde el `popstate`—.
+  // Ver {@link panelExitForeignRetry}.
+  const reintentoTrasAjenaRef = useRef(false)
+  const [reintentoDelArmado, setReintentoDelArmado] = useState(0)
 
   // ── Quién es la dueña ─────────────────────────────────────────────────────────────────────────
   // Declarado ANTES del efecto de marcado a propósito: React corre los efectos de un commit en orden
@@ -1601,6 +1655,15 @@ export function usePanelBranch({
       algoNuestroDebajo: marcaDebajo !== null,
     }
     const accion = panelExitArmAction(hechos)
+    // ⚠ G3-7: ¿declinó SÓLO por la entrada ajena? El contrafáctico es la MISMA decisión bloqueada sobre los
+    // MISMOS hechos con la regla 0 apagada. Se ASIGNA en cada armado (re-deriva en los dos sentidos): el
+    // reintento sin empuje de la rama `ignore` la apaga sola, porque no trae activación.
+    reintentoTrasAjenaRef.current = panelExitForeignRetry({
+      puedeEmpujar,
+      accion,
+      accionSinAjena: panelExitArmAction({ ...hechos, foreignOwnsTop: false }),
+      ajenaArriba,
+    })
     const vivoAntes = sentinelVivoRef.current
     // Lo que se graba en el canal: la acción, o `pendiente` si la decisión dijo armar y no se empujó.
     let registrada: string = accion
@@ -1637,9 +1700,16 @@ export function usePanelBranch({
 
   // El hecho se lee del navegador EN EL COMMIT: al llegar a Inicio tocando la barra (el 1.1), la
   // activación de ese toque todavía está vigente y se arma como siempre; al entrar directo, no.
+  //
+  // ⚠ `reintentoDelArmado` EN LAS DEPENDENCIAS (plan 03-16, `G3-7`): la rama `ignore` del retroceso lo sube
+  // cuando el último toque declinó SÓLO por una entrada ajena que ese retroceso acaba de sacar (cerrar con la
+  // X un diálogo abierto antes del armado). El empuje sale ACÁ, de un commit, con la activación leída ahora
+  // —la del toque que cerró—, y nunca de adentro del `popstate` (la lección 3 del encabezado y el camino 1).
+  // No es un temporizador: es reintentar el MISMO gesto cuando su obstáculo se fue. Y re-pregunta la decisión
+  // ENTERA: si nuestro sentinel ya estaba debajo del overlay, la cuarta regla dice `none` y no pasa nada.
   useEffect(() => {
     armarSentinel({ puedeEmpujar: panelExitActivationNow(navigator.userActivation) })
-  }, [armarSentinel, pathname])
+  }, [armarSentinel, pathname, reintentoDelArmado])
 
   // ── El atrás del dueño en la raíz: absorber UNA vez y avisar; el toque baja el aviso y re-arma ──
   // ⚠ NO HAY UN OYENTE PENDIENTE QUE LIMPIAR, y es a propósito: el armado pendiente no es un estado, es
@@ -1699,6 +1769,13 @@ export function usePanelBranch({
         // ⚠ SIN PODER EMPUJAR (camino 1): un atrás no es una activación, y empujar adentro del
         // `popstate` del consumo de la barra entierra el sentinel bajo la navegación diferida (el
         // hallazgo lateral del plan 03-12). Si la decisión dice armar, el armado queda PENDIENTE.
+        // ⚠ G3-7 (plan 03-16): si el último toque declinó SÓLO por la entrada ajena que este retroceso sacó
+        // (la X de un diálogo abierto antes del armado), se PIDE el reintento al efecto del armado, que
+        // empuja desde un commit con la activación de ese toque. EL ORDEN ES CARGA: la referencia se lee y
+        // se apaga ANTES del armado sin empuje de abajo, porque ese armado la reescribe (en falso).
+        const reintentar = reintentoTrasAjenaRef.current
+        reintentoTrasAjenaRef.current = false
+        if (reintentar) setReintentoDelArmado((n) => n + 1)
         armarSentinel({ puedeEmpujar: false })
         return
       }
@@ -1740,6 +1817,10 @@ export function usePanelBranch({
       // El keyup que no es toque sale ACÁ, antes del canal: como Enter, ningún call site nuevo.
       if (!paso.esToque) return
       if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
+      // ⚠ G3-7: cada toque APAGA el reintento antes de decidir; si declina por una entrada ajena, el armado
+      // de este mismo toque lo vuelve a encender. Un toque que un link se lleva (no arma) no deja un
+      // reintento colgado: es lo que mantiene `R-lateral` sin un `#salir` enterrado bajo la navegación.
+      reintentoTrasAjenaRef.current = false
       // Los hechos, leídos UNA sola vez: la activación del gesto viaja tal cual al armado.
       const activacion = panelExitActivationNow(navigator.userActivation)
       const vivoAntes = sentinelVivoRef.current
