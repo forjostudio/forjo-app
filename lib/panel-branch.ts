@@ -1014,7 +1014,15 @@ function elTecladoSeComeElAtras(): boolean {
 // valía *seguimos absorbiendo* en ese momento — que es exactamente la pregunta que hay que contestar
 // con números antes de escribir un arreglo.
 //
-// LAS CUATRO COSAS QUE LO VUELVEN ACEPTABLE EN PRODUCCIÓN:
+// LA REGLA VIGENTE: **SÓLO EN DESARROLLO** (decisión del dueño del 2026-10-30, plan 03-15, WR-05 del
+// code review; cierra la pendiente abierta desde el 03-12). En el build de producción el canal no graba
+// NADA, aunque alguien cree el arreglo global: un canal vivo ahí es una traza de navegación con tiempos
+// que cualquier script del mismo origen puede abrir. En `next dev` y en vitest graba exactamente igual
+// que antes —las dos sondas corren contra `next dev` y dependen de él para asentar cada gesto—. Lo
+// decide {@link panelExitDiagEnabled}, como PRIMERA sentencia de {@link recordExitDiag}. Sin bandera
+// pública de entorno que lo reabra: el dueño decidió sólo desarrollo.
+//
+// Y EN DESARROLLO CONSERVA LAS CUATRO PROPIEDADES DE SIEMPRE:
 //   · **INERTE.** Escribe sólo si `globalThis.__forjoPanelDiag` **ya es un arreglo**, y nadie en la
 //     app lo crea. Lo abre algo EXTERNO: la sonda de la app real, con
 //     `Page.addScriptToEvaluateOnNewDocument`, **antes** del JS de la app — así sobrevive a las
@@ -1088,10 +1096,32 @@ function estadoComoTexto(estado: unknown): string {
 }
 
 /**
- * Graba un registro en el canal de diagnóstico **si y sólo si** algo externo lo abrió. Devuelve si
- * grabó. **Total:** ninguna excepción sale, ni de un canal hostil ni de un estado raro.
+ * ¿El canal de diagnóstico puede grabar con este `NODE_ENV`? **Pura**: recibe el valor, no lo lee.
+ *
+ * Next permite tres valores (`node_modules/next/dist/docs/01-app/02-guides/environment-variables.md`):
+ * `next dev` pone `development`, todo lo demás —`next build`, `next start`— pone `production`, y las
+ * herramientas de test ponen `test` (vitest lo hace). Habilitan **sólo** `development` y `test`, con
+ * igualdad de cadena EXACTA y sin normalizar (`Production` o `development ` con espacio no habilitan).
+ *
+ * **Falla cerrado:** cualquier otro valor, vacío o ausente devuelve falso. Un entorno que no se sabe
+ * cuál es se trata como producción, porque abrir el canal donde no se debe es el error que importa
+ * (WR-05); cerrarlo de más sólo deja ciega a una sonda, que lo ve enseguida (`asentar` tira).
+ */
+export function panelExitDiagEnabled(nodeEnv: string | undefined): boolean {
+  if (nodeEnv === 'development') return true
+  if (nodeEnv === 'test') return true
+  return false
+}
+
+/**
+ * Graba un registro en el canal de diagnóstico **si y sólo si** el entorno es de desarrollo (o de test)
+ * y algo externo lo abrió. Devuelve si grabó. **Total:** ninguna excepción sale, ni de un canal hostil
+ * ni de un estado raro.
  */
 export function recordExitDiag(entrada: PanelExitDiagInput): boolean {
+  // ⚠ EL GATE VA PRIMERO y con la forma LITERAL que Next reemplaza en el bundle del cliente; se lee en
+  // CADA llamada (no en una constante de módulo) para que la suite pruebe los dos lados con `vi.stubEnv`.
+  if (!panelExitDiagEnabled(process.env.NODE_ENV)) return false
   try {
     const canal = (globalThis as { __forjoPanelDiag?: unknown }).__forjoPanelDiag
     if (!Array.isArray(canal)) return false
