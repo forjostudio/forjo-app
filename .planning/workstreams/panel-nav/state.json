@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-plan-phase 3 --ws panel-nav --gaps",
-    "label": "Re-planificar los gaps del code review con el dueno: G3-5 dio otro (el aviso se va al soltar las teclas; el atras de teclado SI sale) y G3-7 quedo confirmado sin arreglar",
-    "reason": "Phase 03 · el 03-15 paro en P-4 el 2026-10-30 tras medir los cuatro gaps (WR-05 entregado; G3-6 y G3-8 descartados)"
+    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
+    "label": "Ejecutar el 03-16: G3-5 (el aviso se queda al soltar las teclas) y G3-7 (cerrar un dialogo de Inicio re-arma el aviso), por decision del dueno",
+    "reason": "Phase 03 · 03-16 planificado y verificado el 2026-10-30 (plan-checker PASSED)"
   },
-  "updated_at": "2026-10-30T05:05:00.000Z"
+  "updated_at": "2026-10-30T15:00:00.000Z"
 }

@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
-current_plan: 15
+current_plan: 16
 status: executing
-stopped_at: "03-15 PARADO en P-4 tras el task 2: WR-05 entregado; G3-5 otro, G3-6 descartado, G3-7 confirmado (sin arreglar), G3-8 descartado; hay que re-planificar con el dueno"
+stopped_at: "Planificado 03-16-PLAN.md (G3-5 y G3-7, decision del dueno del 2026-10-30); plan-checker PASSED; listo para ejecutar"
 last_updated: "2026-10-30T05:05:00.000Z"
 last_activity: 2026-10-30
-last_activity_desc: "03-15 ejecutado hasta P-4: el canal de diagnostico solo en desarrollo (WR-05) y los cuatro gaps del code review medidos en la app real (seccion (h) del veredicto); ningun arreglo de gap escrito"
+last_activity_desc: "03-15 medido y parado en P-4 (WR-05 entregado; G3-6 y G3-8 descartados); el dueno decidio G3-5 y G3-7; 03-16 planificado y verificado"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 19
+  total_plans: 20
   completed_plans: 18
   percent: 0
 workstream: panel-nav
@@ -25,9 +25,9 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Current Position
 
-**Current Plan:** 15
-**Total Plans in Phase:** 15
-**Status:** PARADO en P-4 (fase 03: el 03-15 se ejecuto hasta el task 2 el 2026-10-30 — WR-05 entregado y los cuatro gaps medidos; `veredicto G3-5: otro` termina el plan sin arreglos de gap; `G3-7` confirmado y sin arreglar; hay que re-planificar con el dueno)
+**Current Plan:** 16
+**Total Plans in Phase:** 16
+**Status:** Ready to execute (fase 03: 03-16 planificado el 2026-10-30 — G3-5 y G3-7 por decision del dueno; plan-checker PASSED)
 **Current Phase:** 03
 **Last Activity:** 2026-10-30 — 03-15 ejecutado hasta P-4 (los gaps del code review, medidos)
 **Last Activity Description:** el canal de diagnostico quedo solo en desarrollo (WR-05, commits ddf96f9/68cf232); la sonda de la app midio G3-5 otro (el atras de teclado SI sale, pero el aviso se va al soltar), G3-6 descartado, G3-7 confirmado, G3-8 descartado (seccion (h) de .planning/debug/la-absorcion-que-no-absorbe-medida.md, commit 2ed78db); MOB-04/05/06 siguen sin marcar
@@ -36,14 +36,14 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 14/15 (en la fase 03)
-**Current Plan:** 15
+**Plans Complete:** 15/16 (en la fase 03)
+**Current Plan:** 16
 
 ## Session Continuity
 
 **Last session:** 2026-10-30T05:05:00.000Z
 
-**Stopped At:** 03-15 PARADO en P-4 tras el task 2 (03-15-SUMMARY.md, status: halted) — proximo: decidir con el dueno G3-5 (otro: el aviso se va al soltar las teclas, la salida no es un boton muerto) y G3-7 (confirmado, arreglo escrito en el plan y no aplicado), y re-planificar: `/gsd-plan-phase 3 --ws panel-nav --gaps`
+**Stopped At:** Planificado 03-16-PLAN.md — proximo: `/gsd-execute-phase 3 --ws panel-nav --gaps-only`
 **Resume File:** None
 
 ## Performance Metrics
