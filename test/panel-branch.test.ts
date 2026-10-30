@@ -2108,7 +2108,9 @@ describe('branchCarryMark — las reglas EN ORDEN, y la del valor leído va ÚLT
 // puede NOMBRAR cuál de las siete reglas declinó ni qué valía *seguimos absorbiendo*. El canal graba
 // la decisión desde adentro, y sólo si algo externo (la sonda, antes del JS de la app) lo abrió.
 //
-// Lo que se afirma acá es lo que lo vuelve aceptable en producción: sin canal no hace nada (INERTE),
+// Desde el plan 03-15 (WR-05, decisión del dueño del 2026-10-30) el canal graba SÓLO EN DESARROLLO —en
+// el build de producción no graba nada; ver el `describe` de `panelExitDiagEnabled`—, y lo que se afirma
+// acá son las cuatro propiedades que conserva en desarrollo: sin canal no hace nada (INERTE),
 // ninguna excepción sale (TOTAL), no crece sin techo (ACOTADO), y no puede cambiar una decisión
 // porque se llama DESPUÉS de computarla y nunca adentro de las dos decisiones puras.
 
@@ -2228,6 +2230,90 @@ describe('recordExitDiag — el canal de diagnóstico del sentinel de salida (pl
     // Cero tiempo en el ciclo: ni el temporizador ni la constante de la ventana (decisión del 2026-10-28).
     expect(cuenta(mod, /setTimeout/g)).toBe(0)
     expect(cuenta(mod, /PANEL_EXIT_HINT_MS/g)).toBe(0)
+  })
+})
+
+// ── Plan 03-15 (WR-05) — el canal SÓLO EN DESARROLLO: la decisión del dueño del 2026-10-30 ───────
+//
+// POR QUÉ. El code review (WR-05) marcó que un canal vivo en el build de producción es una traza de
+// navegación con tiempos que cualquier script del mismo origen puede abrir con sólo crear el arreglo
+// global. El dueño decidió (03-UAT-2.md § «Gaps del code review de la fase — decisión del dueño») que
+// el canal quede SÓLO en desarrollo: en `next dev` y en vitest graba exactamente igual que antes (las
+// dos sondas dependen de él), y en el build de producción no graba nada. Lo fijan una decisión PURA
+// con sus casos —las dos formas exactas que habilitan y todo lo demás que falla cerrado— y dos casos
+// con `vi.stubEnv` que prueban los dos lados del gate sobre el instrumento real.
+
+describe('panelExitDiagEnabled — el canal de diagnóstico SÓLO en desarrollo (plan 03-15, WR-05)', () => {
+  afterEach(() => {
+    // Cada caso que toca el entorno lo restaura: un `NODE_ENV` stubeado que sobreviva al caso dejaría
+    // el canal cerrado (o abierto) para el siguiente.
+    vi.unstubAllEnvs()
+  })
+
+  it('`development` ⇒ habilita: es lo que pone `next dev`, contra el que corren las dos sondas', () => {
+    expect(PB.panelExitDiagEnabled('development')).toBe(true)
+  })
+
+  it('`test` ⇒ habilita: es lo que pone vitest, así que la suite sigue viendo el canal igual que hoy', () => {
+    expect(PB.panelExitDiagEnabled('test')).toBe(true)
+  })
+
+  it('`production` ⇒ NO habilita: el build de producción no graba nada', () => {
+    expect(PB.panelExitDiagEnabled('production')).toBe(false)
+  })
+
+  it('ausente o vacío ⇒ NO habilita: falla CERRADO', () => {
+    expect(PB.panelExitDiagEnabled(undefined)).toBe(false)
+    expect(PB.panelExitDiagEnabled('')).toBe(false)
+  })
+
+  it('igualdad EXACTA, sin normalizar: `Production` y `development ` (con espacio) NO habilitan', () => {
+    expect(PB.panelExitDiagEnabled('Production')).toBe(false)
+    expect(PB.panelExitDiagEnabled('development ')).toBe(false)
+    expect(PB.panelExitDiagEnabled('DEVELOPMENT')).toBe(false)
+  })
+
+  it('con NODE_ENV en `production` y el canal ABIERTO como arreglo: no graba, devuelve falso y el arreglo queda igual', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const canal: unknown[] = [{ previo: true }]
+    ;(globalThis as CanalAbierto).__forjoPanelDiag = canal
+    expect(PB.recordExitDiag(registroDeArmado())).toBe(false)
+    expect(canal).toEqual([{ previo: true }])
+  })
+
+  it('restaurado y con NODE_ENV en `development`: el MISMO instrumento graba un registro y devuelve verdadero', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.unstubAllEnvs()
+    vi.stubEnv('NODE_ENV', 'development')
+    const canal: unknown[] = []
+    ;(globalThis as CanalAbierto).__forjoPanelDiag = canal
+    expect(PB.recordExitDiag(registroDeArmado())).toBe(true)
+    expect(canal).toHaveLength(1)
+  })
+
+  it('auditoría: el gate es la PRIMERA sentencia de `recordExitDiag`, antes del global; una sola lectura del entorno; sin bandera pública; la decisión es pura', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const firma = 'export function recordExitDiag('
+    const desde = mod.indexOf(firma)
+    expect(desde).toBeGreaterThan(0)
+    const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+    expect(region.length).toBeGreaterThan(300)
+    // La primera línea del cuerpo es el gate, y va antes de cualquier lectura del canal global.
+    const cuerpo = region.split('\n').slice(1).filter((l) => l.trim() !== '')
+    expect(cuerpo[0]).toContain('panelExitDiagEnabled(process')
+    expect(region.indexOf('panelExitDiagEnabled(process')).toBeLessThan(region.indexOf('__forjoPanelDiag'))
+    // Una sola lectura del entorno en todo el módulo (la del gate, leída en CADA llamada) y ninguna
+    // bandera pública que lo reabra en producción.
+    expect(cuenta(mod, /NODE_ENV/g)).toBe(1)
+    expect(cuenta(mod, /NEXT_PUBLIC_/g)).toBe(0)
+    // La decisión es pura: no lee el proceso ni el navegador.
+    const dDesde = mod.indexOf('export function panelExitDiagEnabled(')
+    expect(dDesde).toBeGreaterThan(0)
+    const decision = mod.slice(dDesde, mod.indexOf('\n}\n', dDesde) + 3)
+    expect(decision.length).toBeGreaterThan(60)
+    expect(cuenta(decision, /window|navigator|document|history|process/g)).toBe(0)
+    // El canal sigue en 5: 1 declaración + 4 call sites, el gate no suma ninguno.
+    expect(cuenta(mod, /recordExitDiag\(/g)).toBe(5)
   })
 })
 
