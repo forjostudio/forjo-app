@@ -951,6 +951,84 @@ export function panelExitTouchAction({
   return 'arm'
 }
 
+// ── El atajo de atrás de TECLADO: soltar las teclas no es un toque (plan 03-16, G3-5) ───────────
+
+/** Un evento del conjunto de teclas: una tecla que baja (con su repetición), una que sube, o un retroceso. */
+export type PanelExitKeyEvent =
+  | { tipo: 'keydown'; clave: string; repeticion: boolean }
+  | { tipo: 'keyup'; clave: string }
+  | { tipo: 'popstate' }
+
+/** El conjunto de teclas apretadas desde el último retroceso, y si el evento fue un toque. */
+export type PanelExitKeyStepResult = { teclas: ReadonlySet<string>; esToque: boolean }
+
+/** El conjunto vacío: el valor inicial de la instancia y lo que deja todo retroceso. */
+const SIN_TECLAS: ReadonlySet<string> = new Set<string>()
+
+/**
+ * ¿Un `keyup` es un **toque** del dueño? Avanza el conjunto de teclas apretadas **desde el último
+ * retroceso** y lo contesta. Pura, con las reglas **EN ORDEN**; nunca muta el conjunto de entrada (devuelve
+ * uno nuevo).
+ *
+ *   1. `popstate` ⇒ **el conjunto vacío**, y no es un toque: lo que estaba apretado antes del retroceso es
+ *      la combinación que lo disparó (Alt+flecha izquierda, Cmd+[), y su keyup no es un gesto nuevo.
+ *   2. keydown con **repetición** ⇒ sin cambio, y no es un toque: mantener una tecla no es una pulsación
+ *      nueva, así que la flecha mantenida a través del retroceso no entra al conjunto.
+ *   3. keydown ⇒ **suma** la clave, y no es un toque (el toque es el keyup, como hoy).
+ *   4. keyup ⇒ es un toque **si y sólo si** la clave estaba en el conjunto —su keydown llegó después del
+ *      último retroceso—, y la saca.
+ *
+ * **POR QUÉ EXISTE (`G3-5`, CR-01 de `03-REVIEW.md`, medido en la sección `(h)` de
+ * `.planning/debug/la-absorcion-que-no-absorbe-medida.md`).** En escritorio, Alt+flecha izquierda daba el
+ * aviso y al soltar las teclas el keyup —que llega DESPUÉS del `popstate`, con la activación todavía
+ * vigente— contaba como un toque: bajaba el aviso y re-empujaba `#salir`. Medido en los dos órdenes de
+ * soltar: `aviso_tras_soltar=no`, `hash_tras_soltar=#salir`, y el segundo atrás salía SIN aviso a la vista
+ * salteando Inicio (`entradas_salteadas=1`). El veredicto medido fue `otro` y **quedó así**; esto sale de la
+ * **decisión del dueño** del 2026-10-30 (`03-UAT-2.md`, «que el aviso se quede»): soltar el atajo no es un
+ * toque, el aviso se queda y el segundo atrás sale, igual que en el teléfono (D-05).
+ *
+ * ⚠ **POR QUÉ NO ALCANZA UN FILTRO DE MODIFICADORES.** Soltar Alt antes que la flecha deja un keyup de
+ * flecha **SIN** modificador (`altKey=false`), y en macOS el keyup de la tecla común puede no llegar
+ * mientras Cmd está apretado. Lo que distingue el atajo de un toque no es la tecla sino **cuándo bajó**.
+ *
+ * **EL CAMINO 1, intacto:** con el aviso a la vista, una tecla apretada DESPUÉS del retroceso entra al
+ * conjunto, su keyup es un toque, y el toque baja el aviso y re-arma con la activación de ese keydown, que
+ * llegó después del retroceso. Referencias en ASCII para los gates: `G3-5` · `CR-01` · `camino 1`.
+ */
+export function panelExitKeyStep({
+  teclas,
+  evento,
+}: {
+  teclas: ReadonlySet<string>
+  evento: PanelExitKeyEvent
+}): PanelExitKeyStepResult {
+  if (evento.tipo === 'popstate') return { teclas: SIN_TECLAS, esToque: false }
+  if (evento.tipo === 'keydown') {
+    if (evento.repeticion) return { teclas, esToque: false }
+    const conLaNueva = new Set(teclas)
+    conLaNueva.add(evento.clave)
+    return { teclas: conLaNueva, esToque: false }
+  }
+  if (!teclas.has(evento.clave)) return { teclas, esToque: false }
+  const sinLaSoltada = new Set(teclas)
+  sinLaSoltada.delete(evento.clave)
+  return { teclas: sinLaSoltada, esToque: true }
+}
+
+/**
+ * La identidad de una tecla para {@link panelExitKeyStep}: `code` —la tecla **FÍSICA**, independiente del
+ * diseño del teclado (`AltLeft`, `ArrowLeft`, `MetaLeft`, `BracketLeft`, `KeyA`)— y, si viene vacío, como en
+ * los teclados virtuales, `key`. La cadena **tal cual**, sin normalizar: `KeyA` y `keya` son dos teclas, y un
+ * espacio no se recorta (el borde `encoding` de MOB-05).
+ *
+ * ⚠ **ES EL ÚNICO LUGAR QUE LA DECIDE:** el keydown y el keyup la usan los dos. Dos dialectos —uno que
+ * normalice y otro que no— dejarían el keyup sin su keydown, y un toque legítimo se perdería.
+ */
+export function panelExitKeyId({ code, key }: { code: string; key: string }): string {
+  if (code !== '') return code
+  return key
+}
+
 // ── El rastreador del teclado: UNO por documento ─────────────────────────────────────────────────
 //
 // Reusa los DOS helpers puros y ya medidos de `lib/overlay-history.ts` (el umbral de inset y la
@@ -1391,6 +1469,10 @@ export function usePanelBranch({
   // montar, falso en su limpieza) y la lee el consumo DIFERIDO de esa limpieza: es lo que distingue el
   // remontaje del modo estricto de un desmontaje real. Ver {@link panelExitUnmountAction}.
   const montadaRef = useRef(false)
+  // Las teclas apretadas DESDE EL ÚLTIMO RETROCESO (plan 03-16, `G3-5`). En una referencia porque las leen
+  // y escriben los oyentes del teclado, del retroceso y del toque, que necesitan el valor fresco y no
+  // pintan nada. Ver {@link panelExitKeyStep}.
+  const teclasRef = useRef<ReadonlySet<string>>(SIN_TECLAS)
 
   // ── Quién es la dueña ─────────────────────────────────────────────────────────────────────────
   // Declarado ANTES del efecto de marcado a propósito: React corre los efectos de un commit en orden
@@ -1571,6 +1653,9 @@ export function usePanelBranch({
     instalarRastreadorDeTeclado()
 
     const alRetroceder = () => {
+      teclasRef.current = panelExitKeyStep({ teclas: teclasRef.current, evento: { tipo: 'popstate' } }).teclas
+      // ⚠ G3-5: el retroceso CORTA la combinación, y va ANTES del candado del dominio: el conjunto es de la
+      // instancia, y un retroceso que la instancia ignora igual dejó atrás las teclas que lo dispararon.
       if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
       const estado: unknown = window.history.state
       // Los cinco hechos, izados para que la decisión y el canal de diagnóstico lean el MISMO valor
@@ -1640,9 +1725,20 @@ export function usePanelBranch({
     // Next 16 es el documento), así que `defaultPrevented` dice si un link se llevó el gesto. Los
     // motivos de esos dos eventos y de los tres descartados están en {@link panelExitTouchAction}.
     const alTocar = (evento: Event) => {
+      // ⚠ G3-5 (plan 03-16): un keyup cuenta como toque SÓLO si su keydown llegó después del último
+      // retroceso; soltar Alt+flecha (o Cmd+[) no baja el aviso ni re-empuja. El click NO pasa por el
+      // conjunto: cuenta como toque tal cual. Va PRIMERO para que todo keyup —también Enter— saque su
+      // tecla del conjunto.
+      const paso: PanelExitKeyStepResult =
+        evento instanceof KeyboardEvent
+          ? panelExitKeyStep({ teclas: teclasRef.current, evento: { tipo: 'keyup', clave: panelExitKeyId(evento) } })
+          : { teclas: teclasRef.current, esToque: true }
+      teclasRef.current = paso.teclas
       // Enter y la barra espaciadora sintetizan un `click`: ese camino ya los cubre, y armar en su
       // `keyup` armaría ANTES del click que puede empezar una navegación.
       if (evento instanceof KeyboardEvent && (evento.key === 'Enter' || evento.key === ' ')) return
+      // El keyup que no es toque sale ACÁ, antes del canal: como Enter, ningún call site nuevo.
+      if (!paso.esToque) return
       if (branchOwnerDecision({ duenaFigurando: instanciaDuena, preguntaId: id, instanciasVivas }) === 'abstenerse') return
       // Los hechos, leídos UNA sola vez: la activación del gesto viaja tal cual al armado.
       const activacion = panelExitActivationNow(navigator.userActivation)
@@ -1680,13 +1776,25 @@ export function usePanelBranch({
       }
     }
 
+    // ── El teclado que BAJA: alimenta el conjunto de teclas (plan 03-16, `G3-5`) ─────────────────
+    // EN CAPTURA: un componente que frene la propagación de un keydown no puede dejar fuera del conjunto
+    // una tecla cuyo keyup sí llega (ese keyup se perdería como toque). No decide nada: sólo anota.
+    const alApretar = (evento: KeyboardEvent) => {
+      teclasRef.current = panelExitKeyStep({
+        teclas: teclasRef.current,
+        evento: { tipo: 'keydown', clave: panelExitKeyId(evento), repeticion: evento.repeat },
+      }).teclas
+    }
+
     window.addEventListener('popstate', alRetroceder)
     window.addEventListener('click', alTocar)
     window.addEventListener('keyup', alTocar)
+    window.addEventListener('keydown', alApretar, true)
     return () => {
       window.removeEventListener('popstate', alRetroceder)
       window.removeEventListener('click', alTocar)
       window.removeEventListener('keyup', alTocar)
+      window.removeEventListener('keydown', alApretar, true)
     }
   }, [drawsExitHint, id, root, armarSentinel])
 
