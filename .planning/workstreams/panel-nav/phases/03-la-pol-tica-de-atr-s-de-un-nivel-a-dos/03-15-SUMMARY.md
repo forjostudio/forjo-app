@@ -2,7 +2,9 @@
 phase: "03-la-pol-tica-de-atr-s-de-un-nivel-a-dos"
 plan: "15"
 subsystem: panel-nav / sentinel de salida (MOB-05) + guard de cambios sin guardar (MOB-06)
-status: halted
+status: complete
+outcome: "parado por diseño en P-4 después del task 2 — la medición es el entregable; los arreglos pasan al 03-16"
+stop_resolution: "el dueño decidió el 2026-10-30 (03-UAT-2.md § «Los veredictos del 03-15 — decisión del dueño»): G3-5 → que el aviso se quede al soltar las teclas del atajo; G3-7 → arreglarlo. Los dos van en el plan 03-16; G3-6 y G3-8 quedan descartados con su número"
 stop_rule: "P-4 — veredicto G3-5: otro (la firma de CR-01 no encaja: el keyup re-empuja #salir, pero el segundo atrás SALE salteando /dashboard)"
 tags: [code-review, g3-5, g3-6, g3-7, g3-8, wr-05, canal-de-diagnostico, cdp, intervencion-de-historial]
 requires: ["03-14"]
