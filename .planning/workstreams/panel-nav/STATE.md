@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
-current_plan: 14
-status: verifying
-stopped_at: "Completado 03-14-PLAN.md — checkpoint aprobado por el dueno (1.6, 3.2, 4.1, 4.2); fase 03 con 14/14 planes ejecutados, lista para el cierre"
+current_plan: 15
+status: executing
+stopped_at: "Planificado 03-15-PLAN.md (gaps del code review G3-5..G3-8 + WR-05); plan-checker PASSED en la iteracion 2; listo para ejecutar"
 last_updated: "2026-10-29T22:54:36.000Z"
-last_activity: 2026-10-29
-last_activity_desc: "03-14 completo: el dueno aprobo el checkpoint («Todo perfecto»: 1.6, 3.2, 4.1, 4.2); la fase 03 queda 14/14, lista para security gate, code review y verificacion"
+last_activity: 2026-10-30
+last_activity_desc: "code review de la fase (2 BLOCKER, 5 WARNING, 7 INFO); el dueno decidio medir y arreglar + diagnostico solo en dev; 03-15 planificado y verificado"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 18
+  total_plans: 19
   completed_plans: 18
   percent: 0
 workstream: panel-nav
@@ -25,25 +25,25 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Current Position
 
-**Current Plan:** 14
-**Total Plans in Phase:** 14
-**Status:** Phase complete — ready for verification (fase 03: 14/14 planes ejecutados; el 03-14 cerro G3-4 y su checkpoint lo aprobo el dueno el 2026-10-29. Falta el cierre: security gate, code review y `/gsd-verify-work 3 --ws panel-nav`, que marca MOB-04/05/06)
+**Current Plan:** 15
+**Total Plans in Phase:** 15
+**Status:** Ready to execute (fase 03: 03-15 planificado el 2026-10-30 — los gaps del code review `G3-5`..`G3-8` + WR-05; plan-checker PASSED en la iteracion 2)
 **Current Phase:** 03
-**Last Activity:** 2026-10-29 — 03-14 completo (checkpoint aprobado por el dueno)
+**Last Activity:** 2026-10-30 — 03-15 planificado (gaps del code review)
 **Last Activity Description:** el dueno corrio el 1.6, el 3.2 y el bloque 4 y respondio «Todo perfecto» (registrado en 03-UAT-2.md § «Re-prueba tras el 03-14 — 2026-10-29»); la ronda 3 queda cerrada en Android, iPhone y escritorio
 
 ## Progress
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 14/14 (en la fase 03)
-**Current Plan:** 14
+**Plans Complete:** 14/15 (en la fase 03)
+**Current Plan:** 15
 
 ## Session Continuity
 
 **Last session:** 2026-10-29T22:54:36.000Z
 
-**Stopped At:** Completado 03-14-PLAN.md — fase 03 con 14/14 planes ejecutados; proximo: security gate, code review y `/gsd-verify-work 3 --ws panel-nav` (marca MOB-04/05/06)
+**Stopped At:** Planificado 03-15-PLAN.md — proximo: `/gsd-execute-phase 3 --ws panel-nav --gaps-only`
 **Resume File:** None
 
 ## Performance Metrics

@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-verify-work 3 --ws panel-nav",
-    "label": "Fase 03 con 14/14 planes ejecutados: security gate (/gsd-secure-phase 3 --ws panel-nav), code review y verificacion; /gsd-verify-work marca MOB-04/05/06 tras los gates",
-    "reason": "Phase 03 · 03-14 completo (checkpoint aprobado por el dueno el 2026-10-29: 1.6, 3.2, 4.1, 4.2) · lista para el cierre"
+    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
+    "label": "Ejecutar el 03-15: los gaps del code review (G3-5..G3-8 medidos primero) + el canal de diagnostico solo en desarrollo (WR-05)",
+    "reason": "Phase 03 · 03-15 planificado y verificado el 2026-10-30 (plan-checker PASSED, iteracion 2)"
   },
-  "updated_at": "2026-10-29T22:54:36.000Z"
+  "updated_at": "2026-10-30T12:00:00.000Z"
 }
