@@ -1000,6 +1000,48 @@ y `vivo_despues=true`). Antes del arreglo (`(h)`) la secuencia terminaba en el `
 
 cierre G3-7: arreglado
 
+**La no-regresión completa, con los dos arreglos puestos** (2026-10-30, hora local; todo por el turno salvo
+la suite, `tsc` y `eslint`; el `next dev` del dueño sin reiniciar):
+
+- **Los doce de antes** (08:06-08:11): rc 0, 12/12 en `OK`, cero `FALLA`, cero fallos del instrumento.
+- **Los once `R-G3-*`** (08:11-08:13): rc 0, los once reportados, los once en `OK` —los cuatro de `G3-5`, los
+  tres de `G3-7` y los de `G3-6` y `G3-8` con lo que midió `(h)`—.
+- **La estática** (`panel-back-stack.mjs`, sin tocar desde `993fbc5`): 18/18 `OK`, rc 0. Las líneas
+  `esperado` de la sonda de la app, iguales a `993fbc5`.
+- **La suite completa** (`npx vitest run`, 08:14:08-08:15:10, adentro de la ventana [01:00, 23:30] de los
+  canarios de reloj): **110 archivos, 2030 pasados + 4 expected-fail + 1 salteado**, rc 0 (2002 de base + 16
+  de `G3-5` + 12 de `G3-7`). `tsc --noEmit` sin `error TS`; `eslint` sobre lo tocado rc 0; `next.config.ts`
+  con la huella `8ceb99aeabb6a8b16cbe0e6d836bf0aa1ae03578`; los intocables y los archivos de `G3-6` sin
+  cambios desde `993fbc5`.
+
+```text
+OK  C-activacion · la calibracion del navegador sobre /login, antes del login: ¿un empuje con activacion es salteable?
+OK  R-1.3-sin-toque · entrada DIRECTA a Inicio, SIN tocar nada, UN atras: el costo declarado de la decision (sale sin aviso)
+OK  R-1.3-con-toque · entrada DIRECTA a Inicio, UN toque neutro, UN atras: el hash aparece y el atras avisa y no sale
+OK  R-1.3-recarga-logica · la RECARGA del 1.3 por la opcion (A): tres recargas parado en Inicio armado; el armado acredita (none con vivo_despues)
+OK  R-1.3-recarga-gesto · la RECARGA del 1.3 con el atras de la interfaz: (i) sin tocar despues de recargar, (ii) con un toque — tres vueltas cada una
+OK  R-1.1 · el recorrido del dueno, textual: entrar, tocar Turnos, Clientes y Agenda, tocar Inicio; avisa y despues sale
+OK  R-3.1 · el aviso que SE QUEDA: no vence a los 2,5 s ni a los 10 s, con el aviso el atras sale; un toque lo baja y re-arma
+OK  R-1.4 · llegar a Inicio CON EL ATRAS: sin hash, armado pendiente y el atras siguiente sale (la consecuencia declarada); con un toque, avisa
+OK  R-barra-con-aviso · tocar Clientes en la barra con el aviso VISIBLE: el aviso se va y la pila queda sin #salir enterrado
+OK  R-barra-pendiente · tocar Clientes en la barra recien entrado directo (armado pendiente): la sesion abre sin armar y la pila queda sin #salir
+OK  R-lateral · el hallazgo lateral del plan 03-12: tocar Clientes parado en Inicio ARMADO; el consumo se ignora y el armado queda pendiente, sin #salir enterrado
+OK  R-login-con-activacion · G3-4: loguearse por el formulario con la activacion del click VIGENTE al aterrizar; sin aviso, sin popstate, con #salir, y el atras tras un toque avisa
+OK  R-G3-5-escritorio-control · G3-5, el control en ESCRITORIO: un toque arma, el atras de la interfaz avisa y el segundo sale
+OK  R-G3-5-teclado-flecha-primero · G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando la flecha antes que Alt: avisa, el aviso se queda y el segundo sale
+OK  R-G3-5-teclado-alt-primero · G3-5 (CR-01): el atras de TECLADO compuesto en escritorio, soltando Alt antes que la flecha: avisa, el aviso se queda y el segundo sale
+OK  R-G3-5-tecla-tras-el-aviso · G3-5, el camino 1 con teclado: con el aviso visible, una letra apretada y soltada lo baja y re-arma; el atras siguiente avisa
+OK  R-G3-6-con-sentinel · G3-6 (CR-02): «Salir sin guardar» desde /web (marca /mas) hacia Turnos con el sentinel de cambios: aterriza en Turnos y el atras vuelve a Inicio
+OK  R-G3-6-camino-real · G3-6 (CR-02): el atras desde /web sucia, «Seguir editando», y despues «Salir sin guardar» hacia Turnos: aterriza en Turnos y el atras vuelve a Inicio
+OK  R-G3-6-sin-sentinel · G3-6 (CR-02), la precondicion FORZADA: «Salir sin guardar» desde /web sucia SIN el sentinel de cambios hacia Turnos: ¿aterriza en Turnos?
+OK  R-G3-7-autoabierto-x · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar (CTA de la landing), cerrado con la X: el sentinel queda armado y el atras avisa
+OK  R-G3-7-autoabierto-fondo · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar, cerrado tocando el FONDO: el sentinel queda armado y el atras avisa
+OK  R-G3-7-primer-toque · G3-7 (WR-02): el dialogo del plan abierto por el PRIMER toque en Inicio (el boton del banner), cerrado con la X: el atras avisa
+OK  R-G3-8-rebote · G3-8 (WR-04): la sesion vencida en medio de un replace de la barra rebota a /login; al volver, ninguna marca miente sobre la entrada de abajo
+```
+
+no-regresion (plan 03-16): los doce de antes 12/12 OK · los once R-G3-* 11/11 OK (G3-5 4/4, G3-6 3/3, G3-7 3/3, G3-8 1/1) · estatica 18/18 · suite 110 archivos 2030 pasados + 4 xfail + 1 salteado, rc 0 (08:14-08:15) · tsc y eslint limpios · next.config.ts 8ceb99ae intacto
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la

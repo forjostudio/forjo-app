@@ -7,6 +7,31 @@ el plan `03-13`** (la decisión del dueño del `camino 1`, `03-DECISION-UAT-3.md
 
 ---
 
+## ⚠ Actualización del 2026-10-30 (plan 03-16): lo que el code review cambió, y nada más
+
+Los cuatro gaps del code review, en una línea cada uno (el detalle, en la sección «Los arreglos del 03-16» de
+`03-UAT-2.md`):
+
+- **`G3-5` — arreglado:** en escritorio, soltar las teclas del atajo de atrás ya no baja el aviso; el aviso
+  se queda y el segundo atrás sale.
+- **`G3-7` — arreglado:** cerrar con la X o el fondo el diálogo del plan en Inicio vuelve a armar el aviso, y
+  el atrás siguiente avisa.
+- **`G3-6` — descartado** (03-15): «Salir sin guardar» hacia otra sección aterriza bien, medido.
+- **`G3-8` — descartado** (03-15): el rebote al login no deja ninguna marca que mienta, medido.
+
+**No se re-corre la ronda.** La sonda de la app re-midió los doce recorridos de antes y los once nuevos, en
+verde, con los dos arreglos puestos.
+
+**Lo que corre el dueño, con el motivo de cada uno:**
+
+- el **4.3** (nuevo, en el bloque 4): el atrás de **teclado real** en el escritorio —la sonda no puede
+  disparar el atajo del navegador—;
+- el **4.2** (en el escritorio): `G3-5` tocó el oyente del toque en escritorio;
+- el **3.3** (nuevo, en el bloque 3, en Android): cerrar con la X el diálogo del plan y apretar atrás;
+- el **1.5** (en Android): `G3-7` también tocó el oyente del toque.
+
+---
+
 ## ⚠ Actualización del 2026-10-29 (plan 03-14): lo que falta, y nada más
 
 **El defecto del aterrizaje del login (`G3-4`) quedó medido y arreglado.** La causa, en una línea, tal como
@@ -319,6 +344,18 @@ para probar eso»*:
 - **La mitad de Inicio queda DECLARADA NO CORRIBLE**, no marcada: el aviso de salida vive en la raíz y
   Inicio no tiene un overlay con el que probar el caso exacto.
 
+### 3.3 — Cerrar con la X el diálogo del plan en Inicio (nuevo, 2026-10-30, G3-7)
+
+**Cómo:** recién entrado a Inicio, **sin tocar nada**, tocar el **botón del banner del plan** (abre el
+diálogo), cerrarlo con la **X** (o tocando **afuera** del diálogo) y apretar **atrás**.
+
+- **Tiene que:** el primer atrás **avisa y no sale**; el **segundo sale**.
+- **Lo que sería un fallo:** que el primer atrás **salga sin avisar** (era lo de antes del arreglo).
+- ⚠ **Si el banner del plan no aparece en su Inicio** (el negocio no está en prueba ni vencido), se anota
+  **no corrible**, con ese motivo. Es el único diálogo de Inicio: sin él no hay con qué probarlo.
+- *Motivo:* los tres recorridos `R-G3-7` de la sonda de la app (el diálogo auto-abierto cerrado con la X o
+  con el fondo, y el abierto por el primer toque), en verde con el arreglo del 2026-10-30.
+
 ---
 
 ## Bloque 4 · El residuo de escritorio, verificado como lo que es (escritorio ≥1024px)
@@ -346,6 +383,23 @@ El mismo recorrido del **sidebar** pero **sin** cambios sin guardar.
 ⚠ **Al día desde el 2026-10-28:** en escritorio la regla del aviso es la misma —sin gate de pantalla
 (D-05)—, así que **entrando directo** a Inicio también hace falta **un click** en un lugar sin botones
 antes del atrás para que el aviso se arme. Sin el click, el atrás sale sin aviso, igual que en el 1.3 (a).
+
+### 4.3 — Escritorio, el atrás de TECLADO (nuevo, 2026-10-30, G3-5)
+
+**Cómo:** en Inicio, un **click** en un lugar sin botones (el `#salir` aparece en la URL). Después, el atajo
+de atrás del teclado: **Alt + flecha izquierda** en Windows (**Cmd + [** en Mac, si tiene; y el **botón
+lateral «atrás» del mouse**, si tiene uno).
+
+- **Tiene que:** el aviso **aparece** y **se queda** al soltar las teclas, las suelte en el orden que sea;
+  y el **mismo gesto otra vez sale** del panel.
+- **El contrapuesto:** con el aviso **visible**, apretar y soltar **una letra** ⇒ el aviso **se va**, el hash
+  **vuelve** a la URL, y el atrás **siguiente** vuelve a **avisar**.
+- **Lo que sería un fallo:** que el aviso **se vaya solo al soltar** las teclas, o que el **segundo atrás no
+  salga**.
+- *Motivo:* la sonda de la app mide el orden de los eventos de teclado **compuesto** alrededor del atrás de
+  la interfaz (`R-G3-5-teclado-flecha-primero`, `R-G3-5-teclado-alt-primero`, en verde con el arreglo del
+  2026-10-30); el acelerador **real** del navegador, macOS y el botón lateral del mouse no los puede
+  disparar.
 
 ---
 
