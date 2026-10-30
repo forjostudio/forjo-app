@@ -2386,6 +2386,116 @@ describe('panelExitTouchAction — qué hace un toque, puro, con las reglas en o
   })
 })
 
+// ── G3-5 (plan 03-16): soltar el atajo de atrás NO es un toque ──────────────────────────────────────
+//
+// POR QUÉ, medido (`## (h)` de `.planning/debug/la-absorcion-que-no-absorbe-medida.md`) y DECIDIDO por el
+// dueño el 2026-10-30 (`03-UAT-2.md` § «Los veredictos del 03-15 — decisión del dueño»: «que el aviso se
+// quede»): con Alt+flecha izquierda el aviso aparecía y se iba al soltar las teclas —el keyup posterior al
+// `popstate` contaba como un toque, bajaba el aviso y re-empujaba `#salir`—, y el segundo atrás salía sin
+// aviso a la vista. La decisión nueva cuenta un keyup como toque SÓLO si su keydown llegó DESPUÉS del
+// último `popstate`: lo apretado antes del retroceso es la combinación que lo disparó.
+
+describe('panelExitKeyStep — un keyup es un toque SÓLO si su keydown llegó después del último retroceso (plan 03-16, G3-5)', () => {
+  const VACIO: ReadonlySet<string> = new Set<string>()
+  const abajo = (clave: string, repeticion = false) => ({ tipo: 'keydown' as const, clave, repeticion })
+  const arriba = (clave: string) => ({ tipo: 'keyup' as const, clave })
+  const POP = { tipo: 'popstate' as const }
+
+  it('la trampa con la FLECHA soltada primero: Alt, flecha, el atrás, keyup flecha, keyup Alt ⇒ ninguno de los dos keyup es un toque', () => {
+    const a = PB.panelExitKeyStep({ teclas: VACIO, evento: abajo('AltLeft') })
+    const b = PB.panelExitKeyStep({ teclas: a.teclas, evento: abajo('ArrowLeft') })
+    const c = PB.panelExitKeyStep({ teclas: b.teclas, evento: POP })
+    const d = PB.panelExitKeyStep({ teclas: c.teclas, evento: arriba('ArrowLeft') })
+    const e = PB.panelExitKeyStep({ teclas: d.teclas, evento: arriba('AltLeft') })
+    expect([a.esToque, b.esToque, c.esToque]).toEqual([false, false, false])
+    expect(d.esToque).toBe(false)
+    expect(e.esToque).toBe(false)
+    expect(e.teclas.size).toBe(0)
+  })
+
+  it('la trampa con ALT soltada primero (el keyup de la flecha llega SIN modificador: un filtro de modificadores solo no la cierra) ⇒ los dos falsos', () => {
+    const b = PB.panelExitKeyStep({ teclas: PB.panelExitKeyStep({ teclas: VACIO, evento: abajo('AltLeft') }).teclas, evento: abajo('ArrowLeft') })
+    const c = PB.panelExitKeyStep({ teclas: b.teclas, evento: POP })
+    const d = PB.panelExitKeyStep({ teclas: c.teclas, evento: arriba('AltLeft') })
+    const e = PB.panelExitKeyStep({ teclas: d.teclas, evento: arriba('ArrowLeft') })
+    expect(d.esToque).toBe(false)
+    expect(e.esToque).toBe(false)
+  })
+
+  it('Cmd+[ en macOS: Meta, corchete, el atrás, keyup Meta (y el del corchete, si llega) ⇒ falsos', () => {
+    const b = PB.panelExitKeyStep({ teclas: PB.panelExitKeyStep({ teclas: VACIO, evento: abajo('MetaLeft') }).teclas, evento: abajo('BracketLeft') })
+    const c = PB.panelExitKeyStep({ teclas: b.teclas, evento: POP })
+    const d = PB.panelExitKeyStep({ teclas: c.teclas, evento: arriba('MetaLeft') })
+    const e = PB.panelExitKeyStep({ teclas: d.teclas, evento: arriba('BracketLeft') })
+    expect(d.esToque).toBe(false)
+    expect(e.esToque).toBe(false)
+  })
+
+  it('el contrapuesto del camino 1: el atrás, DESPUÉS keydown y keyup de una letra ⇒ el keyup SÍ es un toque (baja el aviso y re-arma)', () => {
+    const c = PB.panelExitKeyStep({ teclas: VACIO, evento: POP })
+    const d = PB.panelExitKeyStep({ teclas: c.teclas, evento: abajo('KeyA') })
+    const e = PB.panelExitKeyStep({ teclas: d.teclas, evento: arriba('KeyA') })
+    expect(d.esToque).toBe(false)
+    expect(e.esToque).toBe(true)
+    expect(e.teclas.size).toBe(0)
+  })
+
+  it('una tecla común SIN retroceso de por medio ⇒ el keyup es un toque (tabular en Inicio sigue armando como hoy)', () => {
+    const d = PB.panelExitKeyStep({ teclas: VACIO, evento: abajo('Tab') })
+    expect(PB.panelExitKeyStep({ teclas: d.teclas, evento: arriba('Tab') }).esToque).toBe(true)
+  })
+
+  it('la tecla MANTENIDA: keydown, el atrás, keydown con repetición, keyup ⇒ falso (mantener no es una pulsación nueva)', () => {
+    const a = PB.panelExitKeyStep({ teclas: VACIO, evento: abajo('ArrowLeft') })
+    const c = PB.panelExitKeyStep({ teclas: a.teclas, evento: POP })
+    const r = PB.panelExitKeyStep({ teclas: c.teclas, evento: abajo('ArrowLeft', true) })
+    expect(r.esToque).toBe(false)
+    expect(r.teclas.size).toBe(0)
+    expect(PB.panelExitKeyStep({ teclas: r.teclas, evento: arriba('ArrowLeft') }).esToque).toBe(false)
+  })
+
+  it('el borde `empty`: un keyup sin keydown (el conjunto VACÍO) ⇒ falso, y un retroceso sobre el conjunto vacío ⇒ vacío', () => {
+    expect(PB.panelExitKeyStep({ teclas: VACIO, evento: arriba('KeyA') })).toEqual({ teclas: VACIO, esToque: false })
+    const c = PB.panelExitKeyStep({ teclas: VACIO, evento: POP })
+    expect(c.esToque).toBe(false)
+    expect(c.teclas.size).toBe(0)
+  })
+
+  it('pureza: el conjunto de entrada NO se muta (la decisión devuelve uno nuevo)', () => {
+    const entrada = new Set<string>(['AltLeft'])
+    const suma = PB.panelExitKeyStep({ teclas: entrada, evento: abajo('ArrowLeft') })
+    const resta = PB.panelExitKeyStep({ teclas: entrada, evento: arriba('AltLeft') })
+    const vacia = PB.panelExitKeyStep({ teclas: entrada, evento: POP })
+    expect([...entrada]).toEqual(['AltLeft'])
+    expect(suma.teclas).not.toBe(entrada)
+    expect([...suma.teclas].sort()).toEqual(['AltLeft', 'ArrowLeft'])
+    expect(resta.esToque).toBe(true)
+    expect(resta.teclas.size).toBe(0)
+    expect(vacia.teclas.size).toBe(0)
+  })
+
+  it('el borde `encoding`, la identidad: dos teclas que difieren sólo en mayúsculas son DOS teclas (el keyup de una no cuenta para la otra)', () => {
+    const d = PB.panelExitKeyStep({ teclas: PB.panelExitKeyStep({ teclas: VACIO, evento: POP }).teclas, evento: abajo('KeyA') })
+    expect(PB.panelExitKeyStep({ teclas: d.teclas, evento: arriba('keya') }).esToque).toBe(false)
+  })
+})
+
+describe('panelExitKeyId — la identidad de una tecla, en UN solo lugar (plan 03-16, G3-5)', () => {
+  it('con `code` ⇒ `code`: la tecla FÍSICA, independiente del diseño del teclado', () => {
+    expect(PB.panelExitKeyId({ code: 'ArrowLeft', key: 'ArrowLeft' })).toBe('ArrowLeft')
+    expect(PB.panelExitKeyId({ code: 'KeyA', key: 'q' })).toBe('KeyA')
+  })
+
+  it('con `code` VACÍO (teclados virtuales) ⇒ `key`, el respaldo', () => {
+    expect(PB.panelExitKeyId({ code: '', key: 'a' })).toBe('a')
+  })
+
+  it('sin normalizar: un espacio no se recorta y `KeyA` y `keya` son dos teclas', () => {
+    expect(PB.panelExitKeyId({ code: ' KeyA', key: 'a' })).toBe(' KeyA')
+    expect(PB.panelExitKeyId({ code: 'KeyA', key: 'a' })).not.toBe(PB.panelExitKeyId({ code: 'keya', key: 'a' }))
+  })
+})
+
 describe('el cableado del camino 1 — auditorías de fuente', () => {
   it('`armarSentinel` recibe el hecho SIN valor por omisión', () => {
     const mod = sinComentarios(leer(MOD_DUENO))
@@ -2427,6 +2537,72 @@ describe('el cableado del camino 1 — auditorías de fuente', () => {
       expect(region.length).toBeGreaterThan(80)
       expect(cuenta(region, /window|navigator|document|history/g)).toBe(0)
     }
+  })
+})
+
+describe('el cableado de G3-5 — el conjunto de teclas en el efecto del retroceso y del toque (plan 03-16), auditorías de fuente', () => {
+  /** Un manejador del efecto, recortado del fuente sin comentarios hasta su llave de sangría 4. */
+  function manejador(firma: string): string {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf(firma)
+    expect(desde).toBeGreaterThan(0)
+    return mod.slice(desde, mod.indexOf('\n    }\n', desde) + 7)
+  }
+
+  it('un oyente `keydown` sobre window, EN CAPTURA, dado de alta y de baja en el MISMO efecto que el retroceso y el toque', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /(add|remove)EventListener\('keydown'/g)).toBe(2)
+    const desde = mod.indexOf('const alRetroceder = () => {')
+    const efecto = mod.slice(desde, mod.indexOf('}, [drawsExitHint, id, root, armarSentinel])', desde))
+    expect(efecto).toContain("window.addEventListener('keydown', alApretar, true)")
+    expect(efecto).toContain("window.removeEventListener('keydown', alApretar, true)")
+    // `click` y `keyup` siguen en cuatro: el oyente nuevo no reemplaza a ninguno.
+    expect(cuenta(mod, /(add|remove)EventListener\('(click|keyup)'/g)).toBe(4)
+    const apretar = manejador('const alApretar = (evento: KeyboardEvent) => {')
+    expect(apretar).toContain('panelExitKeyId(evento)')
+    expect(apretar).toContain('evento.repeat')
+  })
+
+  it('el retroceso corta la combinación como PRIMERA sentencia, antes del candado del dominio', () => {
+    const retroceso = manejador('const alRetroceder = () => {')
+    const iPaso = retroceso.indexOf("panelExitKeyStep({ teclas: teclasRef.current, evento: { tipo: 'popstate' } })")
+    const iCandado = retroceso.indexOf('branchOwnerDecision(')
+    expect(iPaso).toBeGreaterThan(-1)
+    expect(iCandado).toBeGreaterThan(iPaso)
+    const cuerpo = retroceso.slice(retroceso.indexOf('{') + 1).trimStart()
+    expect(cuerpo.startsWith('teclasRef.current = panelExitKeyStep(')).toBe(true)
+  })
+
+  it('en el toque: el paso del keyup, después el filtro de Enter TAL CUAL, después `esToque`, y recién ahí el canal y la decisión', () => {
+    const toque = manejador('const alTocar = (evento: Event) => {')
+    const iPaso = toque.indexOf('panelExitKeyStep(')
+    const iEnter = toque.indexOf("'Enter'")
+    const iEsToque = toque.indexOf('if (!paso.esToque) return')
+    const iCanal = toque.indexOf('recordExitDiag(')
+    const iDecision = toque.indexOf('panelExitTouchAction(')
+    expect(iPaso).toBeGreaterThan(-1)
+    expect(iEnter).toBeGreaterThan(iPaso)
+    expect(iEsToque).toBeGreaterThan(iEnter)
+    expect(iDecision).toBeGreaterThan(iEsToque)
+    expect(iCanal).toBeGreaterThan(iEsToque)
+    expect(toque).toContain("if (evento instanceof KeyboardEvent && (evento.key === 'Enter' || evento.key === ' ')) return")
+    expect(cuenta(toque, /if \(!paso\.esToque\) return/g)).toBe(1)
+    // El click NO pasa por el conjunto: cuenta como toque tal cual.
+    expect(toque).toContain('{ teclas: teclasRef.current, esToque: true }')
+  })
+
+  it('un solo dialecto de la tecla (definición y los dos oyentes), ningún call site nuevo del canal, y las dos decisiones nuevas PURAS', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    expect(cuenta(mod, /panelExitKeyId\(/g)).toBe(3)
+    expect(cuenta(mod, /recordExitDiag\(/g)).toBe(5)
+    for (const firma of ['export function panelExitKeyStep({', 'export function panelExitKeyId({']) {
+      const desde = mod.indexOf(firma)
+      expect(desde).toBeGreaterThan(0)
+      const region = mod.slice(desde, mod.indexOf('\n}\n', desde) + 3)
+      expect(region.length).toBeGreaterThan(60)
+      expect(cuenta(region, /window|navigator|document|history/g)).toBe(0)
+    }
+    expect(mod).toContain('const teclasRef = useRef<ReadonlySet<string>>(SIN_TECLAS)')
   })
 })
 
