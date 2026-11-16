@@ -1831,6 +1831,7 @@ describe('el cableado del reintento de G3-7 — pedido en el toque, leído en el
     const iApaga = toque.indexOf('reintentoTrasAjenaRef.current = false')
     const iDecision = toque.indexOf('panelExitTouchAction(')
     expect(iEsToque).toBeGreaterThan(-1)
+    expect(iCandado).toBeGreaterThan(-1) // R2-IN-03: sin esta guarda, un candado renombrado (-1) pasaría
     expect(iApaga).toBeGreaterThan(iEsToque)
     expect(iApaga).toBeGreaterThan(iCandado)
     expect(iDecision).toBeGreaterThan(iApaga)
@@ -1840,12 +1841,17 @@ describe('el cableado del reintento de G3-7 — pedido en el toque, leído en el
     const retroceso = recortar('const alRetroceder = () => {', /\n {4}\}\n/)
     const ignorar = retroceso.match(/accion === 'ignore'\) \{[\s\S]*?\n {6}\}/)?.[0] ?? ''
     expect(ignorar.length).toBeGreaterThan(50)
-    const iLee = ignorar.indexOf('reintentoTrasAjenaRef.current')
+    // R2-WR-01 (code review ronda 2): el ORDEN es carga —leer, después apagar—. Con las dos líneas
+    // invertidas la lectura ve siempre `false` y el reintento de G3-7 no se pide nunca; por eso se
+    // busca la LECTURA exacta (no cualquier mención de la referencia, que también matchea el apagado).
+    const iLee = ignorar.indexOf('const reintentar = reintentoTrasAjenaRef.current\n')
+    const iApaga = ignorar.indexOf('reintentoTrasAjenaRef.current = false')
+    const iPide = ignorar.indexOf('if (reintentar) setReintentoDelArmado((n) => n + 1)')
     const iArma = ignorar.indexOf('armarSentinel({ puedeEmpujar: false })')
     expect(iLee).toBeGreaterThan(-1)
-    expect(iArma).toBeGreaterThan(iLee)
-    expect(ignorar).toContain('reintentoTrasAjenaRef.current = false')
-    expect(ignorar).toContain('setReintentoDelArmado((n) => n + 1)')
+    expect(iApaga).toBeGreaterThan(iLee)
+    expect(iPide).toBeGreaterThan(iApaga)
+    expect(iArma).toBeGreaterThan(iPide)
     expect(cuenta(retroceso, /pushState/g)).toBe(0)
     expect(cuenta(retroceso, /panelExitActivationNow/g)).toBe(0)
     expect(cuenta(retroceso, /armarSentinel\(\{ puedeEmpujar: false \}\)/g)).toBe(2)
