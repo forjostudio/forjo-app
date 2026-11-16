@@ -1122,7 +1122,7 @@ scroll por caller de «Editar servicio» y «Mover» — `DialogContent` con
 (`-mx-4 min-h-0 overflow-y-auto overscroll-contain px-4 py-1`) y el pie con `mt-4`.
 `components/ui/dialog.tsx` byte-idéntico.
 
-**El GREEN** (16:28-16:31, misma invocación de seis recorridos): rc 0, **6/6 en `OK`**, el scroll movido por un
+**El GREEN** (16:28-16:30, misma invocación de seis recorridos): rc 0, **6/6 en `OK`**, el scroll movido por un
 gesto real en los tres altos (la **rueda**: el dedo sintético de CDP no movió la lista en este Chrome headless,
 sin emulación táctil; la sonda lo registra y cae a la rueda, como el plan prevé) y el atrás después de la X
 **avisa** en los tres (`entradas_salteadas=0`).
@@ -1206,7 +1206,7 @@ primitiva compartida; los botones no son parte del hallazgo): va como observaci�
 `popstate` del overlay es `ignore` → el reintento de `G3-7` lee la activación: vencida, `pendiente` y el atrás
 siguiente sale (el costo del camino 1); viva, `arm` y avisa; y un toque después del cierre arma.
 
-**La medición** (2026-11-16, 16:33-16:37 hora local, una invocación de seis recorridos con `next dev` propio en
+**La medición** (2026-11-16, 16:33-16:34 hora local, una invocación de seis recorridos con `next dev` propio en
 el 3031; `cerrarConElAtras` con la activación al cerrar AFIRMADA en cada caso): rc 1, los tres `R-G3-7` en `OK`,
 cero fallos del instrumento, y **`R-G3-10-primer-toque-atras-pronto` en `FALLA`**:
 
@@ -1297,6 +1297,63 @@ veredicto G3-10: otro
 - **El diálogo AUTO-abierto desde la landing cerrado con el atrás:** no es el camino del dueño; ese overlay
   empuja su entrada al montar sin activación y la intervención de historial puede aplicar ahí. Sin medir, y no
   es `G3-10`.
+
+### La no-regresión (plan 03-17) — DETENIDA por P-1
+
+La no-regresión completa corrió con el modal arreglado (2026-11-16, hora local; todo por el turno salvo la
+suite, `tsc` y `eslint`; `next dev` propio en el 3031 en cada corrida):
+
+- **Los doce de antes** (16:35-16:40): rc 1, **11/12 en `OK`**, una `FALLA`: `R-login-con-activacion`, con
+  `NO REPRODUCE LAS CONDICIONES DEL TELEFONO: ninguno de 3 intentos armo con empuje (la activacion del click vencio
+  antes de montar el panel)` (los tres intentos: 846, 637 y 702 ms del click al primer armado, los tres
+  `pendiente`).
+- **Los diecisiete `R-G3-*`** (16:40-16:43): rc 1 —el esperado: la `FALLA` de `pronto`—, los 17 reportados, los
+  once del 03-16 y los tres `R-G3-9` en `OK`, y los tres `R-G3-10` con el MISMO resultado que quedó pegado arriba
+  (`tarde` OK, `pronto` FALLA, `atras-y-toque` OK). Cero fallos del instrumento.
+- **La estática** (`panel-back-stack.mjs`): 18/18 `OK`, rc 0.
+- **La suite completa** (`npm test`, 16:44:09-16:45:35, adentro de la ventana de los canarios de reloj, con la
+  pila local arriba): **110 archivos, 2031 pasados + 4 expected-fail + 1 salteado**, rc 0. `tsc --noEmit` sin
+  `error TS`; `eslint` de la sonda rc 0 y el del modal con su único problema preexistente
+  (`react-hooks/immutability`); `next.config.ts` con la huella `8ceb99ae`; los intocables sin cambios desde
+  `f7adc9d`; la única fuente cambiada, `components/dashboard/plan-modal.tsx`; ninguna línea `esperado` perdida;
+  nada subido.
+
+```text
+OK  C-activacion · la calibracion del navegador sobre /login, antes del login: ¿un empuje con activacion es salteable?
+OK  R-1.3-sin-toque · entrada DIRECTA a Inicio, SIN tocar nada, UN atras: el costo declarado de la decision (sale sin aviso)
+OK  R-1.3-con-toque · entrada DIRECTA a Inicio, UN toque neutro, UN atras: el hash aparece y el atras avisa y no sale
+OK  R-1.3-recarga-logica · la RECARGA del 1.3 por la opcion (A): tres recargas parado en Inicio armado; el armado acredita (none con vivo_despues)
+OK  R-1.3-recarga-gesto · la RECARGA del 1.3 con el atras de la interfaz: (i) sin tocar despues de recargar, (ii) con un toque — tres vueltas cada una
+OK  R-1.1 · el recorrido del dueno, textual: entrar, tocar Turnos, Clientes y Agenda, tocar Inicio; avisa y despues sale
+OK  R-3.1 · el aviso que SE QUEDA: no vence a los 2,5 s ni a los 10 s, con el aviso el atras sale; un toque lo baja y re-arma
+OK  R-1.4 · llegar a Inicio CON EL ATRAS: sin hash, armado pendiente y el atras siguiente sale (la consecuencia declarada); con un toque, avisa
+OK  R-barra-con-aviso · tocar Clientes en la barra con el aviso VISIBLE: el aviso se va y la pila queda sin #salir enterrado
+OK  R-barra-pendiente · tocar Clientes en la barra recien entrado directo (armado pendiente): la sesion abre sin armar y la pila queda sin #salir
+OK  R-lateral · el hallazgo lateral del plan 03-12: tocar Clientes parado en Inicio ARMADO; el consumo se ignora y el armado queda pendiente, sin #salir enterrado
+FALLA R-login-con-activacion · G3-4: loguearse por el formulario con la activacion del click VIGENTE al aterrizar; sin aviso, sin popstate, con #salir, y el atras tras un toque avisa
+      intento 1: ms del click al primer armado=846 acciones=[pendiente] ids=[1] · no vale (sin empuje: la activacion vencio)
+      intento 2: ms del click al primer armado=637 acciones=[pendiente] ids=[1] · no vale (sin empuje: la activacion vencio)
+      intento 3: ms del click al primer armado=702 acciones=[pendiente] ids=[1] · no vale (sin empuje: la activacion vencio)
+      NO REPRODUCE LAS CONDICIONES DEL TELEFONO: ninguno de 3 intentos armo con empuje (la activacion del click vencio antes de montar el panel)
+```
+
+**La causa, medida en git y no en el modal.** El commit `f75e739` («fix(tema): /login quedaba con la fuente del
+negocio después de cerrar sesión», 2026-10-28) entró a esta rama con el merge `643e99e` (que trajo `origin/main`
+**después** de la no-regresión del 03-16: ni él ni `5c08719` son ancestros de `993fbc5`). Ese commit cambió el
+envío del login de `router.push('/dashboard')` a **`window.location.assign('/dashboard')`** (recarga completa):
+el panel nace en un documento NUEVO y la activación del click del login no pasa a él, así que el recorrido ya no
+puede reproducir su condición («aterrizar con la activación del click vigente») en ningún intento: los tres
+armados son `pendiente` a menos de 1 s del click. No es atribuible al arreglo del modal (clases de
+`components/dashboard/plan-modal.tsx`, fuera del camino del login), así que **no es P-5** y no se revierte nada.
+Y no se puede arreglar el instrumento sin cambiar la premisa del recorrido (que la `esperado` mide), así que
+por P-1 y por la regla del task 3 («si no se puede atribuir al arreglo del modal, PARAR y reportar sin tocar
+más») **el plan se detiene acá**: el task 3 (los documentos de la UAT y del guion) y el checkpoint del 3.4
+quedan sin correr. Lo que cambió en producción con `f75e739`, leído y sin medir: después de loguearse el panel
+arranca SIN activación, así que el aviso queda `pendiente` hasta el primer toque (el costo del camino 1, como
+la entrada directa del 1.3) y el `G3-4` del 03-14 (el aviso espurio al aterrizar con activación) ya no tiene con
+qué dispararse.
+
+parada (plan 03-17): P-1 en la no-regresion, los doce de antes 11/12 (R-login-con-activacion NO REPRODUCE LAS CONDICIONES, 3/3 intentos pendiente a 637-846 ms; causa f75e739, login con recarga completa, no el modal) · los diecisiete R-G3-* como deben (11/11, G3-9 3/3, G3-10 igual a lo pegado) · estatica 18/18 · suite 110 archivos 2031 pasados, rc 0 (16:44-16:45)
 
 ## Qué consume esto
 
