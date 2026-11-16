@@ -5,10 +5,10 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 17
 status: executing
-stopped_at: "Planificado 03-17-PLAN.md (G3-9 el modal de planes, medir G3-10); plan-checker PASSED; listo para ejecutar"
-last_updated: "2026-10-30T11:20:00.000Z"
+stopped_at: "03-17 PARADO en P-1 (no-regresion): G3-9 arreglado y medido, veredicto G3-10 otro; R-login-con-activacion no reproduce su condicion desde f75e739 (login con recarga completa); falta decision antes del task 3 y del checkpoint del 3.4"
+last_updated: "2026-11-16T19:48:00.000Z"
 last_activity: 2026-11-16
-last_activity_desc: "fase subida a produccion (merge de origin/main, CI verde con el CLI de Supabase fijo); el dueno aprobo el 03-16 (4.3, 4.2, 3.3, 1.5) y abrio G3-9 y G3-10"
+last_activity_desc: "03-17 ejecutado hasta la no-regresion: G3-9 arreglado en plan-modal.tsx (RED -> GREEN a 360x640, 375x667, 390x844), G3-10 medido (otro), parado en P-1 por R-login-con-activacion"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
@@ -27,10 +27,10 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 17
 **Total Plans in Phase:** 17
-**Status:** Ready to execute (fase 03: 03-17 planificado el 2026-11-16 — G3-9 el modal de planes + medir G3-10; plan-checker PASSED)
+**Status:** Parado en P-1 (fase 03: el 03-17 ejecutado hasta la no-regresion el 2026-11-16; el task 3 y el checkpoint del 3.4 sin correr)
 **Current Phase:** 03
-**Last Activity:** 2026-11-16 — 03-16 aprobado por el dueno en produccion
-**Last Activity Description:** G3-5: un keyup cuenta como toque solo si su tecla bajo despues del ultimo atras (panelExitKeyStep), el aviso se queda y el segundo atras sale; G3-7: el reintento tras cerrar un dialogo de Inicio desde el efecto del armado (panelExitForeignRetry); cierre en (h) de .planning/debug/la-absorcion-que-no-absorbe-medida.md; MOB-04/05/06 siguen sin marcar
+**Last Activity:** 2026-11-16 — 03-17 parado en P-1 en la no-regresion
+**Last Activity Description:** G3-9 arreglado en components/dashboard/plan-modal.tsx con el patron de scroll por caller (cierre G3-9: arreglado); G3-10 medido (veredicto G3-10: otro: con la activacion viva el reintento arma y Chrome saltea #salir); la no-regresion para en R-login-con-activacion (NO REPRODUCE LAS CONDICIONES desde f75e739, el login con recarga completa); seccion (i) de .planning/debug/la-absorcion-que-no-absorbe-medida.md; MOB-04/05/06 siguen sin marcar
 
 ## Progress
 
@@ -41,10 +41,10 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Session Continuity
 
-**Last session:** 2026-10-30T11:20:00.000Z
+**Last session:** 2026-11-16T19:48:00.000Z
 
-**Stopped At:** Planificado 03-17-PLAN.md — proximo: `/gsd-execute-phase 3 --ws panel-nav --gaps-only`
-**Resume File:** None
+**Stopped At:** 03-17 parado en P-1 (ver 03-17-SUMMARY.md § «La parada — lo que necesita una decision»): decidir que hacer con R-login-con-activacion y con G3-10 (P-10); despues continuar el 03-17 (task 3 y el checkpoint del 3.4) con `/gsd-execute-phase 3 --ws panel-nav --gaps-only`
+**Resume File:** .planning/workstreams/panel-nav/phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-17-SUMMARY.md
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | Phase 03 P14 | 25min | 4 tasks (incl. checkpoint aprobado) | 6 files |
 | Phase 03 P15 | 40min | 2 de 6 tasks (parado en P-4) | 4 files |
 | Phase 03 P16 | 31min | 3 tasks (+1 checkpoint) | 5 files |
+| Phase 03 P17 | 27min | 2 de 4 tasks (parado en P-1 en la no-regresion) | 3 files |
 
 ### Quick Tasks Completed
 
@@ -127,3 +128,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 - [Phase 03]: Los cuatro gaps del code review MEDIDOS en la app real (03-15, seccion (h)): G3-5 otro (el keyup re-empuja #salir con isActive=true pero el segundo atras SALE salteando /dashboard; el aviso se va al soltar), G3-6 descartado (el router.replace pedido desde el popstate del colapso SI escribe), G3-7 confirmado (firma entera de WR-02 en los tres), G3-8 descartado (el login siempre aterriza en /dashboard). P-4: el plan para sin arreglos de gap
 - [Phase 03]: G3-5 se arreglo por la DECISION del dueno (que el aviso se quede), no por un veredicto: veredicto G3-5 sigue en otro. Un keyup cuenta como toque solo si su keydown llego despues del ultimo popstate (panelExitKeyStep, conjunto de teclas con keydown en captura; identidad = code o key, en un solo lugar). Medido: aviso_tras_soltar no->si, entradas_salteadas 1->0 en los dos ordenes de soltar
 - [Phase 03]: G3-7 se arreglo con el contrafactico de panelExitArmAction (foreignOwnsTop en falso) en panelExitForeignRetry y el empuje desde el efecto del armado (deps + reintentoDelArmado), nunca desde el popstate; la intervencion de historial temida (P-8) NO aparecio: los tres R-G3-7 en OK con entradas_salteadas=0 y R-lateral en verde
+- [Phase 03]: G3-9 se arreglo en plan-modal.tsx con el patron de scroll por caller de Editar servicio (max-h 100svh-2rem, tres filas, la lista como unica fila con scroll); components/ui/dialog.tsx intacto. Medido RED -> GREEN a 360x640, 375x667 y 390x844: el popup de 934 px corrido hacia arriba pasa a 608/635/812 px desde top=16 con la X tocable
+- [Phase 03]: El control a 390x844 dio la X fuera ANTES del arreglo: el clickReal de los R-G3-7 caia en <html> fuera del popup (cierre por click afuera), no en la X; el instrumento nuevo mide bien y P-9 no aplica
+- [Phase 03]: veredicto G3-10: otro (P-10, sin arreglo ni costo declarado): sin activacion el cierre con el atras deja el armado pendiente (camino 1), pero con la activacion viva el reintento de G3-7 empuja #salir y el atras siguiente lo saltea (entradas_salteadas=1, la intervencion de historial); la pregunta va al dueno
+- [Phase 03]: El 03-17 paro en P-1 en la no-regresion: R-login-con-activacion ya no puede reproducir su condicion desde f75e739 (el login con window.location.assign, entro con el merge 643e99e); no es el modal (no es P-5, nada revertido)
