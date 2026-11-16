@@ -56,9 +56,14 @@ jobs:
       # El CLI de Supabase: levanta el stack completo (Postgres + PostgREST + GoTrue) en el runner.
       # Hace falta el stack entero y no un Postgres pelado porque los fixtures crean usuarios con la
       # API de administración de auth (`test/helpers/booking-fixtures.ts`), no con SQL.
+      #
+      # ⚠ VERSIÓN FIJA, NO `latest`: el 2026-11-16 `latest` pasó a la v3.1.0, que ya no acepta la
+      # sección `[inbucket]` de `supabase/config.toml` (pide `[local_smtp]`) y el CI quedó rojo sin
+      # que cambiara nada del repo. 2.122.1 es la última v2, la misma línea que el CLI local
+      # (2.107.0). Pasar a v3 es un cambio a propósito: CLI local + `config.toml` + esta línea juntos.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.122.1
 
       # Aplica las 41 migraciones sobre una base vacía y corre `supabase/seed.sql`.
       # `config.toml` ya tiene studio, storage y analytics APAGADOS, así que el arranque es liviano.
