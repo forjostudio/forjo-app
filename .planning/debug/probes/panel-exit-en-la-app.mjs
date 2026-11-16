@@ -1055,8 +1055,9 @@ async function puntoDelFondo(cdp) {
  * auto-abierto desde el CTA de la landing (`forjo_intended_plan` en `localStorage`, con el negocio en
  * `trial`), o abierto por el PRIMER toque en Inicio (el boton del banner)— y cerrado con la X o con el
  * fondo por un click real con activacion. Despues, la foto y el atras siguiente.
+ * `como: 'atras'` (plan 03-17, `G3-10`): cerrado con el ATRAS DE LA INTERFAZ, delegado en `cerrarConElAtras`.
  */
-async function cerrarElDialogoDelPlan(cdp, { abrir, como }) {
+async function cerrarElDialogoDelPlan(cdp, { abrir, como, esperaMs = 0, activacion = null, tocarDespues = false }) {
   // El `localStorage` del ORIGEN se prepara parado en un documento ESTATICO del mismo origen
   // (`public/file.svg`: sin el panel, sin el banner, sin el proxy de sesion), no por `DOMStorage` —
   // MEDIDO el 2026-10-30: `DOMStorage.setDOMStorageItem` tira «Frame not found for the given storage
@@ -1077,6 +1078,7 @@ async function cerrarElDialogoDelPlan(cdp, { abrir, como }) {
   await dormir(500)
   const alAbrir = registros.slice(desde)
   const desdeElCierre = registros.length
+  if (como === 'atras') return cerrarConElAtras(cdp, { alAbrir, toqueQueAbre, esperaMs, activacion, tocarDespues })
   if (como === 'x') {
     await clickReal(cdp, '[role="dialog"] [data-slot="dialog-close"]')
   } else {
@@ -1113,6 +1115,81 @@ function resultadoDelDialogo(x) {
       aviso_visible: x.m.tupla.aviso_visible,
     },
     esperado: { dialogo_abierto: 'si', hash_tras_cerrar: '#salir', absorbido: 'si', aviso_visible: 'si' },
+  }
+}
+
+// ── El cierre del dialogo del plan con el ATRAS (plan 03-17, `G3-10`) ───────────────────────────────
+
+/**
+ * EL CIERRE CON EL ATRAS DE LA INTERFAZ (plan 03-17, `G3-10`). El dueno, en su segundo 3.3, cerro el dialogo
+ * del plan con el atras —la X no se veia (`G3-9`)— y el atras siguiente salio sin aviso. La hipotesis (sin
+ * medir) es el costo del camino 1: el toque que abrio el dialogo declina por la regla 0 (`foreignOwnsTop`,
+ * la entrada del overlay ya esta arriba), el atras que lo cierra NO es una activacion, y el reintento de
+ * `G3-7` corre desde el efecto leyendo la activacion: vencida, el armado queda `pendiente` sin empuje; viva,
+ * arma. Esta funcion lo MIDE, no lo arregla: la logica del aviso no se toca.
+ *
+ * Con el dialogo ya abierto (lo abrio `cerrarElDialogoDelPlan`): espera `esperaMs` quieta, lee
+ * `navigator.userActivation.isActive` (un `evaluar` no da activacion) y, si `activacion` viene, LA GUARDA:
+ * si no coincide, TIRA (P-1: el recorrido no reproduce sus condiciones). Despues el atras de la INTERFAZ y
+ * LAS GUARDAS DEL CIERRE —el dialogo se cierra en 5 s, llego un `sonda-popstate`, y no hubo NINGUN
+ * `sonda-click` desde la apertura (si no, no se midio el atras)—, el asentado, la foto, el toque opcional y
+ * el atras siguiente.
+ */
+async function cerrarConElAtras(cdp, { alAbrir, toqueQueAbre, esperaMs, activacion, tocarDespues }) {
+  const desdeLaApertura = registros.length
+  if (esperaMs > 0) await dormir(esperaMs)
+  const act = await evaluar(cdp, '(() => navigator.userActivation ? navigator.userActivation.isActive : null)()')
+  const activacionAlCerrar = act === true ? 'si' : act === false ? 'no' : 'sin-api'
+  const msDesdeElToque = toqueQueAbre ? Date.now() - toqueQueAbre.llegada : null
+  if (activacion !== null && activacionAlCerrar !== activacion) {
+    throw new Error(`NO REPRODUCE LAS CONDICIONES: activacion al cerrar=${activacionAlCerrar}, el recorrido la necesita en ${activacion}`)
+  }
+  const desde = registros.length
+  await atras(cdp)
+  if (!(await esperarSinDialogo(cdp, 5_000))) throw new Error('el atras de la interfaz no cerro el dialogo del plan en 5 s')
+  if (!(await esperarRegistro(desde, 'sonda-popstate', 3_000))) throw new Error('el cierre con el atras no trajo ningun sonda-popstate')
+  if (registros.slice(desdeLaApertura).some((r) => r.tipo === 'sonda-click')) throw new Error('hubo un sonda-click entre la apertura y el cierre: no se midio el atras')
+  await asentar(desde, 3_000)
+  const trasCerrar = await foto(cdp)
+  const delCierre = registros.slice(desde)
+  const retroceso = delCierre.find((r) => r.tipo === 'retroceso')
+  const ultimoArmado = delCierre.filter((r) => r.tipo === 'armado').at(-1)
+  let trasElToque = null
+  let delToque = []
+  if (tocarDespues) {
+    const desdeElToque = registros.length
+    await tocarLaPantalla(cdp)
+    trasElToque = await foto(cdp)
+    delToque = registros.slice(desdeElToque)
+  }
+  const m = await gestoMedido(cdp)
+  const t = m.tupla
+  const atrasSiguiente = t.absorbido === 'si' && t.aviso_visible === 'si' ? 'avisa' : t.ruta_despues === '(afuera)' && t.aviso_visible === 'no' ? 'sale' : `otro(${t.ruta_despues})`
+  const i = toqueQueAbre ? alAbrir.indexOf(toqueQueAbre) : -1
+  const armadoDeLaApertura = i >= 0 ? alAbrir.slice(i + 1).find((r) => r.tipo === 'armado') : null
+  return {
+    detalle: (p) => {
+      if (toqueQueAbre) console.log(`${p}el primer toque (abre el dialogo): isActive=${toqueQueAbre.isActive} defaultPrevented=${toqueQueAbre.defaultPrevented}`)
+      console.log(`${p}al entrar y abrir:`)
+      for (const r of alAbrir) if (r.tipo !== 'sonda-tecla') console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+      console.log(`${p}cierre con el atras: activacion al cerrar=${activacionAlCerrar} ms_desde_el_toque=${msDesdeElToque ?? 'null'} retroceso=${retroceso ? retroceso.accion : 'sin-registro'} ultimo_armado=${ultimoArmado ? ultimoArmado.accion : 'sin-registro'} hash_tras_cerrar=${trasCerrar.hash || '(ninguno)'}`)
+      for (const r of delCierre) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+      console.log(`${p}tras cerrar: url=${trasCerrar.url} pila=[${trasCerrar.entradas.join(', ')}] actual=${trasCerrar.indice}`)
+      if (trasElToque) {
+        console.log(`${p}el toque despues del cierre: hash_tras_el_toque=${trasElToque.hash || '(ninguno)'}`)
+        for (const r of delToque) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+      }
+      console.log(`${p}el atras siguiente:`)
+      imprimirTupla(`${p}  `, m)
+    },
+    medido: {
+      toque_que_abre: reglaDelArmado(armadoDeLaApertura?.hechos),
+      retroceso_del_cierre: retroceso ? retroceso.accion : 'sin-registro',
+      armado_tras_cerrar: ultimoArmado ? ultimoArmado.accion : 'sin-registro',
+      hash_tras_cerrar: trasCerrar.hash,
+      hash_tras_el_toque: trasElToque ? trasElToque.hash : 'no-medido',
+      atras_siguiente: atrasSiguiente,
+    },
   }
 }
 
@@ -2265,6 +2342,33 @@ const RECORRIDOS = [
       return medirElModalDelPlan(cdp, { ancho: 390, alto: 844 })
     },
   },
+  // plan 03-17, `G3-10`: el dialogo del plan abierto por el PRIMER toque en Inicio y cerrado con el ATRAS de
+  // la interfaz (el camino del dueno en su segundo 3.3). Se MIDE, no se arregla: los `esperado` son la
+  // hipotesis del costo del camino 1, escrita antes de medir.
+  {
+    id: 'R-G3-10-primer-toque-atras-tarde',
+    titulo: 'G3-10: el dialogo del plan abierto por el primer toque, mas de 5 s quieto y cerrado con el ATRAS: el armado queda pendiente y el atras siguiente sale (el costo del camino 1)',
+    async correr(cdp) {
+      const x = await cerrarElDialogoDelPlan(cdp, { abrir: 'primer-toque', como: 'atras', esperaMs: LAPSO_SIN_ACTIVACION_MS, activacion: 'no' })
+      return { ...x, esperado: { toque_que_abre: 'regla-0-foreignOwnsTop', retroceso_del_cierre: 'ignore', armado_tras_cerrar: 'pendiente', hash_tras_cerrar: '', atras_siguiente: 'sale' } }
+    },
+  },
+  {
+    id: 'R-G3-10-primer-toque-atras-pronto',
+    titulo: 'G3-10: el dialogo del plan abierto por el primer toque y cerrado con el ATRAS dentro de la ventana de activacion: el reintento de G3-7 arma y el atras siguiente avisa',
+    async correr(cdp) {
+      const x = await cerrarElDialogoDelPlan(cdp, { abrir: 'primer-toque', como: 'atras', esperaMs: 0, activacion: 'si' })
+      return { ...x, esperado: { toque_que_abre: 'regla-0-foreignOwnsTop', retroceso_del_cierre: 'ignore', armado_tras_cerrar: 'arm', hash_tras_cerrar: '#salir', atras_siguiente: 'avisa' } }
+    },
+  },
+  {
+    id: 'R-G3-10-atras-y-toque',
+    titulo: 'G3-10, el contrapuesto del camino 1: cerrado con el ATRAS sin activacion (pendiente), UN toque en Inicio arma y el atras siguiente avisa',
+    async correr(cdp) {
+      const x = await cerrarElDialogoDelPlan(cdp, { abrir: 'primer-toque', como: 'atras', esperaMs: LAPSO_SIN_ACTIVACION_MS, activacion: 'no', tocarDespues: true })
+      return { ...x, esperado: { armado_tras_cerrar: 'pendiente', hash_tras_el_toque: '#salir', atras_siguiente: 'avisa' } }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -2359,6 +2463,9 @@ const QUE_CIERRA = {
   'R-G3-9-modal-360x640': 'G3-9 (plan 03-17): el modal de planes a 360x640 entra en la pantalla, la lista llega al ultimo Elegir con un gesto real y la X re-arma',
   'R-G3-9-modal-375x667': 'G3-9 (plan 03-17): el modal de planes a 375x667 entra en la pantalla, la lista llega al ultimo Elegir con un gesto real y la X re-arma',
   'R-G3-9-modal-390x844': 'G3-9 (plan 03-17), el control: el modal de planes a 390x844 entero, la X tocable y re-arma',
+  'R-G3-10-primer-toque-atras-tarde': 'G3-10 (plan 03-17): cerrar con el atras sin activacion deja el armado pendiente y el atras siguiente sale (el costo del camino 1)',
+  'R-G3-10-primer-toque-atras-pronto': 'G3-10 (plan 03-17): cerrar con el atras con la activacion viva: el reintento de G3-7 arma y el atras avisa',
+  'R-G3-10-atras-y-toque': 'G3-10 (plan 03-17): tras cerrar con el atras (pendiente), un toque en Inicio arma y el atras avisa',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
