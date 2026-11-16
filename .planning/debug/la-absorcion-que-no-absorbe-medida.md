@@ -1283,6 +1283,16 @@ activación, el camino 1; con activación, la intervención de historial sobre e
 
 veredicto G3-10: otro
 
+decision del dueno sobre G3-10 (2026-11-16): costo del camino 1
+
+**La decisión, después de la parada** (el dueño, 2026-11-16, opción (a) de P-10): `G3-10` se **declara costo del
+camino 1** con lo medido arriba, sin tocar la lógica del aviso, `lib/panel-branch.ts` ni
+`lib/overlay-history.ts`. El veredicto `otro` queda como se midió: lo declarado incluye las dos causas —sin
+activación (`tarde`) el armado queda pendiente; con la activación viva (`pronto`) el reintento arma pero Chrome
+saltea `#salir`—, con el mismo resultado visible (el atrás siguiente sale), y su contrapuesto (`atras-y-toque`:
+un toque en Inicio después del cierre arma y el atrás avisa). Viñeta fechada en `## El costo, declarado` de
+`03-DECISION-UAT-3.md` y nota en el 3.3 y el 3.4 del guion.
+
 ### Lo que esta medición NO cierra (plan 03-17)
 
 - **Android y Safari reales (A11):** todo esto es Chrome de escritorio headless emulando el alto del teléfono.
@@ -1354,6 +1364,56 @@ la entrada directa del 1.3) y el `G3-4` del 03-14 (el aviso espurio al aterrizar
 qué dispararse.
 
 parada (plan 03-17): P-1 en la no-regresion, los doce de antes 11/12 (R-login-con-activacion NO REPRODUCE LAS CONDICIONES, 3/3 intentos pendiente a 637-846 ms; causa f75e739, login con recarga completa, no el modal) · los diecisiete R-G3-* como deben (11/11, G3-9 3/3, G3-10 igual a lo pegado) · estatica 18/18 · suite 110 archivos 2031 pasados, rc 0 (16:44-16:45)
+
+### La no-regresión (plan 03-17), retomada tras la decisión del dueño (2026-11-16)
+
+**La decisión del dueño sobre la parada (2026-11-16): retirar `R-login-con-activacion` de la no-regresión, con
+su motivo escrito.** Es una desviación del plan, declarada: el conjunto de «los doce de antes» pasa a ser de
+**once**, y el único gate que cambia es el que contaba doce (ahora cuenta once, con la misma forma). Motivo:
+`f75e739` (2026-10-28, mergeado en `643e99e`) cambió el login de `router.push('/dashboard')` a
+`window.location.assign('/dashboard')`; el panel nace en un documento nuevo, la activación del click no pasa, y
+el recorrido no puede reproducir su condición. Tampoco `G3-4` puede pasar ya por ese camino: era el doble
+montaje de Strict Mode tras un `router.push` del lado del cliente. El aterrizaje del login se comporta hoy como
+la entrada directa a Inicio (aviso pendiente hasta el primer toque), que cubren `R-1.3-sin-toque` y
+`R-1.3-con-toque` y el dueño ya validó. En la sonda (commit `9f0c647`, `test(03-17)`, antes de esta corrida) el
+recorrido queda con su código y su `esperado` tal cual, marcado `obsoleto`: no corre por omisión, corre sólo si
+se lo nombra, y su `QUE_CIERRA` dice OBSOLETO con el puntero a `f75e739`. Ningún otro `esperado` cambió. El
+arreglo de `G3-4` del 03-14 (`panelExitUnmountAction`) se queda: sigue siendo correcto para cualquier montaje
+del lado del cliente.
+
+- **Los once de antes** (18:58-19:04 hora local, una invocación por el turno, `next dev` propio en el 3031,
+  modo estricto ACTIVO): rc 0, **11/11 en `OK`**, cero `FALLA`, cero fallos del instrumento; puertos 3031 y 9335
+  libres al salir.
+- **Los diecisiete `R-G3-*`:** no se re-corrieron —el retiro no los toca (corren por selección explícita y la
+  sonda no cambió nada de su camino)—; vale la corrida de 16:40-16:43 de arriba: los once del 03-16 11/11, los
+  tres `R-G3-9` 3/3, y los tres `R-G3-10` iguales a lo pegado (`tarde` OK, `pronto` FALLA, `atras-y-toque` OK).
+- **La estática** (`panel-back-stack.mjs`, por el turno): 18/18 `OK`, rc 0.
+- **La suite completa** (`npm test`, con la pila local arriba, adentro de la ventana de los canarios de reloj):
+  la primera corrida (19:05-19:06) dio rc 1 con 109/110 archivos y `Errors 1 error` desde
+  `ChildProcess._handle.onexit` —un worker de Vitest que murió, no un test que falló—; re-corrida una vez
+  (19:07-19:08), como manda el gate para un rojo visto una vez: **110 archivos, 2031 pasados + 4 expected-fail
+  + 1 salteado**, rc 0.
+- `tsc --noEmit` sin `error TS`; `eslint` de la sonda rc 0 y el del modal con su único problema preexistente
+  (`react-hooks/immutability`); `next.config.ts` con la huella `8ceb99ae`; los intocables sin cambios desde
+  `f7adc9d`; la única fuente de la app cambiada, `components/dashboard/plan-modal.tsx`; ninguna línea `esperado`
+  de `f7adc9d` perdida; nada subido.
+
+```text
+OK  C-activacion · la calibracion del navegador sobre /login, antes del login: ¿un empuje con activacion es salteable?
+OK  R-1.3-sin-toque · entrada DIRECTA a Inicio, SIN tocar nada, UN atras: el costo declarado de la decision (sale sin aviso)
+OK  R-1.3-con-toque · entrada DIRECTA a Inicio, UN toque neutro, UN atras: el hash aparece y el atras avisa y no sale
+OK  R-1.3-recarga-logica · la RECARGA del 1.3 por la opcion (A): tres recargas parado en Inicio armado; el armado acredita (none con vivo_despues)
+OK  R-1.3-recarga-gesto · la RECARGA del 1.3 con el atras de la interfaz: (i) sin tocar despues de recargar, (ii) con un toque — tres vueltas cada una
+OK  R-1.1 · el recorrido del dueno, textual: entrar, tocar Turnos, Clientes y Agenda, tocar Inicio; avisa y despues sale
+OK  R-3.1 · el aviso que SE QUEDA: no vence a los 2,5 s ni a los 10 s, con el aviso el atras sale; un toque lo baja y re-arma
+OK  R-1.4 · llegar a Inicio CON EL ATRAS: sin hash, armado pendiente y el atras siguiente sale (la consecuencia declarada); con un toque, avisa
+OK  R-barra-con-aviso · tocar Clientes en la barra con el aviso VISIBLE: el aviso se va y la pila queda sin #salir enterrado
+OK  R-barra-pendiente · tocar Clientes en la barra recien entrado directo (armado pendiente): la sesion abre sin armar y la pila queda sin #salir
+OK  R-lateral · el hallazgo lateral del plan 03-12: tocar Clientes parado en Inicio ARMADO; el consumo se ignora y el armado queda pendiente, sin #salir enterrado
+gesto=interfaz · modo=dev · recorridos medidos: 11 · coinciden con lo esperado: 11 · no coinciden: 0
+```
+
+no-regresion (plan 03-17): los once de antes 11/11 OK (R-login-con-activacion retirado por decision del dueno del 2026-11-16, f75e739) · los once R-G3-* del 03-16 11/11 OK · G3-9 3/3 OK · G3-10 tarde OK, pronto FALLA, atras-y-toque OK (igual a lo pegado; costo del camino 1 por decision del dueno) · estatica 18/18 · suite 110 archivos 2031 pasados + 4 xfail + 1 salteado, rc 0 (19:07-19:08, tras un worker de Vitest caido en la primera corrida) · tsc y eslint limpios · next.config.ts 8ceb99ae intacto
 
 ## Qué consume esto
 

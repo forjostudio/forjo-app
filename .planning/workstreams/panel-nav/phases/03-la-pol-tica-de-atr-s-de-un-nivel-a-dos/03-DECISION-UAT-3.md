@@ -40,6 +40,16 @@ aviso que desaparecía y después dejaba salir sin avisar.
 - El recorrido 1.3 del guion cambia de resultado esperado en su mitad "sin tocar nada": va al guion de
   la ronda 3 como expectativa **nueva**, no como regresión. Con un toque antes del atrás, avisa.
 - El recorrido 3.1 cambia: el aviso **no** se va a los 2 s; queda hasta un toque.
+- **Cerrar con el atrás un diálogo de Inicio abierto antes del armado deja el aviso sin armar: el atrás
+  siguiente sale sin aviso** (agregado el 2026-11-16, plan `03-17`, `G3-10`, medido en la sección `(i)` de
+  `.planning/debug/la-absorcion-que-no-absorbe-medida.md`; el veredicto medido fue `otro` y el dueño decidió
+  el 2026-11-16 declararlo igual como costo del camino 1). El toque que abre el diálogo declina por la regla 0
+  (la entrada del diálogo ya está arriba) y el atrás que lo cierra no es una activación: sin un toque en Inicio
+  después del cierre, el armado queda pendiente y el atrás siguiente sale (`tarde`, el caso del dueño). Si el
+  atrás que cierra llega enseguida de abrir (`pronto`, con la activación todavía viva), el reintento de `G3-7`
+  sí empuja `#salir`, pero la intervención de historial de Chrome lo saltea (`entradas_salteadas=1`): lo que se
+  ve es lo mismo. Un toque en Inicio después del cierre arma siempre y el atrás avisa (`atras-y-toque`). Cerrar
+  con la X o tocando el fondo sigue armando (`G3-7`). La lógica del aviso no cambia.
 
 ## Lo que esta decisión NO cambia
 

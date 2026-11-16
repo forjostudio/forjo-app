@@ -7,6 +7,27 @@ el plan `03-13`** (la decisión del dueño del `camino 1`, `03-DECISION-UAT-3.md
 
 ---
 
+## ⚠ Actualización del 2026-11-16 (plan 03-17): el modal de planes, y nada más
+
+Lo que cambió desde la re-prueba del 03-16, en una línea cada uno (el detalle, en la sección «El 03-17» de
+`03-UAT-2.md`):
+
+- **`G3-9` — arreglado:** el modal de planes («Elegí tu plan») tiene alto máximo de la pantalla y la lista
+  de planes se scrollea adentro: al abrir se ven el título, la X y el pie.
+- **`G3-10` — declarado como costo del camino 1** (el veredicto medido fue `otro`; decisión del dueño del
+  2026-11-16): cerrar el diálogo con el **atrás** no deja el aviso armado y el atrás siguiente sale. Con un
+  toque en Inicio después de cerrar, avisa. Ver el 3.3.
+- **`R-login-con-activacion` — retirado de la sonda** (decisión del dueño del 2026-11-16): desde `f75e739`
+  el login recarga la página entera y la condición de ese recorrido ya no se puede dar. Ver el 1.6.
+
+**No se re-corre la ronda.** La sonda de la app re-midió los once recorridos de antes (el duodécimo,
+retirado), los once del 03-16 y los seis nuevos.
+
+**Lo que corre el dueño:** el **3.4** (nuevo, en el bloque 3), en el teléfono y **en producción**: el modal
+de planes entero y el atrás después de cerrarlo con la X.
+
+---
+
 ## ⚠ Actualización del 2026-10-30 (plan 03-16): lo que el code review cambió, y nada más
 
 Los cuatro gaps del code review, en una línea cada uno (el detalle, en la sección «Los arreglos del 03-16» de
@@ -252,6 +273,11 @@ loguearse con el usuario de prueba y **mirar la URL apenas aterriza en Inicio**.
   aterrizaje con empuje a los 673 ms del click, **un** `popstate` que nadie pidió, el aviso visible y la
   URL sin hash —`G3-4` tal cual lo vio el dueño—. Después: cero `popstate`, sin aviso, `/dashboard#salir`,
   y el atrás después de un toque avisa y no sale.
+- ⚠ **Actualización (2026-11-16, plan `03-17`):** desde `f75e739` (2026-10-28) el login recarga la página
+  entera, así que Inicio nace sin la activación del toque en *Ingresar*: la URL llega **sin hash** y el aviso
+  queda pendiente hasta el primer toque —es el **1.3 (a)**, no el defecto—. Por eso el recorrido
+  `R-login-con-activacion` se retiró de la sonda (decisión del dueño). Sigue siendo un fallo que el aviso
+  aparezca **sin apretar atrás**.
 
 ---
 
@@ -355,6 +381,32 @@ diálogo), cerrarlo con la **X** (o tocando **afuera** del diálogo) y apretar *
   **no corrible**, con ese motivo. Es el único diálogo de Inicio: sin él no hay con qué probarlo.
 - *Motivo:* los tres recorridos `R-G3-7` de la sonda de la app (el diálogo auto-abierto cerrado con la X o
   con el fondo, y el abierto por el primer toque), en verde con el arreglo del 2026-10-30.
+- ⚠ **Expectativa nueva — no es regresión (2026-11-16, `G3-10`):** cerrar el diálogo con el **ATRÁS** (en
+  vez de la X o el fondo) deja el aviso **sin armar**: el atrás siguiente **sale sin aviso**, también si se
+  cierra enseguida de abrirlo. Con **un toque** en Inicio después de cerrar, el atrás avisa. Es un costo
+  declarado del camino 1 (`03-DECISION-UAT-3.md`; medido con veredicto `otro` y declarado por decisión del
+  dueño del 2026-11-16).
+
+### 3.4 — El modal de planes en el celular (nuevo, 2026-11-16, G3-9)
+
+**Cómo:** en el teléfono, **en producción**, en Inicio, tocar **«Activar plan»** en el banner.
+
+- **Tiene que:** al abrir se ven el título **«Elegí tu plan»** y la **X**; la lista de planes se scrollea
+  **con el dedo** hasta el último plan (**Pro**) y su botón **«Elegir»**; el pie («Pagás de forma segura con
+  MercadoPago…») se ve; cerrarlo con la **X** y apretar **atrás** ⇒ **avisa y no sale**; el segundo ⇒ **sale**.
+- **Lo que sería un fallo:** no se ve la X o el título al abrir, no se llega con el dedo al «Elegir» del
+  último plan, o el atrás después de cerrar con la X sale sin avisar.
+- ⚠ **No tocar «Elegir»:** en producción lleva al checkout real de MercadoPago (si se toca, no pagar y
+  volver).
+- ⚠ **Si el banner no aparece** (el negocio no está en prueba), abrir el mismo modal desde **Configuración →
+  «Ver planes»** o **«Cambiar plan»** para la parte visual, y anotar la parte del atrás como **no corrible**
+  con ese motivo (el aviso vive en Inicio).
+- ⚠ **Expectativa nueva — no es regresión (2026-11-16, `G3-10`):** si se cierra con el **ATRÁS** en vez de la
+  X, el atrás siguiente **sale sin aviso**; con un toque en Inicio después, avisa. Es el costo declarado del
+  camino 1 (`03-DECISION-UAT-3.md`), no un fallo del 3.4.
+- *Motivo:* los tres `R-G3-9` de la sonda de la app (360x640, 375x667, 390x844), en verde con el arreglo.
+  Lo que la sonda no ve —la barra real del navegador, el tamaño de fuente del sistema y el dedo— es este
+  recorrido.
 
 ---
 
