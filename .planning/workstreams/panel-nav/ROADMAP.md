@@ -326,6 +326,15 @@ sobre qué escribe esta fase)
      veces seguidas sigue funcionando (es el escenario S1 ya medido en el diagnóstico). Si se descarta,
      el criterio es: en Inicio el atrás sale directo, **y MOB-05 queda marcado "descartado con
      motivo"** en los requisitos — no como pendiente silencioso (MOB-05).
+
+     > ⚠ **PRECISADO el 2026-10-28 (decisión del dueño, «camino 1»).** El aviso se **arma sólo con
+     > activación del usuario**: el primer atrás en Inicio no saca y avisa **si hubo un toque antes**;
+     > el aviso **no vence solo** (sin ventana ni temporizador) y se queda hasta el próximo toque. Entrar
+     > directo a Inicio, recargar, llegar con el atrás o cerrar el teclado sin tocar sale **sin** aviso
+     > —regla de Chrome (intervención de historial), no un defecto—, y cerrar un diálogo con el atrás
+     > (`G3-10`, 2026-11-16) se suma a ese costo declarado. Ver `03-DECISION-UAT-3.md` y la enmienda
+     > fechada de MOB-05 en `REQUIREMENTS.md`. El párrafo «(b)» de abajo («aviso efímero») es la
+     > recomendación previa al plan y queda como historia.
   4. **Cero regresión sobre lo verificado, y verificado otra vez a mano.** Con un overlay abierto el
      atrás **cierra el overlay** y no navega; ídem el selector de hora propio, el campo de fecha y el
      calendario (los cuatro quicks de octubre: `261005-n41`, `261006-dzr`, `261006-fln`, `261005-x91`);
