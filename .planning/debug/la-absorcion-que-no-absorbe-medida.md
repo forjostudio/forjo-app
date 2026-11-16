@@ -1042,6 +1042,163 @@ OK  R-G3-8-rebote · G3-8 (WR-04): la sesion vencida en medio de un replace de l
 
 no-regresion (plan 03-16): los doce de antes 12/12 OK · los once R-G3-* 11/11 OK (G3-5 4/4, G3-6 3/3, G3-7 3/3, G3-8 1/1) · estatica 18/18 · suite 110 archivos 2030 pasados + 4 xfail + 1 salteado, rc 0 (08:14-08:15) · tsc y eslint limpios · next.config.ts 8ceb99ae intacto
 
+## (i) El modal de planes y el cierre con el atrás, medidos (plan 03-17, 2026-11-16)
+
+Los dos hallazgos que el dueño abrió el 2026-11-16 al re-probar el 03-16 **en producción** (`03-UAT-2.md`,
+«Re-prueba tras el 03-16»), con su decisión tal cual: **«arreglar el modal y medir»**. `G3-9` se arregla
+(medido RED → GREEN); `G3-10` se mide y no se arregla (la lógica del aviso no se toca).
+
+**Qué se midió y con qué.** La sonda de la app (`.planning/debug/probes/panel-exit-en-la-app.mjs`), por el
+turno de pantalla, con el gesto `interfaz` (el atrás de la interfaz, `chrome.tabs.goBack`) y el modo estricto
+ACTIVO (`next.config.ts` sin `reactStrictMode`, huella `8ceb99ae`). **El servidor:** el `next dev` del dueño
+estaba muerto (candado `.next/dev/lock` vencido), así que cada corrida levantó **su propio `next dev` en el
+3031** y lo mató al salir (`puerto 3031 libre al salir: si`). **La base:** la pila local de Supabase de
+forjo-app levantada con `supabase start` (CLI 2.107.0; sólo `start`, las pilas de `erp-forjo-studio` no se
+tocaron); `negocio-prueba` en `trial`, con `has_web_custom` puesto en true con el claim `service_role` en una
+transacción y afirmado con el SELECT (`trial|true`). Navegador `Chrome/157.0.8103.52`, node `v24.15.0`.
+
+### `G3-9` — el modal de planes cortado en el celular
+
+**Lo que el instrumento mide** (`medirElModalDelPlan`, commit `a5a95bb`, `test(03-17)`, ANTES del arreglo):
+abre el modal desde «Activar plan» a un alto dado y mide el popup, el título y la X contra `[0, innerHeight]`
+(la X es tocable si su centro está en la pantalla Y `elementFromPoint` cae en ella), busca el contenedor con
+scroll del diálogo, lo scrollea con un **gesto real** (primero el dedo, `synthesizeScrollGesture`; si no se
+movió, la rueda; nunca un `scrollTop` asignado), mide el último «Elegir» y el pie, y cierra con la X midiendo
+el atrás siguiente.
+
+**El RED** (2026-11-16, 16:23-16:26 hora local, el modal sin tocar): rc 1, los tres `R-G3-7` en `OK`, los tres
+`R-G3-9` en `FALLA`. El popup medía **934,3 px** a los tres altos y quedaba corrido hacia arriba: la X y el
+título afuera de la pantalla, sin ningún contenedor con scroll.
+
+```text
+FALLA R-G3-9-modal-360x640 · G3-9: el modal de planes a 360x640 (alto corto): la X y el titulo a la vista, la lista se scrollea con un gesto real hasta el ultimo Elegir, el pie se ve; cerrado con la X, el atras avisa
+      x_visible_al_abrir: medido="no"  <-- NO COINCIDE
+      titulo_visible_al_abrir: medido="no"  <-- NO COINCIDE
+      dialogo_dentro_de_la_pantalla: medido="no"  <-- NO COINCIDE
+      llega_al_ultimo_boton: medido="no"  <-- NO COINCIDE
+      pie_visible_al_final: medido="no"  <-- NO COINCIDE
+      cierra_con_la_x: medido="no"  <-- NO COINCIDE
+      atras_tras_cerrar: medido="no-medido"  <-- NO COINCIDE
+      medida al abrir: viewport=360x640 innerHeight=640 dialogo top=-147.1 bottom=787.1 alto=934.3 · x top=-139.1 bottom=-111.1 tocable=no · titulo top=-131.1 bottom=-115.1 · contenedor_con_scroll=ninguno scrollHeight=null clientHeight=null
+      tras el gesto de scroll: forma=ninguna scrollTop null -> null · ultimo Elegir top=666.1 bottom=698.1 tocable=no · pie top=739.1 bottom=771.1
+FALLA R-G3-9-modal-375x667 · G3-9: el modal de planes a 375x667 (alto corto): la X y el titulo a la vista, la lista se scrollea con un gesto real hasta el ultimo Elegir, el pie se ve; cerrado con la X, el atras avisa
+      x_visible_al_abrir: medido="no"  <-- NO COINCIDE
+      titulo_visible_al_abrir: medido="no"  <-- NO COINCIDE
+      dialogo_dentro_de_la_pantalla: medido="no"  <-- NO COINCIDE
+      llega_al_ultimo_boton: medido="no"  <-- NO COINCIDE
+      pie_visible_al_final: medido="no"  <-- NO COINCIDE
+      cierra_con_la_x: medido="no"  <-- NO COINCIDE
+      atras_tras_cerrar: medido="no-medido"  <-- NO COINCIDE
+      medida al abrir: viewport=375x667 innerHeight=667 dialogo top=-133.6 bottom=800.6 alto=934.3 · x top=-125.6 bottom=-97.6 tocable=no · titulo top=-117.6 bottom=-101.6 · contenedor_con_scroll=ninguno scrollHeight=null clientHeight=null
+      tras el gesto de scroll: forma=ninguna scrollTop null -> null · ultimo Elegir top=679.6 bottom=711.6 tocable=no · pie top=752.6 bottom=784.6
+FALLA R-G3-9-modal-390x844 · G3-9, el control: el modal de planes a 390x844 (donde los R-G3-7 tocaron la X): entero, la X tocable, el ultimo Elegir y el pie a la vista; cerrado con la X, el atras avisa
+      x_visible_al_abrir: medido="no"  <-- NO COINCIDE
+      titulo_visible_al_abrir: medido="no"  <-- NO COINCIDE
+      dialogo_dentro_de_la_pantalla: medido="no"  <-- NO COINCIDE
+      llega_al_ultimo_boton: medido="si"
+      pie_visible_al_final: medido="no"  <-- NO COINCIDE
+      cierra_con_la_x: medido="no"  <-- NO COINCIDE
+      atras_tras_cerrar: medido="no-medido"  <-- NO COINCIDE
+      medida al abrir: viewport=390x844 innerHeight=844 dialogo top=-45.1 bottom=889.1 alto=934.3 · x top=-37.1 bottom=-9.1 tocable=no · titulo top=-29.1 bottom=-13.1 · contenedor_con_scroll=ninguno scrollHeight=null clientHeight=null
+      tras el gesto de scroll: forma=ninguna scrollTop null -> null · ultimo Elegir top=768.1 bottom=800.1 tocable=si · pie top=841.1 bottom=873.1
+```
+
+**⚠ El control dio `no`, y eso disparó P-1: el «hecho medido» del control resultó falso, no el instrumento.**
+El plan esperaba la X tocable a 390x844 antes del arreglo porque los `R-G3-7` «ya tocaron la X» ahí. Se midió
+a dónde cae ese click con una copia DESCARTABLE de la sonda (un recorrido de diagnóstico en el scratchpad, no
+commiteado, 16:27-16:28): el `clickReal` de los `R-G3-7` sobre la X a 390x844 apunta al centro de la X en
+`y=-23,1` (afuera de la pantalla, `elementFromPoint` = `null`), y los cuatro eventos (`pointerdown`,
+`mousedown`, `pointerup`, `click`) llegan a **`<html>`**, con `enLaX=false` y `enElPopup=false`; el diálogo se
+cierra igual porque es un click **afuera del popup** (el cierre por el fondo). O sea: a 390x844 el modal ya
+estaba cortado y los `R-G3-7-*-x` medían, sin saberlo, un cierre por click afuera — que pasa por el mismo
+oyente del toque y por eso no invalida `G3-7`. El instrumento nuevo mide bien (nada que arreglarle); P-9 no
+aplica (los dos altos cortos dan `x_visible_al_abrir: medido="no"`). Con el arreglo, el click de los `R-G3-7`
+cae en la X de verdad (la X queda en `y=24..52` a los tres altos).
+
+**El arreglo** (commit `fa70f25`, `fix(03-17)`, sólo `components/dashboard/plan-modal.tsx`): el patrón de
+scroll por caller de «Editar servicio» y «Mover» — `DialogContent` con
+`grid max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 sm:max-w-2xl`, el header con
+`pb-3 pr-8`, la lista de planes como la ÚNICA fila que scrollea
+(`-mx-4 min-h-0 overflow-y-auto overscroll-contain px-4 py-1`) y el pie con `mt-4`.
+`components/ui/dialog.tsx` byte-idéntico.
+
+**El GREEN** (16:28-16:31, misma invocación de seis recorridos): rc 0, **6/6 en `OK`**, el scroll movido por un
+gesto real en los tres altos (la **rueda**: el dedo sintético de CDP no movió la lista en este Chrome headless,
+sin emulación táctil; la sonda lo registra y cae a la rueda, como el plan prevé) y el atrás después de la X
+**avisa** en los tres (`entradas_salteadas=0`).
+
+```text
+OK  R-G3-9-modal-360x640 · G3-9: el modal de planes a 360x640 (alto corto): la X y el titulo a la vista, la lista se scrollea con un gesto real hasta el ultimo Elegir, el pie se ve; cerrado con la X, el atras avisa
+      medida al abrir: viewport=360x640 innerHeight=640 dialogo top=16 bottom=624 alto=608 · x top=24 bottom=52 tocable=si · titulo top=32 bottom=48 · contenedor_con_scroll=<div.grid> scrollHeight=814 clientHeight=500
+      tras el gesto de scroll: forma=rueda scrollTop 0 -> 314 · ultimo Elegir top=507.3 bottom=539.3 tocable=si · pie top=576 bottom=608
+      tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+OK  R-G3-9-modal-375x667 · G3-9: el modal de planes a 375x667 (alto corto): la X y el titulo a la vista, la lista se scrollea con un gesto real hasta el ultimo Elegir, el pie se ve; cerrado con la X, el atras avisa
+      medida al abrir: viewport=375x667 innerHeight=667 dialogo top=16 bottom=651 alto=635 · x top=24 bottom=52 tocable=si · titulo top=32 bottom=48 · contenedor_con_scroll=<div.grid> scrollHeight=814 clientHeight=527
+      tras el gesto de scroll: forma=rueda scrollTop 0 -> 287 · ultimo Elegir top=534.3 bottom=566.3 tocable=si · pie top=603 bottom=635
+      tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+OK  R-G3-9-modal-390x844 · G3-9, el control: el modal de planes a 390x844 (donde los R-G3-7 tocaron la X): entero, la X tocable, el ultimo Elegir y el pie a la vista; cerrado con la X, el atras avisa
+      medida al abrir: viewport=390x844 innerHeight=844 dialogo top=16 bottom=828 alto=812 · x top=24 bottom=52 tocable=si · titulo top=32 bottom=48 · contenedor_con_scroll=<div.grid> scrollHeight=814 clientHeight=704
+      tras el gesto de scroll: forma=rueda scrollTop 0 -> 110 · ultimo Elegir top=711.3 bottom=743.3 tocable=si · pie top=780 bottom=812
+      tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+OK  R-G3-7-autoabierto-x · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar (CTA de la landing), cerrado con la X: el sentinel queda armado y el atras avisa
+OK  R-G3-7-autoabierto-fondo · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar, cerrado tocando el FONDO: el sentinel queda armado y el atras avisa
+OK  R-G3-7-primer-toque · G3-7 (WR-02): el dialogo del plan abierto por el PRIMER toque en Inicio (el boton del banner), cerrado con la X: el atras avisa
+```
+
+| Alto | Diálogo top / bottom (alto) | X tocable | Contenedor con scroll | Último «Elegir» | Pie |
+|------|-----------------------------|-----------|-----------------------|-----------------|-----|
+| 360x640 | -147,1 / 787,1 (934,3) → **16 / 624 (608)** | no → **sí** | ninguno → **la lista** (814 / 500) | no → **sí** (scrollTop 0 → 314) | no → **sí** |
+| 375x667 | -133,6 / 800,6 (934,3) → **16 / 651 (635)** | no → **sí** | ninguno → **la lista** (814 / 527) | no → **sí** (0 → 287) | no → **sí** |
+| 390x844 | -45,1 / 889,1 (934,3) → **16 / 828 (812)** | no → **sí** | ninguno → **la lista** (814 / 704) | sí → **sí** (0 → 110) | no → **sí** |
+
+Commits: `a5a95bb` (`test(03-17)`, el instrumento, antes del arreglo) y `fa70f25` (`fix(03-17)`, el modal).
+
+cierre G3-9: arreglado
+
+### Auditoría: los otros diálogos sin alto máximo (sólo lectura)
+
+Cada `<DialogContent` bajo `app/` y `components/` (salvo la primitiva), con la etiqueta de apertura leída
+entera; se clasifica por si su `className` trae `max-h-`. Los tres acotados son `plan-modal` (este plan),
+«Editar servicio» (`settings-client.tsx:3290`) y «Mover» (`categorias-manager.tsx:1050`). **Ninguno de los de
+abajo se tocó:** cuál arreglar (y si con el mismo patrón por caller) lo decide el dueño.
+
+auditoria de dialogos: 33 call sites, 3 con alto maximo en el popup, 30 sin (solo lectura, sin tocar)
+
+- `app/(crm)/admin/pipeline/pipeline-client.tsx:334` — «Nuevo deal», un formulario (CRM, escritorio)
+- `app/(dashboard)/abonos/abonos-client.tsx:625`
+- `app/(dashboard)/agenda/agenda-client.tsx:1664`
+- `app/(dashboard)/agenda/agenda-client.tsx:1685` — «Copiar horario», ya anotado como candidato al patrón en `settings-client.tsx`
+- `app/(dashboard)/appointments/appointments-client.tsx:482`
+- `app/(dashboard)/appointments/appointments-client.tsx:498`
+- `app/(dashboard)/clients/clients-client.tsx:1146`
+- `app/(dashboard)/clients/clients-client.tsx:1162` — «Fusionar duplicados», contenido mediano
+- `app/(dashboard)/clients/clients-client.tsx:1229` — «Nuevo cliente», un formulario
+- `app/(dashboard)/clients/clients-client.tsx:1290` — «Importar clientes», el más largo (~190 líneas de contenido): el candidato más obvio
+- `app/(dashboard)/finances/finances-client.tsx:1102` — «Nueva venta / Editar venta», formulario largo (~135 líneas)
+- `app/(dashboard)/finances/finances-client.tsx:1242` — «Nuevo egreso», un formulario
+- `app/(dashboard)/finances/finances-client.tsx:1283` — «Nuevo gasto fijo», un formulario
+- `app/(dashboard)/finances/finances-client.tsx:1325`
+- `app/(dashboard)/finances/finances-client.tsx:1342`
+- `app/(dashboard)/finances/finances-client.tsx:1359`
+- `app/(dashboard)/finances/finances-client.tsx:1369`
+- `app/(dashboard)/settings/settings-client.tsx:3743`
+- `app/(dashboard)/settings/settings-client.tsx:4040`
+- `app/(dashboard)/settings/settings-client.tsx:4060` — «Editar profesional», un formulario
+- `app/(dashboard)/web/web-client.tsx:655`
+- `app/(dashboard)/web/web-client.tsx:693`
+- `components/crm/confirm-dialog.tsx:365` — el confirmar del CRM, contenido variable
+- `components/crm/extend-trial-dialog.tsx:139` — un formulario (CRM)
+- `components/crm/plan-price-card.tsx:159` — un formulario (CRM)
+- `components/dashboard/canchas-manager.tsx:438`
+- `components/dashboard/clinical-history-panel.tsx:254`
+- `components/dashboard/nuevo-abono-form.tsx:176` — «Nuevo abono», el formulario va en un componente aparte
+- `components/dashboard/nuevo-turno-form.tsx:190` — «Nuevo turno», el formulario va en un componente aparte
+- `components/dashboard/unsaved-changes-guard.tsx:406`
+
+La X compartida es `size="icon-sm"` (28 px, por debajo de los 44 px de touch target de CLAUDE.md) y vive en
+`components/ui/dialog.tsx`; los «Elegir» también quedan por debajo. Ninguno se tocó en este plan (la X es de la
+primitiva compartida; los botones no son parte del hallazgo): va como observación para el dueño.
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la
