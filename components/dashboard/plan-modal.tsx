@@ -43,12 +43,19 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      {/* G3-9 (plan 03-17): en el celular los tres planes apilados miden más que la pantalla y el
+          popup centrado dejaba la X, el título y el pie afuera, sin scroll. Es el patrón de scroll
+          POR CALLER de «Editar servicio» (settings-client.tsx): tope con `svh` (el viewport más
+          chico, con las barras del navegador expandidas), tres filas con la del medio en
+          minmax(0,1fr), gap-0 compensado en el header y el pie, y la lista como ÚNICA fila que
+          scrollea; la X vive en el popup, que no scrollea, así que queda siempre a la vista.
+          No va en components/ui/dialog.tsx: ese componente tiene 33 call sites. */}
+      <DialogContent className="grid max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 sm:max-w-2xl">
+        <DialogHeader className="pb-3 pr-8">
           <DialogTitle>Elegí tu plan</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 -mx-4 min-h-0 overflow-y-auto overscroll-contain px-4 py-1">
           {Object.entries(SUBSCRIPTION_PLANS).map(([key, plan]) => {
             // El modal es superficie de VENTA → muestra el límite REAL del plan desde PLANS, no
             // getPlanLimits (que con NEXT_PUBLIC_PLANS_UNLIMITED=true en prod devolvía 99 agendas).
@@ -89,7 +96,7 @@ export function PlanModal({ open, onOpenChange }: { open: boolean; onOpenChange:
             )
           })}
         </div>
-        <p className="text-xs text-muted-foreground text-center mt-2">
+        <p className="text-xs text-muted-foreground text-center mt-4">
           Pagás de forma segura con MercadoPago · Podés cancelar cuando quieras
         </p>
       </DialogContent>
