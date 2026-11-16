@@ -1116,6 +1116,188 @@ function resultadoDelDialogo(x) {
   }
 }
 
+// ── El modal de planes en el alto del telefono (plan 03-17, `G3-9`) ──────────────────────────────────
+
+/**
+ * LA FORMA DEL MODAL DE PLANES a un alto de telefono dado (plan 03-17, `G3-9`). El dueno, en su Android
+ * y en produccion, abrio el modal desde «Activar plan» y «queda cortado y no se ve la X ni se puede
+ * scrollear». El popup compartido es `fixed` y centrado con `-translate-y-1/2`, SIN alto maximo ni
+ * scroll: si su contenido es mas alto que la pantalla, la X (arriba) y los ultimos «Elegir» (abajo) caen
+ * afuera. Por eso el corte depende del ALTO, y por eso hay un CONTROL: a 390x844 los `R-G3-7` ya tocaron
+ * la X (si ahi da `no` antes del arreglo, el instrumento miente: P-1).
+ *
+ * Mide, en este orden:
+ *   1. AL ABRIR (un solo `evaluar`): el popup, la X y el titulo contra `[0, innerHeight]`; la X es
+ *      tocable si su centro esta en el viewport Y `elementFromPoint` de ese centro cae en ella (lo que el
+ *      dueno no podia). Y el CONTENEDOR CON SCROLL: el elemento del subarbol del dialogo (el popup
+ *      incluido) con `overflow-y` auto/scroll y mas de 1 px de recorrido; se marca con
+ *      `data-sonda-scroll` para leerlo despues.
+ *   2. EL SCROLL CON UN GESTO REAL: primero el dedo (`Input.synthesizeScrollGesture`, `touch`) y, si el
+ *      contenedor no se movio, la rueda (`mouseWheel`), hasta tres vueltas mientras crezca. ⚠ NUNCA
+ *      asignando `scrollTop`: eso mueve hasta un contenedor con `overflow: hidden` y daria un verde
+ *      falso. Si hay contenedor y ningun gesto lo movio, TIRA (P-1).
+ *   3. AL FINAL: el ULTIMO «Elegir» entero en la pantalla y tocable, y el pie (el ultimo `p` hijo directo
+ *      del popup) entero en la pantalla.
+ *   4. EL CIERRE CON LA X Y EL ATRAS (el 3.4 del dueno): el contenedor vuelve arriba por asignacion (eso
+ *      no se mide), click real en la X con activacion, y el atras siguiente tiene que avisar (`G3-7` del
+ *      03-16, re-medido a cada alto). Si la X no es tocable no se hace click: un click afuera del
+ *      viewport no mide nada.
+ * El viewport se pone aca y se devuelve al del telefono de siempre en un `finally`.
+ */
+async function medirElModalDelPlan(cdp, { ancho, alto }) {
+  await cdp.enviar('Emulation.setDeviceMetricsOverride', { width: ancho, height: alto, deviceScaleFactor: 2, mobile: true })
+  try {
+    // El `localStorage` como la rama NO automatica de `cerrarElDialogoDelPlan`: sin `forjo_intended_plan`,
+    // asi el dialogo lo abre el toque del dueno y no la landing.
+    await navegar(cdp, `${ORIGEN}/file.svg`)
+    const preparado = await evaluar(cdp, "(() => { localStorage.removeItem('forjo_intended_plan'); return localStorage.getItem('forjo_intended_plan') })()")
+    if (preparado !== null) throw new Error(`el localStorage del origen no quedo preparado (valor=${preparado})`)
+    const desde = await entrarDirecto(cdp)
+    const desdeElToque = registros.length
+    await clickEnBoton(cdp, 'Activar plan')
+    const toqueQueAbre = await esperarRegistro(desdeElToque, 'sonda-click', 3_000)
+    if (!(await esperarDialogo(cdp, null, 10_000))) throw new Error('el dialogo del plan no se abrio en 10 s')
+    await dormir(500)
+    const alAbrir = registros.slice(desde)
+
+    // 1. LA MEDIDA AL ABRIR.
+    const a = await evaluar(cdp, `(() => {
+      const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
+      const dlg = [...document.querySelectorAll('[role="dialog"]')].find(visible)
+      if (!dlg) return null
+      const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height } }
+      const x = dlg.querySelector('[data-slot="dialog-close"]')
+      const rx = rect(x)
+      let tocable = false
+      if (rx) {
+        const cx = (rx.left + rx.right) / 2, cy = (rx.top + rx.bottom) / 2
+        if (cx >= 0 && cx <= innerWidth && cy >= 0 && cy <= innerHeight) {
+          const el = document.elementFromPoint(cx, cy)
+          tocable = Boolean(el && x.contains(el))
+        }
+      }
+      let mejor = null
+      for (const el of [dlg, ...dlg.querySelectorAll('*')]) {
+        const oy = getComputedStyle(el).overflowY
+        if (oy !== 'auto' && oy !== 'scroll') continue
+        const recorrido = el.scrollHeight - el.clientHeight
+        if (recorrido > 1 && (!mejor || recorrido > mejor.recorrido)) mejor = { el, recorrido }
+      }
+      for (const viejo of document.querySelectorAll('[data-sonda-scroll]')) viejo.removeAttribute('data-sonda-scroll')
+      let contenedor = null
+      if (mejor) {
+        mejor.el.setAttribute('data-sonda-scroll', '1')
+        const clase = typeof mejor.el.className === 'string' ? mejor.el.className.trim().split(/\\s+/)[0] : ''
+        contenedor = { descripcion: mejor.el === dlg ? 'el dialogo' : '<' + mejor.el.tagName.toLowerCase() + (clase ? '.' + clase : '') + '>', scrollHeight: mejor.el.scrollHeight, clientHeight: mejor.el.clientHeight }
+      }
+      return { innerWidth, innerHeight, dialogo: rect(dlg), x: rx, tocable, titulo: rect(dlg.querySelector('[data-slot="dialog-title"]')), contenedor }
+    })()`)
+    if (!a) throw new Error('el dialogo del plan no esta visible al medirlo')
+    const T = 0.5
+    const adentro = (r) => Boolean(r) && r.top >= -T && r.bottom <= a.innerHeight + T
+    const n = (v) => (typeof v === 'number' ? Math.round(v * 10) / 10 : 'null')
+    const x_visible_al_abrir = a.tocable ? 'si' : 'no'
+    const titulo_visible_al_abrir = adentro(a.titulo) ? 'si' : 'no'
+    const dialogo_dentro_de_la_pantalla = adentro(a.dialogo) ? 'si' : 'no'
+
+    // 2. EL SCROLL CON UN GESTO REAL. El punto: el centro de la parte VISIBLE del contenedor (o del
+    // dialogo, si no hay contenedor).
+    const leerScroll = () => evaluar(cdp, `(() => { const el = document.querySelector('[data-sonda-scroll]'); return el ? { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight } : null })()`)
+    const punto = await evaluar(cdp, `(() => {
+      const el = document.querySelector('[data-sonda-scroll]') || [...document.querySelectorAll('[role="dialog"]')].find((d) => { const r = d.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
+      const r = el.getBoundingClientRect()
+      const top = Math.max(r.top, 0), bottom = Math.min(r.bottom, innerHeight), left = Math.max(r.left, 0), right = Math.min(r.right, innerWidth)
+      return { x: (left + right) / 2, y: (top + bottom) / 2 }
+    })()`)
+    const inicial = await leerScroll()
+    const scrollAntes = inicial ? inicial.scrollTop : null
+    let forma = 'ninguna'
+    for (let vuelta = 0; vuelta < 3; vuelta++) {
+      const s0 = await leerScroll()
+      try {
+        await cdp.enviar('Input.synthesizeScrollGesture', { x: punto.x, y: punto.y, yDistance: -Math.max(s0 ? s0.scrollHeight : 0, alto), speed: 1200, gestureSourceType: 'touch' })
+      } catch (e) {
+        console.log(`      el gesto del dedo no se pudo sintetizar: ${e instanceof Error ? e.message : e}`)
+      }
+      await dormir(400)
+      if (!s0) break
+      let s1 = await leerScroll()
+      if (s1.scrollTop > s0.scrollTop) {
+        if (forma === 'ninguna') forma = 'dedo'
+      } else {
+        await cdp.enviar('Input.dispatchMouseEvent', { type: 'mouseWheel', x: punto.x, y: punto.y, deltaX: 0, deltaY: Math.max(s0.scrollHeight, alto) })
+        await dormir(600)
+        s1 = await leerScroll()
+        if (s1.scrollTop > s0.scrollTop && forma === 'ninguna') forma = 'rueda'
+      }
+      if (s1.scrollTop <= s0.scrollTop) break
+      if (s1.scrollTop + s1.clientHeight >= s1.scrollHeight - 1) break
+    }
+    const final = await leerScroll()
+    if (inicial && forma === 'ninguna') throw new Error('NO REPRODUCE LAS CONDICIONES: el gesto de scroll no movio el contenedor que tiene para scrollear')
+
+    // 3. LA MEDIDA AL FINAL: el ultimo «Elegir» y el pie.
+    const f = await evaluar(cdp, `(() => {
+      const dlg = [...document.querySelectorAll('[role="dialog"]')].find((d) => { const r = d.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
+      const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right } }
+      const boton = [...dlg.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Elegir').at(-1)
+      const rb = rect(boton)
+      let tocable = false
+      if (rb) {
+        const cx = (rb.left + rb.right) / 2, cy = (rb.top + rb.bottom) / 2
+        if (cx >= 0 && cx <= innerWidth && cy >= 0 && cy <= innerHeight) { const el = document.elementFromPoint(cx, cy); tocable = Boolean(el && boton.contains(el)) }
+      }
+      const pie = [...dlg.children].filter((c) => c.tagName === 'P').at(-1)
+      return { boton: rb, tocable, pie: rect(pie) }
+    })()`)
+    const llega_al_ultimo_boton = adentro(f.boton) && f.tocable ? 'si' : 'no'
+    const pie_visible_al_final = adentro(f.pie) ? 'si' : 'no'
+
+    // 4. EL CIERRE CON LA X Y EL ATRAS. Volver arriba por asignacion NO se mide: solo deja la X donde
+    // estaba al abrir (la X vive en el popup, que no scrollea).
+    await evaluar(cdp, `(() => { const el = document.querySelector('[data-sonda-scroll]'); if (el) el.scrollTop = 0; return true })()`)
+    let cierra_con_la_x = 'no'
+    let atras_tras_cerrar = 'no-medido'
+    let click = null
+    let delCierre = []
+    let m = null
+    if (x_visible_al_abrir === 'si') {
+      const desdeElCierre = registros.length
+      await clickReal(cdp, '[role="dialog"] [data-slot="dialog-close"]')
+      click = await esperarRegistro(desdeElCierre, 'sonda-click', 3_000)
+      if (!click || click.isActive !== true) throw new Error(`el cierre del dialogo no llego como click con activacion (sonda-click=${click ? `isActive=${click.isActive}` : 'ninguno'})`)
+      if (await esperarSinDialogo(cdp, 5_000)) {
+        cierra_con_la_x = 'si'
+        await asentar(desdeElCierre, 3_000)
+        delCierre = registros.slice(desdeElCierre)
+        m = await gestoMedido(cdp)
+        const t = m.tupla
+        atras_tras_cerrar = t.absorbido === 'si' && t.aviso_visible === 'si' ? 'avisa' : t.ruta_despues === '(afuera)' && t.aviso_visible === 'no' ? 'sale' : `otro(${t.ruta_despues})`
+      }
+    }
+    return {
+      detalle: (p) => {
+        if (toqueQueAbre) console.log(`${p}el toque que abre (Activar plan): isActive=${toqueQueAbre.isActive} defaultPrevented=${toqueQueAbre.defaultPrevented}`)
+        const c = a.contenedor
+        console.log(`${p}medida al abrir: viewport=${ancho}x${alto} innerHeight=${a.innerHeight} dialogo top=${n(a.dialogo.top)} bottom=${n(a.dialogo.bottom)} alto=${n(a.dialogo.height)} · x top=${n(a.x?.top)} bottom=${n(a.x?.bottom)} tocable=${x_visible_al_abrir} · titulo top=${n(a.titulo?.top)} bottom=${n(a.titulo?.bottom)} · contenedor_con_scroll=${c ? c.descripcion : 'ninguno'} scrollHeight=${c ? c.scrollHeight : 'null'} clientHeight=${c ? c.clientHeight : 'null'}`)
+        console.log(`${p}tras el gesto de scroll: forma=${forma} scrollTop ${scrollAntes === null ? 'null' : n(scrollAntes)} -> ${final ? n(final.scrollTop) : 'null'} · ultimo Elegir top=${n(f.boton?.top)} bottom=${n(f.boton?.bottom)} tocable=${f.tocable ? 'si' : 'no'} · pie top=${n(f.pie?.top)} bottom=${n(f.pie?.bottom)}`)
+        console.log(`${p}al entrar y abrir:`)
+        for (const r of alAbrir) if (r.tipo !== 'sonda-tecla') console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+        if (click) {
+          console.log(`${p}el cierre con la X (click con isActive=${click.isActive}) y lo que siguio:`)
+          for (const r of delCierre) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
+        }
+        if (m) imprimirTupla(p, m)
+        else console.log(`${p}el atras tras cerrar: no medido (${x_visible_al_abrir === 'si' ? 'el dialogo no se cerro con la X en 5 s' : 'la X no es tocable al abrir: un click afuera del viewport no mide nada'})`)
+      },
+      medido: { x_visible_al_abrir, titulo_visible_al_abrir, dialogo_dentro_de_la_pantalla, llega_al_ultimo_boton, pie_visible_al_final, cierra_con_la_x, atras_tras_cerrar },
+      esperado: { x_visible_al_abrir: 'si', titulo_visible_al_abrir: 'si', dialogo_dentro_de_la_pantalla: 'si', llega_al_ultimo_boton: 'si', pie_visible_al_final: 'si', cierra_con_la_x: 'si', atras_tras_cerrar: 'avisa' },
+    }
+  } finally {
+    await celular(cdp)
+  }
+}
+
 /**
  * El camino comun de los dos recorridos de teclado de `G3-5`: en escritorio, entrar directo, tocar
  * (arma), el atras de teclado COMPUESTO en el orden pedido, la espera corta quieta, la foto y el atras
@@ -2060,6 +2242,29 @@ const RECORRIDOS = [
       return resultadoDelDialogo(await cerrarElDialogoDelPlan(cdp, { abrir: 'primer-toque', como: 'x' }))
     },
   },
+  // plan 03-17, `G3-9`: el modal de planes a dos altos cortos y el CONTROL (390x844, donde los `R-G3-7`
+  // ya tocaron la X). Cada uno pone su viewport y lo devuelve.
+  {
+    id: 'R-G3-9-modal-360x640',
+    titulo: 'G3-9: el modal de planes a 360x640 (alto corto): la X y el titulo a la vista, la lista se scrollea con un gesto real hasta el ultimo Elegir, el pie se ve; cerrado con la X, el atras avisa',
+    async correr(cdp) {
+      return medirElModalDelPlan(cdp, { ancho: 360, alto: 640 })
+    },
+  },
+  {
+    id: 'R-G3-9-modal-375x667',
+    titulo: 'G3-9: el modal de planes a 375x667 (alto corto): la X y el titulo a la vista, la lista se scrollea con un gesto real hasta el ultimo Elegir, el pie se ve; cerrado con la X, el atras avisa',
+    async correr(cdp) {
+      return medirElModalDelPlan(cdp, { ancho: 375, alto: 667 })
+    },
+  },
+  {
+    id: 'R-G3-9-modal-390x844',
+    titulo: 'G3-9, el control: el modal de planes a 390x844 (donde los R-G3-7 tocaron la X): entero, la X tocable, el ultimo Elegir y el pie a la vista; cerrado con la X, el atras avisa',
+    async correr(cdp) {
+      return medirElModalDelPlan(cdp, { ancho: 390, alto: 844 })
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -2151,6 +2356,9 @@ const QUE_CIERRA = {
   'R-G3-7-autoabierto-x': 'G3-7 (WR-02): el dialogo del plan auto-abierto, cerrado con la X: el atras avisa',
   'R-G3-7-autoabierto-fondo': 'G3-7 (WR-02): el dialogo del plan auto-abierto, cerrado con el fondo: el atras avisa',
   'R-G3-7-primer-toque': 'G3-7 (WR-02): el dialogo del plan abierto por el primer toque, cerrado con la X: el atras avisa',
+  'R-G3-9-modal-360x640': 'G3-9 (plan 03-17): el modal de planes a 360x640 entra en la pantalla, la lista llega al ultimo Elegir con un gesto real y la X re-arma',
+  'R-G3-9-modal-375x667': 'G3-9 (plan 03-17): el modal de planes a 375x667 entra en la pantalla, la lista llega al ultimo Elegir con un gesto real y la X re-arma',
+  'R-G3-9-modal-390x844': 'G3-9 (plan 03-17), el control: el modal de planes a 390x844 entero, la X tocable y re-arma',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
