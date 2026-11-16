@@ -3,9 +3,9 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
-current_plan: 16
+current_plan: 17
 status: executing
-stopped_at: "Completado 03-16-PLAN.md — checkpoint aprobado por el dueno el 2026-11-16 en produccion; proximo: planificar el 03-17 (G3-9 el modal de planes cortado, G3-10 medir el cierre con el atras)"
+stopped_at: "Planificado 03-17-PLAN.md (G3-9 el modal de planes, medir G3-10); plan-checker PASSED; listo para ejecutar"
 last_updated: "2026-10-30T11:20:00.000Z"
 last_activity: 2026-11-16
 last_activity_desc: "fase subida a produccion (merge de origin/main, CI verde con el CLI de Supabase fijo); el dueno aprobo el 03-16 (4.3, 4.2, 3.3, 1.5) y abrio G3-9 y G3-10"
@@ -13,7 +13,7 @@ state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 20
+  total_plans: 21
   completed_plans: 19
   percent: 0
 workstream: panel-nav
@@ -25,9 +25,9 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 ## Current Position
 
-**Current Plan:** 16
-**Total Plans in Phase:** 16
-**Status:** Planning — fase 03 con 16/16 planes ejecutados; el 03-16 aprobado por el dueno el 2026-11-16; falta el 03-17 (G3-9 + medir G3-10) antes del cierre
+**Current Plan:** 17
+**Total Plans in Phase:** 17
+**Status:** Ready to execute (fase 03: 03-17 planificado el 2026-11-16 — G3-9 el modal de planes + medir G3-10; plan-checker PASSED)
 **Current Phase:** 03
 **Last Activity:** 2026-11-16 — 03-16 aprobado por el dueno en produccion
 **Last Activity Description:** G3-5: un keyup cuenta como toque solo si su tecla bajo despues del ultimo atras (panelExitKeyStep), el aviso se queda y el segundo atras sale; G3-7: el reintento tras cerrar un dialogo de Inicio desde el efecto del armado (panelExitForeignRetry); cierre en (h) de .planning/debug/la-absorcion-que-no-absorbe-medida.md; MOB-04/05/06 siguen sin marcar
@@ -36,14 +36,14 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 16/16 (en la fase 03)
-**Current Plan:** 16
+**Plans Complete:** 16/17 (en la fase 03)
+**Current Plan:** 17
 
 ## Session Continuity
 
 **Last session:** 2026-10-30T11:20:00.000Z
 
-**Stopped At:** Completado 03-16-PLAN.md — proximo: `/gsd-plan-phase 3 --ws panel-nav --gaps` (el 03-17)
+**Stopped At:** Planificado 03-17-PLAN.md — proximo: `/gsd-execute-phase 3 --ws panel-nav --gaps-only`
 **Resume File:** None
 
 ## Performance Metrics

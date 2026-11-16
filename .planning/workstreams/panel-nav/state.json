@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-plan-phase 3 --ws panel-nav --gaps",
-    "label": "Planificar el 03-17: G3-9 (el modal de planes cortado en el celular) y medir G3-10 (cerrar el dialogo con el atras)",
-    "reason": "Phase 03 · 03-16 aprobado por el dueno el 2026-11-16 en produccion; el 3.3 abrio G3-9 y G3-10"
+    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
+    "label": "Ejecutar el 03-17: G3-9 (el modal de planes cortado) y medir G3-10 (cerrar el dialogo con el atras)",
+    "reason": "Phase 03 · 03-17 planificado y verificado el 2026-11-16 (plan-checker PASSED)"
   },
-  "updated_at": "2026-11-16T17:30:00.000Z"
+  "updated_at": "2026-11-16T20:00:00.000Z"
 }
