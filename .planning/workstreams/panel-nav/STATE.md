@@ -77,6 +77,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | 261009-tze | Los campos editables del panel no disparan el zoom de iOS | 2026-10-10 | 2881ee3 | — |
 | fast-261029 | Sin autoscroll al entrar a /web (el flag de montaje de los widgets de reserva vs Strict Mode) | 2026-10-29 | 76f98f3 | — |
 | fast-261116 | CI: CLI de Supabase fijo en 2.122.1 (`latest` paso a v3 y rechaza `[inbucket]`) | 2026-11-16 | 6750b5d | — |
+| fast-261116b | R2-WR-01: el gate de la rama ignore exige leer el reintento antes de apagarlo (probado con mutacion) + guarda R2-IN-03 | 2026-11-16 | 7eedb66 | — |
 
 ## Decisions
 
