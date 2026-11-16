@@ -75,7 +75,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | 261009-tzf | Compactar el banner de plan y el header de /clients | 2026-10-10 | 3093dd0 | — |
 | 261009-tze | Los campos editables del panel no disparan el zoom de iOS | 2026-10-10 | 2881ee3 | — |
 | fast-261029 | Sin autoscroll al entrar a /web (el flag de montaje de los widgets de reserva vs Strict Mode) | 2026-10-29 | 76f98f3 | — |
-| fast-261116 | CI: CLI de Supabase fijo en 2.122.1 (`latest` paso a v3 y rechaza `[inbucket]`) | 2026-11-16 | (este commit) | — |
+| fast-261116 | CI: CLI de Supabase fijo en 2.122.1 (`latest` paso a v3 y rechaza `[inbucket]`) | 2026-11-16 | 6750b5d | — |
 
 ## Decisions
 
