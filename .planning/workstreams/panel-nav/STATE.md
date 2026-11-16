@@ -5,16 +5,16 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 16
 status: executing
-stopped_at: "03-16 en el checkpoint bloqueante: el dueno corre el 4.3, el 4.2, el 3.3 y el 1.5"
+stopped_at: "Completado 03-16-PLAN.md — checkpoint aprobado por el dueno el 2026-11-16 en produccion; proximo: planificar el 03-17 (G3-9 el modal de planes cortado, G3-10 medir el cierre con el atras)"
 last_updated: "2026-10-30T11:20:00.000Z"
-last_activity: 2026-10-30
-last_activity_desc: "03-16 tasks 1-3 commiteados (G3-5 y G3-7 arreglados y medidos en la app, sonda 12/12 + 11/11, suite 2030); en el checkpoint blocking-human"
+last_activity: 2026-11-16
+last_activity_desc: "fase subida a produccion (merge de origin/main, CI verde con el CLI de Supabase fijo); el dueno aprobo el 03-16 (4.3, 4.2, 3.3, 1.5) y abrio G3-9 y G3-10"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
@@ -27,23 +27,23 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 16
 **Total Plans in Phase:** 16
-**Status:** Executing Phase 03 — el 03-16 en el checkpoint bloqueante (G3-5 y G3-7 arreglados por decision del dueno y medidos en verde en la app real; P-8 no aparecio); falta el dueno: 4.3, 4.2, 3.3 y 1.5 (la fase NO esta completa)
+**Status:** Planning — fase 03 con 16/16 planes ejecutados; el 03-16 aprobado por el dueno el 2026-11-16; falta el 03-17 (G3-9 + medir G3-10) antes del cierre
 **Current Phase:** 03
-**Last Activity:** 2026-10-30 — 03-16 en el checkpoint bloqueante
+**Last Activity:** 2026-11-16 — 03-16 aprobado por el dueno en produccion
 **Last Activity Description:** G3-5: un keyup cuenta como toque solo si su tecla bajo despues del ultimo atras (panelExitKeyStep), el aviso se queda y el segundo atras sale; G3-7: el reintento tras cerrar un dialogo de Inicio desde el efecto del armado (panelExitForeignRetry); cierre en (h) de .planning/debug/la-absorcion-que-no-absorbe-medida.md; MOB-04/05/06 siguen sin marcar
 
 ## Progress
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 15/16 (en la fase 03)
+**Plans Complete:** 16/16 (en la fase 03)
 **Current Plan:** 16
 
 ## Session Continuity
 
 **Last session:** 2026-10-30T11:20:00.000Z
 
-**Stopped At:** 03-16 en el checkpoint bloqueante: el 4.3 y el 4.2 en el escritorio, el 3.3 y el 1.5 en Android, anotados en 03-UAT-2.md con fecha y motor
+**Stopped At:** Completado 03-16-PLAN.md — proximo: `/gsd-plan-phase 3 --ws panel-nav --gaps` (el 03-17)
 **Resume File:** None
 
 ## Performance Metrics

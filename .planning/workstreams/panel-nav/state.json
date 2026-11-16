@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
-    "label": "El 03-16 en su checkpoint bloqueante: el dueno corre el 4.3 (atras de teclado real) y el 4.2 en el escritorio, el 3.3 (cerrar con la X el dialogo del plan) y el 1.5 en Android, y responde aprobado",
-    "reason": "Phase 03 · 03-16 tasks 1-3 hechos (G3-5 y G3-7 arreglados y medidos en la app) · checkpoint blocking-human pendiente"
+    "command": "/gsd-plan-phase 3 --ws panel-nav --gaps",
+    "label": "Planificar el 03-17: G3-9 (el modal de planes cortado en el celular) y medir G3-10 (cerrar el dialogo con el atras)",
+    "reason": "Phase 03 · 03-16 aprobado por el dueno el 2026-11-16 en produccion; el 3.3 abrio G3-9 y G3-10"
   },
-  "updated_at": "2026-10-30T11:20:00.000Z"
+  "updated_at": "2026-11-16T17:30:00.000Z"
 }

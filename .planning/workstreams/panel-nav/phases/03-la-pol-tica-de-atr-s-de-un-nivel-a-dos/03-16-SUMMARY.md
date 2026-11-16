@@ -2,9 +2,9 @@
 phase: "03-la-pol-tica-de-atr-s-de-un-nivel-a-dos"
 plan: "16"
 subsystem: panel-nav / sentinel de salida (MOB-05) + el overlay de Inicio (MOB-06)
-status: halted
-outcome: "tasks 1-3 completos y verdes; PARADO en el task 4 (checkpoint:human-verify, gate=blocking-human), pendiente del dueño: el 4.3 y el 4.2 en el escritorio, el 3.3 y el 1.5 en Android"
-checkpoint_pending: "task 4 — el dueño corre el 4.3 (atrás de teclado real), el 4.2 (click de siempre), el 3.3 (cerrar con la X el diálogo del plan) y el 1.5 (toque a la barra) y los anota en 03-UAT-2.md con fecha y motor"
+status: complete
+outcome: "tasks 1-4 completos; el checkpoint del dueño aprobado el 2026-11-16 (G3-5 y G3-7 verificados en producción)"
+checkpoint_resolution: "task 4 (checkpoint:human-verify, blocking-human) APROBADO por el dueño el 2026-11-16 en producción: 4.3 ✅, 4.2 ✅, 3.3 ✅ cerrando con la X/fondo, 1.5 ✅; el 3.3 abrió dos hallazgos nuevos (G3-9 el modal cortado, G3-10 cerrar con el atrás) que pasan al 03-17 — ver 03-UAT-2.md § «Re-prueba tras el 03-16»"
 tags: [g3-5, g3-7, teclado, atajo-de-atras, overlay, reintento, intervencion-de-historial, cdp]
 requires: ["03-15"]
 provides:
