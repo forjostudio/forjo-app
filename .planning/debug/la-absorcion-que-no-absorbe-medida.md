@@ -1199,6 +1199,105 @@ La X compartida es `size="icon-sm"` (28 px, por debajo de los 44 px de touch tar
 `components/ui/dialog.tsx`; los «Elegir» también quedan por debajo. Ninguno se tocó en este plan (la X es de la
 primitiva compartida; los botones no son parte del hallazgo): va como observación para el dueño.
 
+### `G3-10` — cerrar el diálogo del plan con el atrás
+
+**La hipótesis, escrita antes de medir** (los `esperado` de los tres recorridos, commit `afcba67`,
+`test(03-17)`): el toque que abre el diálogo declina por la regla 0 → el atrás de la interfaz lo cierra → el
+`popstate` del overlay es `ignore` → el reintento de `G3-7` lee la activación: vencida, `pendiente` y el atrás
+siguiente sale (el costo del camino 1); viva, `arm` y avisa; y un toque después del cierre arma.
+
+**La medición** (2026-11-16, 16:33-16:37 hora local, una invocación de seis recorridos con `next dev` propio en
+el 3031; `cerrarConElAtras` con la activación al cerrar AFIRMADA en cada caso): rc 1, los tres `R-G3-7` en `OK`,
+cero fallos del instrumento, y **`R-G3-10-primer-toque-atras-pronto` en `FALLA`**:
+
+```text
+OK  R-G3-10-primer-toque-atras-tarde · G3-10: el dialogo del plan abierto por el primer toque, mas de 5 s quieto y cerrado con el ATRAS: el armado queda pendiente y el atras siguiente sale (el costo del camino 1)
+      toque_que_abre: medido="regla-0-foreignOwnsTop"
+      retroceso_del_cierre: medido="ignore"
+      armado_tras_cerrar: medido="pendiente"
+      hash_tras_cerrar: medido=""
+      atras_siguiente: medido="sale"
+        diag sonda-click doc=p36qav url=/dashboard#modal defaultPrevented=false isActive=true
+        diag toque     doc=p36qav id=1 url=/dashboard#modal accion=arm hechos={"participates":true,"activacion":true,"atRoot":true,"gestoTomado":false,"hintOpen":false} vivo_antes=false vivo_despues=false
+        diag armado    doc=p36qav id=1 duena=1 vivas=1 url=/dashboard#modal estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE","frjOverlay"],"frjOverlay":1} accion=none regla=regla-0-foreignOwnsTop vivo_antes=false vivo_despues=false
+      cierre con el atras: activacion al cerrar=no ms_desde_el_toque=7522 retroceso=ignore ultimo_armado=pendiente hash_tras_cerrar=(ninguno)
+        diag sonda-popstate doc=p36qav url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]}
+        diag retroceso doc=p36qav id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=ignore regla=regla-4-holding-false holding=false
+        diag armado    doc=p36qav id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+        diag armado    doc=p36qav id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+      el atras siguiente:
+        tupla: hash_antes=(ninguno) es_nuestro=no estado_antes={} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=(afuera) documento_nuevo=no aviso_visible=no absorbido=no
+FALLA R-G3-10-primer-toque-atras-pronto · G3-10: el dialogo del plan abierto por el primer toque y cerrado con el ATRAS dentro de la ventana de activacion: el reintento de G3-7 arma y el atras siguiente avisa
+      toque_que_abre: medido="regla-0-foreignOwnsTop"
+      retroceso_del_cierre: medido="ignore"
+      armado_tras_cerrar: medido="arm"
+      hash_tras_cerrar: medido="#salir"
+      atras_siguiente: medido="sale"  <-- NO COINCIDE
+                       esperado="avisa"
+      cierre con el atras: activacion al cerrar=si ms_desde_el_toque=531 retroceso=ignore ultimo_armado=arm hash_tras_cerrar=#salir
+        diag sonda-popstate doc=020dm1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]}
+        diag retroceso doc=020dm1 id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=ignore regla=regla-4-holding-false holding=false
+        diag armado    doc=020dm1 id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+        diag armado    doc=020dm1 id=1 duena=1 vivas=1 url=/dashboard#salir estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=arm regla=ninguna-ARMA vivo_antes=false vivo_despues=true
+      el atras siguiente:
+        tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=1 ruta_despues=(afuera) documento_nuevo=no aviso_visible=no absorbido=no
+        pila antes:   [(afuera), /dashboard, /dashboard#salir] actual=2
+        pila despues: [(afuera), /dashboard, /dashboard#salir] actual=0
+OK  R-G3-10-atras-y-toque · G3-10, el contrapuesto del camino 1: cerrado con el ATRAS sin activacion (pendiente), UN toque en Inicio arma y el atras siguiente avisa
+      armado_tras_cerrar: medido="pendiente"
+      hash_tras_el_toque: medido="#salir"
+      atras_siguiente: medido="avisa"
+      cierre con el atras: activacion al cerrar=no ms_desde_el_toque=7532 retroceso=ignore ultimo_armado=pendiente hash_tras_cerrar=(ninguno)
+      el toque despues del cierre: hash_tras_el_toque=#salir
+        tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+OK  R-G3-7-autoabierto-x · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar (CTA de la landing), cerrado con la X: el sentinel queda armado y el atras avisa
+OK  R-G3-7-autoabierto-fondo · G3-7 (WR-02): el dialogo del plan AUTO-ABIERTO al entrar, cerrado tocando el FONDO: el sentinel queda armado y el atras avisa
+OK  R-G3-7-primer-toque · G3-7 (WR-02): el dialogo del plan abierto por el PRIMER toque en Inicio (el boton del banner), cerrado con la X: el atras avisa
+```
+
+| Recorrido | Activación al cerrar | Último armado | Hash tras cerrar (tras el toque) | Atrás siguiente |
+|-----------|----------------------|---------------|----------------------------------|-----------------|
+| `tarde` (el caso del dueño) | no (7522 ms) | `pendiente` | (ninguno) | **sale**, sin saltear (`entradas_salteadas=0`) — lo esperado |
+| `pronto` | sí (531 ms) | **`arm`** | **`#salir`** | **sale**, salteando **una** entrada (`entradas_salteadas=1`) — esperado `avisa` |
+| `atras-y-toque` | no (7532 ms) | `pendiente` | (ninguno) → **`#salir`** tras el toque | **avisa** (`entradas_salteadas=0`) — lo esperado |
+
+**Lo que dice cada uno.** `tarde` confirma la hipótesis en el caso del dueño: el toque que abre declina por la
+regla 0, el retroceso del cierre es `ignore`, el armado queda `pendiente` sin empuje y el atrás siguiente sale
+sin aviso. `atras-y-toque` confirma el camino 1: después del cierre, un toque en Inicio arma y el atrás avisa.
+**Pero `pronto` no es el costo del camino 1:** con la activación del toque todavía viva, el reintento de `G3-7`
+SÍ empuja `#salir` (`armado arm`, `vivo_despues=true`), y el atrás siguiente **saltea esa entrada y la de
+`/dashboard`** y sale del sitio sin `popstate` (`pila antes [(afuera), /dashboard, /dashboard#salir]
+actual=2` → `actual=0`). Es la **firma de la intervención de historial** que el 03-16 declaró como riesgo de
+`G3-7` (P-8) y que allá no apareció: acá el empuje llega DESPUÉS de una navegación de historial (el atrás que
+cerró el diálogo) sin una activación nueva posterior a ella, y Chrome lo marca salteable. **El hash miente:** la
+URL dice armado (`#salir`) y el atrás sale. La lectura del 03-16 («con la activación viva, el reintento arma y el
+atrás avisa») queda **refutada** para el cierre con el atrás.
+
+Con el instrumento sano (las guardas de activación pasaron, cero fallos, los tres `R-G3-7` en `OK`), una
+`FALLA` de `G3-10` es el veredicto `otro` (P-10): **ningún arreglo, ningún mecanismo probado por cuenta propia y
+ningún costo declarado.** La pregunta va al dueño en el checkpoint, con tres opciones: (a) declararlo costo del
+camino 1 igual, con lo medido; (b) planificar un arreglo —tocaría la lógica del aviso o
+`lib/overlay-history.ts` (intocable)—, con su costo; (c) diferirlo. Para el dueño el resultado visible es el
+mismo en los dos casos (cerrar con el atrás ⇒ el atrás siguiente sale), pero por dos causas distintas: sin
+activación, el camino 1; con activación, la intervención de historial sobre el reintento.
+
+veredicto G3-10: otro
+
+### Lo que esta medición NO cierra (plan 03-17)
+
+- **Android y Safari reales (A11):** todo esto es Chrome de escritorio headless emulando el alto del teléfono.
+- **La barra de URL real y el tamaño de fuente del sistema del teléfono (`G3-9`):** headless no tiene barras
+  (`svh = dvh = lvh = innerHeight`); que el tope `100svh-2rem` alcance con la barra real de Android es el 3.4
+  del dueño.
+- **El build de producción:** se midió en desarrollo, con el modo estricto activo.
+- **La ventana exacta de activación de Chrome de Android** (la de escritorio es de unos 5 s): dónde cae el
+  límite entre `tarde` y `pronto` en el teléfono no está medido.
+- **El gesto del dedo sobre la lista (`G3-9`):** el `synthesizeScrollGesture` táctil de CDP no movió la lista en
+  este Chrome headless (sin emulación táctil); el scroll lo hizo la rueda. El dedo real es el 3.4.
+- **El diálogo AUTO-abierto desde la landing cerrado con el atrás:** no es el camino del dueño; ese overlay
+  empuja su entrada al montar sin activación y la intervención de historial puede aplicar ahí. Sin medir, y no
+  es `G3-10`.
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la
