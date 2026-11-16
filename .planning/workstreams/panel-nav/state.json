@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-execute-phase 3 --ws panel-nav --gaps-only",
-    "label": "Continuar el 03-17 (task 3 y el checkpoint del 3.4) despues de decidir que hacer con R-login-con-activacion y con G3-10",
-    "reason": "Phase 03 · 03-17 parado en P-1 el 2026-11-16: G3-9 arreglado y medido, veredicto G3-10 otro, R-login-con-activacion no reproduce su condicion desde f75e739 (ver 03-17-SUMMARY.md)"
+    "command": "/gsd-verify-work 3 --ws panel-nav",
+    "label": "El dueno corre el 3.4 (el modal de planes) en el telefono, en produccion, despues del push del orquestador; despues verificar la fase 3",
+    "reason": "Phase 03 · 03-17 en su checkpoint bloqueante el 2026-11-16: G3-9 arreglado y medido, G3-10 declarado costo del camino 1, R-login-con-activacion retirado (ver 03-17-SUMMARY.md)"
   },
-  "updated_at": "2026-11-16T19:48:00.000Z"
+  "updated_at": "2026-11-16T22:12:00.000Z"
 }
