@@ -59,6 +59,8 @@
 // activacion y el armado quedaba `pendiente`). Lo acompana el instrumento `SCRIPT_DE_LA_HISTORIA`,
 // que graba cada `pushState`/`replaceState`/`back`/`go`/`forward` con su pila de JS: es lo que nombra
 // QUIEN hizo el retroceso que nadie pidio.
+// ⚠ RETIRADO el 2026-11-16 (plan 03-17, decision del dueno): desde `f75e739` el login hace recarga
+// completa y la condicion del recorrido ya no se puede dar; no corre por omision (ver `obsoleto`).
 //
 // EL SERVIDOR: la sonda levanta el suyo en el 3031 y lo mata al salir (verificando el puerto libre).
 // ⚠ SALVO que ya haya un `next dev` de ESTE repo vivo: Next 16 toma un candado en `.next/dev/lock` y
@@ -1961,6 +1963,16 @@ const RECORRIDOS = [
     // ⚠ Cierra la sesion y la vuelve a abrir, y eso no puede ensuciar a los otros: la DEJA ABIERTA al
     // terminar (el login es lo que mide). Hasta el plan 03-14 era el ultimo; los del plan 03-15 corren
     // despues, con la sesion que este deja, y el ultimo de todos es `R-G3-8-rebote`.
+    //
+    // ⚠ RETIRADO el 2026-11-16 (plan 03-17, decision del dueno): sale del conjunto por omision (corre solo
+    // si se lo nombra en la seleccion) y su codigo y su `esperado` quedan tal cual, como historia. Motivo,
+    // medido en git: `f75e739` (2026-10-28, mergeado en `643e99e`) cambio el login de
+    // `router.push('/dashboard')` a `window.location.assign('/dashboard')`: el panel nace en un documento
+    // NUEVO, la activacion del click no pasa, y la condicion que este recorrido necesita (aterrizar con la
+    // activacion vigente) ya no se puede dar — tampoco el doble montaje de Strict Mode tras un `router.push`
+    // del lado del cliente que era `G3-4`. El aterrizaje del login es hoy la entrada directa a Inicio
+    // (armado pendiente hasta el primer toque), que ya cubren `R-1.3-sin-toque` y `R-1.3-con-toque`.
+    obsoleto: 'f75e739: el login hace recarga completa (window.location.assign); la activacion del click no llega al panel y la condicion de G3-4 ya no existe',
     id: 'R-login-con-activacion',
     titulo: 'G3-4: loguearse por el formulario con la activacion del click VIGENTE al aterrizar; sin aviso, sin popstate, con #salir, y el atras tras un toque avisa',
     async correr(cdp) {
@@ -2449,7 +2461,8 @@ const QUE_CIERRA = {
   'R-barra-con-aviso': 'el toque que navega con el aviso visible: baja el aviso, no arma, pila sin #salir',
   'R-barra-pendiente': 'el toque que navega con el armado pendiente: no arma, pila sin #salir',
   'R-lateral': 'el hallazgo lateral del plan 03-12: el reintento del consumo queda pendiente, sin #salir enterrado',
-  'R-login-con-activacion': 'G3-4 (plan 03-14): el aterrizaje del login con la activacion vigente, sin aviso solo, sin popstate y con #salir',
+  // OBSOLETO desde el 2026-11-16 (decision del dueno, plan 03-17): ver `obsoleto` en el recorrido.
+  'R-login-con-activacion': 'OBSOLETO (retirado 2026-11-16 por f75e739, el login con recarga completa): G3-4 (plan 03-14): el aterrizaje del login con la activacion vigente, sin aviso solo, sin popstate y con #salir',
   'R-G3-5-escritorio-control': 'G3-5, el control: en escritorio un toque arma, el atras de la interfaz avisa y el segundo sale',
   'R-G3-5-teclado-flecha-primero': 'G3-5 (CR-01): el atras de teclado compuesto, soltando la flecha primero; avisa, el aviso se queda y el segundo sale',
   'R-G3-5-teclado-alt-primero': 'G3-5 (CR-01): el atras de teclado compuesto, soltando Alt primero; avisa, el aviso se queda y el segundo sale',
@@ -2577,7 +2590,11 @@ async function main() {
       if (!(await correrYReportar(cdp, CALIBRACION))) fallados++
     }
 
-    const aCorrer = RECORRIDOS.filter((r) => elegido(r.id))
+    // Un recorrido `obsoleto` (plan 03-17) no corre por omision; nombrado en la seleccion, corre igual y
+    // la sonda lo dice antes, para que su resultado no se lea como una regresion.
+    const aCorrer = RECORRIDOS.filter((r) => elegido(r.id) && (seleccion || !r.obsoleto))
+    for (const r of aCorrer) if (r.obsoleto) console.log(`⚠ ${r.id} esta RETIRADO (${r.obsoleto}); corre solo porque se lo nombro`)
+    for (const r of RECORRIDOS) if (r.obsoleto && !seleccion) console.log(`recorrido retirado, no corre por omision: ${r.id} (${r.obsoleto})`)
     if (aCorrer.length > 0) {
       await loguearse(cdp)
       // El ancho del telefono, DESPUES del login: en mobile el formulario vive en una hoja que hay que
