@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import { mpFetch, isMPTestMode } from '@/lib/mercadopago'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { mpFetch } from '@/lib/mercadopago'
 import { getSubscriptionPlan, FORJO_APP_URL } from '@/lib/subscription-plans'
 import type { NextRequest } from 'next/server'
 
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return Response.json({ error: 'No autenticado' }, { status: 401 })
 
-  let body: { plan?: string; payer_email?: string }
+  let body: { plan?: string }
   try { body = await request.json() } catch { return Response.json({ error: 'JSON inválido' }, { status: 400 }) }
 
   const plan = body.plan
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, plan_status, mp_subscription_id')
+    .select('id, name, plan_status, mp_subscription_id, mp_plan_id_active')
     .eq('owner_id', user.id)
     .single()
   if (!business) return Response.json({ error: 'Negocio no encontrado' }, { status: 404 })
@@ -33,52 +34,54 @@ export async function POST(request: NextRequest) {
 
   const planConfig = getSubscriptionPlan(plan)
 
-  // payer_email is mandatory at MP. It must match the buyer's own MercadoPago
-  // account, NOT the Forjo account email — a mismatch breaks the checkout. So we
-  // use the email the client enters in the modal. In test mode we force the MP
-  // test buyer so payer and collector are both test accounts.
-  let payerEmail: string | undefined
-  if (isMPTestMode()) {
-    payerEmail = process.env.MP_TEST_PAYER_EMAIL
-    if (!payerEmail) {
-      return Response.json({ error: 'Falta configurar MP_TEST_PAYER_EMAIL para el modo prueba' }, { status: 500 })
+  // Un preapproval_plan POR NEGOCIO, y el dueño paga desde el link del plan (mismo patrón que
+  // webs-cms, probado en sandbox el 2026-10-26). Por qué un plan y no una preapproval: la
+  // preapproval exige payer_email y tiene que coincidir con la cuenta de MP que paga, que muchas
+  // veces no es la del panel ("Tu e-mail no coincide con el de la suscripción"). En el link del plan
+  // el dueño entra con la cuenta que quiera. La suscripción que nace ahí NO trae external_reference:
+  // el webhook reconoce al negocio por mp_plan_id_active.
+  //
+  // Se reusa el plan del negocio si sigue activo y es del monto elegido (alguien que abrió el link y
+  // volvió sin pagar). Si eligió otro tier, plan nuevo.
+  let mpPlan = business.mp_plan_id_active
+    ? await mpFetch(`/preapproval_plan/${business.mp_plan_id_active}`)
+    : null
+  const reusable =
+    mpPlan?.init_point &&
+    mpPlan.status === 'active' &&
+    mpPlan.auto_recurring?.transaction_amount === planConfig.price_ars
+
+  if (!reusable) {
+    mpPlan = await mpFetch('/preapproval_plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: `Forjo Gestión — Plan ${planConfig.name}`,
+        back_url: `${FORJO_APP_URL}/dashboard?subscription=success`,
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: 'months',
+          transaction_amount: planConfig.price_ars,
+          currency_id: 'ARS',
+        },
+      }),
+    })
+    if (!mpPlan?.id || !mpPlan?.init_point) {
+      console.error('[subscription/create] MP preapproval_plan error:', JSON.stringify(mpPlan))
+      return Response.json({ error: 'Error al crear la suscripción en MercadoPago' }, { status: 500 })
     }
-  } else {
-    payerEmail = body.payer_email?.trim()
-    if (!payerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
-      return Response.json({ error: 'Ingresá el email de tu cuenta de MercadoPago' }, { status: 400 })
+    // mp_plan_id_active es columna admin (migr. 080: el trigger la revierte para el dueño), así que
+    // va con service role — RLS ya confirmó arriba que el negocio es de esta sesión.
+    const { error } = await createAdminClient()
+      .from('businesses')
+      .update({ mp_plan_id_active: mpPlan.id })
+      .eq('id', business.id)
+    if (error) {
+      console.error('[subscription/create] no se guardó mp_plan_id_active:', error.message)
+      return Response.json({ error: 'Error al iniciar la suscripción' }, { status: 500 })
     }
   }
 
-  // Subscription WITHOUT an associated plan: with preapproval_plan_id MP forces
-  // the on-site card flow (requires card_token_id). Sending the amount inline in
-  // auto_recurring — and no preapproval_plan_id / card_token_id / status —
-  // returns an init_point for the hosted checkout where MP collects the card and
-  // confirms the subscription.
-  const preapproval = await mpFetch('/preapproval', {
-    method: 'POST',
-    body: JSON.stringify({
-      reason: `Forjo Gestión — Plan ${planConfig.name}`,
-      external_reference: business.id,
-      payer_email: payerEmail,
-      back_url: `${FORJO_APP_URL}/dashboard?subscription=success`,
-      auto_recurring: {
-        frequency: 1,
-        frequency_type: 'months',
-        transaction_amount: planConfig.price_ars,
-        currency_id: 'ARS',
-      },
-    }),
-  })
-
-  if (!preapproval.id || !preapproval.init_point) {
-    console.error('MP preapproval error:', JSON.stringify(preapproval))
-    return Response.json({ error: 'Error al crear la suscripción en MercadoPago' }, { status: 500 })
-  }
-
-  // Deliberately DO NOT persist plan_status / mp_subscription_id here. The business
-  // stays in 'trial' until the webhook confirms the preapproval is `authorized`.
-  // Writing state before payment confirmation left businesses in a dirty state that
-  // blocked retries when the first card was rejected.
-  return Response.json({ ok: true, init_point: preapproval.init_point })
+  // Guardar el id del PLAN no es estado de pago: NO se escribe plan_status ni mp_subscription_id.
+  // El negocio sigue en 'trial' hasta que el webhook confirma la suscripción `authorized`.
+  return Response.json({ ok: true, init_point: mpPlan.init_point })
 }

@@ -69,8 +69,11 @@ export default async function WebEditorPage() {
   //     gate que DE VERDAD importa vive en las 3 Server Actions (saveLandingDraft / publishLanding /
   //     discardLandingDraft: cada una re-chequea has_web_custom). Defensa en profundidad: una page sin
   //     este check igual no podría escribir.
+  //     El plan se pide aparte y SOLO acá: si fuera en el select de arriba, el `...publicBusiness` lo
+  //     mandaría al payload RSC del preview. El upsell lo usa para mostrar precio (Básico) o "incluida".
   if (!business.has_web_custom) {
-    return <WebUpsell slug={business.slug} />
+    const { data: planRow } = await supabase.from('businesses').select('plan').eq('id', business.id).single()
+    return <WebUpsell slug={business.slug} plan={planRow?.plan ?? 'basic'} />
   }
 
   // 4. Datos del preview: los datasets que el LandingRenderer consume además del config, todos

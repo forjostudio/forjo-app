@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { Globe, Check } from 'lucide-react'
-import { UPGRADE_URL } from '@/lib/plans'
+import { Globe, Check, ExternalLink } from 'lucide-react'
+import { PLANS, UPGRADE_URL, WEB_CUSTOM_ADDON } from '@/lib/plans'
 
 // ── WebUpsell: superficie de VENTA del add-on "Web a medida" (Phase 17, D-02) ──────────────────────
 //
@@ -12,7 +12,10 @@ import { UPGRADE_URL } from '@/lib/plans'
 // plan-banner.tsx. El link secundario al público /{slug} queda subordinado para no competir con el CTA.
 // Solo tokens del design system (Bauhaus dark); touch targets ≥44px; focus visible; contraste WCAG AA.
 
-export function WebUpsell({ slug }: { slug: string }) {
+export function WebUpsell({ slug, plan }: { slug: string; plan: string }) {
+  // Básico: add-on pago. Estudio/Pro: la web viene en el plan, solo falta que la activemos.
+  const included = plan === 'studio' || plan === 'pro'
+  const planName = PLANS[plan as keyof typeof PLANS]?.name ?? PLANS.basic.name
   const features = [
     'Diseño propio con tu logo y tus colores',
     'Reservas online integradas',
@@ -35,6 +38,18 @@ export function WebUpsell({ slug }: { slug: string }) {
           editás vos desde el panel, sin depender de nadie.
         </p>
 
+        {included ? (
+          <p className="mt-5 text-sm font-semibold text-primary">Incluida en tu plan {planName}</p>
+        ) : (
+          <div className="mt-5">
+            <p className="text-2xl font-bold text-foreground">
+              ${WEB_CUSTOM_ADDON.price_ars.toLocaleString('es-AR')}
+              <span className="text-sm font-normal text-muted-foreground">/mes</span>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Add-on del plan {planName}</p>
+          </div>
+        )}
+
         <ul className="mx-auto mt-5 max-w-xs space-y-2 text-left text-sm text-foreground">
           {features.map((f) => (
             <li key={f} className="flex items-start gap-2">
@@ -51,6 +66,16 @@ export function WebUpsell({ slug }: { slug: string }) {
           className="mt-6 flex min-h-[44px] w-full items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           Activar
+        </a>
+
+        <a
+          href={WEB_CUSTOM_ADDON.demo_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-border px-5 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          Ver demo
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
         </a>
 
         <Link

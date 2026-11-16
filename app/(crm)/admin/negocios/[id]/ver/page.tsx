@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/admin-guard'
 import { logAudit } from '@/lib/audit'
 import { loadImpersonationData } from '@/lib/impersonation'
 import { PaletteScript } from '@/components/palette-script'
+import { ThemeSync } from '@/components/theme-sync'
 import { ShellScopeProvider } from '@/components/ui/shell-scope'
 import { ImpersonationBanner } from '@/components/crm/impersonation-banner'
 import { ImpersonationView } from './impersonation-view'
@@ -72,6 +73,9 @@ export default async function VerPage({ params }: { params: Promise<{ id: string
   return (
     <ShellScopeProvider scope="">
       <PaletteScript palette={business.palette} theme={business.theme} font={business.font} />
+      {/* Entrar desde el CRM es sin recarga (PaletteScript no corre) y al salir hay que devolver el
+          tema Forjo al CRM. Ver components/theme-sync.tsx. */}
+      <ThemeSync palette={business.palette} theme={business.theme} font={business.font} />
       <div className="impersonation-view -mx-4 -my-6 min-h-screen bg-background text-foreground lg:-mx-6">
         {/* Banner fijo "Estás viendo como X · solo lectura" + Salir (D-12). Es FEEDBACK, no la
             garantía: la garantía read-only es server-side por ausencia de write paths. */}

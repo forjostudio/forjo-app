@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Business } from '@/lib/types'
 import { getPlanLimits } from '@/lib/plans'
@@ -32,17 +32,17 @@ import { consumeOwnedPanelEntry, panelNavMode } from '@/lib/panel-history'
 export function Sidebar({ business }: { business: Business }) {
   const NAV_GROUPS_RESOLVED = buildNavGroups(business)
   const pathname = usePathname()
-  const router = useRouter()
   const supabase = createClient()
   // Guard de salida del panel: si la pantalla actual tiene cambios sin guardar, cada link de acá
   // pregunta antes de navegar en vez de descartarlos en silencio. Sin provider devuelve siempre
   // false ⇒ nunca bloquea. Ver components/dashboard/unsaved-changes-guard.tsx.
   const requestNavigation = useNavigationGuard()
 
+  // Recarga completa y no router.push: descarta la caché del router con datos del negocio y /login
+  // arranca de cero, sin el tema del panel pegado en <html> (ver components/theme-sync.tsx).
   async function handleLogout() {
     await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+    window.location.assign('/login')
   }
 
   // Contenido del sidebar como ELEMENTO JSX (no un componente declarado en render — eso

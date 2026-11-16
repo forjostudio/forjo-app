@@ -12,10 +12,29 @@ description: >
 
 # MercadoPago — Suscripciones en Forjo Gestión
 
-Forjo Gestión cobra los planes con **suscripciones de MercadoPago vía `preapproval`
-sin plan asociado y checkout redirect**. El cliente elige plan → se crea una
-preapproval → se lo redirige al `init_point` de MP → vuelve por la `back_url`.
-El cobro recurrente lo administra MP.
+Forjo Gestión cobra los planes con **un `preapproval_plan` POR NEGOCIO y el link
+del plan** (desde 2026-10, mismo patrón que webs-cms). El cliente elige tier → se
+crea (o reusa) el plan del negocio → se lo redirige al `init_point` del plan → paga
+logueado con **la cuenta de MP que quiera** → vuelve por la `back_url`. El cobro
+recurrente lo administra MP.
+
+> ⚠ **El modelo viejo (preapproval con `payer_email`) está RETIRADO.** Exigía que el
+> email coincidiera con la cuenta de MP que paga ("Tu e-mail no coincide con el de
+> la suscripción") y obligaba a pedirlo en el modal. NO volver a pedir el email. Las
+> secciones de abajo que hablan de `payer_email` / `external_reference` describen las
+> suscripciones VIEJAS, que el webhook sigue reconociendo.
+>
+> - El plan se guarda en `businesses.mp_plan_id_active` (columna admin, migr. 080:
+>   el trigger la revierte si la escribe el dueño → se escribe con service role).
+> - Se reusa si está `active` y su monto es el del tier elegido; si no, plan nuevo.
+> - La suscripción que nace del link NO trae `external_reference`: el webhook busca
+>   el negocio por `external_reference` (viejas) → `mp_subscription_id` →
+>   `mp_plan_id_active`.
+> - Los cobros de estas suscripciones llegan por `subscription_authorized_payment`
+>   (GET `/authorized_payments/{id}`), NO por `payment` con external_reference. Ese
+>   topic tiene que estar activo en el webhook de la app en el panel de MP.
+> - El `plan` (tier) lo escribe el webhook al `authorized`, derivado del monto que MP
+>   confirma (`tierForAmount`), nunca de lo que mandó el cliente.
 
 ## Regla de oro (la más importante)
 
@@ -28,31 +47,29 @@ a resetear a mano con SQL. Esto ya pasó y ya se arregló — no reintroducirlo.
 
 ## Flujo correcto, paso a paso
 
-### 1. Endpoint que crea la preapproval (`app/api/subscription/create`)
+### 1. Endpoint que crea la suscripción (`app/api/subscription/create`)
 
 - **Guard idempotente al inicio:** si el negocio ya está `plan_status === 'active'`
-  con `mp_subscription_id`, NO crear otra preapproval (ya tiene suscripción activa).
+  con `mp_subscription_id`, NO arrancar otra (ya tiene suscripción activa).
   En cualquier otro estado (`trial`, `pending`, `cancelled`, `expired`) seguir de
-  largo y crear una preapproval nueva, descartando cualquier intento pendiente viejo.
-- Crear la preapproval en MP y redirigir al `init_point`. **No escribir nada de
-  estado.** El negocio se queda en `trial`.
-- Pasar SIEMPRE:
-  - `external_reference`: el id del negocio (es el vínculo para el webhook).
-  - `payer_email`: el email que viene del input del modal. NO reemplazarlo por un
-    default. Debe coincidir con la cuenta de MP con la que el cliente se loguea en el
-    checkout, o MP rechaza el pago ("payer_email mismatch").
-  - `back_url`: la página de retorno (`/dashboard/suscripcion` o equivalente).
-  - `status: "pending"`.
-- Respetar `MP_MODE` (test/producción) con el helper existente (`isMPTestMode()`).
+  largo.
+- Crear o reusar el `preapproval_plan` del negocio y devolver su `init_point`. Lo
+  único que se escribe es `mp_plan_id_active` (con service role): es el vínculo para
+  el webhook, NO estado de pago. **Nunca `plan_status` ni `mp_subscription_id`.**
+- El plan lleva `back_url` (`/dashboard?subscription=success`) y el monto del tier
+  en `auto_recurring`. NO lleva `payer_email`.
+- Respetar `MP_MODE` (test/producción): `mpFetch` usa el token de la plataforma
+  según el modo.
 
 ### 2. Handler del webhook (`app/api/subscription/webhook`)
 
-- Topics a escuchar: `subscription_preapproval` (alta/actualización de la suscripción)
-  y `payments` (pagos asociados). Para cobros recurrentes con pago autorizado también
-  aplica `subscription_authorized_payment`.
+- Topics a escuchar: `subscription_preapproval` (alta/actualización de la suscripción),
+  `subscription_authorized_payment` (cobros de las suscripciones del plan) y `payment`
+  (cobros de las suscripciones viejas, con external_reference).
 - Al recibir el evento, hacer un **GET de la preapproval contra la API de MP** y
   recién si `status === 'authorized'` escribir `plan_status = 'active'` +
-  `mp_subscription_id`, ubicando el negocio por `external_reference`.
+  `mp_subscription_id` + `plan` (tier por monto), ubicando el negocio con
+  `businessForSubscription` (external_reference → mp_subscription_id → mp_plan_id_active).
 - Si el estado NO es authorized, no escribir nada.
 - Si MP cancela una suscripción (cobros recurrentes fallidos), bajar el `plan_status`.
 - **Responder siempre HTTP 200/201.** Si no, MP reintenta o pierde la notificación.
@@ -71,12 +88,12 @@ a resetear a mano con SQL. Esto ya pasó y ya se arregló — no reintroducirlo.
   tardar en acreditarse, que NO reintente (un reintento genera cobro duplicado), que
   refresque en unos minutos.
 
-## payer_email
+## payer_email (retirado)
 
-`payer_email` es **requerido** al crear la preapproval. El cliente debe pagar logueado
-con la cuenta de ese mismo email. El modal lo prellena con el email del usuario logueado
-(Supabase auth) pero lo deja editable (input controlado, no readOnly) por si su cuenta de
-MP usa otro email. El email final del input es el que se manda como `payer_email`.
+Ya no se pide ni se manda. El modal tiene un solo paso ("Elegir" → link del plan) y el
+dueño paga con la cuenta de MP que quiera. Si alguna vez hiciera falta volver a crear
+una `preapproval` directa, ahí sí `payer_email` es obligatorio y tiene que ser el de la
+cuenta que paga — por eso se cambió a plan.
 
 ## Reintentos de cobros recurrentes (cuotas) — los maneja MP solo
 
@@ -97,8 +114,9 @@ avisar y proponer agregarlo.
 
 - [ ] El endpoint de creación NO escribe `plan_status` ni `mp_subscription_id`.
 - [ ] El estado activo se escribe SOLO en el webhook, con `status === 'authorized'`.
-- [ ] `external_reference` = id del negocio, presente en la creación y usado en el webhook.
-- [ ] `payer_email` viene del input, no de un default.
+- [ ] `mp_plan_id_active` se guarda con service role y el webhook encuentra al negocio por él.
+- [ ] El modal NO pide email de MP.
+- [ ] `subscription_authorized_payment` activo en el webhook de la app (panel de MP).
 - [ ] Guard idempotente en la creación (no duplicar suscripción si ya está active).
 - [ ] El webhook responde 200/201.
 - [ ] La página de retorno no persiste estado; polling + timeout-no-error.

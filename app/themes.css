@@ -160,7 +160,16 @@
 /* spa flourishes — sombra suave y difusa en las tarjetas + headings serif aireados */
 [data-theme="spa"] [data-slot="card"]{box-shadow:0 10px 30px -16px rgba(80,64,52,.30)}
 .dark[data-theme="spa"] [data-slot="card"]{box-shadow:0 14px 34px -18px rgba(0,0,0,.5)}
-[data-theme="spa"] h1,[data-theme="spa"] h2,[data-theme="spa"] h3{font-weight:500;letter-spacing:.01em}
+/* Las reglas de headings de theme/fuente (spa, cyber, elegante, tech) van en DOS selectores:
+     1) el del panel, que NO entra a un landing (.frj-site): en la vista previa de /web el landing
+        vive adentro del panel, y un selector descendiente suelto le pasaba el peso y el tracking
+        del tema del PANEL (panel "elegante" → títulos del landing a 600/.01em en vez del
+        800/-0.04em de .frj-display: la vista previa no se parecía a la web pública);
+     2) el del landing, que aplica solo si el theme/fuente es el DEL LANDING.
+   :where() deja las dos en la especificidad de antes (0,1,1), así que la web pública —donde
+   <html> y el landing llevan el mismo theme— queda exactamente igual. */
+[data-theme="spa"] :is(h1,h2,h3):where(:not(.frj-site *)),
+:where(.frj-site)[data-theme="spa"] :is(h1,h2,h3){font-weight:500;letter-spacing:.01em}
 
 /* ============================================================ *
  * 3 · CYBER  — neon cyberpunk, glow + grid, techno type         *
@@ -211,7 +220,8 @@
 }
 /* cyber flourishes — glow neón en tarjetas + botón, tipografía técnica en mayúsculas */
 [data-theme="cyber"] [data-slot="card"]{box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 7%,transparent),0 0 26px -10px color-mix(in srgb,var(--primary) 35%,transparent)}
-[data-theme="cyber"] h1,[data-theme="cyber"] h2,[data-theme="cyber"] h3{text-transform:uppercase;letter-spacing:.03em}
+[data-theme="cyber"] :is(h1,h2,h3):where(:not(.frj-site *)),
+:where(.frj-site)[data-theme="cyber"] :is(h1,h2,h3){text-transform:uppercase;letter-spacing:.03em}
 [data-theme="cyber"] [data-slot="button"].bg-primary{box-shadow:0 0 18px color-mix(in oklab,var(--primary) 55%,transparent)}
 
 /* =========================================================================
@@ -260,5 +270,8 @@
 [data-font="tech"]       { --font-sans:var(--font-chakra), system-ui, sans-serif; --font-heading:var(--font-orbitron), system-ui, sans-serif; }
 [data-font="suave"]      { --font-sans:var(--font-manrope), system-ui, sans-serif; --font-heading:var(--font-sora), system-ui, sans-serif; }
 /* serif quiere algo más de peso + aire que su default display */
-[data-font="elegante"] h1,[data-font="elegante"] h2,[data-font="elegante"] h3{font-weight:600;letter-spacing:.01em}
-[data-font="tech"] h1,[data-font="tech"] h2,[data-font="tech"] h3{text-transform:uppercase;letter-spacing:.03em}
+/* Mismo par de selectores que los headings de spa (ver ahí por qué no entran al landing). */
+[data-font="elegante"] :is(h1,h2,h3):where(:not(.frj-site *)),
+:where(.frj-site)[data-font="elegante"] :is(h1,h2,h3){font-weight:600;letter-spacing:.01em}
+[data-font="tech"] :is(h1,h2,h3):where(:not(.frj-site *)),
+:where(.frj-site)[data-font="tech"] :is(h1,h2,h3){text-transform:uppercase;letter-spacing:.03em}

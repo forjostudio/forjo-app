@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -42,7 +42,6 @@ function OAuthErrorNotice() {
 }
 
 export default function LoginPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
 
@@ -61,8 +60,9 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push('/dashboard')
-    router.refresh()
+    // Recarga completa: el panel arranca con el HTML del server, así PaletteScript pinta el tema
+    // del negocio desde el primer frame (en soft-nav ese <script> no corre).
+    window.location.assign('/dashboard')
   }
 
   return (
