@@ -5,16 +5,16 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 03
 current_plan: 17
 status: executing
-stopped_at: "03-17 en su CHECKPOINT BLOQUEANTE (task 4): el 3.4 del dueno en el telefono, en produccion, despues de que el orquestador suba main; tasks 1-3 completos, G3-10 declarado costo del camino 1 y R-login-con-activacion retirado por decision del dueno"
-last_updated: "2026-11-16T22:12:00.000Z"
+stopped_at: "Completado 03-17-PLAN.md — el 3.4 aprobado por el dueno el 2026-11-16 en produccion (f8fa76f); fase 03 con 17/17 planes; proximo: el cierre de la fase (security gate, verificacion, /gsd-verify-work 3)"
+last_updated: "2026-11-16T23:00:00.000Z"
 last_activity: 2026-11-16
-last_activity_desc: "03-17 continuado con las decisiones del dueno: R-login-con-activacion retirado (f75e739), G3-10 declarado costo del camino 1; no-regresion verde (once de antes 11/11); task 3 cerrado; checkpoint del 3.4 pendiente"
+last_activity_desc: "03-17 cerrado: main subido (f8fa76f, CI verde, deploy listo) y el dueno aprobo el 3.4 en el telefono en produccion"
 state_head: 7617d4d430ebeb0274f961dbbbbab31f8ff822f6
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 0
 workstream: panel-nav
 created: 2026-09-28
@@ -27,23 +27,23 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 
 **Current Plan:** 17
 **Total Plans in Phase:** 17
-**Status:** Esperando el checkpoint bloqueante del 03-17 (fase 03: tasks 1-3 completos el 2026-11-16; el 3.4 del dueno en produccion, despues del push del orquestador)
+**Status:** Cierre de fase — fase 03 con 17/17 planes ejecutados; el 03-17 aprobado por el dueno el 2026-11-16 en produccion; faltan security gate, verificacion y /gsd-verify-work 3
 **Current Phase:** 03
-**Last Activity:** 2026-11-16 — 03-17 en su checkpoint bloqueante (el 3.4)
-**Last Activity Description:** G3-9 arreglado en components/dashboard/plan-modal.tsx (cierre G3-9: arreglado); G3-10 medido (veredicto G3-10: otro) y declarado costo del camino 1 por decision del dueno (03-DECISION-UAT-3.md); R-login-con-activacion retirado de la no-regresion por decision del dueno (f75e739, login con recarga completa), marcado obsoleto en la sonda; no-regresion verde (once de antes 11/11, los 17 R-G3-* como deben, estatica 18/18, suite 110 archivos 2031 pasados); el 3.4 en el guion; MOB-04/05/06 siguen sin marcar
+**Last Activity:** 2026-11-16 — 03-17 aprobado por el dueno en produccion (3.4 ✅)
+**Last Activity Description:** el 3.4 (el modal de planes en el celular) aprobado por el dueno en produccion, deploy de f8fa76f (CI run 43967813776 verde); G3-9 cerrado; G3-10 costo declarado del camino 1; MOB-04/05/06 siguen sin marcar hasta /gsd-verify-work
 
 ## Progress
 
 **Progress:** [░░░░░░░░░░] 0%
 **Phases Complete:** 0/3
-**Plans Complete:** 16/17 (en la fase 03)
+**Plans Complete:** 17/17 (en la fase 03)
 **Current Plan:** 17
 
 ## Session Continuity
 
-**Last session:** 2026-11-16T22:12:00.000Z
+**Last session:** 2026-11-16T23:00:00.000Z
 
-**Stopped At:** 03-17 en el checkpoint bloqueante del task 4 (ver 03-17-SUMMARY.md § «El checkpoint — PENDIENTE»): el orquestador sube main y el dueno corre el 3.4 en el telefono, en produccion, y lo anota en 03-UAT-2.md; despues `/gsd-verify-work 3 --ws panel-nav`
+**Stopped At:** Completado 03-17-PLAN.md — proximo: el cierre de la fase 03 (`/gsd-secure-phase 3 --ws panel-nav`, verificacion del objetivo, `/gsd-verify-work 3 --ws panel-nav`)
 **Resume File:** .planning/workstreams/panel-nav/phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-17-SUMMARY.md
 
 ## Performance Metrics

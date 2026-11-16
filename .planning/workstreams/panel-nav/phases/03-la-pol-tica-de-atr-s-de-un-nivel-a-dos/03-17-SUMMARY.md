@@ -2,8 +2,9 @@
 phase: "03-la-pol-tica-de-atr-s-de-un-nivel-a-dos"
 plan: "17"
 subsystem: panel-nav / el modal de planes de Inicio (MOB-06) + el sentinel de salida (MOB-05)
-status: halted
-outcome: "parado en el checkpoint bloqueante del task 4 (el 3.4 del dueño en el teléfono, EN PRODUCCIÓN, después de que el orquestador suba main): G3-9 arreglado y medido (RED → GREEN); G3-10 medido (veredicto otro) y declarado costo del camino 1 por decisión del dueño del 2026-11-16; R-login-con-activacion retirado de la no-regresión por decisión del dueño (f75e739); el task 3 completo con la no-regresión verde"
+status: complete
+outcome: "tasks 1-4 completos; G3-9 arreglado y medido (RED → GREEN) y verificado por el dueño en el teléfono en producción el 2026-11-16 (3.4 ✅ «Todo bien», deploy f8fa76f); G3-10 medido (veredicto otro) y declarado costo del camino 1; R-login-con-activacion retirado de la no-regresión (f75e739)"
+checkpoint_resolution: "task 4 (checkpoint:human-verify, blocking-human) APROBADO por el dueño el 2026-11-16 en producción (gestion.forjo.studio, deploy f8fa76f, CI run 43967813776): 3.4 ✅ «Todo bien» — ver 03-UAT-2.md § «Re-prueba tras el 03-17»"
 stop_rule: "checkpoint:human-verify gate=blocking-human (task 4) — nunca se auto-aprueba. Historia: la primera ejecución paró en P-1 en la no-regresión (R-login-con-activacion NO REPRODUCE LAS CONDICIONES desde f75e739); la continuación aplicó las dos decisiones del dueño del 2026-11-16 y terminó el task 3"
 tags: [g3-9, g3-10, plan-modal, scroll-por-caller, svh, intervencion-de-historial, cdp, no-regresion]
 requires: ["03-16"]
@@ -50,8 +51,8 @@ actuals:
   # chars/4 sobre las líneas agregadas: 13140 de la primera ejecución (6862596..ea1cdcd, 3 archivos) + 4605 de la
   # continuación (9f0c647~1..23cfb6f, 5 archivos, 18418 caracteres agregados), sin los SUMMARY ni STATE/ROADMAP
   tokens: 17745
-  # tasks 1, 2 y 3 completos; el 4 es el checkpoint bloqueante, pendiente del dueño
-  tasks: 3
+  # los 4 tasks completos; el 4 (checkpoint bloqueante) aprobado por el dueño el 2026-11-16
+  tasks: 4
   # MEDIDO: git rev-list --count 6862596..HEAD al escribir este SUMMARY (sin contar el commit de cierre)
   commits: 10
 coverage:
@@ -60,7 +61,7 @@ coverage:
     human_judgment: false
   - deliverable: "G3-9 en el teléfono real del dueño, con la barra de URL y el tamaño de fuente del sistema"
     human_judgment: true
-    rationale: "headless no tiene barras (svh = dvh = innerHeight) y el dedo sintético de CDP no movió la lista (lo movió la rueda); es el 3.4 del dueño en producción, PENDIENTE en el checkpoint bloqueante del task 4"
+    rationale: "headless no tiene barras (svh = dvh = innerHeight) y el dedo sintético de CDP no movió la lista (lo movió la rueda); es el 3.4 del dueño en producción: APROBADO el 2026-11-16 («Todo bien», deploy f8fa76f)"
   - deliverable: "G3-10 medido: cerrar el diálogo del plan con el atrás de la interfaz"
     verification: { kind: probe, ref: "R-G3-10-primer-toque-atras-tarde OK, -pronto FALLA (entradas_salteadas=1), -atras-y-toque OK; reproducido igual en la corrida de los 17; veredicto G3-10: otro en (i)", status: pass }
     human_judgment: true
@@ -82,7 +83,7 @@ el checkpoint bloqueante: el 3.4 del dueño, en el teléfono y en producción.**
 
 - **Duración:** ~39 min en total: 27 min de la primera ejecución (16:20 → 16:47 hora local, 2026-11-16) y ~12 min
   de trabajo en la continuación (18:57 → 19:10, sin contar la espera del turno)
-- **Tasks:** 3 de 4 completos; el 4 es el checkpoint bloqueante, pendiente del dueño
+- **Tasks:** 4 de 4 completos; el 4 (el checkpoint bloqueante) aprobado por el dueño el 2026-11-16 en producción
 - **Archivos modificados:** 6 (`components/dashboard/plan-modal.tsx`, la sonda de la app, el registro de veredictos,
   `03-UAT-2.md`, `03-UAT-GUION-3.md`, `03-DECISION-UAT-3.md`)
 
@@ -275,7 +276,11 @@ sigue es el texto de la parada, como quedó.
    el `### 3.4` del guion; con `otro`, `03-DECISION-UAT-3.md` no se toca) y el checkpoint bloqueante del 3.4 en
    el teléfono, en producción, después de que el orquestador suba `main`.
 
-## El checkpoint — PENDIENTE (task 4, `gate="blocking-human"`)
+## El checkpoint — APROBADO el 2026-11-16 (task 4, `gate="blocking-human"`)
+
+**Resolución:** el orquestador subió `main` (`984e0b6..f8fa76f`), la CI dio verde (run 43967813776) y el deploy de
+Vercel terminó; el dueño corrió el 3.4 en el Android, en producción: **✅ «Todo bien»**. Anotado en `03-UAT-2.md`
+§ «Re-prueba tras el 03-17». Lo que sigue es el texto del checkpoint tal como quedó al pararse:
 
 El plan espera acá con todo commiteado y nada subido (`HEAD` no está en `origin/main`). El **orquestador** sube
 `main` (CI + deploy de Vercel a `gestion.forjo.studio`), espera la CI verde y el deploy listo, y recién entonces le

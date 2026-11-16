@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-verify-work 3 --ws panel-nav",
-    "label": "El dueno corre el 3.4 (el modal de planes) en el telefono, en produccion, despues del push del orquestador; despues verificar la fase 3",
-    "reason": "Phase 03 · 03-17 en su checkpoint bloqueante el 2026-11-16: G3-9 arreglado y medido, G3-10 declarado costo del camino 1, R-login-con-activacion retirado (ver 03-17-SUMMARY.md)"
+    "command": "/gsd-secure-phase 3 --ws panel-nav",
+    "label": "Cerrar la fase 3: security gate, verificacion del objetivo y /gsd-verify-work 3 (marca MOB-04/05/06)",
+    "reason": "Phase 03 · 17/17 planes; el 03-17 aprobado por el dueno el 2026-11-16 en produccion (3.4 ✅, deploy f8fa76f)"
   },
-  "updated_at": "2026-11-16T22:12:00.000Z"
+  "updated_at": "2026-11-16T23:00:00.000Z"
 }
