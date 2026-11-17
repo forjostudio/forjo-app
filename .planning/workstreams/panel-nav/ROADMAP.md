@@ -690,7 +690,7 @@ se programa)
   causa `'user-switch'` + `panelTabCause`, Finanzas derivada de la URL con su botón de alta (MOB-09), medida RED → GREEN
   en la app real; y el defecto del ejecutor corregido en su propio paso —un `replace` no fabrica la marca sobre una entrada
   ajena— más el `drop` para el OAuth, con el cambio de `/clients` declarado
-- [ ] `04-02-PLAN.md` — wave 2 · **Negocio y Configuración, T-1 y T-2**: los dos grupos de `settings-client.tsx` en la URL
+- [x] `04-02-PLAN.md` — wave 2 · **Negocio y Configuración, T-1 y T-2**: los dos grupos de `settings-client.tsx` en la URL
   con el cambio confinado a L992-1021 (las otras tres rutas sin moverse, con candados y un control en la app), el retorno
   del OAuth como UN `replace` del helper hacia Integraciones, Agenda limpia su `?google=` por el helper, D-08 medido en el
   sidebar, y el barrido crudo del criterio 5 en cero
@@ -754,4 +754,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 1/5 | In Progress | - |
+| 4. Los tabs profundos sobre la política ya fijada | 2/5 | In Progress | - |

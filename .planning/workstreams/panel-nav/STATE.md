@@ -3,19 +3,19 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 4 — Los tabs profundos sobre la política ya fijada
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: "Ejecutando la Phase 4: 04-01 completo (gate verde), wave 2/5 (04-02) por despachar; secuencial en main"
+stopped_at: "Ejecutando la Phase 4: 04-02 completo (gate verde), wave 3/5 (04-03) despachada; frena en el checkpoint:decision A/B1/B2"
 last_updated: "2026-11-17T10:24:04.996Z"
 last_activity: 2026-11-17
-last_activity_desc: "Executing Phase 4 (wave 2/5: 04-02; 04-01 completo)"
+last_activity_desc: "Executing Phase 4 (wave 3/5: 04-03; 04-01 y 04-02 completos)"
 state_head: e68e38177149ca57d0660a6e4bb6066c0b5d6775
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 26
-  completed_plans: 22
-  percent: 85
+  completed_plans: 23
+  percent: 88
 workstream: panel-nav
 created: 2026-09-28
 current_phase_name: Los tabs profundos sobre la política ya fijada
@@ -25,19 +25,19 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 ## Current Position
 
-**Current Plan:** 2
+**Current Plan:** 3
 **Total Plans in Phase:** 5
-**Status:** Executing Phase 4 (wave 2/5: 04-02; 04-01 completo)
+**Status:** Executing Phase 4 (wave 3/5: 04-03; 04-01 y 04-02 completos)
 **Current Phase:** 4 — Los tabs profundos sobre la política ya fijada
 **Last Activity:** 2026-11-17 — Phase 4 execution started
-**Last Activity Description:** Executing Phase 4 (wave 2/5: 04-02; 04-01 completo)
+**Last Activity Description:** Executing Phase 4 (wave 3/5: 04-03; 04-01 y 04-02 completos)
 
 ## Progress
 
-**Progress:** [████████░░] 85%
+**Progress:** [████████░░] 88%
 **Phases Complete:** 2/3
-**Plans Complete:** 22/26 (fases 2 y 3 completas; fase 4 1/5)
-**Current Plan:** 2 (04-02)
+**Plans Complete:** 23/26 (fases 2 y 3 completas; fase 4 2/5)
+**Current Plan:** 3 (04-03)
 
 ## Session Continuity
 
