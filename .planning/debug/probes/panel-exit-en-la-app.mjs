@@ -2381,6 +2381,26 @@ const RECORRIDOS = [
       return { ...x, esperado: { armado_tras_cerrar: 'pendiente', hash_tras_el_toque: '#salir', atras_siguiente: 'avisa' } }
     },
   },
+  // quick 261116-t5o, `R2-WR-02` del code review ronda 2 de la fase 3: el `pronto` de `(i)` MAS un toque en
+  // Inicio despues del cierre. Las cuatro primeras claves del `esperado` son la condicion `pronto` que `(i)`
+  // midio (el toque que abre declina por la regla 0, el cierre es `ignore`, el reintento de G3-7 arma
+  // `#salir`); `hash_tras_el_toque` vale en los dos desenlaces.
+  // `atras_siguiente: 'avisa'` es la AFIRMACION de la vineta de G3-10 en 03-DECISION-UAT-3.md (un toque
+  // despues del cierre deja el aviso armado), que se pone a prueba: NO es una prediccion.
+  // El revisor predice por lectura que el toque NO empuja nada (`toque accion=arm` -> `armarSentinel` con
+  // `puedeEmpujar` en verdadero -> `topIsOurs` -> `none` por la cuarta regla, `vivo_despues=true`): si el
+  // atras avisa lo hace el navegador (Chrome deja de saltear la entrada tras la activacion nueva) y si sale
+  // el cartel miente. Eso no esta medido en ningun sentido.
+  // El mecanismo se lee de las lineas `diag toque`/`diag armado` que `cerrarConElAtras` ya imprime bajo
+  // `el toque despues del cierre:` (ninguna clave nueva en `medido`).
+  {
+    id: 'R-G3-10-pronto-y-toque',
+    titulo: 'G3-10 / R2-WR-02: cerrado con el ATRAS enseguida de abrir (pronto: el reintento arma #salir y Chrome lo saltea) y DESPUES un toque en Inicio: el atras siguiente avisa (lo que afirma la vineta del costo declarado)',
+    async correr(cdp) {
+      const x = await cerrarElDialogoDelPlan(cdp, { abrir: 'primer-toque', como: 'atras', esperaMs: 0, activacion: 'si', tocarDespues: true })
+      return { ...x, esperado: { toque_que_abre: 'regla-0-foreignOwnsTop', retroceso_del_cierre: 'ignore', armado_tras_cerrar: 'arm', hash_tras_cerrar: '#salir', hash_tras_el_toque: '#salir', atras_siguiente: 'avisa' } }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -2479,6 +2499,7 @@ const QUE_CIERRA = {
   'R-G3-10-primer-toque-atras-tarde': 'G3-10 (plan 03-17): cerrar con el atras sin activacion deja el armado pendiente y el atras siguiente sale (el costo del camino 1)',
   'R-G3-10-primer-toque-atras-pronto': 'G3-10 (plan 03-17): cerrar con el atras con la activacion viva: el reintento de G3-7 arma y el atras avisa',
   'R-G3-10-atras-y-toque': 'G3-10 (plan 03-17): tras cerrar con el atras (pendiente), un toque en Inicio arma y el atras avisa',
+  'R-G3-10-pronto-y-toque': 'R2-WR-02 (quick 261116-t5o): tras cerrar con el atras pronto (el reintento arma #salir y Chrome lo saltea), un toque en Inicio: el atras siguiente avisa o sale',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
