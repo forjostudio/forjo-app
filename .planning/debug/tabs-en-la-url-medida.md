@@ -926,3 +926,49 @@ quedan en `cruda` después de la actual, no alcanzables con el atrás, igual que
   errores; `eslint` rc 0 en los siete archivos.
 
 cierre (f): b1 en la barra
+
+### La no-regresión completa (plan 04-04, task 2)
+
+**Las dos corridas**, por el turno, en segundo plano, una después de la otra (la de la app esperó el turno de
+otro proyecto antes de arrancar), con la app de `b13f0a1` y la sonda de `ae032a9` (los `R-C-2/3/4/ficha` ya
+retirados). Entorno: `negocio-prueba` en `trial|true` (consultado en el contenedor local antes de correr; no
+hizo falta la receta del 03-17), `next dev` propio en el 3031, `Chrome/157.0.8103.52`, gesto `interfaz`,
+modo estricto ACTIVO.
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz
+node scripts/con-turno.mjs node .planning/debug/probes/panel-back-stack.mjs
+```
+
+- **La sonda de la app, sin selección:** rc 1 · `recorridos medidos: 47 · coinciden con lo esperado: 46 · no
+  coinciden: 1`. Los cinco retirados no corren (`R-login-con-activacion` y los cuatro `R-C-*` de B1, cada uno
+  con su línea `recorrido retirado, no corre por omision`). Los 46 en `OK`: `C-activacion`, todos los de la
+  Phase 3 (`R-1.*`, `R-3.1`, `R-barra-*`, `R-lateral`, `R-G3-5-*`, `R-G3-6-*`, `R-G3-7-*`, `R-G3-9-*`,
+  `R-G3-10-primer-toque-atras-tarde`, `R-G3-10-atras-y-toque`, `R-G3-10-pronto-y-toque`, `R-G3-8-rebote` —el
+  último—), los doce `R-T-*`, `R-C-5`, `R-C-6` y los cuatro `R-B1-*`. La única línea `FALLA`:
+
+```
+FALLA R-G3-10-primer-toque-atras-pronto · G3-10: el dialogo del plan abierto por el primer toque y cerrado con el ATRAS dentro de la ventana de activacion: el reintento de G3-7 arma y el atras siguiente avisa
+      toque_que_abre: medido="regla-0-foreignOwnsTop"
+      retroceso_del_cierre: medido="ignore"
+      armado_tras_cerrar: medido="arm"
+      hash_tras_cerrar: medido="#salir"
+      atras_siguiente: medido="sale"  <-- NO COINCIDE
+                       esperado="avisa"
+        tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=1 ruta_despues=(afuera) documento_nuevo=no aviso_visible=no absorbido=no
+```
+
+  ⚠ **No es una regresión de B1, y está medido con control, no supuesto.** Es `G3-10`, el **costo del camino 1
+  que el dueño declaró el 2026-11-16** (`veredicto G3-10: otro`, `.planning/debug/la-absorcion-que-no-absorbe-medida.md`
+  §(i), y la viñeta de `## El costo, declarado` de `03-DECISION-UAT-3.md`): con la activación viva el
+  reintento de `G3-7` arma `#salir` y Chrome lo saltea. Su `esperado` (`avisa`) se dejó intacto a propósito en
+  la Phase 3, así que da `FALLA` en toda corrida completa desde el 03-17 —la misma tupla en el 03-17 y en el
+  quick `261116-t5o`—. Y re-medido HOY con el código de antes del arreglo (los tres archivos de `5366056`
+  puestos en el árbol sólo para esa corrida y restaurados con `git checkout -- <archivo>`, árbol limpio
+  verificado): `FALLA` idéntica (`atras_siguiente: medido="sale"`, `entradas_salteadas=1`,
+  `ruta_despues=(afuera)`). El camino no pasa por nada que B1 tocó: es Inicio con un overlay, sin gesto de la
+  barra ni subsección. **P-B1-2 no aplica** (nada «se puso rojo» con el arreglo).
+- **La sonda estática:** rc 0 · `escenarios medidos: 18 · coinciden con lo esperado: 18 · no coinciden: 0`.
+- **Las suites:** la pura 77 archivos / 1804 + 3 expected-fail, rc 0; las ocho de historial 630/630.
+
+no-regresion (plan 04-04): sonda de la app 46/47 en OK, estatica 18/18, suites verdes

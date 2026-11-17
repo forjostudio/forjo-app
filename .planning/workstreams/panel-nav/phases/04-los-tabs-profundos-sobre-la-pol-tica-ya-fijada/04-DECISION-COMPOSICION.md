@@ -71,3 +71,27 @@ miembro del plan de la rama (`consume-view-then-navigate`), con su sonda en rojo
   (`R-B1-inicio`) antes de darlo por bueno.
 - Todo lo medido es Chrome de **escritorio**. Chrome de Android y Safari de iOS no están medidos: los
   cierra el 04-05 en el teléfono del dueño.
+
+## Implementado (plan 04-04, 2026-11-17)
+
+B1 entró en la barra con el séptimo miembro `consume-view-then-navigate` del plan de la rama (el hecho
+`vistaArriba` y la regla `-1d` en `panelBranchPlan`, aditivos), la rama del ejecutor con `reDecidir`, el
+segundo paso `decidirDesdeElAterrizaje` en el hook de la barra y el guard de cambios sin guardar que declara
+el miembro y degrada. Los commits:
+
+- `f8fdb12` `test(04-04)`: los cuatro `R-B1-*` con su control, en la sonda, antes del arreglo (RED: los
+  cuatro en `FALLA`, los controles con la pila de la Phase 3).
+- `5366056` `test(04-04)`: los casos unitarios en rojo y las tres cuentas actualizadas a propósito.
+- `b13f0a1` `fix(04-04)`: el arreglo (GREEN: los cuatro `R-B1-*` en `OK`, incluido el retroceso triple).
+- `d0b06ca` `docs(04-04)`: `(f)` en `.planning/debug/tabs-en-la-url-medida.md`.
+- `ae032a9` `test(04-04)`: `R-C-2`, `R-C-3`, `R-C-4` y `R-C-ficha` retirados con su `esperado` intacto.
+
+cierre (f): b1 en la barra
+
+Lo que queda abierto: C-5 (escritorio, sidebar) sigue declarado como residuo; Chrome de Android y Safari de
+iOS los cierra el 04-05 en el teléfono del dueño. MOB-08 sigue sin marcar.
+
+La no-regresión completa (task 2): la sonda de la app sin selección 46/47 en `OK` y la estática 18/18. La
+única `FALLA` es `R-G3-10-primer-toque-atras-pronto`, el costo del camino 1 que el dueño declaró el
+2026-11-16 (con su `esperado` intacto a propósito), re-medida con el código de antes de B1 con la misma
+tupla: no es una regresión de este plan. Detalle en `### La no-regresión completa` al final de `(f)`.

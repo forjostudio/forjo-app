@@ -141,6 +141,27 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
         canal de propagación que **ya existía**, con el **mismo** consumidor, el **mismo** escritor
         único y la **misma** negativa a inventar una ruta. `panelNavMode` y `panelBranchPlan` quedan
         **intactas**, medidas por recorte: el arreglo es **aditivo**.
+
+      ⚠ **PRECISADO el 2026-11-17 (decisión B1 de la Phase 4, plan `04-04`), no contradicho: con una
+      subsección propia arriba, el gesto de la barra la CONSUME antes de decidir.** La regla de los dos
+      niveles no cambia: cambia la **pila que lee**.
+
+      - **Por qué:** con un tab (`/negocio?tab=cobros`, `/settings`, `/finances`) o la ficha `?c=` de un
+        cliente arriba, la entrada de arriba es la de la subsección y no lleva la marca de la rama, así
+        que el gesto caía en la regla de rutas. Medido en el plan `04-03` (§(e) de
+        `.planning/debug/tabs-en-la-url-medida.md`): `Más → Negocio → Cobros → tocar Inicio` apilaba
+        Inicio sobre el tab **sin armar el aviso de salida** —el síntoma de `G2-1` por otro camino—,
+        Turnos dejaba dos escalones de más y Más se apilaba en vez de subir. Y la ficha `?c=` ya tenía el
+        mismo hueco antes de esta fase, sin declarar.
+      - **El invariante que queda:** con un tab o una ficha abiertos, tocar un destino de la barra
+        termina **igual que sin ellos**. Medido con control en la misma corrida en los `R-B1-*` de la sonda
+        de la app (RED → GREEN, §(f) del registro), incluido el **retroceso triple** tab → sección → Más →
+        Inicio, que la Phase 3 nunca había encadenado.
+      - **Lo que NO cambia:** las reglas de la Phase 3 (`panelNavMode` byte-idéntica y las reglas de
+        `panelBranchPlan` sin reordenar: el arreglo es un miembro, un hecho y una regla, aditivos);
+        **desktop** (la barra está oculta a ≥1024 px; el sidebar no tiene el hook, y el residuo C-5 sigue
+        declarado debajo de MOB-08); y el **guard de cambios sin guardar**, que declara el miembro nuevo y
+        **degrada** a la regla de rutas.
 - [x] **MOB-05**: En **Inicio**, una vez que el dueño **tocó la pantalla** en esta visita, el atrás pide confirmación antes de salir del panel.
       ✅ **RESUELTO el 2026-10-14 — la decisión está TOMADA: SE IMPLEMENTA** (D-01 de la Phase 3, ver
       `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-CONTEXT.md`). El primer atrás en Inicio
