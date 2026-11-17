@@ -1053,6 +1053,106 @@ async function tabsListsVisibles(cdp) {
   return evaluar(cdp, `[...document.querySelectorAll('[data-slot="tabs-list"]')].filter((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }).length`)
 }
 
+// ── Las primitivas del plan 04-03 (la composicion de los tabs con los dos niveles de la Phase 3) ──
+//
+// QUE MIDEN: que le pasa a la pila REAL cuando el dueno toca la barra (o el sidebar) con un tab —o la
+// ficha de un cliente— abierto arriba. El research (04-RESEARCH.md §«La composicion con la Phase 3»)
+// DERIVO esas pilas del codigo y no las midio (A1): con un tab arriba, el gesto lee el estado de la
+// ENTRADA DEL TAB, que nace sin la marca de la rama. Estas primitivas no tocan la app ni el historial:
+// leen la pila por CDP y el hash por `Runtime.evaluate`.
+
+/** Una entrada con su `?c=<id>` normalizado a `?c=*`: el id del cliente no es parte de lo que se mide. */
+function sinIdDeFicha(u) {
+  return u.replace(/([?&]c=)[^&#]*/, '$1*')
+}
+
+/** Donde quedo la pagina, sin el hash y con `?c=*` (o `(afuera)`): lo que comparan los pasos de la composicion. */
+function lugarDe(u) {
+  return u === '(afuera)' ? u : sinIdDeFicha(u.split('#')[0])
+}
+
+/**
+ * La pila que ve el dueno: las entradas de `pilaConQuery` HASTA LA ACTUAL inclusive (las de adelante no
+ * son alcanzables con el atras), sin `(afuera)` y sin las entradas cuyo hash empieza con `#salir` —el
+ * sentinel lo mide la Phase 3 aparte y depende de la activacion—, con `?c=<id>` normalizado a `?c=*`.
+ * La pila CRUDA (con `(afuera)` y los `#salir`) se imprime aparte en el detalle de cada recorrido.
+ */
+async function pilaNormalizada(cdp) {
+  const p = await pilaConQuery(cdp)
+  return p.entradas
+    .slice(0, p.indice + 1)
+    .filter((e) => e !== '(afuera)')
+    .filter((e) => { const i = e.indexOf('#'); return !(i >= 0 && e.slice(i).startsWith('#salir')) })
+    .map(sinIdDeFicha)
+}
+
+/** `si` si la pagina esta parada en el sentinel de salida (`#salir` o `#salir-N`): el aviso esta ARMADO. */
+async function avisoArmado(cdp) {
+  return evaluar(cdp, `/^#salir(-\\d+)?$/.test(location.hash) ? 'si' : 'no'`)
+}
+
+/**
+ * El click REAL en el primer cliente VISIBLE de la lista de `/clients` (el `button` de cada fila, con
+ * las clases `w-full flex items-center gap-3 px-4 py-3 text-left border-l-2`). Se lo centra UNA vez,
+ * se espera hasta 10 s a que este enganchado por React, se lo toca en su centro convertido al viewport
+ * VISUAL (la cuenta de `tocarTab`) y se espera hasta 10 s a que `location.search` empiece con `?c=`.
+ * Si no hay cliente o la ficha no abre, TIRA (P-1: el instrumento no llego a lo que dice medir).
+ */
+async function abrirPrimeraFicha(cdp) {
+  const filtro = `(x) => { const r = x.getBoundingClientRect(); return r.width > 0 && r.height > 0 && ['w-full', 'flex', 'items-center', 'gap-3', 'px-4', 'py-3', 'text-left', 'border-l-2'].every((c) => x.classList.contains(c)) }`
+  const centrar = `(() => { const b = [...document.querySelectorAll('button')].find(${filtro}); if (!b) return false; b.scrollIntoView({ block: 'center' }); return true })()`
+  const buscar = `(() => { const b = [...document.querySelectorAll('button')].find(${filtro}); if (!b) return null; const r = b.getBoundingClientRect(); const cx = r.x + r.width / 2, cy = r.y + r.height / 2; const vv = globalThis.visualViewport; const escala = vv ? vv.scale : 1; return { x: vv ? (cx - vv.offsetLeft) * escala : cx, y: vv ? (cy - vv.offsetTop) * escala : cy, enganchado: Object.keys(b).some((k) => k.startsWith('__reactProps')) } })()`
+  const tope = Date.now() + 10_000
+  while (Date.now() < tope && !(await evaluar(cdp, centrar).catch(() => false))) await dormir(200)
+  await dormir(250)
+  let punto = null
+  while (Date.now() < tope) {
+    punto = await evaluar(cdp, buscar).catch(() => null)
+    if (punto && punto.enganchado) break
+    await dormir(200)
+  }
+  if (!punto) throw new Error('no abrio la ficha: no hay un cliente visible en la lista de /clients')
+  await clickEnPunto(cdp, punto)
+  const fin = Date.now() + 10_000
+  let search = ''
+  while (Date.now() < fin) {
+    search = await evaluar(cdp, `location.protocol.startsWith('http') ? location.search : '(afuera)'`).catch(() => '')
+    if (search.startsWith('?c=')) break
+    await dormir(200)
+  }
+  if (!search.startsWith('?c=')) throw new Error(`no abrio la ficha: la query quedo en "${search}"`)
+  await dormir(800)
+}
+
+/** La preparacion movil de C-2..C-4: Inicio -> Mas -> Negocio -> Cobros. Si no llega a Cobros, TIRA (P-1). */
+async function hastaCobrosPorMas(cdp) {
+  await entrarDirecto(cdp)
+  await tocarEnLaBarra(cdp, '/mas')
+  await tocarEnlace(cdp, '/negocio')
+  await tocarTab(cdp, 'Cobros')
+  const u = await ubicacion(cdp)
+  if (lugarDe(u) !== '/negocio?tab=cobros') throw new Error(`no se pudo llegar a Cobros por Mas: la URL quedo en ${u}`)
+}
+
+/** La preparacion de ESCRITORIO de C-5 y C-6: Inicio -> Negocio (sidebar) -> Cobros. Si no llega, TIRA (P-1). */
+async function hastaCobrosPorElSidebar(cdp) {
+  await entrarDirecto(cdp)
+  await tocarEnlace(cdp, '/negocio')
+  await tocarTab(cdp, 'Cobros')
+  const u = await ubicacion(cdp)
+  if (lugarDe(u) !== '/negocio?tab=cobros') throw new Error(`no se pudo llegar a Cobros por el sidebar: la URL quedo en ${u}`)
+}
+
+/** Todo lo que el dueno va a leer de un paso: la URL, la marca de la entrada de arriba, el aviso y las dos pilas. */
+async function fotoDeLaComposicion(cdp) {
+  return { u: await ubicacion(cdp), estado: (await foto(cdp)).estado, aviso: await avisoArmado(cdp), pila: await pilaNormalizada(cdp), cruda: await pilaConQuery(cdp) }
+}
+
+/** Una linea de detalle por paso, con la pila normalizada Y la cruda. */
+function imprimirComposicion(p, paso, f) {
+  console.log(`${p}${paso}: url=${f.u} estado=${f.estado} aviso=${f.aviso} pila=[${f.pila.join(', ')}] cruda=[${f.cruda.entradas.join(', ')}] actual=${f.cruda.indice}`)
+}
+
 /**
  * Ensucia el editor de `/web`: foco y tipeo REAL (`Input.insertText`) en un campo de texto visible. Las
  * secciones del editor arrancan cerradas, asi que si no hay ningun campo a la vista se abre la siguiente
@@ -3146,6 +3246,202 @@ const RECORRIDOS = [
       }
     },
   },
+  // plan 04-03 (Phase 4): la composicion de los tabs con los dos niveles de la Phase 3. ⚠ Cada `esperado`
+  // es la pila que el research DERIVO del codigo (04-RESEARCH.md §«La composicion con la Phase 3», tabla
+  // C-1..C-6), NO la pila deseada. Se escribe en el commit `test(04-03)` ANTES de medir y no se toca
+  // despues: la medicion confirma o refuta la derivacion, y eso es lo que se le muestra al dueno.
+  {
+    id: 'R-C-2',
+    titulo: 'C-2 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Inicio en la barra; derivado: Inicio se EMPUJA encima del tab, el aviso de salida no se arma y el atras vuelve al tab',
+    async correr(cdp) {
+      await hastaCobrosPorMas(cdp)
+      const antes = await fotoDeLaComposicion(cdp)
+      await tocarEnLaBarra(cdp, '/dashboard')
+      const enInicio = await fotoDeLaComposicion(cdp)
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras1 = await fotoDeLaComposicion(cdp)
+      return {
+        detalle: (p) => {
+          imprimirComposicion(p, 'en Cobros, antes del toque', antes)
+          imprimirComposicion(p, 'tras tocar Inicio', enInicio)
+          imprimirComposicion(p, 'tras el primer atras', tras1)
+        },
+        medido: {
+          pila_tras_inicio: enInicio.pila,
+          aviso_armado_en_inicio: enInicio.aviso,
+          ruta_tras_un_atras: lugarDe(tras1.u),
+        },
+        esperado: {
+          pila_tras_inicio: ['/dashboard', '/mas', '/negocio', '/negocio?tab=cobros', '/dashboard'],
+          aviso_armado_en_inicio: 'no',
+          ruta_tras_un_atras: '/negocio?tab=cobros',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-C-3',
+    titulo: 'C-3 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Turnos en la barra; derivado: Turnos REEMPLAZA la entrada del tab, el atras cae en Negocio y el siguiente en Mas',
+    async correr(cdp) {
+      await hastaCobrosPorMas(cdp)
+      const antes = await fotoDeLaComposicion(cdp)
+      await tocarEnLaBarra(cdp, '/appointments')
+      const enTurnos = await fotoDeLaComposicion(cdp)
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras1 = await fotoDeLaComposicion(cdp)
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras2 = await fotoDeLaComposicion(cdp)
+      return {
+        detalle: (p) => {
+          imprimirComposicion(p, 'en Cobros, antes del toque', antes)
+          imprimirComposicion(p, 'tras tocar Turnos', enTurnos)
+          imprimirComposicion(p, 'tras el primer atras', tras1)
+          imprimirComposicion(p, 'tras el segundo atras', tras2)
+        },
+        medido: {
+          pila_tras_turnos: enTurnos.pila,
+          ruta_tras_un_atras: lugarDe(tras1.u),
+          ruta_tras_dos_atras: lugarDe(tras2.u),
+        },
+        esperado: {
+          pila_tras_turnos: ['/dashboard', '/mas', '/negocio', '/appointments'],
+          ruta_tras_un_atras: '/negocio',
+          ruta_tras_dos_atras: '/mas',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-C-4',
+    titulo: 'C-4 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Mas en la barra; derivado: Mas se EMPUJA encima del tab (no sube) y el atras vuelve al tab',
+    async correr(cdp) {
+      await hastaCobrosPorMas(cdp)
+      const antes = await fotoDeLaComposicion(cdp)
+      await tocarEnLaBarra(cdp, '/mas')
+      const enMas = await fotoDeLaComposicion(cdp)
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras1 = await fotoDeLaComposicion(cdp)
+      return {
+        detalle: (p) => {
+          imprimirComposicion(p, 'en Cobros, antes del toque', antes)
+          imprimirComposicion(p, 'tras tocar Mas', enMas)
+          imprimirComposicion(p, 'tras el primer atras', tras1)
+        },
+        medido: {
+          pila_tras_mas: enMas.pila,
+          ruta_tras_un_atras: lugarDe(tras1.u),
+        },
+        esperado: {
+          pila_tras_mas: ['/dashboard', '/mas', '/negocio', '/negocio?tab=cobros', '/mas'],
+          ruta_tras_un_atras: '/negocio?tab=cobros',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-C-5',
+    titulo: 'C-5 (escritorio): Inicio -> Negocio (sidebar) -> Cobros -> Finanzas (sidebar); derivado: Finanzas REEMPLAZA la entrada del tab y el atras desde Finanzas cae en Negocio, no en Inicio',
+    async correr(cdp) {
+      await escritorio(cdp)
+      let antes, enFinanzas, tras1
+      try {
+        await hastaCobrosPorElSidebar(cdp)
+        antes = await fotoDeLaComposicion(cdp)
+        await tocarEnlace(cdp, '/finances')
+        enFinanzas = await fotoDeLaComposicion(cdp)
+        await atras(cdp)
+        await asentarTab(cdp)
+        tras1 = await fotoDeLaComposicion(cdp)
+      } finally {
+        await celular(cdp)
+      }
+      return {
+        detalle: (p) => {
+          imprimirComposicion(p, 'en Cobros, antes del toque', antes)
+          imprimirComposicion(p, 'tras tocar Finanzas', enFinanzas)
+          imprimirComposicion(p, 'tras el primer atras', tras1)
+        },
+        medido: {
+          pila_tras_finanzas: enFinanzas.pila,
+          ruta_tras_un_atras: lugarDe(tras1.u),
+        },
+        esperado: {
+          pila_tras_finanzas: ['/dashboard', '/negocio', '/finances'],
+          ruta_tras_un_atras: '/negocio',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-C-6',
+    titulo: 'C-6 (escritorio): Inicio -> Negocio (sidebar) -> Cobros -> Inicio (sidebar); derivado: Inicio se EMPUJA encima del tab (igual que el residuo de escritorio ya declarado) y el atras vuelve al tab',
+    async correr(cdp) {
+      await escritorio(cdp)
+      let antes, enInicio, tras1
+      try {
+        await hastaCobrosPorElSidebar(cdp)
+        antes = await fotoDeLaComposicion(cdp)
+        await tocarEnlace(cdp, '/dashboard')
+        enInicio = await fotoDeLaComposicion(cdp)
+        await atras(cdp)
+        await asentarTab(cdp)
+        tras1 = await fotoDeLaComposicion(cdp)
+      } finally {
+        await celular(cdp)
+      }
+      return {
+        detalle: (p) => {
+          imprimirComposicion(p, 'en Cobros, antes del toque', antes)
+          imprimirComposicion(p, 'tras tocar Inicio', enInicio)
+          imprimirComposicion(p, 'tras el primer atras', tras1)
+        },
+        medido: {
+          pila_tras_inicio: enInicio.pila,
+          ruta_tras_un_atras: lugarDe(tras1.u),
+        },
+        esperado: {
+          pila_tras_inicio: ['/dashboard', '/negocio', '/negocio?tab=cobros', '/dashboard'],
+          ruta_tras_un_atras: '/negocio?tab=cobros',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-C-ficha',
+    titulo: 'el hueco de hoy con ?c= (movil): Inicio -> Clientes -> abrir una ficha -> tocar Inicio en la barra; derivado: Inicio se EMPUJA encima de la ficha, el aviso no se arma y el atras vuelve a la ficha',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/clients')
+      await abrirPrimeraFicha(cdp)
+      const antes = await fotoDeLaComposicion(cdp)
+      await tocarEnLaBarra(cdp, '/dashboard')
+      const enInicio = await fotoDeLaComposicion(cdp)
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras1 = await fotoDeLaComposicion(cdp)
+      return {
+        detalle: (p) => {
+          imprimirComposicion(p, 'en la ficha, antes del toque', antes)
+          imprimirComposicion(p, 'tras tocar Inicio', enInicio)
+          imprimirComposicion(p, 'tras el primer atras', tras1)
+        },
+        medido: {
+          pila_tras_inicio: enInicio.pila,
+          aviso_armado_en_inicio: enInicio.aviso,
+          ruta_tras_un_atras: lugarDe(tras1.u),
+        },
+        esperado: {
+          pila_tras_inicio: ['/dashboard', '/clients', '/clients?c=*', '/dashboard'],
+          aviso_armado_en_inicio: 'no',
+          ruta_tras_un_atras: '/clients?c=*',
+        },
+      }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -3257,6 +3553,12 @@ const QUE_CIERRA = {
   'R-T-sidebar-seccion-activa': 'D-08 (plan 04-02, escritorio): tocar Negocio en el sidebar estando en Cobros vuelve a Datos consumiendo; con la URL pegada, sin salir del sitio',
   'R-T-secciones-sin-tab': 'T-1, control (plan 04-02): /servicios, /equipo y /consultorios con ?tab=cobros no se mueven y no tienen TabsList',
   'R-T-agenda-google': 'D-10 (plan 04-02, task 2): ?google=connected en Agenda -> un toast y /agenda por un reemplazo del helper, sin entradas y con {frjView:null}',
+  'R-C-2': 'C-2: Mas -> Negocio -> Cobros -> tocar Inicio; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, el aviso no se arma)',
+  'R-C-3': 'C-3: Mas -> Negocio -> Cobros -> tocar Turnos; esperado = la pila DERIVADA en el research, plan 04-03 (reemplaza el tab: Negocio y Mas debajo)',
+  'R-C-4': 'C-4: Mas -> Negocio -> Cobros -> tocar Mas; esperado = la pila DERIVADA en el research, plan 04-03 (empuja Mas encima del tab)',
+  'R-C-5': 'C-5 (escritorio): Negocio -> Cobros -> Finanzas por el sidebar; esperado = la pila DERIVADA en el research, plan 04-03 (el atras cae en Negocio)',
+  'R-C-6': 'C-6 (escritorio): Negocio -> Cobros -> Inicio por el sidebar; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, como el residuo de escritorio)',
+  'R-C-ficha': 'el hueco de ?c=: Clientes -> ficha -> tocar Inicio; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, el aviso no se arma)',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
