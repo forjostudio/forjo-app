@@ -51,7 +51,7 @@ covered_files:
   - "lib/unsaved-changes.ts"
   - "test/panel-branch.test.ts"
   - "test/panel-nav-chrome.test.ts"
-covered_digest: "v1:sha256:08fcb875a749516934c8d67fcdd1782146880ab6e2e7809b7c23a34ee461cc9f"
+covered_digest: "v1:sha256:7a92af19f7b37618ad6672e2c947382b69f60bcb3ed59d44e950f26aa7ae5806"
 behavior_unverified: 0
 overrides_applied: 0
 gaps: []
@@ -182,6 +182,15 @@ Gate de marcadores de deuda: **limpio** (ninguna marca sin referencia).
 ## Ítems de verificación humana
 
 Ninguno pendiente. Todo lo que exige teléfono real (Android Chrome, iPhone Safari, escritorio) fue corrido y aprobado por el dueño y está citado arriba con su sección de UAT. El **único** residuo no verificado en hardware es el de la Advertencia 4, que es una incógnita declarada del motor Safari y no un recorrido del guion que nadie haya corrido.
+
+## Re-sellado (2026-11-16, orquestador)
+
+Después de esta verificación cambió un solo archivo cubierto: `test/panel-branch.test.ts` (`7eedb66`, R2-WR-01 del
+code review ronda 2): el gate de la rama `ignore` ahora exige el orden leer → apagar del reintento de `G3-7`, más la
+guarda R2-IN-03. Es un test más estricto, no un cambio de comportamiento: `vitest --project pure
+test/panel-branch.test.ts` 224/224 y la mutación (invertir las dos líneas de `lib/panel-branch.ts`) lo pone rojo.
+La medición de R2-WR-02 (`261116-t5o`, veredicto `arma`) sólo tocó la sonda y documentos. `covered_digest`
+recalculado con `verification.fingerprint` sobre los mismos `covered_files`; el veredicto no cambia.
 
 ## Resumen de gaps
 
