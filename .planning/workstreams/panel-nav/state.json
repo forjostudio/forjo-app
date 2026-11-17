@@ -11,7 +11,7 @@
     {
       "number": "3",
       "name": "La política de atrás, de un nivel a dos",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "4",
@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-secure-phase 3 --ws panel-nav",
-    "label": "Cerrar la fase 3: security gate, verificacion del objetivo y /gsd-verify-work 3 (marca MOB-04/05/06)",
-    "reason": "Phase 03 · 17/17 planes; el 03-17 aprobado por el dueno el 2026-11-16 en produccion (3.4 ✅, deploy f8fa76f)"
+    "command": "/gsd-discuss-phase 4 --ws panel-nav",
+    "label": "Discutir la fase 4: los tabs profundos de /negocio, /settings y /finances en la URL sobre la politica de atras ya fijada",
+    "reason": "Phase 3 completa el 2026-11-16 (MOB-04/05/06 Complete); la fase 4 no tiene contexto ni planes"
   },
-  "updated_at": "2026-11-16T23:00:00.000Z"
+  "updated_at": "2026-11-17T02:07:03.337Z"
 }

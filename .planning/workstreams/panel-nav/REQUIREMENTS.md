@@ -54,7 +54,7 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
 
 ### La política de atrás, redefinida
 
-- [ ] **MOB-04**: El atrás tiene **dos niveles**: desde una sección abierta por Más vuelve a **Más**, y
+- [x] **MOB-04**: El atrás tiene **dos niveles**: desde una sección abierta por Más vuelve a **Más**, y
       desde Más vuelve a **Inicio**. Desde una sección de la barra vuelve a **Inicio**.
       ⚠ **PRECISADO el 2026-10-14 (D-02 de la Phase 3), no contradicho.** *Dos niveles* es la
       **profundidad de Más y sus secciones**, **no es un techo de la pila**: Más **apila sobre lo que
@@ -141,7 +141,7 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
         canal de propagación que **ya existía**, con el **mismo** consumidor, el **mismo** escritor
         único y la **misma** negativa a inventar una ruta. `panelNavMode` y `panelBranchPlan` quedan
         **intactas**, medidas por recorte: el arreglo es **aditivo**.
-- [ ] **MOB-05**: En **Inicio**, una vez que el dueño **tocó la pantalla** en esta visita, el atrás pide confirmación antes de salir del panel.
+- [x] **MOB-05**: En **Inicio**, una vez que el dueño **tocó la pantalla** en esta visita, el atrás pide confirmación antes de salir del panel.
       ✅ **RESUELTO el 2026-10-14 — la decisión está TOMADA: SE IMPLEMENTA** (D-01 de la Phase 3, ver
       `phases/03-la-pol-tica-de-atr-s-de-un-nivel-a-dos/03-CONTEXT.md`). El primer atrás en Inicio
       **no sale** y avisa; el segundo **sale de verdad** —con el sentinel armado, que desde el
@@ -270,7 +270,7 @@ a alguna página anterior, podemos poner una guarda ahí que diga ¿desea salir?
       ⚠ **PROHIBIDO tratar como regresión** las expectativas nuevas de esta decisión: el **1.3** sin
       tocar sale sin aviso (y sin hash); el **3.1** deja el aviso hasta un toque y el atrás siguiente
       vuelve a avisar; y el **1.4** y el **1.5** se comportan como el guion de la ronda 3 los declara.
-- [ ] **MOB-06**: Nada de esto rompe lo que ya está verificado en celular: el atrás sigue cerrando
+- [x] **MOB-06**: Nada de esto rompe lo que ya está verificado en celular: el atrás sigue cerrando
       overlays, selectores y el calendario antes que navegar, y el aviso de cambios sin guardar sigue
       frenando la salida.
 
@@ -413,9 +413,9 @@ dos casos, que es el invariante que importa. **La UAT tiene que poder distinguir
 | MOB-01 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-02 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
 | MOB-03 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) |
-| MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Pending — la **ronda 1** se corrió (2026-10-15, Android/Chrome): **16 pasados, 5 fallados** (7, 8, 15, 19, 20) y **una colisión de diseño** (bloque H, G-4). La **ronda 2** se corrió el 2026-10-27 y quedó **interrumpida a propósito**: 7, 8 y 15 **pasaron**, **19 falló** ⇒ gap **`G2-1`** (arreglado en `03-09`), y los otros seis ítems quedaron **sin correr** porque la regla nueva les cambia la expectativa. ⚠ **PRECISADO el 2026-10-27:** sección → raíz es un **retroceso**, con su límite declarado (la pila de tres escalones de D-02 sigue empujando). Lo que lo marca es la **ronda 3** (`03-UAT-GUION-3.md`, bloques 1 a 4 **y** 6) |
-| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos (⚠ patrón decidido en el UI-SPEC de la Phase 2) | Pending — ✅ decisión TOMADA el 2026-10-14: **se implementa** (D-01), forma cerrada en §13 con la regla de la constante única. ✅ Y la **`decision (a)`** del dueño el 2026-10-15 reconcilia la colisión con MOB-04, con su límite aceptado escrito. ⚠ **Y el 2026-10-27 el dueño declaró la consecuencia de la regla de `G2-1`:** `Más → tocar Inicio → atrás` **ya no vuelve a Más, avisa para salir** — está escrito debajo del requisito con prohibición de tratarlo como regresión. ⚠ Y el 2026-10-28 el dueño decidió el `camino 1`: el sentinel se arma sólo con activación y el aviso se queda hasta un toque; la promesa pasa a ser el aviso una vez que el dueño tocó la pantalla en esta visita. Pendiente la ronda 3 en los dos motores. Pendiente **sólo** la verificación en celular real, en la **ronda 3** (bloques 1 a 4 **y** 6) |
-| MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Pending — ⚠ **`cero regresion` ya verificado en ANDROID** en la ronda 1 (el bloque E, ítems 10-13, pasó; marcado a mano por el dueño). Le falta **sólo iPhone / Safari (A11)** más la **parte de overlay del ítem 20**, que nunca se midió: lo cierra la **ronda 3**, el bloque **6** más la parte de overlay del bloque 3 |
+| MOB-04 | Phase 3 — La política de atrás, de un nivel a dos | Complete (2026-11-16) — dos niveles verificados en Android (ronda 3, 2026-10-29) e iPhone (bloque 6, 2026-10-29; re-prueba 2026-11-16). Cierre: `03-VERIFICATION.md` passed 6/6, `03-SECURITY.md` threats_open 0, `03-UAT-CIERRE.md` 10/10 (2026-11-16). Historia de las rondas: `03-UAT.md`, `03-UAT-2.md` |
+| MOB-05 | Phase 3 — La política de atrás, de un nivel a dos | Complete (2026-11-16) — implementado con el `camino 1` (decisión del dueño 2026-10-28: el aviso se arma con activación y se queda hasta un toque); costos declarados en `03-DECISION-UAT-3.md`, incl. `G3-10` (2026-11-16). Cierre: `03-VERIFICATION.md` passed 6/6, `03-SECURITY.md` threats_open 0, `03-UAT-CIERRE.md` 10/10 (2026-11-16). |
+| MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Complete (2026-11-16) — cero regresión: overlays/selectores/calendario/teclado (ronda 1 bloque E + 3.2) y el aviso de cambios sin guardar (ronda 2 ítem 15), en Android e iPhone. Cierre: `03-VERIFICATION.md` passed 6/6, `03-SECURITY.md` threats_open 0, `03-UAT-CIERRE.md` 10/10 (2026-11-16). |
 | MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) — ⚠ **con enmienda** del 2026-10-14 por D-05: ver la nota debajo del requisito. La política de navegación no cambia en escritorio (criterio 6 intacto); **sí** cambia el costo de salir del panel |
 | MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
 | MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |

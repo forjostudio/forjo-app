@@ -123,7 +123,7 @@ Esto salió de leer el código hoy, y corrige o completa lo que dicen los requis
 ### Milestone v0.31 — La navegación mobile del panel
 
 - [x] **Phase 2: La barra inferior y Más** - En mobile el panel se navega desde una barra fija de 5 destinos que respeta la zona segura del teléfono y un "Más" que guarda el resto del menú del rubro sin perder ninguna fila; el mecanismo de historial no se toca y desktop queda idéntico (completed 2026-10-09)
-- [ ] **Phase 3: La política de atrás, de un nivel a dos** - El atrás pasa a tener dos niveles (sección → Más → Inicio) sin romper nada de lo que el dueño ya verificó en celular, y la guarda de salida en Inicio se decide con los números a la vista en vez de asumirse
+- [x] **Phase 3: La política de atrás, de un nivel a dos** - El atrás pasa a tener dos niveles (sección → Más → Inicio) sin romper nada de lo que el dueño ya verificó en celular, y la guarda de salida en Inicio se decide con los números a la vista en vez de asumirse (completed 2026-11-16)
 - [ ] **Phase 4: Los tabs profundos sobre la política ya fijada** - Los tabs de `/negocio`, `/settings` y `/finances` viven en la URL contra la política definitiva, sin tocar las otras tres rutas que comparten esa pantalla ni romper el retorno del OAuth de MercadoPago
 
 ## Phase Details
@@ -462,7 +462,7 @@ sesión del usuario**, no de tenant: un `back()` sobre una entrada ajena **expul
 mitigan, y es lo que un `/gsd-secure-phase` tendría que mirar acá. Riesgo bajo en términos de datos,
 medio en términos de pérdida de trabajo del dueño.
 
-**Plans:** 17/17 plans executed — el **03-17** (`G3-9`: el modal de planes cortado en el celular; medir `G3-10`: cerrar el diálogo con el atrás; decisión del dueño del 2026-11-16) **ejecutado y aprobado por el dueño el 2026-11-16 en producción** (3.4 ✅ «Todo bien», deploy `f8fa76f`; `G3-9` arreglado y medido RED → GREEN; `veredicto G3-10: otro`, declarado **costo del camino 1**; `R-login-con-activacion` **retirado** de la no-regresión —desde `f75e739` el login hace recarga completa—); antes, el **03-16** (`G3-5` el aviso se queda al soltar el atajo; `G3-7` cerrar un diálogo de Inicio re-arma) **ejecutado y aprobado por el dueño el 2026-11-16 en producción** (4.3, 4.2, 3.3 con la X, 1.5 ✅); el 3.3 abrió `G3-9` (el modal de planes cortado) y `G3-10` (cerrar con el atrás), que van a un **03-17**; antes, el **03-15** (los gaps del code review) **ejecutado el 2026-10-30 y parado por diseño en P-4 tras medir**: WR-05 entregado, `G3-6` y `G3-8` descartados, `G3-5` (otro) y `G3-7` (confirmado) decididos por el dueño y pasados al **03-16**; antes, el **03-14** (cierre de `G3-4`, el aterrizaje del login) **ejecutado y aprobado por el dueño el 2026-10-29** («Todo perfecto»: 1.6, 3.2, 4.1 y 4.2 ✅, ver `03-UAT-2.md` § «Re-prueba tras el 03-14 — 2026-10-29»); **la fase queda lista para su cierre** —security gate, code review y `/gsd-verify-work 3 --ws panel-nav`, que es el paso que marca MOB-04/05/06— (historia: 4 originales + 4 de cierre de gaps tras la UAT del 2026-10-15 + 2 de cierre de **G2-1** tras la ronda 2 del 2026-10-27 + **1 de cierre de `G3-1`** tras la ronda 3 del 2026-10-28, ejecutado el 2026-10-28 + **2 de cierre de `G3-2` y `G3-3`** tras la re-corrida de la ronda 3 del 2026-10-28: el **03-12** ejecutado el 2026-10-28 —midio que la causa es la **intervencion de historial** de Chrome y no la referencia, ver `.planning/debug/la-absorcion-que-no-absorbe-medida.md`— y el **03-13** **re-planificado** el 2026-10-28 sobre la **decision del dueno** —el sentinel se arma solo con activacion del usuario y el aviso no vence solo, ver `03-DECISION-UAT-3.md`— y **ejecutado el 2026-10-29 hasta su checkpoint de bloqueo humano**: tasks 1-4 commiteados, la sonda de la app 11/11 con el atras de la interfaz, la ronda 3 en los dos motores **pendiente del dueno**). **Historia de los cierres (ya resuelta por el 03-14):** el plan 03-11 paro en su checkpoint de **bloqueo humano**, la re-corrida de la ronda 3 encontro **dos fallos mas** —`G3-2` (el aviso no se re-arma al expirar la ventana) y `G3-3` (entrando directo a Inicio el hash esta y el primer atras sale igual)—, y los planes **03-12** (medir el mecanismo) y **03-13** (el arreglo) los cierran. La ronda 3 se re-corre **desde el principio** en los dos motores, y esta vez con el **bloque 4** (escritorio) y el **bloque 6** (iPhone), que nunca se corrieron.
+**Plans:** 17/17 plans complete
 
 Plans:
 
@@ -733,5 +733,5 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
-| 3. La política de atrás, de un nivel a dos | 17/17 | In Progress|  |
+| 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
 | 4. Los tabs profundos sobre la política ya fijada | 0/? | Not started | - |
