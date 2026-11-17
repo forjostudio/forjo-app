@@ -29,10 +29,15 @@ const MAS = '/mas'
 // "qué se decide" sí se cubre entero acá. Mismo criterio que `lib/unsaved-changes.test.ts` y
 // `lib/overlay-history.ts`.
 
-/** Las seis causas, para poder barrer la tabla entera sin escribirlas seis veces a mano. */
+/**
+ * Las siete causas, para poder barrer la tabla entera sin escribirlas siete veces a mano. La séptima,
+ * `user-switch`, es la de los tabs de la Phase 4 (plan 04-01): entra acá para que la regla 0 y la
+ * regla 2 también la barran.
+ */
 const TODAS_LAS_CAUSAS: PanelViewCause[] = [
   'user-open',
   'user-close',
+  'user-switch',
   'programmatic',
   'filter',
   'stale',
@@ -365,6 +370,104 @@ describe('panelViewUrl — el armado de URL, puro', () => {
 
   it('preserva los params ajenos', () => {
     expect(panelViewUrl({ pathname: '/clients', search: '?otro=1&c=abc', param: 'c', value: null })).toBe('/clients?otro=1')
+  })
+})
+
+describe('panelViewUrl con `drop` — el retorno del OAuth limpia SUS params sin pisar los ajenos (plan 04-01)', () => {
+  // POR QUÉ EXISTE: el retorno de MercadoPago y de Google aterriza en `/negocio?mp=…` / `?google=…`, y
+  // la pantalla tiene que dejar la URL en `/negocio?tab=integraciones` con UNA escritura. Sin `drop`,
+  // el armado sólo sabe poner o sacar SU param y preservar el resto: `mp` quedaría colgado. Con `drop`
+  // se borran los params que la pantalla declara suyos y los ajenos sobreviven. Lo consume el 04-02.
+  it('?mp=connected + tab integraciones + drop [mp, google] ⇒ /negocio?tab=integraciones', () => {
+    expect(
+      panelViewUrl({ pathname: '/negocio', search: '?mp=connected', param: 'tab', value: 'integraciones', drop: ['mp', 'google'] }),
+    ).toBe('/negocio?tab=integraciones')
+  })
+
+  it('los params ajenos sobreviven: ?mp=connected&x=1 ⇒ /negocio?x=1&tab=integraciones', () => {
+    expect(
+      panelViewUrl({ pathname: '/negocio', search: '?mp=connected&x=1', param: 'tab', value: 'integraciones', drop: ['mp', 'google'] }),
+    ).toBe('/negocio?x=1&tab=integraciones')
+  })
+
+  it('sin params restantes queda el pathname a secas, nunca un `?` colgando', () => {
+    expect(
+      panelViewUrl({ pathname: '/negocio', search: '?google=error', param: 'tab', value: null, drop: ['mp', 'google'] }),
+    ).toBe('/negocio')
+  })
+
+  it('sin `drop` (default vacío) todo sigue igual que antes: /clients no cambia', () => {
+    expect(panelViewUrl({ pathname: '/clients', search: '?otro=1&c=abc', param: 'c', value: 'xyz' })).toBe('/clients?otro=1&c=xyz')
+    expect(panelViewUrl({ pathname: '/clients', search: '?otro=1&c=abc', param: 'c', value: 'xyz', drop: [] })).toBe('/clients?otro=1&c=xyz')
+  })
+})
+
+describe('applyPanelView — UN REEMPLAZO NO CAMBIA QUIÉN EMPUJÓ LA ENTRADA (Patrón 3, plan 04-01)', () => {
+  // EL DEFECTO, paso a paso (04-RESEARCH §Patrón 3): una entrada AJENA —una URL pegada, el retorno del
+  // OAuth— recibe un reemplazo nuestro; si ese reemplazo escribe la marca, la entrada pasa a "ser
+  // nuestra", y el próximo consumo (volver al tab por defecto, el «Volver» de clientes, tocar la
+  // sección activa en el sidebar) hace un retroceso sobre ella: el dueño sale del sitio. Es la
+  // cicatriz 2 del módulo. La regla: sólo un EMPUJE crea una entrada nuestra; un reemplazo conserva la
+  // propiedad que la entrada ya tenía y nunca la fabrica.
+
+  /** Una pila de UNA entrada cuyo state cambia con cada escritura (el reemplazo lo pisa de verdad). */
+  function montarEntrada(state: unknown, search = '') {
+    const pila = { state, search, retrocesos: 0 }
+    const pushState = vi.fn((s: unknown) => { pila.state = s })
+    const replaceState = vi.fn((s: unknown) => { pila.state = s })
+    const back = vi.fn(() => { pila.retrocesos++ })
+    vi.stubGlobal('window', {
+      history: { get state() { return pila.state }, pushState, replaceState, back },
+      location: { pathname: '/clients', get search() { return pila.search } },
+    })
+    return { pila, pushState, replaceState, back }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('el empuje escribe la marca: la entrada que creamos es nuestra', () => {
+    const { pushState } = montarEntrada(null)
+    expect(PH.applyPanelView({ cause: 'user-open', param: 'c', from: null, to: 'abc' })).toBe('push')
+    expect(pushState).toHaveBeenCalledWith({ frjView: 'c' }, '', '/clients?c=abc')
+  })
+
+  it('un reemplazo CON holding conserva la marca (la entrada ya era nuestra)', () => {
+    const { replaceState } = montarEntrada({ frjView: 'c' }, '?c=a')
+    expect(PH.applyPanelView({ cause: 'programmatic', param: 'c', from: 'a', to: 'b' })).toBe('replace')
+    expect(replaceState).toHaveBeenCalledWith({ frjView: 'c' }, '', '/clients?c=b')
+  })
+
+  it('un reemplazo SIN holding NO fabrica la marca sobre una entrada ajena', () => {
+    const { replaceState } = montarEntrada({ __NA: true }, '?c=dup')
+    expect(PH.applyPanelView({ cause: 'programmatic', param: 'c', from: 'dup', to: 'keep' })).toBe('replace')
+    expect(replaceState).toHaveBeenCalledWith({ frjView: null }, '', '/clients?c=keep')
+  })
+
+  it('CAMBIO DECLARADO en /clients: sobre una ?c= pegada, tras la fusión «Volver» REEMPLAZA en vez de retroceder fuera del sitio', () => {
+    // Antes del arreglo, la fusión `programmatic` sobre la `?c=` pegada marcaba la entrada, y el
+    // `user-close` del «Volver» consumía: un retroceso sobre una entrada que no empujamos. Ahora la
+    // entrada sigue siendo ajena y el cierre la reemplaza a `/clients`.
+    const { pila, back, replaceState } = montarEntrada({ __NA: true }, '?c=dup')
+    PH.applyPanelView({ cause: 'programmatic', param: 'c', from: 'dup', to: 'keep' })
+    pila.search = '?c=keep'
+    expect(PH.applyPanelView({ cause: 'user-close', param: 'c', from: 'keep', to: null })).toBe('replace')
+    expect(back).not.toHaveBeenCalled()
+    expect(pila.retrocesos).toBe(0)
+    expect(replaceState).toHaveBeenLastCalledWith({ frjView: null }, '', '/clients')
+  })
+
+  it('la séptima causa: user-switch reemplaza con y sin holding', () => {
+    for (const holding of [false, true]) {
+      expect(panelHistoryAction({ cause: 'user-switch', from: 'a', to: 'b', holding, foreignOwnsTop: false })).toBe('replace')
+    }
+  })
+
+  it('applyPanelView pasa `drop` al armado de URL', () => {
+    const { replaceState } = montarEntrada({ __NA: true }, '?mp=connected')
+    expect(PH.applyPanelView({ cause: 'programmatic', param: 'tab', from: null, to: 'integraciones', drop: ['mp', 'google'] })).toBe('replace')
+    expect(replaceState).toHaveBeenCalledWith({ frjView: null }, '', '/clients?tab=integraciones')
   })
 })
 

@@ -269,6 +269,55 @@ describe('el simulador de pila — el applyPanelView REAL contra una historia fa
   })
 })
 
+describe('el simulador de pila — una entrada AJENA no se vuelve nuestra por un reemplazo (Patrón 3, plan 04-01, task 2)', () => {
+  // D-03: entrar directo a un tab por URL no fabrica una entrada del default por debajo, así que el
+  // atrás —y cualquier consumo— tiene que salir de la sección SIN pasar por un retroceso sobre la
+  // entrada pegada. Con el defecto, el reemplazo del cambio de tab marcaba esa entrada como nuestra y
+  // el toque al default retrocedía a la página de afuera.
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('D-03: /negocio?tab=cobros PEGADA → Integraciones → Datos: cero retrocesos, la URL en /negocio', () => {
+    const { pila, actual } = montarHistoria([{ url: '/afuera', state: null }, { url: '/negocio?tab=cobros', state: { __NA: true } }])
+    expect(tocar(TABS_NEGOCIO, 'integraciones')).toBe('replace')
+    expect(actual().state).toEqual({ frjView: null })
+    expect(tocar(TABS_NEGOCIO, 'business')).toBe('replace')
+    expect(pila.retrocesos).toBe(0)
+    expect(pila.indice).toBe(1)
+    expect(actual().url).toBe('/negocio')
+  })
+
+  it('D-09 en la pila: /negocio?mp=connected → integraciones con drop, sin agregar entradas; Datos después no retrocede', () => {
+    const { pila, actual } = montarHistoria([{ url: '/afuera', state: null }, { url: '/negocio?mp=connected', state: { __NA: true } }])
+    expect(applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: null, to: 'integraciones', drop: ['mp', 'google'] })).toBe('replace')
+    expect(actual().url).toBe('/negocio?tab=integraciones')
+    expect(actual().state).toEqual({ frjView: null })
+    expect(pila.entradas).toHaveLength(2)
+    expect(tocar(TABS_NEGOCIO, 'business')).toBe('replace')
+    expect(pila.retrocesos).toBe(0)
+    expect(actual().url).toBe('/negocio')
+  })
+
+  it('D-08 sobre una entrada ajena: tras la URL pegada + Integraciones, consumeOwnedPanelEntry no retrocede', () => {
+    const { pila } = montarHistoria([{ url: '/afuera', state: null }, { url: '/negocio?tab=cobros', state: { __NA: true } }])
+    tocar(TABS_NEGOCIO, 'integraciones')
+    expect(PH.consumeOwnedPanelEntry()).toBe(false)
+    expect(pila.retrocesos).toBe(0)
+    expect(pila.indice).toBe(1)
+  })
+
+  it('el contrapuesto: la entrada que SÍ empujamos sigue siendo nuestra tras un user-switch y se consume', () => {
+    const { pila, actual } = montarHistoria([{ url: '/negocio', state: { frjUnder: '/mas' } }])
+    tocar(TABS_NEGOCIO, 'cobros')
+    tocar(TABS_NEGOCIO, 'integraciones')
+    expect(actual().state).toEqual({ frjView: 'tab' })
+    expect(PH.consumeOwnedPanelEntry()).toBe(true)
+    expect(pila.retrocesos).toBe(1)
+    expect(actual().url).toBe('/negocio')
+  })
+})
+
 // ── 4) Los candados estáticos de Finanzas ────────────────────────────────────────────────────────
 // Se afirman LEYENDO las fuentes (no hay DOM en este runner). Cada barrido descuenta los comentarios
 // ANTES de afirmar —molde de `test/panel-history-clients.test.ts`— salvo el del criterio 5, que es

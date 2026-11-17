@@ -85,8 +85,12 @@ const CLIENTS_PAGE = `${PANTALLA}/page.tsx`
 const HELPER = 'lib/panel-history.ts'
 const OVERLAY = 'lib/overlay-history.ts'
 
-/** Las seis causas del helper, con sus literales tal como se escriben en un call site. */
-const CAUSAS = ["'user-open'", "'user-close'", "'programmatic'", "'filter'", "'stale'", "'concurrent'"]
+/**
+ * Las siete causas del helper, con sus literales tal como se escriben en un call site. La séptima
+ * (`'user-switch'`, los tabs de la Phase 4, plan 04-01) entra para que los barridos de abajo también la
+ * nieguen en las regiones de clientes.
+ */
+const CAUSAS = ["'user-open'", "'user-close'", "'user-switch'", "'programmatic'", "'filter'", "'stale'", "'concurrent'"]
 
 /** Las mutaciones crudas del historial del navegador: el criterio 4 del roadmap, literal. */
 const HISTORIAL_CRUDO = ['pushState', 'replaceState', 'history.back', 'history.forward', 'history.go']

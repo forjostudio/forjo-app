@@ -2657,6 +2657,55 @@ const RECORRIDOS = [
       }
     },
   },
+  // plan 04-01, task 2 (Patron 3): una entrada AJENA no se vuelve nuestra por un reemplazo. El `esperado`
+  // se escribe ANTES del arreglo del ejecutor: con el defecto, el cambio a Egresos marca la entrada
+  // pegada como nuestra y el toque a Turnos retrocede a la pagina de afuera.
+  {
+    id: 'R-T-finanzas-url-pegada',
+    titulo: 'D-03 + Patron 3 + D-04: /finances?tab=ventas PEGADA -> Egresos -> Turnos; la URL queda en /finances DENTRO del sitio, sin marca fabricada, y el atras sale de la seccion',
+    async correr(cdp) {
+      await navegar(cdp, AFUERA)
+      await cdp.enviar('Page.resetNavigationHistory')
+      const desde = registros.length
+      await navegar(cdp, ORIGEN + '/finances?tab=ventas')
+      await asentar(desde, 15_000)
+      await asentarTab(cdp)
+      const alEntrar = { u: await ubicacion(cdp), tab: await tabActivo(cdp), alta: await altaVisible(cdp), pila: await pilaConQuery(cdp) }
+      await tocarTab(cdp, 'Egresos')
+      const trasEgresos = { u: await ubicacion(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
+      await tocarTab(cdp, 'Turnos')
+      await asentarTab(cdp)
+      const u = await ubicacion(cdp)
+      const trasTurnos = { u, tab: u === '(afuera)' ? 'ninguno' : await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al entrar: url=${alEntrar.u} tab=${alEntrar.tab} alta=${alEntrar.alta} pila=[${alEntrar.pila.entradas.join(', ')}] actual=${alEntrar.pila.indice}`)
+          console.log(`${p}tras Egresos: url=${trasEgresos.u} estado=${trasEgresos.estado} pila=[${trasEgresos.pila.entradas.join(', ')}] actual=${trasEgresos.pila.indice}`)
+          console.log(`${p}tras Turnos: url=${trasTurnos.u} tab=${trasTurnos.tab} pila=[${trasTurnos.pila.entradas.join(', ')}] actual=${trasTurnos.pila.indice}`)
+          console.log(`${p}tras el atras: url=${trasElAtras.u} pila=[${trasElAtras.pila.entradas.join(', ')}] actual=${trasElAtras.pila.indice}`)
+        },
+        medido: {
+          tab_al_entrar: alEntrar.tab,
+          alta_al_entrar: alEntrar.alta,
+          marca_tras_egresos: trasEgresos.estado,
+          ubicacion_tras_turnos: trasTurnos.u,
+          tab_tras_turnos: trasTurnos.tab,
+          ruta_tras_el_atras: rutaDe(trasElAtras.u),
+        },
+        esperado: {
+          tab_al_entrar: 'Ventas',
+          alta_al_entrar: 'Nueva venta',
+          marca_tras_egresos: '{"frjView":null}',
+          ubicacion_tras_turnos: '/finances',
+          tab_tras_turnos: 'Turnos',
+          ruta_tras_el_atras: '(afuera)',
+        },
+      }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -2759,6 +2808,7 @@ const QUE_CIERRA = {
   'R-T-finanzas-por-mas': 'D-01 + D-04 (plan 04-01): por Mas, Ventas lleva ?tab=ventas con Nueva venta; atras -> Turnos sin alta -> Mas -> Inicio',
   'R-T-finanzas-desde-inicio': 'D-01 (plan 04-01): desde la tarjeta de Inicio, Egresos lleva ?tab=egresos con Nuevo egreso; atras -> Turnos -> Inicio',
   'R-T-finanzas-invalido': 'D-06 + D-07 (plan 04-01): ?tab=constructor, ?tab= y ?tab=turnos se sanean a /finances en Turnos sin agregar entradas',
+  'R-T-finanzas-url-pegada': 'D-03 + Patron 3 (plan 04-01, task 2): ?tab=ventas pegada -> Egresos -> Turnos queda en /finances dentro del sitio y el atras sale',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
