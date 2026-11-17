@@ -221,3 +221,8 @@ None - no external service configuration required.
 ---
 *Phase: 04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada*
 *Completed: 2026-11-17*
+
+## Self-Check: PASSED
+
+- Los 4 archivos creados existen (`lib/panel-tabs.ts`, `test/panel-tabs.test.ts`, `.planning/debug/tabs-en-la-url-medida.md`, `deferred-items.md`).
+- Los 13 commits del plan existen (`efb9ae4` … `f24ad6f`); `test(04-01)` antes de `feat(04-01)` y de `fix(04-01)` (gates 4 de los dos tasks).
