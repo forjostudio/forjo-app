@@ -78,6 +78,7 @@ current_phase_name: la-pol-tica-de-atr-s-de-un-nivel-a-dos
 | fast-261029 | Sin autoscroll al entrar a /web (el flag de montaje de los widgets de reserva vs Strict Mode) | 2026-10-29 | 76f98f3 | — |
 | fast-261116 | CI: CLI de Supabase fijo en 2.122.1 (`latest` paso a v3 y rechaza `[inbucket]`) | 2026-11-16 | 6750b5d | — |
 | fast-261116b | R2-WR-01: el gate de la rama ignore exige leer el reintento antes de apagarlo (probado con mutacion) + guarda R2-IN-03 | 2026-11-16 | 7eedb66 | — |
+| 261116-t5o | R2-WR-02 medido: cerrar el dialogo con el atras enseguida y tocar despues → el atras siguiente avisa (veredicto arma, entradas_salteadas=0; lo devuelve Chrome, no el modulo) | 2026-11-16 | 8f58a54 | [261116-t5o-medir-r2-wr-02-g3-10-pronto-y-toque](./quick/261116-t5o-medir-r2-wr-02-g3-10-pronto-y-toque/) |
 
 ## Decisions
 
