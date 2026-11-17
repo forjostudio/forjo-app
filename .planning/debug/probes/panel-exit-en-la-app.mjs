@@ -942,15 +942,18 @@ async function tocarTab(cdp, texto) {
   // salia "quieta" porque la propia sonda la re-centraba, mientras la pagina seguia moviendo el scroll
   // por su cuenta. Ahora se centra UNA vez por intento y las lecturas siguientes NO mueven nada: tres
   // iguales seguidas son quietud de verdad.
-  // ⚠ CUARTA VUELTA (la que lo explica): con la lectura quieta los clicks SEGUIAN cayendo en un `div`. Los
-  // dos sistemas de coordenadas son distintos cuando la pagina esta ESCALADA: `elementFromPoint` y
-  // `getBoundingClientRect` hablan del viewport de LAYOUT, y `Input.dispatchMouseEvent` del VISUAL. Con la
-  // emulacion `mobile: true`, un documento que NACE con contenido mas ancho que 390 px se abre con zoom de
-  // ajuste (escala < 1), y el punto del layout no es el punto que se toca. Por eso el punto se convierte al
-  // viewport visual (`visualViewport.offsetLeft/offsetTop/scale`); con escala 1 la conversion es la
-  // identidad y los recorridos de antes no se mueven.
+  // ⚠ CUARTA VUELTA (la que lo cerro): con la lectura quieta los clicks SEGUIAN cayendo en un `div`. Los
+  // dos sistemas de coordenadas son distintos cuando el viewport VISUAL no coincide con el de LAYOUT:
+  // `elementFromPoint` y `getBoundingClientRect` hablan del de layout, y `Input.dispatchMouseEvent` del
+  // visual. Con la emulacion `mobile: true` el visual puede quedar ESCALADO o DESPLAZADO dentro del de
+  // layout (un `scrollIntoView` puede mover el visual y no el de layout), y entonces el punto del layout
+  // no es el punto que se toca. Por eso el punto se convierte al viewport visual
+  // (`visualViewport.offsetLeft/offsetTop/scale`); con escala 1 y desplazamiento 0 la conversion es la
+  // identidad y los recorridos de antes no se mueven. Medido: con la conversion, el mismo recorrido que
+  // daba seis clicks en un `div` ajeno toco Egresos y Turnos al primer intento. La sonda imprime escala y
+  // desplazamiento cuando no son la identidad.
   const centrar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return false; t.scrollIntoView({ block: 'center' }); return true })()`
-  const buscar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return null; const b = t.getBoundingClientRect(); const cx = b.x + b.width / 2, cy = b.y + b.height / 2; const el = document.elementFromPoint(cx, cy); const vv = globalThis.visualViewport; const escala = vv ? vv.scale : 1; const x = vv ? (cx - vv.offsetLeft) * escala : cx; const y = vv ? (cy - vv.offsetTop) * escala : cy; return { x, y, escala, ancho: document.documentElement.scrollWidth, adentro: Boolean(el && t.contains(el)) } })()`
+  const buscar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return null; const b = t.getBoundingClientRect(); const cx = b.x + b.width / 2, cy = b.y + b.height / 2; const el = document.elementFromPoint(cx, cy); const vv = globalThis.visualViewport; const escala = vv ? vv.scale : 1; const x = vv ? (cx - vv.offsetLeft) * escala : cx; const y = vv ? (cy - vv.offsetTop) * escala : cy; return { x, y, escala, dx: vv ? vv.offsetLeft : 0, dy: vv ? vv.offsetTop : 0, ancho: document.documentElement.scrollWidth, adentro: Boolean(el && t.contains(el)) } })()`
   const seleccionado = `(() => { if (!location.protocol.startsWith('http')) return 'afuera'; const t = [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); return t && t.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) ? 'si' : 'no' })()`
   for (let intento = 1; intento <= 3; intento++) {
     // La posicion QUIETA: tres lecturas iguales seguidas, cada 250 ms, con el punto adentro del tab.
@@ -970,7 +973,7 @@ async function tocarTab(cdp, texto) {
       await dormir(250)
     }
     if (!punto) throw new Error(`no hay un tab visible que empiece con ${texto}`)
-    if (punto.escala !== 1) console.log(`      la pagina esta escalada al tocar ${texto}: escala=${punto.escala} ancho del documento=${punto.ancho}px`)
+    if (punto.escala !== 1 || punto.dx !== 0 || punto.dy !== 0) console.log(`      el viewport visual no es el de layout al tocar ${texto}: escala=${punto.escala} desplazamiento=(${punto.dx},${punto.dy}) ancho del documento=${punto.ancho}px`)
     await clickEnPunto(cdp, punto)
     const tope = Date.now() + (intento < 3 ? 2_000 : 10_000)
     let s = 'no'
