@@ -702,7 +702,7 @@ se programa)
   con el cambio confinado a L992-1021 (las otras tres rutas sin moverse, con candados y un control en la app), el retorno
   del OAuth como UN `replace` del helper hacia Integraciones, Agenda limpia su `?google=` por el helper, D-08 medido en el
   sidebar, y el barrido crudo del criterio 5 en cero
-- [ ] `04-03-PLAN.md` — wave 3 · **La composición medida y la decisión del dueño**: seis recorridos con la pila DERIVADA
+- [x] `04-03-PLAN.md` — wave 3 · **La composición medida y la decisión del dueño**: seis recorridos con la pila DERIVADA
   como esperado, un `checkpoint:decision` bloqueante (A declarar / B1 la barra / B2 la barra y el sidebar), y por escrito
   el «PRECISADO» de D-01 sobre el criterio 1 y MOB-08 y el residuo que quede en los cuatro lugares
 - [ ] `04-04-PLAN.md` — wave 4 · **(condicional, sólo con B1/B2) B1 en la barra**: el séptimo miembro
@@ -762,4 +762,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 2/5 | In Progress | - |
+| 4. Los tabs profundos sobre la política ya fijada | 3/5 | In Progress | - |
