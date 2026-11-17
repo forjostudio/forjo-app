@@ -5,7 +5,7 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 4 — Los tabs profundos sobre la política ya fijada
 current_plan: 5
 status: executing
-stopped_at: "Phase 4: 5/5 planes ejecutados (UAT del dueno aprobada en 974a131); falta seguridad, code review, verifier y /gsd-verify-work 4"
+stopped_at: "Phase 4 ejecutada 5/5; verificacion human_needed (5/5 criterios); code review 0B/4W/3I; proximo /gsd-verify-work 4 --ws panel-nav (obs-1/WR-01..04) y /gsd-secure-phase 4"
 last_updated: "2026-11-17T10:24:04.996Z"
 last_activity: 2026-11-17
 last_activity_desc: "Phase 4: 5/5 planes ejecutados, UAT en produccion aprobada; en verificacion (seguridad, code review, verifier)"

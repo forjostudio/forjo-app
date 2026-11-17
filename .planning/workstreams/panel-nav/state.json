@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-execute-phase 4 --ws panel-nav",
-    "label": "Seguir ejecutando la fase 4 (Phase 4: 5/5 planes ejecutados, UAT en produccion aprobada; en verificacion (seguridad, code review, verifier))",
-    "reason": "Phase 4 en ejecucion desde 2026-11-17 (5 planes; el 04-04 condicional a la decision del 04-03)"
+    "command": "/gsd-verify-work 4 --ws panel-nav",
+    "label": "Cerrar la fase 4: verify-work (obs-1 / WR-01..04) y secure-phase",
+    "reason": "Phase 4 ejecutada 5/5, UAT en produccion aprobada; verificacion human_needed; code review con 4 warnings"
   },
   "updated_at": "2026-11-17T10:24:05.049Z"
 }
