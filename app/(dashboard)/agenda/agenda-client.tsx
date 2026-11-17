@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useSyncExternalStore, type MouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { applyPanelView } from '@/lib/panel-history'
 import { createClient } from '@/lib/supabase/client'
 import { Business, TimeBlock, Location, ScheduleException, Service, Professional, Client, TimeBlockService } from '@/lib/types'
 import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, addDays, isSameMonth, isSameDay, isBefore, startOfDay } from 'date-fns'
@@ -282,12 +283,24 @@ export function AgendaClient({ business, initialTimeBlocks, initialLocations, in
   }
 
   // Aviso al volver del OAuth de Google (?google=connected|error) y limpieza de la URL.
+  // Phase 4 (D-10): la limpieza deja de ser una escritura cruda del historial y pasa por el helper: un
+  // reemplazo `stale` que borra SÓLO `google` y preserva cualquier otro param de la query (el literal
+  // '/agenda' de antes los pisaba todos), con un state fresco del helper. Agenda NO gana tabs: sólo se
+  // limpia la query; su aviso de cambios sin guardar no tiene nada que ver con esto y no se toca.
+  // El aviso se pide en la PRÓXIMA tarea y no acá: el `<Toaster>` de sonner se suscribe en su propio
+  // efecto y está montado DESPUÉS de las páginas (`app/layout.tsx`), así que su efecto corre después de
+  // éste y un toast pedido ahora se pierde sin error en un documento nuevo —que es siempre el caso del
+  // retorno del OAuth: medido el 2026-11-17 en el plan 04-02, cero toasts con el código de antes—. Sin
+  // limpieza A PROPÓSITO: el desmontaje simulado del modo estricto la correría, y como la segunda corrida
+  // ya no ve la query, el aviso no saldría nunca.
   useEffect(() => {
     const g = new URLSearchParams(window.location.search).get('google')
     if (!g) return
-    if (g === 'connected') toast.success('Google Calendar conectado')
-    else if (g === 'error') toast.error('No se pudo conectar con Google Calendar')
-    window.history.replaceState(null, '', '/agenda')
+    setTimeout(() => {
+      if (g === 'connected') toast.success('Google Calendar conectado')
+      else if (g === 'error') toast.error('No se pudo conectar con Google Calendar')
+    }, 0)
+    applyPanelView({ cause: 'stale', param: 'google', from: g, to: null })
   }, [])
 
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false)
