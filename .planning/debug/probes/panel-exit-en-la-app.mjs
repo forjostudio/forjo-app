@@ -1007,6 +1007,52 @@ async function asentarTab(cdp, tope = 5_000) {
   }
 }
 
+// ── Las primitivas del plan 04-02 (Negocio, Configuracion, el retorno del OAuth y T-1) ───────────
+
+/**
+ * El toque REAL en el enlace visible a `href` ESTANDO YA en esa ruta (D-08: tocar la seccion activa del
+ * sidebar con un tab abierto). Espera hasta 10 s a que el enlace este a la vista Y enganchado por React
+ * (sin eso un click sobre una URL recien pegada no hace nada y no mide nada), lo toca en su centro
+ * convertido al viewport VISUAL (la misma cuenta que `tocarTab`), y espera hasta 10 s a que
+ * `location.search` quede vacio, y 800 ms de asentado.
+ * ⚠ NO usa `asentar`: esa espera un registro de armado que un toque sobre la MISMA ruta no produce.
+ * ⚠ NO tira si la query no se vacia: ESE es el resultado a medir. Tira solo si no hay enlace (P-1).
+ */
+async function tocarSeccionActiva(cdp, href) {
+  const buscar = `(() => { const a = [...document.querySelectorAll('a[href=' + JSON.stringify(${JSON.stringify(href)}) + ']')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); if (!a) return null; const b = a.getBoundingClientRect(); const cx = b.x + b.width / 2, cy = b.y + b.height / 2; const vv = globalThis.visualViewport; const escala = vv ? vv.scale : 1; return { x: vv ? (cx - vv.offsetLeft) * escala : cx, y: vv ? (cy - vv.offsetTop) * escala : cy, enganchado: Object.keys(a).some((k) => k.startsWith('__reactProps')) } })()`
+  const tope = Date.now() + 10_000
+  let punto = null
+  while (Date.now() < tope) {
+    punto = await evaluar(cdp, buscar).catch(() => null)
+    if (punto && punto.enganchado) break
+    await dormir(200)
+  }
+  if (!punto) throw new Error(`no hay un enlace visible a ${href}`)
+  if (!punto.enganchado) console.log(`      el enlace a ${href} no esta enganchado por React a los 10 s: se toca igual`)
+  await clickEnPunto(cdp, punto)
+  const fin = Date.now() + 10_000
+  while (Date.now() < fin && (await evaluar(cdp, `location.protocol.startsWith('http') ? location.search : ''`).catch(() => '?')) !== '') await dormir(200)
+  await dormir(800)
+}
+
+/**
+ * Cuantos toasts de sonner VISIBLES contienen `texto`. Espera hasta 3 s a que aparezca el primero (el
+ * toast se pinta un tick despues del efecto que lo pide) y vuelve a contar 600 ms despues: un segundo
+ * toast del modo estricto llegaria en esa ventana. Devuelve 0 si no aparecio ninguno.
+ */
+async function contarToasts(cdp, texto) {
+  const contar = `[...document.querySelectorAll('[data-sonner-toast]')].filter((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.includes(${JSON.stringify(texto)}) }).length`
+  const tope = Date.now() + 3_000
+  while (Date.now() < tope && (await evaluar(cdp, contar).catch(() => 0)) === 0) await dormir(150)
+  await dormir(600)
+  return evaluar(cdp, contar).catch(() => 0)
+}
+
+/** Cuantas `TabsList` (`[data-slot="tabs-list"]`) hay a la vista: T-1, las secciones no tienen ninguna. */
+async function tabsListsVisibles(cdp) {
+  return evaluar(cdp, `[...document.querySelectorAll('[data-slot="tabs-list"]')].filter((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }).length`)
+}
+
 /**
  * Ensucia el editor de `/web`: foco y tipeo REAL (`Input.insertText`) en un campo de texto visible. Las
  * secciones del editor arrancan cerradas, asi que si no hay ningun campo a la vista se abre la siguiente
@@ -2759,6 +2805,312 @@ const RECORRIDOS = [
       }
     },
   },
+  // plan 04-02 (Phase 4): Negocio y Configuracion en la URL, el retorno del OAuth y T-1. Los `esperado` se
+  // escriben en el commit `test(04-02)` de la sonda, ANTES del codigo que los juzga, y no se tocan
+  // despues de medir: si no coinciden se arregla el instrumento o el codigo, nunca la expectativa.
+  {
+    id: 'R-T-negocio-por-mas',
+    titulo: 'MOB-08 criterio 1 / D-01 por Mas, la profundidad maxima: Inicio -> Mas -> Negocio -> Cobros -> Integraciones -> Cobros deja /negocio?tab=cobros con UNA entrada agregada; atras -> Datos -> Mas -> Inicio',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/mas')
+      await tocarEnlace(cdp, '/negocio')
+      const alEntrar = await pilaConQuery(cdp)
+      await tocarTab(cdp, 'Cobros')
+      await tocarTab(cdp, 'Integraciones')
+      await tocarTab(cdp, 'Cobros')
+      const trasLosToques = { u: await ubicacion(cdp), tab: await tabActivo(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras1 = { u: await ubicacion(cdp), tab: await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras2 = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras3 = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al entrar a Negocio: pila=[${alEntrar.entradas.join(', ')}] actual=${alEntrar.indice}`)
+          console.log(`${p}tras Cobros -> Integraciones -> Cobros: url=${trasLosToques.u} tab=${trasLosToques.tab} estado=${trasLosToques.estado} pila=[${trasLosToques.pila.entradas.join(', ')}] actual=${trasLosToques.pila.indice}`)
+          console.log(`${p}tras el primer atras: url=${tras1.u} tab=${tras1.tab} pila=[${tras1.pila.entradas.join(', ')}] actual=${tras1.pila.indice}`)
+          console.log(`${p}tras el segundo atras: url=${tras2.u} pila=[${tras2.pila.entradas.join(', ')}] actual=${tras2.pila.indice}`)
+          console.log(`${p}tras el tercer atras: url=${tras3.u} pila=[${tras3.pila.entradas.join(', ')}] actual=${tras3.pila.indice}`)
+        },
+        medido: {
+          url_tras_los_tres_toques: trasLosToques.u,
+          entradas_de_los_tres_toques: trasLosToques.pila.indice - alEntrar.indice,
+          url_tras_el_primer_atras: tras1.u,
+          tab_tras_el_primer_atras: tras1.tab,
+          ruta_tras_el_segundo_atras: rutaDe(tras2.u),
+          ruta_tras_el_tercer_atras: rutaDe(tras3.u),
+        },
+        esperado: {
+          url_tras_los_tres_toques: '/negocio?tab=cobros',
+          entradas_de_los_tres_toques: 1,
+          url_tras_el_primer_atras: '/negocio',
+          tab_tras_el_primer_atras: 'Datos',
+          ruta_tras_el_segundo_atras: '/mas',
+          ruta_tras_el_tercer_atras: '/dashboard',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-T-negocio-datos-consume',
+    titulo: 'D-02: Mas -> Negocio -> Cobros -> Datos; tocar Datos CONSUME la entrada del tab (el indice vuelve al de la seccion, la URL a /negocio) y el atras siguiente sale a Mas',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/mas')
+      await tocarEnlace(cdp, '/negocio')
+      const i0 = (await pilaConQuery(cdp)).indice
+      await tocarTab(cdp, 'Cobros')
+      const enCobros = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      await tocarTab(cdp, 'Datos')
+      await asentarTab(cdp)
+      const trasDatos = { u: await ubicacion(cdp), tab: await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}indice de la seccion=${i0}`)
+          console.log(`${p}en Cobros: url=${enCobros.u} pila=[${enCobros.pila.entradas.join(', ')}] actual=${enCobros.pila.indice}`)
+          console.log(`${p}tras Datos: url=${trasDatos.u} tab=${trasDatos.tab} pila=[${trasDatos.pila.entradas.join(', ')}] actual=${trasDatos.pila.indice}`)
+          console.log(`${p}tras el atras: url=${trasElAtras.u} pila=[${trasElAtras.pila.entradas.join(', ')}] actual=${trasElAtras.pila.indice}`)
+        },
+        medido: {
+          url_en_cobros: enCobros.u,
+          indice_en_cobros_menos_el_de_la_seccion: enCobros.pila.indice - i0,
+          url_tras_datos: trasDatos.u,
+          indice_tras_datos_menos_el_de_la_seccion: trasDatos.pila.indice - i0,
+          ruta_tras_el_atras: rutaDe(trasElAtras.u),
+        },
+        esperado: {
+          url_en_cobros: '/negocio?tab=cobros',
+          indice_en_cobros_menos_el_de_la_seccion: 1,
+          url_tras_datos: '/negocio',
+          indice_tras_datos_menos_el_de_la_seccion: 0,
+          ruta_tras_el_atras: '/mas',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-T-config-por-url',
+    titulo: 'D-03 + D-06 + D-07 en Configuracion: /settings?tab=seguridad PEGADA abre Seguridad y el atras sale (sin Apariencia fabricada debajo); /settings?tab=ventas cae en Apariencia con la URL saneada a /settings sin agregar entradas',
+    async correr(cdp) {
+      await navegar(cdp, AFUERA)
+      await cdp.enviar('Page.resetNavigationHistory')
+      await navegar(cdp, ORIGEN + '/settings?tab=seguridad')
+      await asentarTab(cdp)
+      const alEntrar = { u: await ubicacion(cdp), tab: await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      await navegar(cdp, ORIGEN + '/settings?tab=ventas')
+      const alCargarVentas = await pilaConQuery(cdp)
+      const tope = Date.now() + 10_000
+      while (Date.now() < tope && (await ubicacion(cdp).catch(() => '')).includes('tab=')) await dormir(200)
+      await asentarTab(cdp)
+      const trasVentas = { u: await ubicacion(cdp), tab: await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al entrar: url=${alEntrar.u} tab=${alEntrar.tab} pila=[${alEntrar.pila.entradas.join(', ')}] actual=${alEntrar.pila.indice}`)
+          console.log(`${p}tras el atras: url=${trasElAtras.u} pila=[${trasElAtras.pila.entradas.join(', ')}] actual=${trasElAtras.pila.indice}`)
+          console.log(`${p}ventas al cargar: pila=[${alCargarVentas.entradas.join(', ')}] actual=${alCargarVentas.indice}`)
+          console.log(`${p}ventas tras el saneo: url=${trasVentas.u} tab=${trasVentas.tab} pila=[${trasVentas.pila.entradas.join(', ')}] actual=${trasVentas.pila.indice}`)
+        },
+        medido: {
+          tab_al_entrar: alEntrar.tab,
+          url_al_entrar: alEntrar.u,
+          ruta_tras_el_atras: rutaDe(trasElAtras.u),
+          url_tras_ventas: trasVentas.u,
+          tab_tras_ventas: trasVentas.tab,
+          entradas_del_saneo: trasVentas.pila.entradas.length - alCargarVentas.entradas.length,
+        },
+        esperado: {
+          tab_al_entrar: 'Seguridad',
+          url_al_entrar: '/settings?tab=seguridad',
+          ruta_tras_el_atras: '(afuera)',
+          url_tras_ventas: '/settings',
+          tab_tras_ventas: 'Apariencia',
+          entradas_del_saneo: 0,
+        },
+      }
+    },
+  },
+  {
+    id: 'R-T-negocio-oauth-mp',
+    titulo: 'D-09 / T-2 (criterio 3 simulado con la URL exacta del backend): /negocio?mp=connected muestra el toast UNA vez y queda en /negocio?tab=integraciones con un reemplazo sin marca fabricada; Datos deja /negocio dentro del sitio y el atras sale',
+    async correr(cdp) {
+      await navegar(cdp, AFUERA)
+      await cdp.enviar('Page.resetNavigationHistory')
+      await navegar(cdp, ORIGEN + '/negocio?mp=connected')
+      const alCargar = await pilaConQuery(cdp)
+      const tope = Date.now() + 10_000
+      while (Date.now() < tope && (await ubicacion(cdp).catch(() => '')).includes('mp=')) await dormir(200)
+      const toasts = await contarToasts(cdp, 'MercadoPago conectado')
+      await asentarTab(cdp)
+      const trasElRetorno = { u: await ubicacion(cdp), tab: await tabActivo(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
+      await tocarTab(cdp, 'Datos')
+      await asentarTab(cdp)
+      const trasDatos = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al cargar: pila=[${alCargar.entradas.join(', ')}] actual=${alCargar.indice}`)
+          console.log(`${p}tras el retorno: url=${trasElRetorno.u} tab=${trasElRetorno.tab} estado=${trasElRetorno.estado} toasts=${toasts} pila=[${trasElRetorno.pila.entradas.join(', ')}] actual=${trasElRetorno.pila.indice}`)
+          console.log(`${p}tras Datos: url=${trasDatos.u} pila=[${trasDatos.pila.entradas.join(', ')}] actual=${trasDatos.pila.indice}`)
+          console.log(`${p}tras el atras: url=${trasElAtras.u} pila=[${trasElAtras.pila.entradas.join(', ')}] actual=${trasElAtras.pila.indice}`)
+        },
+        medido: {
+          url_tras_el_retorno: trasElRetorno.u,
+          tab_tras_el_retorno: trasElRetorno.tab,
+          toasts_mp: toasts,
+          entradas_del_retorno: trasElRetorno.pila.entradas.length - alCargar.entradas.length,
+          marca_tras_el_retorno: trasElRetorno.estado,
+          ubicacion_tras_datos: trasDatos.u,
+          ruta_tras_el_atras: rutaDe(trasElAtras.u),
+        },
+        esperado: {
+          url_tras_el_retorno: '/negocio?tab=integraciones',
+          tab_tras_el_retorno: 'Integraciones',
+          toasts_mp: 1,
+          entradas_del_retorno: 0,
+          marca_tras_el_retorno: '{"frjView":null}',
+          ubicacion_tras_datos: '/negocio',
+          ruta_tras_el_atras: '(afuera)',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-T-negocio-oauth-google-error',
+    titulo: 'D-09, la rama de error: /negocio?google=error muestra el toast de error UNA vez y queda en /negocio?tab=integraciones',
+    async correr(cdp) {
+      await navegar(cdp, AFUERA)
+      await cdp.enviar('Page.resetNavigationHistory')
+      await navegar(cdp, ORIGEN + '/negocio?google=error')
+      const alCargar = await pilaConQuery(cdp)
+      const tope = Date.now() + 10_000
+      while (Date.now() < tope && (await ubicacion(cdp).catch(() => '')).includes('google=')) await dormir(200)
+      const toasts = await contarToasts(cdp, 'No se pudo conectar con Google Calendar')
+      await asentarTab(cdp)
+      const trasElRetorno = { u: await ubicacion(cdp), tab: await tabActivo(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al cargar: pila=[${alCargar.entradas.join(', ')}] actual=${alCargar.indice}`)
+          console.log(`${p}tras el retorno: url=${trasElRetorno.u} tab=${trasElRetorno.tab} estado=${trasElRetorno.estado} toasts=${toasts} pila=[${trasElRetorno.pila.entradas.join(', ')}] actual=${trasElRetorno.pila.indice}`)
+        },
+        medido: {
+          url_tras_el_retorno: trasElRetorno.u,
+          tab_tras_el_retorno: trasElRetorno.tab,
+          toasts_google_error: toasts,
+        },
+        esperado: {
+          url_tras_el_retorno: '/negocio?tab=integraciones',
+          tab_tras_el_retorno: 'Integraciones',
+          toasts_google_error: 1,
+        },
+      }
+    },
+  },
+  {
+    id: 'R-T-sidebar-seccion-activa',
+    titulo: 'D-08 en ESCRITORIO: Inicio -> Negocio (sidebar) -> Cobros -> Negocio (sidebar) deja /negocio en Datos consumiendo la entrada del tab; con /negocio?tab=cobros PEGADA, el mismo toque deja /negocio en Datos sin salir del sitio',
+    async correr(cdp) {
+      await escritorio(cdp)
+      let enCobros, tras, pegadaAlEntrar, pegadaTras
+      try {
+        await entrarDirecto(cdp)
+        await tocarEnlace(cdp, '/negocio')
+        await tocarTab(cdp, 'Cobros')
+        enCobros = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+        await tocarSeccionActiva(cdp, '/negocio')
+        await asentarTab(cdp)
+        tras = { u: await ubicacion(cdp), tab: await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+        await navegar(cdp, AFUERA)
+        await cdp.enviar('Page.resetNavigationHistory')
+        await navegar(cdp, ORIGEN + '/negocio?tab=cobros')
+        await asentarTab(cdp)
+        pegadaAlEntrar = { u: await ubicacion(cdp), tab: await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+        await tocarSeccionActiva(cdp, '/negocio')
+        await asentarTab(cdp)
+        pegadaTras = { u: await ubicacion(cdp), tab: await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+      } finally {
+        await celular(cdp)
+      }
+      return {
+        detalle: (p) => {
+          console.log(`${p}en Cobros: url=${enCobros.u} pila=[${enCobros.pila.entradas.join(', ')}] actual=${enCobros.pila.indice}`)
+          console.log(`${p}tras tocar Negocio: url=${tras.u} tab=${tras.tab} pila=[${tras.pila.entradas.join(', ')}] actual=${tras.pila.indice}`)
+          console.log(`${p}pegada al entrar: url=${pegadaAlEntrar.u} tab=${pegadaAlEntrar.tab} pila=[${pegadaAlEntrar.pila.entradas.join(', ')}] actual=${pegadaAlEntrar.pila.indice}`)
+          console.log(`${p}pegada tras tocar Negocio: url=${pegadaTras.u} tab=${pegadaTras.tab} pila=[${pegadaTras.pila.entradas.join(', ')}] actual=${pegadaTras.pila.indice}`)
+        },
+        medido: {
+          url_tras_tocar_negocio: tras.u,
+          tab_tras_tocar_negocio: tras.tab,
+          indice_tras_tocar_negocio_menos_i1: tras.pila.indice - enCobros.pila.indice,
+          url_pegada_tras_tocar_negocio: pegadaTras.u,
+          tab_pegada_tras_tocar_negocio: pegadaTras.tab,
+        },
+        esperado: {
+          url_tras_tocar_negocio: '/negocio',
+          tab_tras_tocar_negocio: 'Datos',
+          indice_tras_tocar_negocio_menos_i1: -1,
+          url_pegada_tras_tocar_negocio: '/negocio',
+          tab_pegada_tras_tocar_negocio: 'Datos',
+        },
+      }
+    },
+  },
+  {
+    // T-1, el CONTROL: tiene que dar OK con el codigo de antes y con el nuevo. Si da FALLA con el codigo
+    // de antes, el control esta mal (P-1); si da FALLA despues del cambio, T-1 se movio (P-5).
+    id: 'R-T-secciones-sin-tab',
+    titulo: 'T-1, control: /servicios?tab=cobros, /equipo?tab=cobros y /consultorios?tab=cobros dejan la URL como entro, sin ninguna TabsList y sin agregar entradas',
+    async correr(cdp) {
+      const casos = {}
+      for (const ruta of ['/servicios', '/equipo', '/consultorios']) {
+        const camino = `${ruta}?tab=cobros`
+        await navegar(cdp, ORIGEN + camino)
+        const u0 = await ubicacion(cdp)
+        const p0 = await pilaConQuery(cdp)
+        await dormir(3_000)
+        const u3 = await ubicacion(cdp)
+        const p3 = await pilaConQuery(cdp)
+        const listas = await tabsListsVisibles(cdp)
+        casos[ruta] = { camino, u0, u3, p0, p3, listas, igual: u0 === camino && u3 === camino ? 'si' : 'no', agregadas: p3.entradas.length - p0.entradas.length }
+      }
+      const c = (r) => casos[r]
+      return {
+        detalle: (p) => {
+          for (const [ruta, x] of Object.entries(casos)) console.log(`${p}${ruta}: url al cargar=${x.u0} a los 3 s=${x.u3} tabs-list=${x.listas} entradas agregadas=${x.agregadas} pila=[${x.p3.entradas.join(', ')}] actual=${x.p3.indice}`)
+        },
+        medido: {
+          servicios_url_igual: c('/servicios').igual,
+          servicios_tabs_lists: c('/servicios').listas,
+          equipo_url_igual: c('/equipo').igual,
+          equipo_tabs_lists: c('/equipo').listas,
+          consultorios_url_igual: c('/consultorios').igual,
+          consultorios_tabs_lists: c('/consultorios').listas,
+          entradas_agregadas: c('/servicios').agregadas + c('/equipo').agregadas + c('/consultorios').agregadas,
+        },
+        esperado: {
+          servicios_url_igual: 'si',
+          servicios_tabs_lists: 0,
+          equipo_url_igual: 'si',
+          equipo_tabs_lists: 0,
+          consultorios_url_igual: 'si',
+          consultorios_tabs_lists: 0,
+          entradas_agregadas: 0,
+        },
+      }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -2862,6 +3214,13 @@ const QUE_CIERRA = {
   'R-T-finanzas-desde-inicio': 'D-01 (plan 04-01): desde la tarjeta de Inicio, Egresos lleva ?tab=egresos con Nuevo egreso; atras -> Turnos -> Inicio',
   'R-T-finanzas-invalido': 'D-06 + D-07 (plan 04-01): ?tab=constructor, ?tab= y ?tab=turnos se sanean a /finances en Turnos sin agregar entradas',
   'R-T-finanzas-url-pegada': 'D-03 + Patron 3 (plan 04-01, task 2): ?tab=ventas pegada -> Egresos -> Turnos queda en /finances dentro del sitio y el atras sale',
+  'R-T-negocio-por-mas': 'MOB-08 criterio 1 / D-01 (plan 04-02): por Mas, Cobros -> Integraciones -> Cobros agrega UNA entrada; atras -> Datos -> Mas -> Inicio',
+  'R-T-negocio-datos-consume': 'D-02 (plan 04-02): tocar Datos desde Cobros consume la entrada del tab y el atras siguiente sale a Mas',
+  'R-T-config-por-url': 'D-03 + D-06 + D-07 (plan 04-02): ?tab=seguridad pegada abre Seguridad y el atras sale; ?tab=ventas se sanea a /settings en Apariencia',
+  'R-T-negocio-oauth-mp': 'D-09 / T-2 (plan 04-02): ?mp=connected -> un toast, /negocio?tab=integraciones por un reemplazo sin marca; Datos queda en el sitio',
+  'R-T-negocio-oauth-google-error': 'D-09 (plan 04-02): ?google=error -> un toast de error y /negocio?tab=integraciones',
+  'R-T-sidebar-seccion-activa': 'D-08 (plan 04-02, escritorio): tocar Negocio en el sidebar estando en Cobros vuelve a Datos consumiendo; con la URL pegada, sin salir del sitio',
+  'R-T-secciones-sin-tab': 'T-1, control (plan 04-02): /servicios, /equipo y /consultorios con ?tab=cobros no se mueven y no tienen TabsList',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
