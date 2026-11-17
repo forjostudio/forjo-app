@@ -863,6 +863,109 @@ async function tocarEnlace(cdp, href) {
   if (registros.slice(llegada).every((r) => r.tipo !== 'armado')) await asentar(llegada, 5_000)
 }
 
+// ── Las primitivas de los tabs (plan 04-01) ──────────────────────────────────────────────────────
+//
+// QUE MIDEN: los tabs de Finanzas, Negocio y Configuracion pasan a vivir en la QUERY (`?tab=`), asi
+// que lo que se mide ahora es la query. `foto` y `historial` NO la llevan (los recorridos de la Phase
+// 3 comparan rutas y hashes, y se dejan como estan): estas primitivas son nuevas y no tocan aquellas.
+// Ninguna escribe historial desde la pagina: el toque es un click REAL por CDP (da activacion del
+// usuario, como el dedo del dueno) y el atras sigue siendo `atras(cdp)`.
+
+/** Donde esta la pagina AHORA, CON la query: ruta + query + hash, o `(afuera)` si salio del sitio. */
+async function ubicacion(cdp) {
+  return evaluar(cdp, `location.protocol.startsWith('http') ? location.pathname + location.search + location.hash : '(afuera)'`)
+}
+
+/** La ruta sola (sin query ni hash) de una ubicacion: lo que comparan los pasos que salen de la seccion. */
+function rutaDe(u) {
+  return u === '(afuera)' ? u : u.split('#')[0].split('?')[0]
+}
+
+/**
+ * Como `historial`, pero cada entrada CON su query. Normalizada igual (ruta+query+hash, `(afuera)` para
+ * la pagina de afuera): es lo que deja ver si un cambio de tab EMPUJO, REEMPLAZO o RETROCEDIO.
+ */
+async function pilaConQuery(cdp) {
+  const h = await cdp.enviar('Page.getNavigationHistory')
+  return {
+    indice: h.currentIndex,
+    entradas: h.entries.map((e) => {
+      if (e.url.startsWith('data:')) return '(afuera)'
+      if (/^https?:/.test(e.url) && new URL(e.url).hostname === '127.0.0.1') { const u = new URL(e.url); return u.pathname + u.search + u.hash }
+      return e.url
+    }),
+  }
+}
+
+/**
+ * El texto del tab SELECCIONADO y visible, cortado antes de ` (` (los tabs de Finanzas llevan el conteo:
+ * «Ventas (3)»), o `ninguno`.
+ */
+async function tabActivo(cdp) {
+  return evaluar(cdp, `(() => {
+    const t = [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 })
+    if (!t) return 'ninguno'
+    const texto = t.textContent.replace(/\\s+/g, ' ').trim()
+    const corte = texto.indexOf(' (')
+    return corte >= 0 ? texto.slice(0, corte) : texto
+  })()`)
+}
+
+/** Que boton de alta de Finanzas esta a la vista: `Nueva venta`, `Nuevo egreso`, `ambos` o `ninguna`. */
+async function altaVisible(cdp) {
+  return evaluar(cdp, `(() => {
+    const visibles = [...document.querySelectorAll('button')].filter((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }).map((x) => x.textContent.replace(/\\s+/g, ' ').trim())
+    const venta = visibles.includes('Nueva venta')
+    const egreso = visibles.includes('Nuevo egreso')
+    return venta && egreso ? 'ambos' : venta ? 'Nueva venta' : egreso ? 'Nuevo egreso' : 'ninguna'
+  })()`)
+}
+
+/**
+ * El toque REAL en el tab visible cuyo texto empieza con `texto`: se lo trae a la vista, se lo toca en
+ * su centro (`clickEnPunto`) y se espera hasta 10 s a que quede seleccionado O a que la pagina haya
+ * salido del sitio. ⚠ NO TIRA si salio: con el defecto de la marca (plan 04-01, task 2) ESE es el
+ * resultado a medir. Si no hay un tab visible con ese texto en 10 s, TIRA (P-1: el instrumento no
+ * encontro lo que dice tocar). Devuelve la ubicacion tras 500 ms quietos.
+ */
+async function tocarTab(cdp, texto) {
+  const buscar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return null; t.scrollIntoView({ block: 'center' }); const b = t.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`
+  let punto = null
+  const topeBusqueda = Date.now() + 10_000
+  while (Date.now() < topeBusqueda && !(punto = await evaluar(cdp, buscar).catch(() => null))) await dormir(200)
+  if (!punto) throw new Error(`no hay un tab visible que empiece con ${texto}`)
+  await dormir(150)
+  punto = await evaluar(cdp, buscar)
+  await clickEnPunto(cdp, punto)
+  const seleccionado = `(() => { if (!location.protocol.startsWith('http')) return 'afuera'; const t = [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); return t && t.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) ? 'si' : 'no' })()`
+  const tope = Date.now() + 10_000
+  while (Date.now() < tope) {
+    const s = await evaluar(cdp, seleccionado).catch(() => 'no')
+    if (s !== 'no') break
+    await dormir(150)
+  }
+  await dormir(500)
+  return { ubicacion: await ubicacion(cdp) }
+}
+
+/**
+ * Espera, con tope, a que la pagina asiente despues de un atras de tab: el traverse es del MISMO
+ * documento y el render de React llega despues del `popstate`. Sale cuando la ubicacion y el tab
+ * activo quedan iguales dos lecturas seguidas (o al tope).
+ */
+async function asentarTab(cdp, tope = 5_000) {
+  const fin = Date.now() + tope
+  let antes = null
+  while (Date.now() < fin) {
+    await dormir(250)
+    const u = await ubicacion(cdp).catch(() => null)
+    const t = u === '(afuera)' ? 'ninguno' : await tabActivo(cdp).catch(() => null)
+    const ahora = `${u}|${t}`
+    if (ahora === antes) return
+    antes = ahora
+  }
+}
+
 /**
  * Ensucia el editor de `/web`: foco y tipeo REAL (`Input.insertText`) en un campo de texto visible. Las
  * secciones del editor arrancan cerradas, asi que si no hay ningun campo a la vista se abre la siguiente
@@ -2401,6 +2504,139 @@ const RECORRIDOS = [
       return { ...x, esperado: { toque_que_abre: 'regla-0-foreignOwnsTop', retroceso_del_cierre: 'ignore', armado_tras_cerrar: 'arm', hash_tras_cerrar: '#salir', hash_tras_el_toque: '#salir', atras_siguiente: 'avisa' } }
     },
   },
+  // plan 04-01 (Phase 4): los tabs de Finanzas en la URL. Los `esperado` se escriben en el commit
+  // `test(04-01)` de la sonda, ANTES del codigo que los juzga, y no se tocan despues de medir: si no
+  // coinciden se arregla el instrumento o el codigo, nunca la expectativa.
+  {
+    id: 'R-T-finanzas-por-mas',
+    titulo: 'D-01 + D-04 por Mas: Inicio -> Mas -> Finanzas -> Ventas; la URL lleva ?tab=ventas con Nueva venta, el atras vuelve a Turnos sin alta, despues a Mas y despues a Inicio',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarEnLaBarra(cdp, '/mas')
+      await tocarEnlace(cdp, '/finances')
+      const pilaAlEntrar = await pilaConQuery(cdp)
+      await tocarTab(cdp, 'Ventas')
+      const enVentas = { u: await ubicacion(cdp), tab: await tabActivo(cdp), alta: await altaVisible(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras1 = { u: await ubicacion(cdp), tab: await tabActivo(cdp), alta: await altaVisible(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras2 = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras3 = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al entrar a Finanzas: pila=[${pilaAlEntrar.entradas.join(', ')}] actual=${pilaAlEntrar.indice}`)
+          console.log(`${p}en Ventas: url=${enVentas.u} tab=${enVentas.tab} alta=${enVentas.alta} estado=${enVentas.estado} pila=[${enVentas.pila.entradas.join(', ')}] actual=${enVentas.pila.indice}`)
+          console.log(`${p}tras el primer atras: url=${tras1.u} tab=${tras1.tab} alta=${tras1.alta} pila=[${tras1.pila.entradas.join(', ')}] actual=${tras1.pila.indice}`)
+          console.log(`${p}tras el segundo atras: url=${tras2.u} pila=[${tras2.pila.entradas.join(', ')}] actual=${tras2.pila.indice}`)
+          console.log(`${p}tras el tercer atras: url=${tras3.u} pila=[${tras3.pila.entradas.join(', ')}] actual=${tras3.pila.indice}`)
+        },
+        medido: {
+          url_en_ventas: enVentas.u,
+          tab_en_ventas: enVentas.tab,
+          alta_en_ventas: enVentas.alta,
+          marca_en_ventas: enVentas.estado,
+          url_tras_el_primer_atras: tras1.u,
+          tab_tras_el_primer_atras: tras1.tab,
+          alta_tras_el_primer_atras: tras1.alta,
+          ruta_tras_el_segundo_atras: rutaDe(tras2.u),
+          ruta_tras_el_tercer_atras: rutaDe(tras3.u),
+        },
+        esperado: {
+          url_en_ventas: '/finances?tab=ventas',
+          tab_en_ventas: 'Ventas',
+          alta_en_ventas: 'Nueva venta',
+          marca_en_ventas: '{"frjView":"tab"}',
+          url_tras_el_primer_atras: '/finances',
+          tab_tras_el_primer_atras: 'Turnos',
+          alta_tras_el_primer_atras: 'ninguna',
+          ruta_tras_el_segundo_atras: '/mas',
+          ruta_tras_el_tercer_atras: '/dashboard',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-T-finanzas-desde-inicio',
+    titulo: 'D-01 por la otra profundidad: la tarjeta Ingresos del mes de Inicio -> Finanzas -> Egresos; el atras vuelve a Turnos sin alta y el siguiente a Inicio',
+    async correr(cdp) {
+      await entrarDirecto(cdp)
+      await tocarEnlace(cdp, '/finances')
+      const pilaAlEntrar = await pilaConQuery(cdp)
+      await tocarTab(cdp, 'Egresos')
+      const enEgresos = { u: await ubicacion(cdp), alta: await altaVisible(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras1 = { u: await ubicacion(cdp), alta: await altaVisible(cdp), pila: await pilaConQuery(cdp) }
+      await atras(cdp)
+      await asentarTab(cdp)
+      const tras2 = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al entrar a Finanzas: pila=[${pilaAlEntrar.entradas.join(', ')}] actual=${pilaAlEntrar.indice}`)
+          console.log(`${p}en Egresos: url=${enEgresos.u} alta=${enEgresos.alta} pila=[${enEgresos.pila.entradas.join(', ')}] actual=${enEgresos.pila.indice}`)
+          console.log(`${p}tras el primer atras: url=${tras1.u} alta=${tras1.alta} pila=[${tras1.pila.entradas.join(', ')}] actual=${tras1.pila.indice}`)
+          console.log(`${p}tras el segundo atras: url=${tras2.u} pila=[${tras2.pila.entradas.join(', ')}] actual=${tras2.pila.indice}`)
+        },
+        medido: {
+          url_en_egresos: enEgresos.u,
+          alta_en_egresos: enEgresos.alta,
+          url_tras_el_primer_atras: tras1.u,
+          alta_tras_el_primer_atras: tras1.alta,
+          ruta_tras_el_segundo_atras: rutaDe(tras2.u),
+        },
+        esperado: {
+          url_en_egresos: '/finances?tab=egresos',
+          alta_en_egresos: 'Nuevo egreso',
+          url_tras_el_primer_atras: '/finances',
+          alta_tras_el_primer_atras: 'ninguna',
+          ruta_tras_el_segundo_atras: '/dashboard',
+        },
+      }
+    },
+  },
+  {
+    id: 'R-T-finanzas-invalido',
+    titulo: 'D-06 + D-07: /finances?tab=constructor, ?tab= y ?tab=turnos caen en Turnos con la URL saneada a /finances y sin agregar entradas',
+    async correr(cdp) {
+      const casos = {}
+      for (const [clave, camino] of [['constructor', '/finances?tab=constructor'], ['vacio', '/finances?tab='], ['turnos', '/finances?tab=turnos']]) {
+        await navegar(cdp, ORIGEN + camino)
+        const alCargar = await pilaConQuery(cdp)
+        const tope = Date.now() + 10_000
+        while (Date.now() < tope && (await ubicacion(cdp).catch(() => '')).includes('tab=')) await dormir(200)
+        await asentarTab(cdp)
+        const trasElSaneo = await pilaConQuery(cdp)
+        casos[clave] = { u: await ubicacion(cdp), tab: await tabActivo(cdp), alCargar, trasElSaneo, agregadas: trasElSaneo.entradas.length - alCargar.entradas.length }
+      }
+      return {
+        detalle: (p) => {
+          for (const [clave, c] of Object.entries(casos)) {
+            console.log(`${p}${clave}: url=${c.u} tab=${c.tab} entradas_agregadas=${c.agregadas} pila al cargar=[${c.alCargar.entradas.join(', ')}] tras el saneo=[${c.trasElSaneo.entradas.join(', ')}] actual=${c.trasElSaneo.indice}`)
+          }
+        },
+        medido: {
+          url_tras_constructor: casos.constructor.u,
+          tab_tras_constructor: casos.constructor.tab,
+          entradas_del_saneo_constructor: casos.constructor.agregadas,
+          url_tras_vacio: casos.vacio.u,
+          url_tras_turnos_explicito: casos.turnos.u,
+          entradas_del_saneo_turnos: casos.turnos.agregadas,
+        },
+        esperado: {
+          url_tras_constructor: '/finances',
+          tab_tras_constructor: 'Turnos',
+          entradas_del_saneo_constructor: 0,
+          url_tras_vacio: '/finances',
+          url_tras_turnos_explicito: '/finances',
+          entradas_del_saneo_turnos: 0,
+        },
+      }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -2500,6 +2736,9 @@ const QUE_CIERRA = {
   'R-G3-10-primer-toque-atras-pronto': 'G3-10 (plan 03-17): cerrar con el atras con la activacion viva: el reintento de G3-7 arma y el atras avisa',
   'R-G3-10-atras-y-toque': 'G3-10 (plan 03-17): tras cerrar con el atras (pendiente), un toque en Inicio arma y el atras avisa',
   'R-G3-10-pronto-y-toque': 'R2-WR-02 (quick 261116-t5o): tras cerrar con el atras pronto (el reintento arma #salir y Chrome lo saltea), un toque en Inicio: el atras siguiente avisa o sale',
+  'R-T-finanzas-por-mas': 'D-01 + D-04 (plan 04-01): por Mas, Ventas lleva ?tab=ventas con Nueva venta; atras -> Turnos sin alta -> Mas -> Inicio',
+  'R-T-finanzas-desde-inicio': 'D-01 (plan 04-01): desde la tarjeta de Inicio, Egresos lleva ?tab=egresos con Nuevo egreso; atras -> Turnos -> Inicio',
+  'R-T-finanzas-invalido': 'D-06 + D-07 (plan 04-01): ?tab=constructor, ?tab= y ?tab=turnos se sanean a /finances en Turnos sin agregar entradas',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
