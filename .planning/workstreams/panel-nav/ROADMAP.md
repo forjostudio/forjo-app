@@ -705,7 +705,7 @@ se programa)
 - [x] `04-03-PLAN.md` — wave 3 · **La composición medida y la decisión del dueño**: seis recorridos con la pila DERIVADA
   como esperado, un `checkpoint:decision` bloqueante (A declarar / B1 la barra / B2 la barra y el sidebar), y por escrito
   el «PRECISADO» de D-01 sobre el criterio 1 y MOB-08 y el residuo que quede en los cuatro lugares
-- [ ] `04-04-PLAN.md` — wave 4 · **(condicional, sólo con B1/B2) B1 en la barra**: el séptimo miembro
+- [x] `04-04-PLAN.md` — wave 4 · **(condicional, sólo con B1/B2) B1 en la barra**: el séptimo miembro
   `consume-view-then-navigate` del plan de la rama, que consume la subsección propia y re-decide con la pila real, medido
   con control (incluido el retroceso triple) y con la no-regresión completa de la Phase 3
 - [ ] `04-05-PLAN.md` — wave 5 · **El cierre**: la no-regresión de la fase en una sola tanda (las dos sondas, la suite
@@ -762,4 +762,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 3/5 | In Progress | - |
+| 4. Los tabs profundos sobre la política ya fijada | 4/5 | In Progress | - |
