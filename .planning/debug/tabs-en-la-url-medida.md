@@ -519,3 +519,151 @@ OK  R-T-secciones-sin-tab · T-1, control: /servicios?tab=cobros, /equipo?tab=co
   `immutability=6, purity=2, set-state-in-effect=2`): rc 0.
 
 cierre (c): negocio y configuracion en la url
+
+## (d) Agenda y los candados del cableado (plan 04-02, task 2)
+
+Mismo entorno que `(c)`: `next dev` propio en el 3031 (sin servidor del dueño vivo), `Chrome/157.0.8103.52`,
+node `v24.15.0`, gesto `interfaz`, modo estricto ACTIVO.
+
+### Los candados (`test/panel-tabs.test.ts`, el `describe` «el cableado de los tres grupos»), RED → GREEN
+
+Con los candados escritos (`8b9f57d`, `test(04-02)`) y Agenda sin tocar, la suite dio **2 rojos, los dos de
+aserción y los dos esperados**:
+
+```
+× (a) criterio 5: el fuente CRUDO de las tres pantallas no escribe el historial; el descontado tampoco navega la pila
+    Expected: "app/(dashboard)/agenda/agenda-client.tsx: false"
+    Received: "app/(dashboard)/agenda/agenda-client.tsx: true"
+× (h) Agenda limpia su ?google= por el helper (D-10): un reemplazo stale que borra sólo google
+    AssertionError: expected '.get(\'google\')\n    if (!g) return\…' to contain 'applyPanelView('
+Tests  2 failed | 51 passed (53)
+```
+
+Con `cb0d519` (`feat(04-02)` de Agenda): las ocho suites de historial **8 / 615**, la pura entera **77 archivos**
+en verde (rc 0, 08:56 AR: dentro de la ventana de los canarios de reloj).
+
+**Un instrumento que medía cero, encontrado al escribir el caso (i):** el `sinComentarios` del molde saca los
+comentarios de bloque ANTES que los de línea, y `settings-client.tsx` tiene un comentario de línea que nombra
+`/api/google/*`: ese `/*` abría un bloque falso que se comía **24.933 caracteres** de código, incluidas las dos
+`TabsList`. El (i) dio rojo por región vacía (la guarda de honestidad lo atajó); las aserciones negativas sobre
+ese tramo habrían dado verde midiendo nada. El `describe` nuevo usa `sinComentariosFirme` (saca primero los
+comentarios de línea entera) y un caso de honestidad afirma que el fuente descontado conserva
+`{isNegocio && (`, el trigger de Suscripción y `function alElegirTab(`.
+
+### Las cuatro mutaciones, vistas en rojo y restauradas
+
+La salida del gate del plan (su `mutar`, con el árbol limpio después: `arbol limpio=0`):
+
+```
+mutacion roja: [, drop: ['mp', 'google']]
+mutacion roja: [const txTab = tabResuelto.value]
+mutacion roja: [isSection ? undefined :]
+mutacion roja: [if (grupoDeTabs === null || vueltaDeOAuth) return]
+```
+
+Y se re-midieron
+con un script que lee los literales de un ARCHIVO (en esta máquina el `node` de Volta puede pasar por `cmd`, la
+lección del 04-01), para nombrar qué caso cae y de qué tipo:
+
+```
+M-4 rc=1 rojos=1 tipos=[AssertionError] restaurado=true :: [, drop: ['mp', 'google']]
+    × (g) el retorno del OAuth en Negocio: un reemplazo del helper con drop, y la reconciliación cortada mientras dura
+M-5 rc=1 rojos=2 tipos=[AssertionError] restaurado=true :: [const txTab = tabResuelto.value]
+    × no sobrevive ninguna segunda fuente de verdad: ni el useState del tab ni su setter
+    × (b) ninguna segunda fuente de verdad: sin el estado del tab de Negocio, de Configuración ni de Finanzas
+M-6 rc=1 rojos=1 tipos=[AssertionError] restaurado=true :: [isSection ? undefined :]
+    × (c) T-1 textual: la rama de las secciones, SECTION_TAB, el <Tabs> y las dos TabsList de siempre
+M-7 rc=1 rojos=1 tipos=[AssertionError] restaurado=true :: [if (grupoDeTabs === null || vueltaDeOAuth) return]
+    × (g) el retorno del OAuth en Negocio: un reemplazo del helper con drop, y la reconciliación cortada mientras dura
+```
+
+Las cuatro: mutacion roja (M-4, M-5, M-6, M-7), restauradas con la huella verificada y `git status` limpio.
+
+### El barrido crudo del criterio 5 (el `grep` del ROADMAP, comentarios incluidos)
+
+```
+$ grep -rE 'pushState|replaceState|history\.back' "app/(dashboard)/settings/settings-client.tsx" "app/(dashboard)/finances/finances-client.tsx" "app/(dashboard)/agenda/agenda-client.tsx"
+(sin salida) · rc=1
+```
+
+### El RED de la app — Agenda sin tocar (código de `8b9f57d`), rc 1
+
+```
+OK  R-T-negocio-oauth-mp · D-09 / T-2 (criterio 3 simulado con la URL exacta del backend): /negocio?mp=connected muestra el toast UNA vez y queda en /negocio?tab=integraciones con un reemplazo sin marca fabricada; Datos deja /negocio dentro del sitio y el atras sale
+      url_tras_el_retorno: medido="/negocio?tab=integraciones"
+      tab_tras_el_retorno: medido="Integraciones"
+      toasts_mp: medido=1
+      entradas_del_retorno: medido=0
+      marca_tras_el_retorno: medido="{\"frjView\":null}"
+      ubicacion_tras_datos: medido="/negocio"
+      ruta_tras_el_atras: medido="(afuera)"
+      al cargar: pila=[(afuera), /negocio?tab=integraciones] actual=1
+      tras el retorno: url=/negocio?tab=integraciones tab=Integraciones estado={"frjView":null} toasts=1 pila=[(afuera), /negocio?tab=integraciones] actual=1
+      tras Datos: url=/negocio pila=[(afuera), /negocio] actual=1
+      tras el atras: url=(afuera) pila=[(afuera), /negocio] actual=0
+
+OK  R-T-secciones-sin-tab · T-1, control: /servicios?tab=cobros, /equipo?tab=cobros y /consultorios?tab=cobros dejan la URL como entro, sin ninguna TabsList y sin agregar entradas
+      servicios_url_igual: medido="si"
+      servicios_tabs_lists: medido=0
+      equipo_url_igual: medido="si"
+      equipo_tabs_lists: medido=0
+      consultorios_url_igual: medido="si"
+      consultorios_tabs_lists: medido=0
+      entradas_agregadas: medido=0
+      /servicios: url al cargar=/servicios?tab=cobros a los 3 s=/servicios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /servicios?tab=cobros] actual=1
+      /equipo: url al cargar=/equipo?tab=cobros a los 3 s=/equipo?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /servicios?tab=cobros, /equipo?tab=cobros] actual=2
+      /consultorios: url al cargar=/consultorios?tab=cobros a los 3 s=/consultorios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /servicios?tab=cobros, /equipo?tab=cobros, /consultorios?tab=cobros] actual=3
+
+FALLA R-T-agenda-google · D-10: /agenda?google=connected muestra el toast UNA vez y deja /agenda por un reemplazo del helper, sin entradas agregadas y con {frjView:null}
+      url_tras_limpiar: medido="/agenda"
+      toasts_google: medido=0  <-- NO COINCIDE
+                     esperado=1
+      entradas_de_la_limpieza: medido=0
+      marca_tras_limpiar: medido="null"  <-- NO COINCIDE
+                          esperado="{\"frjView\":null}"
+      al cargar: pila=[(afuera), /agenda?google=connected] actual=1
+      tras limpiar: url=/agenda estado=null toasts=0 pila=[(afuera), /agenda] actual=1
+```
+
+Igual que en Negocio, con el código de antes el toast de Agenda NO se veía (`toasts=0`): es el mismo toast sin
+suscriptor de sonner de `(c)`, y se arregló igual en el mismo commit (`[Rule 1]`). La marca medía `null` (la
+escritura cruda dejaba un state nulo, sin nuestra clave): el RED del dialecto.
+
+### El GREEN de la app — con `cb0d519`, rc 0, los tres en OK
+
+```
+OK  R-T-negocio-oauth-mp · D-09 / T-2 (criterio 3 simulado con la URL exacta del backend): /negocio?mp=connected muestra el toast UNA vez y queda en /negocio?tab=integraciones con un reemplazo sin marca fabricada; Datos deja /negocio dentro del sitio y el atras sale
+      url_tras_el_retorno: medido="/negocio?tab=integraciones"
+      tab_tras_el_retorno: medido="Integraciones"
+      toasts_mp: medido=1
+      entradas_del_retorno: medido=0
+      marca_tras_el_retorno: medido="{\"frjView\":null}"
+      ubicacion_tras_datos: medido="/negocio"
+      ruta_tras_el_atras: medido="(afuera)"
+      al cargar: pila=[(afuera), /negocio?tab=integraciones] actual=1
+      tras el retorno: url=/negocio?tab=integraciones tab=Integraciones estado={"frjView":null} toasts=1 pila=[(afuera), /negocio?tab=integraciones] actual=1
+      tras Datos: url=/negocio pila=[(afuera), /negocio] actual=1
+      tras el atras: url=(afuera) pila=[(afuera), /negocio] actual=0
+
+OK  R-T-secciones-sin-tab · T-1, control: /servicios?tab=cobros, /equipo?tab=cobros y /consultorios?tab=cobros dejan la URL como entro, sin ninguna TabsList y sin agregar entradas
+      servicios_url_igual: medido="si"
+      servicios_tabs_lists: medido=0
+      equipo_url_igual: medido="si"
+      equipo_tabs_lists: medido=0
+      consultorios_url_igual: medido="si"
+      consultorios_tabs_lists: medido=0
+      entradas_agregadas: medido=0
+      /servicios: url al cargar=/servicios?tab=cobros a los 3 s=/servicios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /servicios?tab=cobros] actual=1
+      /equipo: url al cargar=/equipo?tab=cobros a los 3 s=/equipo?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /servicios?tab=cobros, /equipo?tab=cobros] actual=2
+      /consultorios: url al cargar=/consultorios?tab=cobros a los 3 s=/consultorios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /servicios?tab=cobros, /equipo?tab=cobros, /consultorios?tab=cobros] actual=3
+
+OK  R-T-agenda-google · D-10: /agenda?google=connected muestra el toast UNA vez y deja /agenda por un reemplazo del helper, sin entradas agregadas y con {frjView:null}
+      url_tras_limpiar: medido="/agenda"
+      toasts_google: medido=1
+      entradas_de_la_limpieza: medido=0
+      marca_tras_limpiar: medido="{\"frjView\":null}"
+      al cargar: pila=[(afuera), /agenda?google=connected] actual=1
+      tras limpiar: url=/agenda estado={"frjView":null} toasts=1 pila=[(afuera), /agenda] actual=1
+```
+
+cierre (d): un solo dialecto
