@@ -570,7 +570,7 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
     // 0 (sin el hecho de la rama), porque en Inicio con el sentinel armado el hecho de la rama es
     // falso y la decisión caería en reemplazar.
     for (const masDebajo of [false, true]) {
-      expect(PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, raizDebajo: false, masDebajo, holdsExitSentinel: true })).toBe('none')
+      expect(PH.panelBranchPlan({ from: PANEL_ROOT, to: PANEL_ROOT, raizDebajo: false, masDebajo, vistaArriba: false, holdsExitSentinel: true })).toBe('none')
     }
   })
 
@@ -585,7 +585,7 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
     for (const to of DESTINOS) {
       if (to === PANEL_ROOT) continue
       expect(
-        PH.panelBranchPlan({ from: PANEL_ROOT, to, raizDebajo: false, masDebajo: false, holdsExitSentinel: true })
+        PH.panelBranchPlan({ from: PANEL_ROOT, to, raizDebajo: false, masDebajo: false, vistaArriba: false, holdsExitSentinel: true })
       ).toBe('consume-exit-then-navigate')
     }
   })
@@ -598,12 +598,12 @@ describe('panelBranchPlan con el sentinel arriba — el quinto miembro del tipo,
     for (const from of [...RAMA, PANEL_ROOT]) {
       for (const to of DESTINOS) {
         for (const masDebajo of [false, true]) {
-          const antes = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: false })
+          const antes = PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, vistaArriba: false, holdsExitSentinel: false })
           expect(antes).not.toBe('none')
           expect(antes).not.toBe('consume-exit-then-navigate')
           const esperado =
             from === to ? 'none' : from === PANEL_ROOT ? 'consume-exit-then-navigate' : antes
-          expect(PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, holdsExitSentinel: true })).toBe(esperado)
+          expect(PH.panelBranchPlan({ from, to, raizDebajo: false, masDebajo, vistaArriba: false, holdsExitSentinel: true })).toBe(esperado)
         }
       }
     }
@@ -910,13 +910,16 @@ describe('G2-1 — UN dialecto del hecho nuevo en los DOS consumidores', () => {
     expect(cuenta(leer(GUARD), /2026-10-27/g)).toBeGreaterThanOrEqual(1)
   })
 
-  it('el `switch` del guard sigue en SEIS casos con su chequeo de exhaustividad, y `up` delega', () => {
-    // No hay miembro nuevo: `up` ya ES el retroceso guardado de un paso. Un séptimo miembro para el
-    // mismo mecanismo obligaría a tocar este `switch` y sería el segundo dialecto.
+  it('el `switch` del guard tiene SIETE casos con su chequeo de exhaustividad, y `up` delega', () => {
+    // No hay miembro nuevo POR G2-1: `up` ya ES el retroceso guardado de un paso. Un séptimo miembro para
+    // el mismo mecanismo obligaría a tocar este `switch` y sería el segundo dialecto.
+    // ⚠ 2026-11-17 (plan 04-04, decisión B1 del dueño): SEIS → SIETE A PROPÓSITO. El séptimo caso es
+    // `consume-view-then-navigate`, un mecanismo DISTINTO (consumir una subsección propia y re-decidir),
+    // declarado acá para que la exhaustividad lo vea y para que DEGRADE (sin `reDecidir` se niega).
     const guard = sinComentarios(leer(GUARD))
     const ejecutor = guard.slice(guard.indexOf('const ejecutarPlanDeRama'))
     expect(ejecutor.length).toBeGreaterThan(400)
-    expect(cuenta(ejecutor, /case '/g)).toBe(6)
+    expect(cuenta(ejecutor, /case '/g)).toBe(7)
     expect(cuenta(ejecutor, /_exhaustivo/g)).toBeGreaterThanOrEqual(1)
     // `up` sigue agrupado con los que delegan al ejecutor COMPARTIDO, no reimplementado acá.
     expect(ejecutor).toContain("case 'up':")
@@ -1226,6 +1229,7 @@ describe('runBranchNavigation — CONSUMIR EL SENTINEL y recién entonces navega
       to: '/appointments',
       raizDebajo: false,
       masDebajo: false,
+      vistaArriba: false,
       holdsExitSentinel: true,
     })
     expect(plan).toBe('consume-exit-then-navigate')
@@ -1252,6 +1256,108 @@ describe('runBranchNavigation — CONSUMIR EL SENTINEL y recién entonces navega
     const ctxUp = montarPila({ state: panelUnderState(PANEL_ROOT), pathname: '/finances' })
     expect(PB.runBranchNavigation({ plan: 'up', to: PANEL_MORE, navigate: vi.fn() })).toBe(true)
     expect(ctxUp.back).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── Plan 04-04 — B1: consumir NUESTRA subsección y re-decidir con la pila real (dos pasos) ───────────
+//
+// El molde es el de `consume-exit-then-navigate` (arriba): el oyente de disparo único EN EL GESTO, el
+// consumo con SUS guardas (`consumeOwnedPanelEntry`: nunca un retroceso sobre una entrada ajena) y el
+// segundo paso desde el EVENTO. La diferencia es que el segundo paso no navega: RE-DECIDE, y quien sabe
+// re-decidir es el hook de la barra (`reDecidir`). Sin él la rama SE NIEGA, que es la degradación segura
+// del otro consumidor (el guard de cambios sin guardar).
+
+describe('runBranchNavigation — CONSUMIR LA SUBSECCIÓN y recién entonces re-decidir (B1, plan 04-04)', () => {
+  it('SIN `reDecidir` SE NIEGA: no retrocede, no engancha nada y devuelve que no se hizo cargo', () => {
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: { frjView: 'tab' }, pathname: '/negocio' })
+    expect(
+      PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: navegar, exitId: 7 })
+    ).toBe(false)
+    expect(ctx.back).not.toHaveBeenCalled()
+    expect(ctx.enganchados).toHaveLength(0)
+    expect(navegar).not.toHaveBeenCalled()
+  })
+
+  it('CON `reDecidir` engancha UN oyente de DISPARO ÚNICO ANTES del consumo, y retrocede una vez', () => {
+    const reDecidir = vi.fn()
+    const ctx = montarPila({ state: { frjView: 'tab' }, pathname: '/negocio' })
+    expect(
+      PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir })
+    ).toBe(true)
+    expect(ctx.enganchados).toHaveLength(1)
+    expect(ctx.enganchados[0].tipo).toBe('popstate')
+    expect(ctx.enganchados[0].opciones).toEqual({ once: true })
+    expect(ctx.back).toHaveBeenCalledTimes(1)
+    // ANTES del consumo: el retroceso es asíncrono, pero el oyente tiene que existir cuando llegue.
+    expect(ctx.win.addEventListener.mock.invocationCallOrder[0]).toBeLessThan(ctx.back.mock.invocationCallOrder[0])
+    expect(ctx.desenganchados).toHaveLength(0)
+    // Y NO re-decide en el mismo tick: el retroceso todavía no ocurrió.
+    expect(reDecidir).not.toHaveBeenCalled()
+  })
+
+  it('el `popstate` llama `reDecidir` UNA vez, y la rama no navega por su cuenta', () => {
+    const reDecidir = vi.fn()
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: { frjView: 'c' }, pathname: '/clients' })
+    PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: navegar, reDecidir })
+    dispararRetroceso(ctx, { pathname: '/clients', state: panelUnderState(PANEL_ROOT) })
+    expect(reDecidir).toHaveBeenCalledTimes(1)
+    expect(navegar).not.toHaveBeenCalled()
+    expect(ctx.back).toHaveBeenCalledTimes(1)
+  })
+
+  it('si el consumo SE NIEGA (sin subsección propia arriba), el oyente queda DESENGANCHADO y devuelve `false`', () => {
+    const reDecidir = vi.fn()
+    const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/negocio' })
+    expect(
+      PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir })
+    ).toBe(false)
+    expect(ctx.back).not.toHaveBeenCalled()
+    expect(ctx.desenganchados).toHaveLength(ctx.enganchados.length)
+    expect(ctx.desenganchados[0]).toBe(ctx.enganchados[0].fn)
+    expect(reDecidir).not.toHaveBeenCalled()
+  })
+
+  it('NUNCA retrocede sobre una entrada AJENA aunque lleve la marca de subsección (las dos guardas)', () => {
+    // Imposible hoy (las formas de state son disjuntas), pero es la cicatriz 2: un retroceso sobre una
+    // entrada que no empujamos nosotros EXPULSA AL DUEÑO DEL SITIO.
+    for (const ajena of [{ frjView: 'tab', frjOverlay: 1 }, { frjView: 'tab', frjDirty: 1 }]) {
+      const ctx = montarPila({ state: ajena, pathname: '/negocio' })
+      expect(
+        PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir: vi.fn() })
+      ).toBe(false)
+      expect(ctx.back).not.toHaveBeenCalled()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('el hook computa el hecho del MISMO `estado` que los otros tres, y le pasa `reDecidir` al ejecutor', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf('function handleNavigate(href: string): boolean {')
+    expect(desde).toBeGreaterThan(0)
+    const gesto = mod.slice(desde, mod.indexOf('\n  }', desde) + 4)
+    expect(gesto).toContain('vistaArriba: panelViewEntryParam(estado) !== null && !isForeignOwnedEntry(estado)')
+    expect(gesto).toContain('reDecidir: () => decidirDesdeElAterrizaje(href)')
+    // Una sola lectura del estado por gesto, igual que antes del arreglo.
+    expect(cuenta(gesto, /window\.history\.state/g)).toBe(1)
+  })
+
+  it('el segundo paso RE-LEE el estado y re-decide con LA política; push/replace se piden, nunca se ejecutan', () => {
+    const mod = sinComentarios(leer(MOD_DUENO))
+    const desde = mod.indexOf('function decidirDesdeElAterrizaje(href: string): void {')
+    expect(desde).toBeGreaterThan(0)
+    const paso = mod.slice(desde, mod.indexOf('\n  }', desde) + 4)
+    expect(paso.length).toBeGreaterThan(300)
+    expect(cuenta(paso, /window\.history\.state/g)).toBe(1)
+    expect(paso).toContain('window.location.pathname')
+    expect(cuenta(paso, /panelBranchPlan\(/g)).toBe(1)
+    expect(paso).toContain('branchCarryMark(')
+    expect(paso).toContain('pedirNavegacion(')
+    expect(paso).toContain('reDecidir: () => decidirDesdeElAterrizaje(href)')
+    // Ni el router, ni un temporizador, ni un retroceso a mano: la navegación se pide (lección 3) y los
+    // retrocesos los hace el ejecutor con sus guardas.
+    expect(cuenta(paso, /setTimeout|setInterval|history\.back|router\./g)).toBe(0)
   })
 })
 
@@ -1296,6 +1402,17 @@ describe('el DOMINIO se suelta ANTES del retroceso deliberado, y el otro consumi
     const provider = leer(MOD_PROVIDER)
     expect(provider).toContain("case 'consume-exit-then-navigate':")
     expect(provider).toContain('_exhaustivo: never')
+  })
+
+  it('B1 (plan 04-04): el provider DECLARA el séptimo miembro, computa el hecho y DEGRADA sin `reDecidir`', () => {
+    // No es dueño de la re-decisión de la barra, y con la pantalla sucia la entrada de arriba es la del
+    // guard: el hecho es falso igual. Declarado para que el chequeo de exhaustividad no lo deje caer por
+    // un camino por defecto que nadie eligió; y sin `reDecidir` la rama del ejecutor se niega.
+    const provider = sinComentarios(leer(MOD_PROVIDER))
+    expect(provider).toContain("case 'consume-view-then-navigate':")
+    expect(provider).toContain('vistaArriba: panelViewEntryParam(estado) !== null && !isForeignOwnedEntry(estado)')
+    expect(provider).not.toContain('reDecidir')
+    expect(provider).toContain('runBranchNavigation({ plan, to, navigate: navegar })')
   })
 
   it('y el provider sigue con CERO mutaciones crudas de historial', () => {
@@ -1999,6 +2116,7 @@ describe('G3-1 — la marca VIAJA por encima del `replace` (el camino entero, un
         to: PANEL_ROOT,
         raizDebajo: PH.panelUnderRoute(panelUnderState(PANEL_ROOT)) === PANEL_ROOT,
         masDebajo: false,
+        vistaArriba: false,
         holdsExitSentinel: false,
       })
     ).toBe('up')
@@ -2127,7 +2245,10 @@ describe('G3-1 — la marca VIAJA por encima del `replace` (el camino entero, un
     expect(plan.length).toBeGreaterThan(400)
     expect(cuenta(nav, /return '/g)).toBe(6)
     expect(cuenta(nav, /if \(/g)).toBe(5)
-    expect(cuenta(plan, /if \(/g)).toBe(6)
+    // ⚠ 2026-11-17 (plan 04-04, decisión B1 del dueño): SEIS → SIETE `if` A PROPÓSITO. La séptima es la
+    // regla `-1d` (consumir NUESTRA subsección y re-decidir), ADITIVA: ninguna de las seis cambió ni se
+    // reordenó, y los otros contadores de esta región siguen iguales.
+    expect(cuenta(plan, /if \(/g)).toBe(7)
     expect(cuenta(plan, /return 'up'/g)).toBe(2)
     expect(cuenta(plan, /return modo/g)).toBe(2)
     // Y el productor nuevo no vive en el módulo de política: la propagación necesita el `window`.
@@ -2142,8 +2263,10 @@ describe('G3-1 — la marca VIAJA por encima del `replace` (el camino entero, un
     const pol = sinComentarios(leer(MOD_REGLA0))
     const tipo = pol.slice(pol.indexOf('export type PanelBranchPlan'), pol.indexOf('export function panelBranchPlan'))
     expect(tipo.length).toBeGreaterThan(60)
-    // Dos de `PanelNavMode` más cuatro propios: SEIS.
-    expect(cuenta(tipo, /\| '/g)).toBe(4)
+    // Dos de `PanelNavMode` más cuatro propios: SEIS hasta el 03-11.
+    // ⚠ 2026-11-17 (plan 04-04, decisión B1 del dueño): CINCO propios A PROPÓSITO (SIETE en total). El
+    // séptimo, `consume-view-then-navigate`, no es de G3-1: es el hueco de composición medido en el 04-03.
+    expect(cuenta(tipo, /\| '/g)).toBe(5)
     expect(tipo).toContain('| PanelNavMode')
     // Y el predicado de la regla 0 sigue reconociendo TRES dueños.
     const desde = pol.indexOf('export function isForeignOwnedEntry')
@@ -2215,6 +2338,7 @@ describe('branchCarryMark — las reglas EN ORDEN, y la del valor leído va ÚLT
         to: PANEL_ROOT,
         raizDebajo: false,
         masDebajo: false,
+        vistaArriba: false,
         holdsExitSentinel: false,
       })
     ).toBe('push')

@@ -84,7 +84,7 @@ describe('leaveNavigationPlan', () => {
 // el quick `261006-iey` ya tuvo que arreglar una vez.
 
 /**
- * Los **seis** planes de la rama, como un mapa TOTAL sobre el tipo.
+ * Los **siete** planes de la rama (seis hasta el plan 04-04), como un mapa TOTAL sobre el tipo.
  *
  * ⚠ **Es el candado, y no es decorativo:** `Record<PanelBranchPlan, true>` **no compila** si mañana
  * aparece un plan nuevo y nadie lo agrega acá. Una lista de literales sueltos no haría nada: se
@@ -98,6 +98,9 @@ const TODOS_LOS_PLANES: Record<PanelBranchPlan, true> = {
   up: true,
   'collapse-then-replace': true,
   'consume-exit-then-navigate': true,
+  // El séptimo (plan 04-04, decisión B1 del dueño, 2026-11-17): consumir NUESTRA subsección de arriba y
+  // re-decidir. Mordió igual que el sexto: sin esta línea el mapa deja de compilar.
+  'consume-view-then-navigate': true,
   none: true,
 }
 
