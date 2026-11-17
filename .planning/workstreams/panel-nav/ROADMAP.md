@@ -686,7 +686,7 @@ aislamiento por tenant no cambia. Riesgo bajo.
 con A, el `04-03` deja su `04-04-SUMMARY.md` «no aplica» con `status: complete`, así execute-phase lo saltea y el `04-05`
 se programa)
 
-- [ ] `04-01-PLAN.md` — wave 1 · **Finanzas de punta a punta y el ejecutor**: la lista cerrada (`lib/panel-tabs.ts`), la
+- [x] `04-01-PLAN.md` — wave 1 · **Finanzas de punta a punta y el ejecutor**: la lista cerrada (`lib/panel-tabs.ts`), la
   causa `'user-switch'` + `panelTabCause`, Finanzas derivada de la URL con su botón de alta (MOB-09), medida RED → GREEN
   en la app real; y el defecto del ejecutor corregido en su propio paso —un `replace` no fabrica la marca sobre una entrada
   ajena— más el `drop` para el OAuth, con el cambio de `/clients` declarado
@@ -754,4 +754,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 0/5 | Planned | - |
+| 4. Los tabs profundos sobre la política ya fijada | 1/5 | In Progress | - |
