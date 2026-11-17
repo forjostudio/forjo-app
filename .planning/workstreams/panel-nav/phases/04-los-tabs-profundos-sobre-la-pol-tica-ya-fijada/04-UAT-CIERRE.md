@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada
 source: [04-01-SUMMARY.md, 04-02-SUMMARY.md, 04-03-SUMMARY.md, 04-04-SUMMARY.md, 04-05-SUMMARY.md, 04-UAT.md, 04-VERIFICATION.md, 04-REVIEW.md]
 started: 2026-11-17T15:55:00Z
-updated: 2026-11-17T21:30:00Z
+updated: 2026-11-17T23:59:00Z
 ---
 
 ## Current Test
@@ -88,33 +88,74 @@ blocked: 0
   reason: "User reported: el primer toque de Ventas/Egresos scrollea al inicio de la página (Android y escritorio); después no pasa más; sólo Finanzas"
   severity: minor
   test: 6
-  artifacts: []
-  missing: []
-  hypothesis: "04-REVIEW.md WR-01 — el `<Suspense fallback={null}>` nuevo de app/(dashboard)/finances/page.tsx:26 deja pendiente el scroll de la navegación de entrada (no hay nodo del DOM para consumirlo); el pushState del primer tab dispara ACTION_RESTORE y el layout ejecuta scrollTop = 0. Negocio/Configuración no lo muestran porque sus tabs están arriba de todo. SIN MEDIR: confirmar con CDP bajo con-turno antes de arreglar. Arreglarlo toca el gate test/panel-tabs.test.ts:400 y el caso (e)."
+  root_cause: "MEDIDO (CDP bajo con-turno, Chrome 157): el `<Suspense fallback={null}>` de app/(dashboard)/finances/page.tsx:26 commitea la página SIN nodo del DOM mientras el chunk de FinancesClient no está cargado en el documento (contenedor con 0 hijos durante 310-1724 ms). InnerScrollAndFocusHandlerOld de Next 16.2.7 no encuentra nodo y deja pendiente el scrollRef de la navegación; el primer update del router —el ACTION_RESTORE que dispara el pushState del primer toque de tab— lo consume con scrollTop=0 + scrollIntoView. Hace falta: entrada por navegación blanda + chunk no cargado + tope de la página fuera de pantalla. Reproducido en Más, tarjeta «Ingresos del mes» (390x844: scrollY 1404→147) y sidebar de escritorio (1280x800: 830→115); segundo toque 0 escrituras; carga dura 0 escrituras. Causalidad: con fallback = div con clase del contenedor, 0 escrituras en los tres caminos (control positivo: Negocio sin tocar sigue escribiendo). El mismo pendiente latente existe en negocio/page.tsx:31 y settings/page.tsx:44 (medido en Negocio con el tope 40 px fuera de pantalla); clients/page.tsx tiene el mismo patrón desde v0.30 (sin medir). H-B (el documento se acorta) descartada: alto constante. El 147/115 en vez de 0 es por `html { scroll-behavior: smooth }` (globals.css:346) sin `data-scroll-behavior`. IN-02 confirmado emulado: router.refresh() en /negocio?tab=integraciones tras pushState escribe scrollTop=0 por OTRO mecanismo (scrollRef nuevo por key __PAGE__ distinta) que el fallback no cubre."
+  artifacts:
+    - path: "app/(dashboard)/finances/page.tsx"
+      issue: "fallback={null} en L26 — causa raíz"
+    - path: "app/(dashboard)/negocio/page.tsx"
+      issue: "mismo Suspense con fallback null (L31): pendiente latente medido"
+    - path: "app/(dashboard)/settings/page.tsx"
+      issue: "mismo Suspense con fallback null (L44)"
+    - path: "test/panel-tabs.test.ts"
+      issue: "el gate de L400 y el caso (e) (~L530) exigen literalmente `<Suspense fallback={null}>`"
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "router.refresh() — IN-02, mecanismo distinto"
+  missing:
+    - "Que el boundary tenga un nodo del DOM mientras suspende (fallback div con la clase del contenedor) en finances, negocio y settings; ajustar el gate de panel-tabs.test.ts:400 y el caso (e)"
+    - "Regresión en la sonda: primer toque de Ventas/Egresos tras entrada blanda con 0 escrituras de scroll"
+    - "IN-02: decisión aparte (aceptar o preservar scrollY alrededor del refresh)"
+  debug_session: ".planning/debug/finanzas-primer-toque-scroll.md"
 - gap_id: G-04-7
   truth: "Un doble toque rápido en un tab no duplica entradas del historial"
   status: failed
   reason: "Code review WR-02: el `from` de panelTabCause sale del render, no de window.location al momento del toque"
   severity: minor
   test: 7
-  artifacts: [app/(dashboard)/finances/finances-client.tsx, app/(dashboard)/settings/settings-client.tsx]
-  missing: []
+  root_cause: "CONFIRMADO por lectura + sonda pura con el applyPanelView real (.planning/debug/probes/g04-7-8-puro.mjs). Los dos alElegirTab pasan `from: tabResuelto.slug` de useSearchParams() del último commit (finances-client.tsx:280, settings-client.tsx:1035); el parche de pushState de Next despacha ACTION_RESTORE en startTransition, así que location/history.state cambian ya y useSearchParams recién al commit. Base UI no frena el segundo toque (active/value del último commit; Tabs controlado, sin estado local). Resultados: E1 Turnos→Ventas ×2 = push,push (Ventas sobre Ventas); E2 Turnos→Ventas→Egresos = push,push (atrás desde Egresos cae en Ventas, viola D-01); E4 = consume + replace que le borra frjUnder a /finances. SEGUNDO DEFECTO que el fix del review no cubre: history.back() es asíncrono, `holding` sigue true hasta el recorrido ⇒ E3 Ventas→Turnos ×2 = dos back, termina en /dashboard, aun leyendo window.location. La suite no lo vio: `tocar` (test/panel-tabs.test.ts:177-183) lee window.location (prueba la versión arreglada) y su back() es síncrono."
+  artifacts:
+    - path: "app/(dashboard)/finances/finances-client.tsx"
+      issue: "alElegirTab decide con tabResuelto.slug del render (L280)"
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "alElegirTab decide con tabResuelto.slug del render (L1035)"
+    - path: "lib/panel-history.ts"
+      issue: "sin guarda de consumo en vuelo entre back() y popstate"
+    - path: "test/panel-tabs.test.ts"
+      issue: "el simulador `tocar` no reproduce el handler real y su back() es síncrono"
+  missing:
+    - "Helper puro compartido por las dos pantallas y por `tocar` que tome el `from` de window.location"
+    - "Guarda de «consumo en vuelo» en lib/panel-history.ts que se limpie en el próximo popstate (misma forma en consumeOwnedPanelEntry y el «Volver» de clientes)"
+    - "RED primero: gate (f) `cuerpoDe(fuente,'function alElegirTab(','): void {')` sin `tabResuelto.slug`; montarHistoria({ backAsincrono: true }) con dos tocar(TABS_FINANZAS,'appointments') desde [/dashboard, /finances{frjUnder}, /finances?tab=ventas{frjView:'tab'}] ⇒ 'consume','none', retrocesos 1, URL /finances"
+  debug_session: ".planning/debug/doble-toque-tab.md"
 - gap_id: G-04-8
   truth: "Volver del OAuth con `?mp=` vacío o con `?tab=integraciones&mp=…` no traba los tabs de Negocio"
   status: failed
   reason: "Code review WR-03: criterio distinto entre el render (L1013) y el efecto del OAuth (L1113) de settings-client.tsx"
   severity: major
   test: 8
-  artifacts: [app/(dashboard)/settings/settings-client.tsx]
-  missing: []
+  root_cause: "CONFIRMADO por lectura + sonda pura. El render fuerza Integraciones y apaga la reconciliación mientras mp/google estén PRESENTES (settings-client.tsx L1013 `!== null`, L1042, L1065); el único que los borra es el efecto del OAuth (deps [isNegocio], una vez por montaje), que no escribe en dos casos: (a) valor vacío — guarda por verdad `if (!mp && !google) return` (L1113); (b) `?tab=integraciones&mp=…` — la regla 2 de panelHistoryAction (from === to ⇒ 'none', lib/panel-history.ts:112 y :976) compara sólo el tab e ignora el drop. alElegirTab nunca pasa drop (L1035) ⇒ ningún toque limpia. Casos trabados: ?mp=, ?google=, ?tab=integraciones&mp=connected, ?tab=integraciones&google=connected, ?tab=integraciones&mp= (siempre se ve Integraciones; sólo sale remontando o recargando). Controles verdes: ?mp=connected, ?tab=cobros&mp=connected. El comentario L1104-1107 es falso y en (b) el toast sale dos veces en dev. Ningún callback emite esas URLs (sólo pegadas/editadas). Agenda (IN-03) tiene la misma guarda pero ningún render lee google ⇒ no traba."
+  artifacts:
+    - path: "app/(dashboard)/settings/settings-client.tsx"
+      issue: "criterio por presencia en el render (L1013/1042/1065) vs por verdad en el efecto (L1113); comentario L1104-1107 incorrecto; alElegirTab sin drop"
+    - path: "lib/panel-history.ts"
+      issue: "regla 2 (from === to ⇒ 'none') se come la limpieza con drop (L112, L976)"
+    - path: "lib/panel-tabs.ts"
+      issue: "lugar del predicado único por presencia, junto a TABS_NEGOCIO"
+  missing:
+    - "Predicado único por presencia (`mp` o `google` en la query) exportado de lib/panel-tabs.ts y usado por render, corte de reconciliación y guarda del efecto"
+    - "Limpieza que escriba cuando cambia la URL aunque from === to (helper de limpieza en lib/panel-history.ts, el de IN-03, o `from: null` cuando desde === 'integraciones')"
+    - "Corregir el comentario L1104-1107"
+    - "RED primero: pila con applyPanelView real + volverDelOAuth() con el predicado exportado para las 5 URLs trabadas ⇒ sin mp/google, /negocio?tab=integraciones, 2 entradas, 0 retrocesos, y tocar(TABS_NEGOCIO,'business') = 'replace' a /negocio; gate (g) sin `get('mp') !== null` ni `if (!mp && !google) return`, predicado ×2, sin «la query queda hasta el próximo toque»"
+  debug_session: ".planning/debug/oauth-traba-tabs-negocio.md"
 - gap_id: G-04-9
   truth: "B1 sigue andando después de recargar con un tab abierto"
-  status: failed
-  reason: "Code review WR-04, sin medir"
+  status: resolved
+  reason: "Code review WR-04 — MEDIDO: NO REPRODUCE"
   severity: major
   test: 9
-  artifacts: [lib/panel-history.ts, lib/panel-branch.ts, components/dashboard/unsaved-changes-guard.tsx]
+  root_cause: "NO REPRODUCE (CDP bajo con-turno, Chrome 157, 390x844, atrás = chrome.tabs.goBack). Más → Negocio → Cobros → recarga → toque en la barra: la marca {frjView:'tab'} sí sobrevive a la recarga, pero el back() de B1 cae en el MISMO documento nuevo (popstate, 0 documentos nuevos) y el segundo paso (decidirDesdeElAterrizaje) encadena. Control vs variante idénticos en Inicio (/dashboard#salir, aviso armado; 3 popstates; pila [/dashboard]), Turnos ([/dashboard, /appointments]) y Más ([/dashboard, /mas]). La premisa de WR-04 (la recarga sólo da documento nuevo a la entrada recargada) es falsa en Chrome 157: la recarga reemplaza el documento de todas las entradas que el documento viejo había empujado. Sin medir: Safari iOS real, Android real (comparte Chromium), pestaña descartada/restaurada por el sistema; sólo dev."
+  artifacts: []
   missing: []
+  debug_session: ".planning/debug/b1-tras-recarga.md"
 
 ## Deferred Follow-Ups
 
