@@ -398,19 +398,29 @@ export function isForeignOwnedEntry(state: unknown): boolean {
  * Devuelve el `pathname` a secas cuando no queda ningún parámetro: un `/clients?` colgando es una URL
  * DISTINTA de `/clients`, así que empujarla o reemplazarla ahí reintroduce la cicatriz 1. Los params
  * ajenos se preservan — esta pantalla no es dueña de la query entera.
+ *
+ * **`drop` (plan 04-01): los params que la pantalla declara SUYOS y quiere borrar en la misma
+ * escritura.** Existe por el retorno del OAuth: MercadoPago y Google vuelven a `/negocio?mp=…` /
+ * `?google=…`, y la pantalla tiene que dejar `/negocio?tab=integraciones` con UNA escritura, borrando
+ * `mp` y `google` sin pisar ningún param ajeno (un literal de ruta los pisaría todos). Se borran ANTES
+ * de poner o sacar `param`, y el `?` colgando sigue imposible: si no queda nada, sale el pathname a
+ * secas. Default vacío ⇒ `/clients` no cambia.
  */
 export function panelViewUrl({
   pathname,
   search,
   param,
   value,
+  drop = [],
 }: {
   pathname: string
   search: string
   param: string
   value: string | null
+  drop?: readonly string[]
 }): string {
   const sp = new URLSearchParams(search)
+  for (const quitar of drop) sp.delete(quitar)
   if (value === null) sp.delete(param)
   else sp.set(param, value)
   const qs = sp.toString()
@@ -870,24 +880,43 @@ export function reconciledMemo({
  * ⚠ Las dos escrituras van como **dos llamadas literales y separadas**, nunca por índice dinámico: el
  * gate de código audita el primer argumento en el punto de escritura, y una indirección lo volvería
  * inauditable — que es justo por donde se cuela un state con internos heredados.
+ *
+ * ⚠ **UN REEMPLAZO NO CAMBIA QUIÉN EMPUJÓ LA ENTRADA** (Patrón 3 de la Phase 4, plan 04-01). Sólo un
+ * EMPUJE crea una entrada nuestra. Un reemplazo conserva la propiedad que la entrada ya tenía
+ * (`holding`) y NUNCA la fabrica sobre una entrada ajena —una URL pegada, el retorno del OAuth—:
+ * fabricarla hace que el próximo consumo —el toque al tab por defecto, el «Volver» de clientes, o tocar
+ * la sección activa en el sidebar (NAV-08/D-08, {@link consumeOwnedPanelEntry})— haga un retroceso
+ * sobre una entrada que no empujamos, y el dueño termina FUERA DEL SITIO (la cicatriz 2). Medido en la
+ * app real: `/finances?tab=ventas` pegada → Egresos → Turnos salía a la página de afuera. Es la hermana
+ * de la frontera que la Phase 3 escribió para la rama: "un `replace` NO CAMBIA lo que quedó debajo"
+ * (`lib/panel-branch.ts`). Por eso `holding` se lee UNA vez y lo usan la decisión y la marca.
+ * **Cambio de comportamiento DECLARADO (2026-11-17, plan 04-01) en `/clients`:** sobre una `?c=`
+ * pegada, la fusión (`programmatic`) ya no marca la entrada, así que el «Volver» siguiente REEMPLAZA
+ * a `/clients` en vez de retroceder fuera del sitio. Lo fija un caso de `lib/panel-history.test.ts`.
+ *
+ * `drop` pasa tal cual a {@link panelViewUrl}: los params propios a borrar en la misma escritura (el
+ * retorno del OAuth, plan 04-02). Default vacío.
  */
 export function applyPanelView({
   cause,
   param,
   from,
   to,
+  drop,
 }: {
   cause: PanelViewCause
   param: string
   from: string | null
   to: string | null
+  drop?: readonly string[]
 }): PanelHistoryAction {
   const actual: unknown = window.history.state
+  const holding = isPanelViewEntry(actual, param)
   const action = panelHistoryAction({
     cause,
     from,
     to,
-    holding: isPanelViewEntry(actual, param),
+    holding,
     foreignOwnsTop: isForeignOwnedEntry(actual),
   })
 
@@ -904,8 +933,11 @@ export function applyPanelView({
     search: window.location.search,
     param,
     value: to,
+    drop,
   })
-  const next = panelViewState(param, to)
+  // La marca, sólo si la entrada es nuestra: la crea un empuje, o ya lo era (ver el docblock: un
+  // reemplazo no fabrica la propiedad). Objeto literal fresco, siempre: nunca el state actual.
+  const next = panelViewState(param, action === 'push' || holding ? to : null)
   if (action === 'push') window.history.pushState(next, '', url)
   else window.history.replaceState(next, '', url)
   return action
@@ -1004,6 +1036,9 @@ export function writePanelUnder(route: string): boolean {
  * línea, pero toca el ejecutor que v0.30 dejó auditado con un gate de código y abre la pregunta de si
  * un estado propio conservado reintroduce la trampa de la rama temprana del parche; si la Phase 4 lo
  * necesita para los tabs, entra ahí con su propia medición.
+ * **La Phase 4 entró en {@link applyPanelView} con su medición (plan 04-01, 2026-11-17) para la marca
+ * DEL REEMPLAZO —un reemplazo ya no fabrica `frjView` sobre una entrada ajena— y NO para preservar la
+ * marca de la rama: `frjUnder` sigue borrándose en los reemplazos que lista este párrafo.**
  */
 export function applyPanelUnder({
   from,
