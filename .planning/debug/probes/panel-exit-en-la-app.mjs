@@ -2669,6 +2669,13 @@ const RECORRIDOS = [
       // (P-1, 2026-11-17): los toques a Egresos y a Turnos sobre la URL pegada NO cambiaron el tab y no se
       // sabia si el toque no llegaba o si la escritura no ocurria. Con esto el detalle lo NOMBRA.
       const { identifier } = await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', { source: SCRIPT_DE_LA_HISTORIA })
+      // Y las excepciones y los errores de consola de la pagina mientras dura el recorrido (segunda vuelta
+      // del P-1: con el instrumento de la historia el toque LLEGA —sonda-click sin defaultPrevented— y
+      // NO HAY ninguna escritura; queda saber si el manejador tiro).
+      const consola = []
+      let escuchando = true
+      cdp.en('Runtime.exceptionThrown', (e) => { if (escuchando) consola.push(`excepcion: ${(e.exceptionDetails?.exception?.description ?? e.exceptionDetails?.text ?? '?').split('\n').slice(0, 3).join(' | ')}`) })
+      cdp.en('Runtime.consoleAPICalled', (e) => { if (escuchando && (e.type === 'error' || e.type === 'warning')) consola.push(`consola.${e.type}: ${(e.args ?? []).map((a) => a.value ?? a.description ?? '').join(' ').split('\n').slice(0, 2).join(' | ').slice(0, 300)}`) })
       let alEntrar, trasEgresos, trasTurnos, trasElAtras, hidratado, desde
       try {
         await navegar(cdp, AFUERA)
@@ -2690,12 +2697,15 @@ const RECORRIDOS = [
         await asentarTab(cdp)
         trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
       } finally {
+        escuchando = false
         await cdp.enviar('Page.removeScriptToEvaluateOnNewDocument', { identifier })
       }
       const delRecorrido = registros.slice(desde).filter((r) => r.tipo === 'sonda-click' || r.tipo === 'sonda-historia' || r.tipo === 'sonda-documento-nuevo' || r.tipo === 'sonda-popstate')
       return {
         detalle: (p) => {
           console.log(`${p}React enganchado en el tab Egresos al entrar: ${hidratado}`)
+          console.log(`${p}excepciones y errores de consola de la pagina: ${consola.length}`)
+          for (const c of consola) console.log(`${p}  ${c}`)
           console.log(`${p}los toques y las escrituras del recorrido:`)
           for (const r of delRecorrido) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
           console.log(`${p}al entrar: url=${alEntrar.u} tab=${alEntrar.tab} alta=${alEntrar.alta} pila=[${alEntrar.pila.entradas.join(', ')}] actual=${alEntrar.pila.indice}`)
