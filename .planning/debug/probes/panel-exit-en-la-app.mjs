@@ -1134,6 +1134,46 @@ async function hastaCobrosPorMas(cdp) {
   if (lugarDe(u) !== '/negocio?tab=cobros') throw new Error(`no se pudo llegar a Cobros por Mas: la URL quedo en ${u}`)
 }
 
+/**
+ * El CONTROL de los `R-B1-*` (plan 04-04): Inicio -> Mas -> Negocio, SIN tocar ningun tab. Es el mismo
+ * camino que `hastaCobrosPorMas` menos el ultimo paso, asi que la unica diferencia entre el control y la
+ * variante es la subseccion de arriba. Si no llega a Negocio, TIRA (P-1).
+ */
+async function hastaNegocioPorMas(cdp) {
+  await entrarDirecto(cdp)
+  await tocarEnLaBarra(cdp, '/mas')
+  await tocarEnlace(cdp, '/negocio')
+  const u = await ubicacion(cdp)
+  if (lugarDe(u) !== '/negocio') throw new Error(`no se pudo llegar a Negocio por Mas: la URL quedo en ${u}`)
+}
+
+/**
+ * Un recorrido `R-B1-*` (plan 04-04, decision B1 del dueno): el MISMO gesto de la barra con y sin la
+ * subseccion arriba, en el mismo recorrido y re-entrando directo entre los dos. Devuelve la foto de cada
+ * uno despues de asentar. El `esperado` de la decision es «con la subseccion arriba, el gesto termina
+ * igual que sin ella»: se compara la pila normalizada y el aviso de la variante contra los del control.
+ */
+async function controlYVariante(cdp, { control, variante, destino }) {
+  await control(cdp)
+  const antesDelControl = await fotoDeLaComposicion(cdp)
+  await tocarEnLaBarra(cdp, destino)
+  const delControl = await fotoDeLaComposicion(cdp)
+  await variante(cdp)
+  const antesDeLaVariante = await fotoDeLaComposicion(cdp)
+  await tocarEnLaBarra(cdp, destino)
+  const deLaVariante = await fotoDeLaComposicion(cdp)
+  return { antesDelControl, delControl, antesDeLaVariante, deLaVariante }
+}
+
+/** El detalle comun de los `R-B1-*`: las cuatro fotos, con la pila cruda de cada una. */
+function detalleB1(p, f, { sinSub, conSub }) {
+  imprimirComposicion(p, `control, ${sinSub}, antes del toque`, f.antesDelControl)
+  imprimirComposicion(p, 'control, tras el toque', f.delControl)
+  imprimirComposicion(p, `variante, ${conSub}, antes del toque`, f.antesDeLaVariante)
+  imprimirComposicion(p, 'variante, tras el toque', f.deLaVariante)
+  console.log(`${p}aviso del control=${f.delControl.aviso} · aviso de la variante=${f.deLaVariante.aviso}`)
+}
+
 /** La preparacion de ESCRITORIO de C-5 y C-6: Inicio -> Negocio (sidebar) -> Cobros. Si no llega, TIRA (P-1). */
 async function hastaCobrosPorElSidebar(cdp) {
   await entrarDirecto(cdp)
@@ -3442,6 +3482,76 @@ const RECORRIDOS = [
       }
     },
   },
+  // plan 04-04 (Phase 4, decision B1 del dueno del 2026-11-17): con una subseccion NUESTRA arriba (un tab
+  // o la ficha `?c=`), el gesto de la barra la CONSUME primero y recien despues decide con la pila real.
+  // Cada recorrido mide el MISMO gesto con y sin la subseccion (el control), re-entrando directo entre los
+  // dos. ⚠ El `esperado` es la decision del dueno, escrito en el commit `test(04-04)` ANTES del arreglo:
+  // con el codigo de antes los cuatro dan FALLA (`pila_igual_al_control: no`) y el control da la pila de
+  // la Phase 3; si un control no la da, el instrumento esta mal (P-1), no el arreglo.
+  {
+    id: 'R-B1-inicio',
+    titulo: 'B1 (movil): Mas -> Negocio -> Cobros -> tocar Inicio termina igual que Mas -> Negocio -> tocar Inicio (el retroceso TRIPLE tab -> seccion -> Mas -> Inicio)',
+    async correr(cdp) {
+      const f = await controlYVariante(cdp, { control: hastaNegocioPorMas, variante: hastaCobrosPorMas, destino: ROOT })
+      return {
+        detalle: (p) => detalleB1(p, f, { sinSub: 'en Negocio', conSub: 'en Cobros' }),
+        medido: {
+          pila_del_control: f.delControl.pila,
+          pila_igual_al_control: iguales(f.deLaVariante.pila, f.delControl.pila) ? 'si' : 'no',
+          aviso_igual_al_control: f.deLaVariante.aviso === f.delControl.aviso ? 'si' : 'no',
+        },
+        esperado: { pila_del_control: ['/dashboard'], pila_igual_al_control: 'si', aviso_igual_al_control: 'si' },
+      }
+    },
+  },
+  {
+    id: 'R-B1-turnos',
+    titulo: 'B1 (movil): Mas -> Negocio -> Cobros -> tocar Turnos termina igual que Mas -> Negocio -> tocar Turnos (colapsa a Inicio + Turnos)',
+    async correr(cdp) {
+      const f = await controlYVariante(cdp, { control: hastaNegocioPorMas, variante: hastaCobrosPorMas, destino: '/appointments' })
+      return {
+        detalle: (p) => detalleB1(p, f, { sinSub: 'en Negocio', conSub: 'en Cobros' }),
+        medido: {
+          pila_del_control: f.delControl.pila,
+          pila_igual_al_control: iguales(f.deLaVariante.pila, f.delControl.pila) ? 'si' : 'no',
+        },
+        esperado: { pila_del_control: ['/dashboard', '/appointments'], pila_igual_al_control: 'si' },
+      }
+    },
+  },
+  {
+    id: 'R-B1-mas',
+    titulo: 'B1 (movil): Mas -> Negocio -> Cobros -> tocar Mas sube igual que Mas -> Negocio -> tocar Mas (D-03, no apila)',
+    async correr(cdp) {
+      const f = await controlYVariante(cdp, { control: hastaNegocioPorMas, variante: hastaCobrosPorMas, destino: '/mas' })
+      return {
+        detalle: (p) => detalleB1(p, f, { sinSub: 'en Negocio', conSub: 'en Cobros' }),
+        medido: {
+          pila_del_control: f.delControl.pila,
+          pila_igual_al_control: iguales(f.deLaVariante.pila, f.delControl.pila) ? 'si' : 'no',
+        },
+        esperado: { pila_del_control: ['/dashboard', '/mas'], pila_igual_al_control: 'si' },
+      }
+    },
+  },
+  {
+    id: 'R-B1-ficha',
+    titulo: 'B1 (movil): Inicio -> Clientes -> ficha -> tocar Inicio termina igual que Inicio -> Clientes -> tocar Inicio (la ficha ?c= consumida primero)',
+    async correr(cdp) {
+      const control = async (c) => { await entrarDirecto(c); await tocarEnLaBarra(c, '/clients') }
+      const variante = async (c) => { await control(c); await abrirPrimeraFicha(c) }
+      const f = await controlYVariante(cdp, { control, variante, destino: ROOT })
+      return {
+        detalle: (p) => detalleB1(p, f, { sinSub: 'en Clientes', conSub: 'en la ficha' }),
+        medido: {
+          pila_del_control: f.delControl.pila,
+          pila_igual_al_control: iguales(f.deLaVariante.pila, f.delControl.pila) ? 'si' : 'no',
+          aviso_igual_al_control: f.deLaVariante.aviso === f.delControl.aviso ? 'si' : 'no',
+        },
+        esperado: { pila_del_control: ['/dashboard'], pila_igual_al_control: 'si', aviso_igual_al_control: 'si' },
+      }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -3559,6 +3669,10 @@ const QUE_CIERRA = {
   'R-C-5': 'C-5 (escritorio): Negocio -> Cobros -> Finanzas por el sidebar; esperado = la pila DERIVADA en el research, plan 04-03 (el atras cae en Negocio)',
   'R-C-6': 'C-6 (escritorio): Negocio -> Cobros -> Inicio por el sidebar; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, como el residuo de escritorio)',
   'R-C-ficha': 'el hueco de ?c=: Clientes -> ficha -> tocar Inicio; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, el aviso no se arma)',
+  'R-B1-inicio': 'B1 (plan 04-04): con Cobros arriba, tocar Inicio termina igual que sin el tab ([/dashboard], el aviso igual): el retroceso TRIPLE',
+  'R-B1-turnos': 'B1 (plan 04-04): con Cobros arriba, tocar Turnos termina igual que sin el tab ([/dashboard, /appointments])',
+  'R-B1-mas': 'B1 (plan 04-04): con Cobros arriba, tocar Mas sube igual que sin el tab ([/dashboard, /mas])',
+  'R-B1-ficha': 'B1 (plan 04-04): con la ficha ?c= arriba, tocar Inicio termina igual que sin la ficha ([/dashboard], el aviso igual)',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
