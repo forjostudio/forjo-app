@@ -682,7 +682,27 @@ tabs y caer al default, **nunca** usarlo para elegir qué se lee (el criterio 1 
 **antes** de cualquier tab: el tab decide qué se **muestra**, nunca qué se **lee**, así que el
 aislamiento por tenant no cambia. Riesgo bajo.
 
-**Plans**: TBD
+**Plans**: 5 plans (el `04-04` es **condicional**: se ejecuta sólo si el dueño elige B1 o B2 en el checkpoint del `04-03`;
+con A, el `04-03` deja su `04-04-SUMMARY.md` «no aplica» con `status: complete`, así execute-phase lo saltea y el `04-05`
+se programa)
+
+- [ ] `04-01-PLAN.md` — wave 1 · **Finanzas de punta a punta y el ejecutor**: la lista cerrada (`lib/panel-tabs.ts`), la
+  causa `'user-switch'` + `panelTabCause`, Finanzas derivada de la URL con su botón de alta (MOB-09), medida RED → GREEN
+  en la app real; y el defecto del ejecutor corregido en su propio paso —un `replace` no fabrica la marca sobre una entrada
+  ajena— más el `drop` para el OAuth, con el cambio de `/clients` declarado
+- [ ] `04-02-PLAN.md` — wave 2 · **Negocio y Configuración, T-1 y T-2**: los dos grupos de `settings-client.tsx` en la URL
+  con el cambio confinado a L992-1021 (las otras tres rutas sin moverse, con candados y un control en la app), el retorno
+  del OAuth como UN `replace` del helper hacia Integraciones, Agenda limpia su `?google=` por el helper, D-08 medido en el
+  sidebar, y el barrido crudo del criterio 5 en cero
+- [ ] `04-03-PLAN.md` — wave 3 · **La composición medida y la decisión del dueño**: seis recorridos con la pila DERIVADA
+  como esperado, un `checkpoint:decision` bloqueante (A declarar / B1 la barra / B2 la barra y el sidebar), y por escrito
+  el «PRECISADO» de D-01 sobre el criterio 1 y MOB-08 y el residuo que quede en los cuatro lugares
+- [ ] `04-04-PLAN.md` — wave 4 · **(condicional, sólo con B1/B2) B1 en la barra**: el séptimo miembro
+  `consume-view-then-navigate` del plan de la rama, que consume la subsección propia y re-decide con la pila real, medido
+  con control (incluido el retroceso triple) y con la no-regresión completa de la Phase 3
+- [ ] `04-05-PLAN.md` — wave 5 · **El cierre**: la no-regresión de la fase en una sola tanda (las dos sondas, la suite
+  completa, el build, el criterio 5), el guion de la UAT y un checkpoint bloqueante en el teléfono y EN PRODUCCIÓN (el OAuth
+  real con al menos un ✅ o la decisión escrita del dueño, T-1 ruta por ruta), después de que el orquestador suba `main`
 
 ## Cobertura de requisitos
 
@@ -734,4 +754,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 0/? | Not started | - |
+| 4. Los tabs profundos sobre la política ya fijada | 0/5 | Planned | - |

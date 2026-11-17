@@ -16,13 +16,13 @@
     {
       "number": "4",
       "name": "Los tabs profundos sobre la política ya fijada",
-      "status": "pending"
+      "status": "in_progress"
     }
   ],
   "next": {
-    "command": "/gsd-plan-phase 4 --ws panel-nav",
-    "label": "Planificar la fase 4: los tabs de /negocio, /settings y /finances en la URL",
-    "reason": "Phase 4 · contexto capturado el 2026-11-17 (04-CONTEXT.md)"
+    "command": "/gsd-execute-phase 4 --ws panel-nav",
+    "label": "Ejecutar la fase 4: los tabs de /negocio, /settings y /finances en la URL (5 planes; el 04-04 condicional a la decision del 04-03)",
+    "reason": "Phase 4 planificada el 2026-11-17; plan-checker PASSED"
   },
-  "updated_at": "2026-11-17T03:00:00.000Z"
+  "updated_at": "2026-11-17T05:00:00.000Z"
 }

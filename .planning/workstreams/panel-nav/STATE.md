@@ -4,18 +4,18 @@ milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 4 — Los tabs profundos sobre la política ya fijada
 current_plan: Not started
-status: planning
-stopped_at: "Phase 4 context gathered (04-CONTEXT.md, 10 decisiones); proximo: /gsd-plan-phase 4 --ws panel-nav"
-last_updated: "2026-11-17T03:00:00.000Z"
+status: ready_to_execute
+stopped_at: "Planificada la Phase 4 (5 planes, 5 waves; el 04-04 condicional a la decision A/B1/B2 del 04-03); plan-checker PASSED; proximo: /gsd-execute-phase 4 --ws panel-nav"
+last_updated: "2026-11-17T05:00:00.000Z"
 last_activity: 2026-11-17
-last_activity_desc: "contexto de la Phase 4 capturado (tabs en la URL: un nivel, nombres en espanol, default = URL limpia, OAuth con replace)"
+last_activity_desc: "Phase 4 planificada: investigacion + patrones + 5 planes; checker PASSED en la iteracion 2 (0 blockers)"
 state_head: 152d0002265f0731ba8f5f1808e93096ea1427b5
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 21
+  total_plans: 26
   completed_plans: 21
-  percent: 67
+  percent: 81
 workstream: panel-nav
 created: 2026-09-28
 current_phase_name: Los tabs profundos sobre la política ya fijada
@@ -26,25 +26,25 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 ## Current Position
 
 **Current Plan:** Not started
-**Total Plans in Phase:** — (la fase 4 sin planificar)
-**Status:** Ready to plan
+**Total Plans in Phase:** 5 (el 04-04 condicional)
+**Status:** Ready to execute (fase 4: 5 planes en 5 waves; plan-checker PASSED)
 **Current Phase:** 4 — Los tabs profundos sobre la política ya fijada
-**Last Activity:** 2026-11-17 — contexto de la Phase 4 capturado
+**Last Activity:** 2026-11-17 — Phase 4 planificada (5 planes, checker PASSED)
 **Last Activity Description:** Phase 3 complete (VERIFICATION passed 6/6, SECURITY threats_open 0, UAT de cierre 10/10 con el iPhone tras los arreglos tardios; MOB-04/05/06 Complete), transitioned to Phase 4
 
 ## Progress
 
-**Progress:** [███████░░░] 67%
+**Progress:** [████████░░] 81%
 **Phases Complete:** 2/3
-**Plans Complete:** 21/21 (fases 2 y 3)
+**Plans Complete:** 21/26 (fases 2 y 3 completas; fase 4 0/5)
 **Current Plan:** Not started
 
 ## Session Continuity
 
-**Last session:** 2026-11-17T03:00:00.000Z
+**Last session:** 2026-11-17T05:00:00.000Z
 
-**Stopped At:** Phase 4 context gathered — proximo: `/gsd-plan-phase 4 --ws panel-nav`
-**Resume File:** .planning/workstreams/panel-nav/phases/04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada/04-CONTEXT.md
+**Stopped At:** Phase 4 planificada — proximo: `/gsd-execute-phase 4 --ws panel-nav`
+**Resume File:** .planning/workstreams/panel-nav/phases/04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada/04-01-PLAN.md
 
 ## Performance Metrics
 
