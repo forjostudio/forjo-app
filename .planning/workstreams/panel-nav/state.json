@@ -21,7 +21,7 @@
   ],
   "next": {
     "command": "/gsd-execute-phase 4 --ws panel-nav",
-    "label": "Seguir ejecutando la fase 4 (Executing Phase 4 (wave 5/5: 04-05 cierre; 04-01..04 completos, B1 implementado))",
+    "label": "Seguir ejecutando la fase 4 (Phase 4: 5/5 planes ejecutados, UAT en produccion aprobada; en verificacion (seguridad, code review, verifier))",
     "reason": "Phase 4 en ejecucion desde 2026-11-17 (5 planes; el 04-04 condicional a la decision del 04-03)"
   },
   "updated_at": "2026-11-17T10:24:05.049Z"

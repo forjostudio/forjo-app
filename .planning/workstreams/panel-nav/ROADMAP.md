@@ -708,7 +708,7 @@ se programa)
 - [x] `04-04-PLAN.md` — wave 4 · **(condicional, sólo con B1/B2) B1 en la barra**: el séptimo miembro
   `consume-view-then-navigate` del plan de la rama, que consume la subsección propia y re-decide con la pila real, medido
   con control (incluido el retroceso triple) y con la no-regresión completa de la Phase 3
-- [ ] `04-05-PLAN.md` — wave 5 · **El cierre**: la no-regresión de la fase en una sola tanda (las dos sondas, la suite
+- [x] `04-05-PLAN.md` — wave 5 · **El cierre**: la no-regresión de la fase en una sola tanda (las dos sondas, la suite
   completa, el build, el criterio 5), el guion de la UAT y un checkpoint bloqueante en el teléfono y EN PRODUCCIÓN (el OAuth
   real con al menos un ✅ o la decisión escrita del dueño, T-1 ruta por ruta), después de que el orquestador suba `main`
 
@@ -762,4 +762,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 4/5 | In Progress | - |
+| 4. Los tabs profundos sobre la política ya fijada | 5/5 | In Progress | - |
