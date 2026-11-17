@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-discuss-phase 4 --ws panel-nav",
-    "label": "Discutir la fase 4: los tabs profundos de /negocio, /settings y /finances en la URL sobre la politica de atras ya fijada",
-    "reason": "Phase 3 completa el 2026-11-16 (MOB-04/05/06 Complete); la fase 4 no tiene contexto ni planes"
+    "command": "/gsd-plan-phase 4 --ws panel-nav",
+    "label": "Planificar la fase 4: los tabs de /negocio, /settings y /finances en la URL",
+    "reason": "Phase 4 · contexto capturado el 2026-11-17 (04-CONTEXT.md)"
   },
-  "updated_at": "2026-11-17T02:07:03.337Z"
+  "updated_at": "2026-11-17T03:00:00.000Z"
 }
