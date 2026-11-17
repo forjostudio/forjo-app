@@ -972,3 +972,99 @@ FALLA R-G3-10-primer-toque-atras-pronto · G3-10: el dialogo del plan abierto po
 - **Las suites:** la pura 77 archivos / 1804 + 3 expected-fail, rc 0; las ocho de historial 630/630.
 
 no-regresion (plan 04-04): sonda de la app 46/47 en OK, estatica 18/18, suites verdes
+
+## (g) La no-regresión de la fase (plan 04-05)
+
+Qué se preguntó: si la fase entera —los tres grupos de tabs, el OAuth, Agenda, B1 en la barra y todo lo de la
+Phase 3— está en verde **en una sola tanda**, antes de que el dueño toque nada. Nada de código cambió en este
+plan: se midió la app de `b4471c2` (la de `b13f0a1` del 04-04 más docs).
+
+**El entorno (paso 0).** 2026-11-17, 11:44 hora de Argentina (dentro de [01:00, 23:30], la ventana de los
+canarios de reloj). Pila local de forjo-app arriba (no hizo falta `supabase start`; no se paró ni reseteó
+ninguna pila). `negocio-prueba` en `trial|true` (consultado en `supabase_db_forjo-app`; no hizo falta la receta
+del 03-17). Sin `next dev` de este repo vivo (sin `.next/dev/lock`; el 3031 libre): la sonda levantó el suyo en
+el 3031 y lo cerró al salir (3031 y 9335 libres). El de forjo-landing en el 3000 no se tocó. `Chrome/157.0.8103.52`,
+node `v24.15.0`, gesto `interfaz`, modo estricto ACTIVO.
+
+**Las corridas (paso 1).** Las dos sondas por el turno, en segundo plano, una después de la otra; la pura, la
+completa, `tsc`, el build y los candados fuera del turno, en la misma tanda.
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz
+node scripts/con-turno.mjs node .planning/debug/probes/panel-back-stack.mjs
+./node_modules/.bin/vitest run --project pure
+npm test
+./node_modules/.bin/tsc --noEmit
+npm run build
+```
+
+### La sonda de la app — dos corridas completas, la primera cortada por el servidor de desarrollo
+
+- **Primera corrida (11:45:43 → 11:59:22), rc 1, incompleta.** Midió 42 recorridos en `OK` hasta `R-B1-inicio`
+  (incluidos los doce `R-T-*`, `R-C-5` y `R-C-6`) y la `FALLA` declarada de `R-G3-10-primer-toque-atras-pronto`,
+  y se cortó en el control de `R-B1-turnos` con su guarda: `la sonda no pudo completar la medicion: no hay un
+  destino visible de la barra para /appointments`. El log del `next dev` de la sonda dice por qué: `[browser]
+  Uncaught ChunkLoadError: Failed to load chunk /_next/static/chunks/node_modules_next_1c72fmn._.js …
+  at NegocioPage (app\(dashboard)\negocio\page.tsx:32:7)`. La página de Negocio no hidrató en esa carga, así
+  que la barra no llegó a estar visible: un fallo del servidor de desarrollo de esa corrida, no del
+  instrumento ni de la app (P-1 no aplicó: no hubo nada que arreglar en la sonda; ningún `esperado` se tocó).
+- **Segunda corrida, sin cambiar nada (12:05:51 → 12:34:25, con ~20 min de espera del turno: lo tenía el
+  `npx playwright test` del ERP), rc 1, completa:** `gesto=interfaz · modo=dev · recorridos medidos: 47 ·
+  coinciden con lo esperado: 46 · no coinciden: 1`. Los cinco retirados no corren (`R-login-con-activacion` y
+  `R-C-2`, `R-C-3`, `R-C-4`, `R-C-ficha`, cada uno con su línea `recorrido retirado, no corre por omision`).
+  Los 46 en `OK`: `C-activacion`, todos los de la Phase 3 (`R-1.*`, `R-3.1`, `R-barra-*`, `R-lateral`,
+  `R-G3-5-*`, `R-G3-6-*`, `R-G3-7-*`, `R-G3-9-*`, `R-G3-10-primer-toque-atras-tarde`, `R-G3-10-atras-y-toque`,
+  `R-G3-10-pronto-y-toque`, `R-G3-8-rebote`), los **doce** `R-T-*`, `R-C-5`, `R-C-6` y los cuatro `R-B1-*`
+  (`R-B1-inicio`, `R-B1-turnos`, `R-B1-mas`, `R-B1-ficha`). La única línea `FALLA`:
+
+```
+FALLA R-G3-10-primer-toque-atras-pronto · G3-10: el dialogo del plan abierto por el primer toque y cerrado con el ATRAS dentro de la ventana de activacion: el reintento de G3-7 arma y el atras siguiente avisa
+      toque_que_abre: medido="regla-0-foreignOwnsTop"
+      retroceso_del_cierre: medido="ignore"
+      armado_tras_cerrar: medido="arm"
+      hash_tras_cerrar: medido="#salir"
+      atras_siguiente: medido="sale"  <-- NO COINCIDE
+                       esperado="avisa"
+        tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=1 ruta_despues=(afuera) documento_nuevo=no aviso_visible=no absorbido=no
+```
+
+  ⚠ **No es una regresión de la Phase 4.** Es `G3-10`, el **costo del camino 1 que el dueño declaró el
+  2026-11-16** (`veredicto G3-10: otro`, `.planning/debug/la-absorcion-que-no-absorbe-medida.md`), con su
+  `esperado` (`avisa`) intacto a propósito: da `FALLA` en toda corrida completa desde el 03-17. La tupla es la
+  MISMA que en el 03-17, en el quick `261116-t5o` y en la re-medición con control del 04-04 (`(f)`, `### La
+  no-regresión completa`: el código de antes de B1 dio la misma `FALLA`): `entradas_salteadas=1`,
+  `ruta_despues=(afuera)`. Las dos corridas de este plan la dieron igual. Ningún `esperado` se tocó y no se
+  cambió código por ella.
+
+### Lo demás
+
+- **La sonda estática:** rc 0 · `escenarios medidos: 18 · coinciden con lo esperado: 18 · no coinciden: 0`.
+- **La pura:** rc 0 · 77 archivos · `Tests 1804 passed | 3 expected fail (1807)` (piso: 77 / 1764).
+- **La completa** (`npm test`, con el carril `db`, 12:00:17, dentro de la ventana de los canarios): rc 0 ·
+  `Test Files 111 passed (111)` · `Tests 2111 passed | 4 expected fail | 1 skipped (2116)` (piso: 111 archivos y
+  2030 + 1804 − 1724 = 2110 casos).
+- **`tsc --noEmit`:** cero `error TS`.
+- **`eslint`, archivo por archivo** (los 15 que la fase tocó desde `85c99ae`), contra la misma cuenta en
+  `85c99ae` (por `--stdin`, sin escribir nada): **ningún problema nuevo**. Limpios: las dos páginas de
+  `negocio`/`settings`, `finances/page.tsx`, `unsaved-changes-guard.tsx`, `lib/panel-branch.ts`,
+  `lib/panel-history.ts`, `lib/panel-tabs.ts` y los seis archivos de test. Con deuda preexistente, igual o menor
+  que en `85c99ae`: `agenda-client.tsx` `react-hooks/purity=1` (=); `finances-client.tsx`
+  `react-hooks/exhaustive-deps=1`, `react-hooks/set-state-in-effect=1` (=); `settings-client.tsx`
+  `@next/next/no-img-element=4`, `react-hooks/immutability=6`, `react-hooks/purity=2` (=) y
+  `react-hooks/set-state-in-effect=2` (en `85c99ae`: 3).
+- **El build** (`npm run build`, 12:02:11 → 12:04:18): rc 0 · `✓ Compiled successfully in 29.6s` · `✓
+  Generating static pages using 11 workers (64/64)`; cero `useSearchParams() should be wrapped in a suspense` /
+  `Missing Suspense boundary`. P-7 no aplicó (no había un `next dev` del dueño vivo).
+- **El barrido CRUDO del criterio 5:** `grep -rE 'pushState|replaceState|history\.back'` sobre
+  `settings-client.tsx`, `finances-client.tsx` y `agenda-client.tsx` → salida vacía.
+- **Lo bloqueado desde `85c99ae`:** `git diff --name-only 85c99ae HEAD -- lib/overlay-history.ts
+  lib/dirty-history.ts scripts/con-turno.mjs next.config.ts app/(dashboard)/servicios app/(dashboard)/equipo
+  app/(dashboard)/consultorios app/api package.json package-lock.json supabase` → vacío (rc 0); huella de
+  `next.config.ts` = `8ceb99aeabb6a8b16cbe0e6d836bf0aa1ae03578`.
+
+**El gate del task 1 da rc 1, y sólo por esa línea:** exige `medidos = coinciden` y la sonda da 47 / 46 por la
+`FALLA` declarada de `G3-10`. Con la primera corrida, además, `medidos` quedó vacío (la corrida no llegó al
+resumen). Todo lo demás del gate cumple (R-T en `OK` 12, estática 18, pura, completa, TS, build, Suspense,
+criterio 5, bloqueado, huella). P-8 no aplicó: no hay nada en rojo que no sea el costo declarado.
+
+no-regresion (plan 04-05): sonda de la app 46/47 en OK, estatica 18/18, pura 77/1804, completa 111/2111, tsc limpio, build ok, criterio 5 en cero
