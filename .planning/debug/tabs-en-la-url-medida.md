@@ -786,3 +786,143 @@ bueno.
 Escrito en los cuatro lugares: el docblock de `lib/panel-tabs.ts`, esta subsección, el «RESIDUO ACEPTADO
 el 2026-11-17» debajo de MOB-08 en `REQUIREMENTS.md` y su entrada `unmet-truth` de la fase 4 en
 `.planning/WINDOWS.md`.
+
+## (f) B1 en la barra (plan 04-04)
+
+Qué se cerró: la decisión **B1** del dueño (2026-11-17, `04-DECISION-COMPOSICION.md`). Con una subsección
+NUESTRA arriba —el tab Cobros de `/negocio` o la ficha `?c=` de `/clients`— el gesto de la barra la
+**consume primero** y recién después decide con la pila real, así que termina **igual que sin la
+subsección**. El mecanismo: el séptimo miembro `consume-view-then-navigate` de `PanelBranchPlan`, el hecho
+`vistaArriba` (sin default) y la regla `-1d` en `panelBranchPlan` (después de la `-1b`, antes de la `-1c`);
+en el ejecutor, la rama con el molde de `consume-exit-then-navigate` y un `reDecidir` opcional; en el hook de
+la barra, `decidirDesdeElAterrizaje` re-lee la pila y re-decide con la misma política.
+
+**Con qué se midió.** Igual que `(e)`: `next dev` propio en el 3031 (el de forjo-landing en el 3000 no se
+tocó), Supabase local arriba, `Chrome/157.0.8103.52`, node `v24.15.0`, gesto `interfaz`, modo estricto
+ACTIVO. Cada `R-B1-*` mide el MISMO gesto con y sin la subsección (el **control**), re-entrando directo entre
+los dos; el `esperado` es la decisión del dueño, escrito en `f8fdb12` (`test(04-04)`) ANTES del arreglo.
+Las dos corridas por el turno, en segundo plano (la primera esperó el turno del ERP).
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz R-B1-inicio,R-B1-turnos,R-B1-mas,R-B1-ficha
+```
+
+### El RED — con el código de antes del arreglo (`f8fdb12`), rc 1, los cuatro en FALLA
+
+Los cuatro controles dan la pila de la Phase 3 (`[/dashboard]` con el aviso armado, `[/dashboard,
+/appointments]`, `[/dashboard, /mas]`, `[/dashboard]` con el aviso armado): el instrumento mide lo que dice.
+Las variantes dan las pilas de `(e)`.
+
+```
+FALLA R-B1-inicio · B1 (movil): Mas -> Negocio -> Cobros -> tocar Inicio termina igual que Mas -> Negocio -> tocar Inicio (el retroceso TRIPLE tab -> seccion -> Mas -> Inicio)
+      pila_del_control: medido=["/dashboard"]
+      pila_igual_al_control: medido="no"  <-- NO COINCIDE
+                             esperado="si"
+      aviso_igual_al_control: medido="no"  <-- NO COINCIDE
+                              esperado="si"
+      control, en Negocio, antes del toque: url=/negocio estado={"frjUnder":"/mas"} aviso=no pila=[/dashboard, /mas, /negocio] cruda=[(afuera), /dashboard, /mas, /negocio] actual=3
+      control, tras el toque: url=/dashboard#salir estado={"frjExit":67} aviso=si pila=[/dashboard] cruda=[(afuera), /dashboard, /dashboard#salir] actual=2
+      variante, en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      variante, tras el toque: url=/dashboard estado={"frjUnder":"/negocio"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros, /dashboard] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros, /dashboard] actual=5
+      aviso del control=si · aviso de la variante=no
+
+FALLA R-B1-turnos · B1 (movil): Mas -> Negocio -> Cobros -> tocar Turnos termina igual que Mas -> Negocio -> tocar Turnos (colapsa a Inicio + Turnos)
+      pila_del_control: medido=["/dashboard","/appointments"]
+      pila_igual_al_control: medido="no"  <-- NO COINCIDE
+                             esperado="si"
+      control, en Negocio, antes del toque: url=/negocio estado={"frjUnder":"/mas"} aviso=no pila=[/dashboard, /mas, /negocio] cruda=[(afuera), /dashboard, /mas, /negocio] actual=3
+      control, tras el toque: url=/appointments estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /appointments] cruda=[(afuera), /dashboard, /appointments, /negocio] actual=2
+      variante, en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      variante, tras el toque: url=/appointments estado={} aviso=no pila=[/dashboard, /mas, /negocio, /appointments] cruda=[(afuera), /dashboard, /mas, /negocio, /appointments] actual=4
+      aviso del control=no · aviso de la variante=no
+
+FALLA R-B1-mas · B1 (movil): Mas -> Negocio -> Cobros -> tocar Mas sube igual que Mas -> Negocio -> tocar Mas (D-03, no apila)
+      pila_del_control: medido=["/dashboard","/mas"]
+      pila_igual_al_control: medido="no"  <-- NO COINCIDE
+                             esperado="si"
+      control, en Negocio, antes del toque: url=/negocio estado={"frjUnder":"/mas"} aviso=no pila=[/dashboard, /mas, /negocio] cruda=[(afuera), /dashboard, /mas, /negocio] actual=3
+      control, tras el toque: url=/mas estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /mas] cruda=[(afuera), /dashboard, /mas, /negocio] actual=2
+      variante, en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      variante, tras el toque: url=/mas estado={"frjUnder":"/negocio"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros, /mas] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros, /mas] actual=5
+      aviso del control=no · aviso de la variante=no
+
+FALLA R-B1-ficha · B1 (movil): Inicio -> Clientes -> ficha -> tocar Inicio termina igual que Inicio -> Clientes -> tocar Inicio (la ficha ?c= consumida primero)
+      pila_del_control: medido=["/dashboard"]
+      pila_igual_al_control: medido="no"  <-- NO COINCIDE
+                             esperado="si"
+      aviso_igual_al_control: medido="no"  <-- NO COINCIDE
+                              esperado="si"
+      control, en Clientes, antes del toque: url=/clients estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /clients] cruda=[(afuera), /dashboard, /clients] actual=2
+      control, tras el toque: url=/dashboard#salir estado={"frjExit":1} aviso=si pila=[/dashboard] cruda=[(afuera), /dashboard, /dashboard#salir] actual=2
+      variante, en la ficha, antes del toque: url=/clients?c=0000000a-0000-0000-0000-000000000001 estado={"frjView":"c"} aviso=no pila=[/dashboard, /clients, /clients?c=*] cruda=[(afuera), /dashboard, /clients, /clients?c=0000000a-0000-0000-0000-000000000001] actual=3
+      variante, tras el toque: url=/dashboard estado={"frjUnder":"/clients"} aviso=no pila=[/dashboard, /clients, /clients?c=*, /dashboard] cruda=[(afuera), /dashboard, /clients, /clients?c=0000000a-0000-0000-0000-000000000001, /dashboard] actual=4
+      aviso del control=si · aviso de la variante=no
+```
+
+### El GREEN — con `b13f0a1` (`fix(04-04)`), rc 0, los cuatro en OK
+
+```
+OK  R-B1-inicio · B1 (movil): Mas -> Negocio -> Cobros -> tocar Inicio termina igual que Mas -> Negocio -> tocar Inicio (el retroceso TRIPLE tab -> seccion -> Mas -> Inicio)
+      pila_del_control: medido=["/dashboard"]
+      pila_igual_al_control: medido="si"
+      aviso_igual_al_control: medido="si"
+      control, en Negocio, antes del toque: url=/negocio estado={"frjUnder":"/mas"} aviso=no pila=[/dashboard, /mas, /negocio] cruda=[(afuera), /dashboard, /mas, /negocio] actual=3
+      control, tras el toque: url=/dashboard#salir estado={"frjExit":1} aviso=si pila=[/dashboard] cruda=[(afuera), /dashboard, /dashboard#salir] actual=2
+      variante, en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      variante, tras el toque: url=/dashboard#salir estado={"frjExit":1} aviso=si pila=[/dashboard] cruda=[(afuera), /dashboard, /dashboard#salir] actual=2
+      aviso del control=si · aviso de la variante=si
+
+OK  R-B1-turnos · B1 (movil): Mas -> Negocio -> Cobros -> tocar Turnos termina igual que Mas -> Negocio -> tocar Turnos (colapsa a Inicio + Turnos)
+      pila_del_control: medido=["/dashboard","/appointments"]
+      pila_igual_al_control: medido="si"
+      control, en Negocio, antes del toque: url=/negocio estado={"frjUnder":"/mas"} aviso=no pila=[/dashboard, /mas, /negocio] cruda=[(afuera), /dashboard, /mas, /negocio] actual=3
+      control, tras el toque: url=/appointments estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /appointments] cruda=[(afuera), /dashboard, /appointments, /negocio] actual=2
+      variante, en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      variante, tras el toque: url=/appointments estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /appointments] cruda=[(afuera), /dashboard, /appointments, /negocio, /negocio?tab=cobros] actual=2
+      aviso del control=no · aviso de la variante=no
+
+OK  R-B1-mas · B1 (movil): Mas -> Negocio -> Cobros -> tocar Mas sube igual que Mas -> Negocio -> tocar Mas (D-03, no apila)
+      pila_del_control: medido=["/dashboard","/mas"]
+      pila_igual_al_control: medido="si"
+      control, en Negocio, antes del toque: url=/negocio estado={"frjUnder":"/mas"} aviso=no pila=[/dashboard, /mas, /negocio] cruda=[(afuera), /dashboard, /mas, /negocio] actual=3
+      control, tras el toque: url=/mas estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /mas] cruda=[(afuera), /dashboard, /mas, /negocio] actual=2
+      variante, en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      variante, tras el toque: url=/mas estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /mas] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=2
+      aviso del control=no · aviso de la variante=no
+
+OK  R-B1-ficha · B1 (movil): Inicio -> Clientes -> ficha -> tocar Inicio termina igual que Inicio -> Clientes -> tocar Inicio (la ficha ?c= consumida primero)
+      pila_del_control: medido=["/dashboard"]
+      pila_igual_al_control: medido="si"
+      aviso_igual_al_control: medido="si"
+      control, en Clientes, antes del toque: url=/clients estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /clients] cruda=[(afuera), /dashboard, /clients] actual=2
+      control, tras el toque: url=/dashboard#salir estado={"frjExit":1} aviso=si pila=[/dashboard] cruda=[(afuera), /dashboard, /dashboard#salir] actual=2
+      variante, en la ficha, antes del toque: url=/clients?c=0000000a-0000-0000-0000-000000000001 estado={"frjView":"c"} aviso=no pila=[/dashboard, /clients, /clients?c=*] cruda=[(afuera), /dashboard, /clients, /clients?c=0000000a-0000-0000-0000-000000000001] actual=3
+      variante, tras el toque: url=/dashboard#salir estado={"frjExit":1} aviso=si pila=[/dashboard] cruda=[(afuera), /dashboard, /dashboard#salir] actual=2
+      aviso del control=si · aviso de la variante=si
+```
+
+**El retroceso TRIPLE, medido** (lo que la Phase 3 nunca encadenó): en `R-B1-inicio` la variante sale de
+`cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4` y, con UN toque en Inicio,
+termina en `url=/dashboard#salir estado={"frjExit":1} aviso=si cruda=[(afuera), /dashboard,
+/dashboard#salir] actual=2`: tab → sección → Más → Inicio sin perder un paso, y el sentinel de salida
+empujado sobre la entrada ORIGINAL de Inicio (las tres de adelante quedaron truncadas por ese empuje), igual
+que el control. En `R-B1-turnos` y `R-B1-mas` las entradas de adelante (`/negocio`, `/negocio?tab=cobros`)
+quedan en `cruda` después de la actual, no alcanzables con el atrás, igual que en el control.
+
+### Las suites, las dos mutaciones y los gates
+
+- Los casos nuevos en rojo en `5366056` (`test(04-04)`): 12 rojos de 414 en `lib/panel-history.test.ts` +
+  `test/panel-branch.test.ts` + `lib/unsaved-changes.test.ts`, todos casos nuevos o las tres cuentas que el
+  plan actualiza a propósito (el `switch` del guard 6 → 7, los `if` de `panelBranchPlan` 6 → 7, los
+  miembros propios del tipo 4 → 5). Con `b13f0a1`: las ocho suites de historial 630/630, la pura 77
+  archivos / 1804 + 3 expected-fail.
+- **MB1** (borrar `if (vistaArriba && from !== to) return 'consume-view-then-navigate'` de
+  `lib/panel-history.ts`) ⇒ `lib/panel-history.test.ts` ROJA; **MB2** (`vistaArriba:
+  panelViewEntryParam(estado) !== null && !isForeignOwnedEntry(estado)` → `vistaArriba: false` en
+  `lib/panel-branch.ts`) ⇒ `test/panel-branch.test.ts` ROJA. Las dos restauradas con la huella verificada;
+  árbol limpio.
+- `panelNavMode` byte-idéntica a la del 04-03; cero temporizadores en `runBranchNavigation`; nada fuera del
+  plan cambiado desde el 04-03 (sidebar, barra, `app/`, `lib/panel-tabs.ts`, los intocables); `tsc` sin
+  errores; `eslint` rc 0 en los siete archivos.
+
+cierre (f): b1 en la barra
