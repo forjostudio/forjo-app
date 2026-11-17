@@ -5,7 +5,7 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 4 — Los tabs profundos sobre la política ya fijada
 current_plan: 5
 status: executing
-stopped_at: "Phase 4 ejecutada 5/5; verificacion human_needed (5/5 criterios); code review 0B/4W/3I; proximo /gsd-verify-work 4 --ws panel-nav (obs-1/WR-01..04) y /gsd-secure-phase 4"
+stopped_at: "Phase 4: verify-work diagnosticado (G-04-6/7/8 con causa raiz, G-04-9 no reproduce); planes de cierre 04-06..08 escritos; proximo /gsd-execute-phase 4 --gaps-only --ws panel-nav"
 last_updated: "2026-11-17T10:24:04.996Z"
 last_activity: 2026-11-17
 last_activity_desc: "Phase 4: 5/5 planes ejecutados, UAT en produccion aprobada; en verificacion (seguridad, code review, verifier)"
@@ -13,9 +13,9 @@ state_head: e68e38177149ca57d0660a6e4bb6066c0b5d6775
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 26
+  total_plans: 29
   completed_plans: 26
-  percent: 100
+  percent: 90
 workstream: panel-nav
 created: 2026-09-28
 current_phase_name: Los tabs profundos sobre la política ya fijada
@@ -27,16 +27,16 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 **Current Plan:** 5
 **Total Plans in Phase:** 5
-**Status:** Phase 4: 5/5 planes ejecutados, UAT en produccion aprobada; en verificacion (seguridad, code review, verifier)
+**Status:** Phase 4: 5/8 planes (cierre de gaps 04-06..08 planificado; G-04-9 descartado medido)
 **Current Phase:** 4 — Los tabs profundos sobre la política ya fijada
 **Last Activity:** 2026-11-17 — Phase 4 execution started
 **Last Activity Description:** Phase 4: 5/5 planes ejecutados, UAT en produccion aprobada; en verificacion (seguridad, code review, verifier)
 
 ## Progress
 
-**Progress:** [██████████] 100%
+**Progress:** [█████████░] 90%
 **Phases Complete:** 2/3
-**Plans Complete:** 26/26 (fases 2 y 3 completas; fase 4 5/5)
+**Plans Complete:** 26/29 (fases 2 y 3 completas; fase 4 5/8)
 **Current Plan:** 5 (04-05)
 
 ## Session Continuity

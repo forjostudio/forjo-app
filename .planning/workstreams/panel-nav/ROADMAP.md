@@ -712,6 +712,16 @@ se programa)
   completa, el build, el criterio 5), el guion de la UAT y un checkpoint bloqueante en el teléfono y EN PRODUCCIÓN (el OAuth
   real con al menos un ✅ o la decisión escrita del dueño, T-1 ruta por ruta), después de que el orquestador suba `main`
 
+**Cierre de gaps** (verify-work, opción B del dueño, 2026-11-17; fuente `04-UAT-CIERRE.md`; G-04-9 descartado medido):
+
+- [ ] `04-06-PLAN.md` — wave 6 · **G-04-6, el scroll del primer toque**: el `<Suspense>` de finances/negocio/settings con
+  un nodo del DOM como fallback, medido RED → GREEN con la sonda CDP y el gate de `panel-tabs.test.ts` ajustado
+- [ ] `04-07-PLAN.md` — wave 7 · **G-04-7 y G-04-8**: el `from` del toque tomado de la URL real por un helper compartido,
+  la guarda de consumo en vuelo, y el predicado único por presencia del OAuth con la limpieza que escribe aunque el tab no
+  cambie; tests rojos primero y la sonda de la app sin regresión
+- [ ] `04-08-PLAN.md` — wave 8 · **El cierre de los gaps**: la no-regresión en una sola tanda, el push con confirmación
+  del dueño y la re-UAT corta en producción (`04-UAT-GAPS.md`)
+
 ## Cobertura de requisitos
 
 | Requisito | Fase | Por qué ahí |
@@ -762,4 +772,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 5/5 | In Progress | - |
+| 4. Los tabs profundos sobre la política ya fijada | 5/8 | In Progress | - |

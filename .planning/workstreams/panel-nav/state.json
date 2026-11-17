@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-verify-work 4 --ws panel-nav",
-    "label": "Cerrar la fase 4: verify-work (obs-1 / WR-01..04) y secure-phase",
-    "reason": "Phase 4 ejecutada 5/5, UAT en produccion aprobada; verificacion human_needed; code review con 4 warnings"
+    "command": "/gsd-execute-phase 4 --gaps-only --ws panel-nav",
+    "label": "Ejecutar el cierre de gaps de la fase 4 (04-06..08)",
+    "reason": "verify-work diagnostico G-04-6/7/8; G-04-9 descartado medido; planes de cierre escritos"
   },
   "updated_at": "2026-11-17T10:24:05.049Z"
 }
