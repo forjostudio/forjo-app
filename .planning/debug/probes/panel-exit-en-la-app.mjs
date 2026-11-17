@@ -936,7 +936,14 @@ async function altaVisible(cdp) {
  * no media nada. Y si el click cae y el tab no cambia en 2 s, se reintenta (hasta tres veces).
  */
 async function tocarTab(cdp, texto) {
-  const buscar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return null; t.scrollIntoView({ block: 'center' }); const b = t.getBoundingClientRect(); const x = b.x + b.width / 2, y = b.y + b.height / 2; const el = document.elementFromPoint(x, y); return { x, y, adentro: Boolean(el && t.contains(el)) } })()`
+  // ⚠ TERCERA VUELTA DEL P-1 (medido el 2026-11-17 en `R-T-finanzas-url-pegada`, con un oyente de click en
+  // captura): sobre una URL pegada los seis clicks cayeron en un `div` AJENO al tab aunque el punto se
+  // habia afirmado adentro. La lectura de antes hacia `scrollIntoView` EN CADA LECTURA: la posicion
+  // salia "quieta" porque la propia sonda la re-centraba, mientras la pagina seguia moviendo el scroll
+  // por su cuenta. Ahora se centra UNA vez por intento y las lecturas siguientes NO mueven nada: tres
+  // iguales seguidas son quietud de verdad.
+  const centrar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return false; t.scrollIntoView({ block: 'center' }); return true })()`
+  const buscar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return null; const b = t.getBoundingClientRect(); const x = b.x + b.width / 2, y = b.y + b.height / 2; const el = document.elementFromPoint(x, y); return { x, y, adentro: Boolean(el && t.contains(el)) } })()`
   const seleccionado = `(() => { if (!location.protocol.startsWith('http')) return 'afuera'; const t = [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); return t && t.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) ? 'si' : 'no' })()`
   for (let intento = 1; intento <= 3; intento++) {
     // La posicion QUIETA: tres lecturas iguales seguidas, cada 250 ms, con el punto adentro del tab.
@@ -944,10 +951,13 @@ async function tocarTab(cdp, texto) {
     let previo = null
     let iguales = 0
     const topeBusqueda = Date.now() + 10_000
+    while (Date.now() < topeBusqueda && !(await evaluar(cdp, centrar).catch(() => false))) await dormir(200)
     while (Date.now() < topeBusqueda) {
       const p = await evaluar(cdp, buscar).catch(() => null)
       if (p && p.adentro && previo && Math.abs(p.x - previo.x) < 1 && Math.abs(p.y - previo.y) < 1) iguales++
       else iguales = 0
+      // Si la pagina se lo llevo fuera del punto (scroll propio), se lo vuelve a centrar y se re-cuenta.
+      if (p && !p.adentro) await evaluar(cdp, centrar).catch(() => false)
       previo = p
       if (iguales >= 2) { punto = p; break }
       await dormir(250)
