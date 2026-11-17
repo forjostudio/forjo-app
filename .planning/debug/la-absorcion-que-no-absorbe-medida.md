@@ -1415,6 +1415,107 @@ gesto=interfaz · modo=dev · recorridos medidos: 11 · coinciden con lo esperad
 
 no-regresion (plan 03-17): los once de antes 11/11 OK (R-login-con-activacion retirado por decision del dueno del 2026-11-16, f75e739) · los once R-G3-* del 03-16 11/11 OK · G3-9 3/3 OK · G3-10 tarde OK, pronto FALLA, atras-y-toque OK (igual a lo pegado; costo del camino 1 por decision del dueno) · estatica 18/18 · suite 110 archivos 2031 pasados + 4 xfail + 1 salteado, rc 0 (19:07-19:08, tras un worker de Vitest caido en la primera corrida) · tsc y eslint limpios · next.config.ts 8ceb99ae intacto
 
+### R2-WR-02 — el toque después de un cierre `pronto` (quick `261116-t5o`, 2026-11-16)
+
+**Qué se mide y por qué.** R2-WR-02 del code review ronda 2 de la fase 3 (`03-REVIEW-2.md`): la viñeta de
+`G3-10` en `03-DECISION-UAT-3.md` afirmaba «Un toque en Inicio después del cierre arma siempre y el atrás avisa»,
+pero eso se había medido sólo desde `tarde` (`atras-y-toque`, armado `pendiente`), nunca desde `pronto` (`#salir`
+empujado por el reintento de `G3-7` y salteado por Chrome). El revisor predijo por lectura que, desde `pronto`, el
+toque no empuja nada: `alTocar` → `armarSentinel({ puedeEmpujar: true })` → la entrada de arriba es nuestra
+(`topIsOurs`) ⇒ `none` por la cuarta regla, `vivo_despues=true`; así que el aviso dependería sólo de que Chrome le
+saque la marca de salteable a la entrada al llegar la activación nueva. El resultado del atrás estaba sin medir en
+los dos sentidos. El `esperado` de `R-G3-10-pronto-y-toque` quedó fijado antes de medir en el commit `2281a0c`
+(`test(quick-261116-t5o)`): la condición `pronto` (`regla-0-foreignOwnsTop`, `ignore`, `arm`, `#salir`), `#salir`
+tras el toque y `atras_siguiente: 'avisa'` —la afirmación de la viñeta puesta a prueba, no una predicción—.
+
+**La corrida** (2026-11-16, 21:19:13-21:20:28 hora local): `node scripts/con-turno.mjs node
+.planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz R-G3-10-primer-toque-atras-pronto,R-G3-10-pronto-y-toque`,
+con `next dev` propio en el 3031 (modo estricto activo; el del dueño no estaba levantado), `Chrome/157.0.8103.52`,
+node v24.15.0, gesto `interfaz` (`chrome.tabs.goBack`). rc 1 (una `FALLA`, la del control, como se esperaba), cero
+fallos del instrumento, la activación al cerrar afirmada en `si` en los dos, sin re-corrida por P-1.
+
+```text
+FALLA R-G3-10-primer-toque-atras-pronto · G3-10: el dialogo del plan abierto por el primer toque y cerrado con el ATRAS dentro de la ventana de activacion: el reintento de G3-7 arma y el atras siguiente avisa
+      toque_que_abre: medido="regla-0-foreignOwnsTop"
+      retroceso_del_cierre: medido="ignore"
+      armado_tras_cerrar: medido="arm"
+      hash_tras_cerrar: medido="#salir"
+      atras_siguiente: medido="sale"  <-- NO COINCIDE
+                       esperado="avisa"
+      el primer toque (abre el dialogo): isActive=true defaultPrevented=false
+      al entrar y abrir:
+        diag sonda-documento-nuevo doc=0q1rl7 url=/dashboard estado=null
+        diag armado    doc=0q1rl7 id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+        diag sonda-click doc=0q1rl7 url=/dashboard#modal defaultPrevented=false isActive=true
+        diag toque     doc=0q1rl7 id=1 url=/dashboard#modal accion=arm hechos={"participates":true,"activacion":true,"atRoot":true,"gestoTomado":false,"hintOpen":false} vivo_antes=false vivo_despues=false
+        diag armado    doc=0q1rl7 id=1 duena=1 vivas=1 url=/dashboard#modal estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE","frjOverlay"],"frjOverlay":1} accion=none regla=regla-0-foreignOwnsTop vivo_antes=false vivo_despues=false
+      cierre con el atras: activacion al cerrar=si ms_desde_el_toque=522 retroceso=ignore ultimo_armado=arm hash_tras_cerrar=#salir
+        diag sonda-popstate doc=0q1rl7 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]}
+        diag retroceso doc=0q1rl7 id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=ignore regla=regla-4-holding-false holding=false
+        diag armado    doc=0q1rl7 id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+        diag armado    doc=0q1rl7 id=1 duena=1 vivas=1 url=/dashboard#salir estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=arm regla=ninguna-ARMA vivo_antes=false vivo_despues=true
+      tras cerrar: url=/dashboard#salir pila=[(afuera), /dashboard, /dashboard#salir] actual=2
+      el atras siguiente:
+        tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=1 ruta_despues=(afuera) documento_nuevo=no aviso_visible=no absorbido=no
+        gesto: accion=sin-registro regla=sin-registro
+        pila antes:   [(afuera), /dashboard, /dashboard#salir] actual=2
+        pila despues: [(afuera), /dashboard, /dashboard#salir] actual=0
+OK  R-G3-10-pronto-y-toque · G3-10 / R2-WR-02: cerrado con el ATRAS enseguida de abrir (pronto: el reintento arma #salir y Chrome lo saltea) y DESPUES un toque en Inicio: el atras siguiente avisa (lo que afirma la vineta del costo declarado)
+      toque_que_abre: medido="regla-0-foreignOwnsTop"
+      retroceso_del_cierre: medido="ignore"
+      armado_tras_cerrar: medido="arm"
+      hash_tras_cerrar: medido="#salir"
+      hash_tras_el_toque: medido="#salir"
+      atras_siguiente: medido="avisa"
+      el primer toque (abre el dialogo): isActive=true defaultPrevented=false
+      al entrar y abrir:
+        diag sonda-documento-nuevo doc=ucz3rs url=/dashboard estado=null
+        diag armado    doc=ucz3rs id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+        diag sonda-click doc=ucz3rs url=/dashboard#modal defaultPrevented=false isActive=true
+        diag toque     doc=ucz3rs id=1 url=/dashboard#modal accion=arm hechos={"participates":true,"activacion":true,"atRoot":true,"gestoTomado":false,"hintOpen":false} vivo_antes=false vivo_despues=false
+        diag armado    doc=ucz3rs id=1 duena=1 vivas=1 url=/dashboard#modal estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE","frjOverlay"],"frjOverlay":1} accion=none regla=regla-0-foreignOwnsTop vivo_antes=false vivo_despues=false
+      cierre con el atras: activacion al cerrar=si ms_desde_el_toque=518 retroceso=ignore ultimo_armado=arm hash_tras_cerrar=#salir
+        diag sonda-popstate doc=ucz3rs url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]}
+        diag retroceso doc=ucz3rs id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=ignore regla=regla-4-holding-false holding=false
+        diag armado    doc=ucz3rs id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=pendiente regla=ninguna-ARMA vivo_antes=false vivo_despues=false
+        diag armado    doc=ucz3rs id=1 duena=1 vivas=1 url=/dashboard#salir estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=arm regla=ninguna-ARMA vivo_antes=false vivo_despues=true
+      tras cerrar: url=/dashboard#salir pila=[(afuera), /dashboard, /dashboard#salir] actual=2
+      el toque despues del cierre: hash_tras_el_toque=#salir
+        diag sonda-click doc=ucz3rs url=/dashboard#salir defaultPrevented=false isActive=true
+        diag toque     doc=ucz3rs id=1 url=/dashboard#salir accion=arm hechos={"participates":true,"activacion":true,"atRoot":true,"gestoTomado":false,"hintOpen":false} vivo_antes=true vivo_despues=true
+        diag armado    doc=ucz3rs id=1 duena=1 vivas=1 url=/dashboard#salir estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE","frjExit"],"frjExit":1} accion=none regla=regla-4-topIsOurs(E-6) vivo_antes=true vivo_despues=true
+      el atras siguiente:
+        tupla: hash_antes=#salir es_nuestro=si estado_antes={"frjExit":1} largo_antes=3 largo_despues=3 entradas_salteadas=0 ruta_despues=/dashboard documento_nuevo=no aviso_visible=si absorbido=si
+        gesto: accion=hint regla=ninguna-AVISA
+        pila antes:   [(afuera), /dashboard, /dashboard#salir] actual=2
+        pila despues: [(afuera), /dashboard, /dashboard#salir] actual=1
+          diag sonda-popstate doc=ucz3rs url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]}
+          diag retroceso doc=ucz3rs id=1 duena=1 vivas=1 url=/dashboard estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]} accion=hint regla=ninguna-AVISA holding=true
+```
+
+| Recorrido | Activación al cerrar | Último armado tras cerrar | Hash tras cerrar (tras el toque) | Armado del toque | Atrás siguiente |
+|-----------|----------------------|---------------------------|----------------------------------|------------------|-----------------|
+| `pronto` (el control) | sí (522 ms) | `arm` | `#salir` | — | **sale**, `entradas_salteadas=1`, sin aviso, a (afuera) — reproduce `(i)` |
+| `pronto-y-toque` | sí (518 ms) | `arm` | `#salir` → `#salir` | `none` / `regla-4-topIsOurs(E-6)` | **avisa**, `entradas_salteadas=0`, aviso visible, a `/dashboard` |
+
+**Lo que dice.** La predicción del revisor sobre el mecanismo se cumple: el toque después del cierre llega como click
+con activación (`isActive=true`), `alTocar` pide `arm`, y `armarSentinel` devuelve `none` por la cuarta regla
+(`regla-4-topIsOurs(E-6)`, `vivo_antes=true vivo_despues=true`): **no hay un empuje nuevo**, el `#salir` salteable del
+reintento queda donde estaba. Y aun así el atrás siguiente **avisa**: cae en `/dashboard` sin saltear nada
+(`entradas_salteadas=0`, `actual=2 → 1`), llega el `popstate` y el retroceso es `hint` con `holding=true`. O sea que
+la marca de salteable de esa entrada la saca **Chrome** al llegar la activación nueva; el arreglo lo hace el
+navegador, no el módulo. El control, en la misma corrida, reproduce `(i)` (sin el toque, el mismo `#salir` se saltea
+y el atrás sale).
+
+veredicto R2-WR-02: arma
+
+medido R2-WR-02: entradas_salteadas=0 aviso_visible=si ruta_despues=/dashboard armado_del_toque=none/regla-4-topIsOurs(E-6) control_pronto_entradas_salteadas=1 control_pronto_atras_siguiente=sale
+
+**Lo que esta medición no cierra:** Android y Safari reales (A11: esto es Chrome de escritorio, y que la activación
+nueva le saque la marca de salteable a una entrada ya empujada es un comportamiento del navegador que el módulo no
+garantiza); la ventana de activación de Chrome de Android; el build de producción (se midió en `next dev` con el
+modo estricto activo); y es UNA corrida del subcaso `pronto` + toque, no repetida.
+
 ## Qué consume esto
 
 - **Plan `03-13`** — la causa (ii) de la recarga con la opción **(A)** elegida y acotada; la

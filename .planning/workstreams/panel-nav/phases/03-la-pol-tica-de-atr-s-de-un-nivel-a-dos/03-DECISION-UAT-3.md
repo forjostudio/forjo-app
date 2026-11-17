@@ -48,7 +48,11 @@ aviso que desaparecía y después dejaba salir sin avisar.
   después del cierre, el armado queda pendiente y el atrás siguiente sale (`tarde`, el caso del dueño). Si el
   atrás que cierra llega enseguida de abrir (`pronto`, con la activación todavía viva), el reintento de `G3-7`
   sí empuja `#salir`, pero la intervención de historial de Chrome lo saltea (`entradas_salteadas=1`): lo que se
-  ve es lo mismo. Un toque en Inicio después del cierre arma siempre y el atrás avisa (`atras-y-toque`). Cerrar
+  ve es lo mismo. Un toque en Inicio después del cierre deja el atrás siguiente avisando en las dos variantes,
+  medido: desde `tarde` el toque arma y empuja `#salir` (`atras-y-toque`); desde `pronto` (`pronto-y-toque`,
+  quick `261116-t5o`, 2026-11-16, veredicto `arma`, `entradas_salteadas=0`) el toque no empuja nada (`none` por
+  la cuarta regla: el `#salir` de arriba ya es nuestro) y el aviso vuelve porque Chrome deja de saltear la
+  entrada tras la activación nueva: lo hace el navegador, no el módulo. Cerrar
   con la X o tocando el fondo sigue armando (`G3-7`). La lógica del aviso no cambia.
 
 ## Lo que esta decisión NO cambia
