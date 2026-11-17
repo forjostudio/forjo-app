@@ -922,27 +922,47 @@ async function altaVisible(cdp) {
 }
 
 /**
- * El toque REAL en el tab visible cuyo texto empieza con `texto`: se lo trae a la vista, se lo toca en
- * su centro (`clickEnPunto`) y se espera hasta 10 s a que quede seleccionado O a que la pagina haya
- * salido del sitio. ⚠ NO TIRA si salio: con el defecto de la marca (plan 04-01, task 2) ESE es el
- * resultado a medir. Si no hay un tab visible con ese texto en 10 s, TIRA (P-1: el instrumento no
- * encontro lo que dice tocar). Devuelve la ubicacion tras 500 ms quietos.
+ * El toque REAL en el tab visible cuyo texto empieza con `texto`: se lo trae a la vista, se espera a
+ * que su POSICION quede QUIETA, se AFIRMA que el punto cae adentro del tab (`elementFromPoint`) y se lo
+ * toca en su centro (`clickEnPunto`); despues se espera hasta 10 s a que quede seleccionado O a que la
+ * pagina haya salido del sitio. ⚠ NO TIRA si salio: con el defecto de la marca (plan 04-01, task 2)
+ * ESE es el resultado a medir. Si no hay un tab visible con ese texto en 10 s, TIRA (P-1: el
+ * instrumento no encontro lo que dice tocar). Devuelve la ubicacion tras 500 ms quietos.
+ *
+ * ⚠ POR QUE LA ESPERA DE LA POSICION (P-1, medido el 2026-11-17 en el primer RED de este plan): Finanzas
+ * entra con `loading` y DESPUES pinta las tarjetas y los graficos por encima de los tabs, que se corren
+ * hacia abajo. Un click calculado antes de ese corrimiento caia en otra cosa: con el codigo de antes
+ * (el `useState`, que si cambia de tab con un click) el tab medido seguia en Turnos. El toque no llegaba;
+ * no media nada. Y si el click cae y el tab no cambia en 2 s, se reintenta (hasta tres veces).
  */
 async function tocarTab(cdp, texto) {
-  const buscar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return null; t.scrollIntoView({ block: 'center' }); const b = t.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`
-  let punto = null
-  const topeBusqueda = Date.now() + 10_000
-  while (Date.now() < topeBusqueda && !(punto = await evaluar(cdp, buscar).catch(() => null))) await dormir(200)
-  if (!punto) throw new Error(`no hay un tab visible que empiece con ${texto}`)
-  await dormir(150)
-  punto = await evaluar(cdp, buscar)
-  await clickEnPunto(cdp, punto)
+  const buscar = `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) }); if (!t) return null; t.scrollIntoView({ block: 'center' }); const b = t.getBoundingClientRect(); const x = b.x + b.width / 2, y = b.y + b.height / 2; const el = document.elementFromPoint(x, y); return { x, y, adentro: Boolean(el && t.contains(el)) } })()`
   const seleccionado = `(() => { if (!location.protocol.startsWith('http')) return 'afuera'; const t = [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); return t && t.textContent.replace(/\\s+/g, ' ').trim().startsWith(${JSON.stringify(texto)}) ? 'si' : 'no' })()`
-  const tope = Date.now() + 10_000
-  while (Date.now() < tope) {
-    const s = await evaluar(cdp, seleccionado).catch(() => 'no')
+  for (let intento = 1; intento <= 3; intento++) {
+    // La posicion QUIETA: tres lecturas iguales seguidas, cada 250 ms, con el punto adentro del tab.
+    let punto = null
+    let previo = null
+    let iguales = 0
+    const topeBusqueda = Date.now() + 10_000
+    while (Date.now() < topeBusqueda) {
+      const p = await evaluar(cdp, buscar).catch(() => null)
+      if (p && p.adentro && previo && Math.abs(p.x - previo.x) < 1 && Math.abs(p.y - previo.y) < 1) iguales++
+      else iguales = 0
+      previo = p
+      if (iguales >= 2) { punto = p; break }
+      await dormir(250)
+    }
+    if (!punto) throw new Error(`no hay un tab visible que empiece con ${texto}`)
+    await clickEnPunto(cdp, punto)
+    const tope = Date.now() + (intento < 3 ? 2_000 : 10_000)
+    let s = 'no'
+    while (Date.now() < tope) {
+      s = await evaluar(cdp, seleccionado).catch(() => 'no')
+      if (s !== 'no') break
+      await dormir(150)
+    }
     if (s !== 'no') break
-    await dormir(150)
+    console.log(`      el toque en el tab ${texto} no lo selecciono (intento ${intento})`)
   }
   await dormir(500)
   return { ubicacion: await ubicacion(cdp) }
