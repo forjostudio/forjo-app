@@ -1,9 +1,9 @@
 ---
-status: testing
+status: complete
 phase: 03-la-pol-tica-de-atr-s-de-un-nivel-a-dos
 source: [03-VERIFICATION.md, 03-01-SUMMARY.md, 03-02-SUMMARY.md, 03-03-SUMMARY.md, 03-04-SUMMARY.md, 03-05-SUMMARY.md, 03-06-SUMMARY.md, 03-07-SUMMARY.md, 03-08-SUMMARY.md, 03-09-SUMMARY.md, 03-10-SUMMARY.md, 03-11-SUMMARY.md, 03-12-SUMMARY.md, 03-13-SUMMARY.md, 03-14-SUMMARY.md, 03-15-SUMMARY.md, 03-16-SUMMARY.md, 03-17-SUMMARY.md]
 started: 2026-11-16T23:30:00Z
-updated: 2026-11-16T23:30:00Z
+updated: 2026-11-17T00:30:00Z
 ---
 
 <!--
@@ -20,14 +20,7 @@ Nota de tooling: el clasificador `uat.classify-coverage` del CLI marca `validati
 
 ## Current Test
 
-number: 10
-name: iPhone / Safari, después de los arreglos tardíos — el 3.3 y el 3.4 en producción
-expected: |
-  En el iPhone, en producción (gestion.forjo.studio), en Inicio:
-  (a) 3.4 — tocar «Activar plan»: se ven «Elegí tu plan» y la X; la lista llega con el dedo al «Elegir» de Pro; el pie se ve. Cerrar con la X y apretar atrás (gesto de borde o botón): el primero avisa y no sale, el segundo sale. ⚠ No tocar «Elegir».
-  (b) 3.3 — recién entrado a Inicio, sin tocar nada, abrir el diálogo del banner, cerrarlo con la X o tocando afuera, y atrás: avisa y no sale; el segundo sale.
-  Si el aviso no aparece en Safari, no es una expulsión: es la incógnita A11 declarada (peor caso, el atrás sale). Anotar igual.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -87,14 +80,16 @@ evidence: decisión del dueño 2026-11-16 (03-DECISION-UAT-3.md, «costo del cam
 
 ### 10. iPhone / Safari, después de los arreglos tardíos — el 3.3 y el 3.4 en producción
 expected: en el iPhone, en producción: (a) el 3.4 del guion (modal de planes: título, X, scroll hasta Pro, pie; cerrado con la X, el atrás avisa y el segundo sale; no tocar «Elegir»); (b) el 3.3 (diálogo del banner cerrado con la X o el fondo, atrás avisa). El pase de iPhone del 2026-10-29 es anterior a G3-5/G3-7/G3-9/G3-10 (advertencia 4 de 03-VERIFICATION.md). Si en Safari el aviso no aparece, es la incógnita A11 declarada, no una expulsión.
-result: [pending]
+result: pass
+source: owner
+reported: "pass, todo bien" (2026-11-16, iPhone / Safari, producción, deploy f8fa76f)
 
 ## Summary
 
 total: 10
-passed: 9
+passed: 10
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
