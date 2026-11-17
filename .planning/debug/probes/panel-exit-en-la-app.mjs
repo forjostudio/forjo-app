@@ -2664,24 +2664,40 @@ const RECORRIDOS = [
     id: 'R-T-finanzas-url-pegada',
     titulo: 'D-03 + Patron 3 + D-04: /finances?tab=ventas PEGADA -> Egresos -> Turnos; la URL queda en /finances DENTRO del sitio, sin marca fabricada, y el atras sale de la seccion',
     async correr(cdp) {
-      await navegar(cdp, AFUERA)
-      await cdp.enviar('Page.resetNavigationHistory')
-      const desde = registros.length
-      await navegar(cdp, ORIGEN + '/finances?tab=ventas')
-      await asentar(desde, 15_000)
-      await asentarTab(cdp)
-      const alEntrar = { u: await ubicacion(cdp), tab: await tabActivo(cdp), alta: await altaVisible(cdp), pila: await pilaConQuery(cdp) }
-      await tocarTab(cdp, 'Egresos')
-      const trasEgresos = { u: await ubicacion(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
-      await tocarTab(cdp, 'Turnos')
-      await asentarTab(cdp)
-      const u = await ubicacion(cdp)
-      const trasTurnos = { u, tab: u === '(afuera)' ? 'ninguno' : await tabActivo(cdp), pila: await pilaConQuery(cdp) }
-      await atras(cdp)
-      await asentarTab(cdp)
-      const trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      // EL INSTRUMENTO DE LA HISTORIA (plan 03-14), instalado SOLO en este recorrido y quitado al terminar:
+      // graba cada escritura y cada retroceso con su pila de JS. Lo agrego el primer RED de este recorrido
+      // (P-1, 2026-11-17): los toques a Egresos y a Turnos sobre la URL pegada NO cambiaron el tab y no se
+      // sabia si el toque no llegaba o si la escritura no ocurria. Con esto el detalle lo NOMBRA.
+      const { identifier } = await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', { source: SCRIPT_DE_LA_HISTORIA })
+      let alEntrar, trasEgresos, trasTurnos, trasElAtras, hidratado, desde
+      try {
+        await navegar(cdp, AFUERA)
+        await cdp.enviar('Page.resetNavigationHistory')
+        desde = registros.length
+        await navegar(cdp, ORIGEN + '/finances?tab=ventas')
+        await asentar(desde, 15_000)
+        await asentarTab(cdp)
+        // ¿React ya engancho sus manejadores en el tab? Sin eso un click no hace nada y no mide nada.
+        hidratado = await evaluar(cdp, `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => x.textContent.trim().startsWith('Egresos')); return t ? Object.keys(t).some((k) => k.startsWith('__reactProps')) : null })()`)
+        alEntrar = { u: await ubicacion(cdp), tab: await tabActivo(cdp), alta: await altaVisible(cdp), pila: await pilaConQuery(cdp) }
+        await tocarTab(cdp, 'Egresos')
+        trasEgresos = { u: await ubicacion(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
+        await tocarTab(cdp, 'Turnos')
+        await asentarTab(cdp)
+        const u = await ubicacion(cdp)
+        trasTurnos = { u, tab: u === '(afuera)' ? 'ninguno' : await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+        await atras(cdp)
+        await asentarTab(cdp)
+        trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
+      } finally {
+        await cdp.enviar('Page.removeScriptToEvaluateOnNewDocument', { identifier })
+      }
+      const delRecorrido = registros.slice(desde).filter((r) => r.tipo === 'sonda-click' || r.tipo === 'sonda-historia' || r.tipo === 'sonda-documento-nuevo' || r.tipo === 'sonda-popstate')
       return {
         detalle: (p) => {
+          console.log(`${p}React enganchado en el tab Egresos al entrar: ${hidratado}`)
+          console.log(`${p}los toques y las escrituras del recorrido:`)
+          for (const r of delRecorrido) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
           console.log(`${p}al entrar: url=${alEntrar.u} tab=${alEntrar.tab} alta=${alEntrar.alta} pila=[${alEntrar.pila.entradas.join(', ')}] actual=${alEntrar.pila.indice}`)
           console.log(`${p}tras Egresos: url=${trasEgresos.u} estado=${trasEgresos.estado} pila=[${trasEgresos.pila.entradas.join(', ')}] actual=${trasEgresos.pila.indice}`)
           console.log(`${p}tras Turnos: url=${trasTurnos.u} tab=${trasTurnos.tab} pila=[${trasTurnos.pila.entradas.join(', ')}] actual=${trasTurnos.pila.indice}`)
