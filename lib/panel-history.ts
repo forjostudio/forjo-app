@@ -53,6 +53,8 @@ export type PanelViewCause =
   | 'user-open'
   /** El usuario pidió volver (el "Volver" de mobile). */
   | 'user-close'
+  /** El usuario pasó de un tab no-default a otro del mismo nivel: no es un destino nuevo, reemplaza. */
+  | 'user-switch'
   /** La app re-apunta la vista sola (la URL alcanzando al cliente conservado de una fusión). */
   | 'programmatic'
   /** Un filtro, no una subsección (el `activeLoc` de Agenda, T-3). No es un destino: reemplaza. */
@@ -118,6 +120,11 @@ export function panelHistoryAction({
     // Si no lo es —el dueño entró pegando la URL—, un `back()` lo sacaría del sitio: se reemplaza.
     case 'user-close':
       return holding ? 'consume' : 'replace'
+    // Un hermano del mismo nivel no es un destino nuevo: reemplaza, así la pila no crece (D-01 de la
+    // Phase 4, la lección de `G2-1`: cada ida y vuelta entre tabs costaría un atrás más). Es el
+    // análogo exacto de sección→sección en `panelNavMode`, que también reemplaza.
+    case 'user-switch':
+      return 'replace'
     // La app re-apunta la vista sola: no es un destino que el usuario haya elegido, así que no puede
     // crear una entrada. Es el criterio 3 del ROADMAP ("la fusión reemplaza en vez de empujar").
     case 'programmatic':
@@ -138,6 +145,32 @@ export function panelHistoryAction({
       return _exhaustivo
     }
   }
+}
+
+/**
+ * Qué pasó, para un grupo de subsecciones de **UN** nivel cuyo default es `null` (la URL limpia): los
+ * tabs de `/negocio`, `/settings` y `/finances` (Phase 4, D-01/D-02).
+ *
+ * **Por qué vive acá y no en la pantalla:** elegir la causa según `from === null` en el call site sería
+ * política en la pantalla —el segundo dialecto que NAV-05 viene a evitar—. La pantalla sólo declara
+ * *"el usuario eligió el tab X estando en el Y"*, y esta función y {@link panelHistoryAction} deciden.
+ *
+ * **Por qué no alcanzan las causas de antes:** `user-open` empuja SIEMPRE (la decisión ① de v0.30 para
+ * A→B en clientes) y `programmatic` es "la app re-apunta la vista sola" — usarla para un toque del
+ * usuario sería un dialecto disfrazado. De ahí `user-switch`.
+ *
+ * No maneja `from === to` (incluido `null === null`): la regla 2 de {@link panelHistoryAction} lo
+ * ataja antes del `switch` y no escribe nada.
+ */
+export function panelTabCause({ from, to }: { from: string | null; to: string | null }): PanelViewCause {
+  // Salir del default hacia otro tab EMPUJA (D-01): el atrás tiene que poder volver al default.
+  if (from === null)
+    return 'user-open'
+  // Volver al default CONSUME la entrada del tab si es nuestra (D-02): nunca Datos arriba de Datos.
+  if (to === null)
+    return 'user-close'
+  // Entre dos tabs no-default REEMPLAZA (D-01): la pila no crece.
+  return 'user-switch'
 }
 
 // ── El marcador de nuestras entradas ─────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths, addDays, isSameMonth, differenceInCalendarDays, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -22,6 +23,8 @@ import {
   guardDraftOnDismiss,
 } from '@/lib/panel-draft'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TAB_PARAM, TABS_FINANZAS, resolveTab, tabSlug } from '@/lib/panel-tabs'
+import { applyPanelView, panelTabCause, resolveViewParam, sanitizeAction, reconciledMemo } from '@/lib/panel-history'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import {
   TrendingUp, TrendingDown, Plus, Pencil, Trash2,
@@ -197,7 +200,85 @@ export function FinancesClient({ businessId }: Props) {
   const [prev, setPrev] = useState({ services: 0, sales: 0, income: 0, expenses: 0, balance: 0 })
   const [loading, setLoading] = useState(true)
   const [exportingFin, setExportingFin] = useState(false)
-  const [txTab, setTxTab] = useState('appointments')
+
+  // ── El tab, DERIVADO de la URL (Phase 4, D-04) ──────────────────────────────
+  // El tab vive en la query (`?tab=ventas`, `?tab=egresos`; Turnos es la URL limpia) y se DERIVA de
+  // ella: por eso el atrás vuelve al tab por defecto y una URL pegada o recargada abre el tab que
+  // nombra. No queda ninguna segunda fuente de verdad: con un estado al lado de la URL, el atrás
+  // volvería a mentir.
+  // `txTab` conserva el nombre y el tipo de antes A PROPÓSITO: las dos líneas del botón de alta lo
+  // siguen leyendo sin cambios, así que el botón sale SIEMPRE del tab resuelto de la URL —en la
+  // entrada directa y en el atrás— por construcción (criterio 4).
+  // ⚠ El valor de la URL sólo elige cuál de las tres listas —ya cargadas por el `businessId` del
+  // dueño— se MUESTRA; nunca decide qué se lee. La lista cerrada (y por qué es un `Map`) vive en
+  // `lib/panel-tabs.ts`.
+  const searchParams = useSearchParams()
+  const tabEnLaUrl = searchParams.get(TAB_PARAM)
+  const tabResuelto = resolveTab({ grupo: TABS_FINANZAS, param: tabEnLaUrl })
+  const txTab = tabResuelto.value
+  // Desestructurado para que el array de deps del efecto lleve identificadores planos: el objeto es
+  // nuevo en cada render y meterlo entero haría correr el efecto en todos.
+  const { reconcile: debeReconciliarTab, cause: causaDelTab, to: destinoDelTab } = resolveViewParam({
+    param: tabEnLaUrl,
+    resolvedTo: tabResuelto.slug,
+  })
+  const conciliadoTabRef = useRef<string | null>(null)
+
+  // ── Reconciliación URL ↔ tab (molde de `clients-client.tsx`) ───────────────
+  // Una URL que dice algo que la pantalla no muestra (`?tab=constructor`, `?tab=`, el default escrito
+  // explícito `?tab=turnos`) se sanea a la URL limpia con la causa que devolvió la resolución —siempre
+  // un reemplazo: este efecto NUNCA declara una apertura, porque un empuje que no sale de un toque del
+  // dueño es salteable por la intervención de historial de Chrome (medido en el plan 03-12)—.
+  // La memoria (`sanitizeAction` + `reconciledMemo`) es la de clientes: el modo estricto corre el
+  // efecto dos veces y escribe una sola, y un forward a una URL ya saneada se vuelve a sanear.
+  // Sin el corte por overlay que tiene clientes, y no es un olvido: con un diálogo de Finanzas abierto
+  // la URL no cambia (el diálogo tapa los tabs), y si cambiara, la regla 0 del helper difiere la
+  // escritura y la memoria se conserva —así que no se envenena—.
+  // La ref se lee y se escribe SÓLO adentro del efecto, nunca durante el render (`react-hooks/refs`).
+  useEffect(() => {
+    // Se lee de `searchParams` y no del valor del render: es lo que hace del objeto una dependencia
+    // genuina, que cambia con cada cambio de la URL canónica.
+    const enLaUrl = searchParams.get(TAB_PARAM)
+    let escribio = false
+    if (
+      sanitizeAction({
+        reconcile: debeReconciliarTab,
+        param: enLaUrl,
+        lastApplied: conciliadoTabRef.current,
+      }) === 'apply' &&
+      causaDelTab !== null
+    ) {
+      escribio =
+        applyPanelView({
+          cause: causaDelTab,
+          param: TAB_PARAM,
+          from: enLaUrl,
+          to: destinoDelTab,
+        }) !== 'none'
+    }
+    conciliadoTabRef.current = reconciledMemo({
+      reconcile: debeReconciliarTab,
+      applied: escribio,
+      param: enLaUrl,
+      previous: conciliadoTabRef.current,
+    })
+  }, [searchParams, debeReconciliarTab, causaDelTab, destinoDelTab])
+
+  // ── El toque en un tab ─────────────────────────────────────────────────────
+  // La pantalla sólo DECLARA "el dueño eligió el tab X estando en el Y": la causa la elige
+  // `panelTabCause` y la acción la decide el helper (salir de Turnos crea una entrada, cambiar entre
+  // Ventas y Egresos la reemplaza, volver a Turnos deshace la del tab). Sin router y sin `<Link>`: una
+  // navegación del router re-renderiza en el server una página que lee datos del dueño y borra las
+  // marcas de la pila. El único escritor es `applyPanelView`.
+  // ⚠ Todo cambio que no sea del usuario (`reason` distinto de 'none': la selección inicial, un tab que
+  // desaparece) se descarta: una entrada nueva sólo puede salir de una activación real.
+  function alElegirTab(value: unknown, detalles: { reason: string }): void {
+    if (detalles.reason !== 'none') return
+    const destino = tabSlug({ grupo: TABS_FINANZAS, value })
+    if (!destino.ok) return
+    const to = destino.slug
+    applyPanelView({ cause: panelTabCause({ from: tabResuelto.slug, to }), param: TAB_PARAM, from: tabResuelto.slug, to })
+  }
 
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [sales, setSales] = useState<ManualSale[]>([])
@@ -1004,7 +1085,7 @@ export function FinancesClient({ businessId }: Props) {
       )}
 
       {/* Tabs */}
-      <Tabs value={txTab} onValueChange={setTxTab}>
+      <Tabs value={txTab} onValueChange={alElegirTab}>
         <div className="flex items-center justify-between gap-2">
           <TabsList>
             <TabsTrigger value="appointments">Turnos ({appointments.length})</TabsTrigger>
