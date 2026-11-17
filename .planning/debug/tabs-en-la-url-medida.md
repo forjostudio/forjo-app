@@ -289,3 +289,233 @@ Playwright de `erp-forjo-studio` antes del RED válido: una espera, no un rojo.
   visual desplazado. Va a `deferred-items.md` de la fase.
 
 cierre (b): el reemplazo no fabrica la marca
+
+## (c) Negocio y Configuración en la URL, y el OAuth (plan 04-02, task 1)
+
+| Pieza | Valor medido |
+|---|---|
+| Servidor | `next dev` **propio** de la sonda en `http://127.0.0.1:3031` en las dos corridas (no había un `next dev` del dueño vivo: sin `.next/dev/lock`); la sonda lo mató al salir y verificó el puerto libre |
+| Navegador | `Chrome/157.0.8103.52`, `--headless=new`, perfil temporal propio; depuración en el 9335 |
+| Node | `v24.15.0` |
+| Gesto de atrás | `interfaz` (`chrome.tabs.goBack`) |
+| Modo estricto | ACTIVO (`next.config.ts` sin `reactStrictMode`, huella `8ceb99aeabb6a8b16cbe0e6d836bf0aa1ae03578`) |
+| Base | Supabase LOCAL de forjo-app ya levantada (`api local=200`; no hizo falta `supabase start`) |
+| Viewport | 390×844 mobile; `R-T-sidebar-seccion-activa` corre a 1280×800 de escritorio y vuelve al celular en un `finally` |
+| Sonda | `1b3e26f` (`test(04-02)`), con los `esperado` escritos antes del código |
+
+Los siete recorridos, por el turno:
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz R-T-negocio-por-mas,R-T-negocio-datos-consume,R-T-config-por-url,R-T-negocio-oauth-mp,R-T-negocio-oauth-google-error,R-T-sidebar-seccion-activa,R-T-secciones-sin-tab
+```
+
+### El RED — la app sin tocar (código de `1b3e26f`), rc 1, 6 en FALLA y el control de T-1 en OK
+
+```
+FALLA R-T-negocio-por-mas · MOB-08 criterio 1 / D-01 por Mas, la profundidad maxima: Inicio -> Mas -> Negocio -> Cobros -> Integraciones -> Cobros deja /negocio?tab=cobros con UNA entrada agregada; atras -> Datos -> Mas -> Inicio
+      url_tras_los_tres_toques: medido="/negocio"  <-- NO COINCIDE
+                                esperado="/negocio?tab=cobros"
+      entradas_de_los_tres_toques: medido=0  <-- NO COINCIDE
+                                   esperado=1
+      url_tras_el_primer_atras: medido="/mas"  <-- NO COINCIDE
+                                esperado="/negocio"
+      tab_tras_el_primer_atras: medido="ninguno"  <-- NO COINCIDE
+                                esperado="Datos"
+      ruta_tras_el_segundo_atras: medido="/dashboard"  <-- NO COINCIDE
+                                  esperado="/mas"
+      ruta_tras_el_tercer_atras: medido="(afuera)"  <-- NO COINCIDE
+                                 esperado="/dashboard"
+      al entrar a Negocio: pila=[(afuera), /dashboard, /mas, /negocio] actual=3
+      tras Cobros -> Integraciones -> Cobros: url=/negocio tab=Cobros estado={"frjUnder":"/mas"} pila=[(afuera), /dashboard, /mas, /negocio] actual=3
+      tras el primer atras: url=/mas tab=ninguno pila=[(afuera), /dashboard, /mas, /negocio] actual=2
+      tras el segundo atras: url=/dashboard#salir pila=[(afuera), /dashboard, /dashboard#salir] actual=2
+      tras el tercer atras: url=(afuera) pila=[(afuera), /dashboard, /dashboard#salir] actual=0
+
+FALLA R-T-negocio-datos-consume · D-02: Mas -> Negocio -> Cobros -> Datos; tocar Datos CONSUME la entrada del tab (el indice vuelve al de la seccion, la URL a /negocio) y el atras siguiente sale a Mas
+      url_en_cobros: medido="/negocio"  <-- NO COINCIDE
+                     esperado="/negocio?tab=cobros"
+      indice_en_cobros_menos_el_de_la_seccion: medido=0  <-- NO COINCIDE
+                                               esperado=1
+      url_tras_datos: medido="/negocio"
+      indice_tras_datos_menos_el_de_la_seccion: medido=0
+      ruta_tras_el_atras: medido="/mas"
+      indice de la seccion=3
+      en Cobros: url=/negocio pila=[(afuera), /dashboard, /mas, /negocio] actual=3
+      tras Datos: url=/negocio tab=Datos pila=[(afuera), /dashboard, /mas, /negocio] actual=3
+      tras el atras: url=/mas pila=[(afuera), /dashboard, /mas, /negocio] actual=2
+
+FALLA R-T-config-por-url · D-03 + D-06 + D-07 en Configuracion: /settings?tab=seguridad PEGADA abre Seguridad y el atras sale (sin Apariencia fabricada debajo); /settings?tab=ventas cae en Apariencia con la URL saneada a /settings sin agregar entradas
+      tab_al_entrar: medido="Apariencia"  <-- NO COINCIDE
+                     esperado="Seguridad"
+      url_al_entrar: medido="/settings?tab=seguridad"
+      ruta_tras_el_atras: medido="(afuera)"
+      url_tras_ventas: medido="/settings?tab=ventas"  <-- NO COINCIDE
+                       esperado="/settings"
+      tab_tras_ventas: medido="Apariencia"
+      entradas_del_saneo: medido=0
+      al entrar: url=/settings?tab=seguridad tab=Apariencia pila=[(afuera), /settings?tab=seguridad] actual=1
+      tras el atras: url=(afuera) pila=[(afuera), /settings?tab=seguridad] actual=0
+      ventas al cargar: pila=[(afuera), /settings?tab=ventas] actual=1
+      ventas tras el saneo: url=/settings?tab=ventas tab=Apariencia pila=[(afuera), /settings?tab=ventas] actual=1
+
+FALLA R-T-negocio-oauth-mp · D-09 / T-2 (criterio 3 simulado con la URL exacta del backend): /negocio?mp=connected muestra el toast UNA vez y queda en /negocio?tab=integraciones con un reemplazo sin marca fabricada; Datos deja /negocio dentro del sitio y el atras sale
+      url_tras_el_retorno: medido="/negocio"  <-- NO COINCIDE
+                           esperado="/negocio?tab=integraciones"
+      tab_tras_el_retorno: medido="Integraciones"
+      toasts_mp: medido=0  <-- NO COINCIDE
+                 esperado=1
+      entradas_del_retorno: medido=0
+      marca_tras_el_retorno: medido="null"  <-- NO COINCIDE
+                             esperado="{\"frjView\":null}"
+      ubicacion_tras_datos: medido="/negocio"
+      ruta_tras_el_atras: medido="(afuera)"
+      al cargar: pila=[(afuera), /negocio?mp=connected] actual=1
+      tras el retorno: url=/negocio tab=Integraciones estado=null toasts=0 pila=[(afuera), /negocio] actual=1
+      tras Datos: url=/negocio pila=[(afuera), /negocio] actual=1
+      tras el atras: url=(afuera) pila=[(afuera), /negocio] actual=0
+
+FALLA R-T-negocio-oauth-google-error · D-09, la rama de error: /negocio?google=error muestra el toast de error UNA vez y queda en /negocio?tab=integraciones
+      url_tras_el_retorno: medido="/negocio"  <-- NO COINCIDE
+                           esperado="/negocio?tab=integraciones"
+      tab_tras_el_retorno: medido="Integraciones"
+      toasts_google_error: medido=0  <-- NO COINCIDE
+                           esperado=1
+      al cargar: pila=[(afuera), /negocio?google=error] actual=1
+      tras el retorno: url=/negocio tab=Integraciones estado=null toasts=0 pila=[(afuera), /negocio] actual=1
+
+FALLA R-T-sidebar-seccion-activa · D-08 en ESCRITORIO: Inicio -> Negocio (sidebar) -> Cobros -> Negocio (sidebar) deja /negocio en Datos consumiendo la entrada del tab; con /negocio?tab=cobros PEGADA, el mismo toque deja /negocio en Datos sin salir del sitio
+      url_tras_tocar_negocio: medido="/negocio"
+      tab_tras_tocar_negocio: medido="Cobros"  <-- NO COINCIDE
+                              esperado="Datos"
+      indice_tras_tocar_negocio_menos_i1: medido=0  <-- NO COINCIDE
+                                          esperado=-1
+      url_pegada_tras_tocar_negocio: medido="/negocio"
+      tab_pegada_tras_tocar_negocio: medido="Datos"
+      en Cobros: url=/negocio pila=[(afuera), /dashboard, /negocio] actual=2
+      tras tocar Negocio: url=/negocio tab=Cobros pila=[(afuera), /dashboard, /negocio] actual=2
+      pegada al entrar: url=/negocio?tab=cobros tab=Datos pila=[(afuera), /negocio?tab=cobros] actual=1
+      pegada tras tocar Negocio: url=/negocio tab=Datos pila=[(afuera), /negocio] actual=1
+
+OK  R-T-secciones-sin-tab · T-1, control: /servicios?tab=cobros, /equipo?tab=cobros y /consultorios?tab=cobros dejan la URL como entro, sin ninguna TabsList y sin agregar entradas
+      servicios_url_igual: medido="si"
+      servicios_tabs_lists: medido=0
+      equipo_url_igual: medido="si"
+      equipo_tabs_lists: medido=0
+      consultorios_url_igual: medido="si"
+      consultorios_tabs_lists: medido=0
+      entradas_agregadas: medido=0
+      /servicios: url al cargar=/servicios?tab=cobros a los 3 s=/servicios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /negocio, /servicios?tab=cobros] actual=2
+      /equipo: url al cargar=/equipo?tab=cobros a los 3 s=/equipo?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /negocio, /servicios?tab=cobros, /equipo?tab=cobros] actual=3
+      /consultorios: url al cargar=/consultorios?tab=cobros a los 3 s=/consultorios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /negocio, /servicios?tab=cobros, /equipo?tab=cobros, /consultorios?tab=cobros] actual=4
+```
+
+**Lo que el RED nombró, además del tab:** con el código de antes los dos retornos del OAuth miden
+`toasts=0` —el aviso «MercadoPago conectado» / «No se pudo conectar con Google Calendar» NUNCA se veía—
+aunque el efecto sí corría (la query desaparecía: la limpieza va en el mismo efecto, después del toast).
+Leído en `node_modules/sonner/dist/index.mjs` (2.0.7): `toast()` sólo publica a los suscriptores de ESE
+momento (`publish` recorre `subscribers`), y el `<Toaster>` se suscribe en su propio `useEffect`; como
+está montado DESPUÉS de `{children}` en `app/layout.tsx`, su efecto corre después del de la pantalla y,
+en un documento nuevo —el retorno del OAuth lo es siempre—, el toast se pierde sin error. No es un
+defecto del instrumento: el contador sí ve los toasts que llegan (ver el GREEN). Se arregló en el mismo
+commit (`[Rule 1]`): el aviso se pide en la próxima tarea (`setTimeout(…, 0)`, sin limpieza a propósito:
+el desmontaje simulado del modo estricto lo cancelaría y la segunda corrida ya no ve la query).
+
+### El GREEN — con `3adb255` (`feat(04-02)`), rc 0, los siete en OK
+
+```
+OK  R-T-negocio-por-mas · MOB-08 criterio 1 / D-01 por Mas, la profundidad maxima: Inicio -> Mas -> Negocio -> Cobros -> Integraciones -> Cobros deja /negocio?tab=cobros con UNA entrada agregada; atras -> Datos -> Mas -> Inicio
+      url_tras_los_tres_toques: medido="/negocio?tab=cobros"
+      entradas_de_los_tres_toques: medido=1
+      url_tras_el_primer_atras: medido="/negocio"
+      tab_tras_el_primer_atras: medido="Datos"
+      ruta_tras_el_segundo_atras: medido="/mas"
+      ruta_tras_el_tercer_atras: medido="/dashboard"
+      al entrar a Negocio: pila=[(afuera), /dashboard, /mas, /negocio] actual=3
+      tras Cobros -> Integraciones -> Cobros: url=/negocio?tab=cobros tab=Cobros estado={"frjView":"tab"} pila=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      tras el primer atras: url=/negocio tab=Datos pila=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=3
+      tras el segundo atras: url=/mas pila=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=2
+      tras el tercer atras: url=/dashboard#salir pila=[(afuera), /dashboard, /dashboard#salir] actual=2
+
+OK  R-T-negocio-datos-consume · D-02: Mas -> Negocio -> Cobros -> Datos; tocar Datos CONSUME la entrada del tab (el indice vuelve al de la seccion, la URL a /negocio) y el atras siguiente sale a Mas
+      url_en_cobros: medido="/negocio?tab=cobros"
+      indice_en_cobros_menos_el_de_la_seccion: medido=1
+      url_tras_datos: medido="/negocio"
+      indice_tras_datos_menos_el_de_la_seccion: medido=0
+      ruta_tras_el_atras: medido="/mas"
+      indice de la seccion=3
+      en Cobros: url=/negocio?tab=cobros pila=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      tras Datos: url=/negocio tab=Datos pila=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=3
+      tras el atras: url=/mas pila=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=2
+
+OK  R-T-config-por-url · D-03 + D-06 + D-07 en Configuracion: /settings?tab=seguridad PEGADA abre Seguridad y el atras sale (sin Apariencia fabricada debajo); /settings?tab=ventas cae en Apariencia con la URL saneada a /settings sin agregar entradas
+      tab_al_entrar: medido="Seguridad"
+      url_al_entrar: medido="/settings?tab=seguridad"
+      ruta_tras_el_atras: medido="(afuera)"
+      url_tras_ventas: medido="/settings"
+      tab_tras_ventas: medido="Apariencia"
+      entradas_del_saneo: medido=0
+      al entrar: url=/settings?tab=seguridad tab=Seguridad pila=[(afuera), /settings?tab=seguridad] actual=1
+      tras el atras: url=(afuera) pila=[(afuera), /settings?tab=seguridad] actual=0
+      ventas al cargar: pila=[(afuera), /settings?tab=ventas] actual=1
+      ventas tras el saneo: url=/settings tab=Apariencia pila=[(afuera), /settings] actual=1
+
+OK  R-T-negocio-oauth-mp · D-09 / T-2 (criterio 3 simulado con la URL exacta del backend): /negocio?mp=connected muestra el toast UNA vez y queda en /negocio?tab=integraciones con un reemplazo sin marca fabricada; Datos deja /negocio dentro del sitio y el atras sale
+      url_tras_el_retorno: medido="/negocio?tab=integraciones"
+      tab_tras_el_retorno: medido="Integraciones"
+      toasts_mp: medido=1
+      entradas_del_retorno: medido=0
+      marca_tras_el_retorno: medido="{\"frjView\":null}"
+      ubicacion_tras_datos: medido="/negocio"
+      ruta_tras_el_atras: medido="(afuera)"
+      al cargar: pila=[(afuera), /negocio?mp=connected] actual=1
+      tras el retorno: url=/negocio?tab=integraciones tab=Integraciones estado={"frjView":null} toasts=1 pila=[(afuera), /negocio?tab=integraciones] actual=1
+      tras Datos: url=/negocio pila=[(afuera), /negocio] actual=1
+      tras el atras: url=(afuera) pila=[(afuera), /negocio] actual=0
+
+OK  R-T-negocio-oauth-google-error · D-09, la rama de error: /negocio?google=error muestra el toast de error UNA vez y queda en /negocio?tab=integraciones
+      url_tras_el_retorno: medido="/negocio?tab=integraciones"
+      tab_tras_el_retorno: medido="Integraciones"
+      toasts_google_error: medido=1
+      al cargar: pila=[(afuera), /negocio?google=error] actual=1
+      tras el retorno: url=/negocio?tab=integraciones tab=Integraciones estado={"frjView":null} toasts=1 pila=[(afuera), /negocio?tab=integraciones] actual=1
+
+OK  R-T-sidebar-seccion-activa · D-08 en ESCRITORIO: Inicio -> Negocio (sidebar) -> Cobros -> Negocio (sidebar) deja /negocio en Datos consumiendo la entrada del tab; con /negocio?tab=cobros PEGADA, el mismo toque deja /negocio en Datos sin salir del sitio
+      url_tras_tocar_negocio: medido="/negocio"
+      tab_tras_tocar_negocio: medido="Datos"
+      indice_tras_tocar_negocio_menos_i1: medido=-1
+      url_pegada_tras_tocar_negocio: medido="/negocio"
+      tab_pegada_tras_tocar_negocio: medido="Datos"
+      en Cobros: url=/negocio?tab=cobros pila=[(afuera), /dashboard, /negocio, /negocio?tab=cobros] actual=3
+      tras tocar Negocio: url=/negocio tab=Datos pila=[(afuera), /dashboard, /negocio, /negocio?tab=cobros] actual=2
+      pegada al entrar: url=/negocio?tab=cobros tab=Cobros pila=[(afuera), /negocio?tab=cobros] actual=1
+      pegada tras tocar Negocio: url=/negocio tab=Datos pila=[(afuera), /negocio] actual=1
+
+OK  R-T-secciones-sin-tab · T-1, control: /servicios?tab=cobros, /equipo?tab=cobros y /consultorios?tab=cobros dejan la URL como entro, sin ninguna TabsList y sin agregar entradas
+      servicios_url_igual: medido="si"
+      servicios_tabs_lists: medido=0
+      equipo_url_igual: medido="si"
+      equipo_tabs_lists: medido=0
+      consultorios_url_igual: medido="si"
+      consultorios_tabs_lists: medido=0
+      entradas_agregadas: medido=0
+      /servicios: url al cargar=/servicios?tab=cobros a los 3 s=/servicios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /negocio, /servicios?tab=cobros] actual=2
+      /equipo: url al cargar=/equipo?tab=cobros a los 3 s=/equipo?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /negocio, /servicios?tab=cobros, /equipo?tab=cobros] actual=3
+      /consultorios: url al cargar=/consultorios?tab=cobros a los 3 s=/consultorios?tab=cobros tabs-list=0 entradas agregadas=0 pila=[(afuera), /negocio, /servicios?tab=cobros, /equipo?tab=cobros, /consultorios?tab=cobros] actual=4
+```
+
+- **D-01, la profundidad máxima por Más:** `[…, /mas, /negocio, /negocio?tab=cobros{V}]` — Cobros empujó,
+  Integraciones y el segundo Cobros reemplazaron (una sola entrada); los tres atrás cayeron en Datos, Más e
+  Inicio (`/dashboard#salir`: el aviso de salida de la Phase 3 quedó armado al volver, como siempre).
+- **D-09 (T-2):** el retorno quedó en `/negocio?tab=integraciones` con `{"frjView":null}` (un reemplazo, sin
+  marca fabricada sobre la entrada ajena), sin entradas nuevas y con UN toast en modo estricto; Datos después
+  reemplazó a `/negocio` y el atrás salió a la página de afuera (no hubo retroceso fuera del sitio en el toque).
+- **D-08:** sobre la entrada nuestra, tocar Negocio en el sidebar consumió (índice −1, Datos); sobre la URL
+  pegada, el `<Link>` reemplazó a `/negocio` limpia (Datos, índice igual, dentro del sitio).
+- **T-1:** el control dio `OK` en las dos corridas: `/servicios`, `/equipo` y `/consultorios` con `?tab=cobros`
+  dejan la URL como entró, sin `TabsList` y sin entradas.
+- **El segundo gate del task 1** (T-1 por diff contra `85c99ae`, el esqueleto textual, `SECTION_TAB`, el
+  `<Tabs>`, las dos `TabsList`, el corte, el `drop`, el crudo en cero, las páginas, lo bloqueado, la huella de
+  `next.config.ts`, las ocho suites —605/605—, `tsc` limpio y eslint de settings exactamente
+  `immutability=6, purity=2, set-state-in-effect=2`): rc 0.
+
+cierre (c): negocio y configuracion en la url
