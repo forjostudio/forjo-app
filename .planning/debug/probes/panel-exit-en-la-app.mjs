@@ -3291,6 +3291,9 @@ const RECORRIDOS = [
   // C-1..C-6), NO la pila deseada. Se escribe en el commit `test(04-03)` ANTES de medir y no se toca
   // despues: la medicion confirma o refuta la derivacion, y eso es lo que se le muestra al dueno.
   {
+    // RETIRADO el 2026-11-17 (plan 04-04): fijaba la pila DERIVADA de antes de B1; su `esperado` queda
+    // tal cual, como historia, y su caso lo mide ahora `R-B1-inicio` (con control).
+    obsoleto: 'reemplazado por R-B1-inicio (plan 04-04, decision B1 del dueno, 2026-11-17): fijaba la pila de antes de B1',
     id: 'R-C-2',
     titulo: 'C-2 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Inicio en la barra; derivado: Inicio se EMPUJA encima del tab, el aviso de salida no se arma y el atras vuelve al tab',
     async correr(cdp) {
@@ -3321,6 +3324,9 @@ const RECORRIDOS = [
     },
   },
   {
+    // RETIRADO el 2026-11-17 (plan 04-04): fijaba la pila DERIVADA de antes de B1; su `esperado` queda
+    // tal cual, como historia, y su caso lo mide ahora `R-B1-turnos` (con control).
+    obsoleto: 'reemplazado por R-B1-turnos (plan 04-04, decision B1 del dueno, 2026-11-17): fijaba la pila de antes de B1',
     id: 'R-C-3',
     titulo: 'C-3 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Turnos en la barra; derivado: Turnos REEMPLAZA la entrada del tab, el atras cae en Negocio y el siguiente en Mas',
     async correr(cdp) {
@@ -3355,6 +3361,9 @@ const RECORRIDOS = [
     },
   },
   {
+    // RETIRADO el 2026-11-17 (plan 04-04): fijaba la pila DERIVADA de antes de B1; su `esperado` queda
+    // tal cual, como historia, y su caso lo mide ahora `R-B1-mas` (con control).
+    obsoleto: 'reemplazado por R-B1-mas (plan 04-04, decision B1 del dueno, 2026-11-17): fijaba la pila de antes de B1',
     id: 'R-C-4',
     titulo: 'C-4 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Mas en la barra; derivado: Mas se EMPUJA encima del tab (no sube) y el atras vuelve al tab',
     async correr(cdp) {
@@ -3451,6 +3460,9 @@ const RECORRIDOS = [
     },
   },
   {
+    // RETIRADO el 2026-11-17 (plan 04-04): fijaba la pila DERIVADA de antes de B1; su `esperado` queda
+    // tal cual, como historia, y su caso lo mide ahora `R-B1-ficha` (con control).
+    obsoleto: 'reemplazado por R-B1-ficha (plan 04-04, decision B1 del dueno, 2026-11-17): fijaba la pila de antes de B1',
     id: 'R-C-ficha',
     titulo: 'el hueco de hoy con ?c= (movil): Inicio -> Clientes -> abrir una ficha -> tocar Inicio en la barra; derivado: Inicio se EMPUJA encima de la ficha, el aviso no se arma y el atras vuelve a la ficha',
     async correr(cdp) {
@@ -3663,11 +3675,15 @@ const QUE_CIERRA = {
   'R-T-sidebar-seccion-activa': 'D-08 (plan 04-02, escritorio): tocar Negocio en el sidebar estando en Cobros vuelve a Datos consumiendo; con la URL pegada, sin salir del sitio',
   'R-T-secciones-sin-tab': 'T-1, control (plan 04-02): /servicios, /equipo y /consultorios con ?tab=cobros no se mueven y no tienen TabsList',
   'R-T-agenda-google': 'D-10 (plan 04-02, task 2): ?google=connected en Agenda -> un toast y /agenda por un reemplazo del helper, sin entradas y con {frjView:null}',
+  // OBSOLETO desde el 2026-11-17 (decision B1 del dueno, plan 04-04): lo mide R-B1-inicio; ver `obsoleto` en el recorrido.
   'R-C-2': 'C-2: Mas -> Negocio -> Cobros -> tocar Inicio; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, el aviso no se arma)',
+  // OBSOLETO desde el 2026-11-17 (decision B1 del dueno, plan 04-04): lo mide R-B1-turnos; ver `obsoleto` en el recorrido.
   'R-C-3': 'C-3: Mas -> Negocio -> Cobros -> tocar Turnos; esperado = la pila DERIVADA en el research, plan 04-03 (reemplaza el tab: Negocio y Mas debajo)',
+  // OBSOLETO desde el 2026-11-17 (decision B1 del dueno, plan 04-04): lo mide R-B1-mas; ver `obsoleto` en el recorrido.
   'R-C-4': 'C-4: Mas -> Negocio -> Cobros -> tocar Mas; esperado = la pila DERIVADA en el research, plan 04-03 (empuja Mas encima del tab)',
   'R-C-5': 'C-5 (escritorio): Negocio -> Cobros -> Finanzas por el sidebar; esperado = la pila DERIVADA en el research, plan 04-03 (el atras cae en Negocio)',
   'R-C-6': 'C-6 (escritorio): Negocio -> Cobros -> Inicio por el sidebar; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, como el residuo de escritorio)',
+  // OBSOLETO desde el 2026-11-17 (decision B1 del dueno, plan 04-04): lo mide R-B1-ficha; ver `obsoleto` en el recorrido.
   'R-C-ficha': 'el hueco de ?c=: Clientes -> ficha -> tocar Inicio; esperado = la pila DERIVADA en el research, plan 04-03 (empuja, el aviso no se arma)',
   'R-B1-inicio': 'B1 (plan 04-04): con Cobros arriba, tocar Inicio termina igual que sin el tab ([/dashboard], el aviso igual): el retroceso TRIPLE',
   'R-B1-turnos': 'B1 (plan 04-04): con Cobros arriba, tocar Turnos termina igual que sin el tab ([/dashboard, /appointments])',
