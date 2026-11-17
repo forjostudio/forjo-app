@@ -61,9 +61,11 @@ import {
   PANEL_MORE,
   PANEL_ROOT,
   isExitSentinelOwnedEntry,
+  isForeignOwnedEntry,
   panelBranchPlan,
   panelNavMode,
   panelUnderRoute,
+  panelViewEntryParam,
   type PanelBranchPlan,
 } from '@/lib/panel-history'
 import { runBranchNavigation, type BranchNavigate } from '@/lib/panel-branch'
@@ -211,6 +213,10 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
         to,
         masDebajo: panelUnderRoute(estado) === PANEL_MORE,
         raizDebajo: panelUnderRoute(estado) === PANEL_ROOT,
+        // El cuarto hecho (B1, plan 04-04), con la MISMA expresión que la barra: un dialecto. Con la
+        // pantalla sucia la entrada de arriba es la del guard, así que es falso igual; en el `popstate`
+        // del consumo puede ser verdadero, y entonces el ejecutor se niega y este archivo degrada.
+        vistaArriba: panelViewEntryParam(estado) !== null && !isForeignOwnedEntry(estado),
         holdsExitSentinel: isExitSentinelOwnedEntry(estado),
       }),
     [],
@@ -254,9 +260,15 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
         // niega** y la salida cae en el `navegar` de la regla de rutas. Y tiene que estar
         // **declarado** igual: el chequeo de exhaustividad de más abajo es el candado contra que la
         // salida caiga por un camino por defecto que nadie eligió.
+        //
+        // ⚠ `consume-view-then-navigate` (B1, plan 04-04) TAMBIÉN DEGRADA, y por lo mismo: este archivo
+        // no es dueño de la re-decisión de la barra (la pide `usePanelBranch` desde un commit), así que la
+        // llamada va **sin** `reDecidir`, el ejecutor se niega sin enganchar nada y la salida navega con
+        // la regla de rutas.
         case 'up':
         case 'collapse-then-replace':
         case 'consume-exit-then-navigate':
+        case 'consume-view-then-navigate':
         case 'none':
           if (runBranchNavigation({ plan, to, navigate: navegar })) return
           // Se negó (marca perdida, o entrada de otro dueño): la degradación segura es navegar con

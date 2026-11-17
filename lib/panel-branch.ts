@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, isExitSentinelOwnedEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, writePanelUnder, type PanelBranchPlan } from '@/lib/panel-history'
+import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, consumeOwnedPanelEntry, isExitSentinelOwnedEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, panelViewEntryParam, writePanelUnder, type PanelBranchPlan } from '@/lib/panel-history'
 // Los dos helpers del teclado, PUROS y ya exportados, y el hash base de los overlays. Se IMPORTAN:
 // esos dos módulos no se tocan (son intocables de la fase), y reusar sus helpers medidos es lo
 // contrario de copiarlos.
@@ -318,8 +318,9 @@ export function consumeOwnedExitSentinel({ id }: { id: number }): boolean {
  * navegación) y `false` si no (⇒ el call site deja navegar, y la pila queda un escalón más larga:
  * la degradación segura).
  *
- * **De los seis miembros del plan le llegan cuatro**: subir, colapsar, consumir-el-sentinel-y-navegar
- * y nada. Empujar y reemplazar los ejecuta el `<Link>`, con su prefetch y su transición — por eso
+ * **De los siete miembros del plan le llegan cinco**: subir, colapsar, consumir-el-sentinel-y-navegar,
+ * consumir-la-subsección-y-re-decidir (plan 04-04) y nada. Empujar y reemplazar los ejecuta el
+ * `<Link>`, con su prefetch y su transición — por eso
  * devuelve `false` para los dos, en vez de reimplementar una navegación peor. *Nada* no toca nada y se
  * hace cargo.
  *
@@ -334,6 +335,12 @@ export function consumeOwnedExitSentinel({ id }: { id: number }): boolean {
  * dueño** del sentinel: si retrocediera igual, estaría retrocediendo sobre una entrada **ajena** y
  * dejaría al dueño **fuera del sitio** con cambios sin guardar en pantalla — el peor resultado de todo
  * ese archivo.
+ *
+ * ⚠ **`reDecidir` es OPCIONAL por el mismo motivo, y con el mismo efecto** (plan 04-04, B1). Es el
+ * segundo paso de `consume-view-then-navigate`: parado ya en la entrada de la sección, re-leer la pila
+ * y volver a decidir con {@link panelBranchPlan}. Sólo lo sabe hacer el hook de la barra, que es quien
+ * pide la navegación desde un commit. Sin él la rama **se niega** antes de enganchar nada y el call
+ * site degrada a la regla de rutas: es lo que recibe el guard de cambios sin guardar.
  */
 export function runBranchNavigation({
   plan,
@@ -342,6 +349,7 @@ export function runBranchNavigation({
   root = PANEL_ROOT,
   navigate,
   exitId,
+  reDecidir,
 }: {
   plan: PanelBranchPlan
   to: string
@@ -353,6 +361,11 @@ export function runBranchNavigation({
    * del sentinel se niega, que es la degradación segura del consumidor que no es su dueño.
    */
   exitId?: number
+  /**
+   * El segundo paso de `consume-view-then-navigate`: re-decidir con la pila real después del
+   * consumo. **Opcional a propósito:** sin él la rama se niega, igual que la del sentinel sin `exitId`.
+   */
+  reDecidir?: () => void
 }): boolean {
   // *Nada*: se hace cargo sin tocar la pila. Lo produce el plan 03-03.
   if (plan === 'none') return true
@@ -384,6 +397,26 @@ export function runBranchNavigation({
     // El consumo se negó (la entrada de arriba ya no lleva NUESTRA marca): no va a llegar ningún
     // evento, así que el listener hay que sacarlo a mano o queda armado para el próximo retroceso
     // del dueño y dispara una navegación que nadie pidió.
+    window.removeEventListener('popstate', segundoPaso)
+    return false
+  }
+
+  // ── Consumir NUESTRA subsección y re-decidir: dos pasos, mismo molde (plan 04-04, B1) ─────────
+  if (plan === 'consume-view-then-navigate') {
+    // Sin quien sepa re-decidir NO se retrocede: es la degradación segura del consumidor que no es
+    // dueño de la re-decisión (el guard). Y va ANTES de enganchar nada, como la rama de arriba.
+    if (reDecidir === undefined) return false
+    const segundoPaso = () => {
+      // La decisión NO se toma acá: se re-toma con la pila real, parados en la entrada de la sección
+      // (que sí lleva la marca de la rama). Quien re-decide pide su navegación en estado (lección 3)
+      // y hace sus retrocesos por este mismo ejecutor, con las guardas de cada consumo.
+      reDecidir()
+    }
+    // ⚠ ENGANCHADO ACÁ, EN EL GESTO, Y CON DISPARO ÚNICO (lección 2).
+    window.addEventListener('popstate', segundoPaso, { once: true })
+    // El consumo pasa por las DOS guardas de `consumeOwnedPanelEntry` (entrada de otro dueño primero,
+    // marca de subsección propia después): nunca un retroceso sobre una entrada ajena.
+    if (consumeOwnedPanelEntry()) return true
     window.removeEventListener('popstate', segundoPaso)
     return false
   }
@@ -1451,6 +1484,52 @@ export function branchPendingNav({
 }
 
 /**
+ * **Los cuatro hechos de la pila, leídos de UN estado y escritos en UN solo lugar** (plan 04-04).
+ *
+ * ⚠ **POR QUÉ ES UNA FUNCIÓN Y NO CUATRO LÍNEAS EN CADA CALL SITE.** Desde B1 el hook decide en DOS
+ * momentos —el gesto (`handleNavigate`) y el aterrizaje del consumo de una subsección
+ * (`decidirDesdeElAterrizaje`)—, y los dos tienen que computar los hechos con la MISMA forma: dos copias
+ * de la misma expresión son dos dialectos de la misma regla, que es lo que NAV-05 viene a evitar (y lo
+ * que el candado de `G2-1` cuenta). Lo que NO cambia: el estado lo lee **el call site, UNA vez por
+ * momento**, y entra como parámetro — esta función no toca `window`.
+ *
+ * El tipo de retorno se INFIERE a propósito: el candado de `G2-1` cuenta UNA aparición del nombre de
+ * cada hecho en este módulo, y el que vale es el del cómputo. La firma de {@link panelBranchPlan} es la
+ * que exige los cuatro (sin default): si faltara uno, el spread del call site no compila.
+ */
+export function branchStackFacts({
+  estado,
+  id,
+  root,
+  more,
+}: {
+  estado: unknown
+  id: number
+  root: string
+  more: string
+}) {
+  return {
+    // El sentinel de salida de ESTA instancia, del MISMO estado: tocar el destino actual con el
+    // sentinel arriba no tiene que hacer NADA.
+    holdsExitSentinel: isPanelExitEntry(estado, id),
+    // ⚠ EL HECHO SE COMPUTA COMPARANDO LA MARCA CONTRA LA RUTA DE MÁS, y no preguntando "¿hay
+    // marca?". Es lo que hace que desktop no se entere POR CONSTRUCCIÓN (criterio 6): en escritorio
+    // nada navega a Más ⇒ la marca nunca dice Más ⇒ el hecho es siempre falso ⇒ la decisión cae en
+    // las ramas de siempre. Sin un chequeo de viewport en el medio.
+    masDebajo: panelUnderRoute(estado) === more,
+    // ⚠ EL TERCER HECHO (G2-1), sobre el MISMO `estado`. Se computa con la forma *la marca DICE la
+    // raíz* —no *¿hay marca?*—, que es exactamente la misma forma que usa `masDebajo` justo arriba y
+    // por el mismo motivo: así el hecho no se dispara donde no corresponde, y la política no necesita
+    // preguntarle nada a la pantalla.
+    raizDebajo: panelUnderRoute(estado) === root,
+    // ⚠ EL CUARTO HECHO (B1, plan 04-04): ¿la entrada de arriba es una subsección NUESTRA (un tab, la
+    // ficha `?c=`) y no la de otro dueño? Con ella arriba los otros tres son falsos por construcción; la
+    // política la consume primero y el segundo paso re-decide con la pila real.
+    vistaArriba: panelViewEntryParam(estado) !== null && !isForeignOwnedEntry(estado),
+  }
+}
+
+/**
  * Cablea la rama de Más a un menú: marca cada entrada con lo que quedó debajo, y resuelve los gestos
  * que la política de rutas sola no puede resolver.
  *
@@ -1928,33 +2007,67 @@ export function usePanelBranch({
     }
   }, [id])
 
+  // La navegación PEDIDA, en UN solo lugar: la usan el gesto y el segundo paso de B1. Es el único
+  // escritor del pedido —lo deja, nunca lo limpia— y lo ejecuta el efecto de arriba desde un commit.
+  const pedirNavegacion: BranchNavigate = (destino, modo) => setPedida({ href: destino, mode: modo })
+
+  // ── El SEGUNDO PASO de B1 (plan 04-04): re-decidir desde el aterrizaje del consumo ────────────────
+  // Lo llama el `popstate` del consumo de la subsección, ya parados en la entrada de la sección. ⚠ ES UNA
+  // LECTURA NUEVA DEL ESTADO A PROPÓSITO, y no contradice la lección 1: es OTRO momento del gesto (después
+  // del retroceso), y la entrada de arriba es otra —la de la sección, con su marca de la rama—. Se
+  // re-decide con LA política (`panelBranchPlan`, los cuatro hechos re-leídos del MISMO estado) y el
+  // gesto termina igual que sin la subsección:
+  //   · `push`/`replace` ⇒ la marca viaja por el canal de siempre y la navegación se PIDE (lección 3:
+  //     adentro del `popstate` el router está procesando su recorrido);
+  //   · `none` ⇒ nada;
+  //   · el resto ⇒ al ejecutor, con `reDecidir` otra vez: una ficha A → B son dos subsecciones y cada
+  //     vuelta consume UNA entrada nuestra, así que termina. Los retrocesos de `up` y del colapso salen
+  //     de acá adentro (son retrocesos, no navegaciones del router: el precedente medido de E-5).
+  // Si el ejecutor se negara (una marca perdida entre la lectura y el consumo), la degradación segura es
+  // la regla de rutas: el `<Link>` ya fue prevenido, así que quedarse quieto dejaría el gesto MUERTO.
+  function decidirDesdeElAterrizaje(href: string): void {
+    const estado: unknown = window.history.state
+    const desde = window.location.pathname
+    const plan = panelBranchPlan({ from: desde, to: href, more, root, ...branchStackFacts({ estado, id, root, more }) })
+    const pedirConLaMarca = (modo: BranchNavMode) => {
+      branchCarryMark({ plan: modo, from: desde, to: href, rutaDebajo: panelUnderRoute(estado) })
+      pedirNavegacion(href, modo)
+    }
+    if (plan === 'none') return
+    if (plan === 'push' || plan === 'replace') {
+      pedirConLaMarca(plan)
+      return
+    }
+    // El dominio se suelta antes de delegar, igual que en el gesto (T-03-29).
+    if (plan === 'consume-exit-then-navigate') sentinelVivoRef.current = false
+    const seHizoCargo = runBranchNavigation({
+      plan,
+      to: href,
+      more,
+      root,
+      navigate: pedirNavegacion,
+      exitId: id,
+      reDecidir: () => decidirDesdeElAterrizaje(href),
+    })
+    if (!seHizoCargo) pedirConLaMarca(panelNavMode({ from: desde, to: href, root, more }))
+  }
+
   function handleNavigate(href: string): boolean {
     const estado: unknown = window.history.state
     const plan = panelBranchPlan({
       from: pathname,
       to: href,
       more,
-      // El segundo hecho, leído del MISMO estado y re-verificado en el momento del click, igual que
-      // el de la rama: tocar el destino actual con el sentinel arriba no tiene que hacer NADA.
-      holdsExitSentinel: isPanelExitEntry(estado, id),
-      // ⚠ EL HECHO SE COMPUTA COMPARANDO LA MARCA CONTRA LA RUTA DE MÁS, y no preguntando "¿hay
-      // marca?". Es lo que hace que desktop no se entere POR CONSTRUCCIÓN (criterio 6): en escritorio
-      // nada navega a Más ⇒ la marca nunca dice Más ⇒ el hecho es siempre falso ⇒ la decisión cae en
-      // las ramas de siempre. Sin un chequeo de viewport en el medio.
-      masDebajo: panelUnderRoute(estado) === more,
-      // ⚠ EL TERCER HECHO (G2-1), Y SE RE-VERIFICA EN EL MOMENTO DEL CLICK, sobre el MISMO `estado`
-      // que ya se leyó para los otros dos. Dos lecturas del estado en el mismo gesto serían dos
-      // verdades que pueden diferir: entre un render y el click pudo haber una escritura blanda que
-      // se llevó la marca (la lección 1 del encabezado de este módulo).
-      // Y se computa con la forma *la marca DICE la raíz* —no *¿hay marca?*—, que es exactamente la
-      // misma forma que usa `masDebajo` justo arriba y por el mismo motivo: así el hecho no se
-      // dispara donde no corresponde, y la política no necesita preguntarle nada a la pantalla.
-      raizDebajo: panelUnderRoute(estado) === root,
+      // ⚠ LOS CUATRO HECHOS, del MISMO `estado` y RE-VERIFICADOS EN EL MOMENTO DEL CLICK: dos lecturas
+      // del estado en el mismo gesto serían dos verdades que pueden diferir —entre un render y el click
+      // pudo haber una escritura blanda que se llevó la marca (la lección 1 del encabezado)—. La forma de
+      // cada uno vive en `branchStackFacts`, UNA vez: el segundo paso de B1 la usa igual.
+      ...branchStackFacts({ estado, id, root, more }),
     })
     // ⚠ LA PROPAGACIÓN (G3-1, plan 03-11), Y VA ACÁ PORQUE ACÁ ES EL ÚNICO MOMENTO EN QUE EL VALOR
     // EXISTE. El `<Link>` reemplaza con su prefetch y su transición, y el router escribe su propio
     // state encima: para cuando el efecto de marcado corre, la marca de esta entrada ya no está. El
-    // valor sale del MISMO `estado` que se leyó arriba para los tres hechos —una sola lectura por
+    // valor sale del MISMO `estado` que se leyó arriba para los cuatro hechos —una sola lectura por
     // gesto, nunca dos verdades que puedan diferir— y la decisión de propagarlo o no vive en el
     // productor, con sus reglas en orden.
     branchCarryMark({ plan, from: pathname, to: href, rutaDebajo: panelUnderRoute(estado) })
@@ -1974,10 +2087,12 @@ export function usePanelBranch({
       to: href,
       more,
       root,
-      navigate: (destino, modo) => setPedida({ href: destino, mode: modo }),
+      navigate: pedirNavegacion,
       // El identificador de dueño: esta instancia SÍ es la dueña del sentinel (lo empujó con este
       // mismo id en `armarSentinel`), así que la rama del consumo puede correr.
       exitId: id,
+      // Y quien re-decide después de consumir una subsección (B1): esta instancia, desde el aterrizaje.
+      reDecidir: () => decidirDesdeElAterrizaje(href),
     })
   }
 

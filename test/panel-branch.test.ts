@@ -1334,13 +1334,36 @@ describe('runBranchNavigation — CONSUMIR LA SUBSECCIÓN y recién entonces re-
 
   it('el hook computa el hecho del MISMO `estado` que los otros tres, y le pasa `reDecidir` al ejecutor', () => {
     const mod = sinComentarios(leer(MOD_DUENO))
+    // La forma del hecho vive UNA vez, en los hechos de la pila, junto a los otros tres.
+    const h = mod.indexOf('export function branchStackFacts({')
+    expect(h).toBeGreaterThan(0)
+    const hechos = mod.slice(h, mod.indexOf('\n}\n', h) + 3)
+    expect(hechos).toContain('vistaArriba: panelViewEntryParam(estado) !== null && !isForeignOwnedEntry(estado)')
+    expect(hechos).toContain('raizDebajo: panelUnderRoute(estado) === root')
+    expect(cuenta(hechos, /window\./g)).toBe(0)
+    expect(cuenta(mod, /vistaArriba: panelViewEntryParam/g)).toBe(1)
     const desde = mod.indexOf('function handleNavigate(href: string): boolean {')
     expect(desde).toBeGreaterThan(0)
     const gesto = mod.slice(desde, mod.indexOf('\n  }', desde) + 4)
-    expect(gesto).toContain('vistaArriba: panelViewEntryParam(estado) !== null && !isForeignOwnedEntry(estado)')
+    // El gesto los pide sobre SU `estado`, leído una sola vez, igual que antes del arreglo.
+    expect(gesto).toContain('...branchStackFacts({ estado, id, root, more })')
     expect(gesto).toContain('reDecidir: () => decidirDesdeElAterrizaje(href)')
-    // Una sola lectura del estado por gesto, igual que antes del arreglo.
     expect(cuenta(gesto, /window\.history\.state/g)).toBe(1)
+  })
+
+  it('los hechos de la pila, leídos de un estado: la subsección PROPIA cuenta, la AJENA no', () => {
+    const base = { id: 7, root: PANEL_ROOT, more: PANEL_MORE }
+    expect(PB.branchStackFacts({ ...base, estado: { frjView: 'tab' } }).vistaArriba).toBe(true)
+    expect(PB.branchStackFacts({ ...base, estado: { frjView: 'c' } }).vistaArriba).toBe(true)
+    expect(PB.branchStackFacts({ ...base, estado: { frjView: null } }).vistaArriba).toBe(false)
+    expect(PB.branchStackFacts({ ...base, estado: { frjView: 'tab', frjOverlay: 1 } }).vistaArriba).toBe(false)
+    expect(PB.branchStackFacts({ ...base, estado: panelUnderState(PANEL_MORE) })).toEqual({
+      holdsExitSentinel: false,
+      masDebajo: true,
+      raizDebajo: false,
+      vistaArriba: false,
+    })
+    expect(PB.branchStackFacts({ ...base, estado: PB.panelExitState(7) }).holdsExitSentinel).toBe(true)
   })
 
   it('el segundo paso RE-LEE el estado y re-decide con LA política; push/replace se piden, nunca se ejecutan', () => {

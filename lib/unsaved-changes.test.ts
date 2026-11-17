@@ -140,11 +140,13 @@ describe('leaveNavigationPlan · los planes de la rama de Más', () => {
     expect(leaveNavigationPlan({ holdsSentinel: true, sectionMode: 'none' })).toBe('consume-then-none')
   })
 
-  it('EXHAUSTIVIDAD: para los SEIS planes, con sentinel es el prefijo de consumo y sin sentinel es el plan pelado', () => {
+  it('EXHAUSTIVIDAD: para los SIETE planes, con sentinel es el prefijo de consumo y sin sentinel es el plan pelado', () => {
     // El candado contra agregar un plan nuevo a la rama y olvidarse de esta composición. El tipo
     // obliga a sumarlo a `TODOS_LOS_PLANES`, y este caso obliga a que la composición valga para él.
+    // ⚠ 2026-11-17 (plan 04-04, decisión B1 del dueño): SEIS → SIETE A PROPÓSITO, por el séptimo
+    // miembro `consume-view-then-navigate`. La composición vale para él sin tocar `leaveNavigationPlan`.
     const planes = Object.keys(TODOS_LOS_PLANES) as PanelBranchPlan[]
-    expect(planes).toHaveLength(6)
+    expect(planes).toHaveLength(7)
     for (const plan of planes) {
       expect(leaveNavigationPlan({ holdsSentinel: false, sectionMode: plan })).toBe(plan)
       expect(leaveNavigationPlan({ holdsSentinel: true, sectionMode: plan })).toBe(`consume-then-${plan}`)

@@ -545,8 +545,8 @@ export function panelNavMode({
 /**
  * Qué hacer con la pila cuando la navegación del menú ocurre **dentro de la rama de Más**.
  *
- * **SEIS miembros**, y los dos primeros son literalmente los de {@link PanelNavMode}: esta decisión
- * **extiende** la política de rutas, no la reemplaza.
+ * **SIETE miembros** (seis hasta el plan 04-04), y los dos primeros son literalmente los de
+ * {@link PanelNavMode}: esta decisión **extiende** la política de rutas, no la reemplaza.
  *
  *   · `push` / `replace` — lo de siempre, y los ejecuta el `<Link>` con su prefetch y su transición.
  *   · `up` — **subir un nivel** (D-03): un retroceso guardado. Nunca un `replace`, que dejaría la
@@ -556,6 +556,13 @@ export function panelNavMode({
  *   · `consume-exit-then-navigate` — **consumir el sentinel de salida y recién entonces navegar**
  *     (plan 03-06): con el sentinel arriba, parados en la raíz y un destino distinto. Su regla, y el
  *     por qué de su lugar, están abajo en {@link panelBranchPlan}.
+ *   · `consume-view-then-navigate` — **consumir NUESTRA subsección de arriba y recién entonces
+ *     decidir con la pila real** (plan 04-04, decisión B1 del dueño del 2026-11-17): con un tab
+ *     (`?tab=`) o la ficha (`?c=`) arriba, la entrada de arriba es la de la subsección y no lleva la
+ *     marca de la rama, así que los otros hechos dan falso **por construcción** y el gesto caería en la
+ *     regla de rutas (el hueco medido en el 04-03). Consumida la subsección, el ejecutor **re-decide**
+ *     con esta misma función sobre la entrada de la sección, y el gesto termina **igual que sin la
+ *     subsección**. Su regla, y el por qué de su lugar, están abajo en {@link panelBranchPlan}.
  *   · `none` — **no hacer nada**: el sentinel de salida está arriba y el destino es la ruta actual
  *     (plan 03-03). Está en el tipo **a propósito** y se **produce desde esta misma función**: si
  *     *nada* es un resultado posible de la decisión de navegación y vive fuera del tipo, el chequeo
@@ -567,6 +574,7 @@ export type PanelBranchPlan =
   | 'up'
   | 'collapse-then-replace'
   | 'consume-exit-then-navigate'
+  | 'consume-view-then-navigate'
   | 'none'
 
 /**
@@ -616,6 +624,26 @@ export type PanelBranchPlan =
  *      regla -1, porque con el destino igual a la ruta actual no hay nada que navegar.
  *      ⚠ **Y por qué sólo en la raíz:** el sentinel es de la raíz y sólo de la raíz. Consumirlo
  *      estando en una sección sería retroceder sobre una entrada que **no es la que creemos**.
+ *   -1d. **Una subsección NUESTRA arriba (un tab o la ficha `?c=`) y un destino DISTINTO ⇒
+ *      CONSUMIRLA Y RECIÉN ENTONCES DECIDIR** (plan 04-04, decisión B1 del dueño del 2026-11-17).
+ *      ⚠ **QUÉ RESUELVE, medido y no derivado** (§(e) de `.planning/debug/tabs-en-la-url-medida.md`):
+ *      la entrada de la subsección lleva `{ frjView }` y **no** la marca de la rama, así que con ella
+ *      arriba `masDebajo` y `raizDebajo` son **falsos por construcción** y la regla 0 devolvía lo de
+ *      {@link panelNavMode}: `Más → Negocio → Cobros → Inicio` apilaba Inicio sobre el tab con el
+ *      aviso de salida sin armar (el síntoma de `G2-1` por otro camino), Turnos dejaba dos escalones
+ *      de más y Más se apilaba en vez de subir. Consumida la subsección, el ejecutor **re-decide** con
+ *      esta misma función parado en la entrada de la sección, que sí tiene su marca: el gesto termina
+ *      **igual que sin la subsección**, con UNA sola política.
+ *      ⚠ **POR QUÉ ANTES DE LA -1c Y DE LA REGLA 0.** Con la subsección arriba los hechos de esas dos
+ *      son falsos por construcción, así que la regla 0 devolvería la regla de rutas — que es
+ *      literalmente el hueco medido. **Y DESPUÉS de la -1b:** el sentinel de salida y una subsección no
+ *      comparten entrada, pero con el sentinel arriba el gesto ya tiene dueño.
+ *      ⚠ **Y por qué `from !== to`:** con el destino igual a la ruta actual el gesto es de **NAV-08**
+ *      (`consumeOwnedPanelEntry` en el `onNavigate` del menú), que va antes; si llegara acá, lo de
+ *      siempre. Las dos son mutuamente excluyentes por construcción, igual que hoy.
+ *      ⚠ **Lo que NO se hace para que la barra "vea" la marca:** copiar el `frjUnder` de la sección en
+ *      la entrada del tab. Mentiría —debajo del tab está la sección, no Más— y un `up` o un colapso
+ *      retrocederían a la sección y abortarían su segundo paso.
  *   -1c. **La marca dice LA RAÍZ, el destino es LA RAÍZ y venimos de otra ruta ⇒ EL RETROCESO
  *      GUARDADO DE UN PASO** (`G2-1`, plan 03-09). Son **tres** hechos juntos, igual que la regla de
  *      arriba, y el tercero (`from !== to`) ya lo atajaría la regla 1 pero se escribe explícito para
@@ -682,6 +710,7 @@ export function panelBranchPlan({
   more = PANEL_MORE,
   raizDebajo,
   masDebajo,
+  vistaArriba,
   holdsExitSentinel,
 }: {
   from: string
@@ -712,6 +741,23 @@ export function panelBranchPlan({
   raizDebajo: boolean
   masDebajo: boolean
   /**
+   * ¿La entrada de arriba es una **subsección NUESTRA** —un tab o la ficha `?c=`— y **no** la de otro
+   * dueño? (plan 04-04, decisión B1.) Va **sin default**, igual que los otros tres hechos de la pila,
+   * por las mismas tres cosas:
+   *
+   *   1. es un **HECHO DE LA PILA y no una configuración**: un call site que lo olvide **no compila**;
+   *   2. lo contesta **el ejecutor** leyendo el estado real de la entrada de arriba
+   *      (`window.history.state` → {@link panelViewEntryParam} no nulo **y** no
+   *      {@link isForeignOwnedEntry}) y lo **re-verifica en el momento del click**, del MISMO estado
+   *      que los otros tres; y
+   *   3. se computa como *marca de subsección propia Y NO ajena*: las dos guardas que
+   *      {@link consumeOwnedPanelEntry} va a repetir en el punto del retroceso.
+   *
+   * ⚠ **Con la pantalla sucia es FALSO por construcción**: la entrada de arriba es la del guard de
+   * cambios sin guardar, que no lleva la marca de subsección.
+   */
+  vistaArriba: boolean
+  /**
    * ¿La entrada de arriba es el sentinel de salida de MOB-05? Va **sin default**, igual que
    * `masDebajo`: es un HECHO de la pila, no una configuración, y un call site que lo olvide no
    * compila — que es justo la disciplina que esta fase viene a instalar.
@@ -730,6 +776,13 @@ export function panelBranchPlan({
   // Los TRES hechos juntos. El tercero (`to !== from`) ya lo atajó la regla de arriba, pero se
   // escribe explícito para que mañana nadie meta una regla en el medio y le cambie el significado.
   if (holdsExitSentinel && from === root && to !== from) return 'consume-exit-then-navigate'
+
+  // ── REGLA -1d — B1 (plan 04-04): una subsección NUESTRA arriba y un destino distinto: consumirla. ─
+  // Con un tab o la ficha `?c=` arriba, los hechos de la -1c y de la regla 0 son falsos POR
+  // CONSTRUCCIÓN (la entrada de la subsección no lleva la marca de la rama), así que lo de abajo
+  // devolvería la regla de rutas: el hueco medido en el 04-03. El ejecutor consume la subsección y
+  // re-decide con esta misma función. Con `from === to` el gesto es de NAV-08, que va antes.
+  if (vistaArriba && from !== to) return 'consume-view-then-navigate'
 
   // ── REGLA -1c — G2-1: la marca dice la RAÍZ y el destino es la RAÍZ: RETROCEDER, no empujar. ───
   // Los TRES hechos juntos. Va ANTES de la regla de abajo a propósito: ahí el hecho de la rama es
