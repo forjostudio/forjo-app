@@ -667,3 +667,99 @@ OK  R-T-agenda-google · D-10: /agenda?google=connected muestra el toast UNA vez
 ```
 
 cierre (d): un solo dialecto
+
+## (e) La composición con la Phase 3, medida (plan 04-03)
+
+Qué se preguntó: qué le pasa a la pila REAL cuando el dueño toca la barra (o el sidebar) con un tab —o la
+ficha de un cliente— abierto arriba. El research (`04-RESEARCH.md` §«⚠ La composición con la Phase 3»,
+tabla C-1..C-6) lo había DERIVADO del código sin medirlo (A1): con un tab arriba, el gesto lee el
+`history.state` de la ENTRADA DEL TAB (`{"frjView":"tab"}`, sin `frjUnder`), así que `masDebajo` y
+`raizDebajo` dan falso y la regla 0 de `panelBranchPlan` devuelve lo de `panelNavMode`.
+
+**Con qué se midió.** `next dev` propio en el 3031 (no había servidor de este repo vivo; el de forjo-landing
+en el 3000 no se tocó), Supabase local ya arriba (`auth/v1/health` = 200, no hizo falta `supabase start`),
+`Chrome/157.0.8103.52`, node `v24.15.0`, gesto `interfaz` (el atrás de la interfaz por la extensión de
+prueba), modo estricto ACTIVO. La app es la que dejó el 04-02 (`1c7a374`): nada de código cambió. Los seis
+`esperado` son la pila DERIVADA, escritos en `b47555d` (`test(04-03)`) ANTES de esta corrida y no tocados
+después. Una sola corrida, por el turno, en segundo plano, sin esperas ajenas; rc 0, puertos 3031 y 9335
+libres al salir.
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz R-C-2,R-C-3,R-C-4,R-C-5,R-C-6,R-C-ficha
+```
+
+Qué es «la pila» en estas líneas: `pila=[…]` es la NORMALIZADA (`pilaNormalizada`: las entradas hasta la
+actual inclusive, sin `(afuera)`, sin las de hash `#salir…` y con `?c=<id>` → `?c=*`); `cruda=[…]` es
+`Page.getNavigationHistory` tal cual, con las entradas de adelante; `estado` es la marca (`frj*`) de la
+entrada de arriba; `aviso` es `si` sólo si la página está parada en `#salir`/`#salir-N`.
+
+### Las seis líneas, tal cual
+
+```
+OK  R-C-2 · C-2 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Inicio en la barra; derivado: Inicio se EMPUJA encima del tab, el aviso de salida no se arma y el atras vuelve al tab
+      pila_tras_inicio: medido=["/dashboard","/mas","/negocio","/negocio?tab=cobros","/dashboard"]
+      aviso_armado_en_inicio: medido="no"
+      ruta_tras_un_atras: medido="/negocio?tab=cobros"
+      en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      tras tocar Inicio: url=/dashboard estado={"frjUnder":"/negocio"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros, /dashboard] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros, /dashboard] actual=5
+      tras el primer atras: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros, /dashboard] actual=4
+
+OK  R-C-3 · C-3 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Turnos en la barra; derivado: Turnos REEMPLAZA la entrada del tab, el atras cae en Negocio y el siguiente en Mas
+      pila_tras_turnos: medido=["/dashboard","/mas","/negocio","/appointments"]
+      ruta_tras_un_atras: medido="/negocio"
+      ruta_tras_dos_atras: medido="/mas"
+      en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      tras tocar Turnos: url=/appointments estado={} aviso=no pila=[/dashboard, /mas, /negocio, /appointments] cruda=[(afuera), /dashboard, /mas, /negocio, /appointments] actual=4
+      tras el primer atras: url=/negocio estado={"frjUnder":"/mas"} aviso=no pila=[/dashboard, /mas, /negocio] cruda=[(afuera), /dashboard, /mas, /negocio, /appointments] actual=3
+      tras el segundo atras: url=/mas estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /mas] cruda=[(afuera), /dashboard, /mas, /negocio, /appointments] actual=2
+
+OK  R-C-4 · C-4 (movil): Inicio -> Mas -> Negocio -> Cobros -> tocar Mas en la barra; derivado: Mas se EMPUJA encima del tab (no sube) y el atras vuelve al tab
+      pila_tras_mas: medido=["/dashboard","/mas","/negocio","/negocio?tab=cobros","/mas"]
+      ruta_tras_un_atras: medido="/negocio?tab=cobros"
+      en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros] actual=4
+      tras tocar Mas: url=/mas estado={"frjUnder":"/negocio"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros, /mas] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros, /mas] actual=5
+      tras el primer atras: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /mas, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /mas, /negocio, /negocio?tab=cobros, /mas] actual=4
+
+OK  R-C-5 · C-5 (escritorio): Inicio -> Negocio (sidebar) -> Cobros -> Finanzas (sidebar); derivado: Finanzas REEMPLAZA la entrada del tab y el atras desde Finanzas cae en Negocio, no en Inicio
+      pila_tras_finanzas: medido=["/dashboard","/negocio","/finances"]
+      ruta_tras_un_atras: medido="/negocio"
+      en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /negocio, /negocio?tab=cobros] actual=3
+      tras tocar Finanzas: url=/finances estado={} aviso=no pila=[/dashboard, /negocio, /finances] cruda=[(afuera), /dashboard, /negocio, /finances] actual=3
+      tras el primer atras: url=/negocio estado={"frjUnder":"/dashboard"} aviso=no pila=[/dashboard, /negocio] cruda=[(afuera), /dashboard, /negocio, /finances] actual=2
+
+OK  R-C-6 · C-6 (escritorio): Inicio -> Negocio (sidebar) -> Cobros -> Inicio (sidebar); derivado: Inicio se EMPUJA encima del tab (igual que el residuo de escritorio ya declarado) y el atras vuelve al tab
+      pila_tras_inicio: medido=["/dashboard","/negocio","/negocio?tab=cobros","/dashboard"]
+      ruta_tras_un_atras: medido="/negocio?tab=cobros"
+      en Cobros, antes del toque: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /negocio, /negocio?tab=cobros] actual=3
+      tras tocar Inicio: url=/dashboard estado={"frjUnder":"/negocio"} aviso=no pila=[/dashboard, /negocio, /negocio?tab=cobros, /dashboard] cruda=[(afuera), /dashboard, /negocio, /negocio?tab=cobros, /dashboard] actual=4
+      tras el primer atras: url=/negocio?tab=cobros estado={"frjView":"tab"} aviso=no pila=[/dashboard, /negocio, /negocio?tab=cobros] cruda=[(afuera), /dashboard, /negocio, /negocio?tab=cobros, /dashboard] actual=3
+
+OK  R-C-ficha · el hueco de hoy con ?c= (movil): Inicio -> Clientes -> abrir una ficha -> tocar Inicio en la barra; derivado: Inicio se EMPUJA encima de la ficha, el aviso no se arma y el atras vuelve a la ficha
+      pila_tras_inicio: medido=["/dashboard","/clients","/clients?c=*","/dashboard"]
+      aviso_armado_en_inicio: medido="no"
+      ruta_tras_un_atras: medido="/clients?c=*"
+      en la ficha, antes del toque: url=/clients?c=0000000a-0000-0000-0000-000000000001 estado={"frjView":"c"} aviso=no pila=[/dashboard, /clients, /clients?c=*] cruda=[(afuera), /dashboard, /clients, /clients?c=0000000a-0000-0000-0000-000000000001] actual=3
+      tras tocar Inicio: url=/dashboard estado={"frjUnder":"/clients"} aviso=no pila=[/dashboard, /clients, /clients?c=*, /dashboard] cruda=[(afuera), /dashboard, /clients, /clients?c=0000000a-0000-0000-0000-000000000001, /dashboard] actual=4
+      tras el primer atras: url=/clients?c=0000000a-0000-0000-0000-000000000001 estado={"frjView":"c"} aviso=no pila=[/dashboard, /clients, /clients?c=*] cruda=[(afuera), /dashboard, /clients, /clients?c=0000000a-0000-0000-0000-000000000001, /dashboard] actual=3
+```
+
+### Lo que ve el dueño, recorrido por recorrido
+
+| Recorrido | Sin el tab (Phase 3, verificado) | Derivado (research) → medido | Lo que ve el dueño |
+|---|---|---|---|
+| `R-C-2` (celular) `Más → Negocio → Cobros → Inicio` | colapsa a `[/dashboard]` y el aviso se arma | empuja `[/dashboard, /mas, /negocio, /negocio?tab=cobros, /dashboard]`, aviso `no` → **igual** | el atrás desde Inicio vuelve a Cobros en vez de avisar; el aviso de salida no está (el síntoma de `G2-1` por otro camino); el atrás recorre Cobros, Datos y Más antes de volver al Inicio de abajo |
+| `R-C-3` (celular) `… → Cobros → Turnos` | `[/dashboard, /appointments]` | reemplaza el tab: `[/dashboard, /mas, /negocio, /appointments]`; atrás → `/negocio`, otro → `/mas` → **igual** | desde Turnos el atrás pasa por Negocio y Más antes de llegar a Inicio: dos escalones de más |
+| `R-C-4` (celular) `… → Cobros → Más` | sube a Más | empuja `[…, /negocio?tab=cobros, /mas]`; atrás → `/negocio?tab=cobros` → **igual** | Más se apila arriba del tab: el atrás desde Más vuelve a Cobros en vez de a Inicio |
+| `R-C-5` (escritorio) `Inicio → Negocio → Cobros → Finanzas` (sidebar) | `[/dashboard, /finances]` | `[/dashboard, /negocio, /finances]`; atrás → `/negocio` → **igual** | el atrás desde Finanzas cae en Negocio (Datos) en vez de Inicio: rompe el «el atrás cae en el dashboard» de NAV-07 por un escalón |
+| `R-C-6` (escritorio) `… → Cobros → Inicio` (sidebar) | empuja (residuo de escritorio ya declarado) | empuja `[/dashboard, /negocio, /negocio?tab=cobros, /dashboard]`; atrás → `/negocio?tab=cobros` → **igual** | lo mismo que hoy sin el tab: el residuo de escritorio declarado en la Phase 3, ahora con el tab abajo |
+| `R-C-ficha` (celular) `Inicio → Clientes → ficha → Inicio` | — (nunca medido; hueco sin declarar) | empuja `[/dashboard, /clients, /clients?c=*, /dashboard]`, aviso `no`; atrás → `/clients?c=*` → **igual** | el mismo síntoma de `R-C-2`, que **ya existe hoy** con la ficha de un cliente: el atrás desde Inicio reabre la ficha y el aviso no se arma |
+
+Las seis son **degradación segura**: la pila queda más larga, ningún atrás expulsó del sitio (ningún
+`(afuera)` alcanzado en ninguna corrida). Y el mecanismo quedó a la vista en el `estado`: antes de cada toque
+la entrada de arriba lleva `{"frjView":"tab"}` (o `{"frjView":"c"}` en la ficha), sin `frjUnder`; el destino
+que se empuja nace con `{"frjUnder":"/negocio"}` (o `/clients`), así que la regla del armado
+`algoNuestroDebajo` no arma.
+
+C-1: medido en el 04-02 (R-T-negocio-por-mas OK)
+
+composicion medida: como-se-derivo
