@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, useId, type CSSProperties } from 
 import { format, parseISO } from 'date-fns'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { THEMES, THEME_PALETTES, THEME_DEFAULT_PAL, FONTS, normalizeTheme, normalizeFont, normalizePalette } from '@/lib/theme-config'
 import { toast } from 'sonner'
@@ -12,6 +12,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService, ServiceCategory } from '@/lib/types'
 import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
 import { blocksBecomingWildcard } from '@/lib/time-block-services'
+import { TAB_PARAM, TABS_NEGOCIO, TABS_CONFIG, resolveTab, tabSlug } from '@/lib/panel-tabs'
+import { applyPanelView, panelTabCause, resolveViewParam, sanitizeAction, reconciledMemo } from '@/lib/panel-history'
 import { nowInAR } from '@/lib/appointment-time'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
@@ -992,32 +994,137 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const SECTION_TAB: Record<string, string> = { negocio: 'business', servicios: 'services', equipo: 'professionals', consultorios: 'locations' }
   const isSection = view !== 'config'
   const isNegocio = view === 'negocio'
-  const [configTab, setConfigTab] = useState('appearance')
-  // Estado de tab propio del hub Negocio (Datos·Cobros·Integraciones·Notificaciones/Mails). Se
-  // separa de configTab porque son dos TabsList distintas en dos rutas distintas; default 'business'.
-  const [negocioTab, setNegocioTab] = useState('business')
-  // Qué value/handler recibe el <Tabs>: config y negocio tienen estado propio (TabsList visible);
-  // las secciones sueltas restantes mapean a su única tab fija y no cambian de tab (onValueChange undefined).
-  const tabValue = isNegocio ? negocioTab : isSection ? SECTION_TAB[view] : configTab
-  const onTabChange = isNegocio ? setNegocioTab : isSection ? undefined : setConfigTab
+  // ── El tab de Negocio y de Configuración, DERIVADO de la URL (Phase 4, D-01..D-07) ──────────────
+  // El tab vive en la query (`?tab=cobros`, `?tab=seguridad`, …; el tab por defecto es la URL limpia) y
+  // se DERIVA de ella con la lista cerrada de cada grupo (`lib/panel-tabs.ts`): por eso el atrás vuelve
+  // al tab por defecto y una URL pegada o recargada abre el tab que nombra. No queda ningún estado de
+  // tab al lado de la URL: con dos fuentes de verdad el atrás volvería a mentir.
+  // ⚠ El valor de la URL sólo elige qué `TabsContent` se MUESTRA de datos que el server ya resolvió
+  // para el dueño (el negocio por `owner_id`, los secretos por `business.id`); nunca decide qué se lee.
+  // `useSearchParams` corre también en /servicios, /equipo y /consultorios (es incondicional): esas tres
+  // páginas son dinámicas por `cookies()`, así que el build no les pide un boundary de Suspense y no se
+  // tocan (T-1); /negocio y /settings lo tienen igual, por molde.
+  // Se resuelven los dos grupos siempre: es barato y evita aserciones de no nulo.
+  const searchParams = useSearchParams()
+  const tabEnLaUrl = searchParams.get(TAB_PARAM)
+  // Volviendo del OAuth (`?mp=` / `?google=`, que el backend sólo manda a /negocio) se muestra
+  // Integraciones desde el PRIMER frame —sin un flash de Datos— hasta que el efecto del OAuth deja la
+  // URL en `?tab=integraciones`.
+  const vueltaDeOAuth = isNegocio && (searchParams.get('mp') !== null || searchParams.get('google') !== null)
+  const tabNegocio = resolveTab({ grupo: TABS_NEGOCIO, param: tabEnLaUrl })
+  const tabConfig = resolveTab({ grupo: TABS_CONFIG, param: tabEnLaUrl })
+  // `null` en las secciones sueltas: no tienen grupo de tabs, así que ni el toque ni la reconciliación
+  // tocan su URL (T-1).
+  const grupoDeTabs = isNegocio ? TABS_NEGOCIO : isSection ? null : TABS_CONFIG
+  const tabResuelto = isNegocio ? tabNegocio : isSection ? null : tabConfig
+
+  // ── El toque en un tab (molde de Finanzas) ────────────────────────────────────
+  // La pantalla sólo DECLARA "el dueño eligió el tab X estando en el Y": la causa la elige
+  // `panelTabCause` y la acción la decide el helper (salir del default crea una entrada, cambiar entre
+  // dos tabs que no son el default la reemplaza, volver al default deshace la del tab). Sin router y
+  // sin `<Link>`: una navegación del router re-renderiza en el server una página que lee los secretos
+  // del dueño y borra las marcas de la pila. El único escritor es `applyPanelView`.
+  // ⚠ Todo cambio que no sea del usuario (`reason` distinto de 'none': la selección inicial, un tab que
+  // desaparece) se descarta: una entrada nueva sólo puede salir de una activación real.
+  function alElegirTab(value: unknown, detalles: { reason: string }): void {
+    if (detalles.reason !== 'none') return
+    if (grupoDeTabs === null || tabResuelto === null) return
+    const destino = tabSlug({ grupo: grupoDeTabs, value })
+    if (!destino.ok) return
+    const to = destino.slug
+    applyPanelView({ cause: panelTabCause({ from: tabResuelto.slug, to }), param: TAB_PARAM, from: tabResuelto.slug, to })
+  }
+
+  // Qué value/handler recibe el <Tabs>. ⚠ EL ESQUELETO DE ESTAS DOS LÍNEAS NO SE TOCA (T-1): el mismo
+  // `<Tabs>` sirve a cinco rutas, y la rama de las secciones sueltas —su única tab fija y ningún
+  // handler— queda textualmente como estaba, para que /servicios, /equipo y /consultorios no se muevan.
+  // Sólo cambian los extremos de Negocio y Configuración, que ahora salen de la URL.
+  const tabValue = isNegocio ? (vueltaDeOAuth ? 'integraciones' : tabNegocio.value) : isSection ? SECTION_TAB[view] : tabConfig.value
+  const onTabChange = isNegocio ? alElegirTab : isSection ? undefined : alElegirTab
+
+  // ── Reconciliación URL ↔ tab (molde de Finanzas y de `clients-client.tsx`) ───────────
+  // Una URL que dice algo que la pantalla no muestra (`?tab=ventas` en /negocio, `?tab=`, el default
+  // escrito explícito `?tab=datos`) se sanea a la URL limpia con la causa que devolvió la resolución
+  // —siempre un reemplazo: este efecto NUNCA declara una apertura, porque un empuje que no sale de un
+  // toque del dueño es salteable por la intervención de historial de Chrome (medido en el plan 03-12)—.
+  // La memoria (`sanitizeAction` + `reconciledMemo`) es la de clientes: el modo estricto corre el efecto
+  // dos veces y escribe una sola, y un forward a una URL ya saneada se vuelve a sanear.
+  // Desestructurado para que el array de deps lleve identificadores planos (el objeto es nuevo en cada
+  // render). La ref se lee y se escribe SÓLO adentro del efecto, nunca durante el render.
+  const { reconcile: debeReconciliarTab, cause: causaDelTab, to: destinoDelTab } = resolveViewParam({
+    param: tabEnLaUrl,
+    resolvedTo: tabResuelto === null ? null : tabResuelto.slug,
+  })
+  const conciliadoTabRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    // Dos cortes, con su porqué:
+    //   1) fuera de Negocio y Configuración no hay grupo: la URL de una sección suelta no se toca (T-1);
+    //   2) con `mp`/`google` en la URL, el ÚNICO escritor es el efecto del OAuth de abajo: si los dos
+    //      escribieran en el mismo commit, uno conservaría la query que el otro borra (Pitfall 8).
+    if (grupoDeTabs === null || vueltaDeOAuth) return
+    // Se lee de `searchParams` y no del valor del render: es lo que hace del objeto una dependencia
+    // genuina, que cambia con cada cambio de la URL canónica.
+    const enLaUrl = searchParams.get(TAB_PARAM)
+    let escribio = false
+    if (
+      sanitizeAction({
+        reconcile: debeReconciliarTab,
+        param: enLaUrl,
+        lastApplied: conciliadoTabRef.current,
+      }) === 'apply' &&
+      causaDelTab !== null
+    ) {
+      escribio =
+        applyPanelView({
+          cause: causaDelTab,
+          param: TAB_PARAM,
+          from: enLaUrl,
+          to: destinoDelTab,
+        }) !== 'none'
+    }
+    conciliadoTabRef.current = reconciledMemo({
+      reconcile: debeReconciliarTab,
+      applied: escribio,
+      param: enLaUrl,
+      previous: conciliadoTabRef.current,
+    })
+  }, [searchParams, grupoDeTabs, vueltaDeOAuth, debeReconciliarTab, causaDelTab, destinoDelTab])
 
   // Aviso al volver del OAuth de MercadoPago (?mp=connected|error) y limpieza de la URL.
   // D-06: Integraciones migró de /settings a /negocio, así que el retorno del OAuth se maneja acá,
   // en el hub Negocio. El backend ahora redirige a /negocio?mp=... → gateamos por isNegocio para que
   // el efecto solo corra al montar /negocio (nunca en /settings).
+  // Phase 4 (D-09): la limpieza deja de ser una escritura cruda del historial que forzaba el tab y
+  // después borraba la query (lo que borraba el tab de la URL y pisaba el state de la entrada). Es UNA
+  // decisión del helper: un reemplazo a `?tab=integraciones` que borra `mp` y `google` en la misma
+  // escritura (`drop`). No agrega entrada, el tab sobrevive, y como la entrada del retorno es ajena (un
+  // documento nuevo que llega del proveedor) el reemplazo no le fabrica nuestra marca: un toque a Datos
+  // después la reemplaza y no retrocede fuera del sitio.
+  // Se lee `window.location` y no el render A PROPÓSITO: en modo estricto el efecto corre dos veces y la
+  // segunda ya ve la URL limpia (la escritura es síncrona sobre `location`), así que el toast sale UNA vez.
+  // Borde aceptado: ningún callback emite `tab`; si alguien pegara `?tab=integraciones&mp=…`, el helper
+  // no escribe (la vista ya es la pedida) y la query queda hasta el próximo toque.
   useEffect(() => {
     if (!isNegocio) return
     const params = new URLSearchParams(window.location.search)
     const mp = params.get('mp')
     const google = params.get('google')
     if (!mp && !google) return
-    if (mp === 'connected') toast.success('MercadoPago conectado')
-    else if (mp === 'error') toast.error('No se pudo conectar con MercadoPago')
-    // Google Calendar también vuelve acá cuando se conecta desde Integraciones (?from=negocio).
-    if (google === 'connected') toast.success('Google Calendar conectado')
-    else if (google === 'error') toast.error('No se pudo conectar con Google Calendar')
-    setNegocioTab('integraciones')
-    window.history.replaceState(null, '', '/negocio')
+    // El aviso se pide en la PRÓXIMA tarea y no acá: el `<Toaster>` de sonner se suscribe en su propio
+    // efecto y está montado DESPUÉS de las páginas (`app/layout.tsx`), así que su efecto corre después
+    // de éste y un toast pedido ahora se pierde sin error en un documento nuevo —que es siempre el caso
+    // del retorno del OAuth: medido el 2026-11-17 en el plan 04-02, cero toasts con el código de antes—.
+    // Sin limpieza A PROPÓSITO: el desmontaje simulado del modo estricto la correría, y como la segunda
+    // corrida ya no ve la query, el aviso no saldría nunca.
+    setTimeout(() => {
+      if (mp === 'connected') toast.success('MercadoPago conectado')
+      else if (mp === 'error') toast.error('No se pudo conectar con MercadoPago')
+      // Google Calendar también vuelve acá cuando se conecta desde Integraciones (?from=negocio).
+      if (google === 'connected') toast.success('Google Calendar conectado')
+      else if (google === 'error') toast.error('No se pudo conectar con Google Calendar')
+    }, 0)
+    applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: params.get(TAB_PARAM), to: 'integraciones', drop: ['mp', 'google'] })
   }, [isNegocio])
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).

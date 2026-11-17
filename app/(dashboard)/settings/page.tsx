@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
@@ -33,16 +34,24 @@ export default async function SettingsPage() {
     supabase.from('agenda_spaces').select('*').eq('business_id', business.id),
   ])
 
+  // `SettingsClient` lee el tab de la query (`?tab=`, Phase 4) con `useSearchParams`, que obliga a un
+  // boundary de Suspense. Acá el fallback NUNCA se renderiza —esta ruta es dinámica porque el
+  // `createClient()` de arriba usa `cookies()`, así que el bailout de prerender no puede dispararse—,
+  // pero se envuelve igual: es el molde de `app/(dashboard)/clients/page.tsx` y de `finances/page.tsx`,
+  // y así el build deja de depender de que nadie vuelva estática la ruta. La query NO llega acá: el
+  // negocio y sus secretos salen del dueño de la sesión, y el tab sólo elige qué se muestra en el cliente.
   return (
-    <SettingsClient
-      business={business}
-      secrets={secrets}
-      initialServices={services || []}
-      initialProfessionals={professionals || []}
-      initialLocations={locations || []}
-      initialSpaces={spaces || []}
-      initialAgendaSpaces={agendaSpaces || []}
-      mpConnectEnabled={mpConnectConfigured()}
-    />
+    <Suspense fallback={null}>
+      <SettingsClient
+        business={business}
+        secrets={secrets}
+        initialServices={services || []}
+        initialProfessionals={professionals || []}
+        initialLocations={locations || []}
+        initialSpaces={spaces || []}
+        initialAgendaSpaces={agendaSpaces || []}
+        mpConnectEnabled={mpConnectConfigured()}
+      />
+    </Suspense>
   )
 }

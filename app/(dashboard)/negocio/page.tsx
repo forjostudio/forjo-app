@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
@@ -20,18 +21,26 @@ export default async function NegocioPage() {
   // un id que venga del cliente. Solo se pasa al form de edición del propio dueño (D-05).
   const secrets = await getBusinessSecrets(business.id)
 
+  // `SettingsClient` lee el tab de la query (`?tab=`, Phase 4) con `useSearchParams`, que obliga a un
+  // boundary de Suspense. Acá el fallback NUNCA se renderiza —esta ruta es dinámica porque el
+  // `createClient()` de arriba usa `cookies()`, así que el bailout de prerender no puede dispararse—,
+  // pero se envuelve igual: es el molde de `app/(dashboard)/clients/page.tsx` y de `finances/page.tsx`,
+  // y así el build deja de depender de que nadie vuelva estática la ruta. La query NO llega acá: el
+  // negocio y sus secretos salen del dueño de la sesión, y el tab sólo elige qué se muestra en el cliente.
   return (
-    <SettingsClient
-      business={business}
-      secrets={secrets}
-      initialServices={[]}
-      initialProfessionals={[]}
-      initialLocations={[]}
-      mpConnectEnabled={mpConnectConfigured()}
-      googleEnabled={googleConfigured()}
-      googleConnected={!!secrets.google_refresh_token}
-      ownerEmail={user.email ?? null}
-      view="negocio"
-    />
+    <Suspense fallback={null}>
+      <SettingsClient
+        business={business}
+        secrets={secrets}
+        initialServices={[]}
+        initialProfessionals={[]}
+        initialLocations={[]}
+        mpConnectEnabled={mpConnectConfigured()}
+        googleEnabled={googleConfigured()}
+        googleConnected={!!secrets.google_refresh_token}
+        ownerEmail={user.email ?? null}
+        view="negocio"
+      />
+    </Suspense>
   )
 }
