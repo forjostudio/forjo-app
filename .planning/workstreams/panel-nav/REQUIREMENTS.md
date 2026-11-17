@@ -349,6 +349,42 @@ una tanda nueva.
 
 - [ ] **MOB-08** (ex **NAV-03**): Los tabs de `/negocio` y `/settings` viven en la URL: el atrás vuelve
       al tab anterior y el tab se puede compartir y recargar.
+      ⚠ **PRECISADO el 2026-11-17 (D-01 de la Phase 4), no contradicho.** Donde dice *el atrás vuelve
+      al tab anterior* vale *al tab **por defecto***. Un solo nivel de tabs: salir del default
+      **empuja**, cambiar entre dos tabs no-default **reemplaza**, así que `Datos → Cobros →
+      Integraciones → Cobros → atrás` cae en **Datos**, y un atrás más sale de la sección según la
+      Phase 3 (Más si se entró por Más, Inicio si se entró desde Inicio).
+
+      - **Por qué:** es la lección de `G2-1` aplicada a los tabs: la pila **no crece** por ida y vuelta.
+        Con *cada tab empuja* el dueño pagaría un atrás por cada ida y vuelta entre tabs; con *sin
+        historial* el atrás se los seguiría comiendo. Elegido por el dueño el 2026-11-17 contra las
+        dos.
+      - **El invariante que queda:** agotado el tab por defecto, el siguiente atrás respeta la política
+        de la Phase 3 tal cual; ningún paseo entre tabs agrega más de **una** entrada a la pila. Medido
+        en `R-T-negocio-por-mas` (`.planning/debug/tabs-en-la-url-medida.md` §(c)).
+
+      ⚠ **RESIDUO ACEPTADO el 2026-11-17 (decisión B1 del dueño), no es un defecto:** en
+      **escritorio**, `Inicio → Negocio → Cobros → Finanzas` por el **sidebar** deja la pila
+      `[/dashboard, /negocio, /finances]` y el atrás desde Finanzas cae en **Negocio** (Datos) en vez de
+      Inicio (C-5, medido en `R-C-5`, `.planning/debug/tabs-en-la-url-medida.md` §(e)).
+
+      - **El mecanismo:** con un tab arriba, el gesto lee el estado **de la entrada del tab**
+        (`{"frjView":"tab"}`), que no lleva la marca de la rama, y el sidebar no tiene el hook de la
+        rama: cae en la regla de rutas y reemplaza la entrada del tab, dejando Negocio debajo.
+      - **Por qué se acepta:** es la **degradación segura** de toda la Phase 3 —un escalón más, nunca el
+        dueño fuera del sitio— y cerrarlo en el sidebar (B2) reabre la enmienda de MOB-07. Se declara en
+        vez de descubrirse en la próxima UAT, en cuatro lugares con esta fecha: el docblock de
+        `lib/panel-tabs.ts`, `### El residuo, declarado` en §(e) del registro, esta precisión y su
+        entrada en `.planning/WINDOWS.md`.
+      - **Lo que NO es residuo:** C-2, C-3 y C-4 (los gestos de la **barra** con un tab abierto: Inicio
+        apila y no arma el aviso, Turnos deja Negocio y Más debajo, Más se apila sobre el tab) y el
+        mismo hueco con la ficha `?c=` de clientes los cierra el plan `04-04` (decisión B1). C-6
+        (`… → Cobros → Inicio` por el sidebar) es el residuo de escritorio ya declarado en la Phase 3,
+        ahora con el tab abajo.
+      - **La regla para la UAT:** la UAT tiene que poder distinguir esto de un bug. En escritorio, el
+        atrás desde una sección abierta por el sidebar **con un tab de otra sección debajo** cae en esa
+        sección: es esto. En el celular, después del 04-04, tocar la barra con un tab abierto tiene que
+        terminar igual que sin el tab: si no, **es** un bug.
 - [ ] **MOB-09** (ex **NAV-04**): Ídem los de `/finances`, y el botón de alta sigue correspondiendo al
       tab visible.
 

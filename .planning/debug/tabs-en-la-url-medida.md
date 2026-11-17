@@ -763,3 +763,26 @@ que se empuja nace con `{"frjUnder":"/negocio"}` (o `/clients`), así que la reg
 C-1: medido en el 04-02 (R-T-negocio-por-mas OK)
 
 composicion medida: como-se-derivo
+
+### El residuo, declarado (decisión B1 del dueño)
+
+Decisión del dueño del 2026-11-17: **B1** (`04-DECISION-COMPOSICION.md`). Con el criterio de la Phase 3
+—se declara en vez de descubrirse en la próxima UAT; degradación segura: un escalón más, nunca una
+expulsión—, lo que queda declarado con esta fecha es **un solo caso**:
+
+- **C-5 (escritorio, sidebar):** `Inicio → Negocio → Cobros → Finanzas` deja `[/dashboard, /negocio,
+  /finances]` y el atrás desde Finanzas cae en **Negocio** en vez de Inicio (`R-C-5`, arriba). Con el tab
+  arriba, el sidebar lee la entrada del tab (`{"frjView":"tab"}`, sin `frjUnder`) y no tiene el hook de la
+  rama: cae en la regla de rutas y reemplaza la entrada del tab. Cerrarlo es B2, que reabre la enmienda de
+  MOB-07: descartado en esta fase.
+
+Lo que **no** queda como residuo: C-2, C-3, C-4 y el hueco de la ficha `?c=` (`R-C-ficha`) los cierra el
+plan `04-04` en la barra, y se miden ahí con sus `R-B1-*` (los `R-C-2/3/4/ficha` pasan a `obsoleto` con su
+`esperado` intacto). C-6 sigue siendo el residuo de escritorio de la Phase 3 (entrada 16 de
+`.planning/WINDOWS.md`), ahora con el tab abajo. El tercer retroceso encadenado que B1 introduce (tab →
+sección → Más → Inicio) **no está medido todavía**: lo mide el 04-04 (`R-B1-inicio`) antes de darlo por
+bueno.
+
+Escrito en los cuatro lugares: el docblock de `lib/panel-tabs.ts`, esta subsección, el «RESIDUO ACEPTADO
+el 2026-11-17» debajo de MOB-08 en `REQUIREMENTS.md` y su entrada `unmet-truth` de la fase 4 en
+`.planning/WINDOWS.md`.

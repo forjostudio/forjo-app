@@ -29,6 +29,30 @@
 // SIN DIRECTIVA DE FRONTERA DE CLIENTE A PROPÓSITO, igual que `lib/panel-history.ts`: son funciones
 // puras y su suite corre en `environment: 'node'`.
 
+// ── EL RESIDUO DE LA COMPOSICIÓN CON LOS DOS NIVELES, declarado acá (2026-11-17) ───────────────────
+//
+// QUÉ ES
+// Con un tab arriba (`?tab=…`), el gesto de navegar lee el estado DE LA ENTRADA DEL TAB, que nace con
+// `{"frjView":"tab"}` y SIN la marca de la rama (`frjUnder`): para la política de dos niveles no hay
+// "Más debajo" ni "la raíz debajo", y la decisión cae en la regla de rutas. Medido en la app real en
+// el plan 04-03 (`.planning/debug/tabs-en-la-url-medida.md` §(e), los seis R-C, todos como se derivó).
+//
+// LO QUE QUEDA DECLARADO (decisión B1 del dueño, `04-DECISION-COMPOSICION.md`): UN SOLO CASO.
+//   C-5, escritorio, por el sidebar: `Inicio → Negocio → Cobros → Finanzas` deja la pila
+//   `[/dashboard, /negocio, /finances]` y el atrás desde Finanzas cae en NEGOCIO en vez de Inicio. El
+//   sidebar no tiene el hook de la rama; cerrarlo (B2) reabre la enmienda de MOB-07.
+//   Se acepta con el criterio de la Phase 3: se declara en vez de descubrirse en la próxima UAT, y es
+//   degradación segura (un escalón más, nunca el dueño fuera del sitio).
+//
+// LO QUE NO QUEDA: los gestos de la BARRA con un tab abierto (C-2: Inicio apila y el aviso de salida no
+// se arma; C-3: Turnos deja Negocio y Más debajo; C-4: Más se apila sobre el tab) y el mismo hueco con
+// la ficha `?c=` de clientes los cierra el plan 04-04 en el plan de la rama, no acá: este módulo es
+// configuración de pantalla y no decide historial. C-6 (Inicio por el sidebar) es el residuo de
+// escritorio ya declarado en la Phase 3.
+//
+// Los otros tres lugares donde está escrito, con esta fecha: el registro (§(e), «El residuo,
+// declarado»), la precisión debajo de MOB-08 en REQUIREMENTS.md y su entrada en .planning/WINDOWS.md.
+
 /** El nombre del parámetro de la query (D-05). */
 export const TAB_PARAM = 'tab'
 

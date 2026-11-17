@@ -614,6 +614,14 @@ contra una política que estaba por cambiar era trabajo para rehacer)
      la barra vuelve a **Inicio**. Un valor de tab ausente o inválido cae al default de hoy sin
      pantalla vacía (`business` en Negocio, `appearance` en Configuración — `settings-client.tsx`)
      (MOB-08).
+
+     ⚠ **PRECISADO el 2026-11-17 (D-01 de la Phase 4), no contradicho:** donde dice *el atrás vuelve
+     al tab anterior* vale *al tab **por defecto***. Un solo nivel de tabs: salir del default empuja,
+     cambiar entre dos tabs no-default reemplaza, así que `Datos → Cobros → Integraciones → Cobros →
+     atrás` cae en **Datos**, y un atrás más sale de la sección según la Phase 3 (Más si se entró por
+     Más, Inicio si se entró desde Inicio). Elegido por el dueño contra *cada tab empuja* (un atrás por
+     cada ida y vuelta: la lección de `G2-1`) y contra *sin historial*. Medido en `R-T-negocio-por-mas`
+     (`.planning/debug/tabs-en-la-url-medida.md` §(c)).
   2. **T-1 respetado — las otras tres rutas no se mueven.** `/servicios`, `/equipo` y `/consultorios`,
      que renderizan el **mismo** `settings-client.tsx` vía la prop `view`, se comportan exactamente
      igual que hoy: no ganan tab en la URL, no cambian de default, no aparece ninguna `TabsList` nueva
