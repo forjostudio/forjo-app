@@ -2686,13 +2686,17 @@ const RECORRIDOS = [
         await asentarTab(cdp)
         // ¿React ya engancho sus manejadores en el tab? Sin eso un click no hace nada y no mide nada.
         hidratado = await evaluar(cdp, `(() => { const t = [...document.querySelectorAll('[role="tab"]')].find((x) => x.textContent.trim().startsWith('Egresos')); return t ? Object.keys(t).some((k) => k.startsWith('__reactProps')) : null })()`)
+        // Tercera vuelta del P-1: el OBJETIVO de cada click, en captura (antes que React), con el tab que
+        // lo contiene y su estado. Es lo que separa "el click cae en otra cosa" de "cae en el tab y nadie
+        // escribe".
+        await evaluar(cdp, `(() => { globalThis.__forjoSondaClicks = []; addEventListener('click', (e) => { const t = e.target instanceof Element ? e.target : null; const tab = t ? t.closest('[role="tab"]') : null; globalThis.__forjoSondaClicks.push({ objetivo: t ? t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') : String(e.target), tab: tab ? tab.textContent.replace(/\\s+/g, ' ').trim() : null, seleccionado: tab ? tab.getAttribute('aria-selected') : null, deshabilitado: tab ? (tab.hasAttribute('disabled') || tab.getAttribute('aria-disabled')) : null, url: location.pathname + location.search }) }, true) })()`)
         alEntrar = { u: await ubicacion(cdp), tab: await tabActivo(cdp), alta: await altaVisible(cdp), pila: await pilaConQuery(cdp) }
         await tocarTab(cdp, 'Egresos')
         trasEgresos = { u: await ubicacion(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
         await tocarTab(cdp, 'Turnos')
         await asentarTab(cdp)
         const u = await ubicacion(cdp)
-        trasTurnos = { u, tab: u === '(afuera)' ? 'ninguno' : await tabActivo(cdp), pila: await pilaConQuery(cdp) }
+        trasTurnos = { u, tab: u === '(afuera)' ? 'ninguno' : await tabActivo(cdp), pila: await pilaConQuery(cdp), clicks: u === '(afuera)' ? [] : await evaluar(cdp, 'globalThis.__forjoSondaClicks ?? []').catch(() => []) }
         await atras(cdp)
         await asentarTab(cdp)
         trasElAtras = { u: await ubicacion(cdp), pila: await pilaConQuery(cdp) }
@@ -2706,6 +2710,8 @@ const RECORRIDOS = [
           console.log(`${p}React enganchado en el tab Egresos al entrar: ${hidratado}`)
           console.log(`${p}excepciones y errores de consola de la pagina: ${consola.length}`)
           for (const c of consola) console.log(`${p}  ${c}`)
+          console.log(`${p}los objetivos de los clicks (en captura): ${trasTurnos.clicks.length}`)
+          for (const c of trasTurnos.clicks) console.log(`${p}  click objetivo=${c.objetivo} tab=${c.tab} seleccionado=${c.seleccionado} deshabilitado=${c.deshabilitado} url=${c.url}`)
           console.log(`${p}los toques y las escrituras del recorrido:`)
           for (const r of delRecorrido) console.log(`${p}  diag ${lineaDeRegistro(r)}`)
           console.log(`${p}al entrar: url=${alEntrar.u} tab=${alEntrar.tab} alta=${alEntrar.alta} pila=[${alEntrar.pila.entradas.join(', ')}] actual=${alEntrar.pila.indice}`)
