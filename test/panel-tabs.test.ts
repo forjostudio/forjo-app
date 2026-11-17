@@ -402,3 +402,197 @@ describe('Finanzas — el tab sale de la URL, en un solo dialecto', () => {
     expect(pagina).not.toContain('searchParams')
   })
 })
+
+// ── 5) El cableado de los tres grupos (plan 04-02): criterio 5, T-1, T-2 y D-10 ──────────────────
+// `read` y `sinComentarios` son los de arriba (copiados del molde de `test/panel-history-clients.test.ts`
+// en el 04-01, con la normalización de CRLF). `recorte` se copia de ese mismo molde: es local a aquella
+// suite (no se exporta, y exportarlo haría de un archivo de test un módulo del que dependen otros), así
+// que se repite acá. Se suman `entre` y `cuerpoDe`. ⚠ Cada región se afirma NO VACÍA antes de afirmar
+// sobre ella: una región que no se encontró daría verde a toda aserción negativa (Pitfall 3).
+
+/** La región desde `marcador` hasta el cierre de su primer bloque, balanceando llaves (molde de clientes). */
+function recorte(fuente: string, marcador: string): string {
+  const at = fuente.indexOf(marcador)
+  if (at === -1) return ''
+  const abre = fuente.indexOf('{', at)
+  if (abre === -1) return ''
+  let profundidad = 0
+  for (let i = abre; i < fuente.length; i++) {
+    const ch = fuente[i]
+    if (ch === '{') profundidad++
+    else if (ch === '}') {
+      profundidad--
+      if (profundidad === 0) return fuente.slice(at, i + 1)
+    }
+  }
+  return ''
+}
+
+/** El tramo entre dos marcadores (`desde` incluido, `hasta` incluido); vacío si falta alguno. */
+function entre(fuente: string, desde: string, hasta: string): string {
+  const at = fuente.indexOf(desde)
+  if (at === -1) return ''
+  const fin = fuente.indexOf(hasta, at + desde.length)
+  return fin === -1 ? '' : fuente.slice(at, fin + hasta.length)
+}
+
+/**
+ * El cuerpo de una función: balancea desde la llave que sigue a `finDeFirma` —buscada DESPUÉS de
+ * `firma`—, no desde la primera llave después de `firma`, que en una firma con parámetro-objeto es la
+ * del parámetro (Pitfall 3, la memoria de los gates que miden cero).
+ */
+function cuerpoDe(fuente: string, firma: string, finDeFirma: string): string {
+  const at = fuente.indexOf(firma)
+  if (at === -1) return ''
+  const fin = fuente.indexOf(finDeFirma, at)
+  if (fin === -1) return ''
+  return recorte(fuente.slice(fin), finDeFirma)
+}
+
+const SETTINGS = 'app/(dashboard)/settings/settings-client.tsx'
+const AGENDA = 'app/(dashboard)/agenda/agenda-client.tsx'
+const PANTALLAS = [SETTINGS, FINANZAS, AGENDA]
+// La línea de `SECTION_TAB` copiada de `85c99ae` (la base de la fase): T-1 la fija byte a byte.
+const SECTION_TAB_85C99AE =
+  "  const SECTION_TAB: Record<string, string> = { negocio: 'business', servicios: 'services', equipo: 'professionals', consultorios: 'locations' }"
+
+/**
+ * `sinComentarios`, pero sacando PRIMERO los comentarios de línea entera. ⚠ Medido el 2026-11-17 (plan
+ * 04-02): `settings-client.tsx` tiene un comentario de línea que nombra `/api/google/*`; el `sinComentarios`
+ * del molde saca los de bloque ANTES que los de línea, así que ese `/*` abría un bloque falso que se comía
+ * ~25.000 caracteres de código —incluidas las dos `TabsList`— y toda aserción negativa sobre ese tramo
+ * daba verde midiendo nada. Por eso cada caso de abajo afirma, además, que el fuente descontado conserva un
+ * marcador del FINAL del tramo que se comía.
+ */
+function sinComentariosFirme(src: string): string {
+  return sinComentarios(src.replace(/^[ \t]*\/\/[^\n]*$/gm, ''))
+}
+
+/** Los `value` de los `TabsTrigger` de una región, en orden. */
+function valoresDeTriggers(region: string): string[] {
+  return [...region.matchAll(/<TabsTrigger\s+value="([^"]+)"/g)].map((m) => m[1])
+}
+
+describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
+  const settingsCrudo = read(SETTINGS)
+  const settings = sinComentariosFirme(settingsCrudo)
+  const finanzas = sinComentariosFirme(read(FINANZAS))
+  const agendaCrudo = read(AGENDA)
+  const agenda = sinComentariosFirme(agendaCrudo)
+
+  it('honestidad: el fuente descontado de settings conserva el tramo que el descuento del molde se comía', () => {
+    expect(settings).toContain('{isNegocio && (')
+    expect(settings).toContain('<TabsTrigger value="suscripcion">')
+    expect(settings).toContain('function alElegirTab(')
+  })
+
+  it('(a) criterio 5: el fuente CRUDO de las tres pantallas no escribe el historial; el descontado tampoco navega la pila', () => {
+    for (const ruta of PANTALLAS) {
+      const crudo = read(ruta)
+      expect(crudo.length).toBeGreaterThan(0)
+      expect(`${ruta}: ${/pushState|replaceState|history\.back/.test(crudo)}`).toBe(`${ruta}: false`)
+      const fuente = sinComentariosFirme(crudo)
+      expect(`${ruta}: ${/history\.forward|history\.go\b/.test(fuente)}`).toBe(`${ruta}: false`)
+    }
+  })
+
+  it('(b) ninguna segunda fuente de verdad: sin el estado del tab de Negocio, de Configuración ni de Finanzas', () => {
+    for (const viejo of ['setConfigTab', 'setNegocioTab', 'configTab', 'negocioTab']) {
+      expect(`${viejo}: ${settings.includes(viejo)}`).toBe(`${viejo}: false`)
+    }
+    expect(settings).not.toMatch(/useState\(\s*['"](appearance|business)['"]\s*\)/)
+    expect(settings).toContain('useSearchParams()')
+    expect(finanzas).not.toContain('setTxTab')
+    expect(finanzas).not.toMatch(/useState\(\s*['"]appointments['"]\s*\)/)
+  })
+
+  it('(c) T-1 textual: la rama de las secciones, SECTION_TAB, el <Tabs> y las dos TabsList de siempre', () => {
+    const cuenta = (s: string) => settingsCrudo.split(s).length - 1
+    expect(cuenta('isSection ? SECTION_TAB[view] :')).toBe(1)
+    expect(cuenta('isSection ? undefined :')).toBe(1)
+    expect(settingsCrudo.split('\n').filter((l) => l === SECTION_TAB_85C99AE)).toHaveLength(1)
+    expect(cuenta('<Tabs value={tabValue} onValueChange={onTabChange}>')).toBe(1)
+    expect(cuenta('<TabsList')).toBe(2)
+    expect(settingsCrudo).toContain('{isNegocio && (')
+    expect(settingsCrudo).toContain('{!isSection && (')
+  })
+
+  it('(d) las tres páginas de sección siguen siendo dinámicas y montan SettingsClient con su view literal', () => {
+    for (const seccion of ['servicios', 'equipo', 'consultorios']) {
+      const pagina = sinComentarios(read(`app/(dashboard)/${seccion}/page.tsx`))
+      expect(pagina.length).toBeGreaterThan(0)
+      expect(pagina).toContain('await createClient()')
+      expect(pagina).toContain('<SettingsClient')
+      expect(pagina).toContain(`view="${seccion}"`)
+    }
+  })
+
+  it('(e) negocio, settings y finances: Suspense de react alrededor del cliente, y ninguna lee searchParams', () => {
+    for (const [ruta, cliente] of [
+      ['app/(dashboard)/negocio/page.tsx', '<SettingsClient'],
+      ['app/(dashboard)/settings/page.tsx', '<SettingsClient'],
+      ['app/(dashboard)/finances/page.tsx', '<FinancesClient'],
+    ] as const) {
+      const pagina = sinComentarios(read(ruta))
+      expect(pagina.length).toBeGreaterThan(0)
+      expect(/import\s*\{[^}]*\bSuspense\b[^}]*\}\s*from\s*'react'/.test(pagina)).toBe(true)
+      const abre = pagina.indexOf('<Suspense')
+      const monta = pagina.indexOf(cliente)
+      const cierra = pagina.indexOf('</Suspense>')
+      expect(abre).toBeGreaterThan(-1)
+      expect(monta).toBeGreaterThan(abre)
+      expect(cierra).toBeGreaterThan(monta)
+      expect(pagina).not.toContain('searchParams')
+    }
+  })
+
+  it('(f) el handler del toque en Negocio/Configuración y en Finanzas, y ningún router ni literal ?tab= en las pantallas', () => {
+    for (const fuente of [settings, finanzas]) {
+      const cuerpo = cuerpoDe(fuente, 'function alElegirTab(', '): void {')
+      expect(cuerpo).not.toBe('')
+      expect(cuerpo).toContain("'none'")
+      expect(cuerpo).toContain('tabSlug(')
+      expect(cuerpo).toContain('panelTabCause(')
+      expect(cuerpo).toContain('applyPanelView(')
+    }
+    for (const fuente of [settings, finanzas, agenda]) {
+      expect(fuente).not.toMatch(/router\.(push|replace)\([^)]*tab/)
+      expect(fuente).not.toContain('?tab=')
+    }
+  })
+
+  it('(g) el retorno del OAuth en Negocio: un reemplazo del helper con drop, y la reconciliación cortada mientras dura', () => {
+    const efecto = entre(settings, 'if (!isNegocio) return', '}, [isNegocio])')
+    expect(efecto).not.toBe('')
+    expect(efecto).toContain('window.location.search')
+    expect(efecto).toContain('applyPanelView(')
+    expect(efecto).toContain("'programmatic'")
+    expect(efecto).toContain("to: 'integraciones'")
+    expect(efecto).toContain("drop: ['mp', 'google']")
+    for (const texto of ['MercadoPago conectado', 'No se pudo conectar con MercadoPago', 'Google Calendar conectado', 'No se pudo conectar con Google Calendar']) {
+      expect(efecto).toContain(texto)
+    }
+    expect(settings).toContain('if (grupoDeTabs === null || vueltaDeOAuth) return')
+  })
+
+  it('(h) Agenda limpia su ?google= por el helper (D-10): un reemplazo stale que borra sólo google', () => {
+    const efecto = entre(agenda, ".get('google')", '}, [])')
+    expect(efecto).not.toBe('')
+    expect(efecto).toContain('applyPanelView(')
+    expect(efecto).toContain("'stale'")
+    expect(efecto).toContain("param: 'google'")
+    expect(efecto).toContain('to: null')
+    expect(efecto).toContain('Google Calendar conectado')
+    expect(efecto).toContain('No se pudo conectar con Google Calendar')
+  })
+
+  it('(i) anti-deriva: los value de los TabsTrigger son exactamente los del mapa de su grupo', () => {
+    const negocio = entre(settings, '{isNegocio && (', '</TabsList>')
+    const config = entre(settings, '{!isSection && (', '</TabsList>')
+    const fin = entre(finanzas, '<TabsList', '</TabsList>')
+    for (const [region, grupo] of [[negocio, TABS_NEGOCIO], [config, TABS_CONFIG], [fin, TABS_FINANZAS]] as const) {
+      expect(region).not.toBe('')
+      expect(valoresDeTriggers(region)).toEqual([...grupo.slugs.values()])
+    }
+  })
+})

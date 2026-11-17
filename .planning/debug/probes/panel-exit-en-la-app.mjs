@@ -3111,6 +3111,41 @@ const RECORRIDOS = [
       }
     },
   },
+  // plan 04-02, task 2 (D-10): Agenda limpia su `?google=` por el helper. El `esperado` se escribe ANTES
+  // del cambio de Agenda: con la escritura cruda de hoy la marca mide sin nuestra clave (el state nulo no
+  // la lleva) — ese es el RED del dialecto.
+  {
+    id: 'R-T-agenda-google',
+    titulo: 'D-10: /agenda?google=connected muestra el toast UNA vez y deja /agenda por un reemplazo del helper, sin entradas agregadas y con {frjView:null}',
+    async correr(cdp) {
+      await navegar(cdp, AFUERA)
+      await cdp.enviar('Page.resetNavigationHistory')
+      await navegar(cdp, ORIGEN + '/agenda?google=connected')
+      const alCargar = await pilaConQuery(cdp)
+      const tope = Date.now() + 10_000
+      while (Date.now() < tope && (await ubicacion(cdp).catch(() => '')).includes('google=')) await dormir(200)
+      const toasts = await contarToasts(cdp, 'Google Calendar conectado')
+      const trasLimpiar = { u: await ubicacion(cdp), estado: (await foto(cdp)).estado, pila: await pilaConQuery(cdp) }
+      return {
+        detalle: (p) => {
+          console.log(`${p}al cargar: pila=[${alCargar.entradas.join(', ')}] actual=${alCargar.indice}`)
+          console.log(`${p}tras limpiar: url=${trasLimpiar.u} estado=${trasLimpiar.estado} toasts=${toasts} pila=[${trasLimpiar.pila.entradas.join(', ')}] actual=${trasLimpiar.pila.indice}`)
+        },
+        medido: {
+          url_tras_limpiar: trasLimpiar.u,
+          toasts_google: toasts,
+          entradas_de_la_limpieza: trasLimpiar.pila.entradas.length - alCargar.entradas.length,
+          marca_tras_limpiar: trasLimpiar.estado,
+        },
+        esperado: {
+          url_tras_limpiar: '/agenda',
+          toasts_google: 1,
+          entradas_de_la_limpieza: 0,
+          marca_tras_limpiar: '{"frjView":null}',
+        },
+      }
+    },
+  },
   {
     // ⚠ ULTIMO A PROPOSITO: cierra la sesion con un pedido de marca vivo y la vuelve a abrir.
     id: 'R-G3-8-rebote',
@@ -3221,6 +3256,7 @@ const QUE_CIERRA = {
   'R-T-negocio-oauth-google-error': 'D-09 (plan 04-02): ?google=error -> un toast de error y /negocio?tab=integraciones',
   'R-T-sidebar-seccion-activa': 'D-08 (plan 04-02, escritorio): tocar Negocio en el sidebar estando en Cobros vuelve a Datos consumiendo; con la URL pegada, sin salir del sitio',
   'R-T-secciones-sin-tab': 'T-1, control (plan 04-02): /servicios, /equipo y /consultorios con ?tab=cobros no se mueven y no tienen TabsList',
+  'R-T-agenda-google': 'D-10 (plan 04-02, task 2): ?google=connected en Agenda -> un toast y /agenda por un reemplazo del helper, sin entradas y con {frjView:null}',
   'R-G3-8-rebote': 'G3-8 (WR-04): el rebote a /login con un pedido de marca vivo; al volver ninguna marca miente',
 }
 
