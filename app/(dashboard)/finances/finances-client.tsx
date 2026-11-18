@@ -23,7 +23,7 @@ import {
   guardDraftOnDismiss,
 } from '@/lib/panel-draft'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { TAB_PARAM, TABS_FINANZAS, resolveTab, tabSlug } from '@/lib/panel-tabs'
+import { TAB_PARAM, TABS_FINANZAS, resolveTab, toqueDeTab } from '@/lib/panel-tabs'
 import { applyPanelView, panelTabCause, resolveViewParam, sanitizeAction, reconciledMemo } from '@/lib/panel-history'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import {
@@ -272,12 +272,15 @@ export function FinancesClient({ businessId }: Props) {
   // marcas de la pila. El único escritor es `applyPanelView`.
   // ⚠ Todo cambio que no sea del usuario (`reason` distinto de 'none': la selección inicial, un tab que
   // desaparece) se descarta: una entrada nueva sólo puede salir de una activación real.
+  // El toque decide con la URL DE AHORA y no con el tab del render (G-04-7): la escritura de un toque
+  // cambia la URL al instante, pero el render recién se entera con el commit siguiente, y un segundo
+  // toque en esa ventana decidiría sobre un tab viejo (el empuje repetido de la misma vista).
   function alElegirTab(value: unknown, detalles: { reason: string }): void {
     if (detalles.reason !== 'none') return
-    const destino = tabSlug({ grupo: TABS_FINANZAS, value })
-    if (!destino.ok) return
-    const to = destino.slug
-    applyPanelView({ cause: panelTabCause({ from: tabResuelto.slug, to }), param: TAB_PARAM, from: tabResuelto.slug, to })
+    const toque = toqueDeTab({ grupo: TABS_FINANZAS, value, search: window.location.search })
+    if (!toque.ok) return
+    const { from, to } = toque
+    applyPanelView({ cause: panelTabCause({ from, to }), param: TAB_PARAM, from, to })
   }
 
   const [appointments, setAppointments] = useState<Appointment[]>([])

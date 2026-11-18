@@ -217,12 +217,14 @@ function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean }
   return { pila, actual, procesar, popstate }
 }
 
-/** EXACTAMENTE lo que hace el handler del tab en la pantalla: slug actual, destino, causa, ejecutor. */
+/**
+ * EXACTAMENTE lo que hace el handler del tab en la pantalla: el toque con la URL de ahora (el MISMO
+ * helper que llaman las dos pantallas; un candado lee este cuerpo), la causa y el ejecutor.
+ */
 function tocar(grupo: PanelTabGroup, value: unknown) {
-  const desde = resolveTab({ grupo, param: new URLSearchParams(window.location.search).get(TAB_PARAM) }).slug
-  const destino = tabSlug({ grupo, value })
-  if (!destino.ok) return 'none'
-  return applyPanelView({ cause: PH.panelTabCause({ from: desde, to: destino.slug }), param: TAB_PARAM, from: desde, to: destino.slug })
+  const toque = PT.toqueDeTab({ grupo, value, search: window.location.search })
+  if (!toque.ok) return 'none'
+  return applyPanelView({ cause: PH.panelTabCause({ from: toque.from, to: toque.to }), param: TAB_PARAM, from: toque.from, to: toque.to })
 }
 
 /** EXACTAMENTE lo que hace el efecto de reconciliación de la pantalla (sin la memoria: una vuelta). */

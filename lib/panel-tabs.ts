@@ -130,3 +130,32 @@ export function tabSlug({ grupo, value }: { grupo: PanelTabGroup; value: unknown
   }
   return { ok: false }
 }
+
+/**
+ * Un toque en un tab → el `from` y el `to` que el handler le pasa a la causa y al ejecutor (G-04-7).
+ *
+ * `from` es el slug que {@link resolveTab} le da al `?tab=` de `search`, la URL DEL MOMENTO DEL TOQUE;
+ * `to` es el de {@link tabSlug}. Si `tabSlug` rechaza el valor, `{ ok: false }` y el handler no escribe.
+ *
+ * **Por qué el `from` no puede salir del render:** la escritura de un toque cambia la URL y el state
+ * del historial AL INSTANTE, pero el parche del historial de Next despacha la restauración del router
+ * dentro de `startTransition`, así que el render —y con él `useSearchParams()`— recién se entera con el
+ * commit de esa transición. Base UI llama al `onValueChange` del último commit y su `active` también es
+ * del último commit: un segundo toque en esa ventana PASA, y con el `from` del render decidía sobre una
+ * URL vieja (E1: Ventas empujado sobre Ventas; E2: Ventas → Egresos empujaba en vez de reemplazar y el
+ * atrás desde Egresos caía en Ventas, en contra de D-01). Medido con el ejecutor real en
+ * `.planning/debug/doble-toque-tab.md`.
+ *
+ * **Por qué recibe `search` y no lee `window`:** este módulo es puro (su encabezado). Las pantallas le
+ * pasan `window.location.search` en el handler y el simulador de `test/panel-tabs.test.ts` la de su
+ * historia falsa: el `tocar` de esa suite llama a ESTA función —un candado lee su cuerpo—, así el espejo
+ * del test no puede volver a probar una versión distinta de la que corre en las pantallas.
+ */
+export function toqueDeTab({ grupo, value, search }: { grupo: PanelTabGroup; value: unknown; search: string }):
+  | { ok: true; from: string | null; to: string | null }
+  | { ok: false } {
+  const destino = tabSlug({ grupo, value })
+  if (!destino.ok) return { ok: false }
+  const from = resolveTab({ grupo, param: new URLSearchParams(search).get(TAB_PARAM) }).slug
+  return { ok: true, from, to: destino.slug }
+}

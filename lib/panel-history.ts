@@ -25,8 +25,10 @@
 //      {@link panelHistoryAction}, y es la que cierra C-1 — está explicada entera ahí.
 //
 // QUÉ NO HACE
-//   - NO escucha `popstate` y NO reescribe historial ajeno (D-01, "historia honesta"): el atrás lo
-//     maneja el router de Next y la vista DERIVA de la URL. Acá no hay ninguna entrada falsa.
+//   - NO reescribe historial ajeno (D-01, "historia honesta"): el atrás lo maneja el router de Next y
+//     la vista DERIVA de la URL. Acá no hay ninguna entrada falsa.
+//   - Escucha UN SOLO `popstate`, de disparo único, y sólo para soltar la guarda del consumo en vuelo
+//     de {@link applyPanelView} (plan 04-07, G-04-7): nunca escribe ni decide nada desde ese evento.
 //   - NO toca `lib/overlay-history.ts`: convive con él mirándole la marca, nada más (NAV-06).
 //   - NO decide qué se muestra: eso lo resuelve el componente contra su lista ya filtrada por tenant.
 //
@@ -914,6 +916,19 @@ export function reconciledMemo({
 // ── El ejecutor ──────────────────────────────────────────────────────────────────────────────────
 
 /**
+ * La guarda del CONSUMO EN VUELO (plan 04-07, G-04-7). Memoria del módulo, NO un estado del historial:
+ * no agrega ninguna clave a la pila y no se exporta. La enciende la rama `consume` de
+ * {@link applyPanelView} y la apaga el próximo `popstate` ({@link soltarConsumo}). Mientras está
+ * encendida, toda llamada al ejecutor devuelve `'none'`. El porqué entero, en el docblock del ejecutor.
+ */
+let consumoEnVuelo = false
+
+/** El oyente de disparo único que suelta la guarda. Sólo apaga la memoria: no escribe ni decide nada. */
+function soltarConsumo(): void {
+  consumoEnVuelo = false
+}
+
+/**
  * **La única función de este módulo que toca `window`, y el único lugar de la superficie del panel
  * donde se escribe historial.**
  *
@@ -949,6 +964,35 @@ export function reconciledMemo({
  *
  * `drop` pasa tal cual a {@link panelViewUrl}: los params propios a borrar en la misma escritura (el
  * retorno del OAuth, plan 04-02). Default vacío.
+ *
+ * ⚠ **UN CONSUMO EN VUELO NO SE REPITE** (plan 04-07, G-04-7; E3 de `.planning/debug/doble-toque-tab.md`).
+ * El retroceso de un `consume` es ASÍNCRONO: el navegador lo encola y el state de arriba —de donde sale
+ * `holding`— no cambia hasta el recorrido. Dos toques seguidos al tab por defecto en esa ventana leían
+ * `holding: true` las dos veces y consumían DOS veces: el segundo retroceso sacaba al dueño de la sección
+ * (en Finanzas terminaba en Inicio). Por eso la rama `consume` enciende {@link consumoEnVuelo} y engancha
+ * {@link soltarConsumo} como oyente `popstate` de disparo único ANTES del retroceso, y la primera
+ * sentencia del ejecutor devuelve `'none'` mientras la guarda esté encendida.
+ *   - **Se descarta TODA escritura en la ventana, no sólo otro consumo:** un reemplazo o un empuje caería
+ *     sobre la entrada que se está dejando y el recorrido encolado la tiraría igual (Ventas → Turnos y
+ *     Egresos antes del recorrido escribía Egresos en la entrada del tab y después volvía a Turnos).
+ *   - **La reconciliación no se envenena:** un `'none'` le deja la memoria igual que la regla 0 (ver
+ *     {@link reconciledMemo}), y su efecto reintenta en el commit siguiente, que llega con la guarda ya
+ *     apagada.
+ *   - **Es el ÚNICO `popstate` que escucha este módulo**, de disparo único y sólo para apagar la memoria:
+ *     desde ahí no se escribe ni se decide nada, así que D-01 —el atrás lo maneja el router de Next y la
+ *     vista deriva de la URL— sigue en pie.
+ *   - **Sólo se enciende en la rama `consume`, que ya exige `holding`:** hay una entrada nuestra debajo
+ *     en el MISMO documento, así que el recorrido dispara `popstate`. Si alguna vez el retroceso cruzara
+ *     a otro documento no llegaría el evento, pero este módulo muere con el documento que lo cargó: la
+ *     guarda no sobrevive para trabar nada.
+ *   - **Borde aceptado (el `popstate` AJENO):** si antes que el nuestro hay otro recorrido encolado —el
+ *     retroceso de un overlay—, su `popstate` dispara primero y suelta la guarda antes de tiempo. La
+ *     guarda NUNCA queda colgada: en esa ventana sólo se degrada al comportamiento de antes del plan.
+ *   - **NO se extiende a {@link consumeOwnedPanelEntry}:** es otra función (el menú, NAV-08, y el primer
+ *     paso de B1), y el segundo paso de B1 (`consume-view-then-navigate`, `lib/panel-branch.ts`) engancha
+ *     su propio `popstate` ANTES de ese consumo y re-decide dentro de ese evento; compartir la guarda
+ *     exige medir ese orden primero. Queda escrito como diferido en el `deferred-items.md` de la fase 4.
+ *     El «Volver» de clientes SÍ la hereda por construcción: pasa por este mismo ejecutor.
  */
 export function applyPanelView({
   cause,
@@ -963,6 +1007,9 @@ export function applyPanelView({
   to: string | null
   drop?: readonly string[]
 }): PanelHistoryAction {
+  // La guarda del consumo en vuelo va PRIMERO, antes de leer el state: mientras el retroceso anterior no
+  // llegó, ese state todavía es el de la entrada que se está dejando (ver el docblock).
+  if (consumoEnVuelo) return 'none'
   const actual: unknown = window.history.state
   const holding = isPanelViewEntry(actual, param)
   const action = panelHistoryAction({
@@ -976,7 +1023,11 @@ export function applyPanelView({
   if (action === 'none') return action
 
   // La guarda de la cicatriz 2 ya está adentro de la decisión: `consume` sólo sale con `holding`.
+  // El encendido de la guarda y su oyente de disparo único van ANTES del retroceso: así el `popstate`
+  // de ESTE recorrido es el que la suelta, aunque el navegador lo despachara enseguida.
   if (action === 'consume') {
+    consumoEnVuelo = true
+    window.addEventListener('popstate', soltarConsumo, { once: true })
     window.history.back()
     return action
   }
