@@ -1324,3 +1324,95 @@ retroceso asíncrono (`test/panel-tabs.test.ts`), y el recorrido de la re-UAT de
 verde (i): gesto=interfaz · modo=dev · recorridos medidos: 16 · coinciden con lo esperado: 16 · no coinciden: 0
 
 cierre (i): un toque decide con la url de ahora y la vuelta del oauth no traba los tabs · pura 77/1844
+
+## (j) La no-regresión del cierre de gaps (plan 04-08)
+
+Qué se preguntó: si el cierre de los tres gaps (G-04-6 del 04-06; G-04-7 y G-04-8 del 04-07) convive en verde con
+todo lo que la fase y la Phase 3 ya tenían, **en una sola tanda**, antes de que el dueño toque nada. Nada de código
+cambió en este plan: se midió la app de `83fc45c` (los `fix(04-06)` y `fix(04-07)` más docs).
+
+**El entorno (paso 0).** 2026-11-18, hora de Argentina. Pila local de forjo-app arriba (no hizo falta `supabase
+start`; no se paró ni reseteó ninguna pila). `negocio-prueba` en `trial|true` (consultado en
+`supabase_db_forjo-app` al empezar y de nuevo al arrancar la completa). Sin `next dev` de este repo vivo (sin
+`.next/dev/lock`): cada sonda levantó el suyo en el 3031 (200 al primer intento) y lo cerró al salir (3031 y 9335
+libres). El de forjo-landing en el 3000 no se tocó. Turno libre al empezar, sin espera. `Chrome/157.0.8103.52`,
+node `v24.15.0`, gesto `interfaz`, modo estricto ACTIVO. `.next/types/validator.ts` entero (no hubo que apartarlo).
+`main` al día con `origin/main` (`git rev-list --count main..origin/main` = 0).
+
+**Las corridas (paso 1).** Las tres sondas por el turno, en segundo plano, una después de la otra; la pura, `tsc`,
+eslint, el build, la completa y los candados fuera del turno. **La tanda empezó a las 00:08, fuera de la ventana
+[01:00, 23:30] de los canarios de reloj:** las sondas, la pura (sin canarios: viven en el carril `db`), `tsc`,
+eslint, el build y los candados no dependen de la hora y corrieron enseguida; la completa se programó para arrancar
+sola a las 01:01 y corrió dentro de la ventana, sin ningún cambio en el árbol entre las dos partes.
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs F-blanda-mas-movil,F-directa-movil,F-tarjeta-movil,F-sidebar-escritorio,N-negocio-borde-movil cierre-04-08 tras-el-fix
+node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz
+node scripts/con-turno.mjs node .planning/debug/probes/panel-back-stack.mjs
+./node_modules/.bin/vitest run --project pure
+./node_modules/.bin/tsc --noEmit
+npm run build
+npm test
+```
+
+### La sonda del scroll (00:08:21 → 00:10:18), rc 0
+
+| recorrido | resultado | el primer toque |
+|---|---|---|
+| `F-blanda-mas-movil` | `OK` | Ventas 1404 → 1367, cero escrituras de Next; Egresos 1367 → 1349; re-entrada Ventas 1404 → 1367 |
+| `F-directa-movil` (control) | `OK` | Ventas 1404 → 1367, cero escrituras |
+| `F-tarjeta-movil` | `OK` | Egresos 1404 → 1349, cero escrituras; Ventas 1349 → 1349 |
+| `F-sidebar-escritorio` | `OK` | Ventas 830 → 830, cero escrituras |
+| `N-negocio-borde-movil` | `OK` | Cobros 187 → 0 con CERO escrituras (`recorte_por_alto`, como en `(h)`); Integraciones 0 → 0 |
+
+Los 37/18/55 px de los toques en móvil son el `recorte_por_alto: si` informativo ya explicado en `(h)` (el viewport
+emulado crece y el máximo de scroll se achica): `llevo_al_inicio=no` y `escritura_de_next=no` en todos.
+
+`etiqueta=cierre-04-08 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 5`
+
+### La sonda de la app (00:10:18 → 00:22:35), rc 1 sólo por la FALLA declarada
+
+`gesto=interfaz · modo=dev · recorridos medidos: 47 · coinciden con lo esperado: 46 · no coinciden: 1`. Los cinco
+retirados no corren (`R-login-con-activacion`, `R-C-2`, `R-C-3`, `R-C-4`, `R-C-ficha`, cada uno con su línea). Sin
+`ChunkLoadError`; una sola corrida, completa. Los 46 en `OK`: `C-activacion`, todos los de la Phase 3 (`R-1.*`,
+`R-3.1`, `R-barra-*`, `R-lateral`, `R-G3-5-*`, `R-G3-6-*`, `R-G3-7-*`, `R-G3-9-*`, `R-G3-10-primer-toque-atras-tarde`,
+`R-G3-10-atras-y-toque`, `R-G3-10-pronto-y-toque`, `R-G3-8-rebote`), los **doce** `R-T-*`, `R-C-5`, `R-C-6` y los
+**cuatro** `R-B1-*`. La única línea `FALLA` es la declarada:
+
+```
+FALLA R-G3-10-primer-toque-atras-pronto · G3-10: el dialogo del plan abierto por el primer toque y cerrado con el ATRAS dentro de la ventana de activacion: el reintento de G3-7 arma y el atras siguiente avisa
+      atras_siguiente: medido="sale"  <-- NO COINCIDE
+                       esperado="avisa"
+```
+
+⚠ **No es una regresión del cierre.** Es `G3-10`, el costo del camino 1 que el dueño declaró el 2026-11-16, con su
+`esperado` intacto a propósito; la misma tupla que en `(g)`. Ningún `esperado` se tocó.
+
+### Lo demás
+
+- **La sonda estática** (00:22:35 → 00:22:42): rc 0 · `escenarios medidos: 18 · coinciden con lo esperado: 18 · no
+  coinciden: 0`.
+- **La pura** (00:22:58): rc 0 · `Test Files 77 passed (77)` · `Tests 1844 passed | 3 expected fail (1847)` (piso:
+  77 / 1844 de `cierre (i)`).
+- **La completa** (`npm test`, con el carril `db`, 01:01:11 → 01:03:29, dentro de la ventana): rc 0 · `Test Files 111
+  passed (111)` · `Tests 2151 passed | 4 expected fail | 1 skipped (2156)` (piso: 111 archivos y 2111 + 1844 − 1804 =
+  2151 casos).
+- **`tsc --noEmit`** (00:23:11): rc 0, cero `error TS`.
+- **`eslint`, archivo por archivo:** `settings-client.tsx` `react-hooks/immutability=6,react-hooks/purity=2,react-hooks/set-state-in-effect=2`
+  y `finances-client.tsx` `react-hooks/set-state-in-effect=1` (la deuda medida, sin cambios); las tres `page.tsx`,
+  `lib/panel-tabs.ts`, `lib/panel-history.ts`, sus dos suites y la sonda `g04-scroll-y-recarga.mjs`: rc 0.
+- **El build** (`npm run build`, 00:23:21 → 00:24:10): rc 0 · `✓ Compiled successfully in 14.0s` · `✓ Generating
+  static pages using 11 workers (64/64)`; cero `useSearchParams() should be wrapped in a suspense` / `Missing
+  Suspense boundary`. P-7 no aplicó (no había un `next dev` de forjo-app vivo).
+- **El barrido CRUDO del criterio 5:** `grep -E 'pushState|replaceState|history\.back'` sobre `finances-client.tsx`,
+  `settings-client.tsx` y `agenda-client.tsx` → salida vacía.
+- **Lo bloqueado desde `974a131`:** `git diff --name-only 974a131 HEAD -- lib/overlay-history.ts lib/dirty-history.ts
+  lib/panel-branch.ts scripts/con-turno.mjs next.config.ts package.json package-lock.json supabase components
+  app/(dashboard)/clients app/(dashboard)/agenda app/(dashboard)/mas app/(dashboard)/servicios app/(dashboard)/equipo
+  app/(dashboard)/consultorios app/api` → vacío (rc 0). **Fuera del cierre** (lo que cambió en `app components lib
+  scripts test` desde `974a131`, menos los nueve archivos del cierre) → vacío. Huella de `next.config.ts` =
+  `8ceb99aeabb6a8b16cbe0e6d836bf0aa1ae03578`.
+
+P-8 no aplicó: no hay nada en rojo que no sea el costo declarado de G3-10.
+
+no-regresion (plan 04-08): sonda del scroll 5/5, sonda de la app 46/47 en OK, estatica 18/18, pura 77/1844, completa 111/2151, tsc limpio, build ok, criterio 5 en cero
