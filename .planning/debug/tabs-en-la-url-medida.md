@@ -1249,3 +1249,26 @@ guarda que soltar); (f) y el espejo, sin `toqueDeTab(`; la guarda, ausente en `a
 `soltarConsumo` en `applyPanelView`; los dos `alElegirTab` por `toqueDeTab` con `window.location.search`; el `tocar`
 de la suite por el mismo helper. Las ocho suites de historial 8/644, `test/panel-tabs.test.ts` 67, `tsc` limpio,
 la deuda de eslint de las dos pantallas sin cambios.
+
+### G-04-8 — un solo criterio para la vuelta del OAuth, y una limpieza que escribe
+
+**El RED** (`c06850e`, `test(04-07): la vuelta del oauth que traba, roja`; sólo tests). En `lib/panel-history.test.ts`,
+la regla 2 con `cleansQuery`: un `it` por causa sobre `TODAS_LAS_CAUSAS` (`'replace'` para las seis que no son
+`concurrent`, `'none'` para `concurrent`), más la regla 0 primero (`'none'`) y `null === null` (`'replace'`). En
+`test/panel-tabs.test.ts`: la existencia y siete casos de `vueltaDeOAuthPendiente`, el ayudante `volverDelOAuth()`
+(espejo del efecto) sobre las cinco URLs trabadas y los dos controles, el caso sin espejo (y su contrapuesto sin
+nada que borrar) y el candado (g) extendido. Corrida: 24 rojos, 232 verdes en las dos suites; todo lo del task 1
+siguió verde. Los rojos: la regla 2 y el sin espejo, `'none'` donde va `'replace'`; el predicado y las siete URLs,
+`vueltaDeOAuthPendiente is not a function` en su caso (los dos controles también caen: el ayudante pide el
+predicado); (g), el render con su propio `get('mp') !== null`.
+
+rojo (i) G-04-8: 24 casos rojos: con la causa 'user-open', origen igual a destino y una limpieza de la query devuelve 'replace' · con la causa 'user-close', origen igual a destino y una limpieza de la query devuelve 'replace' · con la causa 'user-switch', origen igual a destino y una limpieza de la query devuelve 'replace' · con la causa 'programmatic', origen igual a destino y una limpieza de la query devuelve 'replace' · con la causa 'filter', origen igual a destino y una limpieza de la query devuelve 'replace' · con la causa 'stale', origen igual a destino y una limpieza de la query devuelve 'replace' · una limpieza de la query con null === null reemplaza · G-04-8: /negocio?mp= → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde · G-04-8: /negocio?google= → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde · G-04-8: /negocio?tab=integraciones&mp=connected → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde · G-04-8: /negocio?tab=integraciones&google=connected → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde · G-04-8: /negocio?tab=integraciones&mp= → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde · G-04-8: /negocio?mp=connected → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde · G-04-8: /negocio?tab=cobros&mp=connected → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde · G-04-8 sin espejo: la limpieza con la vista ya en Integraciones reemplaza DENTRO del ejecutor · (g) el retorno del OAuth en Negocio: un reemplazo del helper con drop, y la reconciliación cortada mientras dura · vueltaDeOAuthPendiente existe y es una función del módulo de tabs · vueltaDeOAuthPendiente: «?mp=» ⇒ true · vueltaDeOAuthPendiente: «?google=» ⇒ true · vueltaDeOAuthPendiente: «?mp=connected» ⇒ true · vueltaDeOAuthPendiente: «?tab=integraciones» ⇒ false · vueltaDeOAuthPendiente: «» ⇒ false · vueltaDeOAuthPendiente: «?MP=x» ⇒ false · vueltaDeOAuthPendiente: «?xmp=1&tab=cobros» ⇒ false
+
+Los cuatro casos de `false` del predicado caen sólo porque el símbolo no existía: son el contrapuesto de los tres
+`true` y fijan que la presencia es exacta (sensible a mayúsculas, sin prefijos).
+
+**El GREEN** (`6202bdd`, `fix(04-07): un solo criterio para la vuelta del oauth y una limpieza que escribe`):
+`vueltaDeOAuthPendiente({ query })` en `lib/panel-tabs.ts`; `cleansQuery` (default `false`) en la regla 2 de
+`panelHistoryAction`, calculado por `applyPanelView` sólo cuando hay `drop`; en `settings-client.tsx`, el render y
+la guarda del efecto por el predicado y el comentario del «borde aceptado» reescrito. Las ocho suites de historial
+8/670, `tsc` limpio.
