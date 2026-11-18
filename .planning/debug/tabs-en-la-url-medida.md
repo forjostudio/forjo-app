@@ -1221,3 +1221,31 @@ Negocio, y el control de arriba muestra que el mismo 187 → 0 CON escritura sig
 verde (h): etiqueta=verde-04-06 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 5
 
 cierre (h): el primer toque no mueve la pagina
+
+## (i) Un toque, una decisión, y la vuelta del OAuth que no traba (plan 04-07, G-04-7 y G-04-8)
+
+Qué se preguntó: si los dos gaps del code review que el dueño decidió cerrar en la fase (opción B) quedan cerrados
+en los módulos puros y en el ejecutor —un dialecto—, con el RED de cada uno commiteado ANTES de su arreglo. El
+contrato son los `red_tests` de `.planning/debug/doble-toque-tab.md` (G-04-7) y de
+`.planning/debug/oauth-traba-tabs-negocio.md` (G-04-8).
+
+### G-04-7 — un toque decide con la URL de ahora, y un consumo en vuelo no se repite
+
+**El RED** (`1ed8ee3`, `test(04-07): el doble toque, rojo`; sólo `test/panel-tabs.test.ts`). `montarHistoria` ganó
+el `popstate` (con `once`) y la opción `backAsincrono` con `procesar()`: el retroceso real es asíncrono y el
+síncrono de antes no podía expresar E3. Corrida: 12 rojos, 55 verdes (los 53 de antes más las regresiones E1, E2 y
+E4, que ya pasaban porque el `tocar` de la suite leía la URL —la versión arreglada, no la del handler—). Cada rojo
+es de su aserción o, en los cinco casos de `toqueDeTab`, del símbolo ausente en SU caso (`toqueDeTab is not a
+function`, import por namespace): ninguno es de carga del archivo.
+
+rojo (i) G-04-7: 12 casos rojos: (f) el handler del toque en Negocio/Configuración y en Finanzas, y ningún router ni literal ?tab= en las pantallas · toqueDeTab existe y es una función del módulo de tabs · toqueDeTab: Ventas desde la URL limpia ⇒ from null, to ventas · toqueDeTab: Ventas con ?tab=ventas en la URL ⇒ from ventas, to ventas (la regla 2 la ve) · toqueDeTab: un ?tab= de prototipo cae al default (D-07) ⇒ from null, to egresos · toqueDeTab: un valor que no es del grupo ⇒ { ok: false } · toqueDeTab: Datos desde Cobros en Negocio ⇒ from cobros, to null (el default es la URL limpia) · E3: doble toque al default antes del recorrido ⇒ consume, none, UN solo retroceso y la URL en /finances · un empuje durante el consumo se descarta (none, la pila no cambia) y después del recorrido empuja · un popstate AJENO antes del nuestro suelta la guarda (nunca queda colgada) y después ningún toque queda bloqueado · candado del espejo: el `tocar` de ESTA suite pide el toque a toqueDeTab con la URL de ahora · candado de la guarda: en applyPanelView, la guarda antes de holding, y en consume el encendido y el oyente antes del retroceso
+
+Lo que cada rojo decía antes del arreglo: E3 `'consume'` donde va `'none'` (el segundo toque consumía otra vez); el
+empuje durante el consumo `'replace'` donde va `'none'`; el `popstate` ajeno, `0` oyentes donde va `1` (no había
+guarda que soltar); (f) y el espejo, sin `toqueDeTab(`; la guarda, ausente en `applyPanelView`.
+
+**El GREEN** (`43c2198`, `fix(04-07): un toque decide con la url de ahora y no consume dos veces`):
+`toqueDeTab({ grupo, value, search })` en `lib/panel-tabs.ts`; la guarda `consumoEnVuelo` (no exportada) con
+`soltarConsumo` en `applyPanelView`; los dos `alElegirTab` por `toqueDeTab` con `window.location.search`; el `tocar`
+de la suite por el mismo helper. Las ocho suites de historial 8/644, `test/panel-tabs.test.ts` 67, `tsc` limpio,
+la deuda de eslint de las dos pantallas sin cambios.
