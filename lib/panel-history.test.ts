@@ -533,13 +533,25 @@ describe('panelViewEntryParam — la marca, leída sin saber de qué vista es', 
 describe('consumeOwnedPanelEntry — tocar la sección en la que ya estás cierra la subsección', () => {
   // El runner corre con environment 'node': no hay `window`. Se stubea uno mínimo con lo único que
   // el ejecutor toca (`history.state` y `history.back`), que además deja CONTAR los back().
+  // (quick 261118-kat, IN-02) Desde que el consumo enciende la guarda del consumo en vuelo, el stub tiene
+  // también el par de enganche de oyentes, y los registra: el `afterEach` suelta la guarda con ellos antes
+  // de soltar el `window`, porque es memoria del módulo y si no sobreviviría al caso.
+  let registrados: { tipo: string; fn: (e?: unknown) => void }[] = []
   function montarHistorial(state: unknown) {
     const back = vi.fn()
-    vi.stubGlobal('window', { history: { state, back } })
+    const addEventListener = (tipo: string, fn: (e?: unknown) => void) => {
+      registrados.push({ tipo, fn })
+    }
+    const removeEventListener = (tipo: string, fn: (e?: unknown) => void) => {
+      registrados = registrados.filter((o) => !(o.tipo === tipo && o.fn === fn))
+    }
+    vi.stubGlobal('window', { history: { state, back }, addEventListener, removeEventListener })
     return back
   }
 
   afterEach(() => {
+    for (const o of registrados.filter((x) => x.fn.name === 'soltarConsumo')) o.fn()
+    registrados = []
     vi.unstubAllGlobals()
   })
 

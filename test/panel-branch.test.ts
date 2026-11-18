@@ -40,6 +40,10 @@ import { DIRTY_HASH_BASE } from '@/lib/dirty-history'
 // mal, la marca no se escribe y todo degrada a empujar EN SILENCIO — y ésa es, a propósito, la
 // degradación segura.
 
+// Los oyentes del último `montarPila` (quick 261118-kat): el `afterEach` suelta con ellos la guarda del
+// consumo en vuelo de `lib/panel-history.ts`, que es memoria del módulo y sobrevive al caso.
+let ultimosEnganchados: { tipo: string; fn: () => void; opciones: unknown }[] = []
+
 /** Un `window` mínimo: lo único que el ejecutor toca, y contando cada cosa. */
 function montarPila({ state, pathname }: { state: unknown; pathname: string }) {
   const back = vi.fn()
@@ -48,6 +52,7 @@ function montarPila({ state, pathname }: { state: unknown; pathname: string }) {
   const replaceState = vi.fn()
   const enganchados: { tipo: string; fn: () => void; opciones: unknown }[] = []
   const desenganchados: (() => void)[] = []
+  ultimosEnganchados = enganchados
   const win = {
     history: { state, back, replaceState },
     location: { pathname },
@@ -76,6 +81,12 @@ afterEach(() => {
   // ⚠ LOS DOS DATOS A NIVEL DE MÓDULO SE DRENAN ANTES DE SOLTAR EL `window`, y en este orden: son
   // estado del módulo, así que sobreviven al test, y un pedido o un aterrizaje colgado del test
   // anterior envenenaría el siguiente — que es, literalmente, el bug que el plan 03-05 cierra.
+  // (quick 261118-kat) Antes que esos dos, la guarda del consumo en vuelo: `consumeOwnedPanelEntry` la
+  // enciende y acá el `popstate` de su recorrido nunca llega, así que se llama su oyente de liberación
+  // con el `window` del caso todavía puesto. Si no, el caso siguiente la soltaría por identidad del state
+  // y le sumaría dos `desenganchados` ajenos.
+  for (const o of ultimosEnganchados.filter((x) => x.fn.name === 'soltarConsumo')) o.fn()
+  ultimosEnganchados = []
   PB.takeBackLanding()
   PB.applyBranchMarkRequest('__drenaje__')
   // El TERCER dato que sobrevive al test (plan 03-12): el canal de diagnóstico vive en `globalThis`,
@@ -1285,7 +1296,8 @@ describe('runBranchNavigation — CONSUMIR LA SUBSECCIÓN y recién entonces re-
     expect(
       PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir })
     ).toBe(true)
-    expect(ctx.enganchados).toHaveLength(1)
+    // (2026-11-18, quick 261118-kat) `consumeOwnedPanelEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo antes de su retroceso, DESPUÉS del de B1: se cuentan los que no son de la guarda.
+    expect(ctx.enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(1)
     expect(ctx.enganchados[0].tipo).toBe('popstate')
     expect(ctx.enganchados[0].opciones).toEqual({ once: true })
     expect(ctx.back).toHaveBeenCalledTimes(1)

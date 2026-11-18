@@ -27,8 +27,10 @@
 // QUÉ NO HACE
 //   - NO reescribe historial ajeno (D-01, "historia honesta"): el atrás lo maneja el router de Next y
 //     la vista DERIVA de la URL. Acá no hay ninguna entrada falsa.
-//   - Escucha UN SOLO `popstate`, de disparo único, y sólo para soltar la guarda del consumo en vuelo
-//     de {@link applyPanelView} (plan 04-07, G-04-7): nunca escribe ni decide nada desde ese evento.
+//   - Sólo escucha los oyentes de disparo único que sueltan la guarda del consumo en vuelo (plan 04-07,
+//     G-04-7; compartida con {@link consumeOwnedPanelEntry} desde el quick 261118-kat): el `popstate` del
+//     recorrido y el `pageshow` con `persisted` de la vuelta de la bfcache. Nunca escribe ni decide nada
+//     desde esos eventos.
 //   - NO toca `lib/overlay-history.ts`: convive con él mirándole la marca, nada más (NAV-06).
 //   - NO decide qué se muestra: eso lo resuelve el componente contra su lista ya filtrada por tenant.
 //
@@ -925,16 +927,57 @@ export function reconciledMemo({
 // ── El ejecutor ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * La guarda del CONSUMO EN VUELO (plan 04-07, G-04-7). Memoria del módulo, NO un estado del historial:
- * no agrega ninguna clave a la pila y no se exporta. La enciende la rama `consume` de
- * {@link applyPanelView} y la apaga el próximo `popstate` ({@link soltarConsumo}). Mientras está
- * encendida, toda llamada al ejecutor devuelve `'none'`. El porqué entero, en el docblock del ejecutor.
+ * La guarda del CONSUMO EN VUELO (plan 04-07, G-04-7; compartida desde el quick 261118-kat). Memoria del
+ * módulo, NO un estado del historial: no agrega ninguna clave a la pila y no se exporta.
+ *
+ * **Quién la enciende:** los dos que retroceden sobre una entrada nuestra de subsección, con el MISMO
+ * bloque de líneas —la rama `consume` de {@link applyPanelView} (el tab por defecto, el «Volver» de
+ * clientes) y {@link consumeOwnedPanelEntry} (el menú, NAV-08, y el primer paso de B1)—. Mientras está
+ * encendida, el ejecutor devuelve `'none'` y el menú no vuelve a retroceder.
+ *
+ * **Qué la apaga** (todas pasan por {@link soltarConsumo}):
+ *   · el `popstate` del recorrido, con un oyente de disparo único enganchado ANTES del retroceso;
+ *   · el `catch` del bloque, si el retroceso no arranca (el navegador lo rechaza tirando): sin él la guarda
+ *     quedaba encendida con su oyente colgado y el toque siguiente se perdía (caso 2 de R2-WR-01, medido
+ *     rojo en `.planning/debug/tabs-en-la-url-medida.md` ## (l));
+ *   · el `pageshow` con `persisted`, por si la página vuelve de la bfcache sin que llegue el `popstate`
+ *     (caso 1: NO reprodujo en Chrome 157 y se puso por decisión del dueño, ver {@link soltarAlVolverDeLaCache});
+ *   · el chequeo de identidad del state en {@link consumeOwnedPanelEntry}: si la guarda sigue encendida
+ *     pero el state de arriba ya no es el de la entrada desde la que se retrocedió, el recorrido ya llegó
+ *     y su oyente todavía no corrió. Es el caso de B1 re-decidiendo ADENTRO del `popstate` de su propio
+ *     recorrido: su oyente se enganchó antes que el de la guarda, así que corre primero.
  */
 let consumoEnVuelo = false
 
-/** El oyente de disparo único que suelta la guarda. Sólo apaga la memoria: no escribe ni decide nada. */
+/**
+ * El `history.state` de la entrada desde la que salió el retroceso en vuelo (`null` sin guarda). Se
+ * compara por IDENTIDAD: mientras el recorrido no llegó, el getter devuelve el mismo objeto; cuando llegó,
+ * devuelve el de otra entrada. No se exporta, igual que la bandera.
+ */
+let estadoDelConsumo: unknown = null
+
+/**
+ * Suelta la guarda. Apaga PRIMERO la memoria y DESPUÉS saca sus dos oyentes: si un `window` sin
+ * `removeEventListener` tirara, la guarda ya quedó apagada. No escribe ni decide nada.
+ */
 function soltarConsumo(): void {
   consumoEnVuelo = false
+  estadoDelConsumo = null
+  window.removeEventListener('popstate', soltarConsumo)
+  window.removeEventListener('pageshow', soltarAlVolverDeLaCache)
+}
+
+/**
+ * La salida de la guarda por la bfcache (quick 261118-kat, mitigación DEFENSIVA por decisión del dueño,
+ * 2026-11-18). Si el retroceso cruzara de documento y la página volviera con «adelante» desde la bfcache,
+ * la memoria del módulo volvería intacta y llegaría `pageshow`, no `popstate`. Medido en Chrome 157
+ * (K1-bfcache-cruce, ## (l)): el cruce se armó pero ningún documento del panel entró a la bfcache
+ * (`BroadcastChannelOnMessage`), así que esto no se pudo ver en la app; lo fija sólo el simulador
+ * (`C-pageshow-*`). Queda para los motores y caminos que acá no se miden: Safari de iOS, Android real y
+ * la pestaña descartada y restaurada. Un `pageshow` no persistido no suelta nada: es una carga nueva.
+ */
+function soltarAlVolverDeLaCache(e: PageTransitionEvent): void {
+  if (e.persisted) soltarConsumo()
 }
 
 /**
@@ -982,29 +1025,37 @@ function soltarConsumo(): void {
  * `holding`— no cambia hasta el recorrido. Dos toques seguidos al tab por defecto en esa ventana leían
  * `holding: true` las dos veces y consumían DOS veces: el segundo retroceso sacaba al dueño de la sección
  * (en Finanzas terminaba en Inicio). Por eso la rama `consume` enciende {@link consumoEnVuelo} y engancha
- * {@link soltarConsumo} como oyente `popstate` de disparo único ANTES del retroceso, y la primera
- * sentencia del ejecutor devuelve `'none'` mientras la guarda esté encendida.
+ * {@link soltarConsumo} como oyente de disparo único ANTES del retroceso, y la primera sentencia del
+ * ejecutor devuelve `'none'` mientras la guarda esté encendida. Las salidas de la guarda están en su
+ * docblock; las de abajo son los bordes.
  *   - **Se descarta TODA escritura en la ventana, no sólo otro consumo:** un reemplazo o un empuje caería
  *     sobre la entrada que se está dejando y el recorrido encolado la tiraría igual (Ventas → Turnos y
  *     Egresos antes del recorrido escribía Egresos en la entrada del tab y después volvía a Turnos).
  *   - **La reconciliación no se envenena:** un `'none'` le deja la memoria igual que la regla 0 (ver
  *     {@link reconciledMemo}), y su efecto reintenta en el commit siguiente, que llega con la guarda ya
  *     apagada.
- *   - **Es el ÚNICO `popstate` que escucha este módulo**, de disparo único y sólo para apagar la memoria:
- *     desde ahí no se escribe ni se decide nada, así que D-01 —el atrás lo maneja el router de Next y la
- *     vista deriva de la URL— sigue en pie.
- *   - **Sólo se enciende en la rama `consume`, que ya exige `holding`:** hay una entrada nuestra debajo
- *     en el MISMO documento, así que el recorrido dispara `popstate`. Si alguna vez el retroceso cruzara
- *     a otro documento no llegaría el evento, pero este módulo muere con el documento que lo cargó: la
- *     guarda no sobrevive para trabar nada.
+ *   - **Los únicos eventos que escucha este módulo son los de la guarda**, de disparo único y sólo para
+ *     apagar la memoria: desde ahí no se escribe ni se decide nada, así que D-01 —el atrás lo maneja el
+ *     router de Next y la vista deriva de la URL— sigue en pie.
+ *   - **El retroceso que cruza de documento (caso 1 de R2-WR-01), medido:** `K1-bfcache-cruce`
+ *     (quick 261118-kat, `.planning/debug/tabs-en-la-url-medida.md` ## (l)) forzó el cruce en Chrome 157
+ *     y el consumo SÍ aterrizó en otro documento, pero ninguno de los dos entró a la bfcache
+ *     (`Circumstantial/BroadcastChannelOnMessage`): al volver con «adelante» la página es un documento
+ *     NUEVO, la memoria arranca apagada y el tab responde. No reprodujo; la salida por `pageshow` se puso
+ *     igual, como mitigación defensiva por decisión del dueño, para lo que acá no se mide.
  *   - **Borde aceptado (el `popstate` AJENO):** si antes que el nuestro hay otro recorrido encolado —el
- *     retroceso de un overlay—, su `popstate` dispara primero y suelta la guarda antes de tiempo. La
- *     guarda NUNCA queda colgada: en esa ventana sólo se degrada al comportamiento de antes del plan.
- *   - **NO se extiende a {@link consumeOwnedPanelEntry}:** es otra función (el menú, NAV-08, y el primer
- *     paso de B1), y el segundo paso de B1 (`consume-view-then-navigate`, `lib/panel-branch.ts`) engancha
- *     su propio `popstate` ANTES de ese consumo y re-decide dentro de ese evento; compartir la guarda
- *     exige medir ese orden primero. Queda escrito como diferido en el `deferred-items.md` de la fase 4.
- *     El «Volver» de clientes SÍ la hereda por construcción: pasa por este mismo ejecutor.
+ *     retroceso de un overlay—, su `popstate` dispara primero y suelta la guarda antes de tiempo: en esa
+ *     ventana se degrada al comportamiento de antes del plan 04-07. **Residuo declarado, sin medir:** un
+ *     retroceso que el navegador IGNORA EN SILENCIO —sin tirar y sin recorrer— deja la guarda encendida
+ *     hasta el próximo recorrido (atrás, adelante) o una recarga. Queda fuera de los tres casos decididos.
+ *   - **La guarda se COMPARTE con {@link consumeOwnedPanelEntry}** (quick 261118-kat, caso 3 de R2-WR-01:
+ *     medido rojo en los dos sentidos; por el menú un retroceso de más sacaba al dueño a Inicio, y por B1
+ *     el tercero lo sacaba del sitio). Es una sola memoria y no dos: el menú, con un consumo en vuelo
+ *     desde la misma entrada, devuelve `true` sin retroceder, y este ejecutor devuelve `'none'` con un
+ *     consumo del menú en vuelo. El segundo paso de B1 (`consume-view-then-navigate`, `lib/panel-branch.ts`)
+ *     engancha su oyente ANTES del consumo, así que dentro de su `popstate` corre antes que el de la
+ *     guarda: por eso el menú compara la identidad del state en vez de fiarse sólo de la bandera.
+ *     El «Volver» de clientes la sigue heredando por construcción: pasa por este mismo ejecutor.
  */
 export function applyPanelView({
   cause,
@@ -1042,10 +1093,20 @@ export function applyPanelView({
   // La guarda de la cicatriz 2 ya está adentro de la decisión: `consume` sólo sale con `holding`.
   // El encendido de la guarda y su oyente de disparo único van ANTES del retroceso: así el `popstate`
   // de ESTE recorrido es el que la suelta, aunque el navegador lo despachara enseguida.
+  // Si el retroceso tira, el `catch` suelta la guarda y vuelve a lanzar el MISMO error: el handler del
+  // toque lo ve, y el panel sigue respondiendo. Este bloque es IDÉNTICO al de `consumeOwnedPanelEntry` a
+  // propósito (lo vigila `C-retroceso-unico` en `test/panel-tabs.test.ts`).
   if (action === 'consume') {
     consumoEnVuelo = true
-    window.addEventListener('popstate', soltarConsumo, { once: true })
-    window.history.back()
+    estadoDelConsumo = actual
+    try {
+      window.addEventListener('popstate', soltarConsumo, { once: true })
+      window.addEventListener('pageshow', soltarAlVolverDeLaCache, { once: true })
+      window.history.back()
+    } catch (e) {
+      soltarConsumo()
+      throw e
+    }
     return action
   }
 
@@ -1180,13 +1241,15 @@ export function applyPanelUnder({
 
 /**
  * Deshace la entrada de subsección que tengamos arriba, **sea cual sea la subsección** (NAV-08).
- * Devuelve `true` si consumió algo, `false` si no tocó nada.
+ * Devuelve `true` si consumió algo —o si ya hay un consumo en vuelo desde esa misma entrada, que la va a
+ * cerrar: el call site previene la navegación igual—, `false` si no tocó nada.
  *
  * **Para qué existe:** el menú del panel no sabe nada de `?c=`. Cuando el dueño toca "Clientes"
  * TENIENDO UNA FICHA ABIERTA, el `<Link>` empuja una entrada de ruta `/clients` ENCIMA de
  * `/clients?c=A`, y esa entrada de ficha queda sepultada para siempre: este módulo sólo consume la
- * de arriba y, por D-01, no escucha `popstate` ni reescribe historial ajeno. Al volver atrás hasta
- * esa profundidad la ficha RE-APARECE — el bug medido con CDP en
+ * de arriba y, por D-01, no reescribe historial ajeno y no decide nada desde un `popstate`: los únicos
+ * que escucha son los oyentes de disparo único que sueltan la guarda del consumo en vuelo. Al volver
+ * atrás hasta esa profundidad la ficha RE-APARECE — el bug medido con CDP en
  * `.planning/debug/atras-en-clients-aterriza-en-ficha.md`. Consumiendo nuestra entrada ANTES de
  * navegar, tocar la sección en la que ya estás CIERRA la subsección en vez de apilarse.
  *
@@ -1210,12 +1273,37 @@ export function applyPanelUnder({
  * **Trade-off aceptado:** con dos fichas apiladas (A → B), un toque consume UNA sola y deja la ficha
  * A a la vista. Es exactamente el mismo modelo que el botón "Volver" de mobile, así que el gesto es
  * coherente: el menú, estando ya en la sección, se comporta como un "Volver".
+ *
+ * ⚠ **COMPARTE LA GUARDA DEL CONSUMO EN VUELO con {@link applyPanelView}** (quick 261118-kat, caso 3 de
+ * R2-WR-01). Antes no la leía: un tab por defecto consumido y, antes del recorrido, la sección activa del
+ * menú o Inicio en la barra tiraban un segundo retroceso sobre el MISMO state —fuera de la sección, y con
+ * B1 fuera del sitio, la cicatriz 2—; y al revés, el tab volvía a consumir detrás del menú. Ahora, con un
+ * consumo en vuelo desde la entrada de arriba, devuelve `true` sin retroceder (el que viaja la cierra), y
+ * cuando consume, enciende la guarda con el mismo bloque que la rama `consume`. Las dos
+ * guardas de la cicatriz 2 quedan iguales y en su orden: el chequeo nuevo nunca retrocede.
  */
 export function consumeOwnedPanelEntry(): boolean {
+  // El consumo en vuelo va PRIMERO, antes de leer `actual` y de las dos guardas. Con el state de la
+  // entrada que se está dejando, el retroceso que ya viaja cierra la subsección: no se tira otro (sería
+  // uno de más: fuera de la sección, o con B1 fuera del sitio). Con otro state, el recorrido ya llegó y
+  // su oyente todavía no corrió (B1 adentro de su propio `popstate`): se suelta acá y se sigue.
+  if (consumoEnVuelo) {
+    if (window.history.state === estadoDelConsumo) return true
+    soltarConsumo()
+  }
   const actual: unknown = window.history.state
   if (isForeignOwnedEntry(actual)) return false
   if (panelViewEntryParam(actual) === null) return false
-  window.history.back()
+  consumoEnVuelo = true
+  estadoDelConsumo = actual
+  try {
+    window.addEventListener('popstate', soltarConsumo, { once: true })
+    window.addEventListener('pageshow', soltarAlVolverDeLaCache, { once: true })
+    window.history.back()
+  } catch (e) {
+    soltarConsumo()
+    throw e
+  }
   return true
 }
 
