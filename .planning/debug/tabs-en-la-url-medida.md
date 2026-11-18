@@ -1190,3 +1190,34 @@ node .planning/debug/probes/g04-scroll-y-recarga.mjs --reclasificar rojo-04-06.t
 Conclusión del control: el clasificador corregido sigue viendo los cuatro saltos del RED —incluido el de Negocio
 187 → 0, que es numéricamente idéntico al recorte pero tenía escritura de Next— y sólo deja de contar el toque sin
 ninguna escritura cuyo máximo de scroll se achicó por debajo de `y_antes`. Recién con esto se vuelve a medir.
+
+### La corrida final de las tres páginas (task 2, con el instrumento corregido) — 5/5
+
+Con `3c25616` (el clasificador corregido) sobre `7a193a4` (las tres páginas con el boundary con nodo; huellas
+finances `0368712e61af3350`, negocio `6380cdbcc48bc6cb`, settings `c3801bf0e8d32675`: las mismas de la corrida 4/5),
+2026-11-17 23:37 → 23:39 hora de Argentina. Turno libre (tomado y soltado por esta corrida, sin espera). Pila local
+arriba (`/rest/v1/` 200), sin `next dev` de este repo vivo: la sonda levantó el suyo en el 3031 con `/login 200` al
+primer intento y lo cerró al salir (3031 y 9335 libres). El de forjo-landing en el 3000 no se tocó.
+`Chrome/157.0.8103.52`, node `v24.15.0`.
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs F-blanda-mas-movil,F-directa-movil,F-tarjeta-movil,F-sidebar-escritorio,N-negocio-borde-movil verde-04-06 tras-el-fix
+```
+
+| recorrido | resultado | el primer toque |
+|---|---|---|
+| `F-blanda-mas-movil` | `OK` | Ventas 1404 → 1367, cero escrituras; entrada con el nodo del fallback 1840 ms; 2º toque y re-entrada sin escrituras |
+| `F-directa-movil` (control) | `OK` | Ventas 1404 → 1367, cero escrituras |
+| `F-tarjeta-movil` | `OK` | Egresos 1404 → 1349, cero escrituras; entrada 315 ms |
+| `F-sidebar-escritorio` | `OK` | Ventas 830 → 830, cero escrituras; entrada 322 ms |
+| `N-negocio-borde-movil` | `OK` | Cobros 187 → 0 con CERO escrituras y alto 1389 → 844 = viewport: `recorte_por_alto: si`, salto `no`; `next_toque1` y `next_toque2` en `no`; entrada 372 ms |
+
+El `recorte_por_alto: si` informativo también aparece en los toques de Finanzas en móvil que bajan 37 o 55 px: el
+viewport emulado crece de 844 a 881/899 (la barra de direcciones emulada) y el máximo de scroll se achica por debajo
+de `y_antes`; esos toques ya daban salto `no` con el criterio crudo y siguen igual (`--reclasificar` sobre este log:
+11 toques, 0 cambian, cero errores del parser). El único toque que la corrección movió en toda la fase es el de
+Negocio, y el control de arriba muestra que el mismo 187 → 0 CON escritura sigue siendo salto.
+
+verde (h): etiqueta=verde-04-06 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 5
+
+cierre (h): el primer toque no mueve la pagina
