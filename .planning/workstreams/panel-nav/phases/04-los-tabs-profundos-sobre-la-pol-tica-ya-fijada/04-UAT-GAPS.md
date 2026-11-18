@@ -152,11 +152,31 @@ tarjeta muestra el estado real), la URL queda `/negocio?tab=integraciones`, y Da
 
 ## Fecha, motor y commit desplegado
 
-fecha:
-motores:
-commit desplegado:
+fecha: 2026-11-18
+motores: Android Chrome · Escritorio Chrome
+commit desplegado: c3da6d0
 
 ## Resultados
 
 | Recorrido | Motor | Resultado | Lo que se vio |
 |---|---|---|---|
+| G6.1 | Android Chrome | ✅ | dueño: «Anda bien» (con obs-G1) |
+| G6.2 | Android Chrome | ✅ | dueño: «pasa» |
+| G6.3 | Escritorio Chrome | ✅ | dueño: «pasa» |
+| G6.4 | Escritorio Chrome | ✅ | dueño: «pasa» |
+| G7.1 | Android Chrome | ✅ | dueño: «pasa» |
+| G7.2 | Android Chrome | ✅ | dueño: «pasa» |
+| G8.1 | Android Chrome + Escritorio Chrome | ✅ | dueño: «pasa, hice las dos con los dos motores» |
+| G8.2 | Android Chrome + Escritorio Chrome | ✅ | dueño: «pasa, hice las dos con los dos motores» |
+
+## Observaciones fuera del «pasa si»
+
+- **obs-G1 (Android Chrome, G6.1):** «Algo que por ahí me gustaria es que ya se fije el alto de la ventana con los
+  turnos que aparecen, porque sino cada vez que voy a ventas hace un salto ahi porque se achica. Igual es porque hay 0
+  ventas cargadas. Si es chico lo hacemos, sino queda asi.» No es un scroll de la app: es el recorte del navegador
+  cuando el tab nuevo deja el documento más corto que el `scrollY` actual (el mismo `recorte_por_alto` que la sonda
+  mide en Negocio → Cobros, `## (h)`). Mejora de UX a evaluar aparte, no un fallo del G6.
+
+## Aprobación
+
+dueño, 2026-11-18: «aprobado» (8/8 ✅ en producción sobre `c3da6d0`). obs-G1: el dueño eligió resolverla después como un `/gsd-quick` (alto mínimo de los tabs de Finanzas = alto de la pantalla, CSS), fuera de este cierre.
