@@ -368,7 +368,7 @@ una tanda nueva.
 
 ### Heredado de v0.30
 
-- [ ] **MOB-08** (ex **NAV-03**): Los tabs de `/negocio` y `/settings` viven en la URL: el atrás vuelve
+- [x] **MOB-08** (ex **NAV-03**): Los tabs de `/negocio` y `/settings` viven en la URL: el atrás vuelve
       al tab anterior y el tab se puede compartir y recargar.
       ⚠ **PRECISADO el 2026-11-17 (D-01 de la Phase 4), no contradicho.** Donde dice *el atrás vuelve
       al tab anterior* vale *al tab **por defecto***. Un solo nivel de tabs: salir del default
@@ -406,7 +406,7 @@ una tanda nueva.
         atrás desde una sección abierta por el sidebar **con un tab de otra sección debajo** cae en esa
         sección: es esto. En el celular, después del 04-04, tocar la barra con un tab abierto tiene que
         terminar igual que sin el tab: si no, **es** un bug.
-- [ ] **MOB-09** (ex **NAV-04**): Ídem los de `/finances`, y el botón de alta sigue correspondiendo al
+- [x] **MOB-09** (ex **NAV-04**): Ídem los de `/finances`, y el botón de alta sigue correspondiendo al
       tab visible.
 
 ⚠ **Vinieron de la Phase 2 de v0.30, sin ejecutar.** Se difirieron **a propósito**: la política de
@@ -474,8 +474,8 @@ dos casos, que es el invariante que importa. **La UAT tiene que poder distinguir
 | MOB-05 | Phase 3 — La política de atrás, de un nivel a dos | Complete (2026-11-16) — implementado con el `camino 1` (decisión del dueño 2026-10-28: el aviso se arma con activación y se queda hasta un toque); costos declarados en `03-DECISION-UAT-3.md`, incl. `G3-10` (2026-11-16). Cierre: `03-VERIFICATION.md` passed 6/6, `03-SECURITY.md` threats_open 0, `03-UAT-CIERRE.md` 10/10 (2026-11-16). |
 | MOB-06 | Phase 3 — La política de atrás, de un nivel a dos | Complete (2026-11-16) — cero regresión: overlays/selectores/calendario/teclado (ronda 1 bloque E + 3.2) y el aviso de cambios sin guardar (ronda 2 ítem 15), en Android e iPhone. Cierre: `03-VERIFICATION.md` passed 6/6, `03-SECURITY.md` threats_open 0, `03-UAT-CIERRE.md` 10/10 (2026-11-16). |
 | MOB-07 | Phase 2 — La barra inferior y Más | Complete (2026-10-09) — ⚠ **con enmienda** del 2026-10-14 por D-05: ver la nota debajo del requisito. La política de navegación no cambia en escritorio (criterio 6 intacto); **sí** cambia el costo de salir del panel |
-| MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
-| MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Pending |
+| MOB-08 | Phase 4 — Los tabs profundos sobre la política ya fijada | Complete (2026-11-18) — tabs de `/negocio` y `/settings` en `?tab=`, con la PRECISIÓN D-01 (el atrás vuelve al tab por defecto) y B1 en la barra. Cierre: `04-VERIFICATION.md` passed 5/5 (re-verificación), `04-UAT.md` 28 ✅/2 ⚠/0 ❌ y re-UAT de los gaps `04-UAT-GAPS.md` 8/8 ✅ en producción (`c3da6d0`, 2026-11-18); gaps G-04-6/7/8 cerrados (04-06..08), G-04-9 descartado medido. Deuda decidida por el dueño: R2-WR-01 y obs-G1 a `/gsd-quick` (`deferred-items.md`). `04-SECURITY.md` pendiente. |
+| MOB-09 | Phase 4 — Los tabs profundos sobre la política ya fijada | Complete (2026-11-18) — tabs de `/finances` en `?tab=` con el botón de alta siguiendo al tab visible en todos los caminos de entrada; el salto del primer toque (obs-1/G-04-6) cerrado. Cierre: `04-VERIFICATION.md` passed 5/5 (re-verificación), `04-UAT.md` 28 ✅/2 ⚠/0 ❌ y re-UAT de los gaps `04-UAT-GAPS.md` 8/8 ✅ en producción (`c3da6d0`, 2026-11-18); gaps G-04-6/7/8 cerrados (04-06..08), G-04-9 descartado medido. Deuda decidida por el dueño: R2-WR-01 y obs-G1 a `/gsd-quick` (`deferred-items.md`). `04-SECURITY.md` pendiente. |
 
 **Coverage:** 9 requisitos · mapeados a fases: **9/9** · sin mapear: 0 · duplicados: 0
 

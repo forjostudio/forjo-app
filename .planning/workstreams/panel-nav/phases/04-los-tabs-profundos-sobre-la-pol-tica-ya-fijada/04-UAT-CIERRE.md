@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: complete
 phase: 04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada
 source: [04-01-SUMMARY.md, 04-02-SUMMARY.md, 04-03-SUMMARY.md, 04-04-SUMMARY.md, 04-05-SUMMARY.md, 04-UAT.md, 04-VERIFICATION.md, 04-REVIEW.md]
 started: 2026-11-17T15:55:00Z
@@ -84,7 +84,8 @@ blocked: 0
 
 - gap_id: G-04-6
   truth: "El primer toque de un tab de Finanzas (Ventas o Egresos) cambia el tab sin mover el scroll de la página"
-  status: failed
+  status: resolved
+  closed_by: "04-06 (re-UAT 04-UAT-GAPS.md 8/8 en producción c3da6d0, 2026-11-18)"
   reason: "User reported: el primer toque de Ventas/Egresos scrollea al inicio de la página (Android y escritorio); después no pasa más; sólo Finanzas"
   severity: minor
   test: 6
@@ -107,7 +108,8 @@ blocked: 0
   debug_session: ".planning/debug/finanzas-primer-toque-scroll.md"
 - gap_id: G-04-7
   truth: "Un doble toque rápido en un tab no duplica entradas del historial"
-  status: failed
+  status: resolved
+  closed_by: "04-07 (re-UAT 04-UAT-GAPS.md 8/8 en producción c3da6d0, 2026-11-18)"
   reason: "Code review WR-02: el `from` de panelTabCause sale del render, no de window.location al momento del toque"
   severity: minor
   test: 7
@@ -128,7 +130,8 @@ blocked: 0
   debug_session: ".planning/debug/doble-toque-tab.md"
 - gap_id: G-04-8
   truth: "Volver del OAuth con `?mp=` vacío o con `?tab=integraciones&mp=…` no traba los tabs de Negocio"
-  status: failed
+  status: resolved
+  closed_by: "04-07 (re-UAT 04-UAT-GAPS.md 8/8 en producción c3da6d0, 2026-11-18)"
   reason: "Code review WR-03: criterio distinto entre el render (L1013) y el efecto del OAuth (L1113) de settings-client.tsx"
   severity: major
   test: 8

@@ -124,7 +124,7 @@ Esto salió de leer el código hoy, y corrige o completa lo que dicen los requis
 
 - [x] **Phase 2: La barra inferior y Más** - En mobile el panel se navega desde una barra fija de 5 destinos que respeta la zona segura del teléfono y un "Más" que guarda el resto del menú del rubro sin perder ninguna fila; el mecanismo de historial no se toca y desktop queda idéntico (completed 2026-10-09)
 - [x] **Phase 3: La política de atrás, de un nivel a dos** - El atrás pasa a tener dos niveles (sección → Más → Inicio) sin romper nada de lo que el dueño ya verificó en celular, y la guarda de salida en Inicio se decide con los números a la vista en vez de asumirse (completed 2026-11-16)
-- [ ] **Phase 4: Los tabs profundos sobre la política ya fijada** - Los tabs de `/negocio`, `/settings` y `/finances` viven en la URL contra la política definitiva, sin tocar las otras tres rutas que comparten esa pantalla ni romper el retorno del OAuth de MercadoPago
+- [x] **Phase 4: Los tabs profundos sobre la política ya fijada** - Los tabs de `/negocio`, `/settings` y `/finances` viven en la URL contra la política definitiva, sin tocar las otras tres rutas que comparten esa pantalla ni romper el retorno del OAuth de MercadoPago (completed 2026-11-18)
 
 ## Phase Details
 
@@ -772,4 +772,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 8/8 | In Progress | - |
+| 4. Los tabs profundos sobre la política ya fijada | 8/8 | Complete    | 2026-11-18 |
