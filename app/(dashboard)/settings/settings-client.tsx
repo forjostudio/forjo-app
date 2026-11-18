@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Business, BusinessSecrets, Service, Professional, Location, Space, AgendaSpace, ProfessionalService, ServiceCategory } from '@/lib/types'
 import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
 import { blocksBecomingWildcard } from '@/lib/time-block-services'
-import { TAB_PARAM, TABS_NEGOCIO, TABS_CONFIG, resolveTab, toqueDeTab } from '@/lib/panel-tabs'
+import { TAB_PARAM, TABS_NEGOCIO, TABS_CONFIG, resolveTab, toqueDeTab, vueltaDeOAuthPendiente } from '@/lib/panel-tabs'
 import { applyPanelView, panelTabCause, resolveViewParam, sanitizeAction, reconciledMemo } from '@/lib/panel-history'
 import { nowInAR } from '@/lib/appointment-time'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
@@ -1009,8 +1009,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   const tabEnLaUrl = searchParams.get(TAB_PARAM)
   // Volviendo del OAuth (`?mp=` / `?google=`, que el backend sólo manda a /negocio) se muestra
   // Integraciones desde el PRIMER frame —sin un flash de Datos— hasta que el efecto del OAuth deja la
-  // URL en `?tab=integraciones`.
-  const vueltaDeOAuth = isNegocio && (searchParams.get('mp') !== null || searchParams.get('google') !== null)
+  // URL en `?tab=integraciones`. Por presencia, vacío incluido, con el mismo predicado que la guarda del
+  // efecto (G-04-8): si el que limpia preguntara otra cosa, los tabs quedarían trabados en Integraciones.
+  const vueltaDeOAuth = isNegocio && vueltaDeOAuthPendiente({ query: searchParams })
   const tabNegocio = resolveTab({ grupo: TABS_NEGOCIO, param: tabEnLaUrl })
   const tabConfig = resolveTab({ grupo: TABS_CONFIG, param: tabEnLaUrl })
   // `null` en las secciones sueltas: no tienen grupo de tabs, así que ni el toque ni la reconciliación
@@ -1104,16 +1105,20 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
   // escritura (`drop`). No agrega entrada, el tab sobrevive, y como la entrada del retorno es ajena (un
   // documento nuevo que llega del proveedor) el reemplazo no le fabrica nuestra marca: un toque a Datos
   // después la reemplaza y no retrocede fuera del sitio.
-  // Se lee `window.location` y no el render A PROPÓSITO: en modo estricto el efecto corre dos veces y la
-  // segunda ya ve la URL limpia (la escritura es síncrona sobre `location`), así que el toast sale UNA vez.
-  // Borde aceptado: ningún callback emite `tab`; si alguien pegara `?tab=integraciones&mp=…`, el helper
-  // no escribe (la vista ya es la pedida) y la query queda hasta el próximo toque.
+  // Se lee `window.location` y no el render A PROPÓSITO: en modo estricto el efecto corre dos veces; la
+  // primera corrida limpia la URL de forma síncrona y la segunda ya no ve la vuelta, así que el aviso
+  // sale UNA vez —ahora también con el tab ya en Integraciones—.
+  // La guarda es el MISMO predicado por presencia que usa el render (G-04-8): con `?mp=` vacío también
+  // limpia, en vez de dejar la URL forzando Integraciones. Y con el tab ya en Integraciones
+  // (`?tab=integraciones&mp=…`, que ningún callback emite pero llega pegada) la limpieza igual escribe:
+  // el helper reemplaza cuando el `drop` borra algo de la URL, aunque la vista ya sea la pedida.
+  // Los valores de `mp` y `google` sólo eligen el aviso.
   useEffect(() => {
     if (!isNegocio) return
     const params = new URLSearchParams(window.location.search)
+    if (!vueltaDeOAuthPendiente({ query: params })) return
     const mp = params.get('mp')
     const google = params.get('google')
-    if (!mp && !google) return
     // El aviso se pide en la PRÓXIMA tarea y no acá: el `<Toaster>` de sonner se suscribe en su propio
     // efecto y está montado DESPUÉS de las páginas (`app/layout.tsx`), así que su efecto corre después
     // de éste y un toast pedido ahora se pierde sin error en un documento nuevo —que es siempre el caso

@@ -159,3 +159,24 @@ export function toqueDeTab({ grupo, value, search }: { grupo: PanelTabGroup; val
   const from = resolveTab({ grupo, param: new URLSearchParams(search).get(TAB_PARAM) }).slug
   return { ok: true, from, to: destino.slug }
 }
+
+/**
+ * ¿Hay una vuelta del OAuth pendiente en `/negocio`? `true` si `mp` o `google` están PRESENTES en la
+ * query, con cualquier valor —vacío incluido— (G-04-8).
+ *
+ * **Por qué por presencia y por qué UNA función:** el render tiene que mostrar Integraciones con
+ * cualquier valor (también `?mp=`), y el que limpia la URL tiene que usar EXACTAMENTE el mismo criterio:
+ * si el render preguntaba por presencia y el efecto por verdad, `?mp=` forzaba Integraciones, el efecto
+ * no lo borraba nunca y los cuatro tabs de Negocio quedaban trabados hasta recargar
+ * (`.planning/debug/oauth-traba-tabs-negocio.md`). La usan los tres consumidores de `settings-client.tsx`:
+ * lo que se muestra, el corte de la reconciliación (los dos por el `vueltaDeOAuth` del render) y la
+ * guarda del efecto del OAuth.
+ *
+ * El backend sólo emite `?mp=connected|error` y `?google=connected|error`; cualquier otra forma (un
+ * valor vacío, `?tab=integraciones&mp=…`) llega por una URL pegada o editada. Como el resto del módulo,
+ * sólo elige qué se MUESTRA y qué se escribe en la URL: nunca qué se lee. Recibe cualquier objeto con
+ * `has` para servir al `useSearchParams()` del render y al `URLSearchParams` del efecto por igual.
+ */
+export function vueltaDeOAuthPendiente({ query }: { query: { has(nombre: string): boolean } }): boolean {
+  return query.has('mp') || query.has('google')
+}

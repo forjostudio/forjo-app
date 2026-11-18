@@ -77,6 +77,9 @@ export type PanelViewCause =
  *
  * @param holding ¿La entrada de arriba del stack la empujamos nosotros? (guarda de la cicatriz 2)
  * @param foreignOwnsTop ¿La entrada de arriba lleva la marca de OTRO dueño? (regla 0, cicatriz 3)
+ * @param cleansQuery ¿La escritura borra algo de la query ACTUAL? (el `drop` de {@link applyPanelView}
+ *   nombra un param que está presente; lo calcula el ejecutor). Default `false`. Sólo cambia la regla 2:
+ *   con la vista igual, una limpieza reemplaza (G-04-8, plan 04-07).
  */
 export function panelHistoryAction({
   cause,
@@ -84,12 +87,14 @@ export function panelHistoryAction({
   to,
   holding,
   foreignOwnsTop,
+  cleansQuery = false,
 }: {
   cause: PanelViewCause
   from: string | null
   to: string | null
   holding: boolean
   foreignOwnsTop: boolean
+  cleansQuery?: boolean
 }): PanelHistoryAction {
   // ── REGLA 0 — mientras la entrada de arriba tenga OTRO dueño, no se escribe. ───────────────────
   // ⚠ ES LA REGLA QUE CIERRA C-1, Y ES ABSOLUTA A PROPÓSITO. Los otros dos módulos que escriben
@@ -109,9 +114,13 @@ export function panelHistoryAction({
   // pie. Dos candados, no uno.
   if (cause === 'concurrent') return 'none'
 
-  // ── REGLA 2 — sin cambio real no se escribe (cicatriz 1). ──────────────────────────────────────
+  // ── REGLA 2 — sin cambio real —ni de vista ni de query— no se escribe (cicatriz 1). ─────────────
   // Incluye `null === null`, que es el saneo pedido sobre una URL que ya está limpia.
-  if (from === to) return 'none'
+  // Una limpieza con la vista igual (`cleansQuery`: el `drop` borra algo que está en la URL) SÍ es un
+  // cambio real, y reemplaza: nunca empuja ni consume, porque una limpieza no es un destino ni un
+  // cierre. Sin esto, `/negocio?tab=integraciones&mp=connected` se quedaba con `mp` y los tabs de
+  // Negocio, trabados en Integraciones (G-04-8). Las reglas 0 y 1 siguen primero.
+  if (from === to) return cleansQuery ? 'replace' : 'none'
 
   switch (cause) {
     // Un cliente es un destino. Cambiar de A a B también: el atrás tiene que devolver la ficha
@@ -963,7 +972,10 @@ function soltarConsumo(): void {
  * a `/clients` en vez de retroceder fuera del sitio. Lo fija un caso de `lib/panel-history.test.ts`.
  *
  * `drop` pasa tal cual a {@link panelViewUrl}: los params propios a borrar en la misma escritura (el
- * retorno del OAuth, plan 04-02). Default vacío.
+ * retorno del OAuth, plan 04-02). Default vacío. Si algún nombre de `drop` está PRESENTE en la query
+ * actual, la escritura limpia algo aunque la vista no cambie, y se le pasa `cleansQuery` a la decisión:
+ * la regla 2 reemplaza en vez de comerse la limpieza (G-04-8, plan 04-07: con el tab ya en Integraciones,
+ * `?mp=…` quedaba en la URL y trababa los tabs de Negocio).
  *
  * ⚠ **UN CONSUMO EN VUELO NO SE REPITE** (plan 04-07, G-04-7; E3 de `.planning/debug/doble-toque-tab.md`).
  * El retroceso de un `consume` es ASÍNCRONO: el navegador lo encola y el state de arriba —de donde sale
@@ -1012,12 +1024,17 @@ export function applyPanelView({
   if (consumoEnVuelo) return 'none'
   const actual: unknown = window.history.state
   const holding = isPanelViewEntry(actual, param)
+  // ¿La escritura borra algo de la URL de ahora? Sólo se mira la query si hay un `drop`: sin él no hay
+  // limpieza posible y la decisión es la de siempre.
+  const cleansQuery =
+    drop !== undefined && drop.length > 0 && drop.some((nombre) => new URLSearchParams(window.location.search).has(nombre))
   const action = panelHistoryAction({
     cause,
     from,
     to,
     holding,
     foreignOwnsTop: isForeignOwnedEntry(actual),
+    cleansQuery,
   })
 
   if (action === 'none') return action
