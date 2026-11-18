@@ -76,3 +76,17 @@
   **Por qué no se tocó:** da la FORMA animada del salto, no su causa; con el boundary con nodo (plan 04-06) el salto
   ya no ocurre. Tocar `app/layout.tsx`/`app/globals.css` cambia cómo se ven TODAS las navegaciones del panel y de la
   página pública: candidato a un quick que lo mida antes.
+
+- La guarda de consumo en vuelo no se extendió a `consumeOwnedPanelEntry` (plan 04-07, G-04-7)
+  status: open
+  **Qué:** la guarda (`consumoEnVuelo` en `lib/panel-history.ts`) vive sólo en `applyPanelView`. `consumeOwnedPanelEntry`
+  —el menú, NAV-08, y el primer paso de B1— es OTRA función: compartir la guarda no es «el mismo helper» sino una
+  segunda lectura de la memoria del módulo.
+  **Por qué no se hizo:** el segundo paso de B1 (`consume-view-then-navigate`, `lib/panel-branch.ts`, intocable en
+  el cierre) engancha su propio `popstate` ANTES de ese consumo y re-decide DENTRO de ese evento, antes que cualquier
+  oyente que la guarda enganchara después: extenderla exige medir ese orden primero. Además, los stubs de `window`
+  de su suite no tienen `addEventListener`.
+  **Lo que queda sin cubrir:** el caso cruzado —consumir un tab y tocar la barra o el sidebar antes de que llegue el
+  retroceso— es derivado y sin medir.
+  **El «Volver» de clientes SÍ hereda la guarda por construcción** (pasa por el mismo `applyPanelView`), pero ninguna
+  sonda lo recorre directo: lo prueba la re-UAT del 04-08.

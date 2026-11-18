@@ -1272,3 +1272,55 @@ Los cuatro casos de `false` del predicado caen sólo porque el símbolo no exist
 `panelHistoryAction`, calculado por `applyPanelView` sólo cuando hay `drop`; en `settings-client.tsx`, el render y
 la guarda del efecto por el predicado y el comentario del «borde aceptado» reescrito. Las ocho suites de historial
 8/670, `tsc` limpio.
+
+### Sin regresión en la app real (task 3)
+
+Qué se preguntó: si la guarda del consumo en vuelo, `toqueDeTab`, `vueltaDeOAuthPendiente` y la limpieza que escribe
+dejaron igual todo lo que los tabs ya hacían en la app: los doce `R-T-*` (los dos handlers, el retorno del OAuth de
+MercadoPago y de Google, Agenda y el sidebar) y los cuatro `R-B1-*` (el consumo del tab que la guarda ahora protege),
+con los esperados de siempre, que este plan no tocó.
+
+**El entorno.** 2026-11-17 23:58 → 2026-11-18 00:04 hora de Argentina, sobre `0e037c4` (los dos `fix(04-07)` más
+docs). Turno libre (tomado y soltado por esta corrida, sin espera). Pila local de forjo-app arriba (`/rest/v1/` 200;
+no hizo falta `supabase start`; no se paró ni reseteó ninguna pila). Sin `next dev` de este repo vivo (sin
+`.next/dev/lock`; 3031 y 9335 libres): la sonda levantó el suyo en el 3031 (respondió 200) y lo cerró al salir
+(3031 y 9335 libres). El de forjo-landing en el 3000 no se tocó. `Chrome/157.0.8103.52`, node `v24.15.0`, gesto
+`interfaz`, modo estricto ACTIVO (`next.config.ts` sin tocar). Fuera de la ventana de los canarios de reloj, que
+viven en el carril `db` y no en la pura.
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz R-T-finanzas-por-mas,R-T-finanzas-desde-inicio,R-T-finanzas-invalido,R-T-finanzas-url-pegada,R-T-negocio-por-mas,R-T-negocio-datos-consume,R-T-config-por-url,R-T-negocio-oauth-mp,R-T-negocio-oauth-google-error,R-T-sidebar-seccion-activa,R-T-secciones-sin-tab,R-T-agenda-google,R-B1-inicio,R-B1-turnos,R-B1-mas,R-B1-ficha
+./node_modules/.bin/vitest run --project pure
+```
+
+| recorrido | resultado |
+|---|---|
+| `R-T-finanzas-por-mas` | `OK` |
+| `R-T-finanzas-desde-inicio` | `OK` |
+| `R-T-finanzas-invalido` | `OK` |
+| `R-T-finanzas-url-pegada` | `OK` |
+| `R-T-negocio-por-mas` | `OK` |
+| `R-T-negocio-datos-consume` | `OK` (el consumo del tab, con la guarda puesta) |
+| `R-T-config-por-url` | `OK` |
+| `R-T-negocio-oauth-mp` | `OK` (el toast UNA vez, `/negocio?tab=integraciones`) |
+| `R-T-negocio-oauth-google-error` | `OK` |
+| `R-T-sidebar-seccion-activa` | `OK` |
+| `R-T-secciones-sin-tab` | `OK` |
+| `R-T-agenda-google` | `OK` |
+| `R-B1-inicio` | `OK` |
+| `R-B1-turnos` | `OK` |
+| `R-B1-mas` | `OK` |
+| `R-B1-ficha` | `OK` |
+
+Sonda rc 0; la pura completa rc 0 · `Test Files 77 passed (77)` · `Tests 1844 passed | 3 expected fail (1847)` (piso:
+77 / 1820). P-5 no aplicó: ningún `FALLA`.
+
+**El punto ciego, declarado.** La ventana real del doble toque (cuánto tarda el commit de la transición entre la
+escritura de un toque y el render que la ve) no se mide por CDP en esta sonda, ni tampoco dos toques dentro de esa
+ventana. La cubren el candado de fuente (los dos `alElegirTab` y el `tocar` de la suite llaman a `toqueDeTab` con la
+URL de ahora; la guarda va antes de `holding` y se enciende antes del retroceso), la pila con el ejecutor REAL y el
+retroceso asíncrono (`test/panel-tabs.test.ts`), y el recorrido de la re-UAT del 04-08.
+
+verde (i): gesto=interfaz · modo=dev · recorridos medidos: 16 · coinciden con lo esperado: 16 · no coinciden: 0
+
+cierre (i): un toque decide con la url de ahora y la vuelta del oauth no traba los tabs · pura 77/1844
