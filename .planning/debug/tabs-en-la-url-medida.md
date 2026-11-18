@@ -1655,3 +1655,152 @@ OK  G1-ventas-escritorio · obs-G1 escritorio 1280x800: Inicio -> sidebar Finanz
 - **El costo aceptado:** un tab vacío deja hasta una pantalla de blanco debajo de su aviso.
 
 cierre (k): el tab corto de finanzas ya no achica la pagina · rojo 3/3 · verde 8/8
+
+## (l) R2-WR-01: la guarda de consumo en vuelo, medida antes de arreglar (quick 261118-kat)
+
+Qué se preguntó: si la guarda de consumo en vuelo del 04-07 (`consumoEnVuelo` de `applyPanelView`, G-04-7) puede
+quedar encendida o ser salteada por alguno de los tres caminos que nombran el code review de la ronda 2
+(`04-REVIEW-2.md` WR-01) y su cruce con `consumeOwnedPanelEntry` (IN-03):
+
+1. **bfcache, sin `popstate`:** el retroceso del consumo cruza de documento y la página vuelve con «adelante» desde la
+   bfcache (llega `pageshow`, no `popstate`), con la guarda encendida: ningún tab responde.
+2. **Un `back()` que tira:** la guarda queda encendida y el toque siguiente da `none`.
+3. **El cruce con `consumeOwnedPanelEntry`, en los dos sentidos:** (a) consumir un tab y, antes del `popstate`, tocar
+   la sección activa del menú (NAV-08) o Inicio en la barra (B1); (b) la inversa, primero el menú o B1 y después el
+   tab por defecto.
+
+Decisión del dueño (2026-11-18, no se reabre): medir PRIMERO los tres y arreglar sólo los que reproduzcan; el que no
+reproduce se cierra con el número, como WR-04.
+
+**El entorno (paso 0).** 2026-11-18, hora de Argentina (simulador 15:24; K1 ~15:45, después de esperar el turno
+~22 min detrás de `forjo-tiendas`, PID 49748). Pila local de forjo-app arriba (la API contestó 200; no hizo falta
+`supabase start`; ninguna escritura en la base). Sin `next dev` de este repo vivo: la sonda levantó el suyo en el
+3031 (`/login 200` al primer intento) y lo cerró al salir (3031 y 9335 libres). El de forjo-landing en el 3000 no se
+tocó. `Chrome/157.0.8103.52`, node `v24.15.0`. HEAD de la medición: `13b378b` (el `test` con los esperados, sin
+ningún cambio en `lib/`).
+
+### El caso 2 y el caso 3: el simulador fiel, con los ejecutores REALES
+
+El simulador de `test/panel-tabs.test.ts` se volvió fiel al DOM antes de medir (un oyente quitado durante el despacho
+no corre; el mismo oyente no se engancha dos veces) y se drena entre casos: los 85 casos de antes siguieron 85/85.
+Los nueve casos corren `applyPanelView`, `consumeOwnedPanelEntry` y `runBranchNavigation` de verdad, con el retroceso
+ASÍNCRONO (`backAsincrono`) y B1 espejado de `decidirDesdeElAterrizaje`/`handleNavigate`.
+
+```
+./node_modules/.bin/vitest run --project pure test/panel-tabs.test.ts
+```
+
+`Tests  5 failed | 89 passed (94)` — los cinco rojos son los K de los casos 2 y 3, cada uno por su aserción (cero
+`TypeError`/`ReferenceError`); `K2-b` y los tres `NR-b1-*` en verde, así que el simulador representa B1 (no hay
+P-1b). Las tuplas medidas contra las esperadas, tal cual del error de la aserción:
+
+```
+K2-a: un back() que tira no deja la guarda encendida
+  {
+-   "oyentes": 0,
+-   "siguiente": "consume",
++   "oyentes": 1,
++   "siguiente": "none",
+    "tiro": true,
+-   "url": "/finances",
++   "url": "/finances?tab=ventas",
+  }
+
+K3a-nav08: tab por defecto y, antes del popstate, la sección activa del menú
+  {
+    "consumo": "consume",
+    "prevenido": true,
+-   "retrocesos": 1,
+-   "url": "/finances",
++   "retrocesos": 2,
++   "url": "/dashboard",
+  }
+
+K3a-b1: tab por defecto y, antes del popstate, Inicio en la barra
+  {
+    "consumo": "consume",
+    "navegaciones": [],
+-   "retrocesos": 2,
++   "retrocesos": 3,
+    "seHizoCargo": true,
+-   "url": "/dashboard",
++   "url": "/afuera",
+  }
+
+K3b-nav08: la sección activa del menú y, antes del popstate, el tab por defecto
+  {
+    "prevenido": true,
+-   "retrocesos": 1,
+-   "toque": "none",
+-   "url": "/finances",
++   "retrocesos": 2,
++   "toque": "consume",
++   "url": "/dashboard",
+  }
+
+K3b-b1: Inicio en la barra y, antes del popstate, el tab por defecto
+  {
+    "navegaciones": [],
+-   "retrocesos": 2,
++   "retrocesos": 3,
+    "seHizoCargo": true,
+-   "toque": "none",
+-   "url": "/dashboard",
++   "toque": "consume",
++   "url": "/afuera",
+  }
+```
+
+En verde con el código de hoy: `K2-b` (`{ tiro: true, siguiente: 'consume', url: '/finances' }`: el menú no tiene
+guarda, así que un retroceso que tira no deja nada encendido), `NR-b1-control` (2 retrocesos, `/dashboard`),
+`NR-b1-reentrada` (dos fichas apiladas: 3 retrocesos, `/dashboard`, el segundo consumo sale del `popstate` del primero)
+y `NR-b1-triple` (Cobros con Más debajo: 3 retrocesos, `/dashboard`).
+
+Lo que dicen los números: el caso 2 reproduce (la guarda queda encendida con su oyente colgado y el toque siguiente
+da `none`). El caso 3 reproduce en los dos sentidos y por las dos puertas: por el menú, un retroceso de más saca al
+dueño de Finanzas a Inicio; por B1, el tercer retroceso sale del sitio (`/afuera`, la cicatriz 2).
+
+### El caso 1: K1 en Chrome por CDP (el cruce forzado)
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs K1-bfcache-cruce medicion-r2wr01 hipotesis
+```
+
+rc 0. Log: `/tmp/tmp.C8dNWivaMl/k1-medicion.txt` (copia en el scratchpad de la sesión).
+
+```
+NO-COINCIDE K1-bfcache-cruce · R2-WR-01 caso 1, movil 390x844: carga dura de /finances (A), carga dura de /finances?tab=ventas (B) con la marca de tab forzada, Turnos (el consumo cruza de B a A), adelante (B vuelve de la bfcache?) y Egresos
+      cruzo_de_documento: medido="si"
+      b_vuelve_de_la_cache: medido="no"   <-- la hipotesis decia "si"
+      tab_responde: medido="si"   <-- la hipotesis decia "no"
+      forzado: la sonda escribio history.replaceState({ frjView: 'tab' }) sobre /finances?tab=ventas (documento B, hidratado=si); leida de vuelta: frjView="tab" claves=[__NA, __PRIVATE_NEXTJS_INTERNALS_TREE, frjView]; justo antes del toque: frjView="tab"
+      pila antes del toque: [(afuera), /dashboard, /finances, /finances?tab=ventas] actual=3
+      bfcache: navegacion=consumo (B -> A) loader=76EAE3D213661626AF89AD12A50E6658 motivos=[Circumstantial/BroadcastChannelOnMessage]
+      bfcache: navegacion=adelante (A -> B) loader=771E1523E9CFE16F07253702EC471068 motivos=[Circumstantial/BroadcastChannelOnMessage]
+      tras el consumo: url=/finances marca de documento=null notRestoredReasons(A)={"src":null,"id":null,"url":"http://127.0.0.1:3031/finances","name":null,"reasons":[{"reason":"broadcastchannel-message"}],"children":[]}
+      tras adelante: url=/finances?tab=ventas documento=null pageshow propios de B=null marca="tab" pageshow persistido por el canal=no documento nuevo=si
+      notRestoredReasons (documento final): {"src":null,"id":null,"url":"http://127.0.0.1:3031/finances?tab=ventas","name":null,"reasons":[{"reason":"broadcastchannel-message"}],"children":[]}
+      cache-control del documento: no-cache, must-revalidate
+         DOCUMENTO-NUEVO doc=u3tzk6 ruta=/finances estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE"]}
+         pageshow doc=u3tzk6 persisted=false ruta=/finances
+         DOCUMENTO-NUEVO doc=vczplt ruta=/finances estado={"claves":["__NA","__PRIVATE_NEXTJS_INTERNALS_TREE","frjView"],"frjView":"tab"}
+         pageshow doc=vczplt persisted=false ruta=/finances?tab=ventas
+      tras Egresos (hidratado=si): 2 escrituras de historia
+         historia doc=vczplt replaceState en=/finances?tab=ventas urlArg=/finances?tab=egresos estado={"frjView":"tab"} pila: History.<computed> [as replaceState] < History.replaceState < applyPanelView < alElegirTab < TabsRoot.TabsRoot.useStableCallback[onValueChange] < trampoline < TabsList.TabsList.useStableCallback[onTabActivation]
+         historia doc=vczplt replaceState en=/finances?tab=egresos urlArg=/finances?tab=egresos estado={"frjView":"tab"} pila: History.<computed> [as replaceState] < History.replaceState < http://127.0.0.1:3031/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:14340:28 < Object.react_stack_bottom_frame < runWithFiberInDEV < commitHookEffectListMount < commitMutationEffectsOnFiber
+      url final: /finances?tab=egresos
+```
+
+`etiqueta=medicion-r2wr01 · recorridos: 1 · coinciden con la hipotesis: 0`
+
+El motivo, con números: el cruce SÍ se armó (el consumo aterrizó en un documento nuevo de `/finances`, doc `u3tzk6`),
+pero ninguno de los dos documentos entra a la bfcache: Chrome reporta `Circumstantial/BroadcastChannelOnMessage` en
+las dos navegaciones (y `notRestoredReasons` = `broadcastchannel-message` en A y en B). Al volver con «adelante», B es
+un DOCUMENTO NUEVO (doc `vczplt`, `pageshow persisted=false`, sin la marca de documento que la sonda le había dejado),
+con el state de la entrada restaurado (`frjView: "tab"`) pero con la memoria del módulo recién nacida: la guarda arranca
+apagada y Egresos responde (`replaceState` desde `applyPanelView`). El `cache-control` del documento es
+`no-cache, must-revalidate` (no es `no-store`). El que bloquea la bfcache es un mensaje de `BroadcastChannel` recibido
+mientras la página estaba oculta: no se miró qué lo manda (la sesión de Supabase sincroniza pestañas por ese canal, y
+eso vale también para producción, pero no se midió acá).
+
+veredictos (l): caso 1=no-reproduce · caso 2=reproduce · caso 3a=reproduce · caso 3b=reproduce
