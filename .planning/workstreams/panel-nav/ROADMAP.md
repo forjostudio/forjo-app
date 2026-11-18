@@ -719,7 +719,7 @@ se programa)
 - [x] `04-07-PLAN.md` — wave 7 · **G-04-7 y G-04-8**: el `from` del toque tomado de la URL real por un helper compartido,
   la guarda de consumo en vuelo, y el predicado único por presencia del OAuth con la limpieza que escribe aunque el tab no
   cambie; tests rojos primero y la sonda de la app sin regresión
-- [ ] `04-08-PLAN.md` — wave 8 · **El cierre de los gaps**: la no-regresión en una sola tanda, el push con confirmación
+- [x] `04-08-PLAN.md` — wave 8 · **El cierre de los gaps**: la no-regresión en una sola tanda, el push con confirmación
   del dueño y la re-UAT corta en producción (`04-UAT-GAPS.md`)
 
 ## Cobertura de requisitos
@@ -772,4 +772,4 @@ Las fases se ejecutan en orden numérico: 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 2. La barra inferior y Más | 4/4 | Complete    | 2026-10-09 |
 | 3. La política de atrás, de un nivel a dos | 17/17 | Complete    | 2026-11-16 |
-| 4. Los tabs profundos sobre la política ya fijada | 7/8 | In Progress | - |
+| 4. Los tabs profundos sobre la política ya fijada | 8/8 | In Progress | - |

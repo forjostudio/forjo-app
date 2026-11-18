@@ -21,7 +21,7 @@
   ],
   "next": {
     "command": "/gsd-execute-phase 4 --gaps-only --ws panel-nav",
-    "label": "Seguir el cierre de gaps de la fase 4 (Phase 4: cierre de gaps 7/8 (04-07 G-04-7/G-04-8 hecho, app 16/16); ejecutando 04-08)",
+    "label": "Seguir el cierre de gaps de la fase 4 (Phase 4: 8/8 planes (cierre de gaps completo, re-UAT 8/8 aprobada en produccion c3da6d0); en verificacion)",
     "reason": "verify-work diagnostico G-04-6/7/8; G-04-9 descartado medido; planes de cierre escritos"
   },
   "updated_at": "2026-11-17T10:24:05.049Z"
