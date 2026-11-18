@@ -1401,11 +1401,14 @@ function reclasificar(archivos) {
       const vp = t.viewport_despues ?? t.viewport_antes
       const origenVp = t.viewport_despues === null ? 'viewport de antes (el log no trae el de despues)' : 'viewport de despues'
       const r = clasificarToque({ y_antes: t.y_antes, min_durante: t.min_durante, primera_top_antes: t.primera_top_antes, primera_top_despues: t.primera_top_despues, alto_despues: t.alto_despues, viewport_despues: vp, escrituras: t.escrituras })
-      const parserMal = r.crudo !== t.llevo_log || (t.ninguna && t.escrituras > 0) || (!t.ninguna && t.escrituras === 0)
+      // un log de ANTES de esta correccion (sin el viewport de despues) imprimio el criterio crudo; uno de despues
+      // ya imprimio el clasificado: el auto-chequeo del parser compara contra lo que ese log imprimio
+      const logNuevo = t.viewport_despues !== null
+      const parserMal = (logNuevo ? r.llevo_al_inicio : r.crudo) !== t.llevo_log || (t.ninguna && t.escrituras > 0) || (!t.ninguna && t.escrituras === 0)
       if (parserMal) errores++
-      const cambia = r.llevo_al_inicio !== t.llevo_log
+      const cambia = !logNuevo && r.llevo_al_inicio !== t.llevo_log
       if (cambia) cambian++
-      console.log(`   ${t.rec} ${t.toque} (${t.tab}): y ${t.y_antes}->${t.y_despues} min=${t.min_durante} alto_despues=${t.alto_despues} ${origenVp}=${vp} escrituras=${t.escrituras} next=${t.next_log} · salto log=${t.llevo_log} crudo_recalculado=${r.crudo} nuevo=${r.llevo_al_inicio} recorte_por_alto=${r.recorte_por_alto}${cambia ? '  <-- CAMBIA' : ''}${parserMal ? '  <-- ERROR DEL PARSER' : ''}`)
+      console.log(`   ${t.rec} ${t.toque} (${t.tab}): y ${t.y_antes}->${t.y_despues} min=${t.min_durante} alto_despues=${t.alto_despues} ${origenVp}=${vp} escrituras=${t.escrituras} next=${t.next_log} · salto log=${t.llevo_log}${logNuevo ? ' (log ya clasificado)' : ''} crudo_recalculado=${r.crudo} nuevo=${r.llevo_al_inicio} recorte_por_alto=${r.recorte_por_alto}${cambia ? '  <-- CAMBIA' : ''}${parserMal ? '  <-- ERROR DEL PARSER' : ''}`)
     }
     console.log(`   toques: ${toques.length} · cambian de salto con el clasificador nuevo: ${cambian}${cambian === 0 ? ' (el veredicto del log no cambia)' : ''}`)
   }
