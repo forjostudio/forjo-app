@@ -531,13 +531,18 @@ describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
     }
   })
 
-  it('(e) negocio, settings y finances: Suspense de react alrededor del cliente, y ninguna lee searchParams', () => {
-    for (const [ruta, cliente] of [
-      ['app/(dashboard)/negocio/page.tsx', '<SettingsClient'],
-      ['app/(dashboard)/settings/page.tsx', '<SettingsClient'],
-      ['app/(dashboard)/finances/page.tsx', '<FinancesClient'],
+  it('(e) negocio, settings y finances: Suspense de react alrededor del cliente con un fallback CON NODO, y ninguna lee searchParams', () => {
+    // G-04-6 (plan 04-06): cada boundary tiene un nodo mientras suspende —un div vacío con la clase del
+    // contenedor raíz de SU cliente— para que el handler de scroll de Next consuma el scroll de la navegación
+    // blanda al montar; con el fallback nulo lo deja pendiente y el primer toque de un tab lo ejecuta.
+    for (const [ruta, cliente, contenedor] of [
+      ['app/(dashboard)/negocio/page.tsx', '<SettingsClient', 'space-y-6 max-w-3xl'],
+      ['app/(dashboard)/settings/page.tsx', '<SettingsClient', 'space-y-6 max-w-3xl'],
+      ['app/(dashboard)/finances/page.tsx', '<FinancesClient', 'space-y-6 max-w-5xl'],
     ] as const) {
       const pagina = sinComentarios(read(ruta))
+      expect(pagina, ruta).toContain(`<Suspense fallback={<div className="${contenedor}" aria-busy="true" />}>`)
+      expect(pagina, ruta).not.toContain('fallback={null}')
       expect(pagina.length).toBeGreaterThan(0)
       expect(/import\s*\{[^}]*\bSuspense\b[^}]*\}\s*from\s*'react'/.test(pagina)).toBe(true)
       const abre = pagina.indexOf('<Suspense')
