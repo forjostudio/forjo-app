@@ -1143,3 +1143,50 @@ de afuera a `>= 0`) no distingue ese recorte de un scroll de Next. El mismo `alt
 corridas (RED, verde de Finanzas y ésta) y en la corrida 2 del debug («además el alto bajó a 844 = viewport»);
 el `esperado_tras_el_fix` de `salto_toque1` se escribió sin descontarlo. Ningún esperado se tocó: la ejecución
 del plan 04-06 se detuvo acá para que se decida (regla del orquestador: un esperado que no coincide ⇒ parar).
+
+### La decisión del dueño y el control del instrumento corregido (antes de volver a medir)
+
+**La decisión** (2026-11-17, «A + control»): se corrige el INSTRUMENTO (P-1), no un esperado. En `3c25616`
+(`test(04-06): la sonda descuenta el recorte por alto en llevo_al_inicio (P-1)`), `llevo_al_inicio` sale de una
+función pura nueva, `clasificarToque`: un toque es `recorte_por_alto` —y entonces NO es salto— sólo si en ese toque
+no hubo NINGUNA escritura de scroll de la página (la lista entera que graba la sonda, no sólo las de Next) Y el
+máximo de scroll posible después del toque (`alto_despues - innerHeight`) es menor que `y_antes`. Con cualquier
+escritura, o si el máximo alcanzaba, manda el criterio crudo de la corrida 3. El recorte se imprime aparte
+(`recorte_por_alto: si`, informativo, no se juzga) y la línea `despues:` ahora trae su `viewport`. Ningún
+`esperado_tras_el_fix` ni `esperado_si_HA` cambió (el diff del commit no toca ninguna de esas líneas).
+
+**El control: que no haya quedado ciego.** Dos modos nuevos de la sonda, sin navegador (no pasan por el turno):
+
+```
+node .planning/debug/probes/g04-scroll-y-recarga.mjs --autotest
+node .planning/debug/probes/g04-scroll-y-recarga.mjs --reclasificar rojo-04-06.txt verde-finanzas-04-06.txt verde-04-06.txt
+```
+
+1. `--autotest`, el clasificador con los números medidos: **5/5** (rc 0).
+
+   | caso | entrada | salto | `recorte_por_alto` |
+   |---|---|---|---|
+   | RED de Negocio | 2 escrituras, 187 → 0, alto 1389 → 844, innerHeight 844 | `si` | `no` |
+   | verde de Negocio | 0 escrituras, 187 → 0, alto 1389 → 844, innerHeight 844 | `no` | `si` |
+   | sin escritura y sin recorte | 0 escrituras, 187 → 0, alto 1389 (máximo 545 ≥ 187) | `si` | `no` |
+   | RED de `F-blanda` | 2 escrituras, 1404 → 147, alto 2248 | `si` | `no` |
+   | `F-directa` (control) | 0 escrituras, 1404 → 1367, alto 2248 | `no` | `no` |
+
+2. `--reclasificar` sobre los tres logs guardados de las corridas de hoy (re-lee cada toque —`y_antes`, mínimo,
+   `primera_top`, alto de después, las líneas `ESCRITURA`— y le aplica el clasificador nuevo; el log viejo no traía
+   el `viewport` de después y se usa el de antes, declarado en cada línea; un auto-chequeo verifica que el criterio
+   crudo recalculado reproduce el `llevo_al_inicio` impreso en los 33 toques: cero errores del parser):
+   - **RED (`rojo-04-06`): 11 toques, 0 cambian.** Los cuatro `FALLA` siguen `FALLA`: `F-blanda`, `F-tarjeta` y
+     `F-sidebar` con salto `si` (1404 → 147, 1404 → 147, 830 → 115, dos escrituras cada uno) y **Negocio 187 → 0
+     con salto `si`** (tenía las dos escrituras de `handlePotentialScroll`: no es recorte). `F-directa` sigue `OK`
+     (sus dos toques sin salto). Como las claves `next_*` salen de la pila de las escrituras, que la corrección no
+     toca, el veredicto reclasificado es el mismo: 1/5.
+   - **verde de Finanzas (`verde-finanzas-04-06`): 11 toques, 0 cambian** (ahí Negocio, sin tocar, tenía las dos
+     escrituras: sigue `si`, sigue `FALLA`, 4/5).
+   - **verde de las tres páginas (`verde-04-06`): 11 toques, 1 cambia:** `N-negocio-borde-movil` toque 1 (Cobros),
+     0 escrituras, 187 → 0, alto 844 = viewport ⇒ salto `si` → `no`, `recorte_por_alto: si`. Es el único toque de
+     los 33 que la corrección mueve.
+
+Conclusión del control: el clasificador corregido sigue viendo los cuatro saltos del RED —incluido el de Negocio
+187 → 0, que es numéricamente idéntico al recorte pero tenía escritura de Next— y sólo deja de contar el toque sin
+ninguna escritura cuyo máximo de scroll se achicó por debajo de `y_antes`. Recién con esto se vuelve a medir.
