@@ -40,6 +40,9 @@
 //   primera que abre el boundary y NO es un comentario: el comentario de una pagina puede nombrar el boundary
 //   y lo que importa es el codigo, no la prosa.
 //
+//   Sin navegador (no hace falta el turno): `--autotest` juzga el clasificador del toque con los numeros medidos, y
+//   `--reclasificar <log>...` aplica el clasificador actual a los toques de un log guardado (ver `clasificarToque`).
+//
 // MODO tras-el-fix (plan 04-06, G-04-6): juzga cada recorrido contra su `esperado_tras_el_fix`, escrito y
 // commiteado ANTES de la primera corrida que lo juzga (la de las paginas sin tocar, que tiene que dar rojo). Lo que
 // afirma: en los cinco recorridos de G-04-6 ningun toque de tab lleva la pagina al inicio (`salto_toque*: no`) ni
@@ -678,6 +681,27 @@ async function estadoDelScroll(cdp, texto) {
 }
 
 /**
+ * EL CLASIFICADOR del toque, PURO (sin navegador): lo usan `tocarTabMedido`, `--autotest` y `--reclasificar`.
+ *
+ * `llevo_al_inicio` crudo es el criterio de la corrida 3: el borde de la pagina pasa de afuera (< -20) a >= -2, o
+ * `scrollY` arranca > 50 y toca <= 5. ⚠ PLAN 04-06, P-1 DECIDIDO POR EL DUENO («A + control», 2026-11-17): en
+ * `N-negocio-borde-movil`, con el arreglo, el primer toque ya no tenia NINGUNA escritura de scroll y aun asi daba
+ * `si`: al mostrar Cobros (sin cuenta de MP en local) el documento bajo de 1389 a 844 px (= viewport) y el navegador
+ * RECORTO `scrollY` de 187 a 0 sin que nadie escribiera. Eso no es un scroll de Next ni de nadie: es el maximo de
+ * scroll que se achico. Regla: es `recorte_por_alto` SOLO si en ese toque no hubo NINGUNA escritura de scroll de la
+ * pagina (la lista entera que graba la sonda, no solo las de Next) Y el maximo de scroll posible despues del toque
+ * (`alto_despues - viewport_despues`) es menor que `y_antes`. En ese caso `llevo_al_inicio` es `no` y el recorte se
+ * imprime aparte como dato informativo (no se juzga). Con cualquier escritura, o si el maximo alcanzaba, manda el
+ * criterio crudo. Ningun esperado cambia (ni `esperado_tras_el_fix` ni `esperado_si_HA`).
+ */
+function clasificarToque({ y_antes, min_durante, primera_top_antes, primera_top_despues, alto_despues, viewport_despues, escrituras }) {
+  const borde = primera_top_antes !== null && primera_top_despues !== null && primera_top_antes < -20 && primera_top_despues >= -2
+  const crudo = borde || (y_antes > 50 && min_durante <= 5)
+  const recorte = escrituras === 0 && alto_despues - viewport_despues < y_antes
+  return { llevo_al_inicio: crudo && !recorte ? 'si' : 'no', recorte_por_alto: recorte ? 'si' : 'no', crudo: crudo ? 'si' : 'no' }
+}
+
+/**
  * EL TOQUE MEDIDO de un tab: posicion (`centro` o `borde`) → foto de antes → click REAL en el centro del
  * tab convertido al viewport VISUAL (afirmado con `elementFromPoint`) → espera a que quede seleccionado →
  * 1,5 s muestreando `scrollY` cada 100 ms → foto de despues → las escrituras de scroll desde la marca.
@@ -711,10 +735,16 @@ async function tocarTabMedido(cdp, texto, { modo = 'centro' } = {}) {
   // (header y banners) y Next hace `scrollTop=0` + `scrollIntoView()` del div con `scroll-behavior: smooth`, asi que
   // termina con el div pegado arriba. `llevo_al_inicio` mide ESO (el borde de la pagina pasa de afuera a >= 0) y
   // `escritura_de_next` dice si la escritura salio del handler de scroll de Next. Ningun esperado cambia.
-  const llevo = antes.primera_top !== null && despues.primera_top !== null && antes.primera_top < -20 && despues.primera_top >= -2
+  // ⚠ PLAN 04-06 (P-1, decidido por el dueno): el criterio de arriba ahora lo aplica `clasificarToque`, que descuenta
+  // el RECORTE del navegador cuando el documento se achica (ver su comentario). Ningun esperado cambia.
+  const cls = clasificarToque({
+    y_antes: antes.y, min_durante: minimo, primera_top_antes: antes.primera_top, primera_top_despues: despues.primera_top,
+    alto_despues: despues.alto, viewport_despues: despues.viewport, escrituras: escrituras.length,
+  })
   const deNext = escrituras.some((e) => e.pila.includes('handlePotentialScroll'))
   return {
-    llevo_al_inicio: llevo || (antes.y > 50 && minimo <= 5) ? 'si' : 'no',
+    llevo_al_inicio: cls.llevo_al_inicio,
+    recorte_por_alto: cls.recorte_por_alto,
     escritura_de_next: deNext ? 'si' : 'no',
     tab: texto,
     modo,
@@ -735,7 +765,8 @@ async function tocarTabMedido(cdp, texto, { modo = 'centro' } = {}) {
 function imprimirToque(p, nombre, m) {
   console.log(`${p}${nombre}: tab=${m.tab} modo=${m.modo} y_antes=${m.antes.y} y_despues=${m.despues.y} min_durante=${m.min_y_durante} delta=${m.delta} llevo_al_inicio=${m.llevo_al_inicio} escritura_de_next=${m.escritura_de_next} (criterio viejo salto_al_inicio=${m.salto_al_inicio}) se_movio=${m.se_movio} seleccionado=${m.seleccionado} (${m.ms_hasta_seleccionado} ms)`)
   console.log(`${p}   antes: alto=${m.antes.alto} viewport=${m.antes.viewport} tab_top=${m.antes.tab_top} primera_top=${m.antes.primera_top} primera=${m.antes.primera} vv=${JSON.stringify(m.antes.vv)} ruta=${m.antes.ruta}`)
-  console.log(`${p}   despues: alto=${m.despues.alto} tab_top=${m.despues.tab_top} primera_top=${m.despues.primera_top} ruta=${m.despues.ruta}`)
+  console.log(`${p}   despues: alto=${m.despues.alto} viewport=${m.despues.viewport} tab_top=${m.despues.tab_top} primera_top=${m.despues.primera_top} ruta=${m.despues.ruta}`)
+  if (m.recorte_por_alto === 'si') console.log(`${p}   recorte_por_alto: si (informativo, no se juzga: sin escrituras de scroll en el toque y el maximo de scroll despues, ${m.despues.alto - m.despues.viewport}, es menor que y_antes=${m.antes.y}; el navegador recorto scrollY)`)
   console.log(`${p}   posicion pedida: ${JSON.stringify(m.posicion)}`)
   console.log(`${p}   cambios de scrollY del documento: [${m.scrolls.join(', ')}]`)
   if (m.escrituras.length === 0) console.log(`${p}   escrituras de scroll de la pagina: ninguna`)
@@ -1302,4 +1333,85 @@ async function main() {
   }
 }
 
-await main()
+// ── El control del clasificador, SIN navegador (plan 04-06, P-1) ────────────────────────────────
+// Que el instrumento corregido no quedo ciego. `--autotest` juzga `clasificarToque` con los numeros medidos;
+// `--reclasificar <log>...` re-lee el log de una corrida (las lineas de cada toque y sus escrituras) y aplica el
+// clasificador nuevo: si ningun toque cambia de `llevo_al_inicio`, el veredicto de esa corrida es el mismo (las
+// claves `next_*` salen de la pila de las escrituras, que esta correccion no toca). No levantan servidor ni Chrome.
+
+function autotest() {
+  const casos = [
+    // el RED de Negocio (rojo-04-06): dos escrituras de Next, 187 -> 0, el alto 1389 -> 844
+    { nombre: 'RED de Negocio: escritura presente, 187->0, alto 1389->844', e: { y_antes: 187, min_durante: 0, primera_top_antes: -40, primera_top_despues: 147, alto_despues: 844, viewport_despues: 844, escrituras: 2 }, salto: 'si', recorte: 'no' },
+    // el verde de Negocio (verde-04-06): cero escrituras, mismos numeros
+    { nombre: 'verde de Negocio: sin escritura, 187->0, alto 1389->844, innerHeight 844', e: { y_antes: 187, min_durante: 0, primera_top_antes: -40, primera_top_despues: 147, alto_despues: 844, viewport_despues: 844, escrituras: 0 }, salto: 'no', recorte: 'si' },
+    // sin escritura y SIN recorte: el maximo (1389 - 844 = 545) alcanza para 187 y aun asi scrollY baja a 0
+    { nombre: 'sin escritura sin recorte: max 545 >= 187, scrollY 187->0', e: { y_antes: 187, min_durante: 0, primera_top_antes: -40, primera_top_despues: 147, alto_despues: 1389, viewport_despues: 844, escrituras: 0 }, salto: 'si', recorte: 'no' },
+    // el RED de F-blanda-mas-movil: 1404 -> 147, borde -1257 -> 0, dos escrituras de Next
+    { nombre: 'RED de F-blanda: escritura presente, 1404->147, alto 2248', e: { y_antes: 1404, min_durante: 147, primera_top_antes: -1257, primera_top_despues: 0, alto_despues: 2248, viewport_despues: 844, escrituras: 2 }, salto: 'si', recorte: 'no' },
+    // F-directa-movil (control): 1404 -> 1367 por el viewport emulado, sin escrituras
+    { nombre: 'F-directa: sin escritura, 1404->1367, alto 2248', e: { y_antes: 1404, min_durante: 1367, primera_top_antes: -1257, primera_top_despues: -1220, alto_despues: 2248, viewport_despues: 844, escrituras: 0 }, salto: 'no', recorte: 'no' },
+  ]
+  let bien = 0
+  for (const c of casos) {
+    const r = clasificarToque(c.e)
+    const ok = r.llevo_al_inicio === c.salto && r.recorte_por_alto === c.recorte
+    if (ok) bien++
+    console.log(`${ok ? 'OK ' : 'FALLA'} autotest · ${c.nombre} => salto=${r.llevo_al_inicio} recorte_por_alto=${r.recorte_por_alto} (esperado salto=${c.salto} recorte_por_alto=${c.recorte})`)
+  }
+  console.log(`autotest del clasificador: ${bien}/${casos.length}`)
+  if (bien < casos.length) process.exitCode = 1
+}
+
+function reclasificar(archivos) {
+  if (archivos.length === 0) { console.error('uso: --reclasificar <log> [<log> ...]'); process.exitCode = 1; return }
+  const RE_REC = /^(?:OK {2}|FALLA |COINCIDE-CON-LA-HIPOTESIS |NO-COINCIDE )(\S+) /
+  const RE_TOQUE = /^\s*(toque \d+).*?: tab=(\S+) modo=\S+ y_antes=(-?\d+) y_despues=(-?\d+) min_durante=(-?\d+) .*?llevo_al_inicio=(si|no) escritura_de_next=(si|no)/
+  const RE_ANTES = /^\s*antes: alto=(\d+) viewport=(\d+) tab_top=\S+ primera_top=(-?\d+|null) /
+  const RE_DESPUES = /^\s*despues: alto=(\d+)(?: viewport=(\d+))? tab_top=\S+ primera_top=(-?\d+|null) /
+  const num = (s) => (s === 'null' ? null : Number(s))
+  let errores = 0
+  for (const archivo of archivos) {
+    const lineas = readFileSync(archivo, 'utf8').split(/\r?\n/)
+    const veredicto = lineas.find((l) => /^etiqueta=.* · recorridos: /.test(l)) ?? '(sin veredicto)'
+    console.log(`── ${archivo}`)
+    console.log(`   veredicto del log: ${veredicto}`)
+    const toques = []
+    let rec = '(?)'
+    let actual = null
+    const cerrar = () => { if (actual) toques.push(actual); actual = null }
+    for (const l of lineas) {
+      const mr = RE_REC.exec(l)
+      if (mr) { cerrar(); rec = mr[1]; continue }
+      const mt = RE_TOQUE.exec(l)
+      if (mt) { cerrar(); actual = { rec, toque: mt[1], tab: mt[2], y_antes: num(mt[3]), y_despues: num(mt[4]), min_durante: num(mt[5]), llevo_log: mt[6], next_log: mt[7], escrituras: 0, ninguna: false }; continue }
+      if (!actual) continue
+      const ma = RE_ANTES.exec(l)
+      if (ma) { actual.alto_antes = num(ma[1]); actual.viewport_antes = num(ma[2]); actual.primera_top_antes = num(ma[3]); continue }
+      const md = RE_DESPUES.exec(l)
+      if (md) { actual.alto_despues = num(md[1]); actual.viewport_despues = md[2] === undefined ? null : num(md[2]); actual.primera_top_despues = num(md[3]); continue }
+      if (/^\s*ESCRITURA t=/.test(l)) actual.escrituras++
+      if (/escrituras de scroll de la pagina: ninguna/.test(l)) actual.ninguna = true
+      if (/^── veredicto/.test(l)) cerrar()
+    }
+    cerrar()
+    let cambian = 0
+    for (const t of toques) {
+      // el log viejo no imprimia el viewport de DESPUES: se usa el de ANTES y se declara
+      const vp = t.viewport_despues ?? t.viewport_antes
+      const origenVp = t.viewport_despues === null ? 'viewport de antes (el log no trae el de despues)' : 'viewport de despues'
+      const r = clasificarToque({ y_antes: t.y_antes, min_durante: t.min_durante, primera_top_antes: t.primera_top_antes, primera_top_despues: t.primera_top_despues, alto_despues: t.alto_despues, viewport_despues: vp, escrituras: t.escrituras })
+      const parserMal = r.crudo !== t.llevo_log || (t.ninguna && t.escrituras > 0) || (!t.ninguna && t.escrituras === 0)
+      if (parserMal) errores++
+      const cambia = r.llevo_al_inicio !== t.llevo_log
+      if (cambia) cambian++
+      console.log(`   ${t.rec} ${t.toque} (${t.tab}): y ${t.y_antes}->${t.y_despues} min=${t.min_durante} alto_despues=${t.alto_despues} ${origenVp}=${vp} escrituras=${t.escrituras} next=${t.next_log} · salto log=${t.llevo_log} crudo_recalculado=${r.crudo} nuevo=${r.llevo_al_inicio} recorte_por_alto=${r.recorte_por_alto}${cambia ? '  <-- CAMBIA' : ''}${parserMal ? '  <-- ERROR DEL PARSER' : ''}`)
+    }
+    console.log(`   toques: ${toques.length} · cambian de salto con el clasificador nuevo: ${cambian}${cambian === 0 ? ' (el veredicto del log no cambia)' : ''}`)
+  }
+  if (errores > 0) { console.log(`ERROR-DEL-INSTRUMENTO: el parser no reprodujo el criterio crudo en ${errores} toque(s)`); process.exitCode = 1 }
+}
+
+if (process.argv[2] === '--autotest') autotest()
+else if (process.argv[2] === '--reclasificar') reclasificar(process.argv.slice(3))
+else await main()
