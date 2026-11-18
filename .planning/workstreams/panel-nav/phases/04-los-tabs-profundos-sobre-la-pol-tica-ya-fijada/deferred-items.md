@@ -38,3 +38,41 @@
   `sinComentariosFirme` y un caso de honestidad; los dos consumidores viejos no se tocaron.
   **Por qué no se tocó:** son suites de planes anteriores y hoy pasan con regiones no vacías; revisar si alguna
   aserción NEGATIVA suya cae sobre un tramo comido es un quick de tests, no de esta fase.
+
+- `/clients` tiene el mismo boundary sin nodo desde v0.30, sin medir
+  status: open
+  **Qué:** `app/(dashboard)/clients/page.tsx` envuelve a `ClientsClient` en el mismo `<Suspense>` con fallback nulo
+  que el plan 04-06 cambió en Finanzas, Negocio y Configuración, y su comentario repite la misma frase falsa (que el
+  fallback no se dibuja nunca). Si el mecanismo de G-04-6 aplica, el cambio de estado del router que dispararía el
+  scroll pendiente de una entrada blanda es abrir una ficha (un empuje de `?c=`) con el borde de arriba de la lista
+  fuera de la pantalla.
+  **Dónde se midió:** NO se midió. El patrón se leyó en el plan 04-06 (`.planning/debug/finanzas-primer-toque-scroll.md`,
+  `blind_spots`); medirlo exige un recorrido nuevo de `g04-scroll-y-recarga.mjs` con la lista scrolleada.
+  **Por qué no se tocó:** no se cambia sin medir (decisión del dueño, opción B, 2026-11-17); `app/(dashboard)/clients/**`
+  está en la lista de intocables del cierre de gaps. Candidato a un quick: el recorrido primero, el mismo fallback
+  con nodo (`space-y-…` del contenedor raíz de `ClientsClient`) después.
+
+- IN-02: `router.refresh()` en `/negocio?tab=integraciones` puede llevar la página arriba
+  status: open
+  **Qué:** después de un toque de tab (un pushState que deja el árbol del router en `__PAGE__`), un `router.refresh()`
+  en Integraciones —el de desconectar una cuenta— crea un `scrollRef` NUEVO por la clave de la página
+  (`__PAGE__` contra `__PAGE__?{"tab":"integraciones"}`) y, con el borde de arriba fuera, el handler de scroll de Next
+  escribe `scrollTop=0` + `scrollIntoView()`. Es un mecanismo distinto del de G-04-6: el fallback con nodo NO lo cubre.
+  **Dónde se midió:** emulado con `window.next.router.refresh()` en la corrida 5 del debug
+  (`.planning/debug/finanzas-primer-toque-scroll.md`, `related_finding_IN02`; recorrido `IN02-refresh-corto`,
+  390x480: y 187 → 147). A 390x844 Integraciones no desborda y no se ve. El botón real de desconectar no se tocó
+  (no hay cuenta conectada en local).
+  **Por qué no se tocó:** decisión aparte (aceptarlo, o preservar el `scrollY` alrededor del refresh), y el arreglo
+  vive en `settings-client.tsx`, prohibido en el plan 04-06.
+
+- `html { scroll-behavior: smooth }` sin `data-scroll-behavior`
+  status: open
+  **Qué:** `app/globals.css` pone `scroll-behavior: smooth` en `<html>` (con `prefers-reduced-motion: no-preference`)
+  y el `<html>` de `app/layout.tsx` no lleva `data-scroll-behavior="smooth"`. Next 16 ya no apaga el scroll suave
+  durante sus transiciones si ese atributo no está (`node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`
+  L972-995); el log de `next dev` lo avisa en cada corrida de la sonda («Detected scroll-behavior: smooth…»).
+  **Dónde se midió:** corridas 2 y 5 del debug (el salto de G-04-6 era animado y aterrizaba en el div de la página,
+  147/115 px, en vez de y=0) y corrida 6 (sin el scroll pendiente no hay salto ninguno).
+  **Por qué no se tocó:** da la FORMA animada del salto, no su causa; con el boundary con nodo (plan 04-06) el salto
+  ya no ocurre. Tocar `app/layout.tsx`/`app/globals.css` cambia cómo se ven TODAS las navegaciones del panel y de la
+  página pública: candidato a un quick que lo mida antes.

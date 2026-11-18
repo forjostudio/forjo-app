@@ -1109,3 +1109,37 @@ misma corrida y sin tocar, sigue escribiendo. Ningún `esperado_tras_el_fix` se 
 
 rojo (h): etiqueta=rojo-04-06 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 1
 verde finanzas (h): etiqueta=verde-finanzas-04-06 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 4
+
+### La corrida de las tres páginas (task 2) — 4/5: Negocio ya no escribe, pero el esperado `salto_toque1` no se cumple
+
+Con `7a193a4` (las tres páginas con el boundary con nodo; huellas finances `0368712e61af3350`, negocio
+`6380cdbcc48bc6cb`, settings `c3801bf0e8d32675`), 2026-11-17 23:24 → 23:27 hora de Argentina, mismo entorno
+(servidor propio en el 3031 con `/login 200` al primer intento, turno libre, `Chrome/157.0.8103.52`, node `v24.15.0`):
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs F-blanda-mas-movil,F-directa-movil,F-tarjeta-movil,F-sidebar-escritorio,N-negocio-borde-movil verde-04-06 tras-el-fix
+```
+
+Veredicto impreso: `etiqueta=verde-04-06 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 4`
+(rc 1). Los cuatro `F-*` en `OK`. `N-negocio-borde-movil` en `FALLA` por UNA clave:
+
+```
+FALLA N-negocio-borde-movil
+      salto_toque1: medido="si"  <-- NO COINCIDE   (esperado="no")
+      next_toque1: medido="no"
+      next_toque2: medido="no"
+      toque 1 (Cobros, borde fuera): y_antes=187 y_despues=0 llevo_al_inicio=si escritura_de_next=no
+         antes: alto=1389 viewport=844 primera_top=-40 ruta=/negocio
+         despues: alto=844 primera_top=147 ruta=/negocio?tab=cobros
+         escrituras de scroll de la pagina: ninguna
+```
+
+Lo que dice el número: el arreglo SÍ cerró el mecanismo en Negocio —el contenedor pasa de `hijos=0` (RED) a
+`hijos=1 visibles=0` en la entrada, y el primer toque ya no tiene NINGUNA escritura de scroll (en el RED tenía
+`scrollTop=0` + `scrollIntoView()` desde `handlePotentialScroll`)—, pero el documento pasa de 1389 a 844 px al
+mostrar Cobros (en local, sin cuenta de MercadoPago conectada, Cobros cabe en la pantalla: el máximo de scroll
+queda en 0) y el navegador RECORTA el `scrollY` de 187 a 0. El clasificador `llevo_al_inicio` (borde de la página
+de afuera a `>= 0`) no distingue ese recorte de un scroll de Next. El mismo `alto=1389 → 844` estaba en las tres
+corridas (RED, verde de Finanzas y ésta) y en la corrida 2 del debug («además el alto bajó a 844 = viewport»);
+el `esperado_tras_el_fix` de `salto_toque1` se escribió sin descontarlo. Ningún esperado se tocó: la ejecución
+del plan 04-06 se detuvo acá para que se decida (regla del orquestador: un esperado que no coincide ⇒ parar).
