@@ -64,10 +64,21 @@
 // 2026-11-18: cada panel de los tabs de Finanzas con el alto de la pantalla como minimo). La sonda imprime ademas la
 // linea `finances-client.tsx huella=... paneles con alto minimo: N` para que el log diga que variante se midio.
 //
+// MODO R2-WR-01 (quick 261118-kat): el recorrido `K1-bfcache-cruce` mide si la guarda de consumo en vuelo de
+// `applyPanelView` queda ENCENDIDA cuando el retroceso del consumo cruza a otro documento y la pagina vuelve despues
+// de la bfcache con «adelante» (llega `pageshow` con `persisted`, no `popstate`): si queda, ningun tab responde. El
+// cruce se FUERZA: una carga dura de `/finances?tab=ventas` encima de una carga dura de `/finances` (dos documentos)
+// y la marca de tab escrita por la sonda sobre la entrada de arriba, porque WR-04 (`.planning/debug/b1-tras-recarga.md`)
+// midio que en Chrome 157 una recarga NO deja la entrada de abajo en otro documento. Su `esperado_si_HA` es el
+// DEFECTO (el tab no responde despues de volver de la cache) y su `esperado_tras_el_fix` exige el mismo cruce y la
+// misma vuelta con el tab respondiendo. Un `NO-COINCIDE` en modo `hipotesis` es un VEREDICTO (el caso no reproduce,
+// con su motivo: no cruzo, no volvio de la cache o volvio y el tab respondio), no un error del instrumento.
+//
 // QUE NO CIERRA: Chrome de Android y Safari de iOS (esto es Chrome de escritorio headless con emulacion
 // movil), y el build de PRODUCCION (las variables publicas se incrustan en el build y el Supabase local
 // vive solo en el entorno de desarrollo: un build de produccion moveria dos variables a la vez).
 // Para obs-G1: el telefono real (la UAT del dueno va con R2-WR-01, despues del push conjunto).
+// Para R2-WR-01 (K1): Safari de iOS, Android real, la pestana descartada y restaurada por el sistema, y el build de produccion.
 
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, createWriteStream } from 'node:fs'
@@ -537,6 +548,33 @@ async function tocarTab(cdp, texto) {
   }
   await dormir(500)
   return { ubicacion: await ubicacion(cdp) }
+}
+
+/**
+ * UN SOLO toque en el tab (quick 261118-kat, K1): la misma busqueda que `tocarTab` (posicion quieta en dos lecturas,
+ * viewport VISUAL, `adentro` afirmado con `elementFromPoint`) y un unico `clickEnPunto`, sin reintentos y sin esperar a
+ * que se seleccione: un tab muerto se mide con un toque, no con tres (los reintentos de `tocarTab` esconderian justo
+ * el defecto). Si el tab no aparece, es un P-1 del instrumento.
+ */
+async function tocarTabUnaVez(cdp, texto) {
+  const centrar = `(() => { const t = ${exprTab(texto)}; if (!t) return false; t.scrollIntoView({ block: 'center' }); return true })()`
+  const buscar = `(() => { const t = ${exprTab(texto)}; if (!t) return null; const b = t.getBoundingClientRect(); const cx = b.x + b.width / 2, cy = b.y + b.height / 2; const el = document.elementFromPoint(cx, cy); const vv = globalThis.visualViewport; const escala = vv ? vv.scale : 1; return { x: vv ? (cx - vv.offsetLeft) * escala : cx, y: vv ? (cy - vv.offsetTop) * escala : cy, adentro: Boolean(el && t.contains(el)) } })()`
+  let punto = null
+  let previo = null
+  let iguales = 0
+  const tope = Date.now() + 10_000
+  while (Date.now() < tope && !(await evaluar(cdp, centrar).catch(() => false))) await dormir(200)
+  while (Date.now() < tope) {
+    const p = await evaluar(cdp, buscar).catch(() => null)
+    if (p && p.adentro && previo && Math.abs(p.x - previo.x) < 1 && Math.abs(p.y - previo.y) < 1) iguales++
+    else iguales = 0
+    if (p && !p.adentro) await evaluar(cdp, centrar).catch(() => false)
+    previo = p
+    if (iguales >= 2) { punto = p; break }
+    await dormir(250)
+  }
+  if (!punto) throw new Error(`P-1: no hay un tab visible y quieto que empiece con ${texto} (ultima lectura: ${JSON.stringify(previo)})`)
+  await clickEnPunto(cdp, punto)
 }
 
 function sinIdDeFicha(u) { return u.replace(/([?&]c=)[^&#]*/, '$1*') }
@@ -1307,6 +1345,144 @@ RECORRIDOS.push(
   g1Recorrido({ id: 'G1-egresos-movil', entrada: 'tarjeta', primero: 'Egresos', segundo: 'Ventas', titulo: 'obs-G1 movil 390x844: Inicio -> tarjeta «Ingresos del mes» -> Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Egresos (desde Turnos) -> Ventas' }),
   g1Recorrido({ id: 'G1-ventas-escritorio', entrada: 'sidebar', primero: 'Ventas', segundo: 'Egresos', titulo: 'obs-G1 escritorio 1280x800: Inicio -> sidebar Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos' }),
 )
+RECORRIDOS.push(k1BfcacheCruce())
+
+// ── R2-WR-01, caso 1 (quick 261118-kat): la guarda de consumo en vuelo y la vuelta desde la bfcache ──────────────
+// Ver la cabecera (MODO R2-WR-01). El recorrido arma a mano lo que WR-04 midio que la recarga no arma en Chrome 157:
+// una entrada de tab NUESTRA con otro documento debajo. El consumo (Turnos) enciende la guarda en el documento B y su
+// retroceso cruza al documento A, asi que el `popstate` que la apagaria nunca llega a B. Si B entra a la bfcache y
+// vuelve con «adelante», vuelve con la guarda ENCENDIDA y el toque siguiente (Egresos) no escribe nada.
+
+/** Espera a que React haya enganchado el tab (hidratado), con tope. */
+async function esperarTabEnganchado(cdp, texto, tope = 30_000) {
+  const expr = `(() => { const t = ${exprTab(texto)}; return Boolean(t && Object.keys(t).some((k) => k.startsWith('__reactProps'))) })()`
+  const fin = Date.now() + tope
+  while (Date.now() < fin) {
+    if (await evaluar(cdp, expr).catch(() => false)) return true
+    await dormir(200)
+  }
+  return false
+}
+
+/** Espera hasta `tope` ms a que `location.pathname + location.search` cumpla `pred`; devuelve la ultima lectura. */
+async function esperarUbicacion(cdp, pred, tope) {
+  const fin = Date.now() + tope
+  let u = await ubicacion(cdp).catch(() => '(navegando)')
+  while (Date.now() < fin && !pred(u)) {
+    await dormir(200)
+    u = await ubicacion(cdp).catch(() => '(navegando)')
+  }
+  return u
+}
+
+function k1BfcacheCruce() {
+  return {
+    id: 'K1-bfcache-cruce',
+    titulo: 'R2-WR-01 caso 1, movil 390x844: carga dura de /finances (A), carga dura de /finances?tab=ventas (B) con la marca de tab forzada, Turnos (el consumo cruza de B a A), adelante (B vuelve de la bfcache?) y Egresos',
+    async correr(cdp) {
+      await celular(cdp)
+      await entrarDirecto(cdp)
+      // 1. El documento A.
+      await navegar(cdp, ORIGEN + '/finances')
+      await esperarTabQuieto(cdp, 'Turnos', { condicion: COND_FINANZAS })
+      // 2. El documento B: una entrada nueva, con A debajo. Se espera a que React lo hidrate antes de forzar la marca,
+      //    para que la escritura inicial del router de Next no la pise despues.
+      await navegar(cdp, ORIGEN + '/finances?tab=ventas')
+      await esperarTabQuieto(cdp, 'Ventas', { condicion: COND_FINANZAS })
+      const hidratadoB = await esperarTabEnganchado(cdp, 'Turnos')
+      await dormir(1500)
+      // 3. La marca forzada, con el metodo PARCHEADO de la pagina (conserva los internos de Next), y leida de vuelta.
+      //    Ademas una marca de documento y un registro de `pageshow` propios de B: si B vuelve de la cache, siguen ahi.
+      const forzado = await evaluar(cdp, `(() => {
+        history.replaceState({ frjView: 'tab' }, '')
+        globalThis.__k1Doc = 'B'
+        globalThis.__k1Shows = []
+        addEventListener('pageshow', (e) => globalThis.__k1Shows.push(e.persisted))
+        const s = history.state
+        return { url: location.pathname + location.search, frjView: s && typeof s === 'object' ? (s.frjView ?? null) : null, claves: s && typeof s === 'object' ? Object.keys(s).sort() : [] }
+      })()`)
+      await dormir(800)
+      const marcaAntesDelToque = await evaluar(cdp, `(() => { const s = history.state; return s && typeof s === 'object' ? (s.frjView ?? null) : null })()`)
+      const pilaAntes = await pilaConQuery(cdp)
+      // 4. El consumo. Los eventos de la bfcache se juntan solo durante este recorrido.
+      const eventosCache = []
+      let etapa = 'consumo (B -> A)'
+      let escuchando = true
+      cdp.en('Page.backForwardCacheNotUsed', (p) => { if (escuchando) eventosCache.push({ etapa, ...p }) })
+      const d1 = registros.length
+      await tocarTabUnaVez(cdp, 'Turnos')
+      const trasElConsumo = await esperarUbicacion(cdp, (u) => u === '/finances', 30_000)
+      await asentarUbicacion(cdp, { quieto: 2000 })
+      await dormir(800)
+      const docTrasElConsumo = await evaluar(cdp, 'globalThis.__k1Doc ?? null').catch(() => '?')
+      const nrrA = await evaluar(cdp, `JSON.stringify(performance.getEntriesByType('navigation')[0]?.notRestoredReasons ?? null)`).catch((e) => `? ${e.message}`)
+      const regsConsumo = registros.slice(d1)
+      const cruzo = regsConsumo.some((r) => (r.tipo === 'sonda-documento-nuevo' && r.ruta === '/finances') || (r.tipo === 'sonda-pageshow' && r.persisted === true && r.ruta === '/finances'))
+      // 5. «Adelante» del navegador, a la entrada siguiente (B).
+      etapa = 'adelante (A -> B)'
+      const h = await cdp.enviar('Page.getNavigationHistory')
+      const siguiente = h.entries[h.currentIndex + 1]
+      if (!siguiente) throw new Error(`P-1: no hay entrada adelante para volver a B (pila: ${JSON.stringify((await pilaConQuery(cdp)).entradas)})`)
+      const d2 = registros.length
+      await cdp.enviar('Page.navigateToHistoryEntry', { entryId: siguiente.id })
+      const trasAdelante = await esperarUbicacion(cdp, (u) => u.includes('tab=ventas'), 30_000)
+      await dormir(1500)
+      const regsAdelante = registros.slice(d2)
+      const enB = await evaluar(cdp, `({ doc: globalThis.__k1Doc ?? null, shows: Array.isArray(globalThis.__k1Shows) ? globalThis.__k1Shows : null, marca: (history.state && typeof history.state === 'object') ? (history.state.frjView ?? null) : null })`).catch(() => ({ doc: '?', shows: null, marca: '?' }))
+      const docNuevoB = regsAdelante.some((r) => r.tipo === 'sonda-documento-nuevo')
+      const pageshowDelCanal = regsAdelante.some((r) => r.tipo === 'sonda-pageshow' && r.persisted === true)
+      // La señal es la del canal (`sonda-pageshow` con `persisted`). La marca de documento y el registro propio de B son
+      // la corroboracion por si el enlace de la sonda no sobreviviera a la restauracion: los dos juntos son el MISMO
+      // documento B recibiendo un `pageshow` persistido.
+      const pageshowDeB = enB.doc === 'B' && Array.isArray(enB.shows) && enB.shows.includes(true)
+      const vuelve = (pageshowDelCanal || pageshowDeB) && !docNuevoB
+      // 6. El toque siguiente: un solo toque en Egresos y hasta 5 s de espera.
+      etapa = 'egresos'
+      await esperarTabQuieto(cdp, 'Egresos', { condicion: COND_FINANZAS, tope: 60_000 })
+      const hidratadoFinal = await esperarTabEnganchado(cdp, 'Egresos')
+      const d3 = registros.length
+      await tocarTabUnaVez(cdp, 'Egresos')
+      const trasEgresos = await esperarUbicacion(cdp, (u) => u.includes('tab=egresos'), 5_000)
+      const responde = trasEgresos.includes('tab=egresos')
+      escuchando = false
+      await dormir(500)
+      const regsEgresos = registros.slice(d3)
+      const nrrFinal = await evaluar(cdp, `JSON.stringify(performance.getEntriesByType('navigation')[0]?.notRestoredReasons ?? null)`).catch((e) => `? ${e.message}`)
+      const cacheControl = await evaluar(cdp, `fetch(location.href, { credentials: 'include' }).then((r) => r.headers.get('cache-control')).catch((e) => 'fetch fallo: ' + e.message)`).catch((e) => `? ${e.message}`)
+      const urlFinal = await ubicacion(cdp).catch(() => '?')
+      const todos = registros.slice(d1)
+      return {
+        detalle: (p) => {
+          console.log(`${p}forzado: la sonda escribio history.replaceState({ frjView: 'tab' }) sobre ${forzado.url} (documento B, hidratado=${hidratadoB ? 'si' : 'no'}); leida de vuelta: frjView=${JSON.stringify(forzado.frjView)} claves=[${forzado.claves.join(', ')}]; justo antes del toque: frjView=${JSON.stringify(marcaAntesDelToque)}`)
+          console.log(`${p}pila antes del toque: [${pilaAntes.entradas.join(', ')}] actual=${pilaAntes.indice}`)
+          if (eventosCache.length === 0) console.log(`${p}bfcache: sin eventos backForwardCacheNotUsed`)
+          for (const e of eventosCache) {
+            const motivos = (e.notRestoredExplanations ?? []).map((x) => `${x.type}/${x.reason}${x.context ? `(${x.context})` : ''}`).join(', ')
+            console.log(`${p}bfcache: navegacion=${e.etapa} loader=${e.loaderId} motivos=[${motivos || '(ninguno)'}]`)
+          }
+          console.log(`${p}tras el consumo: url=${trasElConsumo} marca de documento=${JSON.stringify(docTrasElConsumo)} notRestoredReasons(A)=${nrrA}`)
+          console.log(`${p}tras adelante: url=${trasAdelante} documento=${JSON.stringify(enB.doc)} pageshow propios de B=${JSON.stringify(enB.shows)} marca=${JSON.stringify(enB.marca)} pageshow persistido por el canal=${pageshowDelCanal ? 'si' : 'no'} documento nuevo=${docNuevoB ? 'si' : 'no'}`)
+          console.log(`${p}notRestoredReasons (documento final): ${nrrFinal}`)
+          console.log(`${p}cache-control del documento: ${cacheControl}`)
+          for (const r of todos.filter((x) => x.tipo === 'sonda-pagehide' || x.tipo === 'sonda-pageshow' || x.tipo === 'sonda-documento-nuevo')) console.log(`${p}   ${lineaDeRegistro(r)}`)
+          console.log(`${p}tras Egresos (hidratado=${hidratadoFinal ? 'si' : 'no'}): ${regsEgresos.filter((r) => r.tipo === 'sonda-historia').length} escrituras de historia`)
+          for (const r of regsEgresos.filter((x) => x.tipo === 'sonda-historia')) console.log(`${p}   ${lineaDeRegistro(r)}`)
+          console.log(`${p}url final: ${urlFinal}`)
+        },
+        medido: {
+          cruzo_de_documento: cruzo ? 'si' : 'no',
+          b_vuelve_de_la_cache: vuelve ? 'si' : 'no',
+          tab_responde: responde ? 'si' : 'no',
+        },
+        // El defecto: el consumo cruzo de documento, B volvio de la cache y el tab no responde.
+        esperado_si_HA: { cruzo_de_documento: 'si', b_vuelve_de_la_cache: 'si', tab_responde: 'no' },
+        // El verde tambien exige el cruce y la vuelta desde la cache: sin ellos, un `tab_responde: si` saldria de un
+        // documento nuevo (la guarda nace apagada) y no probaria nada del arreglo.
+        esperado_tras_el_fix: { cruzo_de_documento: 'si', b_vuelve_de_la_cache: 'si', tab_responde: 'si' },
+      }
+    },
+  }
+}
 
 function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
 

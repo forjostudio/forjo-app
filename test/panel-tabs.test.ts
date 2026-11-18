@@ -9,6 +9,8 @@ import * as PH from '@/lib/panel-history'
 // Mismo molde para los símbolos nuevos de `lib/panel-tabs.ts` (plan 04-07: `toqueDeTab`,
 // `vueltaDeOAuthPendiente`): un símbolo ausente da rojo en SU caso y no tira el archivo en el cargador.
 import * as PT from '@/lib/panel-tabs'
+// B1 se corre REAL (quick 261118-kat): el retroceso de la barra y su segundo paso son los de producción.
+import * as PB from '@/lib/panel-branch'
 import { TAB_PARAM, TABS_NEGOCIO, TABS_CONFIG, TABS_FINANZAS, resolveTab, tabSlug, type PanelTabGroup } from '@/lib/panel-tabs'
 
 // ── Phase 4 (los tabs en la URL) — la lista cerrada, la causa y la pila ──────────────────────────
@@ -136,6 +138,9 @@ describe('panelTabCause — un grupo de UN nivel cuyo default es null: la causa 
 
 type Entrada = { url: string; state: unknown }
 
+// El despacho de `popstate` de la última historia montada (quick 261118-kat, IN-02): ver el docblock de abajo.
+let drenarPopstateDelStub: (() => void) | null = null
+
 /**
  * Una historia falsa con la semántica del navegador: el empuje TRUNCA lo de adelante y agrega, el
  * reemplazo pisa la actual, el retroceso baja el índice (y se cuenta). `location` sale de la entrada
@@ -149,6 +154,14 @@ type Entrada = { url: string; state: unknown }
  * E3 (`.planning/debug/doble-toque-tab.md`): dos toques al default antes de que llegue el recorrido.
  * `popstate()` despacha un evento suelto (uno AJENO: el retroceso de un overlay encolado antes que el
  * nuestro) sin mover la pila; `pila.oyentes` cuenta los oyentes vivos.
+ *
+ * (quick 261118-kat) Dos diferencias con el DOM que hasta acá no cambiaban ningún resultado y que la
+ * medición de R2-WR-01 sí ejercita: el despacho recorre una COPIA de los oyentes, así que uno que otro
+ * oyente quitó durante el MISMO despacho igual corría (el DOM lo saltea: es el «removed flag»); y el
+ * mismo oyente se podía enganchar dos veces (el DOM no lo duplica). Las dos se cierran agregando una línea
+ * cada una. Además el despacho queda expuesto a nivel de módulo para que los `afterEach` lo llamen ANTES de
+ * soltar el `window`: la guarda del consumo en vuelo es memoria del módulo, y un caso rojo que la dejara
+ * encendida envenenaría a los siguientes (IN-02; molde de `test/panel-branch.test.ts`).
  */
 function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean } = {}) {
   const pila = { entradas: [...inicio], indice: inicio.length - 1, retrocesos: 0, oyentes: 0 }
@@ -156,11 +169,13 @@ function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean }
   const cola: number[] = []
   const popstate = () => {
     for (const o of [...oyentes]) {
+      if (!oyentes.includes(o)) continue
       if (o.once) oyentes.splice(oyentes.indexOf(o), 1)
       o.fn()
     }
     pila.oyentes = oyentes.length
   }
+  drenarPopstateDelStub = popstate
   const recorrer = () => {
     if (pila.indice > 0) pila.indice--
     popstate()
@@ -204,6 +219,7 @@ function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean }
   }
   const addEventListener = (tipo: string, fn: () => void, op?: { once?: boolean }) => {
     if (tipo !== 'popstate') return
+    if (oyentes.some((o) => o.fn === fn)) return
     oyentes.push({ fn, once: op?.once === true })
     pila.oyentes = oyentes.length
   }
@@ -248,6 +264,8 @@ function volverDelOAuth() {
 
 describe('el simulador de pila — el applyPanelView REAL contra una historia falsa', () => {
   afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
     vi.unstubAllGlobals()
   })
 
@@ -331,6 +349,8 @@ describe('el simulador de pila — una entrada AJENA no se vuelve nuestra por un
   // entrada pegada. Con el defecto, el reemplazo del cambio de tab marcaba esa entrada como nuestra y
   // el toque al default retrocedía a la página de afuera.
   afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
     vi.unstubAllGlobals()
   })
 
@@ -749,6 +769,8 @@ describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
 
 describe('G-04-7 — un toque decide con la URL de ahora, y un consumo en vuelo no se repite', () => {
   afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
     vi.unstubAllGlobals()
   })
 
@@ -931,4 +953,207 @@ describe('G-04-8 — vueltaDeOAuthPendiente: mp o google PRESENTES en la query',
       expect(PT.vueltaDeOAuthPendiente({ query: new URLSearchParams(query) })).toBe(esperado)
     })
   }
+})
+
+// ── 8) R2-WR-01 (quick 261118-kat): la guarda de consumo en vuelo, medida en sus tres casos ANTES de arreglar ──
+// El code review de la ronda 2 (WR-01) y su cruce con `consumeOwnedPanelEntry` (IN-03) nombran tres caminos por
+// los que la guarda del 04-07 podría fallar. El dueño decidió el 2026-11-18 medir PRIMERO los tres y arreglar sólo
+// los que reproduzcan. Acá van dos; el tercero (la página que vuelve de la bfcache sin `popstate`) no se puede
+// expresar sin un navegador y se mide en Chrome por CDP (`K1-bfcache-cruce`, en la sonda del scroll).
+//   · Caso 2: un `back()` que TIRA. La guarda se enciende antes del retroceso y nadie la apaga: el oyente queda
+//     colgado y el toque siguiente da `none`.
+//   · Caso 3a: un consumo de tab y, antes de su `popstate`, el retroceso del MENÚ (la sección activa, NAV-08) o de
+//     la BARRA (Inicio, B1). `consumeOwnedPanelEntry` no lee la guarda: retrocede otra vez sobre el mismo state.
+//   · Caso 3b: la inversa. Primero el retroceso del menú o de B1, después el tab por defecto, que consume de nuevo.
+// Cada `esperado` es lo CORRECTO (un solo retroceso por gesto, el dueño dentro de la sección o en Inicio): un ROJO
+// quiere decir que el caso REPRODUCE. Los `NR-*` fijan cómo termina B1 hoy (control, dos fichas apiladas cuyo
+// segundo consumo sale del `popstate` del primero, y el retroceso triple de Más) y tienen que estar en verde con el
+// código de hoy: si no, el simulador no representa B1 y el caso 3 se mide en la app (P-1b). `K2-b` es un candado de
+// no-regresión del menú con un retroceso que tira (hoy verde). Los ejecutores son los REALES (`applyPanelView`,
+// `consumeOwnedPanelEntry`, `runBranchNavigation`) contra la historia con retroceso ASÍNCRONO.
+
+describe('R2-WR-01 — los tres casos de la guarda de consumo en vuelo, medidos antes de arreglar (quick 261118-kat)', () => {
+  const ID = 7
+  const navegaciones: string[] = []
+
+  afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
+    navegaciones.length = 0
+    PB.takeBackLanding()
+    PB.applyBranchMarkRequest('__drenaje__')
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  // Las pilas se FABRICAN en cada llamada: la identidad del state de cada entrada es la de ESE caso.
+  const pilaFin = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/finances', state: { frjUnder: '/dashboard' } },
+    { url: '/finances?tab=ventas', state: { frjView: 'tab' } },
+  ]
+  const pilaFichas = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/clients', state: { frjUnder: '/dashboard' } },
+    { url: '/clients?c=a', state: { frjView: 'c' } },
+    { url: '/clients?c=b', state: { frjView: 'c' } },
+  ]
+  const pilaTriple = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/mas', state: { frjUnder: '/dashboard' } },
+    { url: '/negocio', state: { frjUnder: '/mas' } },
+    { url: '/negocio?tab=cobros', state: { frjView: 'tab' } },
+  ]
+
+  // Lo que la barra no modela acá, a propósito: el sentinel de salida (ninguna de estas pilas lo tiene arriba) y el
+  // router de Next (una navegación pedida se ANOTA; no escribe la pila). Eso lo cubren las sondas de la app.
+  const anotar = (to: string, modo: 'push' | 'replace') => {
+    navegaciones.push(`${modo} ${to}`)
+  }
+  const hechos = () =>
+    PB.branchStackFacts({ estado: window.history.state, id: ID, root: PH.PANEL_ROOT, more: PH.PANEL_MORE })
+
+  /** EXACTAMENTE `decidirDesdeElAterrizaje` del hook (`lib/panel-branch.ts`), sin React. */
+  function decidir(href: string): void {
+    const desde = window.location.pathname
+    const plan = PH.panelBranchPlan({ from: desde, to: href, root: PH.PANEL_ROOT, more: PH.PANEL_MORE, ...hechos() })
+    if (plan === 'none') return
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return
+    }
+    const seHizoCargo = PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+    if (!seHizoCargo) navegaciones.push(`caida ${href}`)
+  }
+
+  /** EXACTAMENTE `handleNavigate` del hook: `false` (y la navegación anotada) con push/replace; si no, el ejecutor. */
+  function tocarLaBarra(href: string): boolean {
+    const plan = PH.panelBranchPlan({
+      from: window.location.pathname,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      ...hechos(),
+    })
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return false
+    }
+    return PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+  }
+
+  const queTira = () =>
+    vi.spyOn(window.history, 'back').mockImplementationOnce(() => {
+      throw new DOMException('demasiadas llamadas', 'SecurityError')
+    })
+
+  it('K2-a: un back() que tira no deja la guarda encendida', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queTira()
+    let tiro = false
+    try {
+      tocar(TABS_FINANZAS, 'appointments')
+    } catch {
+      tiro = true
+    }
+    const oyentes = pila.oyentes
+    const siguiente = tocar(TABS_FINANZAS, 'appointments')
+    procesar()
+    const medido = { tiro, oyentes, siguiente, url: actual().url }
+    expect(medido).toEqual({ tiro: true, oyentes: 0, siguiente: 'consume', url: '/finances' })
+  })
+
+  it('K2-b: consumeOwnedPanelEntry con un back() que tira no deja nada encendido (candado de no-regresión)', () => {
+    const { actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queTira()
+    let tiro = false
+    try {
+      PH.consumeOwnedPanelEntry()
+    } catch {
+      tiro = true
+    }
+    const siguiente = tocar(TABS_FINANZAS, 'appointments')
+    procesar()
+    const medido = { tiro, siguiente, url: actual().url }
+    expect(medido).toEqual({ tiro: true, siguiente: 'consume', url: '/finances' })
+  })
+
+  it('K3a-nav08: tab por defecto y, antes del popstate, la sección activa del menú', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const consumo = tocar(TABS_FINANZAS, 'appointments')
+    const prevenido = PH.consumeOwnedPanelEntry()
+    procesar()
+    const medido = { consumo, prevenido, retrocesos: pila.retrocesos, url: actual().url }
+    expect(medido).toEqual({ consumo: 'consume', prevenido: true, retrocesos: 1, url: '/finances' })
+  })
+
+  it('K3a-b1: tab por defecto y, antes del popstate, Inicio en la barra', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const consumo = tocar(TABS_FINANZAS, 'appointments')
+    const seHizoCargo = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { consumo, seHizoCargo, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ consumo: 'consume', seHizoCargo: true, retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('K3b-nav08: la sección activa del menú y, antes del popstate, el tab por defecto', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const prevenido = PH.consumeOwnedPanelEntry()
+    const toque = tocar(TABS_FINANZAS, 'appointments')
+    procesar()
+    const medido = { prevenido, toque, retrocesos: pila.retrocesos, url: actual().url }
+    expect(medido).toEqual({ prevenido: true, toque: 'none', retrocesos: 1, url: '/finances' })
+  })
+
+  it('K3b-b1: Inicio en la barra y, antes del popstate, el tab por defecto', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const seHizoCargo = tocarLaBarra(PH.PANEL_ROOT)
+    const toque = tocar(TABS_FINANZAS, 'appointments')
+    procesar()
+    const medido = { seHizoCargo, toque, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ seHizoCargo: true, toque: 'none', retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('NR-b1-control: Inicio en la barra con el tab arriba y sin otro toque', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const seHizoCargo = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { seHizoCargo, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ seHizoCargo: true, retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('NR-b1-reentrada: Inicio en la barra con dos fichas apiladas (el segundo consumo sale del popstate del primero)', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFichas(), { backAsincrono: true })
+    const seHizoCargo = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { seHizoCargo, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ seHizoCargo: true, retrocesos: 3, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('NR-b1-triple: Inicio desde Cobros con Más debajo (el retroceso triple medido en la app)', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaTriple(), { backAsincrono: true })
+    const seHizoCargo = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { seHizoCargo, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ seHizoCargo: true, retrocesos: 3, url: '/dashboard', navegaciones: [] })
+  })
 })
