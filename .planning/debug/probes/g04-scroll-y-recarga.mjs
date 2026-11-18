@@ -31,11 +31,28 @@
 //
 // COMO SE CORRE (siempre por el turno de pantalla: levanta servidor y navegador):
 //
-//   node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs [ids] [etiqueta]
+//   node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs [ids] [etiqueta] [modo]
 //
 //   ids: lista separada por coma (sin ella, todos). etiqueta: texto libre que se imprime (p. ej. la
-//   variante de la pagina que se midio). La sonda imprime ademas la linea del Suspense de
-//   `app/(dashboard)/finances/page.tsx` y su huella, para que el registro diga QUE pagina se midio.
+//   variante de la pagina que se midio). modo: `hipotesis` (por omision) o `tras-el-fix` (ver abajo). La
+//   sonda imprime ademas la linea del Suspense de `app/(dashboard)/finances/page.tsx`, de `negocio/page.tsx` y
+//   de `settings/page.tsx` con su huella, para que el registro diga QUE paginas se midieron. La linea es la
+//   primera que abre el boundary y NO es un comentario: el comentario de una pagina puede nombrar el boundary
+//   y lo que importa es el codigo, no la prosa.
+//
+// MODO tras-el-fix (plan 04-06, G-04-6): juzga cada recorrido contra su `esperado_tras_el_fix`, escrito y
+// commiteado ANTES de la primera corrida que lo juzga (la de las paginas sin tocar, que tiene que dar rojo). Lo que
+// afirma: en los cinco recorridos de G-04-6 ningun toque de tab lleva la pagina al inicio (`salto_toque*: no`) ni
+// tiene una escritura de scroll cuya pila nombre el handler de scroll de Next (`next_toque*: no`); en Negocio,
+// lo mismo en el primer toque con el borde de arriba fuera, y ninguna escritura de Next en el segundo.
+// `vacio_al_entrar` y `vacio_al_reentrar` quedan AFUERA a proposito: la corrida 6 del debug midio que con el
+// fallback con nodo el contenedor sigue con cero hijos VISIBLES (el div del fallback tiene alto 0), asi que esa
+// clave no es lo que el arreglo afirma (el arreglo afirma que HAY un nodo mientras suspende, no que se vea).
+// `IN02-refresh-corto` y los `B1-*` no llevan `esperado_tras_el_fix` (IN-02 diferido; G-04-9 no se planifica):
+// pedirlos en este modo es un error del instrumento. La primera linea de cada recorrido es `OK  <id>` o
+// `FALLA <id>` (el formato que cuentan los gates del repo) y el veredicto dice cuantos coinciden con lo esperado
+// tras el fix; la sonda sale con 1 si no coinciden todos. Los `esperado_si_HA` son el REGISTRO del diagnostico
+// (`.planning/debug/finanzas-primer-toque-scroll.md`) y no se tocan: el modo `hipotesis` los sigue juzgando igual.
 //
 // QUE NO CIERRA: Chrome de Android y Safari de iOS (esto es Chrome de escritorio headless con emulacion
 // movil), y el build de PRODUCCION (las variables publicas se incrustan en el build y el Supabase local
@@ -853,6 +870,7 @@ const RECORRIDOS = [
         },
         medido: { vacio_al_entrar: entrada.vacio_durante_la_entrada, salto_toque1: t1.llevo_al_inicio, next_toque1: t1.escritura_de_next, salto_toque2: t2.llevo_al_inicio, next_toque2: t2.escritura_de_next, vacio_al_reentrar: reentrada.vacio_durante_la_entrada, salto_toque3_reentrada: t3.llevo_al_inicio, next_toque3_reentrada: t3.escritura_de_next },
         esperado_si_HA: { vacio_al_entrar: 'si', salto_toque1: 'si', next_toque1: 'si', salto_toque2: 'no', next_toque2: 'no', vacio_al_reentrar: 'no', salto_toque3_reentrada: 'no', next_toque3_reentrada: 'no' },
+        esperado_tras_el_fix: { salto_toque1: 'no', next_toque1: 'no', salto_toque2: 'no', next_toque2: 'no', salto_toque3_reentrada: 'no', next_toque3_reentrada: 'no' },
       }
     },
   },
@@ -871,6 +889,7 @@ const RECORRIDOS = [
         detalle: (p) => { imprimirToque(p, 'toque 1 (primer toque tras la carga dura)', t1); imprimirToque(p, 'toque 2', t2) },
         medido: { salto_toque1: t1.llevo_al_inicio, next_toque1: t1.escritura_de_next, salto_toque2: t2.llevo_al_inicio, next_toque2: t2.escritura_de_next },
         esperado_si_HA: { salto_toque1: 'no', next_toque1: 'no', salto_toque2: 'no', next_toque2: 'no' },
+        esperado_tras_el_fix: { salto_toque1: 'no', next_toque1: 'no', salto_toque2: 'no', next_toque2: 'no' },
       }
     },
   },
@@ -895,6 +914,7 @@ const RECORRIDOS = [
         },
         medido: { vacio_al_entrar: entrada.vacio_durante_la_entrada, salto_toque1: t1.llevo_al_inicio, next_toque1: t1.escritura_de_next, salto_toque2: t2.llevo_al_inicio, next_toque2: t2.escritura_de_next },
         esperado_si_HA: { vacio_al_entrar: 'si', salto_toque1: 'si', next_toque1: 'si', salto_toque2: 'no', next_toque2: 'no' },
+        esperado_tras_el_fix: { salto_toque1: 'no', next_toque1: 'no', salto_toque2: 'no', next_toque2: 'no' },
       }
     },
   },
@@ -920,6 +940,7 @@ const RECORRIDOS = [
           },
           medido: { vacio_al_entrar: entrada.vacio_durante_la_entrada, salto_toque1: t1.llevo_al_inicio, next_toque1: t1.escritura_de_next, salto_toque2: t2.llevo_al_inicio, next_toque2: t2.escritura_de_next },
           esperado_si_HA: { vacio_al_entrar: 'si', salto_toque1: 'si', next_toque1: 'si', salto_toque2: 'no', next_toque2: 'no' },
+          esperado_tras_el_fix: { salto_toque1: 'no', next_toque1: 'no', salto_toque2: 'no', next_toque2: 'no' },
         }
       } finally {
         await celular(cdp)
@@ -948,6 +969,7 @@ const RECORRIDOS = [
         },
         medido: { vacio_al_entrar: entrada.vacio_durante_la_entrada, salto_toque1: t1.llevo_al_inicio, next_toque1: t1.escritura_de_next, next_toque2: t2.escritura_de_next },
         esperado_si_HA: { vacio_al_entrar: 'si', salto_toque1: 'si', next_toque1: 'si', next_toque2: 'no' },
+        esperado_tras_el_fix: { salto_toque1: 'no', next_toque1: 'no', next_toque2: 'no' },
       }
     },
   },
@@ -1122,8 +1144,27 @@ RECORRIDOS.push(b1RecargaHacia('B1-recarga-turnos', '/appointments'), b1RecargaH
 
 function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
 
-async function correrYReportar(cdp, rec) {
+async function correrYReportar(cdp, rec, modo) {
   const r = await rec.correr(cdp)
+  if (modo === 'tras-el-fix') {
+    // sin `esperado_tras_el_fix` el recorrido no tiene nada que afirmar en este modo: es un error del instrumento
+    // (lo cuenta el catch de `main` como ERROR-DEL-INSTRUMENTO), nunca un OK por omision.
+    if (!r.esperado_tras_el_fix) throw new Error(`el recorrido ${rec.id} no tiene esperado_tras_el_fix y se lo pidio en modo tras-el-fix`)
+    const claves = Object.keys(r.esperado_tras_el_fix)
+    const malas = claves.filter((k) => !iguales(r.medido[k], r.esperado_tras_el_fix[k]))
+    const ok = malas.length === 0
+    // EL PREFIJO ES `OK ` y la plantilla agrega el espacio: los gates cuentan `OK` + DOS espacios + el id
+    // (el formato de panel-exit-en-la-app.mjs).
+    console.log(`${ok ? 'OK ' : 'FALLA'} ${rec.id} · ${rec.titulo}`)
+    for (const k of claves) {
+      const marca = malas.includes(k) ? '  <-- NO COINCIDE' : ''
+      console.log(`      ${k}: medido=${JSON.stringify(r.medido[k])}${marca}`)
+      if (malas.includes(k)) console.log(`      ${' '.repeat(k.length)}  esperado=${JSON.stringify(r.esperado_tras_el_fix[k])}`)
+    }
+    r.detalle('      ')
+    console.log('')
+    return ok
+  }
   const claves = Object.keys(r.esperado_si_HA)
   const distintas = claves.filter((k) => !iguales(r.medido[k], r.esperado_si_HA[k]))
   console.log(`${distintas.length === 0 ? 'COINCIDE-CON-LA-HIPOTESIS' : 'NO-COINCIDE'} ${rec.id} · ${rec.titulo}`)
@@ -1138,6 +1179,7 @@ async function correrYReportar(cdp, rec) {
 async function main() {
   const seleccion = process.argv[2] ? new Set(process.argv[2].split(',').map((s) => s.trim()).filter(Boolean)) : null
   const etiqueta = process.argv[3] ?? '(sin etiqueta)'
+  const modo = process.argv[4] ?? 'hipotesis'
   const perfil = mkdtempSync(join(tmpdir(), 'forjo-sonda-g04-'))
   const dirExt = mkdtempSync(join(tmpdir(), 'forjo-sonda-g04-ext-'))
   const logNext = join(perfil, '..', `forjo-sonda-g04-next-${process.pid}.log`)
@@ -1149,12 +1191,17 @@ async function main() {
       const desconocidos = [...seleccion].filter((id) => !RECORRIDOS.some((r) => r.id === id))
       if (desconocidos.length > 0) throw new Error(`ids desconocidos: ${desconocidos.join(', ')}`)
     }
+    if (modo !== 'hipotesis' && modo !== 'tras-el-fix') throw new Error(`modo desconocido: ${modo} (hipotesis | tras-el-fix)`)
     const cfg = readFileSync(join(REPO, 'next.config.ts'), 'utf8')
-    const pagina = readFileSync(join(REPO, 'app/(dashboard)/finances/page.tsx'), 'utf8')
-    const lineaSuspense = pagina.split(/\r?\n/).find((l) => l.includes('<Suspense')) ?? '(sin Suspense)'
     console.log(`etiqueta=${etiqueta}`)
+    console.log(`modo=${modo}`)
     console.log(`next.config.ts huella=${createHash('sha256').update(cfg).digest('hex').slice(0, 16)} reactStrictMode=${/reactStrictMode/.test(cfg) ? 'declarado' : 'ausente (default true)'}`)
-    console.log(`finances/page.tsx huella=${createHash('sha256').update(pagina.replace(/\r\n/g, '\n')).digest('hex').slice(0, 16)} suspense: ${lineaSuspense.trim()}`)
+    for (const ruta of ['finances', 'negocio', 'settings']) {
+      const pagina = readFileSync(join(REPO, `app/(dashboard)/${ruta}/page.tsx`), 'utf8')
+      // la primera linea que ABRE el boundary y no es un comentario (el comentario puede nombrar el boundary)
+      const lineaSuspense = pagina.split(/\r?\n/).find((l) => l.includes('<Suspense') && !l.trim().startsWith('//')) ?? '(sin Suspense)'
+      console.log(`${ruta}/page.tsx huella=${createHash('sha256').update(pagina.replace(/\r\n/g, '\n')).digest('hex').slice(0, 16)} suspense: ${lineaSuspense.trim()}`)
+    }
     if (!(await puertoLibre(PUERTO_CDP))) throw new Error(`el puerto ${PUERTO_CDP} esta ocupado`)
     const existente = await servidorExistente()
     if (existente) {
@@ -1221,14 +1268,19 @@ async function main() {
     const aCorrer = RECORRIDOS.filter((r) => !seleccion || seleccion.has(r.id))
     for (const rec of aCorrer) {
       try {
-        if (await correrYReportar(cdp, rec)) coinciden++
+        if (await correrYReportar(cdp, rec, modo)) coinciden++
       } catch (e) {
         console.log(`ERROR-DEL-INSTRUMENTO ${rec.id}: ${e instanceof Error ? e.message : e}`)
         console.log('')
       }
     }
     console.log('── veredicto ─────────────────────────────────────────────────────────────────')
-    console.log(`etiqueta=${etiqueta} · recorridos: ${aCorrer.length} · coinciden con la hipotesis: ${coinciden}`)
+    if (modo === 'tras-el-fix') {
+      console.log(`etiqueta=${etiqueta} · modo=tras-el-fix · recorridos: ${aCorrer.length} · coinciden con lo esperado tras el fix: ${coinciden}`)
+      if (coinciden < aCorrer.length) process.exitCode = 1
+    } else {
+      console.log(`etiqueta=${etiqueta} · recorridos: ${aCorrer.length} · coinciden con la hipotesis: ${coinciden}`)
+    }
   } catch (e) {
     console.error(`la sonda no pudo completar la medicion: ${e instanceof Error ? e.message : e}`)
     console.error(`log del servidor de Next: ${logNext}`)
