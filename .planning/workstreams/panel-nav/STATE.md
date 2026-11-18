@@ -41,7 +41,7 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 ## Session Continuity
 
-**Last session:** 2026-11-17T05:00:00.000Z
+**Last session:** 2026-11-18T14:00:00.000Z
 
 **Stopped At:** Phase 4 completa — próximo `/gsd-secure-phase 4 --ws panel-nav`
 **Resume File:** .planning/workstreams/panel-nav/phases/04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada/04-VERIFICATION.md
@@ -136,3 +136,8 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 - [Phase 03]: El 03-17 paro en P-1 en la no-regresion: R-login-con-activacion ya no puede reproducir su condicion desde f75e739 (el login con window.location.assign, entro con el merge 643e99e); no es el modal (no es P-5, nada revertido)
 - [Phase 03]: Decision del dueno (2026-11-16): R-login-con-activacion RETIRADO de la no-regresion (marcado obsoleto en la sonda, codigo y esperado intactos; los doce de antes pasan a once); G3-4 ya no puede pasar por el login con recarga completa y su arreglo (panelExitUnmountAction) se queda
 - [Phase 03]: Decision del dueno (2026-11-16): G3-10 DECLARADO costo del camino 1 con veredicto otro (cerrar con el atras no deja el aviso armado: sin activacion, pendiente; con activacion, el reintento arma y Chrome lo saltea); la logica del aviso no cambia
+- [Phase 04]: D-01 PRECISA MOB-08: un solo nivel de tabs — salir del default empuja, entre no-default reemplaza, tocar el default consume; un pegado no fabrica el default debajo (D-03)
+- [Phase 04]: B1 elegido por el dueño en el checkpoint del 04-03: séptimo miembro `consume-view-then-navigate` del plan de la rama, para que tocar la barra con un tab abierto termine igual que sin el tab
+- [Phase 04]: G-04-6 (obs-1) se cerró dándole al `<Suspense>` un nodo del DOM como fallback en finances/negocio/settings: con `fallback={null}` el scroll pendiente de Next se ejecutaba en el primer toque de tab (medido por CDP, 1/5 → 5/5); la sonda se corrigió por P-1 para descontar el recorte por alto, con control contra la corrida roja (decisión del dueño)
+- [Phase 04]: G-04-7: el `from` del toque sale de la URL de ahora (`toqueDeTab`) y una guarda de consumo en vuelo corta el doble `back()`; G-04-8: un solo predicado por presencia (`vueltaDeOAuthPendiente`) y `cleansQuery` en la regla 2. G-04-9 (B1 tras recarga) NO REPRODUCE en Chrome 157 y se descartó con el número
+- [Phase 04]: Deuda decidida por el dueño (2026-11-18): R2-WR-01 (guarda sin `popstate` por bfcache) y obs-G1 (recorte con 0 ventas) van a `/gsd-quick`, R2-WR-01 midiendo primero; MOB-08/09 marcados recién con la re-UAT 8/8 en producción
