@@ -140,6 +140,9 @@ type Entrada = { url: string; state: unknown }
 
 // El despacho de `popstate` de la última historia montada (quick 261118-kat, IN-02): ver el docblock de abajo.
 let drenarPopstateDelStub: (() => void) | null = null
+// El despacho de `pageshow` de la última historia montada (quick 261118-kat, F1): la vuelta de la bfcache,
+// con su `persisted`. Sólo la usan los candados del arreglo; ver el docblock de abajo.
+let pageshowDelStub: ((persisted: boolean) => void) | null = null
 
 /**
  * Una historia falsa con la semántica del navegador: el empuje TRUNCA lo de adelante y agrega, el
@@ -162,6 +165,12 @@ let drenarPopstateDelStub: (() => void) | null = null
  * cada una. Además el despacho queda expuesto a nivel de módulo para que los `afterEach` lo llamen ANTES de
  * soltar el `window`: la guarda del consumo en vuelo es memoria del módulo, y un caso rojo que la dejara
  * encendida envenenaría a los siguientes (IN-02; molde de `test/panel-branch.test.ts`).
+ *
+ * (quick 261118-kat, el arreglo) El stub acepta además oyentes de `pageshow`, en su propia lista y con la
+ * misma semántica de `once` y sin duplicados, y `pageshowDelStub(persisted)` los despacha: es la única forma
+ * de expresar acá una página que vuelve de la bfcache sin que llegue el `popstate` de su recorrido. Van en
+ * una lista aparte a propósito: `pila.oyentes` sigue contando sólo los de `popstate`, que es lo que miden
+ * los casos de antes.
  */
 function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean } = {}) {
   const pila = { entradas: [...inicio], indice: inicio.length - 1, retrocesos: 0, oyentes: 0 }
@@ -176,6 +185,14 @@ function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean }
     pila.oyentes = oyentes.length
   }
   drenarPopstateDelStub = popstate
+  const oyentesPageshow: { fn: (e: { persisted: boolean }) => void; once: boolean }[] = []
+  pageshowDelStub = (persisted: boolean) => {
+    for (const o of [...oyentesPageshow]) {
+      if (!oyentesPageshow.includes(o)) continue
+      if (o.once) oyentesPageshow.splice(oyentesPageshow.indexOf(o), 1)
+      o.fn({ persisted })
+    }
+  }
   const recorrer = () => {
     if (pila.indice > 0) pila.indice--
     popstate()
@@ -218,12 +235,21 @@ function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean }
     },
   }
   const addEventListener = (tipo: string, fn: () => void, op?: { once?: boolean }) => {
+    if (tipo === 'pageshow') {
+      if (!oyentesPageshow.some((o) => o.fn === fn)) oyentesPageshow.push({ fn, once: op?.once === true })
+      return
+    }
     if (tipo !== 'popstate') return
     if (oyentes.some((o) => o.fn === fn)) return
     oyentes.push({ fn, once: op?.once === true })
     pila.oyentes = oyentes.length
   }
   const removeEventListener = (tipo: string, fn: () => void) => {
+    if (tipo === 'pageshow') {
+      const j = oyentesPageshow.findIndex((o) => o.fn === fn)
+      if (j !== -1) oyentesPageshow.splice(j, 1)
+      return
+    }
     if (tipo !== 'popstate') return
     const i = oyentes.findIndex((o) => o.fn === fn)
     if (i !== -1) oyentes.splice(i, 1)
@@ -1155,5 +1181,112 @@ describe('R2-WR-01 — los tres casos de la guarda de consumo en vuelo, medidos 
     procesar()
     const medido = { seHizoCargo, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
     expect(medido).toEqual({ seHizoCargo: true, retrocesos: 3, url: '/dashboard', navegaciones: [] })
+  })
+})
+
+// ── 9) R2-WR-01 (quick 261118-kat): los candados del arreglo, escritos ANTES del arreglo ─────────────
+// La medición de arriba dio: caso 2 y caso 3 (los dos sentidos) reproducen; el caso 1 no reprodujo en Chrome 157
+// (ninguno de los dos documentos entró a la bfcache) y el dueño eligió igual la mitigación defensiva (A): soltar la
+// guarda en `pageshow` con `persisted`. Estos tres candados fijan lo que el arreglo agrega y no se puede ver en los
+// nueve casos de arriba, que quedan intactos:
+//   · `C-retroceso-unico`: la duplicación A PROPÓSITO del bloque de encendido (la rama `consume` del ejecutor y
+//     `consumeOwnedPanelEntry`) no puede derivar: las mismas líneas, un solo retroceso, y en el menú el chequeo del
+//     consumo en vuelo ANTES de sus dos guardas. Rojo antes del arreglo.
+//   · `C-pageshow-tab`: un consumo cuyo recorrido nunca llegó (se fue a otro documento) y la página que vuelve de la
+//     bfcache: el `pageshow` persistido suelta la guarda y el tab siguiente escribe. Rojo antes del arreglo.
+//   · `C-pageshow-menu`: lo mismo con el consumo del menú, que con el arreglo también enciende la guarda. Antes del
+//     arreglo da verde de casualidad (el menú no tenía guarda): fija que la nueva no lo trabe.
+
+describe('R2-WR-01 — los candados del arreglo (quick 261118-kat)', () => {
+  const navegaciones: string[] = []
+
+  afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
+    pageshowDelStub = null
+    navegaciones.length = 0
+    PB.takeBackLanding()
+    PB.applyBranchMarkRequest('__drenaje__')
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  // La misma pila que `pilaFin` del bloque de arriba (que no se toca), fabricada en cada llamada.
+  const pilaDelTab = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/finances', state: { frjUnder: '/dashboard' } },
+    { url: '/finances?tab=ventas', state: { frjView: 'tab' } },
+  ]
+
+  /** Las líneas de código de una región, sin sangría y sin las vacías que dejan los comentarios quitados. */
+  const lineas = (region: string) =>
+    region
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '')
+
+  /** Desde `consumoEnVuelo = true` hasta el `}` que cierra el `catch` (incluidos los dos). */
+  const bloqueDeEncendido = (region: string): string[] => {
+    const ls = lineas(region)
+    const desde = ls.indexOf('consumoEnVuelo = true')
+    if (desde === -1) return []
+    const captura = ls.findIndex((l, i) => i > desde && l.startsWith('} catch'))
+    if (captura === -1) return []
+    const cierre = ls.findIndex((l, i) => i > captura && l === '}')
+    return cierre === -1 ? [] : ls.slice(desde, cierre + 1)
+  }
+
+  it('C-retroceso-unico: consumeOwnedPanelEntry chequea el consumo en vuelo antes de sus guardas y enciende la guarda con las MISMAS líneas que la rama consume', () => {
+    const fuente = sinComentarios(read('lib/panel-history.ts'))
+    const menu = cuerpoDe(fuente, 'export function consumeOwnedPanelEntry(', '): boolean {')
+    const at = fuente.indexOf('export function applyPanelView({')
+    const fin = at === -1 ? -1 : fuente.indexOf('\n}\n', at)
+    const ejecutor = at === -1 || fin === -1 ? '' : fuente.slice(at, fin + 2)
+    const rama = recorte(ejecutor, "if (action === 'consume') {")
+    expect(menu).not.toBe('')
+    expect(rama).not.toBe('')
+    // El chequeo del consumo en vuelo va antes de las dos guardas (y de leer `actual`).
+    const enVuelo = menu.indexOf('consumoEnVuelo')
+    const ajena = menu.indexOf('isForeignOwnedEntry(actual)')
+    const marca = menu.indexOf('panelViewEntryParam(actual) === null')
+    expect(enVuelo).toBeGreaterThan(-1)
+    expect(ajena).toBeGreaterThan(-1)
+    expect(marca).toBeGreaterThan(ajena)
+    expect(enVuelo).toBeLessThan(ajena)
+    expect(menu.indexOf('estadoDelConsumo')).toBeGreaterThan(-1)
+    // Un solo retroceso en el menú, después de las dos guardas.
+    expect(menu.split('window.history.back()').length - 1).toBe(1)
+    expect(menu.indexOf('window.history.back()')).toBeGreaterThan(marca)
+    // El bloque de encendido: no vacío, con el oyente, el retroceso adentro del `try` y la liberación en el `catch`,
+    // e IGUAL línea por línea en las dos ramas.
+    const delMenu = bloqueDeEncendido(menu)
+    const delEjecutor = bloqueDeEncendido(rama)
+    expect(delEjecutor.length).toBeGreaterThan(0)
+    expect(delEjecutor).toContain("window.addEventListener('popstate', soltarConsumo, { once: true })")
+    expect(delEjecutor).toContain('window.history.back()')
+    expect(delEjecutor.indexOf('try {')).toBeGreaterThan(-1)
+    expect(delEjecutor.indexOf('window.history.back()')).toBeGreaterThan(delEjecutor.indexOf('try {'))
+    expect(delEjecutor.indexOf('soltarConsumo()')).toBeGreaterThan(delEjecutor.findIndex((l) => l.startsWith('} catch')))
+    expect(delMenu).toEqual(delEjecutor)
+  })
+
+  it('C-pageshow-tab: un consumo cuyo recorrido nunca llegó y la vuelta de la bfcache ⇒ el tab siguiente escribe y no quedan oyentes', () => {
+    const { pila } = montarHistoria(pilaDelTab(), { backAsincrono: true })
+    expect(tocar(TABS_FINANZAS, 'appointments')).toBe('consume')
+    // No se procesa: el recorrido se fue a otro documento. La página vuelve de la bfcache.
+    pageshowDelStub?.(true)
+    const tras = tocar(TABS_FINANZAS, 'expenses')
+    const medido = { tras, oyentes: pila.oyentes }
+    expect(medido).toEqual({ tras: 'replace', oyentes: 0 })
+  })
+
+  it('C-pageshow-menu: el consumo del menú y la vuelta de la bfcache ⇒ un segundo consumo vuelve a retroceder', () => {
+    const { pila } = montarHistoria(pilaDelTab(), { backAsincrono: true })
+    expect(PH.consumeOwnedPanelEntry()).toBe(true)
+    pageshowDelStub?.(true)
+    const otra = PH.consumeOwnedPanelEntry()
+    const medido = { otra, retrocesos: pila.retrocesos }
+    expect(medido).toEqual({ otra: true, retrocesos: 2 })
   })
 })
