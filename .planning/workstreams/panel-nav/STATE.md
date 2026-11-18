@@ -5,7 +5,7 @@ milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 4 — Los tabs profundos sobre la política ya fijada
 current_plan: Not started
 status: completed
-stopped_at: "Phase 4 completa (2026-11-18): verificación passed 5/5, re-UAT de gaps 8/8 en producción (c3da6d0); las 3 fases del milestone completas; próximo /gsd-secure-phase 4 --ws panel-nav, después los quicks obs-G1 y R2-WR-01 y el cierre del milestone"
+stopped_at: "Phase 4 completa y SECURED (56 amenazas, threats_open 0); próximo: quicks obs-G1 y R2-WR-01 (medir primero), después /gsd-complete-milestone"
 last_updated: "2026-11-18T13:47:23.429Z"
 last_activity: 2026-11-18
 last_activity_desc: "Phase 4 completa (verificación passed, re-UAT de gaps 8/8)"
@@ -27,7 +27,7 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 **Current Plan:** Not started
 **Total Plans in Phase:** 8
-**Status:** Phase 4 completa — las 3 fases de v0.31 completas; falta `/gsd-secure-phase 4` y el cierre del milestone
+**Status:** Phase 4 completa y SECURED — las 3 fases de v0.31 completas; faltan los quicks obs-G1 y R2-WR-01 y el cierre del milestone
 **Current Phase:** 4 — Los tabs profundos sobre la política ya fijada
 **Last Activity:** 2026-11-18
 **Last Activity Description:** Phase 4 completa (verificación passed 5/5, re-UAT de gaps 8/8 en producción)
@@ -43,7 +43,7 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 **Last session:** 2026-11-18T14:00:00.000Z
 
-**Stopped At:** Phase 4 completa — próximo `/gsd-secure-phase 4 --ws panel-nav`
+**Stopped At:** Phase 4 completa y SECURED (56 amenazas, threats_open 0); próximo: quicks obs-G1 y R2-WR-01 (medir primero), después /gsd-complete-milestone
 **Resume File:** .planning/workstreams/panel-nav/phases/04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada/04-VERIFICATION.md
 
 ## Performance Metrics

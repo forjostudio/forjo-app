@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-secure-phase 4 --ws panel-nav",
-    "label": "Auditar las amenazas de la fase 4 (no hay 04-SECURITY.md); después los quicks obs-G1 y R2-WR-01 y el cierre del milestone v0.31",
-    "reason": "Phase 4 completa: verificación passed 5/5, re-UAT de gaps 8/8 en producción (c3da6d0)"
+    "command": "/gsd-quick --ws panel-nav",
+    "label": "Quicks pendientes de la fase 4: obs-G1 (alto mínimo de los tabs de Finanzas) y R2-WR-01 + cruce con consumeOwnedPanelEntry (medir primero; vence AR-04-05/06); después /gsd-complete-milestone",
+    "reason": "Phase 4 completa y SECURED (04-SECURITY.md threats_open 0)"
   },
   "updated_at": "2026-11-18T13:47:23.501Z"
 }
