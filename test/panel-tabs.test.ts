@@ -235,6 +235,17 @@ function sanear(grupo: PanelTabGroup) {
   return applyPanelView({ cause: v.cause, param: TAB_PARAM, from: enLaUrl, to: v.to })
 }
 
+/**
+ * EXACTAMENTE lo que hace el efecto del retorno del OAuth de Negocio (G-04-8, plan 04-07): la URL de
+ * ahora, el corte por el MISMO predicado que usa el render (un candado lee este cuerpo) y la misma
+ * llamada al ejecutor —`programmatic`, el `tab` crudo de la URL como origen, Integraciones y el `drop`—.
+ */
+function volverDelOAuth() {
+  const params = new URLSearchParams(window.location.search)
+  if (!PT.vueltaDeOAuthPendiente({ query: params })) return 'none'
+  return applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: params.get(TAB_PARAM), to: 'integraciones', drop: ['mp', 'google'] })
+}
+
 describe('el simulador de pila — el applyPanelView REAL contra una historia falsa', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -342,6 +353,47 @@ describe('el simulador de pila — una entrada AJENA no se vuelve nuestra por un
     expect(tocar(TABS_NEGOCIO, 'business')).toBe('replace')
     expect(pila.retrocesos).toBe(0)
     expect(actual().url).toBe('/negocio')
+  })
+
+  // G-04-8 (plan 04-07): las cinco URLs que trababan los tabs de Negocio (el render forzaba
+  // Integraciones por PRESENCIA de `mp`/`google` y el único que los borra no escribía: por valor vacío,
+  // o por la regla 2 con el tab ya en Integraciones) y los dos controles que ya andaban. Ningún callback
+  // emite las cinco: llegan por una URL pegada o editada.
+  for (const url of [
+    '/negocio?mp=',
+    '/negocio?google=',
+    '/negocio?tab=integraciones&mp=connected',
+    '/negocio?tab=integraciones&google=connected',
+    '/negocio?tab=integraciones&mp=',
+    '/negocio?mp=connected',
+    '/negocio?tab=cobros&mp=connected',
+  ]) {
+    it(`G-04-8: ${url} → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde`, () => {
+      const { pila, actual } = montarHistoria([{ url: '/afuera', state: null }, { url, state: { __NA: true } }])
+      volverDelOAuth()
+      const q = new URLSearchParams(window.location.search)
+      expect(`${url}: ${q.has('mp') || q.has('google')}`).toBe(`${url}: false`)
+      expect(`${url}: ${actual().url}`).toBe(`${url}: /negocio?tab=integraciones`)
+      expect(`${url}: ${pila.entradas.length}`).toBe(`${url}: 2`)
+      expect(`${url}: ${pila.retrocesos}`).toBe(`${url}: 0`)
+      expect(`${url}: ${tocar(TABS_NEGOCIO, 'business')}`).toBe(`${url}: replace`)
+      expect(`${url}: ${actual().url}`).toBe(`${url}: /negocio`)
+    })
+  }
+
+  it('G-04-8 sin espejo: la limpieza con la vista ya en Integraciones reemplaza DENTRO del ejecutor', () => {
+    const { pila, actual } = montarHistoria([{ url: '/afuera', state: null }, { url: '/negocio?tab=integraciones&mp=connected', state: { __NA: true } }])
+    expect(applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: 'integraciones', to: 'integraciones', drop: ['mp', 'google'] })).toBe('replace')
+    expect(actual().url).toBe('/negocio?tab=integraciones')
+    expect(actual().state).toEqual({ frjView: null })
+    expect(pila.entradas).toHaveLength(2)
+    expect(pila.retrocesos).toBe(0)
+  })
+
+  it('G-04-8 sin espejo: con nada que borrar, la misma llamada sigue sin escribir (regla 2)', () => {
+    const { pila } = montarHistoria([{ url: '/afuera', state: null }, { url: '/negocio?tab=integraciones', state: { __NA: true } }])
+    expect(applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: 'integraciones', to: 'integraciones', drop: ['mp', 'google'] })).toBe('none')
+    expect(pila.entradas).toEqual([{ url: '/afuera', state: null }, { url: '/negocio?tab=integraciones', state: { __NA: true } }])
   })
 
   it('D-08 sobre una entrada ajena: tras la URL pegada + Integraciones, consumeOwnedPanelEntry no retrocede', () => {
@@ -631,6 +683,21 @@ describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
       expect(efecto).toContain(texto)
     }
     expect(settings).toContain('if (grupoDeTabs === null || vueltaDeOAuth) return')
+    // G-04-8 (plan 04-07): «hay una vuelta del OAuth pendiente» se pregunta UNA vez, por presencia, en
+    // `lib/panel-tabs.ts`: el render no lleva su propio criterio ni el efecto su guarda por verdad, y los
+    // dos llaman al mismo predicado (el render, que también corta la reconciliación, y el efecto).
+    expect(settings).not.toContain("get('mp') !== null")
+    expect(efecto).not.toContain('if (!mp && !google) return')
+    expect(settings.split('vueltaDeOAuthPendiente(').length - 1).toBe(2)
+    expect(efecto.split('vueltaDeOAuthPendiente(').length - 1).toBe(1)
+    // El comentario que prometía que el próximo toque limpiaba la query (no la limpiaba: los tabs se trababan).
+    expect(settingsCrudo).not.toContain('la query queda hasta el próximo toque')
+    // El espejo del efecto en ESTA suite pregunta lo mismo y hace la misma llamada.
+    const espejo = cuerpoDe(read('test/panel-tabs.test.ts'), 'function volverDelOAuth(', ') {')
+    expect(espejo).not.toBe('')
+    expect(espejo).toContain('vueltaDeOAuthPendiente(')
+    expect(espejo).toContain('window.location.search')
+    expect(espejo).toContain("drop: ['mp', 'google']")
   })
 
   it('(h) Agenda limpia su ?google= por el helper (D-10): un reemplazo stale que borra sólo google', () => {
@@ -825,4 +892,29 @@ describe('G-04-7 — un toque decide con la URL de ahora, y un consumo en vuelo 
     expect(fuente).not.toMatch(/export\s+(let|const|var)\s+consumoEnVuelo\b/)
     expect((PH as Record<string, unknown>).consumoEnVuelo).toBeUndefined()
   })
+})
+
+// ── 7) G-04-8 (plan 04-07): un solo criterio para la vuelta del OAuth, por PRESENCIA ───────────────
+// El render fuerza Integraciones mientras `mp` o `google` estén en la query —con cualquier valor, vacío
+// incluido—, y el que limpia tiene que preguntar EXACTAMENTE lo mismo: si preguntara por verdad, `?mp=`
+// quedaría para siempre y los cuatro tabs de Negocio, trabados (`.planning/debug/oauth-traba-tabs-negocio.md`).
+
+describe('G-04-8 — vueltaDeOAuthPendiente: mp o google PRESENTES en la query', () => {
+  it('vueltaDeOAuthPendiente existe y es una función del módulo de tabs', () => {
+    expect(typeof (PT as Record<string, unknown>).vueltaDeOAuthPendiente).toBe('function')
+  })
+
+  for (const [query, esperado] of [
+    ['?mp=', true],
+    ['?google=', true],
+    ['?mp=connected', true],
+    ['?tab=integraciones', false],
+    ['', false],
+    ['?MP=x', false],
+    ['?xmp=1&tab=cobros', false],
+  ] as const) {
+    it(`vueltaDeOAuthPendiente: «${query}» ⇒ ${esperado}`, () => {
+      expect(PT.vueltaDeOAuthPendiente({ query: new URLSearchParams(query) })).toBe(esperado)
+    })
+  }
 })

@@ -95,6 +95,32 @@ describe('panelHistoryAction — regla 2: empujar la misma URL colapsa la entrad
       panelHistoryAction({ cause: 'stale', from: null, to: null, holding: false, foreignOwnsTop: false }),
     ).toBe('none')
   })
+
+  // G-04-8 (plan 04-07): con la vista igual pero algo que `drop` va a borrar de la query actual
+  // (`cleansQuery`, lo calcula `applyPanelView`), SÍ hay un cambio real —el de la query—. La regla 2 se
+  // comía esa limpieza: `/negocio?tab=integraciones&mp=connected` quedaba con `mp` para siempre y los
+  // tabs de Negocio, trabados en Integraciones. Una limpieza nunca es un destino ni un consumo: reemplaza.
+  // Las reglas 0 y 1 siguen primero. Sin `cleansQuery`, los casos de arriba no cambian.
+  for (const cause of TODAS_LAS_CAUSAS) {
+    const esperado = cause === 'concurrent' ? 'none' : 'replace'
+    it(`con la causa '${cause}', origen igual a destino y una limpieza de la query devuelve '${esperado}'`, () => {
+      expect(
+        panelHistoryAction({ cause, from: 'abc', to: 'abc', holding: true, foreignOwnsTop: false, cleansQuery: true }),
+      ).toBe(esperado)
+    })
+  }
+
+  it('una limpieza de la query con la entrada de arriba ajena sigue en none (la regla 0 primero)', () => {
+    expect(
+      panelHistoryAction({ cause: 'programmatic', from: 'abc', to: 'abc', holding: false, foreignOwnsTop: true, cleansQuery: true }),
+    ).toBe('none')
+  })
+
+  it('una limpieza de la query con null === null reemplaza', () => {
+    expect(
+      panelHistoryAction({ cause: 'stale', from: null, to: null, holding: false, foreignOwnsTop: false, cleansQuery: true }),
+    ).toBe('replace')
+  })
 })
 
 describe('panelHistoryAction — la tabla de decisiones', () => {
