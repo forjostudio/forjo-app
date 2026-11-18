@@ -1088,6 +1088,15 @@ export function FinancesClient({ businessId }: Props) {
       )}
 
       {/* Tabs */}
+      {/* obs-G1 (re-UAT del 04-08, quick 261118-jdq): con un tab corto —Ventas con 0 ventas— el
+          documento quedaba más corto que el scroll del momento y el navegador lo recortaba: la página
+          «se achica» y salta. Por eso cada panel lleva `min-h-dvh`: el alto de la pantalla como mínimo,
+          con la MISMA unidad que el `main` del layout del panel (ver ahí por qué `dvh` y no `vh`). Así el
+          alto del documento es al menos el borde del panel más una pantalla, y el scroll máximo nunca
+          queda por debajo del scroll con el que se tocó el tab (que tiene que estar a la vista para
+          tocarlo). CSS puro, sin medir alturas. Va en cada panel y no en el componente compartido de
+          tabs, y no en la raíz de los tabs: ahí la fila de los triggers contaría adentro del mínimo.
+          Costo aceptado por el dueño (opción A, 2026-11-18): un tab vacío deja blanco debajo de su aviso. */}
       <Tabs value={txTab} onValueChange={alElegirTab}>
         <div className="flex items-center justify-between gap-2">
           <TabsList>
@@ -1099,7 +1108,7 @@ export function FinancesClient({ businessId }: Props) {
           {txTab === 'expenses' && <Button size="sm" className="gap-2 flex-shrink-0" onClick={openNewExpense}><Plus className="w-4 h-4" /> Nuevo egreso</Button>}
         </div>
 
-        <TabsContent value="appointments" className="space-y-2 mt-4">
+        <TabsContent value="appointments" className="space-y-2 mt-4 min-h-dvh">
           {appointments.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-sm">Sin turnos en este período</p>
           ) : appointments.map(appt => {
@@ -1132,7 +1141,7 @@ export function FinancesClient({ businessId }: Props) {
           })}
         </TabsContent>
 
-        <TabsContent value="sales" className="space-y-3 mt-4">
+        <TabsContent value="sales" className="space-y-3 mt-4 min-h-dvh">
           {sales.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-sm">Sin ventas en este período</p>
           ) : sales.map(sale => {
@@ -1157,7 +1166,7 @@ export function FinancesClient({ businessId }: Props) {
           })}
         </TabsContent>
 
-        <TabsContent value="expenses" className="space-y-3 mt-4">
+        <TabsContent value="expenses" className="space-y-3 mt-4 min-h-dvh">
           {expenses.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 text-sm">Sin egresos en este período</p>
           ) : expenses.map(exp => (
