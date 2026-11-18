@@ -90,3 +90,15 @@
   retroceso— es derivado y sin medir.
   **El «Volver» de clientes SÍ hereda la guarda por construcción** (pasa por el mismo `applyPanelView`), pero ninguna
   sonda lo recorre directo: lo prueba la re-UAT del 04-08.
+
+- obs-G1: con 0 ventas, el tab Ventas de Finanzas achica la página y el navegador recorta el scroll (re-UAT del 04-08)
+  status: open
+  **Qué:** el dueño, en Android Chrome durante el G6.1 en producción (`c3da6d0`, 2026-11-18): «Algo que por ahí me
+  gustaria es que ya se fije el alto de la ventana con los turnos que aparecen, porque sino cada vez que voy a ventas
+  hace un salto ahi porque se achica. Igual es porque hay 0 ventas cargadas.» No es un scroll de la app: el tab nuevo
+  deja el documento más corto que el `scrollY` de ese momento y el navegador lo recorta (el mismo `recorte_por_alto`
+  que la sonda mide en Negocio → Cobros, `## (h)` de `.planning/debug/tabs-en-la-url-medida.md`).
+  **Dónde se vio:** `04-UAT-GAPS.md` § «Observaciones fuera del "pasa si"». El G6.1 pasó igual (✅).
+  **Por qué no se tocó:** la Phase 4 es «cero pixel nuevo» y el plan 04-08 no cambia código. Decisión del dueño
+  (2026-11-18): resolverlo DESPUÉS como un `/gsd-quick` separado — alto mínimo del contenedor de los tabs de Finanzas =
+  alto de la pantalla (CSS), y medir antes con la sonda del scroll que el primer toque sigue sin moverse.
