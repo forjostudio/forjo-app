@@ -29,7 +29,7 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 **Total Plans in Phase:** 8
 **Status:** Phase 4 completa y SECURED — las 3 fases de v0.31 completas; faltan los quicks obs-G1 y R2-WR-01 y el cierre del milestone
 **Current Phase:** 4 — Los tabs profundos sobre la política ya fijada
-**Last Activity:** 2026-11-18 - Completed quick task 261118-jdq: obs-G1 alto minimo de los tabs de Finanzas
+**Last Activity:** 2026-11-18 - Completed quick task 261118-kat: R2-WR-01 la guarda de consumo en vuelo (medido y arreglado)
 **Last Activity Description:** Phase 4 completa (verificación passed 5/5, re-UAT de gaps 8/8 en producción)
 
 ## Progress
@@ -80,6 +80,7 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 | fast-261116b | R2-WR-01: el gate de la rama ignore exige leer el reintento antes de apagarlo (probado con mutacion) + guarda R2-IN-03 | 2026-11-16 | 7eedb66 | — |
 | 261116-t5o | R2-WR-02 medido: cerrar el dialogo con el atras enseguida y tocar despues → el atras siguiente avisa (veredicto arma, entradas_salteadas=0; lo devuelve Chrome, no el modulo) | 2026-11-16 | 8f58a54 | [261116-t5o-medir-r2-wr-02-g3-10-pronto-y-toque](./quick/261116-t5o-medir-r2-wr-02-g3-10-pronto-y-toque/) |
 | 261118-jdq | obs-G1: los tabs de Finanzas con `min-h-dvh` para que Ventas vacia no achique la pagina (rojo 3/3 recorte del navegador → verde 8/8, G-04-6 sigue 5/5; sin pushear, UAT con R2-WR-01) | 2026-11-18 | 05733dc | [261118-jdq-obs-g1-alto-minimo-de-los-tabs-de-finanz](./quick/261118-jdq-obs-g1-alto-minimo-de-los-tabs-de-finanz/) |
+| 261118-kat | R2-WR-01: la guarda de consumo en vuelo — medido primero (caso 1 bfcache NO reproduce en Chrome 157 por BroadcastChannel; casos 2 y 3a/3b SI, 3b-b1 sacaba del sitio) y arreglado: try/catch del back, guarda compartida con consumeOwnedPanelEntry, pageshow persisted defensivo (decision A del dueno); AR-04-05/06 cerrados por mitigacion; sin pushear | 2026-11-18 | 87868c4 | [261118-kat-r2-wr-01-la-guarda-de-consumo-en-vuelo-s](./quick/261118-kat-r2-wr-01-la-guarda-de-consumo-en-vuelo-s/) |
 
 ## Decisions
 
