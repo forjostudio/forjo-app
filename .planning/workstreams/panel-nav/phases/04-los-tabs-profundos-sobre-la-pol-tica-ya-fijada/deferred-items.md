@@ -78,7 +78,7 @@
   página pública: candidato a un quick que lo mida antes.
 
 - La guarda de consumo en vuelo no se extendió a `consumeOwnedPanelEntry` (plan 04-07, G-04-7)
-  status: open
+  status: resolved (quick 261118-kat, cerrado por mitigación; medido en .planning/debug/tabs-en-la-url-medida.md ## (l))
   **Qué:** la guarda (`consumoEnVuelo` en `lib/panel-history.ts`) vive sólo en `applyPanelView`. `consumeOwnedPanelEntry`
   —el menú, NAV-08, y el primer paso de B1— es OTRA función: compartir la guarda no es «el mismo helper» sino una
   segunda lectura de la memoria del módulo.
@@ -90,6 +90,10 @@
   retroceso— es derivado y sin medir.
   **El «Volver» de clientes SÍ hereda la guarda por construcción** (pasa por el mismo `applyPanelView`), pero ninguna
   sonda lo recorre directo: lo prueba la re-UAT del 04-08.
+  **Cierre:** la guarda se comparte (`87868c4`): `consumeOwnedPanelEntry` chequea el consumo en vuelo por identidad del
+  state antes de sus dos guardas y enciende la guarda con el mismo bloque que la rama `consume`. El orden de B1 se midió
+  en el simulador con los ejecutores reales (`NR-b1-control`, `NR-b1-reentrada`, `NR-b1-triple`, verdes antes y después);
+  el cruce, rojo 4/4 antes (K3a/K3b por el menú y por B1) y verde después; R-B1 4/4 y R-T 12/12 en la app.
 
 - obs-G1: con 0 ventas, el tab Ventas de Finanzas achica la página y el navegador recorta el scroll (re-UAT del 04-08)
   status: resolved (quick 261118-jdq, 05733dc; medido en .planning/debug/tabs-en-la-url-medida.md ## (k))
@@ -108,7 +112,7 @@
   (los cinco recorridos del 04-06 en OK, cero escrituras de Next). Falta la UAT en el teléfono, junto con R2-WR-01.
 
 - R2-WR-01: la guarda de consumo en vuelo podría quedar encendida sin `popstate` (code review ronda 2, `04-REVIEW-2.md`)
-  status: open
+  status: resolved (quick 261118-kat, cerrado por mitigación; medido en .planning/debug/tabs-en-la-url-medida.md ## (l))
   **Qué:** `consumoEnVuelo` (`lib/panel-history.ts:933-938`, `:1024`, `:1045-1049`) sólo se apaga con un `popstate`;
   mientras está encendida, todo `applyPanelView` del documento devuelve `'none'` (tabs, reconciliación, ficha `?c=`).
   Caminos derivados SIN MEDIR: (a) bfcache — un retroceso que cruza de documento (p. ej. Safari tras recargar, donde las
@@ -117,6 +121,12 @@
   **Decisión del dueño (2026-11-18):** cerrar la fase y resolverlo DESPUÉS en un `/gsd-quick` que MIDA primero (Chrome
   desmintió el caso hermano WR-04); si reproduce: soltar también en `pageshow`, `try` alrededor del `back()`, corregir
   el docblock. Sale en el mismo push que obs-G1.
+  **Cierre:** caso 2 (`back()` que tira) reprodujo en el simulador (K2-a: la guarda quedaba encendida con su oyente y
+  el toque siguiente daba `none`) y se arregló con el `try`/`catch` (`87868c4`). Caso 1 (bfcache) NO reprodujo en Chrome
+  157 (K1-bfcache-cruce: el cruce se armó pero ningún documento entró a la bfcache, `BroadcastChannelOnMessage`); la
+  salida por `pageshow` con `persisted` se puso igual por decisión del dueño (A), verificada sólo en el simulador
+  (`C-pageshow-*`). Docblock corregido. Residuo sin medir: Safari de iOS, Android real, la pestaña restaurada y el
+  retroceso ignorado en silencio.
 
 - R2-IN-04: doble toque en una fila de Clientes apila `?c=A` sobre `?c=A` (code review ronda 2)
   status: open
@@ -125,9 +135,13 @@
   ir junto con R2-WR-01 (mismo helper `toqueDeTab`/URL de ahora). Sin medir.
 
 - Decisión del dueño (2026-11-18, secure-phase): el cruce guarda ↔ `consumeOwnedPanelEntry` va al MISMO quick de R2-WR-01
-  status: open
+  status: resolved (quick 261118-kat, cerrado por mitigación; medido en .planning/debug/tabs-en-la-url-medida.md ## (l))
   **Qué:** el residuo de T-04-39 de arriba («La guarda de consumo en vuelo no se extendió a `consumeOwnedPanelEntry`»)
   en los DOS sentidos: (a) consumir un tab y tocar la barra o el sidebar antes del `popstate`; (b) la inversa
   (`04-REVIEW-2.md` IN-03): primero el retroceso de `consumeOwnedPanelEntry`/B1 y después un toque al tab por defecto.
   **Registro:** `04-SECURITY.md` AR-04-06 (y AR-04-05 para R2-WR-01), aceptados con vencimiento en ese quick, que mide
   los tres casos primero y arregla los que reproduzcan.
+  **Cierre:** los dos sentidos reprodujeron en el simulador: (a) K3a-nav08 2 retrocesos y `/dashboard` (esperado 1 y
+  `/finances`), K3a-b1 3 retrocesos y `/afuera`; (b) K3b-nav08 el tab volvía a consumir (2 retrocesos), K3b-b1 3
+  retrocesos y `/afuera`. Con la guarda compartida (`87868c4`) los cuatro dan verde, sin regresar B1 (NR-b1-* 3/3,
+  R-B1 4/4 en la app).

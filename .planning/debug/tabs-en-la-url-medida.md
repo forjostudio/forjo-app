@@ -1804,3 +1804,63 @@ mientras la página estaba oculta: no se miró qué lo manda (la sesión de Supa
 eso vale también para producción, pero no se midió acá).
 
 veredictos (l): caso 1=no-reproduce · caso 2=reproduce · caso 3a=reproduce · caso 3b=reproduce
+
+decision caso 1 (dueno, 2026-11-18): A
+
+### El arreglo (task 3)
+
+Banderas: **F1** encendida por la decisión del dueño (A: mitigación defensiva aunque el caso 1 no reprodujo en Chrome
+157), **F2** y **F3** encendidas por lo medido arriba (caso 2 y caso 3, los dos sentidos). Se aplicó el diseño del plan
+tal cual, en `lib/panel-history.ts` y nada más (`lib/panel-branch.ts` intacto):
+
+- **F2:** en la rama `consume` de `applyPanelView`, el oyente y el retroceso van en un `try`; el `catch` llama a
+  `soltarConsumo()` y relanza el mismo error. `soltarConsumo()` apaga primero la memoria y después saca sus dos oyentes.
+- **F3:** una memoria nueva, `estadoDelConsumo` (no exportada). `consumeOwnedPanelEntry` empieza con el chequeo del
+  consumo en vuelo: con el mismo state devuelve `true` sin retroceder; con otro state suelta la guarda y sigue. Después
+  van sus dos guardas sin cambios y el MISMO bloque de encendido que la rama `consume`.
+- **F1:** `soltarAlVolverDeLaCache(e)` suelta la guarda sólo si `e.persisted`; cada bloque de encendido engancha el
+  `pageshow` de disparo único y `soltarConsumo()` lo saca.
+- **Docblocks:** sin la garantía de que la guarda no se traba; con el número de K1; con el residuo del retroceso ignorado
+  en silencio; con la guarda compartida y el orden de oyentes de B1; IN-05 corregido en `consumeOwnedPanelEntry`.
+- **La única aserción vieja cambiada:** la cuenta de oyentes del B1 en `test/panel-branch.test.ts` (ahora cuenta los
+  que no son de la guarda, incluido el de `pageshow`). Se agregaron drenajes de la guarda en su `afterEach` y en el
+  preludio de NAV-08 de `lib/panel-history.test.ts` (IN-02), cuyo stub ahora tiene el par de enganche.
+
+**Los candados nuevos, antes del arreglo** (`9e4df17`):
+
+```
+./node_modules/.bin/vitest run --project pure test/panel-tabs.test.ts
+Tests  7 failed | 90 passed (97)
+```
+
+Los siete rojos: los cinco K de arriba (idénticos) más `C-retroceso-unico` (`expected -1 to be greater than -1`: el
+menú no leía `consumoEnVuelo`) y `C-pageshow-tab` (`{ tras: 'none', oyentes: 1 }` contra `{ tras: 'replace', oyentes: 0 }`).
+`C-pageshow-menu` en verde antes del arreglo, como se predijo (el menú no tenía guarda). Log:
+`C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/kat-candados-rojo.txt`.
+
+**El verde, con el arreglo** (`87868c4`):
+
+- Gate 1 (estático, suites y build), rc 0: `panel-tabs` 97/97 (los nueve K/NR y los tres C en verde, el bloque K y el
+  describe G-04-7 idénticos desde su commit), pura 77 archivos / 1857 casos, las 8 suites de historial 683, `tsc` sin
+  `error TS`, eslint por archivo rc 0, `npm run build` rc 0 sin avisos de Suspense, `next.config.ts` con su huella,
+  cero intocables cambiados. Log: `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/kat-t3-gate1.txt`.
+- Gate 2 (por el turno), rc 0: la app `recorridos medidos: 47 · coinciden con lo esperado: 46 · no coinciden: 1` con
+  R-T 12/12 y R-B1 4/4 en `OK` y la única FALLA la declarada `R-G3-10-primer-toque-atras-pronto`; la estática 18/18; el
+  scroll `verde-r2wr01 · tras-el-fix` 8/8 con `paneles con alto minimo: 3`. K1 no se volvió a correr (sólo corre si
+  el caso 1 reprodujo). ⚠ La sonda de la app devolvió rc 127 por el envoltorio del turno (las corridas anteriores daban
+  1 por la FALLA declarada); la salida está completa y el gate no juzga ese código. No se investigó: la herramienta del
+  turno no vive en este repo. Logs: `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/kat-t3-logs/`
+  (`app.txt`, `estatica.txt`, `scroll.txt`) y el resumen en `kat-t3-gate2.txt` del mismo scratchpad.
+
+### Lo que NO cierra
+
+- **El caso 1 en la app:** la salida por `pageshow` sólo la fija el simulador (`C-pageshow-tab`, `C-pageshow-menu`). En
+  Chrome 157 el panel no entra a la bfcache (`BroadcastChannelOnMessage`), así que no hay cómo verla acá.
+- **Safari de iOS, Chrome de Android reales y la pestaña descartada y restaurada:** sin medir. Lo de acá es Chrome de
+  escritorio headless con emulación móvil.
+- **El retroceso que el navegador ignora en silencio** (sin tirar y sin recorrer): deja la guarda encendida hasta el
+  próximo recorrido o una recarga. Declarado en el docblock, sin medir, fuera de los tres casos decididos.
+- **El teléfono real:** la UAT corta va con obs-G1, después del push conjunto (nada se pusheó).
+- **R2-IN-04** (doble toque en una fila de Clientes): sigue abierto, fuera de alcance.
+
+cierre (l): la guarda de consumo en vuelo · caso 1=mitigado · caso 2=mitigado · caso 3=mitigado
