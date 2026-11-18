@@ -397,7 +397,11 @@ describe('Finanzas — el tab sale de la URL, en un solo dialecto', () => {
 
   it('la página: Suspense, el negocio por owner_id y SIN searchParams (el tab no decide qué se lee)', () => {
     const pagina = sinComentarios(read(PAGINA))
-    expect(pagina).toContain('<Suspense fallback={null}>')
+    // G-04-6 (plan 04-06): el boundary tiene un NODO mientras suspende —un div vacío con la clase del contenedor
+    // raíz de FinancesClient—; con el fallback nulo el handler de scroll de Next deja pendiente el scroll de la
+    // navegación blanda y el primer toque de un tab lo ejecuta (medido en `.planning/debug/finanzas-primer-toque-scroll.md`).
+    expect(pagina).toContain('<Suspense fallback={<div className="space-y-6 max-w-5xl" aria-busy="true" />}>')
+    expect(pagina).not.toContain('fallback={null}')
     expect(pagina).toContain(".eq('owner_id', user.id)")
     expect(pagina).not.toContain('searchParams')
   })
