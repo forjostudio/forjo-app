@@ -1068,3 +1068,44 @@ resumen). Todo lo demás del gate cumple (R-T en `OK` 12, estática 18, pura, co
 criterio 5, bloqueado, huella). P-8 no aplicó: no hay nada en rojo que no sea el costo declarado.
 
 no-regresion (plan 04-05): sonda de la app 46/47 en OK, estatica 18/18, pura 77/1804, completa 111/2111, tsc limpio, build ok, criterio 5 en cero
+
+## (h) El primer toque de un tab no mueve la página (plan 04-06, G-04-6)
+
+Qué se preguntó: si darle un NODO al `<Suspense>` de la página de Finanzas (un `div` vacío con la clase del
+contenedor raíz de `FinancesClient`, `space-y-6 max-w-5xl`, y `aria-busy="true"`) apaga el salto al inicio del
+primer toque de Ventas o Egresos después de una entrada blanda —la obs-1 del dueño en la UAT, diagnosticada en
+`.planning/debug/finanzas-primer-toque-scroll.md`—, medido en la app real, con los esperados escritos y
+commiteados ANTES de la primera corrida que los juzga (`c7a1a78`, `test(04-06): modo tras-el-fix de la sonda del
+scroll`), y con Negocio sin tocar como control positivo en la misma corrida.
+
+**El entorno.** 2026-11-17, 23:16 → 23:22 hora de Argentina. Pila local de forjo-app arriba (`/rest/v1/` 200; no
+hizo falta `supabase start`; no se paró ni reseteó ninguna pila). Sin `next dev` de este repo vivo (sin
+`.next/dev/lock`; 3031 y 9335 libres): la sonda levantó el suyo en el 3031 con `/login 200` al primer intento y lo
+cerró al salir (3031 y 9335 libres). El de forjo-landing en el 3000 no se tocó. Turno libre en las dos corridas
+(sin espera). `Chrome/157.0.8103.52`, node `v24.15.0`, modo estricto activo (`next.config.ts` sin tocar).
+
+**Las corridas** (por el turno, en segundo plano, modo `tras-el-fix`):
+
+```
+# RED, las tres paginas sin tocar (huellas finances f079ef8df9a24c2b, negocio f7329e6119e061d6, settings ba61b06ee688be9c)
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs F-blanda-mas-movil,F-directa-movil,F-tarjeta-movil,F-sidebar-escritorio,N-negocio-borde-movil rojo-04-06 tras-el-fix
+# verde de Finanzas, con 0777339 (finances 0368712e61af3350; negocio y settings sin tocar)
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs F-blanda-mas-movil,F-directa-movil,F-tarjeta-movil,F-sidebar-escritorio,N-negocio-borde-movil verde-finanzas-04-06 tras-el-fix
+```
+
+| recorrido | RED (sin tocar) | verde Finanzas (`0777339`) |
+|---|---|---|
+| `F-blanda-mas-movil` (Más → Finanzas, 390x844) | `FALLA`: Ventas 1404 → 147, `scrollTop=0` + `scrollIntoView()` desde `InnerScrollAndFocusHandlerOld.handlePotentialScroll < componentDidUpdate`; contenedor vacío 349 ms; 2º toque y re-entrada sin escritura | `OK`: Ventas 1404 → 1367 (−37 = recorte del viewport emulado), cero escrituras de Next; entrada con `hijos=1 visibles=0` (el nodo del fallback) 332 ms |
+| `F-directa-movil` (carga dura, control) | `OK`: cero escrituras | `OK`: cero escrituras |
+| `F-tarjeta-movil` (tarjeta «Ingresos del mes») | `FALLA`: Egresos 1404 → 147, las mismas dos escrituras; vacío 321 ms | `OK`: Egresos 1404 → 1349 (−55 = recorte), cero escrituras |
+| `F-sidebar-escritorio` (1280x800) | `FALLA`: Ventas 830 → 115, las mismas dos escrituras; vacío 317 ms | `OK`: Ventas 830 → 830, cero escrituras |
+| `N-negocio-borde-movil` (Más → Negocio, borde 40 px fuera) | `FALLA`: Cobros 187 → 0 con las mismas dos escrituras; vacío 363 ms | `FALLA` (control positivo, Negocio sin tocar): Cobros 187 → 0 con las mismas dos escrituras; `hijos=0` 364 ms |
+
+La corrida RED dio exactamente lo escrito en el plan antes de correrla (los tres caminos blandos de Finanzas y
+Negocio en `FALLA` con la pila `handlePotentialScroll`, la carga dura en `OK`): el instrumento discrimina (P-1 no
+aplicó). En la de Finanzas, el contenedor de la página pasa de `hijos=0` a `hijos=1 visibles=0` durante la carga
+del chunk —HAY nodo, de alto cero— y el primer toque deja de escribir en los tres caminos, mientras Negocio, en la
+misma corrida y sin tocar, sigue escribiendo. Ningún `esperado_tras_el_fix` se tocó después de medir.
+
+rojo (h): etiqueta=rojo-04-06 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 1
+verde finanzas (h): etiqueta=verde-finanzas-04-06 · modo=tras-el-fix · recorridos: 5 · coinciden con lo esperado tras el fix: 4
