@@ -102,3 +102,20 @@
   **Por qué no se tocó:** la Phase 4 es «cero pixel nuevo» y el plan 04-08 no cambia código. Decisión del dueño
   (2026-11-18): resolverlo DESPUÉS como un `/gsd-quick` separado — alto mínimo del contenedor de los tabs de Finanzas =
   alto de la pantalla (CSS), y medir antes con la sonda del scroll que el primer toque sigue sin moverse.
+
+- R2-WR-01: la guarda de consumo en vuelo podría quedar encendida sin `popstate` (code review ronda 2, `04-REVIEW-2.md`)
+  status: open
+  **Qué:** `consumoEnVuelo` (`lib/panel-history.ts:933-938`, `:1024`, `:1045-1049`) sólo se apaga con un `popstate`;
+  mientras está encendida, todo `applyPanelView` del documento devuelve `'none'` (tabs, reconciliación, ficha `?c=`).
+  Caminos derivados SIN MEDIR: (a) bfcache — un retroceso que cruza de documento (p. ej. Safari tras recargar, donde las
+  entradas podrían no compartir documento) y después «adelante»: llega `pageshow`, no `popstate`; (b) un `back()` que
+  tira o que el navegador ignora. El docblock dice «nunca queda colgada» sin medirlo.
+  **Decisión del dueño (2026-11-18):** cerrar la fase y resolverlo DESPUÉS en un `/gsd-quick` que MIDA primero (Chrome
+  desmintió el caso hermano WR-04); si reproduce: soltar también en `pageshow`, `try` alrededor del `back()`, corregir
+  el docblock. Sale en el mismo push que obs-G1.
+
+- R2-IN-04: doble toque en una fila de Clientes apila `?c=A` sobre `?c=A` (code review ronda 2)
+  status: open
+  **Qué:** `app/(dashboard)/clients/clients-client.tsx:1055` — el `user-open` toma `from: selectedId` del render, el
+  mismo defecto que WR-02 tenía en los tabs. Fuera del alcance del cierre (archivo intocable en 04-06..08). Candidato a
+  ir junto con R2-WR-01 (mismo helper `toqueDeTab`/URL de ahora). Sin medir.
