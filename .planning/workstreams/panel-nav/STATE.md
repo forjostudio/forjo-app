@@ -3,19 +3,19 @@ gsd_state_version: "1.0"
 milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 4 — Los tabs profundos sobre la política ya fijada
-current_plan: 7
+current_plan: 8
 status: executing
-stopped_at: "Phase 4: 04-06 completo (G-04-6, fallback con nodo, sonda 5/5); proximo 04-07 (G-04-7/G-04-8)"
+stopped_at: "Phase 4: 04-07 completo (G-04-7 doble toque, G-04-8 vuelta del OAuth; app 16/16); proximo 04-08 (cierre, push con confirmacion, re-UAT)"
 last_updated: "2026-11-17T10:24:04.996Z"
 last_activity: 2026-11-17
-last_activity_desc: "Phase 4: cierre de gaps 6/8 (04-06 G-04-6 hecho, sonda 5/5); ejecutando 04-07"
+last_activity_desc: "Phase 4: cierre de gaps 7/8 (04-07 G-04-7/G-04-8 hecho, app 16/16); ejecutando 04-08"
 state_head: e68e38177149ca57d0660a6e4bb6066c0b5d6775
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 29
-  completed_plans: 27
-  percent: 93
+  completed_plans: 28
+  percent: 97
 workstream: panel-nav
 created: 2026-09-28
 current_phase_name: Los tabs profundos sobre la política ya fijada
@@ -25,19 +25,19 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 ## Current Position
 
-**Current Plan:** 7
+**Current Plan:** 8
 **Total Plans in Phase:** 5
-**Status:** Phase 4: cierre de gaps 6/8 (04-06 G-04-6 hecho, sonda 5/5); ejecutando 04-07
+**Status:** Phase 4: cierre de gaps 7/8 (04-07 G-04-7/G-04-8 hecho, app 16/16); ejecutando 04-08
 **Current Phase:** 4 — Los tabs profundos sobre la política ya fijada
 **Last Activity:** 2026-11-17 — Phase 4 execution started
-**Last Activity Description:** Phase 4: cierre de gaps 6/8 (04-06 G-04-6 hecho, sonda 5/5); ejecutando 04-07
+**Last Activity Description:** Phase 4: cierre de gaps 7/8 (04-07 G-04-7/G-04-8 hecho, app 16/16); ejecutando 04-08
 
 ## Progress
 
-**Progress:** [█████████░] 93%
+**Progress:** [█████████░] 97%
 **Phases Complete:** 2/3
-**Plans Complete:** 27/29 (fases 2 y 3 completas; fase 4 6/8)
-**Current Plan:** 7 (04-07)
+**Plans Complete:** 28/29 (fases 2 y 3 completas; fase 4 7/8)
+**Current Plan:** 8 (04-08)
 
 ## Session Continuity
 
