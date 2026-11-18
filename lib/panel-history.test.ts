@@ -536,6 +536,9 @@ describe('consumeOwnedPanelEntry — tocar la sección en la que ya estás cierr
   // (quick 261118-kat, IN-02) Desde que el consumo enciende la guarda del consumo en vuelo, el stub tiene
   // también el par de enganche de oyentes, y los registra: el `afterEach` suelta la guarda con ellos antes
   // de soltar el `window`, porque es memoria del módulo y si no sobreviviría al caso.
+  // (quick 261118-pjd, IN-03) El `afterEach` ya no busca el oyente por su nombre: despacha el `popstate` del
+  // recorrido que acá nunca llega (cada oyente de `popstate` vivo se saca y se llama) y después exige que no
+  // quede NINGÚN oyente, tampoco el de `pageshow`. Así la limpieza de la guarda se mide en cada caso de NAV-08.
   let registrados: { tipo: string; fn: (e?: unknown) => void }[] = []
   function montarHistorial(state: unknown) {
     const back = vi.fn()
@@ -550,7 +553,13 @@ describe('consumeOwnedPanelEntry — tocar la sección en la que ya estás cierr
   }
 
   afterEach(() => {
-    for (const o of registrados.filter((x) => x.fn.name === 'soltarConsumo')) o.fn()
+    for (const o of [...registrados]) {
+      if (o.tipo !== 'popstate') continue
+      if (!registrados.includes(o)) continue
+      registrados = registrados.filter((x) => x !== o)
+      o.fn()
+    }
+    expect(registrados).toHaveLength(0)
     registrados = []
     vi.unstubAllGlobals()
   })

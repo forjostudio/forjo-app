@@ -143,6 +143,8 @@ let drenarPopstateDelStub: (() => void) | null = null
 // El despacho de `pageshow` de la última historia montada (quick 261118-kat, F1): la vuelta de la bfcache,
 // con su `persisted`. Sólo la usan los candados del arreglo; ver el docblock de abajo.
 let pageshowDelStub: ((persisted: boolean) => void) | null = null
+// Cuántos oyentes de `pageshow` siguen vivos en la última historia montada (quick 261118-pjd, WR-03).
+let oyentesPageshowDelStub: (() => number) | null = null
 
 /**
  * Una historia falsa con la semántica del navegador: el empuje TRUNCA lo de adelante y agrega, el
@@ -171,6 +173,11 @@ let pageshowDelStub: ((persisted: boolean) => void) | null = null
  * de expresar acá una página que vuelve de la bfcache sin que llegue el `popstate` de su recorrido. Van en
  * una lista aparte a propósito: `pila.oyentes` sigue contando sólo los de `popstate`, que es lo que miden
  * los casos de antes.
+ *
+ * (quick 261118-pjd) `pila.oyentes` sigue contando sólo los de `popstate`, que es lo que miden los casos
+ * viejos. El contador nuevo, `oyentesPageshowDelStub()`, cuenta los de `pageshow` que siguen vivos: sin él
+ * nada podía afirmar que la guarda no deja colgado su oyente de la bfcache, que es justo lo que WR-03 del
+ * review encontró sin medir (borrar la línea que lo saca dejaba toda la suite en verde).
  */
 function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean } = {}) {
   const pila = { entradas: [...inicio], indice: inicio.length - 1, retrocesos: 0, oyentes: 0 }
@@ -193,6 +200,7 @@ function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean }
       o.fn({ persisted })
     }
   }
+  oyentesPageshowDelStub = () => oyentesPageshow.length
   const recorrer = () => {
     if (pila.indice > 0) pila.indice--
     popstate()
@@ -1288,5 +1296,280 @@ describe('R2-WR-01 — los candados del arreglo (quick 261118-kat)', () => {
     const otra = PH.consumeOwnedPanelEntry()
     const medido = { otra, retrocesos: pila.retrocesos }
     expect(medido).toEqual({ otra: true, retrocesos: 2 })
+  })
+})
+
+// ── 10) CR-01 del review de R2-WR-01 (quick 261118-pjd): medidos ANTES de arreglar ────────────────────
+// El code review del quick 261118-kat dejó un crítico y tres avisos de la misma familia que la guarda de consumo en
+// vuelo. El dueño decidió el 2026-11-18 arreglarlos ANTES del push conjunto (obs-G1 + R2-WR-01 + éste), midiendo
+// primero; y, sobre el doble toque a `up` que se vio por lectura al planificar, «medirlo y arreglarlo si da rojo».
+// Cinco grupos:
+//   · CR-01: dos (o tres) toques a Inicio en la barra antes del recorrido. B1 engancha su segundo paso ANTES de
+//     `consumeOwnedPanelEntry`, y ese consumo devuelve `true` sin retroceder con un consumo en vuelo: quedan varios
+//     re-decisores que corren en el MISMO `popstate`, leen el mismo state y retroceden cada uno.
+//     `CR-b1-silencio` fija el residuo que se acepta para el retroceso que el navegador ignora en silencio: a lo
+//     sumo UN re-decisor pendiente (el atrás del sistema más un `up`), nunca el dueño fuera del sitio.
+//   · WR-02: un `back()` que tira dentro de B1 deja su segundo paso enganchado y el siguiente atrás del sistema
+//     navega solo (`K2-c-b1`; las otras dos ramas de dos pasos se miden en `test/panel-branch.test.ts`).
+//   · WR-01: el `replaceState` que hace el `HistoryUpdater` de Next en cada commit
+//     (`node_modules/next/dist/client/components/app-router.js:38-67`) cambia la identidad del state sin cambiar la
+//     URL; los `W1-*` lo emulan dentro de la ventana del recorrido.
+//   · WR-03/IN-01: un `pageshow` no persistido no puede soltar la guarda ni gastar su salida por la bfcache, y
+//     ninguna salida de la guarda deja vivo un oyente de `popstate` ni de `pageshow` (`P0-*`).
+//   · UP-doble: dos toques a Inicio desde una sección con la marca de la rama, antes del recorrido:
+//     `consumeOwnedBranchEntry` no lee la guarda.
+// Cada `esperado` es lo CORRECTO (un retroceso por gesto, el dueño en la sección o en Inicio): un ROJO quiere decir que
+// el caso REPRODUCE. `NR-menu-y-barra`, `UP-control` y los `P0-*` son candados de no-regresión y tienen que estar en
+// verde con el código de hoy: si no, el simulador no representa el camino y no hay veredicto (P-1). Los ejecutores
+// son los REALES contra la historia con retroceso ASÍNCRONO.
+
+describe('CR-01 del review de R2-WR-01 — medidos antes de arreglar (quick 261118-pjd)', () => {
+  const ID = 7
+  const navegaciones: string[] = []
+
+  afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
+    pageshowDelStub = null
+    oyentesPageshowDelStub = null
+    navegaciones.length = 0
+    PB.takeBackLanding()
+    PB.applyBranchMarkRequest('__drenaje__')
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  // Las pilas se FABRICAN en cada llamada: la identidad del state de cada entrada es la de ESE caso. Las dos primeras
+  // son copias exactas de las del describe K del quick 261118-kat (que no se toca).
+  const pilaFin = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/finances', state: { frjUnder: '/dashboard' } },
+    { url: '/finances?tab=ventas', state: { frjView: 'tab' } },
+  ]
+  const pilaFichas = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/clients', state: { frjUnder: '/dashboard' } },
+    { url: '/clients?c=a', state: { frjView: 'c' } },
+    { url: '/clients?c=b', state: { frjView: 'c' } },
+  ]
+  // Una sección con la marca de la rama arriba y sin subsección: Inicio desde acá es un `up` solo.
+  const pilaSeccion = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/finances', state: { frjUnder: '/dashboard' } },
+  ]
+
+  const anotar = (to: string, modo: 'push' | 'replace') => {
+    navegaciones.push(`${modo} ${to}`)
+  }
+  const hechos = () =>
+    PB.branchStackFacts({ estado: window.history.state, id: ID, root: PH.PANEL_ROOT, more: PH.PANEL_MORE })
+
+  /** EXACTAMENTE `decidirDesdeElAterrizaje` del hook (`lib/panel-branch.ts`), sin React. */
+  function decidir(href: string): void {
+    const desde = window.location.pathname
+    const plan = PH.panelBranchPlan({ from: desde, to: href, root: PH.PANEL_ROOT, more: PH.PANEL_MORE, ...hechos() })
+    if (plan === 'none') return
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return
+    }
+    const seHizoCargo = PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+    if (!seHizoCargo) navegaciones.push(`caida ${href}`)
+  }
+
+  /** EXACTAMENTE `handleNavigate` del hook: `false` (y la navegación anotada) con push/replace; si no, el ejecutor. */
+  function tocarLaBarra(href: string): boolean {
+    const plan = PH.panelBranchPlan({
+      from: window.location.pathname,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      ...hechos(),
+    })
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return false
+    }
+    return PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+  }
+
+  const queTira = () =>
+    vi.spyOn(window.history, 'back').mockImplementationOnce(() => {
+      throw new DOMException('demasiadas llamadas', 'SecurityError')
+    })
+
+  // Un retroceso que el navegador IGNORA EN SILENCIO: ni tira, ni recorre, ni se cuenta.
+  const queSeIgnora = () => vi.spyOn(window.history, 'back').mockImplementationOnce(() => {})
+
+  // El commit de una transición de Next dentro de la ventana del recorrido: el `HistoryUpdater`
+  // (`app-router.js:38-67`) reemplaza la entrada con el state de ahora esparcido (conserva `frjView`) y la
+  // `canonicalUrl` del árbol que confirma, que en el flujo medido es la misma: la URL NO cambia, la identidad sí.
+  const nextReemplaza = () => window.history.replaceState({ ...(window.history.state as object), __NA: true }, '')
+
+  it('CR-b1-doble: dos toques a Inicio en la barra antes del recorrido', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const s1 = tocarLaBarra(PH.PANEL_ROOT)
+    const s2 = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { s1, s2, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, s2: true, retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('CR-b1-doble-fichas: dos toques a Inicio en la barra con dos fichas apiladas', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFichas(), { backAsincrono: true })
+    const s1 = tocarLaBarra(PH.PANEL_ROOT)
+    const s2 = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { s1, s2, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, s2: true, retrocesos: 3, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('CR-b1-silencio: el retroceso ignorado en silencio, tres toques a la barra y después un atrás del sistema', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queSeIgnora()
+    const s1 = tocarLaBarra(PH.PANEL_ROOT)
+    const s2 = tocarLaBarra(PH.PANEL_ROOT)
+    const s3 = tocarLaBarra(PH.PANEL_ROOT)
+    window.history.back()
+    procesar()
+    const medido = { s1, s2, s3, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, s2: true, s3: true, retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('NR-menu-y-barra: la sección activa del menú y, antes del recorrido, Inicio en la barra', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const s1 = PH.consumeOwnedPanelEntry()
+    const s2 = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { s1, s2, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, s2: true, retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('K2-c-b1: B1 con un back() que tira no deja su segundo paso enganchado', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queTira()
+    let tiro = false
+    try {
+      tocarLaBarra(PH.PANEL_ROOT)
+    } catch {
+      tiro = true
+    }
+    const oyentes = pila.oyentes
+    window.history.back()
+    procesar()
+    const medido = { tiro, oyentes, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ tiro: true, oyentes: 0, retrocesos: 1, url: '/finances', navegaciones: [] })
+  })
+
+  it('W1-menu: el tab por defecto, el replaceState de Next en la ventana y la sección activa del menú', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const consumo = tocar(TABS_FINANZAS, 'appointments')
+    nextReemplaza()
+    const prevenido = PH.consumeOwnedPanelEntry()
+    procesar()
+    const medido = { consumo, prevenido, retrocesos: pila.retrocesos, url: actual().url }
+    expect(medido).toEqual({ consumo: 'consume', prevenido: true, retrocesos: 1, url: '/finances' })
+  })
+
+  it('W1-b1: el tab por defecto, el replaceState de Next en la ventana e Inicio en la barra', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const consumo = tocar(TABS_FINANZAS, 'appointments')
+    nextReemplaza()
+    const seHizoCargo = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { consumo, seHizoCargo, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ consumo: 'consume', seHizoCargo: true, retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('C-pageshow-no-persistido: un pageshow no persistido no suelta la guarda ni gasta su salida', () => {
+    const { pila } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const consumo = tocar(TABS_FINANZAS, 'appointments')
+    pageshowDelStub?.(false)
+    const primero = tocar(TABS_FINANZAS, 'expenses')
+    const vivosPageshow = oyentesPageshowDelStub?.()
+    pageshowDelStub?.(true)
+    const despues = tocar(TABS_FINANZAS, 'expenses')
+    const oyentes = pila.oyentes
+    const oyentesPageshow = oyentesPageshowDelStub?.()
+    const medido = { consumo, primero, vivosPageshow, despues, oyentes, oyentesPageshow }
+    expect(medido).toEqual({ consumo: 'consume', primero: 'none', vivosPageshow: 1, despues: 'replace', oyentes: 0, oyentesPageshow: 0 })
+  })
+
+  it('P0-normal: el recorrido que llega no deja oyentes de popstate ni de pageshow', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const consumo = tocar(TABS_FINANZAS, 'appointments')
+    procesar()
+    const medido = { consumo, url: actual().url, oyentes: pila.oyentes, oyentesPageshow: oyentesPageshowDelStub?.() }
+    expect(medido).toEqual({ consumo: 'consume', url: '/finances', oyentes: 0, oyentesPageshow: 0 })
+  })
+
+  it('P0-catch-tab: el back() que tira en el tab no deja oyentes', () => {
+    const { pila } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queTira()
+    let tiro = false
+    try {
+      tocar(TABS_FINANZAS, 'appointments')
+    } catch {
+      tiro = true
+    }
+    const medido = { tiro, oyentes: pila.oyentes, oyentesPageshow: oyentesPageshowDelStub?.() }
+    expect(medido).toEqual({ tiro: true, oyentes: 0, oyentesPageshow: 0 })
+  })
+
+  it('P0-catch-menu: el back() que tira en el menú no deja oyentes', () => {
+    const { pila } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queTira()
+    let tiro = false
+    try {
+      PH.consumeOwnedPanelEntry()
+    } catch {
+      tiro = true
+    }
+    const medido = { tiro, oyentes: pila.oyentes, oyentesPageshow: oyentesPageshowDelStub?.() }
+    expect(medido).toEqual({ tiro: true, oyentes: 0, oyentesPageshow: 0 })
+  })
+
+  it('P0-pageshow: la vuelta de la bfcache tras el consumo del menú no deja oyentes', () => {
+    const { pila } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const consumo = PH.consumeOwnedPanelEntry()
+    pageshowDelStub?.(true)
+    const medido = { consumo, oyentes: pila.oyentes, oyentesPageshow: oyentesPageshowDelStub?.() }
+    expect(medido).toEqual({ consumo: true, oyentes: 0, oyentesPageshow: 0 })
+  })
+
+  it('UP-doble: dos toques a Inicio desde una sección con la marca de la rama, antes del recorrido', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaSeccion(), { backAsincrono: true })
+    const s1 = tocarLaBarra(PH.PANEL_ROOT)
+    const s2 = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { s1, s2, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, s2: true, retrocesos: 1, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('UP-control: un solo toque a Inicio desde la misma sección (el simulador arma el up)', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaSeccion(), { backAsincrono: true })
+    const s1 = tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { s1, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, retrocesos: 1, url: '/dashboard', navegaciones: [] })
   })
 })

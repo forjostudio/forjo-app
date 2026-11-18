@@ -40,9 +40,10 @@ import { DIRTY_HASH_BASE } from '@/lib/dirty-history'
 // mal, la marca no se escribe y todo degrada a empujar EN SILENCIO — y ésa es, a propósito, la
 // degradación segura.
 
-// Los oyentes del último `montarPila` (quick 261118-kat): el `afterEach` suelta con ellos la guarda del
-// consumo en vuelo de `lib/panel-history.ts`, que es memoria del módulo y sobrevive al caso.
-let ultimosEnganchados: { tipo: string; fn: () => void; opciones: unknown }[] = []
+// Los oyentes VIVOS del último `montarPila` (quick 261118-pjd, IN-03): los que se engancharon y nadie sacó todavía.
+// El `afterEach` despacha con ellos el evento del recorrido que en el caso nunca llegó, así suelta la guarda del
+// consumo en vuelo de `lib/panel-history.ts` y el segundo paso pendiente de B1, que son memoria del módulo.
+let ultimosVivos: { tipo: string; fn: () => void; opciones: unknown }[] = []
 
 /** Un `window` mínimo: lo único que el ejecutor toca, y contando cada cosa. */
 function montarPila({ state, pathname }: { state: unknown; pathname: string }) {
@@ -52,20 +53,30 @@ function montarPila({ state, pathname }: { state: unknown; pathname: string }) {
   const replaceState = vi.fn()
   const enganchados: { tipo: string; fn: () => void; opciones: unknown }[] = []
   const desenganchados: (() => void)[] = []
-  ultimosEnganchados = enganchados
+  // (quick 261118-pjd) Los vivos, aparte del registro: `enganchados`/`desenganchados` son lo que miden los casos
+  // viejos y no se tocan; `vivos` refleja lo que el DOM tendría enganchado ahora.
+  const vivos: { tipo: string; fn: () => void; opciones: unknown }[] = []
+  ultimosVivos = vivos
   const win = {
     history: { state, back, replaceState },
     location: { pathname },
     addEventListener: vi.fn((tipo: string, fn: () => void, opciones: unknown) => {
       enganchados.push({ tipo, fn, opciones })
+      vivos.push({ tipo, fn, opciones })
     }),
-    removeEventListener: vi.fn((_tipo: string, fn: () => void) => {
+    removeEventListener: vi.fn((tipo: string, fn: () => void) => {
       desenganchados.push(fn)
+      const i = vivos.findIndex((o) => o.tipo === tipo && o.fn === fn)
+      if (i !== -1) vivos.splice(i, 1)
     }),
   }
   vi.stubGlobal('window', win)
-  return { back, replaceState, enganchados, desenganchados, win }
+  return { back, replaceState, enganchados, desenganchados, vivos, win }
 }
+
+/** ¿El oyente es de disparo único? Los del recorrido lo son todos (el de B1, el del sentinel, el del colapso, la guarda). */
+const deDisparoUnico = (o: { opciones: unknown }) =>
+  typeof o.opciones === 'object' && o.opciones !== null && (o.opciones as { once?: unknown }).once === true
 
 /** Dispara el `popstate` que el ejecutor enganchó, después de mover la pila a donde aterrizó. */
 function dispararRetroceso(
@@ -74,6 +85,12 @@ function dispararRetroceso(
 ) {
   ctx.win.location.pathname = aterrizaje.pathname
   ctx.win.history.state = aterrizaje.state
+  // (quick 261118-pjd) El DOM saca al de disparo único ANTES de invocarlo: también de los vivos.
+  const primero = ctx.enganchados[0]
+  if (deDisparoUnico(primero)) {
+    const i = ctx.vivos.findIndex((o) => o.tipo === primero.tipo && o.fn === primero.fn)
+    if (i !== -1) ctx.vivos.splice(i, 1)
+  }
   ctx.enganchados[0].fn()
 }
 
@@ -85,8 +102,20 @@ afterEach(() => {
   // enciende y acá el `popstate` de su recorrido nunca llega, así que se llama su oyente de liberación
   // con el `window` del caso todavía puesto. Si no, el caso siguiente la soltaría por identidad del state
   // y le sumaría dos `desenganchados` ajenos.
-  for (const o of ultimosEnganchados.filter((x) => x.fn.name === 'soltarConsumo')) o.fn()
-  ultimosEnganchados = []
+  // (quick 261118-pjd, IN-03) Se DESPACHA el evento del recorrido: cada oyente de `popstate` de disparo único
+  // que sigue vivo se saca y se llama, como haría el navegador. No depende del nombre de ninguna función (un
+  // wrapper o una arrow no lo engañan), suelta la guarda y el segundo paso pendiente de B1, y si un oyente de
+  // recorrido quedara vivo después, el caso se pone rojo acá en vez de envenenar al siguiente. Los que no son
+  // de disparo único no se llaman: no son de un recorrido y llamarlos fuera de su prueba podría tirar.
+  for (const o of [...ultimosVivos]) {
+    if (o.tipo !== 'popstate' || !deDisparoUnico(o)) continue
+    const i = ultimosVivos.indexOf(o)
+    if (i === -1) continue
+    ultimosVivos.splice(i, 1)
+    o.fn()
+  }
+  expect(ultimosVivos.filter((o) => o.tipo === 'popstate' && deDisparoUnico(o))).toHaveLength(0)
+  ultimosVivos = []
   PB.takeBackLanding()
   PB.applyBranchMarkRequest('__drenaje__')
   // El TERCER dato que sobrevive al test (plan 03-12): el canal de diagnóstico vive en `globalThis`,
@@ -1299,6 +1328,8 @@ describe('runBranchNavigation — CONSUMIR LA SUBSECCIÓN y recién entonces re-
     // (2026-11-18, quick 261118-kat) `consumeOwnedPanelEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo antes de su retroceso, DESPUÉS del de B1: se cuentan los que no son de la guarda.
     expect(ctx.enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(1)
     expect(ctx.enganchados[0].tipo).toBe('popstate')
+    // (2026-11-18, quick 261118-pjd) El primero tiene que ser el oyente de B1, no el de la guarda: los dos son de `popstate` y de disparo único.
+    expect(ctx.enganchados[0].fn.name).toBe('segundoPaso')
     expect(ctx.enganchados[0].opciones).toEqual({ once: true })
     expect(ctx.back).toHaveBeenCalledTimes(1)
     // ANTES del consumo: el retroceso es asíncrono, pero el oyente tiene que existir cuando llegue.
@@ -2998,5 +3029,89 @@ describe('el cableado del desmontaje (G3-4) — auditorías de fuente', () => {
     const mod = sinComentarios(leer(MOD_DUENO))
     expect(cuenta(mod, /history\.back\(\)/g)).toBe(2)
     expect(cuenta(mod, /setTimeout|setInterval|requestAnimationFrame|clearTimeout/g)).toBe(0)
+  })
+})
+
+// ── CR-01 y WR-02 del review de R2-WR-01 (quick 261118-pjd): el mecanismo de los dos pasos, medido ANTES de arreglar ──
+// La contraparte unitaria de los casos de `test/panel-tabs.test.ts` (sección 10): acá se mira el mecanismo y no la
+// pila. `K2-c-*`: en las TRES ramas de dos pasos de `runBranchNavigation` el segundo paso se engancha antes del
+// consumo, y si el `back()` tira tiene que quedar desenganchado (WR-02; si no, el siguiente atrás del dueño dispara
+// una navegación que nadie pidió). `CR-b1-reemplazo-unidad`: dos toques a B1 antes del recorrido dejan UN solo
+// segundo paso pendiente, el último (CR-01, decisión del dueño 2026-11-18). Cada esperado es lo CORRECTO: un rojo
+// quiere decir que el caso reproduce.
+
+describe('CR-01 del review de R2-WR-01 — el mecanismo de los dos pasos, medido antes de arreglar (quick 261118-pjd)', () => {
+  const queTira = (ctx: ReturnType<typeof montarPila>) =>
+    ctx.back.mockImplementationOnce(() => {
+      throw new DOMException('demasiadas llamadas', 'SecurityError')
+    })
+
+  it('K2-c-b1-unidad: B1 con un back() que tira desengancha su segundo paso y no re-decide', () => {
+    const ctx = montarPila({ state: { frjView: 'tab' }, pathname: '/negocio' })
+    const reDecidir = vi.fn()
+    queTira(ctx)
+    let tiro = false
+    try {
+      PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir })
+    } catch {
+      tiro = true
+    }
+    const medido = {
+      tiro,
+      segundoPasoDesenganchado: ctx.desenganchados.includes(ctx.enganchados[0].fn),
+      reDecidio: reDecidir.mock.calls.length,
+    }
+    expect(medido).toEqual({ tiro: true, segundoPasoDesenganchado: true, reDecidio: 0 })
+  })
+
+  it('K2-c-exit: el sentinel con un back() que tira desengancha su segundo paso y no navega', () => {
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: PB.panelExitState(7), pathname: PANEL_ROOT })
+    queTira(ctx)
+    let tiro = false
+    try {
+      PB.runBranchNavigation({ plan: 'consume-exit-then-navigate', to: '/appointments', navigate: navegar, exitId: 7 })
+    } catch {
+      tiro = true
+    }
+    const medido = {
+      tiro,
+      segundoPasoDesenganchado: ctx.desenganchados.includes(ctx.enganchados[0].fn),
+      navego: navegar.mock.calls.length,
+    }
+    expect(medido).toEqual({ tiro: true, segundoPasoDesenganchado: true, navego: 0 })
+  })
+
+  it('K2-c-colapso: el colapso con un back() que tira desengancha su segundo paso y no navega', () => {
+    const navegar = vi.fn()
+    const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/finances' })
+    queTira(ctx)
+    let tiro = false
+    try {
+      PB.runBranchNavigation({ plan: 'collapse-then-replace', to: '/clients', navigate: navegar })
+    } catch {
+      tiro = true
+    }
+    const medido = {
+      tiro,
+      segundoPasoDesenganchado: ctx.desenganchados.includes(ctx.enganchados[0].fn),
+      navego: navegar.mock.calls.length,
+    }
+    expect(medido).toEqual({ tiro: true, segundoPasoDesenganchado: true, navego: 0 })
+  })
+
+  it('CR-b1-reemplazo-unidad: dos toques a B1 antes del recorrido dejan un solo segundo paso, el último', () => {
+    const ctx = montarPila({ state: { frjView: 'tab' }, pathname: '/negocio' })
+    const reDecidir = vi.fn()
+    const r1 = PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir })
+    const r2 = PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir })
+    const medido = {
+      r1,
+      r2,
+      retrocesos: ctx.back.mock.calls.length,
+      primeroDesenganchado: ctx.desenganchados.includes(ctx.enganchados[0].fn),
+      reDecidio: reDecidir.mock.calls.length,
+    }
+    expect(medido).toEqual({ r1: true, r2: true, retrocesos: 1, primeroDesenganchado: true, reDecidio: 0 })
   })
 })
