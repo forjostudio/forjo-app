@@ -6,6 +6,9 @@ import { resolveViewParam, applyPanelView, panelHistoryAction } from '@/lib/pane
 // pide como `PH.panelTabCause` y no como import nombrado, para que antes de existir el rojo sea el de
 // la ASERCIÓN y no el del cargador.
 import * as PH from '@/lib/panel-history'
+// Mismo molde para los símbolos nuevos de `lib/panel-tabs.ts` (plan 04-07: `toqueDeTab`,
+// `vueltaDeOAuthPendiente`): un símbolo ausente da rojo en SU caso y no tira el archivo en el cargador.
+import * as PT from '@/lib/panel-tabs'
 import { TAB_PARAM, TABS_NEGOCIO, TABS_CONFIG, TABS_FINANZAS, resolveTab, tabSlug, type PanelTabGroup } from '@/lib/panel-tabs'
 
 // ── Phase 4 (los tabs en la URL) — la lista cerrada, la causa y la pila ──────────────────────────
@@ -137,9 +140,37 @@ type Entrada = { url: string; state: unknown }
  * Una historia falsa con la semántica del navegador: el empuje TRUNCA lo de adelante y agrega, el
  * reemplazo pisa la actual, el retroceso baja el índice (y se cuenta). `location` sale de la entrada
  * actual. Es lo mínimo que hace falta para correr el `applyPanelView` de verdad y mirar la PILA.
+ *
+ * El `popstate` (plan 04-07): el stub de `window` acepta oyentes de `popstate`, con la semántica de
+ * `once` (el de disparo único se saca al dispararse). Sin `backAsincrono`, el retroceso baja el índice
+ * y DESPUÉS despacha `popstate`. Con `backAsincrono: true`, el retroceso sólo cuenta y se encola, y
+ * `procesar()` aplica la cola de a uno, con un `popstate` después de cada recorrido: es lo que hace el
+ * navegador real, donde `history.back()` es ASÍNCRONO. El `back()` síncrono de antes no podía expresar
+ * E3 (`.planning/debug/doble-toque-tab.md`): dos toques al default antes de que llegue el recorrido.
+ * `popstate()` despacha un evento suelto (uno AJENO: el retroceso de un overlay encolado antes que el
+ * nuestro) sin mover la pila; `pila.oyentes` cuenta los oyentes vivos.
  */
-function montarHistoria(inicio: Entrada[], indice = inicio.length - 1) {
-  const pila = { entradas: [...inicio], indice, retrocesos: 0 }
+function montarHistoria(inicio: Entrada[], opciones: { backAsincrono?: boolean } = {}) {
+  const pila = { entradas: [...inicio], indice: inicio.length - 1, retrocesos: 0, oyentes: 0 }
+  const oyentes: { fn: () => void; once: boolean }[] = []
+  const cola: number[] = []
+  const popstate = () => {
+    for (const o of [...oyentes]) {
+      if (o.once) oyentes.splice(oyentes.indexOf(o), 1)
+      o.fn()
+    }
+    pila.oyentes = oyentes.length
+  }
+  const recorrer = () => {
+    if (pila.indice > 0) pila.indice--
+    popstate()
+  }
+  const procesar = () => {
+    while (cola.length > 0) {
+      cola.shift()
+      recorrer()
+    }
+  }
   const actual = () => pila.entradas[pila.indice]
   const partir = (url: string) => {
     const q = url.indexOf('?')
@@ -159,7 +190,8 @@ function montarHistoria(inicio: Entrada[], indice = inicio.length - 1) {
     },
     back() {
       pila.retrocesos++
-      if (pila.indice > 0) pila.indice--
+      if (opciones.backAsincrono) cola.push(1)
+      else recorrer()
     },
   }
   const location = {
@@ -170,8 +202,19 @@ function montarHistoria(inicio: Entrada[], indice = inicio.length - 1) {
       return partir(actual().url).search
     },
   }
-  vi.stubGlobal('window', { history, location })
-  return { pila, actual }
+  const addEventListener = (tipo: string, fn: () => void, op?: { once?: boolean }) => {
+    if (tipo !== 'popstate') return
+    oyentes.push({ fn, once: op?.once === true })
+    pila.oyentes = oyentes.length
+  }
+  const removeEventListener = (tipo: string, fn: () => void) => {
+    if (tipo !== 'popstate') return
+    const i = oyentes.findIndex((o) => o.fn === fn)
+    if (i !== -1) oyentes.splice(i, 1)
+    pila.oyentes = oyentes.length
+  }
+  vi.stubGlobal('window', { history, location, addEventListener, removeEventListener })
+  return { pila, actual, procesar, popstate }
 }
 
 /** EXACTAMENTE lo que hace el handler del tab en la pantalla: slug actual, destino, causa, ejecutor. */
@@ -560,7 +603,11 @@ describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
       const cuerpo = cuerpoDe(fuente, 'function alElegirTab(', '): void {')
       expect(cuerpo).not.toBe('')
       expect(cuerpo).toContain("'none'")
-      expect(cuerpo).toContain('tabSlug(')
+      // G-04-7 (plan 04-07): el toque decide con la URL DEL MOMENTO DEL TOQUE, por el helper que comparte
+      // con el `tocar` del simulador, y nunca con el slug del último render.
+      expect(cuerpo).toContain('toqueDeTab(')
+      expect(cuerpo).toContain('window.location.search')
+      expect(cuerpo).not.toContain('tabResuelto.slug')
       expect(cuerpo).toContain('panelTabCause(')
       expect(cuerpo).toContain('applyPanelView(')
     }
@@ -603,5 +650,177 @@ describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
       expect(region).not.toBe('')
       expect(valoresDeTriggers(region)).toEqual([...grupo.slugs.values()])
     }
+  })
+})
+
+// ── 6) G-04-7 (plan 04-07): un toque decide con la URL de ahora, y un consumo en vuelo no se repite ──
+// El contrato son los `red_tests` de `.planning/debug/doble-toque-tab.md`. Dos defectos:
+//   - el `from` salía del render del último commit: la escritura de un toque cambia la URL al instante,
+//     pero el render recién se entera con el commit de la transición, y un segundo toque en esa ventana
+//     decidía sobre un `from` viejo (E1: Ventas sobre Ventas; E2: el atrás desde Egresos caía en Ventas);
+//   - el retroceso de un consumo es ASÍNCRONO: `holding` se lee de un state que no cambia hasta el
+//     recorrido, y dos toques al default consumían dos veces (E3: el dueño terminaba en Inicio).
+// ⚠ La guarda del consumo es memoria del MÓDULO y persiste entre casos de este archivo: todo caso que
+// produzca un consumo termina con su `popstate` despachado (el retroceso síncrono lo despacha; con
+// `backAsincrono`, el caso llama a `procesar()` antes de terminar).
+
+describe('G-04-7 — un toque decide con la URL de ahora, y un consumo en vuelo no se repite', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('toqueDeTab existe y es una función del módulo de tabs', () => {
+    expect(typeof (PT as Record<string, unknown>).toqueDeTab).toBe('function')
+  })
+
+  it('toqueDeTab: Ventas desde la URL limpia ⇒ from null, to ventas', () => {
+    expect(PT.toqueDeTab({ grupo: TABS_FINANZAS, value: 'sales', search: '' })).toEqual({ ok: true, from: null, to: 'ventas' })
+  })
+
+  it('toqueDeTab: Ventas con ?tab=ventas en la URL ⇒ from ventas, to ventas (la regla 2 la ve)', () => {
+    expect(PT.toqueDeTab({ grupo: TABS_FINANZAS, value: 'sales', search: '?tab=ventas' })).toEqual({ ok: true, from: 'ventas', to: 'ventas' })
+  })
+
+  it('toqueDeTab: un ?tab= de prototipo cae al default (D-07) ⇒ from null, to egresos', () => {
+    expect(PT.toqueDeTab({ grupo: TABS_FINANZAS, value: 'expenses', search: '?x=1&tab=constructor' })).toEqual({ ok: true, from: null, to: 'egresos' })
+  })
+
+  it('toqueDeTab: un valor que no es del grupo ⇒ { ok: false }', () => {
+    expect(PT.toqueDeTab({ grupo: TABS_FINANZAS, value: 'business', search: '' })).toEqual({ ok: false })
+  })
+
+  it('toqueDeTab: Datos desde Cobros en Negocio ⇒ from cobros, to null (el default es la URL limpia)', () => {
+    expect(PT.toqueDeTab({ grupo: TABS_NEGOCIO, value: 'business', search: '?tab=cobros' })).toEqual({ ok: true, from: 'cobros', to: null })
+  })
+
+  it('E3: doble toque al default antes del recorrido ⇒ consume, none, UN solo retroceso y la URL en /finances', () => {
+    const { pila, actual, procesar } = montarHistoria(
+      [
+        { url: '/dashboard', state: null },
+        { url: '/finances', state: { frjUnder: '/dashboard' } },
+        { url: '/finances?tab=ventas', state: { frjView: 'tab' } },
+      ],
+      { backAsincrono: true },
+    )
+    expect(tocar(TABS_FINANZAS, 'appointments')).toBe('consume')
+    const segundo = tocar(TABS_FINANZAS, 'appointments')
+    const retrocesos = pila.retrocesos
+    procesar()
+    expect(segundo).toBe('none')
+    expect(retrocesos).toBe(1)
+    expect(actual().url).toBe('/finances')
+  })
+
+  it('un empuje durante el consumo se descarta (none, la pila no cambia) y después del recorrido empuja', () => {
+    const { pila, procesar } = montarHistoria(
+      [
+        { url: '/dashboard', state: null },
+        { url: '/finances', state: { frjUnder: '/dashboard' } },
+        { url: '/finances?tab=ventas', state: { frjView: 'tab' } },
+      ],
+      { backAsincrono: true },
+    )
+    expect(tocar(TABS_FINANZAS, 'appointments')).toBe('consume')
+    const antes = JSON.stringify(pila.entradas)
+    const enVuelo = tocar(TABS_FINANZAS, 'expenses')
+    const despues = JSON.stringify(pila.entradas)
+    procesar()
+    expect(enVuelo).toBe('none')
+    expect(despues).toBe(antes)
+    expect(tocar(TABS_FINANZAS, 'expenses')).toBe('push')
+  })
+
+  it('un popstate AJENO antes del nuestro suelta la guarda (nunca queda colgada) y después ningún toque queda bloqueado', () => {
+    const { pila, actual, procesar, popstate } = montarHistoria(
+      [
+        { url: '/dashboard', state: null },
+        { url: '/finances', state: { frjUnder: '/dashboard' } },
+        { url: '/finances?tab=ventas', state: { frjView: 'tab' } },
+      ],
+      { backAsincrono: true },
+    )
+    expect(tocar(TABS_FINANZAS, 'appointments')).toBe('consume')
+    const oyentesTrasElConsumo = pila.oyentes
+    popstate()
+    const oyentesTrasElAjeno = pila.oyentes
+    // Borde aceptado y escrito: con la guarda suelta antes de tiempo, la ventana se degrada al
+    // comportamiento de antes (un reemplazo sobre la entrada que se está dejando), nunca a un bloqueo.
+    const trasElAjeno = tocar(TABS_FINANZAS, 'expenses')
+    procesar()
+    expect(oyentesTrasElConsumo).toBe(1)
+    expect(oyentesTrasElAjeno).toBe(0)
+    expect(trasElAjeno).toBe('replace')
+    expect(actual().url).toBe('/finances')
+    expect(tocar(TABS_FINANZAS, 'sales')).toBe('push')
+  })
+
+  it('E1 (regresión): Turnos → Ventas ×2 sin commit entre toques ⇒ push, none y 3 entradas', () => {
+    const { pila } = montarHistoria([
+      { url: '/dashboard', state: null },
+      { url: '/finances', state: { frjUnder: '/dashboard' } },
+    ])
+    expect(tocar(TABS_FINANZAS, 'sales')).toBe('push')
+    expect(tocar(TABS_FINANZAS, 'sales')).toBe('none')
+    expect(pila.entradas).toHaveLength(3)
+  })
+
+  it('E2 (regresión): Turnos → Ventas → Egresos ⇒ push, replace, y un atrás deja /finances (D-01)', () => {
+    const { actual } = montarHistoria([
+      { url: '/dashboard', state: null },
+      { url: '/finances', state: { frjUnder: '/dashboard' } },
+    ])
+    expect(tocar(TABS_FINANZAS, 'sales')).toBe('push')
+    expect(tocar(TABS_FINANZAS, 'expenses')).toBe('replace')
+    window.history.back()
+    expect(actual().url).toBe('/finances')
+  })
+
+  it('E4 (regresión): Ventas → Turnos, recorrido, Turnos otra vez ⇒ consume, none, un retroceso y /finances conserva frjUnder', () => {
+    const { pila, actual, procesar } = montarHistoria(
+      [
+        { url: '/dashboard', state: null },
+        { url: '/finances', state: { frjUnder: '/dashboard' } },
+      ],
+      { backAsincrono: true },
+    )
+    expect(tocar(TABS_FINANZAS, 'sales')).toBe('push')
+    expect(tocar(TABS_FINANZAS, 'appointments')).toBe('consume')
+    procesar()
+    expect(tocar(TABS_FINANZAS, 'appointments')).toBe('none')
+    expect(pila.retrocesos).toBe(1)
+    expect(actual().state).toEqual({ frjUnder: '/dashboard' })
+  })
+
+  it('candado del espejo: el `tocar` de ESTA suite pide el toque a toqueDeTab con la URL de ahora', () => {
+    const cuerpo = cuerpoDe(read('test/panel-tabs.test.ts'), 'function tocar(', 'value: unknown) {')
+    expect(cuerpo).not.toBe('')
+    expect(cuerpo).toContain('toqueDeTab(')
+    expect(cuerpo).toContain('window.location.search')
+    expect(cuerpo).not.toContain('resolveTab(')
+  })
+
+  it('candado de la guarda: en applyPanelView, la guarda antes de holding, y en consume el encendido y el oyente antes del retroceso', () => {
+    const fuente = sinComentarios(read('lib/panel-history.ts'))
+    const at = fuente.indexOf('export function applyPanelView({')
+    const fin = at === -1 ? -1 : fuente.indexOf('\n}\n', at)
+    const region = at === -1 || fin === -1 ? '' : fuente.slice(at, fin + 2)
+    expect(region).not.toBe('')
+    const guarda = region.indexOf("if (consumoEnVuelo) return 'none'")
+    const holding = region.indexOf('const holding =')
+    expect(guarda).toBeGreaterThan(-1)
+    expect(holding).toBeGreaterThan(-1)
+    expect(guarda).toBeLessThan(holding)
+    const rama = region.indexOf("if (action === 'consume')")
+    const enciende = region.indexOf('consumoEnVuelo = true')
+    const oyente = region.indexOf("window.addEventListener('popstate', soltarConsumo, { once: true })")
+    const retroceso = region.indexOf('window.history.back()')
+    expect(rama).toBeGreaterThan(-1)
+    expect(enciende).toBeGreaterThan(rama)
+    expect(oyente).toBeGreaterThan(rama)
+    expect(retroceso).toBeGreaterThan(enciende)
+    expect(retroceso).toBeGreaterThan(oyente)
+    expect(cuerpoDe(fuente, 'function soltarConsumo(', '): void {')).toContain('consumoEnVuelo = false')
+    expect(fuente).not.toMatch(/export\s+(let|const|var)\s+consumoEnVuelo\b/)
+    expect((PH as Record<string, unknown>).consumoEnVuelo).toBeUndefined()
   })
 })
