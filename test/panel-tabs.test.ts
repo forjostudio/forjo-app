@@ -492,6 +492,20 @@ describe('Finanzas — el tab sale de la URL, en un solo dialecto', () => {
     expect(crudo).toContain("{txTab === 'expenses' && <Button")
   })
 
+  // obs-G1 (re-UAT del 04-08, opción A del dueño, quick 261118-jdq): con un tab corto —Ventas con 0
+  // ventas— el documento quedaba más corto que el scroll del momento y el navegador lo recortaba. Cada
+  // panel lleva el alto de la pantalla como mínimo, con CSS; el mínimo va POR PANTALLA y no en el
+  // componente compartido. Se afirma sobre `crudo`: el descuento de comentarios de esta suite tiene un
+  // defecto declarado en `deferred-items.md`.
+  it('obs-G1: los tres paneles tienen el alto de la pantalla como mínimo (CSS, sin medir alturas)', () => {
+    for (const v of ['appointments', 'sales', 'expenses']) {
+      const m = crudo.match(new RegExp(`<TabsContent value="${v}" className="([^"]*)">`))
+      expect(m, `<TabsContent value="${v}"> con className`).not.toBeNull()
+      expect(m![1].split(/\s+/)).toContain('min-h-dvh')
+    }
+    expect(read('components/ui/tabs.tsx')).not.toContain('min-h-')
+  })
+
   it('la página: Suspense, el negocio por owner_id y SIN searchParams (el tab no decide qué se lee)', () => {
     const pagina = sinComentarios(read(PAGINA))
     // G-04-6 (plan 04-06): el boundary tiene un NODO mientras suspende —un div vacío con la clase del contenedor

@@ -57,9 +57,17 @@
 // tras el fix; la sonda sale con 1 si no coinciden todos. Los `esperado_si_HA` son el REGISTRO del diagnostico
 // (`.planning/debug/finanzas-primer-toque-scroll.md`) y no se tocan: el modo `hipotesis` los sigue juzgando igual.
 //
+// MODO obs-G1 (quick 261118-jdq): los recorridos `G1-*` JUZGAN `recorte_por_alto` (en el resto de los recorridos
+// es informativo). Necesitan un mes con >= 10 turnos y 0 ventas y 0 egresos, que buscan retrocediendo con el boton
+// real «Mes anterior» de Finanzas (datos locales, sin escribir en la base). Su `esperado_si_HA` es el ROJO (el
+// codigo sin el alto minimo de los paneles) y su `esperado_tras_el_fix` es el arreglo (decision del dueno, opcion A,
+// 2026-11-18: cada panel de los tabs de Finanzas con el alto de la pantalla como minimo). La sonda imprime ademas la
+// linea `finances-client.tsx huella=... paneles con alto minimo: N` para que el log diga que variante se midio.
+//
 // QUE NO CIERRA: Chrome de Android y Safari de iOS (esto es Chrome de escritorio headless con emulacion
 // movil), y el build de PRODUCCION (las variables publicas se incrustan en el build y el Supabase local
 // vive solo en el entorno de desarrollo: un build de produccion moveria dos variables a la vez).
+// Para obs-G1: el telefono real (la UAT del dueno va con R2-WR-01, despues del push conjunto).
 
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, createWriteStream } from 'node:fs'
@@ -1173,6 +1181,133 @@ function b1RecargaHacia(id, destino) {
 }
 RECORRIDOS.push(b1RecargaHacia('B1-recarga-turnos', '/appointments'), b1RecargaHacia('B1-recarga-mas', '/mas'))
 
+// ── obs-G1 (quick 261118-jdq): el recorte por alto al cambiar a un tab corto de Finanzas ──────────
+// La re-UAT del 04-08 (obs-G1): «cada vez que voy a ventas hace un salto ahi porque se achica». No es un scroll de la
+// app: con Ventas en 0 ventas el documento queda mas corto que el scrollY del toque y el navegador RECORTA el scroll
+// (el mismo `recorte_por_alto` que `clasificarToque` ya mide). En estos tres recorridos el recorte se JUZGA.
+// Hace falta un mes con muchos turnos y 0 ventas / 0 egresos: el mes actual de los datos locales no tiene turnos, asi
+// que se retrocede con el boton real «Mes anterior» (sin escribir en la base).
+
+/** Los conteos de los tres tabs de Finanzas, el mes del selector y si la pagina termino de cargar. */
+const EXPR_CONTEOS_FINANZAS = `(() => {
+  const c = {}
+  for (const t of document.querySelectorAll('[role="tab"]')) {
+    const b = t.getBoundingClientRect()
+    if (!(b.width > 0 && b.height > 0)) continue
+    const m = /^(Turnos|Ventas|Egresos) \\((\\d+)\\)$/.exec(t.textContent.replace(/\\s+/g, ' ').trim())
+    if (m) c[m[1]] = Number(m[2])
+  }
+  const bt = [...document.querySelectorAll('button[aria-label="Mes anterior"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 })
+  const mes = bt && bt.nextElementSibling ? bt.nextElementSibling.textContent.replace(/\\s+/g, ' ').trim() : null
+  return { mes, turnos: c.Turnos ?? null, ventas: c.Ventas ?? null, egresos: c.Egresos ?? null, listo: Boolean(${COND_FINANZAS}), alto: document.documentElement.scrollHeight }
+})()`
+
+/** Espera los conteos QUIETOS: la pagina cargada y los mismos conteos, mes y alto en 4 lecturas seguidas (1,2 s). */
+async function conteosQuietos(cdp, tope = 60_000) {
+  const fin = Date.now() + tope
+  let previo = null
+  let iguales = 0
+  let ultimo = null
+  while (Date.now() < fin) {
+    ultimo = await evaluar(cdp, EXPR_CONTEOS_FINANZAS).catch(() => null)
+    const v = ultimo && ultimo.listo && ultimo.turnos !== null ? JSON.stringify(ultimo) : null
+    if (v !== null && v === previo) iguales++
+    else iguales = 0
+    previo = v
+    if (iguales >= 3) return ultimo
+    await dormir(300)
+  }
+  throw new Error(`P-1 obs-G1: los conteos de los tabs de Finanzas no quedaron quietos en ${tope} ms (ultimo: ${JSON.stringify(ultimo)})`)
+}
+
+/**
+ * Retrocede mes por mes con el boton REAL «Mes anterior» hasta uno con >= `minimo` turnos y 0 en cada tab de `vacios`.
+ * El click va al centro del boton convertido al viewport VISUAL y afirmado con `elementFromPoint` (el patron de
+ * `tocarTabMedido`); antes, el scroll a 0 como propio de la sonda (`__sondaPropio`, como `posicionar`).
+ */
+async function irAlMesConTurnos(cdp, { minimo = 10, vacios, tope = 12 }) {
+  const clave = { Turnos: 'turnos', Ventas: 'ventas', Egresos: 'egresos' }
+  let pasos = 0
+  for (;;) {
+    const c = await conteosQuietos(cdp)
+    if (c.turnos >= minimo && vacios.every((v) => c[clave[v]] === 0)) return { mes: c.mes, turnos: c.turnos, ventas: c.ventas, egresos: c.egresos, pasos }
+    if (pasos >= tope) throw new Error(`P-1 obs-G1: ningun mes de los ultimos ${tope} tiene >= ${minimo} turnos con 0 en ${vacios.join(', ')} (el caso no se reproduce con los datos locales)`)
+    await evaluar(cdp, `(() => { globalThis.__sondaPropio = true; window.scrollTo(0, 0); globalThis.__sondaPropio = false; return true })()`)
+    await dormir(400)
+    const punto = await evaluar(cdp, `(() => { const t = [...document.querySelectorAll('button[aria-label="Mes anterior"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); if (!t) return null; const b = t.getBoundingClientRect(); const cx = b.x + b.width / 2, cy = b.y + b.height / 2; const el = document.elementFromPoint(cx, cy); const vv = globalThis.visualViewport; const e = vv ? vv.scale : 1; return { x: vv ? (cx - vv.offsetLeft) * e : cx, y: vv ? (cy - vv.offsetTop) * e : cy, adentro: Boolean(el && t.contains(el)) } })()`)
+    if (!punto || !punto.adentro) throw new Error(`P-1 obs-G1: el punto del toque no cae adentro del boton Mes anterior (${JSON.stringify(punto)})`)
+    await clickEnPunto(cdp, punto)
+    const fin = Date.now() + 10_000
+    let mes = c.mes
+    while (Date.now() < fin) {
+      const ahora = await evaluar(cdp, EXPR_CONTEOS_FINANZAS).catch(() => null)
+      mes = ahora ? ahora.mes : mes
+      if (mes !== c.mes) break
+      await dormir(100)
+    }
+    if (mes === c.mes) throw new Error(`P-1 obs-G1: el mes no cambio en 10 s despues de tocar Mes anterior (sigue en ${c.mes})`)
+    pasos++
+    await esperarTabQuieto(cdp, 'Turnos', { condicion: COND_FINANZAS })
+  }
+}
+
+/** Un recorrido de obs-G1: entrar a Finanzas por `entrada`, ir al mes con turnos y tocar `primero` (desde Turnos) y `segundo`. */
+function g1Recorrido({ id, titulo, entrada, primero, segundo }) {
+  return {
+    id,
+    titulo,
+    async correr(cdp) {
+      const medir = async () => {
+        await esperarTabQuieto(cdp, 'Turnos', { condicion: COND_FINANZAS })
+        const mes = await irAlMesConTurnos(cdp, { vacios: ['Ventas', 'Egresos'] })
+        const t1 = await tocarTabMedido(cdp, primero)
+        const t2 = await tocarTabMedido(cdp, segundo)
+        return { mes, t1, t2 }
+      }
+      let r
+      if (entrada === 'sidebar') {
+        await escritorio(cdp)
+        try {
+          await entrarDirecto(cdp)
+          await tocarEnlaceDentro(cdp, 'nav[aria-label="Navegación"]', '/finances')
+          r = await medir()
+        } finally {
+          await celular(cdp)
+        }
+      } else if (entrada === 'mas' || entrada === 'tarjeta') {
+        await celular(cdp)
+        await entrarDirecto(cdp)
+        if (entrada === 'mas') await tocarEnLaBarra(cdp, '/mas')
+        await tocarEnlace(cdp, '/finances')
+        r = await medir()
+      } else {
+        throw new Error(`entrada desconocida en ${id}: ${entrada}`)
+      }
+      const { mes, t1, t2 } = r
+      return {
+        detalle: (p) => {
+          console.log(`${p}mes con turnos: ${mes.mes} turnos=${mes.turnos} ventas=${mes.ventas} egresos=${mes.egresos} pasos=${mes.pasos}`)
+          imprimirToque(p, `toque 1 (${primero}, desde Turnos)`, t1)
+          imprimirToque(p, `toque 2 (${segundo})`, t2)
+        },
+        medido: { recorte_toque1: t1.recorte_por_alto, salto_toque1: t1.llevo_al_inicio, next_toque1: t1.escritura_de_next, recorte_toque2: t2.recorte_por_alto, salto_toque2: t2.llevo_al_inicio, next_toque2: t2.escritura_de_next },
+        // El ROJO no afirma `recorte_toque2`: sin el arreglo el segundo toque sale de un tab ya corto con el scroll
+        // pegado al maximo, y su recorte depende del desborde horizontal del viewport emulado (innerHeight 881/899),
+        // no de obs-G1. Con el arreglo los dos toques tienen que dar `no` (la geometria del plan: el alto del
+        // documento es al menos el borde del panel mas una pantalla, asi que el maximo de scroll no baja del toque).
+        esperado_si_HA: { recorte_toque1: 'si', salto_toque1: 'no', next_toque1: 'no', salto_toque2: 'no', next_toque2: 'no' },
+        esperado_tras_el_fix: { recorte_toque1: 'no', salto_toque1: 'no', next_toque1: 'no', recorte_toque2: 'no', salto_toque2: 'no', next_toque2: 'no' },
+      }
+    },
+  }
+}
+
+RECORRIDOS.push(
+  g1Recorrido({ id: 'G1-ventas-movil', entrada: 'mas', primero: 'Ventas', segundo: 'Egresos', titulo: 'obs-G1 movil 390x844: Inicio -> Mas -> Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos' }),
+  g1Recorrido({ id: 'G1-egresos-movil', entrada: 'tarjeta', primero: 'Egresos', segundo: 'Ventas', titulo: 'obs-G1 movil 390x844: Inicio -> tarjeta «Ingresos del mes» -> Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Egresos (desde Turnos) -> Ventas' }),
+  g1Recorrido({ id: 'G1-ventas-escritorio', entrada: 'sidebar', primero: 'Ventas', segundo: 'Egresos', titulo: 'obs-G1 escritorio 1280x800: Inicio -> sidebar Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos' }),
+)
+
 function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
 
 async function correrYReportar(cdp, rec, modo) {
@@ -1233,6 +1368,10 @@ async function main() {
       const lineaSuspense = pagina.split(/\r?\n/).find((l) => l.includes('<Suspense') && !l.trim().startsWith('//')) ?? '(sin Suspense)'
       console.log(`${ruta}/page.tsx huella=${createHash('sha256').update(pagina.replace(/\r\n/g, '\n')).digest('hex').slice(0, 16)} suspense: ${lineaSuspense.trim()}`)
     }
+    // obs-G1 (quick 261118-jdq): cuantos paneles de los tabs de Finanzas llevan un alto minimo (el rojo 0, el verde 3)
+    const finCliente = readFileSync(join(REPO, 'app/(dashboard)/finances/finances-client.tsx'), 'utf8').replace(/\r\n/g, '\n')
+    const panelesConMinimo = finCliente.split('\n').filter((l) => l.includes('<TabsContent value=') && l.includes('min-h-')).length
+    console.log(`finances-client.tsx huella=${createHash('sha256').update(finCliente).digest('hex').slice(0, 16)} paneles con alto minimo: ${panelesConMinimo}`)
     if (!(await puertoLibre(PUERTO_CDP))) throw new Error(`el puerto ${PUERTO_CDP} esta ocupado`)
     const existente = await servidorExistente()
     if (existente) {
