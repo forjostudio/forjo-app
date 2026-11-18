@@ -119,3 +119,11 @@
   **Qué:** `app/(dashboard)/clients/clients-client.tsx:1055` — el `user-open` toma `from: selectedId` del render, el
   mismo defecto que WR-02 tenía en los tabs. Fuera del alcance del cierre (archivo intocable en 04-06..08). Candidato a
   ir junto con R2-WR-01 (mismo helper `toqueDeTab`/URL de ahora). Sin medir.
+
+- Decisión del dueño (2026-11-18, secure-phase): el cruce guarda ↔ `consumeOwnedPanelEntry` va al MISMO quick de R2-WR-01
+  status: open
+  **Qué:** el residuo de T-04-39 de arriba («La guarda de consumo en vuelo no se extendió a `consumeOwnedPanelEntry`»)
+  en los DOS sentidos: (a) consumir un tab y tocar la barra o el sidebar antes del `popstate`; (b) la inversa
+  (`04-REVIEW-2.md` IN-03): primero el retroceso de `consumeOwnedPanelEntry`/B1 y después un toque al tab por defecto.
+  **Registro:** `04-SECURITY.md` AR-04-06 (y AR-04-05 para R2-WR-01), aceptados con vencimiento en ese quick, que mide
+  los tres casos primero y arregla los que reproduzcan.
