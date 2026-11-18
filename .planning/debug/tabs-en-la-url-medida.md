@@ -1864,3 +1864,205 @@ menú no leía `consumoEnVuelo`) y `C-pageshow-tab` (`{ tras: 'none', oyentes: 1
 - **R2-IN-04** (doble toque en una fila de Clientes): sigue abierto, fuera de alcance.
 
 cierre (l): la guarda de consumo en vuelo · caso 1=mitigado · caso 2=mitigado · caso 3=mitigado
+
+## (m) CR-01 del review de R2-WR-01: un solo segundo paso de B1, el try de la rama y los candados de pageshow (quick 261118-pjd)
+
+Qué se preguntó: si los hallazgos del code review del quick 261118-kat (`261118-kat-REVIEW.md`) reproducen con el
+código de hoy, medidos con los esperados commiteados ANTES de la corrida que los juzga:
+
+1. **CR-01 (critical, en prod desde B1):** con un consumo en vuelo, `consumeOwnedPanelEntry` devuelve `true` sin
+   retroceder, pero B1 ya enganchó su segundo paso; dos toques a Inicio en la barra dejan dos re-decisores que corren
+   en el mismo `popstate` y retroceden cada uno.
+2. **WR-02:** un `back()` que tira dentro de una rama de dos pasos de `runBranchNavigation` deja su segundo paso
+   enganchado y el siguiente atrás del sistema navega solo.
+3. **WR-01:** el `replaceState` del `HistoryUpdater` de Next (`app-router.js:38-67`) en la ventana del recorrido cambia
+   la identidad del state sin cambiar la URL, y la guarda se suelta antes de tiempo.
+4. **WR-03 / IN-01:** un `pageshow` no persistido gasta el oyente `{ once: true }` sin soltar nada; y ningún candado
+   medía que no quede vivo un oyente de `pageshow`.
+5. **UP-doble** (visto por lectura al planificar): `consumeOwnedBranchEntry` no lee la guarda, así que dos toques a
+   Inicio desde una sección con la marca de la rama, antes del recorrido, retroceden dos veces.
+
+Decisión del dueño (2026-11-18, no se reabre): arreglar el review ANTES del push conjunto (obs-G1 + R2-WR-01 + éste),
+RED primero, arreglo sólo de lo que reproduce; CR-01 con un solo segundo paso de B1 pendiente (el nuevo reemplaza al
+anterior); WR-02 con un `try` en las tres ramas; WR-01 se mide primero y, si reproduce, su diseño lo decide el dueño;
+`UP-doble`: «medirlo y arreglarlo si da rojo».
+
+La referencia del revisor (su simulador `scratchpad/rev/guard.run.mjs`, re-corrido al planificar contra `73ff6cc`;
+no es un artefacto del repo, el veredicto lo da la suite), en la pila
+`/afuera → /dashboard → /finances{frjUnder} → /finances?tab=ventas{frjView}`:
+
+| Escenario | HEAD `73ff6cc` |
+|---|---|
+| A — tab por defecto, `replaceState` de Next en la ventana, sección activa del menú | 2 retrocesos, `/dashboard` |
+| B — igual que A, con Inicio en la barra (B1) | 3, `/afuera` |
+| C — doble toque a Inicio en la barra | 3, `/afuera` |
+| D — menú y después B1 | 2, `/dashboard` ✔ |
+| E — B1 con un `back()` que tira y después un atrás del sistema | 2, `/dashboard` (correcto: 1, `/finances`) |
+
+**El entorno (paso 0).** 2026-11-18, ~20:40 hora de Argentina. node `v24.15.0`. HEAD al empezar: `73ff6cc`. HEAD de la
+medición: `ba97254` (el `test(quick-261118-pjd)` con los esperados; ningún cambio en `lib/` fuera de
+`lib/panel-history.test.ts`). Sin navegador ni servidor: no pasa por el turno ni necesita Supabase.
+
+### Lo medido: 14 casos en el simulador fiel y 4 en el stub del ejecutor
+
+El simulador de `test/panel-tabs.test.ts` aprendió a contar los oyentes de `pageshow` (`oyentesPageshowDelStub`) antes
+de los casos: siguió 97/97. `test/panel-branch.test.ts` y `lib/panel-history.test.ts` drenan ahora despachando el
+evento del recorrido (sin filtrar por nombre, IN-03) y el candado de orden de B1 nombra al `segundoPaso`.
+
+```
+./node_modules/.bin/vitest run --project pure test/panel-tabs.test.ts test/panel-branch.test.ts lib/panel-history.test.ts
+```
+
+`Tests  12 failed | 508 passed (520)` — los doce rojos son casos nuevos, cada uno por su aserción (cero
+`TypeError`/`ReferenceError`); ningún caso viejo en rojo. Las tuplas medidas contra las esperadas, tal cual del error
+de la aserción:
+
+```
+CR-b1-doble: dos toques a Inicio en la barra antes del recorrido
+  {
+    "navegaciones": [],
+-   "retrocesos": 2,
++   "retrocesos": 3,
+    "s1": true,
+    "s2": true,
+-   "url": "/dashboard",
++   "url": "/afuera",
+  }
+
+CR-b1-doble-fichas: dos toques a Inicio en la barra con dos fichas apiladas
+  {
+    "navegaciones": [],
+-   "retrocesos": 3,
++   "retrocesos": 4,
+    "s1": true,
+    "s2": true,
+-   "url": "/dashboard",
++   "url": "/afuera",
+  }
+
+CR-b1-silencio: el retroceso ignorado en silencio, tres toques a la barra y después un atrás del sistema
+  {
+    "navegaciones": [],
+-   "retrocesos": 2,
++   "retrocesos": 4,
+    "s1": true,
+    "s2": true,
+    "s3": true,
+-   "url": "/dashboard",
++   "url": "/afuera",
+  }
+
+CR-b1-reemplazo-unidad: dos toques a B1 antes del recorrido dejan un solo segundo paso, el último
+  {
+-   "primeroDesenganchado": true,
++   "primeroDesenganchado": false,
+    "r1": true,
+    "r2": true,
+    "reDecidio": 0,
+    "retrocesos": 1,
+  }
+
+K2-c-b1: B1 con un back() que tira no deja su segundo paso enganchado
+  {
+    "navegaciones": [],
+-   "oyentes": 0,
+-   "retrocesos": 1,
++   "oyentes": 1,
++   "retrocesos": 2,
+    "tiro": true,
+-   "url": "/finances",
++   "url": "/dashboard",
+  }
+
+K2-c-b1-unidad: B1 con un back() que tira desengancha su segundo paso y no re-decide
+  {
+    "reDecidio": 0,
+-   "segundoPasoDesenganchado": true,
++   "segundoPasoDesenganchado": false,
+    "tiro": true,
+  }
+
+K2-c-exit: el sentinel con un back() que tira desengancha su segundo paso y no navega
+  {
+    "navego": 0,
+-   "segundoPasoDesenganchado": true,
++   "segundoPasoDesenganchado": false,
+    "tiro": true,
+  }
+
+K2-c-colapso: el colapso con un back() que tira desengancha su segundo paso y no navega
+  {
+    "navego": 0,
+-   "segundoPasoDesenganchado": true,
++   "segundoPasoDesenganchado": false,
+    "tiro": true,
+  }
+
+W1-menu: el tab por defecto, el replaceState de Next en la ventana y la sección activa del menú
+  {
+    "consumo": "consume",
+    "prevenido": true,
+-   "retrocesos": 1,
+-   "url": "/finances",
++   "retrocesos": 2,
++   "url": "/dashboard",
+  }
+
+W1-b1: el tab por defecto, el replaceState de Next en la ventana e Inicio en la barra
+  {
+    "consumo": "consume",
+    "navegaciones": [],
+-   "retrocesos": 2,
++   "retrocesos": 3,
+    "seHizoCargo": true,
+-   "url": "/dashboard",
++   "url": "/afuera",
+  }
+
+C-pageshow-no-persistido: un pageshow no persistido no suelta la guarda ni gasta su salida
+  {
+    "consumo": "consume",
+-   "despues": "replace",
+-   "oyentes": 0,
++   "despues": "none",
++   "oyentes": 1,
+    "oyentesPageshow": 0,
+    "primero": "none",
+-   "vivosPageshow": 1,
++   "vivosPageshow": 0,
+  }
+
+UP-doble: dos toques a Inicio desde una sección con la marca de la rama, antes del recorrido
+  {
+    "navegaciones": [],
+-   "retrocesos": 1,
++   "retrocesos": 2,
+    "s1": true,
+    "s2": true,
+-   "url": "/dashboard",
++   "url": "/afuera",
+  }
+```
+
+En verde con el código de hoy (los candados de no-regresión): `NR-menu-y-barra` (`{ s1: true, s2: true, retrocesos: 2,
+url: '/dashboard', navegaciones: [] }`, el D del revisor), `UP-control` (un toque desde la sección: 1 retroceso,
+`/dashboard`; el simulador sí arma el `up`), `P0-normal`, `P0-catch-tab`, `P0-catch-menu` y `P0-pageshow` (cero
+oyentes de `popstate` y de `pageshow` en las tres salidas de la guarda), el candado de orden de B1
+(`enganchados[0].fn.name === 'segundoPaso'`) y los 151 `it` de `lib/panel-history.test.ts` con el `afterEach` que ahora
+exige cero oyentes en cada caso de NAV-08.
+
+Lo que dicen los números:
+- **CR-01 reproduce, y es peor que la referencia:** dos toques ⇒ 3 retrocesos y `/afuera` (fuera del sitio); con dos
+  fichas apiladas, 4; con el retroceso ignorado en silencio y tres toques, el próximo atrás del sistema dispara los tres
+  re-decisores: 4 retrocesos y `/afuera`. La unidad lo confirma: el segundo toque no desengancha al primero.
+- **WR-02 reproduce en las tres ramas:** el segundo paso queda enganchado (unidad: `segundoPasoDesenganchado: false` en
+  B1, en el sentinel y en el colapso); en la pila, el atrás del sistema dispara la re-decisión de B1: 2 retrocesos y
+  `/dashboard` en vez de `/finances`.
+- **WR-01 reproduce, como en la referencia:** por el menú, 2 retrocesos y `/dashboard` (fuera de la sección); por la
+  barra, 3 y `/afuera` (fuera del sitio, la cicatriz 2).
+- **IN-01 reproduce:** el `pageshow` no persistido se lleva el oyente `{ once: true }` (`vivosPageshow: 0`) y la guarda
+  queda sin su salida por la bfcache: el `pageshow` persistido de después ya no la suelta (`despues: 'none'`, el oyente
+  de `popstate` sigue vivo).
+- **UP-doble reproduce:** dos toques a Inicio desde `/finances` con la marca ⇒ 2 retrocesos y `/afuera`.
+
+veredictos (m): CR-01=reproduce · WR-02=reproduce · WR-01=reproduce · IN-01=reproduce · UP=reproduce
