@@ -1416,3 +1416,242 @@ FALLA R-G3-10-primer-toque-atras-pronto · G3-10: el dialogo del plan abierto po
 P-8 no aplicó: no hay nada en rojo que no sea el costo declarado de G3-10.
 
 no-regresion (plan 04-08): sonda del scroll 5/5, sonda de la app 46/47 en OK, estatica 18/18, pura 77/1844, completa 111/2151, tsc limpio, build ok, criterio 5 en cero
+
+## (k) obs-G1: el alto mínimo de los tabs de Finanzas (quick 261118-jdq)
+
+Qué se preguntó: si darle a cada panel de los tabs de Finanzas (Turnos · Ventas · Egresos) el alto de la pantalla
+como mínimo —opción A del dueño, 2026-11-18— apaga el recorte del navegador al cambiar a un tab corto (obs-G1 de la
+re-UAT del 04-08: «cada vez que voy a ventas hace un salto ahí porque se achica»), sin regresar G-04-6.
+
+La geometría: con `min-h-dvh` en el panel activo, `alto_documento >= borde_del_panel + 100dvh + lo_de_abajo`, así que
+`scroll_máximo = alto_documento - innerHeight >= borde_del_panel + (100dvh - innerHeight) + lo_de_abajo`, y el tab
+tocado tiene que estar a la vista (`scrollY < borde_del_panel - 24`): el máximo nunca baja del scroll del toque.
+`dvh` y no `vh`/`svh`/`calc`: es el viewport visible, la misma unidad que el envoltorio y el `<main>` de
+`app/(dashboard)/layout.tsx` (su comentario explica por qué); sobra margen (`lo_de_abajo + 24` ≈ 96 px en móvil,
+56 px en escritorio) aun con el `innerHeight` inflado a 881/899/916 por el desborde horizontal del móvil emulado.
+
+**El entorno (paso 0).** 2026-11-18, hora de Argentina (rojo 14:20, verde 14:25-14:32). Pila local de forjo-app
+arriba (la API contestó 200; no hizo falta `supabase start`; sin `db reset`, sin escrituras: sólo `select`). Turno
+libre al empezar, sin espera. Sin `next dev` de este repo vivo: cada sonda levantó el suyo en el 3031 (`/login 200`
+al primer intento) y lo cerró al salir (3031 y 9335 libres). El de forjo-landing en el 3000 no se tocó.
+`Chrome/157.0.8103.52`, node `v24.15.0`.
+
+La distribución de `negocio-prueba` (turnos con `status <> 'cancelled'` por mes; consulta de sólo lectura en
+`supabase_db_forjo-app`):
+
+```
+2026-03|1
+2026-04|3
+2026-05|5
+2026-06|8
+2026-07|18
+2026-08|15
+2026-09|22
+2026-10|5
+manual_sales|0
+expenses|0
+```
+
+Noviembre 2026 tiene 0 turnos: por eso el caso no se veía en los `F-*`. `irAlMesConTurnos` retrocedió dos veces con
+el botón real «Mes anterior» y eligió, en los tres recorridos y en las dos corridas,
+`mes con turnos: septiembre 2026 turnos=22 ventas=0 egresos=0 pasos=2`.
+
+### El rojo (con el `test` 4f114ba, sin el arreglo; `paneles con alto minimo: 0`), rc 0
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs G1-ventas-movil,G1-egresos-movil,G1-ventas-escritorio rojo-obs-g1 hipotesis
+```
+
+`finances-client.tsx huella=06bada07cc49a23c paneles con alto minimo: 0`
+
+```
+COINCIDE-CON-LA-HIPOTESIS G1-ventas-movil · obs-G1 movil 390x844: Inicio -> Mas -> Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos
+      recorte_toque1: medido="si"
+      salto_toque1: medido="no"
+      next_toque1: medido="no"
+      salto_toque2: medido="no"
+      next_toque2: medido="no"
+      mes con turnos: septiembre 2026 turnos=22 ventas=0 egresos=0 pasos=2
+      toque 1 (Ventas, desde Turnos): tab=Ventas modo=centro y_antes=1886 y_despues=1605 min_durante=1605 delta=-281 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=si seleccionado=true (161 ms)
+         antes: alto=4008 viewport=844 tab_top=409 primera_top=-1739 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances
+         despues: alto=2504 viewport=899 tab_top=690 primera_top=-1458 ruta=/finances?tab=ventas
+         recorte_por_alto: si (informativo, no se juzga: sin escrituras de scroll en el toque y el maximo de scroll despues, 1605, es menor que y_antes=1886; el navegador recorto scrollY)
+         posicion pedida: {"ok":true,"pedido":1886,"max":3164,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: [1605]
+         escrituras de scroll de la pagina: ninguna
+      toque 2 (Egresos): tab=Egresos modo=centro y_antes=1605 y_despues=1588 min_durante=1588 delta=-17 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=si seleccionado=true (145 ms)
+         antes: alto=2504 viewport=899 tab_top=690 primera_top=-1458 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":55} ruta=/finances?tab=ventas
+         despues: alto=2504 viewport=916 tab_top=707 primera_top=-1441 ruta=/finances?tab=egresos
+         recorte_por_alto: si (informativo, no se juzga: sin escrituras de scroll en el toque y el maximo de scroll despues, 1588, es menor que y_antes=1605; el navegador recorto scrollY)
+         posicion pedida: {"ok":true,"pedido":1605,"max":1605,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: [1588]
+         escrituras de scroll de la pagina: ninguna
+
+COINCIDE-CON-LA-HIPOTESIS G1-egresos-movil · obs-G1 movil 390x844: Inicio -> tarjeta «Ingresos del mes» -> Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Egresos (desde Turnos) -> Ventas
+      recorte_toque1: medido="si"
+      salto_toque1: medido="no"
+      next_toque1: medido="no"
+      salto_toque2: medido="no"
+      next_toque2: medido="no"
+      mes con turnos: septiembre 2026 turnos=22 ventas=0 egresos=0 pasos=2
+      toque 1 (Egresos, desde Turnos): tab=Egresos modo=centro y_antes=1886 y_despues=1588 min_durante=1588 delta=-298 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=si seleccionado=true (174 ms)
+         antes: alto=4008 viewport=844 tab_top=409 primera_top=-1739 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances
+         despues: alto=2504 viewport=916 tab_top=707 primera_top=-1441 ruta=/finances?tab=egresos
+         recorte_por_alto: si (informativo, no se juzga: sin escrituras de scroll en el toque y el maximo de scroll despues, 1588, es menor que y_antes=1886; el navegador recorto scrollY)
+         posicion pedida: {"ok":true,"pedido":1886,"max":3164,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: [1588]
+         escrituras de scroll de la pagina: ninguna
+      toque 2 (Ventas): tab=Ventas modo=centro y_antes=1588 y_despues=1588 min_durante=1588 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (146 ms)
+         antes: alto=2504 viewport=916 tab_top=707 primera_top=-1441 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":72} ruta=/finances?tab=egresos
+         despues: alto=2504 viewport=899 tab_top=707 primera_top=-1441 ruta=/finances?tab=ventas
+         posicion pedida: {"ok":true,"pedido":1588,"max":1588,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+
+COINCIDE-CON-LA-HIPOTESIS G1-ventas-escritorio · obs-G1 escritorio 1280x800: Inicio -> sidebar Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos
+      recorte_toque1: medido="si"
+      salto_toque1: medido="no"
+      next_toque1: medido="no"
+      salto_toque2: medido="no"
+      next_toque2: medido="no"
+      mes con turnos: septiembre 2026 turnos=22 ventas=0 egresos=0 pasos=2
+      toque 1 (Ventas, desde Turnos): tab=Ventas modo=centro y_antes=1094 y_despues=850 min_durante=850 delta=-244 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=si seleccionado=true (248 ms)
+         antes: alto=3026 viewport=800 tab_top=387 primera_top=-979 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances
+         despues: alto=1650 viewport=800 tab_top=631 primera_top=-735 ruta=/finances?tab=ventas
+         recorte_por_alto: si (informativo, no se juzga: sin escrituras de scroll en el toque y el maximo de scroll despues, 850, es menor que y_antes=1094; el navegador recorto scrollY)
+         posicion pedida: {"ok":true,"pedido":1094,"max":2226,"tabAbs":1481,"primeraAbs":115}
+         cambios de scrollY del documento: [850]
+         escrituras de scroll de la pagina: ninguna
+      toque 2 (Egresos): tab=Egresos modo=centro y_antes=850 y_despues=850 min_durante=850 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (144 ms)
+         antes: alto=1650 viewport=800 tab_top=631 primera_top=-735 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances?tab=ventas
+         despues: alto=1650 viewport=800 tab_top=631 primera_top=-735 ruta=/finances?tab=egresos
+         posicion pedida: {"ok":true,"pedido":850,"max":850,"tabAbs":1481,"primeraAbs":115}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+```
+
+`etiqueta=rojo-obs-g1 · recorridos: 3 · coinciden con la hipotesis: 3`
+
+El recorte de obs-G1, con números: el documento baja de 4008 a 2504 px (móvil) y de 3026 a 1650 px (escritorio) al
+pasar de Turnos (22 turnos) a un tab vacío, y el navegador recorta `scrollY` 281/298 px en móvil y 244 px en
+escritorio, sin ninguna escritura de scroll de nadie. La leyenda «informativo, no se juzga» del renglón
+`recorte_por_alto` es la de `imprimirToque` (sin tocar): en los `G1-*` el recorte SÍ se juzga, por su `esperado`.
+
+### El verde (con el `fix` 05733dc; `paneles con alto minimo: 3`), rc 0
+
+```
+node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs F-blanda-mas-movil,F-directa-movil,F-tarjeta-movil,F-sidebar-escritorio,N-negocio-borde-movil,G1-ventas-movil,G1-egresos-movil,G1-ventas-escritorio verde-obs-g1 tras-el-fix
+```
+
+`finances-client.tsx huella=e6cc85d19b8be539 paneles con alto minimo: 3`
+
+| recorrido | toque 1: y_antes → y_despues | alto antes → después | recorte_por_alto (toque 1) | escrituras de Next |
+|---|---|---|---|---|
+| `F-blanda-mas-movil` | Ventas 1630 → 1630 (re-entrada 1630 → 1630) | 3008 → 3008 | no | 0 |
+| `F-directa-movil` (control) | Ventas 1630 → 1630 | 3008 → 3008 | no | 0 |
+| `F-tarjeta-movil` | Egresos 1630 → 1630 | 3008 → 3008 | no | 0 |
+| `F-sidebar-escritorio` | Ventas 1074 → 1074 | 2346 → 2346 | no | 0 |
+| `N-negocio-borde-movil` | Cobros 187 → 0 | 1389 → 844 | si (informativo, Negocio queda fuera del alcance) | 0 |
+| `G1-ventas-movil` | Ventas 1886 → 1886 (toque 2 Egresos 1858 → 1858) | 4008 → 3264 | no | 0 |
+| `G1-egresos-movil` | Egresos 1886 → 1886 (toque 2 Ventas 1850 → 1850) | 4008 → 3264 | no | 0 |
+| `G1-ventas-escritorio` | Ventas 1094 → 1094 (toque 2 Egresos 1094 → 1094) | 3026 → 2366 | no | 0 |
+
+De yapa: los 37/18/55 px del recorte del viewport emulado en los `F-*` móviles (`(h)`, `(j)`) también desaparecen
+(delta 0 en todos los toques de Finanzas): con noviembre en 0 turnos el panel de Turnos ahora mide una pantalla, así
+que el inflado del `innerHeight` (844 → 881/899/916) ya no achica el máximo por debajo del toque.
+
+```
+OK  G1-ventas-movil · obs-G1 movil 390x844: Inicio -> Mas -> Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos
+      recorte_toque1: medido="no"
+      salto_toque1: medido="no"
+      next_toque1: medido="no"
+      recorte_toque2: medido="no"
+      salto_toque2: medido="no"
+      next_toque2: medido="no"
+      mes con turnos: septiembre 2026 turnos=22 ventas=0 egresos=0 pasos=2
+      toque 1 (Ventas, desde Turnos): tab=Ventas modo=centro y_antes=1886 y_despues=1886 min_durante=1886 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (149 ms)
+         antes: alto=4008 viewport=844 tab_top=409 primera_top=-1739 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances
+         despues: alto=3264 viewport=899 tab_top=409 primera_top=-1739 ruta=/finances?tab=ventas
+         posicion pedida: {"ok":true,"pedido":1886,"max":3164,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+      toque 2 (Egresos): tab=Egresos modo=centro y_antes=1858 y_despues=1858 min_durante=1858 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (140 ms)
+         antes: alto=3264 viewport=899 tab_top=437 primera_top=-1711 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances?tab=ventas
+         despues: alto=3264 viewport=916 tab_top=437 primera_top=-1711 ruta=/finances?tab=egresos
+         posicion pedida: {"ok":true,"pedido":1858,"max":2365,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+
+OK  G1-egresos-movil · obs-G1 movil 390x844: Inicio -> tarjeta «Ingresos del mes» -> Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Egresos (desde Turnos) -> Ventas
+      recorte_toque1: medido="no"
+      salto_toque1: medido="no"
+      next_toque1: medido="no"
+      recorte_toque2: medido="no"
+      salto_toque2: medido="no"
+      next_toque2: medido="no"
+      mes con turnos: septiembre 2026 turnos=22 ventas=0 egresos=0 pasos=2
+      toque 1 (Egresos, desde Turnos): tab=Egresos modo=centro y_antes=1886 y_despues=1886 min_durante=1886 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (152 ms)
+         antes: alto=4008 viewport=844 tab_top=409 primera_top=-1739 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances
+         despues: alto=3264 viewport=916 tab_top=409 primera_top=-1739 ruta=/finances?tab=egresos
+         posicion pedida: {"ok":true,"pedido":1886,"max":3164,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+      toque 2 (Ventas): tab=Ventas modo=centro y_antes=1850 y_despues=1850 min_durante=1850 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (130 ms)
+         antes: alto=3264 viewport=916 tab_top=445 primera_top=-1703 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances?tab=egresos
+         despues: alto=3264 viewport=899 tab_top=445 primera_top=-1703 ruta=/finances?tab=ventas
+         posicion pedida: {"ok":true,"pedido":1850,"max":2348,"tabAbs":2295,"primeraAbs":147}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+
+OK  G1-ventas-escritorio · obs-G1 escritorio 1280x800: Inicio -> sidebar Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos
+      recorte_toque1: medido="no"
+      salto_toque1: medido="no"
+      next_toque1: medido="no"
+      recorte_toque2: medido="no"
+      salto_toque2: medido="no"
+      next_toque2: medido="no"
+      mes con turnos: septiembre 2026 turnos=22 ventas=0 egresos=0 pasos=2
+      toque 1 (Ventas, desde Turnos): tab=Ventas modo=centro y_antes=1094 y_despues=1094 min_durante=1094 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (176 ms)
+         antes: alto=3026 viewport=800 tab_top=387 primera_top=-979 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances
+         despues: alto=2366 viewport=800 tab_top=387 primera_top=-979 ruta=/finances?tab=ventas
+         posicion pedida: {"ok":true,"pedido":1094,"max":2226,"tabAbs":1481,"primeraAbs":115}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+      toque 2 (Egresos): tab=Egresos modo=centro y_antes=1094 y_despues=1094 min_durante=1094 delta=0 llevo_al_inicio=no escritura_de_next=no (criterio viejo salto_al_inicio=no) se_movio=no seleccionado=true (144 ms)
+         antes: alto=2366 viewport=800 tab_top=387 primera_top=-979 primera=div.space-y-6.max-w-5xl vv={"escala":1,"dx":0,"dy":0} ruta=/finances?tab=ventas
+         despues: alto=2366 viewport=800 tab_top=387 primera_top=-979 ruta=/finances?tab=egresos
+         posicion pedida: {"ok":true,"pedido":1094,"max":1566,"tabAbs":1481,"primeraAbs":115}
+         cambios de scrollY del documento: []
+         escrituras de scroll de la pagina: ninguna
+```
+
+`etiqueta=verde-obs-g1 · modo=tras-el-fix · recorridos: 8 · coinciden con lo esperado tras el fix: 8`
+
+### Lo demás
+
+- **`--autotest`** del clasificador: `autotest del clasificador: 5/5` (antes y después del arreglo).
+- **La sonda de la app**, por el turno, en el mismo gate (`node scripts/con-turno.mjs node .planning/debug/probes/panel-exit-en-la-app.mjs dev interfaz R-T-finanzas-por-mas,R-T-finanzas-desde-inicio,R-T-finanzas-invalido,R-T-finanzas-url-pegada`):
+  rc 0 · `gesto=interfaz · modo=dev · recorridos medidos: 4 · coinciden con lo esperado: 4 · no coinciden: 0`.
+- **`tsc --noEmit`**: cero `error TS`.
+- **eslint, archivo por archivo:** `finances-client.tsx` `react-hooks/set-state-in-effect=1` (la deuda medida, sin
+  cambios); la sonda, `test/panel-tabs.test.ts` y `finances/page.tsx`: rc 0.
+- **La pura:** rc 0 · `Test Files 77 passed (77)` · `Tests 1845 passed | 3 expected fail (1848)` (piso 77 / 1845).
+- **Las 8 suites de historial:** rc 0 · 8 archivos · 671 casos (piso 671).
+- **`panel-tabs`:** el candado obs-G1 fue ROJO con el `test` (`Tests 1 failed | 84 passed (85)`, el rojo es el
+  obs-G1) y VERDE con el `fix` (85 passed).
+- **El build** (`npm run build`): rc 0 · `✓ Compiled successfully in 13.2s` · `✓ Generating static pages using 11
+  workers (64/64)`; cero avisos de Suspense. P-7 no aplicó.
+- **El criterio 5 CRUDO** sobre `finances-client.tsx`, `settings-client.tsx` y `agenda-client.tsx`: vacío. El único
+  archivo de la app cambiado desde la base es `app/(dashboard)/finances/finances-client.tsx`; `components/ui/tabs.tsx`
+  y `finances/page.tsx` intactos; `next.config.ts` = `8ceb99aeabb6a8b16cbe0e6d836bf0aa1ae03578`.
+
+### Lo que NO cierra
+
+- **El teléfono real** (Android Chrome / iOS Safari): esto es Chrome headless con emulación móvil. La UAT del dueño
+  va junto con R2-WR-01, después del push conjunto (nada se pusheó).
+- **Negocio → Cobros** sigue con su `recorte_por_alto` informativo (187 → 0): el dueño acotó el arreglo a Finanzas.
+- **El desborde horizontal de Finanzas a 390 px** (el `innerHeight` 881/899/916 del emulado) sigue abierto en su
+  propia entrada de `deferred-items.md`.
+- **El costo aceptado:** un tab vacío deja hasta una pantalla de blanco debajo de su aviso.
+
+cierre (k): el tab corto de finanzas ya no achica la pagina · rojo 3/3 · verde 8/8

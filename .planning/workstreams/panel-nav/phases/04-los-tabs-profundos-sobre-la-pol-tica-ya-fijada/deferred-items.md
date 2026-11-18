@@ -92,7 +92,7 @@
   sonda lo recorre directo: lo prueba la re-UAT del 04-08.
 
 - obs-G1: con 0 ventas, el tab Ventas de Finanzas achica la página y el navegador recorta el scroll (re-UAT del 04-08)
-  status: open
+  status: resolved (quick 261118-jdq, 05733dc; medido en .planning/debug/tabs-en-la-url-medida.md ## (k))
   **Qué:** el dueño, en Android Chrome durante el G6.1 en producción (`c3da6d0`, 2026-11-18): «Algo que por ahí me
   gustaria es que ya se fije el alto de la ventana con los turnos que aparecen, porque sino cada vez que voy a ventas
   hace un salto ahi porque se achica. Igual es porque hay 0 ventas cargadas.» No es un scroll de la app: el tab nuevo
@@ -102,6 +102,10 @@
   **Por qué no se tocó:** la Phase 4 es «cero pixel nuevo» y el plan 04-08 no cambia código. Decisión del dueño
   (2026-11-18): resolverlo DESPUÉS como un `/gsd-quick` separado — alto mínimo del contenedor de los tabs de Finanzas =
   alto de la pantalla (CSS), y medir antes con la sonda del scroll que el primer toque sigue sin moverse.
+  **Cierre:** `min-h-dvh` en los tres paneles de Finanzas (`05733dc`). Rojo 3/3 con el código de antes (septiembre
+  2026, 22 turnos, 0 ventas / 0 egresos: el documento baja 4008 → 2504 px y `scrollY` se recorta 281/298 px en móvil,
+  244 px en escritorio) → verde 8/8 en `tras-el-fix` (los tres `G1-*` con delta 0 y sin recorte), sin regresar G-04-6
+  (los cinco recorridos del 04-06 en OK, cero escrituras de Next). Falta la UAT en el teléfono, junto con R2-WR-01.
 
 - R2-WR-01: la guarda de consumo en vuelo podría quedar encendida sin `popstate` (code review ronda 2, `04-REVIEW-2.md`)
   status: open
