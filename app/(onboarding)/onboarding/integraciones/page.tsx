@@ -18,11 +18,21 @@ export default async function IntegracionesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
+  // `maybeSingle` y no `single` (WR-03): separa «no tiene negocio» (0 filas, sin error) de «falló la
+  // lectura» (red/PostgREST, o 2+ filas, que también vuelve como error). Sólo lo primero va al wizard.
+  // Ante un error se va al panel y NUNCA a `/onboarding`: el wizard no verifica si ya hay negocio, así
+  // que mandar ahí a quien ya lo tiene es la puerta a un segundo negocio (no hay unique en owner_id).
+  // El panel es el destino de «Ir al panel» —este paso es opcional, saltearlo no pierde nada— y las
+  // integraciones siguen en Negocio → Integraciones.
+  const { data: business, error: bizError } = await supabase
     .from('businesses')
     .select('id, vertical, type, mp_user_id, mp_connection_status')
     .eq('owner_id', user.id)
-    .single()
+    .maybeSingle()
+  if (bizError) {
+    console.error('[onboarding/integraciones] leer negocio falló:', bizError.code ?? bizError.message)
+    redirect('/dashboard')
+  }
   if (!business) redirect('/onboarding')
 
   // Integración no configurada por entorno → su tarjeta se oculta, como en el panel. Ninguna
