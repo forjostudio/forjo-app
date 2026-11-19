@@ -1,21 +1,28 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { exchangeMpCode } from '@/lib/mercadopago'
+import { MP_RETURN, oauthReturnPath, resolveOAuthReturn } from '@/lib/oauth-return'
 
 // Callback del OAuth de MercadoPago: valida el state, canjea el code y guarda las credenciales
 // del negocio del dueño logueado. El access_token va a mp_access_token (lo usa el flujo de seña
-// tal cual el modo manual). Vuelve a /negocio con ?mp=connected|error (Integraciones migró de
-// Configuración a Negocio, NAV-02/D-06).
+// tal cual el modo manual). Vuelve con ?mp=connected|error al destino de la lista CERRADA de MP
+// (`lib/oauth-return.ts`): /negocio por default (Integraciones del panel, NAV-02/D-06) o
+// /onboarding/integraciones cuando el connect se inició desde el paso 5 del onboarding.
 export async function GET(request: NextRequest) {
   const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://gestion.forjo.studio').replace(/\/$/, '')
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
   const saved = request.cookies.get('mp_oauth_state')?.value
+  // Destino de vuelta (anti open-redirect T-05-02): la cookie guarda sólo un token y se vuelve a
+  // normalizar acá; cualquier otra cosa (cookie ausente o editada) cae a /negocio. Se calcula ANTES de
+  // `fail()` para que el error vuelva al mismo lugar que el éxito. No participa del chequeo de `state`.
+  const returnPath = oauthReturnPath(resolveOAuthReturn(request.cookies.get('mp_oauth_from')?.value, MP_RETURN))
 
   const fail = () => {
-    const r = NextResponse.redirect(`${base}/negocio?mp=error`)
+    const r = NextResponse.redirect(`${base}${returnPath}?mp=error`)
     r.cookies.delete('mp_oauth_state')
+    r.cookies.delete('mp_oauth_from')
     return r
   }
 
@@ -71,7 +78,8 @@ export async function GET(request: NextRequest) {
     return fail()
   }
 
-  const r = NextResponse.redirect(`${base}/negocio?mp=connected`)
+  const r = NextResponse.redirect(`${base}${returnPath}?mp=connected`)
   r.cookies.delete('mp_oauth_state')
+  r.cookies.delete('mp_oauth_from')
   return r
 }
