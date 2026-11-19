@@ -35,23 +35,47 @@ import { GET as mpCallback } from '@/app/api/mercadopago/callback/route'
 import { GET as googleConnect } from '@/app/api/google/connect/route'
 import { GET as googleCallback } from '@/app/api/google/callback/route'
 
-// Session client mínimo: el dueño `user-1` con su negocio `biz-1`; updates y upserts sanos.
+// Session client mínimo: el dueño `user-1` con su negocio `biz-1`; updates y upserts sanos. Registra
+// cada `eq` sobre `businesses` y cada `upsert` sobre `business_secrets` (IN-01): sin eso, un callback
+// que dejara de filtrar por `owner_id` seguiría en verde (T-q8v-03).
 function fakeSupabase() {
-  return {
+  const eqCalls: Array<{ op: 'select' | 'update'; args: unknown[] }> = []
+  const upserts: unknown[] = []
+  const client = {
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'user-1' } } })) },
     from: vi.fn((table: string) => {
       if (table === 'businesses') {
         return {
           select: vi.fn(() => ({
-            eq: vi.fn(() => ({ single: vi.fn(async () => ({ data: { id: 'biz-1' } })) })),
+            eq: vi.fn((...args: unknown[]) => {
+              eqCalls.push({ op: 'select', args })
+              return { single: vi.fn(async () => ({ data: { id: 'biz-1' } })) }
+            }),
           })),
-          update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+          update: vi.fn(() => ({
+            eq: vi.fn(async (...args: unknown[]) => {
+              eqCalls.push({ op: 'update', args })
+              return { error: null }
+            }),
+          })),
         }
       }
       // business_secrets
-      return { upsert: vi.fn(async () => ({ error: null })) }
+      return {
+        upsert: vi.fn(async (payload: unknown) => {
+          upserts.push(payload)
+          return { error: null }
+        }),
+      }
     }),
   }
+  return Object.assign(client, { eqCalls, upserts })
+}
+
+// Todo `eq` sobre `businesses` filtra por el `owner_id` de la sesión, y hubo al menos uno por cada op.
+function expectOwnerScoped(sb: ReturnType<typeof fakeSupabase>, ops: Array<'select' | 'update'>) {
+  for (const op of ops) expect(sb.eqCalls.some(c => c.op === op), `no hubo ${op} sobre businesses`).toBe(true)
+  for (const c of sb.eqCalls) expect(c.args).toEqual(['owner_id', 'user-1'])
 }
 
 function req(url: string, cookie?: string) {
@@ -140,13 +164,27 @@ describe('MP callback', () => {
   const tokens = { access_token: 'at', refresh_token: 'rt', user_id: 12345, expires_in: 3600 }
 
   it('cookie mp_oauth_from=onboarding y flujo sano → /onboarding/integraciones?mp=connected y borra las cookies', async () => {
-    h.createClientMock.mockResolvedValue(fakeSupabase())
+    const sb = fakeSupabase()
+    h.createClientMock.mockResolvedValue(sb)
     h.exchangeMpCodeMock.mockResolvedValue(tokens)
     const res = await mpCallback(req(MP_CALLBACK, 'mp_oauth_state=xyz; mp_oauth_from=onboarding'))
 
     expect(dest(res)).toBe('/onboarding/integraciones?mp=connected')
     expectDeleted(res, 'mp_oauth_from')
     expectDeleted(res, 'mp_oauth_state')
+    // Tenant (T-q8v-03): el negocio se lee y se actualiza por el owner_id de la sesión, y los
+    // secretos van al business_id que salió de esa lectura.
+    expectOwnerScoped(sb, ['select', 'update'])
+    expect(sb.upserts).toEqual([expect.objectContaining({ business_id: 'biz-1' })])
+  })
+
+  it('sin la cookie mp_oauth_state → /onboarding/integraciones?mp=error sin canjear el code', async () => {
+    h.createClientMock.mockResolvedValue(fakeSupabase())
+    const res = await mpCallback(req(MP_CALLBACK, 'mp_oauth_from=onboarding'))
+
+    expect(dest(res)).toBe('/onboarding/integraciones?mp=error')
+    expect(h.exchangeMpCodeMock).not.toHaveBeenCalled()
+    expectDeleted(res, 'mp_oauth_from')
   })
 
   it.each([
@@ -198,13 +236,25 @@ describe('Google callback', () => {
     ['g_oauth_from=onboarding', '/onboarding/integraciones?google=connected', 'g_oauth_state=xyz; g_oauth_from=onboarding'],
     ['sin g_oauth_from', '/agenda?google=connected', 'g_oauth_state=xyz'],
     ['g_oauth_from=negocio', '/negocio?google=connected', 'g_oauth_state=xyz; g_oauth_from=negocio'],
+    ['g_oauth_from=__proto__', '/agenda?google=connected', 'g_oauth_state=xyz; g_oauth_from=__proto__'],
   ])('%s → %s', async (_label, expected, cookie) => {
-    h.createClientMock.mockResolvedValue(fakeSupabase())
+    const sb = fakeSupabase()
+    h.createClientMock.mockResolvedValue(sb)
     h.exchangeCodeMock.mockResolvedValue({ refresh_token: 'rt' })
     const res = await googleCallback(req(G_CALLBACK, cookie))
     expect(dest(res)).toBe(expected)
     expectDeleted(res, 'g_oauth_from')
     expectDeleted(res, 'g_oauth_state')
+    expectOwnerScoped(sb, ['select'])
+    expect(sb.upserts).toEqual([{ business_id: 'biz-1', google_refresh_token: 'rt' }])
+  })
+
+  it('sin la cookie g_oauth_state → /onboarding/integraciones?google=error sin canjear el code', async () => {
+    h.createClientMock.mockResolvedValue(fakeSupabase())
+    const res = await googleCallback(req(G_CALLBACK, 'g_oauth_from=onboarding'))
+    expect(dest(res)).toBe('/onboarding/integraciones?google=error')
+    expect(h.exchangeCodeMock).not.toHaveBeenCalled()
+    expectDeleted(res, 'g_oauth_from')
   })
 
   it.each([
