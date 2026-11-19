@@ -62,6 +62,7 @@ interface IntegrationCardProps {
   onConnect: () => void
 }
 
+// Los botones de la tarjeta van en `outline` (IN-04): el único primario de la pantalla es «Ir al panel».
 function IntegrationCard({ logo, title, description, connected, notice, connecting, disabled, connectLabel, errorText, unconfirmedText, onConnect }: IntegrationCardProps) {
   const titleId = useId()
   return (
@@ -84,19 +85,19 @@ function IntegrationCard({ logo, title, description, connected, notice, connecti
       ) : notice === 'error' ? (
         <div className="space-y-3">
           <p role="alert" className="text-sm text-destructive">{errorText}</p>
-          <Button className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
+          <Button variant="outline" className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
             {connecting ? 'Conectando…' : 'Reintentar'}
           </Button>
         </div>
       ) : notice === 'unconfirmed' ? (
         <div className="space-y-3">
           <p role="status" className="text-sm text-muted-foreground">{unconfirmedText}</p>
-          <Button className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
+          <Button variant="outline" className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
             {connecting ? 'Conectando…' : connectLabel}
           </Button>
         </div>
       ) : (
-        <Button className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
+        <Button variant="outline" className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
           {connecting ? 'Conectando…' : connectLabel}
         </Button>
       )}
