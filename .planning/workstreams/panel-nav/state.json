@@ -20,9 +20,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-quick --ws panel-nav",
-    "label": "Quicks pendientes de la fase 4: obs-G1 (alto mínimo de los tabs de Finanzas) y R2-WR-01 + cruce con consumeOwnedPanelEntry (medir primero; vence AR-04-05/06); después /gsd-complete-milestone",
-    "reason": "Phase 4 completa y SECURED (04-SECURITY.md threats_open 0)"
+    "command": "/gsd-complete-milestone --ws panel-nav",
+    "label": "Cerrar el milestone v0.31 (las 3 fases completas y SECURED; quicks post-fase desplegados en ed95669 con UAT 6/6)",
+    "reason": "Phase 4 completa; obs-G1, R2-WR-01, CR-01 y la familia back() en producción"
   },
   "updated_at": "2026-11-18T13:47:23.501Z"
 }
