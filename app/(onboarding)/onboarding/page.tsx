@@ -1241,8 +1241,10 @@ export default function OnboardingPage() {
                 </Button>
               </div>
             ) : (
+              // El CTA de «Finalizar» (handleFinish) dice lo que hace: crea el negocio y lleva al paso 5
+              // opcional (IN-08). El paso 5 ya no es «entrar al dashboard», así que el verbo es el alta.
               <Button onClick={handleFinish} disabled={loading}>
-                {loading ? 'Guardando...' : 'Finalizar'}
+                {loading ? 'Guardando...' : 'Crear mi negocio'}
               </Button>
             )}
           </div>
