@@ -1573,3 +1573,72 @@ describe('CR-01 del review de R2-WR-01 — medidos antes de arreglar (quick 2611
     expect(medido).toEqual({ s1: true, retrocesos: 1, url: '/dashboard', navegaciones: [] })
   })
 })
+
+// ── 11) UP-doble (quick 261118-pjd): el candado de la guarda compartida, escrito ANTES del arreglo ─────────
+// `UP-doble` reprodujo en (m): dos toques a Inicio desde una sección con la marca de la rama, antes del recorrido,
+// dieron 2 retrocesos y `/afuera`, porque `consumeOwnedBranchEntry` no leía la guarda del consumo en vuelo. El dueño
+// decidió (2026-11-18) arreglarlo si daba rojo, con la MISMA guarda: el mismo chequeo que el menú y el mismo bloque de
+// encendido que la rama `consume`. Son tres copias a propósito de las mismas líneas, y este candado es el que no las
+// deja derivar (`C-retroceso-unico`, más arriba y sin tocar, vigila las dos primeras). Rojo antes del arreglo.
+// `lineas` y `bloqueDeEncendido` son copias exactas de las del describe de los candados del quick 261118-kat, que no
+// se toca.
+
+describe('UP-doble — el candado del arreglo, antes del arreglo (quick 261118-pjd)', () => {
+  /** Las líneas de código de una región, sin sangría y sin las vacías que dejan los comentarios quitados. */
+  const lineas = (region: string) =>
+    region
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '')
+
+  /** Desde `consumoEnVuelo = true` hasta el `}` que cierra el `catch` (incluidos los dos). */
+  const bloqueDeEncendido = (region: string): string[] => {
+    const ls = lineas(region)
+    const desde = ls.indexOf('consumoEnVuelo = true')
+    if (desde === -1) return []
+    const captura = ls.findIndex((l, i) => i > desde && l.startsWith('} catch'))
+    if (captura === -1) return []
+    const cierre = ls.findIndex((l, i) => i > captura && l === '}')
+    return cierre === -1 ? [] : ls.slice(desde, cierre + 1)
+  }
+
+  /** Desde la primera línea que nombra `consumoEnVuelo` hasta la anterior a la que empieza con `const actual`. */
+  const chequeoEnVuelo = (region: string): string[] => {
+    const ls = lineas(region)
+    const desde = ls.findIndex((l) => l.includes('consumoEnVuelo'))
+    if (desde === -1) return []
+    const hasta = ls.findIndex((l, i) => i > desde && l.startsWith('const actual'))
+    return hasta === -1 ? [] : ls.slice(desde, hasta)
+  }
+
+  it('C-retroceso-unico-rama: consumeOwnedBranchEntry chequea el consumo en vuelo como el menú y enciende la guarda con las MISMAS líneas que la rama consume', () => {
+    const fuente = sinComentarios(read('lib/panel-history.ts'))
+    const rama = cuerpoDe(fuente, 'export function consumeOwnedBranchEntry(', '): boolean {')
+    const menu = cuerpoDe(fuente, 'export function consumeOwnedPanelEntry(', '): boolean {')
+    const at = fuente.indexOf('export function applyPanelView({')
+    const fin = at === -1 ? -1 : fuente.indexOf('\n}\n', at)
+    const ejecutor = at === -1 || fin === -1 ? '' : fuente.slice(at, fin + 2)
+    const consume = recorte(ejecutor, "if (action === 'consume') {")
+    expect(rama).not.toBe('')
+    expect(menu).not.toBe('')
+    expect(consume).not.toBe('')
+    // El chequeo del consumo en vuelo va antes de las dos guardas, y la guarda ajena antes de la marca de la rama.
+    const enVuelo = rama.indexOf('consumoEnVuelo')
+    const ajena = rama.indexOf('isForeignOwnedEntry(actual)')
+    const marca = rama.indexOf('panelUnderRoute(actual) === null')
+    expect(enVuelo).toBeGreaterThan(-1)
+    expect(ajena).toBeGreaterThan(enVuelo)
+    expect(marca).toBeGreaterThan(ajena)
+    // Un solo retroceso, después de las dos guardas.
+    expect(rama.split('window.history.back()').length - 1).toBe(1)
+    expect(rama.indexOf('window.history.back()')).toBeGreaterThan(marca)
+    // El chequeo: no vacío e IGUAL línea por línea al del menú.
+    const delMenu = chequeoEnVuelo(menu)
+    expect(delMenu.length).toBeGreaterThan(0)
+    expect(chequeoEnVuelo(rama)).toEqual(delMenu)
+    // El bloque de encendido: no vacío e IGUAL línea por línea al de la rama `consume` del ejecutor.
+    const delEjecutor = bloqueDeEncendido(consume)
+    expect(delEjecutor.length).toBeGreaterThan(0)
+    expect(bloqueDeEncendido(rama)).toEqual(delEjecutor)
+  })
+})
