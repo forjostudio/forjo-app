@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { oauthReturnPath, resolveOAuthReturn, MP_RETURN, GOOGLE_RETURN, type OAuthReturnToken } from '@/lib/oauth-return'
+import { oauthReturnPath, resolveOAuthReturn, oauthReturnNotice, MP_RETURN, GOOGLE_RETURN, type OAuthReturnToken } from '@/lib/oauth-return'
 
 // ── Test PURO: sin red, sin credenciales, sin Supabase ─────────────────────────────────────────
 // Importa SOLO de @/lib/oauth-return. Nada del helper de entorno de la carpeta test/ (eso es la marca
@@ -72,4 +72,26 @@ describe('presets', () => {
     expect(MP_RETURN.allowed).toContain(MP_RETURN.fallback)
     expect(GOOGLE_RETURN.allowed).toContain(GOOGLE_RETURN.fallback)
   })
+})
+
+// ── IN-02 (review del quick): el aviso de la vuelta lo decide el estado REAL del server ──────────
+// El `?mp=`/`?google=` de la URL sólo dice que hubo una vuelta; qué se le muestra al dueño sale del
+// booleano leído de la base. Así nunca conviven un «Conectado» en la tarjeta y un error en el toast,
+// ni un «conectado» anunciado que la base no confirma.
+describe('oauthReturnNotice', () => {
+  it.each([
+    ['connected', true, 'success'],
+    ['error', true, 'success'], // la reconexión falló pero la conexión anterior sigue sana
+    ['error', false, 'error'],
+    ['connected', false, 'unconfirmed'], // p. ej. `?mp=connected` fabricado, o el callback no dejó mp_user_id
+  ] as const)('?…=%s con conectado=%s → %s', (result, connected, expected) => {
+    expect(oauthReturnNotice(result, connected)).toBe(expected)
+  })
+
+  it.each([null, '', 'ok', 'CONNECTED', '__proto__'].flatMap(v => [[v, true], [v, false]] as const))(
+    'valor %j (conectado=%s) → sin aviso',
+    (result, connected) => {
+      expect(oauthReturnNotice(result, connected)).toBeNull()
+    },
+  )
 })
