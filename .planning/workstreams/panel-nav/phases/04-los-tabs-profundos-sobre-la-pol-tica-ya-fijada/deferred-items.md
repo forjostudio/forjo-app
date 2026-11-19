@@ -197,3 +197,12 @@
   suites, pura 77/1888, 8 suites 714, `panel-tabs` 123, build verde, app 47 medidos / 46 coinciden (sólo la FALLA
   declarada), R-T 12/12, R-B1 4/4, estática 18/18, scroll 8/8. Residuo: teléfono real, Safari iOS/Android, el
   retroceso ignorado en silencio sin medir en ningún motor (con el sentinel como productor más) y R2-IN-04.
+
+- R3-WR-01 (review final antes del push, 2026-11-19): `applyPanelView` sin el chequeo de llegada de sus hermanas
+  status: open
+  **Qué:** si el navegador ignora un `back()` sin tirar (no observado en ningún motor), la guarda queda colgada y
+  `applyPanelView` devuelve `'none'` en todo el panel. Medido en el simulador del review (`261119-32l-REVIEW.md`,
+  sim4): R1 `up` ignorado → `/clients` → abrir ficha: producción se abre / HEAD no; R2 salida ignorada → tab de
+  Finanzas: cambia / no; R3 menú ignorado → tab de `/settings`: cambia / no; R4 tab ignorado: igual en los dos.
+  **Arreglo propuesto:** copiar en `applyPanelView` el chequeo de llegada (state Y URL) de `consumeOwnedPanelEntry`.
+  No bloquea el push (review final: «seguro para subir: sí»); queda para un quick posterior.
