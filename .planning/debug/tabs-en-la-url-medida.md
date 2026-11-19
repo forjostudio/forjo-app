@@ -2159,3 +2159,171 @@ mutacion M2 (sin sacar el oyente de pageshow): P0-normal=rojo
   cubierto por lectura por la misma guarda.
 
 cierre (m): CR-01=arreglado · WR-02=arreglado · WR-01=arreglado · IN-01=arreglado · UP=arreglado
+
+## (n) La familia back(): todo atrás del panel por la guarda compartida (quick 261119-32l)
+
+Qué se preguntó: si los hallazgos de la revisión de verificación del quick 261118-pjd (`261118-pjd-REVIEW.md`)
+reproducen con el código de hoy, medidos con los esperados commiteados ANTES de la corrida que los juzga:
+
+1. **CR-01 / X2 (critical, preexistente):** con el sentinel de salida arriba (Inicio, aviso armado), dos toques a un
+   destino de la barra antes del recorrido. `consumeOwnedExitSentinel` no lee la guarda del consumo en vuelo: cada toque
+   engancha su segundo paso y retrocede; el primer retroceso consume el sentinel y el segundo la entrada de Inicio.
+2. **IN-03:** semánticas distintas ante dos toques: B1 se queda con el último, el colapso y la salida con todos.
+3. **WR-01 / S4:** con la guarda colgada (un retroceso que el navegador ignoró en silencio), el `up` o el colapso del
+   guard de cambios sin guardar devuelven «se hizo cargo» sin retroceder ni navegar.
+4. **D-01 / D-02:** ¿todo retroceso del panel pasa por la guarda compartida? Un candado de fuente con la lista cerrada.
+
+Decisión del dueño (**2026-11-19**, no se reabre):
+- **D-01:** todo `history.back()` del panel (`lib/panel-history.ts` y `lib/panel-branch.ts`) que consuma una entrada
+  propia pasa por la guarda compartida (mismo chequeo de consumo en vuelo, mismo bloque de encendido, candado anti-deriva),
+  empezando por `consumeOwnedExitSentinel` (el BLOCKER). RED primero con `X2-exit-doble` más un control verde.
+- **D-02:** candado estructural anti `back()` suelto: un test de fuente con la lista cerrada y contada, que mide de verdad
+  (no cero) y con su mutación probada.
+- **D-03:** con la guarda colgada, el `up` del guard sucio no puede devolver «se hizo cargo» sin hacer nada. RED primero;
+  arreglo que respete `unsaved-changes-guard.tsx` y el aviso, sin tocar `lib/dirty-history.ts`.
+- **D-04:** IN-01 (docblock y call sites de `consumeOwnedBranchEntry`), IN-03 (decidir y justificar la semántica ante dos
+  toques), IN-04 (el stub de `test/panel-branch.test.ts`). IN-02 queda declarado.
+- **D-05:** el registro: esta sección, `04-SECURITY.md`, `deferred-items.md`; y el SUMMARY con la tabla de call sites.
+
+**Los `back()` del panel al planificar** (`grep` sobre `lib/`, líneas de `e07bffd`):
+
+| # | Sitio | Qué consume | ¿Pasa por la guarda? | Candado de hoy |
+|---|---|---|---|---|
+| 1 | `lib/panel-history.ts:1145` | rama `consume` de `applyPanelView` (tab por defecto, «Volver» de clientes) | SÍ | `C-retroceso-unico` |
+| 2 | `lib/panel-history.ts:1348` | `consumeOwnedPanelEntry` (menú NAV-08, primer paso de B1) | SÍ | `C-retroceso-unico` |
+| 3 | `lib/panel-history.ts:1418` | `consumeOwnedBranchEntry` (`up`, el colapso y su `second-consume`) | SÍ | `C-retroceso-unico-rama` |
+| 4 | `lib/panel-branch.ts:312` | `consumeOwnedExitSentinel`: el sentinel de salida, primer paso de `consume-exit-then-navigate` | **NO** (el BLOCKER) | ninguno |
+| 5 | `lib/panel-branch.ts:2065` | el desmontaje del sentinel (`usePanelBranch`, microtask, `panelExitUnmountAction`, G3-4) | **NO** (sin doble consumo conocido, pero consume una entrada PROPIA) | `test/panel-branch.test.ts:3001` y `:3006` exigen el literal del retroceso crudo |
+| — | `lib/overlay-history.ts:498, :548`; `lib/dirty-history.ts:343, :369, :385, :391, :419` | sus propias marcas | fuera de alcance | intocables |
+
+**El entorno (paso 0).** 2026-11-19, 02:40 hora de Argentina. node `v24.15.0`. HEAD al empezar: `e07bffd`. HEAD de la
+medición: `2a38661` (el `test(quick-261119-32l)` con los esperados; ningún cambio en `lib/`, `components/` ni `app/`).
+Sin navegador ni servidor: no pasa por el turno ni necesita Supabase.
+
+### Lo medido: 9 casos en el simulador fiel y 2 candados de fuente
+
+`test/panel-branch.test.ts` cambió de forma NEUTRAL antes de medir (IN-04): el filtro de los oyentes de la guarda pasó a
+ser por identidad (`DE_LA_GUARDA`, llenado una vez en un `beforeAll` con un consumo real del menú), el stub de `location`
+tiene `search: ''`, y `C-oyentes-de-la-guarda` fija que la guarda engancha exactamente dos oyentes. Corrido antes del
+commit: 238/238 en verde.
+
+```
+./node_modules/.bin/vitest run --project pure test/panel-tabs.test.ts test/panel-branch.test.ts
+```
+
+`Tests  9 failed | 352 passed (361)` — los nueve rojos son casos nuevos, cada uno por su aserción (cero
+`TypeError`/`ReferenceError`); ningún caso viejo en rojo. Verdes, como tenían que estar: `X2-control`, `S4-control` y
+`C-oyentes-de-la-guarda`. Log: `scratchpad/32l/medicion-antes.txt` de la sesión. Las tuplas medidas contra las
+esperadas, tal cual del error de la aserción:
+
+```
+X2-exit-doble: dos toques a un destino de la barra desde Inicio con el aviso armado, antes del recorrido  — ROJO
+  {
+    "navegaciones": [
+      "push /finances",
++     "push /finances",
+    ],
+-   "retrocesos": 1,
++   "retrocesos": 2,
+    "s1": true,
+    "s2": true,
+-   "url": "/dashboard",
++   "url": "/afuera",
+  }
+
+X2-control: un solo toque  — VERDE  { s1: true, retrocesos: 1, url: '/dashboard', navegaciones: ['push /finances'] }
+
+X2-destinos: /finances y después /clients desde Inicio con el aviso armado  — ROJO
+  {
+    "navegaciones": [
++     "push /finances",
+      "push /clients",
+    ],
+-   "retrocesos": 1,
+-   "url": "/dashboard",
++   "retrocesos": 2,
++   "url": "/afuera",
+  }
+
+CO2-doble-colapso: dos toques a /agenda desde una sección de Más  — ROJO
+  {
+    "navegaciones": [
+      "replace /agenda",
++     "replace /agenda",
+    ],
+    "retrocesos": 1,
+    "url": "/mas",
+  }
+
+CO-mixto: el colapso a /agenda y después Inicio  — ROJO
+  {
+-   "navegaciones": [],
++   "navegaciones": [
++     "replace /agenda",
++   ],
+    "retrocesos": 2,
+    "url": "/dashboard",
+  }
+
+CO3-colapso-y-mas: el colapso a /agenda y después Más  — ROJO
+  {
+-   "navegaciones": [],
++   "navegaciones": [
++     "replace /agenda",
++   ],
+    "retrocesos": 1,
+    "url": "/mas",
+  }
+
+S4-guard-up: up ignorado en silencio y después «Descartar» hacia Inicio  — ROJO
+  {
+-   "navegaciones": [
+-     "push /dashboard",
+-   ],
+-   "p": "degrado",
++   "navegaciones": [],
++   "p": "se-hizo-cargo",
+    "retrocesos": 0,
+    "url": "/finances",
+  }
+
+S4-guard-colapso: colapso ignorado en silencio y después «Descartar» hacia /agenda  — ROJO
+  {
+-   "navegaciones": [
+-     "replace /agenda",
+-   ],
+-   "p": "degrado",
++   "navegaciones": [],
++   "p": "se-hizo-cargo",
+    "retrocesos": 0,
+  }
+
+S4-control: «Descartar» hacia Inicio sin guarda colgada  — VERDE  { p: 'se-hizo-cargo', retrocesos: 1, url: '/dashboard', navegaciones: [] }
+
+C-back-cerrado  — ROJO (por construcción)
+  {
+    "historia": [
+      "applyPanelView",
+      "consumeOwnedBranchEntry",
+-     "consumeOwnedExitEntry",
+      "consumeOwnedPanelEntry",
+    ],
+-   "rama": [],
++   "rama": [
++     "consumeOwnedExitSentinel",
++     "usePanelBranch",
++   ],
+  }
+
+C-retroceso-unico-salida  — ROJO (por construcción): expected '' not to be '' (`consumeOwnedExitEntry` no existe)
+
+C-oyentes-de-la-guarda (test/panel-branch.test.ts)  — VERDE
+```
+
+Lectura: X2 reproduce exactamente lo que midió el revisor (2 retrocesos, `/afuera`, dos empujes). IN-03 reproduce en las
+tres formas, incluida la que sólo cierra la unificación (`CO-mixto`: el retroceso a Inicio Y el `replace` a `/agenda`
+pedidos a la vez). S4 reproduce en el `up` y en el colapso: el guard recibe «se hizo cargo» y no navega. Los dos
+candados de fuente están rojos por construcción, que es lo que tienen que estar antes del arreglo (verdes querría decir
+que no miden).
+
+veredictos (n): CR-01=reproduce · IN-03=reproduce · WR-01=reproduce · C-back=rojo
