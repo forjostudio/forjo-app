@@ -2327,3 +2327,110 @@ candados de fuente están rojos por construcción, que es lo que tienen que esta
 que no miden).
 
 veredictos (n): CR-01=reproduce · IN-03=reproduce · WR-01=reproduce · C-back=rojo
+
+### El arreglo (`a85adc0`): FX, FU y FW, los tres porque los tres reprodujeron
+
+- **FX (D-01, CR-01).** `lib/panel-history.ts` suma `consumeOwnedExitEntry(esNuestra)`: la cuarta copia, a propósito,
+  del chequeo de consumo en vuelo de `consumeOwnedPanelEntry` y del bloque de encendido de la rama `consume` de
+  `applyPanelView`, con UNA sola guarda de propiedad en el medio (el predicado). `consumeOwnedExitSentinel`
+  (`lib/panel-branch.ts`) delega en una línea con `isPanelExitEntry(estado, id)` como predicado, y el desmontaje del
+  sentinel (G3-4) pasa a llamar a `consumeOwnedExitSentinel({ id })` en vez de retroceder crudo. El predicado, y no el
+  `id`, porque la pregunta por la marca de ESTA instancia es del dueño del sentinel (al revés sería un import circular) y
+  la memoria de la guarda sigue sin exportarse. Quedan cuatro retrocesos en `lib/panel-history.ts` y cero en
+  `lib/panel-branch.ts`.
+- **FU (D-04 / IN-03, decidido: UNIFICAR).** `segundoPasoB1Pendiente` pasa a `segundoPasoPendiente` (misma línea, no
+  exportada) con `soltarSegundoPasoPendiente()` al lado. Las tres ramas de dos pasos (salida, B1, colapso) sueltan el
+  pendiente anterior y registran el suyo antes de enganchar; el que corre se suelta a sí mismo antes de re-decidir o
+  navegar; la negativa y el `catch` apagan la memoria. `up` suelta el pendiente antes de consumir. Por qué unificar y no
+  sólo declarar: `X2-exit-doble` necesita una sola navegación en la rama del sentinel; con la memoria en dos ramas,
+  dejar el colapso afuera es la misma asimetría que señala IN-03; en un mismo state el tipo de plan de dos pasos es
+  único, así que la memoria compartida nunca mezcla ramas; y `CO-mixto` mide un defecto que sólo cierra la unificación.
+  Semántica ante dos toques, en las tres ramas y sobre `up`: **el último toque gana**. No se restaura el anterior: el
+  retroceso que viaja es el mismo primer paso para los dos toques, así que lo único que cambia es qué segundo paso corre.
+- **FW (D-03, WR-01).** `consumoEnVueloDesdeArriba()` en `lib/panel-history.ts`: consulta de SÓLO lectura con la misma
+  condición de llegada que el chequeo del menú. En `runBranchNavigation`, `if (reDecidir === undefined &&
+  consumoEnVueloDesdeArriba()) return false` como primera sentencia de `up` y del colapso. El guard de cambios sin
+  guardar llega segundos después de su diálogo; un consumo propio todavía en vuelo en ese momento es una guarda
+  colgada, y la negativa lo hace caer en su degradación de siempre (`navegar(href, panelNavMode(...))`). Sin reloj,
+  sin resultado de tres valores, sin tocar el código del guard (sólo su comentario) ni `lib/dirty-history.ts`.
+- **IN-01.** El docblock de `consumeOwnedBranchEntry` dice que `true` también es «ya hay un retroceso propio en camino
+  desde esta entrada»; comentario en sus dos call sites (`up` y el `second-consume`). El mismo `true` está declarado
+  en `consumeOwnedExitSentinel` y en `consumeOwnedExitEntry`. Los CUERPOS de `applyPanelView`,
+  `consumeOwnedPanelEntry` y `consumeOwnedBranchEntry` no cambiaron (el gate los compara con `sha1` contra `e07bffd`).
+- **IN-02, declarado (la nota del hash).** La URL del sentinel difiere de la de Inicio sólo en el hash, que la
+  comparación de la guarda no mira; al aterrizar, el chequeo de llegada lo sigue dando por «en vuelo» hasta que corre su
+  oyente de liberación, en el MISMO `popstate`, y en ese `popstate` ningún consumo guardado corre antes (el segundo paso
+  de la salida sólo pide la navegación). El radio del residuo del retroceso ignorado en silencio crece en un productor:
+  un retroceso del sentinel ignorado también deja la guarda colgada (tabs muertos hasta el próximo recorrido), con la
+  misma probabilidad sin medir de siempre; FW hace que, en ese estado, el guard sucio degrade en vez de quedar muerto.
+
+**Las líneas viejas editadas de `test/panel-branch.test.ts`** (el candado del desmontaje, `describe('el cableado del
+desmontaje (G3-4) — auditorías de fuente'`): las DOS declaradas en el plan (el orden mide `consumeOwnedExitSentinel(`
+después de `panelExitUnmountAction(`, y el literal exigido pasa a `if (accion === 'consume') consumeOwnedExitSentinel({
+id })`) y, por **decisión del dueño en el checkpoint P-4 (2026-11-19, opción «A»)**, una TERCERA con su título: la
+aserción que contaba los retrocesos del módulo (`.toBe(2)` en `e07bffd` L3033) pasa a `.toBe(0)` y el título del `it`
+(L3031) a «en CERO call sites del módulo: todo retroceso por la guarda compartida, D-01». La línea de cero temporizadores
+no se tocó. Con D-01 aplicado esa aserción medía 0 y era la única roja (360/361): no era un defecto del arreglo sino el
+candado viejo diciendo lo que D-01 cambia a propósito. El gate del task 2 cuenta, por eso, cuatro líneas viejas quitadas
+(las dos declaradas, la aserción y el título) en vez de dos. Ningún esperado de un caso nuevo cambió.
+
+### Lo medido con el arreglo
+
+```
+./node_modules/.bin/vitest run --project pure test/panel-tabs.test.ts test/panel-branch.test.ts
+```
+
+`Tests  361 passed (361)`. Las tuplas de los casos nuevos, antes → después (el después es el esperado commiteado en
+`2a38661`, que no se tocó):
+
+```
+X2-exit-doble      2 retrocesos, /afuera, [push /finances ×2]    → 1, /dashboard, [push /finances]
+X2-control         1, /dashboard, [push /finances]               → igual (control verde antes y después)
+X2-destinos        2, /afuera, [push /finances, push /clients]   → 1, /dashboard, [push /clients]
+CO2-doble-colapso  1, /mas, [replace /agenda ×2]                 → 1, /mas, [replace /agenda]
+CO-mixto           2, /dashboard, [replace /agenda]              → 2, /dashboard, []
+CO3-colapso-y-mas  1, /mas, [replace /agenda]                    → 1, /mas, []
+S4-guard-up        se-hizo-cargo, 0, /finances, []               → degrado, 0, /finances, [push /dashboard]
+S4-guard-colapso   se-hizo-cargo, 0, []                          → degrado, 0, [replace /agenda]
+S4-control         se-hizo-cargo, 1, /dashboard, []              → igual (control verde antes y después)
+C-back-cerrado     historia 3 + rama [consumeOwnedExitSentinel, usePanelBranch]
+                   → historia [applyPanelView, consumeOwnedBranchEntry, consumeOwnedExitEntry, consumeOwnedPanelEntry], rama []
+C-retroceso-unico-salida  consumeOwnedExitEntry no existía → la cuarta copia igual línea por línea, y la consulta con la misma condición
+C-oyentes-de-la-guarda    verde antes y después
+```
+
+**Las mutaciones de `C-back-cerrado` (D-02), revertidas con Edit y sin commitear** (`git diff --quiet HEAD` rc 0 después
+de cada una), corridas con `./node_modules/.bin/vitest run --project pure test/panel-tabs.test.ts -t C-back-cerrado`:
+
+- M1: rojo C-back-cerrado — un `window.history.back()` como primera sentencia de `writePanelUnder` en
+  `lib/panel-history.ts`: la lista de la historia suma `writePanelUnder` (5 contra 4). Log:
+  `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/mut32l.kJN2/m1.txt`
+- M2: rojo C-back-cerrado — un `window.history.go(-1)` como primera sentencia de `soltarSegundoPasoPendiente` en
+  `lib/panel-branch.ts`: la rama deja de estar vacía (`["soltarSegundoPasoPendiente"]`). Log:
+  `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/mut32l.kJN2/m2.txt`
+
+**No-regresión estática (el gate del task 2, rc 0, con el arreglo commiteado):** políticas y cuerpos byte-idénticos
+(`panelNavMode`, `panelBranchPlan`, `branchSecondStep`, `branchStackFacts`, `applyPanelView`, `consumeOwnedPanelEntry`,
+`consumeOwnedBranchEntry`); retrocesos 4 en `lib/panel-history.ts` y 0 en `lib/panel-branch.ts`; `runBranchNavigation`
+178 líneas, `try`/`throw` 3/3, negativas de FW 2, registros del pendiente 3; temporizadores 0; guard: 0 líneas de
+código cambiadas; intocables sin cambios, `next.config.ts` `8ceb99ae…`; eslint rc 0 en los cinco archivos; `tsc` limpio;
+`panel-tabs` 123/123; 8 suites 714/714; pura 77 archivos / 1888 casos / 3 expected fail, 0 fallas; build rc 0.
+
+**No-regresión por el turno** (`node scripts/con-turno.mjs …`, 2026-11-19 ~14:24-14:39 hora de Argentina, `next dev`
+propio de la sonda; logs en
+`C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/32l/sondas-1/`):
+- la app (`panel-exit-en-la-app.mjs dev interfaz`): `recorridos medidos: 47 · coinciden con lo esperado: 46 · no
+  coinciden: 1`; la única FALLA es la declarada `R-G3-10-primer-toque-atras-pronto`; R-T 12/12; R-B1 4/4 con
+  `R-B1-inicio` (el retroceso triple) en OK. El aviso de salida aparece donde aparecía.
+- la estática (`panel-back-stack.mjs`): rc 0, E 18/18.
+- el scroll (`g04-scroll-y-recarga.mjs`, etiqueta `verde-32l`, modo `tras-el-fix`): rc 0, 8/8, `finances-client.tsx
+  paneles con alto minimo: 3`.
+
+El gate del task 3 re-corre las tres sondas por el turno con el registro ya commiteado; su salida es la que juzga.
+
+**Lo que NO cierra:** el teléfono real; Safari iOS y Chrome Android (todo lo medido es Chrome de escritorio headless y el
+simulador); el retroceso ignorado en silencio, que no está medido en ningún motor (sólo simulado: su probabilidad sigue
+sin número, y con FX el sentinel es un productor más); R2-IN-04. La UAT corta en el teléfono va después del push
+conjunto.
+
+cierre (n): CR-01=arreglado · IN-03=arreglado · WR-01=arreglado · C-back=cerrado

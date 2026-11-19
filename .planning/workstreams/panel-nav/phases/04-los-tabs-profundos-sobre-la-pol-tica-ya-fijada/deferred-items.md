@@ -173,3 +173,27 @@
   4/4, estática 18/18, scroll 8/8. Residuo: teléfono real, Safari iOS/Android, el `HistoryUpdater` real en la
   ventana (y el borde declarado de A: un reemplazo que cambie la URL), el doble toque sobre el colapso (cubierto por
   lectura, sin medir) y R2-IN-04.
+
+- Review del quick 261118-pjd (CR-01 X2, WR-01 S4, IN-01..04): la familia back() cerrada
+  status: resolved (quick 261119-32l; medido en .planning/debug/tabs-en-la-url-medida.md ## (n))
+  **Qué:** `261118-pjd-REVIEW.md`: CR-01 (BLOCKER, preexistente: `consumeOwnedExitSentinel` no pasaba por la guarda
+  del consumo en vuelo, y dos toques a la barra desde Inicio con el aviso armado sacaban al dueño del sitio), WR-01
+  (con la guarda colgada, el `up` y el colapso del guard de cambios sin guardar devolvían «se hizo cargo» sin hacer
+  nada), IN-01 (el `true` de `consumeOwnedBranchEntry` sin retroceso, sin documentar), IN-02 (la URL del sentinel
+  difiere de la de Inicio sólo en el hash), IN-03 (semánticas distintas ante dos toques: B1 con el último, el
+  colapso y la salida con todos), IN-04 (el stub de `test/panel-branch.test.ts`: filtro por nombre de función, sin
+  `location.search`).
+  **Decisión del dueño (2026-11-19):** D-01, todo `history.back()` del panel pasa por la guarda compartida, empezando
+  por el sentinel; D-02, un candado de fuente con la lista cerrada, que mida de verdad y con su mutación probada; D-03,
+  el guard sucio no puede devolver «se hizo cargo» sin hacer nada, sin tocar su código ni `lib/dirty-history.ts`;
+  D-04, IN-01, IN-03 (decidir y justificar) e IN-04, con IN-02 declarado; D-05, el registro. En el checkpoint P-4,
+  opción A: la aserción vieja que contaba los retrocesos del módulo pasa de 2 a 0 con su título.
+  **Cierre:** los tres reprodujeron (rojos commiteados en `2a38661` antes de medir) y quedaron arreglados en
+  `a85adc0`: `X2-exit-doble` 2/`afuera` → 1/`dashboard` con una navegación, `X2-destinos` 2/`afuera` →
+  1/`dashboard`, `CO2-doble-colapso` dos `replace` → uno, `CO-mixto` y `CO3-colapso-y-mas` sin el `replace` colgado,
+  `S4-guard-up` y `S4-guard-colapso` `se-hizo-cargo` → `degrado` con la navegación de la regla de rutas; IN-03 decidido
+  como unificación (el último toque gana en las tres ramas y sobre `up`). `C-back-cerrado`: cuatro retrocesos en
+  `lib/panel-history.ts`, cero en `lib/panel-branch.ts`; M1 y M2 lo ponen rojo. Sin regresión: 361/361 en las dos
+  suites, pura 77/1888, 8 suites 714, `panel-tabs` 123, build verde, app 47 medidos / 46 coinciden (sólo la FALLA
+  declarada), R-T 12/12, R-B1 4/4, estática 18/18, scroll 8/8. Residuo: teléfono real, Safari iOS/Android, el
+  retroceso ignorado en silencio sin medir en ningún motor (con el sentinel como productor más) y R2-IN-04.
