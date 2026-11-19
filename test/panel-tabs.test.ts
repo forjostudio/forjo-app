@@ -1642,3 +1642,338 @@ describe('UP-doble — el candado del arreglo, antes del arreglo (quick 261118-p
     expect(bloqueDeEncendido(rama)).toEqual(delEjecutor)
   })
 })
+
+// ── 12) La familia back() (quick 261119-32l): medidos ANTES de arreglar ──────────────────────────────────────────
+// La revisión de verificación del quick 261118-pjd (`261118-pjd-REVIEW.md`) dejó abierta la misma familia que ese quick
+// cerró en B1 y en `up`. El dueño decidió el 2026-11-19 cerrarla entera antes del push conjunto (D-01..D-05):
+//   · X2 (CR-01 del review): dos toques a un destino de la barra desde Inicio con el aviso de salida armado, antes del
+//     recorrido. `consumeOwnedExitSentinel` no lee la guarda del consumo en vuelo: cada toque engancha su segundo paso
+//     y retrocede, el primer retroceso consume el sentinel y el segundo la entrada de Inicio. El revisor midió 2
+//     retrocesos y `/afuera` (fuera del sitio, la cicatriz 2) con dos empujes; lo correcto es 1, Inicio y UNO.
+//   · IN-03 (decidido: UNIFICAR, el último toque gana en las tres ramas de dos pasos y también sobre `up`): hoy B1 se
+//     queda con el último toque y el colapso y la salida con todos (CO2 del revisor: `replace /agenda` dos veces).
+//     `CO-mixto` mide el defecto que sólo cierra la unificación: un colapso a `/agenda` y después Inicio dejan pedidos a
+//     la vez el retroceso a Inicio Y el `replace` a `/agenda`. `CO3-colapso-y-mas`: el colapso y después Más.
+//   · S4 (WR-01 del review): con la guarda colgada —un retroceso que el navegador ignoró en silencio—, el guard de
+//     cambios sin guardar pide `up` o el colapso después de «Descartar» y el ejecutor le devuelve «se hizo cargo» sin
+//     retroceder ni navegar: el gesto queda muerto después de que el dueño aceptó perder su trabajo. Lo correcto es que
+//     el guard degrade a la regla de rutas, como con una marca perdida. `descartarYSalir` es EXACTAMENTE el camino
+//     inmediato de `confirmLeave` + `ejecutarPlanDeRama` (`components/dashboard/unsaved-changes-guard.tsx`), sin React.
+//   · Los dos candados de fuente de D-01/D-02: `C-back-cerrado` (la lista cerrada de retrocesos del panel, atribuidos
+//     por declaración de nivel superior, con control anti-cero) y `C-retroceso-unico-salida` (la cuarta copia del
+//     chequeo y del bloque de encendido, igual a las otras tres). Rojos por construcción con el código de hoy.
+// Cada `esperado` es lo CORRECTO: un ROJO quiere decir que el caso REPRODUCE. `X2-control` y `S4-control` son
+// controles y tienen que dar verde con el código de hoy (si no, el simulador no arma el camino y no hay veredicto).
+// Los ejecutores son los REALES contra la historia con retroceso ASÍNCRONO. `anotar`, `hechos`, `decidir`,
+// `tocarLaBarra` y `queSeIgnora` son copias exactas de las del describe de 261118-pjd, que no se toca.
+
+describe('La familia back() — medidos antes de arreglar (quick 261119-32l)', () => {
+  const ID = 7
+  const navegaciones: string[] = []
+
+  afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
+    pageshowDelStub = null
+    oyentesPageshowDelStub = null
+    navegaciones.length = 0
+    PB.takeBackLanding()
+    PB.applyBranchMarkRequest('__drenaje__')
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  // Las pilas se FABRICAN en cada llamada. ⚠ El stub no tiene hash: en la app el sentinel vive en `/dashboard#salir`,
+  // y acá se escribe con URL `/dashboard`. Es lo mismo para la guarda, que compara `pathname + search`.
+  const pilaSalida = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/dashboard', state: PB.panelExitState(ID) },
+  ]
+  // Una sección de la rama de Más con Más debajo (y Más con Inicio debajo): la barra colapsa desde acá.
+  const pilaMas = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/mas', state: { frjUnder: '/dashboard' } },
+    { url: '/web', state: { frjUnder: '/mas' } },
+  ]
+  // Una sección con la marca de la rama arriba y sin subsección: Inicio desde acá es un `up` solo.
+  const pilaSeccion = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/finances', state: { frjUnder: '/dashboard' } },
+  ]
+
+  const anotar = (to: string, modo: 'push' | 'replace') => {
+    navegaciones.push(`${modo} ${to}`)
+  }
+  const hechos = () =>
+    PB.branchStackFacts({ estado: window.history.state, id: ID, root: PH.PANEL_ROOT, more: PH.PANEL_MORE })
+
+  /** EXACTAMENTE `decidirDesdeElAterrizaje` del hook (`lib/panel-branch.ts`), sin React. */
+  function decidir(href: string): void {
+    const desde = window.location.pathname
+    const plan = PH.panelBranchPlan({ from: desde, to: href, root: PH.PANEL_ROOT, more: PH.PANEL_MORE, ...hechos() })
+    if (plan === 'none') return
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return
+    }
+    const seHizoCargo = PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+    if (!seHizoCargo) navegaciones.push(`caida ${href}`)
+  }
+
+  /** EXACTAMENTE `handleNavigate` del hook: `false` (y la navegación anotada) con push/replace; si no, el ejecutor. */
+  function tocarLaBarra(href: string): boolean {
+    const plan = PH.panelBranchPlan({
+      from: window.location.pathname,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      ...hechos(),
+    })
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return false
+    }
+    return PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+  }
+
+  // Un retroceso que el navegador IGNORA EN SILENCIO: ni tira, ni recorre, ni se cuenta.
+  const queSeIgnora = () => vi.spyOn(window.history, 'back').mockImplementationOnce(() => {})
+
+  /**
+   * EXACTAMENTE el camino inmediato de `confirmLeave` + `ejecutarPlanDeRama` del guard de cambios sin guardar, sin
+   * React y sin sentinel sucio: el plan con los cinco hechos de `calcularPlanDeRama` (sin `root`/`more`, como allá),
+   * desde la ruta de ahora; `push`/`replace` navegan; el resto va al ejecutor SIN `exitId` ni `reDecidir`, y si se niega,
+   * la degradación de siempre: navegar con la regla de rutas.
+   */
+  function descartarYSalir(href: string): 'push' | 'replace' | 'se-hizo-cargo' | 'degrado' {
+    const from = window.location.pathname
+    const estado: unknown = window.history.state
+    const plan = PH.panelBranchPlan({
+      from,
+      to: href,
+      masDebajo: PH.panelUnderRoute(estado) === PH.PANEL_MORE,
+      raizDebajo: PH.panelUnderRoute(estado) === PH.PANEL_ROOT,
+      vistaArriba: PH.panelViewEntryParam(estado) !== null && !PH.isForeignOwnedEntry(estado),
+      holdsExitSentinel: PH.isExitSentinelOwnedEntry(estado),
+    })
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return plan
+    }
+    if (PB.runBranchNavigation({ plan, to: href, navigate: anotar })) return 'se-hizo-cargo'
+    anotar(href, PH.panelNavMode({ from, to: href }))
+    return 'degrado'
+  }
+
+  it('X2-exit-doble: dos toques a un destino de la barra desde Inicio con el aviso armado, antes del recorrido', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaSalida(), { backAsincrono: true })
+    const s1 = tocarLaBarra('/finances')
+    const s2 = tocarLaBarra('/finances')
+    procesar()
+    const medido = { s1, s2, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, s2: true, retrocesos: 1, url: '/dashboard', navegaciones: ['push /finances'] })
+  })
+
+  it('X2-control: un solo toque a un destino de la barra desde Inicio con el aviso armado (el simulador arma la salida)', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaSalida(), { backAsincrono: true })
+    const s1 = tocarLaBarra('/finances')
+    procesar()
+    const medido = { s1, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ s1: true, retrocesos: 1, url: '/dashboard', navegaciones: ['push /finances'] })
+  })
+
+  it('X2-destinos: dos toques a destinos DISTINTOS desde Inicio con el aviso armado: gana el último', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaSalida(), { backAsincrono: true })
+    tocarLaBarra('/finances')
+    tocarLaBarra('/clients')
+    procesar()
+    const medido = { retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ retrocesos: 1, url: '/dashboard', navegaciones: ['push /clients'] })
+  })
+
+  it('CO2-doble-colapso: dos toques a /agenda desde una sección de Más, antes del recorrido: un solo reemplazo', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaMas(), { backAsincrono: true })
+    tocarLaBarra('/agenda')
+    tocarLaBarra('/agenda')
+    procesar()
+    const medido = { retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ retrocesos: 1, url: '/mas', navegaciones: ['replace /agenda'] })
+  })
+
+  it('CO-mixto: el colapso a /agenda y después Inicio, antes del recorrido: gana Inicio y no queda un reemplazo colgado', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaMas(), { backAsincrono: true })
+    tocarLaBarra('/agenda')
+    tocarLaBarra(PH.PANEL_ROOT)
+    procesar()
+    const medido = { retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ retrocesos: 2, url: '/dashboard', navegaciones: [] })
+  })
+
+  it('CO3-colapso-y-mas: el colapso a /agenda y después Más, antes del recorrido: gana Más', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaMas(), { backAsincrono: true })
+    tocarLaBarra('/agenda')
+    tocarLaBarra(PH.PANEL_MORE)
+    procesar()
+    const medido = { retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ retrocesos: 1, url: '/mas', navegaciones: [] })
+  })
+
+  it('S4-guard-up: con la guarda colgada por un up ignorado, «Descartar» hacia Inicio degrada a la regla de rutas', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaSeccion(), { backAsincrono: true })
+    queSeIgnora()
+    tocarLaBarra(PH.PANEL_ROOT)
+    const p = descartarYSalir(PH.PANEL_ROOT)
+    procesar()
+    const medido = { p, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ p: 'degrado', retrocesos: 0, url: '/finances', navegaciones: ['push /dashboard'] })
+  })
+
+  it('S4-guard-colapso: con la guarda colgada por un colapso ignorado, «Descartar» hacia /agenda degrada a la regla de rutas', () => {
+    const { pila, procesar } = montarHistoria(pilaMas(), { backAsincrono: true })
+    queSeIgnora()
+    tocarLaBarra('/agenda')
+    const p = descartarYSalir('/agenda')
+    procesar()
+    // Las navegaciones se copian ANTES del drenaje del `afterEach`, que dispara el segundo paso que quedó enganchado.
+    const medido = { p, retrocesos: pila.retrocesos, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ p: 'degrado', retrocesos: 0, navegaciones: ['replace /agenda'] })
+  })
+
+  it('S4-control: sin guarda colgada, «Descartar» hacia Inicio desde una sección sube con un retroceso (el simulador arma el up)', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaSeccion(), { backAsincrono: true })
+    const p = descartarYSalir(PH.PANEL_ROOT)
+    procesar()
+    const medido = { p, retrocesos: pila.retrocesos, url: actual().url, navegaciones: [...navegaciones] }
+    expect(medido).toEqual({ p: 'se-hizo-cargo', retrocesos: 1, url: '/dashboard', navegaciones: [] })
+  })
+
+  // ── Los dos candados de fuente (D-01 / D-02) ──
+  // `lineas`, `bloqueDeEncendido` y `chequeoEnVuelo` son copias exactas de las del describe de UP-doble, que no se toca.
+
+  /** Las líneas de código de una región, sin sangría y sin las vacías que dejan los comentarios quitados. */
+  const lineas = (region: string) =>
+    region
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '')
+
+  /** Desde `consumoEnVuelo = true` hasta el `}` que cierra el `catch` (incluidos los dos). */
+  const bloqueDeEncendido = (region: string): string[] => {
+    const ls = lineas(region)
+    const desde = ls.indexOf('consumoEnVuelo = true')
+    if (desde === -1) return []
+    const captura = ls.findIndex((l, i) => i > desde && l.startsWith('} catch'))
+    if (captura === -1) return []
+    const cierre = ls.findIndex((l, i) => i > captura && l === '}')
+    return cierre === -1 ? [] : ls.slice(desde, cierre + 1)
+  }
+
+  /** Desde la primera línea que nombra `consumoEnVuelo` hasta la anterior a la que empieza con `const actual`. */
+  const chequeoEnVuelo = (region: string): string[] => {
+    const ls = lineas(region)
+    const desde = ls.findIndex((l) => l.includes('consumoEnVuelo'))
+    if (desde === -1) return []
+    const hasta = ls.findIndex((l, i) => i > desde && l.startsWith('const actual'))
+    return hasta === -1 ? [] : ls.slice(desde, hasta)
+  }
+
+  // Un RETROCESO, en cualquiera de sus formas: una llamada `.back(` o `.go(` (con espacios y `?.` opcionales, también
+  // `back?.(`), una desestructuración de `back` o `go` desde `history`, o un acceso por corchetes `history['back']`.
+  const RETROCESOS = [
+    /\??\.\s*(?:back|go)\s*(?:\?\.)?\s*\(/,
+    /\{[^}]*\b(?:back|go)\b[^}]*\}\s*=\s*(?:window\s*(?:\?\.|\.)\s*)?history\b/,
+    /history\s*(?:\?\.)?\s*\[\s*['"`](?:back|go)['"`]\s*\]/,
+  ]
+  const esRetroceso = (linea: string) => RETROCESOS.some((r) => r.test(linea))
+  // Una declaración de NIVEL SUPERIOR: en la columna 0, una función (exportada o no, async o no) o un `const`/`let`.
+  const DECLARACION = /^(?:export\s+)?(?:(?:async\s+)?function\s*\*?\s*|const\s+|let\s+)([A-Za-z_$][\w$]*)/
+
+  /** Cada línea con un retroceso, atribuida a la última declaración de nivel superior que la precede. */
+  const retrocesosPorDeclaracion = (fuente: string): string[] => {
+    const encontrados: string[] = []
+    let duena = '(nivel superior)'
+    for (const linea of fuente.split('\n')) {
+      const m = DECLARACION.exec(linea)
+      if (m) duena = m[1]
+      if (esRetroceso(linea)) encontrados.push(duena)
+    }
+    return encontrados.sort()
+  }
+
+  it('C-back-cerrado: todo retroceso del panel está en la lista cerrada — cuatro en lib/panel-history.ts, cero en lib/panel-branch.ts', () => {
+    const historia = retrocesosPorDeclaracion(sinComentarios(read('lib/panel-history.ts')))
+    const rama = retrocesosPorDeclaracion(sinComentarios(read('lib/panel-branch.ts')))
+    // Control anti-cero: el patrón SÍ ve ese archivo (sus comentarios nombran el retroceso). Si esto diera cero, la
+    // lista vacía de abajo no mediría nada.
+    const crudoDeLaRama = read('lib/panel-branch.ts').split('\n').filter(esRetroceso).length
+    expect(crudoDeLaRama).toBeGreaterThan(0)
+    const mensaje =
+      'La lista cerrada de D-01 (quick 261119-32l): todo retroceso del panel pasa por la guarda del consumo en vuelo ' +
+      '(applyPanelView, consumeOwnedPanelEntry, consumeOwnedBranchEntry, consumeOwnedExitEntry). Un retroceso nuevo ' +
+      'tiene que pasar por esa guarda, o agregarse acá con su propio candado.'
+    expect({ historia, rama }, mensaje).toEqual({
+      historia: ['applyPanelView', 'consumeOwnedBranchEntry', 'consumeOwnedExitEntry', 'consumeOwnedPanelEntry'],
+      rama: [],
+    })
+  })
+
+  it('C-retroceso-unico-salida: consumeOwnedExitEntry chequea el consumo en vuelo y enciende la guarda con las MISMAS líneas que las otras tres, y la consulta repite la condición de llegada', () => {
+    const fuente = sinComentarios(read('lib/panel-history.ts'))
+    const salida = cuerpoDe(fuente, 'export function consumeOwnedExitEntry(', '): boolean {')
+    const menu = cuerpoDe(fuente, 'export function consumeOwnedPanelEntry(', '): boolean {')
+    const at = fuente.indexOf('export function applyPanelView({')
+    const fin = at === -1 ? -1 : fuente.indexOf('\n}\n', at)
+    const ejecutor = at === -1 || fin === -1 ? '' : fuente.slice(at, fin + 2)
+    const consume = recorte(ejecutor, "if (action === 'consume') {")
+    expect(salida).not.toBe('')
+    expect(menu).not.toBe('')
+    expect(consume).not.toBe('')
+    // El chequeo del consumo en vuelo: no vacío e IGUAL línea por línea al del menú.
+    const delMenu = chequeoEnVuelo(menu)
+    expect(delMenu.length).toBeGreaterThan(0)
+    expect(chequeoEnVuelo(salida)).toEqual(delMenu)
+    // La pregunta por la marca, DESPUÉS del chequeo y de leer `actual`; un solo retroceso, después de la pregunta.
+    const lectura = salida.indexOf('const actual')
+    const marca = salida.indexOf('if (!esNuestra(actual)) return false')
+    expect(lectura).toBeGreaterThan(salida.indexOf('consumoEnVuelo'))
+    expect(marca).toBeGreaterThan(lectura)
+    expect(salida.split('window.history.back()').length - 1).toBe(1)
+    expect(salida.indexOf('window.history.back()')).toBeGreaterThan(marca)
+    // El bloque de encendido: no vacío e IGUAL línea por línea al de la rama `consume` del ejecutor.
+    const delEjecutor = bloqueDeEncendido(consume)
+    expect(delEjecutor.length).toBeGreaterThan(0)
+    expect(bloqueDeEncendido(salida)).toEqual(delEjecutor)
+    // La consulta de sólo lectura repite la MISMA condición de llegada del menú, y no suelta ni enciende nada.
+    const lineaDeLlegada = lineas(menu).find((l) => l.startsWith('if (') && l.endsWith(') return true'))
+    expect(lineaDeLlegada).toBeDefined()
+    const condicion = (lineaDeLlegada ?? '').slice('if ('.length, -') return true'.length)
+    expect(condicion).not.toBe('')
+    const consulta = cuerpoDe(fuente, 'export function consumoEnVueloDesdeArriba(', '): boolean {')
+    expect(consulta).not.toBe('')
+    expect(consulta).toContain(`consumoEnVuelo && (${condicion})`)
+    expect(consulta).not.toContain('soltarConsumo')
+    expect(consulta).not.toContain('consumoEnVuelo =')
+    // Y el dueño del sentinel delega: el cuerpo de `consumeOwnedExitSentinel` es UNA línea.
+    const delSentinel = cuerpoDe(sinComentarios(read('lib/panel-branch.ts')), 'export function consumeOwnedExitSentinel(', '): boolean {')
+    expect(lineas(delSentinel).slice(1, -1)).toEqual(['return consumeOwnedExitEntry((estado) => isPanelExitEntry(estado, id))'])
+  })
+})

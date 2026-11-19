@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest'
 import {
   branchSecondStep,
   branchMarkDecision,
@@ -59,7 +59,7 @@ function montarPila({ state, pathname }: { state: unknown; pathname: string }) {
   ultimosVivos = vivos
   const win = {
     history: { state, back, replaceState },
-    location: { pathname },
+    location: { pathname, search: '' },
     addEventListener: vi.fn((tipo: string, fn: () => void, opciones: unknown) => {
       enganchados.push({ tipo, fn, opciones })
       vivos.push({ tipo, fn, opciones })
@@ -125,6 +125,31 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// (quick 261119-32l, IN-04 del review de 261118-pjd) Los oyentes que engancha la guarda del consumo en vuelo de
+// `lib/panel-history.ts`, capturados por IDENTIDAD y no por nombre: los casos que cuentan «los oyentes que no son de
+// la guarda» filtran contra este conjunto. Un filtro por el nombre de la función se engaña con un wrapper, una arrow o
+// un renombre (la función sigue siendo de la guarda y el filtro deja de verla); la identidad no. Se llena UNA vez,
+// antes de todos los casos, con un consumo real del menú (la memoria de la guarda no se exporta, así que la única
+// forma de conocer sus oyentes es mirar qué engancha), y después se despacha el recorrido como el navegador para
+// soltarla: sin eso el primer caso arrancaría con la guarda encendida. `C-oyentes-de-la-guarda`, al final del
+// archivo, fija que son exactamente dos: si la guarda sumara un oyente, el filtro dejaría de medir y ese caso lo ve.
+const DE_LA_GUARDA = new Set<unknown>()
+
+beforeAll(() => {
+  const ctx = montarPila({ state: { frjView: 'c' }, pathname: '/clients' })
+  PH.consumeOwnedPanelEntry()
+  for (const o of ctx.enganchados) DE_LA_GUARDA.add(o.fn)
+  for (const o of [...ctx.vivos]) {
+    if (o.tipo !== 'popstate' || !deDisparoUnico(o)) continue
+    const i = ctx.vivos.indexOf(o)
+    if (i === -1) continue
+    ctx.vivos.splice(i, 1)
+    o.fn()
+  }
+  ultimosVivos = []
+  vi.unstubAllGlobals()
+})
+
 describe('branchSecondStep — la decisión del segundo paso del colapso, pura y en orden', () => {
   it('parados en una ruta que NO es la de Más ⇒ ABORTAR: el evento no es el de nuestro consumo', () => {
     // Es la misma guarda que el provider del guard de cambios sin guardar pone comparando la ruta
@@ -169,7 +194,7 @@ describe('runBranchNavigation — SUBIR un nivel (D-03)', () => {
     expect(back).toHaveBeenCalledTimes(1)
     // Subir es un paso solo: no hay segundo paso ni listener que enganchar.
     // (2026-11-18, quick 261118-pjd) `consumeOwnedBranchEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo: se cuentan los que no son de la guarda.
-    expect(enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(0)
+    expect(enganchados.filter((o) => !DE_LA_GUARDA.has(o.fn))).toHaveLength(0)
     expect(navegar).not.toHaveBeenCalled()
   })
 
@@ -198,7 +223,7 @@ describe('runBranchNavigation — COLAPSAR y reemplazar (criterio 2)', () => {
     const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/finances' })
     expect(runBranchNavigation({ plan: 'collapse-then-replace', to: '/clients', navigate: navegar })).toBe(true)
     // (2026-11-18, quick 261118-pjd) `consumeOwnedBranchEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo: se cuentan los que no son de la guarda.
-    expect(ctx.enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(1)
+    expect(ctx.enganchados.filter((o) => !DE_LA_GUARDA.has(o.fn))).toHaveLength(1)
     expect(ctx.enganchados[0].tipo).toBe('popstate')
     // Disparo único: sin él, el listener sobrevive al segundo paso y el próximo atrás del dueño
     // dispara una navegación que nadie pidió.
@@ -215,7 +240,7 @@ describe('runBranchNavigation — COLAPSAR y reemplazar (criterio 2)', () => {
     runBranchNavigation({ plan: 'collapse-then-replace', to: '/clients', navigate: navegar })
     expect(navegar).not.toHaveBeenCalled()
     // (2026-11-18, quick 261118-pjd) `consumeOwnedBranchEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo: se cuentan los que no son de la guarda.
-    expect(ctx.enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(1)
+    expect(ctx.enganchados.filter((o) => !DE_LA_GUARDA.has(o.fn))).toHaveLength(1)
   })
 
   it('sin marca no deja ningún listener vivo, no retrocede y no se hace cargo', () => {
@@ -1183,7 +1208,7 @@ describe('runBranchNavigation — CONSUMIR EL SENTINEL y recién entonces navega
         exitId: 7,
       })
     ).toBe(true)
-    expect(ctx.enganchados).toHaveLength(1)
+    expect(ctx.enganchados.filter((o) => !DE_LA_GUARDA.has(o.fn))).toHaveLength(1)
     expect(ctx.enganchados[0].tipo).toBe('popstate')
     // Sin disparo único el listener sobrevive al paso y el PRÓXIMO atrás del dueño dispara una
     // navegación que nadie pidió.
@@ -1329,7 +1354,7 @@ describe('runBranchNavigation — CONSUMIR LA SUBSECCIÓN y recién entonces re-
       PB.runBranchNavigation({ plan: 'consume-view-then-navigate', to: PANEL_ROOT, navigate: vi.fn(), reDecidir })
     ).toBe(true)
     // (2026-11-18, quick 261118-kat) `consumeOwnedPanelEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo antes de su retroceso, DESPUÉS del de B1: se cuentan los que no son de la guarda.
-    expect(ctx.enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(1)
+    expect(ctx.enganchados.filter((o) => !DE_LA_GUARDA.has(o.fn))).toHaveLength(1)
     expect(ctx.enganchados[0].tipo).toBe('popstate')
     // (2026-11-18, quick 261118-pjd) El primero tiene que ser el oyente de B1, no el de la guarda: los dos son de `popstate` y de disparo único.
     expect(ctx.enganchados[0].fn.name).toBe('segundoPaso')
@@ -3116,5 +3141,31 @@ describe('CR-01 del review de R2-WR-01 — el mecanismo de los dos pasos, medido
       reDecidio: reDecidir.mock.calls.length,
     }
     expect(medido).toEqual({ r1: true, r2: true, retrocesos: 1, primeroDesenganchado: true, reDecidio: 0 })
+  })
+})
+
+// ── IN-04 del review de 261118-pjd (quick 261119-32l): el filtro de la guarda mide por identidad ─────────────────
+// Los casos de arriba que cuentan «los oyentes que no son de la guarda» filtran contra `DE_LA_GUARDA`. Este candado
+// fija lo que ese filtro supone: la guarda engancha exactamente dos oyentes —el del recorrido, de `popstate` y de
+// disparo único, y el de la vuelta de la bfcache, de `pageshow`— y los dos están en el conjunto. Si la guarda sumara
+// un tercero, o si el conjunto se llenara con otra cosa, el filtro dejaría de medir en silencio: esto se pone rojo.
+
+describe('IN-04 — los oyentes de la guarda, por identidad (quick 261119-32l)', () => {
+  it('C-oyentes-de-la-guarda: la guarda engancha exactamente dos oyentes (popstate de disparo único y pageshow) y los dos están en el conjunto', () => {
+    const ctx = montarPila({ state: { frjView: 'c' }, pathname: '/clients' })
+    const consumio = PH.consumeOwnedPanelEntry()
+    const medido = {
+      consumio,
+      tamano: DE_LA_GUARDA.size,
+      enganchados: ctx.enganchados.map((o) => ({ tipo: o.tipo, opciones: o.opciones, deLaGuarda: DE_LA_GUARDA.has(o.fn) })),
+    }
+    expect(medido).toEqual({
+      consumio: true,
+      tamano: 2,
+      enganchados: [
+        { tipo: 'popstate', opciones: { once: true }, deLaGuarda: true },
+        { tipo: 'pageshow', opciones: undefined, deLaGuarda: true },
+      ],
+    })
   })
 })
