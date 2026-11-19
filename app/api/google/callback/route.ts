@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { exchangeCode } from '@/lib/google-calendar'
+import { GOOGLE_RETURN, oauthReturnPath, resolveOAuthReturn } from '@/lib/oauth-return'
 
 // Callback del OAuth: valida el state (cookie), canjea el code por el refresh_token y lo
-// guarda en el negocio del dueño logueado. Vuelve al origen (agenda o negocio) con ?google=connected|error.
+// guarda en el negocio del dueño logueado. Vuelve al origen (agenda, negocio u onboarding) con
+// ?google=connected|error.
 export async function GET(request: NextRequest) {
   const base = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '')
   const url = new URL(request.url)
@@ -11,8 +13,9 @@ export async function GET(request: NextRequest) {
   const state = url.searchParams.get('state')
   const saved = request.cookies.get('g_oauth_state')?.value
   // Destino de vuelta desde una lista CERRADA (anti open-redirect T-05-02): el cookie guarda solo un
-  // token ('negocio'|'agenda'); cualquier otra cosa cae a /agenda. Nunca se usa un path crudo del cliente.
-  const returnPath = request.cookies.get('g_oauth_from')?.value === 'negocio' ? '/negocio' : '/agenda'
+  // token ('negocio'|'agenda'|'onboarding', ver `lib/oauth-return.ts`); cualquier otra cosa cae a /agenda.
+  // Nunca se usa un path crudo del cliente.
+  const returnPath = oauthReturnPath(resolveOAuthReturn(request.cookies.get('g_oauth_from')?.value, GOOGLE_RETURN))
 
   const fail = () => {
     const r = NextResponse.redirect(`${base}${returnPath}?google=error`)

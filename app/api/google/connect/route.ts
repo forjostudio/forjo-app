@@ -1,16 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildAuthUrl, googleConfigured } from '@/lib/google-calendar'
+import { GOOGLE_RETURN, oauthReturnPath, resolveOAuthReturn } from '@/lib/oauth-return'
 
 // Inicia el OAuth de Google Calendar: solo el dueño logueado. Setea un state en cookie
 // (CSRF) y redirige a la pantalla de consentimiento de Google.
 export async function GET(request: NextRequest) {
   const base = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '')
-  // Anti open-redirect (T-05-02): el destino de vuelta sale de una lista CERRADA, nunca del valor
-  // crudo del cliente. `from` solo elige entre agenda (default) y negocio; cualquier otra cosa → agenda.
-  // El control de Google vive en las dos superficies (Agenda e Integraciones) → volvemos a la que lo inició.
-  const from = new URL(request.url).searchParams.get('from') === 'negocio' ? 'negocio' : 'agenda'
-  const returnPath = from === 'negocio' ? '/negocio' : '/agenda'
+  // Anti open-redirect (T-05-02): el destino de vuelta sale de la lista CERRADA de Google
+  // (`lib/oauth-return.ts`), nunca del valor crudo del cliente. `from` elige entre tres destinos:
+  // agenda (default, sin `from`), negocio (Integraciones del panel) y onboarding (paso 5 del
+  // onboarding); cualquier otra cosa → agenda. Volvemos a la superficie que lo inició.
+  const from = resolveOAuthReturn(new URL(request.url).searchParams.get('from'), GOOGLE_RETURN)
+  const returnPath = oauthReturnPath(from)
   if (!googleConfigured()) return NextResponse.redirect(`${base}${returnPath}?google=error`)
 
   const supabase = await createClient()

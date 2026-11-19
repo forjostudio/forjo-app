@@ -34,6 +34,11 @@ function MpLogo({ className }: { className?: string }) {
   return <Image src="/mercadopago-isotipo.png" alt="" width={35} height={26} className={className} />
 }
 
+// Ícono de Google Calendar (PNG oficial, igual que en el panel). Decorativo.
+function GoogleCalendarLogo({ className }: { className?: string }) {
+  return <Image src="/google-calendar.png" alt="" width={20} height={20} className={className} />
+}
+
 interface IntegrationCardProps {
   logo: ReactNode
   title: string
@@ -84,11 +89,10 @@ function IntegrationCard({ logo, title, description, connected, error, connectin
   )
 }
 
-export function IntegracionesClient({ mpEnabled, mpConnected, googleConnected }: Props) {
+export function IntegracionesClient({ mpEnabled, mpConnected, googleEnabled, googleConnected }: Props) {
   const [connecting, setConnecting] = useState<Provider | null>(null)
   const [mpError, setMpError] = useState(false)
-  // El error de Google se setea ya desde el efecto de vuelta; su tarjeta se pinta con su route.
-  const [, setGoogleError] = useState(false)
+  const [googleError, setGoogleError] = useState(false)
 
   // Vuelta del OAuth (D-05). Molde de Negocio → Integraciones, SIN `applyPanelView` (es el escritor del
   // historial del panel): acá alcanza un `replaceState`, que además es síncrono.
@@ -136,6 +140,12 @@ export function IntegracionesClient({ mpEnabled, mpConnected, googleConnected }:
     window.location.assign('/api/mercadopago/connect?from=onboarding')
   }
 
+  const connectGoogle = () => {
+    setConnecting('google')
+    setGoogleError(false)
+    window.location.assign('/api/google/connect?from=onboarding')
+  }
+
   return (
     <div className="min-h-screen p-4 pt-3 sm:pt-4 flex flex-col items-center">
       <div className="w-full max-w-2xl mt-0 sm:mt-8">
@@ -151,7 +161,7 @@ export function IntegracionesClient({ mpEnabled, mpConnected, googleConnected }:
           <div className="space-y-2">
             <h1 className="text-xl font-semibold">Conectá tus integraciones</h1>
             <p className="text-sm text-muted-foreground">
-              Dejá todo listo antes de entrar al panel. Podés conectar una, las dos o ninguna.
+              Dejá todo listo antes de entrar al panel. Si ahora no podés, lo hacés después.
             </p>
           </div>
 
@@ -168,6 +178,20 @@ export function IntegracionesClient({ mpEnabled, mpConnected, googleConnected }:
                 connectLabel="Conectar con MercadoPago"
                 errorText="No se pudo conectar con MercadoPago. Probá de nuevo o conectalo después desde Negocio → Integraciones."
                 onConnect={connectMp}
+              />
+            )}
+            {googleEnabled && (
+              <IntegrationCard
+                logo={<GoogleCalendarLogo className="h-4 w-auto" />}
+                title="Google Calendar"
+                description="Tus turnos aparecen solos en tu Google Calendar."
+                connected={googleConnected}
+                error={googleError}
+                connecting={connecting === 'google'}
+                disabled={connecting !== null}
+                connectLabel="Conectar Google Calendar"
+                errorText="No se pudo conectar con Google Calendar. Probá de nuevo o conectalo después desde Negocio → Integraciones."
+                onConnect={connectGoogle}
               />
             )}
           </div>
