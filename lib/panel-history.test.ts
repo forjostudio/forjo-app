@@ -548,7 +548,14 @@ describe('consumeOwnedPanelEntry — tocar la sección en la que ya estás cierr
     const removeEventListener = (tipo: string, fn: (e?: unknown) => void) => {
       registrados = registrados.filter((o) => !(o.tipo === tipo && o.fn === fn))
     }
-    vi.stubGlobal('window', { history: { state, back }, addEventListener, removeEventListener })
+    // (quick 261118-pjd, WR-01 opción A del dueño) El encendido de la guarda recuerda también la URL de la
+    // entrada que se deja, así que el stub necesita `location`.
+    vi.stubGlobal('window', {
+      history: { state, back },
+      location: { pathname: '/clients', search: '' },
+      addEventListener,
+      removeEventListener,
+    })
     return back
   }
 
