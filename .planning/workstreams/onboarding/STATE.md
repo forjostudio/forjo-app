@@ -118,6 +118,12 @@ None yet.
 - **AUTH-05 puede morder a un cliente que ya paga:** si el linking sale mal, un dueño registrado con
   contraseña que entra con Google puede quedar mirando el negocio de nadie. Probar los dos órdenes.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 261119-q8v | Onboarding: paso 5 opcional de integraciones (MercadoPago y Google Calendar) despues de crear el negocio, con destino de vuelta del OAuth por lista cerrada; correcciones del review (WR-01..03, IN-01/02/04/08); sin pushear | 2026-11-19 | 07c2841 | Needs Review (UAT en el telefono) | [261119-q8v-onboarding-paso-5-opcional-de-integracio](./quick/261119-q8v-onboarding-paso-5-opcional-de-integracio/) |
+
 ## Deferred Items (v2 / future — NO en v0.19)
 
 | Category | Item | Status | Deferred At |
