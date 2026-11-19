@@ -9,6 +9,8 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { vueltaDeOAuthPendiente } from '@/lib/panel-tabs'
+import { stepperSteps, INTEGRACIONES_STEP } from '@/lib/onboarding-steps'
+import { OnboardingStepper } from '@/components/onboarding/onboarding-stepper'
 
 // ── Paso 5 del onboarding: «Conectá tus integraciones» ───────────────────────────────────────────
 // Todo es opcional: «Ir al panel» está siempre habilitado (D-02) y no hay «Atrás» (D-01: el negocio ya
@@ -89,7 +91,7 @@ function IntegrationCard({ logo, title, description, connected, error, connectin
   )
 }
 
-export function IntegracionesClient({ mpEnabled, mpConnected, googleEnabled, googleConnected }: Props) {
+export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEnabled, googleConnected }: Props) {
   const [connecting, setConnecting] = useState<Provider | null>(null)
   const [mpError, setMpError] = useState(false)
   const [googleError, setGoogleError] = useState(false)
@@ -156,6 +158,10 @@ export function IntegracionesClient({ mpEnabled, mpConnected, googleEnabled, goo
           </div>
           <p className="text-muted-foreground mt-2">Tu negocio ya está creado. Este paso es opcional.</p>
         </div>
+
+        {/* Mismo stepper que el wizard, con este paso activo: los anteriores salen tildados por
+            `current > s.n` (D-01). En canchas la numeración visible es 1-4 por posición. */}
+        <OnboardingStepper steps={stepperSteps(vertical)} current={INTEGRACIONES_STEP.n} />
 
         <Card className="p-6">
           <div className="space-y-2">

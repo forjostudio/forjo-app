@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Check, Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles, LogOut, Image as ImageIcon } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles, LogOut, Image as ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
 import { normalizeArWhatsApp } from '@/lib/whatsapp'
@@ -33,6 +33,8 @@ import {
   shouldMapServices,
 } from '@/lib/onboarding-agenda'
 import { isValidBlockTime } from '@/lib/agenda-hours-payload'
+import { wizardSteps, stepperSteps } from '@/lib/onboarding-steps'
+import { OnboardingStepper } from '@/components/onboarding/onboarding-stepper'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -466,7 +468,7 @@ export default function OnboardingPage() {
       // la RLS del bucket exige que el negocio exista (path keyeado por business.id). El path lo arma
       // el server con business.id de la sesión (UUID de confianza, NO del cliente → mitigación T-07-02
       // path traversal). Best-effort: el negocio ya existe, así que un fallo del upload/update se
-      // loguea y NO rompe el redirect al dashboard (mismo criterio que linkLeadOnSignup, T-04-09).
+      // loguea y NO rompe la salida del wizard (mismo criterio que linkLeadOnSignup, T-04-09).
       if (logoFile) {
         try {
           const ext = logoFile.name.split('.').pop()?.toLowerCase() || 'jpg'
@@ -582,7 +584,7 @@ export default function OnboardingPage() {
       // del dueño NO puede escribir leads/deals (tablas admin-only por RLS, migración 034) → la action
       // corre service-role server-side y re-deriva el email del owner de la sesión (anti-tampering, por
       // eso NO le pasamos email ni leadId). Best-effort: si falla, el negocio ya se creó; loguear y
-      // seguir, NUNCA bloquear el redirect al dashboard (T-04-09).
+      // seguir, NUNCA bloquear la salida del wizard (T-04-09).
       try {
         await linkLeadOnSignup({ businessId: business.id })
       } catch (linkErr) {
@@ -590,7 +592,10 @@ export default function OnboardingPage() {
       }
 
       toast.success('¡Negocio creado con éxito!')
-      router.push('/dashboard')
+      // Salida del wizard: al paso 5 opcional (Integraciones), en su propia ruta. `replace` y no `push`
+      // para que el atrás no devuelva al wizard ya usado: completarlo de nuevo crearía un SEGUNDO negocio
+      // (no hay unique en `businesses.owner_id`; la única red es el slug repetido → 23505).
+      router.replace('/onboarding/integraciones')
     } catch (err) {
       toast.error('Error al crear el negocio. Intentá de nuevo.')
       console.error(err)
@@ -599,23 +604,19 @@ export default function OnboardingPage() {
     }
   }
 
-  // Array base de pasos con su `n` ESTABLE (n=1 Negocio … n=4 Horarios). `n` es el identificador
-  // canónico del paso: `step` y los bloques del render (`step === 1/2/3/4`) siempre keyean contra él,
-  // así el contenido de cada paso no se corre cuando ocultamos uno. El orden NO cambia (D-06).
-  const steps = [
-    { n: 1, label: 'Tu negocio' },
-    { n: 2, label: 'Servicios' },
-    { n: 3, label: 'Profesionales' },
-    { n: 4, label: 'Horarios' },
-  ]
-
-  // Stepper dinámico por vertical (D-03): en 'canchas' una cancha NO es un profesional humano, así que
-  // el paso Profesionales (n=3) desaparece del flujo → quedan 3 pasos (Negocio → Servicios → Horarios).
-  // En el resto de verticales `visibleSteps === steps` (4 pasos). La numeración VISIBLE del stepper
-  // deriva de la POSICIÓN en este array (idx+1), no del `n`, para leerse 1-2-3 / 1-2-3-4 sin huecos.
-  const visibleSteps = vertical === 'canchas'
-    ? steps.filter(s => s.n !== 3)
-    : steps
+  // Pasos con su `n` ESTABLE (n=1 Negocio … n=4 Horarios), desde `lib/onboarding-steps.ts`. `n` es el
+  // identificador canónico del paso: `step` y los bloques del render (`step === 1/2/3/4`) siempre keyean
+  // contra él, así el contenido de cada paso no se corre cuando ocultamos uno. El orden NO cambia (D-06).
+  //
+  // Dos listas (D-01 del quick 261119-q8v):
+  // - `visibleSteps` = los pasos que RECORRE el wizard (navegación: `currentIndex`, `isLastStep`, Atrás,
+  //   Omitir, Siguiente). En 'canchas' una cancha NO es un profesional humano, así que Profesionales (n=3)
+  //   desaparece (D-03) → Negocio → Servicios → Horarios. Termina siempre en Horarios: ahí va Finalizar.
+  // - `shownSteps` = los que PINTA el stepper y cuenta el subtítulo: los de arriba + el paso 5
+  //   «Integraciones», que vive en `/onboarding/integraciones` (adonde lleva Finalizar). La numeración
+  //   VISIBLE del stepper deriva de la POSICIÓN (idx+1), no del `n`, para leerse sin huecos.
+  const visibleSteps = wizardSteps(vertical)
+  const shownSteps = stepperSteps(vertical)
 
   // ── Los gates del mapeo franja↔servicio del paso Horarios (AGENDA-08) ───────────────────────
   // 1) Vertical canchas (D-03): en ese rubro un "servicio" ES una cancha con su propia agenda
@@ -720,40 +721,16 @@ export default function OnboardingPage() {
             <Image src="/brand/forjo-gestion-lockup-tinta.png" alt="Forjo Gestión" width={781} height={190} priority className="h-10 w-auto dark:hidden" />
             <Image src="/brand/forjo-gestion-lockup-crema.png" alt="Forjo Gestión" width={781} height={190} priority className="hidden h-10 w-auto dark:block" />
           </div>
-          {/* Subtítulo count-aware: refleja el conteo real de pasos visibles (3 en canchas, 4 en el
-              resto), no un literal fijo. */}
-          <p className="text-muted-foreground mt-2">Configurá tu negocio en {visibleSteps.length} pasos</p>
+          {/* Subtítulo count-aware: refleja el conteo real de pasos del stepper, Integraciones incluido
+              (4 en canchas, 5 en el resto), no un literal fijo. */}
+          <p className="text-muted-foreground mt-2">Configurá tu negocio en {shownSteps.length} pasos</p>
         </div>
 
-        {/* Stepper — itera sobre visibleSteps (Profesionales oculto en canchas, D-03). El número visible
-            del nodo deriva de la POSICIÓN (idx+1) → 1-2-3 / 1-2-3-4 sin huecos; el estado
-            activo/completado compara contra `s.n` (el paso real), no contra la posición. */}
-        <div className="flex items-center justify-center mb-8 gap-0">
-          {visibleSteps.map((s, idx) => (
-            <div key={s.n} className="flex items-center">
-              <div className="flex flex-col items-center">
-                <div className={cn(
-                  'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-colors',
-                  step > s.n ? 'bg-primary text-primary-foreground' :
-                  step === s.n ? 'bg-primary text-primary-foreground ring-4 ring-primary/20' :
-                  'bg-secondary text-muted-foreground'
-                )}>
-                  {step > s.n ? <Check className="w-4 h-4" /> : idx + 1}
-                </div>
-                <span className={cn(
-                  'text-xs mt-1 hidden sm:block',
-                  step === s.n ? 'text-foreground font-medium' : 'text-muted-foreground'
-                )}>{s.label}</span>
-              </div>
-              {idx < visibleSteps.length - 1 && (
-                <div className={cn(
-                  'h-px w-12 sm:w-20 mx-1 sm:mx-2 mb-4 transition-colors',
-                  step > s.n ? 'bg-primary' : 'bg-border'
-                )} />
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Stepper — pinta `shownSteps` (Profesionales oculto en canchas, D-03; + Integraciones, que es
+            el paso siguiente a Finalizar). El número visible del nodo deriva de la POSICIÓN (idx+1) → sin
+            huecos; el estado activo/completado compara contra `s.n` (el paso real), no contra la posición.
+            Compartido con `/onboarding/integraciones` (components/onboarding/onboarding-stepper.tsx). */}
+        <OnboardingStepper steps={shownSteps} current={step} />
 
         <Card className="p-6">
           {/* Step 1 */}
@@ -1261,7 +1238,7 @@ export default function OnboardingPage() {
               </div>
             ) : (
               <Button onClick={handleFinish} disabled={loading}>
-                {loading ? 'Guardando...' : 'Finalizar y entrar al dashboard'}
+                {loading ? 'Guardando...' : 'Finalizar'}
               </Button>
             )}
           </div>
