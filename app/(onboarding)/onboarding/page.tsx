@@ -438,6 +438,7 @@ export default function OnboardingPage() {
         whatsappNorm = normalizeArWhatsApp(whatsapp)
         if (!whatsappNorm) {
           toast.error('WhatsApp inválido. Usá código de país y área, ej. +54 9 11 1234-5678')
+          setLoading(false)
           return
         }
       }
@@ -596,10 +597,13 @@ export default function OnboardingPage() {
       // para que el atrás no devuelva al wizard ya usado: completarlo de nuevo crearía un SEGUNDO negocio
       // (no hay unique en `businesses.owner_id`; la única red es el slug repetido → 23505).
       router.replace('/onboarding/integraciones')
+      // `loading` queda en true A PROPÓSITO (WR-02): `router.replace` no espera la navegación, y soltarlo
+      // acá re-habilitaba «Finalizar» mientras se renderiza el paso 5; un segundo toque volvía a correr
+      // el alta. Se suelta sólo en el `catch` y en las salidas tempranas de arriba; en el éxito, el
+      // wizard se desmonta con el botón todavía deshabilitado.
     } catch (err) {
       toast.error('Error al crear el negocio. Intentá de nuevo.')
       console.error(err)
-    } finally {
       setLoading(false)
     }
   }
