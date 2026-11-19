@@ -1096,7 +1096,10 @@ export function FinancesClient({ businessId }: Props) {
           queda por debajo del scroll con el que se tocó el tab (que tiene que estar a la vista para
           tocarlo). CSS puro, sin medir alturas. Va en cada panel y no en el componente compartido de
           tabs, y no en la raíz de los tabs: ahí la fila de los triggers contaría adentro del mínimo.
-          Costo aceptado por el dueño (opción A, 2026-11-18): un tab vacío deja blanco debajo de su aviso. */}
+          Costo aceptado por el dueño (opción A, 2026-11-18): queda blanco debajo de CUALQUIER tab más corto
+          que la pantalla, también en escritorio (donde la página pasa a tener scroll aunque el contenido
+          entre), y mientras cargan los datos del mes (los tres paneles muestran su aviso de vacío seguido de
+          una pantalla en blanco); como el panel es el último bloque, se lee como espacio de scroll al final. */}
       <Tabs value={txTab} onValueChange={alElegirTab}>
         <div className="flex items-center justify-between gap-2">
           <TabsList>

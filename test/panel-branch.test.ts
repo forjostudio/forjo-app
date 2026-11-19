@@ -168,7 +168,8 @@ describe('runBranchNavigation — SUBIR un nivel (D-03)', () => {
     expect(runBranchNavigation({ plan: 'up', to: PANEL_MORE, navigate: navegar })).toBe(true)
     expect(back).toHaveBeenCalledTimes(1)
     // Subir es un paso solo: no hay segundo paso ni listener que enganchar.
-    expect(enganchados).toHaveLength(0)
+    // (2026-11-18, quick 261118-pjd) `consumeOwnedBranchEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo: se cuentan los que no son de la guarda.
+    expect(enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(0)
     expect(navegar).not.toHaveBeenCalled()
   })
 
@@ -196,7 +197,8 @@ describe('runBranchNavigation — COLAPSAR y reemplazar (criterio 2)', () => {
     const navegar = vi.fn()
     const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/finances' })
     expect(runBranchNavigation({ plan: 'collapse-then-replace', to: '/clients', navigate: navegar })).toBe(true)
-    expect(ctx.enganchados).toHaveLength(1)
+    // (2026-11-18, quick 261118-pjd) `consumeOwnedBranchEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo: se cuentan los que no son de la guarda.
+    expect(ctx.enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(1)
     expect(ctx.enganchados[0].tipo).toBe('popstate')
     // Disparo único: sin él, el listener sobrevive al segundo paso y el próximo atrás del dueño
     // dispara una navegación que nadie pidió.
@@ -212,7 +214,8 @@ describe('runBranchNavigation — COLAPSAR y reemplazar (criterio 2)', () => {
     const ctx = montarPila({ state: panelUnderState(PANEL_MORE), pathname: '/finances' })
     runBranchNavigation({ plan: 'collapse-then-replace', to: '/clients', navigate: navegar })
     expect(navegar).not.toHaveBeenCalled()
-    expect(ctx.enganchados).toHaveLength(1)
+    // (2026-11-18, quick 261118-pjd) `consumeOwnedBranchEntry` engancha ahora los oyentes de liberación de la guarda del consumo en vuelo: se cuentan los que no son de la guarda.
+    expect(ctx.enganchados.filter((o) => o.fn.name !== 'soltarConsumo' && o.fn.name !== 'soltarAlVolverDeLaCache')).toHaveLength(1)
   })
 
   it('sin marca no deja ningún listener vivo, no retrocede y no se hace cargo', () => {
