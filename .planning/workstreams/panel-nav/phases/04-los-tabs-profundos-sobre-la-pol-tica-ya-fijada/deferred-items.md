@@ -3,7 +3,7 @@
 ## Deferred Items
 
 - Finanzas desborda en horizontal a 390 px (17-25 px de más)
-  status: open
+  status: acknowledged
   **Qué:** en un documento que nace en `/finances` con el viewport del teléfono (390×844, `mobile: true`), el
   documento mide 407-415 px de ancho (`document.documentElement.scrollWidth`). Es lo que dejó el viewport
   visual desplazado respecto del de layout en la sonda (`(0,37)` y `(0,55)`).
@@ -13,12 +13,12 @@
   por este plan (el tab en la URL no cambia el ancho del contenido). Candidato a un quick de polish mobile.
 
 - eslint de `finances-client.tsx`: `react-hooks/set-state-in-effect` preexistente
-  status: open
+  status: acknowledged
   **Qué:** el `useEffect(() => { fetchData() }, [fetchData])` (era la L383 en `85c99ae`) llama a un setState
   adentro del efecto. Estaba antes de la fase y el plan 04-01 no lo toca.
 
 - El aviso de error del OAuth de Google en el login mobile probablemente tampoco se ve
-  status: open
+  status: acknowledged
   **Qué:** `components/auth/mobile-login-hero.tsx` pide `toast.error('No pudimos entrar con Google…')` en un
   efecto de montaje que lee `?error=oauth`. Es el mismo patrón que el plan 04-02 midió en `/negocio` y `/agenda`
   (cero toasts con el código de antes): sonner sólo publica a los suscriptores de ese momento y el `<Toaster>`
@@ -30,7 +30,7 @@
   primero (puede que el banner del form lo cubra) y, si se pierde, el mismo arreglo (pedirlo en la próxima tarea).
 
 - El `sinComentarios` del molde se come código cuando un comentario de línea nombra `/*`
-  status: open
+  status: acknowledged
   **Qué:** el descuento de comentarios de `test/panel-history-clients.test.ts` (y el del bloque de Finanzas de
   `test/panel-tabs.test.ts`, que lo copia) saca los de bloque ANTES que los de línea: un comentario de línea con
   `/api/google/*` abre un bloque falso hasta el próximo `*/`. En `settings-client.tsx` se comía 24.933 caracteres.
@@ -40,7 +40,7 @@
   aserción NEGATIVA suya cae sobre un tramo comido es un quick de tests, no de esta fase.
 
 - `/clients` tiene el mismo boundary sin nodo desde v0.30, sin medir
-  status: open
+  status: acknowledged
   **Qué:** `app/(dashboard)/clients/page.tsx` envuelve a `ClientsClient` en el mismo `<Suspense>` con fallback nulo
   que el plan 04-06 cambió en Finanzas, Negocio y Configuración, y su comentario repite la misma frase falsa (que el
   fallback no se dibuja nunca). Si el mecanismo de G-04-6 aplica, el cambio de estado del router que dispararía el
@@ -53,7 +53,7 @@
   con nodo (`space-y-…` del contenedor raíz de `ClientsClient`) después.
 
 - IN-02: `router.refresh()` en `/negocio?tab=integraciones` puede llevar la página arriba
-  status: open
+  status: acknowledged
   **Qué:** después de un toque de tab (un pushState que deja el árbol del router en `__PAGE__`), un `router.refresh()`
   en Integraciones —el de desconectar una cuenta— crea un `scrollRef` NUEVO por la clave de la página
   (`__PAGE__` contra `__PAGE__?{"tab":"integraciones"}`) y, con el borde de arriba fuera, el handler de scroll de Next
@@ -66,7 +66,7 @@
   vive en `settings-client.tsx`, prohibido en el plan 04-06.
 
 - `html { scroll-behavior: smooth }` sin `data-scroll-behavior`
-  status: open
+  status: acknowledged
   **Qué:** `app/globals.css` pone `scroll-behavior: smooth` en `<html>` (con `prefers-reduced-motion: no-preference`)
   y el `<html>` de `app/layout.tsx` no lleva `data-scroll-behavior="smooth"`. Next 16 ya no apaga el scroll suave
   durante sus transiciones si ese atributo no está (`node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`
@@ -78,7 +78,7 @@
   página pública: candidato a un quick que lo mida antes.
 
 - La guarda de consumo en vuelo no se extendió a `consumeOwnedPanelEntry` (plan 04-07, G-04-7)
-  status: resolved (quick 261118-kat, cerrado por mitigación; medido en .planning/debug/tabs-en-la-url-medida.md ## (l))
+  status: acknowledged
   **Qué:** la guarda (`consumoEnVuelo` en `lib/panel-history.ts`) vive sólo en `applyPanelView`. `consumeOwnedPanelEntry`
   —el menú, NAV-08, y el primer paso de B1— es OTRA función: compartir la guarda no es «el mismo helper» sino una
   segunda lectura de la memoria del módulo.
@@ -96,7 +96,7 @@
   el cruce, rojo 4/4 antes (K3a/K3b por el menú y por B1) y verde después; R-B1 4/4 y R-T 12/12 en la app.
 
 - obs-G1: con 0 ventas, el tab Ventas de Finanzas achica la página y el navegador recorta el scroll (re-UAT del 04-08)
-  status: resolved (quick 261118-jdq, 05733dc; medido en .planning/debug/tabs-en-la-url-medida.md ## (k))
+  status: acknowledged
   **Qué:** el dueño, en Android Chrome durante el G6.1 en producción (`c3da6d0`, 2026-11-18): «Algo que por ahí me
   gustaria es que ya se fije el alto de la ventana con los turnos que aparecen, porque sino cada vez que voy a ventas
   hace un salto ahi porque se achica. Igual es porque hay 0 ventas cargadas.» No es un scroll de la app: el tab nuevo
@@ -112,7 +112,7 @@
   (los cinco recorridos del 04-06 en OK, cero escrituras de Next). Falta la UAT en el teléfono, junto con R2-WR-01.
 
 - R2-WR-01: la guarda de consumo en vuelo podría quedar encendida sin `popstate` (code review ronda 2, `04-REVIEW-2.md`)
-  status: resolved (quick 261118-kat, cerrado por mitigación; medido en .planning/debug/tabs-en-la-url-medida.md ## (l))
+  status: acknowledged
   **Qué:** `consumoEnVuelo` (`lib/panel-history.ts:933-938`, `:1024`, `:1045-1049`) sólo se apaga con un `popstate`;
   mientras está encendida, todo `applyPanelView` del documento devuelve `'none'` (tabs, reconciliación, ficha `?c=`).
   Caminos derivados SIN MEDIR: (a) bfcache — un retroceso que cruza de documento (p. ej. Safari tras recargar, donde las
@@ -129,13 +129,13 @@
   retroceso ignorado en silencio.
 
 - R2-IN-04: doble toque en una fila de Clientes apila `?c=A` sobre `?c=A` (code review ronda 2)
-  status: open
+  status: acknowledged
   **Qué:** `app/(dashboard)/clients/clients-client.tsx:1055` — el `user-open` toma `from: selectedId` del render, el
   mismo defecto que WR-02 tenía en los tabs. Fuera del alcance del cierre (archivo intocable en 04-06..08). Candidato a
   ir junto con R2-WR-01 (mismo helper `toqueDeTab`/URL de ahora). Sin medir.
 
 - Decisión del dueño (2026-11-18, secure-phase): el cruce guarda ↔ `consumeOwnedPanelEntry` va al MISMO quick de R2-WR-01
-  status: resolved (quick 261118-kat, cerrado por mitigación; medido en .planning/debug/tabs-en-la-url-medida.md ## (l))
+  status: acknowledged
   **Qué:** el residuo de T-04-39 de arriba («La guarda de consumo en vuelo no se extendió a `consumeOwnedPanelEntry`»)
   en los DOS sentidos: (a) consumir un tab y tocar la barra o el sidebar antes del `popstate`; (b) la inversa
   (`04-REVIEW-2.md` IN-03): primero el retroceso de `consumeOwnedPanelEntry`/B1 y después un toque al tab por defecto.
@@ -152,7 +152,7 @@
   (`5d7ee5f`), 2 y `/dashboard` (con dos fichas, 3). Medido en .planning/debug/tabs-en-la-url-medida.md ## (m).
 
 - Review del quick 261118-kat (CR-01, WR-01..04, IN-01..03): un solo segundo paso de B1, el try de la rama, el criterio de llegada de la guarda y los candados de `pageshow`
-  status: resolved (quick 261118-pjd; medido en .planning/debug/tabs-en-la-url-medida.md ## (m))
+  status: acknowledged
   **Qué:** `261118-kat-REVIEW.md`: CR-01 (doble toque a Inicio en la barra ⇒ fuera del sitio), WR-01 (el
   `replaceState` del `HistoryUpdater` de Next en la ventana del recorrido suelta la guarda antes de tiempo), WR-02 (un
   `back()` que tira deja colgado el segundo paso de las ramas de dos pasos), WR-03/IN-01 (el `pageshow` con disparo
@@ -175,7 +175,7 @@
   lectura, sin medir) y R2-IN-04.
 
 - Review del quick 261118-pjd (CR-01 X2, WR-01 S4, IN-01..04): la familia back() cerrada
-  status: resolved (quick 261119-32l; medido en .planning/debug/tabs-en-la-url-medida.md ## (n))
+  status: acknowledged
   **Qué:** `261118-pjd-REVIEW.md`: CR-01 (BLOCKER, preexistente: `consumeOwnedExitSentinel` no pasaba por la guarda
   del consumo en vuelo, y dos toques a la barra desde Inicio con el aviso armado sacaban al dueño del sitio), WR-01
   (con la guarda colgada, el `up` y el colapso del guard de cambios sin guardar devolvían «se hizo cargo» sin hacer
@@ -199,7 +199,7 @@
   retroceso ignorado en silencio sin medir en ningún motor (con el sentinel como productor más) y R2-IN-04.
 
 - R3-WR-01 (review final antes del push, 2026-11-19): `applyPanelView` sin el chequeo de llegada de sus hermanas
-  status: open
+  status: acknowledged
   **Qué:** si el navegador ignora un `back()` sin tirar (no observado en ningún motor), la guarda queda colgada y
   `applyPanelView` devuelve `'none'` en todo el panel. Medido en el simulador del review (`261119-32l-REVIEW.md`,
   sim4): R1 `up` ignorado → `/clients` → abrir ficha: producción se abre / HEAD no; R2 salida ignorada → tab de

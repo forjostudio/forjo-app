@@ -1,3 +1,10 @@
+---
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  gap_snapshot: "unknown::scenarios=0"
+---
+
 # Phase 3 — UAT, RONDA 3: lo que la regla nueva cambió, y nada más
 
 **Fecha del guion:** 2026-10-27 · **Ronda:** 3 · **Plan:** `03-10` · ⚠ **actualizado el 2026-10-28 por

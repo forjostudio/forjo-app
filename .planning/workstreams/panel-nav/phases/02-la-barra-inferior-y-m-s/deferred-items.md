@@ -22,3 +22,4 @@
   02-04 que vuelvan a listar `app/(dashboard)/layout.tsx` en un gate de eslint se van a topar con lo
   mismo.
 - **Dónde se arregla:** fuera de esta fase (candidato a `/gsd-quick`).
+  status: acknowledged

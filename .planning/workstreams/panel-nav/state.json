@@ -20,9 +20,10 @@
     }
   ],
   "next": {
-    "command": "/gsd-complete-milestone --ws panel-nav",
-    "label": "Cerrar el milestone v0.31 (las 3 fases completas y SECURED; quicks post-fase desplegados en ed95669 con UAT 6/6)",
-    "reason": "Phase 4 completa; obs-G1, R2-WR-01, CR-01 y la familia back() en producción"
+    "command": "/gsd-new-milestone --ws panel-nav",
+    "label": "v0.31 cerrado; arrancar el próximo milestone del workstream (o de otro)",
+    "reason": "v0.31 SHIPPED 2026-11-19, tag v0.31, archivado en .planning/milestones/v0.31-*"
   },
-  "updated_at": "2026-11-18T13:47:23.501Z"
+  "updated_at": "2026-11-18T13:47:23.501Z",
+  "status": null
 }

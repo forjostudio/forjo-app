@@ -1,3 +1,10 @@
+---
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  gap_snapshot: "unknown::scenarios=0"
+---
+
 # Phase 3 — UAT: La política de atrás, de un nivel a dos
 
 **Fecha:** 2026-10-15

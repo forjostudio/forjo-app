@@ -457,3 +457,40 @@ palabra por formulario y un gate que impide la reincidencia.
 diálogo intocable, un chip desbordado ni un drawer clavado. Los encontró el dueño con el teléfono en la
 mano. Ver `feedback-uat-prod-real-encuentra-lo-que-el-pipeline-no`.
 
+
+## v0.31 — La navegación mobile del panel (2026-11-19)
+
+**Qué resolvió:** el pedido del dueño después de la UAT de v0.30: una navegación de app en el celular —barra
+inferior fija y una sección **Más**— y un atrás de **dos niveles** (sección → Más → Inicio) que nunca saque
+al dueño del panel por haber abierto un tab o una subsección. Workstream `panel-nav`, Phases 2-4, 29 planes,
+cero migraciones, tag `v0.31`, producción en `ed95669`.
+
+**Entregó los 9 requisitos (MOB-01..09)**, todos verificados en el teléfono:
+
+- **MOB-01/02/03/07** (Phase 2): la barra de cinco destinos con zona segura y reserva de alto, **Más** como
+  pantalla completa con todo el menú del rubro (incluido el logout), el header de dos líneas sin el ☰, y
+  desktop idéntico. Cerró de raíz un bug de layout que mordió tres veces (`min-h-dvh` en `<main>`).
+- **MOB-04/05/06** (Phase 3): la política de atrás de dos niveles, con el **camino 1** (decisión del dueño):
+  el aviso de salida de Inicio se arma sólo con activación del usuario, porque la intervención de historial
+  de Chrome saltea las entradas empujadas sin gesto — medido por CDP, no supuesto.
+- **MOB-08/09** (Phase 4): los tabs de `/negocio`, `/settings` y `/finances` en `?tab=` con un solo nivel
+  (D-01), B1 en la barra, y el retorno del OAuth de MercadoPago sin perder el tab. Cuatro gaps del code
+  review cerrados dentro de la fase midiendo rojo primero (G-04-6 el scroll del primer toque por un
+  `Suspense` sin nodo, G-04-7 el doble toque, G-04-8 la vuelta del OAuth trabada; G-04-9 descartado medido).
+
+**Después de la Phase 4, cuatro quicks** cerraron una **familia** de bugs de doble toque: el peor, en
+producción desde B1, sacaba al dueño del sitio con dos toques rápidos a Inicio en la barra. Cada ronda de
+review encontraba otra función con su propio `history.back()` sin guarda; la salida fue pasar **todos** los
+atrás del panel por una guarda compartida y fijarlo con un candado estructural (`C-back-cerrado`, probado
+por mutación). UAT corta en producción 6/6.
+
+**Cierre:** `override_closeout`. Known verification overrides: 28 newly acknowledged, 0 carried forward from
+a prior close (see `.planning/workstreams/panel-nav/STATE.md` Deferred Items) — 10 «UAT gaps» que son guiones
+y decisiones leídos como tests por el escáner, 1 verificación `human_needed` de la Phase 1 (v0.30), 1 quick
+viejo sin SUMMARY y 16 diferidos (4 ya resueltos, 12 de deuda anotada con motivo). Las verificaciones de las
+fases figuran `stale` porque los quicks posteriores cambiaron código después de verificar; ese código pasó
+un review final («seguro para subir») y la UAT en producción.
+
+**La lección:** con el historial del navegador, un arreglo de a una función no cierra nada: siempre hay
+otro consumidor del mismo recurso. Lo que cerró el problema fue una regla estructural con un candado que la
+haga cumplir, no la quinta ronda de review.

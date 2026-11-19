@@ -214,6 +214,27 @@ Un negocio NUNCA puede leer ni modificar datos de otro, y los flujos de pago no 
 
 </details>
 
+## Milestone (workstream `panel-nav`): v0.31 La navegación mobile del panel — ✅ SHIPPED 2026-11-19 (tag v0.31)
+
+> **Cerrado.** Phases 2-4, 29 planes, cero migraciones. Archivado en `.planning/milestones/v0.31-*`.
+> 9/9 requisitos (MOB-01..09) verificados en el teléfono del dueño (Android e iPhone) y en producción;
+> las tres fases SECURED con `threats_open: 0`. Producción en `ed95669`.
+>
+> **Lo que entregó:** en mobile el panel se navega desde una barra fija de cinco destinos con zona segura
+> y un **Más** que guarda el resto del menú del rubro; el atrás tiene **dos niveles** (sección → Más →
+> Inicio) con un aviso de salida en Inicio que se arma con activación del usuario; y los tabs de
+> `/negocio`, `/settings` y `/finances` viven en `?tab=` con la política de un nivel (D-01), sin tocar
+> las tres rutas que comparten esa pantalla ni romper el retorno del OAuth de MercadoPago.
+>
+> **Lo que no estaba en el plan y salió igual:** cuatro quicks posteriores a la Phase 4 cerraron una
+> **familia** de bugs de doble toque —el más grave, ya en producción desde B1: dos toques rápidos a
+> Inicio en la barra sacaban al dueño del sitio— pasando **todo** `history.back()` del panel por una
+> guarda compartida, con un candado estructural que falla si aparece uno suelto. Cada ronda de code
+> review encontraba otra función con su propio `back()`; la salida fue cerrar la familia, no seguir de a una.
+>
+> **Deuda reconocida al cerrar:** ver `STATE.md` del workstream § Deferred Items (R3-WR-01, el desborde
+> horizontal de Finanzas a 390 px, `/clients` sin el fallback con nodo, el doble toque en una fila de Clientes).
+
 ## Requirements
 
 ### Validated
@@ -310,4 +331,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-11 after v0.26 milestone — **v0.26 Cupo por solape + cierre de backlog SHIPPED** (ws `motor-reservas`, Phases 12-14, 18 planes, migraciones 062→067 en prod, tag `v0.26`). Las 3 fases cerradas con `threats_open: 0`. v0.9–v0.26 shipped y archivados; el próximo milestone del ws `motor-reservas` arranca en **Phase 15**. Pendiente del ws `web-builder`: Phase 18 — auto-armado de la web con el pago del add-on (`web-builder-automation-northstar`).*
+*Last updated: 2026-11-19 after v0.31 milestone — **v0.31 La navegación mobile del panel SHIPPED** (ws `panel-nav`, Phases 2-4, 29 planes, cero migraciones, tag `v0.31`, producción en `ed95669`). Las 3 fases cerradas con `threats_open: 0`. La próxima migración libre sigue en la **081**. Pendiente del ws `web-builder`: Phase 18 — auto-armado de la web con el pago del add-on (`web-builder-automation-northstar`).*

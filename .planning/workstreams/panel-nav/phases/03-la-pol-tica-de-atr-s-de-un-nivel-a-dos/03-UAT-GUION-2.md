@@ -1,3 +1,10 @@
+---
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  gap_snapshot: "unknown::scenarios=0"
+---
+
 # Phase 3 — UAT, RONDA 2: lo que falta, y nada más
 
 **Fecha del guion:** 2026-10-23 · **Ronda:** 2 · **Plan:** `03-08`

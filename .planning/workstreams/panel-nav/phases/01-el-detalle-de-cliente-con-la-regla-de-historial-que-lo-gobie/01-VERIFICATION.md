@@ -4,6 +4,7 @@ verified: 2026-09-29T17:03:39Z
 status: human_needed
 score: 2/5 criterios verificados estáticamente (0 fallidos · 3 present-behavior-unverified, a la UAT en celular del dueño)
 covered_files:
+
   - ".planning/workstreams/panel-nav/REQUIREMENTS.md"
   - ".planning/workstreams/panel-nav/phases/01-el-detalle-de-cliente-con-la-regla-de-historial-que-lo-gobie/01-01-PLAN.md"
   - ".planning/workstreams/panel-nav/phases/01-el-detalle-de-cliente-con-la-regla-de-historial-que-lo-gobie/01-01-SUMMARY.md"
@@ -16,10 +17,12 @@ covered_files:
   - "lib/panel-history.test.ts"
   - "lib/panel-history.ts"
   - "test/panel-history-clients.test.ts"
+
 covered_digest: "v1:sha256:4a85e1cf9aff27767df079314d51049e8791cefda956f0ee6c037e70caca9bb6"
 behavior_unverified: 3
 overrides_applied: 0
 behavior_unverified_items:
+
   - truth: "Criterio 1 — Finanzas → Clientes → abrir un cliente → el back vuelve al listado con la búsqueda y los tres filtros intactos (NAV-01)"
     test: "En un celular real: entrar a Finanzas, ir a Clientes por el menú hamburguesa, escribir algo en el buscador y activar los tres filtros (estado, profesional, obra social), abrir un cliente, y apretar el botón atrás del sistema."
     expected: "Vuelve al listado de Clientes (no a Finanzas), con el texto del buscador y los tres filtros exactamente como estaban. En DevTools, la entrada del detalle existe en el historial."
@@ -33,6 +36,7 @@ behavior_unverified_items:
     expected: "Se cierra el overlay, no se cierra el detalle, no se cambia de sección, y no queda una entrada huérfana (el siguiente atrás vuelve al listado)."
     why_human: "Convivencia de dos pilas de entradas en el mismo stack (la del overlay y la del detalle). Es exactamente la cicatriz que el proyecto ya pagó tres veces; la prueba es el navegador, no el grep."
 human_verification:
+
   - test: "UAT en celular real — recorrido del bug: Finanzas → hamburguesa → Clientes (con buscador escrito y los 3 filtros puestos) → abrir un cliente → atrás."
     expected: "Vuelve al listado de Clientes con búsqueda y los tres filtros intactos."
     why_human: "Comportamiento del botón atrás del sistema + preservación de estado: no observable sin navegador."
@@ -54,6 +58,10 @@ human_verification:
   - test: "`npm run build` (rc=0) corrido por el dueño cuando el server de dev del puerto 80 esté bajado."
     expected: "rc=0, sin el error de `useSearchParams` sin `Suspense`."
     why_human: "El verificador NO lo corrió a propósito: `next build` escribe en `.next/`, el mismo directorio que usa el `next dev` que el dueño tiene levantado. El SUMMARY lo declara en rc=0 (01-01-SUMMARY.md:170); queda como claim no re-medido."
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  status: human_needed
 ---
 
 # Phase 1: El detalle de cliente, con la regla de historial que lo gobierna — Informe de verificación

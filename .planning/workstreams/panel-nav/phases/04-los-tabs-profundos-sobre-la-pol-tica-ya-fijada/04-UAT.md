@@ -1,3 +1,10 @@
+---
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  gap_snapshot: "unknown::scenarios=0"
+---
+
 # Phase 4 — UAT en el teléfono y en producción
 
 El guion está en `04-UAT-GUION.md` (misma carpeta): bloques 0 a 9, 30 recorridos, cada uno con «Pasa si» y

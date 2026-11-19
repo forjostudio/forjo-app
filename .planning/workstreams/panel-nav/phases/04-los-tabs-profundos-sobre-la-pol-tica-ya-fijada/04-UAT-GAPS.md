@@ -1,3 +1,10 @@
+---
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  gap_snapshot: "unknown::scenarios=0"
+---
+
 # Phase 4 — Re-UAT corta en el teléfono y en producción: el cierre de los gaps
 
 **Fecha del guion:** 2026-11-18 · **Plan:** `04-08`

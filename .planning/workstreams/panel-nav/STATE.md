@@ -4,10 +4,10 @@ milestone: v0.31
 milestone_name: La navegación mobile del panel (workstream `panel-nav`)
 current_phase: 4 — Los tabs profundos sobre la política ya fijada
 current_plan: Not started
-status: completed
-stopped_at: "v0.31: las 3 fases completas y SECURED; quicks obs-G1, R2-WR-01, CR-01 y familia back() desplegados (ed95669) con UAT 6/6 en el teléfono; próximo /gsd-complete-milestone"
+status: milestone_complete
+stopped_at: "v0.31 SHIPPED y archivado (2026-11-19, tag v0.31, producción ed95669); workstream sin milestone activo; próximo /gsd-new-milestone"
 last_updated: "2026-11-18T13:47:23.429Z"
-last_activity: 2026-11-18
+last_activity: 2026-11-19
 last_activity_desc: "Phase 4 completa (verificación passed, re-UAT de gaps 8/8)"
 state_head: c279df5ea249d549a782aac2e56c3b749d8db483
 progress:
@@ -27,9 +27,9 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 **Current Plan:** Not started
 **Total Plans in Phase:** 8
-**Status:** v0.31 listo para cerrar — 3/3 fases completas y SECURED, producción en ed95669
+**Status:** v0.31 SHIPPED — milestone cerrado y archivado en `.planning/milestones/v0.31-*`
 **Current Phase:** 4 — Los tabs profundos sobre la política ya fijada
-**Last Activity:** 2026-11-19 - Completed quick task 261119-32l: familia back() por la guarda compartida
+**Last Activity:** 2026-11-19 - Milestone v0.31 cerrado y archivado (tag v0.31)
 **Last Activity Description:** Phase 4 completa (verificación passed 5/5, re-UAT de gaps 8/8 en producción)
 
 ## Progress
@@ -43,7 +43,7 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 
 **Last session:** 2026-11-18T14:00:00.000Z
 
-**Stopped At:** v0.31: las 3 fases completas y SECURED; quicks obs-G1, R2-WR-01, CR-01 y familia back() desplegados (ed95669) con UAT 6/6 en el teléfono; próximo /gsd-complete-milestone
+**Stopped At:** v0.31 SHIPPED y archivado (2026-11-19, tag v0.31, producción ed95669); workstream sin milestone activo; próximo /gsd-new-milestone
 **Resume File:** .planning/workstreams/panel-nav/phases/04-los-tabs-profundos-sobre-la-pol-tica-ya-fijada/04-VERIFICATION.md
 
 ## Performance Metrics
@@ -145,3 +145,38 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 - [Phase 04]: G-04-6 (obs-1) se cerró dándole al `<Suspense>` un nodo del DOM como fallback en finances/negocio/settings: con `fallback={null}` el scroll pendiente de Next se ejecutaba en el primer toque de tab (medido por CDP, 1/5 → 5/5); la sonda se corrigió por P-1 para descontar el recorte por alto, con control contra la corrida roja (decisión del dueño)
 - [Phase 04]: G-04-7: el `from` del toque sale de la URL de ahora (`toqueDeTab`) y una guarda de consumo en vuelo corta el doble `back()`; G-04-8: un solo predicado por presencia (`vueltaDeOAuthPendiente`) y `cleansQuery` en la regla 2. G-04-9 (B1 tras recarga) NO REPRODUCE en Chrome 157 y se descartó con el número
 - [Phase 04]: Deuda decidida por el dueño (2026-11-18): R2-WR-01 (guarda sin `popstate` por bfcache) y obs-G1 (recorte con 0 ventas) van a `/gsd-quick`, R2-WR-01 midiendo primero; MOB-08/09 marcados recién con la re-UAT 8/8 en producción
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close, most recent first:
+
+| Category | Item | Status | Deferred At | Milestone |
+|----------|------|--------|-------------|-----------|
+| quick_tasks | 261006-tbc-el-ci-levanta-su-propia-base-en-vez-de-p | missing | 2026-11-19 | v0.31 |
+| uat_gaps | 03/03-DECISION-UAT-2.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 03/03-DECISION-UAT-3.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 03/03-DECISION-UAT.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 03/03-UAT-2.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 03/03-UAT-GUION-2.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 03/03-UAT-GUION-3.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 03/03-UAT.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 04/04-UAT-GAPS.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 04/04-UAT-GUION.md | unknown | 2026-11-19 | v0.31 |
+| uat_gaps | 04/04-UAT.md | unknown | 2026-11-19 | v0.31 |
+| verification_gaps | 01/01-VERIFICATION.md | human_needed | 2026-11-19 | v0.31 |
+| deferred_items | 02/deferred-items.md: D-1 ·  react-hooks/purity  preexistente en  app/(dashboard)/layout.tsx   -  Encontrado d | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: Finanzas desborda en horizontal a 390 px (17-25 px de más) status: open  Qué:  en un doc | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: eslint de  finances-client.tsx :  react-hooks/set-state-in-effect  preexistente status:  | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: El aviso de error del OAuth de Google en el login mobile probablemente tampoco se ve sta | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: El  sinComentarios  del molde se come código cuando un comentario de línea nombra  /  st | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md:  /clients  tiene el mismo boundary sin nodo desde v0.30, sin medir status: open  Qué:    | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: IN-02:  router.refresh()  en  /negocio?tab=integraciones  puede llevar la página arriba  | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md:  html { scroll-behavior: smooth }  sin  data-scroll-behavior  status: open  Qué:   app/g | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: La guarda de consumo en vuelo no se extendió a  consumeOwnedPanelEntry  (plan 04-07, G-0 | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: obs-G1: con 0 ventas, el tab Ventas de Finanzas achica la página y el navegador recorta  | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: R2-WR-01: la guarda de consumo en vuelo podría quedar encendida sin  popstate  (code rev | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: R2-IN-04: doble toque en una fila de Clientes apila  ?c=A  sobre  ?c=A  (code review ron | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: Decisión del dueño (2026-11-18, secure-phase): el cruce guarda ↔  consumeOwnedPanelEntry | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: Review del quick 261118-kat (CR-01, WR-01..04, IN-01..03): un solo segundo paso de B1, e | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: Review del quick 261118-pjd (CR-01 X2, WR-01 S4, IN-01..04): la familia back() cerrada s | acknowledged | 2026-11-19 | v0.31 |
+| deferred_items | 04/deferred-items.md: R3-WR-01 (review final antes del push, 2026-11-19):  applyPanelView  sin el chequeo de l | acknowledged | 2026-11-19 | v0.31 |

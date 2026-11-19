@@ -1,3 +1,10 @@
+---
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  gap_snapshot: "unknown::scenarios=0"
+---
+
 # Decisión del dueño durante la UAT de la fase 3 — 2026-10-15
 
 ## La colisión que la UAT destapó

@@ -239,6 +239,39 @@ Reserva con varios profesionales sobre el motor v0.12 sin reconstruirlo: mapeo s
 - Model mix: opus (research/plan/execute/secure) + sonnet (checker/verifier).
 - Todo el ciclo discuss→plan→execute→secure de las 4 fases corrió en sesión, con UAT humano intercalado.
 
+## Milestone: v0.31 — La navegación mobile del panel
+
+**Shipped:** 2026-11-19
+**Phases:** 3 (2-4) | **Plans:** 29 (+ 4 quicks posteriores)
+
+### What Was Built
+- Barra inferior fija de cinco destinos + pantalla **Más** con todo el menú del rubro; desktop idéntico (Phase 2).
+- Atrás de dos niveles con aviso de salida en Inicio armado sólo con activación (camino 1) (Phase 3).
+- Tabs de Negocio, Configuración y Finanzas en `?tab=` con la política de un nivel, B1 en la barra y el OAuth sin perder el tab (Phase 4).
+- Todo `history.back()` del panel por una guarda compartida, con candado estructural anti back() suelto (quicks).
+
+### What Worked
+- **Medir antes de arreglar**, en serio: sondas CDP en la app real bajo turno de pantalla, esperados commiteados antes de correr. Varias hipótesis cayeron al medirlas (G-04-9, el caso de bfcache en Chrome).
+- La UAT del dueño en producción encontró lo que los tests no veían (el scroll del primer toque en Finanzas).
+- Los checkpoints `blocking-human` para el push y las decisiones de diseño nunca se auto-aprobaron.
+
+### What Was Inefficient
+- **El whack-a-mole de la guarda:** tres rondas de code review encontraron, cada una, otra función con su propio `back()` sin guarda. Cerrar la familia con una regla estructural desde el principio habría ahorrado dos ciclos.
+- El CLI de GSD en layout `--ws` siguió necesitando correcciones a mano (`phase.complete`, verificaciones `stale` por la huella de código, el escáner que cuenta guiones como UAT).
+- Un instrumento (la sonda del scroll) tuvo que corregirse después de medir; se resolvió con decisión del dueño y un control contra la corrida roja.
+
+### Patterns Established
+- Un recurso compartido del navegador (el historial) se protege con **una** guarda y un candado que impida consumidores nuevos por fuera, no función por función.
+- Cada arreglo de navegación va con su test en rojo commiteado antes y con la sonda de la app sin regresión (R-T, R-B1, estática, scroll).
+
+### Key Lessons
+- Si dos revisiones seguidas encuentran el mismo defecto en otro lugar, el problema es de forma, no de lugar: buscá la regla.
+- La huella de verificación de GSD marca `stale` cualquier cambio posterior; documentar la causa en el cierre en vez de re-verificar todo.
+
+### Cost Observations
+- Model mix: opus (planner/executor/reviewer/debugger/auditor) + sonnet (plan-checker/verifier).
+- Notable: la mayor parte del costo de la Phase 4 estuvo en el cierre de gaps y en los quicks posteriores, no en los 5 planes originales.
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Shipped | Nota |
@@ -247,5 +280,6 @@ Reserva con varios profesionales sobre el motor v0.12 sin reconstruirlo: mapeo s
 | v0.18 CMS Publish / Go-live | 3 | 8 | 2026-07-16 | Borrador/publicar + CMS abierto a clientes; 2 de 3 fases security-sensitive (SECURED 18/18 y 10/10) |
 | v0.19 Cuenta y acceso | 3 | 11 | 2026-07-17 | Auth completo (reset + Google + mails branded); las 3 fases SECURED; UAT atrapó D-14 (enumeration) |
 | v0.20 Onboarding pulido | 2 | 2 | 2026-07-18 | Onboarding robusto (slug fix + salida) + logo + auth siempre Forjo; ambas SECURED; 100% autónomo, sin checkpoint |
+| v0.31 La navegación mobile del panel | 3 | 29 | 2026-11-19 | Barra + Más + atrás de dos niveles + tabs en la URL; las 3 SECURED; 4 quicks cerraron la familia de doble toque con una guarda compartida |
 
 > Nota: v0.10–v0.17 no tienen sección de retrospective (no se corrió `/gsd:complete-milestone` con este archivo en su momento). La tabla salta de v0.9 a v0.18 a propósito.

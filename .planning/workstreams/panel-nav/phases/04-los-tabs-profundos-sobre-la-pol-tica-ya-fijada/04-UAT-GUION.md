@@ -1,3 +1,10 @@
+---
+audit_acknowledged:
+  milestone: v0.31
+  at: 2026-11-19
+  gap_snapshot: "unknown::scenarios=0"
+---
+
 # Phase 4 — UAT en el teléfono y en producción: los tabs en la URL
 
 **Fecha del guion:** 2026-11-17 · **Plan:** `04-05`
