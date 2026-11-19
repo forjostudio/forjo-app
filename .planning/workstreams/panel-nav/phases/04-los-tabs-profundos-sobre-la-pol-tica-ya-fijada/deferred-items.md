@@ -145,3 +145,31 @@
   `/finances`), K3a-b1 3 retrocesos y `/afuera`; (b) K3b-nav08 el tab volvía a consumir (2 retrocesos), K3b-b1 3
   retrocesos y `/afuera`. Con la guarda compartida (`87868c4`) los cuatro dan verde, sin regresar B1 (NR-b1-* 3/3,
   R-B1 4/4 en la app).
+  **Corrección (2026-11-18, quick 261118-pjd):** el cierre por la barra no cubría el doble toque. Con un consumo en
+  vuelo, `consumeOwnedPanelEntry` devuelve `true` sin retroceder, pero B1 ya había enganchado su segundo paso: dos
+  toques a Inicio dejaban dos re-decisores en el mismo `popstate` (CR-01 del review del quick 261118-kat).
+  `CR-b1-doble` daba 3 retrocesos y `/afuera` (con dos fichas, 4); con un solo segundo paso de B1 pendiente
+  (`5d7ee5f`), 2 y `/dashboard` (con dos fichas, 3). Medido en .planning/debug/tabs-en-la-url-medida.md ## (m).
+
+- Review del quick 261118-kat (CR-01, WR-01..04, IN-01..03): un solo segundo paso de B1, el try de la rama, el criterio de llegada de la guarda y los candados de `pageshow`
+  status: resolved (quick 261118-pjd; medido en .planning/debug/tabs-en-la-url-medida.md ## (m))
+  **Qué:** `261118-kat-REVIEW.md`: CR-01 (doble toque a Inicio en la barra ⇒ fuera del sitio), WR-01 (el
+  `replaceState` del `HistoryUpdater` de Next en la ventana del recorrido suelta la guarda antes de tiempo), WR-02 (un
+  `back()` que tira deja colgado el segundo paso de las ramas de dos pasos), WR-03/IN-01 (el `pageshow` con disparo
+  único se gastaba con un `pageshow` no persistido; los candados no medían la limpieza), WR-04 (el docblock del
+  retroceso ignorado en silencio), IN-02 (el comentario de obs-G1 subestimaba el blanco), IN-03 (el drenaje de los
+  tests por nombre de función). Más `UP-doble`, visto por lectura al planificar: `consumeOwnedBranchEntry` no leía la
+  guarda y dos toques a Inicio desde una sección con la marca de la rama retrocedían dos veces.
+  **Decisión del dueño (2026-11-18):** arreglar ANTES del push conjunto (obs-G1 + R2-WR-01 + éste), RED primero y
+  sólo lo que reproduce; CR-01 con un solo segundo paso de B1 (el nuevo reemplaza al anterior); WR-02 con un `try` en
+  las tres ramas; `UP-doble`: «medirlo y arreglarlo si da rojo»; WR-01: opción A en el checkpoint («llegó» = cambiaron
+  el state Y la URL).
+  **Cierre:** los cinco reprodujeron (rojos commiteados en `ba97254` antes de medir) y quedaron arreglados en
+  `5d7ee5f`: `CR-b1-doble` 3/`afuera` → 2/`dashboard`, `CR-b1-doble-fichas` 4 → 3, `CR-b1-silencio` 4/`afuera` →
+  2/`dashboard`; `K2-c-b1` 2/`dashboard` → 1/`finances` y el segundo paso desenganchado en las tres ramas; `W1-menu`
+  2/`dashboard` → 1/`finances`, `W1-b1` 3/`afuera` → 2/`dashboard`; `C-pageshow-no-persistido` en verde; `UP-doble`
+  2/`afuera` → 1/`dashboard` (con `C-retroceso-unico-rama` rojo antes del `fix`). Mutaciones: M1 pone rojo
+  `C-pageshow-no-persistido`, M2 pone rojo `P0-normal`. Sin regresión: pura 77/1876, 8 suites 702, R-T 12/12, R-B1
+  4/4, estática 18/18, scroll 8/8. Residuo: teléfono real, Safari iOS/Android, el `HistoryUpdater` real en la
+  ventana (y el borde declarado de A: un reemplazo que cambie la URL), el doble toque sobre el colapso (cubierto por
+  lectura, sin medir) y R2-IN-04.

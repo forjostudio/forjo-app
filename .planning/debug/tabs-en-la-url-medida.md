@@ -2066,3 +2066,96 @@ Lo que dicen los números:
 - **UP-doble reproduce:** dos toques a Inicio desde `/finances` con la marca ⇒ 2 retrocesos y `/afuera`.
 
 veredictos (m): CR-01=reproduce · WR-02=reproduce · WR-01=reproduce · IN-01=reproduce · UP=reproduce
+
+decision WR-01 (dueno, 2026-11-18): A
+
+### El arreglo (task 3)
+
+Banderas: FCR=FW2=FI1=FUP=1 (los cuatro reprodujeron) y FW1=1 (WR-01 reprodujo y el dueño eligió **A** en el
+checkpoint del 2026-11-18: «llegó» = cambiaron el state Y la URL). HEAD al arreglar: `4ae9a12`; el entorno, el
+mismo de arriba (node `v24.15.0`), 2026-11-19 ~00:45 hora de Argentina.
+
+- **El instrumento de A, neutral** (`341e12d`, `test`): el stub de NAV-08 de `lib/panel-history.test.ts` recibe
+  `location`. Con el código de antes, las tres suites dieron EXACTAMENTE los 12 rojos de arriba (`12 failed | 508
+  passed (520)`).
+- **El candado de FUP, antes del arreglo** (`54a5e08`, `test`): `C-retroceso-unico-rama` en `test/panel-tabs.test.ts`.
+  Rojo con el código de antes, por su aserción:
+  ```
+  AssertionError: expected -1 to be greater than -1
+   ❯ test/panel-tabs.test.ts:1629:21
+      1629|     expect(enVuelo).toBeGreaterThan(-1)
+  ```
+  (`consumeOwnedBranchEntry` no nombraba `consumoEnVuelo`).
+- **El `fix`** (`5d7ee5f`):
+  - CR-01: `segundoPasoB1Pendiente` en `lib/panel-branch.ts` (memoria no exportada entre `consumeOwnedExitSentinel`
+    y `runBranchNavigation`): el toque nuevo desengancha al pendiente; el que corre se suelta ANTES de `reDecidir`.
+  - WR-02: un `try` por rama de dos pasos (sentinel, B1, colapso) cuyo `catch (e)` desengancha el segundo paso (en
+    B1 también apaga la memoria) y hace `throw e`: 3 `catch (e)` y 3 `throw e` en `runBranchNavigation`.
+  - IN-01: el `pageshow` va sin disparo único en los bloques de encendido; el condicional de `persisted` queda.
+  - WR-01 (A): `urlDelConsumo` (`pathname` + `search`), cargada en los bloques de encendido y apagada en
+    `soltarConsumo`; el chequeo devuelve `true` si el state O la URL siguen siendo los del consumo.
+  - UP-doble (FUP): `consumeOwnedBranchEntry` empieza con el MISMO chequeo que `consumeOwnedPanelEntry` y enciende la
+    guarda con el MISMO bloque que la rama `consume`; sus dos guardas, iguales y en su orden.
+  - Docblocks: WR-04 (el radio del retroceso ignorado en silencio, con `CR-b1-silencio`), WR-01 (state Y URL, con
+    los `W1-*` y el borde declarado), IN-01 (por qué sin disparo único), la guarda compartida con
+    `consumeOwnedBranchEntry` (con `UP-doble`), el encabezado y la frase del «nunca retrocede». IN-02: sólo el
+    comentario de obs-G1 en `finances-client.tsx`.
+  - Las tres aserciones viejas declaradas de `test/panel-branch.test.ts` (`up`: 0 oyentes; colapso: 1 y 1) dieron
+    rojo con el `fix` puesto (`expected [...] to have a length of +0 but got 2`, y `1 but got 3` dos veces: los
+    oyentes de la guarda) y pasan a contar los que no son de la guarda con el mismo filtro que ya usaba el caso de B1, con la misma
+    cantidad. Ninguna otra línea de ese archivo cambió; ningún esperado cambió.
+
+Con el arreglo, las tres suites: `Tests  521 passed (521)` — los 14 casos de `panel-tabs`, los 4 de `panel-branch`
+y `C-retroceso-unico-rama` en verde sin tocar un esperado: `CR-b1-doble` 2 retrocesos y `/dashboard`,
+`CR-b1-doble-fichas` 3 y `/dashboard`, `CR-b1-silencio` 2 y `/dashboard`, `CR-b1-reemplazo-unidad` con el primero
+desenganchado, los `K2-c-*` con el segundo paso desenganchado (`K2-c-b1`: 1 retroceso y `/finances`), `W1-menu` 1
+y `/finances`, `W1-b1` 2 y `/dashboard`, `C-pageshow-no-persistido` con la guarda viva tras el `pageshow` no
+persistido y suelta tras el persistido, `UP-doble` 1 y `/dashboard`.
+
+Las mutaciones (sobre el árbol de trabajo, revertidas con Edit, sin commitear; `git diff --quiet HEAD --
+lib/panel-history.ts` = 0 después de cada una). Logs en `C:\Users\franc\AppData\Local\Temp\tmp.JP4cU02P7t\`
+(`m1.txt`, `m2.txt`):
+- M1 (el condicional de `persisted` reemplazado por la llamada directa a `soltarConsumo()`): `panel-tabs` 1 rojo,
+  `C-pageshow-no-persistido` (`Tests  1 failed | 111 passed (112)`).
+- M2 (sin la línea que saca el oyente de `pageshow` en `soltarConsumo`): `panel-tabs` + `lib/panel-history.test.ts`
+  10 rojos (`Tests  10 failed | 274 passed (284)`): `P0-normal`, `P0-catch-tab`, `P0-catch-menu`, `P0-pageshow`,
+  `C-pageshow-no-persistido` y cinco casos de NAV-08 por el `afterEach` que exige cero oyentes.
+
+mutacion M1 (sin el condicional de persisted): C-pageshow-no-persistido=rojo
+mutacion M2 (sin sacar el oyente de pageshow): P0-normal=rojo
+
+**Los dos gates del task 3:**
+- **El primero (estático, suites y build):** `tsc` sin errores; eslint rc 0 en `lib/panel-branch.ts`,
+  `lib/panel-history.ts` y las tres suites, y en `finances-client.tsx` sólo la deuda medida (`467:21 error`); pura
+  `77` archivos / `1876` casos, 0 fallas; las 8 suites `702`, 0 fallas; `panel-tabs` `112`, 0 fallas; `panelNavMode`
+  y `panelBranchPlan` byte-idénticas; `lib/panel-branch.ts` cambió sólo en `runBranchNavigation` y su memoria; cero
+  temporizadores. Dos ítems del gate NO dieron su verde tal cual y se declaran:
+  - **`pageshow` sin disparo único = 3, el gate exige 2.** El conteo del plan es de un bloque de encendido por
+    función y asumía dos bloques; con FUP (`UP-doble` reprodujo) `consumeOwnedBranchEntry` lleva el TERCER bloque,
+    idéntico línea por línea a los otros dos porque así lo exige `C-retroceso-unico-rama`. Es un defecto del
+    conteo del gate con FUP (lo correcto es 2 + FUP = 3), no del código: `pageshow` con disparo único = 0.
+  - **El build dentro del gate:** la primera corrida cayó en el `tsc` del build por `.next/dev/types/routes.d.ts`
+    corrupto (basura después del final del archivo, `ops<LayoutRoute extends LayoutRoutes>` en la L141; fechado
+    2026-11-18 16:29, de un `next dev` anterior). Con ningún `next dev` de forjo-app vivo, los tres archivos de
+    `.next/dev/types/` se apartaron al scratchpad (`apartado-next-dev-types/`), y dos builds sueltos dieron
+    `rc=0` (`Compiled successfully`, `Finished TypeScript`, 64/64 páginas, 0 avisos de Suspense). En el medio hubo
+    dos corridas con errores de `next/font/google` (`queries have exactly one entry`) que no se repitieron, y la
+    re-corrida del gate entero tuvo un worker del build caído (`exited with code: 3221226505`, un crash de Windows
+    con otras suites de la máquina corriendo): entorno, no código (P-7).
+- **El segundo (por el turno, en segundo plano):** logs en `C:\Users\franc\AppData\Local\Temp\tmp.4jcriXdRPu\`
+  (`app.txt`, `estatica.txt`, `scroll.txt`). App: `recorridos medidos: 47 · coinciden con lo esperado: 46 · no
+  coinciden: 1`, la única FALLA es la declarada `R-G3-10-primer-toque-atras-pronto`; R-T 12/12, R-B1 4/4 (con el
+  retroceso triple de `R-B1-inicio`). Estática: 18/18. Scroll: `etiqueta=verde-pjd · modo=tras-el-fix ·
+  recorridos: 8 · coinciden con lo esperado tras el fix: 8`, `paneles con alto minimo: 3`.
+
+**Lo que NO cierra:**
+- El teléfono real: la UAT corta va después del push conjunto (obs-G1 + R2-WR-01 + éste).
+- Safari de iOS y Chrome de Android reales: todo lo de acá es el simulador y Chrome de escritorio headless.
+- El `HistoryUpdater` real de Next dentro de la ventana del recorrido: los `W1-*` lo emulan; las sondas de la app no
+  arman la ráfaga. Y el borde declarado de A: un reemplazo en la ventana que cambie la URL suelta la guarda antes de
+  tiempo, como antes.
+- R2-IN-04 (doble toque en una fila de Clientes), fuera de alcance.
+- El doble toque sobre el COLAPSO (dos toques desde Más → sección antes del recorrido): sin medir; con FUP queda
+  cubierto por lectura por la misma guarda.
+
+cierre (m): CR-01=arreglado · WR-02=arreglado · WR-01=arreglado · IN-01=arreglado · UP=arreglado
