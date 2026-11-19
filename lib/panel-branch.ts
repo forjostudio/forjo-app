@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, consumeOwnedPanelEntry, isExitSentinelOwnedEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, panelViewEntryParam, writePanelUnder, type PanelBranchPlan } from '@/lib/panel-history'
+import { PANEL_MORE, PANEL_ROOT, applyPanelUnder, consumeOwnedBranchEntry, consumeOwnedExitEntry, consumeOwnedPanelEntry, consumoEnVueloDesdeArriba, isExitSentinelOwnedEntry, isForeignOwnedEntry, panelBranchPlan, panelNavMode, panelUnderRoute, panelViewEntryParam, writePanelUnder, type PanelBranchPlan } from '@/lib/panel-history'
 // Los dos helpers del teclado, PUROS y ya exportados, y el hash base de los overlays. Se IMPORTAN:
 // esos dos módulos no se tocan (son intocables de la fase), y reusar sus helpers medidos es lo
 // contrario de copiarlos.
@@ -284,8 +284,18 @@ export function branchCarryMark({
 }
 
 /**
- * Deshace **nuestra** entrada del sentinel de salida. Devuelve `true` si consumió algo, `false` si no
- * tocó nada. Es el primero de los dos pasos de `consume-exit-then-navigate`.
+ * Deshace **nuestra** entrada del sentinel de salida. Devuelve `true` si consumió algo —o si ya hay un
+ * retroceso propio en camino desde esta misma entrada, y entonces NO retrocede: el que viaja hace el
+ * trabajo (IN-01 aplicado a ésta)—, `false` si no tocó nada. Es el primero de los dos pasos de
+ * `consume-exit-then-navigate`, y lo que hace el desmontaje de la barra con `consume`.
+ *
+ * ⚠ **(quick 261119-32l) YA NO RETROCEDE ELLA: DELEGA EN LA GUARDA COMPARTIDA** del consumo en vuelo
+ * (`consumeOwnedExitEntry`, `lib/panel-history.ts`; D-01 del dueño, 2026-11-19). Era el único retroceso del
+ * panel que no la leía: con el aviso armado en Inicio, dos toques a un destino de la barra antes del
+ * recorrido retrocedían dos veces y el segundo consumía la entrada de Inicio. Medido en
+ * `.planning/debug/tabs-en-la-url-medida.md` ## (n): `X2-exit-doble` daba 2 retrocesos y `/afuera`; con la
+ * guarda, 1 y `/dashboard`. La pregunta por la marca sigue siendo de acá (el predicado de abajo, con
+ * {@link isPanelExitEntry} y nuestro `id`), y la memoria de la guarda sigue sin exportarse.
  *
  * ⚠ **POR QUÉ ES UNA TERCERA FUNCIÓN HERMANA** de `consumeOwnedPanelEntry` y
  * {@link consumeOwnedBranchEntry}, y no una extensión de ninguna: cada una pregunta por **su** marca,
@@ -308,35 +318,51 @@ export function branchCarryMark({
  * **desde el evento** del retroceso, nunca en el mismo tick.
  */
 export function consumeOwnedExitSentinel({ id }: { id: number }): boolean {
-  if (!isPanelExitEntry(window.history.state, id)) return false
-  window.history.back()
-  return true
+  return consumeOwnedExitEntry((estado) => isPanelExitEntry(estado, id))
 }
 
 /**
- * El segundo paso de B1 (`consume-view-then-navigate`) que está esperando su recorrido, o `null`. UNO SOLO a la
- * vez (quick 261118-pjd, CR-01 del review de R2-WR-01; decisión del dueño 2026-11-18: el nuevo reemplaza al
- * anterior). Memoria del módulo, no se exporta.
+ * El segundo paso de dos pasos que está esperando su recorrido, o `null`: UNO SOLO en todo el módulo, sea de la
+ * salida (`consume-exit-then-navigate`), de B1 (`consume-view-then-navigate`) o del colapso. Memoria del módulo, no
+ * se exporta. Nació para B1 (quick 261118-pjd, CR-01 del review de R2-WR-01; decisión del dueño 2026-11-18: el
+ * nuevo reemplaza al anterior) y desde el quick 261119-32l es de las tres ramas (IN-03 del review de 261118-pjd,
+ * D-04 del dueño, 2026-11-19: unificar, no sólo declarar).
  *
  * **Por qué hace falta:** cada toque arma su propio closure, y dos closures distintas no se deduplican al
- * engancharlas. Con un consumo en vuelo, `consumeOwnedPanelEntry` devuelve `true` sin retroceder, pero el
- * segundo paso de ese toque ya estaba enganchado: dos toques a Inicio en la barra dejaban dos re-decisores que
- * corrían en el MISMO `popstate`, leían el mismo state y retrocedían cada uno. Medido en
- * `.planning/debug/tabs-en-la-url-medida.md` ## (m): `CR-b1-doble` daba 3 retrocesos y `/afuera` (fuera del
- * sitio) donde lo correcto es 2 y `/dashboard`; con dos fichas apiladas, 4 en vez de 3.
+ * engancharlas. Con un consumo en vuelo, el consumo guardado devuelve `true` sin retroceder, pero el segundo paso
+ * de ese toque ya estaba enganchado: dos toques antes del recorrido dejaban dos segundos pasos que corrían en el
+ * MISMO `popstate`. Medido en `.planning/debug/tabs-en-la-url-medida.md`: en ## (m), `CR-b1-doble` daba 3
+ * retrocesos y `/afuera` (lo correcto, 2 y `/dashboard`); en ## (n), `X2-exit-doble` dos empujes, `CO2-doble-colapso`
+ * dos reemplazos a `/agenda`, y `CO-mixto` —un colapso a `/agenda` y después Inicio— el retroceso a Inicio Y el
+ * reemplazo a `/agenda` pedidos a la vez.
  *
- * **El último toque gana:** antes de enganchar el suyo, el toque nuevo desengancha el pendiente. Y el que corre se
- * suelta a sí mismo ANTES de re-decidir, porque la re-decisión puede volver a entrar a esta misma rama (dos
- * fichas apiladas) y enganchar el siguiente: soltarse después borraría a ése.
+ * **El último toque gana, en las tres ramas y también sobre `up`:** antes de enganchar el suyo, el toque nuevo
+ * suelta el pendiente; `up` lo suelta antes de consumir, porque con un colapso en vuelo el retroceso que viaja es el
+ * mismo primer paso que `up` pide (consumir la sección de Más y aterrizar en Más): soltar el pendiente completa el
+ * `up` del último toque (`CO3-colapso-y-mas`). Por qué unificar y no sólo declarar la asimetría: la salida necesita
+ * la memoria igual (`X2-exit-doble` pide UNA navegación); dejar el colapso afuera sería la misma asimetría que
+ * IN-03 señala; en un mismo state el tipo de plan de dos pasos es único (con la subsección arriba siempre es B1, con
+ * el sentinel arriba la salida, sobre una sección de Más el colapso), así que una memoria compartida no mezcla
+ * ramas; `CO-mixto` sólo cierra así; y a lo sumo un segundo paso pendiente en el módulo achica el radio del
+ * retroceso ignorado en silencio.
+ *
+ * **El que corre se suelta a sí mismo** ANTES de re-decidir o navegar, porque la re-decisión puede volver a entrar a
+ * una rama de dos pasos (dos fichas apiladas) y dejar pendiente el siguiente: soltarse después borraría a ése.
  *
  * **Por qué no se restaura el anterior si el consumo nuevo se niega o tira:** el plan de la rama y las guardas
- * del consumo leen el mismo state en el mismo tick, así que una negativa después de un plan
- * `consume-view-then-navigate` no tiene camino conocido. Y un pendiente viejo sin recorrido en vuelo (la vuelta
- * de la bfcache, un retroceso que el navegador ignoró) es justo el que NO tiene que disparar. Si el consumo nuevo
- * tira con otro recorrido en vuelo, ese recorrido aterriza sin re-decidir: el dueño queda en la sección, nunca
- * fuera del sitio.
+ * del consumo leen el mismo state en el mismo tick, así que una negativa después de un plan de dos pasos no tiene
+ * camino conocido. Y un pendiente viejo sin recorrido en vuelo (la vuelta de la bfcache, un retroceso que el
+ * navegador ignoró) es justo el que NO tiene que disparar. Si el consumo nuevo tira con otro recorrido en vuelo, ese
+ * recorrido aterriza sin segundo paso: el dueño queda donde aterrizó, nunca fuera del sitio.
  */
-let segundoPasoB1Pendiente: (() => void) | null = null
+let segundoPasoPendiente: (() => void) | null = null
+
+/** Suelta el segundo paso pendiente, si hay: lo desengancha del `popstate` y apaga la memoria. No navega. */
+function soltarSegundoPasoPendiente(): void {
+  if (segundoPasoPendiente === null) return
+  window.removeEventListener('popstate', segundoPasoPendiente)
+  segundoPasoPendiente = null
+}
 
 /**
  * El ejecutor. Devuelve `true` si **se hizo cargo** del gesto (⇒ el call site tiene que PREVENIR la
@@ -366,14 +392,30 @@ let segundoPasoB1Pendiente: (() => void) | null = null
  * y volver a decidir con {@link panelBranchPlan}. Sólo lo sabe hacer el hook de la barra, que es quien
  * pide la navegación desde un commit. Sin él la rama **se niega** antes de enganchar nada y el call
  * site degrada a la regla de rutas: es lo que recibe el guard de cambios sin guardar.
+ * **(quick 261119-32l, D-03)** Y sin él, en `up` y en el colapso, un consumo propio todavía en vuelo desde la
+ * entrada de arriba ({@link consumoEnVueloDesdeArriba}) también es una **negativa**: ese consumidor llega
+ * segundos después de un diálogo, así que un consumo en vuelo en ese momento es una guarda colgada (un
+ * retroceso que el navegador ignoró en silencio) y no un recorrido. Antes devolvía `true` sin retroceder ni
+ * navegar y el guard quedaba muerto después de «Descartar» (`S4-guard-up`, ## (n) de
+ * `.planning/debug/tabs-en-la-url-medida.md`); ahora el guard degrada a la regla de rutas, como con una
+ * marca perdida. Es el mismo mecanismo que `exitId` y `reDecidir`: su AUSENCIA es la degradación. Borde
+ * declarado: un consumo propio legítimo en vuelo a la vez que el guard confirma no tiene productor conocido
+ * (el diálogo es modal); si existiera, el guard navegaría y el retroceso aterrizaría igual — un escalón de
+ * más, nunca fuera del sitio.
  *
  * ⚠ **(quick 261118-pjd) LAS TRES RAMAS DE DOS PASOS ENVUELVEN SU CONSUMO EN UN `try`.** El segundo paso se
  * engancha ANTES del retroceso (lección 2), así que si el `back()` tira —el navegador lo rechaza— el
  * evento no llega nunca y el oyente quedaba vivo: el siguiente atrás del sistema navegaba o re-decidía
  * solo (WR-02, medido en `.planning/debug/tabs-en-la-url-medida.md` ## (m): en B1, 2 retrocesos y
  * `/dashboard` donde lo correcto es 1 y `/finances`; y el segundo paso enganchado en las tres ramas). El
- * `catch` lo desengancha y relanza el MISMO error, que ve el handler del toque. Y B1 deja un solo segundo
- * paso pendiente a la vez, el del último toque (CR-01, ver {@link segundoPasoB1Pendiente}).
+ * `catch` lo desengancha y relanza el MISMO error, que ve el handler del toque.
+ *
+ * ⚠ **(quick 261119-32l) DOS TOQUES ANTES DEL RECORRIDO: GANA EL ÚLTIMO, en las tres ramas de dos pasos y
+ * también sobre `up`** (IN-03 del review de 261118-pjd, decidido por el dueño: unificar). Hay a lo sumo UN
+ * segundo paso pendiente en todo el módulo ({@link segundoPasoPendiente}); cada rama lo suelta antes de
+ * enganchar el suyo, y `up` antes de consumir. Medido en ## (n): `X2-destinos` ⇒ un solo `push /clients`,
+ * `CO2-doble-colapso` ⇒ un solo `replace /agenda`, `CO-mixto` ⇒ Inicio sin un `replace` colgado,
+ * `CO3-colapso-y-mas` ⇒ Más.
  */
 export function runBranchNavigation({
   plan,
@@ -407,7 +449,18 @@ export function runBranchNavigation({
 
   // Subir es un paso solo: un retroceso guardado y listo. La guarda de la marca se re-verifica
   // adentro del consumo (lección 1), así que sin marca esto devuelve `false` y nadie retrocede.
-  if (plan === 'up') return consumeOwnedBranchEntry()
+  if (plan === 'up') {
+    // El consumidor que no sabe re-decidir (el guard de cambios sin guardar) llega segundos después de su
+    // diálogo: un consumo propio todavía en vuelo es una guarda colgada, y la salida segura es negarse para que
+    // navegue con la regla de rutas (D-03, `S4-guard-up`; ver el ⚠ de `reDecidir` en el docblock).
+    if (reDecidir === undefined && consumoEnVueloDesdeArriba()) return false
+    // El último toque gana también sobre `up`: con un colapso en vuelo, el retroceso que viaja es el mismo primer
+    // paso que este `up` pide, así que soltar el segundo paso pendiente completa el `up` (`CO3-colapso-y-mas`).
+    soltarSegundoPasoPendiente()
+    // Un `true` sin retroceso es correcto (IN-01): con un consumo en vuelo desde esta entrada, el recorrido que ya
+    // viaja hace el trabajo.
+    return consumeOwnedBranchEntry()
+  }
 
   // ── Consumir el sentinel de salida y navegar: dos pasos, mismo molde que el colapso ───────────
   if (plan === 'consume-exit-then-navigate') {
@@ -419,24 +472,34 @@ export function runBranchNavigation({
     // literal: un segundo dialecto de la regla es exactamente lo que NAV-05 viene a evitar.
     const modo = panelNavMode({ from: root, to, root, more })
     const segundoPaso = () => {
+      // Se suelta a sí mismo antes de navegar: el pendiente del módulo es UNO (ver `segundoPasoPendiente`).
+      if (segundoPasoPendiente === segundoPaso) segundoPasoPendiente = null
       // La navegación se deja PEDIDA desde el evento y la ejecuta un commit (lección 3): acá adentro
       // el router de Next está procesando su propio recorrido y una navegación pedida en este
       // momento SE LLAMA, NO ESCRIBE NADA y el dueño se queda donde estaba.
       navigate(to, modo)
     }
+    // El último toque gana (IN-03): el segundo paso de un toque anterior que todavía espera su recorrido se
+    // suelta, y queda registrado el de éste. Con dos toques antes del recorrido, una sola navegación (`X2-*`).
+    soltarSegundoPasoPendiente()
+    segundoPasoPendiente = segundoPaso
     // ⚠ ENGANCHADO ACÁ, EN EL GESTO, Y CON DISPARO ÚNICO (lección 2), igual que el colapso.
     window.addEventListener('popstate', segundoPaso, { once: true })
     try {
+      // El consumo pasa por la guarda compartida del consumo en vuelo (D-01): con un retroceso propio ya en
+      // camino desde el sentinel devuelve `true` sin retroceder, y el que viaja hace el trabajo.
       if (consumeOwnedExitSentinel({ id: exitId })) return true
     } catch (e) {
-      // El retroceso tiró: tampoco va a llegar el evento. Se desengancha y se relanza el mismo error.
+      // El retroceso tiró: tampoco va a llegar el evento. Se desengancha, se apaga la memoria y se relanza.
       window.removeEventListener('popstate', segundoPaso)
+      segundoPasoPendiente = null
       throw e
     }
     // El consumo se negó (la entrada de arriba ya no lleva NUESTRA marca): no va a llegar ningún
     // evento, así que el listener hay que sacarlo a mano o queda armado para el próximo retroceso
     // del dueño y dispara una navegación que nadie pidió.
     window.removeEventListener('popstate', segundoPaso)
+    segundoPasoPendiente = null
     return false
   }
 
@@ -448,16 +511,16 @@ export function runBranchNavigation({
     const segundoPaso = () => {
       // Se suelta a sí mismo ANTES de re-decidir: la re-decisión puede volver a entrar a esta rama (dos
       // fichas apiladas) y dejar pendiente el siguiente, que no hay que borrar.
-      if (segundoPasoB1Pendiente === segundoPaso) segundoPasoB1Pendiente = null
+      if (segundoPasoPendiente === segundoPaso) segundoPasoPendiente = null
       // La decisión NO se toma acá: se re-toma con la pila real, parados en la entrada de la sección
       // (que sí lleva la marca de la rama). Quien re-decide pide su navegación en estado (lección 3)
       // y hace sus retrocesos por este mismo ejecutor, con las guardas de cada consumo.
       reDecidir()
     }
-    // Un solo segundo paso pendiente: el de este toque reemplaza al de un toque anterior que todavía
-    // espera su recorrido (CR-01; ver `segundoPasoB1Pendiente`).
-    if (segundoPasoB1Pendiente !== null) window.removeEventListener('popstate', segundoPasoB1Pendiente)
-    segundoPasoB1Pendiente = segundoPaso
+    // Un solo segundo paso pendiente en el módulo: el de este toque reemplaza al de un toque anterior que
+    // todavía espera su recorrido (CR-01 de R2-WR-01; desde el quick 261119-32l, de las tres ramas).
+    soltarSegundoPasoPendiente()
+    segundoPasoPendiente = segundoPaso
     // ⚠ ENGANCHADO ACÁ, EN EL GESTO, Y CON DISPARO ÚNICO (lección 2).
     window.addEventListener('popstate', segundoPaso, { once: true })
     // El consumo pasa por las DOS guardas de `consumeOwnedPanelEntry` (entrada de otro dueño primero,
@@ -467,16 +530,21 @@ export function runBranchNavigation({
     } catch (e) {
       // El retroceso tiró: el evento no va a llegar. Se desengancha, se apaga la memoria y se relanza.
       window.removeEventListener('popstate', segundoPaso)
-      segundoPasoB1Pendiente = null
+      segundoPasoPendiente = null
       throw e
     }
     window.removeEventListener('popstate', segundoPaso)
-    segundoPasoB1Pendiente = null
+    segundoPasoPendiente = null
     return false
   }
 
   // ── El colapso: dos pasos, y el segundo sale del EVENTO del primero ──────────────────────────
+  // El consumidor que no sabe re-decidir se niega con un consumo propio en vuelo (D-03, `S4-guard-colapso`),
+  // ANTES de crear y enganchar su segundo paso y antes de tocar el pendiente: el guard navega con la regla de rutas.
+  if (reDecidir === undefined && consumoEnVueloDesdeArriba()) return false
   const segundoPaso = () => {
+    // Se suelta a sí mismo antes de re-decidir o navegar: el pendiente del módulo es UNO.
+    if (segundoPasoPendiente === segundoPaso) segundoPasoPendiente = null
     // La marca de la entrada de Más, leída recién ahora: es el único momento en que se puede. Y es
     // también el ÚNICO dato fiable de qué queda debajo del destino después del reemplazo, porque el
     // reemplazo PISA la entrada de Más (ver abajo).
@@ -493,6 +561,8 @@ export function runBranchNavigation({
       // navegación del router (el precedente es la continuación de dos pasos de
       // `lib/dirty-history.ts`, y está medido en E-5). Y pasa igual por las dos guardas: si la marca
       // se perdió en el medio, no se retrocede y se navega, que es la degradación segura.
+      // Un `true` sin retroceso es correcto (IN-01): si ya hay un retroceso propio en camino desde esta entrada
+      // (el doble colapso hacia Inicio, CO1 del review), el recorrido en vuelo completa el segundo consumo.
       if (consumeOwnedBranchEntry()) return
       pedirMarcaPropagada(to, rutaDebajo)
       navigate(to, 'replace')
@@ -508,6 +578,10 @@ export function runBranchNavigation({
     navigate(to, 'replace')
   }
 
+  // El último toque gana (IN-03): se suelta el segundo paso de un toque anterior que todavía espera su
+  // recorrido y queda registrado el de éste (`CO2-doble-colapso`, `CO-mixto`).
+  soltarSegundoPasoPendiente()
+  segundoPasoPendiente = segundoPaso
   // ⚠ ENGANCHADO ACÁ, EN EL GESTO, Y CON DISPARO ÚNICO (lección 2). En un efecto se perdería el
   // evento; sin `once` sobreviviría al segundo paso y el próximo atrás del dueño dispararía una
   // navegación que nadie pidió.
@@ -515,13 +589,15 @@ export function runBranchNavigation({
   try {
     if (consumeOwnedBranchEntry()) return true
   } catch (e) {
-    // El retroceso tiró: el evento no va a llegar. Se desengancha y se relanza el mismo error.
+    // El retroceso tiró: el evento no va a llegar. Se desengancha, se apaga la memoria y se relanza.
     window.removeEventListener('popstate', segundoPaso)
+    segundoPasoPendiente = null
     throw e
   }
   // El consumo se negó (sin marca, o entrada de otro dueño): no va a llegar ningún evento, así que
   // el listener hay que sacarlo a mano o queda armado para el próximo retroceso del dueño.
   window.removeEventListener('popstate', segundoPaso)
+  segundoPasoPendiente = null
   return false
 }
 
@@ -2062,7 +2138,11 @@ export function usePanelBranch({
           vivoAntes: true,
           vivoDespues: sentinelVivoRef.current,
         })
-        if (accion === 'consume') window.history.back()
+        // El retroceso pasa por la guarda compartida del consumo en vuelo, como los otros tres del panel
+        // (D-01 del dueño, quick 261119-32l; lo vigila `C-back-cerrado`). La marca se vuelve a preguntar
+        // adentro, en el MISMO tick que la decisión de arriba, así que la guarda de la cicatriz 2 no cambia;
+        // lo que se suma es que con un retroceso propio ya en camino desde el sentinel no se tira otro.
+        if (accion === 'consume') consumeOwnedExitSentinel({ id })
       })
     }
   }, [id])

@@ -271,9 +271,11 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
         case 'consume-view-then-navigate':
         case 'none':
           if (runBranchNavigation({ plan, to, navigate: navegar })) return
-          // Se negó (marca perdida, o entrada de otro dueño): la degradación segura es navegar con
-          // la regla de rutas. Quedarse sin hacer nada dejaría el gesto del dueño MUERTO después de
-          // que ya aceptó descartar su trabajo, que es el peor resultado de todo este archivo.
+          // Se negó: una marca perdida, una entrada de otro dueño, o un consumo propio todavía en
+          // vuelo desde la entrada de arriba (una guarda colgada por un retroceso que el navegador
+          // ignoró; quick 261119-32l). En los tres casos la salida segura es navegar con la regla de
+          // rutas. Quedarse sin hacer nada dejaría el gesto del dueño MUERTO después de que ya aceptó
+          // descartar su trabajo, que es el peor resultado de todo este archivo.
           navegar(href, panelNavMode({ from, to }))
           return
         default: {

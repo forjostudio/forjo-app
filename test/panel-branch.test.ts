@@ -3023,12 +3023,12 @@ describe('el cableado del desmontaje (G3-4) — auditorías de fuente', () => {
     expect(r.indexOf('window.history.state')).toBeGreaterThan(iQ)
     expect(r.indexOf('isPanelExitEntry(')).toBeGreaterThan(iQ)
     expect(r.indexOf('panelExitUnmountAction(')).toBeGreaterThan(r.indexOf('isPanelExitEntry('))
-    expect(r.indexOf('window.history.back()')).toBeGreaterThan(r.indexOf('panelExitUnmountAction('))
+    expect(r.indexOf('consumeOwnedExitSentinel(')).toBeGreaterThan(r.indexOf('panelExitUnmountAction('))
   })
 
   it('retrocede SÓLO con consume, y conserva la guarda de la referencia y su apagado', () => {
     const r = regionDelDesmontaje()
-    expect(r).toContain("if (accion === 'consume') window.history.back()")
+    expect(r).toContain("if (accion === 'consume') consumeOwnedExitSentinel({ id })")
     expect(r).toContain('if (!sentinelVivoRef.current) return')
     expect(r).toContain('sentinelVivoRef.current = false')
   })
@@ -3053,9 +3053,9 @@ describe('el cableado del desmontaje (G3-4) — auditorías de fuente', () => {
     expect(r.indexOf('recordExitDiag(')).toBeGreaterThan(r.indexOf('panelExitUnmountAction('))
   })
 
-  it('ningún camino NUEVO que retroceda: `history.back()` sigue en DOS call sites del módulo, y cero tiempo', () => {
+  it('ningún camino NUEVO que retroceda: `history.back()` en CERO call sites del módulo: todo retroceso por la guarda compartida, D-01, y cero tiempo', () => {
     const mod = sinComentarios(leer(MOD_DUENO))
-    expect(cuenta(mod, /history\.back\(\)/g)).toBe(2)
+    expect(cuenta(mod, /history\.back\(\)/g)).toBe(0)
     expect(cuenta(mod, /setTimeout|setInterval|requestAnimationFrame|clearTimeout/g)).toBe(0)
   })
 })

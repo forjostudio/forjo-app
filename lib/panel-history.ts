@@ -28,8 +28,10 @@
 //   - NO reescribe historial ajeno (D-01, "historia honesta"): el atrás lo maneja el router de Next y
 //     la vista DERIVA de la URL. Acá no hay ninguna entrada falsa.
 //   - Sólo escucha los dos oyentes que sueltan la guarda del consumo en vuelo (plan 04-07, G-04-7;
-//     compartida con {@link consumeOwnedPanelEntry} desde el quick 261118-kat y con
-//     {@link consumeOwnedBranchEntry} desde el quick 261118-pjd): el `popstate` del recorrido, de disparo
+//     compartida con {@link consumeOwnedPanelEntry} desde el quick 261118-kat, con
+//     {@link consumeOwnedBranchEntry} desde el quick 261118-pjd y con {@link consumeOwnedExitEntry} —el
+//     sentinel de salida de `lib/panel-branch.ts`— desde el quick 261119-32l: cada retroceso del panel pasa
+//     por ella, y `C-back-cerrado` de `test/panel-tabs.test.ts` lo vigila): el `popstate` del recorrido, de disparo
 //     único, y el `pageshow` con `persisted` de la vuelta de la bfcache, que no es de disparo único y lo
 //     saca la propia liberación. Nunca escribe ni decide nada desde esos eventos.
 //   - NO toca `lib/overlay-history.ts`: convive con él mirándole la marca, nada más (NAV-06).
@@ -935,8 +937,11 @@ export function reconciledMemo({
  * líneas —la rama `consume` de {@link applyPanelView} (el tab por defecto, el «Volver» de clientes),
  * {@link consumeOwnedPanelEntry} (el menú, NAV-08, y el primer paso de B1) y, desde el quick 261118-pjd,
  * {@link consumeOwnedBranchEntry} (el `up` de la barra y de B1, el primer paso del colapso y su
- * `second-consume`)—. Mientras está encendida, el ejecutor devuelve `'none'` y los dos consumos de
- * arriba no vuelven a retroceder.
+ * `second-consume`) y, desde el quick 261119-32l, {@link consumeOwnedExitEntry} (el sentinel de salida: el
+ * primer paso de `consume-exit-then-navigate` y el desmontaje de la barra, `lib/panel-branch.ts`)—. Son los
+ * CUATRO retrocesos del panel, y no hay otro: la lista cerrada la vigila `C-back-cerrado`
+ * (`test/panel-tabs.test.ts`, D-01/D-02 del dueño, 2026-11-19). Mientras está encendida, el ejecutor devuelve
+ * `'none'` y los tres consumos de arriba no vuelven a retroceder.
  *
  * **Qué la apaga** (todas pasan por {@link soltarConsumo}):
  *   · el `popstate` del recorrido, con un oyente de disparo único enganchado ANTES del retroceso;
@@ -945,10 +950,14 @@ export function reconciledMemo({
  *     rojo en `.planning/debug/tabs-en-la-url-medida.md` ## (l));
  *   · el `pageshow` con `persisted`, por si la página vuelve de la bfcache sin que llegue el `popstate`
  *     (caso 1: NO reprodujo en Chrome 157 y se puso por decisión del dueño, ver {@link soltarAlVolverDeLaCache});
- *   · el chequeo de LLEGADA en {@link consumeOwnedPanelEntry} y {@link consumeOwnedBranchEntry}: si la
- *     guarda sigue encendida pero cambiaron el state de arriba Y la URL, el recorrido ya llegó y su oyente
- *     todavía no corrió. Es el caso de B1 re-decidiendo ADENTRO del `popstate` de su propio recorrido: su
- *     oyente se enganchó antes que el de la guarda, así que corre primero.
+ *   · el chequeo de LLEGADA en {@link consumeOwnedPanelEntry}, {@link consumeOwnedBranchEntry} y
+ *     {@link consumeOwnedExitEntry}: si la guarda sigue encendida pero cambiaron el state de arriba Y la URL,
+ *     el recorrido ya llegó y su oyente todavía no corrió. Es el caso de B1 re-decidiendo ADENTRO del
+ *     `popstate` de su propio recorrido: su oyente se enganchó antes que el de la guarda, así que corre primero.
+ *
+ * **Quién sólo la mira:** {@link consumoEnVueloDesdeArriba}, la consulta de sólo lectura con la MISMA
+ * condición de llegada, para el consumidor del ejecutor que no sabe re-decidir (el guard de cambios sin
+ * guardar, quick 261119-32l): no la enciende ni la suelta.
  *
  * **Por qué el state Y la URL, y no sólo el state** (quick 261118-pjd, WR-01 del review de R2-WR-01; opción
  * A del dueño, 2026-11-18): el `HistoryUpdater` de Next reemplaza la entrada de arriba en cada commit
@@ -1007,6 +1016,29 @@ function soltarConsumo(): void {
  */
 function soltarAlVolverDeLaCache(e: PageTransitionEvent): void {
   if (e.persisted) soltarConsumo()
+}
+
+/**
+ * ¿Hay un retroceso PROPIO todavía en vuelo desde la entrada de arriba? Sólo PREGUNTA: no suelta la guarda, no la
+ * enciende y no toca el historial (quick 261119-32l, D-03 del dueño; WR-01 del review de 261118-pjd). La condición
+ * es la MISMA, textual, que el chequeo de llegada de {@link consumeOwnedPanelEntry} (lo vigila
+ * `C-retroceso-unico-salida` en `test/panel-tabs.test.ts`): el state O la URL siguen siendo los de la entrada que
+ * se dejó.
+ *
+ * **Quién la usa y por qué:** `runBranchNavigation` (`lib/panel-branch.ts`), en `up` y en el colapso, cuando el
+ * que llama NO sabe re-decidir (sin `reDecidir`): el guard de cambios sin guardar. Ese guard llega SEGUNDOS después
+ * del gesto que lo disparó —el dueño leyó un diálogo y tocó «Descartar»—, y un recorrido real tarda milisegundos:
+ * un consumo propio todavía en vuelo en ese momento es una guarda COLGADA (un retroceso que el navegador ignoró en
+ * silencio), no un recorrido. Con ella, `up` y el colapso devolvían `true` sin retroceder ni navegar, y el guard lo
+ * tomaba como «se hizo cargo»: el gesto quedaba muerto después de aceptar perder el trabajo. Medido en
+ * `.planning/debug/tabs-en-la-url-medida.md` ## (n): `S4-guard-up` daba `se-hizo-cargo`, 0 retrocesos y ninguna
+ * navegación; lo correcto es que el ejecutor se niegue y el guard degrade a la regla de rutas (`push /dashboard`).
+ *
+ * **Lo que NO es:** un reloj (la regla del ciclo es cero tiempo) ni un tercer valor de retorno del consumo (rompería
+ * el contrato booleano que el guard y los candados leen). La respuesta la da la pila, como siempre.
+ */
+export function consumoEnVueloDesdeArriba(): boolean {
+  return consumoEnVuelo && (window.history.state === estadoDelConsumo || window.location.pathname + window.location.search === urlDelConsumo)
 }
 
 /**
@@ -1085,12 +1117,19 @@ function soltarAlVolverDeLaCache(e: PageTransitionEvent): void {
  *     lo sumo un `up` de más, nunca fuera del sitio. Medido en `.planning/debug/tabs-en-la-url-medida.md`
  *     ## (m) con `CR-b1-silencio` (el retroceso ignorado, tres toques a la barra y un atrás del sistema):
  *     4 retrocesos y `/afuera` con el código de antes; 2 y `/dashboard` con el re-decisor único.
+ *     **Desde el quick 261119-32l** el guard de cambios sin guardar ya NO entra en ese radio como gesto
+ *     muerto: su `up` y su colapso preguntan {@link consumoEnVueloDesdeArriba} y, con la guarda colgada, el
+ *     ejecutor se niega y el guard navega con la regla de rutas (`S4-guard-up`, ## (n)). Y el radio suma UN
+ *     productor: el retroceso del sentinel de salida ({@link consumeOwnedExitEntry}) también enciende la guarda,
+ *     así que si el navegador lo ignorara en silencio, los tabs, el menú y la barra quedarían igual de muertos
+ *     hasta el próximo recorrido. Con la misma probabilidad sin medir de siempre: en ningún motor se vio.
  *   - **La guarda se COMPARTE con {@link consumeOwnedPanelEntry}** (quick 261118-kat, caso 3 de R2-WR-01:
  *     medido rojo en los dos sentidos; por el menú un retroceso de más sacaba al dueño a Inicio, y por B1
- *     el tercero lo sacaba del sitio) **y con {@link consumeOwnedBranchEntry}** (quick 261118-pjd,
- *     `UP-doble`). Es una sola memoria y no tres: el menú y el `up`, con un consumo en vuelo desde la misma
- *     entrada, devuelven `true` sin retroceder, y este ejecutor devuelve `'none'` con cualquiera de los dos
- *     en vuelo. El segundo paso de B1 (`consume-view-then-navigate`, `lib/panel-branch.ts`) engancha su
+ *     el tercero lo sacaba del sitio), **con {@link consumeOwnedBranchEntry}** (quick 261118-pjd,
+ *     `UP-doble`) **y con {@link consumeOwnedExitEntry}** (quick 261119-32l, `X2-exit-doble`: dos toques a la
+ *     barra desde Inicio con el aviso armado daban 2 retrocesos y `/afuera`). Es una sola memoria y no cuatro:
+ *     el menú, el `up` y el sentinel, con un consumo en vuelo desde la misma entrada, devuelven `true` sin
+ *     retroceder, y este ejecutor devuelve `'none'` con cualquiera de los tres en vuelo. El segundo paso de B1 (`consume-view-then-navigate`, `lib/panel-branch.ts`) engancha su
  *     oyente ANTES del consumo, así que dentro de su `popstate` corre antes que el de la guarda: por eso
  *     los dos consumos preguntan si el recorrido llegó (cambiaron el state Y la URL, ver
  *     {@link consumoEnVuelo}) en vez de fiarse sólo de la bandera.
@@ -1355,7 +1394,9 @@ export function consumeOwnedPanelEntry(): boolean {
 
 /**
  * Deshace la entrada de **sección de la rama de Más** que tengamos arriba. Devuelve `true` si
- * consumió algo, `false` si no tocó nada. Es el retroceso guardado de `up` y del colapso.
+ * consumió algo —o si ya hay un retroceso propio en camino desde esta misma entrada, y entonces NO
+ * retrocede: el que viaja hace el trabajo (quick 261119-32l, IN-01 del review de 261118-pjd)—, `false` si
+ * no tocó nada. Es el retroceso guardado de `up` y del colapso.
  *
  * ⚠ **POR QUÉ ES UNA FUNCIÓN HERMANA Y NO UNA EXTENSIÓN DE {@link consumeOwnedPanelEntry}.** Dos
  * motivos, y el primero es un candado:
@@ -1408,6 +1449,67 @@ export function consumeOwnedBranchEntry(): boolean {
   const actual: unknown = window.history.state
   if (isForeignOwnedEntry(actual)) return false
   if (panelUnderRoute(actual) === null) return false
+  // El mismo bloque de encendido que la rama `consume` de `applyPanelView`, línea por línea.
+  consumoEnVuelo = true
+  estadoDelConsumo = actual
+  urlDelConsumo = window.location.pathname + window.location.search
+  try {
+    window.addEventListener('popstate', soltarConsumo, { once: true })
+    window.addEventListener('pageshow', soltarAlVolverDeLaCache)
+    window.history.back()
+  } catch (e) {
+    soltarConsumo()
+    throw e
+  }
+  return true
+}
+
+/**
+ * Deshace la entrada del **sentinel de salida** de `lib/panel-branch.ts` que tengamos arriba, por la guarda
+ * compartida del consumo en vuelo. Devuelve `true` si consumió algo —o si ya hay un retroceso propio en camino
+ * desde esta misma entrada, y entonces NO retrocede: el que viaja hace el trabajo—, `false` si no tocó nada. La
+ * llaman `consumeOwnedExitSentinel` (el primer paso de `consume-exit-then-navigate`) y el desmontaje de la barra
+ * (`usePanelBranch`), los dos en `lib/panel-branch.ts`.
+ *
+ * **Por qué existe** (quick 261119-32l, CR-01 del review de 261118-pjd; D-01 del dueño, 2026-11-19): el retroceso
+ * del sentinel era el único del panel que no leía la guarda. Con el aviso de salida armado en Inicio, dos toques a
+ * un destino de la barra antes del recorrido leían dos veces el MISMO sentinel y retrocedían dos veces: el primero
+ * consumía el sentinel y el segundo la entrada de Inicio. Medido en `.planning/debug/tabs-en-la-url-medida.md`
+ * ## (n): `X2-exit-doble` daba 2 retrocesos y `/afuera` (fuera del sitio, la cicatriz 2) con dos empujes; lo
+ * correcto, y lo que da con la guarda, es 1, `/dashboard` y un solo empuje.
+ *
+ * **Por qué es la CUARTA COPIA y no un ayudante compartido:** es el mismo motivo que las otras tres. El chequeo de
+ * llegada es textual el de {@link consumeOwnedPanelEntry} y el bloque de encendido es textual el de la rama
+ * `consume` de {@link applyPanelView}; las copias se leen enteras en cada punto de retroceso, que es la disciplina
+ * de la cicatriz 2. Que no deriven lo vigila `C-retroceso-unico-salida`, y que no aparezca un quinto retroceso
+ * fuera de la guarda lo vigila `C-back-cerrado` (los dos en `test/panel-tabs.test.ts`).
+ *
+ * **Por qué recibe un PREDICADO y no el `id`:** la pregunta por la marca de ESTA instancia es del dueño del
+ * sentinel (`isPanelExitEntry`, en `lib/panel-branch.ts`, que ya importa de acá: al revés sería un import
+ * circular), y la memoria de la guarda sigue sin exportarse. La guarda de propiedad se hace UNA vez, después del
+ * chequeo de llegada y antes del encendido, igual que en las hermanas.
+ *
+ * **La nota del hash (IN-02, declarado):** la URL del sentinel es la de Inicio con `#salir`, y la comparación de la
+ * guarda mira `pathname + search`, no el hash. Así que al aterrizar en Inicio el chequeo de llegada todavía la da
+ * por «en vuelo» hasta que corre su oyente de liberación, en el MISMO `popstate`. En ese `popstate` ningún consumo
+ * guardado corre antes: el segundo paso de la salida sólo pide la navegación. Y el radio del residuo crece en UN
+ * productor: un retroceso del sentinel que el navegador ignorara en silencio también deja la guarda colgada (tabs,
+ * menú y barra muertos hasta el próximo recorrido), con la misma probabilidad sin medir de siempre.
+ *
+ * ⚠ **`history.back()` es ASÍNCRONO.** El call site tiene que PREVENIR la navegación y pedir la suya desde el
+ * evento del retroceso, nunca en el mismo tick.
+ */
+export function consumeOwnedExitEntry(esNuestra: (estado: unknown) => boolean): boolean {
+  // El consumo en vuelo va PRIMERO, igual que en el menú y en la rama: con el state o la URL de la entrada que se
+  // está dejando, el retroceso que ya viaja hace el trabajo y no se tira otro. Si cambiaron los dos, el recorrido ya
+  // llegó y su oyente todavía no corrió: se suelta y se sigue.
+  if (consumoEnVuelo) {
+    if (window.history.state === estadoDelConsumo || window.location.pathname + window.location.search === urlDelConsumo) return true
+    soltarConsumo()
+  }
+  const actual: unknown = window.history.state
+  // La única guarda de propiedad: la marca del sentinel de ESTA instancia (la pregunta la hace su dueño).
+  if (!esNuestra(actual)) return false
   // El mismo bloque de encendido que la rama `consume` de `applyPanelView`, línea por línea.
   consumoEnVuelo = true
   estadoDelConsumo = actual
