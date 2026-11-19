@@ -58,3 +58,20 @@ export const GOOGLE_RETURN: Readonly<OAuthReturnPolicy> = {
   allowed: ['negocio', 'agenda', 'onboarding'] as const,
   fallback: 'agenda',
 }
+
+// ── Aviso de la vuelta (IN-02) ───────────────────────────────────────────────────────────────────
+// Qué se le dice al dueño al volver del OAuth. El `?mp=`/`?google=` de la URL sólo dice QUE hubo una
+// vuelta; el contenido del aviso lo decide el booleano leído de la base (T-q8v-05):
+// - conectado → `success`, aunque la URL diga `error` (una reconexión que falló con la conexión anterior
+//   sana): la tarjeta dice «Conectado» y el aviso no la contradice.
+// - no conectado + `error` → `error` (inline con «Reintentar»).
+// - no conectado + `connected` → `unconfirmed`: un `connected` fabricado, o un callback que guardó los
+//   secretos sin `mp_user_id`. Nunca se anuncia un éxito que la base no confirma.
+// - cualquier otro valor → sin aviso.
+export type OAuthReturnNotice = 'success' | 'error' | 'unconfirmed' | null
+
+export function oauthReturnNotice(result: string | null, connected: boolean): OAuthReturnNotice {
+  if (result !== 'connected' && result !== 'error') return null
+  if (connected) return 'success'
+  return result === 'error' ? 'error' : 'unconfirmed'
+}

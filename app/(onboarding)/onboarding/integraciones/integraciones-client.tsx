@@ -9,6 +9,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { vueltaDeOAuthPendiente } from '@/lib/panel-tabs'
+import { oauthReturnNotice, type OAuthReturnNotice } from '@/lib/oauth-return'
 import { stepperSteps, INTEGRACIONES_STEP } from '@/lib/onboarding-steps'
 import { OnboardingStepper } from '@/components/onboarding/onboarding-stepper'
 
@@ -41,22 +42,27 @@ function GoogleCalendarLogo({ className }: { className?: string }) {
   return <Image src="/google-calendar.png" alt="" width={20} height={20} className={className} />
 }
 
+/** Aviso inline de la tarjeta tras la vuelta del OAuth (el `success` va sólo por toast). */
+type CardNotice = Exclude<OAuthReturnNotice, 'success'>
+
 interface IntegrationCardProps {
   logo: ReactNode
   title: string
   description: string
   connected: boolean
-  error: boolean
+  notice: CardNotice
   /** Esta tarjeta es la que se tocó y el navegador está yendo al proveedor. */
   connecting: boolean
   /** Alguna tarjeta está conectando: se deshabilitan los botones de las dos. */
   disabled: boolean
   connectLabel: string
   errorText: string
+  /** Volvió `connected` pero la base no lo confirma: mensaje neutro, sin éxito ni error. */
+  unconfirmedText: string
   onConnect: () => void
 }
 
-function IntegrationCard({ logo, title, description, connected, error, connecting, disabled, connectLabel, errorText, onConnect }: IntegrationCardProps) {
+function IntegrationCard({ logo, title, description, connected, notice, connecting, disabled, connectLabel, errorText, unconfirmedText, onConnect }: IntegrationCardProps) {
   const titleId = useId()
   return (
     <section aria-labelledby={titleId} className="rounded-lg border border-border p-4 space-y-3">
@@ -75,11 +81,18 @@ function IntegrationCard({ logo, title, description, connected, error, connectin
         <p role="status" className="text-sm flex items-center gap-1.5">
           <Check aria-hidden="true" className="w-4 h-4 text-primary shrink-0" /> Conectado
         </p>
-      ) : error ? (
+      ) : notice === 'error' ? (
         <div className="space-y-3">
           <p role="alert" className="text-sm text-destructive">{errorText}</p>
           <Button className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
             {connecting ? 'Conectando…' : 'Reintentar'}
+          </Button>
+        </div>
+      ) : notice === 'unconfirmed' ? (
+        <div className="space-y-3">
+          <p role="status" className="text-sm text-muted-foreground">{unconfirmedText}</p>
+          <Button className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
+            {connecting ? 'Conectando…' : connectLabel}
           </Button>
         </div>
       ) : (
@@ -93,8 +106,8 @@ function IntegrationCard({ logo, title, description, connected, error, connectin
 
 export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEnabled, googleConnected }: Props) {
   const [connecting, setConnecting] = useState<Provider | null>(null)
-  const [mpError, setMpError] = useState(false)
-  const [googleError, setGoogleError] = useState(false)
+  const [mpNotice, setMpNotice] = useState<CardNotice>(null)
+  const [googleNotice, setGoogleNotice] = useState<CardNotice>(null)
 
   // Vuelta del OAuth (D-05). Molde de Negocio → Integraciones, SIN `applyPanelView` (es el escritor del
   // historial del panel): acá alcanza un `replaceState`, que además es síncrono.
@@ -111,18 +124,18 @@ export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEn
     // además, no corre dentro del cuerpo del efecto.
     // Sin limpieza A PROPÓSITO: el desmontaje simulado del modo estricto la correría y, como la segunda
     // corrida ya no ve la query, el aviso no saldría nunca.
+    // Qué se avisa lo decide el booleano del server, no la URL (IN-02, `oauthReturnNotice`): conectado
+    // → éxito aunque diga `error`; no conectado + `error` → error inline; no conectado + `connected` →
+    // mensaje neutro, sin anunciar un éxito que la base no confirma.
     setTimeout(() => {
-      // El éxito sólo se anuncia si la base lo confirma: un `?mp=connected` fabricado no dice nada.
-      if (mp === 'connected' && mpConnected) toast.success('MercadoPago conectado')
-      else if (mp === 'error') {
-        toast.error('No se pudo conectar con MercadoPago')
-        setMpError(true)
-      }
-      if (google === 'connected' && googleConnected) toast.success('Google Calendar conectado')
-      else if (google === 'error') {
-        toast.error('No se pudo conectar con Google Calendar')
-        setGoogleError(true)
-      }
+      const mpAviso = oauthReturnNotice(mp, mpConnected)
+      if (mpAviso === 'success') toast.success('MercadoPago conectado')
+      else if (mpAviso === 'error') toast.error('No se pudo conectar con MercadoPago')
+      if (mpAviso !== 'success') setMpNotice(mpAviso)
+      const googleAviso = oauthReturnNotice(google, googleConnected)
+      if (googleAviso === 'success') toast.success('Google Calendar conectado')
+      else if (googleAviso === 'error') toast.error('No se pudo conectar con Google Calendar')
+      if (googleAviso !== 'success') setGoogleNotice(googleAviso)
     }, 0)
   }, [mpConnected, googleConnected])
 
@@ -138,13 +151,13 @@ export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEn
 
   const connectMp = () => {
     setConnecting('mp')
-    setMpError(false)
+    setMpNotice(null)
     window.location.assign('/api/mercadopago/connect?from=onboarding')
   }
 
   const connectGoogle = () => {
     setConnecting('google')
-    setGoogleError(false)
+    setGoogleNotice(null)
     window.location.assign('/api/google/connect?from=onboarding')
   }
 
@@ -178,11 +191,12 @@ export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEn
                 title="MercadoPago"
                 description="Cobrá las señas de los turnos directo en tu cuenta. Si no pedís seña al reservar, podés saltear esto."
                 connected={mpConnected}
-                error={mpError}
+                notice={mpNotice}
                 connecting={connecting === 'mp'}
                 disabled={connecting !== null}
                 connectLabel="Conectar con MercadoPago"
                 errorText="No se pudo conectar con MercadoPago. Probá de nuevo o conectalo después desde Negocio → Integraciones."
+                unconfirmedText="No pudimos confirmar la conexión con MercadoPago. Si ya la autorizaste, probá de nuevo."
                 onConnect={connectMp}
               />
             )}
@@ -192,11 +206,12 @@ export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEn
                 title="Google Calendar"
                 description="Tus turnos aparecen solos en tu Google Calendar."
                 connected={googleConnected}
-                error={googleError}
+                notice={googleNotice}
                 connecting={connecting === 'google'}
                 disabled={connecting !== null}
                 connectLabel="Conectar Google Calendar"
                 errorText="No se pudo conectar con Google Calendar. Probá de nuevo o conectalo después desde Negocio → Integraciones."
+                unconfirmedText="No pudimos confirmar la conexión con Google Calendar. Si ya la autorizaste, probá de nuevo."
                 onConnect={connectGoogle}
               />
             )}
