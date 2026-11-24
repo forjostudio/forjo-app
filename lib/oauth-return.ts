@@ -59,6 +59,17 @@ export const GOOGLE_RETURN: Readonly<OAuthReturnPolicy> = {
   fallback: 'agenda',
 }
 
+// ── Motivo del error de la vuelta (quick 261124-obs) ─────────────────────────────────────────────
+// Cuando el callback de MP falla por una causa que el dueño puede resolver, vuelve con
+// `?mp=error&motivo=<token>`. El callback sólo puede emitir un token de esta lista CERRADA (el tipo lo
+// obliga), nunca texto libre ni un mensaje de Postgres; quien lo lee lo normaliza contra la misma lista
+// y muestra una constante, jamás el valor de la URL (un link pegado no puede inyectar texto).
+// - `cuenta-en-uso`: la cuenta de MP que autorizó ya está conectada a otro negocio de Forjo (índice
+//   único `businesses_mp_user_id_key`, migración 082 → 23505 en el update del callback).
+export type MpErrorReason = 'cuenta-en-uso'
+
+export const MP_ERROR_REASONS = ['cuenta-en-uso'] as const satisfies readonly MpErrorReason[]
+
 // ── Aviso de la vuelta (IN-02) ───────────────────────────────────────────────────────────────────
 // Qué se le dice al dueño al volver del OAuth. El `?mp=`/`?google=` de la URL sólo dice QUE hubo una
 // vuelta; el contenido del aviso lo decide el booleano leído de la base (T-q8v-05):

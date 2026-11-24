@@ -70,14 +70,28 @@ describe('createDepositPreference — 401 del cobro (D-04, MPCONN-06)', () => {
 
 describe('callback OAuth — heal del flag (D-06, MPCONN-05)', () => {
   it('reconexión exitosa escribe mp_connection_status: connected en el update owner-scoped', async () => {
-    const bizUpdateSpy = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }))
+    // Update encadenable (.eq('id').eq('owner_id')) y awaitable (quick 261124-obs).
+    const bizUpdateSpy = vi.fn(() => {
+      const builder = {
+        eq: vi.fn(() => builder),
+        then: (resolve: (v: { error: null }) => unknown) => Promise.resolve({ error: null }).then(resolve),
+      }
+      return builder
+    })
     const fakeSupabase = {
       auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'user-1' } } })) },
       from: vi.fn((table: string) => {
         if (table === 'businesses') {
           return {
             select: vi.fn(() => ({
-              eq: vi.fn(() => ({ single: vi.fn(async () => ({ data: { id: 'biz-1' } })) })),
+              // La cadena de negocioDelDueno: order → limit → maybeSingle (quick 261124-obs).
+              eq: vi.fn(() => ({
+                order: vi.fn(() => ({
+                  limit: vi.fn(() => ({
+                    maybeSingle: vi.fn(async () => ({ data: { id: 'biz-1' }, error: null })),
+                  })),
+                })),
+              })),
             })),
             update: bizUpdateSpy,
           }

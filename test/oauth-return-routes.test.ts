@@ -34,13 +34,25 @@ import { GET as mpConnect } from '@/app/api/mercadopago/connect/route'
 import { GET as mpCallback } from '@/app/api/mercadopago/callback/route'
 import { GET as googleConnect } from '@/app/api/google/connect/route'
 import { GET as googleCallback } from '@/app/api/google/callback/route'
+import { MP_ERROR_REASONS } from '@/lib/oauth-return'
 
 // Session client mínimo: el dueño `user-1` con su negocio `biz-1`; updates y upserts sanos. Registra
 // cada `eq` sobre `businesses` y cada `upsert` sobre `business_secrets` (IN-01): sin eso, un callback
 // que dejara de filtrar por `owner_id` seguiría en verde (T-q8v-03).
-function fakeSupabase() {
+//
+// Opciones (quick 261124-obs): `updateError` es lo que devuelve el update de businesses (p. ej. el 23505
+// del índice de la 082) y `bizRead` lo que devuelve la lectura del negocio. El `eq` del select expone
+// `single` (el callback de Google lo sigue usando) Y la cadena `order → limit → maybeSingle` de
+// `negocioDelDueno` (el callback de MP); cada paso de la cadena queda registrado en `readChain`.
+type FakeOpts = {
+  updateError?: { code: string; message: string } | null
+  bizRead?: { data: unknown; error: { code: string; message: string } | null }
+}
+function fakeSupabase(opts: FakeOpts = {}) {
   const eqCalls: Array<{ op: 'select' | 'update'; args: unknown[] }> = []
+  const readChain: Array<{ step: 'order' | 'limit' | 'maybeSingle' | 'single'; args: unknown[] }> = []
   const upserts: unknown[] = []
+  const bizRead = opts.bizRead ?? { data: { id: 'biz-1' }, error: null }
   const client = {
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'user-1' } } })) },
     from: vi.fn((table: string) => {
@@ -49,15 +61,40 @@ function fakeSupabase() {
           select: vi.fn(() => ({
             eq: vi.fn((...args: unknown[]) => {
               eqCalls.push({ op: 'select', args })
-              return { single: vi.fn(async () => ({ data: { id: 'biz-1' } })) }
+              return {
+                single: vi.fn(async () => {
+                  readChain.push({ step: 'single', args: [] })
+                  return bizRead
+                }),
+                order: vi.fn((...orderArgs: unknown[]) => {
+                  readChain.push({ step: 'order', args: orderArgs })
+                  return {
+                    limit: vi.fn((...limitArgs: unknown[]) => {
+                      readChain.push({ step: 'limit', args: limitArgs })
+                      return {
+                        maybeSingle: vi.fn(async () => {
+                          readChain.push({ step: 'maybeSingle', args: [] })
+                          return bizRead
+                        }),
+                      }
+                    }),
+                  }
+                }),
+              }
             }),
           })),
-          update: vi.fn(() => ({
-            eq: vi.fn(async (...args: unknown[]) => {
-              eqCalls.push({ op: 'update', args })
-              return { error: null }
-            }),
-          })),
+          // Builder encadenable y awaitable: cada `eq` se registra y devuelve el mismo builder.
+          update: vi.fn(() => {
+            const builder = {
+              eq: vi.fn((...args: unknown[]) => {
+                eqCalls.push({ op: 'update', args })
+                return builder
+              }),
+              then: (resolve: (v: { error: unknown }) => unknown, reject?: (e: unknown) => unknown) =>
+                Promise.resolve({ error: opts.updateError ?? null }).then(resolve, reject),
+            }
+            return builder
+          }),
         }
       }
       // business_secrets
@@ -69,13 +106,26 @@ function fakeSupabase() {
       }
     }),
   }
-  return Object.assign(client, { eqCalls, upserts })
+  return Object.assign(client, { eqCalls, readChain, upserts })
 }
 
-// Todo `eq` sobre `businesses` filtra por el `owner_id` de la sesión, y hubo al menos uno por cada op.
+// Todo `eq` del select sobre `businesses` filtra por el `owner_id` de la sesión; el update filtra por el
+// id del negocio resuelto Y por `owner_id` (un callback que soltara owner_id sigue en rojo, T-q8v-03).
+// Hubo al menos un `eq` por cada op pedida.
 function expectOwnerScoped(sb: ReturnType<typeof fakeSupabase>, ops: Array<'select' | 'update'>) {
   for (const op of ops) expect(sb.eqCalls.some(c => c.op === op), `no hubo ${op} sobre businesses`).toBe(true)
-  for (const c of sb.eqCalls) expect(c.args).toEqual(['owner_id', 'user-1'])
+  for (const c of sb.eqCalls.filter(c => c.op === 'select')) expect(c.args).toEqual(['owner_id', 'user-1'])
+  if (ops.includes('update')) {
+    const updateEqs = sb.eqCalls.filter(c => c.op === 'update').map(c => c.args)
+    expect(updateEqs).toContainEqual(['id', 'biz-1'])
+    expect(updateEqs).toContainEqual(['owner_id', 'user-1'])
+  }
+}
+
+// El `motivo` de un Location, si existe, sale de la lista cerrada REAL.
+function expectMotivoCerrado(res: Response) {
+  const motivo = new URL(res.headers.get('location')!).searchParams.get('motivo')
+  if (motivo !== null) expect(MP_ERROR_REASONS as readonly string[]).toContain(motivo)
 }
 
 function req(url: string, cookie?: string) {
@@ -204,6 +254,70 @@ describe('MP callback', () => {
     expect(dest(res)).toBe('/onboarding/integraciones?mp=error')
     expect(h.exchangeMpCodeMock).not.toHaveBeenCalled()
     expectDeleted(res, 'mp_oauth_from')
+  })
+
+  // ── Cuenta de MP ya conectada a otro negocio (quick 261124-obs, migración 082) ──
+  const dup = { code: '23505', message: 'duplicate key value violates unique constraint "businesses_mp_user_id_key"' }
+
+  it.each([
+    ['mp_oauth_from=onboarding', 'mp_oauth_state=xyz; mp_oauth_from=onboarding', '/onboarding/integraciones?mp=error&motivo=cuenta-en-uso'],
+    ['sin mp_oauth_from', 'mp_oauth_state=xyz', '/negocio?mp=error&motivo=cuenta-en-uso'],
+  ])('update con 23505 y %s → %s, sin secretos y con las cookies borradas', async (_label, cookie, expected) => {
+    const sb = fakeSupabase({ updateError: dup })
+    h.createClientMock.mockResolvedValue(sb)
+    h.exchangeMpCodeMock.mockResolvedValue(tokens)
+    const res = await mpCallback(req(MP_CALLBACK, cookie))
+
+    expect(dest(res)).toBe(expected)
+    expectMotivoCerrado(res)
+    // Nada de la cuenta rechazada llega a business_secrets: el negocio conserva sus tokens anteriores.
+    expect(sb.upserts).toEqual([])
+    expectDeleted(res, 'mp_oauth_state')
+    expectDeleted(res, 'mp_oauth_from')
+  })
+
+  it('update con otro error (42501) → /negocio?mp=error sin motivo y sin secretos', async () => {
+    const sb = fakeSupabase({ updateError: { code: '42501', message: 'permission denied' } })
+    h.createClientMock.mockResolvedValue(sb)
+    h.exchangeMpCodeMock.mockResolvedValue(tokens)
+    const res = await mpCallback(req(MP_CALLBACK, 'mp_oauth_state=xyz'))
+
+    expect(dest(res)).toBe('/negocio?mp=error')
+    expect(sb.upserts).toEqual([])
+  })
+
+  it('flujo sano → lee el negocio más viejo con maybeSingle y el update va por id + owner_id', async () => {
+    const sb = fakeSupabase()
+    h.createClientMock.mockResolvedValue(sb)
+    h.exchangeMpCodeMock.mockResolvedValue(tokens)
+    const res = await mpCallback(req(MP_CALLBACK, 'mp_oauth_state=xyz'))
+
+    expect(dest(res)).toBe('/negocio?mp=connected')
+    expectMotivoCerrado(res)
+    // Nunca el single de PostgREST: con dos negocios del mismo dueño daba error y no conectaba.
+    expect(sb.readChain).toEqual([
+      { step: 'order', args: ['created_at', { ascending: true }] },
+      { step: 'limit', args: [1] },
+      { step: 'maybeSingle', args: [] },
+    ])
+    expectOwnerScoped(sb, ['select', 'update'])
+    const updateEqs = sb.eqCalls.filter(c => c.op === 'update').map(c => c.args)
+    expect(updateEqs).toEqual([['id', 'biz-1'], ['owner_id', 'user-1']])
+    expect(sb.upserts).toEqual([expect.objectContaining({ business_id: 'biz-1', mp_access_token: 'at' })])
+  })
+
+  it.each([
+    ['falla la lectura', { data: null, error: { code: 'PGRST000', message: 'boom' } }],
+    ['el dueño no tiene negocio', { data: null, error: null }],
+  ])('%s → /negocio?mp=error sin update ni upsert', async (_label, bizRead) => {
+    const sb = fakeSupabase({ bizRead })
+    h.createClientMock.mockResolvedValue(sb)
+    h.exchangeMpCodeMock.mockResolvedValue(tokens)
+    const res = await mpCallback(req(MP_CALLBACK, 'mp_oauth_state=xyz'))
+
+    expect(dest(res)).toBe('/negocio?mp=error')
+    expect(sb.eqCalls.some(c => c.op === 'update')).toBe(false)
+    expect(sb.upserts).toEqual([])
   })
 })
 
