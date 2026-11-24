@@ -174,6 +174,7 @@ describe('negocioDelPanel: la política de las pantallas del panel', () => {
 
     const tres = await negocioDelPanel(sb, 'user-1', 'id, vertical, type')
     expectTypeOf<keyof typeof tres>().toEqualTypeOf<'id' | 'vertical' | 'type'>()
+    expectTypeOf(tres.vertical).toBeAny()
   })
 })
 

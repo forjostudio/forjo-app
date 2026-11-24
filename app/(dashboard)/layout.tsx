@@ -54,12 +54,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // wizard (quick 261124-neg). No se lanza a propósito: según la doc de error.js de Next 16, el
   // `app/(dashboard)/error.tsx` no envuelve al layout de su mismo segmento, así que un throw acá
   // saltearía ese boundary y terminaría en la pantalla genérica de Next, en inglés. El `redirect` de
-  // arriba no va en try/catch: lanza NEXT_REDIRECT.
+  // arriba no va en try/catch: lanza NEXT_REDIRECT. Envoltorio `div` y no `main`: el único `<main>` de
+  // este archivo es el del panel, que test/panel-nav-chrome.test.ts mide como «el elemento principal».
   if (!negocio.ok) {
     return (
-      <main className="min-h-dvh flex items-center justify-center bg-background px-4 py-12">
+      <div className="min-h-dvh flex items-center justify-center bg-background px-4 py-12">
         <PanelErrorDeCarga titulo="No pudimos cargar tu panel" />
-      </main>
+      </div>
     )
   }
   const business = negocio.business

@@ -29,6 +29,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // anotación, `tsc --noEmit` muere por heap; con `--incremental false` sale 0. El alias lo mantiene corto.
 
 type ConsultaDeNegocios = ReturnType<SupabaseClient['from']>
+// Sólo existe en tipos: la usa la instantiation expression `typeof consulta.select<Q>` de abajo.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare const consulta: ConsultaDeNegocios
 /** La fila que devuelve `.select(Q)` del cliente de sesión, tal cual la tipaba el `.single()` de antes. */
 export type FilaDe<Q extends string> = NonNullable<Awaited<ReturnType<typeof consulta.select<Q>>>['data']>[number]
