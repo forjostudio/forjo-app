@@ -14,6 +14,7 @@ import { professionalsForService, isServiceCovered } from '@/lib/staff-services'
 import { blocksBecomingWildcard } from '@/lib/time-block-services'
 import { TAB_PARAM, TABS_NEGOCIO, TABS_CONFIG, resolveTab, toqueDeTab, vueltaDeOAuthPendiente } from '@/lib/panel-tabs'
 import { applyPanelView, panelTabCause, resolveViewParam, sanitizeAction, reconciledMemo } from '@/lib/panel-history'
+import { MP_CUENTA_EN_USO_TEXTO, resolveMpErrorReason } from '@/lib/oauth-return'
 import { nowInAR } from '@/lib/appointment-time'
 import { getPlanLimits, UPGRADE_URL } from '@/lib/plans'
 import { PlanModal } from '@/components/dashboard/plan-modal'
@@ -1119,6 +1120,9 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     if (!vueltaDeOAuthPendiente({ query: params })) return
     const mp = params.get('mp')
     const google = params.get('google')
+    // quick 261124-obs: `?mp=error&motivo=cuenta-en-uso` cuando la cuenta ya está en otro negocio. El
+    // motivo se normaliza contra la lista cerrada y el texto es una constante, nunca el valor de la URL.
+    const motivo = params.get('motivo')
     // El aviso se pide en la PRÓXIMA tarea y no acá: el `<Toaster>` de sonner se suscribe en su propio
     // efecto y está montado DESPUÉS de las páginas (`app/layout.tsx`), así que su efecto corre después
     // de éste y un toast pedido ahora se pierde sin error en un documento nuevo —que es siempre el caso
@@ -1127,12 +1131,15 @@ export function SettingsClient({ business, secrets = EMPTY_SECRETS, initialServi
     // corrida ya no ve la query, el aviso no saldría nunca.
     setTimeout(() => {
       if (mp === 'connected') toast.success('MercadoPago conectado')
-      else if (mp === 'error') toast.error('No se pudo conectar con MercadoPago')
+      else if (mp === 'error') {
+        toast.error(resolveMpErrorReason(motivo) === 'cuenta-en-uso' ? MP_CUENTA_EN_USO_TEXTO : 'No se pudo conectar con MercadoPago')
+      }
       // Google Calendar también vuelve acá cuando se conecta desde Integraciones (?from=negocio).
       if (google === 'connected') toast.success('Google Calendar conectado')
       else if (google === 'error') toast.error('No se pudo conectar con Google Calendar')
     }, 0)
-    applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: params.get(TAB_PARAM), to: 'integraciones', drop: ['mp', 'google'] })
+    // `motivo` viaja sólo con `mp=error` y se limpia en la misma escritura (quick 261124-obs).
+    applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: params.get(TAB_PARAM), to: 'integraciones', drop: ['mp', 'google', 'motivo'] })
   }, [isNegocio])
 
   // Etiqueta del lugar de atención según el rubro (Consultorio/Local/Sucursal).

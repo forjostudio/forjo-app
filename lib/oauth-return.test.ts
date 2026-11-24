@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { oauthReturnPath, resolveOAuthReturn, oauthReturnNotice, MP_RETURN, GOOGLE_RETURN, type OAuthReturnToken } from '@/lib/oauth-return'
+import {
+  oauthReturnPath,
+  resolveOAuthReturn,
+  oauthReturnNotice,
+  resolveMpErrorReason,
+  MP_ERROR_REASONS,
+  MP_CUENTA_EN_USO_TEXTO,
+  MP_RETURN,
+  GOOGLE_RETURN,
+  type OAuthReturnToken,
+} from '@/lib/oauth-return'
 
 // ── Test PURO: sin red, sin credenciales, sin Supabase ─────────────────────────────────────────
 // Importa SOLO de @/lib/oauth-return. Nada del helper de entorno de la carpeta test/ (eso es la marca
@@ -94,4 +104,39 @@ describe('oauthReturnNotice', () => {
       expect(oauthReturnNotice(result, connected)).toBeNull()
     },
   )
+
+  // quick 261124-obs: el motivo sólo cuenta con `error`, y sólo si es un token de la lista cerrada.
+  it.each([
+    ['error', false, 'cuenta-en-uso', 'cuenta-en-uso'],
+    ['error', true, 'cuenta-en-uso', 'cuenta-en-uso'], // tenía otra cuenta: la tarjeta sigue «Conectado», el aviso explica el rechazo
+    ['error', false, 'inventado', 'error'],
+    ['error', true, 'inventado', 'success'], // como hoy
+    ['connected', true, 'cuenta-en-uso', 'success'],
+    ['connected', false, 'cuenta-en-uso', 'unconfirmed'],
+    [null, true, 'cuenta-en-uso', null],
+    [null, false, 'cuenta-en-uso', null],
+  ] as const)('?mp=%s con conectado=%s y motivo=%s → %s', (result, connected, motivo, expected) => {
+    expect(oauthReturnNotice(result, connected, motivo)).toBe(expected)
+  })
+})
+
+// ── Motivo del error de la vuelta (quick 261124-obs) ──
+// El `?motivo=` es texto que cualquiera puede pegar en un link: sólo vale un token textual de la lista.
+describe('resolveMpErrorReason', () => {
+  it('cada token de la lista se resuelve a sí mismo', () => {
+    expect(resolveMpErrorReason('cuenta-en-uso')).toBe('cuenta-en-uso')
+    for (const t of MP_ERROR_REASONS) expect(resolveMpErrorReason(t)).toBe(t)
+  })
+
+  it.each([null, undefined, '', 'Cuenta-En-Uso', ' cuenta-en-uso', 'cuenta-en-uso ', '__proto__', 'constructor', 'inventado', 'cuenta-en-uso&x=1'])(
+    'valor %j → null',
+    raw => {
+      expect(resolveMpErrorReason(raw)).toBeNull()
+    },
+  )
+
+  it('el texto de cuenta en uso no abre con ¿/¡ y nombra al otro negocio', () => {
+    expect(MP_CUENTA_EN_USO_TEXTO).not.toMatch(/[¿¡]/)
+    expect(MP_CUENTA_EN_USO_TEXTO).toContain('otro negocio')
+  })
 })

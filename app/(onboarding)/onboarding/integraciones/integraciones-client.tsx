@@ -9,7 +9,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { vueltaDeOAuthPendiente } from '@/lib/panel-tabs'
-import { oauthReturnNotice, type OAuthReturnNotice } from '@/lib/oauth-return'
+import { MP_CUENTA_EN_USO_TEXTO, oauthReturnNotice, type OAuthReturnNotice } from '@/lib/oauth-return'
 import { stepperSteps, INTEGRACIONES_STEP } from '@/lib/onboarding-steps'
 import { OnboardingStepper } from '@/components/onboarding/onboarding-stepper'
 
@@ -59,11 +59,13 @@ interface IntegrationCardProps {
   errorText: string
   /** Volvió `connected` pero la base no lo confirma: mensaje neutro, sin éxito ni error. */
   unconfirmedText: string
+  /** La cuenta ya está conectada a otro negocio (quick 261124-obs). Sin él, se muestra `errorText`. */
+  inUseText?: string
   onConnect: () => void
 }
 
 // Los botones de la tarjeta van en `outline` (IN-04): el único primario de la pantalla es «Ir al panel».
-function IntegrationCard({ logo, title, description, connected, notice, connecting, disabled, connectLabel, errorText, unconfirmedText, onConnect }: IntegrationCardProps) {
+function IntegrationCard({ logo, title, description, connected, notice, connecting, disabled, connectLabel, errorText, unconfirmedText, inUseText, onConnect }: IntegrationCardProps) {
   const titleId = useId()
   return (
     <section aria-labelledby={titleId} className="rounded-lg border border-border p-4 space-y-3">
@@ -87,6 +89,15 @@ function IntegrationCard({ logo, title, description, connected, notice, connecti
           <p role="alert" className="text-sm text-destructive">{errorText}</p>
           <Button variant="outline" className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
             {connecting ? 'Conectando…' : 'Reintentar'}
+          </Button>
+        </div>
+      ) : notice === 'cuenta-en-uso' ? (
+        // Sólo se ve sin conexión (la rama `connected` va primero). El botón es el de conectar y no
+        // «Reintentar»: repetir con la misma cuenta vuelve a fallar.
+        <div className="space-y-3">
+          <p role="alert" className="text-sm text-destructive">{inUseText ?? errorText}</p>
+          <Button variant="outline" className="h-11 w-full sm:w-auto" onClick={onConnect} disabled={disabled}>
+            {connecting ? 'Conectando…' : connectLabel}
           </Button>
         </div>
       ) : notice === 'unconfirmed' ? (
@@ -117,6 +128,8 @@ export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEn
     if (!vueltaDeOAuthPendiente({ query })) return
     const mp = query.get('mp')
     const google = query.get('google')
+    // Se lee ANTES del replaceState, que limpia la query entera (motivo incluido). quick 261124-obs.
+    const motivo = query.get('motivo')
     // Limpieza SÍNCRONA: la segunda corrida del modo estricto ya no ve la query y el aviso sale una vez.
     window.history.replaceState(null, '', '/onboarding/integraciones')
     // El aviso va en la PRÓXIMA tarea: el `<Toaster>` está montado DESPUÉS de las páginas
@@ -127,10 +140,12 @@ export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEn
     // corrida ya no ve la query, el aviso no saldría nunca.
     // Qué se avisa lo decide el booleano del server, no la URL (IN-02, `oauthReturnNotice`): conectado
     // → éxito aunque diga `error`; no conectado + `error` → error inline; no conectado + `connected` →
-    // mensaje neutro, sin anunciar un éxito que la base no confirma.
+    // mensaje neutro, sin anunciar un éxito que la base no confirma. `error` + motivo `cuenta-en-uso` →
+    // el aviso de cuenta en uso (la lista cerrada la normaliza `oauthReturnNotice`).
     setTimeout(() => {
-      const mpAviso = oauthReturnNotice(mp, mpConnected)
+      const mpAviso = oauthReturnNotice(mp, mpConnected, motivo)
       if (mpAviso === 'success') toast.success('MercadoPago conectado')
+      else if (mpAviso === 'cuenta-en-uso') toast.error(MP_CUENTA_EN_USO_TEXTO)
       else if (mpAviso === 'error') toast.error('No se pudo conectar con MercadoPago')
       if (mpAviso !== 'success') setMpNotice(mpAviso)
       const googleAviso = oauthReturnNotice(google, googleConnected)
@@ -198,6 +213,7 @@ export function IntegracionesClient({ vertical, mpEnabled, mpConnected, googleEn
                 connectLabel="Conectar con MercadoPago"
                 errorText="No se pudo conectar con MercadoPago. Probá de nuevo o conectalo después desde Negocio → Integraciones."
                 unconfirmedText="No pudimos confirmar la conexión con MercadoPago. Si ya la autorizaste, probá de nuevo."
+                inUseText={MP_CUENTA_EN_USO_TEXTO}
                 onConnect={connectMp}
               />
             )}

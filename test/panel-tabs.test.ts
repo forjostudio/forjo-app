@@ -293,7 +293,7 @@ function sanear(grupo: PanelTabGroup) {
 function volverDelOAuth() {
   const params = new URLSearchParams(window.location.search)
   if (!PT.vueltaDeOAuthPendiente({ query: params })) return 'none'
-  return applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: params.get(TAB_PARAM), to: 'integraciones', drop: ['mp', 'google'] })
+  return applyPanelView({ cause: 'programmatic', param: TAB_PARAM, from: params.get(TAB_PARAM), to: 'integraciones', drop: ['mp', 'google', 'motivo'] })
 }
 
 describe('el simulador de pila — el applyPanelView REAL contra una historia falsa', () => {
@@ -421,12 +421,14 @@ describe('el simulador de pila — una entrada AJENA no se vuelve nuestra por un
     '/negocio?tab=integraciones&mp=',
     '/negocio?mp=connected',
     '/negocio?tab=cobros&mp=connected',
+    // quick 261124-obs: el motivo viaja con mp=error y sale en la misma escritura.
+    '/negocio?mp=error&motivo=cuenta-en-uso',
   ]) {
     it(`G-04-8: ${url} → Integraciones limpia sin agregar entradas ni retroceder, y Datos responde`, () => {
       const { pila, actual } = montarHistoria([{ url: '/afuera', state: null }, { url, state: { __NA: true } }])
       volverDelOAuth()
       const q = new URLSearchParams(window.location.search)
-      expect(`${url}: ${q.has('mp') || q.has('google')}`).toBe(`${url}: false`)
+      expect(`${url}: ${q.has('mp') || q.has('google') || q.has('motivo')}`).toBe(`${url}: false`)
       expect(`${url}: ${actual().url}`).toBe(`${url}: /negocio?tab=integraciones`)
       expect(`${url}: ${pila.entradas.length}`).toBe(`${url}: 2`)
       expect(`${url}: ${pila.retrocesos}`).toBe(`${url}: 0`)
@@ -748,7 +750,10 @@ describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
     expect(efecto).toContain('applyPanelView(')
     expect(efecto).toContain("'programmatic'")
     expect(efecto).toContain("to: 'integraciones'")
-    expect(efecto).toContain("drop: ['mp', 'google']")
+    expect(efecto).toContain("drop: ['mp', 'google', 'motivo']")
+    // quick 261124-obs: el motivo se normaliza contra la lista cerrada y el texto es la constante.
+    expect(efecto).toContain('resolveMpErrorReason(')
+    expect(efecto).toContain('MP_CUENTA_EN_USO_TEXTO')
     for (const texto of ['MercadoPago conectado', 'No se pudo conectar con MercadoPago', 'Google Calendar conectado', 'No se pudo conectar con Google Calendar']) {
       expect(efecto).toContain(texto)
     }
@@ -767,7 +772,7 @@ describe('el cableado de los tres grupos (criterio 5, T-1, T-2, D-10)', () => {
     expect(espejo).not.toBe('')
     expect(espejo).toContain('vueltaDeOAuthPendiente(')
     expect(espejo).toContain('window.location.search')
-    expect(espejo).toContain("drop: ['mp', 'google']")
+    expect(espejo).toContain("drop: ['mp', 'google', 'motivo']")
   })
 
   it('(h) Agenda limpia su ?google= por el helper (D-10): un reemplazo stale que borra sólo google', () => {

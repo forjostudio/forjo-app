@@ -70,6 +70,20 @@ export type MpErrorReason = 'cuenta-en-uso'
 
 export const MP_ERROR_REASONS = ['cuenta-en-uso'] as const satisfies readonly MpErrorReason[]
 
+/**
+ * Normaliza el `?motivo=` crudo contra la lista cerrada. Match exacto con `find` (misma razón que
+ * `resolveOAuthReturn`: con un objeto indexado, `'__proto__'` resolvería a algo); cualquier otra cosa
+ * —mayúsculas, espacios, texto inventado— es `null` y la pantalla muestra el error genérico.
+ */
+export function resolveMpErrorReason(raw: string | null | undefined): MpErrorReason | null {
+  if (typeof raw !== 'string') return null
+  return MP_ERROR_REASONS.find(t => t === raw) ?? null
+}
+
+// Una sola fuente para Negocio → Integraciones y para el paso 5 del onboarding.
+export const MP_CUENTA_EN_USO_TEXTO =
+  'Esa cuenta de MercadoPago ya está conectada a otro negocio de Forjo. Conectá otra cuenta o desconectala del otro negocio primero.'
+
 // ── Aviso de la vuelta (IN-02) ───────────────────────────────────────────────────────────────────
 // Qué se le dice al dueño al volver del OAuth. El `?mp=`/`?google=` de la URL sólo dice QUE hubo una
 // vuelta; el contenido del aviso lo decide el booleano leído de la base (T-q8v-05):
@@ -79,10 +93,19 @@ export const MP_ERROR_REASONS = ['cuenta-en-uso'] as const satisfies readonly Mp
 // - no conectado + `connected` → `unconfirmed`: un `connected` fabricado, o un callback que guardó los
 //   secretos sin `mp_user_id`. Nunca se anuncia un éxito que la base no confirma.
 // - cualquier otro valor → sin aviso.
-export type OAuthReturnNotice = 'success' | 'error' | 'unconfirmed' | null
+// - `error` + motivo `cuenta-en-uso` (quick 261124-obs) → `cuenta-en-uso`, esté conectado o no. Si el
+//   negocio ya tenía otra cuenta, la tarjeta sigue diciendo «Conectado» (con la anterior, que el callback
+//   no tocó) y el aviso explica por qué la nueva no entró: anunciar «MercadoPago conectado» escondería el
+//   rechazo. El motivo sólo cuenta con `error`; un motivo fuera de la lista cae a las reglas de arriba.
+export type OAuthReturnNotice = 'success' | 'error' | 'unconfirmed' | 'cuenta-en-uso' | null
 
-export function oauthReturnNotice(result: string | null, connected: boolean): OAuthReturnNotice {
+export function oauthReturnNotice(
+  result: string | null,
+  connected: boolean,
+  motivo: string | null = null,
+): OAuthReturnNotice {
   if (result !== 'connected' && result !== 'error') return null
+  if (result === 'error' && resolveMpErrorReason(motivo) === 'cuenta-en-uso') return 'cuenta-en-uso'
   if (connected) return 'success'
   return result === 'error' ? 'error' : 'unconfirmed'
 }
