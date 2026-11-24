@@ -22,15 +22,37 @@
 //             se adelanta a "vence en 30 s" y, en `refresh-colgado`, CDP retiene POST /auth/v1/token
 //             sin responder nunca.
 //
+//   config-colgada  (quick 261124-iu8) sin tocar la sesion: CDP retiene `POST /rest/v1/services` (un paso
+//             de la configuracion, DESPUES del insert del negocio) sin responder nunca.
+//
 // RESULTADOS (2026-11-24, codigo 02c6a17): mail, password, mail mobile, oauth-ish y refresh-ok → exito
 // (5/5); refresh-colgado → «Guardando…» 40 s sin toast, sin /auth/v1/user, sin negocio (1/1).
+//
+// ESPERADO NUEVO (2026-11-24, escrito ANTES del arreglo — quick 261124-iu8). Desde aca la sonda mide el
+// arreglo, no el mecanismo:
+//   refresh-colgado  `colgado` → `error-y-reintento-ok`: con el refresh retenido, a 25 s o menos del
+//                    click el boton dice «Reintentar» HABILITADO (toast + linea role="alert"), «Atrás»
+//                    estuvo deshabilitado en todas las muestras hasta el reintento (DC-7) y no salio
+//                    ningun POST /rest/v1/businesses. Despues la sonda libera el refresh, espera que se
+//                    suelte el lock `lock:sb-…` y toca «Reintentar» de verdad: tiene que llegar a
+//                    /onboarding/integraciones con EXACTAMENTE 1 negocio del usuario en la base y 1
+//                    solo POST a businesses en toda la corrida (el intento vencido no inserta tarde).
+//                    Si no, el resultado nombra lo que fallo: aviso-tarde, sin-aviso, atras-habilitado,
+//                    inserto-antes-de-liberar, reintento-no-navego, doble-negocio.
+//   config-colgada   `exito`: el paso trabado se corta, sale el toast de que no se guardaron los
+//                    servicios y el alta navega fuera de /onboarding a 25 s o menos del click (si no:
+//                    colgado, tarde, sin-aviso-de-servicios, sin-negocio).
+// Las demas variantes siguen esperando `exito`. Cada corrida borra su usuario de prueba al final
+// (cascada a su negocio).
 //
 // EL ESPERADO esta escrito ANTES de la primera corrida (ver ESPERADO y el archivo de debug): en local,
 // sin lock retenido por otra pestaña, el alta NO se cuelga: /auth/v1/user 200 → POST /rest/v1/businesses
 // 201 → toast de exito → /onboarding/integraciones (o /dashboard si integraciones redirige).
 //
 // COMO SE CORRE (levanta servidor y navegador → siempre por el turno):
-//   node scripts/con-turno.mjs node .planning/debug/probes/onb-crear-negocio-colgado.mjs <mail|password|oauth-ish|refresh-ok|refresh-colgado> [mobile]
+//   node scripts/con-turno.mjs node .planning/debug/probes/onb-crear-negocio-colgado.mjs <mail|password|oauth-ish|refresh-ok|refresh-colgado|config-colgada> [mobile]
+//   (las 7 corridas del quick 261124-iu8: mail, password, "mail mobile", oauth-ish, refresh-ok,
+//   refresh-colgado, config-colgada)
 //
 // QUE NO CIERRA: el Google OAuth real (en local no hay provider), la red de un telefono real, el build
 // de produccion.
@@ -68,7 +90,11 @@ const ESPERADO = {
   //                    una conexion movil muerta) → si H1 vale: «Guardando…» sin toast, sin
   //                    /auth/v1/user, sin POST /rest/v1/businesses y sin negocio en la base.
   'refresh-ok': 'exito',
-  'refresh-colgado': 'colgado',
+  // Hasta el quick 261124-iu8 era 'colgado' (el mecanismo). Esperado nuevo, escrito ANTES del arreglo:
+  // aviso + «Reintentar» a <= 25 s, «Atrás» bloqueado, liberar, reintento sin doble negocio.
+  'refresh-colgado': 'error-y-reintento-ok',
+  // Quick 261124-iu8 (DC-2): un paso de la configuracion trabado no deja el boton en «Guardando…».
+  'config-colgada': 'exito',
 }
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -285,11 +311,13 @@ async function completarWizard(cdp) {
 }
 
 const EXPR_ESTADO = `(async () => {
-  const boton = [...document.querySelectorAll('button')].find((b) => /Crear mi negocio|Guardando/.test(b.textContent))
+  const boton = [...document.querySelectorAll('button')].find((b) => /Crear mi negocio|Guardando|Reintentar/.test(b.textContent))
+  const atras = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Atrás')
   const toasts = [...document.querySelectorAll('[data-sonner-toast]')].map((t) => t.textContent.trim())
+  const alertas = [...document.querySelectorAll('[role="alert"]')].map((a) => a.textContent.trim()).filter(Boolean)
   let locks = null
   try { const q = await navigator.locks.query(); locks = { held: q.held.map((l) => l.name), pending: q.pending.map((l) => l.name) } } catch (e) { locks = String(e) }
-  return { ruta: location.pathname, boton: boton ? boton.textContent.trim() + (boton.disabled ? ' [disabled]' : '') : null, toasts, locks }
+  return { ruta: location.pathname, boton: boton ? boton.textContent.trim() + (boton.disabled ? ' [disabled]' : '') : null, atras: atras ? atras.disabled : null, toasts, alertas, locks }
 })()`
 
 async function main() {
@@ -334,8 +362,17 @@ async function main() {
     // ── Registro de red, consola y excepciones (todo el tiempo; se filtra despues del click) ─────
     const reqs = new Map()
     let marcaClick = null
+    // Cada POST a /rest/v1/businesses (con o sin query), con su hora: el conteo de inserts del alta.
+    const postsNegocio = []
+    // requestId de cada request retenido por CDP Fetch (para liberarlos en refresh-colgado).
+    const retenidos = []
+    cdp.en('Fetch.requestPaused', (p) => {
+      retenidos.push(p.requestId)
+      console.log(`${ts()} RETENIDO (sin responder): ${p.request.method} ${p.request.url.replace(/\?.*$/, '?…')}`)
+    })
     cdp.en('Network.requestWillBeSent', (p) => {
       const u = p.request.url
+      if (p.request.method === 'POST' && /\/rest\/v1\/businesses(\?|$)/.test(u)) postsNegocio.push(Date.now())
       if (!/:54321\/|:3031\//.test(u)) return
       if (/\/_next\/static|__nextjs|\.(png|svg|woff2?|css|js)(\?|$)|webpack-hmr|turbopack/.test(u)) return
       const accion = p.request.headers['Next-Action'] || p.request.headers['next-action']
@@ -401,8 +438,11 @@ async function main() {
       if (r.error) throw new Error(`no se pudo adelantar la sesion: ${r.error}`)
       if (variante === 'refresh-colgado') {
         await cdp.enviar('Fetch.enable', { patterns: [{ urlPattern: '*auth/v1/token*', requestStage: 'Request' }] })
-        cdp.en('Fetch.requestPaused', (p) => console.log(`${ts()} RETENIDO (sin responder nunca): ${p.request.method} ${p.request.url.replace(/\?.*$/, '?…')}`))
       }
+    }
+    if (variante === 'config-colgada') {
+      // Un paso de la configuracion (el insert de servicios, DESPUES del insert del negocio) que no vuelve.
+      await cdp.enviar('Fetch.enable', { patterns: [{ urlPattern: '*rest/v1/services*', requestStage: 'Request' }] })
     }
 
     const antes = await evaluar(cdp, EXPR_ESTADO)
@@ -416,19 +456,92 @@ async function main() {
     let resultado = 'colgado'
     let primerToast = null
     let vioGuardando = false
-    const fin = Date.now() + OBSERVAR_MS
-    while (Date.now() < fin) {
+    const toastsVistos = []
+    const muestras = []
+    const seg = (t) => Number(((t - marcaClick) / 1000).toFixed(1))
+    async function muestra() {
       const e = await evaluar(cdp, EXPR_ESTADO).catch((err) => ({ error: err.message }))
       const linea = JSON.stringify(e)
       if (linea !== ultimo) { console.log(`${ts()} estado: ${linea}`); ultimo = linea }
+      e.t = Date.now()
+      muestras.push(e)
+      for (const t of e.toasts ?? []) if (!toastsVistos.includes(t)) toastsVistos.push(t)
       if (e.toasts?.length && !primerToast) primerToast = e.toasts[0]
       if (/Guardando/.test(e.boton ?? '')) vioGuardando = true
-      if (e.ruta && e.ruta !== '/onboarding') { resultado = 'exito'; await dormir(1500); break }
-      await dormir(500)
+      return e
     }
-    if (resultado !== 'exito' && primerToast && /Error/.test(primerToast)) resultado = 'error'
-    if (resultado === 'colgado' && !vioGuardando) resultado = 'click-no-llego'
+    // Muestrea cada 500 ms hasta que `parar(e)` de true (devuelve esa muestra) o hasta el tope (null).
+    async function observar(topeMs, parar) {
+      const finObs = Date.now() + topeMs
+      while (Date.now() < finObs) {
+        const e = await muestra()
+        if (parar(e)) return e
+        await dormir(500)
+      }
+      return null
+    }
+    const salioDelWizard = (e) => Boolean(e.ruta && e.ruta !== '/onboarding')
+    const destinoOk = (ruta) => ruta === '/onboarding/integraciones' || ruta === '/dashboard'
+    const negociosEnBase = () => Number(sql(`select count(*) from public.businesses b join auth.users u on u.id = b.owner_id where u.email = '${EMAIL}'`))
+
+    if (variante === 'refresh-colgado') {
+      const aviso = await observar(OBSERVAR_MS, (e) => e.boton === 'Reintentar')
+      if (!aviso) {
+        resultado = vioGuardando ? 'colgado' : 'click-no-llego'
+      } else {
+        const tAviso = seg(aviso.t)
+        console.log(`${ts()} AVISO a +${tAviso}s del click · alertas=${JSON.stringify(aviso.alertas)} · POST businesses hasta aca=${postsNegocio.filter((t) => t >= marcaClick).length}`)
+        // Liberar cada request retenido y apagar la intercepcion (un request ya cancelado tira: se tolera).
+        const marcaLiberar = Date.now()
+        const postsAntesDeLiberar = postsNegocio.filter((t) => t >= marcaClick && t < marcaLiberar).length
+        for (const requestId of retenidos) {
+          try { await cdp.enviar('Fetch.continueRequest', { requestId }); console.log(`${ts()} liberado ${requestId}`) } catch (err) { console.log(`${ts()} no se pudo liberar ${requestId}: ${err.message.slice(0, 80)}`) }
+        }
+        await cdp.enviar('Fetch.disable')
+        // Esperar a que auth-js suelte el lock (hasta 15 s).
+        const finLock = Date.now() + 15_000
+        let lockSuelto = false
+        while (Date.now() < finLock) {
+          const held = await evaluar(cdp, `navigator.locks.query().then((q) => q.held.map((l) => l.name))`).catch(() => ['?'])
+          if (!held.some((n) => n.startsWith('lock:sb-'))) { lockSuelto = true; break }
+          await dormir(250)
+        }
+        console.log(`${ts()} lock de auth suelto tras liberar: ${lockSuelto ? 'si' : 'NO (15 s)'}`)
+        const previa = await muestra()
+        const hastaReintento = muestras.filter((m) => !m.error)
+        const atrasBloqueado = hastaReintento.length > 0 && hastaReintento.every((m) => m.atras === true)
+        const vioAvisoInline = muestras.some((m) => (m.alertas ?? []).some((a) => /Reintentar/.test(a)))
+        console.log(`«Atrás» deshabilitado en ${hastaReintento.filter((m) => m.atras === true).length}/${hastaReintento.length} muestras entre el click y el reintento · aviso inline visto: ${vioAvisoInline ? 'si' : 'no'} · boton antes del reintento: ${previa.boton}`)
+        const marcaReintento = Date.now()
+        await clickEn(cdp, botonPorTexto('Reintentar'), 'Reintentar')
+        console.log(`${ts()} CLICK en «Reintentar» (+${seg(marcaReintento)}s del primer click)`)
+        const nav = await observar(OBSERVAR_MS, salioDelWizard)
+        if (nav) await dormir(1500)
+        const postsTotal = postsNegocio.filter((t) => t >= marcaClick).length
+        const nNegocios = negociosEnBase()
+        console.log(`reintento: ruta final=${nav ? nav.ruta : '(no navego)'}${nav ? ` a +${seg(nav.t)}s del primer click (+${((nav.t - marcaReintento) / 1000).toFixed(1)}s del reintento)` : ''} · POST businesses antes de liberar=${postsAntesDeLiberar} · total=${postsTotal} · negocios en la base=${nNegocios}`)
+        if (tAviso > 25) resultado = 'aviso-tarde'
+        else if (!vioAvisoInline || !toastsVistos.length) resultado = 'sin-aviso'
+        else if (!atrasBloqueado) resultado = 'atras-habilitado'
+        else if (postsAntesDeLiberar > 0) resultado = 'inserto-antes-de-liberar'
+        else if (!nav || !destinoOk(nav.ruta)) resultado = 'reintento-no-navego'
+        else if (nNegocios !== 1 || postsTotal !== 1) resultado = 'doble-negocio'
+        else resultado = 'error-y-reintento-ok'
+      }
+    } else {
+      const nav = await observar(OBSERVAR_MS, salioDelWizard)
+      if (nav) { resultado = 'exito'; console.log(`${ts()} salio del wizard a +${seg(nav.t)}s del click → ${nav.ruta}`); await dormir(1500) }
+      if (resultado !== 'exito' && primerToast && /Error/.test(primerToast)) resultado = 'error'
+      if (resultado === 'colgado' && !vioGuardando) resultado = 'click-no-llego'
+      if (variante === 'config-colgada' && nav) {
+        const vioServicios = toastsVistos.some((t) => /servicios/.test(t))
+        if (seg(nav.t) > 25) resultado = 'tarde'
+        else if (!vioServicios) resultado = 'sin-aviso-de-servicios'
+        else if (negociosEnBase() < 1) resultado = 'sin-negocio'
+      }
+    }
     console.log(`el boton paso por «Guardando…»: ${vioGuardando ? 'si' : 'no'}`)
+    console.log(`toasts vistos: ${JSON.stringify(toastsVistos)}`)
 
     console.log('')
     console.log('── red desde el click ──')
@@ -442,6 +555,9 @@ async function main() {
     console.log(`requests pendientes al cierre: ${pendientes.length}`)
     const enBase = sql(`select coalesce(string_agg(b.slug || ' @ ' || to_char(b.created_at at time zone 'America/Argentina/Buenos_Aires', 'HH24:MI:SS'), ', '), '(ninguno)') from public.businesses b join auth.users u on u.id = b.owner_id where u.email = '${EMAIL}'`)
     console.log(`negocio en la base local para ${EMAIL}: ${enBase}`)
+    const config = sql(`select coalesce(string_agg(b.slug || ': services=' || (select count(*) from public.services s where s.business_id = b.id) || ' professionals=' || (select count(*) from public.professionals p where p.business_id = b.id) || ' time_blocks=' || (select count(*) from public.time_blocks t where t.business_id = b.id), ', '), '(sin negocio)') from public.businesses b join auth.users u on u.id = b.owner_id where u.email = '${EMAIL}'`)
+    console.log(`configuracion en la base: ${config}`)
+    console.log(`POST /rest/v1/businesses desde el click: ${postsNegocio.filter((t) => t >= marcaClick).length}`)
     console.log(`primer toast: ${primerToast ?? '(ninguno)'}`)
     console.log('')
     console.log(`veredicto variante=${variante}: resultado=${resultado} (esperado ${ESPERADO[variante]}) → ${resultado === ESPERADO[variante] ? 'COINCIDE' : 'NO COINCIDE'}`)
@@ -463,6 +579,13 @@ async function main() {
     await dormir(500)
     console.log(`puerto de depuracion ${PUERTO_CDP} libre al salir: ${(await puertoLibre(PUERTO_CDP)) ? 'si' : 'NO'}`)
     try { rmSync(perfil, { recursive: true, force: true }) } catch { /* lo limpia el sistema */ }
+    // Limpieza del usuario de prueba (cascada a su negocio y su configuracion), despues de los chequeos.
+    try {
+      const borrado = sql(`delete from auth.users where email = '${EMAIL}'`)
+      console.log(`usuario de prueba ${EMAIL} borrado: ${borrado || '(sin salida)'} · quedan=${sql(`select count(*) from auth.users where email = '${EMAIL}'`)}`)
+    } catch (err) {
+      console.log(`NO se pudo borrar el usuario de prueba ${EMAIL}: ${err instanceof Error ? err.message.slice(0, 200) : err}`)
+    }
   }
 }
 
