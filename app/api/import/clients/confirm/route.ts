@@ -1,22 +1,28 @@
 import { createClient } from '@/lib/supabase/server'
-import { parseCsv, classifyRows } from '@/lib/clients-import'
+import { classifyRows } from '@/lib/clients-import'
+import { parseClientsFile, IMPORT_MAX_ROWS } from '@/lib/clients-xlsx'
 import { buildClientInsert } from '@/lib/clients-create'
 
-// Confirm del import CSV de clientes (DATA-03) — route handler AUTENTICADO del dueño.
-// Runtime Node por defecto (NO Edge: usa Supabase + parseo de archivo).
+// Confirm del import de clientes (archivo .xlsx o .csv) (DATA-03) — route handler AUTENTICADO del dueño.
+// Runtime Node (NO Edge: usa Supabase + la librería de planillas, que necesita APIs de Node).
 //
 // Invariantes de seguridad (D-03/D-04 + skill supabase-multitenant-rls):
 //   • RE-recibe el MISMO archivo por multipart y RE-PARSEA (stateless — Pitfall 2: Vercel Hobby es
 //     efímero, sin stash server-side). NO confía en la preview del cliente: re-valida + re-deduplica
 //     el archivo crudo (T-03-07). La preview no es autoritativa.
 //   • origin='importado' se FUERZA server-side vía buildClientInsert(business, fila, 'importado')
-//     (Pitfall 5); el CSV/body NUNCA aporta business_id ni origin (T-03-04/T-03-08).
+//     (Pitfall 5); el archivo/body NUNCA aporta business_id ni origin (T-03-04/T-03-08).
 //   • Insert anon+RLS (@/lib/supabase/server), NUNCA admin/service-role (T-03-10): RLS `with check`
 //     como red final + business_id en cada payload = defensa en profundidad.
-//   • Mismos guards de tamaño/extensión/header/filas que preview, ANTES de tocar la DB.
+//   • Mismos guards que preview y en el mismo orden (tamaño → tipo por contenido + ZIP-bomba →
+//     filas → header), ANTES de tocar la DB.
 
 const MAX_BYTES = 2 * 1024 * 1024 // 2 MB (D-04)
-const MAX_ROWS = 2000 // T-03-06
+const MAX_ROWS = IMPORT_MAX_ROWS // T-03-06: una sola fuente con preview
+
+// La librería de planillas usa APIs de Node (streams, Buffer): este handler no puede ir a Edge.
+// 'nodejs' ya es el default; se declara para que nadie lo mueva sin ver esto.
+export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   // Cliente anon+RLS con las cookies de la sesión del dueño. NO admin.
@@ -48,17 +54,18 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'missing_file' }, { status: 400 })
   }
 
-  // Guards ANTES de leer/parsear (D-04).
+  // Guard de tamaño ANTES de leer un solo byte (D-04).
   if (file.size > MAX_BYTES) {
     return Response.json({ ok: false, error: 'file_too_large' }, { status: 413 })
   }
-  if (!file.name.toLowerCase().endsWith('.csv')) {
-    return Response.json({ ok: false, error: 'invalid_file_type' }, { status: 400 })
-  }
 
-  // RE-PARSEO autoritativo (D-03): no se confía en lo que el cliente "vio" en la preview.
-  const text = await file.text()
-  const { validHeader, rows } = parseCsv(text)
+  // RE-PARSEO autoritativo (D-03): no se confía en lo que el cliente "vio" en la preview. Mismo
+  // parser que preview: tipo por contenido, ZIP-bomba y cap de filas antes del header.
+  const parsed = await parseClientsFile({ name: file.name, bytes: await file.arrayBuffer(), maxRows: MAX_ROWS })
+  if (!parsed.ok) {
+    return Response.json({ ok: false, error: parsed.error }, { status: 400 })
+  }
+  const { validHeader, rows } = parsed
   if (!validHeader) {
     return Response.json({ ok: false, error: 'invalid_header' }, { status: 400 })
   }

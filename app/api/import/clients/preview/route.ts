@@ -1,24 +1,30 @@
 import { createClient } from '@/lib/supabase/server'
-import { parseCsv, classifyRows } from '@/lib/clients-import'
+import { classifyRows } from '@/lib/clients-import'
+import { parseClientsFile, IMPORT_MAX_ROWS } from '@/lib/clients-xlsx'
 
-// Preview del import CSV de clientes (DATA-03) — route handler AUTENTICADO del dueño.
-// Runtime Node por defecto (NO Edge: usa Supabase + parseo de archivo). El proxy Edge solo refresca
-// la sesión sobre /api/*.
+// Preview del import de clientes (archivo .xlsx o .csv) (DATA-03) — route handler AUTENTICADO del dueño.
+// Runtime Node (NO Edge: usa Supabase + la librería de planillas, que necesita APIs de Node). El proxy
+// Edge solo refresca la sesión sobre /api/*.
 //
 // Invariantes de seguridad (D-01/D-03/D-04 + skill supabase-multitenant-rls):
 //   • Cliente anon+RLS (@/lib/supabase/server), NUNCA admin/service-role: el aislamiento por tenant
 //     lo garantizan RLS + el filtro explícito por business_id (defensa en profundidad).
-//   • business_id se resuelve por owner_id de la SESIÓN (auth.getUser()), NUNCA del CSV ni del body.
+//   • business_id se resuelve por owner_id de la SESIÓN (auth.getUser()), NUNCA del archivo ni del body.
 //   • NADA se escribe acá (SC-1): preview solo parsea + valida + deduplica + cuenta. Cero
 //     .insert()/.update()/.delete(). El confirm re-recibe el MISMO archivo y RE-PARSEA (no confía
 //     en esta preview — la preview no es autoritativa).
-//   • Guards de tamaño/extensión/header/filas ANTES de parsear/tocar la DB (D-04): rechazar temprano
-//     un archivo hostil (T-03-05/T-03-06).
+//   • Guards ANTES de tocar la DB, en este orden: tamaño (antes de leer un byte) → tipo por CONTENIDO
+//     + ZIP-bomba → filas → header (D-04): rechazar temprano un archivo hostil (T-03-05/T-03-06). El
+//     tipo lo decide la firma del archivo, no la extensión (T-03-08, quick 261124-ine).
 
 // Guard de tamaño ANTES de leer/parsear (D-04). Vercel corta el request a 4.5MB con 413 igual, y el
 // proxy.ts bufferea /api/* con 10MB (trunca en silencio) — el cap de 2MB queda holgado bajo ambos.
 const MAX_BYTES = 2 * 1024 * 1024 // 2 MB (D-04)
-const MAX_ROWS = 2000 // T-03-06: expansión por filas → 400 too_many_rows antes de dedup/insert
+const MAX_ROWS = IMPORT_MAX_ROWS // T-03-06: una sola fuente con confirm → 400 too_many_rows antes de dedup/insert
+
+// La librería de planillas usa APIs de Node (streams, Buffer): este handler no puede ir a Edge.
+// 'nodejs' ya es el default; se declara para que nadie lo mueva sin ver esto.
+export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   try {
@@ -52,17 +58,18 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'missing_file' }, { status: 400 })
   }
 
-  // Guards ANTES de leer/parsear (D-04): tamaño (T-03-05) + extensión (T-03-08).
+  // Guard de tamaño ANTES de leer un solo byte (D-04, T-03-05).
   if (file.size > MAX_BYTES) {
     return Response.json({ ok: false, error: 'file_too_large' }, { status: 413 })
   }
-  if (!file.name.toLowerCase().endsWith('.csv')) {
-    return Response.json({ ok: false, error: 'invalid_file_type' }, { status: 400 })
-  }
 
-  // Parseo RFC4180 + BOM + validación del header rígido (round-trip con el export — T-03-08).
-  const text = await file.text()
-  const { validHeader, rows } = parseCsv(text)
+  // Tipo por contenido (.xlsx = firma ZIP, .csv = texto; la extensión es solo lista permitida) +
+  // pre-chequeo del ZIP-bomba + cap de filas, y después el header rígido (T-03-08, quick 261124-ine).
+  const parsed = await parseClientsFile({ name: file.name, bytes: await file.arrayBuffer(), maxRows: MAX_ROWS })
+  if (!parsed.ok) {
+    return Response.json({ ok: false, error: parsed.error }, { status: 400 })
+  }
+  const { validHeader, rows } = parsed
   if (!validHeader) {
     return Response.json({ ok: false, error: 'invalid_header' }, { status: 400 })
   }

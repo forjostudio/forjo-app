@@ -29,7 +29,7 @@ import {
   sanitizeAction,
   reconciledMemo,
 } from '@/lib/panel-history'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -459,16 +459,17 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
     guardDraftOnDismiss(isImportDirty, () => onImportOpenChange(false), noticeImportBlocked)(nextOpen, details)
   }
 
-  // Selección de archivo: valida extensión .csv + tamaño ≤2MB client-side (feedback inmediato; el
+  // Selección de archivo: valida extensión .xlsx/.csv + tamaño ≤2MB client-side (feedback inmediato; el
   // server re-valida — D-03/D-04). Si inválido, NO avanza y muestra el error inline.
   function onImportFileSelect(file: File | null) {
     setImportFileError(null)
     if (!file) { setImportFile(null); return }
-    const okExt = file.name.toLowerCase().endsWith('.csv')
+    const lowerName = file.name.toLowerCase()
+    const okExt = lowerName.endsWith('.xlsx') || lowerName.endsWith('.csv')
     const okSize = file.size <= IMPORT_MAX_BYTES
     if (!okExt || !okSize) {
       setImportFile(null)
-      setImportFileError('Subí un archivo .csv de hasta 2 MB.')
+      setImportFileError('Subí un archivo .xlsx o .csv de hasta 2 MB.')
       if (importInputRef.current) importInputRef.current.value = ''
       return
     }
@@ -495,9 +496,15 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       if (!res.ok || !body?.ok || !body.preview) {
         // Header inválido → mensaje inline específico; el resto → toast genérico y quedarse en upload.
         if (body?.error === 'invalid_header') {
-          setImportFileError('El CSV no tiene el formato esperado. Exportá tus clientes desde Forjo y usá ese archivo como base.')
+          setImportFileError('El archivo no tiene el formato esperado. Bajá la plantilla o exportá tus clientes desde Forjo y usá ese archivo como base.')
         } else if (body?.error === 'file_too_large' || body?.error === 'invalid_file_type') {
-          setImportFileError('Subí un archivo .csv de hasta 2 MB.')
+          setImportFileError('Subí un archivo .xlsx o .csv de hasta 2 MB.')
+        } else if (body?.error === 'unreadable_file') {
+          setImportFileError('No pudimos leer el archivo. Tiene que ser un Excel (.xlsx) o un .csv; si es un .xls viejo, guardalo como .xlsx.')
+        } else if (body?.error === 'too_many_rows') {
+          // 2000 = mismo cap que el server (IMPORT_MAX_ROWS); escrito a mano porque este componente no
+          // puede importar el módulo de servidor (llevaría la librería de planillas al navegador).
+          setImportFileError('El archivo tiene más de 2000 filas. Partilo en varios.')
         } else {
           toast.error(`No se pudo procesar el archivo${body?.error ? ` (${body.error})` : ''}. Intentá de nuevo.`)
         }
@@ -916,23 +923,23 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                   <GitMerge className="w-4 h-4" />
                 </button>
               )}
-              {/* ⚠ SIGUE SIENDO UN <a href download>, no un <Button>: la descarga del CSV la hace el
+              {/* ⚠ SIGUE SIENDO UN <a href download>, no un <Button>: la descarga del Excel la hace el
                   navegador contra el route handler. Pasarlo a botón obligaría a un fetch + blob por
                   nada. Lo único que cambió es que ya no lleva texto. */}
               <a
                 href="/api/export/clients"
                 download
                 className={ACCION_ICONO}
-                aria-label={`Exportar ${term.clients.toLowerCase()} a CSV`}
-                title="Exportar CSV"
+                aria-label={`Exportar ${term.clients.toLowerCase()} a Excel`}
+                title="Exportar a Excel"
               >
                 <Download className="w-4 h-4" />
               </a>
               <button
                 onClick={() => { clearDismissBlocked(); setImportOpen(true) }}
                 className={ACCION_ICONO}
-                aria-label={`Importar ${term.clients.toLowerCase()} desde CSV`}
-                title="Importar CSV"
+                aria-label={`Importar ${term.clients.toLowerCase()} desde Excel o CSV`}
+                title="Importar"
               >
                 <Upload className="w-4 h-4" />
               </button>
@@ -1282,7 +1289,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
         </DialogContent>
       </Dialog>
 
-      {/* ── Importar CSV (DATA-03) — un Dialog ancho, 4 etapas (upload→preview→confirming→resumen) ── */}
+      {/* ── Importar Excel/CSV (DATA-03) — un Dialog ancho, 4 etapas (upload→preview→confirming→resumen) ── */}
       {/* El cierre ACCIDENTAL pasa por la guarda; `onImportOpenChange` sigue siendo el cierre
           deliberado (lo llaman "Cancelar" y la ✕) y conserva su bloqueo propio de la etapa
           `confirming`, que es más fuerte que la guarda: ahí no pasa ningún cierre. */}
@@ -1297,18 +1304,24 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               {/* Dropzone (click-to-choose; el input file va oculto y lo dispara "Elegir archivo") */}
               <div className="border-2 border-dashed border-border rounded-lg py-6 px-4 flex flex-col items-center gap-2 text-center">
                 <Upload className="w-8 h-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Elegí el archivo .csv exportado de Forjo.</p>
+                <p className="text-sm text-muted-foreground">Elegí el Excel (.xlsx) o el .csv exportado de Forjo.</p>
                 <input
                   ref={importInputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
                   className="sr-only"
                   onChange={(e) => onImportFileSelect(e.target.files?.[0] ?? null)}
                 />
-                <Button variant="outline" onClick={() => importInputRef.current?.click()}>
-                  Elegir archivo
-                </Button>
-                <p className="text-xs text-muted-foreground">Usá el CSV que exportaste desde Forjo (mismo formato).</p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button variant="outline" onClick={() => importInputRef.current?.click()}>
+                    Elegir archivo
+                  </Button>
+                  <a href="/api/export/clients?plantilla=1" download className={buttonVariants({ variant: 'outline' })}>
+                    <Download className="w-4 h-4" />
+                    Descargar plantilla
+                  </a>
+                </div>
+                <p className="text-xs text-muted-foreground">{`Si vas a cargar ${term.clients.toLowerCase()} desde cero, bajá la plantilla y completala.`}</p>
               </div>
 
               {/* Archivo elegido: nombre + tamaño + X para quitarlo */}
@@ -1362,7 +1375,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                   <AlertCircle className="w-8 h-8 text-destructive" />
                   <p className="text-sm font-bold">No hay filas para importar.</p>
                   <p className="text-sm text-muted-foreground">
-                    Revisá que el CSV tenga la primera fila de encabezados y al menos un {term.client.toLowerCase()} con nombre y un contacto (teléfono o email).
+                    Revisá que el archivo tenga la primera fila de encabezados y al menos un {term.client.toLowerCase()} con nombre y un contacto (teléfono o email).
                   </p>
                 </div>
               ) : (

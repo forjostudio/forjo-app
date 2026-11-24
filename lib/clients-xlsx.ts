@@ -14,6 +14,8 @@
 
 import ExcelJS from 'exceljs'
 import { styleHeaderSheet } from '@/lib/xlsx-style'
+// Sin ciclo: este módulo importa de clients-import, nunca al revés.
+import { CANONICAL_HEADER, canonicalHeader, parseCsv, type RawRow } from '@/lib/clients-import'
 
 // ── Columnas ────────────────────────────────────────────────────────────────────────────────────
 
@@ -104,4 +106,174 @@ export function buildClientsWorkbook(
   }
 
   return wb
+}
+
+// ── Import: lectura del archivo subido (.xlsx o .csv) ────────────────────────────────────────────
+
+// Una sola fuente para los dos handlers (preview y confirm). 2000 es el cap vigente (T-03-06): el
+// confirm hace UN batch insert y subirlo aflojaría un límite de seguridad sin que nadie lo pida.
+export const IMPORT_MAX_ROWS = 2000
+// Topes del ZIP-bomba: un .xlsx de 2 MB con 2000 clientes descomprime a pocos cientos de KB y unas
+// pocas decenas de entradas. 30 MB y 500 entradas dejan holgura de sobra para un archivo honesto.
+export const XLSX_MAX_UNZIPPED_BYTES = 30 * 1024 * 1024
+export const XLSX_MAX_ENTRIES = 500
+
+// Lo que guarda una celda, siempre como texto (mismo espíritu que celda() de facturador-ARCA, pero sin
+// devolver números: el import compara y valida strings).
+//   • Número entero grande → BigInt, para que un teléfono escrito como número no salga con exponente.
+//   • Fórmula → SOLO su resultado cacheado. Nada se evalúa (T-q-06): sin resultado, celda vacía.
+//   • Hipervínculo → su texto (Excel convierte los emails tipeados en links mailto:).
+export function cellText(v: ExcelJS.CellValue): string {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'string') return v
+  if (typeof v === 'number') {
+    if (Number.isInteger(v) && !Number.isSafeInteger(v)) return BigInt(v).toString()
+    return String(v)
+  }
+  if (typeof v === 'boolean') return String(v)
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)
+  if (typeof v === 'object') {
+    if ('richText' in v && Array.isArray(v.richText)) return v.richText.map((t) => t.text ?? '').join('')
+    if ('text' in v) return cellText(v.text as ExcelJS.CellValue)
+    if ('result' in v) return cellText(v.result as ExcelJS.CellValue)
+    if ('error' in v) return ''
+  }
+  return ''
+}
+
+// Pre-chequeo del ZIP-bomba ANTES de cargar el libro: el cap de filas recién actúa cuando la librería
+// ya descomprimió todo en memoria. Acá se suma el tamaño descomprimido que DECLARA el directorio
+// central (sin descomprimir nada) y se corta si pasa los topes, si es ZIP64 o si está roto.
+//
+// Residuo aceptado (T-q-03b): los tamaños declarados se pueden falsificar, y la librería recién lo
+// nota al terminar de descomprimir. Esto frena el ZIP-bomba común (tamaños honestos) sin costo.
+export function zipDeclaredSizeOk(
+  bytes: ArrayBuffer,
+  limits: { maxUnzippedBytes: number; maxEntries: number } = {
+    maxUnzippedBytes: XLSX_MAX_UNZIPPED_BYTES,
+    maxEntries: XLSX_MAX_ENTRIES,
+  },
+): boolean {
+  const view = new DataView(bytes)
+  const len = bytes.byteLength
+  if (len < 22) return false
+
+  // Fin del directorio central: 22 bytes fijos + un comentario de hasta 65535 → buscar hacia atrás.
+  let eocd = -1
+  for (let i = len - 22; i >= Math.max(0, len - 65557); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i
+      break
+    }
+  }
+  if (eocd < 0) return false
+
+  const entries = view.getUint16(eocd + 10, true)
+  const cdSize = view.getUint32(eocd + 12, true)
+  const cdOffset = view.getUint32(eocd + 16, true)
+  if (entries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) return false // ZIP64
+  if (entries > limits.maxEntries) return false
+  if (cdOffset + cdSize > len) return false
+
+  let pos = cdOffset
+  let total = 0
+  for (let i = 0; i < entries; i++) {
+    if (pos + 46 > len) return false
+    if (view.getUint32(pos, true) !== 0x02014b50) return false
+    const unzipped = view.getUint32(pos + 24, true)
+    if (unzipped === 0xffffffff) return false
+    total += unzipped
+    if (total > limits.maxUnzippedBytes) return false
+    pos += 46 + view.getUint16(pos + 28, true) + view.getUint16(pos + 30, true) + view.getUint16(pos + 32, true)
+  }
+  return true
+}
+
+// Qué parser usar. La extensión es SOLO lista permitida (.xlsx o .csv); lo decide el CONTENIDO (D-01,
+// T-q-04): un .xlsx es un ZIP y arranca con `PK\x03\x04`. Un .csv que en realidad es un Excel se lee
+// como Excel; un .xlsx que no es ZIP se rechaza (el server no confía en la extensión).
+export function detectImportFormat({ name, bytes }: { name: string; bytes: ArrayBuffer }): 'xlsx' | 'csv' | null {
+  const lower = name.toLowerCase()
+  const isXlsxName = lower.endsWith('.xlsx')
+  const isCsvName = lower.endsWith('.csv')
+  if (!isXlsxName && !isCsvName) return null
+  const head = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength))
+  const isZip =
+    head.length === 4 && head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04
+  if (isZip) return 'xlsx'
+  return isCsvName ? 'csv' : null
+}
+
+export type ParseFileResult =
+  | { ok: true; validHeader: boolean; rows: RawRow[] }
+  | { ok: false; error: 'invalid_file_type' | 'unreadable_file' | 'too_many_rows' }
+
+type CanonicalKey = (typeof CANONICAL_HEADER)[number]
+const CANONICAL_SET: ReadonlySet<string> = new Set(CANONICAL_HEADER)
+const isCanonicalKey = (k: string): k is CanonicalKey => CANONICAL_SET.has(k)
+
+// El archivo subido → las mismas RawRow que daba el CSV, para que classifyRows (y su numeración de
+// errores) signifique lo mismo en los dos formatos. Guards en orden: tipo → ZIP → filas → header.
+export async function parseClientsFile({
+  name,
+  bytes,
+  maxRows,
+}: {
+  name: string
+  bytes: ArrayBuffer
+  maxRows: number
+}): Promise<ParseFileResult> {
+  const format = detectImportFormat({ name, bytes })
+  if (!format) return { ok: false, error: 'invalid_file_type' }
+
+  if (format === 'csv') {
+    // parseCsv ya saca el BOM y `sep=`, y recupera el colapso a una columna: el CSV viejo, idéntico.
+    const { validHeader, rows } = parseCsv(new TextDecoder('utf-8').decode(bytes))
+    return { ok: true, validHeader, rows }
+  }
+
+  if (!zipDeclaredSizeOk(bytes)) return { ok: false, error: 'unreadable_file' }
+
+  const wb = new ExcelJS.Workbook()
+  try {
+    await wb.xlsx.load(bytes)
+  } catch {
+    return { ok: false, error: 'unreadable_file' }
+  }
+
+  // La hoja Clientes; si el dueño la renombró, la primera que no sea Instrucciones (un libro propio
+  // con una sola "Hoja1" también entra). Nunca se leen datos de la hoja Instrucciones.
+  const ws =
+    wb.worksheets.find((w) => canonicalHeader(w.name) === 'clientes') ??
+    wb.worksheets.find((w) => canonicalHeader(w.name) !== 'instrucciones')
+  if (!ws) return { ok: false, error: 'unreadable_file' }
+
+  // Cap de filas ANTES de recorrerlas (+1 por el encabezado).
+  if (ws.actualRowCount > maxRows + 1) return { ok: false, error: 'too_many_rows' }
+
+  // Fila 1: columna → canónico. Si un canónico se repite, gana la primera columna. Las columnas que no
+  // son canónicas se ignoran (header rígido: las 7 tienen que estar, las extra no molestan).
+  const colOf = new Map<CanonicalKey, number>()
+  ws.getRow(1).eachCell((cell, col) => {
+    const key = canonicalHeader(cellText(cell.value))
+    if (isCanonicalKey(key) && !colOf.has(key)) colOf.set(key, col)
+  })
+  if (!CANONICAL_HEADER.every((k) => colOf.has(k))) return { ok: true, validHeader: false, rows: [] }
+
+  // Filas de datos. NO se aplica unescapeFormulaGuard acá: classifyRows ya lo hace para los dos formatos.
+  const rows: RawRow[] = []
+  ws.eachRow((r, n) => {
+    if (n === 1) return
+    const raw: RawRow = {}
+    let empty = true
+    for (const [key, col] of colOf) {
+      const value = cellText(r.getCell(col).value)
+      if (value.trim() !== '') empty = false
+      raw[key] = value
+    }
+    // Una fila con solo espacios se saltea (mismo criterio que skipEmptyLines 'greedy' del CSV).
+    if (!empty) rows.push(raw)
+  })
+
+  return { ok: true, validHeader: true, rows }
 }
