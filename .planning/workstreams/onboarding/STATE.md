@@ -124,6 +124,7 @@ None yet.
 |---|-------------|------|--------|--------|-----------|
 | 261119-q8v | Onboarding: paso 5 opcional de integraciones (MercadoPago y Google Calendar) despues de crear el negocio, con destino de vuelta del OAuth por lista cerrada; correcciones del review (WR-01..03, IN-01/02/04/08); sin pushear | 2026-11-19 | 07c2841 | Verified (UAT 6/7 + 1 parcial en prod 02c6a17) | [261119-q8v-onboarding-paso-5-opcional-de-integracio](./quick/261119-q8v-onboarding-paso-5-opcional-de-integracio/) |
 | 261124-iu8 | Onboarding: Crear mi negocio no queda trabado en Guardando (limite de 20 s, aviso + Reintentar, alta idempotente sin segundo negocio, slug y Atras bloqueados mientras no se confirma); sonda 7/7 COINCIDE; sin pushear | 2026-11-24 | 55547fc | Verified (UAT 3/3 en prod 98f1c9f) | [261124-iu8-onboarding-crear-mi-negocio-no-queda-tra](./quick/261124-iu8-onboarding-crear-mi-negocio-no-queda-tra/) |
+| 261124-neg | Panel: un error al leer el negocio no manda al onboarding (helper negocioDelDueno con maybeSingle + order created_at + limit 1; error.tsx del panel y aviso del layout con Reintentar; / con error va a /dashboard; gate anti-reincidencia); sin pushear | 2026-11-24 | c18527e | Needs Review (UAT visual pendiente) | [261124-neg-panel-error-de-lectura-del-negocio-no-ma](./quick/261124-neg-panel-error-de-lectura-del-negocio-no-ma/) |
 
 ## Deferred Items (v2 / future — NO en v0.19)
 
