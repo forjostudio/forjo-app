@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { startOfWeek, format } from 'date-fns'
 import { googleConfigured } from '@/lib/google-calendar'
@@ -10,13 +11,7 @@ export default async function AgendaPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('owner_id', user.id)
-    .single()
-
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   // google_refresh_token ya no vive en businesses (migración 027). Leemos la PRESENCIA server-side
   // vía getBusinessSecrets y pasamos solo un booleano al client (D-05: nunca el token crudo).

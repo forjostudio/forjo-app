@@ -567,7 +567,9 @@ describe('Finanzas — el tab sale de la URL, en un solo dialecto', () => {
     // navegación blanda y el primer toque de un tab lo ejecuta (medido en `.planning/debug/finanzas-primer-toque-scroll.md`).
     expect(pagina).toContain('<Suspense fallback={<div className="space-y-6 max-w-5xl" aria-busy="true" />}>')
     expect(pagina).not.toContain('fallback={null}')
-    expect(pagina).toContain(".eq('owner_id', user.id)")
+    // El negocio sale del dueño de la sesión: `negocioDelPanel` filtra por `owner_id` = `user.id`
+    // (quick 261124-neg, lib/negocio-del-dueno.ts).
+    expect(pagina).toContain("negocioDelPanel(supabase, user.id, 'id')")
     expect(pagina).not.toContain('searchParams')
   })
 })

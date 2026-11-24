@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { AppointmentsClient } from './appointments-client'
 
@@ -7,13 +8,7 @@ export default async function AppointmentsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('owner_id', user.id)
-    .single()
-
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   const [{ data: appointments }, { data: professionals }, { data: services }, { data: timeBlocks }, { data: clients }, { data: locations }] = await Promise.all([
     supabase.from('appointments')

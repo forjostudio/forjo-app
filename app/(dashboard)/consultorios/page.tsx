@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
 import { SettingsClient } from '../settings/settings-client'
@@ -8,8 +9,7 @@ export default async function ConsultoriosPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase.from('businesses').select('*').eq('owner_id', user.id).single()
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   const { data: locations } = await supabase.from('locations').select('*').eq('business_id', business.id).order('created_at')
 

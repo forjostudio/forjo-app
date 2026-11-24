@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { selectFutureOccurrences, summarizeOccurrences, todayISOInAR } from '@/lib/abono-cancel'
 import { AbonosClient, type AbonoRow } from './abonos-client'
@@ -11,13 +12,7 @@ export default async function AbonosPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('owner_id', user.id)
-    .single()
-
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   // Corte del preview de la baja: frontera INCLUSIVE del día de hoy en hora AR (D-02). Se calcula UNA
   // sola vez, ANTES de las queries, para que todas las series se midan contra el mismo día y para que

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
 import { SettingsClient } from '../settings/settings-client'
@@ -8,8 +9,7 @@ export default async function ServiciosPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase.from('businesses').select('*').eq('owner_id', user.id).single()
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   // /servicios sirve a TODOS los verticales. Para canchas (D-03) el manager vive acá y necesita
   // professionals/spaces/agenda_spaces (el motor v0.12) que hoy /equipo carga pero /servicios no.

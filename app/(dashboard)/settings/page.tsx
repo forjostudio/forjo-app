@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
 import { getBusinessSecrets } from '@/lib/business-secrets'
@@ -10,13 +11,7 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('owner_id', user.id)
-    .single()
-
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   // Secretos server-side (service role, server-only). Los 7 secretos ya no viven en businesses
   // (migración 027) → se leen vía getBusinessSecrets. Solo se pasan al form de edición del

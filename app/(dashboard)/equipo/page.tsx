@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { mpConnectConfigured } from '@/lib/mercadopago'
 import { resolveVertical } from '@/lib/verticals'
@@ -9,8 +10,7 @@ export default async function EquipoPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase.from('businesses').select('*').eq('owner_id', user.id).single()
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   // El rubro canchas no tiene "Equipo" (D-05): cada cancha es una fila de `professionals`, así que
   // cargar /equipo en un negocio canchas listaría las canchas como "Equipo" — leak de datos, no solo

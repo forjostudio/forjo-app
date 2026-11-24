@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { WebEditorClient } from './web-client'
 import { WebUpsell } from './_web-upsell'
@@ -49,14 +50,11 @@ export default async function WebEditorPage() {
   //    el modo que el dueño eligió — y no hay ningún error: es un preview que miente sobre el orden,
   //    la misma clase de bug que el quick 260913-3tv vino a cerrar. Viajan solas por la
   //    desestructuración que arma `publicBusiness` más abajo.
-  const { data: business } = await supabase
-    .from('businesses')
-    .select(
-      'id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, palette, theme, font, has_web_custom, landing_config, landing_draft, category_sort_mode, service_sort_mode',
-    )
-    .eq('owner_id', user.id)
-    .single()
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(
+    supabase,
+    user.id,
+    'id, owner_id, slug, name, type, vertical, logo_url, primary_color, whatsapp, address, instagram, require_deposit, deposit_amount, deposit_expiry_hours, recaptcha_site_key, default_slot_duration, buffer_minutes, created_at, palette, theme, font, has_web_custom, landing_config, landing_draft, category_sort_mode, service_sort_mode',
+  )
 
   // 3b. ENTITLEMENT por negocio (PUB-01): el CMS es un add-on, no una feature de plan. Solo edita la
   //     web un negocio que efectivamente TIENE web a medida (has_web_custom).

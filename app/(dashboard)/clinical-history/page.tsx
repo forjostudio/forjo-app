@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { redirect } from 'next/navigation'
 import { resolveVertical } from '@/lib/verticals'
 import { ClinicalHistoryClient } from './clinical-history-client'
@@ -8,13 +9,7 @@ export default async function ClinicalHistoryPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('owner_id', user.id)
-    .single()
-
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, '*')
 
   // La historia clínica solo existe para el rubro salud.
   if (resolveVertical(business).key !== 'salud') redirect('/dashboard')

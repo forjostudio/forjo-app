@@ -296,9 +296,11 @@ describe('el preview del panel: el mismo dato por el otro camino de lectura (D-1
     // así que las dos columnas van en LOS DOS selects o no van: el propio comentario de
     // app/(dashboard)/web/page.tsx declara que su lista es "misma lista que app/[slug]/page.tsx", así
     // que agregarlas en uno solo rompe una invariante escrita en el repo, además de D-09/D-13.
-    const at = panelPage.indexOf("from('businesses')")
+    // Desde el quick 261124-neg el negocio del panel se lee con `negocioDelPanel(supabase, user.id,
+    // '<columnas>')` (lib/negocio-del-dueno.ts); la lista explícita es su tercer argumento.
+    const at = panelPage.indexOf('negocioDelPanel(')
     expect(at).toBeGreaterThan(-1)
-    const fin = panelPage.indexOf('.single()', at)
+    const fin = panelPage.indexOf(')', at)
     expect(fin).toBeGreaterThan(at)
     const bloque = sinComentarios(panelPage.slice(at, fin))
     expect(bloque).toContain('category_sort_mode')
