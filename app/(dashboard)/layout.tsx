@@ -3,6 +3,8 @@ import { NOINDEX } from '@/lib/noindex'
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
+import { PanelErrorDeCarga } from '@/components/dashboard/panel-error-de-carga'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { PanelBottomNav } from '@/components/dashboard/panel-bottom-nav'
 import { PanelTopBar } from '@/components/dashboard/panel-top-bar'
@@ -45,13 +47,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('owner_id', user.id)
-    .single()
+  const negocio = await negocioDelDueno(supabase, user.id, '*')
+  if (!negocio.ok && negocio.reason === 'sin-negocio') redirect('/onboarding')
 
-  if (!business) redirect('/onboarding')
+  // Falló la lectura (red o PostgREST): aviso inline con «Reintentar», sin `children`, y NUNCA el
+  // wizard (quick 261124-neg). No se lanza a propósito: según la doc de error.js de Next 16, el
+  // `app/(dashboard)/error.tsx` no envuelve al layout de su mismo segmento, así que un throw acá
+  // saltearía ese boundary y terminaría en la pantalla genérica de Next, en inglés. El `redirect` de
+  // arriba no va en try/catch: lanza NEXT_REDIRECT.
+  if (!negocio.ok) {
+    return (
+      <main className="min-h-dvh flex items-center justify-center bg-background px-4 py-12">
+        <PanelErrorDeCarga titulo="No pudimos cargar tu panel" />
+      </main>
+    )
+  }
+  const business = negocio.business
 
   const planStatus = business.plan_status ?? 'trial'
 
