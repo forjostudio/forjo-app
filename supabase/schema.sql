@@ -1838,6 +1838,10 @@ CREATE INDEX "audit_log_created_at_idx" ON "public"."audit_log" USING "btree" ("
 
 
 
+CREATE UNIQUE INDEX "businesses_mp_user_id_key" ON "public"."businesses" USING "btree" ("mp_user_id") WHERE ("mp_user_id" IS NOT NULL);
+
+
+
 CREATE INDEX "conversations_business_idx" ON "public"."conversations" USING "btree" ("business_id");
 
 
