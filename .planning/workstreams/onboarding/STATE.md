@@ -123,6 +123,7 @@ None yet.
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
 | 261119-q8v | Onboarding: paso 5 opcional de integraciones (MercadoPago y Google Calendar) despues de crear el negocio, con destino de vuelta del OAuth por lista cerrada; correcciones del review (WR-01..03, IN-01/02/04/08); sin pushear | 2026-11-19 | 07c2841 | Needs Review (UAT en el telefono) | [261119-q8v-onboarding-paso-5-opcional-de-integracio](./quick/261119-q8v-onboarding-paso-5-opcional-de-integracio/) |
+| 261124-iu8 | Onboarding: Crear mi negocio no queda trabado en Guardando (limite de 20 s, aviso + Reintentar, alta idempotente sin segundo negocio, slug y Atras bloqueados mientras no se confirma); sonda 7/7 COINCIDE; sin pushear | 2026-11-24 | 55547fc | Needs Review (UAT en el telefono) | [261124-iu8-onboarding-crear-mi-negocio-no-queda-tra](./quick/261124-iu8-onboarding-crear-mi-negocio-no-queda-tra/) |
 
 ## Deferred Items (v2 / future — NO en v0.19)
 
