@@ -1105,7 +1105,11 @@ export function FinancesClient({ businessId }: Props) {
           entre), y mientras cargan los datos del mes (los tres paneles muestran su aviso de vacío seguido de
           una pantalla en blanco); como el panel es el último bloque, se lee como espacio de scroll al final. */}
       <Tabs value={txTab} onValueChange={alElegirTab}>
-        <div className="flex items-center justify-between gap-2">
+        {/* `flex-wrap` (quick 261124-q68): los tres triggers y el botón «Nueva venta»/«Nuevo egreso» no entran
+            juntos en un celular angosto, y como el botón es `flex-shrink-0` y la fila no envolvía, el documento
+            se ensanchaba: medido por CDP, 407 px con Ventas y 415 con Egresos a 360, 375 y 390 de ancho (a 430
+            entra). Envolver sólo actúa cuando no entra: el botón baja a su propia línea y el resto queda igual. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
             <TabsTrigger value="appointments">Turnos ({appointments.length})</TabsTrigger>
             <TabsTrigger value="sales">Ventas ({sales.length})</TabsTrigger>
