@@ -1738,7 +1738,20 @@ function dFinanzasAncho() {
             if (vuelta === 0) {
               mes = await conteosQuietos(cdp)
             } else {
-              const m = await irAlMesConTurnos(cdp, { minimo: 10, vacios: [] })
+              // El mes con >= 10 turnos; si los datos locales no lo tienen (corrida rojo-q68: ninguno en 12 meses), el
+              // primero con al menos un turno, y si tampoco, sólo el actual. Lo que se midió queda DECLARADO en el detalle.
+              let m = null
+              for (const minimo of [10, 1]) {
+                try {
+                  m = { ...(await irAlMesConTurnos(cdp, { minimo, vacios: [] })), minimo }
+                  break
+                } catch (e) {
+                  if (!(e instanceof Error) || !e.message.includes('ningun mes')) throw e
+                  await navegar(cdp, ORIGEN + '/finances')
+                  await esperarTabQuieto(cdp, 'Turnos', { condicion: COND_FINANZAS })
+                }
+              }
+              if (m === null) { meses.push({ mes: '(ningun mes con turnos en 12)', sin_segundo: true }); break }
               if (m.pasos === 0) { meses.push({ ...m, igual_al_actual: true }); break }
               mes = m
             }
@@ -1763,7 +1776,7 @@ function dFinanzasAncho() {
               }
             }
           }
-          mediciones.push({ ancho: a.nombre, meses: meses.map((m) => `${m.mes}${m.igual_al_actual ? ' (el actual ya tiene >= 10 turnos: un solo mes)' : ''} turnos=${m.turnos} ventas=${m.ventas} egresos=${m.egresos}`), soloMeses: true })
+          mediciones.push({ ancho: a.nombre, meses: meses.map((m) => `${m.mes}${m.igual_al_actual ? ` (el actual ya cumple el minimo ${m.minimo}: un solo mes)` : ''}${m.sin_segundo ? ' (sin segundo mes)' : ''}${m.minimo !== undefined ? ` [minimo pedido=${m.minimo}]` : ''} turnos=${m.turnos} ventas=${m.ventas} egresos=${m.egresos}`), soloMeses: true })
         }
       } finally {
         await celular(cdp)
