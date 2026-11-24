@@ -1747,6 +1747,18 @@ function dFinanzasAncho() {
                   m = { ...(await irAlMesConTurnos(cdp, { minimo, vacios: [] })), minimo }
                   break
                 } catch (e) {
+                  if (e instanceof Error && e.message.includes('el mes no cambio')) {
+                    // Corrida verde-q68 (tres veces, a 390): el toque en «Mes anterior» no cambio el mes. No se
+                    // aborta el recorrido entero por el SEGUNDO mes: se declara, con una captura del momento para
+                    // ver si es la app o el instrumento, y se sigue con el ancho siguiente.
+                    const png = await cdp.enviar('Page.captureScreenshot', { format: 'png' })
+                    const archivo = join(process.env.SONDA_CAPTURAS || tmpdir(), `fin-mes-no-cambio-${a.nombre}.png`)
+                    writeFileSync(archivo, Buffer.from(png.data, 'base64'))
+                    const estado = await evaluar(cdp, EXPR_CONTEOS_FINANZAS).catch(() => null)
+                    console.log(`      [D-finanzas-ancho] ancho ${a.nombre}: «Mes anterior» no cambio el mes (${e.message}); estado=${JSON.stringify(estado)} captura=${archivo}`)
+                    m = { mes: `(segundo mes NO medido: «Mes anterior» no cambio el mes; captura ${archivo})`, sin_segundo: true, error: true }
+                    break
+                  }
                   if (!(e instanceof Error) || !e.message.includes('ningun mes')) throw e
                   await navegar(cdp, ORIGEN + '/finances')
                   await esperarTabQuieto(cdp, 'Turnos', { condicion: COND_FINANZAS })
@@ -1760,6 +1772,7 @@ function dFinanzasAncho() {
                 }
               }
               if (m === null) { meses.push({ mes: '(ningun mes con turnos en 12)', sin_segundo: true }); break }
+              if (m.error) { meses.push(m); break }
               if (m.pasos === 0) { meses.push({ ...m, igual_al_actual: true }); break }
               mes = m
             }
