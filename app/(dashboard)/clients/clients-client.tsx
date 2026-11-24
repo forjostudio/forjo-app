@@ -11,6 +11,8 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { Client, Appointment } from '@/lib/types'
 import { isValidPhone } from '@/lib/clients-create'
+// Nombre completo del cliente (quick 261124-lfd): una sola fuente del «Nombre Apellido».
+import { clientFullName, normalizeLastName } from '@/lib/client-name'
 // Clasificación del cliente (POLISH-07). La regla vive en lib/ y NO se reimplementa acá: hasta ahora
 // el status del filtro y la rama de getSuggestion la calculaban por su cuenta y habían derivado en el
 // umbral de pausa (45 vs 60 días), así que el mismo cliente podía estar en el tab "Pausa" y recibir el
@@ -171,6 +173,7 @@ const IMPORT_MAX_BYTES = 2 * 1024 * 1024 // 2 MB — mismo cap que el server (D-
 const newClientSchema = z
   .object({
     name: z.string().trim().min(1, 'Ingresá un nombre.'),
+    last_name: z.string().trim().optional(),
     phone: z.string().trim().refine(isValidPhone, 'El teléfono solo puede tener números, espacios y + ( ) -.').optional(),
     email: z.union([z.string().trim().email('El email no es válido.'), z.literal('')]).optional(),
     notes: z.string().trim().optional(),
@@ -356,7 +359,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   /**
    * ¿El alta de cliente tiene algo cargado? (quick 261009-tzd)
    *
-   * Es un ALTA: los seis campos nacen vacíos, así que "algún campo con contenido" ES la definición de
+   * Es un ALTA: los siete campos nacen vacíos, así que "algún campo con contenido" ES la definición de
    * sucio — el mismo molde que usan `nuevo-turno-form` y `nuevo-abono-form`, y no el `isDirty` de
    * react-hook-form, que sin `defaultValues` compara contra `{}` y deja marcado como sucio un campo
    * que se tipeó y se volvió a vaciar.
@@ -367,7 +370,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   function isNewClientDirty() {
     const v = getValuesNew()
     return !!(
-      v.name?.trim() || v.phone?.trim() || v.email?.trim() || v.notes?.trim() ||
+      v.name?.trim() || v.last_name?.trim() || v.phone?.trim() || v.email?.trim() || v.notes?.trim() ||
       v.insurance_name?.trim() || v.insurance_number?.trim()
     )
   }
@@ -382,6 +385,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: data.name?.trim(),
+          last_name: data.last_name?.trim() || null,
           phone: data.phone?.trim() || null,
           email: data.email?.trim() || null,
           notes: data.notes?.trim() || null,
@@ -629,7 +633,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
     const q = search.toLowerCase()
     return clients
       .filter(c => {
-        const m = !q || c.name.toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q)
+        const m = !q || clientFullName(c).toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q)
         const f = filter === 'all' || clientStats[c.id]?.status === filter
         const fp = filterPro === 'all' || (clientProMap[c.id]?.has(filterPro) ?? false)
         const fi = filterInsurance === 'all' || c.insurance_name?.trim() === filterInsurance
@@ -831,7 +835,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
         for (const dup of toDelete) next[dup.id] = keep.id
         return next
       })
-      toast.success(`Fusionados ${group.length} → ${keep.name}`)
+      toast.success(`Fusionados ${group.length} → ${clientFullName(keep)}`)
     } catch { toast.error('Error al fusionar') }
   }
 
@@ -1080,7 +1084,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                           la línea del nombre para dejarle el ancho completo a ese identificador. */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
-                          <p className="text-sm font-medium truncate">{client.name}</p>
+                          <p className="text-sm font-medium truncate">{clientFullName(client)}</p>
                           {/* Badge de origen (SC-2): estado no interactivo, coexiste con el status dot */}
                           <Badge variant={ORIGIN_BADGE[client.origin].variant} className="flex-shrink-0 ml-auto">
                             {ORIGIN_BADGE[client.origin].label}
@@ -1153,7 +1157,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>¿Eliminar cliente?</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Se eliminarán <strong>{selected?.name}</strong> y todos sus turnos. Esta acción no se puede deshacer.
+            Se eliminarán <strong>{clientFullName(selected)}</strong> y todos sus turnos. Esta acción no se puede deshacer.
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
@@ -1197,7 +1201,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                           {/* La insignia no encoge (`shrink-0`): es la ÚNICA señal de qué ficha
                               sobrevive a la fusión y tiene que leerse de un vistazo. */}
                           {c.id === keep.id && <span className="shrink-0 text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">CONSERVAR</span>}
-                          <span className="min-w-0 text-sm font-medium break-words">{c.name}</span>
+                          <span className="min-w-0 text-sm font-medium break-words">{clientFullName(c)}</span>
                         </div>
                         {c.phone && <p className="min-w-0 text-xs text-muted-foreground break-words">{c.phone}</p>}
                         {c.email && <p className="min-w-0 text-xs text-muted-foreground break-all">{c.email}</p>}
@@ -1247,11 +1251,17 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
               vuelve a ver la pantalla) en vez de abrir una superficie nueva. Ya hidratado,
               `handleSubmit` hace `preventDefault()` y este atributo queda inerte. */}
           <form method="post" onSubmit={handleSubmitNew(onCreateClient)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="nc-name">Nombre</Label>
-              <Input id="nc-name" {...registerNew('name')} aria-invalid={!!newErrors.name} />
-              {newErrors.name && <p className="text-xs text-destructive">{newErrors.name.message}</p>}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="nc-name">Nombre</Label>
+                <Input id="nc-name" {...registerNew('name')} aria-invalid={!!newErrors.name} />
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="nc-last-name">Apellido (opcional)</Label>
+                <Input id="nc-last-name" {...registerNew('last_name')} />
+              </div>
             </div>
+            {newErrors.name && <p className="text-xs text-destructive">{newErrors.name.message}</p>}
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 space-y-2">
                 <Label htmlFor="nc-phone">Teléfono</Label>
@@ -1530,6 +1540,7 @@ function ClientDetail({
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState(() => ({
     name: client.name,
+    last_name: client.last_name || '',
     phone: client.phone || '',
     email: client.email || '',
     insurance_name: client.insurance_name || '',
@@ -1581,6 +1592,7 @@ function ClientDetail({
     setSaving(true)
     const updates: Partial<Client> = {
       name: editForm.name,
+      last_name: normalizeLastName(editForm.last_name),
       phone: editForm.phone || null,
       email: editForm.email || null,
     }
@@ -1644,8 +1656,12 @@ function ClientDetail({
 
         {editMode ? (
           <div className="space-y-2">
-            <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-              className="text-2xl font-bold h-auto py-1" />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Nombre" aria-label="Nombre" className="text-2xl font-bold h-auto py-1" />
+              <Input value={editForm.last_name} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))}
+                placeholder="Apellido" aria-label="Apellido" className="text-2xl font-bold h-auto py-1" />
+            </div>
             <div className="flex gap-2">
               <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
                 placeholder="Teléfono" className="h-8 text-base sm:text-sm" />
@@ -1667,7 +1683,7 @@ function ClientDetail({
           </div>
         ) : (
           <>
-            <h2 className="text-3xl font-bold tracking-tight uppercase">{client.name}</h2>
+            <h2 className="text-3xl font-bold tracking-tight uppercase">{clientFullName(client)}</h2>
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               {client.phone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{client.phone}</span>}
               <span>alta hace {fmtSince(client.created_at)}</span>

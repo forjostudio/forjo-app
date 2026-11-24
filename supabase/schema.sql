@@ -1060,6 +1060,7 @@ CREATE TABLE IF NOT EXISTS "public"."clients" (
     "insurance_number" "text",
     "preferences" "text",
     "origin" "text" DEFAULT 'reserva'::"text" NOT NULL,
+    "last_name" "text",
     CONSTRAINT "clients_origin_check" CHECK (("origin" = ANY (ARRAY['reserva'::"text", 'manual'::"text", 'importado'::"text"])))
 );
 

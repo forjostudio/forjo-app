@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { validateClientBody, buildClientInsert } from '@/lib/clients-create'
+import { normalizeLastName } from '@/lib/client-name'
 
 // Alta MANUAL de cliente desde el dashboard (autenticada). Molde de app/api/appointments/create:
 // corre con la SESIÓN DEL DUEÑO → cliente anon+RLS (lib/supabase/server) y el negocio se resuelve por
@@ -11,6 +12,8 @@ import { validateClientBody, buildClientInsert } from '@/lib/clients-create'
 // origin='manual' server-side (el cliente no lo elige; el CHECK de migr. 049 refuerza), y solo
 // persiste obra social (insurance_*) si el vertical del negocio es salud. A diferencia del alta de
 // turno, NO hay dedupe: el alta manual crea un cliente nuevo directo (D-02).
+// El apellido (last_name, migr. 081) es opcional: se normaliza (trim; vacío o no-string → null) y nunca
+// se exige.
 export async function POST(request: Request) {
   // Cliente anon+RLS con las cookies de la sesión del dueño. NO admin.
   const supabase = await createClient()
@@ -39,6 +42,7 @@ export async function POST(request: Request) {
   }
   const body = (raw ?? {}) as Record<string, unknown>
   const name = typeof body.name === 'string' ? body.name.trim() : ''
+  const last_name = normalizeLastName(body.last_name)
   const phone = typeof body.phone === 'string' && body.phone.trim() ? body.phone.trim() : null
   const email = typeof body.email === 'string' && body.email.trim() ? body.email.trim() : null
   const notes = typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim().slice(0, 1000) : null
@@ -51,7 +55,7 @@ export async function POST(request: Request) {
 
   // Insert (anon+RLS). business_id = business.id (de la sesión, NO del body). origin='manual' fijo.
   // insurance_* solo si el vertical es salud (gate dentro de buildClientInsert).
-  const payload = buildClientInsert(business, { name, phone, email, notes, insurance_name, insurance_number })
+  const payload = buildClientInsert(business, { name, last_name, phone, email, notes, insurance_name, insurance_number })
   const { data: created, error: insertErr } = await supabase.from('clients').insert(payload).select('*').single()
   if (insertErr || !created) {
     console.error('[clients/create] insert error:', insertErr?.message ?? insertErr)

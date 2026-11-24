@@ -287,6 +287,9 @@ export interface Client {
   id: string
   business_id: string
   name: string
+  // Apellido opcional (migr. 081). Solo lo carga el panel; la reserva pública no lo pide. Desde la
+  // 081, `name` es el nombre de pila. Para mostrar al cliente se usa clientFullName (lib/client-name).
+  last_name?: string | null
   phone: string | null
   email: string | null
   notes: string | null

@@ -13,6 +13,9 @@ import { resolveVertical } from '@/lib/verticals'
 
 export interface ClientCreateInput {
   name: string
+  // Apellido opcional (migr. 081). Opcional en el tipo para que los llamadores que no lo manejan no
+  // cambien; ya llega normalizado (normalizeLastName: trim, vacío → null). Nunca es obligatorio.
+  last_name?: string | null
   phone: string | null
   email: string | null
   notes: string | null
@@ -60,6 +63,7 @@ export function buildClientInsert(
   return {
     business_id: business.id,
     name: input.name,
+    last_name: input.last_name ?? null,
     phone: input.phone,
     email: input.email,
     notes: input.notes,

@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
 import { validateClientBody, buildClientInsert } from '@/lib/clients-create'
+import { normalizeLastName } from '@/lib/client-name'
 
 // ── Tests del alta MANUAL de cliente (app/api/clients/create) ─────────────────────────────────
 // Cubre CLIENT-01: alta autenticada (anon+RLS) que inserta en `clients` con business_id derivado
@@ -109,6 +110,25 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de cliente (origin=manual + tena
     expect(created!.business_id).toBe(t.businessId)
     expect(created!.name).toBe('Cliente Manual')
     expect(created!.notes).toBe('nota de prueba')
+  })
+
+  // ── Insert: apellido opcional (migr. 081, quick 261124-lfd) ──────────────────────────────────
+  it('apellido — last_name se persiste; vacío queda null', async () => {
+    const conApellido = buildClientInsert(
+      { id: t.businessId },
+      { name: 'Ana', last_name: 'Pérez', phone: '1144445555', email: null, notes: null, insurance_name: null, insurance_number: null },
+    )
+    const { data: a, error: errA } = await ownerAnon.from('clients').insert(conApellido).select('last_name').single()
+    expect(errA).toBeNull()
+    expect(a!.last_name).toBe('Pérez')
+
+    const sinApellido = buildClientInsert(
+      { id: t.businessId },
+      { name: 'Beto', last_name: normalizeLastName('   '), phone: '1144446666', email: null, notes: null, insurance_name: null, insurance_number: null },
+    )
+    const { data: b, error: errB } = await ownerAnon.from('clients').insert(sinApellido).select('last_name').single()
+    expect(errB).toBeNull()
+    expect(b!.last_name).toBeNull()
   })
 
   // ── Insert: business_id del body es IGNORADO (tenant siempre de la sesión) ────────────────────
