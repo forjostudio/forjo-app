@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { negocioDelPanel } from '@/lib/negocio-del-dueno'
 import { FinancesClient } from './finances-client'
 
 export default async function FinancesPage() {
@@ -8,13 +9,7 @@ export default async function FinancesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('owner_id', user.id)
-    .single()
-
-  if (!business) redirect('/onboarding')
+  const business = await negocioDelPanel(supabase, user.id, 'id')
 
   // `FinancesClient` lee el tab de la query (`?tab=`, Phase 4) con `useSearchParams`, que obliga a un
   // boundary de Suspense. El fallback SÍ se dibuja: en una entrada blanda (Más, la tarjeta de Inicio, el
