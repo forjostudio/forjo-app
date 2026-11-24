@@ -1,13 +1,16 @@
-// Lógica PURA del import CSV de clientes (DATA-03), compartida por los route handlers de la Wave 2
+// Lógica PURA del import de clientes (DATA-03), compartida por los route handlers de la Wave 2
 // (app/api/import/clients/{preview,confirm}/route.ts) y sus tests. Framework-agnostic (sin React ni
 // Next), para poder testear el contrato — sobre todo el round-trip con el export — sin levantar el
 // server. La ÚNICA dep externa es papaparse (parseo RFC4180); el resto reusa @/lib/clients-create.
+// Desde el quick 261124-ine también lo consume el import de Excel (lib/clients-xlsx.ts): el .xlsx se
+// lee a las mismas RawRow con el mismo canonicalHeader, y classifyRows es el mismo para los dos.
 //
 // Invariantes de seguridad que viven acá (D-01/D-02/D-03 + skill supabase-multitenant-rls):
 //  - El CSV NUNCA aporta business_id ni origin: el business lo resuelve el handler por sesión y
 //    origin='importado' se fuerza en el insert (buildClientInsert). Este módulo solo clasifica.
-//  - unescapeFormulaGuard des-escapa el prefijo ' anti-fórmula que agrega el export. Es SEGURO:
-//    la defensa anti-fórmula es de PRESENTACIÓN (se re-aplica en cada export con esc() y React
+//  - unescapeFormulaGuard des-escapa el prefijo ' anti-fórmula que agregaba el export CSV (los .csv
+//    viejos lo siguen trayendo; el export de Excel ya no lo pone: escribe celdas de texto). Es SEGURO:
+//    la defensa anti-fórmula es de PRESENTACIÓN (el export la re-aplica escribiendo texto y React
 //    escapa el render en el panel). Almacenar el ' corrompería el dato sin ganar seguridad
 //    (Pattern 3 / Pitfall 3 del RESEARCH; test estrella de round-trip lossless lo verifica).
 //  - Header RÍGIDO = el del export de la Fase 2 (round-trip). Columnas extra se ignoran; la
@@ -41,10 +44,11 @@ export interface ImportableRow {
   nro_obra_social: string | null
 }
 
-// Header canónico del export (app/api/export/clients/route.ts L64) — el contrato de round-trip.
-// El orden no importa para la validación (papaparse mapea por nombre), pero las OBLIGATORIAS del
-// header rígido deben estar todas presentes.
-const CANONICAL_HEADER = [
+// Header canónico (ya normalizado por canonicalHeader) — el contrato de round-trip con el export. El
+// export de Excel escribe los títulos legibles (Nombre, Teléfono, … Nro. obra social) y el CSV viejo
+// los escribía en snake_case: los dos normalizan a esto. El orden no importa para la validación (se
+// mapea por nombre), pero las OBLIGATORIAS del header rígido deben estar todas presentes.
+export const CANONICAL_HEADER = [
   'nombre',
   'telefono',
   'email',
@@ -55,9 +59,10 @@ const CANONICAL_HEADER = [
 ] as const
 
 // Quita UN `'` líder si y solo si el siguiente carácter es de inicio de fórmula (= + - @ tab CR).
-// Ese es EXACTAMENTE el conjunto que el esc() del export prefija (route.ts L59), invertido para
-// detectar el prefijo en vez de agregarlo. Un `'` legítimo (O'Brien) NO se toca porque ahí el char
-// siguiente no matchea. Acoplado al export: si el export cambia el conjunto, cambiar acá también.
+// Ese es EXACTAMENTE el conjunto que prefijaba el esc() del export CSV, invertido para detectar el
+// prefijo en vez de agregarlo (el export de Excel ya no prefija, pero los .csv exportados antes del
+// quick 261124-ine sí, y un dueño puede tipear `'=` en una celda del Excel). Un `'` legítimo
+// (O'Brien) NO se toca porque ahí el char siguiente no matchea.
 export function unescapeFormulaGuard(v: string): string {
   return v.startsWith("'") && /^[=+\-@\t\r]/.test(v.slice(1)) ? v.slice(1) : v
 }
@@ -68,21 +73,35 @@ export interface ParseResult {
   rows: RawRow[]
 }
 
-// Parseo RFC4180 con papaparse. Strip defensivo del BOM del export (U+FEFF vía secuencia de escape,
-// NUNCA el glifo pegado — misma convención que el export). transformHeader normaliza trim+lowercase
-// para tolerar "Nombre "/"TELEFONO" sin habilitar mapeo flexible (eso es v2). El header rígido se
-// valida contra CANONICAL_HEADER; si falta una columna obligatoria → validHeader=false y no se
-// devuelven filas (el handler responde invalid_header).
-// Normaliza un nombre de columna: quita comillas sueltas (Excel puede dejar `nombre"`/`"nombre` al
-// re-guardar) + trim + lowercase. NO habilita mapeo flexible (v2): el header rígido igual se valida.
-const normHeader = (h: string) => h.trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase()
+// Normaliza un nombre de columna al canónico: trim → quita comillas sueltas (Excel puede dejar
+// `nombre"`/`"nombre` al re-guardar) → trim → sin acentos → minúsculas → sin puntos → espacios y
+// guiones bajos repetidos a un solo `_`. Así el título legible del Excel (`Teléfono`, `Nro. obra
+// social`) y el snake_case del CSV viejo (`telefono`, `nro_obra_social`) caen en lo mismo, sin una
+// tabla de alias (D-04). NO es mapeo flexible: el header sigue RÍGIDO (las 7 de CANONICAL_HEADER
+// tienen que estar; las columnas extra se ignoran). La usan parseCsv y el import de Excel.
+export function canonicalHeader(h: string): string {
+  return h
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\./g, '')
+    .trim()
+    .replace(/[\s_]+/g, '_')
+}
 
+// Parseo RFC4180 con papaparse. Strip defensivo del BOM del export (U+FEFF) y de `sep=`.
+// transformHeader = canonicalHeader (ver arriba). El header rígido se valida contra CANONICAL_HEADER;
+// si falta una columna obligatoria → validHeader=false y no se devuelven filas (el handler responde
+// invalid_header).
 export function parseCsv(text: string): ParseResult {
   // Strip del BOM del export (U+FEFF) + de una línea `sep=,`/`sep=;` que Excel a veces escribe
   // adelante para fijar el delimitador. Ambos romperían el header rígido si no.
   const clean = text.replace(/^﻿/, '').replace(/^sep=.\r?\n/i, '')
 
-  let result = Papa.parse<RawRow>(clean, { header: true, skipEmptyLines: 'greedy', transformHeader: normHeader })
+  let result = Papa.parse<RawRow>(clean, { header: true, skipEmptyLines: 'greedy', transformHeader: canonicalHeader })
   let fields = result.meta.fields ?? []
 
   // Recuperación del "colapso a una columna" de Excel (locale ES/AR, delimitador ;): Excel abre el
@@ -93,7 +112,7 @@ export function parseCsv(text: string): ParseResult {
   if (fields.length === 1 && fields[0].includes(',')) {
     const flat = Papa.parse<string[]>(clean, { header: false, skipEmptyLines: 'greedy' })
     const lines = (flat.data as string[][]).map((r) => r[0] ?? '')
-    result = Papa.parse<RawRow>(lines.join('\r\n'), { header: true, skipEmptyLines: 'greedy', transformHeader: normHeader })
+    result = Papa.parse<RawRow>(lines.join('\r\n'), { header: true, skipEmptyLines: 'greedy', transformHeader: canonicalHeader })
     fields = result.meta.fields ?? []
   }
 

@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
+import { buildClientsWorkbook } from '@/lib/clients-xlsx'
+import { XLSX_CONTENT_TYPE, workbookToBytes } from '@/lib/xlsx-style'
 
-// Export CSV de clientes (DATA-01) — route handler AUTENTICADO del dueño.
+// Export de clientes en Excel (DATA-01) y plantilla de import — route handler AUTENTICADO del dueño.
 //
-// Por qué así (aislamiento por tenant, igual que appointments/create):
+// Lo que sigue igual (aislamiento por tenant, igual que appointments/create):
 //   • Cliente anon + RLS (@/lib/supabase/server), NUNCA admin/service-role: el service role
 //     queda prohibido en un endpoint que devuelve datos crudos al browser. RLS + el filtro
 //     explícito por business_id son la defensa en profundidad.
@@ -10,27 +12,27 @@ import { createClient } from '@/lib/supabase/server'
 //     querystring: el actor solo puede exportar SU propio negocio (T-02-10/T-02-11).
 //   • Se exportan TODAS las filas del negocio (no la página visible en el cliente).
 //
-// Formato del archivo (D-03/D-04):
-//   • Response CRUDO text/csv (no Response.json) con Content-Disposition attachment.
-//   • BOM UTF-8 al inicio — emitido con la secuencia de escape TS (backslash-uFEFF), NUNCA el glifo
-//     invisible pegado — para que Excel-AR muestre bien los acentos.
-//   • Escaping RFC4180 (esc): cada campo entre comillas dobles, comilla interna duplicada;
-//     filas separadas por \r\n (CRLF). Cubre comas/comillas/saltos.
-//   • CSV formula injection (OWASP): las comillas de RFC4180 NO alcanzan (Excel las quita al
-//     parsear y evalúa =... igual). Los campos que arrancan con = + - @ (o tab/CR) se prefijan
-//     con ' para neutralizar la fórmula. Importa porque el CSV incluye datos de origen no
-//     confiable (ej. nombre del cliente cargado en una reserva pública).
-//   • Header = CONTRATO DE ROUND-TRIP con la Fase 3 (import CSV): orden estable
-//     nombre,telefono,email,origen,notas,obra_social,nro_obra_social. NO cambiar el orden
-//     ni los nombres sin coordinar con la Fase 3.
-//
-// CSV hand-authored: NO se agrega dependencia de CSV (guardrail UI-SPEC Registry Safety).
+// Lo que cambió (quick 261124-ine):
+//   • Sale un .xlsx (hoja Clientes, encabezado de marca, fila congelada, autofiltro) en vez de un CSV
+//     que Excel-AR abría colapsado en una columna.
+//   • Cada valor va como celda de TEXTO: Excel no la evalúa aunque empiece con `=`, así que ya no hace
+//     falta el prefijo `'` anti-fórmula (los nombres pueden venir de reservas públicas, no confiables).
+//   • Los títulos son legibles (Nombre, Teléfono, … Nro. obra social); el import los reconoce con
+//     canonicalHeader, así el archivo exportado vuelve a entrar sin tocarlo.
+//   • `?plantilla=1` baja la plantilla de import (mismo builder, 0 filas + hoja Instrucciones) detrás
+//     del MISMO gate de sesión. El querystring no aporta tenant: solo elige qué archivo armar.
 
-export async function GET() {
+// La librería de planillas usa APIs de Node (streams, Buffer): el route handler no puede ir a Edge.
+// 'nodejs' ya es el default; se declara para que nadie lo mueva sin ver esto.
+export const runtime = 'nodejs'
+
+export async function GET(request: Request) {
+  const plantilla = new URL(request.url).searchParams.get('plantilla') === '1'
+
   // Cliente anon+RLS con las cookies de la sesión del dueño. NO admin.
   const supabase = await createClient()
 
-  // Auth gate (T-02-10): sin sesión → 401.
+  // Auth gate (T-02-10): sin sesión → 401. También para la plantilla (D-03).
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -45,6 +47,12 @@ export async function GET() {
     .single()
   if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
+  if (plantilla) {
+    // La plantilla no lee ningún cliente.
+    const bytes = await workbookToBytes(buildClientsWorkbook([], { plantilla: true }))
+    return xlsxResponse(bytes, 'plantilla-clientes.xlsx')
+  }
+
   // TODAS las filas del negocio (no la página visible), filtradas por business_id de la sesión.
   const { data: clients } = await supabase
     .from('clients')
@@ -52,40 +60,18 @@ export async function GET() {
     .eq('business_id', business.id)
     .order('name', { ascending: true })
 
-  // Escaping RFC4180 + defensa CSV formula injection (OWASP): si el campo arranca con = + - @
-  // (o tab/CR), prefijar con ' para que Excel/Sheets no lo evalúe como fórmula; luego RFC4180
-  // (comillas dobles, comilla interna duplicada). Ver cabecera (T-02-13, endurecido post-secure).
-  const esc = (v: string) => {
-    const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
-    return `"${safe.replace(/"/g, '""')}"`
-  }
-
-  // Header = contrato de round-trip con la Fase 3 (orden estable).
-  const headers = ['nombre', 'telefono', 'email', 'origen', 'notas', 'obra_social', 'nro_obra_social']
-
-  const rows = (clients ?? []).map((c) =>
-    [
-      c.name ?? '',
-      c.phone ?? '',
-      c.email ?? '',
-      c.origin ?? '',
-      c.notes ?? '',
-      c.insurance_name ?? '',
-      c.insurance_number ?? '',
-    ]
-      .map((v) => esc(String(v)))
-      .join(',')
-  )
-
-  const csv = [headers.map(esc).join(','), ...rows].join('\r\n')
-
   const fecha = new Date().toISOString().slice(0, 10)
+  const bytes = await workbookToBytes(buildClientsWorkbook(clients ?? []))
+  return xlsxResponse(bytes, `clientes-${business.slug}-${fecha}.xlsx`)
+}
 
-  // Response crudo con BOM U+FEFF delante del string (secuencia de escape, no glifo pegado).
-  return new Response('\uFEFF' + csv, {
+// no-store: son datos personales; que ninguna caché intermedia se quede con una copia (T-q-07).
+function xlsxResponse(bytes: Uint8Array<ArrayBuffer>, filename: string): Response {
+  return new Response(bytes, {
     headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="clientes-${business.slug}-${fecha}.csv"`,
+      'Content-Type': XLSX_CONTENT_TYPE,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control': 'no-store',
     },
   })
 }
