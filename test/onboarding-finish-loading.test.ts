@@ -80,3 +80,77 @@ describe('handleFinish del wizard (WR-02)', () => {
     }
   })
 })
+
+// ── Quick 261124-iu8: ningún await de `handleFinish` espera sin tope ─────────────────────────────
+//
+// EL DEFECTO: un refresh de token que no volvía dejaba `await supabase.auth.getUser()` pendiente para
+// siempre (lock de auth-js 2.106.2 sin timeout) y el botón en «Guardando...». Detrás del mismo lock
+// esperan los inserts/rpc/storage de la configuración, y sus fetch tampoco tienen timeout. LO QUE ESTE
+// GATE CONGELA: cada `await` del cuerpo pasa por el límite del alta (`altaDelNegocio(`) o por el plazo
+// de la configuración (`enPlazo(`). Un await nuevo sin tope lo pone en rojo.
+describe('handleFinish: ningún await sin límite (quick 261124-iu8)', () => {
+  const cuerpo = cuerpoDeHandleFinish()
+  const awaits = [...cuerpo.matchAll(/\bawait\b/g)]
+
+  // Guarda del instrumento: alta + 2 del logo + servicios + profesionales + agenda + lead = 7.
+  it('el recorte ve todos los awaits y el plazo de la configuración', () => {
+    expect(awaits.length).toBeGreaterThanOrEqual(7)
+    expect(cuerpo).toContain('crearPlazo(')
+  })
+
+  it('cada await va seguido de altaDelNegocio( o enPlazo(', () => {
+    for (const m of awaits) {
+      const despues = cuerpo.slice(m.index! + 'await'.length).replace(/^\s+/, '')
+      expect(
+        despues.startsWith('altaDelNegocio(') || despues.startsWith('enPlazo('),
+        `await sin límite: await ${despues.slice(0, 80)}`,
+      ).toBe(true)
+    }
+  })
+})
+
+// ── Quick 261124-iu8, DC-7: slug y «Atrás» bloqueados mientras el alta no se confirma ─────────────
+//
+// Un intento que vence con su insert (slug A) en viaje no puede dejar que el dueño vuelva al paso 1,
+// cambie a slug B y reintente: la búsqueda correría antes de que A aterrice y se crearía B. Este gate
+// nace verde (el bloqueo lo cableó la tarea 2); su rojo previo es la marca `atras-habilitado` de la
+// sonda `onb-crear-negocio-colgado`.
+describe('wizard: slug y Atrás bloqueados mientras el alta no se confirma (quick 261124-iu8, DC-7)', () => {
+  const src = sinComentarios(readFileSync(ARCHIVO, 'utf8').replace(/\r\n/g, '\n'))
+
+  it('altaSinConfirmar = loading || errorAlta !== null', () => {
+    expect(src).toMatch(/const altaSinConfirmar = loading \|\| errorAlta !== null\b/)
+  })
+
+  it('el «Atrás» del pie tiene un disabled que incluye altaSinConfirmar', () => {
+    const iClick = src.indexOf('onClick={() => setStep(visibleSteps[currentIndex - 1].n)}')
+    expect(iClick, 'no encontré el onClick de «Atrás»').toBeGreaterThan(-1)
+    const iInicio = src.lastIndexOf('<Button', iClick)
+    const iTexto = src.indexOf('Atrás', iClick)
+    expect(iInicio).toBeGreaterThan(-1)
+    expect(iTexto).toBeGreaterThan(iClick)
+    expect(src.slice(iInicio, iTexto)).toMatch(/disabled=\{[^}\n]*\baltaSinConfirmar\b[^}\n]*\}/)
+  })
+
+  it('los inputs del slug y del nombre llevan disabled={altaSinConfirmar}', () => {
+    for (const marca of ['value={slug}', 'placeholder="Ej: Estudio Nova"']) {
+      const i = src.indexOf(marca)
+      expect(i, `no encontré el input con ${marca}`).toBeGreaterThan(-1)
+      const iInicio = src.lastIndexOf('<Input', i)
+      const iFin = src.indexOf('/>', i)
+      expect(iInicio).toBeGreaterThan(-1)
+      expect(iFin).toBeGreaterThan(i)
+      expect(src.slice(iInicio, iFin), `input ${marca}`).toContain('disabled={altaSinConfirmar}')
+    }
+  })
+
+  it('el catch de handleFinish decide con esAltaSinConfirmar(err) antes de setErrorAlta(', () => {
+    const cuerpo = cuerpoDeHandleFinish()
+    const iCatch = cuerpo.indexOf('} catch (err) {')
+    expect(iCatch).toBeGreaterThan(-1)
+    const iDecide = cuerpo.indexOf('esAltaSinConfirmar(err)', iCatch)
+    const iSet = cuerpo.indexOf('setErrorAlta(', iCatch)
+    expect(iDecide).toBeGreaterThan(iCatch)
+    expect(iSet).toBeGreaterThan(iDecide)
+  })
+})
