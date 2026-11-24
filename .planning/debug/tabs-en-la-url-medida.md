@@ -2434,3 +2434,64 @@ sin número, y con FX el sentinel es un productor más); R2-IN-04. La UAT corta 
 conjunto.
 
 cierre (n): CR-01=arreglado · IN-03=arreglado · WR-01=arreglado · C-back=cerrado
+
+## (o) Los pendientes de v0.31: R3-WR-01, R2-IN-04, /clients sin nodo y el desborde de Finanzas (quick 261124-q68)
+
+Los cuatro pendientes que v0.31 dejó abiertos en `deferred-items.md` (Phase 4), con la regla del dueño en este
+workstream: medir primero, con el rojo commiteado antes del arreglo, y arreglar sólo lo que reproduce. (o.1) es la
+lógica de historial, medida con el simulador de `test/panel-tabs.test.ts` y los ejecutores reales; (o.2) y (o.3) son
+pantalla, medidas por CDP con `.planning/debug/probes/g04-scroll-y-recarga.mjs`.
+
+### (o.1) R3-WR-01 y R2-IN-04 en el simulador (2026-11-24)
+
+**Rojo** (commit `8e7bae0`, `test(quick-261124-q68)`, con el código de hoy) y **verde** (después de `e53dd41` para
+R3-WR-01 y `a810e07` para R2-IN-04). El describe nuevo es `R3-WR-01 y R2-IN-04 — medidos antes de arreglar (quick
+261124-q68)`, al final de `test/panel-tabs.test.ts`; `(j)` va en el primer describe de
+`test/panel-history-clients.test.ts`.
+
+| Caso | Con el código de hoy (rojo) | Con el arreglo (verde) | Lo correcto |
+|---|---|---|---|
+| R1 `up` ignorado → sidebar reemplaza a `/clients` → abrir ficha | `none`, `/clients` | `push`, `/clients?c=A` | `push` |
+| R2 salida ignorada → sidebar empuja `/finances` → tab | `none`, `/finances` | `push`, `/finances?tab=ventas` | `push` |
+| R3 menú ignorado → sidebar reemplaza a `/settings` → tab | `none`, `/settings` | `push`, `/settings?tab=seguridad` | `push` |
+| R4 tab por defecto ignorado → sidebar reemplaza a `/clients` → abrir ficha | `none`, `/clients` | `push`, `/clients?c=A` | `push` |
+| R5-misma-entrada (el residuo): tab por defecto ignorado y, sin moverse, Egresos | `none`, 0 retrocesos | `none`, 0 retrocesos | `none` (declarado) |
+| W1-tab: default, reemplazo de Next con la MISMA URL, default otra vez | `consume`, `none`, 1 retroceso, `/finances` | ídem | ídem |
+| C-llegada-ejecutor (candado de fuente) | rojo (el ejecutor tenía una sola línea) | verde | — |
+| IN04-mecanismo: dos `user-open` con el `from` congelado del render | `push`, `push`, 2 entradas `?c=A`, un atrás cae en `?c=A` | ídem (es la medición) | — |
+| IN04-doble: `tocarFila('A')` dos veces | rojo (`toqueDeFicha` no existía) | `push`, `none`, 3 entradas, atrás → `/clients` | ídem |
+| IN04-a-b: con `?c=A`, `tocarFila('B')` dos veces | rojo | `push`, `none`, atrás → `?c=A` | ídem |
+| IN04-fusion: `?c=dup` absorbida por `kept`, tocar `kept` | rojo | `none` | `none` |
+| IN04-ajeno: `?c=ghost` fuera de la lista, tocar A | rojo | `push`, `/clients?c=A` | `push` |
+| `toqueDeFicha` unitario (sin `c`, `?c=`, resolver nulo, `to` intacto) | rojo (`undefined`) | verde | — |
+| `(j)` la fila decide con la URL de ahora y con `clienteDeLaUrl` | rojo (`from: selectedId`) | verde | — |
+| candado del espejo (`tocarFila` llama a `toqueDeFicha` con `window.location.search`) | verde desde el rojo | verde | — |
+
+El candado del espejo dio verde ya en el rojo, y es lo esperable: vigila el cuerpo de `tocarFila`, que es del propio
+test y nació llamando a `toqueDeFicha`. Mide que el espejo no derive, no al código de la pantalla (eso lo mide `(j)`).
+
+**La línea vieja que se ajustó** (una sola, «mismo invariante, dialecto nuevo»): el «candado de la guarda» del describe
+de G-04-7 buscaba la guarda de `applyPanelView` con su forma de una línea, `if (consumoEnVuelo) return 'none'`. Con el
+arreglo la guarda es un bloque igual al del menú, así que ahora busca su apertura, `if (consumoEnVuelo) {`. La aserción
+que importa —la guarda antes de `const holding =`— no cambió. Ningún otro caso existente se tocó; `C-retroceso-unico*`
+y `C-back-cerrado` quedaron verdes sin tocarlos.
+
+**Mutaciones** (temporales, con Edit, revertidas; `git diff --quiet HEAD --` dio 0 después de cada una):
+- M-a: rojo — la primera sentencia de `applyPanelView` vuelve a `if (consumoEnVuelo) return 'none'`: R1, R2, R3, R4,
+  `C-llegada-ejecutor` y el candado de la guarda en rojo (6 fallas en `test/panel-tabs.test.ts`).
+- M-b: rojo — la llegada del ejecutor sólo por el state (sin la mitad de la URL): `W1-tab` en rojo con `a2: 'consume'`,
+  2 retrocesos y `/dashboard` (lo correcto: `none`, 1 y `/finances`), y `C-llegada-ejecutor` en rojo.
+- M-c: rojo — la fila vuelve a pasar `from: selectedId` (el valor del render): `(j)` en rojo.
+
+**Verde:** las 8 suites de historial dan 730/730 (antes 715; 15 casos nuevos); `tsc --noEmit` limpio; eslint de
+`lib/panel-history.ts` y `clients-client.tsx` sin problemas.
+
+**Lo que NO cierra:** el retroceso ignorado en silencio sigue sin verse en ningún motor (sólo simulado); la ventana real
+del doble toque en la app (pushState → commit) no se midió en el teléfono; `W1x` (un reemplazo con URL nueva dentro de la
+ventana) sigue siendo el borde declarado, ahora también del ejecutor.
+
+Logs: `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/q68/`
+(`rojo-historial.txt`, `verde-historial.txt`, `mut-a.txt`, `mut-b.txt`, `mut-c.txt`, `eslint-antes.txt`,
+`casos-antes.txt`).
+
+veredictos (o.1): R3-WR-01=reproduce · R2-IN-04=reproduce
