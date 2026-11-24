@@ -26,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TAB_PARAM, TABS_FINANZAS, resolveTab, toqueDeTab } from '@/lib/panel-tabs'
 import { applyPanelView, panelTabCause, resolveViewParam, sanitizeAction, reconciledMemo } from '@/lib/panel-history'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
-import { clientFullName } from '@/lib/client-name'
+import { clientFullName, normalizeLastName } from '@/lib/client-name'
 import {
   TrendingUp, TrendingDown, Plus, Pencil, Trash2,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
@@ -57,7 +57,7 @@ const EXPENSE_CATEGORIES = ['Insumos', 'Alquiler', 'Servicios', 'Personal', 'Mar
 // Los campos van ENUMERADOS y no por spread: así reordenar la declaración del estado (o sumarle un
 // campo) no cambia la huella en silencio. Un campo nuevo que haya que vigilar se suma ACÁ, a mano.
 type SaleForm = { description: string; quantity: string; amount: string; date: string; type: string }
-type NewClientDraft = { name: string; phone: string; email: string }
+type NewClientDraft = { name: string; last_name: string; phone: string; email: string }
 
 /**
  * Huella del borrador de venta: el formulario MÁS la asociación de cliente, que es parte del trabajo
@@ -77,6 +77,7 @@ function saleFingerprint(f: SaleForm, mode: ClientMode, clientId: string | null,
     mode,
     clientId,
     ncName: nc.name,
+    ncLastName: nc.last_name,
     ncPhone: nc.phone,
     ncEmail: nc.email,
   })
@@ -344,7 +345,7 @@ export function FinancesClient({ businessId }: Props) {
   const [saleClientMode, setSaleClientMode] = useState<ClientMode>('none')
   const [saleClientSearch, setSaleClientSearch] = useState('')
   const [saleClientSelected, setSaleClientSelected] = useState<Client | null>(null)
-  const [saleNewClient, setSaleNewClient] = useState({ name: '', phone: '', email: '' })
+  const [saleNewClient, setSaleNewClient] = useState({ name: '', last_name: '', phone: '', email: '' })
 
   // Expense modal
   const [expenseModal, setExpenseModal] = useState(false)
@@ -552,7 +553,7 @@ export function FinancesClient({ businessId }: Props) {
     setSaleClientMode('none')
     setSaleClientSearch('')
     setSaleClientSelected(null)
-    setSaleNewClient({ name: '', phone: '', email: '' })
+    setSaleNewClient({ name: '', last_name: '', phone: '', email: '' })
   }
 
   function openNewSale() {
@@ -562,7 +563,7 @@ export function FinancesClient({ businessId }: Props) {
     const inicial = { description: '', quantity: '1', amount: '', date: format(new Date(), 'yyyy-MM-dd'), type: 'venta' }
     setSaleForm(inicial)
     resetSaleClientState()
-    setSaleBaselineFp(saleFingerprint(inicial, 'none', null, { name: '', phone: '', email: '' }))
+    setSaleBaselineFp(saleFingerprint(inicial, 'none', null, { name: '', last_name: '', phone: '', email: '' }))
     clearDismissBlocked()
     setSaleModal(true)
   }
@@ -580,7 +581,7 @@ export function FinancesClient({ businessId }: Props) {
       inicial,
       existing ? 'search' : 'none',
       existing ? existing.id : null,
-      { name: '', phone: '', email: '' },
+      { name: '', last_name: '', phone: '', email: '' },
     ))
     clearDismissBlocked()
     setSaleModal(true)
@@ -603,6 +604,7 @@ export function FinancesClient({ businessId }: Props) {
       const { data: nc } = await supabase.from('clients').insert({
         business_id: businessId,
         name: saleNewClient.name.trim(),
+        last_name: normalizeLastName(saleNewClient.last_name),
         phone: saleNewClient.phone.trim() || null,
         email: saleNewClient.email.trim() || null,
       }).select().single()
@@ -1314,8 +1316,12 @@ export function FinancesClient({ businessId }: Props) {
 
               {saleClientMode === 'new' && (
                 <div className="space-y-1.5">
-                  <Input value={saleNewClient.name} onChange={e => setSaleNewClient(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Nombre *" className="h-8 text-base sm:text-sm" />
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Input value={saleNewClient.name} onChange={e => setSaleNewClient(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Nombre *" className="h-8 text-base sm:text-sm" />
+                    <Input value={saleNewClient.last_name} onChange={e => setSaleNewClient(f => ({ ...f, last_name: e.target.value }))}
+                      placeholder="Apellido" className="h-8 text-base sm:text-sm" />
+                  </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     <Input value={saleNewClient.phone} onChange={e => setSaleNewClient(f => ({ ...f, phone: e.target.value }))}
                       placeholder="Teléfono" className="h-8 text-base sm:text-sm" />
