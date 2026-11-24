@@ -11,7 +11,6 @@ import { TimeField } from '@/components/ui/time-field'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, Clock, DollarSign, Stethoscope, Sparkles, LogOut, Image as ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VERTICALS, RUBRO_PLACEHOLDERS, type VerticalKey } from '@/lib/verticals'
@@ -226,15 +225,20 @@ export default function OnboardingPage() {
     }
   }, [])
 
-  useEffect(() => {
-    const slugified = name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .slice(0, 50)
-    setSlug(slugified)
-  }, [name])
+  // El slug se deriva del nombre EN el cambio del nombre, no en un efecto: un setState dentro de un
+  // useEffect dispara un render extra en cascada (react-hooks/set-state-in-effect). El comportamiento
+  // es el mismo: cada tecla en el nombre reescribe el slug, y editar el slug a mano no toca el nombre.
+  function handleNameChange(val: string) {
+    setName(val)
+    setSlug(
+      val
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .slice(0, 50),
+    )
+  }
 
   useEffect(() => {
     const timeout = setTimeout(() => checkSlug(slug), 500)
@@ -888,7 +892,7 @@ export default function OnboardingPage() {
                   {/* Bloqueado mientras el alta no se confirma (DC-7): el slug sale del nombre. */}
                   <Input
                     value={name}
-                    onChange={e => setName(e.target.value)}
+                    onChange={e => handleNameChange(e.target.value)}
                     placeholder="Ej: Estudio Nova"
                     disabled={altaSinConfirmar}
                   />
