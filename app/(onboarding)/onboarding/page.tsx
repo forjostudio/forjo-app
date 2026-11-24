@@ -35,8 +35,20 @@ import {
 import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 import { wizardSteps, stepperSteps } from '@/lib/onboarding-steps'
 import { OnboardingStepper } from '@/components/onboarding/onboarding-stepper'
+import { altaDelNegocio, esAltaSinConfirmar, pasosDeConfiguracion, type ConfiguracionExistente } from '@/lib/onboarding-alta'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+// Tope de la fase de ALTA de `handleFinish` (getUser + búsqueda de negocios del dueño + insert), D-01 del
+// quick 261124-iu8. Sin tope, un refresh de token que no vuelve dejaba `getUser()` pendiente para siempre
+// dentro del lock de auth-js 2.106.2 (que encola sin timeout) y el botón en «Guardando...» sin salida
+// (debug `onboarding-guardando-colgado`). 20 s: holgado para una red móvil lenta, corto para un dueño
+// mirando un botón quieto.
+const LIMITE_ALTA_MS = 20_000
+// Un solo mensaje para el vencimiento y para el pedido cortado sin respuesta: en los dos casos NO
+// sabemos si el negocio se creó, así que no se puede decir "falló". «Reintentar» lo resuelve: si llegó a
+// la base, el próximo intento lo encuentra (`retomado`) en vez de crear otro.
+const MENSAJE_ALTA_SIN_CONFIRMAR = 'No pudimos confirmar que se creó tu negocio por un problema de conexión. Revisá tu conexión y tocá Reintentar.'
 
 // La clave local de cada servicio del paso 2 (D-08/D-09), y a la vez el `services.id` final, vive en
 // `lib/onboarding-agenda.ts`. Se mudó al módulo puro por WR-02: llamaba a `globalThis.crypto
@@ -110,6 +122,16 @@ export default function OnboardingPage() {
   const supabase = createClient()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  // Aviso del alta que no se pudo confirmar (vencida o cortada sin respuesta del server). Mientras esté
+  // puesto, el botón dice «Reintentar» y hay una línea `role="alert"` en el último paso (DC-5).
+  const [errorAlta, setErrorAlta] = useState<string | null>(null)
+  // DC-7: mientras haya un intento sin confirmar (en curso, o vencido/cortado sin respuesta), «Atrás» y
+  // los campos de nombre y slug quedan bloqueados. El caso que cierra: un intento vence con su insert
+  // (slug A) todavía en viaje, el dueño vuelve al paso 1, cambia a slug B y reintenta; la búsqueda corre
+  // antes de que A aterrice y se crea B = dos negocios. Con el slug fijo, si A aterriza en el medio, el
+  // reintento lo encuentra (`retomado`) o choca con el unique del slug (23505). Sólo una respuesta del
+  // server (éxito o error con status HTTP) libera el bloqueo.
+  const altaSinConfirmar = loading || errorAlta !== null
 
   // Step 1 - Business
   const [name, setName] = useState('')
@@ -420,6 +442,27 @@ export default function OnboardingPage() {
     return valid
   }
 
+  // Qué configuración ya tiene un negocio propio que se está RETOMANDO (DC-3 del quick 261124-iu8): un
+  // intento anterior llegó a la base aunque su respuesta no volvió, y pudo llegar también a la
+  // configuración (o el dueño la cargó desde otra pestaña). Corre adentro del MISMO límite del alta
+  // (`altaDelNegocio`), con el mismo cliente de sesión y filtrado por `business_id`. Fail-closed: si
+  // cualquiera de las tres lecturas falla, tira y el intento no escribe nada. Vive FUERA de
+  // `handleFinish` para que sus awaits no entren en el gate de fuente de ese cuerpo.
+  async function leerConfiguracionDelNegocio(businessId: string, signal: AbortSignal): Promise<ConfiguracionExistente> {
+    const [svc, pro, franjas] = await Promise.all([
+      supabase.from('services').select('id').eq('business_id', businessId).abortSignal(signal),
+      supabase.from('professionals').select('id', { count: 'exact', head: true }).eq('business_id', businessId).abortSignal(signal),
+      supabase.from('time_blocks').select('id', { count: 'exact', head: true }).eq('business_id', businessId).abortSignal(signal),
+    ])
+    const error = svc.error ?? pro.error ?? franjas.error
+    if (error) throw error
+    return {
+      serviceIds: (svc.data ?? []).map((s: { id: string }) => s.id),
+      profesionales: (pro.count ?? 0) > 0,
+      horarios: (franjas.count ?? 0) > 0,
+    }
+  }
+
   async function handleFinish() {
     // Bloquear el finalizar si algún bloque de horario es inválido (fin <= inicio). Marca el error
     // inline en el estado y no avanza (no crea el negocio con horarios rotos).
@@ -427,11 +470,9 @@ export default function OnboardingPage() {
       toast.error('Revisá los horarios: la hora de fin debe ser mayor a la de inicio.')
       return
     }
+    setErrorAlta(null)
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No autenticado')
-
       // WhatsApp opcional: si lo cargaron, normalizar a formato wa.me y validar.
       let whatsappNorm: string | null = null
       if (whatsapp.trim()) {
@@ -443,27 +484,49 @@ export default function OnboardingPage() {
         }
       }
 
-      const { data: business, error: bizError } = await supabase
-        .from('businesses')
-        .insert({
-          owner_id: user.id,
-          name,
-          slug,
-          type,
-          vertical,
-          whatsapp: whatsappNorm,
-          address: address || null,
-          instagram: instagram || null,
-          // Paleta default (ONB-04, D-06): el wizard ya no ofrece el selector; el negocio arranca con
-          // la paleta 'red' (el default histórico) y la edita después en Ajustes → Apariencia.
-          palette: 'red',
-          // back-compat: la columna primary_color sigue existiendo; es el swatch del 'red'.
-          primary_color: '#d94a2b',
-        })
-        .select()
-        .single()
+      // Fase de ALTA bajo UN solo límite (D-01/D-02 del quick 261124-iu8): usuario de la sesión →
+      // negocios del dueño → retomar / no crear / insertar. Ver `lib/onboarding-alta.ts`. Todo con el
+      // MISMO `supabase` del navegador y no con un endpoint (DC-1): pasar por el server rotaría el refresh
+      // token y el refresh trabado del navegador, al llegar, desloguearía al dueño. Cada query lleva el
+      // signal del límite, así un intento vencido no inserta tarde (DC-4). Los adaptadores son
+      // expresiones a propósito (el gate WR-02 cuenta los `return` de este tramo).
+      const alta = await altaDelNegocio({
+        limiteMs: LIMITE_ALTA_MS,
+        slug,
+        obtenerUsuarioId: () => supabase.auth.getUser().then(({ data }) => data.user?.id ?? null),
+        buscarNegociosDelDueno: (ownerId, signal) =>
+          supabase.from('businesses').select('id, slug').eq('owner_id', ownerId).abortSignal(signal),
+        leerConfiguracion: leerConfiguracionDelNegocio,
+        insertarNegocio: (ownerId, signal) => supabase
+          .from('businesses')
+          .insert({
+            owner_id: ownerId,
+            name,
+            slug,
+            type,
+            vertical,
+            whatsapp: whatsappNorm,
+            address: address || null,
+            instagram: instagram || null,
+            // Paleta default (ONB-04, D-06): el wizard ya no ofrece el selector; el negocio arranca con
+            // la paleta 'red' (el default histórico) y la edita después en Ajustes → Apariencia.
+            palette: 'red',
+            // back-compat: la columna primary_color sigue existiendo; es el swatch del 'red'.
+            primary_color: '#d94a2b',
+          })
+          .select()
+          .abortSignal(signal)
+          .single(),
+      })
 
-      if (bizError) throw bizError
+      if (alta.tipo === 'ya-existia') {
+        // El dueño ya tiene un negocio con OTRO slug: no se arma un segundo. `loading` queda en true por
+        // el mismo motivo que en el éxito (WR-02): el wizard se desmonta con el botón deshabilitado.
+        toast('Ya tenías un negocio creado: no armamos otro. Seguimos con las integraciones.')
+        router.replace('/onboarding/integraciones')
+        return
+      }
+      const business = alta.negocio
 
       // Upload del logo al bucket `logos` (ONB-03, D-05). Timing: DESPUÉS de crear el negocio porque
       // la RLS del bucket exige que el negocio exista (path keyeado por business.id). El path lo arma
@@ -500,13 +563,16 @@ export default function OnboardingPage() {
       // paso 2 y el mismo que el mapeo del paso 4 referencia. No hay `.select()` ni correlación por
       // posición — ver el comentario de newServiceId().
       const filasDeServicios = buildServiceRows(services, business.id)
+      // Al RETOMAR un negocio propio que ya llegó a la base (DC-3), se saltea cada paso que ya tiene filas:
+      // servicios, profesionales y horarios nunca se duplican ni se pisan. En `creado`, todo corre igual que antes.
+      const pasos = pasosDeConfiguracion(alta, filasDeServicios.map(s => s.id))
       // El error de este insert SÍ se chequea, y no por prolijidad: si los servicios no entraron, el
       // mapeo del paso 4 apuntaría a ids que no existen, la FK compuesta `tbs_service_same_tenant`
       // (migr. 073) rebotaría con 23503 y —como el RPC de la agenda es todo-o-nada— el negocio se
       // quedaría TAMBIÉN sin horarios. Cuando falla, la agenda se degrada a comodín en vez de
       // arrastrar al fondo a toda la configuración.
       let falloServicios = false
-      if (filasDeServicios.length > 0) {
+      if (pasos.servicios && filasDeServicios.length > 0) {
         const { error: svcErr } = await supabase.from('services').insert(filasDeServicios)
         if (svcErr) {
           falloServicios = true
@@ -536,7 +602,7 @@ export default function OnboardingPage() {
       const filasDeProfesionales = professionals
         .filter(p => p.name.trim())
         .map(p => ({ name: p.name, business_id: business.id }))
-      if (filasDeProfesionales.length > 0) {
+      if (pasos.profesionales && filasDeProfesionales.length > 0) {
         const { error: proErr } = await supabase.from('professionals').insert(filasDeProfesionales)
         if (proErr) {
           console.error('[onboarding/professionals]', proErr.code)
@@ -559,12 +625,12 @@ export default function OnboardingPage() {
       // decide entre "agenda en comodín" y "negocio sin ningún horario".
       const p_blocks = buildOnboardingAgendaPayload(dayStates, {
         mapServices: shouldMapServices({ vertical, perFranja, servicesFailed: falloServicios }),
-        liveServiceIds: filasDeServicios.map(s => s.id),
+        liveServiceIds: pasos.idsVigentes,
       })
-      const { error: agendaErr } = await supabase.rpc('save_agenda_blocks', {
+      const { error: agendaErr } = pasos.horarios ? await supabase.rpc('save_agenda_blocks', {
         p_business_id: business.id,
         p_blocks,
-      })
+      }) : { error: null }
       if (agendaErr) {
         // Se registra el CÓDIGO, nunca el mensaje: alcanza para diagnosticar y no arrastra nombres
         // de tabla ni de constraint a ningún lado.
@@ -602,8 +668,17 @@ export default function OnboardingPage() {
       // el alta. Se suelta sólo en el `catch` y en las salidas tempranas de arriba; en el éxito, el
       // wizard se desmonta con el botón todavía deshabilitado.
     } catch (err) {
-      toast.error('Error al crear el negocio. Intentá de nuevo.')
-      console.error(err)
+      if (esAltaSinConfirmar(err)) {
+        // Vencido o cortado sin respuesta: no sabemos si el negocio se creó. Aviso que queda en pantalla,
+        // «Reintentar» en el mismo botón y el slug sigue bloqueado (DC-5, DC-7).
+        setErrorAlta(MENSAJE_ALTA_SIN_CONFIRMAR)
+        toast.error(MENSAJE_ALTA_SIN_CONFIRMAR)
+        console.error('[onboarding/alta] sin confirmar', err instanceof Error ? err.message : err)
+      } else {
+        // El server contestó (23505, RLS, 500...) o falló algo propio: el error de siempre, sin bloqueo.
+        toast.error('Error al crear el negocio. Intentá de nuevo.')
+        console.error(err)
+      }
       setLoading(false)
     }
   }
@@ -796,10 +871,12 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nombre del negocio *</Label>
+                  {/* Bloqueado mientras el alta no se confirma (DC-7): el slug sale del nombre. */}
                   <Input
                     value={name}
                     onChange={e => setName(e.target.value)}
                     placeholder="Ej: Estudio Nova"
+                    disabled={altaSinConfirmar}
                   />
                 </div>
                 <div className="space-y-2">
@@ -857,11 +934,14 @@ export default function OnboardingPage() {
                 <Label>URL de tu página *</Label>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground text-sm whitespace-nowrap">forjo.studio/</span>
+                  {/* Bloqueado mientras el alta no se confirma (DC-7): el reintento usa SIEMPRE el mismo
+                      slug, así el unique del slug sigue siendo la red contra un segundo negocio. */}
                   <Input
                     value={slug}
                     onChange={e => handleSlugChange(e.target.value)}
                     placeholder="mi-negocio"
                     className="flex-1"
+                    disabled={altaSinConfirmar}
                   />
                 </div>
                 <div className="text-sm">
@@ -1208,11 +1288,20 @@ export default function OnboardingPage() {
               dentro de visibleSteps (no por el literal 4), para saltar limpio el paso oculto en canchas
               (Servicios n=2 → Horarios n=4). Cluster: Atrás — [ Omitir por ahora ] [ Siguiente ];
               en el último paso solo la CTA Finalizar. */}
+          {/* Aviso del alta sin confirmar (DC-5, quick 261124-iu8). SIEMPRE MONTADO en el último paso y lo
+              único que cambia es su texto: mismo motivo que el aviso de cobertura de arriba (una región
+              viva que se monta junto con su texto no se locuta). Vacío no ocupa alto. Va en un contenedor
+              junto con la fila de navegación porque la Card es `flex-col gap-4`: como hijo directo, el
+              párrafo vacío sumaría un hueco de 16 px en el último paso. */}
+          <div>
+          {isLastStep && <p role="alert" className="text-sm text-destructive">{errorAlta ?? ''}</p>}
           <div className="flex justify-between mt-6 pt-4 border-t border-border">
+            {/* «Atrás» bloqueado mientras el alta no se confirma (DC-7): volver al paso 1 permitiría
+                cambiar el slug con un insert todavía en viaje. */}
             <Button
               variant="ghost"
               onClick={() => setStep(visibleSteps[currentIndex - 1].n)}
-              disabled={currentIndex === 0}
+              disabled={currentIndex === 0 || altaSinConfirmar}
             >
               Atrás
             </Button>
@@ -1243,10 +1332,13 @@ export default function OnboardingPage() {
             ) : (
               // El CTA de «Finalizar» (handleFinish) dice lo que hace: crea el negocio y lleva al paso 5
               // opcional (IN-08). El paso 5 ya no es «entrar al dashboard», así que el verbo es el alta.
+              // Si el alta anterior no se pudo confirmar, el MISMO botón dice «Reintentar» (DC-5): no una
+              // `action` del toast, que quedaría atada a la closure del render en que se creó.
               <Button onClick={handleFinish} disabled={loading}>
-                {loading ? 'Guardando...' : 'Crear mi negocio'}
+                {loading ? 'Guardando...' : errorAlta ? 'Reintentar' : 'Crear mi negocio'}
               </Button>
             )}
+          </div>
           </div>
         </Card>
       </div>
