@@ -927,6 +927,47 @@ export function reconciledMemo({
   return previous
 }
 
+/**
+ * Un toque en una fila de la lista → el `from` y el `to` que la fila le pasa al ejecutor (R2-IN-04).
+ *
+ * `from` es lo que `resolver` dice del `param` de `search`, la URL DEL MOMENTO DEL TOQUE (`null` si el param
+ * está ausente o vacío, o si el resolver no lo encuentra); `to` es el pedido, tal cual.
+ *
+ * **Por qué el `from` no puede salir del render:** el empuje de un toque cambia la URL y el state del historial
+ * AL INSTANTE, pero el parche del historial de Next despacha la restauración del router dentro de
+ * `startTransition`, así que el render —y con él `useSearchParams()`— recién se entera con el commit de esa
+ * transición. El `onClick` que corre en esa ventana es el del último commit: con el `from` del render, dos toques
+ * a la misma fila apilaban `?c=A` sobre `?c=A`, porque la regla 2 (`from === to`) nunca lo veía. Es E1 de G-04-7
+ * (`.planning/debug/doble-toque-tab.md`), el mismo defecto que {@link toqueDeTab} (`lib/panel-tabs.ts`) cerró en
+ * los tabs, y lo encontró R2-IN-04 del review de la Phase 4 (`04-REVIEW-2.md`). Medido con el ejecutor real en
+ * `.planning/debug/tabs-en-la-url-medida.md` ## (o).
+ *
+ * **Por qué recibe `search` y no lee `window`:** la única función de este módulo que toca `window` es el ejecutor.
+ * La pantalla le pasa `window.location.search` en el handler y el simulador de `test/panel-tabs.test.ts` la de su
+ * historia falsa: el espejo `tocarFila` de esa suite llama a ESTA función —un candado lee su cuerpo—, así el test
+ * no puede volver a probar una versión distinta de la que corre en la pantalla.
+ *
+ * **Por qué recibe el resolver:** este módulo NO decide qué se muestra (su encabezado). La resolución es de la
+ * pantalla, contra su lista ya filtrada por tenant y con la redirección de la fusión, y nunca contra la base: un id
+ * ajeno, borrado o inexistente resuelve a `null` igual que en el render (NAV-02, sin oracle de existencia). La
+ * pantalla le pasa la MISMA función que usa el render, para que el toque y lo que se ve no puedan discrepar.
+ */
+export function toqueDeFicha({
+  search,
+  param,
+  to,
+  resolver,
+}: {
+  search: string
+  param: string
+  to: string
+  resolver: (pedido: string) => string | null
+}): { from: string | null; to: string } {
+  const pedido = new URLSearchParams(search).get(param)
+  const from = pedido === null || pedido === '' ? null : resolver(pedido)
+  return { from, to }
+}
+
 // ── El ejecutor ──────────────────────────────────────────────────────────────────────────────────
 
 /**

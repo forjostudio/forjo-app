@@ -30,6 +30,7 @@ import {
   resolveViewParam,
   sanitizeAction,
   reconciledMemo,
+  toqueDeFicha,
 } from '@/lib/panel-history'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -666,9 +667,16 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
   //
   // El param pasa antes por la tabla de redirección de la fusión: si el cliente que la URL nombra fue
   // absorbido por un duplicado, lo que se muestra es el conservado.
+  //
+  // La resolución es UNA función porque la usan dos: el render (acá abajo) y el toque de la fila, que
+  // decide con la URL del momento del toque (R2-IN-04, quick 261124-q68). Si fueran dos copias, el toque
+  // y la pantalla podrían discrepar sobre qué ficha está abierta.
+  const clienteDeLaUrl = (pedido: string | null): Client | null => {
+    const targetId = pedido === null || pedido === '' ? null : (mergedInto[pedido] ?? pedido)
+    return targetId === null ? null : (clients.find(c => c.id === targetId) ?? null)
+  }
   const viewParam = searchParams.get(VIEW_PARAM)
-  const targetId = viewParam === null || viewParam === '' ? null : (mergedInto[viewParam] ?? viewParam)
-  const resolved = targetId === null ? null : (clients.find(c => c.id === targetId) ?? null)
+  const resolved = clienteDeLaUrl(viewParam)
   const view = resolveViewParam({ param: viewParam, resolvedTo: resolved?.id ?? null })
   // Mismo nombre y mismo tipo que antes, para que el resto del archivo no se entere del cambio.
   const selectedId = view.selected
@@ -1063,7 +1071,19 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                       key={client.id}
                       // Abrir un cliente es un DESTINO: se declara la situación y el helper empuja
                       // una entrada. Nada se desmonta, así que búsqueda y filtros sobreviven al atrás.
-                      onClick={() => applyPanelView({ cause: 'user-open', param: VIEW_PARAM, from: selectedId, to: client.id })}
+                      // El `from` sale de la URL DEL MOMENTO DEL TOQUE, no del render: el empuje cambia la
+                      // URL al instante pero el render recién se entera con el commit de la transición de
+                      // Next, y un segundo toque en esa ventana apilaba `?c=A` sobre `?c=A` (R2-IN-04; E1 de
+                      // `.planning/debug/doble-toque-tab.md`). Se resuelve con la MISMA función del render.
+                      onClick={() => {
+                        const toque = toqueDeFicha({
+                          search: window.location.search,
+                          param: VIEW_PARAM,
+                          to: client.id,
+                          resolver: pedido => clienteDeLaUrl(pedido)?.id ?? null,
+                        })
+                        applyPanelView({ cause: 'user-open', param: VIEW_PARAM, from: toque.from, to: toque.to })
+                      }}
                       className={cn(
                         'w-full flex items-center gap-3 px-4 py-3 text-left border-l-2 transition-all',
                         isSelected
