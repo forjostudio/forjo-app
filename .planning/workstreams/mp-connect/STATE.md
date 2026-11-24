@@ -72,6 +72,12 @@ None yet.
 - [Phase 1] NO tocar el flujo de suscripciones de los planes (token de plataforma `MP_FORJO_ACCESS_TOKEN`) — es otro flujo.
 - [Phase 2] El dashboard (`settings-client.tsx`) marca "Conectado" solo por `mp_user_id`; el aviso de reconexión debe leer el flag real sin exponer secretos de token en la UI. Depende de la columna + lógica de escritura de la Phase 1.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 261124-obs | MP: una cuenta de MercadoPago no puede quedar en dos negocios (migr. 082 guarda + indice unico parcial; callback 23505 -> motivo=cuenta-en-uso sin guardar secretos; update acotado al id; aviso en panel y onboarding); 082 NO aplicada en prod; sin pushear | 2026-11-24 | f8593e9 | Verified | [261124-obs-mp-una-cuenta-de-mercadopago-no-puede-qu](./quick/261124-obs-mp-una-cuenta-de-mercadopago-no-puede-qu/) |
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
