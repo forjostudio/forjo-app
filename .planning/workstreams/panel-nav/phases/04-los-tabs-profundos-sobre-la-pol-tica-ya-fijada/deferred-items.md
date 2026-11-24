@@ -11,6 +11,12 @@
   `## (b)`, la línea «el viewport visual no es el de layout»).
   **Por qué no se tocó:** es layout de la pantalla, no routing; la Phase 4 es «cero pixel nuevo». No es causado
   por este plan (el tab en la URL no cambia el ancho del contenido). Candidato a un quick de polish mobile.
+  **Cierre:** (quick 261124-q68) medido por CDP en un documento que nace en `/finances`, a 360/375/390/430 y 1280:
+  reprodujo en Ventas (407 px) y Egresos (415 px) a 360, 375 y 390 (Turnos y 430 entran). El culpable es el botón
+  «Nueva venta»/«Nuevo egreso» (`flex-shrink-0`, `nowrap`) en la fila de los tabs, que no envolvía. Arreglo `c89b4f5`:
+  `flex-wrap` en esa fila. Tras el fix los cuatro anchos móviles sin desborde y las tres huellas de escritorio
+  idénticas (`.planning/debug/tabs-en-la-url-medida.md` ## (o.3); esperados en `2631401`). Residuo: el teléfono real,
+  Safari de iOS y meses con datos (los locales estaban vacíos al medir).
 
 - eslint de `finances-client.tsx`: `react-hooks/set-state-in-effect` preexistente
   status: acknowledged
@@ -51,6 +57,12 @@
   **Por qué no se tocó:** no se cambia sin medir (decisión del dueño, opción B, 2026-11-17); `app/(dashboard)/clients/**`
   está en la lista de intocables del cierre de gaps. Candidato a un quick: el recorrido primero, el mismo fallback
   con nodo (`space-y-…` del contenedor raíz de `ClientsClient`) después.
+  **Veredicto:** (quick 261124-q68) no reproduce: `CL-ficha-movil` y `CL-ficha-escritorio` (esperados en `260a3b9`)
+  midieron la condición INALCANZABLE en los dos anchos: en el celular el contenedor es `absolute inset-0` y el documento
+  mide el viewport (844/844); en escritorio es `lg:h-screen` y el scroll máximo (83) es justo el desplazamiento del borde,
+  que llega a 0 y nunca queda afuera, así que el handler de Next no tiene nada que mover. Sin escrituras de scroll al
+  abrir la ficha. `page.tsx` sin tocar. Queda para el dueño: `vacio_al_entrar=si` (322/325 ms) prueba que el comentario
+  de `page.tsx` es falso (el fallback SÍ se dibuja) (## (o.2)). Residuo: el teléfono real y Safari de iOS.
 
 - IN-02: `router.refresh()` en `/negocio?tab=integraciones` puede llevar la página arriba
   status: acknowledged
@@ -133,6 +145,12 @@
   **Qué:** `app/(dashboard)/clients/clients-client.tsx:1055` — el `user-open` toma `from: selectedId` del render, el
   mismo defecto que WR-02 tenía en los tabs. Fuera del alcance del cierre (archivo intocable en 04-06..08). Candidato a
   ir junto con R2-WR-01 (mismo helper `toqueDeTab`/URL de ahora). Sin medir.
+  **Cierre:** (quick 261124-q68) reprodujo en el simulador con el ejecutor real (`IN04-mecanismo`: dos `user-open` con el
+  `from` del render dan `push`, `push` y dos entradas `?c=A`), rojo commiteado en `8e7bae0`. Arreglo `a810e07`:
+  `toqueDeFicha` (pura, `lib/panel-history.ts`) saca el `from` de la URL del momento del toque, resuelto con la MISMA
+  `clienteDeLaUrl` del render (lista ya filtrada por tenant + redirección de la fusión). Ahora `push`, `none` y un atrás
+  vuelve al listado; `(j)` de `test/panel-history-clients.test.ts` verde y M-c lo pone rojo (## (o.1)). En la app,
+  `R-B1-ficha` OK. Residuo: la ventana real del doble toque en el teléfono no se midió.
 
 - Decisión del dueño (2026-11-18, secure-phase): el cruce guarda ↔ `consumeOwnedPanelEntry` va al MISMO quick de R2-WR-01
   status: acknowledged
@@ -206,3 +224,8 @@
   Finanzas: cambia / no; R3 menú ignorado → tab de `/settings`: cambia / no; R4 tab ignorado: igual en los dos.
   **Arreglo propuesto:** copiar en `applyPanelView` el chequeo de llegada (state Y URL) de `consumeOwnedPanelEntry`.
   No bloquea el push (review final: «seguro para subir: sí»); queda para un quick posterior.
+  **Cierre:** (quick 261124-q68) R1..R4 reprodujeron en el simulador (`none` con el código de hoy; rojo commiteado en
+  `8e7bae0`). Arreglo `e53dd41`: la primera sentencia de `applyPanelView` es el mismo chequeo de llegada que el menú
+  (`C-llegada-ejecutor`). R1..R4 pasan a `push`; `W1-tab` y `R5-misma-entrada` siguen en `none` (el residuo de la misma
+  entrada queda declarado en el docblock); M-a y M-b lo ponen rojo (## (o.1)). En la app, R-T 12/12 y R-B1 4/4.
+  Residuo: el `back()` ignorado en silencio sigue sin observarse en ningún motor (sólo simulado), y el borde `W1x`.

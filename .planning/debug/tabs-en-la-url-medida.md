@@ -2534,3 +2534,86 @@ y el build de producción.
 Log: `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/q68/cl-hipotesis.txt`.
 
 veredictos (o.2): CL-fallback=no-reproduce
+
+### (o.3) Finanzas a 390: quién desborda (2026-11-24)
+
+Recorrido `D-finanzas-ancho` de `.planning/debug/probes/g04-scroll-y-recarga.mjs`, esperados commiteados antes de
+medir (`2631401`, `test(quick-261124-q68)`). Un documento que NACE en `/finances` por ancho (CDP
+`Emulation.setDeviceMetricsOverride`: 360/375/390/430 x 844, escala 3, `mobile: true`; 1280x800 escritorio), los tres
+tabs por el toque real.
+
+**Instrumento, declarado.** La primera corrida fue `ERROR-DEL-INSTRUMENTO`: los datos locales ya no tienen ningún mes
+con >= 10 turnos en los últimos 12 (los meses que usaban las sondas obs-G1 no están; el negocio de prueba tiene 0
+turnos, 0 ventas y 0 egresos en todos). El segundo mes pasó a ser el primero con >= 10, si no con >= 1, si no sólo el
+actual, declarado (`5666b7a`). En las corridas `tras-el-fix`, el toque en «Mes anterior» no cambió el mes tres veces
+(una a 390, las otras sin traza); se agregó la espera del enganche de React tras la recarga (`94d4964`) y, como volvió
+a pasar —ahora a 430—, el segundo mes que no se puede medir se DECLARA con una captura del momento en vez de abortar el
+recorrido (`f4991e1`). La captura (`fin-mes-no-cambio-430.png`) muestra el botón a la vista y el mes sin cambiar: es
+intermitente y salta de ancho, y el arreglo de abajo no toca esa fila. Con los datos de hoy el segundo mes no agrega
+nada (los doce meses están vacíos): **todo lo medido es noviembre 2026 con 0 en los tres tabs.**
+
+| Ancho | Turnos (scrollWidth) | Ventas | Egresos | Culpable |
+|---|---|---|---|---|
+| 360 | 360 | **407** | **415** | el `<button>` «Nueva venta» (left 287.2, right 407.5, width 120.2) / «Nuevo egreso» (right 415.2, width 128): `white-space: nowrap`, `flex-shrink: 0` |
+| 375 | 375 | **407** | **415** | ídem |
+| 390 | 390 | **407** | **415** | ídem |
+| 430 | 430 | 430 | 430 | — (entra) |
+| 1280 (clientWidth 1265) | 1265 | 1265 | 1265 | — |
+
+El botón arranca siempre en `left=287.2`: es la fila `flex items-center justify-between gap-2` de los tabs, con la
+`TabsList` (~279 px con «(0)» en los tres) y el botón `flex-shrink-0` que no entran juntos en 360-390 y la fila no
+envolvía. Coincide con la medición diferida (407-415 px). El culpable vive en `finances-client.tsx`, no en un componente
+compartido.
+
+**Arreglo** (`c89b4f5`, `fix(quick-261124-q68)`): `flex-wrap` en esa fila, con su comentario. Sólo actúa cuando no
+entra: el botón baja a su propia línea. Los tres `min-h-dvh` de los paneles quedan intactos (la sonda imprime
+`paneles con alto minimo: 3`). eslint del archivo: el mismo único problema de la base (`react-hooks/set-state-in-effect`,
+preexistente).
+
+**Tras el fix** (`verde-q68`, `tras-el-fix`): `OK  D-finanzas-ancho`, los cuatro anchos móviles en `desborde=no`
+(scrollWidth = clientWidth en los tres tabs de 360, 375, 390 y 430), y las tres huellas de escritorio IGUALES antes y
+después:
+
+| Tab | Huella (rojo-q68) | Huella (verde-q68) |
+|---|---|---|
+| turnos | `bbb534f294eb3e77` (526 nodos) | `bbb534f294eb3e77` |
+| ventas | `70758746c1f57ffd` (530) | `70758746c1f57ffd` |
+| egresos | `12a5352d948d3cea` (530) | `12a5352d948d3cea` |
+
+Capturas: `fin-390-antes.png` (Ventas, el botón cortado contra el borde derecho) y `fin-390-despues.png` (Turnos: sin
+desborde no hay un tab «que desborde» para elegir, así que la sonda guardó el primero; la vista del botón ya envuelto
+no quedó capturada y la mira el dueño en el teléfono).
+
+**Lo que NO cierra:** el teléfono real y Safari de iOS; meses con datos (con muchos turnos el contador «Turnos (123)»
+ensancha la `TabsList`: `flex-wrap` lo cubre igual, pero no se midió); anchos menores a 360.
+
+Logs en `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/q68/`:
+`fin-hipotesis.txt` (rojo), `fin-hipotesis-error-instrumento.txt`, `fin-tras-el-fix.txt` (verde),
+`fin-tras-el-fix-error-instrumento{,-2,-3}.txt`, capturas `fin-390-antes.png`, `fin-390-despues.png`,
+`fin-mes-no-cambio-430.png`.
+
+veredictos (o.3): FIN-desborde=reproduce
+
+veredictos (o): R3-WR-01=reproduce · R2-IN-04=reproduce · CL-fallback=no-reproduce · FIN-desborde=reproduce
+cierre (o): R3-WR-01=arreglado · R2-IN-04=arreglado · CL-fallback=descartado · FIN-desborde=arreglado
+
+**Evidencia de cierre del quick (2026-11-24, ~20:20-21:00 hora de Argentina, por el turno; logs en `q68/`):**
+- `tsc --noEmit` limpio; `npm test` 125 archivos, 2500 casos en verde (4 *expected fail*, 1 *skip*), sin fallas (dentro de
+  la ventana de los canarios); eslint de los seis archivos: 1 problema antes y 1 después (el `set-state-in-effect`
+  preexistente de `finances-client.tsx`); `npm run build` rc 0. Las 8 suites de historial: 730/730.
+- La estática (`panel-back-stack.mjs`): rc 0, E 18/18.
+- La de scroll (`g04-scroll-y-recarga.mjs`, `cierre-q68`, `tras-el-fix`, los ocho de siempre + `D-finanzas-ancho`):
+  **6/9**. OK: los cinco de G-04-6 (`F-*`, `N-negocio-borde-movil`) y `D-finanzas-ancho`; `finances-client.tsx ...
+  paneles con alto minimo: 3`. Los tres `G1-*` dieron `ERROR-DEL-INSTRUMENTO` («ningun mes de los ultimos 12 tiene >= 10
+  turnos con 0 en Ventas, Egresos»): **no es una regresión, es el entorno.** Durante este quick otra sesión midió la
+  migración 082 contra el Postgres local (`d581ee3`, `ea1457e`, en otra rama) y el negocio de prueba quedó sin datos
+  (0 turnos, 0 ventas, 0 egresos en los doce meses; lo vio primero `D-finanzas-ancho`). Este quick no escribe en la base.
+- La de la app (`panel-exit-en-la-app.mjs dev interfaz`): **no completó** — 15 recorridos en OK y después «no se pudo
+  ensuciar /web: campo=null secciones abiertas=[]» (el editor de `/web` del negocio de prueba sin campos: mismo entorno
+  vaciado). Por eso se corrió aparte la parte que toca este quick, `R-T-*` y `R-B1-*`: **16/16** (`R-T` 12/12, `R-B1` 4/4,
+  incluido `R-B1-ficha`, que abre una ficha por la fila nueva). No quedó medido: el resto de los 47 (el aviso de salida
+  con la pantalla sucia, los `R-G3-*`, el login) con este código; ninguno pasa por las dos funciones que cambiaron
+  más allá del ejecutor, que R-T y R-B1 sí ejercitan. Re-correr la sonda completa cuando el negocio de prueba vuelva a
+  tener su web y sus turnos.
+- Logs: `app.txt`, `app-rt-rb1.txt`, `estatica.txt`, `scroll.txt`, `npm-test.txt`, `eslint-despues.txt`, `build.txt`,
+  `gate-cierre.txt`.
