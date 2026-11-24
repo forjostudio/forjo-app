@@ -605,6 +605,7 @@ export function FinancesClient({ businessId }: Props) {
         business_id: businessId,
         name: saleNewClient.name.trim(),
         last_name: normalizeLastName(saleNewClient.last_name),
+        origin: 'manual', // lo carga el dueño desde el panel, no vino por la reserva pública
         phone: saleNewClient.phone.trim() || null,
         email: saleNewClient.email.trim() || null,
       }).select().single()

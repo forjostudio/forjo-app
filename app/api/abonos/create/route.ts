@@ -387,7 +387,7 @@ async function resolveClientId(
   // (3) Sin match → cliente nuevo (anon+RLS, NUNCA admin).
   const { data: created } = await supabase
     .from('clients')
-    .insert({ business_id: businessId, name: clientName, last_name: clientLastName, phone: clientPhone, email: clientEmail })
+    .insert({ business_id: businessId, name: clientName, last_name: clientLastName, origin: 'manual', phone: clientPhone, email: clientEmail })
     .select('id')
     .single()
   return created?.id || null

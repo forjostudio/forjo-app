@@ -414,11 +414,13 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de turno (dedupe D-04 + confirme
     expect(appt?.client_name).toBe('Ana Pérez')
     const { data: client } = await t.admin
       .from('clients')
-      .select('name, last_name')
+      .select('name, last_name, origin')
       .eq('id', appt?.client_id as string)
       .single()
     expect(client?.name).toBe('Ana')
     expect(client?.last_name).toBe('Pérez')
+    // El alta rápida la hace el dueño desde el panel: el cliente no vino por la reserva pública.
+    expect(client?.origin).toBe('manual')
   })
 
   it('alta rápida — apellido de solo espacios → last_name null y snapshot solo con el nombre', async () => {

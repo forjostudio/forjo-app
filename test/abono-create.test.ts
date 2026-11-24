@@ -522,7 +522,7 @@ describe.skipIf(!hasSupabaseCreds)('alta manual del abono (auth + anti-tampering
       .single()
     const { data: client } = await t.admin
       .from('clients')
-      .select('name, last_name')
+      .select('name, last_name, origin')
       .eq('id', abono?.client_id as string)
       .single()
     const { data: appts } = await t.admin
@@ -537,6 +537,7 @@ describe.skipIf(!hasSupabaseCreds)('alta manual del abono (auth + anti-tampering
     const { client, appts } = await altaRapida(' Pérez ', '11 7000-0001')
     expect(client?.name).toBe('Ana')
     expect(client?.last_name).toBe('Pérez')
+    expect(client?.origin).toBe('manual')
     expect(appts.length).toBeGreaterThanOrEqual(1)
     expect(appts.every((a) => a.client_name === 'Ana Pérez')).toBe(true)
   })
