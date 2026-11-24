@@ -494,8 +494,18 @@ async function main() {
         // Liberar cada request retenido y apagar la intercepcion (un request ya cancelado tira: se tolera).
         const marcaLiberar = Date.now()
         const postsAntesDeLiberar = postsNegocio.filter((t) => t >= marcaClick && t < marcaLiberar).length
-        for (const requestId of retenidos) {
-          try { await cdp.enviar('Fetch.continueRequest', { requestId }); console.log(`${ts()} liberado ${requestId}`) } catch (err) { console.log(`${ts()} no se pudo liberar ${requestId}: ${err.message.slice(0, 80)}`) }
+        // En tandas: lo retenido primero es el preflight OPTIONS, y al liberarlo el POST del refresh entra
+        // pausado a su vez. Se libera hasta que pase 1 s sin requests nuevos y recien ahi se apaga Fetch.
+        const liberados = new Set()
+        let quieto = 0
+        while (quieto < 4) {
+          const nuevos = retenidos.filter((id) => !liberados.has(id))
+          if (!nuevos.length) { quieto++; await dormir(250); continue }
+          quieto = 0
+          for (const requestId of nuevos) {
+            liberados.add(requestId)
+            try { await cdp.enviar('Fetch.continueRequest', { requestId }); console.log(`${ts()} liberado ${requestId}`) } catch (err) { console.log(`${ts()} no se pudo liberar ${requestId}: ${err.message.slice(0, 80)}`) }
+          }
         }
         await cdp.enviar('Fetch.disable')
         // Esperar a que auth-js suelte el lock (hasta 15 s).
