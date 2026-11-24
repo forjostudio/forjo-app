@@ -1,29 +1,29 @@
 import { createClient } from '@/lib/supabase/server'
 import { apptServiceName, apptServicePrice } from '@/lib/appointment-service'
+import { buildFinancesWorkbook } from '@/lib/finances-xlsx'
+import { XLSX_CONTENT_TYPE, workbookToBytes } from '@/lib/xlsx-style'
 
-// Export CSV de finanzas (DATA-02) — route handler AUTENTICADO del dueño.
+// Export de finanzas en Excel (DATA-02) — route handler AUTENTICADO del dueño.
 //
-// Export-ONLY: la Fase 3 importa clientes, NO finanzas. No hay contrato de round-trip acá;
-// el header es legible para el dueño/contador. Header (D-03): fecha,tipo,concepto,monto
-// (tipo in turno|venta|egreso).
+// Export-ONLY: el import es de clientes, NO de finanzas. No hay contrato de round-trip acá; el archivo
+// es para que lo lea el dueño o su contador.
 //
 // Aislamiento por tenant (idéntico a export/clients):
 //   • Cliente anon + RLS (@/lib/supabase/server), NUNCA admin/service-role.
 //   • business_id re-derivado de la SESIÓN (owner_id), NUNCA de un querystring (T-02-11).
 //   • Las tres queries filtran por .eq('business_id', business.id).
 //
-// El CSV combina TRES fuentes del modelo de movimientos (espejando finances-client.tsx):
-//   • Turnos  (tipo='turno')  → appointments (neq cancelled) + services(name, price).
-//   • Ventas  (tipo='venta')  → manual_sales; monto = amount * quantity (mismo cálculo que
-//     finances-client: cada venta puede tener cantidad).
-//   • Egresos (tipo='egreso') → expenses (category / amount / expense_date).
-//
-// NO se incluye fixed_expenses: son plantillas recurrentes (name / amount / frequency), NO
-// movimientos fechados. Meterlas obligaría a inventar fechas y rompería la coherencia del CSV
-// de movimientos (que es un registro de hechos fechados). Quedan fuera a propósito.
-//
-// Formato (D-04): Response CRUDO text/csv, BOM U+FEFF (secuencia de escape TS, no glifo pegado),
-// escaping RFC4180, filas \r\n. CSV hand-authored, sin dependencia nueva.
+// Formato (quick 261124-ine): un libro .xlsx de cuatro hojas — Resumen (totales calculados), Turnos,
+// Ventas y Egresos — armado por lib/finances-xlsx.ts. Las TRES fuentes son las de siempre (espejando
+// finances-client.tsx):
+//   • Turnos  → appointments (neq cancelled) con el snapshot del servicio (nombre y precio).
+//   • Ventas  → manual_sales; total = amount * quantity (cada venta puede tener cantidad).
+//   • Egresos → expenses (category / amount / expense_date).
+// Por qué fixed_expenses NO entra: ver la cabecera de lib/finances-xlsx.ts.
+
+// La librería de planillas usa APIs de Node (streams, Buffer): el route handler no puede ir a Edge.
+// 'nodejs' ya es el default; se declara para que nadie lo mueva sin ver esto.
+export const runtime = 'nodejs'
 
 export async function GET() {
   const supabase = await createClient()
@@ -47,7 +47,7 @@ export async function GET() {
     supabase
       .from('appointments')
       // Select ACOTADO: pide el snapshot del servicio (migr. 065) además del join. Sin él, un turno
-      // de un servicio ya borrado saldría en el CSV como "—" y $0, contradiciendo HIST-03.
+      // de un servicio ya borrado saldría en el Excel como "—" y $0, contradiciendo HIST-03.
       .select('date, service_name, service_price, services(name, price)')
       .eq('business_id', business.id)
       .neq('status', 'cancelled'),
@@ -61,65 +61,38 @@ export async function GET() {
       .eq('business_id', business.id),
   ])
 
-  type Movimiento = { fecha: string; tipo: string; concepto: string; monto: number }
-  const movimientos: Movimiento[] = []
+  // Turnos: el helper resuelve snapshot → join (D-05), así que un servicio borrado conserva su
+  // nombre y su precio (0 si no hay).
+  const turnos = (apptRes.data ?? []).map((a) => ({
+    fecha: a.date ?? '',
+    servicio: apptServiceName(a),
+    monto: apptServicePrice(a),
+  }))
 
-  // Turnos: concepto = nombre del servicio, monto = precio del servicio (0 si no hay). El helper
-  // resuelve snapshot → join (D-05), así que un servicio borrado conserva su nombre y su precio.
-  for (const a of apptRes.data ?? []) {
-    movimientos.push({
-      fecha: a.date ?? '',
-      tipo: 'turno',
-      concepto: apptServiceName(a),
-      monto: apptServicePrice(a),
-    })
-  }
-
-  // Ventas: monto = amount * quantity (mismo cálculo que finances-client).
-  for (const s of salesRes.data ?? []) {
-    movimientos.push({
-      fecha: s.sale_date ?? '',
-      tipo: 'venta',
-      concepto: s.description ?? '',
-      monto: Number(s.amount) * Number(s.quantity),
-    })
-  }
+  // Ventas: el total (precio unitario × cantidad) lo calcula el builder, igual que finances-client.
+  const ventas = (salesRes.data ?? []).map((v) => ({
+    fecha: v.sale_date ?? '',
+    descripcion: v.description ?? '',
+    cantidad: Number(v.quantity),
+    precioUnitario: Number(v.amount),
+  }))
 
   // Egresos: concepto = categoría, monto = amount.
-  for (const e of expRes.data ?? []) {
-    movimientos.push({
-      fecha: e.expense_date ?? '',
-      tipo: 'egreso',
-      concepto: e.category ?? '',
-      monto: Number(e.amount),
-    })
-  }
-
-  // Orden por fecha descendente (coherente con la vista de finanzas).
-  movimientos.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0))
-
-  // Escaping RFC4180 + defensa CSV formula injection (OWASP): si el campo arranca con = + - @
-  // (o tab/CR), prefijar con ' para que Excel/Sheets no lo evalúe como fórmula; luego RFC4180
-  // (comillas dobles, comilla interna duplicada). Los conceptos pueden venir de datos no confiables.
-  const esc = (v: string) => {
-    const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
-    return `"${safe.replace(/"/g, '""')}"`
-  }
-
-  const headers = ['fecha', 'tipo', 'concepto', 'monto']
-  const rows = movimientos.map((m) =>
-    [m.fecha, m.tipo, m.concepto, String(m.monto)].map((v) => esc(String(v))).join(',')
-  )
-
-  const csv = [headers.map(esc).join(','), ...rows].join('\r\n')
+  const egresos = (expRes.data ?? []).map((e) => ({
+    fecha: e.expense_date ?? '',
+    categoria: e.category ?? '',
+    monto: Number(e.amount),
+  }))
 
   const fecha = new Date().toISOString().slice(0, 10)
+  const bytes = await workbookToBytes(buildFinancesWorkbook({ turnos, ventas, egresos }))
 
-  // Response crudo con BOM U+FEFF delante del string (secuencia de escape, no glifo pegado).
-  return new Response('\uFEFF' + csv, {
+  // no-store: datos del negocio; que ninguna caché intermedia se quede con una copia (T-q-07).
+  return new Response(bytes, {
     headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="finanzas-${business.slug}-${fecha}.csv"`,
+      'Content-Type': XLSX_CONTENT_TYPE,
+      'Content-Disposition': `attachment; filename="finanzas-${business.slug}-${fecha}.xlsx"`,
+      'Cache-Control': 'no-store',
     },
   })
 }

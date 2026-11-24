@@ -836,8 +836,8 @@ export function FinancesClient({ businessId }: Props) {
           )}
           {customMode && <span className="text-sm font-semibold">Rango personalizado</span>}
           <Button size="sm" variant={customMode ? 'default' : 'outline'} onClick={() => setCustomMode(v => !v)}>{customMode ? 'Por mes' : 'Personalizado'}</Button>
-          {/* Export CSV (DATA-02) — acción SECUNDARIA (outline). Fetch+blob para mostrar estado de
-              carga "Exportando..." y manejar el error con toast (el CSV puede tardar en negocios grandes). */}
+          {/* Export Excel (DATA-02) — acción SECUNDARIA (outline). Fetch+blob para mostrar estado de
+              carga "Exportando..." y manejar el error con toast (el Excel puede tardar en negocios grandes). */}
           <Button
             size="sm"
             variant="outline"
@@ -849,7 +849,7 @@ export function FinancesClient({ businessId }: Props) {
                 if (!res.ok) throw new Error('export_failed')
                 const blob = await res.blob()
                 const cd = res.headers.get('content-disposition') || ''
-                const filename = cd.match(/filename="?([^"]+)"?/)?.[1] || 'finanzas.csv'
+                const filename = cd.match(/filename="?([^"]+)"?/)?.[1] || 'finanzas.xlsx'
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
                 a.href = url
@@ -865,7 +865,7 @@ export function FinancesClient({ businessId }: Props) {
               }
             }}
           >
-            <Download className="w-4 h-4" /> {exportingFin ? 'Exportando...' : 'Exportar CSV'}
+            <Download className="w-4 h-4" /> {exportingFin ? 'Exportando...' : 'Exportar Excel'}
           </Button>
         </div>
       </div>
