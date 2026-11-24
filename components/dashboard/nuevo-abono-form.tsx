@@ -34,7 +34,7 @@ import {
 import type { OverlayDismissDetails } from '@/lib/overlay-history'
 import { Plus, Minus, Check, UserPlus, ChevronLeft, Repeat, XIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { clientFullName } from '@/lib/client-name'
+import { clientFullName, normalizeLastName } from '@/lib/client-name'
 
 // ── Hook responsive mínimo (idéntico al de nuevo-turno-form) ─────────────────────────────────
 // Dialog y Drawer son portales con estado propio; el breakpoint se decide en JS. useSyncExternalStore
@@ -90,7 +90,9 @@ function clampSessions(n: number): number {
   return Math.min(MAX_SESSIONS, Math.max(1, int))
 }
 
-type SelectedClient = { id: string | null; name: string; phone: string | null; email: string | null }
+// last_name lo trae solo el cliente nuevo inline; para uno existente va null porque su name ya es el
+// completo (si no, el apellido saldría dos veces).
+type SelectedClient = { id: string | null; name: string; last_name: string | null; phone: string | null; email: string | null }
 
 interface Props {
   open: boolean
@@ -251,6 +253,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
   const [clientSearch, setClientSearch] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
   const [newClientName, setNewClientName] = useState('')
+  const [newClientLastName, setNewClientLastName] = useState('')
   const [newClientContact, setNewClientContact] = useState('')
 
   const fieldId = useId()
@@ -258,7 +261,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
   // El form está "sucio" si se tocó algún campo → habilita la confirmación de descarte del shell.
   const isDirty = !!(
     selectedClient || creatingClient || serviceId || dayOfWeek || time ||
-    duracion === 'sesiones' || newClientName.trim() || newClientContact.trim()
+    duracion === 'sesiones' || newClientName.trim() || newClientLastName.trim() || newClientContact.trim()
   )
   useEffect(() => { dirtyRef.current = isDirty }, [isDirty, dirtyRef])
 
@@ -294,7 +297,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
 
   function pickClient(c: Client) {
     // name = nombre completo: viaja como clientName al snapshot appointments.client_name (D-07).
-    setSelectedClient({ id: c.id, name: clientFullName(c), phone: c.phone, email: c.email })
+    setSelectedClient({ id: c.id, name: clientFullName(c), last_name: null, phone: c.phone, email: c.email })
     setCreatingClient(false)
   }
 
@@ -304,7 +307,13 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
     const contact = newClientContact.trim()
     if (!contact) { toast.error('Ingresá un teléfono o email.'); return }
     const isEmail = contact.includes('@')
-    setSelectedClient({ id: null, name, phone: isEmail ? null : contact, email: isEmail ? contact : null })
+    setSelectedClient({
+      id: null,
+      name,
+      last_name: normalizeLastName(newClientLastName),
+      phone: isEmail ? null : contact,
+      email: isEmail ? contact : null,
+    })
     setCreatingClient(false)
   }
 
@@ -326,7 +335,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
       if (!name) { toast.error('Ingresá el nombre del cliente.'); return }
       if (!contact) { toast.error('Ingresá un teléfono o email del cliente.'); return }
       const isEmail = contact.includes('@')
-      client = { id: null, name, phone: isEmail ? null : contact, email: isEmail ? contact : null }
+      client = { id: null, name, last_name: normalizeLastName(newClientLastName), phone: isEmail ? null : contact, email: isEmail ? contact : null }
     }
     // En canchas el bookable es la cancha (professionalId); en el resto se exige el servicio.
     const hasBookable = isCanchas ? professionalId !== 'none' : !!serviceId
@@ -345,6 +354,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
         body: JSON.stringify({
           clientId: client.id,
           clientName: client.name,
+          clientLastName: client.last_name,
           clientPhone: client.phone,
           clientEmail: client.email,
           // En canchas el server DERIVA el service desde la cancha; no mandamos serviceId.
@@ -398,7 +408,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
             <div className="flex items-center gap-2 min-w-0">
               <Check className="w-4 h-4 text-primary flex-shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{selectedClient.name}</p>
+                <p className="text-sm font-medium truncate">{clientFullName(selectedClient)}</p>
                 {selectedClient.phone && <p className="text-xs text-muted-foreground truncate">{selectedClient.phone}</p>}
                 {selectedClient.email && <p className="text-xs text-muted-foreground truncate">{selectedClient.email}</p>}
               </div>
@@ -411,6 +421,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
               onClick={() => {
                 if (selectedClient.id === null) {
                   setNewClientName(selectedClient.name)
+                  setNewClientLastName(selectedClient.last_name || '')
                   setNewClientContact(selectedClient.email || selectedClient.phone || '')
                   setSelectedClient(null)
                   setCreatingClient(true)
@@ -431,15 +442,27 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Volver a buscar
             </button>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${fieldId}-name`}>Nombre</Label>
-              <Input
-                id={`${fieldId}-name`}
-                value={newClientName}
-                onChange={(e) => setNewClientName(e.target.value)}
-                placeholder="Nombre y apellido"
-                autoComplete="off"
-              />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor={`${fieldId}-name`}>Nombre</Label>
+                <Input
+                  id={`${fieldId}-name`}
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  placeholder="Nombre"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor={`${fieldId}-last-name`}>Apellido (opcional)</Label>
+                <Input
+                  id={`${fieldId}-last-name`}
+                  value={newClientLastName}
+                  onChange={(e) => setNewClientLastName(e.target.value)}
+                  placeholder="Apellido"
+                  autoComplete="off"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${fieldId}-contact`}>Teléfono o email</Label>
@@ -454,7 +477,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
             {dedupeMatch ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Ya tenés un cliente con ese contacto: <span className="font-medium">{dedupeMatch.name}</span>. ¿Usar el existente?
+                  Ya tenés un cliente con ese contacto: <span className="font-medium">{clientFullName(dedupeMatch)}</span>. ¿Usar el existente?
                 </p>
                 <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={useExistingFromDedupe}>
                   Usar existente
@@ -488,6 +511,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
                     onClick={() => {
                       setCreatingClient(true)
                       setNewClientName(clientSearch.replace(/\d/g, '').trim())
+                      setNewClientLastName('')
                       setNewClientContact(/\d/.test(clientSearch) ? clientSearch.trim() : '')
                     }}
                   >
@@ -512,7 +536,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
                   <li className="border-t border-border">
                     <button
                       type="button"
-                      onClick={() => { setCreatingClient(true); setNewClientName(''); setNewClientContact('') }}
+                      onClick={() => { setCreatingClient(true); setNewClientName(''); setNewClientLastName(''); setNewClientContact('') }}
                       className="w-full text-left px-3 py-2 text-xs font-medium text-primary hover:bg-secondary/60 transition-colors flex items-center gap-1.5"
                     >
                       <UserPlus className="w-3.5 h-3.5" /> Crear nuevo cliente

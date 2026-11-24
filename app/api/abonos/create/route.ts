@@ -4,6 +4,7 @@ import { getBusinessSecrets } from '@/lib/business-secrets'
 import { generateAbonoOccurrences } from '@/lib/abono-generation'
 import { sendAbonoConfirmation, emailBrandInputs } from '@/lib/email'
 import { todayInAR } from '@/lib/booking-window'
+import { clientFullName, normalizeLastName } from '@/lib/client-name'
 // Etiqueta del día y serialización 'yyyy-MM-dd' desde el motor compartido (IN-01/IN-02). El cuerpo de
 // la serialización es EXACTAMENTE el que estaba local: componentes locales del Date con padding a 2.
 // Nunca recortar el ISO string en UTC — en Vercel el proceso corre en UTC y el corte del día AR se
@@ -24,7 +25,9 @@ import { abonoDayLabel, toISODate } from '@/lib/abono-cancel'
 //      business_id ANTES de insertar; en el vertical canchas DERIVA el serviceId desde la cancha
 //      (professional.service_id) server-side — nunca confía en el serviceId del cliente (T-06-10).
 //   3. Resuelve/crea el cliente con dedupe (mismo criterio que appointments/create): el abono queda
-//      SIEMPRE con client_id.
+//      SIEMPRE con client_id. El alta rápida inline puede traer un apellido opcional (clientLastName,
+//      quick 261124-nxz) que va a clients.last_name del cliente nuevo; el snapshot client_name de cada
+//      ocurrencia NO se arma acá: lo arma lib/abono-generation.ts leyendo name + last_name del cliente.
 //   4. Inserta la fila `abonos` (anon+RLS): la policy INSERT with-check garantiza que sólo se cree en
 //      el negocio del dueño.
 //   5. Corre la PRIMERA TANDA de generación (hasta el borde de la ventana abono_window_weeks) vía el
@@ -108,6 +111,10 @@ export async function POST(request: Request) {
   const time = typeof body.time === 'string' ? body.time : ''
   const clientId = typeof body.clientId === 'string' && body.clientId.trim() ? body.clientId.trim() : null
   const clientName = typeof body.clientName === 'string' ? body.clientName.trim() : ''
+  // Apellido opcional del alta rápida inline (quick 261124-nxz): solo lo manda el modo «cliente
+  // nuevo». Con un cliente existente el form ya manda el nombre completo en clientName y este campo
+  // llega null.
+  const clientLastName = normalizeLastName(body.clientLastName)
   const clientPhone = typeof body.clientPhone === 'string' && body.clientPhone.trim() ? body.clientPhone.trim() : null
   const clientEmail = typeof body.clientEmail === 'string' && body.clientEmail.trim() ? body.clientEmail.trim() : null
   // Duración del abono (D-07′): entero 1..MAX → FINITO de N sesiones; cualquier otra cosa (ausente, null,
@@ -177,7 +184,13 @@ export async function POST(request: Request) {
   }
 
   // ── Resolver/crear el cliente con dedupe (mismo criterio que appointments/create) ───────────
-  const resolvedClientId = await resolveClientId(supabase, business.id, { clientId, clientName, clientPhone, clientEmail })
+  const resolvedClientId = await resolveClientId(supabase, business.id, {
+    clientId,
+    clientName,
+    clientLastName,
+    clientPhone,
+    clientEmail,
+  })
 
   // ── Insert de la fila abonos (anon+RLS; policy INSERT with-check → sólo el negocio del dueño) ──
   const { data: abono, error: insertErr } = await supabase
@@ -274,7 +287,7 @@ export async function POST(request: Request) {
         const secrets = await getBusinessSecrets(business.id)
         await sendAbonoConfirmation({
           to: clientEmail,
-          clientName,
+          clientName: clientFullName({ name: clientName, last_name: clientLastName }),
           service: '', // el nombre del service es aditivo; el mail funciona sin él (evita un select extra)
           dayLabel: `todos ${abonoDayLabel(dayOfWeek)}`,
           time,
@@ -334,9 +347,15 @@ async function countAbonoAppointments(
 async function resolveClientId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
-  input: { clientId: string | null; clientName: string; clientPhone: string | null; clientEmail: string | null },
+  input: {
+    clientId: string | null
+    clientName: string
+    clientLastName: string | null
+    clientPhone: string | null
+    clientEmail: string | null
+  },
 ): Promise<string | null> {
-  const { clientId, clientName, clientPhone, clientEmail } = input
+  const { clientId, clientName, clientLastName, clientPhone, clientEmail } = input
 
   // (1) clientId explícito → re-validar por tenant antes de confiar en él (T-06-10).
   if (clientId) {
@@ -368,7 +387,7 @@ async function resolveClientId(
   // (3) Sin match → cliente nuevo (anon+RLS, NUNCA admin).
   const { data: created } = await supabase
     .from('clients')
-    .insert({ business_id: businessId, name: clientName, phone: clientPhone, email: clientEmail })
+    .insert({ business_id: businessId, name: clientName, last_name: clientLastName, phone: clientPhone, email: clientEmail })
     .select('id')
     .single()
   return created?.id || null

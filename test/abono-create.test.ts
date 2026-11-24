@@ -17,10 +17,46 @@ import { sendAbonoConfirmation } from '@/lib/email'
 // persistir generated_until + skipped. Es la lógica exacta del handler, así que valida el contrato sin
 // un server vivo. El mail (que en el handler va en after()) se prueba aparte, PURO, stubbeando fetch.
 //
+// Además de la réplica, los casos «alta rápida —» (quick 261124-nxz) invocan el POST REAL del handler
+// con la sesión del dueño, para probar el apellido opcional del alta inline contra el código de prod.
+//
 // describe.skipIf(!hasSupabaseCreds): sin las creds de Supabase, se skipean (igual que el resto).
 //
 // Rango fijo de marzo/2031 (LUNES) para no chocar con lógica de turnos pasados: los lunes de
 // [2031-03-03, 2031-03-31] son 03/10/17/24/31 (5 ocurrencias).
+
+const h = vi.hoisted(() => ({
+  // Cliente que devuelve `@/lib/supabase/server`: el anon autenticado como el dueño del caso.
+  session: { current: null as SupabaseClient | null },
+}))
+
+// Mock PARCIAL de next/server (molde de test/abono-cancel-routes.test.ts): se conservan los exports
+// reales y se reemplaza SOLO `after`, que descarta la tarea. El mail de alta va en after() y no se
+// manda acá (los casos m1-m4 siguen probando el template REAL aparte); sin el request scope de Next el
+// `after` real no funciona cuando el handler se invoca directo desde Vitest.
+vi.mock('next/server', async importOriginal => {
+  const actual = await importOriginal<typeof import('next/server')>()
+  return { ...actual, after: () => {} }
+})
+
+// El handler pide la sesión del dueño; se le entrega el cliente anon autenticado del caso, así corre
+// con RLS como en producción (nunca service role).
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => h.session.current,
+}))
+
+import { POST as createAbonoPOST } from '@/app/api/abonos/create/route'
+
+async function postAbono(body: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await createAbonoPOST(
+    new Request('http://localhost/api/abonos/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  )
+  return { status: res.status, json: (await res.json()) as Record<string, unknown> }
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -454,6 +490,63 @@ describe.skipIf(!hasSupabaseCreds)('alta manual del abono (auth + anti-tampering
       // La serie nace 'active' y la 066 no deja borrarla así: se archiva primero (ver purgeAbonos).
       await purgeAbonos(t, { id: res.abonoId })
     }
+  })
+
+  // ── Alta rápida inline con apellido, vía el POST REAL (quick 261124-nxz) ──────────────────────
+  // El handler no acepta fechas: la primera tanda sale del reloj real (hoy hora AR + la ventana del
+  // negocio). Por eso no se fijan fechas y la guarda de honestidad es generated ≥ 1 (con el bloque
+  // del lunes 08-20 sembrado y la ventana por defecto siempre hay lunes por delante). El afterEach
+  // borra turnos y abonos; los clientes nuevos los limpia teardownOneTenant (CASCADE) — ningún caso
+  // de este archivo cuenta clientes. Sin email, así el handler no encola el mail.
+  async function altaRapida(clientLastName: string, phone: string) {
+    h.session.current = ownerAnon
+    const { status, json } = await postAbono({
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      dayOfWeek: DOW_MON,
+      time: START,
+      clientId: null,
+      clientName: 'Ana',
+      clientLastName,
+      clientPhone: phone,
+      clientEmail: null,
+    })
+    expect(status).toBe(200)
+    expect(json.ok).toBe(true)
+    expect(json.generated as number).toBeGreaterThanOrEqual(1)
+    const { data: abono } = await t.admin
+      .from('abonos')
+      .select('client_id')
+      .eq('id', json.abonoId as string)
+      .single()
+    const { data: client } = await t.admin
+      .from('clients')
+      .select('name, last_name')
+      .eq('id', abono?.client_id as string)
+      .single()
+    const { data: appts } = await t.admin
+      .from('appointments')
+      .select('client_name')
+      .eq('business_id', t.businessId)
+      .eq('abono_id', json.abonoId as string)
+    return { client, appts: appts ?? [] }
+  }
+
+  it('alta rápida — cliente nuevo con apellido: last_name guardado y todos los turnos con el nombre completo', async () => {
+    const { client, appts } = await altaRapida(' Pérez ', '11 7000-0001')
+    expect(client?.name).toBe('Ana')
+    expect(client?.last_name).toBe('Pérez')
+    expect(appts.length).toBeGreaterThanOrEqual(1)
+    expect(appts.every((a) => a.client_name === 'Ana Pérez')).toBe(true)
+  })
+
+  it('alta rápida — apellido de solo espacios → last_name null y los turnos solo con el nombre', async () => {
+    const { client, appts } = await altaRapida('   ', '11 7000-0002')
+    expect(client?.name).toBe('Ana')
+    expect(client?.last_name).toBeNull()
+    expect(appts.length).toBeGreaterThanOrEqual(1)
+    expect(appts.every((a) => a.client_name === 'Ana')).toBe(true)
   })
 })
 
