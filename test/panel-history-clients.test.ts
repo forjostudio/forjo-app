@@ -231,6 +231,26 @@ describe('el cableado de /clients: cada cambio de vista declara SU causa', () =>
     const filtros = pagina.split(".eq('business_id'").length - 1
     expect(filtros).toBe(3)
   })
+
+  it('(j) R2-IN-04 — la fila decide con la URL de ahora y con la misma resolución que el render', () => {
+    // El mecanismo, el mismo de G-04-7 en los tabs (E1 de `.planning/debug/doble-toque-tab.md`): el
+    // empuje de un toque cambia la URL y el state AL INSTANTE, pero el parche del historial de Next
+    // despacha la restauración del router en `startTransition`, así que `useSearchParams()` —y con él el
+    // `selectedId` del render— recién se entera con el commit. El `onClick` que corre en esa ventana es
+    // el del ÚLTIMO commit: con el `from` del render, dos toques a la misma fila apilan `?c=A` sobre
+    // `?c=A` (la regla 2, `from === to`, nunca lo ve). Por eso el `from` sale de `window.location.search`
+    // por `toqueDeFicha`, y se resuelve con la MISMA función que el render (`clienteDeLaUrl`: la lista
+    // ya filtrada por tenant y la redirección de la fusión, nunca la base) para que el toque y la
+    // pantalla no puedan discrepar sobre qué ficha está abierta.
+    expect(regionLista.length).toBeGreaterThan(0)
+    expect(regionLista).toContain('toqueDeFicha(')
+    expect(regionLista).toContain('window.location.search')
+    expect(regionLista).not.toMatch(/from:\s*selectedId\b/)
+    expect(regionLista).toContain('clienteDeLaUrl(')
+    const declaraciones = pantalla.match(/\bconst clienteDeLaUrl\b/g) ?? []
+    expect(declaraciones.length).toBe(1)
+    expect(pantalla).toMatch(/const resolved = clienteDeLaUrl\(/)
+  })
 })
 
 // ⚠ EL CUARTO INVARIANTE DE CONVIVENCIA NO VIVE ACÁ, Y ES A PROPÓSITO. "Los tres archivos que

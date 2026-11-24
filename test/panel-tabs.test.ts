@@ -951,7 +951,7 @@ describe('G-04-7 — un toque decide con la URL de ahora, y un consumo en vuelo 
     const fin = at === -1 ? -1 : fuente.indexOf('\n}\n', at)
     const region = at === -1 || fin === -1 ? '' : fuente.slice(at, fin + 2)
     expect(region).not.toBe('')
-    const guarda = region.indexOf("if (consumoEnVuelo) return 'none'")
+    const guarda = region.indexOf('if (consumoEnVuelo) {')
     const holding = region.indexOf('const holding =')
     expect(guarda).toBeGreaterThan(-1)
     expect(holding).toBeGreaterThan(-1)
@@ -1982,5 +1982,317 @@ describe('La familia back() — medidos antes de arreglar (quick 261119-32l)', (
     // Y el dueño del sentinel delega: el cuerpo de `consumeOwnedExitSentinel` es UNA línea.
     const delSentinel = cuerpoDe(sinComentarios(read('lib/panel-branch.ts')), 'export function consumeOwnedExitSentinel(', '): boolean {')
     expect(lineas(delSentinel).slice(1, -1)).toEqual(['return consumeOwnedExitEntry((estado) => isPanelExitEntry(estado, id))'])
+  })
+})
+
+// ── 12) R3-WR-01 y R2-IN-04 (quick 261124-q68): medidos ANTES de arreglar ─────────────────────────────────
+// Los dos pendientes de lógica de historial que v0.31 dejó en `deferred-items.md` (Phase 4):
+//   · R3-WR-01 (`261119-32l-REVIEW.md` WR-01, y su simulador `sim4`): `applyPanelView` corta con la guarda
+//     del consumo en vuelo SIN el chequeo de llegada (state Y URL) que ya tienen sus tres hermanas. Si un
+//     retroceso queda colgado —el navegador lo ignora en silencio: ni tira ni recorre— y el dueño se va a
+//     OTRA entrada por el sidebar, los tabs y la ficha de esa otra sección quedan muertos. `R1`..`R4` son los
+//     cuatro recorridos del review (un retroceso de `up`, de la salida, del menú o del tab, ignorado; después
+//     el sidebar a otra entrada; ahí abrir una ficha o tocar un tab): lo correcto es `push`. `R5-misma-entrada`
+//     es el residuo (sin moverse, la entrada es la misma: sigue `none`) y `W1-tab` es la no-regresión que
+//     mata a una llegada medida sólo por el state (un reemplazo de Next con la MISMA URL en la ventana no
+//     suelta la guarda). `C-llegada-ejecutor` es el candado de fuente: el chequeo del ejecutor, igual línea
+//     por línea al del menú salvo el valor de retorno.
+//   · R2-IN-04 (`04-REVIEW-2.md`): la fila de Clientes le pasa a `applyPanelView` el `from` del RENDER, el
+//     mismo defecto que G-04-7 tenía en los tabs (cerrado con `toqueDeTab`): dos toques a la misma fila
+//     antes del commit apilan `?c=A` sobre `?c=A`. `IN04-mecanismo` mide el defecto con el ejecutor real y
+//     el `from` congelado como lo da hoy el render (verde antes y después: es la medición, no el arreglo).
+//     `tocarFila` es el espejo de lo que va a hacer la fila: pide el toque a `toqueDeFicha` —por el
+//     namespace `PH`, así su ausencia es rojo de SU caso y no tira el cargador— con la URL de ahora y un
+//     resolver que hace lo mismo que el render (la lista ya filtrada por tenant y la redirección de la
+//     fusión). Un candado lee su cuerpo.
+// Cada `esperado` es lo CORRECTO: un ROJO quiere decir que el caso REPRODUCE. Los ejecutores son los REALES
+// contra la historia con retroceso ASÍNCRONO. `anotar`, `hechos`, `decidir`, `tocarLaBarra`, `queSeIgnora`,
+// `nextReemplaza`, `lineas` y `chequeoEnVuelo` son copias exactas de las de los describes de 261118-pjd y
+// 261119-32l, que no se tocan.
+
+describe('R3-WR-01 y R2-IN-04 — medidos antes de arreglar (quick 261124-q68)', () => {
+  const ID = 7
+  const navegaciones: string[] = []
+
+  afterEach(() => {
+    drenarPopstateDelStub?.()
+    drenarPopstateDelStub = null
+    pageshowDelStub = null
+    oyentesPageshowDelStub = null
+    navegaciones.length = 0
+    PB.takeBackLanding()
+    PB.applyBranchMarkRequest('__drenaje__')
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  // Las pilas se FABRICAN en cada llamada: la identidad del state de cada entrada es la de ESE caso.
+  const pilaFin = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/finances', state: { frjUnder: '/dashboard' } },
+    { url: '/finances?tab=ventas', state: { frjView: 'tab' } },
+  ]
+  const pilaSeccion = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/finances', state: { frjUnder: '/dashboard' } },
+  ]
+  // ⚠ El stub no tiene hash: en la app el sentinel vive en `/dashboard#salir`, acá con URL `/dashboard`.
+  const pilaSalida = (): Entrada[] => [
+    { url: '/afuera', state: null },
+    { url: '/dashboard', state: null },
+    { url: '/dashboard', state: PB.panelExitState(ID) },
+  ]
+  // El listado de clientes con Inicio debajo, sin ficha abierta.
+  const pilaListado = (): Entrada[] => [
+    { url: '/dashboard', state: null },
+    { url: '/clients', state: { frjUnder: '/dashboard' } },
+  ]
+
+  const anotar = (to: string, modo: 'push' | 'replace') => {
+    navegaciones.push(`${modo} ${to}`)
+  }
+  const hechos = () =>
+    PB.branchStackFacts({ estado: window.history.state, id: ID, root: PH.PANEL_ROOT, more: PH.PANEL_MORE })
+
+  /** EXACTAMENTE `decidirDesdeElAterrizaje` del hook (`lib/panel-branch.ts`), sin React. */
+  function decidir(href: string): void {
+    const desde = window.location.pathname
+    const plan = PH.panelBranchPlan({ from: desde, to: href, root: PH.PANEL_ROOT, more: PH.PANEL_MORE, ...hechos() })
+    if (plan === 'none') return
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return
+    }
+    const seHizoCargo = PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+    if (!seHizoCargo) navegaciones.push(`caida ${href}`)
+  }
+
+  /** EXACTAMENTE `handleNavigate` del hook: `false` (y la navegación anotada) con push/replace; si no, el ejecutor. */
+  function tocarLaBarra(href: string): boolean {
+    const plan = PH.panelBranchPlan({
+      from: window.location.pathname,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      ...hechos(),
+    })
+    if (plan === 'push' || plan === 'replace') {
+      anotar(href, plan)
+      return false
+    }
+    return PB.runBranchNavigation({
+      plan,
+      to: href,
+      root: PH.PANEL_ROOT,
+      more: PH.PANEL_MORE,
+      navigate: anotar,
+      exitId: ID,
+      reDecidir: () => decidir(href),
+    })
+  }
+
+  // Un retroceso que el navegador IGNORA EN SILENCIO: ni tira, ni recorre, ni se cuenta.
+  const queSeIgnora = () => vi.spyOn(window.history, 'back').mockImplementationOnce(() => {})
+
+  // El commit de una transición de Next dentro de la ventana del recorrido: el `HistoryUpdater`
+  // (`app-router.js:38-67`) reemplaza la entrada con el state de ahora esparcido (conserva `frjView`) y la
+  // `canonicalUrl` del árbol que confirma, que en el flujo medido es la misma: la URL NO cambia, la identidad sí.
+  const nextReemplaza = () => window.history.replaceState({ ...(window.history.state as object), __NA: true }, '')
+
+  // El sidebar a OTRA entrada, como lo escribe el router de Next: un state nuevo con `__NA` y la URL de la sección.
+  const sidebarReemplaza = (url: string) => window.history.replaceState({ __NA: true }, '', url)
+  const sidebarEmpuja = (url: string) => window.history.pushState({ __NA: true }, '', url)
+
+  // ── R3-WR-01 ──
+
+  it('R1: un up ignorado, el sidebar reemplaza a /clients y ahí se abre una ficha ⇒ empuja', () => {
+    const { actual } = montarHistoria(pilaSeccion(), { backAsincrono: true })
+    queSeIgnora()
+    tocarLaBarra(PH.PANEL_ROOT)
+    sidebarReemplaza('/clients')
+    const a = applyPanelView({ cause: 'user-open', param: 'c', from: null, to: 'A' })
+    const medido = { a, url: actual().url }
+    expect(medido).toEqual({ a: 'push', url: '/clients?c=A' })
+  })
+
+  it('R2: la salida ignorada, el sidebar empuja /finances y ahí se toca un tab ⇒ empuja', () => {
+    const { actual } = montarHistoria(pilaSalida(), { backAsincrono: true })
+    queSeIgnora()
+    tocarLaBarra('/finances')
+    sidebarEmpuja('/finances')
+    const a = applyPanelView({ cause: 'user-open', param: 'tab', from: null, to: 'ventas' })
+    // Se copia ANTES del drenaje del `afterEach`, que dispara el segundo paso que quedó enganchado.
+    const medido = { a, url: actual().url }
+    expect(medido).toEqual({ a: 'push', url: '/finances?tab=ventas' })
+  })
+
+  it('R3: el menú ignorado, el sidebar reemplaza a /settings y ahí se toca un tab ⇒ empuja', () => {
+    const { actual } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queSeIgnora()
+    PH.consumeOwnedPanelEntry()
+    sidebarReemplaza('/settings')
+    const a = applyPanelView({ cause: 'user-open', param: 'tab', from: null, to: 'seguridad' })
+    const medido = { a, url: actual().url }
+    expect(medido).toEqual({ a: 'push', url: '/settings?tab=seguridad' })
+  })
+
+  it('R4: el tab por defecto ignorado, el sidebar reemplaza a /clients y ahí se abre una ficha ⇒ empuja', () => {
+    const { actual } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queSeIgnora()
+    tocar(TABS_FINANZAS, 'appointments')
+    sidebarReemplaza('/clients')
+    const a = applyPanelView({ cause: 'user-open', param: 'c', from: null, to: 'A' })
+    const medido = { a, url: actual().url }
+    expect(medido).toEqual({ a: 'push', url: '/clients?c=A' })
+  })
+
+  it('R5-misma-entrada (el residuo): el tab por defecto ignorado y, SIN moverse, Egresos ⇒ none', () => {
+    const { pila, actual } = montarHistoria(pilaFin(), { backAsincrono: true })
+    queSeIgnora()
+    tocar(TABS_FINANZAS, 'appointments')
+    const a = tocar(TABS_FINANZAS, 'expenses')
+    const medido = { a, retrocesos: pila.retrocesos, url: actual().url }
+    expect(medido).toEqual({ a: 'none', retrocesos: 0, url: '/finances?tab=ventas' })
+  })
+
+  it('W1-tab (no regresión): el tab por defecto, un reemplazo de Next con la MISMA URL y el default otra vez ⇒ un solo retroceso', () => {
+    const { pila, actual, procesar } = montarHistoria(pilaFin(), { backAsincrono: true })
+    const a1 = tocar(TABS_FINANZAS, 'appointments')
+    nextReemplaza()
+    const a2 = tocar(TABS_FINANZAS, 'appointments')
+    procesar()
+    const medido = { a1, a2, retrocesos: pila.retrocesos, url: actual().url }
+    expect(medido).toEqual({ a1: 'consume', a2: 'none', retrocesos: 1, url: '/finances' })
+  })
+
+  /** Las líneas de código de una región, sin sangría y sin las vacías que dejan los comentarios quitados. */
+  const lineas = (region: string) =>
+    region
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '')
+
+  /** Desde la primera línea que nombra `consumoEnVuelo` hasta la anterior a la que empieza con `const actual`. */
+  const chequeoEnVuelo = (region: string): string[] => {
+    const ls = lineas(region)
+    const desde = ls.findIndex((l) => l.includes('consumoEnVuelo'))
+    if (desde === -1) return []
+    const hasta = ls.findIndex((l, i) => i > desde && l.startsWith('const actual'))
+    return hasta === -1 ? [] : ls.slice(desde, hasta)
+  }
+
+  it('C-llegada-ejecutor: el chequeo del consumo en vuelo de applyPanelView es el del menú salvo el valor de retorno, y va antes de holding', () => {
+    const fuente = sinComentarios(read('lib/panel-history.ts'))
+    const menu = cuerpoDe(fuente, 'export function consumeOwnedPanelEntry(', '): boolean {')
+    const at = fuente.indexOf('export function applyPanelView({')
+    const fin = at === -1 ? -1 : fuente.indexOf('\n}\n', at)
+    const ejecutor = at === -1 || fin === -1 ? '' : fuente.slice(at, fin + 2)
+    expect(menu).not.toBe('')
+    expect(ejecutor).not.toBe('')
+    const delMenu = chequeoEnVuelo(menu)
+    expect(delMenu.length).toBeGreaterThan(0)
+    expect(delMenu.filter((l) => l.endsWith(') return true')).length).toBe(1)
+    const esperado = delMenu.map((l) => (l.endsWith(') return true') ? l.slice(0, -'return true'.length) + "return 'none'" : l))
+    expect(chequeoEnVuelo(ejecutor)).toEqual(esperado)
+    const ls = lineas(ejecutor)
+    const ultimaDelChequeo = ls.indexOf(esperado[esperado.length - 1])
+    const holding = ls.findIndex((l) => l.startsWith('const holding ='))
+    expect(holding).toBeGreaterThan(-1)
+    expect(ultimaDelChequeo).toBeGreaterThan(-1)
+    expect(ultimaDelChequeo).toBeLessThan(holding)
+  })
+
+  // ── R2-IN-04 ──
+
+  // La lista de la pantalla, ya filtrada por tenant (`page.tsx`): lo que no está acá no se muestra.
+  const LISTA = ['A', 'B', 'kept']
+  const enLaLista = (pedido: string): string | null => (LISTA.includes(pedido) ? pedido : null)
+
+  /**
+   * EXACTAMENTE lo que hace la fila de la lista (`clients-client.tsx`): el toque con la URL de ahora (el MISMO
+   * helper que llama la pantalla; un candado lee este cuerpo), la causa del destino y el ejecutor.
+   */
+  function tocarFila(id: string, resolver: (pedido: string) => string | null = enLaLista) {
+    const toque = PH.toqueDeFicha({ search: window.location.search, param: 'c', to: id, resolver })
+    return applyPanelView({ cause: 'user-open', param: 'c', from: toque.from, to: toque.to })
+  }
+
+  /** Corre un toque y, si tira (el helper todavía no existe), devuelve el motivo: así el rojo muestra el número. */
+  const intentar = (f: () => unknown): unknown => {
+    try {
+      return f()
+    } catch (e) {
+      return `tiro: ${e instanceof Error ? e.message : String(e)}`
+    }
+  }
+
+  it('candado del espejo: el tocarFila de ESTA suite pide el toque a toqueDeFicha con la URL de ahora', () => {
+    const cuerpo = cuerpoDe(read('test/panel-tabs.test.ts'), 'function tocarFila(', '= enLaLista) {')
+    expect(cuerpo).not.toBe('')
+    expect(cuerpo).toContain('toqueDeFicha(')
+    expect(cuerpo).toContain('window.location.search')
+  })
+
+  it('IN04-mecanismo (la medición del defecto): dos toques con el from congelado del render apilan ?c=A sobre ?c=A', () => {
+    const { pila, actual } = montarHistoria(pilaListado())
+    const a1 = applyPanelView({ cause: 'user-open', param: 'c', from: null, to: 'A' })
+    const a2 = applyPanelView({ cause: 'user-open', param: 'c', from: null, to: 'A' })
+    const conA = pila.entradas.filter((e) => e.url === '/clients?c=A').length
+    window.history.back()
+    const medido = { a1, a2, conA, trasUnAtras: actual().url }
+    expect(medido).toEqual({ a1: 'push', a2: 'push', conA: 2, trasUnAtras: '/clients?c=A' })
+  })
+
+  it('IN04-doble: dos toques a la misma fila ⇒ push, none, y un atrás vuelve al listado', () => {
+    const { pila, actual } = montarHistoria(pilaListado())
+    const a1 = intentar(() => tocarFila('A'))
+    const a2 = intentar(() => tocarFila('A'))
+    const entradas = pila.entradas.length
+    window.history.back()
+    const medido = { a1, a2, entradas, trasUnAtras: actual().url }
+    expect(medido).toEqual({ a1: 'push', a2: 'none', entradas: 3, trasUnAtras: '/clients' })
+  })
+
+  it('IN04-a-b: con ?c=A arriba, dos toques a B ⇒ push, none, y un atrás vuelve a ?c=A', () => {
+    const { actual } = montarHistoria([...pilaListado(), { url: '/clients?c=A', state: { frjView: 'c' } }])
+    const a1 = intentar(() => tocarFila('B'))
+    const a2 = intentar(() => tocarFila('B'))
+    window.history.back()
+    const medido = { a1, a2, trasUnAtras: actual().url }
+    expect(medido).toEqual({ a1: 'push', a2: 'none', trasUnAtras: '/clients?c=A' })
+  })
+
+  it('IN04-fusion: con ?c=dup absorbida por kept, tocar kept ⇒ none (el from sale resuelto como en el render)', () => {
+    montarHistoria([...pilaListado(), { url: '/clients?c=dup', state: { frjView: 'c' } }])
+    const fusion = (pedido: string) => enLaLista(pedido === 'dup' ? 'kept' : pedido)
+    const a = intentar(() => tocarFila('kept', fusion))
+    expect({ a }).toEqual({ a: 'none' })
+  })
+
+  it('IN04-ajeno: con ?c=ghost que no está en la lista, tocar A ⇒ push (from null, igual que el render)', () => {
+    const { actual } = montarHistoria([...pilaListado(), { url: '/clients?c=ghost', state: null }])
+    const a = intentar(() => tocarFila('A'))
+    const medido = { a, url: actual().url }
+    expect(medido).toEqual({ a: 'push', url: '/clients?c=A' })
+  })
+
+  it('toqueDeFicha: sin c, con c vacío o con un pedido que no resuelve ⇒ from null; el to es siempre el pedido', () => {
+    expect(typeof (PH as Record<string, unknown>).toqueDeFicha).toBe('function')
+    const nada = () => null
+    expect(PH.toqueDeFicha({ search: '', param: 'c', to: 'A', resolver: enLaLista })).toEqual({ from: null, to: 'A' })
+    expect(PH.toqueDeFicha({ search: '?tab=x', param: 'c', to: 'A', resolver: enLaLista })).toEqual({ from: null, to: 'A' })
+    expect(PH.toqueDeFicha({ search: '?c=', param: 'c', to: 'A', resolver: enLaLista })).toEqual({ from: null, to: 'A' })
+    expect(PH.toqueDeFicha({ search: '?c=x', param: 'c', to: 'B', resolver: nada })).toEqual({ from: null, to: 'B' })
+    expect(PH.toqueDeFicha({ search: '?c=B', param: 'c', to: 'A', resolver: enLaLista })).toEqual({ from: 'B', to: 'A' })
   })
 })
