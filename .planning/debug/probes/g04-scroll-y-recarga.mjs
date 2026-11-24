@@ -85,6 +85,16 @@
 // Sin escribir en la base. La sonda imprime ademas la linea del Suspense de `clients/page.tsx` con su huella.
 // No cierra: el telefono real, Safari de iOS, y el build de produccion.
 //
+// MODO ancho de Finanzas (quick 261124-q68): el recorrido `D-finanzas-ancho` mide el desborde horizontal de Finanzas
+// por CDP (`Emulation.setDeviceMetricsOverride`, el viewport emulado de verdad) a 360/375/390/430 (movil, 844 de alto,
+// escala 3) y 1280x800 (escritorio), en un documento que NACE en `/finances`, en los tres tabs y en dos meses (el actual
+// y uno con >= 10 turnos, retrocediendo con el boton real, sin escribir en la base). Por medicion: `clientWidth`,
+// `scrollWidth`, `innerWidth`, `visualViewport` y los CULPABLES (el mas externo de cada cadena que pasa el borde, sin
+// recortados ni fijos). En escritorio, una huella por tab (`huella_escritorio_<tab>=`, los rectangulos de `main` en el
+// mes actual) para afirmar que un arreglo movil no toco un pixel del escritorio. Guarda una captura a 390 en
+// `$SONDA_CAPTURAS` (o el temporal): `fin-390-antes.png` en `hipotesis`, `fin-390-despues.png` en `tras-el-fix`.
+// No cierra: el telefono real, Safari de iOS, el build de produccion.
+//
 // QUE NO CIERRA: Chrome de Android y Safari de iOS (esto es Chrome de escritorio headless con emulacion
 // movil), y el build de PRODUCCION (las variables publicas se incrustan en el build y el Supabase local
 // vive solo en el entorno de desarrollo: un build de produccion moveria dos variables a la vez).
@@ -1357,6 +1367,7 @@ RECORRIDOS.push(
   g1Recorrido({ id: 'G1-ventas-escritorio', entrada: 'sidebar', primero: 'Ventas', segundo: 'Egresos', titulo: 'obs-G1 escritorio 1280x800: Inicio -> sidebar Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos' }),
 )
 RECORRIDOS.push(k1BfcacheCruce())
+RECORRIDOS.push(dFinanzasAncho())
 RECORRIDOS.push(
   clFichaRecorrido({ id: 'CL-ficha-movil', pantalla: 'movil', titulo: '/clients movil 390x844: Inicio -> barra Clientes (BLANDA, documento nuevo) -> el borde de arriba fuera (si el documento scrollea) y la lista a la mitad -> tocar una fila' }),
   clFichaRecorrido({ id: 'CL-ficha-escritorio', pantalla: 'escritorio', titulo: '/clients escritorio 1280x800: Inicio -> sidebar Clientes (BLANDA, documento nuevo) -> el borde de arriba fuera (si el documento scrollea) y la lista a la mitad -> tocar una fila' }),
@@ -1655,10 +1666,134 @@ function clFichaRecorrido({ id, titulo, pantalla }) {
   }
 }
 
+// ── El ancho de Finanzas (quick 261124-q68) ───────────────────────────────────────────────────────
+// Ver la cabecera (MODO ancho de Finanzas). La medicion diferida (`.planning/debug/tabs-en-la-url-medida.md`, el
+// documento que nace en `/finances` a 390x844 con `mobile: true`) dio un documento de 407-415 px: 17-25 px de mas.
+// Este recorrido lo mide por CDP —que emula el viewport de verdad— en cinco anchos, tres tabs y dos meses, y NOMBRA el
+// elemento que desborda.
+
+/**
+ * El ancho del documento AHORA y los CULPABLES: los elementos visibles cuyo borde derecho pasa `clientWidth + 0.5`,
+ * sin los que tienen un ancestro que recorta en x (`overflow-x` distinto de `visible`; el `<body>` no cuenta: su
+ * overflow se propaga al viewport) ni los que estan dentro de un `position: fixed`, quedandose con el mas externo de
+ * cada cadena (tope 5).
+ */
+const EXPR_ANCHO_FINANZAS = `(() => {
+  const html = document.documentElement
+  const vv = globalThis.visualViewport
+  const cw = html.clientWidth
+  const recortaX = (el) => { for (let a = el.parentElement; a && a !== document.body && a !== html; a = a.parentElement) { if (getComputedStyle(a).overflowX !== 'visible') return true } return false }
+  const enFijo = (el) => { for (let a = el; a && a !== html; a = a.parentElement) { if (getComputedStyle(a).position === 'fixed') return true } return false }
+  const pasan = []
+  for (const el of document.body.querySelectorAll('*')) {
+    const b = el.getBoundingClientRect()
+    if (b.width <= 0 || b.height <= 0) continue
+    if (b.right <= cw + 0.5) continue
+    if (getComputedStyle(el).visibility === 'hidden') continue
+    if (recortaX(el) || enFijo(el)) continue
+    pasan.push(el)
+  }
+  const externos = pasan.filter((el) => !pasan.some((o) => o !== el && o.contains(el)))
+  const culpables = externos.slice(0, 5).map((el) => {
+    const b = el.getBoundingClientRect(); const s = getComputedStyle(el)
+    return { tag: el.tagName.toLowerCase(), clase: String(el.getAttribute('class') || '').slice(0, 120), texto: el.textContent.replace(/\\s+/g, ' ').trim().slice(0, 40), left: Math.round(b.left * 10) / 10, right: Math.round(b.right * 10) / 10, width: Math.round(b.width * 10) / 10, whiteSpace: s.whiteSpace, minWidth: s.minWidth, flexShrink: s.flexShrink }
+  })
+  return { clientWidth: cw, scrollWidth: html.scrollWidth, innerWidth, vv: vv ? { width: Math.round(vv.width * 10) / 10, offsetLeft: Math.round(vv.offsetLeft) } : null, culpables, total: externos.length }
+})()`
+
+/** Los rectangulos (absolutos, redondeados) de todos los descendientes de `main`: la HUELLA del escritorio. */
+const EXPR_RECTS_MAIN = `(() => {
+  const m = document.querySelector('main'); if (!m) return ''
+  return [...m.querySelectorAll('*')].map((el) => { const b = el.getBoundingClientRect(); return [Math.round(b.left + scrollX), Math.round(b.top + scrollY), Math.round(b.width), Math.round(b.height)].join(',') }).join(';')
+})()`
+
+const ANCHOS_FINANZAS = [
+  { nombre: '360', width: 360, height: 844, deviceScaleFactor: 3, mobile: true },
+  { nombre: '375', width: 375, height: 844, deviceScaleFactor: 3, mobile: true },
+  { nombre: '390', width: 390, height: 844, deviceScaleFactor: 3, mobile: true },
+  { nombre: '430', width: 430, height: 844, deviceScaleFactor: 3, mobile: true },
+  { nombre: '1280', width: 1280, height: 800, deviceScaleFactor: 1, mobile: false },
+]
+const TABS_DE_FINANZAS = ['Turnos', 'Ventas', 'Egresos']
+
+function dFinanzasAncho() {
+  return {
+    id: 'D-finanzas-ancho',
+    titulo: 'Finanzas: documento que NACE en /finances a 360/375/390/430 (movil) y 1280 (escritorio), los tres tabs en el mes actual y en uno con >= 10 turnos: scrollWidth contra clientWidth y los culpables',
+    async correr(cdp, modo) {
+      const mediciones = []
+      const huellas = {}
+      let captura = null
+      try {
+        for (const a of ANCHOS_FINANZAS) {
+          await cdp.enviar('Emulation.setDeviceMetricsOverride', { width: a.width, height: a.height, deviceScaleFactor: a.deviceScaleFactor, mobile: a.mobile })
+          await navegar(cdp, AFUERA)
+          await cdp.enviar('Page.resetNavigationHistory')
+          await navegar(cdp, ORIGEN + '/finances')
+          await esperarTabQuieto(cdp, 'Turnos', { condicion: COND_FINANZAS })
+          await conteosQuietos(cdp)
+          const meses = []
+          for (let vuelta = 0; vuelta < 2; vuelta++) {
+            let mes
+            if (vuelta === 0) {
+              mes = await conteosQuietos(cdp)
+            } else {
+              const m = await irAlMesConTurnos(cdp, { minimo: 10, vacios: [] })
+              if (m.pasos === 0) { meses.push({ ...m, igual_al_actual: true }); break }
+              mes = m
+            }
+            meses.push(mes)
+            for (const tab of TABS_DE_FINANZAS) {
+              await tocarTab(cdp, tab)
+              await conteosQuietos(cdp)
+              await dormir(400)
+              const w = await evaluar(cdp, EXPR_ANCHO_FINANZAS)
+              const med = { ancho: a.nombre, tab, mes: mes.mes, ...w, desborda: w.scrollWidth > w.clientWidth }
+              mediciones.push(med)
+              if (a.nombre === '390' && (captura === null || (!captura.desborda && med.desborda))) {
+                const png = await cdp.enviar('Page.captureScreenshot', { format: 'png' })
+                const dir = process.env.SONDA_CAPTURAS || tmpdir()
+                const archivo = join(dir, modo === 'tras-el-fix' ? 'fin-390-despues.png' : 'fin-390-antes.png')
+                writeFileSync(archivo, Buffer.from(png.data, 'base64'))
+                captura = { archivo, tab, mes: mes.mes, desborda: med.desborda }
+              }
+              if (!a.mobile && vuelta === 0) {
+                const rects = await evaluar(cdp, EXPR_RECTS_MAIN)
+                huellas[tab.toLowerCase()] = { hash: createHash('sha256').update(rects).digest('hex').slice(0, 16), nodos: rects === '' ? 0 : rects.split(';').length }
+              }
+            }
+          }
+          mediciones.push({ ancho: a.nombre, meses: meses.map((m) => `${m.mes}${m.igual_al_actual ? ' (el actual ya tiene >= 10 turnos: un solo mes)' : ''} turnos=${m.turnos} ventas=${m.ventas} egresos=${m.egresos}`), soloMeses: true })
+        }
+      } finally {
+        await celular(cdp)
+      }
+      const desborde = (n) => (mediciones.some((m) => !m.soloMeses && m.ancho === n && m.desborda) ? 'si' : 'no')
+      return {
+        detalle: (p) => {
+          for (const m of mediciones) {
+            if (m.soloMeses) { console.log(`${p}ancho ${m.ancho}: meses medidos: ${m.meses.join(' · ')}`); continue }
+            console.log(`${p}ancho ${m.ancho} · ${m.tab} · ${m.mes}: clientWidth=${m.clientWidth} scrollWidth=${m.scrollWidth} innerWidth=${m.innerWidth} vv=${JSON.stringify(m.vv)} desborda=${m.desborda ? 'si' : 'no'} culpables=${m.total}`)
+            for (const c of m.culpables) console.log(`${p}   CULPABLE <${c.tag}> left=${c.left} right=${c.right} width=${c.width} white-space=${c.whiteSpace} min-width=${c.minWidth} flex-shrink=${c.flexShrink} clase="${c.clase}" texto="${c.texto}"`)
+          }
+          for (const tab of TABS_DE_FINANZAS) {
+            const h = huellas[tab.toLowerCase()]
+            if (h) console.log(`${p}huella_escritorio_${tab.toLowerCase()}=${h.hash} (nodos=${h.nodos}, mes actual)`)
+          }
+          console.log(`${p}captura a 390: ${captura ? `${captura.archivo} (${captura.tab}, ${captura.mes}, desborda=${captura.desborda ? 'si' : 'no'})` : '(ninguna)'}`)
+        },
+        medido: { desborde_360: desborde('360'), desborde_375: desborde('375'), desborde_390: desborde('390'), desborde_430: desborde('430') },
+        esperado_si_HA: { desborde_390: 'si' },
+        esperado_tras_el_fix: { desborde_360: 'no', desborde_375: 'no', desborde_390: 'no', desborde_430: 'no' },
+      }
+    },
+  }
+}
+
 function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
 
 async function correrYReportar(cdp, rec, modo) {
-  const r = await rec.correr(cdp)
+  const r = await rec.correr(cdp, modo)
   if (modo === 'tras-el-fix') {
     // sin `esperado_tras_el_fix` el recorrido no tiene nada que afirmar en este modo: es un error del instrumento
     // (lo cuenta el catch de `main` como ERROR-DEL-INSTRUMENTO), nunca un OK por omision.
